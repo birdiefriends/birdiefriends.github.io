@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#085041">
+<title>Series #2 — BirdieFriends Golf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600&family=DM+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #085041;
+    --green-mid: #0f6b52;
+    --gold: #c9a227;
+    --gold-lite: #fff8e1;
+    --bg: #f4f7f5;
+    --card: #ffffff;
+    --text: #0a2e25;
+    --muted: #6b8f82;
+    --border: #d0e5dc;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+  header {
+    background:var(--green);
+    padding:20px 16px 16px;
+    text-align:center;
+  }
+  .logo-row { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:6px; }
+  .logo-circle { width:40px; height:40px; background:rgba(255,255,255,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .event-title { font-family:'Playfair Display',serif; font-size:1.5rem; font-weight:900; color:#fff; line-height:1.1; }
+  .event-sub { font-size:0.8rem; color:rgba(255,255,255,0.65); margin-top:4px; letter-spacing:0.05em; }
+  .event-date { font-size:0.78rem; color:var(--gold); margin-top:3px; font-weight:500; }
+
+  .tabs { display:flex; background:var(--green); border-top:1px solid rgba(255,255,255,0.1); overflow-x:auto; }
+  .tab { flex:1; min-width:80px; padding:10px 4px; font-size:0.72rem; font-weight:600; color:rgba(255,255,255,0.6); text-align:center; cursor:pointer; border-bottom:2px solid transparent; transition:all 0.2s; letter-spacing:0.04em; white-space:nowrap; }
+  .tab.active { color:#fff; border-bottom-color:var(--gold); }
+
+  .tab-content { display:none; padding:16px; max-width:600px; margin:0 auto; }
+  .tab-content.active { display:block; }
+
+  .card { background:var(--card); border-radius:12px; padding:16px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,0.07); }
+  .card-label { font-size:0.68rem; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); margin-bottom:10px; }
+
+  /* Podium */
+  .podium { display:flex; gap:10px; margin-bottom:4px; }
+  .podium-card { flex:1; background:linear-gradient(135deg,var(--green),var(--green-mid)); border-radius:10px; padding:12px 8px; text-align:center; }
+  .podium-card.p1 { background:linear-gradient(135deg,#7a5a00,#c9a227); }
+  .podium-card .medal { font-size:1.5rem; margin-bottom:4px; }
+  .podium-card .pname { font-size:0.78rem; font-weight:600; color:#fff; line-height:1.2; }
+  .podium-card .pscore { font-size:0.68rem; color:rgba(255,255,255,0.75); margin-top:4px; }
+  .podium-card .pdiff { font-size:0.8rem; font-weight:700; color:#fff; margin-top:3px; }
+
+  /* Tables */
+  table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+  th { font-size:0.65rem; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); padding:6px 8px; border-bottom:1px solid var(--border); text-align:left; }
+  th.r { text-align:right; }
+  td { padding:8px 8px; border-bottom:0.5px solid var(--border); vertical-align:middle; }
+  td.r { text-align:right; font-family:'DM Mono',monospace; }
+  tr:last-child td { border-bottom:none; }
+  .rank { color:var(--muted); font-size:0.75rem; width:24px; }
+  .pname-cell { font-weight:500; }
+  .tag { display:inline-block; padding:2px 7px; border-radius:20px; font-size:0.68rem; font-weight:600; }
+  .tag-tee-green { background:#e8f5e9; color:#1a6b30; }
+  .tag-tee-combo { background:#fff3e0; color:#7a4a00; }
+  .tag-tee-gold  { background:#fff8e1; color:#7a5a00; }
+  .pos { color:#085041; font-weight:600; }
+  .neg { color:#a32d2d; font-weight:500; }
+  .skin-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:0.5px solid var(--border); }
+  .skin-row:last-child { border-bottom:none; }
+  .hole-badge { width:36px; height:36px; border-radius:8px; background:var(--green); color:#fff; font-weight:700; font-size:0.82rem; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .skin-info { flex:1; }
+  .skin-name { font-weight:600; font-size:0.85rem; }
+  .skin-detail { font-size:0.72rem; color:var(--muted); margin-top:1px; }
+  .ctp-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:0.5px solid var(--border); }
+  .ctp-row:last-child { border-bottom:none; }
+  .par3-badge { width:36px; height:36px; border-radius:8px; background:var(--gold); color:#fff; font-weight:700; font-size:0.82rem; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .updated { text-align:center; font-size:0.72rem; color:var(--muted); padding:20px 0 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-row">
+    <div class="logo-circle">🐦</div>
+    <div>
+      <div class="event-title">Series #2</div>
+      <div class="event-date">Sunday, May 3, 2026</div>
+    </div>
+  </div>
+  <div class="event-sub">BirdieFriends Golf &nbsp;·&nbsp; Blue Shamrock GC &nbsp;·&nbsp; Quota + Skins</div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('podium',this)">Podium</div>
+  <div class="tab" onclick="switchTab('standings',this)">Standings</div>
+  <div class="tab" onclick="switchTab('strokes',this)">vs Par</div>
+  <div class="tab" onclick="switchTab('birdies',this)">🐦 Birdies</div>
+  <div class="tab" onclick="switchTab('skins',this)">Skins</div>
+  <div class="tab" onclick="switchTab('ctp',this)">CTP</div>
+  <div class="tab" onclick="switchTab('money',this)">💰 Money</div>
+</div>
+
+<!-- ── PODIUM TAB ── -->
+<div class="tab-content active" id="tab-podium">
+  <div class="card">
+    <div class="card-label">Top 3 Finishers</div>
+    <div class="podium">
+      
+        <div class="podium-card p1">
+          <div class="medal">🥇</div>
+          <div class="pname">Chooch Wernett</div>
+          <div class="pscore">27.0 pts · Quota 24.6</div>
+          <div class="pdiff">+2.4</div>
+        </div>
+        <div class="podium-card ">
+          <div class="medal">🥈</div>
+          <div class="pname">Mohamed Walli</div>
+          <div class="pscore">27.0 pts · Quota 24.7</div>
+          <div class="pdiff">+2.3</div>
+        </div>
+        <div class="podium-card ">
+          <div class="medal">🥉</div>
+          <div class="pname">Jeremy Burkett</div>
+          <div class="pscore">23.0 pts · Quota 21.8</div>
+          <div class="pdiff">+1.2</div>
+        </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── STANDINGS TAB ── -->
+<div class="tab-content" id="tab-standings">
+  <div class="card">
+    <div class="card-label">Quota Standings</div>
+    <table>
+      <thead><tr><th></th><th>Player</th><th class="r">Score</th><th class="r">+/− Quota</th></tr></thead>
+      <tbody>
+        
+          <tr>
+            <td class="rank">1</td>
+            <td class="pname-cell">Chooch Wernett
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff3e0;color:#7a4a00"
+              >Combo</span>
+            </td>
+            <td class="r">27.0</td>
+            <td class="r pos">+2.4</td>
+          </tr>
+          <tr>
+            <td class="rank">2</td>
+            <td class="pname-cell">Mohamed Walli
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff3e0;color:#7a4a00"
+              >Combo</span>
+            </td>
+            <td class="r">27.0</td>
+            <td class="r pos">+2.3</td>
+          </tr>
+          <tr>
+            <td class="rank">3</td>
+            <td class="pname-cell">Jeremy Burkett
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff3e0;color:#7a4a00"
+              >Combo</span>
+            </td>
+            <td class="r">23.0</td>
+            <td class="r pos">+1.2</td>
+          </tr>
+          <tr>
+            <td class="rank">4</td>
+            <td class="pname-cell">BJ Kolonia
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff3e0;color:#7a4a00"
+              >Combo</span>
+            </td>
+            <td class="r">20.0</td>
+            <td class="r pos">+0.2</td>
+          </tr>
+          <tr>
+            <td class="rank">5</td>
+            <td class="pname-cell">Jordan Knappenberger
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#e8f5e9;color:#1a6b30"
+              >Green</span>
+            </td>
+            <td class="r">31.0</td>
+            <td class="r neg">-0.7</td>
+          </tr>
+          <tr>
+            <td class="rank">6</td>
+            <td class="pname-cell">Adam Costa
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff3e0;color:#7a4a00"
+              >Combo</span>
+            </td>
+            <td class="r">14.0</td>
+            <td class="r neg">-1.7</td>
+          </tr>
+          <tr>
+            <td class="rank">7</td>
+            <td class="pname-cell">Scott Skeens
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff8e1;color:#7a5a00"
+              >Gold</span>
+            </td>
+            <td class="r">13.0</td>
+            <td class="r neg">-3.2</td>
+          </tr>
+          <tr>
+            <td class="rank">8</td>
+            <td class="pname-cell">Nate Stettler
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff3e0;color:#7a4a00"
+              >Combo</span>
+            </td>
+            <td class="r">19.0</td>
+            <td class="r neg">-3.9</td>
+          </tr>
+          <tr>
+            <td class="rank">9</td>
+            <td class="pname-cell">Jeff Rapp
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#e8f5e9;color:#1a6b30"
+              >Green</span>
+            </td>
+            <td class="r">22.0</td>
+            <td class="r neg">-4.0</td>
+          </tr>
+          <tr>
+            <td class="rank">10</td>
+            <td class="pname-cell">Evan Lindermuth
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#e8f5e9;color:#1a6b30"
+              >Green</span>
+            </td>
+            <td class="r">23.0</td>
+            <td class="r neg">-4.8</td>
+          </tr>
+          <tr>
+            <td class="rank">11</td>
+            <td class="pname-cell">Rich Penberg
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff8e1;color:#7a5a00"
+              >Gold</span>
+            </td>
+            <td class="r">6.0</td>
+            <td class="r neg">-5.7</td>
+          </tr>
+          <tr>
+            <td class="rank">12</td>
+            <td class="pname-cell">Brian Hager
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#e8f5e9;color:#1a6b30"
+              >Green</span>
+            </td>
+            <td class="r">24.0</td>
+            <td class="r neg">-5.9</td>
+          </tr>
+          <tr>
+            <td class="rank">13</td>
+            <td class="pname-cell">Kadri Gashi
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff3e0;color:#7a4a00"
+              >Combo</span>
+            </td>
+            <td class="r">17.0</td>
+            <td class="r neg">-6.0</td>
+          </tr>
+          <tr>
+            <td class="rank">14</td>
+            <td class="pname-cell">Tom Kobol
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff3e0;color:#7a4a00"
+              >Combo</span>
+            </td>
+            <td class="r">8.0</td>
+            <td class="r neg">-7.7</td>
+          </tr>
+          <tr>
+            <td class="rank">15</td>
+            <td class="pname-cell">Carl Stadtmueller
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff8e1;color:#7a5a00"
+              >Gold</span>
+            </td>
+            <td class="r">3.0</td>
+            <td class="r neg">-9.8</td>
+          </tr>
+          <tr>
+            <td class="rank">16</td>
+            <td class="pname-cell">Bill Steirer
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#e8f5e9;color:#1a6b30"
+              >Green</span>
+            </td>
+            <td class="r">19.0</td>
+            <td class="r neg">-9.9</td>
+          </tr>
+          <tr>
+            <td class="rank">17</td>
+            <td class="pname-cell">Jake Knappenberger
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff3e0;color:#7a4a00"
+              >Combo</span>
+            </td>
+            <td class="r">8.0</td>
+            <td class="r neg">-15.4</td>
+          </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── STROKES TAB ── -->
+<div class="tab-content" id="tab-strokes">
+  <div class="card">
+    <div class="card-label">Stroke Score vs Par 71 (Front 36 · Back 35)</div>
+    <table>
+      <thead><tr><th></th><th>Player</th><th class="r">Front</th><th class="r">Back</th><th class="r">Total</th></tr></thead>
+      <tbody>
+        <tr>
+            <td class="rank">1</td>
+            <td class="pname-cell">Jordan Knappenberger</td>
+            <td class="r"><span class="neg">40 (+4)</span></td>
+            <td class="r"><span class="neg">39 (+4)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">79 (+8)</span></td>
+          </tr><tr>
+            <td class="rank">2</td>
+            <td class="pname-cell">Mohamed Walli</td>
+            <td class="r"><span class="neg">40 (+4)</span></td>
+            <td class="r"><span class="neg">42 (+7)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">82 (+11)</span></td>
+          </tr><tr>
+            <td class="rank">3</td>
+            <td class="pname-cell">Chooch Wernett</td>
+            <td class="r"><span class="neg">41 (+5)</span></td>
+            <td class="r"><span class="neg">42 (+7)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">83 (+12)</span></td>
+          </tr><tr>
+            <td class="rank">4</td>
+            <td class="pname-cell">Brian Hager</td>
+            <td class="r"><span class="neg">42 (+6)</span></td>
+            <td class="r"><span class="neg">41 (+6)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">83 (+12)</span></td>
+          </tr><tr>
+            <td class="rank">5</td>
+            <td class="pname-cell">Evan Lindermuth</td>
+            <td class="r"><span class="neg">44 (+8)</span></td>
+            <td class="r"><span class="neg">40 (+5)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">84 (+13)</span></td>
+          </tr><tr>
+            <td class="rank">6</td>
+            <td class="pname-cell">Jeremy Burkett</td>
+            <td class="r"><span class="neg">45 (+9)</span></td>
+            <td class="r"><span class="neg">40 (+5)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">85 (+14)</span></td>
+          </tr><tr>
+            <td class="rank">7</td>
+            <td class="pname-cell">Jeff Rapp</td>
+            <td class="r"><span class="neg">46 (+10)</span></td>
+            <td class="r"><span class="neg">41 (+6)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">87 (+16)</span></td>
+          </tr><tr>
+            <td class="rank">8</td>
+            <td class="pname-cell">BJ Kolonia</td>
+            <td class="r"><span class="neg">42 (+6)</span></td>
+            <td class="r"><span class="neg">46 (+11)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">88 (+17)</span></td>
+          </tr><tr>
+            <td class="rank">9</td>
+            <td class="pname-cell">Nate Stettler</td>
+            <td class="r"><span class="neg">48 (+12)</span></td>
+            <td class="r"><span class="neg">40 (+5)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">88 (+17)</span></td>
+          </tr><tr>
+            <td class="rank">10</td>
+            <td class="pname-cell">Bill Steirer</td>
+            <td class="r"><span class="neg">43 (+7)</span></td>
+            <td class="r"><span class="neg">45 (+10)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">88 (+17)</span></td>
+          </tr><tr>
+            <td class="rank">11</td>
+            <td class="pname-cell">Kadri Gashi</td>
+            <td class="r"><span class="neg">49 (+13)</span></td>
+            <td class="r"><span class="neg">42 (+7)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">91 (+20)</span></td>
+          </tr><tr>
+            <td class="rank">12</td>
+            <td class="pname-cell">Adam Costa</td>
+            <td class="r"><span class="neg">46 (+10)</span></td>
+            <td class="r"><span class="neg">47 (+12)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">93 (+22)</span></td>
+          </tr><tr>
+            <td class="rank">13</td>
+            <td class="pname-cell">Scott Skeens</td>
+            <td class="r"><span class="neg">49 (+13)</span></td>
+            <td class="r"><span class="neg">45 (+10)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">94 (+23)</span></td>
+          </tr><tr>
+            <td class="rank">14</td>
+            <td class="pname-cell">Tom Kobol</td>
+            <td class="r"><span class="neg">51 (+15)</span></td>
+            <td class="r"><span class="neg">48 (+13)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">99 (+28)</span></td>
+          </tr><tr>
+            <td class="rank">15</td>
+            <td class="pname-cell">Jake Knappenberger</td>
+            <td class="r"><span class="neg">50 (+14)</span></td>
+            <td class="r"><span class="neg">49 (+14)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">99 (+28)</span></td>
+          </tr><tr>
+            <td class="rank">16</td>
+            <td class="pname-cell">Rich Penberg</td>
+            <td class="r"><span class="neg">52 (+16)</span></td>
+            <td class="r"><span class="neg">49 (+14)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">101 (+30)</span></td>
+          </tr><tr>
+            <td class="rank">17</td>
+            <td class="pname-cell">Carl Stadtmueller</td>
+            <td class="r"><span class="neg">53 (+17)</span></td>
+            <td class="r"><span class="neg">51 (+16)</span></td>
+            <td class="r" style="font-weight:600"><span class="neg">104 (+33)</span></td>
+          </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── BIRDIES TAB ── -->
+<div class="tab-content" id="tab-birdies">
+  <div class="card">
+    <div class="card-label">🐦 Birdie Count — Birdies &amp; Eagles Only</div>
+    <table>
+      <thead><tr><th></th><th>Player</th><th class="r">🦅 Eagles</th><th class="r">🐦 Birdies</th><th class="r">Total</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="rank">1</td>
+          <td class="pname-cell">Chooch Wernett</td>
+          <td class="r" style="color:#3B6D11;font-weight:600">—</td>
+          <td class="r" style="color:#085041;font-weight:600">3</td>
+          <td class="r" style="font-weight:700">3</td>
+        </tr>
+        <tr>
+          <td class="rank">2</td>
+          <td class="pname-cell">Jordan Knappenberger</td>
+          <td class="r" style="color:#3B6D11;font-weight:600">—</td>
+          <td class="r" style="color:#085041;font-weight:600">3</td>
+          <td class="r" style="font-weight:700">3</td>
+        </tr>
+        <tr>
+          <td class="rank">3</td>
+          <td class="pname-cell">Mohamed Walli</td>
+          <td class="r" style="color:#3B6D11;font-weight:600">—</td>
+          <td class="r" style="color:#085041;font-weight:600">2</td>
+          <td class="r" style="font-weight:700">2</td>
+        </tr>
+        <tr>
+          <td class="rank">4</td>
+          <td class="pname-cell">Jeff Rapp</td>
+          <td class="r" style="color:#3B6D11;font-weight:600">—</td>
+          <td class="r" style="color:#085041;font-weight:600">2</td>
+          <td class="r" style="font-weight:700">2</td>
+        </tr>
+        <tr>
+          <td class="rank">5</td>
+          <td class="pname-cell">Jeremy Burkett</td>
+          <td class="r" style="color:#3B6D11;font-weight:600">—</td>
+          <td class="r" style="color:#085041;font-weight:600">1</td>
+          <td class="r" style="font-weight:700">1</td>
+        </tr>
+        <tr>
+          <td class="rank">6</td>
+          <td class="pname-cell">BJ Kolonia</td>
+          <td class="r" style="color:#3B6D11;font-weight:600">—</td>
+          <td class="r" style="color:#085041;font-weight:600">1</td>
+          <td class="r" style="font-weight:700">1</td>
+        </tr>
+        <tr>
+          <td class="rank">7</td>
+          <td class="pname-cell">Kadri Gashi</td>
+          <td class="r" style="color:#3B6D11;font-weight:600">—</td>
+          <td class="r" style="color:#085041;font-weight:600">1</td>
+          <td class="r" style="font-weight:700">1</td>
+        </tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── SKINS TAB ── -->
+<div class="tab-content" id="tab-skins">
+  <div class="card">
+    <div class="card-label">4 Skins Won</div>
+    
+          <div class="skin-row">
+            <div class="hole-badge">#2</div>
+            <div class="skin-info">
+              <div class="skin-name">Bill Steirer</div>
+              <div class="skin-detail">Outright winner · 2 pts</div>
+            </div>
+          </div>
+          <div class="skin-row">
+            <div class="hole-badge">#14</div>
+            <div class="skin-info">
+              <div class="skin-name">Kadri Gashi</div>
+              <div class="skin-detail">Outright winner · 4 pts</div>
+            </div>
+          </div>
+          <div class="skin-row">
+            <div class="hole-badge">#15</div>
+            <div class="skin-info">
+              <div class="skin-name">Chooch Wernett</div>
+              <div class="skin-detail">Outright winner · 4 pts</div>
+            </div>
+          </div>
+          <div class="skin-row">
+            <div class="hole-badge">#17</div>
+            <div class="skin-info">
+              <div class="skin-name">Jeff Rapp</div>
+              <div class="skin-detail">Outright winner · 4 pts</div>
+            </div>
+          </div>
+  </div>
+</div>
+
+<!-- ── CTP TAB ── -->
+<div class="tab-content" id="tab-ctp">
+  <div class="card">
+    <div class="card-label">Closest to the Pin · Par 3 Holes</div>
+    <div class="ctp-row"><div class="par3-badge">#3</div><div class="skin-info"><div class="skin-name">BJ Kolonia</div><div class="skin-detail">Hole #3 · Par 3</div></div></div><div class="ctp-row"><div class="par3-badge">#8</div><div class="skin-info"><div class="skin-name">Bill Steirer</div><div class="skin-detail">Hole #8 · Par 3</div></div></div><div class="ctp-row"><div class="par3-badge">#10</div><div class="skin-info"><div class="skin-name">Evan Lindermuth</div><div class="skin-detail">Hole #10 · Par 3</div></div></div><div class="ctp-row"><div class="par3-badge">#15</div><div class="skin-info"><div class="skin-name">Chooch Wernett</div><div class="skin-detail">Hole #15 · Par 3</div></div></div><div class="ctp-row"><div class="par3-badge">#18</div><div class="skin-info"><div class="skin-name">Nate Stettler</div><div class="skin-detail">Hole #18 · Par 3</div></div></div>
+  </div>
+</div>
+
+<!-- ── MONEY TAB ── -->
+<div class="tab-content" id="tab-money">
+  <div class="card">
+    <div class="card-label">💰 Money List — Total Earnings</div>
+    <table>
+      <thead><tr><th></th><th>Player</th><th class="r">Podium</th><th class="r">Skins</th><th class="r">CTP</th><th class="r">Total</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="rank">1</td>
+          <td class="pname-cell">Chooch Wernett</td>
+          <td class="r" style="color:var(--muted)">$40.00</td>
+          <td class="r" style="color:var(--muted)">$55.00</td>
+          <td class="r" style="color:var(--muted)">$10.00</td>
+          <td class="r" style="font-weight:700;color:var(--green)">$105.00</td>
+        </tr>
+        <tr>
+          <td class="rank">2</td>
+          <td class="pname-cell">Bill Steirer</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="color:var(--muted)">$55.00</td>
+          <td class="r" style="color:var(--muted)">$10.00</td>
+          <td class="r" style="font-weight:700;color:var(--green)">$65.00</td>
+        </tr>
+        <tr>
+          <td class="rank">3</td>
+          <td class="pname-cell">Jeff Rapp</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="color:var(--muted)">$55.00</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="font-weight:700;color:var(--green)">$55.00</td>
+        </tr>
+        <tr>
+          <td class="rank">4</td>
+          <td class="pname-cell">Kadri Gashi</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="color:var(--muted)">$55.00</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="font-weight:700;color:var(--green)">$55.00</td>
+        </tr>
+        <tr>
+          <td class="rank">5</td>
+          <td class="pname-cell">Mohamed Walli</td>
+          <td class="r" style="color:var(--muted)">$20.00</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="font-weight:700;color:var(--green)">$20.00</td>
+        </tr>
+        <tr>
+          <td class="rank">6</td>
+          <td class="pname-cell">Jeremy Burkett</td>
+          <td class="r" style="color:var(--muted)">$10.00</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="font-weight:700;color:var(--green)">$10.00</td>
+        </tr>
+        <tr>
+          <td class="rank">7</td>
+          <td class="pname-cell">BJ Kolonia</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="color:var(--muted)">$10.00</td>
+          <td class="r" style="font-weight:700;color:var(--green)">$10.00</td>
+        </tr>
+        <tr>
+          <td class="rank">8</td>
+          <td class="pname-cell">Nate Stettler</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="color:var(--muted)">$10.00</td>
+          <td class="r" style="font-weight:700;color:var(--green)">$10.00</td>
+        </tr>
+        <tr>
+          <td class="rank">9</td>
+          <td class="pname-cell">Evan Lindermuth</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="color:var(--muted)">—</td>
+          <td class="r" style="color:var(--muted)">$10.00</td>
+          <td class="r" style="font-weight:700;color:var(--green)">$10.00</td>
+        </tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="updated">Updated May 9, 12:16 PM &nbsp;·&nbsp; <a href="/" style="color:var(--muted)">← Series Standings</a></div>
+
+<script>
+function switchTab(id, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  el.classList.add('active');
+}
+</script>
+</body>
+</html>
