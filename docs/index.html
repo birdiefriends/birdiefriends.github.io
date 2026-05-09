@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#085041">
+<title>2026 BF Championship Series</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--green:#085041;--gold:#c9a227;--bg:#f4f7f5;--card:#fff;--muted:#6b8f82;--border:#d0e5dc}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:#0a2e25}
+header{background:var(--green);padding:20px 16px;text-align:center}
+.title{font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:900;color:#fff}
+.sub{font-size:0.78rem;color:rgba(255,255,255,0.6);margin-top:4px}
+.date{font-size:0.78rem;color:var(--gold);margin-top:3px}
+.tabs{display:flex;background:var(--green);border-top:1px solid rgba(255,255,255,0.1);overflow-x:auto}
+.tab{flex:1;min-width:90px;padding:10px 4px;font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.6);text-align:center;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.active{color:#fff;border-bottom-color:var(--gold)}
+.content{display:none;padding:16px;max-width:700px;margin:0 auto}
+.content.active{display:block}
+.card{background:var(--card);border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
+.label{font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:0.82rem}
+th{font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border);text-align:left}
+td{padding:7px 8px;border-bottom:0.5px solid var(--border)}
+tr:last-child td{border-bottom:none}
+.notice{font-size:0.78rem;color:var(--muted);padding:10px;background:#f0f7f4;border-radius:8px;margin-bottom:12px}
+.raw-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:12px}
+.updated{text-align:center;font-size:0.72rem;color:var(--muted);padding:16px 0 8px}
+.ftab{padding:8px 14px;border:none;background:none;font-size:0.75rem;font-weight:500;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap}
+.ftab.active{color:var(--green);border-bottom-color:var(--green);font-weight:600}
+.flight-tabs{display:flex;border-bottom:2px solid var(--border);margin-bottom:12px;overflow-x:auto}
+</style>
+</head>
+<body>
+<header>
+  <div class="title">2026 BF Championship Series</div>
+  <div class="sub">BirdieFriends Golf &nbsp;·&nbsp; After 1 event</div>
+  <div class="date">Sunday, May 3, 2026</div>
+</header>
+
+<div class="notice" style="margin:12px 16px">
+  Min. 4 events to qualify &nbsp;·&nbsp; Best 4 results count fully &nbsp;·&nbsp; Greyed = not yet qualified
+</div>
+
+<div style="padding:0 16px 24px;max-width:700px;margin:0 auto">
+
+  <!-- Overall -->
+  <div class="card">
+    <div class="label">🏆 Overall Standings</div>
+    <table><thead><tr>
+      <th></th><th>Player</th>
+      <th style="text-align:center">Played</th>
+      <th style="text-align:right">Performance</th>
+      <th style="text-align:right">Assigned</th>
+      <th style="text-align:right">Achieved</th>
+    </tr></thead><tbody><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">1</td>
+        <td style="padding:8px;font-weight:500">Chooch Wernett
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+2.4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24.6</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">2</td>
+        <td style="padding:8px;font-weight:500">Mohamed Walli
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+2.3</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24.7</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">3</td>
+        <td style="padding:8px;font-weight:500">Jeremy Burkett
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+1.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">21.8</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">4</td>
+        <td style="padding:8px;font-weight:500">BJ Kolonia
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+0.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19.8</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">20</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">5</td>
+        <td style="padding:8px;font-weight:500">Jordan Knappenberger
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-0.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">31.7</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">31</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">6</td>
+        <td style="padding:8px;font-weight:500">Adam Costa
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-1.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">15.7</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">14</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">7</td>
+        <td style="padding:8px;font-weight:500">Scott Skeens
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-3.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">16.2</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">13</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">8</td>
+        <td style="padding:8px;font-weight:500">Nate Stettler
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-3.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">22.9</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">9</td>
+        <td style="padding:8px;font-weight:500">Jeff Rapp
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">26</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">22</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">10</td>
+        <td style="padding:8px;font-weight:500">Evan Lindermuth
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-4.8</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27.8</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">11</td>
+        <td style="padding:8px;font-weight:500">Rich Penberg
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-5.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">11.7</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">6</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">12</td>
+        <td style="padding:8px;font-weight:500">Brian Hager
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-5.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">29.9</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">13</td>
+        <td style="padding:8px;font-weight:500">Kadri Gashi
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-6</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">17</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">14</td>
+        <td style="padding:8px;font-weight:500">Tom Kobol
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-7.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">15.7</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">8</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">15</td>
+        <td style="padding:8px;font-weight:500">Carl Stadtmueller
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-9.8</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">12.8</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">3</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">16</td>
+        <td style="padding:8px;font-weight:500">Bill Steirer
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-9.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">28.9</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">17</td>
+        <td style="padding:8px;font-weight:500">Jake Knappenberger
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-15.4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23.4</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">8</td>
+      </tr><tr><td colspan="6" style="padding:6px 8px;font-size:0.7rem;color:#999">* Not yet qualified (min. 4 events)</td></tr></tbody></table>
+  </div>
+
+  <!-- Green -->
+  <div class="card">
+    <div class="label">🟢 Green Tees Flight</div>
+    <table><thead><tr>
+      <th></th><th>Player</th>
+      <th style="text-align:center">Played</th>
+      <th style="text-align:right">Performance</th>
+      <th style="text-align:right">Assigned</th>
+      <th style="text-align:right">Achieved</th>
+    </tr></thead><tbody><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">1</td>
+        <td style="padding:8px;font-weight:500">Jordan Knappenberger
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-0.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">31.7</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">31</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">2</td>
+        <td style="padding:8px;font-weight:500">Jeff Rapp
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">26</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">22</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">3</td>
+        <td style="padding:8px;font-weight:500">Evan Lindermuth
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-4.8</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27.8</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">4</td>
+        <td style="padding:8px;font-weight:500">Brian Hager
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-5.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">29.9</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">5</td>
+        <td style="padding:8px;font-weight:500">Bill Steirer
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-9.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">28.9</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19</td>
+      </tr><tr><td colspan="6" style="padding:6px 8px;font-size:0.7rem;color:#999">* Not yet qualified (min. 4 events)</td></tr></tbody></table>
+  </div>
+
+  <!-- Combo -->
+  <div class="card">
+    <div class="label">🟡 Combo Tees Flight</div>
+    <table><thead><tr>
+      <th></th><th>Player</th>
+      <th style="text-align:center">Played</th>
+      <th style="text-align:right">Performance</th>
+      <th style="text-align:right">Assigned</th>
+      <th style="text-align:right">Achieved</th>
+    </tr></thead><tbody><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">1</td>
+        <td style="padding:8px;font-weight:500">Chooch Wernett
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+2.4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24.6</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">2</td>
+        <td style="padding:8px;font-weight:500">Mohamed Walli
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+2.3</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24.7</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">3</td>
+        <td style="padding:8px;font-weight:500">Jeremy Burkett
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+1.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">21.8</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">4</td>
+        <td style="padding:8px;font-weight:500">BJ Kolonia
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+0.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19.8</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">20</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">5</td>
+        <td style="padding:8px;font-weight:500">Adam Costa
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-1.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">15.7</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">14</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">6</td>
+        <td style="padding:8px;font-weight:500">Nate Stettler
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-3.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">22.9</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">7</td>
+        <td style="padding:8px;font-weight:500">Kadri Gashi
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-6</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">17</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">8</td>
+        <td style="padding:8px;font-weight:500">Tom Kobol
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-7.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">15.7</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">8</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">9</td>
+        <td style="padding:8px;font-weight:500">Jake Knappenberger
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-15.4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23.4</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">8</td>
+      </tr><tr><td colspan="6" style="padding:6px 8px;font-size:0.7rem;color:#999">* Not yet qualified (min. 4 events)</td></tr></tbody></table>
+  </div>
+
+  <!-- Gold -->
+  <div class="card">
+    <div class="label">🟠 Gold Tees Flight</div>
+    <table><thead><tr>
+      <th></th><th>Player</th>
+      <th style="text-align:center">Played</th>
+      <th style="text-align:right">Performance</th>
+      <th style="text-align:right">Assigned</th>
+      <th style="text-align:right">Achieved</th>
+    </tr></thead><tbody><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">1</td>
+        <td style="padding:8px;font-weight:500">Scott Skeens
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-3.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">16.2</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">13</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">2</td>
+        <td style="padding:8px;font-weight:500">Rich Penberg
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-5.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">11.7</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">6</td>
+      </tr><tr style="opacity:0.75">
+        <td style="padding:8px;color:#999;font-size:0.75rem">3</td>
+        <td style="padding:8px;font-weight:500">Carl Stadtmueller
+          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
+        </td>
+        <td style="padding:8px;text-align:center">1</td>
+        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-9.8</span><span style="color:#999;font-size:0.7rem"> *</span></td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">12.8</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">3</td>
+      </tr><tr><td colspan="6" style="padding:6px 8px;font-size:0.7rem;color:#999">* Not yet qualified (min. 4 events)</td></tr></tbody></table>
+  </div>
+
+</div>
+
+<div class="updated">Updated May 9, 12:16 PM &nbsp;·&nbsp; <a href="/results.html" style="color:var(--muted)">Latest Event Results →</a></div>
+</body>
+</html>
