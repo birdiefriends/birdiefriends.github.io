@@ -1,406 +1,724 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#085041">
-<title>2026 BF Championship Series</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- saved from url=(0059)file:///C:/Users/16177/Downloads/birdiefriends_landing.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BirdieFriends Golf — Tee Off. Play Great.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link href="./BirdieFriends Golf — Tee Off. Play Great._files/css2" rel="stylesheet">
 <style>
-:root{--green:#085041;--gold:#c9a227;--bg:#f4f7f5;--card:#fff;--muted:#6b8f82;--border:#d0e5dc}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:#0a2e25}
-header{background:var(--green);padding:20px 16px;text-align:center}
-.title{font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:900;color:#fff}
-.sub{font-size:0.78rem;color:rgba(255,255,255,0.6);margin-top:4px}
-.date{font-size:0.78rem;color:var(--gold);margin-top:3px}
-.tabs{display:flex;background:var(--green);border-top:1px solid rgba(255,255,255,0.1);overflow-x:auto}
-.tab{flex:1;min-width:90px;padding:10px 4px;font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.6);text-align:center;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
-.tab.active{color:#fff;border-bottom-color:var(--gold)}
-.content{display:none;padding:16px;max-width:700px;margin:0 auto}
-.content.active{display:block}
-.card{background:var(--card);border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
-.label{font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px}
-table{width:100%;border-collapse:collapse;font-size:0.82rem}
-th{font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border);text-align:left}
-td{padding:7px 8px;border-bottom:0.5px solid var(--border)}
-tr:last-child td{border-bottom:none}
-.notice{font-size:0.78rem;color:var(--muted);padding:10px;background:#f0f7f4;border-radius:8px;margin-bottom:12px}
-.raw-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:12px}
-.updated{text-align:center;font-size:0.72rem;color:var(--muted);padding:16px 0 8px}
-.ftab{padding:8px 14px;border:none;background:none;font-size:0.75rem;font-weight:500;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap}
-.ftab.active{color:var(--green);border-bottom-color:var(--green);font-weight:600}
-.flight-tabs{display:flex;border-bottom:2px solid var(--border);margin-bottom:12px;overflow-x:auto}
+  :root {
+    --green:      #085041;
+    --green-mid:  #0f6b52;
+    --green-lite: #1a8a6a;
+    --gold:       #c9a227;
+    --gold-lite:  #FAC775;
+    --cream:      #f7f4ee;
+    --white:      #ffffff;
+    --text:       #0a2e25;
+    --muted:      #6b8f82;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--cream);
+    color: var(--text);
+    overflow-x: hidden;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    background:
+      linear-gradient(160deg, rgba(8,80,65,0.92) 0%, rgba(8,80,65,0.75) 50%, rgba(8,80,65,0.88) 100%),
+      url('https://images.unsplash.com/photo-1535131749006-b7f58c99034b?w=1600&q=80') center/cover no-repeat;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 70% 30%, rgba(201,162,39,0.15) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .hero-logo {
+    width: 72px;
+    height: 72px;
+    background: rgba(255,255,255,0.12);
+    border: 1.5px solid rgba(255,255,255,0.25);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    margin-bottom: 28px;
+    backdrop-filter: blur(8px);
+    animation: fadeDown 0.8s ease both;
+  }
+
+  .hero-eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold-lite);
+    margin-bottom: 16px;
+    animation: fadeDown 0.8s 0.1s ease both;
+  }
+
+  .hero-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.8rem, 8vw, 5.5rem);
+    font-weight: 900;
+    color: #fff;
+    line-height: 1.0;
+    margin-bottom: 8px;
+    animation: fadeDown 0.8s 0.2s ease both;
+  }
+
+  .hero-title em {
+    font-style: italic;
+    color: var(--gold-lite);
+  }
+
+  .hero-tagline {
+    font-size: clamp(1rem, 2.5vw, 1.25rem);
+    color: rgba(255,255,255,0.7);
+    font-weight: 300;
+    letter-spacing: 0.05em;
+    margin-bottom: 48px;
+    animation: fadeDown 0.8s 0.3s ease both;
+  }
+
+  .hero-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--gold);
+    color: var(--green);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 0.04em;
+    padding: 18px 40px;
+    border-radius: 60px;
+    text-decoration: none;
+    transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+    box-shadow: 0 8px 32px rgba(201,162,39,0.35);
+    animation: fadeUp 0.8s 0.5s ease both;
+  }
+
+  .hero-cta:hover {
+    background: var(--gold-lite);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 40px rgba(201,162,39,0.5);
+  }
+
+  .hero-cta svg { width: 20px; height: 20px; }
+
+  .hero-scroll {
+    position: absolute;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: rgba(255,255,255,0.4);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    animation: fadeUp 1s 1s ease both;
+  }
+
+  .scroll-line {
+    width: 1px;
+    height: 40px;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.4), transparent);
+    animation: scrollPulse 2s infinite;
+  }
+
+  /* ── STATS BAR ── */
+  .stats-bar {
+    background: var(--green);
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+    gap: clamp(24px, 6vw, 80px);
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    text-align: center;
+    color: white;
+  }
+
+  .stat-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--gold-lite);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.55);
+    margin-top: 4px;
+  }
+
+  /* ── SECTION SHARED ── */
+  .section {
+    padding: clamp(60px, 10vw, 100px) clamp(20px, 5vw, 60px);
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .section-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--green-lite);
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--green);
+    margin-bottom: 16px;
+  }
+
+  .section-body {
+    font-size: 1.05rem;
+    color: var(--muted);
+    line-height: 1.7;
+    max-width: 560px;
+  }
+
+  /* ── FEATURES ── */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px;
+    margin-top: 56px;
+  }
+
+  .feature-card {
+    background: white;
+    border-radius: 16px;
+    padding: 32px 28px;
+    border: 1px solid rgba(8,80,65,0.08);
+    box-shadow: 0 2px 20px rgba(8,80,65,0.06);
+    transition: transform 0.25s, box-shadow 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--green), var(--green-lite));
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+
+  .feature-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 12px 40px rgba(8,80,65,0.12);
+  }
+
+  .feature-card:hover::before { opacity: 1; }
+
+  .feature-icon {
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, #e8f5f0, #f0faf6);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    margin-bottom: 20px;
+  }
+
+  .feature-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--green);
+    margin-bottom: 10px;
+  }
+
+  .feature-body {
+    font-size: 0.9rem;
+    color: var(--muted);
+    line-height: 1.65;
+  }
+
+  /* ── CHAMPIONSHIP STRIP ── */
+  .champ-strip {
+    background: linear-gradient(135deg, var(--green) 0%, var(--green-mid) 100%);
+    padding: clamp(60px, 8vw, 80px) clamp(20px, 5vw, 60px);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .champ-strip::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 300px; height: 300px;
+    border: 60px solid rgba(255,255,255,0.04);
+    border-radius: 50%;
+  }
+
+  .champ-strip::after {
+    content: '';
+    position: absolute;
+    bottom: -80px; left: -40px;
+    width: 220px; height: 220px;
+    border: 50px solid rgba(201,162,39,0.08);
+    border-radius: 50%;
+  }
+
+  .champ-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+  }
+
+  @media (max-width: 700px) {
+    .champ-inner { grid-template-columns: 1fr; gap: 32px; }
+  }
+
+  .champ-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold-lite);
+    margin-bottom: 12px;
+  }
+
+  .champ-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    color: white;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 16px;
+  }
+
+  .champ-body {
+    color: rgba(255,255,255,0.65);
+    font-size: 1rem;
+    line-height: 1.7;
+    margin-bottom: 32px;
+  }
+
+  .champ-metrics {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+
+  .champ-metric {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    padding: 16px 20px;
+    text-align: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .champ-metric-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.8rem;
+    color: var(--gold-lite);
+    font-weight: 700;
+  }
+
+  .champ-metric-label {
+    font-size: 0.72rem;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .standings-preview {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 24px;
+    backdrop-filter: blur(8px);
+  }
+
+  .standings-header {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold-lite);
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .standings-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .standings-row:last-child { border-bottom: none; }
+
+  .s-rank {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.35);
+    width: 20px;
+  }
+
+  .s-medal { font-size: 1rem; width: 24px; }
+
+  .s-name {
+    font-weight: 500;
+    color: white;
+    font-size: 0.9rem;
+    flex: 1;
+  }
+
+  .s-score {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--gold-lite);
+  }
+
+  /* ── CTA SECTION ── */
+  .cta-section {
+    text-align: center;
+    padding: clamp(80px, 12vw, 120px) 24px;
+    position: relative;
+  }
+
+  .cta-section::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(8,80,65,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .cta-pill {
+    display: inline-block;
+    background: rgba(8,80,65,0.08);
+    color: var(--green);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 8px 20px;
+    border-radius: 40px;
+    margin-bottom: 24px;
+    border: 1px solid rgba(8,80,65,0.15);
+  }
+
+  .cta-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 6vw, 3.5rem);
+    font-weight: 900;
+    color: var(--green);
+    line-height: 1.1;
+    margin-bottom: 20px;
+  }
+
+  .cta-title em { font-style: italic; color: var(--green-lite); }
+
+  .cta-body {
+    font-size: 1.05rem;
+    color: var(--muted);
+    max-width: 480px;
+    margin: 0 auto 40px;
+    line-height: 1.7;
+  }
+
+  .cta-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--green);
+    color: white;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 18px 44px;
+    border-radius: 60px;
+    text-decoration: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 8px 32px rgba(8,80,65,0.25);
+  }
+
+  .cta-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 40px rgba(8,80,65,0.35);
+  }
+
+  .cta-note {
+    margin-top: 16px;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    background: var(--green);
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    padding: 32px 24px;
+    font-size: 0.82rem;
+  }
+
+  footer a {
+    color: var(--gold-lite);
+    text-decoration: none;
+  }
+
+  footer .footer-logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    color: white;
+    margin-bottom: 8px;
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes scrollPulse {
+    0%, 100% { opacity: 0.4; }
+    50%       { opacity: 1; }
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (max-width: 600px) {
+    .stats-bar { gap: 32px; }
+    .feature-card { padding: 24px 20px; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="title">2026 BF Championship Series</div>
-  <div class="sub">BirdieFriends Golf &nbsp;·&nbsp; After 1 event</div>
-  <div class="date">Sunday, May 3, 2026</div>
-</header>
 
-<div class="notice" style="margin:12px 16px">
-  Min. 4 events to qualify &nbsp;·&nbsp; Best 4 results count fully &nbsp;·&nbsp; Greyed = not yet qualified
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="hero-logo" style="background:rgba(255,255,255,0.95);padding:6px">
+    <img src="data:image/png;base64,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" alt="BirdieFriends" style="width:58px;height:58px;object-fit:contain;border-radius:50%">
+  </div>
+  <div class="hero-eyebrow">BirdieFriends Golf</div>
+  <h1 class="hero-title">Where Golf Friends<br><em>Come to Play</em></h1>
+  <p class="hero-tagline">Weekly events · Championship Series · Swing Insights</p>
+  <a href="https://www.jotform.com/app/233083550317148" class="hero-cta">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"></path>
+      <path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"></path>
+    </svg>
+    Get the App
+  </a>
+  <div class="hero-scroll">
+    <div class="scroll-line"></div>
+    <span>Scroll</span>
+  </div>
+</section>
+
+<!-- ── STATS ── -->
+<div class="stats-bar">
+  <div class="stat">
+    <div class="stat-num">8</div>
+    <div class="stat-label">Events per Season</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">3</div>
+    <div class="stat-label">Seasons Running</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">30+</div>
+    <div class="stat-label">Active Members</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">4</div>
+    <div class="stat-label">Championship Flights</div>
+  </div>
 </div>
 
-<div style="padding:0 16px 24px;max-width:700px;margin:0 auto">
-
-  <!-- Overall -->
-  <div class="card">
-    <div class="label">🏆 Overall Standings</div>
-    <table><thead><tr>
-      <th></th><th>Player</th>
-      <th style="text-align:center">Played</th>
-      <th style="text-align:right">Performance</th>
-      <th style="text-align:right">Assigned</th>
-      <th style="text-align:right">Achieved</th>
-    </tr></thead><tbody><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">1</td>
-        <td style="padding:8px;font-weight:500">Chooch Wernett
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+2.4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24.6</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">2</td>
-        <td style="padding:8px;font-weight:500">Mohamed Walli
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+2.3</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24.7</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">3</td>
-        <td style="padding:8px;font-weight:500">Jeremy Burkett
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+1.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">21.8</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">4</td>
-        <td style="padding:8px;font-weight:500">BJ Kolonia
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+0.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19.8</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">20</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">5</td>
-        <td style="padding:8px;font-weight:500">Jordan Knappenberger
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-0.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">31.7</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">31</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">6</td>
-        <td style="padding:8px;font-weight:500">Adam Costa
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-1.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">15.7</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">14</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">7</td>
-        <td style="padding:8px;font-weight:500">Scott Skeens
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-3.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">16.2</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">13</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">8</td>
-        <td style="padding:8px;font-weight:500">Nate Stettler
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-3.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">22.9</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">9</td>
-        <td style="padding:8px;font-weight:500">Jeff Rapp
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">26</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">22</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">10</td>
-        <td style="padding:8px;font-weight:500">Evan Lindermuth
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-4.8</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27.8</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">11</td>
-        <td style="padding:8px;font-weight:500">Rich Penberg
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-5.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">11.7</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">6</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">12</td>
-        <td style="padding:8px;font-weight:500">Brian Hager
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-5.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">29.9</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">13</td>
-        <td style="padding:8px;font-weight:500">Kadri Gashi
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-6</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">17</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">14</td>
-        <td style="padding:8px;font-weight:500">Tom Kobol
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-7.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">15.7</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">8</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">15</td>
-        <td style="padding:8px;font-weight:500">Carl Stadtmueller
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-9.8</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">12.8</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">3</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">16</td>
-        <td style="padding:8px;font-weight:500">Bill Steirer
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-9.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">28.9</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">17</td>
-        <td style="padding:8px;font-weight:500">Jake Knappenberger
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-15.4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23.4</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">8</td>
-      </tr><tr><td colspan="6" style="padding:6px 8px;font-size:0.7rem;color:#999">* Not yet qualified (min. 4 events)</td></tr></tbody></table>
+<!-- ── FEATURES ── -->
+<div class="section">
+  <div class="reveal" style="transition-delay: 0s;">
+    <div class="section-label">Everything in one place</div>
+    <h2 class="section-title">Your Golf Community,<br>Organized.</h2>
+    <p class="section-body">BirdieFriends brings together everything you need for competitive recreational golf — from weekly tee time reservations to season-long championship tracking.</p>
   </div>
 
-  <!-- Green -->
-  <div class="card">
-    <div class="label">🟢 Green Tees Flight</div>
-    <table><thead><tr>
-      <th></th><th>Player</th>
-      <th style="text-align:center">Played</th>
-      <th style="text-align:right">Performance</th>
-      <th style="text-align:right">Assigned</th>
-      <th style="text-align:right">Achieved</th>
-    </tr></thead><tbody><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">1</td>
-        <td style="padding:8px;font-weight:500">Jordan Knappenberger
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-0.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">31.7</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">31</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">2</td>
-        <td style="padding:8px;font-weight:500">Jeff Rapp
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">26</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">22</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">3</td>
-        <td style="padding:8px;font-weight:500">Evan Lindermuth
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-4.8</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27.8</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">4</td>
-        <td style="padding:8px;font-weight:500">Brian Hager
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-5.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">29.9</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">5</td>
-        <td style="padding:8px;font-weight:500">Bill Steirer
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#e8f5e9;color:#1a6b30">Green</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-9.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">28.9</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19</td>
-      </tr><tr><td colspan="6" style="padding:6px 8px;font-size:0.7rem;color:#999">* Not yet qualified (min. 4 events)</td></tr></tbody></table>
+  <div class="features-grid">
+    <div class="feature-card reveal" style="transition-delay: 0.1s;">
+      <div class="feature-icon">📅</div>
+      <div class="feature-title">Weekly Event Registration</div>
+      <div class="feature-body">Reserve your spot for upcoming events in seconds. View the schedule, confirm attendance, and always know when and where the next round is happening.</div>
+    </div>
+    <div class="feature-card reveal" style="transition-delay: 0.2s;">
+      <div class="feature-icon">🏆</div>
+      <div class="feature-title">Championship Series</div>
+      <div class="feature-body">Compete across 8 events in the annual BF Championship. Rolling standings, handicap-adjusted quotas, and prize payouts track who's playing their best golf all season.</div>
+    </div>
+    <div class="feature-card reveal" style="transition-delay: 0s;">
+      <div class="feature-icon">📊</div>
+      <div class="feature-title">Live Scorecard Entry</div>
+      <div class="feature-body">Submit your hole-by-hole points right from the course. Scores flow automatically into the results system — no paperwork, no manual entry delays.</div>
+    </div>
+    <div class="feature-card reveal" style="transition-delay: 0.1s;">
+      <div class="feature-icon">🎯</div>
+      <div class="feature-title">Closest to the Pin</div>
+      <div class="feature-body">Track CTP results on all par-3 holes. Winners recorded instantly, payouts calculated automatically — no more arguments at the 19th hole.</div>
+    </div>
+    <div class="feature-card reveal" style="transition-delay: 0.2s;">
+      <div class="feature-icon">🏌️</div>
+      <div class="feature-title">Swing Insights</div>
+      <div class="feature-body">Access curated swing tips, mechanics videos, and improvement resources tailored for recreational golfers. Play smarter, not just harder.</div>
+    </div>
+    <div class="feature-card reveal" style="transition-delay: 0s;">
+      <div class="feature-icon">💰</div>
+      <div class="feature-title">Skins &amp; Payouts</div>
+      <div class="feature-body">Automated skins calculations, money list tracking, and payout breakdowns. Every dollar accounted for, every winner recognized.</div>
+    </div>
   </div>
-
-  <!-- Combo -->
-  <div class="card">
-    <div class="label">🟡 Combo Tees Flight</div>
-    <table><thead><tr>
-      <th></th><th>Player</th>
-      <th style="text-align:center">Played</th>
-      <th style="text-align:right">Performance</th>
-      <th style="text-align:right">Assigned</th>
-      <th style="text-align:right">Achieved</th>
-    </tr></thead><tbody><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">1</td>
-        <td style="padding:8px;font-weight:500">Chooch Wernett
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+2.4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24.6</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">2</td>
-        <td style="padding:8px;font-weight:500">Mohamed Walli
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+2.3</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">24.7</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">27</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">3</td>
-        <td style="padding:8px;font-weight:500">Jeremy Burkett
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+1.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">21.8</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">4</td>
-        <td style="padding:8px;font-weight:500">BJ Kolonia
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#085041;font-weight:500">+0.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19.8</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">20</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">5</td>
-        <td style="padding:8px;font-weight:500">Adam Costa
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-1.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">15.7</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">14</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">6</td>
-        <td style="padding:8px;font-weight:500">Nate Stettler
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-3.9</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">22.9</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">19</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">7</td>
-        <td style="padding:8px;font-weight:500">Kadri Gashi
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-6</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">17</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">8</td>
-        <td style="padding:8px;font-weight:500">Tom Kobol
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-7.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">15.7</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">8</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">9</td>
-        <td style="padding:8px;font-weight:500">Jake Knappenberger
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff3e0;color:#7a4a00">Combo</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-15.4</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">23.4</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">8</td>
-      </tr><tr><td colspan="6" style="padding:6px 8px;font-size:0.7rem;color:#999">* Not yet qualified (min. 4 events)</td></tr></tbody></table>
-  </div>
-
-  <!-- Gold -->
-  <div class="card">
-    <div class="label">🟠 Gold Tees Flight</div>
-    <table><thead><tr>
-      <th></th><th>Player</th>
-      <th style="text-align:center">Played</th>
-      <th style="text-align:right">Performance</th>
-      <th style="text-align:right">Assigned</th>
-      <th style="text-align:right">Achieved</th>
-    </tr></thead><tbody><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">1</td>
-        <td style="padding:8px;font-weight:500">Scott Skeens
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-3.2</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">16.2</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">13</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">2</td>
-        <td style="padding:8px;font-weight:500">Rich Penberg
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-5.7</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">11.7</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">6</td>
-      </tr><tr style="opacity:0.75">
-        <td style="padding:8px;color:#999;font-size:0.75rem">3</td>
-        <td style="padding:8px;font-weight:500">Carl Stadtmueller
-          <span style="font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;background:#fff8e1;color:#7a5a00">Gold</span>
-        </td>
-        <td style="padding:8px;text-align:center">1</td>
-        <td style="padding:8px;text-align:right;font-family:monospace"><span style="color:#a32d2d;font-weight:500">-9.8</span><span style="color:#999;font-size:0.7rem"> *</span></td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">12.8</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;font-size:0.78rem;color:#888">3</td>
-      </tr><tr><td colspan="6" style="padding:6px 8px;font-size:0.7rem;color:#999">* Not yet qualified (min. 4 events)</td></tr></tbody></table>
-  </div>
-
 </div>
 
-<div class="updated">Updated May 9, 12:21 PM &nbsp;·&nbsp; <a href="/results.html" style="color:var(--muted)">Latest Event Results →</a></div>
-</body>
-</html>
+<!-- ── CHAMPIONSHIP STRIP ── -->
+<section class="champ-strip">
+  <div class="champ-inner">
+    <div class="reveal" style="transition-delay: 0.1s;">
+      <div class="champ-label">2026 BF Championship</div>
+      <h2 class="champ-title">Compete All Season.<br><em>Every Round Counts.</em></h2>
+      <p class="champ-body">The BirdieFriends Championship Series rewards consistency. Your best 4 events count fully — so every round matters, and anyone can find their groove at any point in the season.</p>
+
+    </div>
+    <div class="standings-preview reveal" style="transition-delay: 0.2s;">
+      <div class="standings-header">
+        <span>2026 Series Standings</span>
+        <a href="https://birdiefriends.github.io/" style="color:var(--gold-lite);text-decoration:none;font-size:0.68rem">View Live →</a>
+      </div>
+      <div style="text-align:center;padding:32px 16px">
+        <div style="font-size:2rem;margin-bottom:12px">🏆</div>
+        <div style="color:white;font-weight:600;font-size:0.95rem;margin-bottom:8px">Live Series Standings</div>
+        <div style="color:rgba(255,255,255,0.55);font-size:0.82rem;line-height:1.6;margin-bottom:20px">
+          Updated after every event throughout the 2026 season
+        </div>
+        <a href="https://birdiefriends.github.io/" style="display:inline-block;background:var(--gold);color:var(--green);
+                  font-weight:700;font-size:0.85rem;padding:12px 24px;
+                  border-radius:40px;text-decoration:none;">
+          View Full Standings →
+        </a>
+        <div style="margin-top:12px">
+          <a href="https://birdiefriends.github.io/results.html" style="color:rgba(255,255,255,0.45);font-size:0.78rem;text-decoration:none;">
+            Latest Event Results →
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ── -->
+<section class="cta-section">
+  <div class="cta-pill">Free to join</div>
+  <h2 class="cta-title">Ready to <em>Tee Off?</em></h2>
+  <p class="cta-body">Join the BirdieFriends community. Register for upcoming events, track your handicap progress, and compete for the championship all season long.</p>
+  <a href="https://www.jotform.com/app/233083550317148" class="cta-btn">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"></path>
+      <path d="M10 8l6 4-6 4V8z" fill="currentColor" stroke="none"></path>
+    </svg>
+    Open the BirdieFriends App
+  </a>
+  <p class="cta-note">Also view <a href="https://birdiefriends.github.io/" style="color:var(--green)">Series Standings</a> or <a href="https://birdiefriends.github.io/results.html" style="color:var(--green)">Latest Results</a></p>
+</section>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="footer-logo" style="display:flex;align-items:center;justify-content:center;gap:10px">
+    <img src="data:image/png;base64,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" alt="BirdieFriends" style="width:32px;height:32px;object-fit:contain;border-radius:50%;background:white;padding:2px">
+    BirdieFriends Golf
+  </div>
+  <p>Blue Shamrock Golf Club &nbsp;·&nbsp; Palmerton, Pennsylvania</p>
+  <p style="margin-top:8px">
+    <a href="https://birdiefriends.github.io/">Series Standings</a>
+    &nbsp;·&nbsp;
+    <a href="https://birdiefriends.github.io/results.html">Event Results</a>
+    &nbsp;·&nbsp;
+    <a href="https://www.jotform.com/app/233083550317148">Get the App</a>
+  </p>
+  <p style="margin-top:12px">© 2026 BirdieFriends Golf · Tee Off. Play Great.</p>
+</footer>
+
+<script>
+// Scroll reveal
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      observer.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach((el, i) => {
+  el.style.transitionDelay = `${(i % 3) * 0.1}s`;
+  observer.observe(el);
+});
+</script>
+
+
+</body></html>
