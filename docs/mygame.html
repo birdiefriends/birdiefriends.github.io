@@ -231,7 +231,7 @@ function showPlayer(name) {
         <div style="font-size:0.83rem;color:var(--text-muted);margin-top:4px">Since you had no GHIN handicap at Event 1, your starting quota is set equal to that event's total score.</div>`;
       } else {
         const perfAdj = 0.50 * (prevEvt.actual - prevEvt.quota);
-        const prevHcp = evt.prevHcp !== undefined ? evt.prevHcp : null;
+        const prevHcp = prevEvt.hcp !== undefined ? prevEvt.hcp : null;
         const hcpDelta = (prevHcp !== null && evt.hcp !== null)
           ? (prevHcp - evt.hcp) * (slope / 113) : null;
         detailHtml = `
