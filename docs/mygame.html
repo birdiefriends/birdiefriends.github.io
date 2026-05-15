@@ -151,18 +151,18 @@ function showPlayer(name) {
   } else {
     const scoreStr = fmt2(p.seriesScore);
     const rankStr  = p.qualifies
-      ? `ranked <strong>#${p.overallRank} overall</strong> and <strong>#${p.flightRank} in the ${p.tee} flight</strong>`
+      ? `ranked <strong>#${p.overallRank} overall</strong> and <strong>#${p.flightRank} in the ${p.seriesFlight || p.tee} flight</strong>`
       : `not yet qualified for the series championship (minimum 4 events required)`;
     const eventsStr = p.scorablePlayed === 1
-      ? `1 qualifying event`
-      : `${p.scorablePlayed} qualifying events`;
+      ? `1 event`
+      : `${p.scorablePlayed} events`;
     const scoreDir = p.seriesScore > 0
       ? `above quota by ${Math.abs(p.seriesScore).toFixed(2)} points on average`
       : p.seriesScore < 0
       ? `below quota by ${Math.abs(p.seriesScore).toFixed(2)} points on average`
       : `exactly at quota`;
 
-    narrative = `<p>${p.name} has played ${eventsStr} in the ${p.tee} flight and is ${rankStr}.</p>
+    narrative = `<p>${p.name} has played ${eventsStr} in the ${p.seriesFlight || p.tee} flight and is ${rankStr}.</p>
       <p>Across those events, performance has been ${scoreDir}. The series score of <strong>${scoreStr}</strong> reflects the best 4 results${p.calcEvts.length > 4 ? ', with remaining events averaged in' : ''}.</p>`;
 
     if (!p.qualifies) {
@@ -332,7 +332,7 @@ function showPlayer(name) {
     <div class="rank-banner">
       <div class="rank-block"><div class="rank-num">#${p.overallRank}</div><div class="rank-label">Overall</div></div>
       <div class="rank-divider"></div>
-      <div class="rank-block"><div class="rank-num">#${p.flightRank}</div><div class="rank-label">${p.tee} Flight</div></div>
+      <div class="rank-block"><div class="rank-num">#${p.flightRank}</div><div class="rank-label">${p.seriesFlight || p.tee} Flight</div></div>
       <div class="rank-divider"></div>
       <div class="rank-block"><div class="rank-num" style="font-size:1.5rem">${scoreStr}</div><div class="rank-label">Series Score</div></div>
     </div>`;
