@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Game — BirdieFriends 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --green:#1D9E75;--green-light:#E1F5EE;--green-dark:#085041;
+  --gold:#BA7517;--gold-light:#FAEEDA;
+  --combo:#534AB7;--combo-light:#EEEDFE;
+  --text:#1a1a1a;--text-muted:#6b6b6b;--border:rgba(0,0,0,0.12);
+  --surface:#f7f6f2;--card:#ffffff;--radius:12px;
+}
+body{font-family:'Instrument Sans',sans-serif;background:var(--surface);color:var(--text);min-height:100vh;padding:0 0 48px}
+header{background:var(--green-dark);color:#fff;padding:18px 20px 14px;text-align:center}
+header h1{font-family:'DM Serif Display',serif;font-size:1.6rem;margin-bottom:2px}
+header p{font-size:0.82rem;opacity:0.7;letter-spacing:0.04em}
+.container{max-width:680px;margin:0 auto;padding:20px 16px}
+.picker-card{background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.07);margin-bottom:20px;text-align:center}
+.picker-card label{display:block;font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px}
+select{width:100%;max-width:320px;padding:10px 14px;font-size:1rem;font-family:inherit;border:1.5px solid var(--border);border-radius:8px;background:#fff;color:var(--text);cursor:pointer}
+select:focus{outline:none;border-color:var(--green)}
+.section{background:var(--card);border-radius:var(--radius);box-shadow:0 2px 8px rgba(0,0,0,0.07);margin-bottom:18px;overflow:hidden}
+.section-header{background:var(--green-dark);color:#fff;padding:14px 18px;font-family:'DM Serif Display',serif;font-size:1.1rem}
+.section-body{padding:16px 18px}
+.event-card{border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px}
+.event-card:last-child{margin-bottom:0}
+.event-title{font-weight:600;font-size:0.95rem;margin-bottom:8px;color:var(--green-dark)}
+.tee-badge{display:inline-block;font-size:0.72rem;padding:2px 9px;border-radius:10px;font-weight:600;margin-left:6px;vertical-align:middle}
+.tee-Green{background:#e8f5e9;color:#1a6b30}
+.tee-Combo{background:#eeedfe;color:#534AB7}
+.tee-Gold{background:#FAEEDA;color:#7a4a00}
+.math-block{background:#f8f9fa;border-left:3px solid var(--green);border-radius:0 6px 6px 0;padding:10px 14px;margin:10px 0;font-family:'DM Mono',monospace;font-size:0.82rem;line-height:1.7}
+.math-block .label{color:var(--text-muted);font-size:0.75rem;font-family:'Instrument Sans',sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px}
+.math-result{font-weight:600;color:var(--green-dark);font-size:0.9rem}
+.explain-text{font-size:0.88rem;color:var(--text-muted);line-height:1.6;margin:6px 0}
+.series-table{width:100%;border-collapse:collapse;font-size:0.86rem;margin:12px 0}
+.series-table th{text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);font-weight:600;padding:4px 8px;border-bottom:2px solid var(--border)}
+.series-table td{padding:8px;border-bottom:1px solid var(--border);font-family:'DM Mono',monospace}
+.series-table td.label-col{font-family:'Instrument Sans',sans-serif;font-weight:500}
+.tag-best4{display:inline-block;font-size:0.68rem;padding:1px 7px;border-radius:8px;background:#e8f5e9;color:#1a6b30;font-weight:600;font-family:'Instrument Sans',sans-serif}
+.tag-avg{display:inline-block;font-size:0.68rem;padding:1px 7px;border-radius:8px;background:#f0f0f0;color:#888;font-weight:600;font-family:'Instrument Sans',sans-serif}
+.tag-retro{display:inline-block;font-size:0.68rem;padding:1px 7px;border-radius:8px;background:#fff8e1;color:#7a5a00;font-weight:600;font-family:'Instrument Sans',sans-serif}
+.sum-row td{font-weight:700;color:var(--green-dark);border-top:2px solid var(--green);border-bottom:none;padding-top:10px}
+.perf-pos{color:#1a6b30;font-weight:700}
+.perf-neg{color:#a32d2d;font-weight:600}
+.rank-banner{background:linear-gradient(135deg,#085041,#1D9E75);color:#fff;border-radius:10px;padding:16px 20px;margin-bottom:16px;display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.rank-block{text-align:center;flex:1}
+.rank-block .rank-num{font-family:'DM Serif Display',serif;font-size:2.2rem;line-height:1}
+.rank-block .rank-label{font-size:0.72rem;opacity:0.75;letter-spacing:0.06em;text-transform:uppercase;margin-top:2px}
+.rank-divider{width:1px;background:rgba(255,255,255,0.25);align-self:stretch}
+.note{font-size:0.78rem;color:var(--text-muted);font-style:italic;margin-top:10px;line-height:1.5}
+.empty-state{text-align:center;padding:40px 20px;color:var(--text-muted)}
+.hidden{display:none}
+.baseline-card{background:#fff8e1;border:1px solid #f0d080;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:0.88rem;color:#7a5a00}
+.qualifying-banner{border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:0.88rem;font-weight:500}
+.qualifying-yes{background:#e8f5e9;color:#1a6b30;border:1px solid #b2dfcc}
+.qualifying-no{background:#fff8e1;color:#7a5a00;border:1px solid #f0d080}
+</style>
+</head>
+<body>
+<header>
+  <h1>⛳ My Game</h1>
+  <p>BirdieFriends 2026 Championship Series</p>
+</header>
+<div class="container">
+  <div class="picker-card">
+    <label for="player-select">Select your name to see your breakdown</label>
+    <select id="player-select" onchange="showPlayer(this.value)">
+      <option value="">— Choose a player —</option>
+    </select>
+  </div>
+  <div id="player-content" class="hidden"></div>
+</div>
+
+<script>
+const ALL_PLAYER_DATA = {"Alex Green":{"name":"Alex Green","tee":"Green","noHcp":false,"currentHcp":2.8,"currentQuota":32.4777,"hasRetroE1":false,"retroAvg":null,"events":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":4.2,"tee":"Green","quota":31.093805309734513,"actual":29,"quotaAdj":null,"result":-2.0938053097345133,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":3.9,"tee":"Green","quota":30.0469,"actual":31,"quotaAdj":-1,"result":0.9530999999999992,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":3.7,"tee":"Green","quota":30.8739,"actual":28,"quotaAdj":0.8,"result":-2.873899999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":3.5,"tee":"Green","quota":29.6706,"actual":33,"quotaAdj":-1.2,"result":3.3293999999999997,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":3.3,"tee":"Green","quota":31.5689,"actual":30,"quotaAdj":1.9,"result":-1.5688999999999993,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":3.1,"tee":"Green","quota":31.0181,"actual":32,"quotaAdj":-0.6,"result":0.9818999999999996,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":3,"tee":"Green","quota":31.7427,"actual":29,"quotaAdj":0.7,"result":-2.7426999999999992,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":2.8,"tee":"Green","quota":30.4882,"actual":34,"quotaAdj":-1.3,"result":3.511800000000001,"noHcp":false,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":4.2,"tee":"Green","quota":31.093805309734513,"actual":29,"quotaAdj":null,"result":-2.0938053097345133,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":3.9,"tee":"Green","quota":30.0469,"actual":31,"quotaAdj":-1,"result":0.9530999999999992,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":3.7,"tee":"Green","quota":30.8739,"actual":28,"quotaAdj":0.8,"result":-2.873899999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":3.5,"tee":"Green","quota":29.6706,"actual":33,"quotaAdj":-1.2,"result":3.3293999999999997,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":3.3,"tee":"Green","quota":31.5689,"actual":30,"quotaAdj":1.9,"result":-1.5688999999999993,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":3.1,"tee":"Green","quota":31.0181,"actual":32,"quotaAdj":-0.6,"result":0.9818999999999996,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":3,"tee":"Green","quota":31.7427,"actual":29,"quotaAdj":0.7,"result":-2.7426999999999992,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":2.8,"tee":"Green","quota":30.4882,"actual":34,"quotaAdj":-1.3,"result":3.511800000000001,"noHcp":false,"podiumEligible":true}],"calcEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":4.2,"tee":"Green","quota":31.093805309734513,"actual":29,"quotaAdj":null,"result":-2.0938053097345133,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":3.9,"tee":"Green","quota":30.0469,"actual":31,"quotaAdj":-1,"result":0.9530999999999992,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":3.7,"tee":"Green","quota":30.8739,"actual":28,"quotaAdj":0.8,"result":-2.873899999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":3.5,"tee":"Green","quota":29.6706,"actual":33,"quotaAdj":-1.2,"result":3.3293999999999997,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":3.3,"tee":"Green","quota":31.5689,"actual":30,"quotaAdj":1.9,"result":-1.5688999999999993,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":3.1,"tee":"Green","quota":31.0181,"actual":32,"quotaAdj":-0.6,"result":0.9818999999999996,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":3,"tee":"Green","quota":31.7427,"actual":29,"quotaAdj":0.7,"result":-2.7426999999999992,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":2.8,"tee":"Green","quota":30.4882,"actual":34,"quotaAdj":-1.3,"result":3.511800000000001,"noHcp":false,"podiumEligible":true}],"best4Events":["2026 BFSeries#8","2026 BFSeries#4","2026 BFSeries#6","2026 BFSeries#2"],"restEvents":["2026 BFSeries#5","2026 BFSeries#1","2026 BFSeries#7","2026 BFSeries#3"],"restAvgResult":-2.32,"seriesAssigned":152.54,"seriesAchieved":159,"seriesScore":6.46,"qualifies":true,"played":8,"scorablePlayed":8,"overallRank":8,"flightRank":3},"Beth Green":{"name":"Beth Green","tee":"Green","noHcp":false,"currentHcp":9,"currentQuota":27.9512,"hasRetroE1":false,"retroAvg":null,"events":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":7.8,"tee":"Green","quota":26.888495575221242,"actual":27,"quotaAdj":null,"result":0.111504424778758,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":8.1,"tee":"Green","quota":26.9442,"actual":29,"quotaAdj":0.1,"result":2.0558000000000014,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":8.3,"tee":"Green","quota":27.6217,"actual":26,"quotaAdj":0.7,"result":-1.6217000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":8.5,"tee":"Green","quota":26.5772,"actual":27,"quotaAdj":-1,"result":0.42279999999999873,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":8.7,"tee":"Green","quota":26.555,"actual":27,"quotaAdj":0,"result":0.4450000000000003,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":8.9,"tee":"Green","quota":26.5439,"actual":26,"quotaAdj":0,"result":-0.5439000000000007,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":9,"tee":"Green","quota":26.0383,"actual":28,"quotaAdj":-0.5,"result":1.9617000000000004,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":9,"tee":"Green","quota":26.9023,"actual":29,"quotaAdj":0.9,"result":2.0976999999999997,"noHcp":false,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":7.8,"tee":"Green","quota":26.888495575221242,"actual":27,"quotaAdj":null,"result":0.111504424778758,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":8.1,"tee":"Green","quota":26.9442,"actual":29,"quotaAdj":0.1,"result":2.0558000000000014,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":8.3,"tee":"Green","quota":27.6217,"actual":26,"quotaAdj":0.7,"result":-1.6217000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":8.5,"tee":"Green","quota":26.5772,"actual":27,"quotaAdj":-1,"result":0.42279999999999873,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":8.7,"tee":"Green","quota":26.555,"actual":27,"quotaAdj":0,"result":0.4450000000000003,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":8.9,"tee":"Green","quota":26.5439,"actual":26,"quotaAdj":0,"result":-0.5439000000000007,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":9,"tee":"Green","quota":26.0383,"actual":28,"quotaAdj":-0.5,"result":1.9617000000000004,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":9,"tee":"Green","quota":26.9023,"actual":29,"quotaAdj":0.9,"result":2.0976999999999997,"noHcp":false,"podiumEligible":true}],"calcEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":7.8,"tee":"Green","quota":26.888495575221242,"actual":27,"quotaAdj":null,"result":0.111504424778758,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":8.1,"tee":"Green","quota":26.9442,"actual":29,"quotaAdj":0.1,"result":2.0558000000000014,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":8.3,"tee":"Green","quota":27.6217,"actual":26,"quotaAdj":0.7,"result":-1.6217000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":8.5,"tee":"Green","quota":26.5772,"actual":27,"quotaAdj":-1,"result":0.42279999999999873,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":8.7,"tee":"Green","quota":26.555,"actual":27,"quotaAdj":0,"result":0.4450000000000003,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":8.9,"tee":"Green","quota":26.5439,"actual":26,"quotaAdj":0,"result":-0.5439000000000007,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":9,"tee":"Green","quota":26.0383,"actual":28,"quotaAdj":-0.5,"result":1.9617000000000004,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":9,"tee":"Green","quota":26.9023,"actual":29,"quotaAdj":0.9,"result":2.0976999999999997,"noHcp":false,"podiumEligible":true}],"best4Events":["2026 BFSeries#8","2026 BFSeries#2","2026 BFSeries#7","2026 BFSeries#5"],"restEvents":["2026 BFSeries#4","2026 BFSeries#1","2026 BFSeries#6","2026 BFSeries#3"],"restAvgResult":-0.41,"seriesAssigned":133.35,"seriesAchieved":139.5,"seriesScore":6.15,"qualifies":true,"played":8,"scorablePlayed":8,"overallRank":9,"flightRank":4},"Carl Combo":{"name":"Carl Combo","tee":"Green","noHcp":false,"currentHcp":9.2,"currentQuota":29.2482,"hasRetroE1":false,"retroAvg":null,"events":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":13.5,"tee":"Combo","quota":20.70796460176991,"actual":25,"quotaAdj":null,"result":4.292035398230091,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":12.9,"tee":"Combo","quota":22.854,"actual":27,"quotaAdj":2.1,"result":4.146000000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":12.3,"tee":"Combo","quota":25.6066,"actual":27,"quotaAdj":2.8,"result":1.3933999999999997,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":11.4,"tee":"Combo","quota":26.9829,"actual":29,"quotaAdj":1.4,"result":2.0170999999999992,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":10.6,"tee":"Combo","quota":29.0109,"actual":27,"quotaAdj":2,"result":-2.0108999999999995,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":9.8,"tee":"Green","quota":28.9116,"actual":27,"quotaAdj":-0.1,"result":-1.9116,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":9.5,"tee":"Green","quota":28.8903,"actual":28,"quotaAdj":0,"result":-0.8902999999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":9.2,"tee":"Green","quota":28.7956,"actual":29,"quotaAdj":-0.1,"result":0.2043999999999997,"noHcp":false,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":13.5,"tee":"Combo","quota":20.70796460176991,"actual":25,"quotaAdj":null,"result":4.292035398230091,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":12.9,"tee":"Combo","quota":22.854,"actual":27,"quotaAdj":2.1,"result":4.146000000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":12.3,"tee":"Combo","quota":25.6066,"actual":27,"quotaAdj":2.8,"result":1.3933999999999997,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":11.4,"tee":"Combo","quota":26.9829,"actual":29,"quotaAdj":1.4,"result":2.0170999999999992,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":10.6,"tee":"Combo","quota":29.0109,"actual":27,"quotaAdj":2,"result":-2.0108999999999995,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":9.8,"tee":"Green","quota":28.9116,"actual":27,"quotaAdj":-0.1,"result":-1.9116,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":9.5,"tee":"Green","quota":28.8903,"actual":28,"quotaAdj":0,"result":-0.8902999999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":9.2,"tee":"Green","quota":28.7956,"actual":29,"quotaAdj":-0.1,"result":0.2043999999999997,"noHcp":false,"podiumEligible":true}],"calcEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":13.5,"tee":"Combo","quota":20.70796460176991,"actual":25,"quotaAdj":null,"result":4.292035398230091,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":12.9,"tee":"Combo","quota":22.854,"actual":27,"quotaAdj":2.1,"result":4.146000000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":12.3,"tee":"Combo","quota":25.6066,"actual":27,"quotaAdj":2.8,"result":1.3933999999999997,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":11.4,"tee":"Combo","quota":26.9829,"actual":29,"quotaAdj":1.4,"result":2.0170999999999992,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":10.6,"tee":"Combo","quota":29.0109,"actual":27,"quotaAdj":2,"result":-2.0108999999999995,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":9.8,"tee":"Green","quota":28.9116,"actual":27,"quotaAdj":-0.1,"result":-1.9116,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":9.5,"tee":"Green","quota":28.8903,"actual":28,"quotaAdj":0,"result":-0.8902999999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":9.2,"tee":"Green","quota":28.7956,"actual":29,"quotaAdj":-0.1,"result":0.2043999999999997,"noHcp":false,"podiumEligible":true}],"best4Events":["2026 BFSeries#1","2026 BFSeries#2","2026 BFSeries#4","2026 BFSeries#3"],"restEvents":["2026 BFSeries#8","2026 BFSeries#7","2026 BFSeries#6","2026 BFSeries#5"],"restAvgResult":-1.15,"seriesAssigned":125.05,"seriesAchieved":135.75,"seriesScore":10.7,"qualifies":true,"played":8,"scorablePlayed":8,"overallRank":6,"flightRank":1},"Dana Combo":{"name":"Dana Combo","tee":"Combo","noHcp":false,"currentHcp":15.5,"currentQuota":26.2189,"hasRetroE1":false,"retroAvg":null,"events":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":16.9,"tee":"Combo","quota":16.856637168141596,"actual":24,"quotaAdj":null,"result":7.143362831858404,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":16.5,"tee":"Combo","quota":20.4283,"actual":26,"quotaAdj":3.6,"result":5.5717,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":16.2,"tee":"Combo","quota":23.6672,"actual":25,"quotaAdj":3.2,"result":1.3327999999999989,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":16,"tee":"Combo","quota":24.6734,"actual":25,"quotaAdj":1,"result":0.3265999999999991,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":15.8,"tee":"Combo","quota":25.0632,"actual":26,"quotaAdj":0.4,"result":0.9368000000000016,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":15.5,"tee":"Combo","quota":25.7581,"actual":26,"quotaAdj":0.7,"result":0.24190000000000111,"noHcp":false,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":16.9,"tee":"Combo","quota":16.856637168141596,"actual":24,"quotaAdj":null,"result":7.143362831858404,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":16.5,"tee":"Combo","quota":20.4283,"actual":26,"quotaAdj":3.6,"result":5.5717,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":16.2,"tee":"Combo","quota":23.6672,"actual":25,"quotaAdj":3.2,"result":1.3327999999999989,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":16,"tee":"Combo","quota":24.6734,"actual":25,"quotaAdj":1,"result":0.3265999999999991,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":15.8,"tee":"Combo","quota":25.0632,"actual":26,"quotaAdj":0.4,"result":0.9368000000000016,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":15.5,"tee":"Combo","quota":25.7581,"actual":26,"quotaAdj":0.7,"result":0.24190000000000111,"noHcp":false,"podiumEligible":true}],"calcEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":16.9,"tee":"Combo","quota":16.856637168141596,"actual":24,"quotaAdj":null,"result":7.143362831858404,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":16.5,"tee":"Combo","quota":20.4283,"actual":26,"quotaAdj":3.6,"result":5.5717,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":16.2,"tee":"Combo","quota":23.6672,"actual":25,"quotaAdj":3.2,"result":1.3327999999999989,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":16,"tee":"Combo","quota":24.6734,"actual":25,"quotaAdj":1,"result":0.3265999999999991,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":15.8,"tee":"Combo","quota":25.0632,"actual":26,"quotaAdj":0.4,"result":0.9368000000000016,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":15.5,"tee":"Combo","quota":25.7581,"actual":26,"quotaAdj":0.7,"result":0.24190000000000111,"noHcp":false,"podiumEligible":true}],"best4Events":["2026 BFSeries#1","2026 BFSeries#2","2026 BFSeries#4","2026 BFSeries#6"],"restEvents":["2026 BFSeries#5","2026 BFSeries#8"],"restAvgResult":0.28,"seriesAssigned":111.23,"seriesAchieved":126.5,"seriesScore":15.27,"qualifies":true,"played":6,"scorablePlayed":6,"overallRank":4,"flightRank":2},"Ed Combo":{"name":"Ed Combo","tee":"Green","noHcp":false,"currentHcp":9.9,"currentQuota":26.4902,"hasRetroE1":false,"retroAvg":null,"events":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":10,"tee":"Combo","quota":24.672566371681416,"actual":25,"quotaAdj":null,"result":0.3274336283185839,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":10.2,"tee":"Combo","quota":24.8363,"actual":26,"quotaAdj":0.2,"result":1.1636999999999986,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":10.1,"tee":"Combo","quota":25.1916,"actual":26,"quotaAdj":0.4,"result":0.8083999999999989,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":9.9,"tee":"Green","quota":25.7091,"actual":27,"quotaAdj":0.5,"result":1.2909000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":10,"tee":"Combo","quota":26.5882,"actual":25,"quotaAdj":0.9,"result":-1.5882000000000005,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":10.1,"tee":"Combo","quota":25.6808,"actual":26,"quotaAdj":-0.9,"result":0.3191999999999986,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":9.8,"tee":"Green","quota":25.7271,"actual":26,"quotaAdj":0,"result":0.2728999999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":9.9,"tee":"Green","quota":26.214,"actual":27,"quotaAdj":0.5,"result":0.7860000000000014,"noHcp":false,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":10,"tee":"Combo","quota":24.672566371681416,"actual":25,"quotaAdj":null,"result":0.3274336283185839,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":10.2,"tee":"Combo","quota":24.8363,"actual":26,"quotaAdj":0.2,"result":1.1636999999999986,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":10.1,"tee":"Combo","quota":25.1916,"actual":26,"quotaAdj":0.4,"result":0.8083999999999989,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":9.9,"tee":"Green","quota":25.7091,"actual":27,"quotaAdj":0.5,"result":1.2909000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":10,"tee":"Combo","quota":26.5882,"actual":25,"quotaAdj":0.9,"result":-1.5882000000000005,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":10.1,"tee":"Combo","quota":25.6808,"actual":26,"quotaAdj":-0.9,"result":0.3191999999999986,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":9.8,"tee":"Green","quota":25.7271,"actual":26,"quotaAdj":0,"result":0.2728999999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":9.9,"tee":"Green","quota":26.214,"actual":27,"quotaAdj":0.5,"result":0.7860000000000014,"noHcp":false,"podiumEligible":true}],"calcEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":10,"tee":"Combo","quota":24.672566371681416,"actual":25,"quotaAdj":null,"result":0.3274336283185839,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":10.2,"tee":"Combo","quota":24.8363,"actual":26,"quotaAdj":0.2,"result":1.1636999999999986,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":10.1,"tee":"Combo","quota":25.1916,"actual":26,"quotaAdj":0.4,"result":0.8083999999999989,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":9.9,"tee":"Green","quota":25.7091,"actual":27,"quotaAdj":0.5,"result":1.2909000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":10,"tee":"Combo","quota":26.5882,"actual":25,"quotaAdj":0.9,"result":-1.5882000000000005,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":10.1,"tee":"Combo","quota":25.6808,"actual":26,"quotaAdj":-0.9,"result":0.3191999999999986,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":9.8,"tee":"Green","quota":25.7271,"actual":26,"quotaAdj":0,"result":0.2728999999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":9.9,"tee":"Green","quota":26.214,"actual":27,"quotaAdj":0.5,"result":0.7860000000000014,"noHcp":false,"podiumEligible":true}],"best4Events":["2026 BFSeries#4","2026 BFSeries#2","2026 BFSeries#3","2026 BFSeries#8"],"restEvents":["2026 BFSeries#1","2026 BFSeries#6","2026 BFSeries#7","2026 BFSeries#5"],"restAvgResult":-0.17,"seriesAssigned":127.62,"seriesAchieved":131.5,"seriesScore":3.88,"qualifies":true,"played":8,"scorablePlayed":8,"overallRank":11,"flightRank":5},"Fran Gold":{"name":"Fran Gold","tee":"Combo","noHcp":false,"currentHcp":17,"currentQuota":25.8835,"hasRetroE1":false,"retroAvg":null,"events":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":19.4,"tee":"Gold","quota":16.256637168141594,"actual":22,"quotaAdj":null,"result":5.743362831858406,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":18.9,"tee":"Gold","quota":19.1283,"actual":23,"quotaAdj":2.9,"result":3.8717000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":18.5,"tee":"Gold","quota":21.573,"actual":23,"quotaAdj":2.4,"result":1.4269999999999996,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":18.1,"tee":"Gold","quota":22.6936,"actual":24,"quotaAdj":1.1,"result":1.3064,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":17.8,"tee":"Combo","quota":23.7539,"actual":24,"quotaAdj":1.1,"result":0.24609999999999843,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":17.5,"tee":"Combo","quota":24.2168,"actual":25,"quotaAdj":0.5,"result":0.7832000000000008,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":17.2,"tee":"Combo","quota":24.9482,"actual":25,"quotaAdj":0.7,"result":0.05180000000000007,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":17,"tee":"Combo","quota":25.3139,"actual":26,"quotaAdj":0.4,"result":0.6860999999999997,"noHcp":false,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":19.4,"tee":"Gold","quota":16.256637168141594,"actual":22,"quotaAdj":null,"result":5.743362831858406,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":18.9,"tee":"Gold","quota":19.1283,"actual":23,"quotaAdj":2.9,"result":3.8717000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":18.5,"tee":"Gold","quota":21.573,"actual":23,"quotaAdj":2.4,"result":1.4269999999999996,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":18.1,"tee":"Gold","quota":22.6936,"actual":24,"quotaAdj":1.1,"result":1.3064,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":17.8,"tee":"Combo","quota":23.7539,"actual":24,"quotaAdj":1.1,"result":0.24609999999999843,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":17.5,"tee":"Combo","quota":24.2168,"actual":25,"quotaAdj":0.5,"result":0.7832000000000008,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":17.2,"tee":"Combo","quota":24.9482,"actual":25,"quotaAdj":0.7,"result":0.05180000000000007,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":17,"tee":"Combo","quota":25.3139,"actual":26,"quotaAdj":0.4,"result":0.6860999999999997,"noHcp":false,"podiumEligible":true}],"calcEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":19.4,"tee":"Gold","quota":16.256637168141594,"actual":22,"quotaAdj":null,"result":5.743362831858406,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":18.9,"tee":"Gold","quota":19.1283,"actual":23,"quotaAdj":2.9,"result":3.8717000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":18.5,"tee":"Gold","quota":21.573,"actual":23,"quotaAdj":2.4,"result":1.4269999999999996,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":18.1,"tee":"Gold","quota":22.6936,"actual":24,"quotaAdj":1.1,"result":1.3064,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":17.8,"tee":"Combo","quota":23.7539,"actual":24,"quotaAdj":1.1,"result":0.24609999999999843,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":17.5,"tee":"Combo","quota":24.2168,"actual":25,"quotaAdj":0.5,"result":0.7832000000000008,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":17.2,"tee":"Combo","quota":24.9482,"actual":25,"quotaAdj":0.7,"result":0.05180000000000007,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":17,"tee":"Combo","quota":25.3139,"actual":26,"quotaAdj":0.4,"result":0.6860999999999997,"noHcp":false,"podiumEligible":true}],"best4Events":["2026 BFSeries#1","2026 BFSeries#2","2026 BFSeries#3","2026 BFSeries#4"],"restEvents":["2026 BFSeries#6","2026 BFSeries#8","2026 BFSeries#5","2026 BFSeries#7"],"restAvgResult":0.44,"seriesAssigned":104.21,"seriesAchieved":117,"seriesScore":12.79,"qualifies":true,"played":8,"scorablePlayed":8,"overallRank":5,"flightRank":3},"Gary Gold":{"name":"Gary Gold","tee":"Gold","noHcp":false,"currentHcp":23.5,"currentQuota":24.2088,"hasRetroE1":false,"retroAvg":null,"events":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":24.1,"tee":"Gold","quota":11.47345132743363,"actual":22,"quotaAdj":null,"result":10.52654867256637,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":24.1,"tee":"Gold","quota":16.7367,"actual":22,"quotaAdj":5.3,"result":5.263300000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":24.1,"tee":"Gold","quota":19.3684,"actual":23,"quotaAdj":2.6,"result":3.631599999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":23.8,"tee":"Gold","quota":21.1842,"actual":24,"quotaAdj":1.8,"result":2.8157999999999994,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":23.8,"tee":"Gold","quota":22.8974,"actual":22,"quotaAdj":1.7,"result":-0.8974000000000011,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":23.8,"tee":"Gold","quota":22.4487,"actual":24,"quotaAdj":-0.4,"result":1.5513000000000012,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":23.5,"tee":"Gold","quota":23.2244,"actual":23,"quotaAdj":0.8,"result":-0.22439999999999927,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":23.5,"tee":"Gold","quota":23.4175,"actual":25,"quotaAdj":0.2,"result":1.5824999999999996,"noHcp":false,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":24.1,"tee":"Gold","quota":11.47345132743363,"actual":22,"quotaAdj":null,"result":10.52654867256637,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":24.1,"tee":"Gold","quota":16.7367,"actual":22,"quotaAdj":5.3,"result":5.263300000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":24.1,"tee":"Gold","quota":19.3684,"actual":23,"quotaAdj":2.6,"result":3.631599999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":23.8,"tee":"Gold","quota":21.1842,"actual":24,"quotaAdj":1.8,"result":2.8157999999999994,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":23.8,"tee":"Gold","quota":22.8974,"actual":22,"quotaAdj":1.7,"result":-0.8974000000000011,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":23.8,"tee":"Gold","quota":22.4487,"actual":24,"quotaAdj":-0.4,"result":1.5513000000000012,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":23.5,"tee":"Gold","quota":23.2244,"actual":23,"quotaAdj":0.8,"result":-0.22439999999999927,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":23.5,"tee":"Gold","quota":23.4175,"actual":25,"quotaAdj":0.2,"result":1.5824999999999996,"noHcp":false,"podiumEligible":true}],"calcEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":24.1,"tee":"Gold","quota":11.47345132743363,"actual":22,"quotaAdj":null,"result":10.52654867256637,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":24.1,"tee":"Gold","quota":16.7367,"actual":22,"quotaAdj":5.3,"result":5.263300000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":24.1,"tee":"Gold","quota":19.3684,"actual":23,"quotaAdj":2.6,"result":3.631599999999999,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":23.8,"tee":"Gold","quota":21.1842,"actual":24,"quotaAdj":1.8,"result":2.8157999999999994,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":23.8,"tee":"Gold","quota":22.8974,"actual":22,"quotaAdj":1.7,"result":-0.8974000000000011,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":23.8,"tee":"Gold","quota":22.4487,"actual":24,"quotaAdj":-0.4,"result":1.5513000000000012,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":23.5,"tee":"Gold","quota":23.2244,"actual":23,"quotaAdj":0.8,"result":-0.22439999999999927,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":23.5,"tee":"Gold","quota":23.4175,"actual":25,"quotaAdj":0.2,"result":1.5824999999999996,"noHcp":false,"podiumEligible":true}],"best4Events":["2026 BFSeries#1","2026 BFSeries#2","2026 BFSeries#3","2026 BFSeries#4"],"restEvents":["2026 BFSeries#8","2026 BFSeries#6","2026 BFSeries#7","2026 BFSeries#5"],"restAvgResult":0.5,"seriesAssigned":91.76,"seriesAchieved":114.5,"seriesScore":22.74,"qualifies":true,"played":8,"scorablePlayed":8,"overallRank":1,"flightRank":1},"Iris Combo":{"name":"Iris Combo","tee":"Combo","noHcp":false,"currentHcp":17.5,"currentQuota":25.5131,"hasRetroE1":false,"retroAvg":null,"events":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":17.9,"tee":"Combo","quota":15.723893805309736,"actual":24,"quotaAdj":null,"result":8.276106194690264,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":18.1,"tee":"Gold","quota":19.8619,"actual":23,"quotaAdj":4.1,"result":3.1381000000000014,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":17.8,"tee":"Combo","quota":21.2274,"actual":25,"quotaAdj":1.4,"result":3.7726000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":17.6,"tee":"Combo","quota":23.4535,"actual":26,"quotaAdj":2.2,"result":2.5465000000000018,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":17.9,"tee":"Combo","quota":24.9533,"actual":24,"quotaAdj":1.5,"result":-0.9532999999999987,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":18,"tee":"Gold","quota":24.1368,"actual":23,"quotaAdj":-0.8,"result":-1.136800000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":17.7,"tee":"Combo","quota":23.4666,"actual":25,"quotaAdj":-0.7,"result":1.5334000000000003,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":17.5,"tee":"Combo","quota":24.5731,"actual":26,"quotaAdj":1.1,"result":1.4268999999999998,"noHcp":false,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":17.9,"tee":"Combo","quota":15.723893805309736,"actual":24,"quotaAdj":null,"result":8.276106194690264,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":18.1,"tee":"Gold","quota":19.8619,"actual":23,"quotaAdj":4.1,"result":3.1381000000000014,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":17.8,"tee":"Combo","quota":21.2274,"actual":25,"quotaAdj":1.4,"result":3.7726000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":17.6,"tee":"Combo","quota":23.4535,"actual":26,"quotaAdj":2.2,"result":2.5465000000000018,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":17.9,"tee":"Combo","quota":24.9533,"actual":24,"quotaAdj":1.5,"result":-0.9532999999999987,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":18,"tee":"Gold","quota":24.1368,"actual":23,"quotaAdj":-0.8,"result":-1.136800000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":17.7,"tee":"Combo","quota":23.4666,"actual":25,"quotaAdj":-0.7,"result":1.5334000000000003,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":17.5,"tee":"Combo","quota":24.5731,"actual":26,"quotaAdj":1.1,"result":1.4268999999999998,"noHcp":false,"podiumEligible":true}],"calcEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":17.9,"tee":"Combo","quota":15.723893805309736,"actual":24,"quotaAdj":null,"result":8.276106194690264,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":18.1,"tee":"Gold","quota":19.8619,"actual":23,"quotaAdj":4.1,"result":3.1381000000000014,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":17.8,"tee":"Combo","quota":21.2274,"actual":25,"quotaAdj":1.4,"result":3.7726000000000006,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":17.6,"tee":"Combo","quota":23.4535,"actual":26,"quotaAdj":2.2,"result":2.5465000000000018,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":17.9,"tee":"Combo","quota":24.9533,"actual":24,"quotaAdj":1.5,"result":-0.9532999999999987,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":18,"tee":"Gold","quota":24.1368,"actual":23,"quotaAdj":-0.8,"result":-1.136800000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":17.7,"tee":"Combo","quota":23.4666,"actual":25,"quotaAdj":-0.7,"result":1.5334000000000003,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":17.5,"tee":"Combo","quota":24.5731,"actual":26,"quotaAdj":1.1,"result":1.4268999999999998,"noHcp":false,"podiumEligible":true}],"best4Events":["2026 BFSeries#1","2026 BFSeries#3","2026 BFSeries#2","2026 BFSeries#4"],"restEvents":["2026 BFSeries#7","2026 BFSeries#8","2026 BFSeries#5","2026 BFSeries#6"],"restAvgResult":0.22,"seriesAssigned":104.55,"seriesAchieved":122.5,"seriesScore":17.95,"qualifies":true,"played":8,"scorablePlayed":8,"overallRank":3,"flightRank":1},"Kim Green":{"name":"Kim Green","tee":"Green","noHcp":false,"currentHcp":8.8,"currentQuota":29.0351,"hasRetroE1":false,"retroAvg":null,"events":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":9.4,"tee":"Green","quota":25.019469026548673,"actual":27,"quotaAdj":null,"result":1.9805309734513266,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":9.2,"tee":"Green","quota":26.0097,"actual":29,"quotaAdj":1,"result":2.9903000000000013,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":9,"tee":"Green","quota":27.7385,"actual":27,"quotaAdj":1.7,"result":-0.7384999999999984,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":8.8,"tee":"Green","quota":27.6029,"actual":30,"quotaAdj":-0.1,"result":2.3970999999999982,"noHcp":false,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":9.4,"tee":"Green","quota":25.019469026548673,"actual":27,"quotaAdj":null,"result":1.9805309734513266,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":9.2,"tee":"Green","quota":26.0097,"actual":29,"quotaAdj":1,"result":2.9903000000000013,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":9,"tee":"Green","quota":27.7385,"actual":27,"quotaAdj":1.7,"result":-0.7384999999999984,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":8.8,"tee":"Green","quota":27.6029,"actual":30,"quotaAdj":-0.1,"result":2.3970999999999982,"noHcp":false,"podiumEligible":true}],"calcEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":9.4,"tee":"Green","quota":25.019469026548673,"actual":27,"quotaAdj":null,"result":1.9805309734513266,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":9.2,"tee":"Green","quota":26.0097,"actual":29,"quotaAdj":1,"result":2.9903000000000013,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":9,"tee":"Green","quota":27.7385,"actual":27,"quotaAdj":1.7,"result":-0.7384999999999984,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":8.8,"tee":"Green","quota":27.6029,"actual":30,"quotaAdj":-0.1,"result":2.3970999999999982,"noHcp":false,"podiumEligible":true}],"best4Events":["2026 BFSeries#2","2026 BFSeries#4","2026 BFSeries#1","2026 BFSeries#3"],"restEvents":[],"restAvgResult":null,"seriesAssigned":106.37,"seriesAchieved":113,"seriesScore":6.63,"qualifies":true,"played":4,"scorablePlayed":4,"overallRank":7,"flightRank":2},"Leo Combo":{"name":"Leo Combo","tee":"Combo","noHcp":false,"currentHcp":10.6,"currentQuota":25.9498,"hasRetroE1":false,"retroAvg":null,"events":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":11.1,"tee":"Combo","quota":23.426548672566373,"actual":25,"quotaAdj":null,"result":1.5734513274336273,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":10.8,"tee":"Combo","quota":24.2133,"actual":26,"quotaAdj":0.8,"result":1.7866999999999997,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":10.6,"tee":"Combo","quota":25.4465,"actual":26,"quotaAdj":1.2,"result":0.5534999999999997,"noHcp":false,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":11.1,"tee":"Combo","quota":23.426548672566373,"actual":25,"quotaAdj":null,"result":1.5734513274336273,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":10.8,"tee":"Combo","quota":24.2133,"actual":26,"quotaAdj":0.8,"result":1.7866999999999997,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":10.6,"tee":"Combo","quota":25.4465,"actual":26,"quotaAdj":1.2,"result":0.5534999999999997,"noHcp":false,"podiumEligible":true}],"calcEvts":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":11.1,"tee":"Combo","quota":23.426548672566373,"actual":25,"quotaAdj":null,"result":1.5734513274336273,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":10.8,"tee":"Combo","quota":24.2133,"actual":26,"quotaAdj":0.8,"result":1.7866999999999997,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":10.6,"tee":"Combo","quota":25.4465,"actual":26,"quotaAdj":1.2,"result":0.5534999999999997,"noHcp":false,"podiumEligible":true}],"best4Events":["2026 BFSeries#2","2026 BFSeries#1","2026 BFSeries#3"],"restEvents":[],"restAvgResult":null,"seriesAssigned":73.09,"seriesAchieved":77,"seriesScore":3.91,"qualifies":false,"played":3,"scorablePlayed":3,"overallRank":null,"flightRank":null},"Joe Guest":{"name":"Joe Guest","tee":"Gold","noHcp":true,"currentHcp":null,"currentQuota":25,"hasRetroE1":true,"retroAvg":1,"events":[{"eventName":"2026 BFSeries#1","date":"2026-05-12","hcp":null,"tee":"Gold","quota":null,"actual":18,"quotaAdj":null,"result":null,"noHcp":true,"podiumEligible":false},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":null,"tee":"Gold","quota":18,"actual":20,"quotaAdj":null,"result":2,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":null,"tee":"Gold","quota":20,"actual":21,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":null,"tee":"Gold","quota":21,"actual":22,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":null,"tee":"Gold","quota":22,"actual":22,"quotaAdj":null,"result":0,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":null,"tee":"Gold","quota":22,"actual":23,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":null,"tee":"Gold","quota":23,"actual":24,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":null,"tee":"Gold","quota":24,"actual":25,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":null,"tee":"Gold","quota":18,"actual":20,"quotaAdj":null,"result":2,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":null,"tee":"Gold","quota":20,"actual":21,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":null,"tee":"Gold","quota":21,"actual":22,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":null,"tee":"Gold","quota":22,"actual":22,"quotaAdj":null,"result":0,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":null,"tee":"Gold","quota":22,"actual":23,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":null,"tee":"Gold","quota":23,"actual":24,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":null,"tee":"Gold","quota":24,"actual":25,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true}],"calcEvts":[{"quota":20,"actual":21,"result":1,"retroactive":true,"eventName":"~E1 (retroactive)"},{"eventName":"2026 BFSeries#2","date":"2026-05-13","hcp":null,"tee":"Gold","quota":18,"actual":20,"quotaAdj":null,"result":2,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#3","date":"2026-05-14","hcp":null,"tee":"Gold","quota":20,"actual":21,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":null,"tee":"Gold","quota":21,"actual":22,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#5","date":"2026-05-16","hcp":null,"tee":"Gold","quota":22,"actual":22,"quotaAdj":null,"result":0,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":null,"tee":"Gold","quota":22,"actual":23,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":null,"tee":"Gold","quota":23,"actual":24,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":null,"tee":"Gold","quota":24,"actual":25,"quotaAdj":null,"result":1,"noHcp":true,"podiumEligible":true}],"best4Events":["2026 BFSeries#2","~E1 (retroactive)","2026 BFSeries#3","2026 BFSeries#4"],"restEvents":["2026 BFSeries#6","2026 BFSeries#7","2026 BFSeries#8","2026 BFSeries#5"],"restAvgResult":0.75,"seriesAssigned":101.75,"seriesAchieved":107.5,"seriesScore":5.75,"qualifies":true,"played":8,"scorablePlayed":7,"overallRank":10,"flightRank":3},"Hank Gold":{"name":"Hank Gold","tee":"Gold","noHcp":false,"currentHcp":20.5,"currentQuota":24.6286,"hasRetroE1":false,"retroAvg":null,"events":[{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":21.3,"tee":"Gold","quota":14.323008849557521,"actual":24,"quotaAdj":null,"result":9.676991150442479,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":21,"tee":"Gold","quota":19.1615,"actual":24,"quotaAdj":4.8,"result":4.8385,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":20.8,"tee":"Gold","quota":21.8861,"actual":25,"quotaAdj":2.7,"result":3.113900000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":20.5,"tee":"Gold","quota":23.6466,"actual":25,"quotaAdj":1.8,"result":1.3534000000000006,"noHcp":false,"podiumEligible":true}],"scorableEvts":[{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":21.3,"tee":"Gold","quota":14.323008849557521,"actual":24,"quotaAdj":null,"result":9.676991150442479,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":21,"tee":"Gold","quota":19.1615,"actual":24,"quotaAdj":4.8,"result":4.8385,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":20.8,"tee":"Gold","quota":21.8861,"actual":25,"quotaAdj":2.7,"result":3.113900000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":20.5,"tee":"Gold","quota":23.6466,"actual":25,"quotaAdj":1.8,"result":1.3534000000000006,"noHcp":false,"podiumEligible":true}],"calcEvts":[{"eventName":"2026 BFSeries#4","date":"2026-05-15","hcp":21.3,"tee":"Gold","quota":14.323008849557521,"actual":24,"quotaAdj":null,"result":9.676991150442479,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#6","date":"2026-05-17","hcp":21,"tee":"Gold","quota":19.1615,"actual":24,"quotaAdj":4.8,"result":4.8385,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#7","date":"2026-05-18","hcp":20.8,"tee":"Gold","quota":21.8861,"actual":25,"quotaAdj":2.7,"result":3.113900000000001,"noHcp":false,"podiumEligible":true},{"eventName":"2026 BFSeries#8","date":"2026-05-19","hcp":20.5,"tee":"Gold","quota":23.6466,"actual":25,"quotaAdj":1.8,"result":1.3534000000000006,"noHcp":false,"podiumEligible":true}],"best4Events":["2026 BFSeries#4","2026 BFSeries#6","2026 BFSeries#7","2026 BFSeries#8"],"restEvents":[],"restAvgResult":null,"seriesAssigned":79.02,"seriesAchieved":98,"seriesScore":18.98,"qualifies":true,"played":4,"scorablePlayed":4,"overallRank":2,"flightRank":2}};
+const EVENT_LIST = ["2026 BFSeries#1","2026 BFSeries#2","2026 BFSeries#3","2026 BFSeries#4","2026 BFSeries#5","2026 BFSeries#6","2026 BFSeries#7","2026 BFSeries#8"];
+
+// Populate dropdown sorted A-Z
+const sel = document.getElementById('player-select');
+Object.keys(ALL_PLAYER_DATA).sort().forEach(name => {
+  const opt = document.createElement('option');
+  opt.value = name; opt.textContent = name;
+  sel.appendChild(opt);
+});
+
+// Check URL param ?player=Name
+const urlPlayer = new URLSearchParams(location.search).get('player');
+if (urlPlayer && ALL_PLAYER_DATA[urlPlayer]) {
+  sel.value = urlPlayer;
+  showPlayer(urlPlayer);
+}
+
+function fmt(v, sign=false) {
+  if (v===null||v===undefined) return '—';
+  const s = Math.abs(v).toFixed(2);
+  if (!sign) return v < 0 ? '-'+s : s;
+  return (v >= 0 ? '+' : '-') + s;
+}
+
+function teeClass(t) { return 'tee-badge tee-'+t; }
+
+function showPlayer(name) {
+  const wrap = document.getElementById('player-content');
+  if (!name) { wrap.innerHTML=''; wrap.classList.add('hidden'); return; }
+  const p = ALL_PLAYER_DATA[name];
+  if (!p) { wrap.innerHTML=''; wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+
+  // ── SECTION 1: Quota by Event ───────────────────────────────────────────
+  let quotaCards = '';
+  const evtsSorted = (p.events||[]).slice().sort((a,b)=>{
+    const ia = EVENT_LIST.indexOf(a.eventName);
+    const ib = EVENT_LIST.indexOf(b.eventName);
+    return ia - ib;
+  });
+
+  evtsSorted.forEach((evt, idx) => {
+    const isBaseline = evt.quota === null && evt.result === null;
+    const evtNum = idx + 1;
+    const slope = { Green:132, Combo:128, Gold:115 }[evt.tee] || 128;
+
+    if (isBaseline) {
+      // NoHCP baseline event
+      quotaCards += `
+      <div class="event-card">
+        <div class="event-title">Event ${evtNum}: ${evt.eventName}
+          <span class="${teeClass(evt.tee)}">${evt.tee}</span>
+        </div>
+        <div class="baseline-card">
+          📋 <strong>Baseline Event</strong> — This was your first event with no GHIN handicap.
+          No quota was assigned; this event doesn't count toward your series score.
+          Your Stableford total of <strong>${evt.actual}</strong> becomes your starting quota for Event 2.
+        </div>
+        <div class="explain-text">Tee selection: <strong>${evt.tee}</strong> — manually assigned (no GHIN handicap on file).</div>
+      </div>`;
+    } else {
+      // Find previous event to explain quota adjustment
+      const prevIdx = evtsSorted.findIndex(e=>e.eventName===evt.eventName) - 1;
+      const prevEvt = prevIdx >= 0 ? evtsSorted[prevIdx] : null;
+      const achievement = Math.round((evt.actual - evt.quota)*100)/100;
+      const achStr = achievement >= 0 ? `+${achievement.toFixed(2)}` : achievement.toFixed(2);
+      const achColor = achievement > 0 ? '#1a6b30' : achievement < 0 ? '#a32d2d' : '#555';
+
+      let quotaExplain = '';
+      if (!prevEvt) {
+        // First scored event (GHIN player, E1) — quota from HCP
+        quotaExplain = `
+        <div class="math-block">
+          <span class="label">Quota Formula</span>
+          36 − (HCP × Slope ÷ 113)<br>
+          36 − (${evt.hcp.toFixed(1)} × ${slope} ÷ 113) = <span class="math-result">${evt.quota.toFixed(2)}</span>
+        </div>
+        <div class="explain-text">
+          ${evt.tee} tees (slope ${slope}) assigned because ${p.noHcp ? 'manual selection — no GHIN handicap' :
+            evt.hcp < 10 ? 'HCP '+evt.hcp.toFixed(1)+' is under 10.0' :
+            evt.hcp < 18 ? 'HCP '+evt.hcp.toFixed(1)+' is 10.0–17.9' :
+            'HCP '+evt.hcp.toFixed(1)+' is 18.0 or above'}.
+        </div>`;
+      } else if (prevEvt.quota === null) {
+        // E2 for a NoHCP player — quota = E1 Stableford total
+        quotaExplain = `
+        <div class="math-block">
+          <span class="label">Quota Assignment — NoHCP Player, Event 2</span>
+          Your Event 1 Stableford total = <span class="math-result">${prevEvt.actual} → Quota ${evt.quota.toFixed(2)}</span>
+        </div>
+        <div class="explain-text">
+          Since you had no GHIN handicap, your starting quota is set to your first event's total score of ${prevEvt.actual}.
+          From here, your quota adjusts after each event using your performance.
+        </div>`;
+      } else {
+        // Standard adjustment — show the full formula with real numbers
+        const perfAdj  = 0.50 * (prevEvt.actual - prevEvt.quota);
+        const prevSlope = { Green:132, Combo:128, Gold:115 }[prevEvt.tee] || 128;
+        const prevHcp   = evt.prevHcp !== undefined ? evt.prevHcp : null;
+        const hcpDelta  = (prevHcp !== null && evt.hcp !== null)
+          ? (prevHcp - evt.hcp) * (slope / 113) : null;
+        const calcTotal = prevEvt.quota + perfAdj + (hcpDelta||0);
+
+        quotaExplain = `
+        <div class="math-block">
+          <span class="label">Quota Adjustment from Previous Event</span>
+          Previous quota: ${prevEvt.quota.toFixed(2)}<br>
+          Performance regression (50% of ${fmt(prevEvt.actual - prevEvt.quota, true)}): ${perfAdj >= 0 ? '+' : ''}${perfAdj.toFixed(2)}<br>
+          ${hcpDelta !== null
+            ? `HCP change (${prevHcp !== null ? prevHcp.toFixed(1) : '—'} → ${evt.hcp.toFixed(1)}, slope ${slope} ÷ 113): ${hcpDelta >= 0 ? '+' : ''}${hcpDelta.toFixed(2)}`
+            : `HCP adjustment: none (no HCP delta available)`}<br>
+          ─────────────────────<br>
+          New quota: ${prevEvt.quota.toFixed(2)} ${perfAdj>=0?'+':''}${perfAdj.toFixed(2)}${hcpDelta!==null ? (hcpDelta>=0?' + ':' ')+Math.abs(hcpDelta).toFixed(2) : ''} = <span class="math-result">${evt.quota.toFixed(2)}</span>
+        </div>
+        <div class="explain-text">
+          Tee: <strong>${evt.tee}</strong> (slope ${slope}) — ${
+            evt.hcp < 10 ? 'HCP '+evt.hcp.toFixed(1)+' under 10.0' :
+            evt.hcp < 18 ? 'HCP '+evt.hcp.toFixed(1)+' is 10.0–17.9' :
+            'HCP '+evt.hcp.toFixed(1)+' is 18.0 or above'}.
+        </div>`;
+      }
+
+      quotaCards += `
+      <div class="event-card">
+        <div class="event-title">Event ${evtNum}: ${evt.eventName}
+          <span class="${teeClass(evt.tee)}">${evt.tee}</span>
+        </div>
+        ${quotaExplain}
+        <div style="display:flex;gap:18px;margin-top:10px;font-size:0.85rem">
+          <span>Quota: <strong style="font-family:'DM Mono',monospace">${evt.quota.toFixed(2)}</strong></span>
+          <span>Score: <strong style="font-family:'DM Mono',monospace">${evt.actual}</strong></span>
+          <span>Achievement: <strong style="font-family:'DM Mono',monospace;color:${achColor}">${achStr}</strong></span>
+        </div>
+      </div>`;
+    }
+  });
+
+  // ── SECTION 2: Series Ranking ───────────────────────────────────────────
+  // Build the event rows for the series table
+  const calcEvts = p.calcEvts || [];
+  const best4Set  = new Set(p.best4Events||[]);
+  const restSet   = new Set(p.restEvents||[]);
+
+  // Sort calc events best→worst for display
+  const sortedCalc = [...calcEvts].sort((a,b)=>b.result-a.result);
+
+  let tableRows = '';
+  let best4Sum  = 0;
+  let restResults = [];
+
+  sortedCalc.forEach(evt => {
+    const evtName  = evt.eventName || '~E1 (retroactive)';
+    const result   = Math.round(evt.result*100)/100;
+    const isBest4  = best4Set.has(evtName);
+    const isRetro  = evt.retroactive;
+    const resStr   = result >= 0 ? `+${result.toFixed(2)}` : result.toFixed(2);
+    const resColor = result > 0 ? '#1a6b30' : result < 0 ? '#a32d2d' : '#555';
+    let tag = isBest4
+      ? `<span class="tag-best4">Best 4 ✓</span>`
+      : `<span class="tag-avg">Averaged</span>`;
+    if (isRetro) tag += ` <span class="tag-retro">~ retroactive</span>`;
+    if (isBest4) best4Sum += result;
+    else restResults.push(result);
+
+    tableRows += `<tr>
+      <td class="label-col">${isRetro ? '~E1 (retroactive avg)' : evtName}</td>
+      <td style="text-align:right;color:${resColor}">${resStr}</td>
+      <td>${tag}</td>
+    </tr>`;
+  });
+
+  // Avg of remainder
+  let restAvgStr = '—';
+  let seriesCalcBlock = '';
+  const best4Rounded = Math.round(best4Sum*100)/100;
+
+  if (restResults.length > 0) {
+    const restAvg = Math.round((restResults.reduce((s,v)=>s+v,0)/restResults.length)*100)/100;
+    restAvgStr = restAvg >= 0 ? `+${restAvg.toFixed(2)}` : restAvg.toFixed(2);
+    const total = Math.round((best4Rounded + restAvg)*100)/100;
+    const totalStr = total >= 0 ? `+${total.toFixed(2)}` : total.toFixed(2);
+    seriesCalcBlock = `
+    <div class="math-block" style="margin-top:14px">
+      <span class="label">Series Score Calculation</span>
+      Best 4 events summed: ${best4Rounded >= 0 ? '+' : ''}${best4Rounded.toFixed(2)}<br>
+      Remaining ${restResults.length} event${restResults.length>1?'s':''} averaged: ${restAvgStr}<br>
+      ─────────────────────<br>
+      Series Score = <span class="math-result">${totalStr}</span>
+    </div>`;
+  } else if (calcEvts.length >= 4) {
+    const totalStr = best4Rounded >= 0 ? `+${best4Rounded.toFixed(2)}` : best4Rounded.toFixed(2);
+    seriesCalcBlock = `
+    <div class="math-block" style="margin-top:14px">
+      <span class="label">Series Score Calculation</span>
+      Best 4 events summed (no remainder): ${best4Rounded >= 0 ? '+' : ''}${best4Rounded.toFixed(2)}<br>
+      ─────────────────────<br>
+      Series Score = <span class="math-result">${totalStr}</span>
+    </div>`;
+  } else {
+    seriesCalcBlock = `
+    <div class="math-block" style="margin-top:14px;border-color:#ccc">
+      <span class="label">Series Score</span>
+      ${calcEvts.length} of 4 minimum events played — not yet qualifying for series rankings.
+    </div>`;
+  }
+
+  // Rank banner
+  let rankHtml = '';
+  if (p.qualifies) {
+    const overallStr = p.overallRank ? `#${p.overallRank}` : '—';
+    const flightStr  = p.flightRank  ? `#${p.flightRank}`  : '—';
+    const scoreStr   = p.seriesScore >= 0 ? `+${p.seriesScore.toFixed(2)}` : p.seriesScore.toFixed(2);
+    rankHtml = `
+    <div class="rank-banner">
+      <div class="rank-block"><div class="rank-num">${overallStr}</div><div class="rank-label">Overall</div></div>
+      <div class="rank-divider"></div>
+      <div class="rank-block"><div class="rank-num">${flightStr}</div><div class="rank-label">${p.tee} Flight</div></div>
+      <div class="rank-divider"></div>
+      <div class="rank-block"><div class="rank-num" style="font-size:1.5rem">${scoreStr}</div><div class="rank-label">Series Score</div></div>
+    </div>`;
+  }
+
+  // Qualifying status
+  const qualBanner = p.qualifies
+    ? `<div class="qualifying-banner qualifying-yes">✅ You have played ${p.scorablePlayed} qualifying event${p.scorablePlayed!==1?'s':''} and are eligible for the series championship payout.</div>`
+    : `<div class="qualifying-banner qualifying-no">⏳ You have played ${p.scorablePlayed} qualifying event${p.scorablePlayed!==1?'s':''} — ${Math.max(0,4-p.scorablePlayed)} more needed to qualify for the series championship.</div>`;
+
+  let retroNote = '';
+  if (p.hasRetroE1) {
+    retroNote = `<div class="note">~ Your Event 1 score (baseline, no quota) has been retroactively added to the series as an estimated result using the average of your scored events (${p.retroAvg >= 0 ? '+' : ''}${(p.retroAvg||0).toFixed(2)}). This recalculates automatically as you play more events.</div>`;
+  }
+
+  wrap.innerHTML = `
+  <div class="section">
+    <div class="section-header">📋 My Quota — Event by Event</div>
+    <div class="section-body">
+      ${quotaCards || '<p class="explain-text">No events recorded yet.</p>'}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">🏆 My Series Ranking</div>
+    <div class="section-body">
+      ${rankHtml}
+      ${qualBanner}
+      <table class="series-table">
+        <thead><tr>
+          <th>Event</th>
+          <th style="text-align:right">Achievement</th>
+          <th>Counts as</th>
+        </tr></thead>
+        <tbody>${tableRows || '<tr><td colspan="3" style="color:#999;padding:10px">No scored events yet.</td></tr>'}</tbody>
+      </table>
+      ${seriesCalcBlock}
+      ${retroNote}
+      <div class="note" style="margin-top:10px">Achievement = your Stableford total minus your quota for that event. Best 4 achievements count in full; any additional events are averaged together and added as one score.</div>
+    </div>
+  </div>`;
+}
+</script>
+</body>
+</html>
