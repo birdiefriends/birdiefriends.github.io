@@ -13,7 +13,9 @@
   }
   * { box-sizing:border-box; margin:0; padding:0; }
   body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
-  header { background:var(--green); padding:20px 16px 16px; text-align:center; }
+  header { background:var(--green); padding:20px 16px 16px; text-align:center; position:relative; }
+  .mygame-btn { position:absolute; top:50%; right:14px; transform:translateY(-50%); background:rgba(255,255,255,0.15); color:#fff; border:1px solid rgba(255,255,255,0.35); border-radius:8px; padding:7px 12px; font-size:0.78rem; font-weight:600; text-decoration:none; letter-spacing:0.03em; white-space:nowrap; }
+  .mygame-btn:hover { background:rgba(255,255,255,0.25); }
   .logo-row { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:6px; }
   .logo-circle { width:40px; height:40px; background:rgba(255,255,255,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:22px; }
   .event-title { font-family:'Playfair Display',serif; font-size:1.5rem; font-weight:900; color:#fff; line-height:1.1; }
@@ -44,6 +46,7 @@
     </div>
   </div>
   <div class="event-sub">BirdieFriends Golf &nbsp;·&nbsp; After 8 events</div>
+  <a href="/mygame.html" class="mygame-btn">⛳ My Game</a>
 </header>
 
 <div class="tabs">
@@ -345,7 +348,7 @@
     </div>
 </div>
 
-<div class="updated">Updated May 15, 3:47 PM &nbsp;·&nbsp; <a href="/results.html" style="color:var(--muted)">Latest Event Results →</a> &nbsp;·&nbsp; <a href="/mygame.html" style="color:var(--muted)">⛳ My Game</a></div>
+<div class="updated">Updated May 15, 4:05 PM &nbsp;·&nbsp; <a href="/results.html" style="color:var(--muted)">Latest Event Results →</a> &nbsp;·&nbsp; <a href="/mygame.html" style="color:var(--muted)">⛳ My Game</a></div>
 
 <script>
 function switchTab(id, el) {
