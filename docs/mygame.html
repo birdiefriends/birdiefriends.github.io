@@ -220,10 +220,14 @@ function showPlayer(name) {
         <div class="math-block">
           <span class="mlabel">Quota Formula — First Event</span>
           36 − (HCP × Slope ÷ 113)<br>
-          36 − (${evt.hcp.toFixed(1)} × ${slope} ÷ 113) = <span class="math-result">${evt.quota.toFixed(2)}</span>
+          36 − (${evt.hcp !== null ? evt.hcp.toFixed(1) : '—'} × ${slope} ÷ 113) = <span class="math-result">${evt.quota.toFixed(2)}</span>
         </div>
         <div style="font-size:0.83rem;color:var(--text-muted);margin-top:4px">
-          ${evt.tee} tees assigned: ${evt.hcp < 10 ? 'HCP '+evt.hcp.toFixed(1)+' is under 10.0' : evt.hcp < 18 ? 'HCP '+evt.hcp.toFixed(1)+' is 10.0–17.9' : 'HCP '+evt.hcp.toFixed(1)+' is 18.0 or above'}.
+          ${evt.noHcp ? 'Manual tee selection (no GHIN handicap)' :
+            evt.hcp === null ? evt.tee + ' tees assigned' :
+            evt.hcp < 10 ? evt.tee + ' tees: HCP '+evt.hcp.toFixed(1)+' under 10.0' :
+            evt.hcp < 18 ? evt.tee + ' tees: HCP '+evt.hcp.toFixed(1)+' is 10.0–17.9' :
+            evt.tee + ' tees: HCP '+evt.hcp.toFixed(1)+' is 18.0 or above'}.
         </div>`;
       } else if (prevEvt.quota === null) {
         detailHtml = `
@@ -243,13 +247,13 @@ function showPlayer(name) {
           Previous quota:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${prevEvt.quota.toFixed(2)}<br>
           Performance (50% of ${fmt2(prevEvt.actual - prevEvt.quota)}): ${sign(perfAdj)}${perfAdj.toFixed(2)}<br>
           ${hcpDelta !== null
-            ? `HCP change (${prevHcp !== null ? prevHcp.toFixed(1) : '—'} → ${evt.hcp.toFixed(1)}, slope ${slope}/113):&nbsp;${sign(hcpDelta)}${hcpDelta.toFixed(2)}`
+            ? `HCP change (${prevHcp !== null ? prevHcp.toFixed(1) : '—'} → ${evt.hcp !== null ? evt.hcp.toFixed(1) : '—'}, slope ${slope}/113):&nbsp;${sign(hcpDelta)}${hcpDelta.toFixed(2)}`
             : 'HCP adjustment: none'}<br>
           ─────────────────────────────<br>
           New quota: <span class="math-result">${evt.quota.toFixed(2)}</span>
         </div>
         <div style="font-size:0.83rem;color:var(--text-muted);margin-top:4px">
-          ${evt.tee} tees: ${evt.hcp < 10 ? 'HCP '+evt.hcp.toFixed(1)+' under 10.0' : evt.hcp < 18 ? 'HCP '+evt.hcp.toFixed(1)+' is 10.0–17.9' : 'HCP '+evt.hcp.toFixed(1)+' is 18.0 or above'}.
+          ${evt.tee} tees: ${evt.hcp === null ? '' : evt.hcp < 10 ? 'HCP '+evt.hcp.toFixed(1)+' under 10.0' : evt.hcp < 18 ? 'HCP '+evt.hcp.toFixed(1)+' is 10.0–17.9' : 'HCP '+evt.hcp.toFixed(1)+' is 18.0 or above'}.
         </div>`;
       }
 
