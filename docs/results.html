@@ -142,7 +142,7 @@
   <div class="card">
     <div class="card-label">Quota Standings</div>
     <table>
-      <thead><tr><th></th><th>Player</th><th class="r">Score</th><th class="r">+/− Quota</th></tr></thead>
+      <thead><tr><th></th><th>Player</th><th class="r">Quota</th><th class="r">Score</th><th class="r">+/− Quota</th></tr></thead>
       <tbody>
         
           <tr>
@@ -152,6 +152,7 @@
                 background:#e8f5e9;color:#1a6b30"
               >Green</span>
             </td>
+            <td class="r">30.49</td>
             <td class="r">34.0</td>
             <td class="r pos">+3.5</td>
           </tr>
@@ -162,6 +163,7 @@
                 background:#e8f5e9;color:#1a6b30"
               >Green</span>
             </td>
+            <td class="r">26.90</td>
             <td class="r">29.0</td>
             <td class="r pos">+2.1</td>
           </tr>
@@ -172,6 +174,7 @@
                 background:#fff8e1;color:#7a5a00"
               >Gold</span>
             </td>
+            <td class="r">23.42</td>
             <td class="r">25.0</td>
             <td class="r pos">+1.6</td>
           </tr>
@@ -182,6 +185,7 @@
                 background:#fff3e0;color:#7a4a00"
               >Combo</span>
             </td>
+            <td class="r">24.57</td>
             <td class="r">26.0</td>
             <td class="r pos">+1.4</td>
           </tr>
@@ -192,6 +196,7 @@
                 background:#fff8e1;color:#7a5a00"
               >Gold</span>
             </td>
+            <td class="r">23.65</td>
             <td class="r">25.0</td>
             <td class="r pos">+1.4</td>
           </tr>
@@ -202,6 +207,7 @@
                 background:#fff8e1;color:#7a5a00"
               >Gold</span>
             </td>
+            <td class="r">24.00</td>
             <td class="r">25.0</td>
             <td class="r pos">+1.0</td>
           </tr>
@@ -212,6 +218,7 @@
                 background:#e8f5e9;color:#1a6b30"
               >Green</span>
             </td>
+            <td class="r">26.21</td>
             <td class="r">27.0</td>
             <td class="r pos">+0.8</td>
           </tr>
@@ -222,6 +229,7 @@
                 background:#fff3e0;color:#7a4a00"
               >Combo</span>
             </td>
+            <td class="r">25.31</td>
             <td class="r">26.0</td>
             <td class="r pos">+0.7</td>
           </tr>
@@ -232,6 +240,7 @@
                 background:#fff3e0;color:#7a4a00"
               >Combo</span>
             </td>
+            <td class="r">25.76</td>
             <td class="r">26.0</td>
             <td class="r pos">+0.2</td>
           </tr>
@@ -242,6 +251,7 @@
                 background:#e8f5e9;color:#1a6b30"
               >Green</span>
             </td>
+            <td class="r">28.80</td>
             <td class="r">29.0</td>
             <td class="r pos">+0.2</td>
           </tr>
@@ -554,7 +564,7 @@
   </div>
 </div>
 
-<div class="updated">Updated May 16, 7:26 AM</div>
+<div class="updated">Updated May 16, 7:55 AM</div>
 
 <script>
 // ── Embedded series data for event selector ──
@@ -631,6 +641,7 @@ function loadEvent(selectedName) {
           ${p.tee==='Green'?'background:#e8f5e9;color:#1a6b30':p.tee==='Combo'?'background:#fff3e0;color:#7a4a00':'background:#fff8e1;color:#7a5a00'}"
         >${p.tee}</span>
       </td>
+      <td class="r">${p.quota !== undefined && p.quota !== null ? p.quota.toFixed(2) : '—'}</td>
       <td class="r">${p.total.toFixed(1)}</td>
       <td class="r ${p.diff!==null&&p.diff>0?'pos':p.diff!==null&&p.diff<0?'neg':''}">${p.diff!==null?(p.diff>=0?'+':'')+p.diff.toFixed(1):'—'}</td>
     </tr>`).join('');
