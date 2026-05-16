@@ -156,9 +156,11 @@ function showPlayer(name) {
     const rankStr  = p.qualifies
       ? `ranked <strong>#${p.overallRank} overall</strong> and <strong>#${p.flightRank} in the ${p.seriesFlight || p.tee} flight</strong>`
       : `not yet qualified for the series championship (minimum 4 events required)`;
-    const eventsStr = p.scorablePlayed === 1
-      ? `1 event`
-      : `${p.scorablePlayed} events`;
+    const totalPlayed = p.played || p.scorablePlayed;
+    const baselineNote = (p.hasRetroE1 || totalPlayed > p.scorablePlayed) ? ' (including 1 baseline event)' : '';
+    const eventsStr = totalPlayed === 1
+      ? `1 event${baselineNote}`
+      : `${totalPlayed} events${baselineNote}`;
     const scoreDir = p.seriesScore > 0
       ? `above quota by ${Math.abs(p.seriesScore).toFixed(2)} points on average`
       : p.seriesScore < 0
