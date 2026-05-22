@@ -1907,10 +1907,19 @@ function showToast(msg) {
 }
 </script>
 <script>
-// Register service worker for PWA installability
+// Unregister all old service workers, clear all caches, then re-register fresh
 if ('serviceWorker' in navigator) {
+  // Unregister every registered SW
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(reg => reg.unregister());
+  });
+  // Nuke all caches
+  if ('caches' in window) {
+    caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+  }
+  // Re-register clean
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/sw.js?v=2').catch(() => {});
   });
 }
 </script>
