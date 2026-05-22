@@ -1641,7 +1641,7 @@ function buildActionButtons(evt, myReg, capStatus) {
   const isForcedSub = capStatus.isFivesome || capStatus.isWaitlist;
   const yesDisabled = isForcedSub ? 'style="opacity:0.35;pointer-events:none"' : '';
   const capNote     = capStatus.isFivesome
-    ? '<div class="cap-note">5th slot — you'll join as Sub. If a 6th player joins, you move up automatically.</div>'
+    ? '<div class="cap-note">5th slot — you\'ll join as Sub. If a 6th player joins, you move up automatically.</div>'
     : capStatus.isWaitlist
     ? '<div class="cap-note">Event is full — joining the waitlist as Sub. Commissioner confirms.</div>'
     : '';
