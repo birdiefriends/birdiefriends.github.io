@@ -187,10 +187,9 @@ body {
 
 /* ── Main content area ── */
 .bf-main {
-  padding: 12px 4px calc(var(--nav-h) + env(safe-area-inset-bottom) + 20px);
-  max-width: 680px;
-  margin: 0 auto;
+  padding: 12px 0 calc(var(--nav-h) + env(safe-area-inset-bottom) + 20px);
   width: 100%;
+  box-sizing: border-box;
 }
 
 /* ── Screens ── */
@@ -237,6 +236,8 @@ body {
   position: relative;
   transition: transform 0.15s, box-shadow 0.15s;
   color: #fff;
+  width: 100%;
+  box-sizing: border-box;
 }
 /* BF logo data URI — used by .event-mark */
 :root {
@@ -499,6 +500,8 @@ body {
   color: #fff;
   position: relative;
   overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
 }
 .bf-hero::before {
   content: '';
@@ -764,7 +767,7 @@ body {
   .player-picker-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (min-width: 769px) {
-  .bf-main { padding: 20px 24px calc(var(--nav-h) + 24px); }
+  .bf-main { padding: 20px 24px calc(var(--nav-h) + 24px); max-width: 680px; margin: 0 auto; }
 }
 
 /* ── Toast notification ── */
@@ -821,19 +824,7 @@ body {
 }
 
 
-/* ── Mobile: near edge-to-edge cards ── */
-@media (max-width: 768px) {
-  .bf-main {
-    padding-left: 4px;
-    padding-right: 4px;
-  }
-  .event-card {
-    border-radius: 12px;
-  }
-  .bf-hero {
-    border-radius: 12px;
-  }
-}
+/* mobile edge-to-edge handled by default styles */
 
 </style>
 </head>
