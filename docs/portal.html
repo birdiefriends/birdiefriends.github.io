@@ -827,7 +827,13 @@ body {
 }
 
 
-/* mobile edge-to-edge handled by default styles */
+/* ── Mobile: flush edge-to-edge cards ── */
+@media (max-width: 768px) {
+  .event-card   { border-radius: 0; margin-bottom: 3px; box-shadow: none; }
+  .bf-hero      { border-radius: 0; margin-bottom: 3px; box-shadow: none; }
+  .see-more-row { border-radius: 0; }
+  .bf-main      { padding-top: 4px; }
+}
 
 </style>
 </head>
