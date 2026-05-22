@@ -1226,68 +1226,49 @@ function getCapacityStatus(evt) {
 
   const cap      = evt.capacity;
   const now      = new Date();
-  const hoursOut = (evt.dt - now) / 36e5;  // hours until tee time
+  const hoursOut = (evt.dt - now) / 36e5;
   const within48 = hoursOut <= 48 && hoursOut >= 0;
+  const is4man   = cap <= 4;   // 4-player = true sub bench; 8-player = 2nd tee time
 
-  // All Yes registrants (Jotform status = Yes)
   const yesRegs  = regData.filter(r => r.eventName === evt.name && r.status === 'Yes');
   const subRegs  = regData.filter(r => r.eventName === evt.name && r.status === 'Sub');
   const yesCount = yesRegs.length;
 
-  // Within 48hrs and fewer than 6 confirmed → locked at 4
+  // Within 48hrs and 2nd tee time not secured → locked
   if (within48 && yesCount < 6) {
     return {
-      restricted:  true,
-      locked:      true,
-      yesCount,
-      subCount:    subRegs.length,
-      cap,
-      message:     '🔒 Registration closed — 2nd tee time not secured. Play limited to 4.',
+      restricted: true, locked: true,
+      yesCount, subCount: subRegs.length, cap, is4man,
       canRegister: false
     };
   }
 
-  // Over capacity (9th+) → waitlist
+  // Waitlist (over capacity)
   if (yesCount >= cap) {
     return {
-      restricted:  true,
-      locked:      false,
-      waitlist:    true,
-      yesCount,
-      subCount:    subRegs.length,
-      cap,
-      message:     '⏳ Event is full. Waitlist only — commissioner will confirm.',
-      canRegister: true,   // can still submit but shown as waitlist
-      isWaitlist:  true
+      restricted: true, locked: false, waitlist: true, isWaitlist: true,
+      yesCount, subCount: subRegs.length, cap, is4man,
+      canRegister: true
     };
   }
 
-  // 5th slot — auto-sub zone (fivesome prevention)
-  // 4 confirmed + this would be 5th = sub slot
+  // 5th slot — meaning depends on capacity
   if (yesCount === 4) {
     return {
-      restricted:  true,
-      locked:      false,
-      fivesome:    true,
-      yesCount,
-      subCount:    subRegs.length,
-      cap,
-      message:     '🔄 Slot #5 — you\'ll be registered as a Sub. If a 6th player joins, you\'re automatically confirmed.',
-      canRegister: true,
-      isFivesome:  true
+      restricted:  true, locked: false,
+      fivesome:    true, isFivesome: true,
+      is4man,               // true=genuine sub, false=pending 2nd tee time
+      yesCount, subCount: subRegs.length, cap,
+      canRegister: true
     };
   }
 
   // Normal open slot
   return {
-    restricted:  true,
-    locked:      false,
-    yesCount,
-    subCount:    subRegs.length,
-    cap,
+    restricted: true, locked: false, open: true,
+    yesCount, subCount: subRegs.length, cap, is4man,
     canRegister: true,
-    open:        true,
-    spotsLeft:   cap - yesCount
+    spotsLeft: cap - yesCount
   };
 }
 
@@ -1295,26 +1276,39 @@ function getCapacityStatus(evt) {
 function getMyCapacityDisplay(evt, myReg, capStatus) {
   if (!capStatus.restricted || !myReg) return null;
 
-  const yesRegs = regData.filter(r => r.eventName === evt.name && r.status === 'Yes');
+  const yesRegs  = regData.filter(r => r.eventName === evt.name && r.status === 'Yes');
   const yesCount = yesRegs.length;
+  const is4man   = capStatus.is4man;
 
-  // My Jotform status is Sub
+  // Sub status — 4-man = bench sub; 8-man = should now be Yes
   if (myReg.status === 'Sub') {
-    // If yes count is now ≥6 they've moved up
-    if (yesCount >= 6) {
-      return { icon: '✅', label: 'You\'re confirmed — you moved up!', confirmed: true };
+    if (is4man) {
+      // Genuine sub — waiting for a cancellation
+      return { icon: '🔄', label: 'Sub — you\'ll play if someone cancels', sub4man: true };
+    } else {
+      // 8-man pending 2nd tee time — should have been Yes, legacy Sub
+      if (yesCount >= 6) {
+        return { icon: '✅', label: 'You\'re In — 2nd tee time confirmed!', confirmed: true };
+      }
+      return { icon: '⏳', label: 'You\'re #5 — one more player needed for your tee time', pending: true };
     }
-    // Still waiting
-    return { icon: '🔄', label: 'Tentatively confirmed — check back for confirmation', tentative: true };
   }
 
-  // My Jotform status is Yes but they're in waitlist territory (9th+)
+  // Yes status — check if they\'re in 5th slot of 8-man (pending tee time)
+  if (!is4man && yesCount === 5) {
+    const myPosition = yesRegs.findIndex(r => r.id === myReg.id);
+    if (myPosition === 4) {
+      return { icon: '⏳', label: 'You\'re #5 — one more player confirms your tee time', pending: true };
+    }
+  }
+
+  // Waitlist (9th+)
   const myPosition = yesRegs.findIndex(r => r.id === myReg.id);
   if (myPosition >= evt.capacity) {
     return { icon: '⏳', label: 'You\'re on the waitlist — commissioner will confirm', waitlist: true };
   }
 
-  return null; // Normal confirmed, no special display needed
+  return null; // Normal confirmed
 }
 
 // ── Weekend window helpers ────────────────────────────────────
@@ -1643,10 +1637,11 @@ function buildActionButtons(evt, myReg, capStatus) {
     return `<div class="my-status-badge">🔒 Registration closed</div>`;
   }
 
-  // ALREADY REGISTERED — one button: Unregister
+  // ALREADY REGISTERED — show capacity-aware status + Unregister
   if (myReg && myReg.status !== 'No') {
-    const icon  = myReg.status === 'Sub' ? '🔄' : '✅';
-    const label = myReg.status === 'Sub' ? "Registered as Sub" : "You're In";
+    const myDisp = getMyCapacityDisplay(evt, myReg, capStatus);
+    const icon   = myDisp ? myDisp.icon  : (myReg.status === 'Sub' ? '🔄' : '✅');
+    const label  = myDisp ? myDisp.label : (myReg.status === 'Sub' ? "Registered as Sub" : "You\'re In");
     return `
       <div class="my-status-badge">${icon} ${label}</div>
       <button class="btn btn-cant-make-it"
@@ -1655,14 +1650,30 @@ function buildActionButtons(evt, myReg, capStatus) {
       </button>`;
   }
 
-  // UNREGISTERED — one button, contextually labelled
-  const isForcedSub = capStatus.isFivesome || capStatus.isWaitlist;
-  const btnLabel = capStatus.isWaitlist  ? '⏳ Join Waitlist'
-                 : capStatus.isFivesome  ? '🔄 Register as Sub'
-                 : '⛳ Register';
-  const answer   = isForcedSub ? 'Sub' : 'Yes';
+  // UNREGISTERED — one button, label and answer depend on capacity context
+  let btnLabel, answer, capNote = '';
+
+  if (capStatus.isWaitlist) {
+    btnLabel = '⏳ Join Waitlist';
+    answer   = 'Sub';
+    capNote  = '<div class="cap-note">Event is full — commissioner will confirm if a spot opens.</div>';
+  } else if (capStatus.isFivesome && capStatus.is4man) {
+    // 4-player event: genuine sub bench
+    btnLabel = '🔄 I\'m Available';
+    answer   = 'Sub';
+    capNote  = '<div class="cap-note">You\'ll play if someone cancels — don\'t head out until confirmed.</div>';
+  } else if (capStatus.isFivesome && !capStatus.is4man) {
+    // 8-player event: 5th slot is Yes, pending 2nd tee time
+    btnLabel = '⛳ Register';
+    answer   = 'Yes';
+    capNote  = '<div class="cap-note">You\'re #5 — one more player needed to confirm your tee time. We\'ll update you when it\'s set.</div>';
+  } else {
+    btnLabel = '⛳ Register';
+    answer   = 'Yes';
+  }
 
   return `
+    ${capNote}
     <button class="btn btn-register-yes"
       onclick="submitRegistration('${evt.id}','${evt.name}',this,'${answer}')">
       ${btnLabel}
