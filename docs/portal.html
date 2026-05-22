@@ -1445,7 +1445,7 @@ function buildHeroCard(evt, regCount, myReg) {
     <div style="margin-top:14px;font-size:0.85rem;color:rgba(255,255,255,0.55);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       ${heroBadge}
       <span>👥 ${regCount} registered</span>
-      <span style="cursor:pointer;text-decoration:underline;margin-left:auto" onclick="toggleWhoPlaying('hero-who')">Details ›</span>
+      <span style="cursor:pointer;text-decoration:underline;margin-left:auto" onclick="toggleWhoPlaying('hero-who')">Players ›</span>
     </div>
     <div id="hero-who" style="display:none;margin-top:8px">${buildMiniRoster(evt.name)}</div>
   </div>`;
@@ -1524,7 +1524,7 @@ function buildEventCard(evt, isPast) {
     ${actionHtml ? `<div class="event-card-actions" id="actions-${evt.id}">${actionHtml}</div>` : ''}
     <div class="who-playing-row" onclick="toggleWhoPlaying('${whoId}')">
       <span>${badgeHtml}${badgeHtml ? '&nbsp;&nbsp;' : ''}👥 ${countLabel}</span>
-      <span style="margin-left:auto;font-size:0.82rem;color:rgba(255,255,255,0.5)">Details ›</span>
+      <span style="margin-left:auto;font-size:0.82rem;color:rgba(255,255,255,0.5)">Players ›</span>
     </div>
     <div id="${whoId}" style="display:none">
       ${buildPlayerChips(evt.name)}
