@@ -1477,7 +1477,8 @@ function buildHeroCard(evt, regCount, myReg) {
 }
 
 function buildMiniRoster(eventName) {
-  const players = regData.filter(r => r.eventName === eventName && r.status !== 'No');
+  const players = regData.filter(r => r.eventName === eventName && r.status !== 'No')
+    .sort((a,b) => a.player.localeCompare(b.player));
   if (!players.length) return `<div style="font-size:0.75rem;color:rgba(255,255,255,0.5);padding:6px 0">No registrations yet</div>`;
   return `<div style="display:flex;flex-wrap:wrap;gap:5px;padding:4px 0">` +
     players.map(p => {
@@ -1558,7 +1559,8 @@ function buildEventCard(evt, isPast) {
 }
 
 function buildPlayerChips(eventName) {
-  const players = regData.filter(r => r.eventName === eventName && r.status !== 'No');
+  const players = regData.filter(r => r.eventName === eventName && r.status !== 'No')
+    .sort((a,b) => a.player.localeCompare(b.player));
   if (!players.length) return `<div class="bf-empty" style="padding:10px 16px">No registrations yet</div>`;
   return `<div class="player-chips">` +
     players.map(p => `<span class="player-chip${p.status==='Sub'?' sub':''}">${p.player}${p.status==='Sub'?' (Sub)':''}</span>`).join('') +
