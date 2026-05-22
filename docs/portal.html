@@ -1643,40 +1643,29 @@ function buildActionButtons(evt, myReg, capStatus) {
     return `<div class="my-status-badge">🔒 Registration closed</div>`;
   }
 
-  // ALREADY REGISTERED
+  // ALREADY REGISTERED — one button: Unregister
   if (myReg && myReg.status !== 'No') {
-    const icon   = myReg.status === 'Yes' ? '✅' : '🔄';
-    const label  = myReg.status === 'Yes' ? "You're In" : 'Registered as Sub';
+    const icon  = myReg.status === 'Sub' ? '🔄' : '✅';
+    const label = myReg.status === 'Sub' ? "Registered as Sub" : "You're In";
     return `
       <div class="my-status-badge">${icon} ${label}</div>
       <button class="btn btn-cant-make-it"
         onclick="changeRegistration('${evt.id}','${evt.name}','${myReg.id}','No',this)">
-        Can't make it
+        Unregister
       </button>`;
   }
 
-  // UNREGISTERED — show Yes + Sub options
+  // UNREGISTERED — one button, contextually labelled
   const isForcedSub = capStatus.isFivesome || capStatus.isWaitlist;
-  const yesDisabled = isForcedSub ? 'style="opacity:0.35;pointer-events:none"' : '';
-  const capNote     = capStatus.isFivesome
-    ? '<div class="cap-note">5th slot — you\'ll join as Sub. If a 6th player joins, you move up automatically.</div>'
-    : capStatus.isWaitlist
-    ? '<div class="cap-note">Event is full — joining the waitlist as Sub. Commissioner confirms.</div>'
-    : '';
+  const btnLabel = capStatus.isWaitlist  ? '⏳ Join Waitlist'
+                 : capStatus.isFivesome  ? '🔄 Register as Sub'
+                 : '⛳ Register';
+  const answer   = isForcedSub ? 'Sub' : 'Yes';
 
   return `
-    ${capNote}
-    <button class="btn btn-register-yes" ${yesDisabled}
-      onclick="selectRegOption(this, '${evt.id}', 'Yes')">
-      ⛳ Yes — I'm playing
-    </button>
-    <button class="btn btn-register-sub"
-      onclick="selectRegOption(this, '${evt.id}', 'Sub')">
-      🔄 Sub — if needed
-    </button>
-    <button class="btn btn-submit" id="submit-${evt.id}" style="display:none"
-      onclick="submitRegistration('${evt.id}','${evt.name}',this)">
-      Confirm
+    <button class="btn btn-register-yes"
+      onclick="submitRegistration('${evt.id}','${evt.name}',this,'${answer}')">
+      ${btnLabel}
     </button>`;
 }
 
@@ -1703,10 +1692,10 @@ function selectRegOption(btn, evtId, choice) {
 }
 
 // ── POST new submission to Jotform ───────────────────────────────
-async function submitRegistration(evtId, evtName, submitBtn) {
-  const choice = _pendingChoice[evtId];
+async function submitRegistration(evtId, evtName, submitBtn, choice) {
+  if (!choice) choice = _pendingChoice[evtId];
   if (!choice) { showToast('Please select Yes or Sub first', true); return; }
-  if (!currentPlayer) { showToast('Please select your name first', true); return; }
+  if (!currentPlayer) { showToast('Please select your name first', true); openPlayerPicker(); return; }
 
   // Find event details
   const evt = eventData.find(e => e.id === evtId);
@@ -1747,7 +1736,7 @@ async function submitRegistration(evtId, evtName, submitBtn) {
     }
   } catch(e) {
     submitBtn.classList.remove('btn-loading');
-    submitBtn.textContent = 'Try again';
+    submitBtn.textContent = btnLabel;
     showToast('Registration failed — try again', true);
     console.error('submitRegistration error:', e);
   }
@@ -1772,8 +1761,8 @@ async function changeRegistration(evtId, evtName, subId, newAnswer, btn) {
       if (reg) reg.status = newAnswer;
       const evt = eventData.find(e => e.id === evtId);
       showToast(newAnswer === 'No'
-        ? `Removed from ${evtName}`
-        : `Updated to ${newAnswer} for ${evtName}`);
+        ? `Unregistered from ${evtName}`
+        : `Updated for ${evtName}`);
       renderAll();
     } else {
       throw new Error(data.message || 'Unknown error');
