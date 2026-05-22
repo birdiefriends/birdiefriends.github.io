@@ -42,6 +42,9 @@
 html, body {
   height: 100%;
   overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  width: 100%;
 }
 
 body {
@@ -193,8 +196,8 @@ body {
 }
 
 /* ── Screens ── */
-.bf-screen { display: none; }
-.bf-screen.active { display: block; animation: fadeUp 0.22s ease; }
+.bf-screen { display: none; width: 100%; padding: 0; margin: 0; }
+.bf-screen.active { display: block; animation: fadeUp 0.22s ease; width: 100%; padding: 0; margin: 0; }
 
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(8px); }
@@ -496,7 +499,7 @@ body {
   background: linear-gradient(135deg, var(--green-dark) 0%, var(--green-mid) 100%);
   border-radius: var(--radius);
   padding: 20px;
-  margin-bottom: 14px;
+  margin: 0 0 10px 0;
   color: #fff;
   position: relative;
   overflow: hidden;
