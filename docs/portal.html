@@ -1913,20 +1913,15 @@ function showToast(msg) {
 }
 </script>
 <script>
-// Unregister all old service workers, clear all caches, then re-register fresh
+// Unregister all service workers and clear all caches permanently
+// SW disabled — network-direct is simpler and more reliable for rapid deploys
 if ('serviceWorker' in navigator) {
-  // Unregister every registered SW
   navigator.serviceWorker.getRegistrations().then(regs => {
     regs.forEach(reg => reg.unregister());
   });
-  // Nuke all caches
-  if ('caches' in window) {
-    caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
-  }
-  // Re-register clean
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js?v=2').catch(() => {});
-  });
+}
+if ('caches' in window) {
+  caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
 }
 </script>
 </body>
