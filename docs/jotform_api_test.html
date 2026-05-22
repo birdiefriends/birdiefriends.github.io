@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BF — Jotform API Test</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: monospace; background: #0d1117; color: #e6edf3; padding: 20px; }
+h1 { color: #58a6ff; margin-bottom: 6px; font-size: 1.1rem; }
+.sub { color: #8b949e; font-size: 0.8rem; margin-bottom: 24px; }
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.card h2 { font-size: 0.9rem; color: #58a6ff; margin-bottom: 12px; }
+button {
+  background: #238636; color: #fff; border: none; border-radius: 6px;
+  padding: 8px 18px; font-size: 0.85rem; cursor: pointer; margin-right: 8px; margin-bottom: 8px;
+}
+button:hover { background: #2ea043; }
+button.danger { background: #da3633; }
+button.danger:hover { background: #f85149; }
+button:disabled { background: #21262d; color: #8b949e; cursor: not-allowed; }
+.result {
+  margin-top: 12px; padding: 10px; background: #0d1117;
+  border-radius: 4px; font-size: 0.75rem; line-height: 1.6;
+  white-space: pre-wrap; word-break: break-all;
+  border-left: 3px solid #30363d; min-height: 40px;
+}
+.result.ok   { border-left-color: #3fb950; color: #3fb950; }
+.result.fail { border-left-color: #f85149; color: #f85149; }
+.result.info { border-left-color: #58a6ff; color: #8b949e; }
+label { font-size: 0.78rem; color: #8b949e; display: block; margin-bottom: 4px; }
+input {
+  width: 100%; background: #0d1117; border: 1px solid #30363d; color: #e6edf3;
+  border-radius: 4px; padding: 6px 8px; font-size: 0.82rem; margin-bottom: 10px; font-family: monospace;
+}
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; margin-left: 8px; }
+.badge.pending { background: #21262d; color: #8b949e; }
+.badge.ok      { background: #1a4726; color: #3fb950; }
+.badge.fail    { background: #3d0614; color: #f85149; }
+.step { font-size: 0.78rem; color: #8b949e; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+
+<h1>🏌 BirdieFriends — Jotform API Browser Test</h1>
+<div class="sub">Tests POST (new submission) and PUT (edit submission) from the browser — confirms feasibility of fully in-portal registration.</div>
+
+<!-- ── Config ── -->
+<div class="card">
+  <h2>Config</h2>
+  <label>Jotform API Key</label>
+  <input id="apiKey" value="dd0cb09a71eee7d0db3aa690e292660f">
+  <label>Registration Form ID</label>
+  <input id="formId" value="233103072261037">
+  <label>Test submission ID (auto-filled after POST test)</label>
+  <input id="subId" placeholder="Will be filled after Test 1 runs">
+</div>
+
+<!-- ── Test 1: POST new submission ── -->
+<div class="card">
+  <h2>Test 1 — POST new submission <span class="badge pending" id="t1badge">pending</span></h2>
+  <div class="step">Creates a clearly-labelled test submission. Records the submission ID for Test 2 and 3.</div>
+  <button onclick="runTest1()">▶ Run POST Test</button>
+  <div class="result info" id="t1result">Not run yet</div>
+</div>
+
+<!-- ── Test 2: PUT edit submission ── -->
+<div class="card">
+  <h2>Test 2 — PUT edit submission <span class="badge pending" id="t2badge">pending</span></h2>
+  <div class="step">Edits the submission created in Test 1. Changes answer from "Yes" to "No". This is the "Can't make it" flow.</div>
+  <button onclick="runTest2()" id="t2btn" disabled>▶ Run PUT Test (run Test 1 first)</button>
+  <div class="result info" id="t2result">Not run yet — run Test 1 first</div>
+</div>
+
+<!-- ── Test 3: Cleanup ── -->
+<div class="card">
+  <h2>Test 3 — DELETE test submission <span class="badge pending" id="t3badge">pending</span></h2>
+  <div class="step">Removes the test submission so it doesn't pollute real registration data.</div>
+  <button class="danger" onclick="runTest3()" id="t3btn" disabled>🗑 Delete Test Submission</button>
+  <div class="result info" id="t3result">Not run yet — run Test 1 first</div>
+</div>
+
+<!-- ── Summary ── -->
+<div class="card">
+  <h2>Summary</h2>
+  <div id="summary" class="result info">Run all three tests to see results.</div>
+</div>
+
+<script>
+const JF = 'https://api.jotform.com';
+let testSubId = null;
+const results = { post: null, put: null, del: null };
+
+function apiKey() { return document.getElementById('apiKey').value.trim(); }
+function formId() { return document.getElementById('formId').value.trim(); }
+
+function setResult(id, text, status) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = `result ${status}`;
+}
+function setBadge(id, status) {
+  const el = document.getElementById(id);
+  el.textContent = status === 'ok' ? '✅ passed' : status === 'fail' ? '❌ failed' : 'running…';
+  el.className = `badge ${status}`;
+}
+
+// ── Test 1: POST ──────────────────────────────────────────────
+async function runTest1() {
+  setBadge('t1badge', 'running');
+  setResult('t1result', 'Sending POST request…', 'info');
+
+  const url = `${JF}/form/${formId()}/submissions?apiKey=${apiKey()}`;
+  const body = new URLSearchParams({
+    'submission[3]':  '🧪 API_TEST — IGNORE',
+    'submission[12]': '05-21-2026 06:00 AM',
+    'submission[13]': 'BSGC',
+    'submission[5]':  'Yes',
+    'submission[25]': 'API Test — Delete Me',
+  });
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    });
+    const data = await resp.json();
+    console.log('POST response:', data);
+
+    if (data.responseCode === 200 || data.responseCode === 201) {
+      testSubId = data.content?.submissionID || data.content?.id;
+      document.getElementById('subId').value = testSubId || '(check console)';
+      setBadge('t1badge', 'ok');
+      results.post = true;
+      setResult('t1result',
+        `✅ POST succeeded!\n\nresponseCode: ${data.responseCode}\nsubmissionID: ${testSubId}\nmessage: ${data.message}\n\nFull response:\n${JSON.stringify(data.content, null, 2)}`,
+        'ok'
+      );
+      document.getElementById('t2btn').disabled = false;
+      document.getElementById('t2btn').textContent = '▶ Run PUT Test';
+      document.getElementById('t3btn').disabled = false;
+    } else {
+      setBadge('t1badge', 'fail');
+      results.post = false;
+      setResult('t1result', `❌ POST failed\n\nresponseCode: ${data.responseCode}\nmessage: ${data.message}\n\n${JSON.stringify(data, null, 2)}`, 'fail');
+    }
+  } catch(e) {
+    setBadge('t1badge', 'fail');
+    results.post = false;
+    setResult('t1result', `❌ Network error: ${e.message}\n\nThis likely means CORS is blocking POST requests from the browser.`, 'fail');
+  }
+  updateSummary();
+}
+
+// ── Test 2: PUT ──────────────────────────────────────────────
+async function runTest2() {
+  const subId = testSubId || document.getElementById('subId').value.trim();
+  if (!subId) { alert('No submission ID — run Test 1 first'); return; }
+
+  setBadge('t2badge', 'running');
+  setResult('t2result', 'Sending PUT request…', 'info');
+
+  // Jotform edit endpoint: POST to /submission/{id} with _method=PUT
+  const url = `${JF}/submission/${subId}?apiKey=${apiKey()}`;
+  const body = new URLSearchParams({
+    'submission[5]': 'No',   // Change answer from Yes → No
+  });
+
+  try {
+    // Jotform uses POST with method override for edits
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    });
+    const data = await resp.json();
+    console.log('PUT response:', data);
+
+    if (data.responseCode === 200) {
+      setBadge('t2badge', 'ok');
+      results.put = true;
+      setResult('t2result',
+        `✅ PUT (edit) succeeded!\n\nSubmission ${subId} updated: answer changed Yes → No\n\nresponseCode: ${data.responseCode}\nmessage: ${data.message}\n\nFull response:\n${JSON.stringify(data.content, null, 2)}`,
+        'ok'
+      );
+    } else {
+      setBadge('t2badge', 'fail');
+      results.put = false;
+      setResult('t2result', `❌ PUT failed\n\nresponseCode: ${data.responseCode}\nmessage: ${data.message}\n\n${JSON.stringify(data, null, 2)}`, 'fail');
+    }
+  } catch(e) {
+    setBadge('t2badge', 'fail');
+    results.put = false;
+    setResult('t2result', `❌ Network error: ${e.message}\n\nCORS may block PUT/POST-to-submission from browser.`, 'fail');
+  }
+  updateSummary();
+}
+
+// ── Test 3: DELETE ────────────────────────────────────────────
+async function runTest3() {
+  const subId = testSubId || document.getElementById('subId').value.trim();
+  if (!subId) { alert('No submission ID — run Test 1 first'); return; }
+
+  setBadge('t3badge', 'running');
+  setResult('t3result', 'Sending DELETE request…', 'info');
+
+  const url = `${JF}/submission/${subId}?apiKey=${apiKey()}`;
+
+  try {
+    const resp = await fetch(url, { method: 'DELETE' });
+    const data = await resp.json();
+    console.log('DELETE response:', data);
+
+    if (data.responseCode === 200) {
+      setBadge('t3badge', 'ok');
+      results.del = true;
+      setResult('t3result', `✅ DELETE succeeded — test submission ${subId} removed.\n\nresponseCode: ${data.responseCode}\nmessage: ${data.message}`, 'ok');
+    } else {
+      setBadge('t3badge', 'fail');
+      results.del = false;
+      setResult('t3result', `❌ DELETE failed\n\nresponseCode: ${data.responseCode}\nmessage: ${data.message}\n\n${JSON.stringify(data, null, 2)}`, 'fail');
+    }
+  } catch(e) {
+    setBadge('t3badge', 'fail');
+    results.del = false;
+    setResult('t3result', `❌ Network error: ${e.message}`, 'fail');
+  }
+  updateSummary();
+}
+
+function updateSummary() {
+  const lines = [];
+  if (results.post !== null) lines.push(`POST new submission:   ${results.post ? '✅ WORKS' : '❌ BLOCKED'}`);
+  if (results.put  !== null) lines.push(`PUT  edit submission:  ${results.put  ? '✅ WORKS' : '❌ BLOCKED'}`);
+  if (results.del  !== null) lines.push(`DELETE submission:     ${results.del  ? '✅ WORKS' : '❌ BLOCKED'}`);
+
+  if (results.post && results.put) {
+    lines.push('');
+    lines.push('🟢 Full in-portal registration is feasible.');
+    lines.push('   New registrations + answer changes can both');
+    lines.push('   happen silently in the background.');
+  } else if (results.post === false) {
+    lines.push('');
+    lines.push('🔴 POST blocked — new registrations need Jotform redirect.');
+    lines.push('   Answer changes (Yes→No) still possible if PUT works.');
+  } else if (results.post && results.put === false) {
+    lines.push('');
+    lines.push('🟡 POST works but PUT blocked.');
+    lines.push('   New registrations: in-portal ✅');
+    lines.push('   Answer changes: need alternative approach.');
+  }
+
+  const el = document.getElementById('summary');
+  el.textContent = lines.join('\n') || 'Run all three tests to see results.';
+  el.className = `result ${results.post && results.put ? 'ok' : results.post === false ? 'fail' : 'info'}`;
+}
+</script>
+</body>
+</html>
