@@ -612,7 +612,6 @@ body {
 .player-picker-grid {
   display: grid !important;
   grid-template-columns: repeat(2, 1fr) !important;
-  grid-auto-flow: column;
   gap: 8px;
   margin-top: 12px;
 }
@@ -2083,21 +2082,36 @@ function buildPlayerPickerGrid(showInactive = false) {
   const names = getMemberNames(showInactive);
   const inactiveNames = getMemberNames(true);
 
+  // Clear any leftover inline row styles from previous approach
+  grid.style.gridTemplateRows = '';
+
   if (memberData.length === 0) {
     grid.innerHTML = '<div style="color:var(--text-muted);font-size:0.83rem;padding:8px 0;grid-column:1/-1">Loading roster…</div>';
-    grid.style.gridTemplateRows = '';
     return;
   }
 
-  // Column-first flow: names fill col 1 top→bottom, then col 2
-  // Full-span elements (inactive toggle, join button) always appear after via grid-column:1/-1
-  const rowCount = Math.ceil(names.length / 2);
-  grid.style.gridTemplateRows = `repeat(${rowCount}, auto)`;
-
-  const playerBtns = names.map(p => {
+  // Build column-sorted order manually:
+  // Split names into left col (first half) and right col (second half),
+  // then interleave them row by row so the standard row-flow grid
+  // displays col 1 top→bottom, col 2 top→bottom.
+  function makeBtn(p, style = '') {
     const sel = p === currentPlayer ? ' selected' : '';
-    return `<button class="player-picker-btn${sel}" onclick="selectPlayer('${p.replace(/'/g,"\\'")}')">${p}</button>`;
-  }).join('');
+    return `<button class="player-picker-btn${sel}" onclick="selectPlayer('${p.replace(/'/g,"\\'")}')"${style ? ` style="${style}"` : ''}>${p}</button>`;
+  }
+
+  function interleaved(arr) {
+    const half = Math.ceil(arr.length / 2);
+    const left  = arr.slice(0, half);
+    const right = arr.slice(half);
+    const rows = [];
+    for (let i = 0; i < half; i++) {
+      rows.push(makeBtn(left[i]));
+      rows.push(right[i] ? makeBtn(right[i]) : '<div></div>');
+    }
+    return rows.join('');
+  }
+
+  const playerBtns = interleaved(names);
 
   // Inactive toggle — only show if there are inactive members
   let inactiveSection = '';
@@ -2108,14 +2122,21 @@ function buildPlayerPickerGrid(showInactive = false) {
         Show inactive players (${inactiveNames.length}) ›
       </button>`;
   } else if (showInactive) {
+    const inactiveBtns = interleaved(inactiveNames.map(p => ({ name: p })));
+    // Re-do with opacity — rebuild interleaved for inactive names
+    const half = Math.ceil(inactiveNames.length / 2);
+    const left  = inactiveNames.slice(0, half);
+    const right = inactiveNames.slice(half);
+    const iRows = [];
+    for (let i = 0; i < half; i++) {
+      iRows.push(makeBtn(left[i], 'opacity:0.6'));
+      iRows.push(right[i] ? makeBtn(right[i], 'opacity:0.6') : '<div></div>');
+    }
     inactiveSection = `
       <div style="grid-column:1/-1;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-hint);font-family:'DM Mono',monospace;padding:10px 0 4px">
         Inactive Players
       </div>
-      ${inactiveNames.map(p => {
-        const sel = p === currentPlayer ? ' selected' : '';
-        return `<button class="player-picker-btn${sel}" onclick="selectPlayer('${p.replace(/'/g,"\\'")}')" style="opacity:0.6">${p}</button>`;
-      }).join('')}
+      ${iRows.join('')}
       <button class="player-picker-btn" onclick="buildPlayerPickerGrid(false)"
         style="grid-column:1/-1;background:transparent;color:var(--text-hint);border-color:var(--border);font-size:0.78rem;margin-top:4px;text-align:center">
         ‹ Hide inactive
