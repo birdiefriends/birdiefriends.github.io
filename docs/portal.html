@@ -1148,6 +1148,8 @@ async function loadAllData() {
     regData    = parseRegSubmissions(regContent);
     dataLoaded = true;
     renderAll();
+    // Write capacity=4 back to Jotform for any events that hit the 48hr lock
+    eventData.forEach(evt => collapseCapacityIfNeeded(evt));
   } catch(e) {
     console.error('Data load error:', e.message, e);
     renderFallback(e.message);
@@ -1159,6 +1161,58 @@ async function loadAllData() {
 function isNewEvent(evt) {
   if (!evt.createdAt) return false;
   return (new Date() - evt.createdAt) < 72 * 60 * 60 * 1000;
+}
+
+
+// ── Capacity collapse write-back ─────────────────────────────────────────────
+// When the 48hr window hits with < 6 confirmed on an 8-player event,
+// the golf course has released the 2nd tee time. We write capacity=4
+// back to the Event Request submission so Jotform is source of truth.
+// Fires once per event per session — subsequent loads just read 4 from Jotform.
+const _capacityCollapsed = new Set();
+
+async function collapseCapacityIfNeeded(evt) {
+  if (!evt.capacity || evt.capacity <= 4) return;        // already 4-man or no cap
+  if (_capacityCollapsed.has(evt.id)) return;            // already done this session
+
+  const now      = new Date();
+  const hoursOut = (evt.dt - now) / 36e5;
+  const within48 = hoursOut <= 48 && hoursOut >= 0;
+  if (!within48) return;
+
+  const yesCount = regData.filter(r => r.eventName === evt.name && r.status === 'Yes').length;
+  if (yesCount >= 6) return;  // 2nd tee time confirmed — no collapse needed
+
+  // Find the QID for the Capacity field in this submission's raw answers
+  const answers = evt.raw && evt.raw.answers;
+  if (!answers) return;
+  let capQid = null;
+  for (const [qid, ans] of Object.entries(answers)) {
+    const label = (ans.text || ans.name || '').toLowerCase().replace(/[^a-z]/g, '');
+    if (label === 'capacity') { capQid = qid; break; }
+  }
+  if (!capQid) return;
+
+  _capacityCollapsed.add(evt.id);  // mark before async so we don't double-fire
+
+  try {
+    const body = new URLSearchParams({ [`submission[${capQid}]`]: '4' });
+    const resp = await fetch(
+      `${JF_API}/submission/${evt.id}?apiKey=${JOTFORM_API_KEY}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() }
+    );
+    const data = await resp.json();
+    if (data.responseCode === 200) {
+      console.log(`Capacity collapsed to 4 for ${evt.name} (submission ${evt.id})`);
+      evt.capacity = 4;  // update local copy so this session is accurate
+    } else {
+      _capacityCollapsed.delete(evt.id);  // allow retry
+      console.warn('Capacity collapse failed:', data.message);
+    }
+  } catch(e) {
+    _capacityCollapsed.delete(evt.id);
+    console.warn('Capacity collapse error:', e.message);
+  }
 }
 
 function parseEventSubmissions(raw) {
@@ -1253,24 +1307,21 @@ function getCapacityStatus(evt) {
   const now      = new Date();
   const hoursOut = (evt.dt - now) / 36e5;
   const within48 = hoursOut <= 48 && hoursOut >= 0;
+  const is4man   = cap <= 4;
 
   const yesRegs  = regData.filter(r => r.eventName === evt.name && r.status === 'Yes');
   const subRegs  = regData.filter(r => r.eventName === evt.name && r.status === 'Sub');
   const yesCount = yesRegs.length;
 
-  // Option A: when 48hr lock fires without 6 confirmed, golf course released 2nd tee time.
-  // Effective capacity collapses to 4 — this IS a 4-player event now.
-  const effectiveCap = (within48 && yesCount < 6 && cap > 4) ? 4 : cap;
-  const is4man       = effectiveCap <= 4;
-
-  // Within 48hrs and 2nd tee time not secured → locked for new Yes registrations
-  // Sub always remains available so players can join the waitlist
+  // Within 48hrs and 2nd tee time not secured → locked
+  // Portal writes capacity=4 back to Jotform (see collapseCapacityIfNeeded)
+  // so on next load Jotform is already accurate. Sub always available.
   if (within48 && yesCount < 6) {
     return {
       restricted: true, locked: true,
       yesCount, subCount: subRegs.length,
-      cap: effectiveCap, is4man,
-      canRegister: false   // Yes slots locked; Sub still available via button
+      cap, is4man: cap <= 4,
+      canRegister: false
     };
   }
 
