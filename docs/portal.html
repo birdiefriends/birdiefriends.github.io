@@ -612,6 +612,7 @@ body {
 .player-picker-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
+  grid-auto-flow: column;
   gap: 8px;
   margin-top: 12px;
 }
@@ -766,9 +767,6 @@ body {
 }
 
 /* ── Responsive ── */
-@media (min-width: 480px) {
-  .player-picker-grid { grid-template-columns: repeat(3, 1fr); }
-}
 @media (min-width: 769px) {
   .bf-main { padding: 20px 24px calc(var(--nav-h) + 24px); max-width: 680px; margin: 0 auto; }
 }
@@ -2087,8 +2085,14 @@ function buildPlayerPickerGrid(showInactive = false) {
 
   if (memberData.length === 0) {
     grid.innerHTML = '<div style="color:var(--text-muted);font-size:0.83rem;padding:8px 0;grid-column:1/-1">Loading roster…</div>';
+    grid.style.gridTemplateRows = '';
     return;
   }
+
+  // Column-first flow: names fill col 1 top→bottom, then col 2
+  // Full-span elements (inactive toggle, join button) always appear after via grid-column:1/-1
+  const rowCount = Math.ceil(names.length / 2);
+  grid.style.gridTemplateRows = `repeat(${rowCount}, auto)`;
 
   const playerBtns = names.map(p => {
     const sel = p === currentPlayer ? ' selected' : '';
