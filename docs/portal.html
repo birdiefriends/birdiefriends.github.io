@@ -1309,13 +1309,13 @@ function getMyCapacityDisplay(evt, myReg, capStatus) {
   if (myReg.status === 'Sub') {
     if (is4man) {
       // Genuine sub — waiting for a cancellation
-      return { icon: '🔄', label: 'Sub — you\'ll play if someone cancels', sub4man: true };
+      return { icon: '🔄', label: 'Registered — Sub', sub4man: true };
     } else {
       // 8-man pending 2nd tee time — should have been Yes, legacy Sub
       if (yesCount >= 6) {
-        return { icon: '✅', label: 'You\'re In — 2nd tee time confirmed!', confirmed: true };
+        return { icon: '✅', label: 'Registered — Confirmed', confirmed: true };
       }
-      return { icon: '⏳', label: 'You\'re #5 — one more player needed for your tee time', pending: true };
+      return { icon: '⏳', label: 'Registered — Pending 2nd tee time', pending: true };
     }
   }
 
@@ -1323,14 +1323,14 @@ function getMyCapacityDisplay(evt, myReg, capStatus) {
   if (!is4man && yesCount === 5) {
     const myPosition = yesRegs.findIndex(r => r.id === myReg.id);
     if (myPosition === 4) {
-      return { icon: '⏳', label: 'You\'re #5 — one more player confirms your tee time', pending: true };
+      return { icon: '⏳', label: 'Registered — Pending 2nd tee time', pending: true };
     }
   }
 
   // Waitlist (9th+)
   const myPosition = yesRegs.findIndex(r => r.id === myReg.id);
   if (myPosition >= evt.capacity) {
-    return { icon: '⏳', label: 'You\'re on the waitlist — commissioner will confirm', waitlist: true };
+    return { icon: '⏳', label: 'Registered — Waitlist', waitlist: true };
   }
 
   return null; // Normal confirmed
@@ -1665,7 +1665,7 @@ function buildActionButtons(evt, myReg, capStatus) {
   if (capStatus.locked) {
     if (myReg && myReg.status !== 'No') {
       const icon  = myReg.status === 'Sub' ? '🔄' : '✅';
-      const label = myReg.status === 'Sub' ? "You're In as Sub" : "You're In";
+      const label = myReg.status === 'Sub' ? "Registered — Sub" : "Registered";
       return `<div class="my-status-badge">${icon} ${label} &nbsp;🔒</div>`;
     }
     return `<div class="my-status-badge">🔒 Registration closed</div>`;
@@ -1675,7 +1675,7 @@ function buildActionButtons(evt, myReg, capStatus) {
   if (myReg && myReg.status !== 'No') {
     const myDisp = getMyCapacityDisplay(evt, myReg, capStatus);
     const icon   = myDisp ? myDisp.icon  : (myReg.status === 'Sub' ? '🔄' : '✅');
-    const label  = myDisp ? myDisp.label : (myReg.status === 'Sub' ? "Registered as Sub" : "You\'re In");
+    const label  = myDisp ? myDisp.label : (myReg.status === 'Sub' ? "Registered — Sub" : "Registered");
     return `
       <div class="my-status-badge">${icon} ${label}</div>
       <button class="btn btn-cant-make-it"
@@ -1688,19 +1688,19 @@ function buildActionButtons(evt, myReg, capStatus) {
   let btnLabel, answer, capNote = '';
 
   if (capStatus.isWaitlist) {
-    btnLabel = '⏳ Join Waitlist';
+    btnLabel = '⏳ Waitlist';
     answer   = 'Sub';
-    capNote  = '<div class="cap-note">Event is full — commissioner will confirm if a spot opens.</div>';
+    capNote  = '<div class="cap-note">Event is full. You are on the waitlist — commissioner will confirm.</div>';
   } else if (capStatus.isFivesome && capStatus.is4man) {
     // 4-player event: genuine sub bench
-    btnLabel = '🔄 I\'m Available';
+    btnLabel = '🔄 Register as Sub';
     answer   = 'Sub';
-    capNote  = '<div class="cap-note">You\'ll play if someone cancels — don\'t head out until confirmed.</div>';
+    capNote  = '<div class="cap-note">You are on the Sub list. Do not go to the course unless contacted by the commissioner.</div>';
   } else if (capStatus.isFivesome && !capStatus.is4man) {
     // 8-player event: 5th slot is Yes, pending 2nd tee time
     btnLabel = '⛳ Register';
     answer   = 'Yes';
-    capNote  = '<div class="cap-note">You\'re #5 — one more player needed to confirm your tee time. We\'ll update you when it\'s set.</div>';
+    capNote  = '<div class="cap-note">You are #5. One more player needed to confirm the 2nd tee time.</div>';
   } else {
     btnLabel = '⛳ Register';
     answer   = 'Yes';
