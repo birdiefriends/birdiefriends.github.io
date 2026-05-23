@@ -98,7 +98,7 @@ select:focus{outline:none;border-color:var(--green)}
 <div class="container">
   <div class="picker-card">
     <label for="player-select">Select your name to see your breakdown</label>
-    <select id="player-select" onchange="showPlayer(this.value)">
+    <select id="player-select" onchange="localStorage.setItem('bf_player',this.value);showPlayer(this.value)">
       <option value="">— Choose a player —</option>
     </select>
   </div>
@@ -120,6 +120,15 @@ const urlPlayer = new URLSearchParams(location.search).get('player');
 if (urlPlayer && ALL_PLAYER_DATA[urlPlayer]) {
   sel.value = urlPlayer;
   showPlayer(urlPlayer);
+}
+
+// Auto-select from portal identity (bf_player localStorage key)
+if (!sel.value) {
+  const storedPlayer = localStorage.getItem('bf_player');
+  if (storedPlayer && ALL_PLAYER_DATA[storedPlayer]) {
+    sel.value = storedPlayer;
+    showPlayer(storedPlayer);
+  }
 }
 
 function sign(v) { return v >= 0 ? '+' : ''; }
