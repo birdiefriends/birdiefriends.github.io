@@ -1661,8 +1661,13 @@ function showToast(msg, isError) {
 // Returns HTML string. Handles all states:
 //   unregistered (open/sub/waitlist/locked) and registered (Yes/Sub → change)
 function buildActionButtons(evt, myReg, capStatus) {
-  // LOCKED — no actions
+  // LOCKED — registered players see their status, others see closed message
   if (capStatus.locked) {
+    if (myReg && myReg.status !== 'No') {
+      const icon  = myReg.status === 'Sub' ? '🔄' : '✅';
+      const label = myReg.status === 'Sub' ? "You're In as Sub" : "You're In";
+      return `<div class="my-status-badge">${icon} ${label} &nbsp;🔒</div>`;
+    }
     return `<div class="my-status-badge">🔒 Registration closed</div>`;
   }
 
