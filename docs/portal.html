@@ -1335,7 +1335,7 @@ function getMyCapacityDisplay(evt, myReg, capStatus) {
 
   // Waitlist (9th+)
   const myPosition = yesRegs.findIndex(r => r.id === myReg.id);
-  if (myPosition >= evt.capacity) {
+  if (myPosition >= (capStatus ? capStatus.cap : evt.capacity)) {
     return { icon: '⏳', label: 'Registered — Waitlist', waitlist: true };
   }
 
@@ -1462,7 +1462,7 @@ function buildHeroCard(evt, regCount, myReg) {
 
   const heroSubCount = capStatus.subCount || 0;
   const capLabel = capStatus.restricted
-    ? ` · <span style="opacity:0.7">${capStatus.yesCount}/${evt.capacity}${heroSubCount ? ` + ${heroSubCount} sub` : ''}</span>`
+    ? ` · <span style="opacity:0.7">${capStatus.yesCount}/${capStatus.cap}${heroSubCount ? ` + ${heroSubCount} sub` : ''}</span>`
     : ` · <span style="opacity:0.7">${regCount} registered</span>`;
 
   const heroBadge = fmtBadge ? `<span class="format-badge ${formatClass(evt.format)}">${fmtBadge}</span>` : '';
@@ -1476,7 +1476,7 @@ function buildHeroCard(evt, regCount, myReg) {
     <div class="bf-hero-actions" id="actions-${evt.id}">${actionHtml}</div>
     <div style="margin-top:14px;font-size:0.85rem;color:rgba(255,255,255,0.55);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       ${heroBadge}
-      <span>👥 ${capStatus.restricted ? `${capStatus.yesCount}/${evt.capacity}${heroSubCount ? " + " + heroSubCount + " sub" : ""}` : `${regCount} registered`}</span>
+      <span>👥 ${capStatus.restricted ? `${capStatus.yesCount}/${capStatus.cap}${heroSubCount ? " + " + heroSubCount + " sub" : ""}` : `${regCount} registered`}</span>
       <span style="cursor:pointer;text-decoration:underline;margin-left:auto" onclick="toggleWhoPlaying('hero-who')">Players ›</span>
     </div>
     <div id="hero-who" style="display:none;margin-top:8px">${buildMiniRoster(evt.name)}</div>
@@ -1512,8 +1512,9 @@ function buildEventCard(evt, isPast) {
   }
 
   const subCount  = regData.filter(r => r.eventName === evt.name && r.status === 'Sub').length;
-  const countLabel = evt.capacity
-    ? `${yesCount}/${evt.capacity}${subCount ? ` + ${subCount} sub` : ''}`
+  const dispCap    = capStatus.restricted ? capStatus.cap : evt.capacity;
+  const countLabel = dispCap
+    ? `${yesCount}/${dispCap}${subCount ? ` + ${subCount} sub` : ''}`
     : `${regCount} registered`;
 
   const whoId = `who-${evt.id}`;
