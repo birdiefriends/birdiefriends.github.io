@@ -1435,7 +1435,7 @@ function renderHome() {
   if (upcoming.length > 0) {
     const next = upcoming[0];
     const regCount = regData.filter(r => r.eventName === next.name && r.status !== 'No').length;
-    const myReg    = currentPlayer ? regData.find(r => r.eventName === next.name && r.player === currentPlayer) : null;
+    const myReg    = currentPlayer ? findMyReg(next.name) : null;
     heroEl.innerHTML = buildHeroCard(next, regCount, myReg);
   } else {
     heroEl.innerHTML = `<div class="bf-hero">
@@ -1553,7 +1553,7 @@ function buildEventCard(evt, isPast) {
   const locStr    = evt.location === 'BSGC' ? 'Blue Shamrock GC' : evt.location;
   const yesCount  = regData.filter(r => r.eventName === evt.name && r.status === 'Yes').length;
   const regCount  = regData.filter(r => r.eventName === evt.name && r.status !== 'No').length;
-  const myReg     = currentPlayer ? regData.find(r => r.eventName === evt.name && r.player === currentPlayer) : null;
+  const myReg     = currentPlayer ? findMyReg(evt.name) : null;
   const capStatus = getCapacityStatus(evt);
   const myCapDisp = myReg ? getMyCapacityDisplay(evt, myReg, capStatus) : null;
 
@@ -1800,52 +1800,74 @@ function selectRegOption(btn, evtId, choice) {
   }
 }
 
-// ── POST new submission to Jotform ───────────────────────────────
+
+// ── Find my registration for an event ────────────────────────────────────────
+// Returns the most recent active (non-No) submission for currentPlayer + eventName.
+// Falls back to most recent any-status submission so we can PUT instead of POST.
+function findMyReg(eventName) {
+  if (!currentPlayer) return null;
+  const mine = regData
+    .filter(r => r.eventName === eventName && r.player === currentPlayer)
+    .sort((a, b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
+  // Prefer active registration
+  const active = mine.find(r => r.status !== 'No');
+  return active || mine[0] || null;
+}
+
+// ── Register: PUT existing submission or POST new one ────────────
 async function submitRegistration(evtId, evtName, submitBtn, choice) {
   if (!choice) choice = _pendingChoice[evtId];
   if (!choice) { showToast('Please select Yes or Sub first', true); return; }
   if (!currentPlayer) { showToast('Please select your name first', true); openPlayerPicker(); return; }
 
-  // Find event details
   const evt = eventData.find(e => e.id === evtId);
   if (!evt) { showToast('Event not found', true); return; }
 
   submitBtn.classList.add('btn-loading');
   submitBtn.textContent = 'Registering…';
 
-  const body = new URLSearchParams({
-    'submission[3]':  evt.name,
-    'submission[12]': formatDateForJotform(evt.dt),
-    'submission[13]': evt.location || 'BSGC',
-    'submission[5]':  choice,
-    'submission[25]': currentPlayer,
-  });
+  // Always check for an existing submission first — PUT beats POST
+  // This prevents duplicate rows from register → unregister → register cycles
+  const existing = findMyReg(evtName);
 
   try {
-    const resp = await fetch(
-      `${JF_API}/form/${REGISTER_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`,
-      { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() }
-    );
-    const data = await resp.json();
-    if (data.responseCode === 200 || data.responseCode === 201) {
-      const newId = data.content?.submissionID || data.content?.id;
-      // Optimistically add to local regData so card updates immediately
-      regData.push({
-        id:        newId,
-        eventName: evt.name,
-        player:    currentPlayer,
-        status:    choice,
-        createdAt: new Date().toISOString()
-      });
-      delete _pendingChoice[evtId];
-      showToast(choice === 'Yes' ? `✅ Registered for ${evt.name}!` : `🔄 Joined as Sub for ${evt.name}`);
-      renderAll(); // refresh cards
+    let resultId;
+    if (existing) {
+      // PUT — update existing submission answer only
+      const body = new URLSearchParams({ 'submission[5]': choice });
+      const resp = await fetch(
+        `${JF_API}/submission/${existing.id}?apiKey=${JOTFORM_API_KEY}`,
+        { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() }
+      );
+      const data = await resp.json();
+      if (data.responseCode !== 200) throw new Error(data.message || 'PUT failed');
+      existing.status = choice;  // update local copy
+      resultId = existing.id;
     } else {
-      throw new Error(data.message || 'Unknown error');
+      // POST — no existing submission, create fresh
+      const body = new URLSearchParams({
+        'submission[3]':  evt.name,
+        'submission[12]': formatDateForJotform(evt.dt),
+        'submission[13]': evt.location || 'BSGC',
+        'submission[5]':  choice,
+        'submission[25]': currentPlayer,
+      });
+      const resp = await fetch(
+        `${JF_API}/form/${REGISTER_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`,
+        { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() }
+      );
+      const data = await resp.json();
+      if (data.responseCode !== 200 && data.responseCode !== 201) throw new Error(data.message || 'POST failed');
+      resultId = data.content?.submissionID || data.content?.id;
+      regData.push({ id: resultId, eventName: evt.name, player: currentPlayer, status: choice, createdAt: new Date().toISOString() });
     }
+
+    delete _pendingChoice[evtId];
+    showToast(choice === 'Yes' ? `✅ Registered for ${evt.name}` : `🔄 Sub registered for ${evt.name}`);
+    renderAll();
   } catch(e) {
     submitBtn.classList.remove('btn-loading');
-    submitBtn.textContent = btnLabel;
+    submitBtn.textContent = 'Try again';
     showToast('Registration failed — try again', true);
     console.error('submitRegistration error:', e);
   }
