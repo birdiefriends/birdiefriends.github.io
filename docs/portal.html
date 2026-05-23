@@ -1253,18 +1253,24 @@ function getCapacityStatus(evt) {
   const now      = new Date();
   const hoursOut = (evt.dt - now) / 36e5;
   const within48 = hoursOut <= 48 && hoursOut >= 0;
-  const is4man   = cap <= 4;   // 4-player = true sub bench; 8-player = 2nd tee time
 
   const yesRegs  = regData.filter(r => r.eventName === evt.name && r.status === 'Yes');
   const subRegs  = regData.filter(r => r.eventName === evt.name && r.status === 'Sub');
   const yesCount = yesRegs.length;
 
-  // Within 48hrs and 2nd tee time not secured → locked
+  // Option A: when 48hr lock fires without 6 confirmed, golf course released 2nd tee time.
+  // Effective capacity collapses to 4 — this IS a 4-player event now.
+  const effectiveCap = (within48 && yesCount < 6 && cap > 4) ? 4 : cap;
+  const is4man       = effectiveCap <= 4;
+
+  // Within 48hrs and 2nd tee time not secured → locked for new Yes registrations
+  // Sub always remains available so players can join the waitlist
   if (within48 && yesCount < 6) {
     return {
       restricted: true, locked: true,
-      yesCount, subCount: subRegs.length, cap, is4man,
-      canRegister: false
+      yesCount, subCount: subRegs.length,
+      cap: effectiveCap, is4man,
+      canRegister: false   // Yes slots locked; Sub still available via button
     };
   }
 
@@ -1661,14 +1667,20 @@ function showToast(msg, isError) {
 // Returns HTML string. Handles all states:
 //   unregistered (open/sub/waitlist/locked) and registered (Yes/Sub → change)
 function buildActionButtons(evt, myReg, capStatus) {
-  // LOCKED — registered players see their status, others see closed message
+  // LOCKED — registered players see their status; unregistered can still join as Sub
   if (capStatus.locked) {
     if (myReg && myReg.status !== 'No') {
       const icon  = myReg.status === 'Sub' ? '🔄' : '✅';
-      const label = myReg.status === 'Sub' ? "Registered — Sub" : "Registered";
+      const label = myReg.status === 'Sub' ? 'Registered — Sub' : 'Registered';
       return `<div class="my-status-badge">${icon} ${label} &nbsp;🔒</div>`;
     }
-    return `<div class="my-status-badge">🔒 Registration closed</div>`;
+    // Sub always available — player needs to know their status before travelling
+    return `
+      <div class="cap-note">Registration closed. Sub list still open — check your status before heading to the course.</div>
+      <button class="btn btn-register-sub"
+        onclick="submitRegistration('${evt.id}','${evt.name}',this,'Sub')">
+        🔄 Register as Sub
+      </button>`;
   }
 
   // ALREADY REGISTERED — show capacity-aware status + Unregister
