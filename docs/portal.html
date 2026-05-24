@@ -1826,6 +1826,19 @@ function parseEventSubmissions(raw) {
     const a = s.answers || {};
     const name     = getAnswer(a, ['Event Name','eventName']);
     const dateStr  = getAnswer(a, ['Date & Time','dateTime','date']);
+    // Debug: log raw date answer for any event with a suspicious dateStr
+    if (!dateStr || dateStr === 'AM' || dateStr === 'PM' || dateStr.length < 6) {
+      const dateKeys = ['Date & Time','dateTime','date'];
+      for (const key of dateKeys) {
+        for (const [qid, ans] of Object.entries(a)) {
+          const label = (ans.text || ans.name || '').toLowerCase().replace(/[^a-z]/g,'');
+          const keyN = key.toLowerCase().replace(/[^a-z]/g,'');
+          if (label === keyN || ans.name === key) {
+            console.warn(`[dateDebug] name="${getAnswer(a,['Event Name','eventName'])}" qid=${qid} label="${ans.text||ans.name}" answer=`, JSON.stringify(ans.answer));
+          }
+        }
+      }
+    }
     const location = getAnswer(a, ['Event Location','location']) || 'BSGC';
     const format   = getAnswer(a, ['Event Format','format']) || 'Individual Score';
     const reqName  = getAnswer(a, ['Requestor Name','requestorName','name']);
