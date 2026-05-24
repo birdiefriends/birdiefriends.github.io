@@ -1826,19 +1826,7 @@ function parseEventSubmissions(raw) {
     const a = s.answers || {};
     const name     = getAnswer(a, ['Event Name','eventName']);
     const dateStr  = getAnswer(a, ['Date & Time','dateTime','date']);
-    // Debug: log raw date answer for any event with a suspicious dateStr
-    if (!dateStr || dateStr === 'AM' || dateStr === 'PM' || dateStr.length < 6) {
-      const dateKeys = ['Date & Time','dateTime','date'];
-      for (const key of dateKeys) {
-        for (const [qid, ans] of Object.entries(a)) {
-          const label = (ans.text || ans.name || '').toLowerCase().replace(/[^a-z]/g,'');
-          const keyN = key.toLowerCase().replace(/[^a-z]/g,'');
-          if (label === keyN || ans.name === key) {
-            console.warn(`[dateDebug] name="${getAnswer(a,['Event Name','eventName'])}" qid=${qid} label="${ans.text||ans.name}" answer=`, JSON.stringify(ans.answer));
-          }
-        }
-      }
-    }
+
     const location = getAnswer(a, ['Event Location','location']) || 'BSGC';
     const format   = getAnswer(a, ['Event Format','format']) || 'Individual Score';
     const reqName  = getAnswer(a, ['Requestor Name','requestorName','name']);
@@ -1929,10 +1917,22 @@ function getAnswer(answers, keys) {
         if (typeof v === 'object') {
           // Name field: {first, last}
           if (v.first || v.last) return [v.first||'', v.last||''].join(' ').trim();
-          // Date field
+          // Jotform datetime string
           if (v.datetime) return v.datetime;
           // Jotform Date/Time field returns {date: "MM-DD-YYYY", time: "HH:MM AM"}
           if (v.date) return v.time ? `${v.date} ${v.time}` : v.date;
+          // Jotform Date/Time field (component style): {month,day,year,hour,min,ampm}
+          // Only assemble if year is populated — blank year means no date was entered
+          if ('month' in v || 'year' in v) {
+            if (!v.year) return '';  // blank date — treat as no date
+            const mo = String(v.month||'').padStart(2,'0');
+            const dy = String(v.day||'').padStart(2,'0');
+            const yr = v.year;
+            const hr = v.hour || v.timeInput || '7';
+            const mn = String(v.min||'0').padStart(2,'0');
+            const ap = v.ampm || 'AM';
+            return `${mo}-${dy}-${yr} ${hr}:${mn} ${ap}`;
+          }
           return Object.values(v).filter(Boolean).join(' ').trim();
         }
         return String(v).trim();
