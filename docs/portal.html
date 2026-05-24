@@ -1278,7 +1278,10 @@ function initOneSignal() {
       notifyButton: { enable: false },  // we use our own bell UI
       allowLocalhostAsSecureOrigin: false,
     });
-    updateBellUI();
+    // Small delay to let subscription state settle after init
+    setTimeout(updateBellUI, 800);
+    // Keep bell in sync if subscription changes externally
+    OneSignal.User.PushSubscription.addEventListener('change', updateBellUI);
   });
 }
 
@@ -1287,12 +1290,23 @@ async function osSubscribe() {
   if (typeof OneSignal === 'undefined') return;
   try {
     await OneSignal.Notifications.requestPermission();
-    updateBellUI();
+    // Permission granted — opt in explicitly then wait for subscription to settle
+    try { await OneSignal.User.PushSubscription.optIn(); } catch(e) { /* already opted in */ }
     // Store player linkage locally so commissioner can target by name
     if (currentPlayer) {
       localStorage.setItem('bf_os_player', currentPlayer);
     }
-    showToast('🔔 Notifications on — we\'ll ping you for new events!');
+    // Poll up to 3s for subscribed state to reflect — SDK takes a moment after grant
+    let attempts = 0;
+    const pollBell = setInterval(async () => {
+      attempts++;
+      const subbed = await osIsSubscribed();
+      if (subbed || attempts >= 6) {
+        clearInterval(pollBell);
+        updateBellUI();
+        if (subbed) showToast('🔔 Notifications on — we\'ll ping you for new events!');
+      }
+    }, 500);
   } catch(e) {
     console.warn('[OneSignal] subscribe error:', e);
     showToast('Notification permission denied', true);
