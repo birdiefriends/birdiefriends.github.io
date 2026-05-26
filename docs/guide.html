@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>BirdieFriends — Player Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --green:       #0a6640;
+      --green-dark:  #085035;
+      --green-light: #e8f5ee;
+      --gold:        #c9952a;
+      --gold-light:  #fdf3e0;
+      --gold-bright: #f5b942;
+      --bg:          #f4f6f3;
+      --card:        #ffffff;
+      --text:        #1a2e1f;
+      --text-muted:  #5a7060;
+      --text-hint:   #96a89c;
+      --border:      #dde8df;
+      --radius:      14px;
+      --shadow:      0 2px 12px rgba(8,80,53,0.08);
+      --shadow-lg:   0 8px 32px rgba(8,80,53,0.14);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Instrument Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ── */
+    .guide-header {
+      background: var(--green-dark);
+      padding: 28px 20px 24px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .guide-header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 120%, rgba(197,149,42,0.18) 0%, transparent 70%);
+    }
+    .guide-header-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 6px;
+      position: relative;
+    }
+    .guide-header-logo img {
+      width: 36px;
+      height: 36px;
+    }
+    .guide-header h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.6rem;
+      color: #fff;
+      letter-spacing: -0.01em;
+    }
+    .guide-header-sub {
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.6);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      position: relative;
+    }
+
+    /* ── TOC ── */
+    .toc {
+      background: var(--green-dark);
+      padding: 0 20px 20px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .toc a {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.85);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-decoration: none;
+      letter-spacing: 0.02em;
+      transition: background 0.15s;
+    }
+    .toc a:hover { background: rgba(255,255,255,0.2); }
+
+    /* ── Main content ── */
+    .guide-main {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 24px 16px 60px;
+    }
+
+    /* ── Section ── */
+    .guide-section {
+      margin-bottom: 32px;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--green-light);
+    }
+    .section-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: var(--green-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      flex-shrink: 0;
+    }
+    .section-icon.gold { background: var(--gold); }
+    .section-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.2rem;
+      color: var(--green-dark);
+      line-height: 1.2;
+    }
+    .section-num {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--text-hint);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      display: block;
+    }
+
+    /* ── Cards ── */
+    .guide-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 10px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+    }
+    .guide-card h3 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--green-dark);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .guide-card p {
+      font-size: 0.84rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .guide-card p + p { margin-top: 8px; }
+
+    /* ── Steps ── */
+    .steps {
+      counter-reset: step;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .step {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .step-num {
+      counter-increment: step;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--green-dark);
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-family: 'DM Mono', monospace;
+    }
+    .step-num::before { content: counter(step); }
+    .step-body { flex: 1; }
+    .step-body strong {
+      display: block;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+    .step-body span {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ── Tips ── */
+    .tip {
+      background: var(--gold-light);
+      border: 1.5px solid rgba(197,149,42,0.3);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-top: 10px;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .tip strong { color: var(--gold); }
+
+    .tip-green {
+      background: var(--green-light);
+      border-color: rgba(10,102,64,0.2);
+    }
+    .tip-green strong { color: var(--green-dark); }
+
+    /* ── Nav pill diagram ── */
+    .nav-diagram {
+      background: var(--green-dark);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: flex;
+      gap: 4px;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .nav-pill {
+      flex: 1;
+      text-align: center;
+      padding: 8px 4px;
+      border-radius: 10px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.03em;
+    }
+    .nav-pill .nav-emoji { font-size: 1.1rem; display: block; margin-bottom: 3px; }
+    .nav-pill.active {
+      background: rgba(255,255,255,0.12);
+      color: var(--gold-bright);
+    }
+
+    /* ── Swipe demo ── */
+    .swipe-demo {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      margin-bottom: 10px;
+      overflow: hidden;
+      position: relative;
+    }
+    .swipe-demo-card {
+      background: var(--green-dark);
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      position: relative;
+    }
+    .swipe-arrow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      justify-content: center;
+    }
+    .swipe-arrow .arrow {
+      font-size: 1.2rem;
+      color: var(--green);
+    }
+
+    /* ── Live event highlight ── */
+    .live-banner-demo {
+      background: linear-gradient(135deg, #c9952a 0%, #e8b84b 100%);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      color: #fff;
+    }
+    .live-banner-demo h3 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1rem;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .live-banner-demo p {
+      font-size: 0.78rem;
+      opacity: 0.85;
+    }
+    .live-features {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .live-feat {
+      background: rgba(255,255,255,0.2);
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    /* ── Inline badge ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      vertical-align: middle;
+    }
+    .badge-green { background: var(--green-light); color: var(--green-dark); }
+    .badge-gold  { background: var(--gold-light);  color: var(--gold); }
+
+    /* ── Footer ── */
+    .guide-footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 0.78rem;
+      color: var(--text-hint);
+      border-top: 1px solid var(--border);
+      margin-top: 20px;
+    }
+    .guide-footer a {
+      color: var(--green);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    /* ── Divider ── */
+    hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    /* ── iOS install callout ── */
+    .ios-steps {
+      background: #f0f4ff;
+      border: 1.5px solid #c5d0f0;
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-top: 10px;
+    }
+    .ios-steps h4 {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #3a4a8a;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ios-steps ol {
+      padding-left: 18px;
+      font-size: 0.8rem;
+      color: #4a5a7a;
+      line-height: 1.8;
+    }
+
+    @media (max-width: 400px) {
+      .guide-header h1 { font-size: 1.3rem; }
+      .section-title { font-size: 1.05rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="guide-header">
+  <div class="guide-header-logo">
+    <span style="font-size:2rem">⛳</span>
+    <h1>BirdieFriends</h1>
+  </div>
+  <div class="guide-header-sub">Player Guide · How to use the app</div>
+</div>
+
+<!-- Table of Contents -->
+<div class="toc">
+  <a href="#getting-started">Getting Started</a>
+  <a href="#my-events">My Events</a>
+  <a href="#parking">Parking Events</a>
+  <a href="#registering">Registering</a>
+  <a href="#schedule">Schedule</a>
+  <a href="#live">Live Round</a>
+  <a href="#results">Results</a>
+  <a href="#notifications">Notifications</a>
+</div>
+
+<div class="guide-main">
+
+  <!-- ── 1. Getting Started ── -->
+  <div class="guide-section" id="getting-started">
+    <div class="section-header">
+      <div class="section-icon">👤</div>
+      <div>
+        <span class="section-num">Step 1</span>
+        <div class="section-title">Getting Started</div>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <strong>Open the portal</strong>
+          <span>Go to <strong>birdiefriends.com/portal.html</strong> in your browser, or tap the BirdieFriends icon on your home screen if you've installed it.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <strong>Select your name</strong>
+          <span>Tap the player pill in the top right corner — it shows <strong>BH</strong> initials or "Guest." Pick your name from the list. This is how the app knows who you are.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <strong>Install to your home screen</strong>
+          <span>For the best experience — and to receive push notifications — add BirdieFriends to your home screen.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <strong>Enable notifications</strong>
+          <span>Tap the 🔕 bell icon in the header and allow notifications. You'll get live birdie alerts, CttP updates, and event news.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ios-steps" style="margin-top:10px">
+      <h4>🍎 iPhone users — install first, then enable notifications</h4>
+      <ol>
+        <li>Open <strong>birdiefriends.com/portal.html</strong> in Safari</li>
+        <li>Tap the Share button <strong>⎋</strong> at the bottom</li>
+        <li>Tap <strong>"Add to Home Screen"</strong></li>
+        <li>Open BirdieFriends from your home screen icon</li>
+        <li>Select your name, then tap the 🔕 bell to enable notifications</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ── 2. My Events ── -->
+  <div class="guide-section" id="my-events">
+    <div class="section-header">
+      <div class="section-icon">⛳</div>
+      <div>
+        <span class="section-num">Step 2</span>
+        <div class="section-title">My Events — Your Home Screen</div>
+      </div>
+    </div>
+
+    <div class="nav-diagram">
+      <div class="nav-pill active">
+        <span class="nav-emoji">⛳</span>My Events
+      </div>
+      <div class="nav-pill">
+        <span class="nav-emoji">🅿️</span>Parked
+      </div>
+      <div class="nav-pill">
+        <span class="nav-emoji">🗓️</span>Schedule
+      </div>
+      <div class="nav-pill">
+        <span class="nav-emoji">🏆</span>Results
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>⛳ Your personal event feed</h3>
+      <p>My Events shows all upcoming BirdieFriends events by default. New events appear here automatically — no action needed to see them.</p>
+      <p>Events you've registered for stay here permanently. Events you're not interested in can be swiped away to <strong>Parked</strong>.</p>
+    </div>
+
+    <div class="guide-card">
+      <h3>🆕 New Events button</h3>
+      <p>When new events are added to the calendar, a gold <strong>🆕 N</strong> button appears in the header. Tap it to open your <strong>New Events queue</strong> — a focused view showing only the new additions. Register, swipe to park, or scroll past. Tap <strong>✓ Done</strong> when finished.</p>
+    </div>
+
+    <div class="tip tip-green">
+      <strong>Tip:</strong> The count in the section label (e.g. "Upcoming (4)") shows how many events are on your My Events screen. Tap "N parked →" to jump to events you've set aside.
+    </div>
+  </div>
+
+  <!-- ── 3. Parking Events ── -->
+  <div class="guide-section" id="parking">
+    <div class="section-header">
+      <div class="section-icon">🅿️</div>
+      <div>
+        <span class="section-num">Step 3</span>
+        <div class="section-title">Parking Events You'll Skip</div>
+      </div>
+    </div>
+
+    <div class="swipe-demo">
+      <div class="swipe-demo-card">
+        <span>Sat 5/30 — BSGC Individual Play</span>
+        <span style="opacity:0.5;font-size:0.75rem">⟵ swipe</span>
+      </div>
+      <div class="swipe-arrow">
+        <span class="arrow">←</span>
+        <span>Swipe left on any event card to park it</span>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>👈 How to park an event</h3>
+      <p>Can't make it to a round? <strong>Swipe left</strong> on the event card on My Events. The card slides off and moves to your <strong>Parked</strong> tab.</p>
+      <p>You'll see a brief <strong>Parked</strong> confirmation with an <strong>Undo</strong> option — tap it within 4 seconds if you swiped by mistake.</p>
+    </div>
+
+    <div class="guide-card">
+      <h3>🅿️ The Parked tab</h3>
+      <p>Parked events live in the <strong>Parked</strong> tab in the bottom nav. They're still fully actionable — you can register from there anytime, which brings the event back to My Events automatically.</p>
+    </div>
+
+    <div class="tip">
+      <strong>Note:</strong> You can't park an event you're registered for. Cancel your registration first, then swipe to park it.
+    </div>
+  </div>
+
+  <!-- ── 4. Registering ── -->
+  <div class="guide-section" id="registering">
+    <div class="section-header">
+      <div class="section-icon">✅</div>
+      <div>
+        <span class="section-num">Step 4</span>
+        <div class="section-title">Registering for Events</div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🏌️ Register to play</h3>
+      <p>Tap the green <strong>Register</strong> button on any event card. Your spot is confirmed immediately and the event stays pinned to My Events.</p>
+    </div>
+
+    <div class="guide-card">
+      <h3>🔄 Register as Sub</h3>
+      <p>If an event is full, you'll see <strong>Register as Sub</strong>. You're on the waitlist — if a spot opens, you may be promoted. Watch for a push notification if that happens.</p>
+    </div>
+
+    <div class="guide-card">
+      <h3>❌ Unregister</h3>
+      <p>Plans changed? Tap <strong>Unregister</strong> on the event card. The event will stay on My Events until you park it. Please unregister early so others can take your spot.</p>
+    </div>
+
+    <div class="guide-card">
+      <h3>👥 See who's playing</h3>
+      <p>Tap <strong>Players ›</strong> on any event card to see the full registered player list for that event.</p>
+    </div>
+  </div>
+
+  <!-- ── 5. Schedule ── -->
+  <div class="guide-section" id="schedule">
+    <div class="section-header">
+      <div class="section-icon">🗓️</div>
+      <div>
+        <span class="section-num">Step 5</span>
+        <div class="section-title">Your Schedule</div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🗓️ What you're committed to</h3>
+      <p>The <strong>Schedule</strong> tab shows only events you've registered for, displayed as a clean date list with your status (<span class="badge badge-green">✅ Going</span> or <span class="badge badge-gold">🔄 Sub</span>).</p>
+      <p>Tap any row to jump directly to that event card on My Events — where you can unregister, see the player list, or get directions.</p>
+    </div>
+
+    <div class="tip tip-green">
+      <strong>Tip:</strong> Check Schedule before the weekend to see everything you've signed up for at a glance.
+    </div>
+  </div>
+
+  <!-- ── 6. Live Round ── -->
+  <div class="guide-section" id="live">
+    <div class="section-header">
+      <div class="section-icon gold">⚡</div>
+      <div>
+        <span class="section-num">Step 6</span>
+        <div class="section-title">During a Live Round</div>
+      </div>
+    </div>
+
+    <div class="live-banner-demo">
+      <h3>⚡ Live Event Banner</h3>
+      <p>When a BF Series event tee time arrives, a gold banner appears at the top of My Events for registered players. Tap it to expand the live panel.</p>
+      <div class="live-features">
+        <span class="live-feat">🦅 Birdie Alert</span>
+        <span class="live-feat">🎯 Closest to Pin</span>
+        <span class="live-feat">🏁 End Round</span>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🦅 Birdie Alert</h3>
+      <p>Made a birdie? Tap <strong>Birdie Alert</strong>, select your name, tap the hole number, and tap <strong>Announce</strong>. A push notification fires to all BirdieFriends — the community celebrates with you.</p>
+      <p>Skin detection is automatic — if someone already birdied that hole, the app announces the skin is busted.</p>
+    </div>
+
+    <div class="guide-card">
+      <h3>🎯 Closest to the Pin (CttP)</h3>
+      <p>On designated holes (#3, #8, #10, #15, #18), tap the hole pill, enter your distance (optional, in feet), and tap <strong>Closest on #X</strong>. The live leaderboard updates immediately and a push goes out.</p>
+      <p>Last submission per hole wins — honor system. Leaderboard refreshes every 60 seconds.</p>
+    </div>
+
+    <div class="guide-card">
+      <h3>🏁 End Round — Enter Scorecards</h3>
+      <p>After the round, overseers tap <strong>End Round — Enter Scorecards</strong> to enter each player's point scores hole by hole.</p>
+      <p><strong>Point values:</strong> Albatross 8 · Eagle 6 · Birdie 4 · Par 2 · Bogey 1 · Bogey+ 0</p>
+    </div>
+
+    <div class="tip">
+      <strong>Note:</strong> The live banner only appears for registered players. Non-registered players won't see it.
+    </div>
+  </div>
+
+  <!-- ── 7. Results ── -->
+  <div class="guide-section" id="results">
+    <div class="section-header">
+      <div class="section-icon">🏆</div>
+      <div>
+        <span class="section-num">Step 7</span>
+        <div class="section-title">Results</div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🏆 After the round</h3>
+      <p>Tap <strong>Results</strong> in the bottom nav to find links to event results, series standings, your personal game history (My Game), and groupings for upcoming events.</p>
+    </div>
+
+    <div class="guide-card">
+      <h3>📊 Series Standings</h3>
+      <p>The BF Series tracks points across all Series events. Standings update after each event is scored. Check your flight ranking and series total in <strong>Results → Series Standings</strong>.</p>
+    </div>
+  </div>
+
+  <!-- ── 8. Notifications ── -->
+  <div class="guide-section" id="notifications">
+    <div class="section-header">
+      <div class="section-icon">🔔</div>
+      <div>
+        <span class="section-num">Step 8</span>
+        <div class="section-title">Notifications</div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🔔 What you'll receive</h3>
+      <p>When notifications are enabled, you'll get push alerts for:</p>
+      <ul style="margin-top:8px;padding-left:18px;font-size:0.82rem;color:var(--text-muted);line-height:2">
+        <li>🦅 Birdie alerts during live events</li>
+        <li>🎯 New CttP leader on each hole</li>
+        <li>📣 Messages from the Commissioner</li>
+        <li>🎉 Sub promotion (when a spot opens for you)</li>
+      </ul>
+    </div>
+
+    <div class="guide-card">
+      <h3>🔕 Toggle notifications</h3>
+      <p>Tap the bell icon (🔔 or 🔕) in the header anytime to turn notifications on or off. You can also manage this in <strong>About</strong> (tap the ⓘ icon in the header).</p>
+    </div>
+
+    <div class="tip">
+      <strong>iPhone reminder:</strong> Notifications only work when BirdieFriends is installed as a PWA (added to home screen). Opening in Safari browser won't receive push notifications.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- Quick Reference -->
+  <div class="guide-section">
+    <div class="section-header">
+      <div class="section-icon">⚡</div>
+      <div>
+        <div class="section-title">Quick Reference</div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>📱 Header icons</h3>
+      <p style="margin-top:6px;line-height:2.2">
+        <strong>⚙️</strong> Commissioner admin (commissioner only)<br>
+        <strong>ⓘ</strong> About + notification settings<br>
+        <strong>🔔 / 🔕</strong> Toggle push notifications<br>
+        <strong>BH pill</strong> Select your player name
+      </p>
+    </div>
+
+    <div class="guide-card">
+      <h3>⛳ Bottom nav</h3>
+      <p style="margin-top:6px;line-height:2.2">
+        <strong>⛳ My Events</strong> — Your home screen, all upcoming events<br>
+        <strong>🅿️ Parked</strong> — Events you've swiped away<br>
+        <strong>🗓️ Schedule</strong> — Events you're registered for<br>
+        <strong>🏆 Results</strong> — Results, standings, my game
+      </p>
+    </div>
+
+    <div class="guide-card">
+      <h3>👈 Gestures</h3>
+      <p style="margin-top:6px;line-height:2.2">
+        <strong>Swipe left</strong> on an event card → Park it<br>
+        <strong>Tap logo</strong> → Return to My Events + scroll to top<br>
+        <strong>Tap "N parked →"</strong> → Jump to Parked tab
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<!-- Footer -->
+<div class="guide-footer">
+  <a href="https://birdiefriends.com/portal.html">← Back to BirdieFriends</a>
+  <div style="margin-top:8px">Questions? Text the Commish: <strong>617-710-4755</strong></div>
+</div>
+
+</body>
+</html>
