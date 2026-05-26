@@ -2579,13 +2579,17 @@ function getTwoWeekendWindow() {
 }
 
 function renderHome() {
-  const now    = new Date();
+  const now      = new Date();
   const upcoming = eventData.filter(e => e.dt >= now);
 
   // ── Live event banner ─────────────────────────────────────────────────────
   renderLiveBanner();
 
-  // ── Hero — next non-dismissed event ──────────────────────────────────────
+  // ── Announcements + install nudge ─────────────────────────────────────────
+  renderAnnouncementsCard();
+  renderInstallNudge();
+
+  // ── Build visible event list ──────────────────────────────────────────────
   const dismissed = getDismissedEvents();
   const liveEvt   = getLiveEvent();
   const visible   = upcoming.filter(e => {
@@ -2594,41 +2598,34 @@ function renderHome() {
   });
 
   const heroEl = document.getElementById('home-hero');
-  if (visible.length > 0) {
-    const next = visible[0];
-    const regCount = regData.filter(r => r.eventName === next.name && r.status !== 'No').length;
-    const myReg    = currentPlayer ? findMyReg(next.name) : null;
-    heroEl.innerHTML = buildHeroCard(next, regCount, myReg);
-  } else {
-    heroEl.innerHTML = `<div class="bf-hero">
-      <div class="bf-hero-label">No upcoming events</div>
-      <div class="bf-hero-title">Check back soon</div>
-      <div class="bf-hero-sub">Want to organize a round?</div>
-      <div class="bf-hero-actions">
-        <a class="btn btn-register" href="https://form.jotform.com/233113019726045" target="_blank">📋 Request an Event</a>
-      </div>
-    </div>`;
-  }
-
-  // Announcements + install nudge
-  renderAnnouncementsCard();
-  renderInstallNudge();
-
-  // ── Flat event list (all upcoming, skip hero, skip dismissed) ─────────────
   const upEl   = document.getElementById('home-events-upcoming');
   const pastEl = document.getElementById('home-events-past');
+  heroEl.innerHTML = '';
   pastEl.innerHTML = '';
 
-  const rest = visible.filter((e, i) => i > 0);  // everything after the hero
-  if (rest.length > 0) {
-    const label = dismissed.size > 0
-      ? `<div class="section-label">Coming Up <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-hint);font-size:0.72rem">· ${dismissed.size} hidden in Events</span></div>`
-      : `<div class="section-label">Coming Up</div>`;
-    upEl.innerHTML = label + rest.map(e => buildSwipeableCard(e)).join('');
-    initSwipeListeners();
-  } else {
+  if (visible.length === 0) {
+    const allHidden = upcoming.filter(e => !(liveEvt && e.id === liveEvt.id)).length > 0 && dismissed.size > 0;
+    heroEl.innerHTML = `<div class="bf-hero">
+      <div class="bf-hero-label">${allHidden ? 'All events hidden' : 'No upcoming events'}</div>
+      <div class="bf-hero-title">${allHidden ? 'Nothing on your Home screen' : 'Check back soon'}</div>
+      <div class="bf-hero-sub">${allHidden
+        ? 'Head to <strong>Events</strong> to restore anything you\'ve hidden.'
+        : 'Want to organize a round?'}</div>
+      ${!allHidden ? `<div class="bf-hero-actions">
+        <a class="btn btn-register" href="https://form.jotform.com/233113019726045" target="_blank">📋 Request an Event</a>
+      </div>` : ''}
+    </div>`;
     upEl.innerHTML = '';
+    return;
   }
+
+  // ── All visible events as swipeable cards ─────────────────────────────────
+  const hiddenCount = upcoming.filter(e => dismissed.has(e.id)).length;
+  const label = hiddenCount > 0
+    ? `<div class="section-label">Upcoming <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-hint);font-size:0.72rem">· ${hiddenCount} hidden in Events</span></div>`
+    : `<div class="section-label">Upcoming</div>`;
+  upEl.innerHTML = label + visible.map(e => buildSwipeableCard(e)).join('');
+  initSwipeListeners();
 }
 
 // Build a swipe-wrapper around a standard event card
@@ -3177,9 +3174,9 @@ function renderSchedule() {
 }
 
 function showHomeLoading() {
-  document.getElementById('home-hero').innerHTML =
+  document.getElementById('home-hero').innerHTML = '';
+  document.getElementById('home-events-upcoming').innerHTML =
     `<div class="bf-loading"><div class="spinner"></div>Loading events…</div>`;
-  document.getElementById('home-events-upcoming').innerHTML = '';
   document.getElementById('home-events-past').innerHTML = '';
 }
 
