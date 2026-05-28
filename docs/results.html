@@ -125,14 +125,14 @@
         </div>
         <div class="podium-card ">
           <div class="medal">🥈</div>
-          <div class="pname">Tom Stitt</div>
-          <div class="pscore">25.0 pts · Quota 20.7</div>
+          <div class="pname">Jake Knappenberger</div>
+          <div class="pscore">20.0 pts · Quota 15.7</div>
           <div class="pdiff">+4.29</div>
         </div>
         <div class="podium-card ">
           <div class="medal">🥉</div>
-          <div class="pname">Jake Knappenberger</div>
-          <div class="pscore">20.0 pts · Quota 15.7</div>
+          <div class="pname">Tom Stitt</div>
+          <div class="pscore">25.0 pts · Quota 20.7</div>
           <div class="pdiff">+4.29</div>
         </div>
     </div>
@@ -160,17 +160,6 @@
           </tr>
           <tr>
             <td class="rank">2</td>
-            <td class="pname-cell">Tom Stitt
-              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
-                background:#fff3e0;color:#7a4a00"
-              >Combo</span>
-            </td>
-            <td class="r">20.71</td>
-            <td class="r">25.0</td>
-            <td class="r pos">+4.29</td>
-          </tr>
-          <tr>
-            <td class="rank">3</td>
             <td class="pname-cell">Jake Knappenberger
               <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
                 background:#fff3e0;color:#7a4a00"
@@ -178,6 +167,17 @@
             </td>
             <td class="r">15.71</td>
             <td class="r">20.0</td>
+            <td class="r pos">+4.29</td>
+          </tr>
+          <tr>
+            <td class="rank">3</td>
+            <td class="pname-cell">Tom Stitt
+              <span style="margin-left:6px;font-size:0.65rem;padding:1px 5px;border-radius:10px;
+                background:#fff3e0;color:#7a4a00"
+              >Combo</span>
+            </td>
+            <td class="r">20.71</td>
+            <td class="r">25.0</td>
             <td class="r pos">+4.29</td>
           </tr>
           <tr>
@@ -670,10 +670,10 @@
         <tr>
           <td class="rank">1</td>
           <td class="pname-cell">Tom Stitt</td>
-          <td class="r" style="color:var(--muted)">$20.00</td>
+          <td class="r" style="color:var(--muted)">$15.00</td>
           <td class="r" style="color:var(--muted)">$70.00</td>
           <td class="r" style="color:var(--muted)">—</td>
-          <td class="r" style="font-weight:700;color:var(--green)">$90.00</td>
+          <td class="r" style="font-weight:700;color:var(--green)">$85.00</td>
         </tr>
         <tr>
           <td class="rank">2</td>
@@ -726,10 +726,10 @@
         <tr>
           <td class="rank">8</td>
           <td class="pname-cell">Jake Knappenberger</td>
-          <td class="r" style="color:var(--muted)">$10.00</td>
+          <td class="r" style="color:var(--muted)">$15.00</td>
           <td class="r" style="color:var(--muted)">—</td>
           <td class="r" style="color:var(--muted)">$10.00</td>
-          <td class="r" style="font-weight:700;color:var(--green)">$20.00</td>
+          <td class="r" style="font-weight:700;color:var(--green)">$25.00</td>
         </tr>
         <tr>
           <td class="rank">9</td>
@@ -759,7 +759,7 @@
   </div>
 </div>
 
-<div class="updated">Updated May 28, 4:33 PM &nbsp;·&nbsp; GS v8.9 · 2026-05-28g</div>
+<div class="updated">Updated May 28, 4:40 PM &nbsp;·&nbsp; GS v8.10 · 2026-05-28h</div>
 
 <script>
 // ── Embedded series data for event selector ──
@@ -810,7 +810,7 @@ function loadEvent(selectedName) {
       if (!evtRecord) return null;
       const total = evtRecord.actual;
       const quota = evtRecord.quota;
-      const diff  = quota !== null ? total - quota : null;
+      const diff  = quota !== null ? Math.round((total - quota) * 100) / 100 : null;
       return { name, hcp: evtRecord.hcp, tee: evtRecord.tee, quota, total, diff,
                noHcp: evtRecord.noHcp || false };
     })
