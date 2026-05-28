@@ -759,7 +759,7 @@
   </div>
 </div>
 
-<div class="updated">Updated May 28, 4:06 PM</div>
+<div class="updated">Updated May 28, 4:17 PM</div>
 
 <script>
 // ── Embedded series data for event selector ──
@@ -827,9 +827,19 @@ function loadEvent(selectedName) {
   // ── Podium ──
   const medals = ['🥇','🥈','🥉'];
   const top3 = quotaResults.filter(p => p.diff !== null).slice(0,3);
+  // Build place labels with tie awareness (T-1, T-2 etc)
+  const placeLabels = [];
+  let pi = 0;
+  while (pi < top3.length) {
+    let ti = pi;
+    while (ti < top3.length && Math.abs((top3[ti].diff||0) - (top3[pi].diff||0)) < 0.001) ti++;
+    const tied = (ti - pi) > 1;
+    for (let j = pi; j < ti; j++) placeLabels.push(tied ? `T-${pi+1}` : `${pi+1}`);
+    pi = ti;
+  }
   document.querySelector('#tab-podium .podium').innerHTML = top3.map((p,i) => `
-    <div class="podium-card ${i===0?'p1':''}">
-      <div class="medal">${medals[i]}</div>
+    <div class="podium-card ${i===0&&placeLabels[0]==='1'?'p1':''}">
+      <div class="medal">${placeLabels[i]==='1'?'🥇':placeLabels[i]==='2'?'🥈':placeLabels[i]==='3'?'🥉':placeLabels[i]}</div>
       <div class="pname">${p.name}</div>
       <div class="pscore">${p.total.toFixed(1)} pts · Quota ${p.quota!==null?p.quota.toFixed(1):'—'}</div>
       <div class="pdiff">${p.diff!==null?fmtDiff(p.diff):'—'}</div>
@@ -928,7 +938,7 @@ function loadEvent(selectedName) {
     }
     let prizeSum = 0;
     for (let k=placeIdx; k<Math.min(scan,3); k++) prizeSum += QUOTA_PRIZES[k];
-    const share = prizeSum / tiedGroup.length;
+    const share = Math.floor(prizeSum / tiedGroup.length); // floor per tie rule spec
     tiedGroup.forEach(n => { if (payouts[n]) payouts[n].quota = share; });
     placeIdx = scan;
   }
