@@ -233,7 +233,7 @@
             </td>
             <td class="r">19.90</td>
             <td class="r">20.0</td>
-            <td class="r pos">+0.1</td>
+            <td class="r pos">+0.10</td>
           </tr>
           <tr>
             <td class="rank">9</td>
@@ -343,7 +343,7 @@
             </td>
             <td class="r">29.70</td>
             <td class="r">24.0</td>
-            <td class="r neg">-5.7</td>
+            <td class="r neg">-5.70</td>
           </tr>
           <tr>
             <td class="rank">19</td>
@@ -759,7 +759,7 @@
   </div>
 </div>
 
-<div class="updated">Updated May 28, 4:26 PM &nbsp;·&nbsp; GS v8.8 · 2026-05-28f</div>
+<div class="updated">Updated May 28, 4:33 PM &nbsp;·&nbsp; GS v8.9 · 2026-05-28g</div>
 
 <script>
 // ── Embedded series data for event selector ──
@@ -789,12 +789,10 @@ function loadEvent(selectedName) {
   const evt = ALL_SERIES_DATA.events.find(e => e.name === selectedName);
   if (!evt) return;
 
-  // Smart diff formatter — shows 2 decimals only when second decimal is non-zero
+  // Always 2 decimal places — the numbers are the numbers
   function fmtDiff(v) {
     if (v === null || v === undefined) return '—';
-    const sign = v >= 0 ? '+' : '';
-    const d2 = Math.round(Math.abs(v) * 100) % 10;
-    return sign + v.toFixed(d2 !== 0 ? 2 : 1);
+    return (v >= 0 ? '+' : '') + v.toFixed(2);
   }
 
   // Build quota results from saved per-player event records (correct quota, not next-event quota)
