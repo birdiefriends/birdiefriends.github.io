@@ -1561,7 +1561,7 @@ body {
         <div class="bf-card-title">🔔 Push Subscribers</div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-ghost" style="font-size:0.78rem;padding:4px 10px" onclick="loadAdminSubscribers()">↻ Refresh</button>
-          <button class="btn btn-ghost" style="font-size:0.78rem;padding:4px 10px" onclick="showSubDiagnostics()" title="Show raw identity fields — diagnose missing names">🔍 Diagnose</button>
+          <button class="btn btn-ghost" style="font-size:0.78rem;padding:4px 10px" onclick="showSubDiagnostics()" title="Show raw identity fields for each subscriber">🔍 Diagnose</button>
         </div>
       </div>
       <div class="bf-card-body" id="admin-subscribers-body">
@@ -1891,60 +1891,45 @@ function initOneSignal() {
   });
 }
 
-// ── Silent re-login on every app load ────────────────────────────────────────
-// If the player is already subscribed but external_user_id is "" (empty),
-// OneSignal.login() was never confirmed server-side. Re-fire it silently every load.
-// Also writes subscription ID back to Jotform memberData if it changed.
+// ── Silent identity refresh — fires every app load after data ready ──────────
+// Re-fires OneSignal.login() if player is subscribed but external_user_id is "".
+// Also re-writes sub ID to Jotform if it changed. Completely invisible to players.
 async function osIdentityRefresh() {
   if (!currentPlayer || currentPlayer === 'Guest') return;
   if (typeof OneSignal === 'undefined') return;
   try {
     const subbed = await osIsSubscribed();
-    if (!subbed) return;  // not subscribed — nothing to tag
-    // Re-fire login to ensure external_user_id is set in OneSignal v1
+    if (!subbed) return;
     await OneSignal.login(currentPlayer);
-    console.log('[OS] Identity refresh: login() fired for', currentPlayer);
-    // Also write sub ID to Jotform in case it was never written or changed
+    console.log('[OS] Identity refresh fired for', currentPlayer);
     const subId = OneSignal.User.PushSubscription.id;
     if (subId) {
       const cached = localStorage.getItem('bf_os_sub_id');
       if (subId !== cached) {
         localStorage.setItem('bf_os_sub_id', subId);
         writeSubscriptionToMember(subId);
-        console.log('[OS] Identity refresh: new sub ID written for', currentPlayer);
       }
     }
-    // Prune stale dupes silently
     setTimeout(() => osPruneStaleSubscriptions(currentPlayer), 3000);
   } catch(e) {
     console.warn('[OS] Identity refresh error:', e.message);
   }
 }
 
-// ── Subscription health check ─────────────────────────────────────────────────
-// Runs once per session after data loads. Records health snapshot to localStorage.
-// Never shows anything to the player — pure data collection for Admin visibility.
+// ── Subscription health snapshot — writes to localStorage for Admin visibility ─
 const OS_HEALTH_KEY = 'bf_os_health';
 async function osHealthCheck() {
   if (typeof OneSignal === 'undefined') return;
   try {
     const subbed = await osIsSubscribed();
     const subId  = subbed ? (OneSignal.User.PushSubscription.id || null) : null;
-    const health = {
-      player:   currentPlayer || null,
-      subbed,
-      subId,
-      v:        '1',
-      ts:       Date.now(),
-      ua:       navigator.userAgent.slice(0, 80),
-      pwa:      isInstalledPWA(),
-    };
-    localStorage.setItem(OS_HEALTH_KEY, JSON.stringify(health));
-
-    // If subscribed but we have no name identity confirmed yet — re-try login
+    localStorage.setItem(OS_HEALTH_KEY, JSON.stringify({
+      player: currentPlayer || null,
+      subbed, subId,
+      ts:  Date.now(),
+      pwa: isInstalledPWA(),
+    }));
     if (subbed && currentPlayer && currentPlayer !== 'Guest') {
-      const cached = JSON.parse(localStorage.getItem(OS_HEALTH_KEY) || '{}');
-      // Trigger refresh regardless — cheap and idempotent
       setTimeout(osIdentityRefresh, 1500);
     }
   } catch(e) {
@@ -2301,7 +2286,7 @@ async function loadAllData() {
     seedFivesomeFlags();
     renderAll();
     buildPlayerPickerGrid();  // refresh picker now roster is live
-    // Run silent subscription health check + identity refresh after data is available
+    // Silent subscription health check + identity refresh (invisible to players)
     setTimeout(osHealthCheck, 2000);
     // Write capacity=4 back to Jotform for any events that hit the 48hr lock
     eventData.forEach(evt => collapseCapacityIfNeeded(evt));
@@ -4170,7 +4155,7 @@ function selectPlayer(name) {
         try {
           OneSignal.login(name);
           setTimeout(() => osPruneStaleSubscriptions(name), 2000);
-          // Also write sub ID to Jotform in case it was never recorded
+          // Also write current sub ID to Jotform if not yet recorded
           setTimeout(() => {
             const subId = OneSignal.User.PushSubscription.id;
             if (subId) { localStorage.setItem('bf_os_sub_id', subId); writeSubscriptionToMember(subId); }
@@ -5485,7 +5470,8 @@ async function loadAdminSubscribers() {
     const data = await resp.json();
     const subs = (data.players || []).filter(s => s.invalid_identifier !== true);
 
-    // Resolve names — check v1 field (may be "" not null when unset via v5 SDK), v5 field, Jotform pushId fallback
+    // Resolve names — v1 field may be "" (empty string) not null when set via v5 SDK
+    // Check all identity paths: external_user_id (v1), external_id/aliases (v5), Jotform pushId
     const named   = [];  // { name, device, date, pushId, rawDate, source }
     const unknown = [];  // { id, device, date }
 
@@ -5525,15 +5511,12 @@ async function loadAdminSubscribers() {
     const tdStyle = `padding:8px 10px;border-bottom:1px solid var(--border);font-size:0.83rem`;
     const osBaseUrl = 'https://dashboard.onesignal.com/apps/' + OS_APP_ID + '/users/';
 
-    // Show per-player health badge if this device has a health snapshot
-    const healthSnap = (() => { try { return JSON.parse(localStorage.getItem('bf_os_health') || 'null'); } catch(e) { return null; } })();
-    const healthBadge = healthSnap
-      ? `<span style="float:right;font-size:0.72rem;font-family:'DM Mono',monospace;color:var(--text-hint)" title="Health snapshot from this device">
-          ${healthSnap.player ? healthSnap.player.split(' ')[0] : '?'} ${healthSnap.subbed ? '🔔' : '🔕'} ${healthSnap.pwa ? 'PWA' : 'browser'}
-        </span>`
+    const _snap = (() => { try { return JSON.parse(localStorage.getItem('bf_os_health')||'null'); } catch(e) { return null; } })();
+    const _snapBadge = _snap
+      ? ` <span style="float:right;font-size:0.7rem;font-family:'DM Mono',monospace;color:var(--text-hint)" title="Health snapshot — this device">${(_snap.player||'?').split(' ')[0]} ${_snap.subbed?'🔔':'🔕'} ${_snap.pwa?'PWA':'browser'}</span>`
       : '';
     let html = `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:14px">
-      ✅ ${named.length} named · ❓ ${unknown.length} unknown · ⚠️ ${notSubscribed.length} not subscribed${healthBadge}
+      ✅ ${named.length} named · ❓ ${unknown.length} unknown · ⚠️ ${notSubscribed.length} not subscribed${_snapBadge}
     </div>`;
 
     // Section 1 — Named subscribers
@@ -5570,14 +5553,17 @@ async function loadAdminSubscribers() {
             + ' style="font-size:0.72rem;color:var(--gold);font-weight:600;background:none;'
             + 'border:none;cursor:pointer;padding:0;text-decoration:underline">Delete</button>'
           : '';
-        // Source badge — shows how the name was resolved (good for debugging)
-        const srcLabel = s.source === 'v5' ? '<span title="Identified via v5 SDK" style="font-size:0.65rem;background:rgba(91,141,238,.15);color:#5b8dee;border-radius:3px;padding:1px 4px;margin-left:4px;font-family:DM Mono,monospace">v5</span>'
-                       : s.source === 'jf' ? '<span title="Identified via Jotform pushId fallback" style="font-size:0.65rem;background:rgba(240,180,41,.15);color:var(--gold);border-radius:3px;padding:1px 4px;margin-left:4px;font-family:DM Mono,monospace">jf</span>'
-                       : '';
-        const reLoginBtn = (!s.source || s.source === 'v5' || s.source === 'jf')
-          ? ' &nbsp;<button onclick="adminForceReLogin(\'' + s.name.replace(/\'/g,\"\\\'\" ) + '\', \'' + (s.pushId||'') + '\', this)"'
-            + ' title="Force re-send OneSignal.login() for this player via push — fixes v1 empty external_user_id"'
-            + ' style="font-size:0.65rem;color:var(--blue,#5b8dee);font-weight:600;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Re-login</button>'
+        // Source badge — v5/jf means external_user_id is empty, re-login will fix it
+        const srcBadge = (s.source === 'v5')
+          ? ' <span style="font-size:0.63rem;background:rgba(91,141,238,.18);color:#5b8dee;border-radius:3px;padding:1px 4px;font-family:DM Mono,monospace" title="Identified via v5 SDK — external_user_id is empty">v5</span>'
+          : (s.source === 'jf')
+          ? ' <span style="font-size:0.63rem;background:rgba(240,180,41,.18);color:var(--gold);border-radius:3px;padding:1px 4px;font-family:DM Mono,monospace" title="Identified via Jotform pushId fallback">jf</span>'
+          : '';
+        // Re-login button uses data attributes to avoid inline escape issues
+        const reLoginBtn = (!s.source || s.source !== 'v1')
+          ? ' <button data-name="' + s.name.replace(/"/g, '&quot;') + '" data-pid="' + (s.pushId||'') + '" onclick="adminForceReLogin(this)"'
+            + ' title="Send nudge push — player re-opens app and re-login fires silently"'
+            + ' style="font-size:0.65rem;color:#5b8dee;font-weight:600;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline;vertical-align:middle">Re-login</button>'
           : '';
         const statusHtml = isDup
           ? (isLatest
@@ -5585,7 +5571,7 @@ async function loadAdminSubscribers() {
               : '<td style="' + tdStyle + ';white-space:nowrap"><span style="color:var(--text-hint)">🗑️ Stale</span>' + delLink + '</td>')
           : '<td style="' + tdStyle + '">' + reLoginBtn + '</td>';
         return '<tr style="' + (isStale ? 'opacity:0.5' : '') + '">'
-          + '<td style="' + tdStyle + ';font-weight:' + (isStale ? '400' : '600') + '">' + s.name + srcLabel + '</td>'
+          + '<td style="' + tdStyle + ';font-weight:' + (isStale ? '400' : '600') + '">' + s.name + srcBadge + '</td>'
           + '<td style="' + tdStyle + ';color:var(--text-muted)">' + s.device + '</td>'
           + '<td style="' + tdStyle + ';color:var(--text-muted)">' + s.date + '</td>'
           + '<td style="' + tdStyle + '">' + idHtml + '</td>'
@@ -5683,15 +5669,15 @@ async function nudgeUnknownSubscribers() {
     const data = await resp.json();
     const subs = (data.players || []).filter(s => s.invalid_identifier !== true);
 
-    // Same resolution logic as loadAdminSubscribers — check v1, v5, and Jotform pushId
+    // Same resolution as loadAdminSubscribers — empty string is falsy so use .trim()
     const unknownIds = subs
       .filter(s => {
         const v1id = (s.external_user_id && s.external_user_id.trim()) || null;
         const v5id = (s.external_id && s.external_id.trim()) ||
                      (s.aliases && s.aliases.external_id && s.aliases.external_id.trim()) || null;
-        if (v1id || v5id) return false;  // has identity — skip
+        if (v1id || v5id) return false;
         const m = memberData.find(m => m.pushId === s.id);
-        return !m;  // no Jotform match either — truly unknown
+        return !m;
       })
       .map(s => s.id)
       .filter(Boolean);
@@ -5714,107 +5700,97 @@ async function nudgeUnknownSubscribers() {
   }
 }
 
-// ── Admin: force re-login for a named subscriber via push notification ───────
-// Sends a targeted push asking that device to re-open the app, which triggers
-// osIdentityRefresh() and re-fires OneSignal.login() invisibly.
-async function adminForceReLogin(playerName, pushId, btn) {
+// Re-login nudge — sends a targeted push so the player re-opens app,
+// which fires osIdentityRefresh() and sets external_user_id silently.
+// Button reads name/pushId from data attributes to avoid inline escape issues.
+async function adminForceReLogin(btn) {
   if (!isCommissioner()) return;
+  const playerName = btn.dataset.name;
+  const pushId     = btn.dataset.pid;
+  if (!pushId) return;
   btn.disabled = true;
   btn.textContent = '⏳';
   try {
-    // Send a silent-ish nudge directly to that device
-    const payload = {
-      include_player_ids: [pushId],
-      headings:           { en: '👋 BirdieFriends' },
-      contents:           { en: 'Tap to refresh your notification settings — takes 2 seconds.' },
-      url:                'https://birdiefriends.com/portal.html'
-    };
-    await osSend(payload.include_player_ids ? { include_player_ids: payload.include_player_ids } : {},
-      payload.headings.en, payload.contents.en, payload.url);
+    await osSend(
+      { include_player_ids: [pushId] },
+      '👋 BirdieFriends',
+      'Tap to refresh your notification settings — takes 2 seconds.',
+      'https://birdiefriends.com/portal.html'
+    );
     btn.textContent = '✅ Sent';
     btn.style.color = 'var(--green)';
-    showToast(`📲 Re-login nudge sent to ${playerName.split(' ')[0]}`);
+    showToast('📲 Re-login nudge sent to ' + playerName.split(' ')[0]);
   } catch(e) {
     btn.textContent = '❌';
     btn.disabled = false;
-    console.warn('[adminForceReLogin]', e);
   }
 }
 
-// ── Admin: show raw field diagnostic view inline ──────────────────────────────
+// Inline diagnostic view — shows raw identity fields per subscriber.
+// Replaces the subscriber card body; Back button restores it.
 async function showSubDiagnostics() {
   if (!isCommissioner()) return;
   const body = document.getElementById('admin-subscribers-body');
-  body.innerHTML = `<div style="color:var(--text-hint);font-size:0.85rem">Loading diagnostics…</div>`;
+  body.innerHTML = '<div style="color:var(--text-hint);font-size:0.85rem">Loading diagnostics…</div>';
   try {
     const resp = await fetch(`${OS_API.replace(/\/$/, '')}/subscriptions?app_id=${OS_APP_ID}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     const subs = (data.players || []).filter(s => s.invalid_identifier !== true);
 
-    const thS = `padding:5px 8px;text-align:left;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-hint);font-family:'DM Mono',monospace;white-space:nowrap`;
-    const tdS = `padding:6px 8px;border-bottom:1px solid var(--border);font-size:0.72rem;font-family:'DM Mono',monospace;word-break:break-all`;
+    const thS = 'padding:5px 8px;text-align:left;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-hint);font-family:DM Mono,monospace;white-space:nowrap';
+    const tdS = 'padding:6px 8px;border-bottom:1px solid var(--border);font-size:0.72rem;font-family:DM Mono,monospace;word-break:break-all';
 
-    // Local health snapshots from this device (useful when you ARE a player)
-    const localHealth = (() => { try { return JSON.parse(localStorage.getItem('bf_os_health') || 'null'); } catch(e) { return null; } })();
+    const snap = (() => { try { return JSON.parse(localStorage.getItem('bf_os_health')||'null'); } catch(e) { return null; } })();
+    const snapHtml = snap
+      ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:0.73rem;font-family:'DM Mono',monospace;color:var(--text-muted);margin-bottom:10px">
+          <strong style="color:var(--text)">This device:</strong>
+          ${snap.player||'?'} · ${snap.subbed?'🔔 subscribed':'🔕 not subscribed'} · ${snap.pwa?'PWA':'browser'}
+          · <span style="color:var(--text-hint)">${new Date(snap.ts).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>
+        </div>`
+      : '';
 
+    let noName = 0;
     const rows = subs.map(s => {
-      const v1id  = (s.external_user_id && s.external_user_id.trim()) || null;
-      const v5id  = (s.external_id && s.external_id.trim()) ||
-                    (s.aliases && s.aliases.external_id && s.aliases.external_id.trim()) || null;
-      const jfM   = memberData.find(m => m.pushId === s.id);
-      const resolved = v1id || v5id || (jfM ? jfM.display : null);
-      const src   = v1id ? 'v1' : (v5id ? 'v5' : (jfM ? 'jf' : '—'));
-      const srcColor = v1id ? '#4caf80' : (v5id ? '#5b8dee' : (jfM ? '#f0b429' : '#e05252'));
+      const v1 = (s.external_user_id && s.external_user_id.trim()) || null;
+      const v5 = (s.external_id && s.external_id.trim()) || (s.aliases && s.aliases.external_id && s.aliases.external_id.trim()) || null;
+      const jf = memberData.find(m => m.pushId === s.id);
+      const resolved = v1 || v5 || (jf ? jf.display : null);
+      const src = v1 ? 'v1' : (v5 ? 'v5' : (jf ? 'jf' : '—'));
+      const srcColor = v1 ? '#4caf80' : (v5 ? '#5b8dee' : (jf ? '#f0b429' : '#e05252'));
       const nameColor = resolved ? '#4caf80' : '#e05252';
-      const shortId = (s.id || '').slice(0, 10) + '…';
+      if (!resolved) noName++;
       return `<tr>
-        <td style="${tdS};font-weight:600;color:${nameColor}">${resolved || '—'}</td>
-        <td style="${tdS};color:${srcColor};font-weight:600">${src}</td>
-        <td style="${tdS};color:${v1id ? '#4caf80' : '#e05252'}">${v1id || '✗'}</td>
-        <td style="${tdS};color:${v5id ? '#5b8dee' : 'var(--text-hint)'}">${v5id || '—'}</td>
-        <td style="${tdS};color:${jfM ? '#f0b429' : 'var(--text-hint)'}">${jfM ? jfM.display : '—'}</td>
-        <td style="${tdS};color:var(--text-hint)">${shortId}</td>
+        <td style="${tdS};font-weight:600;color:${nameColor}">${resolved||'—'}</td>
+        <td style="${tdS};font-weight:700;color:${srcColor}">${src}</td>
+        <td style="${tdS};color:${v1?'#4caf80':'#e05252'}">${v1||'✗ empty'}</td>
+        <td style="${tdS};color:${v5?'#5b8dee':'var(--text-hint)'}">${v5||'—'}</td>
+        <td style="${tdS};color:${jf?'#f0b429':'var(--text-hint)'}">${jf?jf.display:'—'}</td>
+        <td style="${tdS};color:var(--text-hint)">${(s.id||'').slice(0,10)}…</td>
         <td style="${tdS};color:var(--text-hint)">${deviceLabel(s.device_type)}</td>
       </tr>`;
     }).join('');
 
-    const noNameCount = subs.filter(s => {
-      const v1 = (s.external_user_id && s.external_user_id.trim()) || null;
-      const v5 = (s.external_id && s.external_id.trim()) || (s.aliases && s.aliases.external_id && s.aliases.external_id.trim()) || null;
-      return !v1 && !v5 && !memberData.find(m => m.pushId === s.id);
-    }).length;
-
-    const healthHtml = localHealth ? `
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:0.75rem;font-family:'DM Mono',monospace;color:var(--text-muted);margin-bottom:10px">
-        <strong style="color:var(--text)">This device health snapshot</strong> &nbsp;·&nbsp; 
-        Player: <span style="color:var(--green-dark)">${localHealth.player || '—'}</span> &nbsp;·&nbsp;
-        Subscribed: <span style="color:${localHealth.subbed ? 'var(--green)' : '#e05252'}">${localHealth.subbed ? '✅' : '❌'}</span> &nbsp;·&nbsp;
-        PWA: ${localHealth.pwa ? '✅' : '❌'} &nbsp;·&nbsp;
-        ${new Date(localHealth.ts).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'})}
-      </div>` : '';
-
-    body.innerHTML = `
-      ${healthHtml}
-      <div style="margin-bottom:10px;font-size:0.78rem;color:var(--text-muted)">
-        Source: <span style="color:#4caf80;font-weight:600">v1</span>=external_user_id &nbsp;
-        <span style="color:#5b8dee;font-weight:600">v5</span>=external_id (v5 SDK) &nbsp;
-        <span style="color:#f0b429;font-weight:600">jf</span>=Jotform pushId fallback &nbsp;
-        ${noNameCount > 0 ? `<span style="color:#e05252;font-weight:600">⚠️ ${noNameCount} with no name</span>` : '<span style="color:#4caf80">✅ All named</span>'}
-      </div>
-      <div style="overflow-x:auto;margin-bottom:14px">
-        <table style="width:100%;border-collapse:collapse;min-width:520px">
-          <thead><tr style="background:var(--surface)">
-            <th style="${thS}">Name</th><th style="${thS}">Src</th>
-            <th style="${thS}">v1 field</th><th style="${thS}">v5 field</th>
-            <th style="${thS}">Jotform</th><th style="${thS}">Push ID</th><th style="${thS}">Device</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-      <button class="btn btn-ghost" style="font-size:0.78rem;padding:4px 10px" onclick="loadAdminSubscribers()">← Back to Subscriber List</button>`;
+    body.innerHTML = snapHtml
+      + `<div style="font-size:0.77rem;color:var(--text-muted);margin-bottom:8px">
+          Source: <strong style="color:#4caf80">v1</strong>=external_user_id &nbsp;
+          <strong style="color:#5b8dee">v5</strong>=external_id (v5 SDK) &nbsp;
+          <strong style="color:#f0b429">jf</strong>=Jotform pushId &nbsp;·&nbsp;
+          ${noName>0?`<strong style="color:#e05252">⚠️ ${noName} with no name</strong>`:'<strong style="color:#4caf80">✅ All named</strong>'}
+        </div>
+        <div style="overflow-x:auto;margin-bottom:12px">
+          <table style="width:100%;border-collapse:collapse;min-width:480px">
+            <thead><tr style="background:var(--surface)">
+              <th style="${thS}">Name</th><th style="${thS}">Src</th>
+              <th style="${thS}">v1 (ext_user_id)</th><th style="${thS}">v5 (ext_id)</th>
+              <th style="${thS}">Jotform</th><th style="${thS}">Push ID</th><th style="${thS}">Device</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <button class="btn btn-ghost" style="font-size:0.78rem;padding:4px 10px" onclick="loadAdminSubscribers()">← Back</button>`;
   } catch(e) {
-    body.innerHTML = `<div style="color:#e05252;font-size:0.85rem">Diagnostics failed: ${e.message}</div>`;
+    body.innerHTML = `<div style="color:#e05252;font-size:0.85rem">Failed: ${e.message}</div>`;
   }
 }
 
