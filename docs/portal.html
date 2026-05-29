@@ -5737,7 +5737,7 @@ async function loadAdminSubscribers() {
 
       subscribed.forEach(function(m) {
         const shortId = m.pushId.slice(0, 10) + '…';
-        const copyId  = '<span onclick="navigator.clipboard.writeText('' + m.pushId + '').then(()=>showToast('ID copied'))"'
+        const copyId  = '<span data-pid="' + m.pushId + '" onclick="navigator.clipboard.writeText(this.dataset.pid).then(()=>showToast(\'ID copied\'))"'
           + ' title="' + m.pushId + '" style="font-family:DM Mono,monospace;font-size:0.72rem;cursor:pointer;'
           + 'color:var(--text-muted);border-bottom:1px dashed var(--border)">' + shortId + '</span>';
         const sendBtn = '<button data-pid="' + m.pushId + '" data-name="' + m.display.replace(/"/g,'&quot;') + '"'
@@ -5791,7 +5791,7 @@ async function adminSendTestPush(btn) {
     const result = await osSend(
       { include_player_ids: [pushId] },
       '🔔 BirdieFriends Test',
-      'Notification test for ' + name.split(' ')[0] + ' — you're all set!',
+      'Notification test for ' + name.split(' ')[0] + ' - you\'re all set!',
       'https://birdiefriends.com/portal.html'
     );
     btn.textContent = result.ok ? '✅ Sent' : '❌ Failed';
@@ -5845,15 +5845,18 @@ async function showSundayChecklist() {
       ? '<span style="font-size:0.72rem;color:var(--green);font-weight:600">✅ Nothing</span>'
       : '<span style="font-size:0.72rem;color:#e05252;font-weight:600">Open app → 🔕 → Allow</span>';
     return '<tr id="' + rowId + '" style="' + (isDone ? 'opacity:0.45' : '') + '">'
-      + '<td style="' + tdS + ';width:28px"><div style="' + checkStyle + '" onclick="sundayToggle('' + m.display + '','' + DONE_KEY + '')">'
-      + (isDone ? '✓' : '') + '</div></td>'
+      + '<td style="' + tdS + ';width:28px"><div style="' + checkStyle + '"'
+      + ' data-player="' + m.display.replace(/"/g, '&quot;') + '"'
+      + ' data-donekey="' + DONE_KEY + '"'
+      + ' onclick="sundayToggle(this.dataset.player, this.dataset.donekey)">'
+      + (isDone ? '\u2713' : '') + '</div></td>'
       + '<td style="' + nameStyle + '">' + m.display + '</td>'
       + '<td style="' + tdS + '">' + action + '</td>'
       + '</tr>';
   }
 
   if (subscribed.length) {
-    html += '<div style="font-size:0.75rem;font-weight:700;color:var(--green-dark);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">✅ Subscribed — tell them they're set</div>'
+    html += '<div style="font-size:0.75rem;font-weight:700;color:var(--green-dark);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">✅ Subscribed — tell them they\'re set</div>'
       + '<table style="width:100%;border-collapse:collapse;margin-bottom:16px"><tbody>';
     subscribed.forEach(m => { html += makeRow(m, 1); });
     html += '</tbody></table>';
