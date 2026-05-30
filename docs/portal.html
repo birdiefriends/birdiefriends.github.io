@@ -1720,6 +1720,40 @@ body {
   </div>
 </div>
 
+<!-- ══ TEXT SELECT OVERLAY ══ -->
+<div id="text-select-overlay" style="display:none;position:fixed;inset:0;z-index:8500;
+  background:rgba(0,0,0,0.55);display:none;align-items:flex-end;justify-content:center"
+  onclick="closeTextSelectOverlay(event)">
+  <div id="text-select-sheet" onclick="event.stopPropagation()"
+    style="background:var(--surface);border-radius:18px 18px 0 0;width:100%;max-width:480px;
+      max-height:82vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)">
+    <div style="padding:12px 16px 8px;border-bottom:1px solid var(--border-light)">
+      <div style="width:36px;height:4px;background:var(--border-med);border-radius:2px;margin:0 auto 12px"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:0.95rem;font-weight:600;color:var(--text-primary)">📱 Text Players</div>
+        <div style="display:flex;gap:8px">
+          <button onclick="textSelectToggleAll(true)"
+            style="font-size:0.75rem;padding:4px 10px;border-radius:6px;border:1px solid var(--border-med);
+              background:transparent;color:var(--text-secondary);cursor:pointer">All</button>
+          <button onclick="textSelectToggleAll(false)"
+            style="font-size:0.75rem;padding:4px 10px;border-radius:6px;border:1px solid var(--border-med);
+              background:transparent;color:var(--text-secondary);cursor:pointer">None</button>
+        </div>
+      </div>
+      <div style="font-size:0.78rem;color:var(--text-muted)" id="text-select-count"></div>
+    </div>
+    <div id="text-select-list" style="overflow-y:auto;flex:1;padding:4px 0"></div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border-light)">
+      <button id="text-select-send-btn" onclick="textSelectSend()"
+        style="width:100%;padding:13px;border-radius:10px;border:none;
+          background:var(--green);color:#fff;font-size:0.95rem;font-weight:600;
+          font-family:'Instrument Sans',sans-serif;cursor:pointer">
+        Open Messages
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ SCORECARD MODAL ══ -->
 <div id="scorecard-modal" style="display:none;position:fixed;inset:0;z-index:9000;
   background:rgba(0,0,0,0.75);overflow-y:auto;-webkit-overflow-scrolling:touch">
@@ -3425,44 +3459,107 @@ function buildTextAllBtn(evt, isHero) {
   </div>`;
 }
 
+// ── Text Players — multi-select overlay ──────────────────────────────────────
+let _textSelectEvtId   = null;
+let _textSelectEvtName = null;
+let _textSelectPlayers = [];  // [{name, digits, hasCel}]
+
 function textAllPlayers(evtId, evtName) {
   const evt = eventData.find(e => e.id === evtId);
   if (!evt) return;
 
-  const players = regData.filter(r => r.eventName === evtName && r.status !== 'No');
-  if (!players.length) { showToast('No registered players yet', true); return; }
+  const regs = regData.filter(r => r.eventName === evtName && r.status !== 'No');
+  if (!regs.length) { showToast('No registered players yet', true); return; }
 
-  const numbers = [];
-  const missing  = [];
-  players.forEach(p => {
-    const cell = getCellForPlayer(p.player);
+  _textSelectEvtId   = evtId;
+  _textSelectEvtName = evtName;
+  _textSelectPlayers = regs.map(r => {
+    const cell = getCellForPlayer(r.player);
+    let digits = null;
     if (cell) {
-      let digits = cell.replace(/\D/g,'');
-      if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
-      if (digits.length === 10) numbers.push(digits);
-      else missing.push(p.player);
-    } else {
-      missing.push(p.player);
+      let d = cell.replace(/\D/g,'');
+      if (d.length === 11 && d.startsWith('1')) d = d.slice(1);
+      if (d.length === 10) digits = d;
     }
+    return { name: r.player, digits, selected: !!digits };
   });
 
-  if (!numbers.length) {
-    showToast('No cell numbers on file for registered players', true);
-    return;
-  }
+  _renderTextSelectList();
+  _updateTextSelectCount();
+  const overlay = document.getElementById('text-select-overlay');
+  overlay.style.display = 'flex';
+}
 
-  const dtStr = evt.dt
+function _renderTextSelectList() {
+  const list = document.getElementById('text-select-list');
+  list.innerHTML = _textSelectPlayers.map((p, i) => {
+    const initials = p.name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+    const dimStyle = p.digits ? '' : 'opacity:0.45';
+    const noCell   = p.digits ? '' : '<span style="font-size:0.72rem;color:var(--text-hint);margin-left:6px">no cell</span>';
+    const chk      = p.selected
+      ? `<div style="width:22px;height:22px;border-radius:50%;background:var(--green);
+           display:flex;align-items:center;justify-content:center;flex-shrink:0">
+           <span style="color:#fff;font-size:0.75rem">✓</span></div>`
+      : `<div style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border-med);flex-shrink:0"></div>`;
+    return `<div onclick="textSelectToggle(${i})"
+      style="display:flex;align-items:center;gap:12px;padding:11px 16px;cursor:pointer;${p.digits?'':'pointer-events:none'}">
+      <div style="width:36px;height:36px;border-radius:50%;background:var(--green-light);
+        display:flex;align-items:center;justify-content:center;font-size:0.8rem;
+        font-weight:700;color:var(--green-dark);flex-shrink:0;${dimStyle}">${initials}</div>
+      <div style="flex:1;${dimStyle}">
+        <div style="font-size:0.88rem;font-weight:500;color:var(--text-primary)">${p.name}${noCell}</div>
+      </div>
+      ${chk}
+    </div>`;
+  }).join('');
+}
+
+function textSelectToggle(i) {
+  if (!_textSelectPlayers[i].digits) return;
+  _textSelectPlayers[i].selected = !_textSelectPlayers[i].selected;
+  _renderTextSelectList();
+  _updateTextSelectCount();
+}
+
+function textSelectToggleAll(val) {
+  _textSelectPlayers.forEach(p => { if (p.digits) p.selected = val; });
+  _renderTextSelectList();
+  _updateTextSelectCount();
+}
+
+function _updateTextSelectCount() {
+  const sel = _textSelectPlayers.filter(p => p.selected).length;
+  const total = _textSelectPlayers.filter(p => p.digits).length;
+  document.getElementById('text-select-count').textContent =
+    `${sel} of ${total} players selected`;
+  const btn = document.getElementById('text-select-send-btn');
+  btn.disabled = sel === 0;
+  btn.style.opacity = sel === 0 ? '0.45' : '1';
+}
+
+function closeTextSelectOverlay(e) {
+  if (e && e.target !== document.getElementById('text-select-overlay')) return;
+  document.getElementById('text-select-overlay').style.display = 'none';
+}
+
+function textSelectSend() {
+  const evt = eventData.find(e => e.id === _textSelectEvtId);
+  const numbers = _textSelectPlayers.filter(p => p.selected && p.digits).map(p => p.digits);
+  if (!numbers.length) return;
+
+  const dtStr = evt && evt.dt
     ? evt.dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})
-    : evtName;
+    : _textSelectEvtName;
   const msg = encodeURIComponent(
-    `BirdieFriends: ${evtName} · ${dtStr} · ${evt.location || 'BSGC'}. See you there! ⛳`
+    `BirdieFriends: ${_textSelectEvtName} · ${dtStr} · ${(evt && evt.location) || 'BSGC'}. See you there! ⛳`
   );
 
-  const smsUrl = `sms:${numbers.join(',')}?body=${msg}`;
-  window.location.href = smsUrl;
+  document.getElementById('text-select-overlay').style.display = 'none';
+  setTimeout(() => { window.location.href = `sms:${numbers.join(',')}?body=${msg}`; }, 150);
 
+  const missing = _textSelectPlayers.filter(p => !p.digits).map(p => p.name);
   if (missing.length) {
-    setTimeout(() => showToast(`⚠️ No cell on file: ${missing.join(', ')}`), 800);
+    setTimeout(() => showToast(`⚠️ No cell on file: ${missing.join(', ')}`), 900);
   }
 }
 
