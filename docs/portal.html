@@ -2935,10 +2935,9 @@ function getCapacityStatus(evt) {
   const subRegs  = regData.filter(r => r.eventName === evt.name && r.status === 'Sub');
   const yesCount = yesRegs.length;
 
-  // Within 48hrs and 2nd tee time not secured → locked
-  // Portal writes capacity=4 back to Jotform (see collapseCapacityIfNeeded)
-  // so on next load Jotform is already accurate. Sub always available.
-  if (within48 && yesCount < 6) {
+  // Within 48hrs and 2nd tee time not secured → locked (8-player events only)
+  // 4-player events never lock — no 2nd tee time needed
+  if (within48 && !is4man && yesCount < 6) {
     return {
       restricted: true, locked: true,
       yesCount, subCount: subRegs.length,
