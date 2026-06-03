@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BF Deploy</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+
+  :root {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --surface2:  #1c2128;
+    --border:    #30363d;
+    --gold:      #d4a017;
+    --gold2:     #f0c040;
+    --green:     #3fb950;
+    --red:       #f85149;
+    --blue:      #58a6ff;
+    --muted:     #8b949e;
+    --text:      #e6edf3;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── PIN SCREEN ─────────────────────────────────────────────── */
+  #pin-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 24px; z-index: 100;
+  }
+  .pin-logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--gold);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .pin-title {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+  .pin-dots {
+    display: flex; gap: 12px;
+  }
+  .pin-dot {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: transparent;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .pin-dot.filled {
+    background: var(--gold);
+    border-color: var(--gold);
+  }
+  .pin-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 64px);
+    gap: 10px;
+  }
+  .pin-key {
+    height: 56px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s, transform 0.08s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pin-key:active { transform: scale(0.94); background: var(--surface2); }
+  .pin-key.del { font-size: 16px; color: var(--muted); }
+  .pin-error {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--red);
+    height: 16px;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── MAIN APP ───────────────────────────────────────────────── */
+  #app { display: none; }
+  #app.visible { display: flex; flex-direction: column; min-height: 100vh; }
+
+  header {
+    padding: 16px 20px 0;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+  }
+  .header-logo {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gold);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .header-title {
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .header-spacer { flex: 1; }
+  .header-version {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ── TABS ───────────────────────────────────────────────────── */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    gap: 0;
+    margin-top: 0;
+  }
+  .tab {
+    padding: 12px 18px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+  /* ── PANELS ─────────────────────────────────────────────────── */
+  .panel { display: none; padding: 20px; flex: 1; }
+  .panel.active { display: block; }
+
+  /* ── FORM ELEMENTS ──────────────────────────────────────────── */
+  label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+    margin-top: 16px;
+  }
+  label:first-child { margin-top: 0; }
+
+  select, textarea, input[type=text] {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+    appearance: none;
+  }
+  select:focus, textarea:focus, input[type=text]:focus {
+    border-color: var(--gold);
+  }
+  textarea {
+    resize: vertical;
+    min-height: 180px;
+    line-height: 1.5;
+  }
+
+  /* file picker row */
+  .file-row {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .file-row input[type=file] { display: none; }
+  .btn-pick {
+    padding: 9px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-pick:hover { border-color: var(--gold); color: var(--gold); }
+  .file-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── BUTTONS ────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s, transform 0.08s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .btn-primary {
+    background: var(--gold);
+    color: #000;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--gold2); }
+  .btn-danger {
+    background: transparent;
+    color: var(--red);
+    border: 1px solid var(--red);
+  }
+  .btn-danger:hover:not(:disabled) { background: rgba(248,81,73,0.1); }
+  .btn-ghost {
+    background: transparent;
+    color: var(--blue);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover:not(:disabled) { border-color: var(--blue); }
+  .btn-sm { padding: 6px 12px; font-size: 11px; }
+
+  .btn-row {
+    display: flex; gap: 10px; margin-top: 20px;
+    flex-wrap: wrap; align-items: center;
+  }
+
+  /* ── STATUS / TOAST ─────────────────────────────────────────── */
+  #toast {
+    position: fixed;
+    bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-family: var(--mono);
+    font-size: 13px;
+    max-width: 340px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.25s;
+    pointer-events: none;
+    z-index: 200;
+  }
+  #toast.show { opacity: 1; }
+  #toast.ok   { border-color: var(--green); color: var(--green); }
+  #toast.err  { border-color: var(--red);   color: var(--red); }
+  #toast.info { border-color: var(--gold);  color: var(--gold); }
+
+  /* ── HISTORY ────────────────────────────────────────────────── */
+  .history-controls {
+    display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
+  }
+  .history-controls > div { flex: 1; min-width: 140px; }
+  .commit-list {
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .commit-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.12s;
+  }
+  .commit-item:last-child { border-bottom: none; }
+  .commit-item:hover { background: var(--surface2); }
+  .commit-sha {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--blue);
+    min-width: 58px;
+    flex-shrink: 0;
+  }
+  .commit-meta { flex: 1; min-width: 0; }
+  .commit-msg {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .commit-date {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .empty-state {
+    padding: 40px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── SNAPSHOT FEED ──────────────────────────────────────────── */
+  .snap-item {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .snap-item:last-child { border-bottom: none; }
+  .snap-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .snap-badge.deploy  { background: rgba(63,185,80,0.15);  color: var(--green); }
+  .snap-badge.rollback{ background: rgba(88,166,255,0.15); color: var(--blue); }
+  .snap-meta { flex: 1; min-width: 0; }
+  .snap-file {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .snap-detail {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── ROLLBACK CONFIRM ───────────────────────────────────────── */
+  .confirm-box {
+    background: var(--surface);
+    border: 1px solid var(--red);
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 16px;
+    display: none;
+  }
+  .confirm-box.visible { display: block; }
+  .confirm-box h3 {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--red);
+    margin-bottom: 10px;
+  }
+  .confirm-box p {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 14px;
+  }
+  .confirm-box strong { color: var(--text); }
+
+  /* ── SECTION HEADER ─────────────────────────────────────────── */
+  .section-header {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── VERSION PREVIEW ────────────────────────────────────────── */
+  #version-preview {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--gold);
+    margin-top: 8px;
+    min-height: 18px;
+  }
+
+  .info-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(212,160,23,0.1);
+    border: 1px solid rgba(212,160,23,0.3);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gold);
+    margin-top: 10px;
+  }
+
+  @media (max-width: 480px) {
+    .tab { padding: 10px 12px; font-size: 11px; }
+    .panel { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── PIN SCREEN ──────────────────────────────────────────────── -->
+<div id="pin-screen">
+  <div class="pin-logo">BirdieFriends</div>
+  <div class="pin-title">Deploy Panel</div>
+  <div class="pin-dots">
+    <div class="pin-dot" id="d0"></div>
+    <div class="pin-dot" id="d1"></div>
+    <div class="pin-dot" id="d2"></div>
+    <div class="pin-dot" id="d3"></div>
+  </div>
+  <div class="pin-keypad">
+    <button class="pin-key" onclick="pinKey('1')">1</button>
+    <button class="pin-key" onclick="pinKey('2')">2</button>
+    <button class="pin-key" onclick="pinKey('3')">3</button>
+    <button class="pin-key" onclick="pinKey('4')">4</button>
+    <button class="pin-key" onclick="pinKey('5')">5</button>
+    <button class="pin-key" onclick="pinKey('6')">6</button>
+    <button class="pin-key" onclick="pinKey('7')">7</button>
+    <button class="pin-key" onclick="pinKey('8')">8</button>
+    <button class="pin-key" onclick="pinKey('9')">9</button>
+    <button class="pin-key" onclick="pinKey('')" style="visibility:hidden"></button>
+    <button class="pin-key" onclick="pinKey('0')">0</button>
+    <button class="pin-key del" onclick="pinDel()">⌫</button>
+  </div>
+  <div class="pin-error" id="pin-error"></div>
+</div>
+
+<!-- ── MAIN APP ─────────────────────────────────────────────────── -->
+<div id="app">
+  <header>
+    <div>
+      <div class="header-logo">BirdieFriends</div>
+      <div class="header-title">⛳ Deploy Panel</div>
+    </div>
+    <div class="header-spacer"></div>
+    <div class="header-version" id="header-version">v3.10.70</div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('deploy')">Deploy</div>
+    <div class="tab" onclick="showTab('history')">History</div>
+    <div class="tab" onclick="showTab('snapshots')">Log</div>
+  </div>
+
+  <!-- ── DEPLOY TAB ─────────────────────────────────────────────── -->
+  <div class="panel active" id="panel-deploy">
+    <div class="section-header">Push a file to GitHub</div>
+
+    <label>File</label>
+    <select id="deploy-file" onchange="onFileSelect()">
+      <option value="">— select file —</option>
+      <option value="portal">portal.html — birdiefriends.com/portal.html</option>
+      <option value="guide">guide.html — birdiefriends.com/guide.html</option>
+      <option value="worker">worker.js — Cloudflare Worker source</option>
+      <option value="golfscore">BF_Golf_Scorer_8.html — GolfScorer app</option>
+      <option value="ops_guide">BF_Operations_Guide.md — Ops reference</option>
+      <option value="deploy_py">deploy_portal.py — Deploy script</option>
+      <option value="launcher">launch_golf_scorer.py — GS launcher</option>
+    </select>
+
+    <label>Load from file</label>
+    <div class="file-row">
+      <button class="btn-pick" onclick="document.getElementById('file-picker').click()">📂 Choose file</button>
+      <span class="file-name" id="file-name-label">No file chosen</span>
+      <input type="file" id="file-picker" onchange="onFilePicked(event)">
+    </div>
+
+    <label>Content <span id="content-len" style="color:var(--muted);font-size:11px;margin-left:8px;"></span></label>
+    <textarea id="deploy-content" placeholder="Paste file content here, or use the file picker above..." oninput="onContentChange()"></textarea>
+    <div id="version-preview"></div>
+
+    <div id="worker-note" style="display:none" class="info-chip">
+      ⚠️ Worker source is archived to GitHub — Cloudflare paste still required after deploy
+    </div>
+
+    <label>Commit message (optional)</label>
+    <input type="text" id="deploy-message" placeholder="Auto-generated if blank">
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-deploy" onclick="doDeploy()" disabled>
+        🚀 Deploy
+      </button>
+      <button class="btn btn-ghost" onclick="doClear()">Clear</button>
+      <span id="deploy-status" style="font-family:var(--mono);font-size:12px;color:var(--muted);"></span>
+    </div>
+  </div>
+
+  <!-- ── HISTORY TAB ─────────────────────────────────────────────── -->
+  <div class="panel" id="panel-history">
+    <div class="section-header">File commit history</div>
+
+    <div class="history-controls">
+      <div>
+        <label style="margin-top:0">File</label>
+        <select id="history-file" onchange="loadHistory()">
+          <option value="">— select file —</option>
+          <option value="portal">portal.html</option>
+          <option value="guide">guide.html</option>
+          <option value="worker">worker.js</option>
+          <option value="golfscore">BF_Golf_Scorer_8.html</option>
+          <option value="ops_guide">BF_Operations_Guide.md</option>
+          <option value="deploy_py">deploy_portal.py</option>
+          <option value="launcher">launch_golf_scorer.py</option>
+        </select>
+      </div>
+      <div>
+        <label style="margin-top:0">Show</label>
+        <select id="history-n" onchange="loadHistory()">
+          <option value="10">Last 10</option>
+          <option value="20" selected>Last 20</option>
+          <option value="50">Last 50</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="history-list">
+      <div class="empty-state">Select a file to view its history</div>
+    </div>
+
+    <!-- Rollback confirm box -->
+    <div class="confirm-box" id="confirm-box">
+      <h3>⚠️ Confirm Rollback</h3>
+      <p>
+        Restore <strong id="confirm-file"></strong> to commit <strong id="confirm-sha"></strong><br>
+        <span id="confirm-msg"></span><br>
+        <span id="confirm-date"></span>
+      </p>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-danger" onclick="doRollback()">Restore this version</button>
+        <button class="btn btn-ghost" onclick="cancelRollback()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SNAPSHOTS / LOG TAB ────────────────────────────────────── -->
+  <div class="panel" id="panel-snapshots">
+    <div class="section-header">Deploy log (this session)</div>
+    <div id="snap-list">
+      <div class="empty-state">No deploys this session</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost btn-sm" onclick="loadSnapshots()">↻ Refresh</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ── CONFIG ─────────────────────────────────────────────────────────
+const WORKER_URL = 'https://birdiefriends-push.bgolfer4.workers.dev';
+const PIN_CORRECT = '7797';
+
+// ── PIN ────────────────────────────────────────────────────────────
+let pinBuffer = '';
+
+function pinKey(d) {
+  if (!d || pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  updateDots();
+  if (pinBuffer.length === 4) {
+    setTimeout(checkPin, 120);
+  }
+}
+
+function pinDel() {
+  pinBuffer = pinBuffer.slice(0, -1);
+  updateDots();
+  document.getElementById('pin-error').textContent = '';
+}
+
+function updateDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('d' + i).classList.toggle('filled', i < pinBuffer.length);
+  }
+}
+
+function checkPin() {
+  if (pinBuffer === PIN_CORRECT) {
+    document.getElementById('pin-screen').style.display = 'none';
+    document.getElementById('app').classList.add('visible');
+    loadSnapshots();
+  } else {
+    document.getElementById('pin-error').textContent = 'Incorrect PIN';
+    pinBuffer = '';
+    updateDots();
+  }
+}
+
+// ── TABS ───────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const names = ['deploy', 'history', 'snapshots'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'snapshots') loadSnapshots();
+}
+
+// ── FILE REGISTRY ──────────────────────────────────────────────────
+const FILE_META = {
+  portal:    { label: 'portal.html',             versionPattern: /v3\.\d+\.\d+ · \d{4}-\d{2}-\d{2}/ },
+  guide:     { label: 'guide.html',              versionPattern: null },
+  worker:    { label: 'worker.js',               versionPattern: /\/\/ Worker: (\d{4}-\d{2}-\d{2})/ },
+  golfscore: { label: 'BF_Golf_Scorer_8.html',   versionPattern: /v8\.\d+[^ ]* · \d{4}-\d{2}-\d{2}/ },
+  ops_guide: { label: 'BF_Operations_Guide.md',  versionPattern: null },
+  deploy_py: { label: 'deploy_portal.py',        versionPattern: null },
+  launcher:  { label: 'launch_golf_scorer.py',   versionPattern: null },
+};
+
+// ── DEPLOY TAB ────────────────────────────────────────────────────
+function onFileSelect() {
+  const key = document.getElementById('deploy-file').value;
+  document.getElementById('worker-note').style.display = (key === 'worker') ? 'flex' : 'none';
+  updateVersionPreview();
+  updateDeployBtn();
+}
+
+function onFilePicked(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('file-name-label').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('deploy-content').value = ev.target.result;
+    onContentChange();
+    // Auto-select file type from filename if not set
+    const key = document.getElementById('deploy-file').value;
+    if (!key) {
+      const guesses = {
+        'portal.html': 'portal', 'birdiefriends_portal.html': 'portal',
+        'worker.js': 'worker',
+        'BF_Golf_Scorer_8.html': 'golfscore',
+        'guide.html': 'guide',
+        'BF_Operations_Guide.md': 'ops_guide',
+        'deploy_portal.py': 'deploy_py',
+        'launch_golf_scorer.py': 'launcher',
+      };
+      const guessed = guesses[file.name];
+      if (guessed) {
+        document.getElementById('deploy-file').value = guessed;
+        onFileSelect();
+      }
+    }
+  };
+  reader.readAsText(file);
+}
+
+function onContentChange() {
+  const content = document.getElementById('deploy-content').value;
+  const len = content.length;
+  document.getElementById('content-len').textContent = len ? `${(len/1024).toFixed(1)} KB` : '';
+  updateVersionPreview();
+  updateDeployBtn();
+}
+
+function updateVersionPreview() {
+  const key = document.getElementById('deploy-file').value;
+  const content = document.getElementById('deploy-content').value;
+  const el = document.getElementById('version-preview');
+  if (!key || !content) { el.textContent = ''; return; }
+  const meta = FILE_META[key];
+  if (meta && meta.versionPattern) {
+    const m = content.match(meta.versionPattern);
+    el.textContent = m ? `Detected: ${m[0]}` : 'No version string detected';
+  } else {
+    el.textContent = '';
+  }
+}
+
+function updateDeployBtn() {
+  const key = document.getElementById('deploy-file').value;
+  const content = document.getElementById('deploy-content').value.trim();
+  document.getElementById('btn-deploy').disabled = !(key && content);
+}
+
+function doClear() {
+  document.getElementById('deploy-content').value = '';
+  document.getElementById('deploy-file').value = '';
+  document.getElementById('deploy-message').value = '';
+  document.getElementById('file-name-label').textContent = 'No file chosen';
+  document.getElementById('version-preview').textContent = '';
+  document.getElementById('content-len').textContent = '';
+  document.getElementById('worker-note').style.display = 'none';
+  document.getElementById('deploy-status').textContent = '';
+  updateDeployBtn();
+}
+
+async function doDeploy() {
+  const file    = document.getElementById('deploy-file').value;
+  const content = document.getElementById('deploy-content').value.trim();
+  const message = document.getElementById('deploy-message').value.trim() || undefined;
+  if (!file || !content) return;
+
+  const btn = document.getElementById('btn-deploy');
+  const status = document.getElementById('deploy-status');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Deploying…';
+  status.textContent = '';
+
+  try {
+    const resp = await fetch(`${WORKER_URL}/deploy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: PIN_CORRECT, file, content, message }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      toast(`✅ ${file} deployed — ${data.commitSha}`, 'ok');
+      status.textContent = `Commit ${data.commitSha}`;
+      addLocalSnap({ file, commitSha: data.commitSha, deployedAt: new Date().toISOString(), isRollback: false });
+      if (file === 'portal') {
+        document.getElementById('header-version').textContent = detectVersion(content) || 'deployed';
+      }
+    } else {
+      toast(`❌ Deploy failed: ${data.error || resp.status}`, 'err');
+    }
+  } catch(e) {
+    toast(`❌ Network error: ${e.message}`, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🚀 Deploy';
+    updateDeployBtn();
+  }
+}
+
+function detectVersion(content) {
+  const m = content.match(/v3\.\d+\.\d+ · \d{4}-\d{2}-\d{2}/);
+  return m ? m[0] : null;
+}
+
+// ── HISTORY TAB ──────────────────────────────────────────────────
+let pendingRollback = null;
+
+async function loadHistory() {
+  const file = document.getElementById('history-file').value;
+  const n    = document.getElementById('history-n').value;
+  const list = document.getElementById('history-list');
+  cancelRollback();
+  if (!file) { list.innerHTML = '<div class="empty-state">Select a file to view its history</div>'; return; }
+
+  list.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading…</div>';
+
+  try {
+    const resp = await fetch(`${WORKER_URL}/history?file=${file}&n=${n}`);
+    const data = await resp.json();
+    if (!data.commits || data.commits.length === 0) {
+      list.innerHTML = '<div class="empty-state">No commits found — file may not be in source/ yet</div>';
+      return;
+    }
+    list.innerHTML = '<div class="commit-list">' +
+      data.commits.map((c, idx) => `
+        <div class="commit-item">
+          <div class="commit-sha">${c.short}</div>
+          <div class="commit-meta">
+            <div class="commit-msg">${escHtml(c.message)}</div>
+            <div class="commit-date">${fmtDate(c.date)}</div>
+          </div>
+          ${idx === 0
+            ? '<span style="font-family:var(--mono);font-size:10px;color:var(--green);padding:3px 8px;border:1px solid var(--green);border-radius:4px;flex-shrink:0;">CURRENT</span>'
+            : `<button class="btn btn-ghost btn-sm" onclick="promptRollback('${escHtml(file)}','${c.sha}','${escHtml(c.message)}','${c.date}')">Restore</button>`
+          }
+        </div>
+      `).join('') +
+    '</div>';
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+  }
+}
+
+function promptRollback(file, sha, msg, date) {
+  pendingRollback = { file, sha, msg, date };
+  document.getElementById('confirm-file').textContent = FILE_META[file]?.label || file;
+  document.getElementById('confirm-sha').textContent  = sha.slice(0, 7);
+  document.getElementById('confirm-msg').textContent  = msg;
+  document.getElementById('confirm-date').textContent = fmtDate(date);
+  document.getElementById('confirm-box').classList.add('visible');
+  document.getElementById('confirm-box').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function cancelRollback() {
+  pendingRollback = null;
+  document.getElementById('confirm-box').classList.remove('visible');
+}
+
+async function doRollback() {
+  if (!pendingRollback) return;
+  const { file, sha } = pendingRollback;
+  const btn = document.querySelector('#confirm-box .btn-danger');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Restoring…';
+
+  try {
+    const resp = await fetch(`${WORKER_URL}/rollback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: PIN_CORRECT, file, sha }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      toast(`✅ ${file} restored to ${sha.slice(0,7)} → new commit ${data.newCommitSha}`, 'ok');
+      addLocalSnap({ file, commitSha: data.newCommitSha, deployedAt: new Date().toISOString(), isRollback: true, restoredFrom: sha.slice(0,7) });
+      cancelRollback();
+      loadHistory();
+    } else {
+      toast(`❌ Rollback failed: ${data.error || resp.status}`, 'err');
+    }
+  } catch(e) {
+    toast(`❌ Network error: ${e.message}`, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Restore this version';
+  }
+}
+
+// ── SNAPSHOTS / LOG ──────────────────────────────────────────────
+let localSnaps = [];
+
+function addLocalSnap(snap) {
+  localSnaps.unshift(snap);
+  if (document.getElementById('panel-snapshots').classList.contains('active')) {
+    renderSnaps();
+  }
+}
+
+async function loadSnapshots() {
+  // Show local session snaps only — KV snaps require a dedicated fetch endpoint
+  // which we don't need to build today; the local list is sufficient for the session
+  renderSnaps();
+}
+
+function renderSnaps() {
+  const el = document.getElementById('snap-list');
+  if (localSnaps.length === 0) {
+    el.innerHTML = '<div class="empty-state">No deploys this session</div>';
+    return;
+  }
+  el.innerHTML = '<div class="commit-list">' +
+    localSnaps.map(s => `
+      <div class="snap-item">
+        <span class="snap-badge ${s.isRollback ? 'rollback' : 'deploy'}">${s.isRollback ? 'Rollback' : 'Deploy'}</span>
+        <div class="snap-meta">
+          <div class="snap-file">${FILE_META[s.file]?.label || s.file}</div>
+          <div class="snap-detail">
+            ${s.isRollback ? `Restored from ${s.restoredFrom} → ` : ''}commit ${s.commitSha} · ${fmtDate(s.deployedAt)}
+          </div>
+        </div>
+      </div>
+    `).join('') +
+  '</div>';
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 3500);
+}
+
+// ── UTILS ─────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+</script>
+</body>
+</html>
