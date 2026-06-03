@@ -3685,7 +3685,7 @@ function renderSchedule() {
     const myReg  = findMyReg(e.name);
     const status = myReg ? myReg.status : 'Yes';
     const badgeCls = status === 'Sub' ? 'ssb-sub' : 'ssb-yes';
-    const badgeLbl = status === 'Sub' ? '🔄 Sub' : '✅ Going';
+    const badgeLbl = status === 'Sub' ? '🔄 Sub' : '✅ Registered';
     const mon = e.dt.toLocaleDateString('en-US', {month:'short'}).toUpperCase();
     const day = e.dt.getDate();
     const dow = e.dt.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
