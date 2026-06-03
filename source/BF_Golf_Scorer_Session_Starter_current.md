@@ -1,39 +1,29 @@
 <!-- CLAUDE INSTRUCTIONS — READ FIRST
-VERSION RULE — NON-NEGOTIABLE:
-Claude must output the portal at THE SAME version fetched from the library.
+DEPLOY RULE — NON-NEGOTIABLE:
+Claude deploys the portal directly via the GitHub API using bf_deploy.py from the library.
 source/portal_version.txt in GitHub is the sole version source of truth.
-Do NOT use any uploaded file for version baseline. Do NOT increment. Do NOT guess.
-deploy_portal.bat owns the increment and pushes the new version to source/ on every deploy.
+bf_deploy.py reads the current version, increments patch, updates the portal HTML, and pushes
+docs/portal.html + source/portal.html + source/portal_version.txt atomically.
+Do NOT use any uploaded file for version baseline. Do NOT guess the version.
 
-If portal_version.txt cannot be fetched from GitHub:
-STOP. Report the fetch failure. Do not produce any portal HTML output.
+DEPLOY FLOW (every portal change):
+  1. curl portal from GitHub → /home/claude/birdiefriends_portal.html
+  2. curl bf_deploy.py from library → /home/claude/bf_deploy.py
+  3. Make changes to portal
+  4. python3 /home/claude/bf_deploy.py /home/claude/birdiefriends_portal.html "<commit message>"
+  Increments version, pushes all three files, prints new version. Done.
 
-VERSION SYNC — MANDATORY FIRST STEP BEFORE ANY CODE CHANGE:
-ALWAYS fetch the live version directly from GitHub using the HARDENED script below.
-The bare one-liner is UNSAFE — if curl returns empty, sed wipes all version strings.
-
-HARDENED VERSION SYNC (copy exactly):
-  PORTAL="/home/claude/birdiefriends_portal.html"
-  GITHUB_URL="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/docs/portal.html"
-  VER_URL="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/portal_version.txt"
-  LIVE_VER=$(curl -s --max-time 10 "$GITHUB_URL" | grep -o 'v3\.10\.[0-9]* · [0-9-]*' | head -1)
-  if [ -z "$LIVE_VER" ]; then
-    echo "⚠️  GitHub HTML fetch failed — trying source/portal_version.txt"
-    LIVE_VER=$(curl -s --max-time 10 "$VER_URL" | grep -o 'v3\.10\.[0-9]* · [0-9-]*' | head -1)
-  fi
-  if [ -z "$LIVE_VER" ]; then echo "❌ Cannot determine version — abort"; exit 1; fi
-  sed -i "s/v3\.10\.[0-9]* · [0-9-]*/${LIVE_VER}/g" "$PORTAL"
-  grep -o 'v3\.10\.[0-9]* · [0-9-]*' "$PORTAL" | head -1
+ROLLBACK FLOW:
+  import sys; sys.path.insert(0,'/home/claude'); import bf_deploy; bf_deploy.rollback('<sha>', '<msg>')
 
 WORKER RULE:
-If Worker changes are planned, worker.js MUST be uploaded at session start.
+Worker changes require worker.js from the library (source/worker.js).
 Claude never reconstructs Worker code without the source file.
-If worker.js is missing and Worker changes are needed: STOP and ask for it.
 -->
 
-# BirdieFriends Golf Scorer — Session 28 Starter
-**Date:** TBD (follows Session 27, 2026-06-03)
-**Portal Version (production):** v3.10.75 · 2026-06-03 ← fetched from library at session start
+# BirdieFriends Golf Scorer — Session 29 Starter
+**Date:** TBD (follows Session 28, 2026-06-03)
+**Portal Version (production):** v3.10.79 · 2026-06-03 ← fetched from library at session start
 **GolfScorer Version:** v8.6 · 2026-05-28d (deployed, unchanged)
 **Worker Version:** 2026-06-03 (deploy/history/rollback endpoints added)
 **Live URL:** https://birdiefriends.com/portal.html
@@ -58,41 +48,37 @@ If worker.js is missing and Worker changes are needed: STOP and ask for it.
 
 ## ⚠️ VERSION RULE — GOLDEN
 
-> **Claude never increments the portal version.**
-> `source/portal_version.txt` in GitHub is the sole source of truth — fetched via the hardened sync script at session start. `deploy_portal.bat` owns the increment and pushes the new version to `source/` on every deploy.
+> **Claude deploys via `bf_deploy.py` — platform independent, no bat, no uploads.**
+> `source/portal_version.txt` is the sole version source of truth. `bf_deploy.py` reads it, increments patch, and pushes atomically. Works from any device.
 
-Example: GitHub fetch returns v3.10.75 → Claude outputs v3.10.75 → deploy lands at v3.10.76 ✅
+Example: current version is v3.10.79 → Claude runs bf_deploy.py → deploys as v3.10.80 ✅
 
 ---
 
-## Session 27 Accomplishments
+## Session 28 Accomplishments
 
-### Code Library + Remote Deploy system shipped (Priority 3)
-- `worker.js` — added `GET /history`, `POST /deploy`, `POST /rollback` endpoints
-  - `/history` — returns last N commits for any managed file (calls GitHub API)
-  - `/deploy` — pushes file content to GitHub + writes KV snapshot entry (PIN required)
-  - `/rollback` — restores file to any prior commit SHA as new commit (PIN required)
-  - GitHub token stored directly in Worker (acceptable for this app)
-- `deploy.html` — live at birdiefriends.com/deploy.html (PIN 7797)
-  - **Deploy tab** — pick file, load from disk or paste, version string auto-detected, one-tap deploy
-  - **History tab** — per-file commit list, tap any row to restore, confirm before executing
-  - **Log tab** — session deploy/rollback activity feed
-- `deploy_portal.py` — updated to deploy `deploy.html` to `docs/` and mirror 7 source files to `source/` on every bat run
-  - Mirrors: `source/portal.html`, `source/guide.html`, `source/deploy.html`, `source/worker.js`, `source/BF_Golf_Scorer_8.html`, `source/BF_Operations_Guide.md`, `source/BF_Golf_Scorer_Session_Starter_current.md`
-  - `.py` files excluded from mirrors — GitHub secret scanning blocks them (correct behavior)
-- **Golden Rule #16** added — upload `deploy_portal.py` and `launch_golf_scorer.py` at session start if changes planned; never reconstruct from scratch
+### Claude-direct deploy shipped (Priority 1)
+- `bf_deploy.py` added to library (`source/bf_deploy.py`)
+  - `deploy(path, msg)` — fetches current version, increments patch, pushes portal + version file atomically
+  - `rollback(sha, msg)` — restores portal to any prior commit SHA, stamps new version, deploys
+  - `history(n)` — lists last N commit SHAs and messages for portal
+- Deploy flow is now fully platform-independent — phone, tablet, laptop all equivalent
+- Worker `/deploy` endpoint documented as unusable for portal (Cloudflare free tier ~100KB body limit)
+- **Golden Rules #18** added — Claude uses GitHub API direct for portal deploys; Worker `/deploy` for small files only
+- **Golden Rule #13 updated** — bf_deploy.py now owns version increment for Claude-direct deploys; bat still owns it for laptop deploys
 
 ### Managed file registry
 | Key | GitHub path | Updated by |
 |-----|-------------|------------|
-| portal | `docs/portal.html` + `source/portal.html` | bat |
+| portal | `docs/portal.html` + `source/portal.html` | bf_deploy.py (any device) or bat |
 | guide | `docs/guide.html` + `source/guide.html` | bat |
 | worker | `source/worker.js` | bat |
 | golfscore | `source/BF_Golf_Scorer_8.html` | bat |
-| ops_guide | `source/BF_Operations_Guide.md` | bat |
+| ops_guide | `source/BF_Operations_Guide.md` | Claude direct or bat |
 | deploy.html | `docs/deploy.html` + `source/deploy.html` | bat |
 | session_starter | `source/BF_Golf_Scorer_Session_Starter_current.md` | bat |
-| portal_version | `source/portal_version.txt` | bat (step 9) |
+| portal_version | `source/portal_version.txt` | bf_deploy.py or bat |
+| bf_deploy.py | `source/bf_deploy.py` | Claude direct |
 
 **Not in library (secrets):** `deploy_portal.py`, `launch_golf_scorer.py` — laptop only, upload when changes needed.
 
@@ -118,9 +104,10 @@ deploy_portal.py   → if deploy script changes planned
 launch_golf_scorer.py → if launcher changes planned
 ```
 
-**Mid-session deploys** (Brian runs bat, version increments):
-- Claude re-fetches version from GitHub automatically on next code change
-- No re-upload needed — hardened sync script handles it
+**Mid-session deploys** (Claude runs bf_deploy.py directly):
+- No bat, no file download, no laptop needed
+- Claude fetches portal from GitHub, makes change, runs bf_deploy.py, version increments atomically
+- Works from phone, tablet, or laptop
 
 **Session end:**
 ```
@@ -130,7 +117,7 @@ launch_golf_scorer.py → if launcher changes planned
 
 ---
 
-## 🔴 SESSION 28 — Priority 1: Worker KV Feed
+## 🔴 SESSION 29 — Priority 1: Worker KV Feed
 
 ### Problem
 Announcement feed reads from OneSignal history. OneSignal owns the data, can't delete delivered messages via API, list grows forever, all players see same global list, no commissioner control.
@@ -162,7 +149,7 @@ Announcement feed reads from OneSignal history. OneSignal owns the data, can't d
 
 ---
 
-## 🔴 SESSION 28 — Priority 2: Cancelled Events
+## 🔴 SESSION 29 — Priority 2: Cancelled Events
 
 ### Concept
 Commissioner needs to cancel an event and notify registered players.
@@ -179,7 +166,7 @@ Use Commissioner Broadcast from portal → reaches all bfw=Yes members. Then han
 
 ---
 
-## 🔵 SESSION 28 — Priority 3: Remaining Backlog
+## 🔵 SESSION 29 — Priority 3: Remaining Backlog
 
 ### Push notification message audit (before BFSeries#4)
 Audit ALL templates:
