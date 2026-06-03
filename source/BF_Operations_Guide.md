@@ -19,7 +19,7 @@ Update this file at the end of every session.
 10. **Bump GS version on every output.** No file leaves Claude without a version increment. Verify header shows correct version before doing anything after deploy.
 11. **GS does not go to the course.** Laptop stays home. All scoring happens post-round at home. Groupings can be published the night before/morning of and GS closed.
 12. **TEST_PREVIEW_MODE must be False on event day.** Check `launch_golf_scorer.py` before launching. When True, publishes save to local preview/ folder only.
-13. **Claude never increments the portal version.** `source/portal_version.txt` in GitHub is the sole source of truth — Claude fetches it via the hardened sync script. The local `portal_version.txt` file is no longer needed and should not be uploaded. `deploy_portal.bat` owns the increment and pushes the new version to `source/` on every deploy.
+13. **`source/portal_version.txt` in GitHub is the sole version source of truth.** Claude reads it at session start via the hardened sync script. When deploying via the Claude-direct flow (`bf_deploy.py`), Claude increments the patch and pushes `portal_version.txt` as part of the same atomic deploy. When deploying via the bat (laptop), `deploy_portal.bat` owns the increment. Claude never guesses or manually edits the version outside of `bf_deploy.py`.
 14. **Version sync is a mandatory first bash step.** After copying the portal HTML to the working directory, immediately fetch the live version from GitHub and apply it. See hardened sync script below — never use the bare one-liner (empty LIVE_VER would wipe all version strings).
 15. **Always upload worker.js at session start if Worker changes are planned.** Claude never reconstructs Worker code from scratch. If worker.js is missing and Worker changes are needed, Claude stops and asks for it. Worker source is the canonical file — treat it like portal_version.txt.
 16. **Always upload `deploy_portal.py` and `launch_golf_scorer.py` at session start if changes to those files are planned.** These files contain secrets and cannot be stored in GitHub — Claude never reconstructs them from scratch. Before adding any new capability to a `.py` file, the current version must be in the session so changes are additive, not replacement. Same policy as Golden Rule #15 for worker.js.
@@ -102,7 +102,18 @@ Downloads/
 
 ## Deploy: Portal
 
-### Steps
+### ✅ Standard flow (any device — phone, tablet, laptop)
+Claude makes the change, increments the version, and pushes directly to GitHub via the GitHub API. No file download, no bat, no laptop required.
+
+1. Describe the change to Claude
+2. Claude fetches portal from GitHub, makes the change, increments version, pushes to `docs/portal.html` + `source/portal.html` + `source/portal_version.txt`
+3. Wait ~60 seconds → hard refresh → confirm new version in header
+
+Claude uses `source/bf_deploy.py` from the library for this. The script reads `portal_version.txt`, increments patch, updates the portal HTML, and pushes all three files atomically.
+
+### 💻 Laptop-only flow (when bat is needed)
+Use the bat when deploying non-portal files (GolfScorer, guide, ops guide) or doing a full mirror of all source files.
+
 1. Download `birdiefriends_portal.html` from Claude
 2. Place in `Downloads/GolfScorer/` (overwrite existing)
 3. Double-click **`deploy_portal.bat`**
