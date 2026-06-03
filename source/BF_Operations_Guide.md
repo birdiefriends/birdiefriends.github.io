@@ -1,5 +1,5 @@
 # BirdieFriends — Operations Guide
-**Last Updated:** 2026-06-03 (Session 27 — portal v3.10.72, Code Library + Remote Deploy shipped, Golden Rule #16 added)  
+**Last Updated:** 2026-06-03 (Session 28 — Golden Rule #18 added: mobile deploy via GitHub API direct)  
 **Maintained by:** Commissioner (Brian Hager) + Claude  
 **Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system.  
 Update this file at the end of every session.
@@ -24,6 +24,7 @@ Update this file at the end of every session.
 15. **Always upload worker.js at session start if Worker changes are planned.** Claude never reconstructs Worker code from scratch. If worker.js is missing and Worker changes are needed, Claude stops and asks for it. Worker source is the canonical file — treat it like portal_version.txt.
 16. **Always upload `deploy_portal.py` and `launch_golf_scorer.py` at session start if changes to those files are planned.** These files contain secrets and cannot be stored in GitHub — Claude never reconstructs them from scratch. Before adding any new capability to a `.py` file, the current version must be in the session so changes are additive, not replacement. Same policy as Golden Rule #15 for worker.js.
 17. **Save the session starter as `BF_Golf_Scorer_Session_Starter_current.md` in the GolfScorer folder before running the bat.** The bat mirrors it to `source/` on every deploy — GitHub history is the version archive. No numbered copies needed.
+18. **For phone/tablet deploys, Claude pushes directly to the GitHub API — not via the Worker `/deploy` endpoint.** The Worker's `/deploy` endpoint has a ~100KB request body limit (Cloudflare free tier) which the portal (350KB+) exceeds, returning an empty response. Claude uses the GitHub token embedded in worker.js to call the GitHub Contents API directly. The Worker `/deploy` endpoint remains useful only for small files (ops guide, worker.js itself).
 
 ---
 
@@ -175,6 +176,9 @@ Every deploy automatically increments the patch version and updates the date. Th
 - Upload it at session start whenever Worker changes are planned
 - After any Worker deploy, save the updated source back to `worker.js` in GolfScorer folder
 - Claude never reconstructs Worker code without the source file — always upload it
+
+### Worker `/deploy` endpoint — size limit
+The Cloudflare free tier enforces a ~100KB request body limit. The portal (~350KB) exceeds this — the Worker returns an empty response with no error. **For portal deploys from phone/tablet, Claude calls the GitHub Contents API directly** using the token in worker.js. The `/deploy` endpoint works fine for small files (worker.js, ops guide, etc.).
 
 ### Worker secrets (Variables and Secrets tab → Settings)
 | Secret | Value | Notes |
