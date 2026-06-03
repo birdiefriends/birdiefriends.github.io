@@ -1,5 +1,5 @@
 # BirdieFriends — Operations Guide
-**Last Updated:** 2026-06-03 (Session 28 — Golden Rule #18 added: mobile deploy via GitHub API direct)  
+**Last Updated:** 2026-06-03 (Session 28 — bf_deploy.py shipped; Claude-direct deploy now standard; Golden Rules #13 updated, #18 added)  
 **Maintained by:** Commissioner (Brian Hager) + Claude  
 **Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system.  
 Update this file at the end of every session.
@@ -750,6 +750,7 @@ const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
 | v3.10.70 | 48hr lock: added yesCount===0 guard — never show Sub if nobody registered yet |
 | v3.10.71 | 48hr lock: root fix — lock condition now includes !is4man — 4-player events never lock regardless of 48hr window |
 | v3.10.72 | Code Library: deploy_portal.py updated — deploys deploy.html, mirrors source files to source/ on every bat run |
+| v3.10.77–79 | Session 28 test deploys: Going→Registered→Going→Registered via Claude-direct bf_deploy.py flow |
 
 ### Worker
 | Date | Key Change |
