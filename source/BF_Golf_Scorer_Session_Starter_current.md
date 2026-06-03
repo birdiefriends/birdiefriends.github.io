@@ -1,27 +1,25 @@
 <!-- CLAUDE INSTRUCTIONS — READ FIRST
 VERSION RULE — NON-NEGOTIABLE:
-Claude must output the portal at THE SAME version found in portal_version.txt.
-The version in the uploaded HTML file is IRRELEVANT — ignore it for versioning.
-Do NOT increment. Do NOT change the date. deploy_portal.bat owns the increment.
-If portal_version.txt says v3.10.69 · 2026-06-02, Claude outputs v3.10.69 · 2026-06-02.
-The deploy will land at v3.10.70. That is correct and expected.
+Claude must output the portal at THE SAME version fetched from the library.
+source/portal_version.txt in GitHub is the sole version source of truth.
+Do NOT use any uploaded file for version baseline. Do NOT increment. Do NOT guess.
+deploy_portal.bat owns the increment and pushes the new version to source/ on every deploy.
 
-If portal_version.txt has NOT been uploaded to this session:
-STOP. Before producing any portal HTML output, ask:
-"Before I make any portal changes, please upload portal_version.txt from your GolfScorer folder."
-Do NOT use the version from the uploaded HTML. Do NOT guess. Wait for portal_version.txt.
+If portal_version.txt cannot be fetched from GitHub:
+STOP. Report the fetch failure. Do not produce any portal HTML output.
 
 VERSION SYNC — MANDATORY FIRST STEP BEFORE ANY CODE CHANGE:
-portal_version.txt is NOT reliable mid-session — Brian deploys multiple times per session.
 ALWAYS fetch the live version directly from GitHub using the HARDENED script below.
 The bare one-liner is UNSAFE — if curl returns empty, sed wipes all version strings.
 
 HARDENED VERSION SYNC (copy exactly):
   PORTAL="/home/claude/birdiefriends_portal.html"
   GITHUB_URL="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/docs/portal.html"
+  VER_URL="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/portal_version.txt"
   LIVE_VER=$(curl -s --max-time 10 "$GITHUB_URL" | grep -o 'v3\.10\.[0-9]* · [0-9-]*' | head -1)
   if [ -z "$LIVE_VER" ]; then
-    LIVE_VER=$(grep -o 'v3\.10\.[0-9]* · [0-9-]*' portal_version.txt | head -1)
+    echo "⚠️  GitHub HTML fetch failed — trying source/portal_version.txt"
+    LIVE_VER=$(curl -s --max-time 10 "$VER_URL" | grep -o 'v3\.10\.[0-9]* · [0-9-]*' | head -1)
   fi
   if [ -z "$LIVE_VER" ]; then echo "❌ Cannot determine version — abort"; exit 1; fi
   sed -i "s/v3\.10\.[0-9]* · [0-9-]*/${LIVE_VER}/g" "$PORTAL"
@@ -35,7 +33,7 @@ If worker.js is missing and Worker changes are needed: STOP and ask for it.
 
 # BirdieFriends Golf Scorer — Session 28 Starter
 **Date:** TBD (follows Session 27, 2026-06-03)
-**Portal Version (production):** v3.10.72 · 2026-06-03 ← Claude outputs THIS version (verify via GitHub fetch)
+**Portal Version (production):** v3.10.75 · 2026-06-03 ← fetched from library at session start
 **GolfScorer Version:** v8.6 · 2026-05-28d (deployed, unchanged)
 **Worker Version:** 2026-06-03 (deploy/history/rollback endpoints added)
 **Live URL:** https://birdiefriends.com/portal.html
@@ -47,25 +45,23 @@ If worker.js is missing and Worker changes are needed: STOP and ask for it.
 
 | File | Required | Purpose |
 |------|----------|---------|
-| `portal_version.txt` | ✅ Always | Version baseline — Claude won't touch portal without it |
 | `birdiefriends_portal.html` | ✅ Always | Portal source |
-| `worker.js` | ✅ If Worker changes planned | Claude won't touch Worker without it |
+| `worker.js` | ✅ If Worker changes planned | Claude won't touch Worker without it (Golden Rule #15) |
 | `deploy_portal.py` | ✅ If deploy script changes planned | Claude won't touch it without it (Golden Rule #16) |
 | `launch_golf_scorer.py` | ✅ If launcher changes planned | Claude won't touch it without it (Golden Rule #16) |
-| `BF_Operations_Guide.md` | ✅ Recommended | Reference for architecture decisions |
-| This session starter | ✅ Always | Context and priorities |
 
-> **Session starter convention (Golden Rule #17):** At session end, save the updated starter as BOTH `BF_Golf_Scorer_Session_Starter_NN.md` (numbered archive) AND `BF_Golf_Scorer_Session_Starter_current.md` in the GolfScorer folder. The bat mirrors `_current.md` to `source/` — that's the library copy. Upload the numbered one to Claude at session start.
+> **Everything else is fetched from the library.** Session starter, ops guide, and portal version are all read directly from `source/` in GitHub via the bootstrap. No other uploads needed.
+
+> **Session starter convention (Golden Rule #17):** At session end, save the updated starter as `BF_Golf_Scorer_Session_Starter_current.md` in the GolfScorer folder and run the bat. GitHub history is the version archive — no numbered copies needed.
 
 ---
 
 ## ⚠️ VERSION RULE — GOLDEN
 
 > **Claude never increments the portal version.**
-> Claude reads portal_version.txt and outputs that SAME version. deploy_portal.bat owns the increment.
-> The version in the uploaded HTML is irrelevant — it always lags production by one deploy.
+> `source/portal_version.txt` in GitHub is the sole source of truth — fetched via the hardened sync script at session start. `deploy_portal.bat` owns the increment and pushes the new version to `source/` on every deploy.
 
-Example: GitHub fetch returns v3.10.69 → Claude outputs v3.10.69 → deploy lands at v3.10.70 ✅
+Example: GitHub fetch returns v3.10.75 → Claude outputs v3.10.75 → deploy lands at v3.10.76 ✅
 
 ---
 
@@ -87,15 +83,50 @@ Example: GitHub fetch returns v3.10.69 → Claude outputs v3.10.69 → deploy la
 - **Golden Rule #16** added — upload `deploy_portal.py` and `launch_golf_scorer.py` at session start if changes planned; never reconstruct from scratch
 
 ### Managed file registry
-| Key | GitHub path | Deploy path |
-|-----|-------------|-------------|
-| portal | `docs/portal.html` + `source/portal.html` | birdiefriends.com/portal.html |
-| guide | `docs/guide.html` + `source/guide.html` | birdiefriends.com/guide.html |
-| worker | `source/worker.js` | Cloudflare (manual paste) |
-| golfscore | `source/BF_Golf_Scorer_8.html` | localhost (manual copy) |
-| ops_guide | `source/BF_Operations_Guide.md` | — |
-| deploy.html | `docs/deploy.html` + `source/deploy.html` | birdiefriends.com/deploy.html |
-| session_starter | `source/BF_Golf_Scorer_Session_Starter_current.md` | — |
+| Key | GitHub path | Updated by |
+|-----|-------------|------------|
+| portal | `docs/portal.html` + `source/portal.html` | bat |
+| guide | `docs/guide.html` + `source/guide.html` | bat |
+| worker | `source/worker.js` | bat |
+| golfscore | `source/BF_Golf_Scorer_8.html` | bat |
+| ops_guide | `source/BF_Operations_Guide.md` | bat |
+| deploy.html | `docs/deploy.html` + `source/deploy.html` | bat |
+| session_starter | `source/BF_Golf_Scorer_Session_Starter_current.md` | bat |
+| portal_version | `source/portal_version.txt` | bat (step 9) |
+
+**Not in library (secrets):** `deploy_portal.py`, `launch_golf_scorer.py` — laptop only, upload when changes needed.
+
+---
+
+## ⚠️ HOW TO START EVERY SESSION
+
+**Step 1 — Paste bootstrap** (no uploads needed to start):
+```
+Paste contents of BF_Session_Bootstrap.md into Claude
+```
+Claude will fetch from library: session starter, ops guide, portal version.
+
+**Step 2 — Upload portal source** (required for any portal edits):
+```
+Upload: birdiefriends_portal.html
+```
+
+**Step 3 — Upload secret files only if changing them:**
+```
+worker.js          → if Worker changes planned
+deploy_portal.py   → if deploy script changes planned
+launch_golf_scorer.py → if launcher changes planned
+```
+
+**Mid-session deploys** (Brian runs bat, version increments):
+- Claude re-fetches version from GitHub automatically on next code change
+- No re-upload needed — hardened sync script handles it
+
+**Session end:**
+```
+1. Save starter as BF_Golf_Scorer_Session_Starter_current.md
+2. Run deploy_portal.bat → all files mirror to library
+```
 
 ---
 
@@ -174,12 +205,12 @@ Audit ALL templates:
 ### Versions
 | Component | Version | Status |
 |-----------|---------|--------|
-| Portal | v3.10.72 · 2026-06-03 | Production ✅ |
+| Portal | v3.10.75 · 2026-06-03 | Production ✅ |
 | GolfScorer | v8.6 · 2026-05-28d | Deployed ✅ |
 | Worker | 2026-06-03 | Deployed ✅ — deploy/history/rollback added |
 | deploy.html | 2026-06-03 | Live ✅ — birdiefriends.com/deploy.html |
 | launch_golf_scorer.py | 2026-06-01 | Current ✅ |
-| deploy_portal.py | 2026-06-03 | Current ✅ — source mirrors added |
+| deploy_portal.py | 2026-06-03 | Current ✅ — source mirrors + version push |
 | guide.html | Session 25 | Live ✅ |
 
 ### Worker Endpoints
@@ -225,26 +256,34 @@ Audit ALL templates:
 
 ### Deploy Pattern
 ```
-Portal:
+Session start (any session):
+1. Paste BF_Session_Bootstrap.md into Claude
+2. Claude fetches session starter, ops guide, portal_version.txt from library
+3. Upload birdiefriends_portal.html (always needed for portal edits)
+4. Upload worker.js / deploy_portal.py / launch_golf_scorer.py only if changing them
+
+Portal (after Claude produces output):
 1. Download birdiefriends_portal.html from Claude output
 2. Place in GolfScorer folder (overwrite existing)
 3. Double-click deploy_portal.bat
 4. Confirm version bump in console output
 5. Wait ~60 seconds → hard refresh on phone
 6. Confirm new version in header
-7. ⚠️ Upload portal_version.txt at START of next session
 
 Worker (when changed):
 1. Download worker.js from Claude output
 2. Cloudflare → Workers → birdiefriends-push → Edit code → paste → Save and Deploy
-3. Save worker.js to GolfScorer folder
-4. ⚠️ Upload worker.js at START of next session if further Worker changes planned
+3. Save worker.js to GolfScorer folder (bat mirrors it to source/ on next run)
 
-GolfScorer:
+GolfScorer (when changed):
 1. Download BF_Golf_Scorer_8.html from Claude output
 2. Replace file in GolfScorer folder
 3. Double-click Launch_Golf_Scorer.bat
 4. VERIFY VERSION IN HEADER before doing anything
+
+Session end:
+1. Save updated session starter as BF_Golf_Scorer_Session_Starter_current.md
+2. Run bat — all source files mirror to GitHub library
 ```
 
 ### Known Issues Carried Forward
