@@ -496,8 +496,6 @@
       <option value="worker">worker.js — Cloudflare Worker source</option>
       <option value="golfscore">BF_Golf_Scorer_8.html — GolfScorer app</option>
       <option value="ops_guide">BF_Operations_Guide.md — Ops reference</option>
-      <option value="deploy_py">deploy_portal.py — Deploy script</option>
-      <option value="launcher">launch_golf_scorer.py — GS launcher</option>
     </select>
 
     <label>Load from file</label>
@@ -541,8 +539,6 @@
           <option value="worker">worker.js</option>
           <option value="golfscore">BF_Golf_Scorer_8.html</option>
           <option value="ops_guide">BF_Operations_Guide.md</option>
-          <option value="deploy_py">deploy_portal.py</option>
-          <option value="launcher">launch_golf_scorer.py</option>
         </select>
       </div>
       <div>
@@ -648,8 +644,6 @@ const FILE_META = {
   worker:    { label: 'worker.js',               versionPattern: /\/\/ Worker: (\d{4}-\d{2}-\d{2})/ },
   golfscore: { label: 'BF_Golf_Scorer_8.html',   versionPattern: /v8\.\d+[^ ]* · \d{4}-\d{2}-\d{2}/ },
   ops_guide: { label: 'BF_Operations_Guide.md',  versionPattern: null },
-  deploy_py: { label: 'deploy_portal.py',        versionPattern: null },
-  launcher:  { label: 'launch_golf_scorer.py',   versionPattern: null },
 };
 
 // ── DEPLOY TAB ────────────────────────────────────────────────────
@@ -677,8 +671,6 @@ function onFilePicked(e) {
         'BF_Golf_Scorer_8.html': 'golfscore',
         'guide.html': 'guide',
         'BF_Operations_Guide.md': 'ops_guide',
-        'deploy_portal.py': 'deploy_py',
-        'launch_golf_scorer.py': 'launcher',
       };
       const guessed = guesses[file.name];
       if (guessed) {
