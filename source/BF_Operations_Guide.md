@@ -19,11 +19,11 @@ Update this file at the end of every session.
 10. **Bump GS version on every output.** No file leaves Claude without a version increment. Verify header shows correct version before doing anything after deploy.
 11. **GS does not go to the course.** Laptop stays home. All scoring happens post-round at home. Groupings can be published the night before/morning of and GS closed.
 12. **TEST_PREVIEW_MODE must be False on event day.** Check `launch_golf_scorer.py` before launching. When True, publishes save to local preview/ folder only.
-13. **Claude never increments the portal version.** `portal_version.txt` is the sole source of truth — Claude reads it and outputs that exact version. The version in the uploaded HTML is irrelevant (it always lags production by one deploy). `deploy_portal.bat` owns the increment. If `portal_version.txt` is not uploaded at session start, Claude stops and asks for it before producing any portal output.
+13. **Claude never increments the portal version.** `source/portal_version.txt` in GitHub is the sole source of truth — Claude fetches it via the hardened sync script. The local `portal_version.txt` file is no longer needed and should not be uploaded. `deploy_portal.bat` owns the increment and pushes the new version to `source/` on every deploy.
 14. **Version sync is a mandatory first bash step.** After copying the portal HTML to the working directory, immediately fetch the live version from GitHub and apply it. See hardened sync script below — never use the bare one-liner (empty LIVE_VER would wipe all version strings).
 15. **Always upload worker.js at session start if Worker changes are planned.** Claude never reconstructs Worker code from scratch. If worker.js is missing and Worker changes are needed, Claude stops and asks for it. Worker source is the canonical file — treat it like portal_version.txt.
 16. **Always upload `deploy_portal.py` and `launch_golf_scorer.py` at session start if changes to those files are planned.** These files contain secrets and cannot be stored in GitHub — Claude never reconstructs them from scratch. Before adding any new capability to a `.py` file, the current version must be in the session so changes are additive, not replacement. Same policy as Golden Rule #15 for worker.js.
-17. **Always save the session starter as both `BF_Golf_Scorer_Session_Starter_NN.md` (archive) and `BF_Golf_Scorer_Session_Starter_current.md` (bat pickup) in the GolfScorer folder before running the bat.** The bat mirrors `_current.md` to `source/` on every deploy — this is how the session starter stays in the library. If only the numbered copy exists, the bat skips it silently.
+17. **Save the session starter as `BF_Golf_Scorer_Session_Starter_current.md` in the GolfScorer folder before running the bat.** The bat mirrors it to `source/` on every deploy — GitHub history is the version archive. No numbered copies needed.
 
 ---
 
@@ -32,12 +32,13 @@ Update this file at the end of every session.
 ```bash
 PORTAL="/home/claude/birdiefriends_portal.html"
 GITHUB_URL="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/docs/portal.html"
+VER_URL="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/portal_version.txt"
 
 LIVE_VER=$(curl -s --max-time 10 "$GITHUB_URL" | grep -o 'v3\.10\.[0-9]* · [0-9-]*' | head -1)
 
 if [ -z "$LIVE_VER" ]; then
-  echo "⚠️  GitHub fetch failed — falling back to portal_version.txt"
-  LIVE_VER=$(grep -o 'v3\.10\.[0-9]* · [0-9-]*' portal_version.txt | head -1)
+  echo "⚠️  GitHub HTML fetch failed — trying source/portal_version.txt"
+  LIVE_VER=$(curl -s --max-time 10 "$VER_URL" | grep -o 'v3\.10\.[0-9]* · [0-9-]*' | head -1)
 fi
 
 if [ -z "$LIVE_VER" ]; then
@@ -70,8 +71,7 @@ Downloads/
     ├── sw.js                         ← Service worker stub (disabled)
     ├── OneSignalSDKWorker.js         ← OneSignal push SW (deployed by deploy_portal.py)
     ├── guide.html                            ← Player guide (deployed alongside portal)
-    ├── BF_Golf_Scorer_Session_Starter_XX.md  ← Current session starter (numbered archive)
-    ├── BF_Golf_Scorer_Session_Starter_current.md ← Current session starter (bat pickup → source/)
+    ├── BF_Golf_Scorer_Session_Starter_current.md ← Session starter (bat pickup → source/)
     └── BF_Operations_Guide.md        ← This file
 ```
 
@@ -143,7 +143,7 @@ Every deploy automatically increments the patch version and updates the date. Th
    - `BF_Operations_Guide.md` → `source/BF_Operations_Guide.md`
    - `BF_Golf_Scorer_Session_Starter_current.md` → `source/BF_Golf_Scorer_Session_Starter_current.md`
 
-**Session starter convention:** Save as BOTH `BF_Golf_Scorer_Session_Starter_NN.md` (numbered archive) AND `BF_Golf_Scorer_Session_Starter_current.md` (bat pickup) in GolfScorer folder. Bat mirrors `_current.md` — numbered copy is for local reference only.
+**Session starter convention:** Save as `BF_Golf_Scorer_Session_Starter_current.md` in GolfScorer folder. Bat mirrors it to `source/` — GitHub history is the version archive.
 
 **Version rule:** `portal_version.txt` is the sole source of truth for the current production version. Claude reads it at session start and outputs that exact version. The uploaded HTML file version is ignored — it always lags production by one deploy. deploy_portal.bat adds 1 on every deploy and rewrites both the HTML and `portal_version.txt`. If `portal_version.txt` is not uploaded at session start, Claude stops and asks for it.
 
@@ -674,7 +674,7 @@ const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
 ## Session Handoff Checklist
 
 - [ ] Download updated files from Claude (portal HTML, session starter, ops guide, worker.js if changed)
-- [ ] Save session starter as BOTH `BF_Golf_Scorer_Session_Starter_NN.md` AND `BF_Golf_Scorer_Session_Starter_current.md` in GolfScorer folder
+- [ ] Save updated session starter as `BF_Golf_Scorer_Session_Starter_current.md` in GolfScorer folder
 - [ ] Deploy portal via `deploy_portal.bat` — mirrors all source files including `_current.md`
 - [ ] If worker.js changed: deploy to Cloudflare manually (edit code → paste → save and deploy)
 - [ ] Test on phone — confirm version number and basic functionality
