@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>BirdieFriends — Player Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --green:       #1D9E75;
+      --green-dark:  #085041;
+      --green-mid:   #0d6b54;
+      --green-light: #E1F5EE;
+      --gold:        #BA7517;
+      --gold-light:  #FAEEDA;
+      --gold-bright: #F5C842;
+      --bg:          #f0f4f2;
+      --card:        #ffffff;
+      --text:        #1a2e1f;
+      --text-muted:  #5a7060;
+      --text-hint:   #96a89c;
+      --border:      rgba(0,0,0,0.09);
+      --border-med:  rgba(0,0,0,0.16);
+      --radius:      16px;
+      --shadow:      0 2px 16px rgba(0,0,0,0.08);
+      --shadow-lg:   0 8px 32px rgba(0,0,0,0.14);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Instrument Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ── */
+    .guide-header {
+      background: linear-gradient(160deg, #053528 0%, #085041 60%, #0d6b54 100%);
+      padding: 32px 20px 28px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .guide-header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 130%, rgba(245,200,66,0.2) 0%, transparent 65%);
+    }
+    .guide-header-logo {
+      display: flex; align-items: center; justify-content: center;
+      gap: 10px; margin-bottom: 8px; position: relative;
+    }
+    .guide-header h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.75rem; color: #fff; letter-spacing: -0.01em;
+    }
+    .guide-header-sub {
+      font-size: 0.78rem; color: rgba(255,255,255,0.55);
+      letter-spacing: 0.1em; text-transform: uppercase; position: relative;
+    }
+
+    /* ── TOC ── */
+    .toc {
+      background: var(--green-dark);
+      padding: 0 16px 18px;
+      display: flex; gap: 7px; flex-wrap: wrap; justify-content: center;
+    }
+    .toc a {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.82);
+      border-radius: 20px; padding: 5px 12px;
+      font-size: 0.72rem; font-weight: 600;
+      text-decoration: none; letter-spacing: 0.03em;
+    }
+
+    /* ── Main ── */
+    .guide-main { max-width: 680px; margin: 0 auto; padding: 24px 14px 72px; }
+
+    /* ── Section ── */
+    .guide-section { margin-bottom: 36px; }
+    .section-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 16px; padding-bottom: 10px;
+      border-bottom: 2px solid var(--green-light);
+    }
+    .section-icon {
+      width: 44px; height: 44px; border-radius: 13px;
+      background: var(--green-dark);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.35rem; flex-shrink: 0;
+    }
+    .section-icon.gold { background: linear-gradient(135deg,#c9952a,#e8b84b); }
+    .section-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.25rem; color: var(--green-dark); line-height: 1.2;
+    }
+    .section-num {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.63rem; color: var(--text-hint);
+      text-transform: uppercase; letter-spacing: 0.1em; display: block;
+    }
+
+    /* ── Guide cards ── */
+    .guide-card {
+      background: var(--card); border-radius: var(--radius);
+      padding: 16px; margin-bottom: 10px;
+      box-shadow: var(--shadow); border: 1px solid var(--border);
+    }
+    .guide-card h3 {
+      font-size: 0.9rem; font-weight: 700; color: var(--green-dark);
+      margin-bottom: 7px; display: flex; align-items: center; gap: 8px;
+    }
+    .guide-card p {
+      font-size: 0.84rem; color: var(--text-muted); line-height: 1.65;
+    }
+    .guide-card p + p { margin-top: 8px; }
+
+    /* ── Steps ── */
+    .steps { counter-reset: step; display: flex; flex-direction: column; gap: 10px; }
+    .step {
+      background: var(--card); border-radius: var(--radius);
+      padding: 14px 16px; box-shadow: var(--shadow); border: 1px solid var(--border);
+      display: flex; gap: 14px; align-items: flex-start;
+    }
+    .step-num {
+      counter-increment: step;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--green-dark); color: #fff;
+      font-size: 0.75rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-family: 'DM Mono', monospace;
+    }
+    .step-num::before { content: counter(step); }
+    .step-body { flex: 1; }
+    .step-body strong {
+      display: block; font-size: 0.88rem; font-weight: 700;
+      color: var(--text); margin-bottom: 3px;
+    }
+    .step-body span { font-size: 0.8rem; color: var(--text-muted); line-height: 1.55; }
+
+    /* ── Tips ── */
+    .tip {
+      background: var(--gold-light); border: 1.5px solid rgba(186,117,23,0.25);
+      border-radius: var(--radius); padding: 12px 14px; margin-top: 10px;
+      font-size: 0.82rem; color: var(--text-muted); line-height: 1.55;
+    }
+    .tip strong { color: var(--gold); }
+    .tip-green { background: var(--green-light); border-color: rgba(10,102,64,0.18); }
+    .tip-green strong { color: var(--green-dark); }
+    .tip-red { background: #fff2f2; border-color: rgba(180,40,40,0.2); }
+    .tip-red strong { color: #a02020; }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 0.72rem; font-weight: 700; vertical-align: middle;
+    }
+    .badge-green { background: var(--green-light); color: var(--green-dark); }
+    .badge-gold  { background: var(--gold-light); color: var(--gold); }
+
+    /* ── iPhone callout ── */
+    .ios-steps {
+      background: #f0f4ff; border: 1.5px solid #c5d0f0;
+      border-radius: var(--radius); padding: 14px 16px; margin-top: 10px;
+    }
+    .ios-steps h4 {
+      font-size: 0.82rem; font-weight: 700; color: #3a4a8a;
+      margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+    }
+    .ios-steps ol {
+      padding-left: 18px; font-size: 0.8rem; color: #4a5a7a; line-height: 1.9;
+    }
+
+    /* ── Point table ── */
+    .point-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.82rem; }
+    .point-table th {
+      background: var(--green-dark); color: #fff;
+      padding: 8px 12px; text-align: left; font-size: 0.72rem;
+      letter-spacing: 0.06em; text-transform: uppercase; font-family: 'DM Mono', monospace;
+    }
+    .point-table th:first-child { border-radius: 8px 0 0 0; }
+    .point-table th:last-child  { border-radius: 0 8px 0 0; }
+    .point-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text-muted); }
+    .point-table tr:last-child td { border-bottom: none; }
+    .point-table tr:nth-child(even) td { background: #f7faf8; }
+    .point-val { font-family: 'DM Mono', monospace; font-weight: 700; color: var(--green-dark); }
+    .point-highlight { background: #e8f5ee !important; }
+    .point-highlight .point-val { color: #085041; font-size: 1rem; }
+
+    /* ── Troubleshoot table ── */
+    .trouble-item {
+      background: var(--card); border-radius: var(--radius);
+      padding: 14px 16px; margin-bottom: 8px;
+      box-shadow: var(--shadow); border: 1px solid var(--border);
+    }
+    .trouble-q { font-size: 0.88rem; font-weight: 700; color: var(--text); margin-bottom: 5px; }
+    .trouble-a { font-size: 0.81rem; color: var(--text-muted); line-height: 1.55; }
+
+    /* ── Nav diagram ── */
+    .nav-diagram {
+      background: var(--green-dark); border-radius: var(--radius);
+      padding: 12px 14px; display: flex; gap: 4px; justify-content: center;
+      margin-bottom: 14px;
+    }
+    .nav-pill {
+      flex: 1; text-align: center; padding: 8px 4px; border-radius: 10px;
+      font-size: 0.62rem; font-weight: 600;
+      color: rgba(255,255,255,0.45); letter-spacing: 0.03em;
+    }
+    .nav-pill .nav-emoji { font-size: 1.1rem; display: block; margin-bottom: 3px; }
+    .nav-pill.active { background: rgba(255,255,255,0.12); color: var(--gold-bright); }
+
+    /* ── App mockups ── */
+    .mockup-wrap {
+      background: var(--green-dark); border-radius: var(--radius);
+      padding: 14px; margin-bottom: 12px; overflow: hidden;
+    }
+    .mockup-label {
+      font-family: 'DM Mono', monospace; font-size: 0.65rem;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(255,255,255,0.4); margin-bottom: 10px; padding-left: 2px;
+    }
+
+    /* Event card mockup */
+    .mock-event-card {
+      background: linear-gradient(135deg, #085041 0%, #0d6b54 100%);
+      border-radius: 14px; overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+    }
+    .mock-card-top { padding: 18px 16px 14px; position: relative; }
+    .mock-card-name {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.45rem; color: #fff; line-height: 1.15; margin-bottom: 8px;
+    }
+    .mock-card-meta { font-size: 0.8rem; color: rgba(255,255,255,0.7); line-height: 1.8; }
+    .mock-format-badge {
+      display: inline-block; font-size: 0.62rem; font-weight: 600;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      padding: 2px 8px; border-radius: 10px;
+      background: rgba(100,90,220,0.4); color: #d5d0ff;
+      margin-top: 4px;
+    }
+    .mock-btn {
+      display: block; width: 100%; padding: 14px 16px;
+      border-radius: 10px; font-family: 'Instrument Sans', sans-serif;
+      font-size: 0.9rem; font-weight: 600; text-align: center;
+      margin-bottom: 8px;
+    }
+    .mock-btn-register { background: linear-gradient(135deg,#1D9E75,#085041); color: #fff; }
+    .mock-btn-sub { background: rgba(255,255,255,0.15); color: #fff; border: 1.5px solid rgba(255,255,255,0.3); }
+    .mock-btn-unregister { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); border: 1.5px solid rgba(255,255,255,0.18); font-size: 0.82rem; }
+    .mock-btn-cantmake { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.65); border: 1.5px solid rgba(255,255,255,0.18); font-size: 0.82rem; }
+    .mock-actions { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+    .mock-who {
+      padding: 12px 16px; background: rgba(0,0,0,0.2);
+      border-top: 1px solid rgba(255,255,255,0.1);
+      font-size: 0.82rem; color: rgba(255,255,255,0.6);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .mock-chip {
+      display: inline-block; font-size: 0.78rem;
+      background: rgba(255,255,255,0.15); color: #fff;
+      padding: 4px 10px; border-radius: 10px; margin: 2px;
+    }
+    .mock-chips { padding: 10px 14px 12px; background: rgba(0,0,0,0.15); border-top: 1px solid rgba(255,255,255,0.1); }
+    .mock-capacity {
+      font-family: 'DM Mono', monospace; font-size: 0.7rem;
+      color: rgba(255,255,255,0.5); text-align: right;
+    }
+    .mock-status-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(245,200,66,0.2); border: 1px solid rgba(245,200,66,0.4);
+      color: #F5C842; padding: 8px 12px; border-radius: 10px;
+      font-size: 0.8rem; font-weight: 600;
+    }
+    .mock-status-going {
+      background: rgba(29,158,117,0.2); border-color: rgba(29,158,117,0.4); color: #4de0a8;
+    }
+
+    /* callout arrow annotation */
+    .callout-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      margin: 6px 0; font-size: 0.75rem; color: rgba(255,255,255,0.65);
+    }
+    .callout-arrow { color: var(--gold-bright); font-size: 0.9rem; flex-shrink:0; margin-top:1px; }
+
+    /* ── Live panel mockup ── */
+    .mock-live-banner {
+      background: linear-gradient(135deg, #BA7517 0%, #e8b84b 100%);
+      border-radius: 12px; padding: 14px 16px; margin-bottom: 8px;
+    }
+    .mock-live-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1rem; color: #fff; margin-bottom: 4px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .mock-live-sub { font-size: 0.75rem; color: rgba(255,255,255,0.8); margin-bottom: 10px; }
+    .mock-live-feats { display: flex; gap: 6px; flex-wrap: wrap; }
+    .mock-live-feat {
+      background: rgba(255,255,255,0.2); border-radius: 8px;
+      padding: 5px 10px; font-size: 0.72rem; font-weight: 600; color: #fff;
+    }
+
+    .mock-live-panel {
+      background: rgba(0,0,0,0.25); border-radius: 12px;
+      padding: 14px; margin-top: 8px;
+    }
+    .mock-panel-section { margin-bottom: 14px; }
+    .mock-panel-label {
+      font-family: 'DM Mono', monospace; font-size: 0.62rem;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: rgba(255,255,255,0.45); margin-bottom: 8px;
+    }
+    .mock-birdie-btn {
+      background: linear-gradient(135deg,#1D9E75,#085041);
+      border-radius: 10px; padding: 12px 14px; color: #fff;
+      font-size: 0.85rem; font-weight: 600; text-align: center; margin-bottom: 6px;
+    }
+    .mock-hole-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .mock-hole-pill {
+      background: rgba(255,255,255,0.15); border-radius: 8px;
+      padding: 8px 12px; color: #fff; font-size: 0.78rem; font-weight: 600;
+      text-align: center; min-width: 44px;
+    }
+    .mock-hole-pill.active {
+      background: var(--gold-bright); color: var(--green-dark);
+    }
+    .mock-cttp-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(255,255,255,0.1); border-radius: 8px;
+      padding: 8px 12px; margin-bottom: 5px; font-size: 0.8rem; color: rgba(255,255,255,0.85);
+    }
+    .mock-cttp-leader { color: var(--gold-bright); font-weight: 700; font-size: 0.75rem; }
+    .mock-end-btn {
+      background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.25);
+      border-radius: 10px; padding: 12px 14px; color: rgba(255,255,255,0.8);
+      font-size: 0.82rem; font-weight: 600; text-align: center;
+    }
+
+    /* ── Swipe demo ── */
+    .swipe-demo-wrap {
+      background: var(--green-dark); border-radius: var(--radius);
+      padding: 14px; overflow: hidden; margin-bottom: 10px;
+    }
+    .swipe-track { position: relative; overflow: hidden; border-radius: 10px; }
+    .swipe-card-demo {
+      background: linear-gradient(135deg,#085041,#0d6b54);
+      border-radius: 10px; padding: 14px 16px;
+      color: #fff; font-size: 0.88rem; font-weight: 600;
+      display: flex; align-items: center; justify-content: space-between;
+      animation: swipeLeft 3s ease-in-out infinite;
+      will-change: transform;
+    }
+    @keyframes swipeLeft {
+      0%   { transform: translateX(0); }
+      60%  { transform: translateX(-72%); opacity: 0.3; }
+      70%  { transform: translateX(-72%); opacity: 0.3; }
+      80%  { transform: translateX(0); opacity: 1; }
+      100% { transform: translateX(0); opacity: 1; }
+    }
+    .swipe-behind {
+      position: absolute; right: 0; top: 0; bottom: 0;
+      background: #ba2020; border-radius: 0 10px 10px 0;
+      display: flex; align-items: center; padding: 0 18px;
+      font-size: 0.8rem; font-weight: 700; color: #fff; gap: 6px;
+      z-index: 0;
+    }
+    .swipe-hint {
+      font-family: 'DM Mono', monospace; font-size: 0.65rem;
+      letter-spacing: 0.08em; color: rgba(255,255,255,0.4);
+      text-align: center; margin-top: 10px; text-transform: uppercase;
+    }
+
+    /* ── Schedule mockup ── */
+    .mock-schedule-row {
+      background: var(--card); border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 6px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: var(--shadow); border: 1px solid var(--border);
+    }
+    .mock-sched-date {
+      font-family: 'DM Mono', monospace; font-size: 0.7rem;
+      color: var(--text-hint); min-width: 42px; text-align: center; line-height: 1.3;
+    }
+    .mock-sched-date strong { display: block; font-size: 1rem; color: var(--green-dark); }
+    .mock-sched-name { flex: 1; font-size: 0.85rem; font-weight: 600; color: var(--text); }
+    .mock-sched-badge {
+      font-size: 0.7rem; font-weight: 700; padding: 3px 8px; border-radius: 8px;
+    }
+    .mock-sched-going  { background: var(--green-light); color: var(--green-dark); }
+    .mock-sched-sub    { background: var(--gold-light); color: var(--gold); }
+    .mock-sched-unregister {
+      display: block; background: var(--green-light);
+      border-radius: 8px; padding: 10px 14px; margin-top: 6px;
+      font-size: 0.78rem; font-weight: 600; color: var(--green-dark); text-align: center;
+    }
+
+    /* ── Header mockup ── */
+    .mock-app-header {
+      background: var(--green-dark);
+      border-radius: 14px 14px 0 0; padding: 14px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .mock-header-logo {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.1rem; color: #fff; display: flex; align-items: center; gap: 8px;
+    }
+    .mock-header-icons { display: flex; gap: 10px; align-items: center; }
+    .mock-header-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: rgba(255,255,255,0.12);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.95rem;
+    }
+    .mock-player-pill {
+      background: var(--gold-bright); color: var(--green-dark);
+      border-radius: 8px; padding: 5px 10px;
+      font-size: 0.72rem; font-weight: 700; font-family: 'DM Mono', monospace;
+    }
+
+    /* ── 5th player callout ── */
+    .fivesome-callout {
+      background: #fff8ec; border: 2px solid var(--gold);
+      border-radius: var(--radius); padding: 16px; margin-bottom: 10px;
+    }
+    .fivesome-callout h3 { color: var(--gold); margin-bottom: 8px; font-size: 0.9rem; font-weight: 700; }
+    .fivesome-callout p { font-size: 0.83rem; color: var(--text-muted); line-height: 1.6; }
+    .fivesome-callout p + p { margin-top: 8px; }
+    .fivesome-callout .warn { color: var(--gold); font-weight: 700; margin-top: 10px; font-size: 0.83rem; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+    .guide-footer {
+      text-align: center; padding: 20px;
+      font-size: 0.78rem; color: var(--text-hint);
+      border-top: 1px solid var(--border); margin-top: 20px;
+    }
+    .guide-footer a { color: var(--green); text-decoration: none; font-weight: 600; }
+
+    @media (max-width:400px) {
+      .guide-header h1 { font-size: 1.4rem; }
+      .section-title { font-size: 1.05rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="guide-header">
+  <div class="guide-header-logo">
+    <span style="font-size:2.2rem">⛳</span>
+    <h1>BirdieFriends</h1>
+  </div>
+  <div class="guide-header-sub">Player Guide · How to use the app</div>
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <a href="#getting-started">Getting Started</a>
+  <a href="#my-events">My Events</a>
+  <a href="#parking">Parking</a>
+  <a href="#registering">Registering</a>
+  <a href="#fivesome">5th Player Rule</a>
+  <a href="#schedule">Schedule</a>
+  <a href="#live">Live Round</a>
+  <a href="#scorecard">Scorecards</a>
+  <a href="#results">Results</a>
+  <a href="#notifications">Notifications</a>
+  <a href="#troubleshoot">Troubleshooting</a>
+</div>
+
+<div class="guide-main">
+
+  <!-- ── 1. Getting Started ── -->
+  <div class="guide-section" id="getting-started">
+    <div class="section-header">
+      <div class="section-icon">👤</div>
+      <div>
+        <span class="section-num">Step 1</span>
+        <div class="section-title">Getting Started</div>
+      </div>
+    </div>
+
+    <!-- Header mockup with callouts -->
+    <div class="mockup-wrap" style="margin-bottom:14px">
+      <div class="mockup-label">App header</div>
+      <div class="mock-app-header">
+        <div class="mock-header-logo">⛳ BirdieFriends</div>
+        <div class="mock-header-icons">
+          <div class="mock-header-icon">⚙️</div>
+          <div class="mock-header-icon">ℹ️</div>
+          <div class="mock-header-icon">🔕</div>
+          <div class="mock-player-pill">BH</div>
+        </div>
+      </div>
+      <div style="padding:10px 4px 2px;display:flex;flex-direction:column;gap:6px">
+        <div class="callout-row"><span class="callout-arrow">↗</span><span><strong style="color:#fff">Your initials pill</strong> — tap to select your name from the player list</span></div>
+        <div class="callout-row"><span class="callout-arrow">↑</span><span><strong style="color:#fff">🔕 Bell</strong> — tap to enable push notifications</span></div>
+        <div class="callout-row"><span class="callout-arrow">↑</span><span><strong style="color:#fff">ℹ️</strong> — About, notification settings, app info</span></div>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <strong>Open the portal</strong>
+          <span>Go to <strong>birdiefriends.com/portal.html</strong> in your browser, or tap the BirdieFriends icon on your home screen if you've installed it.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <strong>Select your name</strong>
+          <span>Tap the initials pill in the top-right corner (shows <strong>BH</strong> or "Guest"). Pick your name from the list. The app needs this to personalize your event feed.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <strong>Install to your home screen</strong>
+          <span>For the best experience — and to receive push notifications — add BirdieFriends to your home screen. See iPhone instructions below.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"></div>
+        <div class="step-body">
+          <strong>Enable notifications</strong>
+          <span>Tap the 🔕 bell icon in the header and allow notifications. You'll get live birdie alerts, CttP updates, and event news from the Commissioner.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ios-steps" style="margin-top:12px">
+      <h4>🍎 iPhone — install first, then enable notifications</h4>
+      <ol>
+        <li>Open <strong>birdiefriends.com/portal.html</strong> in <strong>Safari</strong> (not Chrome)</li>
+        <li>Tap the <strong>Share</strong> button at the bottom of Safari (<strong>□↑</strong>)</li>
+        <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+        <li>Tap <strong>Add</strong> — the green BirdieFriends icon appears on your home screen</li>
+        <li>Open BirdieFriends <strong>from the home screen icon</strong>, select your name, then tap the 🔕 bell</li>
+      </ol>
+    </div>
+    <div class="tip">
+      <strong>⚠️ iPhone note:</strong> Push notifications only work when BirdieFriends is opened from the home screen icon — not from Safari. Skip this step and you won't get Birdie Alerts or CttP updates during the round.
+    </div>
+  </div>
+
+  <!-- ── 2. My Events ── -->
+  <div class="guide-section" id="my-events">
+    <div class="section-header">
+      <div class="section-icon">⛳</div>
+      <div>
+        <span class="section-num">Step 2</span>
+        <div class="section-title">My Events — Your Home Screen</div>
+      </div>
+    </div>
+
+    <div class="nav-diagram">
+      <div class="nav-pill active"><span class="nav-emoji">⛳</span>My Events</div>
+      <div class="nav-pill"><span class="nav-emoji">🅿️</span>Parked</div>
+      <div class="nav-pill"><span class="nav-emoji">🗓️</span>Schedule</div>
+      <div class="nav-pill"><span class="nav-emoji">🏆</span>Results</div>
+    </div>
+
+    <!-- Event card mockup annotated -->
+    <div class="mockup-wrap">
+      <div class="mockup-label">Event card</div>
+      <div class="mock-event-card">
+        <div class="mock-card-top">
+          <div class="mock-card-name">2026 BFSeries#3</div>
+          <div class="mock-card-meta">
+            <div>📅 Sat, May 31 · 7:06 AM</div>
+            <div>📍 Blue Slide Golf Club</div>
+          </div>
+          <div class="mock-format-badge">BF Series</div>
+        </div>
+        <div class="mock-actions">
+          <div class="mock-btn mock-btn-register">✅ Register</div>
+          <div class="mock-btn mock-btn-sub">🔄 Register as Sub</div>
+        </div>
+        <div class="mock-who">
+          <span>👥 Players › (5 going)</span>
+          <span style="font-size:0.75rem;opacity:0.5">tap to expand ↓</span>
+        </div>
+      </div>
+      <div style="padding:10px 4px 2px;display:flex;flex-direction:column;gap:6px">
+        <div class="callout-row"><span class="callout-arrow">↖</span><span>Event name, date, and location at a glance</span></div>
+        <div class="callout-row"><span class="callout-arrow">↑</span><span>Green <strong style="color:#fff">Register</strong> button — tap to confirm your spot</span></div>
+        <div class="callout-row"><span class="callout-arrow">↑</span><span><strong style="color:#fff">Register as Sub</strong> — joins the waitlist if the event is full</span></div>
+        <div class="callout-row"><span class="callout-arrow">↑</span><span><strong style="color:#fff">Players ›</strong> — tap to see who's registered</span></div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🆕 New Events button</h3>
+      <p>When new events are added to the calendar, a gold <strong>🆕 N</strong> button appears in the header. Tap it to open your <strong>New Events queue</strong> — a focused view of new additions only. Register, park, or scroll past. Tap <strong>✓ Done</strong> when finished.</p>
+    </div>
+    <div class="tip tip-green">
+      <strong>Tip:</strong> Events you've registered for stay pinned to My Events permanently. Events you're not interested in can be swiped left to Parked to clear the clutter.
+    </div>
+  </div>
+
+  <!-- ── 3. Parking ── -->
+  <div class="guide-section" id="parking">
+    <div class="section-header">
+      <div class="section-icon">🅿️</div>
+      <div>
+        <span class="section-num">Step 3</span>
+        <div class="section-title">Parking Events You'll Skip</div>
+      </div>
+    </div>
+
+    <!-- Animated swipe demo -->
+    <div class="swipe-demo-wrap">
+      <div class="mockup-label">Swipe left to park</div>
+      <div class="swipe-track">
+        <div class="swipe-behind">🅿️ Park</div>
+        <div class="swipe-card-demo">
+          <span>Sat 5/30 — BSGC Individual Play</span>
+          <span style="opacity:0.55;font-size:0.75rem">← swipe</span>
+        </div>
+      </div>
+      <div class="swipe-hint">Swipe left on any event card → moves to Parked tab</div>
+    </div>
+
+    <div class="guide-card">
+      <h3>👈 How to park an event</h3>
+      <p>Can't make it to a round? <strong>Swipe left</strong> on the event card. The card slides off and moves to your <strong>Parked</strong> tab. You'll see a brief <strong>Parked ✓</strong> confirmation with an <strong>Undo</strong> option — tap it within 4 seconds if you swiped by mistake.</p>
+    </div>
+    <div class="guide-card">
+      <h3>🅿️ The Parked tab</h3>
+      <p>Parked events live in the <strong>Parked</strong> tab in the bottom nav. They're still fully actionable — you can register from there anytime, which automatically brings the event back to My Events.</p>
+    </div>
+    <div class="tip">
+      <strong>Note:</strong> You can't park an event you're already registered for. Unregister first, then swipe to park.
+    </div>
+  </div>
+
+  <!-- ── 4. Registering ── -->
+  <div class="guide-section" id="registering">
+    <div class="section-header">
+      <div class="section-icon">✅</div>
+      <div>
+        <span class="section-num">Step 4</span>
+        <div class="section-title">Registering for Events</div>
+      </div>
+    </div>
+
+    <!-- After-registration card mockup -->
+    <div class="mockup-wrap" style="margin-bottom:14px">
+      <div class="mockup-label">After registering — your card looks like this</div>
+      <div class="mock-event-card">
+        <div class="mock-card-top">
+          <div class="mock-card-name">2026 BFSeries#3</div>
+          <div class="mock-card-meta">
+            <div>📅 Sat, May 31 · 7:06 AM</div>
+            <div>📍 Blue Slide Golf Club</div>
+          </div>
+        </div>
+        <div class="mock-actions">
+          <div class="mock-status-badge mock-status-going">✅ Going</div>
+          <div class="mock-btn mock-btn-unregister">❌ Can't Make It — Unregister</div>
+        </div>
+        <div class="mock-who">
+          <span>👥 Players › (6 going)</span>
+          <span style="font-size:0.75rem;opacity:0.5">you're in this list</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🏌️ Register to play</h3>
+      <p>Tap the green <strong>Register</strong> button on any event card. Your status changes to <span class="badge badge-green">✅ Going</span> and the event stays pinned to My Events.</p>
+    </div>
+    <div class="guide-card">
+      <h3>🔄 Register as Sub</h3>
+      <p>If an event is full, you'll see <strong>Register as Sub</strong>. You're on the waitlist. If a spot opens, watch for a push notification — you'll be promoted automatically.</p>
+    </div>
+    <div class="guide-card">
+      <h3>❌ Unregister</h3>
+      <p>Plans changed? Tap <strong>Unregister</strong> on the event card or the <strong>"Can't Make It"</strong> button in your Schedule tab. Please unregister early so others can take your spot.</p>
+    </div>
+    <div class="guide-card">
+      <h3>👥 See who's playing</h3>
+      <p>Tap <strong>Players ›</strong> on any event card to see the full registered player list, including anyone on sub status.</p>
+    </div>
+  </div>
+
+  <!-- ── 5. 5th Player ── -->
+  <div class="guide-section" id="fivesome">
+    <div class="section-header">
+      <div class="section-icon gold">⏳</div>
+      <div>
+        <span class="section-num">Important</span>
+        <div class="section-title">The 5th Player Rule</div>
+      </div>
+    </div>
+
+    <!-- 5th player mockup -->
+    <div class="mockup-wrap" style="margin-bottom:14px">
+      <div class="mockup-label">What you see when you're the 5th player</div>
+      <div class="mock-event-card">
+        <div class="mock-card-top">
+          <div class="mock-card-name">BSGC Individual Play</div>
+          <div class="mock-card-meta"><div>📅 Sat, Jun 7 · 7:00 AM</div></div>
+        </div>
+        <div class="mock-actions">
+          <div class="mock-status-badge" style="background:rgba(245,200,66,0.18);border-color:rgba(245,200,66,0.4);color:#F5C842;font-size:0.78rem">⏳ Spot not yet confirmed — waiting for a 6th player</div>
+          <div class="mock-btn mock-btn-unregister">❌ Can't Make It — Unregister</div>
+        </div>
+        <div class="mock-who"><span>👥 Players › (5 going)</span></div>
+      </div>
+    </div>
+
+    <div class="fivesome-callout">
+      <h3>⏳ The 5th Player — Read This</h3>
+      <p>BirdieFriends events are organized in groups of 4. If you're the <strong>5th player</strong> to register for an 8-player event, your spot is <strong>tentatively held</strong> — not yet confirmed.</p>
+      <p>Your spot locks in automatically when a <strong>6th player registers</strong>, completing the second group. Until then, your event card shows a gold <strong>⏳ Spot not yet confirmed</strong> warning.</p>
+      <p class="warn">⚠️ Always check the player count on your event card before heading to the course. If you're still showing as the 5th player, contact the Commissioner.</p>
+    </div>
+    <div class="tip tip-green">
+      <strong>Tip:</strong> BF Series events don't have this limitation — they use a flexible grouping system. The 5th player rule applies only to standard 4-player group events.
+    </div>
+  </div>
+
+  <!-- ── 6. Schedule ── -->
+  <div class="guide-section" id="schedule">
+    <div class="section-header">
+      <div class="section-icon">🗓️</div>
+      <div>
+        <span class="section-num">Step 5</span>
+        <div class="section-title">Your Schedule</div>
+      </div>
+    </div>
+
+    <!-- Schedule mockup -->
+    <div style="background:var(--bg);border-radius:var(--radius);padding:12px;margin-bottom:12px;border:1px solid var(--border)">
+      <div style="font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-hint);margin-bottom:10px">🗓️ Schedule tab</div>
+      <div class="mock-schedule-row">
+        <div class="mock-sched-date">MAY<strong>31</strong></div>
+        <div class="mock-sched-name">2026 BFSeries#3</div>
+        <div class="mock-sched-badge mock-sched-going">✅ Going</div>
+      </div>
+      <div style="padding:0 4px 8px">
+        <div class="mock-sched-unregister">❌ Can't Make It — Unregister</div>
+      </div>
+      <div class="mock-schedule-row">
+        <div class="mock-sched-date">JUN<strong>7</strong></div>
+        <div class="mock-sched-name">BSGC Individual Play</div>
+        <div class="mock-sched-badge mock-sched-sub">🔄 Sub</div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🗓️ What you're committed to</h3>
+      <p>The <strong>Schedule</strong> tab shows only events you've registered for, in date order. Each row shows your status (<span class="badge badge-green">✅ Going</span> or <span class="badge badge-gold">🔄 Sub</span>) and a full-width <strong>Unregister</strong> button.</p>
+      <p>Tap the top portion of any row to jump directly to that event card on My Events.</p>
+    </div>
+    <div class="tip tip-green">
+      <strong>Tip:</strong> Check your Schedule the night before any weekend — it's the quickest way to confirm everything you've committed to.
+    </div>
+  </div>
+
+  <!-- ── 7. Live Round ── -->
+  <div class="guide-section" id="live">
+    <div class="section-header">
+      <div class="section-icon gold">⚡</div>
+      <div>
+        <span class="section-num">Step 6</span>
+        <div class="section-title">During a Live Round</div>
+      </div>
+    </div>
+
+    <!-- Live panel full mockup -->
+    <div class="mockup-wrap">
+      <div class="mockup-label">Live event panel — tap the banner to expand</div>
+
+      <div class="mock-live-banner">
+        <div class="mock-live-title">⚡ Live Now — 2026 BFSeries#3</div>
+        <div class="mock-live-sub">Tap to open live features ↓</div>
+        <div class="mock-live-feats">
+          <span class="mock-live-feat">🦅 Birdie Alert</span>
+          <span class="mock-live-feat">🎯 Closest to Pin</span>
+          <span class="mock-live-feat">🏁 End Round</span>
+        </div>
+      </div>
+
+      <!-- Expanded panel -->
+      <div class="mock-live-panel">
+        <!-- Birdie Alert -->
+        <div class="mock-panel-section">
+          <div class="mock-panel-label">🦅 Birdie Alert</div>
+          <div class="mock-birdie-btn">🦅 Made a Birdie? Announce It</div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.45);text-align:center">Select your name → pick hole → Announce</div>
+        </div>
+
+        <!-- CttP -->
+        <div class="mock-panel-section">
+          <div class="mock-panel-label">🎯 Closest to the Pin — Active Holes</div>
+          <div class="mock-hole-pills">
+            <div class="mock-hole-pill">Hole 3</div>
+            <div class="mock-hole-pill active">Hole 8</div>
+            <div class="mock-hole-pill">Hole 10</div>
+            <div class="mock-hole-pill">Hole 15</div>
+            <div class="mock-hole-pill">Hole 18</div>
+          </div>
+          <div style="margin-top:10px">
+            <div class="mock-cttp-row">
+              <span>🎯 Hole 8</span>
+              <span class="mock-cttp-leader">🏆 Brian H · 12 ft</span>
+            </div>
+            <div class="mock-cttp-row">
+              <span>🎯 Hole 3</span>
+              <span class="mock-cttp-leader">🏆 Adam C · 18 ft</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- End Round -->
+        <div class="mock-panel-section" style="margin-bottom:0">
+          <div class="mock-panel-label">🏁 After the round</div>
+          <div class="mock-end-btn">🏁 End Round — Enter Scorecards</div>
+        </div>
+      </div>
+
+      <div style="padding:10px 4px 2px;display:flex;flex-direction:column;gap:6px">
+        <div class="callout-row"><span class="callout-arrow">↑</span><span>Gold banner only appears for <strong style="color:#fff">registered players</strong> — guests won't see it</span></div>
+        <div class="callout-row"><span class="callout-arrow">↑</span><span>Tap a <strong style="color:#fff">hole pill</strong> to submit your CttP distance on that hole</span></div>
+        <div class="callout-row"><span class="callout-arrow">↑</span><span>CttP leaderboard <strong style="color:#fff">auto-refreshes every 60 seconds</strong></span></div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🦅 Birdie Alert</h3>
+      <p>Made a birdie? Tap <strong>Birdie Alert</strong>, select your name, tap the hole number, and tap <strong>Announce</strong>. A push notification fires to all BirdieFriends — the community celebrates with you. If someone already birdied that hole, the app announces the skin is busted.</p>
+    </div>
+
+    <div class="guide-card">
+      <h3>🎯 Closest to the Pin (CttP)</h3>
+      <p>On designated holes (<strong>#3, #8, #10, #15, #18</strong>), tap the hole pill, enter your distance in feet (optional), and tap <strong>Closest on #X</strong>. The live leaderboard updates immediately and a push goes out announcing the new leader.</p>
+      <p><strong>Last valid submission per hole wins.</strong> Honor system — submit your own distance, not a teammate's. The leaderboard refreshes every 60 seconds.</p>
+    </div>
+    <div class="tip">
+      <strong>Note:</strong> Uncontested CttP holes (only one entry, or no entries) roll into skins. CttP and skins are independent of each other.
+    </div>
+  </div>
+
+  <!-- ── 8. Scorecards ── -->
+  <div class="guide-section" id="scorecard">
+    <div class="section-header">
+      <div class="section-icon">🏁</div>
+      <div>
+        <span class="section-num">Step 7</span>
+        <div class="section-title">End Round — Scorecards</div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🏁 Who enters scorecards?</h3>
+      <p>Each group's <strong>overseer</strong> (designated by the Commissioner before the round) enters scores after play is complete. Tap <strong>End Round — Enter Scorecards</strong> in the live panel to open the scorecard entry form.</p>
+    </div>
+
+    <div class="guide-card">
+      <h3>📋 How to enter scores</h3>
+      <p>For each player, select their result on each hole using the dropdown. You're entering <strong>Stableford points</strong> — not stroke scores. Use the chart below:</p>
+      <table class="point-table" style="margin-top:12px">
+        <thead>
+          <tr>
+            <th>Result</th>
+            <th>Points</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="point-highlight">
+            <td>🦅 Birdie</td>
+            <td class="point-val">4</td>
+            <td>The goal!</td>
+          </tr>
+          <tr class="point-highlight">
+            <td>🏌️ Par</td>
+            <td class="point-val">2</td>
+            <td>Solid result</td>
+          </tr>
+          <tr>
+            <td>Bogey</td>
+            <td class="point-val">1</td>
+            <td>1 over par</td>
+          </tr>
+          <tr>
+            <td>Bogey+ (Double or worse)</td>
+            <td class="point-val">0</td>
+            <td>No points</td>
+          </tr>
+          <tr>
+            <td>🦅🦅 Eagle</td>
+            <td class="point-val">6</td>
+            <td>2 under par</td>
+          </tr>
+          <tr>
+            <td>🦅🦅🦅 Albatross</td>
+            <td class="point-val">8</td>
+            <td>3 under par</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tip">
+      <strong>Note:</strong> Enter points — not strokes. A 4 on a par-3 is a Bogey (1 point), not entered as "4". When in doubt, ask the Commissioner.
+    </div>
+  </div>
+
+  <!-- ── 9. Results ── -->
+  <div class="guide-section" id="results">
+    <div class="section-header">
+      <div class="section-icon">🏆</div>
+      <div>
+        <span class="section-num">Step 8</span>
+        <div class="section-title">Results</div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🏆 After the round</h3>
+      <p>Tap <strong>Results</strong> in the bottom nav for links to:</p>
+      <ul style="margin-top:8px;padding-left:18px;font-size:0.82rem;color:var(--text-muted);line-height:2.1">
+        <li>📊 <strong>Series Standings</strong> — your flight ranking and series totals</li>
+        <li>📋 <strong>Event Results</strong> — individual event scorecards</li>
+        <li>👤 <strong>My Game</strong> — your personal history across all events</li>
+        <li>👥 <strong>Groupings</strong> — your tee time and playing partners (published before each event)</li>
+      </ul>
+    </div>
+    <div class="guide-card">
+      <h3>👥 Finding your Groupings and Tee Time</h3>
+      <p>The Commissioner publishes groupings before each event. Tap <strong>Results → Groupings</strong> to see your tee time, playing partners, and cart assignments. Check this the night before or morning of the event.</p>
+    </div>
+    <div class="guide-card">
+      <h3>📊 Series Standings</h3>
+      <p>The BF Series tracks points across all Series events in three flights: <strong>Green, Combo, and Gold</strong>. Standings update after each event is scored. Find your ranking in <strong>Results → Series Standings</strong>.</p>
+    </div>
+  </div>
+
+  <!-- ── 10. Notifications ── -->
+  <div class="guide-section" id="notifications">
+    <div class="section-header">
+      <div class="section-icon">🔔</div>
+      <div>
+        <span class="section-num">Step 9</span>
+        <div class="section-title">Notifications</div>
+      </div>
+    </div>
+
+    <div class="guide-card">
+      <h3>🔔 What you'll receive</h3>
+      <ul style="margin-top:6px;padding-left:18px;font-size:0.82rem;color:var(--text-muted);line-height:2.2">
+        <li>🦅 <strong>Birdie alerts</strong> during live events</li>
+        <li>🎯 <strong>New CttP leader</strong> announced on each hole</li>
+        <li>📣 <strong>Commissioner messages</strong> — schedule news, reminders</li>
+        <li>🎉 <strong>Sub promotion</strong> when a spot opens for you</li>
+      </ul>
+    </div>
+    <div class="guide-card">
+      <h3>🔕 Toggle notifications</h3>
+      <p>Tap the bell icon (🔔 or 🔕) in the header anytime. You can also manage notifications in <strong>About</strong> (tap the ℹ️ icon). When you enable notifications, a push subscription is stored under your name so the Commissioner can reach you directly.</p>
+    </div>
+    <div class="tip">
+      <strong>iPhone reminder:</strong> You must open BirdieFriends from the home screen icon (installed as PWA) to receive push notifications. The Safari browser tab will not receive them.
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ── Troubleshooting ── -->
+  <div class="guide-section" id="troubleshoot">
+    <div class="section-header">
+      <div class="section-icon">🔧</div>
+      <div>
+        <div class="section-title">Troubleshooting</div>
+      </div>
+    </div>
+
+    <div class="trouble-item">
+      <div class="trouble-q">❓ I don't see the live banner during the event</div>
+      <div class="trouble-a">The live banner only appears for <strong>registered players</strong>. Check that you're registered for the event (your card should show ✅ Going) and that you've selected your name (initials pill top-right). If you're registered and still don't see it, close and reopen the app.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-q">❓ I'm not getting push notifications</div>
+      <div class="trouble-a"><strong>iPhone:</strong> Make sure you opened the app from your home screen icon, not Safari. Then tap the 🔕 bell and allow notifications. <strong>Android:</strong> Tap the bell, allow notifications if prompted. If the bell shows 🔔 but you still get nothing, tap it twice to reset your subscription.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-q">❓ I can't find my name in the player list</div>
+      <div class="trouble-a">You need to be a registered BirdieFriends member to appear in the list. Contact the Commissioner to get added — it only takes a minute.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-q">❓ My event disappeared from My Events</div>
+      <div class="trouble-a">You may have accidentally swiped it to Parked. Tap the <strong>🅿️ Parked</strong> tab in the bottom nav and check there — you can register or unpark it from there.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-q">❓ Register button isn't showing</div>
+      <div class="trouble-a">If the event is within 48 hours and has more than 4 players registered, registration locks to allow group management. Contact the Commissioner directly to be added.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-q">❓ Something else isn't working</div>
+      <div class="trouble-a">Text the Commissioner: <strong>617-710-4755</strong>. For a quick fix, try pulling down to refresh or closing and reopening the app from the home screen icon.</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- Quick Reference -->
+  <div class="guide-section">
+    <div class="section-header">
+      <div class="section-icon">⚡</div>
+      <div><div class="section-title">Quick Reference</div></div>
+    </div>
+
+    <div class="guide-card">
+      <h3>📱 Header icons</h3>
+      <p style="line-height:2.3;margin-top:4px">
+        <strong>⛳ Logo</strong> — tap to return to My Events + scroll to top<br>
+        <strong>⚙️</strong> — Commissioner admin only<br>
+        <strong>ℹ️</strong> — About + notification settings<br>
+        <strong>🔔/🔕</strong> — toggle push notifications<br>
+        <strong>BH pill</strong> — tap to select your player name
+      </p>
+    </div>
+    <div class="guide-card">
+      <h3>⛳ Bottom nav</h3>
+      <p style="line-height:2.3;margin-top:4px">
+        <strong>⛳ My Events</strong> — home screen, all upcoming events<br>
+        <strong>🅿️ Parked</strong> — events you've swiped away<br>
+        <strong>🗓️ Schedule</strong> — events you're registered for<br>
+        <strong>🏆 Results</strong> — results, standings, groupings, my game
+      </p>
+    </div>
+    <div class="guide-card">
+      <h3>👈 Gestures</h3>
+      <p style="line-height:2.3;margin-top:4px">
+        <strong>Swipe left</strong> on an event card → park it<br>
+        <strong>Tap logo</strong> → return to My Events + scroll top<br>
+        <strong>Tap "N parked →"</strong> → jump to Parked tab<br>
+        <strong>Tap live banner</strong> → expand/collapse live panel
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<!-- Footer -->
+<div class="guide-footer">
+  <a href="https://birdiefriends.com/portal.html">← Back to BirdieFriends</a>
+  <div style="margin-top:8px">Questions? Text the Commish: <strong>617-710-4755</strong></div>
+</div>
+
+</body>
+</html>
