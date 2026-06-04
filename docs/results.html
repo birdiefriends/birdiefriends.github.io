@@ -95,7 +95,7 @@
 </header>
 <div style="display:flex;justify-content:center;gap:8px;padding:10px 16px;background:#f4f7f5;border-bottom:1px solid #d0e5dc">
   <a href="/portal.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">← Portal</a>
-  <a href="/groupings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">&#x26F3; Groupings</a>
+  <a id="groupings-nav-link" href="/groupings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">&#x26F3; Groupings</a>
   <a href="/standings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">🏆 Standings</a>
   <a href="/results.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">📋 Results</a>
   <a href="/mygame.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">⛳ My Game</a>
@@ -986,6 +986,21 @@ function loadEvent(selectedName) {
   // Reset to podium tab
   switchTab('podium', document.querySelector('.tabs .tab'));
 }
+
+// ── Groupings link — point to archive if Final publish exists ──
+(async function initGroupingsLink() {
+  try {
+    const resp = await fetch('/groupings-meta.json?nocache=' + Date.now());
+    if (!resp.ok) return;
+    const meta = await resp.json();
+    const link = document.getElementById('groupings-nav-link');
+    if (!link) return;
+    if (meta.archiveFile && meta.status === 'Final') {
+      link.href = '/' + meta.archiveFile;
+      link.title = 'Final groupings archive — ' + (meta.eventName || '');
+    }
+  } catch(e) { /* fail silently */ }
+})();
 </script>
 </body>
 </html>
