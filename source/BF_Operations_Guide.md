@@ -1,5 +1,5 @@
 # BirdieFriends — Operations Guide
-**Last Updated:** 2026-06-03 (Session 28 — bf_deploy.py shipped; Claude-direct deploy now standard; Golden Rules #13 updated, #18 added)  
+**Last Updated:** 2026-06-04 (Session 29 — BF_Session_Bootstrap.md added to library; deploy.html Claude tab added; portal+worker+bf_deploy.py auto-fetched at session start; Golden Rules #15 and #16 updated)  
 **Maintained by:** Commissioner (Brian Hager) + Claude  
 **Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system.  
 Update this file at the end of every session.
@@ -21,8 +21,8 @@ Update this file at the end of every session.
 12. **TEST_PREVIEW_MODE must be False on event day.** Check `launch_golf_scorer.py` before launching. When True, publishes save to local preview/ folder only.
 13. **`source/portal_version.txt` in GitHub is the sole version source of truth.** Claude reads it at session start via the hardened sync script. When deploying via the Claude-direct flow (`bf_deploy.py`), Claude increments the patch and pushes `portal_version.txt` as part of the same atomic deploy. When deploying via the bat (laptop), `deploy_portal.bat` owns the increment. Claude never guesses or manually edits the version outside of `bf_deploy.py`.
 14. **Version sync is a mandatory first bash step.** After copying the portal HTML to the working directory, immediately fetch the live version from GitHub and apply it. See hardened sync script below — never use the bare one-liner (empty LIVE_VER would wipe all version strings).
-15. **Always upload worker.js at session start if Worker changes are planned.** Claude never reconstructs Worker code from scratch. If worker.js is missing and Worker changes are needed, Claude stops and asks for it. Worker source is the canonical file — treat it like portal_version.txt.
-16. **Always upload `deploy_portal.py` and `launch_golf_scorer.py` at session start if changes to those files are planned.** These files contain secrets and cannot be stored in GitHub — Claude never reconstructs them from scratch. Before adding any new capability to a `.py` file, the current version must be in the session so changes are additive, not replacement. Same policy as Golden Rule #15 for worker.js.
+15. **worker.js is fetched from the library automatically at session start.** Claude never reconstructs Worker code from scratch. `source/worker.js` in GitHub is the canonical source — the bootstrap fetches it to `/home/claude/worker.js` every session.
+16. **Always upload `deploy_portal.py` and `launch_golf_scorer.py` if changes to those files are planned.** These are the only files that cannot be in GitHub — they contain secrets. Claude never reconstructs them from scratch. Before modifying either `.py` file, upload the current version so changes are additive, not replacement. All other files (portal, worker, bf_deploy.py) are library-managed and fetched automatically.
 17. **Save the session starter as `BF_Golf_Scorer_Session_Starter_current.md` in the GolfScorer folder before running the bat.** The bat mirrors it to `source/` on every deploy — GitHub history is the version archive. No numbered copies needed.
 18. **For phone/tablet deploys, Claude pushes directly to the GitHub API — not via the Worker `/deploy` endpoint.** The Worker's `/deploy` endpoint has a ~100KB request body limit (Cloudflare free tier) which the portal (350KB+) exceeds, returning an empty response. Claude uses the GitHub token embedded in worker.js to call the GitHub Contents API directly. The Worker `/deploy` endpoint remains useful only for small files (ops guide, worker.js itself).
 
@@ -111,6 +111,8 @@ Claude makes the change, increments the version, and pushes directly to GitHub v
 
 Claude uses `source/bf_deploy.py` from the library for this. The script reads `portal_version.txt`, increments patch, updates the portal HTML, and pushes all three files atomically.
 
+**To start a new session from any device:** open `birdiefriends.com/deploy.html` → **Claude tab** → tap **📋 Copy Session Start Command** → paste into Claude. Claude auto-fetches the entire library and is ready to work.
+
 ### 💻 Laptop-only flow (when bat is needed)
 Use the bat when deploying non-portal files (GolfScorer, guide, ops guide) or doing a full mirror of all source files.
 
@@ -157,7 +159,7 @@ Every deploy automatically increments the patch version and updates the date. Th
 
 **Session starter convention:** Save as `BF_Golf_Scorer_Session_Starter_current.md` in GolfScorer folder. Bat mirrors it to `source/` — GitHub history is the version archive.
 
-**Version rule:** `portal_version.txt` is the sole source of truth for the current production version. Claude reads it at session start and outputs that exact version. The uploaded HTML file version is ignored — it always lags production by one deploy. deploy_portal.bat adds 1 on every deploy and rewrites both the HTML and `portal_version.txt`. If `portal_version.txt` is not uploaded at session start, Claude stops and asks for it.
+**Version rule:** `portal_version.txt` is the sole source of truth for the current production version. Claude reads it at session start via the bootstrap (fetched from `source/portal_version.txt`). deploy_portal.bat adds 1 on every laptop deploy; `bf_deploy.py` adds 1 on every Claude-direct deploy — both push the updated version file atomically.
 
 **Token recovery:** If token is lost, go to github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → GolfScorer → Regenerate. Paste new `ghp_...` value into BOTH `deploy_portal.py` line 16 AND `launch_golf_scorer.py` line 39. Both files must have the same token or one will fail with GitHub 401.
 
@@ -183,10 +185,9 @@ Every deploy automatically increments the patch version and updates the date. Th
 5. Confirm new version in Deployments tab
 
 ### Worker file management
-- `worker.js` lives in your GolfScorer folder alongside the portal
-- Upload it at session start whenever Worker changes are planned
-- After any Worker deploy, save the updated source back to `worker.js` in GolfScorer folder
-- Claude never reconstructs Worker code without the source file — always upload it
+- `worker.js` is fetched from `source/worker.js` in the library automatically at session start — no upload needed
+- After any Worker deploy, save the updated source back to `worker.js` in GolfScorer folder and run the bat to mirror it back to `source/`
+- Claude never reconstructs Worker code from scratch — `source/worker.js` is the canonical source
 
 ### Worker `/deploy` endpoint — size limit
 The Cloudflare free tier enforces a ~100KB request body limit. The portal (~350KB) exceeds this — the Worker returns an empty response with no error. **For portal deploys from phone/tablet, Claude calls the GitHub Contents API directly** using the token in worker.js. The `/deploy` endpoint works fine for small files (worker.js, ops guide, etc.).
@@ -688,12 +689,12 @@ const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
 
 ## Session Handoff Checklist
 
-- [ ] Download updated files from Claude (portal HTML, session starter, ops guide, worker.js if changed)
-- [ ] Save updated session starter as `BF_Golf_Scorer_Session_Starter_current.md` in GolfScorer folder
-- [ ] Deploy portal via `deploy_portal.bat` — mirrors all source files including `_current.md`
-- [ ] If worker.js changed: deploy to Cloudflare manually (edit code → paste → save and deploy)
+- [ ] If portal changed: Claude deploys via `bf_deploy.py` directly — or download + bat on laptop
+- [ ] If worker.js changed: download from Claude → deploy to Cloudflare (edit code → paste → save and deploy) → save to GolfScorer folder → run bat to mirror to `source/`
+- [ ] Save updated session starter as `BF_Golf_Scorer_Session_Starter_current.md` in GolfScorer folder → run bat (mirrors all source files)
 - [ ] Test on phone — confirm version number and basic functionality
 - [ ] Verify remote flags at `/flags` endpoint
+- [ ] Next session: open `deploy.html` → Claude tab → Copy Session Start Command → paste into Claude
 - [ ] Save worker.js to GolfScorer folder if it changed this session
 - [ ] Update this `BF_Operations_Guide.md` with anything new learned
 
