@@ -1,5 +1,5 @@
 # BirdieFriends — Operations Guide
-**Last Updated:** 2026-06-04 (Session 29 — BF_Session_Bootstrap.md added to library; deploy.html Claude tab added; portal+worker+bf_deploy.py auto-fetched at session start; Golden Rules #15 and #16 updated)  
+**Last Updated:** 2026-06-04 (Session 29 — KV Feed shipped; bat retired for library mirroring; Claude direct is now standard for all managed files; Golden Rule #19 added)  
 **Maintained by:** Commissioner (Brian Hager) + Claude  
 **Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system.  
 Update this file at the end of every session.
@@ -25,6 +25,7 @@ Update this file at the end of every session.
 16. **Always upload `deploy_portal.py` and `launch_golf_scorer.py` if changes to those files are planned.** These are the only files that cannot be in GitHub — they contain secrets. Claude never reconstructs them from scratch. Before modifying either `.py` file, upload the current version so changes are additive, not replacement. All other files (portal, worker, bf_deploy.py) are library-managed and fetched automatically.
 17. **Save the session starter as `BF_Golf_Scorer_Session_Starter_current.md` in the GolfScorer folder before running the bat.** The bat mirrors it to `source/` on every deploy — GitHub history is the version archive. No numbered copies needed.
 18. **For phone/tablet deploys, Claude pushes directly to the GitHub API — not via the Worker `/deploy` endpoint.** The Worker's `/deploy` endpoint has a ~100KB request body limit (Cloudflare free tier) which the portal (350KB+) exceeds, returning an empty response. Claude uses the GitHub token embedded in worker.js to call the GitHub Contents API directly. The Worker `/deploy` endpoint remains useful only for small files (ops guide, worker.js itself).
+19. **`deploy_portal.bat` is retired for library mirroring.** Claude direct (GitHub API via `bf_deploy.py`) is the standard deploy path for all managed files — portal, worker, session starter, ops guide, bootstrap, deploy.html. The bat is no longer needed and the GolfScorer folder archive does not need to be undone. The only files that still require laptop-local handling are the secrets files (`deploy_portal.py`, `launch_golf_scorer.py`) which never go to GitHub.
 
 ---
 
@@ -113,16 +114,13 @@ Claude uses `source/bf_deploy.py` from the library for this. The script reads `p
 
 **To start a new session from any device:** open `birdiefriends.com/deploy.html` → **Claude tab** → tap **📋 Copy Session Start Command** → paste into Claude. Claude auto-fetches the entire library and is ready to work.
 
-### 💻 Laptop-only flow (when bat is needed)
-Use the bat when deploying non-portal files (GolfScorer, guide, ops guide) or doing a full mirror of all source files.
+### 💻 Laptop-only flow (GolfScorer HTML only)
+The bat is retired for library mirroring. The only remaining laptop-only deploy is `BF_Golf_Scorer_8.html` — the local scoring tool that runs on localhost and is deployed via the bat.
 
-1. Download `birdiefriends_portal.html` from Claude
+1. Download `BF_Golf_Scorer_8.html` from Claude output
 2. Place in `Downloads/GolfScorer/` (overwrite existing)
-3. Double-click **`deploy_portal.bat`**
-4. Window stays open — confirm version bump in console output (e.g. `v3.10.68 → v3.10.69`)
-5. Wait ~60 seconds
-6. Hard refresh on phone (close tab and reopen, or Ctrl+Shift+R)
-7. **Confirm new version number in header** at `https://birdiefriends.com/portal.html`
+3. Double-click **`deploy_portal.bat`** — mirrors GolfScorer HTML to `source/`
+4. All other files (portal, worker, ops guide, session starter, etc.) are deployed by Claude direct — no bat needed
 
 ### Expected console output (healthy deploy)
 ```
@@ -186,7 +184,7 @@ Every deploy automatically increments the patch version and updates the date. Th
 
 ### Worker file management
 - `worker.js` is fetched from `source/worker.js` in the library automatically at session start — no upload needed
-- After any Worker deploy, save the updated source back to `worker.js` in GolfScorer folder and run the bat to mirror it back to `source/`
+- After any Worker deploy, Claude pushes the updated `worker.js` directly to `source/worker.js` in the library — no bat needed
 - Claude never reconstructs Worker code from scratch — `source/worker.js` is the canonical source
 
 ### Worker `/deploy` endpoint — size limit
@@ -689,9 +687,9 @@ const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
 
 ## Session Handoff Checklist
 
-- [ ] If portal changed: Claude deploys via `bf_deploy.py` directly — or download + bat on laptop
-- [ ] If worker.js changed: download from Claude → deploy to Cloudflare (edit code → paste → save and deploy) → save to GolfScorer folder → run bat to mirror to `source/`
-- [ ] Save updated session starter as `BF_Golf_Scorer_Session_Starter_current.md` in GolfScorer folder → run bat (mirrors all source files)
+- [ ] If portal changed: Claude deploys via `bf_deploy.py` — live in ~60s, no action needed
+- [ ] If worker.js changed: deploy to Cloudflare manually (Workers → birdiefriends-push → Edit code → paste → Save and Deploy)
+- [ ] If session starter / ops guide changed: Claude pushes directly to library — no action needed
 - [ ] Test on phone — confirm version number and basic functionality
 - [ ] Verify remote flags at `/flags` endpoint
 - [ ] Next session: open `deploy.html` → Claude tab → Copy Session Start Command → paste into Claude
