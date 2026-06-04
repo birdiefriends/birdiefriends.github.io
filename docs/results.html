@@ -793,6 +793,7 @@ function loadEvent(selectedName) {
   if (!ALL_SERIES_DATA) return;
   const evt = ALL_SERIES_DATA.events.find(e => e.name === selectedName);
   if (!evt) return;
+  updateGroupingsLink(selectedName);
 
   // Always 2 decimal places — the numbers are the numbers
   function fmtDiff(v) {
@@ -987,20 +988,35 @@ function loadEvent(selectedName) {
   switchTab('podium', document.querySelector('.tabs .tab'));
 }
 
-// ── Groupings link — point to archive if Final publish exists ──
+// ── Groupings link — event-aware archive resolution ──
+const GROUPINGS_ARCHIVE = {};  // eventName → archive filename, populated from meta
+
 (async function initGroupingsLink() {
   try {
     const resp = await fetch('/groupings-meta.json?nocache=' + Date.now());
     if (!resp.ok) return;
     const meta = await resp.json();
-    const link = document.getElementById('groupings-nav-link');
-    if (!link) return;
-    if (meta.archiveFile && meta.status === 'Final') {
-      link.href = '/' + meta.archiveFile;
-      link.title = 'Final groupings archive — ' + (meta.eventName || '');
+    if (meta.archiveFile && meta.status === 'Final' && meta.eventName) {
+      GROUPINGS_ARCHIVE[meta.eventName] = meta.archiveFile;
     }
   } catch(e) { /* fail silently */ }
+  // Set initial state for the default loaded event (most recent = BFSeries#3)
+  updateGroupingsLink(ALL_SERIES_DATA?.events?.slice(-1)[0]?.name);
 })();
+
+function updateGroupingsLink(eventName) {
+  const link = document.getElementById('groupings-nav-link');
+  if (!link) return;
+  const archiveFile = GROUPINGS_ARCHIVE[eventName];
+  if (archiveFile) {
+    link.href  = '/' + archiveFile;
+    link.style.display = '';
+    link.title = 'Final groupings — ' + eventName;
+  } else {
+    // No archive for this event — hide the link
+    link.style.display = 'none';
+  }
+}
 </script>
 </body>
 </html>
