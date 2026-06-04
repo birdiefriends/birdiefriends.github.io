@@ -229,6 +229,51 @@ export default {
       });
     }
 
+    // GET /feed — read KV announcement feed, newest-first, max 50
+    if (request.method === 'GET' && url.pathname === '/feed') {
+      const list = await env.BF_FLAGS.list({ prefix: 'feed::' });
+      const entries = await Promise.all(
+        list.keys.map(async k => {
+          const val = await env.BF_FLAGS.get(k.name);
+          try { return JSON.parse(val); } catch(e) { return null; }
+        })
+      );
+      const feed = entries
+        .filter(Boolean)
+        .sort((a, b) => b.sentAt - a.sentAt)
+        .slice(0, 50);
+      return new Response(JSON.stringify({ feed }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // DELETE /feed — clear feed entries (PIN required)
+    // Body: { pin }         → clear all entries
+    // Body: { pin, key }    → clear one entry by KV key (e.g. "feed::1748880000000")
+    if (request.method === 'DELETE' && url.pathname === '/feed') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (String(body.pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (body.key) {
+        // Delete single entry
+        await env.BF_FLAGS.delete(body.key);
+        return new Response(JSON.stringify({ ok: true, deleted: 1 }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } else {
+        // Delete all feed entries
+        const list = await env.BF_FLAGS.list({ prefix: 'feed::' });
+        await Promise.all(list.keys.map(k => env.BF_FLAGS.delete(k.name)));
+        return new Response(JSON.stringify({ ok: true, deleted: list.keys.length }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
     // POST / — send a notification
     if (request.method !== 'POST') {
       return new Response('Method not allowed', { status: 405, headers: corsHeaders });
@@ -250,6 +295,30 @@ export default {
     });
 
     const data = await osResp.json();
+
+    // Write to KV feed on successful send
+    if (osResp.status === 200 && data.id) {
+      const sentAt  = Date.now();
+      const kvKey   = `feed::${sentAt}`;
+      const title   = (payload.headings   && (payload.headings.en   || Object.values(payload.headings)[0]))   || '';
+      const body    = (payload.contents   && (payload.contents.en   || Object.values(payload.contents)[0]))   || '';
+      const type    = payload.bf_type || 'broadcast'; // portal sets bf_type; default broadcast
+      const entry   = { id: data.id, key: kvKey, title, body, sentAt, type };
+      await env.BF_FLAGS.put(kvKey, JSON.stringify(entry));
+
+      // Prune entries older than 48 hours
+      const cutoff  = sentAt - 48 * 60 * 60 * 1000;
+      const allKeys = await env.BF_FLAGS.list({ prefix: 'feed::' });
+      await Promise.all(
+        allKeys.keys
+          .filter(k => {
+            const ts = parseInt(k.name.replace('feed::', ''), 10);
+            return ts < cutoff;
+          })
+          .map(k => env.BF_FLAGS.delete(k.name))
+      );
+    }
+
     return new Response(JSON.stringify(data), {
       status: osResp.status,
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
