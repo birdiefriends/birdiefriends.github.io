@@ -61,6 +61,18 @@ Example: current version is v3.10.79 → Claude runs bf_deploy.py → deploys as
 
 ## Session 29 Accomplishments
 
+### Worker KV Feed shipped (Priority 1 — completed)
+- `GET /feed` — reads all `feed::*` KV keys, returns sorted array newest-first, max 50
+- `DELETE /feed` — PIN required; `{ pin }` clears all, `{ pin, key }` clears one entry
+- `POST /` — writes `feed::{timestamp}` KV entry on every successful send; prunes entries >48 hours
+- Portal `fetchAnnouncements()` + `loadAdminAnnouncements()` → read `/feed` (not OneSignal history)
+- Portal `adminDeleteOneNotification()` + `adminClearAllNotifications()` → `DELETE /feed`
+- `bf_type` set on all send paths: `birdie`, `cttp`, `broadcast`
+- Push Broadcast card added to Admin (📣 Push Notification to All Members)
+- "in OneSignal" label → "in feed"
+- OneSignal is now purely a delivery pipe — commissioner owns the feed data completely
+- KV feed confirmed working end-to-end (v3.10.83)
+
 ### Bootstrap & session start hardened (Priority 0 — completed)
 - `BF_Session_Bootstrap.md` added to library (`source/BF_Session_Bootstrap.md`)
   - Bootstrap now auto-fetches portal, worker, bf_deploy.py — no uploads needed to start any session
@@ -149,7 +161,7 @@ launch_golf_scorer.py → if local launcher changes planned
 
 ---
 
-## 🔴 SESSION 29 — Priority 1: Worker KV Feed
+## ✅ SESSION 29 — COMPLETED: Worker KV Feed
 
 ### Problem
 Announcement feed reads from OneSignal history. OneSignal owns the data, can't delete delivered messages via API, list grows forever, all players see same global list, no commissioner control.
@@ -181,24 +193,72 @@ Announcement feed reads from OneSignal history. OneSignal owns the data, can't d
 
 ---
 
-## 🔴 SESSION 29 — Priority 2: Cancelled Events
+## 🔴 SESSION 30 — Priority 1: Self-Service Events + Cancelled Events
 
-### Concept
-Commissioner needs to cancel an event and notify registered players.
+### Vision
+Any member can publish and manage their own golf event through the portal. No Jotform access, no commissioner needed. Commissioner retains full visibility and override on all events. Cancelled Events (original backlog item) is built as part of this — same cancel flow applies to both member-owned and commissioner events.
 
-### Full solution (needs dedicated session)
-1. Commissioner marks event cancelled → KV flag keyed to event ID
-2. Cancellation push fires automatically to registered players
-3. Event card shows ❌ Cancelled state persistently (reads KV flag on load)
-4. Ghost entry on Schedule tab showing event was cancelled
-5. Jotform row options: hide vs delete vs keep for records
+### Spec (finalized Session 29)
 
-### For immediate needs (before next session)
-Use Commissioner Broadcast from portal → reaches all bfw=Yes members. Then handle Jotform row manually.
+**Data model:**
+- Existing Event Request Jotform form — no new form needed
+- Requestor Name (QID 11) pre-filled from logged-in player name
+- New KV entries: `evt_meta::{submissionId}` → `{ owner, visibility, namedPlayers[], cancelledAt, cancelReason }`
+- Submission ID is the join key between Jotform row and KV metadata
+
+**Event creation flow:**
+- ➕ Create Event button on My Events tab → slide-up sheet
+- Fields: Event Name, Date & Time, Location (default BSGC), Capacity (required), Format (Individual Play v1), Visibility (Open / Named), Description (optional)
+- Named visibility → multi-select player picker
+- Submit → silent POST to Jotform Event Request + write KV entry → appears immediately
+
+**Event card — owner view:**
+- 📋 Manage button on owner's own cards (commissioner sees on all)
+- Manage sheet: View Registrants, Message Players (push scoped to registrants), SMS Players, Cancel Event, (Edit — post-v1)
+
+**Cancelled Events:**
+1. Write KV: `cancelledAt`, `cancelReason`
+2. Push fires to all registered players via `osSendToPlayers`
+3. KV feed entry written (type: broadcast)
+4. Event card shows ❌ Cancelled state for everyone (reads KV on load)
+5. Jotform row kept for records — no delete
+
+**Permissions:**
+| Action | Owner | Non-owner | Commissioner |
+|--------|-------|-----------|--------------|
+| Create event | ✅ | ✅ | ✅ |
+| View registrants | ✅ own | ❌ | ✅ all |
+| Message players | ✅ own | ❌ | ✅ all |
+| Cancel event | ✅ own | ❌ | ✅ all |
+| Edit event | ❌ v1 | ❌ | ✅ all |
+
+**Format architecture (v1 + future):**
+```javascript
+const EVENT_FORMATS = [
+  { id: 'individual',    label: 'Individual Play',  v1: true  },
+  { id: 'scramble_2man', label: '2-Man Scramble',   v1: false },
+  { id: 'bestball_2man', label: '2-Man Best Ball',  v1: false },
+  { id: 'scramble_4man', label: '4-Man Scramble',   v1: false },
+  { id: 'other',         label: 'Other',            v1: false },
+];
+```
+Only `v1: true` formats shown in picker. Future formats flip to true as supported.
+
+**Worker changes needed:**
+- `GET /evt_meta` — read all `evt_meta::*` KV keys (loaded alongside flags on portal init)
+- `POST /evt_meta` — write/update KV entry (PIN or owner-verified)
+
+**Build order (2 sessions):**
+1. Worker: `evt_meta` KV endpoints
+2. Portal: Create Event sheet + Jotform submission
+3. Portal: Event card owner badge + Manage sheet
+4. Portal: Cancel flow (KV write + push + card state)
+5. Portal: Message Players (scoped push + SMS)
+6. Portal: Named visibility + player picker
 
 ---
 
-## 🔵 SESSION 29 — Priority 3: Remaining Backlog
+## 🔵 SESSION 30 — Priority 2: Remaining Backlog
 
 ### Push notification message audit (before BFSeries#4)
 Audit ALL templates:
