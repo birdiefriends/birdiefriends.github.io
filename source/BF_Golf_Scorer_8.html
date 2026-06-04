@@ -556,7 +556,7 @@
   </div>
   <div style="text-align:right;min-width:0;flex-shrink:1">
     <div id="event-name-display" style="font-size:0.85rem;opacity:0.75;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px"></div>
-    <div style="font-size:0.7rem;opacity:0.45;letter-spacing:0.08em;margin-top:4px;font-family:'DM Mono',monospace">v8.15 · <span id="build-date"></span></div>
+    <div style="font-size:0.7rem;opacity:0.45;letter-spacing:0.08em;margin-top:4px;font-family:'DM Mono',monospace">v8.16 · <span id="build-date"></span></div>
     <div id="preview-mode-badge" style="display:none;margin-left:12px;padding:3px 10px;border-radius:100px;background:#f59e0b;color:#1a1a1a;font-size:0.7rem;font-weight:700;letter-spacing:0.06em;font-family:'DM Mono',monospace;">🔍 PREVIEW MODE</div>
   </div>
 </header>
@@ -6775,19 +6775,31 @@ async function grpPublish() {
   const btn = document.getElementById('grp-publish-btn');
   btn.disabled = true;
 
+  // Build archive slug for Final publishes: "2026 BFSeries#3" → "groupings-2026-BFSeries3.html"
+  const archiveSlug = eventName.replace(/\s+/g, '-').replace(/#/g, '').replace(/[^a-zA-Z0-9-]/g, '');
+  const archiveFile = `groupings-${archiveSlug}.html`;
+
+  const pages = {
+    'groupings.html': html,
+    'groupings-meta.json': JSON.stringify({
+      eventName,
+      status,
+      visibility,
+      publishedAt: new Date().toISOString(),
+      archiveFile: status === 'Final' ? archiveFile : undefined
+    })
+  };
+
+  // On Final publish, also push an immutable archive copy
+  if (status === 'Final' && visibility !== 'hidden') {
+    pages[archiveFile] = html;
+  }
+
   try {
     const resp = await fetch('/api/netlify/deploy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pages: {
-        'groupings.html': html,
-        'groupings-meta.json': JSON.stringify({
-          eventName,
-          status,
-          visibility,
-          publishedAt: new Date().toISOString()
-        })
-      }})
+      body: JSON.stringify({ pages })
     });
     const result = await resp.json();
     if (result.success) {
@@ -6797,7 +6809,10 @@ async function grpPublish() {
           &nbsp;<span style="color:#6b7280;font-size:0.78rem">— Not published to birdiefriends.com</span>`);
       } else {
         const visLabel = visibility === 'hidden' ? ' — <strong>Hidden (holding page live)</strong>' : '';
-        grpShowPublishStatus('success', `&#x2713; groupings.html published (${status})${visLabel} &mdash; <a href="https://birdiefriends.com/groupings.html" target="_blank" style="color:#085041;font-weight:600">birdiefriends.com/groupings.html</a>`);
+        const archiveNote = (status === 'Final' && visibility !== 'hidden')
+          ? ` &nbsp;·&nbsp; <a href="https://birdiefriends.com/${archiveFile}" target="_blank" style="color:#4a6fbd;font-weight:600">📋 Archive saved</a>`
+          : '';
+        grpShowPublishStatus('success', `&#x2713; groupings.html published (${status})${visLabel} &mdash; <a href="https://birdiefriends.com/groupings.html" target="_blank" style="color:#085041;font-weight:600">birdiefriends.com/groupings.html</a>${archiveNote}`);
       }
     } else {
       throw new Error(result.error || 'Unknown error');
@@ -7042,7 +7057,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-05-28m';
-const GS_VERSION = 'v8.15 · 2026-05-28m';
+const GS_VERSION = 'v8.16 · 2026-05-28m';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
