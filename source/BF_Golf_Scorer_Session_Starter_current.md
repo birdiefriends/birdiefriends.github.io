@@ -31,16 +31,20 @@ Claude never reconstructs Worker code without the source file.
 
 ---
 
-## ⚠️ FIRST THING EVERY SESSION — Required uploads
+## ⚠️ FIRST THING EVERY SESSION — No uploads needed to start
 
-| File | Required | Purpose |
-|------|----------|---------|
-| `birdiefriends_portal.html` | ✅ Always | Portal source |
-| `worker.js` | ✅ If Worker changes planned | Claude won't touch Worker without it (Golden Rule #15) |
-| `deploy_portal.py` | ✅ If deploy script changes planned | Claude won't touch it without it (Golden Rule #16) |
-| `launch_golf_scorer.py` | ✅ If launcher changes planned | Claude won't touch it without it (Golden Rule #16) |
+**All files are in the library.** The bootstrap fetches everything automatically:
+- Session starter, ops guide, portal version → read into context
+- `portal.html` → `/home/claude/birdiefriends_portal.html`
+- `worker.js` → `/home/claude/worker.js`
+- `bf_deploy.py` → `/home/claude/bf_deploy.py`
 
-> **Everything else is fetched from the library.** Session starter, ops guide, and portal version are all read directly from `source/` in GitHub via the bootstrap. No other uploads needed.
+**Uploads — secrets only (laptop only, never in GitHub):**
+
+| File | When needed |
+|------|-------------|
+| `deploy_portal.py` | Only if changing the bat deploy script |
+| `launch_golf_scorer.py` | Only if changing the local GolfScorer launcher |
 
 > **Session starter convention (Golden Rule #17):** At session end, save the updated starter as `BF_Golf_Scorer_Session_Starter_current.md` in the GolfScorer folder and run the bat. GitHub history is the version archive — no numbered copies needed.
 
@@ -52,6 +56,35 @@ Claude never reconstructs Worker code without the source file.
 > `source/portal_version.txt` is the sole version source of truth. `bf_deploy.py` reads it, increments patch, and pushes atomically. Works from any device.
 
 Example: current version is v3.10.79 → Claude runs bf_deploy.py → deploys as v3.10.80 ✅
+
+---
+
+## Session 29 Accomplishments
+
+### Bootstrap & session start hardened (Priority 0 — completed)
+- `BF_Session_Bootstrap.md` added to library (`source/BF_Session_Bootstrap.md`)
+  - Bootstrap now auto-fetches portal, worker, bf_deploy.py — no uploads needed to start any session
+  - Only secrets files (`deploy_portal.py`, `launch_golf_scorer.py`) ever need uploading
+- `deploy.html` **Claude tab** added — one-tap copy of session start command, works on phone/iPad
+  - Links to Open Claude, View Bootstrap, View Session Starter
+- Session starter + Ops Guide updated: Golden Rules #15/#16 revised, HOW TO START rewritten, Deploy Pattern updated, Session Handoff Checklist updated
+- **Session start command (any device):** open `deploy.html` → Claude tab → Copy → paste into Claude
+
+### Managed file registry (updated)
+| Key | GitHub path | Updated by |
+|-----|-------------|------------|
+| portal | `docs/portal.html` + `source/portal.html` | bf_deploy.py (any device) or bat |
+| guide | `docs/guide.html` + `source/guide.html` | bat |
+| worker | `source/worker.js` | bat |
+| golfscore | `source/BF_Golf_Scorer_8.html` | bat |
+| ops_guide | `source/BF_Operations_Guide.md` | Claude direct or bat |
+| deploy.html | `docs/deploy.html` + `source/deploy.html` | Claude direct or bat |
+| session_starter | `source/BF_Golf_Scorer_Session_Starter_current.md` | bat |
+| portal_version | `source/portal_version.txt` | bf_deploy.py or bat |
+| bf_deploy.py | `source/bf_deploy.py` | Claude direct |
+| bootstrap | `source/BF_Session_Bootstrap.md` | Claude direct or bat |
+
+**Not in library (secrets):** `deploy_portal.py`, `launch_golf_scorer.py` — laptop only, upload only if changing them.
 
 ---
 
@@ -86,22 +119,21 @@ Example: current version is v3.10.79 → Claude runs bf_deploy.py → deploys as
 
 ## ⚠️ HOW TO START EVERY SESSION
 
-**Step 1 — Paste bootstrap** (no uploads needed to start):
-```
-Paste contents of BF_Session_Bootstrap.md into Claude
-```
-Claude will fetch from library: session starter, ops guide, portal version.
+**From any device (phone, tablet, laptop) — one command:**
 
-**Step 2 — Upload portal source** (required for any portal edits):
+Open Claude → paste this:
 ```
-Upload: birdiefriends_portal.html
+Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md and follow all instructions in it exactly.
 ```
 
-**Step 3 — Upload secret files only if changing them:**
+Or use `birdiefriends.com/deploy.html` → **Claude tab** → tap **📋 Copy Session Start Command** → paste into Claude.
+
+Claude auto-fetches everything from the library. No uploads, no files, no laptop required to start.
+
+**Uploads only needed for secrets files (if changing them):**
 ```
-worker.js          → if Worker changes planned
-deploy_portal.py   → if deploy script changes planned
-launch_golf_scorer.py → if launcher changes planned
+deploy_portal.py      → if bat deploy script changes planned
+launch_golf_scorer.py → if local launcher changes planned
 ```
 
 **Mid-session deploys** (Claude runs bf_deploy.py directly):
@@ -243,11 +275,11 @@ Audit ALL templates:
 
 ### Deploy Pattern
 ```
-Session start (any session):
-1. Paste BF_Session_Bootstrap.md into Claude
-2. Claude fetches session starter, ops guide, portal_version.txt from library
-3. Upload birdiefriends_portal.html (always needed for portal edits)
-4. Upload worker.js / deploy_portal.py / launch_golf_scorer.py only if changing them
+Session start (any device):
+1. Open deploy.html → Claude tab → Copy Session Start Command → paste into Claude
+   OR paste directly: "Fetch ...BF_Session_Bootstrap.md and follow all instructions in it exactly."
+2. Claude auto-fetches everything from library — portal, worker, bf_deploy.py all staged
+3. Upload deploy_portal.py / launch_golf_scorer.py only if changing those secrets files
 
 Portal (after Claude produces output):
 1. Download birdiefriends_portal.html from Claude output
