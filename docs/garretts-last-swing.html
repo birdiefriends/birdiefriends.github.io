@@ -9,131 +9,121 @@
 <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --navy: #0f1e3c; --navy-mid: #162850; --gold: #c9a84c; --gold-light: #e2c97e;
-    --gold-dim: #8a6e2f; --white: #f5f0e8; --white-dim: rgba(245,240,232,0.6);
-    --white-faint: rgba(245,240,232,0.12); --white-faintest: rgba(245,240,232,0.06);
-    --green-txt: #6dbf7e; --red-txt: #e07070;
+    --navy:#0f1e3c;--gold:#c9a84c;--gold-light:#e2c97e;--gold-dim:#8a6e2f;
+    --white:#f5f0e8;--white-dim:rgba(245,240,232,0.6);--white-faint:rgba(245,240,232,0.12);
+    --white-faintest:rgba(245,240,232,0.06);--green:#6dbf7e;--red:#e07070;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--navy); color: var(--white); font-family: 'DM Sans', sans-serif; min-height: 100vh; overflow-x: hidden; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--navy);color:var(--white);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
 
   /* HERO */
-  .hero { text-align: center; padding: 3rem 1.5rem 2.5rem; border-bottom: 1px solid rgba(201,168,76,0.25); background: radial-gradient(ellipse at 50% 0%, rgba(201,168,76,0.08) 0%, transparent 70%); }
-  .hero-eyebrow { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 0.75rem; font-weight: 500; }
-  .hero-title { font-family: 'Pacifico', cursive; font-size: clamp(2.8rem,10vw,5rem); color: var(--white); line-height: 1.1; margin-bottom: 0.5rem; text-shadow: 0 2px 20px rgba(201,168,76,0.2); }
-  .hero-subtitle { font-size: 13px; color: var(--gold-light); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 1.5rem; font-weight: 300; }
-  .live-pill { display: inline-flex; align-items: center; gap: 6px; background: rgba(201,168,76,0.12); border: 1px solid rgba(201,168,76,0.35); border-radius: 99px; padding: 5px 14px; font-size: 11px; font-weight: 500; color: var(--gold-light); letter-spacing: 0.08em; }
-  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #e74c3c; animation: blink 1.4s ease-in-out infinite; }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+  .hero{text-align:center;padding:3rem 1.5rem 2.5rem;border-bottom:1px solid rgba(201,168,76,0.25);background:radial-gradient(ellipse at 50% 0%,rgba(201,168,76,0.08) 0%,transparent 70%);}
+  .hero-eyebrow{font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);margin-bottom:0.75rem;font-weight:500;}
+  .hero-title{font-family:'Pacifico',cursive;font-size:clamp(2.8rem,10vw,5rem);color:var(--white);line-height:1.1;margin-bottom:0.5rem;text-shadow:0 2px 20px rgba(201,168,76,0.2);}
+  .hero-subtitle{font-size:13px;color:var(--gold-light);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:1.5rem;font-weight:300;}
+  .final-pill{display:inline-flex;align-items:center;gap:6px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);border-radius:99px;padding:5px 16px;font-size:11px;font-weight:600;color:var(--gold-light);letter-spacing:0.1em;}
+  .players-section{margin-top:1.75rem;}
+  .players-group-label{font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--gold-dim);margin-bottom:8px;font-weight:500;}
+  .players-row{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;margin-bottom:10px;}
+  .player-chip{font-size:11px;font-weight:500;color:var(--white-dim);background:var(--white-faint);border:1px solid rgba(245,240,232,0.14);border-radius:99px;padding:4px 12px;}
+  .player-chip.pinch{color:rgba(201,168,76,0.7);background:rgba(201,168,76,0.08);border-color:rgba(201,168,76,0.2);font-size:10px;}
 
-  .players-section { margin-top: 1.75rem; }
-  .players-group-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold-dim); margin-bottom: 8px; font-weight: 500; }
-  .players-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; margin-bottom: 10px; }
-  .player-chip { font-size: 11px; font-weight: 500; color: var(--white-dim); background: var(--white-faint); border: 1px solid rgba(245,240,232,0.14); border-radius: 99px; padding: 4px 12px; }
-  .player-chip.pinch { color: rgba(201,168,76,0.7); background: rgba(201,168,76,0.08); border-color: rgba(201,168,76,0.2); font-size: 10px; }
+  /* WINNER BANNERS */
+  .winner-banner{border-radius:16px;padding:1.5rem;margin-bottom:1rem;text-align:center;position:relative;overflow:hidden;}
+  .winner-banner.gold-banner{background:linear-gradient(135deg,rgba(201,168,76,0.2) 0%,rgba(201,168,76,0.08) 100%);border:1px solid rgba(201,168,76,0.4);}
+  .winner-banner .trophy{font-size:2.5rem;margin-bottom:0.5rem;display:block;}
+  .winner-banner .comp-label{font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold-dim);margin-bottom:6px;font-weight:600;}
+  .winner-banner .winner-name{font-family:'Pacifico',cursive;font-size:2rem;color:var(--gold-light);margin-bottom:4px;}
+  .winner-banner .winner-stat{font-size:13px;color:var(--white-dim);}
 
   /* LAYOUT */
-  .page { max-width: 700px; margin: 0 auto; padding: 0 1rem 4rem; }
+  .page{max-width:700px;margin:0 auto;padding:0 1rem 4rem;}
+  .section-header{display:flex;align-items:baseline;gap:10px;margin:2.5rem 0 1rem;flex-wrap:wrap;}
+  .section-num{font-family:'Pacifico',cursive;font-size:1.8rem;color:var(--gold);line-height:1;}
+  .section-title{font-size:16px;font-weight:600;color:var(--white);}
+  .section-desc{font-size:12px;color:var(--white-dim);margin-top:2px;}
+  .section-plain{margin:2.5rem 0 1rem;}
+  .section-plain .section-title{font-size:16px;font-weight:600;}
+  .section-plain .section-desc{font-size:12px;color:var(--white-dim);margin-top:3px;}
 
-  /* SECTION HEADERS */
-  .section-header { display: flex; align-items: baseline; gap: 10px; margin: 2.5rem 0 1rem; flex-wrap: wrap; }
-  .section-num { font-family: 'Pacifico', cursive; font-size: 1.8rem; color: var(--gold); line-height: 1; }
-  .section-title { font-size: 16px; font-weight: 600; color: var(--white); }
-  .section-desc { font-size: 12px; color: var(--white-dim); margin-top: 2px; }
-  .rounds-badge { margin-left: auto; font-size: 11px; color: var(--gold); background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.25); border-radius: 99px; padding: 3px 10px; font-weight: 500; white-space: nowrap; }
-  .section-plain { margin: 2.5rem 0 1rem; }
-  .section-plain .section-title { font-size: 16px; font-weight: 600; }
-  .section-plain .section-desc { font-size: 12px; color: var(--white-dim); margin-top: 3px; }
+  /* CARDS & TABLES */
+  .lb-card{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:16px;overflow:hidden;}
+  .lb-table{width:100%;border-collapse:collapse;}
+  .lb-table thead tr{background:rgba(201,168,76,0.08);border-bottom:1px solid rgba(201,168,76,0.2);}
+  .lb-table th{font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold-dim);padding:10px 14px;text-align:right;}
+  .lb-table th.left{text-align:left;}
+  .lb-table td{padding:12px 14px;text-align:right;border-bottom:1px solid rgba(245,240,232,0.06);font-size:13px;font-variant-numeric:tabular-nums;vertical-align:middle;}
+  .lb-table td.left{text-align:left;}
+  .lb-table tr:last-child td{border-bottom:none;}
+  .lb-table .leader-row{background:rgba(201,168,76,0.1);}
+  .place-cell{width:36px;font-size:16px;}
+  .player-name{font-weight:600;font-size:14px;color:var(--white);}
+  .player-detail{font-size:11px;color:var(--white-dim);margin-top:2px;font-weight:300;}
+  .score-raw{font-weight:500;color:var(--white);}
+  .score-rel{font-size:11px;margin-top:2px;font-weight:500;}
+  .over{color:var(--red);}.under{color:var(--green);}.even{color:var(--white-dim);}
+  .total-raw{font-size:16px;font-weight:600;color:var(--white);}
+  .total-rel{font-size:12px;font-weight:600;margin-top:2px;}
+  .gap{font-size:10px;color:var(--white-dim);font-weight:400;margin-top:1px;}
+  .pt-win{color:var(--green);font-weight:700;font-size:15px;}
+  .pt-half{color:var(--gold-light);font-weight:700;font-size:15px;}
+  .pt-loss{color:var(--white-dim);font-size:14px;}
 
-  /* CARDS */
-  .lb-card { background: var(--white-faintest); border: 1px solid rgba(245,240,232,0.1); border-radius: 16px; overflow: hidden; }
-
-  /* LB TABLE */
-  .lb-table { width: 100%; border-collapse: collapse; }
-  .lb-table thead tr { background: rgba(201,168,76,0.08); border-bottom: 1px solid rgba(201,168,76,0.2); }
-  .lb-table th { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); padding: 10px 14px; text-align: right; }
-  .lb-table th.left { text-align: left; }
-  .lb-table td { padding: 12px 14px; text-align: right; border-bottom: 1px solid rgba(245,240,232,0.06); font-size: 13px; font-variant-numeric: tabular-nums; vertical-align: middle; }
-  .lb-table td.left { text-align: left; }
-  .lb-table tr:last-child td { border-bottom: none; }
-  .lb-table .leader-row { background: rgba(201,168,76,0.07); }
-  .place-cell { width: 36px; font-size: 16px; }
-  .player-name { font-weight: 600; font-size: 14px; color: var(--white); }
-  .player-detail { font-size: 11px; color: var(--white-dim); margin-top: 2px; font-weight: 300; }
-  .score-raw { font-weight: 500; color: var(--white); }
-  .score-rel { font-size: 11px; margin-top: 2px; font-weight: 500; }
-  .over { color: var(--red-txt); } .under { color: var(--green-txt); } .even { color: var(--white-dim); }
-  .pending { color: var(--white-dim); font-style: italic; font-size: 12px; }
-  .total-raw { font-size: 16px; font-weight: 600; color: var(--white); }
-  .total-rel { font-size: 12px; font-weight: 600; margin-top: 2px; }
-  .gap { font-size: 10px; color: var(--white-dim); font-weight: 400; margin-top: 1px; }
-  .pt-win { color: var(--green-txt); font-weight: 700; font-size: 15px; }
-  .pt-half { color: var(--gold-light); font-weight: 700; font-size: 15px; }
-  .pt-loss { color: var(--white-dim); font-size: 14px; }
-
-  /* FULL FIELD TABLE */
-  .field-table { width: 100%; border-collapse: collapse; }
-  .field-table thead tr { background: rgba(201,168,76,0.08); border-bottom: 1px solid rgba(201,168,76,0.2); }
-  .field-table th { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-dim); padding: 9px 14px; text-align: right; }
-  .field-table th.left { text-align: left; }
-  .field-table td { padding: 10px 14px; text-align: right; border-bottom: 1px solid rgba(245,240,232,0.06); font-size: 13px; font-variant-numeric: tabular-nums; vertical-align: middle; }
-  .field-table td.left { text-align: left; }
-  .field-table tr:last-child td { border-bottom: none; }
-  .field-table .group-divider td { border-top: 1px solid rgba(201,168,76,0.15); }
-  .round-label { font-size: 10px; color: var(--gold-dim); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 2px; }
-  .team-name { font-weight: 500; font-size: 13px; }
-  .pinch-tag { display: inline-block; font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; background: rgba(201,168,76,0.15); color: var(--gold); border-radius: 99px; padding: 2px 7px; margin-left: 6px; vertical-align: middle; }
+  /* FULL FIELD */
+  .field-table{width:100%;border-collapse:collapse;}
+  .field-table thead tr{background:rgba(201,168,76,0.08);border-bottom:1px solid rgba(201,168,76,0.2);}
+  .field-table th{font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--gold-dim);padding:9px 14px;text-align:right;}
+  .field-table th.left{text-align:left;}
+  .field-table td{padding:10px 14px;text-align:right;border-bottom:1px solid rgba(245,240,232,0.06);font-size:13px;font-variant-numeric:tabular-nums;vertical-align:middle;}
+  .field-table td.left{text-align:left;}
+  .field-table tr:last-child td{border-bottom:none;}
+  .field-table .group-divider td{border-top:1px solid rgba(201,168,76,0.15);}
+  .round-label{font-size:10px;color:var(--gold-dim);font-weight:500;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:2px;}
+  .team-name{font-weight:500;font-size:13px;}
+  .pinch-tag{display:inline-block;font-size:9px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;background:rgba(201,168,76,0.15);color:var(--gold);border-radius:99px;padding:2px 7px;margin-left:6px;vertical-align:middle;}
 
   /* PINCH HITTER CARDS */
-  .ph-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 12px; }
-  .ph-card { background: var(--white-faintest); border: 1px solid rgba(245,240,232,0.1); border-radius: 14px; padding: 1rem; }
-  .ph-card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .ph-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(201,168,76,0.15); border: 1px solid rgba(201,168,76,0.3); display: flex; align-items: center; justify-content: center; font-family: 'Pacifico', cursive; font-size: 13px; color: var(--gold); flex-shrink: 0; }
-  .ph-name { font-weight: 600; font-size: 13px; color: var(--white); line-height: 1.2; }
-  .ph-round { font-size: 11px; color: var(--white-dim); margin-top: 1px; }
-  .ph-divider { height: 1px; background: rgba(245,240,232,0.08); margin-bottom: 10px; }
-  .ph-stat-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
-  .ph-stat-label { font-size: 11px; color: var(--white-dim); }
-  .ph-stat-val { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .ph-partner { font-size: 11px; color: var(--white-dim); margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(245,240,232,0.08); }
-  .ph-partner strong { color: var(--white); font-weight: 500; }
-  .ph-pending { text-align: center; padding: 1.5rem 1rem; color: var(--white-dim); font-size: 12px; font-style: italic; }
+  .ph-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;}
+  .ph-card{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:14px;padding:1rem;}
+  .ph-card-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .ph-avatar{width:36px;height:36px;border-radius:50%;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);display:flex;align-items:center;justify-content:center;font-family:'Pacifico',cursive;font-size:12px;color:var(--gold);flex-shrink:0;}
+  .ph-name{font-weight:600;font-size:13px;color:var(--white);line-height:1.2;}
+  .ph-round{font-size:11px;color:var(--white-dim);margin-top:1px;}
+  .ph-divider{height:1px;background:rgba(245,240,232,0.08);margin-bottom:10px;}
+  .ph-stat-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;}
+  .ph-stat-label{font-size:11px;color:var(--white-dim);}
+  .ph-stat-val{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;}
+  .ph-partner{font-size:11px;color:var(--white-dim);margin-top:8px;padding-top:8px;border-top:1px solid rgba(245,240,232,0.08);}
+  .ph-partner strong{color:var(--white);font-weight:500;}
 
-  /* STATS GRID */
-  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-  .stat-card { background: var(--white-faintest); border: 1px solid rgba(245,240,232,0.1); border-radius: 14px; padding: 1rem; }
-  .stat-card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-  .stat-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(201,168,76,0.12); border: 1px solid rgba(201,168,76,0.25); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--gold); flex-shrink: 0; }
-  .stat-avatar.g8 { background: rgba(245,240,232,0.08); border-color: rgba(245,240,232,0.15); color: var(--white-dim); }
-  .stat-name { font-weight: 600; font-size: 13px; color: var(--white); line-height: 1.2; }
-  .stat-sub { font-size: 11px; color: var(--white-dim); margin-top: 1px; }
-  .stat-divider { height: 1px; background: rgba(245,240,232,0.08); margin-bottom: 10px; }
-  .dist-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-  .dist-label { font-size: 11px; color: var(--white-dim); width: 48px; flex-shrink: 0; }
-  .dist-track { flex: 1; height: 5px; background: rgba(245,240,232,0.08); border-radius: 99px; overflow: hidden; }
-  .dist-fill { height: 100%; border-radius: 99px; }
-  .f-eagle  { background: #7F77DD; }
-  .f-birdie { background: #1D9E75; }
-  .f-par    { background: rgba(245,240,232,0.25); }
-  .f-bogey  { background: #EF9F27; }
-  .f-double { background: #D85A30; }
-  .f-worse  { background: #A32D2D; }
-  .dist-count { font-size: 11px; font-weight: 500; min-width: 16px; text-align: right; color: var(--white-dim); }
-  .stat-footer { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(245,240,232,0.08); }
-  .stat-foot-item { text-align: center; }
-  .stat-foot-val { font-size: 14px; font-weight: 600; }
-  .stat-foot-lbl { font-size: 10px; color: var(--white-dim); margin-top: 1px; }
-  .filter-row { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
-  .filter-btn { padding: 5px 12px; border: 1px solid rgba(245,240,232,0.15); border-radius: 99px; background: transparent; color: var(--white-dim); font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif; }
-  .filter-btn.active { background: rgba(245,240,232,0.1); color: var(--white); border-color: rgba(245,240,232,0.3); font-weight: 500; }
-  .caveat { font-size: 11px; color: var(--white-dim); font-style: italic; margin-bottom: 1rem; padding: 8px 12px; background: rgba(245,240,232,0.04); border-left: 2px solid rgba(201,168,76,0.3); border-radius: 0 8px 8px 0; }
+  /* STATS */
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;}
+  .stat-card{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:14px;padding:1rem;}
+  .stat-card-top{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+  .stat-avatar{width:36px;height:36px;border-radius:50%;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.25);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--gold);flex-shrink:0;}
+  .stat-avatar.g8{background:rgba(245,240,232,0.08);border-color:rgba(245,240,232,0.15);color:var(--white-dim);}
+  .stat-name{font-weight:600;font-size:13px;color:var(--white);line-height:1.2;}
+  .stat-sub{font-size:11px;color:var(--white-dim);margin-top:1px;}
+  .stat-divider{height:1px;background:rgba(245,240,232,0.08);margin-bottom:10px;}
+  .dist-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;}
+  .dist-label{font-size:11px;color:var(--white-dim);width:48px;flex-shrink:0;}
+  .dist-track{flex:1;height:5px;background:rgba(245,240,232,0.08);border-radius:99px;overflow:hidden;}
+  .dist-fill{height:100%;border-radius:99px;}
+  .f-eagle{background:#7F77DD;}.f-birdie{background:#1D9E75;}.f-par{background:rgba(245,240,232,0.25);}
+  .f-bogey{background:#EF9F27;}.f-double{background:#D85A30;}.f-worse{background:#A32D2D;}
+  .dist-count{font-size:11px;font-weight:500;min-width:16px;text-align:right;color:var(--white-dim);}
+  .stat-footer{display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid rgba(245,240,232,0.08);}
+  .stat-foot-item{text-align:center;}
+  .stat-foot-val{font-size:14px;font-weight:600;}
+  .stat-foot-lbl{font-size:10px;color:var(--white-dim);margin-top:1px;}
+  .filter-row{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;}
+  .filter-btn{padding:5px 12px;border:1px solid rgba(245,240,232,0.15);border-radius:99px;background:transparent;color:var(--white-dim);font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .filter-btn.active{background:rgba(245,240,232,0.1);color:var(--white);border-color:rgba(245,240,232,0.3);font-weight:500;}
+  .caveat{font-size:11px;color:var(--white-dim);font-style:italic;margin-bottom:1rem;padding:8px 12px;background:rgba(245,240,232,0.04);border-left:2px solid rgba(201,168,76,0.3);border-radius:0 8px 8px 0;}
 
-  /* DIVIDER */
-  .divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(201,168,76,0.3), transparent); margin: 2.5rem 0; }
-
-  /* FOOTER */
-  .footer { text-align: center; padding: 2rem 1rem; font-size: 11px; color: rgba(245,240,232,0.25); letter-spacing: 0.1em; border-top: 1px solid rgba(245,240,232,0.07); }
-  .footer-script { color: var(--gold-dim); font-family: 'Pacifico', cursive; font-size: 14px; display: block; margin-bottom: 6px; }
+  .divider{height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,76,0.3),transparent);margin:2.5rem 0;}
+  .footer{text-align:center;padding:2rem 1rem;font-size:11px;color:rgba(245,240,232,0.25);letter-spacing:0.1em;border-top:1px solid rgba(245,240,232,0.07);}
+  .footer-script{color:var(--gold-dim);font-family:'Pacifico',cursive;font-size:14px;display:block;margin-bottom:6px;}
 </style>
 </head>
 <body>
@@ -142,18 +132,14 @@
   <div class="hero-eyebrow">Bachelor Weekend · Cape May</div>
   <div class="hero-title"><span style="font-size:0.55em;display:block;line-height:1.3;opacity:0.85">Garrett's</span>Last Swing</div>
   <div class="hero-subtitle">Cape May &nbsp;·&nbsp; 2026</div>
-  <div class="live-pill"><span class="live-dot"></span> Round 3 in progress · Cape May National</div>
+  <div class="final-pill">⛳ Final Results — All 3 Rounds Complete</div>
   <div class="players-section">
     <div class="players-group-label">The Original 8</div>
     <div class="players-row">
-      <span class="player-chip">Garrett Perschy</span>
-      <span class="player-chip">Tim Wargo</span>
-      <span class="player-chip">Jon Hernandez</span>
-      <span class="player-chip">Brian Hager</span>
-      <span class="player-chip">Jason Dinkel</span>
-      <span class="player-chip">Jerry Snyder</span>
-      <span class="player-chip">Matt Falcone</span>
-      <span class="player-chip">Nate Breiner</span>
+      <span class="player-chip">Garrett Perschy</span><span class="player-chip">Tim Wargo</span>
+      <span class="player-chip">Jon Hernandez</span><span class="player-chip">Brian Hager</span>
+      <span class="player-chip">Jason Dinkel</span><span class="player-chip">Jerry Snyder</span>
+      <span class="player-chip">Matt Falcone</span><span class="player-chip">Nate Breiner</span>
     </div>
     <div class="players-group-label">Pinch Hitters</div>
     <div class="players-row">
@@ -167,22 +153,38 @@
 </div>
 
 <div style="max-width:700px;margin:0 auto;padding:0 1rem;">
-  <img src="/garretts-last-swing-photo.jpg"
-       alt="Garrett's Last Swing — the crew"
+  <img src="/garretts-last-swing-photo.jpg" alt="Garrett's Last Swing — the crew"
        style="width:100%;border-radius:16px;margin-top:1.5rem;display:block;object-fit:cover;max-height:420px;border:1px solid rgba(201,168,76,0.2);">
-  <div style="text-align:center;font-size:11px;color:rgba(245,240,232,0.35);letter-spacing:0.08em;margin-top:8px;margin-bottom:0.5rem;">Cape May · June 2026</div>
+  <div style="text-align:center;font-size:11px;color:rgba(245,240,232,0.35);letter-spacing:0.08em;margin-top:8px;">Cape May · June 2026</div>
 </div>
 
 <div class="page">
+
+  <!-- WINNER BANNERS -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:2.5rem;">
+    <div class="winner-banner gold-banner">
+      <span class="trophy">🏆</span>
+      <div class="comp-label">The Victor</div>
+      <div class="winner-name">Jon</div>
+      <div class="winner-stat">Hernandez · +6 · 220</div>
+    </div>
+    <div class="winner-banner gold-banner">
+      <span class="trophy">🥊</span>
+      <div class="comp-label">Match Play</div>
+      <div class="winner-name">Jason</div>
+      <div class="winner-stat">Dinkel · 2.5 pts</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
 
   <!-- COMP 1 -->
   <div class="section-header">
     <div class="section-num">1</div>
     <div>
       <div class="section-title">The Victor</div>
-      <div class="section-desc">Lowest cumulative score vs par across 3 rounds · team scramble score each round</div>
+      <div class="section-desc">Cumulative score vs par · 3 rounds · team scramble score each round</div>
     </div>
-    <div class="rounds-badge">2 of 3 rounds ✓</div>
   </div>
   <div class="lb-card">
     <table class="lb-table">
@@ -209,7 +211,6 @@
       <div class="section-title">Match Play Champion</div>
       <div class="section-desc">Hole-by-hole within each cart group · 1 pt win · ½ pt tie</div>
     </div>
-    <div class="rounds-badge">2 of 3 rounds ✓</div>
   </div>
   <div class="lb-card">
     <table class="lb-table">
@@ -240,10 +241,7 @@
         <tr>
           <th class="left">Round · Course</th>
           <th class="left">Team</th>
-          <th>Front</th>
-          <th>Back</th>
-          <th>Total</th>
-          <th>vs Par</th>
+          <th>Front</th><th>Back</th><th>Total</th><th>vs Par</th>
         </tr>
       </thead>
       <tbody id="field-body"></tbody>
@@ -264,7 +262,7 @@
   <!-- PLAYER STATS -->
   <div class="section-plain">
     <div class="section-title">Scoring breakdown</div>
-    <div class="section-desc">Team scramble scores per hole vs course par · both players share credit</div>
+    <div class="section-desc">Team scramble scores per hole vs course par · all 3 rounds</div>
   </div>
   <div class="caveat">Scramble format — one ball, both teammates credited. Stats reflect team performance, not individual shots.</div>
   <div class="filter-row">
@@ -282,92 +280,102 @@
 </div>
 
 <script>
-const PAR = { rd1:72, rd2:71, rd3:71 };
-function rel(n) { return n===0?{s:'E',c:'even'}:n>0?{s:`+${n}`,c:'over'}:{s:`${n}`,c:'under'}; }
-function place(i) { return i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:rgba(245,240,232,0.35);font-size:13px">${i+1}</span>`; }
-function init(name) { return name.split(' ').map(w=>w[0]).join(''); }
+const PAR={rd1:72,rd2:71,rd3:71};
+function rel(n){return n===0?{s:'E',c:'even'}:n>0?{s:`+${n}`,c:'over'}:{s:`${n}`,c:'under'};}
+function place(i){return i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:rgba(245,240,232,0.35);font-size:13px">${i+1}</span>`;}
+function init(n){return n.split(' ').map(w=>w[0]).join('');}
 
-// ── COMP 1 ──
-const victorData = [
-  { name:'Tim Wargo',       rd1:{s:81,p:'Nate Breiner'},    rd2:{s:68,p:'Aaron Sebelin'} },
-  { name:'Jon Hernandez',   rd1:{s:76,p:'Jerry Snyder'},    rd2:{s:70,p:'Kyle Sebelin'} },
-  { name:'Brian Hager',     rd1:{s:79,p:'Jason Dinkel'},    rd2:{s:75,p:'Chase Sebelin'} },
-  { name:'Jason Dinkel',    rd1:{s:79,p:'Brian Hager'},     rd2:{s:74,p:'Garrett Perschy'} },
-  { name:'Jerry Snyder',    rd1:{s:76,p:'Jon Hernandez'},   rd2:{s:78,p:'Nate Breiner'} },
-  { name:'Garrett Perschy', rd1:{s:85,p:'Matt Falcone'},    rd2:{s:74,p:'Jason Dinkel'} },
-  { name:'Matt Falcone',    rd1:{s:85,p:'Garrett Perschy'}, rd2:{s:76,p:'Mike Falcone'} },
-  { name:'Nate Breiner',    rd1:{s:81,p:'Tim Wargo'},       rd2:{s:78,p:'Jerry Snyder'} },
+// COMP 1
+const victorData=[
+  {name:'Jon Hernandez',  rd1:{s:76,p:'Jerry Snyder'},    rd2:{s:70,p:'Kyle Sebelin'},   rd3:{s:74,p:'Chase Sebelin'}},
+  {name:'Tim Wargo',      rd1:{s:81,p:'Nate Breiner'},    rd2:{s:68,p:'Aaron Sebelin'},  rd3:{s:72,p:'Jason Dinkel'}},
+  {name:'Jason Dinkel',   rd1:{s:79,p:'Brian Hager'},     rd2:{s:74,p:'Garrett Perschy'},rd3:{s:72,p:'Tim Wargo'}},
+  {name:'Brian Hager',    rd1:{s:79,p:'Jason Dinkel'},    rd2:{s:75,p:'Chase Sebelin'},  rd3:{s:75,p:'Nate Breiner'}},
+  {name:'Garrett Perschy',rd1:{s:85,p:'Matt Falcone'},    rd2:{s:74,p:'Jason Dinkel'},   rd3:{s:71,p:'Kyle Sebelin'}},
+  {name:'Jerry Snyder',   rd1:{s:76,p:'Jon Hernandez'},   rd2:{s:78,p:'Nate Breiner'},   rd3:{s:80,p:'Justin Sebelin'}},
+  {name:'Nate Breiner',   rd1:{s:81,p:'Tim Wargo'},       rd2:{s:78,p:'Jerry Snyder'},   rd3:{s:75,p:'Brian Hager'}},
+  {name:'Matt Falcone',   rd1:{s:85,p:'Garrett Perschy'}, rd2:{s:76,p:'Mike Falcone'},   rd3:{s:78,p:'Aaron Sebelin'}},
 ];
-victorData.forEach(p => { p.rel1=p.rd1.s-PAR.rd1; p.rel2=p.rd2.s-PAR.rd2; p.totalRel=p.rel1+p.rel2; p.totalRaw=p.rd1.s+p.rd2.s; });
-victorData.sort((a,b) => a.totalRel-b.totalRel);
-const vb = document.getElementById('victor-body');
-const vLead = victorData[0].totalRel;
-victorData.forEach((p,i) => {
-  const r1=rel(p.rel1),r2=rel(p.rel2),tot=rel(p.totalRel);
+victorData.forEach(p=>{
+  p.rel1=p.rd1.s-PAR.rd1; p.rel2=p.rd2.s-PAR.rd2; p.rel3=p.rd3.s-PAR.rd3;
+  p.totalRel=p.rel1+p.rel2+p.rel3; p.totalRaw=p.rd1.s+p.rd2.s+p.rd3.s;
+});
+victorData.sort((a,b)=>a.totalRel-b.totalRel);
+const vb=document.getElementById('victor-body');
+const vLead=victorData[0].totalRel;
+victorData.forEach((p,i)=>{
+  const r1=rel(p.rel1),r2=rel(p.rel2),r3=rel(p.rel3),tot=rel(p.totalRel);
   const gap=p.totalRel-vLead;
-  vb.innerHTML += `<tr${i===0?' class="leader-row"':''}>
+  vb.innerHTML+=`<tr${i===0?' class="leader-row"':''}>
     <td class="left place-cell">${place(i)}</td>
-    <td class="left"><div class="player-name">${p.name}</div><div class="player-detail">w/ ${p.rd1.p} · ${p.rd2.p}</div></td>
+    <td class="left"><div class="player-name">${p.name}</div><div class="player-detail">w/ ${p.rd1.p} · ${p.rd2.p} · ${p.rd3.p}</div></td>
     <td><div class="score-raw">${p.rd1.s}</div><div class="score-rel ${r1.c}">${r1.s}</div></td>
     <td><div class="score-raw">${p.rd2.s}</div><div class="score-rel ${r2.c}">${r2.s}</div></td>
-    <td class="pending">—</td>
-    <td><div class="total-raw">${p.totalRaw}</div><div class="total-rel ${tot.c}">${tot.s}</div><div class="gap">${i===0?'leads':`+${gap} back`}</div></td>
+    <td><div class="score-raw">${p.rd3.s}</div><div class="score-rel ${r3.c}">${r3.s}</div></td>
+    <td><div class="total-raw">${p.totalRaw}</div><div class="total-rel ${tot.c}">${tot.s}</div><div class="gap">${i===0?'🏆 Champion':`+${gap} back`}</div></td>
   </tr>`;
 });
 
-// ── COMP 2 ──
-const mpData = [
-  { name:'Jason Dinkel',    rd1:1,   rd2:1   },
-  { name:'Jerry Snyder',    rd1:1,   rd2:0.5 },
-  { name:'Jon Hernandez',   rd1:1,   rd2:0   },
-  { name:'Brian Hager',     rd1:1,   rd2:0   },
-  { name:'Garrett Perschy', rd1:0,   rd2:1   },
-  { name:'Tim Wargo',       rd1:0,   rd2:1   },
-  { name:'Matt Falcone',    rd1:0,   rd2:0.5 },
-  { name:'Nate Breiner',    rd1:0,   rd2:0.5 },
+// COMP 2
+const mpData=[
+  {name:'Jason Dinkel',   rd1:1,  rd2:1,   rd3:0.5},
+  {name:'Jon Hernandez',  rd1:1,  rd2:0,   rd3:1},
+  {name:'Jerry Snyder',   rd1:1,  rd2:0.5, rd3:0},
+  {name:'Tim Wargo',      rd1:0,  rd2:1,   rd3:0.5},
+  {name:'Garrett Perschy',rd1:0,  rd2:1,   rd3:0.5},
+  {name:'Matt Falcone',   rd1:0,  rd2:0.5, rd3:1},
+  {name:'Brian Hager',    rd1:1,  rd2:0,   rd3:0},
+  {name:'Nate Breiner',   rd1:0,  rd2:0.5, rd3:0},
 ];
-mpData.forEach(p => p.total=p.rd1+p.rd2);
-mpData.sort((a,b) => b.total-a.total);
-function ptCell(v) {
-  if(v===null||v===undefined) return `<td class="pending">—</td>`;
-  if(v===1) return `<td class="pt-win">1</td>`;
-  if(v===0.5) return `<td class="pt-half">½</td>`;
-  return `<td class="pt-loss">0</td>`;
+mpData.forEach(p=>p.total=p.rd1+p.rd2+p.rd3);
+mpData.sort((a,b)=>b.total-a.total);
+function ptCell(v){
+  if(v===1) return`<td class="pt-win">1</td>`;
+  if(v===0.5) return`<td class="pt-half">½</td>`;
+  return`<td class="pt-loss">0</td>`;
 }
-const mb = document.getElementById('mp-body');
-const mpLead = mpData[0].total;
-mpData.forEach((p,i) => {
+const mb=document.getElementById('mp-body');
+const mpLead=mpData[0].total;
+mpData.forEach((p,i)=>{
   const gap=p.total-mpLead;
-  mb.innerHTML += `<tr${i===0?' class="leader-row"':''}>
+  mb.innerHTML+=`<tr${i===0?' class="leader-row"':''}>
     <td class="left place-cell">${place(i)}</td>
     <td class="left"><div class="player-name">${p.name}</div></td>
-    ${ptCell(p.rd1)}${ptCell(p.rd2)}<td class="pending">—</td>
-    <td><div class="total-raw">${p.total}</div><div class="gap">${i===0?'leads':gap===0?'tied':`${gap} back`}</div></td>
+    ${ptCell(p.rd1)}${ptCell(p.rd2)}${ptCell(p.rd3)}
+    <td><div class="total-raw">${p.total}</div><div class="gap">${i===0?'🏆 Champion':gap===0?'tied':`${gap} back`}</div></td>
   </tr>`;
 });
 
-// ── FULL FIELD ──
-const fieldData = [
-  { round:'Rd 1', course:'Shore Gate GC', par:72, teams:[
-    { name:'Jon Hernandez / Jerry Snyder',   f:38,b:38,t:76,pinch:false },
-    { name:'Brian Hager / Jason Dinkel',     f:38,b:41,t:79,pinch:false },
-    { name:'Tim Wargo / Nate Breiner',       f:41,b:40,t:81,pinch:false },
-    { name:'Garrett Perschy / Matt Falcone', f:43,b:42,t:85,pinch:false },
+// FULL FIELD
+const fieldData=[
+  {round:'Rd 1',course:'Shore Gate GC',par:72,teams:[
+    {name:'Jon Hernandez / Jerry Snyder',  f:38,b:38,t:76,pinch:false},
+    {name:'Brian Hager / Jason Dinkel',    f:38,b:41,t:79,pinch:false},
+    {name:'Tim Wargo / Nate Breiner',      f:41,b:40,t:81,pinch:false},
+    {name:'Garrett Perschy / Matt Falcone',f:43,b:42,t:85,pinch:false},
   ]},
-  { round:'Rd 2', course:'Cape May National', par:71, teams:[
-    { name:'Tim Wargo / Aaron Sebelin',      f:34,b:34,t:68,pinch:true },
-    { name:'Jon Hernandez / Kyle Sebelin',   f:36,b:34,t:70,pinch:true },
-    { name:'Garrett Perschy / Jason Dinkel', f:37,b:37,t:74,pinch:false },
-    { name:'Brian Hager / Chase Sebelin',    f:40,b:35,t:75,pinch:true },
-    { name:'Matt Falcone / Mike Falcone',    f:40,b:36,t:76,pinch:true },
-    { name:'Jerry Snyder / Nate Breiner',    f:38,b:40,t:78,pinch:false },
+  {round:'Rd 2',course:'Cape May National',par:71,teams:[
+    {name:'Tim Wargo / Aaron Sebelin',     f:34,b:34,t:68,pinch:true},
+    {name:'Jon Hernandez / Kyle Sebelin',  f:36,b:34,t:70,pinch:true},
+    {name:'Garrett Perschy / Jason Dinkel',f:37,b:37,t:74,pinch:false},
+    {name:'Brian Hager / Chase Sebelin',   f:40,b:35,t:75,pinch:true},
+    {name:'Matt Falcone / Mike Falcone',   f:40,b:36,t:76,pinch:true},
+    {name:'Jerry Snyder / Nate Breiner',   f:38,b:40,t:78,pinch:false},
+  ]},
+  {round:'Rd 3',course:'Cape May National',par:71,teams:[
+    {name:'Garrett Perschy / Kyle Sebelin',f:37,b:34,t:71,pinch:true},
+    {name:'Tim Wargo / Jason Dinkel',      f:39,b:33,t:72,pinch:false},
+    {name:'Jon Hernandez / Chase Sebelin', f:38,b:36,t:74,pinch:true},
+    {name:'Brian Hager / Nate Breiner',    f:38,b:37,t:75,pinch:false},
+    {name:'Matt Falcone / Aaron Sebelin',  f:38,b:40,t:78,pinch:true},
+    {name:'Jerry Snyder / Justin Sebelin', f:40,b:40,t:80,pinch:true},
   ]},
 ];
-const fb = document.getElementById('field-body');
-fieldData.forEach((rd,ri) => {
-  [...rd.teams].sort((a,b)=>a.t-b.t).forEach((team,ti) => {
+const fb=document.getElementById('field-body');
+fieldData.forEach((rd,ri)=>{
+  [...rd.teams].sort((a,b)=>a.t-b.t).forEach((team,ti)=>{
     const vsp=rel(team.t-rd.par);
-    fb.innerHTML += `<tr${ti===0&&ri>0?' class="group-divider"':''}>
+    fb.innerHTML+=`<tr${ti===0&&ri>0?' class="group-divider"':''}>
       <td class="left"><div class="round-label">${rd.round} · ${rd.course}</div></td>
       <td class="left"><div class="team-name">${team.name}${team.pinch?'<span class="pinch-tag">pinch</span>':''}</div></td>
       <td>${team.f}</td><td>${team.b}</td>
@@ -377,95 +385,93 @@ fieldData.forEach((rd,ri) => {
   });
 });
 
-// ── PINCH HITTERS ──
-const pinchers = [
-  { name:'Aaron Sebelin',  rd:'Rd 2', course:'Cape May',  partner:'Tim Wargo',    f:34,b:34,t:68,par:71 },
-  { name:'Kyle Sebelin',   rd:'Rd 2', course:'Cape May',  partner:'Jon Hernandez',f:36,b:34,t:70,par:71 },
-  { name:'Chase Sebelin',  rd:'Rd 2', course:'Cape May',  partner:'Brian Hager',  f:40,b:35,t:75,par:71 },
-  { name:'Mike Falcone',   rd:'Rd 2', course:'Cape May',  partner:'Matt Falcone', f:40,b:36,t:76,par:71 },
-  { name:'Justin Sebelin', rd:'Rd 3', course:'Cape May',  partner:'TBD',          f:null,b:null,t:null,par:71 },
+// PINCH HITTERS
+const pinchers=[
+  {name:'Aaron Sebelin', rd:'Rd 2 & 3',course:'Cape May', partner:'Tim Wargo / Matt Falcone',f:null,b:null,t:null,par:71,rd2t:68,rd3t:78},
+  {name:'Kyle Sebelin',  rd:'Rd 2 & 3',course:'Cape May', partner:'Jon Hernandez / Garrett Perschy',f:null,b:null,t:null,par:71,rd2t:70,rd3t:71},
+  {name:'Chase Sebelin', rd:'Rd 2 & 3',course:'Cape May', partner:'Brian Hager / Jon Hernandez',f:null,b:null,t:null,par:71,rd2t:75,rd3t:74},
+  {name:'Mike Falcone',  rd:'Rd 2',    course:'Cape May', partner:'Matt Falcone',f:40,b:36,t:76,par:71,rd2t:null,rd3t:null},
+  {name:'Justin Sebelin',rd:'Rd 3',    course:'Cape May', partner:'Jerry Snyder',f:40,b:40,t:80,par:71,rd2t:null,rd3t:null},
 ];
-const pg = document.getElementById('ph-grid');
-pinchers.forEach(p => {
-  const vsp = p.t ? rel(p.t-p.par) : null;
-  pg.innerHTML += `<div class="ph-card">
+const pg=document.getElementById('ph-grid');
+pinchers.forEach(p=>{
+  // For multi-round pinchers show both rounds
+  let statsHTML='';
+  if(p.rd2t&&p.rd3t){
+    const v2=rel(p.rd2t-p.par), v3=rel(p.rd3t-p.par);
+    statsHTML=`
+      <div class="ph-stat-row"><span class="ph-stat-label">Rd 2</span><span class="ph-stat-val">${p.rd2t} <span class="${v2.c}" style="font-size:11px">${v2.s}</span></span></div>
+      <div class="ph-stat-row"><span class="ph-stat-label">Rd 3</span><span class="ph-stat-val">${p.rd3t} <span class="${v3.c}" style="font-size:11px">${v3.s}</span></span></div>`;
+  } else if(p.t){
+    const vsp=rel(p.t-p.par);
+    statsHTML=`
+      <div class="ph-stat-row"><span class="ph-stat-label">Score</span><span class="ph-stat-val">${p.t}</span></div>
+      <div class="ph-stat-row"><span class="ph-stat-label">vs Par</span><span class="ph-stat-val ${vsp.c}">${vsp.s}</span></div>
+      <div class="ph-stat-row"><span class="ph-stat-label">F / B</span><span class="ph-stat-val">${p.f} · ${p.b}</span></div>`;
+  }
+  pg.innerHTML+=`<div class="ph-card">
     <div class="ph-card-top">
       <div class="ph-avatar">${init(p.name)}</div>
       <div><div class="ph-name">${p.name}</div><div class="ph-round">${p.rd} · ${p.course}</div></div>
     </div>
     <div class="ph-divider"></div>
-    ${p.t ? `
-    <div class="ph-stat-row"><span class="ph-stat-label">Score</span><span class="ph-stat-val">${p.t}</span></div>
-    <div class="ph-stat-row"><span class="ph-stat-label">vs Par</span><span class="ph-stat-val ${vsp.c}">${vsp.s}</span></div>
-    <div class="ph-stat-row"><span class="ph-stat-label">Front / Back</span><span class="ph-stat-val">${p.f} · ${p.b}</span></div>
-    ` : `<div class="ph-pending">In progress…</div>`}
+    ${statsHTML}
     <div class="ph-partner">w/ <strong>${p.partner}</strong></div>
   </div>`;
 });
 
-// ── PLAYER STATS ──
-const playerStats = [
-  { name:'Tim Wargo',       guest:false, holes:36, eagle:0, birdie:6, par:18, bogey:12, double:0, worse:0, strokes:149 },
-  { name:'Jon Hernandez',   guest:false, holes:36, eagle:1, birdie:5, par:21, bogey:8,  double:1, worse:0, strokes:146 },
-  { name:'Brian Hager',     guest:false, holes:36, eagle:0, birdie:7, par:12, bogey:16, double:1, worse:0, strokes:154 },
-  { name:'Jason Dinkel',    guest:false, holes:36, eagle:0, birdie:4, par:19, bogey:12, double:1, worse:0, strokes:153 },
-  { name:'Jerry Snyder',    guest:false, holes:36, eagle:0, birdie:5, par:16, bogey:14, double:1, worse:0, strokes:154 },
-  { name:'Garrett Perschy', guest:false, holes:36, eagle:0, birdie:3, par:21, bogey:7,  double:3, worse:2, strokes:159 },
-  { name:'Matt Falcone',    guest:false, holes:36, eagle:0, birdie:3, par:19, bogey:9,  double:3, worse:2, strokes:161 },
-  { name:'Nate Breiner',    guest:false, holes:36, eagle:0, birdie:4, par:13, bogey:18, double:1, worse:0, strokes:159 },
-  { name:'Aaron Sebelin',   guest:true,  holes:18, eagle:0, birdie:5, par:11, bogey:2,  double:0, worse:0, strokes:68 },
-  { name:'Kyle Sebelin',    guest:true,  holes:18, eagle:1, birdie:3, par:11, bogey:2,  double:1, worse:0, strokes:70 },
-  { name:'Chase Sebelin',   guest:true,  holes:18, eagle:0, birdie:4, par:6,  bogey:8,  double:0, worse:0, strokes:75 },
-  { name:'Mike Falcone',    guest:true,  holes:18, eagle:0, birdie:1, par:11, bogey:6,  double:0, worse:0, strokes:76 },
+// PLAYER STATS — all 3 rounds
+const playerStats=[
+  {name:'Jon Hernandez',  guest:false,holes:54,eagle:1,birdie:7, par:32,bogey:13,double:1,worse:0,strokes:220},
+  {name:'Tim Wargo',      guest:false,holes:54,eagle:0,birdie:10,par:28,bogey:15,double:1,worse:0,strokes:221},
+  {name:'Jason Dinkel',   guest:false,holes:54,eagle:0,birdie:8, par:29,bogey:15,double:2,worse:0,strokes:225},
+  {name:'Brian Hager',    guest:false,holes:54,eagle:1,birdie:8, par:21,bogey:23,double:1,worse:0,strokes:229},
+  {name:'Garrett Perschy',guest:false,holes:54,eagle:1,birdie:6, par:31,bogey:10,double:4,worse:2,strokes:230},
+  {name:'Jerry Snyder',   guest:false,holes:54,eagle:0,birdie:5, par:28,bogey:17,double:4,worse:0,strokes:234},
+  {name:'Nate Breiner',   guest:false,holes:54,eagle:1,birdie:5, par:22,bogey:25,double:1,worse:0,strokes:234},
+  {name:'Matt Falcone',   guest:false,holes:54,eagle:0,birdie:4, par:31,bogey:12,double:4,worse:3,strokes:239},
+  {name:'Aaron Sebelin',  guest:true, holes:36,eagle:0,birdie:6, par:23,bogey:6, double:1,worse:0,strokes:146},
+  {name:'Kyle Sebelin',   guest:true, holes:36,eagle:2,birdie:6, par:21,bogey:5, double:2,worse:0,strokes:141},
+  {name:'Chase Sebelin',  guest:true, holes:36,eagle:0,birdie:6, par:17,bogey:13,double:0,worse:0,strokes:149},
+  {name:'Mike Falcone',   guest:true, holes:18,eagle:0,birdie:1, par:11,bogey:6, double:0,worse:0,strokes:76},
+  {name:'Justin Sebelin', guest:true, holes:18,eagle:0,birdie:0, par:12,bogey:3, double:3,worse:0,strokes:80},
 ];
-
-const cats = [
-  { key:'eagle',  label:'Eagle',  cls:'f-eagle'  },
-  { key:'birdie', label:'Birdie', cls:'f-birdie' },
-  { key:'par',    label:'Par',    cls:'f-par'    },
-  { key:'bogey',  label:'Bogey',  cls:'f-bogey'  },
-  { key:'double', label:'Double', cls:'f-double' },
-  { key:'worse',  label:'Worse',  cls:'f-worse'  },
+const cats=[
+  {key:'eagle',label:'Eagle',cls:'f-eagle'},{key:'birdie',label:'Birdie',cls:'f-birdie'},
+  {key:'par',label:'Par',cls:'f-par'},{key:'bogey',label:'Bogey',cls:'f-bogey'},
+  {key:'double',label:'Double',cls:'f-double'},{key:'worse',label:'Worse',cls:'f-worse'},
 ];
-
-function buildStats(list) {
-  const grid = document.getElementById('stats-grid');
-  grid.innerHTML = '';
-  list.forEach(p => {
-    const sub = p.holes + (p.guest?' holes (Rd 2)':' holes (Rd 1–2)');
-    const underH = p.eagle+p.birdie, overH = p.bogey+p.double+p.worse;
-    const avg = (p.strokes/p.holes).toFixed(2);
-    const bars = cats.filter(c=>p[c.key]>0).map(c => {
-      const pct = Math.round((p[c.key]/p.holes)*100);
-      return `<div class="dist-row">
-        <span class="dist-label">${c.label}</span>
-        <div class="dist-track"><div class="dist-fill ${c.cls}" style="width:${pct}%"></div></div>
-        <span class="dist-count">${p[c.key]}</span>
-      </div>`;
+function buildStats(list){
+  const grid=document.getElementById('stats-grid');
+  grid.innerHTML='';
+  list.forEach(p=>{
+    const sub=p.holes+' holes'+(p.guest?' (pinch hitter)':' (Rd 1–3)');
+    const underH=p.eagle+p.birdie,overH=p.bogey+p.double+p.worse;
+    const avg=(p.strokes/p.holes).toFixed(2);
+    const bars=cats.filter(c=>p[c.key]>0).map(c=>{
+      const pct=Math.round((p[c.key]/p.holes)*100);
+      return`<div class="dist-row"><span class="dist-label">${c.label}</span><div class="dist-track"><div class="dist-fill ${c.cls}" style="width:${pct}%"></div></div><span class="dist-count">${p[c.key]}</span></div>`;
     }).join('');
-    grid.innerHTML += `<div class="stat-card">
+    grid.innerHTML+=`<div class="stat-card">
       <div class="stat-card-top">
         <div class="stat-avatar${p.guest?'':' g8'}">${init(p.name)}</div>
         <div><div class="stat-name">${p.name}</div><div class="stat-sub">${sub}</div></div>
       </div>
-      <div class="stat-divider"></div>
-      ${bars}
+      <div class="stat-divider"></div>${bars}
       <div class="stat-footer">
-        <div class="stat-foot-item"><div class="stat-foot-val under-color">${underH}</div><div class="stat-foot-lbl">sub-par</div></div>
+        <div class="stat-foot-item"><div class="stat-foot-val" style="color:var(--green)">${underH}</div><div class="stat-foot-lbl">sub-par</div></div>
         <div class="stat-foot-item"><div class="stat-foot-val">${p.par}</div><div class="stat-foot-lbl">pars</div></div>
-        <div class="stat-foot-item"><div class="stat-foot-val over-color">${overH}</div><div class="stat-foot-lbl">over par</div></div>
+        <div class="stat-foot-item"><div class="stat-foot-val" style="color:var(--red)">${overH}</div><div class="stat-foot-lbl">over par</div></div>
         <div class="stat-foot-item"><div class="stat-foot-val">${avg}</div><div class="stat-foot-lbl">avg/hole</div></div>
       </div>
     </div>`;
   });
 }
-
-function filterStats(type, btn) {
+function filterStats(type,btn){
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   buildStats(type==='all'?playerStats:type==='orig'?playerStats.filter(p=>!p.guest):playerStats.filter(p=>p.guest));
 }
-
 buildStats(playerStats);
 </script>
 </body>
