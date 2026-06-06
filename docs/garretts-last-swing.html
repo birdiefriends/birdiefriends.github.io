@@ -278,47 +278,11 @@
       <tbody id="skins-body"></tbody>
     </table>
   </div>
-  <div style="margin-top:1rem;">
-    <div class="lb-card">
-      <table class="lb-table">
-        <thead>
-          <tr>
-            <th class="left">Team</th>
-            <th style="width:80px">Skins won</th>
-          </tr>
-        </thead>
-        <tbody id="skins-totals"></tbody>
-      </table>
-    </div>
-  </div>
-
   <div style="margin-top:1.5rem;">
     <div class="section-plain" style="margin-top:0;margin-bottom:1rem;">
       <div class="section-title">Rd 3 Closest to the Pin</div>
       <div class="section-desc">Cape May National · all par 3s</div>
     </div>
-    <div class="lb-card">
-      <table class="lb-table">
-        <thead>
-          <tr>
-            <th class="left">Hole</th>
-            <th class="left">Par 3</th>
-            <th class="left">Closest to the Pin</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td class="left">Hole 3</td><td class="left" style="color:var(--white-dim)">P3</td><td class="left"><div class="player-name" style="font-size:13px">Nate Breiner</div></td></tr>
-          <tr><td class="left">Hole 6</td><td class="left" style="color:var(--white-dim)">P3</td><td class="left"><div class="player-name" style="font-size:13px">Aaron Sebelin</div></td></tr>
-          <tr><td class="left">Hole 8</td><td class="left" style="color:var(--white-dim)">P3</td><td class="left"><div class="player-name" style="font-size:13px">Jon Hernandez</div></td></tr>
-          <tr><td class="left">Hole 13</td><td class="left" style="color:var(--white-dim)">P3</td><td class="left"><div class="player-name" style="font-size:13px">Tim Wargo</div></td></tr>
-          <tr><td class="left">Hole 17</td><td class="left" style="color:var(--white-dim)">P3</td><td class="left"><div class="player-name" style="font-size:13px">Garrett Perschy</div></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-
-  <div style="margin-top:1rem;">
     <div class="lb-card">
       <table class="lb-table">
         <thead>
@@ -580,14 +544,6 @@ skinsData.forEach(s=>{
     <td><span style="font-size:15px;font-weight:700;color:var(--gold-light)">${s.value}</span></td>
   </tr>`;
 });
-const st=document.getElementById('skins-totals');
-skinsTotals.forEach((t,i)=>{
-  st.innerHTML+=`<tr${i===0?' class="leader-row"':''}>
-    <td class="left"><div class="player-name" style="font-size:13px">${t.team}</div></td>
-    <td><span style="font-size:15px;font-weight:700;color:${i===0?'var(--gold-light)':'var(--white)'}">${t.skins}</span></td>
-  </tr>`;
-});
-
 buildStats(playerStats);
 </script>
 </body>
