@@ -271,8 +271,7 @@
           <th class="left" style="width:52px">Hole</th>
           <th class="left" style="width:40px">Par</th>
           <th class="left">Winner</th>
-          <th style="width:52px">Score</th>
-          <th style="width:64px">Skins</th>
+          <th style="width:72px">Score</th>
         </tr>
       </thead>
       <tbody id="skins-body"></tbody>
@@ -540,8 +539,7 @@ skinsData.forEach(s=>{
     <td class="left" style="font-weight:500">Hole ${s.hole}</td>
     <td class="left" style="color:var(--white-dim)">P${s.par}</td>
     <td class="left"><div class="player-name" style="font-size:13px">${s.winner}</div>${s.note?`<div class="player-detail">${s.note}</div>`:''}</td>
-    <td><span class="${relCls}" style="font-weight:600">${s.score} (${relStr})</span></td>
-    <td><span style="font-size:15px;font-weight:700;color:var(--gold-light)">${s.value}</span></td>
+    <td><span class="${relStr<0?'under':relStr>0?'over':'even'}" style="font-weight:600">${s.score} (${s.rel<0?'-'+Math.abs(s.rel):s.rel>0?'+'+s.rel:'E'})</span></td>
   </tr>`;
 });
 buildStats(playerStats);
