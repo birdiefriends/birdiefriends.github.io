@@ -349,7 +349,6 @@
   </div>
 
 </div>
-</script>
 <!-- FLOATING PHOTO BUBBLE -->
 <div id="photo-bubble" onclick="openOverlay()">
   <img id="bubble-img" src="/gls-photo-955.webp" alt="">
@@ -365,6 +364,157 @@
   <div id="po-filmstrip"></div>
   <a id="po-gallery-link" href="/garretts-last-swing-gallery.html">📸 See all photos →</a>
 </div>
+
+
+<script>
+// ── DATA ──
+const PAR={rd1:72,rd2:71,rd3:71};
+function rel(n){return n===0?{s:'E',c:'even'}:n>0?{s:`+${n}`,c:'over'}:{s:`${n}`,c:'under'};}
+function place(i){return i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:rgba(245,240,232,0.35);font-size:13px">${i+1}</span>`;}
+function init(n){return n.split(' ').map(w=>w[0]).join('');}
+
+// WINNER BANNERS
+document.getElementById('winner-banners').innerHTML = `
+  <div class="winner-banner gold-banner"><span class="trophy">🏆</span><div class="comp-label">The Victor</div><div class="winner-name">Jon</div><div class="winner-stat">Hernandez · +6 · 220</div></div>
+  <div class="winner-banner gold-banner"><span class="trophy">🥊</span><div class="comp-label">Match Play</div><div class="winner-name">Jason</div><div class="winner-stat">Dinkel · 2.5 pts</div></div>`;
+
+// ROUND TABLES
+const rounds=[
+  {id:'rd1-body',par:72,teams:[
+    {name:'Jon / Jerry',f:38,b:38,t:76},{name:'Brian / Jason',f:38,b:41,t:79},
+    {name:'Tim / Nate',f:41,b:40,t:81},{name:'Garrett / Matt',f:43,b:42,t:85}]},
+  {id:'rd2-body',par:71,teams:[
+    {name:'Tim / Aaron',f:34,b:34,t:68},{name:'Jon / Kyle',f:36,b:34,t:70},
+    {name:'Garrett / Jason',f:37,b:37,t:74},{name:'Brian / Chase',f:40,b:35,t:75},
+    {name:'Matt / Mike',f:40,b:36,t:76},{name:'Jerry / Nate',f:38,b:40,t:78}]},
+  {id:'rd3-body',par:71,teams:[
+    {name:'Garrett / Kyle',f:37,b:34,t:71},{name:'Tim / Jason',f:39,b:33,t:72},
+    {name:'Jon / Chase',f:38,b:36,t:74},{name:'Brian / Nate',f:38,b:37,t:75},
+    {name:'Matt / Aaron',f:38,b:40,t:78},{name:'Jerry / Justin',f:40,b:40,t:80}]},
+];
+rounds.forEach(rd=>{
+  const tbody=document.getElementById(rd.id);
+  [...rd.teams].sort((a,b)=>a.t-b.t).forEach((t,i)=>{
+    const vsp=rel(t.t-rd.par);
+    tbody.innerHTML+=`<tr${i===0?' class="leader-row"':''}>
+      <td class="left place-cell">${place(i)}</td>
+      <td class="left"><div class="player-name" style="font-size:13px">${t.name}</div></td>
+      <td>${t.f}</td><td>${t.b}</td><td style="font-weight:600">${t.t}</td>
+      <td class="${vsp.c}" style="font-weight:600">${vsp.s}</td></tr>`;
+  });
+});
+
+// VICTOR
+const victorData=[
+  {name:'Jon Hernandez',  rd1:{s:76,p:'Jerry Snyder'},   rd2:{s:70,p:'Kyle Sebelin'},   rd3:{s:74,p:'Chase Sebelin'}},
+  {name:'Tim Wargo',      rd1:{s:81,p:'Nate Breiner'},   rd2:{s:68,p:'Aaron Sebelin'},  rd3:{s:72,p:'Jason Dinkel'}},
+  {name:'Jason Dinkel',   rd1:{s:79,p:'Brian Hager'},    rd2:{s:74,p:'Garrett Perschy'},rd3:{s:72,p:'Tim Wargo'}},
+  {name:'Brian Hager',    rd1:{s:79,p:'Jason Dinkel'},   rd2:{s:75,p:'Chase Sebelin'},  rd3:{s:75,p:'Nate Breiner'}},
+  {name:'Garrett Perschy',rd1:{s:85,p:'Matt Falcone'},   rd2:{s:74,p:'Jason Dinkel'},   rd3:{s:71,p:'Kyle Sebelin'}},
+  {name:'Jerry Snyder',   rd1:{s:76,p:'Jon Hernandez'},  rd2:{s:78,p:'Nate Breiner'},   rd3:{s:80,p:'Justin Sebelin'}},
+  {name:'Nate Breiner',   rd1:{s:81,p:'Tim Wargo'},      rd2:{s:78,p:'Jerry Snyder'},   rd3:{s:75,p:'Brian Hager'}},
+  {name:'Matt Falcone',   rd1:{s:85,p:'Garrett Perschy'},rd2:{s:76,p:'Mike Falcone'},   rd3:{s:78,p:'Aaron Sebelin'}},
+];
+victorData.forEach(p=>{p.rel1=p.rd1.s-PAR.rd1;p.rel2=p.rd2.s-PAR.rd2;p.rel3=p.rd3.s-PAR.rd3;p.totalRel=p.rel1+p.rel2+p.rel3;p.totalRaw=p.rd1.s+p.rd2.s+p.rd3.s;});
+victorData.sort((a,b)=>a.totalRel-b.totalRel);
+const vb=document.getElementById('victor-body');
+const vLead=victorData[0].totalRel;
+victorData.forEach((p,i)=>{
+  const r1=rel(p.rel1),r2=rel(p.rel2),r3=rel(p.rel3),tot=rel(p.totalRel);
+  vb.innerHTML+=`<tr${i===0?' class="leader-row"':''}>
+    <td class="left place-cell">${place(i)}</td>
+    <td class="left"><div class="player-name">${p.name}</div><div class="player-detail">w/ ${p.rd1.p} · ${p.rd2.p} · ${p.rd3.p}</div></td>
+    <td><div class="score-raw">${p.rd1.s}</div><div class="score-rel ${r1.c}">${r1.s}</div></td>
+    <td><div class="score-raw">${p.rd2.s}</div><div class="score-rel ${r2.c}">${r2.s}</div></td>
+    <td><div class="score-raw">${p.rd3.s}</div><div class="score-rel ${r3.c}">${r3.s}</div></td>
+    <td><div class="total-raw">${p.totalRaw}</div><div class="total-rel ${tot.c}">${tot.s}</div><div class="gap">${i===0?'🏆 Champion':`+${p.totalRel-vLead} back`}</div></td>
+  </tr>`;
+});
+
+// MATCH PLAY
+const mpData=[
+  {name:'Jason Dinkel',   rd1:1,  rd2:1,   rd3:0.5},
+  {name:'Jon Hernandez',  rd1:1,  rd2:0,   rd3:1},
+  {name:'Jerry Snyder',   rd1:1,  rd2:0.5, rd3:0},
+  {name:'Tim Wargo',      rd1:0,  rd2:1,   rd3:0.5},
+  {name:'Garrett Perschy',rd1:0,  rd2:1,   rd3:0.5},
+  {name:'Matt Falcone',   rd1:0,  rd2:0.5, rd3:1},
+  {name:'Brian Hager',    rd1:1,  rd2:0,   rd3:0},
+  {name:'Nate Breiner',   rd1:0,  rd2:0.5, rd3:0},
+];
+mpData.forEach(p=>p.total=p.rd1+p.rd2+p.rd3);
+mpData.sort((a,b)=>b.total-a.total);
+function ptCell(v){return v===1?`<td class="pt-win">1</td>`:v===0.5?`<td class="pt-half">½</td>`:`<td class="pt-loss">0</td>`;}
+const mb=document.getElementById('mp-body');
+const mpLead=mpData[0].total;
+mpData.forEach((p,i)=>{
+  const gap=p.total-mpLead;
+  mb.innerHTML+=`<tr${i===0?' class="leader-row"':''}>
+    <td class="left place-cell">${place(i)}</td>
+    <td class="left"><div class="player-name">${p.name}</div></td>
+    ${ptCell(p.rd1)}${ptCell(p.rd2)}${ptCell(p.rd3)}
+    <td><div class="total-raw">${p.total}</div><div class="gap">${i===0?'🏆 Champion':gap===0?'tied':`${gap} back`}</div></td>
+  </tr>`;
+});
+
+// PINCH HITTERS
+const pinchers=[
+  {name:'Aaron Sebelin', rd:'Rd 2 & 3',partner:'Tim Wargo / Matt Falcone',     rd2t:68,rd3t:78,par:71},
+  {name:'Kyle Sebelin',  rd:'Rd 2 & 3',partner:'Jon Hernandez / Garrett Perschy',rd2t:70,rd3t:71,par:71},
+  {name:'Chase Sebelin', rd:'Rd 2 & 3',partner:'Brian Hager / Jon Hernandez',   rd2t:75,rd3t:74,par:71},
+  {name:'Mike Falcone',  rd:'Rd 2',    partner:'Matt Falcone',                  f:40,b:36,t:76,par:71},
+  {name:'Justin Sebelin',rd:'Rd 3',    partner:'Jerry Snyder',                  f:40,b:40,t:80,par:71},
+];
+const pg=document.getElementById('ph-grid');
+pinchers.forEach(p=>{
+  let stats='';
+  if(p.rd2t&&p.rd3t){const v2=rel(p.rd2t-p.par),v3=rel(p.rd3t-p.par);stats=`<div class="ph-stat-row"><span class="ph-stat-label">Rd 2</span><span class="ph-stat-val">${p.rd2t} <span class="${v2.c}" style="font-size:11px">${v2.s}</span></span></div><div class="ph-stat-row"><span class="ph-stat-label">Rd 3</span><span class="ph-stat-val">${p.rd3t} <span class="${v3.c}" style="font-size:11px">${v3.s}</span></span></div>`;}
+  else if(p.t){const vsp=rel(p.t-p.par);stats=`<div class="ph-stat-row"><span class="ph-stat-label">Score</span><span class="ph-stat-val">${p.t}</span></div><div class="ph-stat-row"><span class="ph-stat-label">vs Par</span><span class="ph-stat-val ${vsp.c}">${vsp.s}</span></div><div class="ph-stat-row"><span class="ph-stat-label">F / B</span><span class="ph-stat-val">${p.f} · ${p.b}</span></div>`;}
+  pg.innerHTML+=`<div class="ph-card"><div class="ph-card-top"><div class="ph-avatar">${init(p.name)}</div><div><div class="ph-name">${p.name}</div><div class="ph-round">${p.rd}</div></div></div><div class="ph-divider"></div>${stats}<div class="ph-partner">w/ <strong>${p.partner}</strong></div></div>`;
+});
+
+// PLAYER STATS
+const playerStats=[
+  {name:'Jon Hernandez',  guest:false,holes:54,eagle:1,birdie:7, par:32,bogey:13,double:1,worse:0,strokes:220},
+  {name:'Tim Wargo',      guest:false,holes:54,eagle:0,birdie:10,par:28,bogey:15,double:1,worse:0,strokes:221},
+  {name:'Jason Dinkel',   guest:false,holes:54,eagle:0,birdie:8, par:29,bogey:15,double:2,worse:0,strokes:225},
+  {name:'Brian Hager',    guest:false,holes:54,eagle:1,birdie:8, par:21,bogey:23,double:1,worse:0,strokes:229},
+  {name:'Garrett Perschy',guest:false,holes:54,eagle:1,birdie:6, par:31,bogey:10,double:4,worse:2,strokes:230},
+  {name:'Jerry Snyder',   guest:false,holes:54,eagle:0,birdie:5, par:28,bogey:17,double:4,worse:0,strokes:234},
+  {name:'Nate Breiner',   guest:false,holes:54,eagle:1,birdie:5, par:22,bogey:25,double:1,worse:0,strokes:234},
+  {name:'Matt Falcone',   guest:false,holes:54,eagle:0,birdie:4, par:31,bogey:12,double:4,worse:3,strokes:239},
+  {name:'Aaron Sebelin',  guest:true, holes:36,eagle:0,birdie:6, par:23,bogey:6, double:1,worse:0,strokes:146},
+  {name:'Kyle Sebelin',   guest:true, holes:36,eagle:2,birdie:6, par:21,bogey:5, double:2,worse:0,strokes:141},
+  {name:'Chase Sebelin',  guest:true, holes:36,eagle:0,birdie:6, par:17,bogey:13,double:0,worse:0,strokes:149},
+  {name:'Mike Falcone',   guest:true, holes:18,eagle:0,birdie:1, par:11,bogey:6, double:0,worse:0,strokes:76},
+  {name:'Justin Sebelin', guest:true, holes:18,eagle:0,birdie:0, par:12,bogey:3, double:3,worse:0,strokes:80},
+];
+const cats=[
+  {key:'eagle',label:'Eagle',cls:'f-eagle'},{key:'birdie',label:'Birdie',cls:'f-birdie'},
+  {key:'par',label:'Par',cls:'f-par'},{key:'bogey',label:'Bogey',cls:'f-bogey'},
+  {key:'double',label:'Double',cls:'f-double'},{key:'worse',label:'Worse',cls:'f-worse'},
+];
+function buildStats(list){
+  const grid=document.getElementById('stats-grid');
+  grid.innerHTML='';
+  list.forEach(p=>{
+    const sub=p.holes+' holes'+(p.guest?' (pinch hitter)':' (Rd 1–3)');
+    const underH=p.eagle+p.birdie,overH=p.bogey+p.double+p.worse;
+    const avg=(p.strokes/p.holes).toFixed(2);
+    const bars=cats.filter(c=>p[c.key]>0).map(c=>{
+      const pct=Math.round((p[c.key]/p.holes)*100);
+      return`<div class="dist-row"><span class="dist-label">${c.label}</span><div class="dist-track"><div class="dist-fill ${c.cls}" style="width:${pct}%"></div></div><span class="dist-count">${p[c.key]}</span></div>`;
+    }).join('');
+    grid.innerHTML+=`<div class="stat-card"><div class="stat-card-top"><div class="stat-avatar${p.guest?'':' g8'}">${init(p.name)}</div><div><div class="stat-name">${p.name}</div><div class="stat-sub">${sub}</div></div></div><div class="stat-divider"></div>${bars}<div class="stat-footer"><div class="stat-foot-item"><div class="stat-foot-val" style="color:var(--green)">${underH}</div><div class="stat-foot-lbl">sub-par</div></div><div class="stat-foot-item"><div class="stat-foot-val">${p.par}</div><div class="stat-foot-lbl">pars</div></div><div class="stat-foot-item"><div class="stat-foot-val" style="color:var(--red)">${overH}</div><div class="stat-foot-lbl">over par</div></div><div class="stat-foot-item"><div class="stat-foot-val">${avg}</div><div class="stat-foot-lbl">avg/hole</div></div></div></div>`;
+  });
+}
+function filterStats(type,btn){
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  buildStats(type==='all'?playerStats:type==='orig'?playerStats.filter(p=>!p.guest):playerStats.filter(p=>p.guest));
+}
+buildStats(playerStats);
+</script>
 
 </body>
 </html>
