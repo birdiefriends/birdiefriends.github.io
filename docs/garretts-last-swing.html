@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v16 -->
+<!DOCTYPE html><!-- v15 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -677,30 +677,7 @@ function filterStats(type,btn){
   buildStats(type==='all'?playerStats:type==='orig'?playerStats.filter(p=>!p.guest):playerStats.filter(p=>p.guest));
 }
 // SKINS
-const skinsData=[
-  {hole:9,  par:4, winner:'Garrett / Kyle', score:2, rel:-2, value:9, note:'Carries holes 1–8'},
-  {hole:11, par:4, winner:'Brian / Nate',   score:2, rel:-2, value:2, note:'Carries hole 10'},
-  {hole:14, par:5, winner:'Garrett / Kyle', score:4, rel:-1, value:3, note:'Carries holes 12–13'},
-  {hole:15, par:4, winner:'Jon / Chase',    score:3, rel:-1, value:1, note:''},
-  {hole:17, par:3, winner:'Tim / Jason',    score:2, rel:-1, value:2, note:'Carries hole 16'},
-];
-const skinsTotals=[
-  {team:'Garrett / Kyle', skins:12},
-  {team:'Brian / Nate',   skins:2},
-  {team:'Tim / Jason',    skins:2},
-  {team:'Jon / Chase',    skins:1},
-];
-const sb2=document.getElementById('skins-body');
-skinsData.forEach(s=>{
-  const relStr=s.rel<0?`-${Math.abs(s.rel)}`:s.rel>0?`+${s.rel}`:'E';
-  const relCls=s.rel<0?'under':s.rel>0?'over':'even';
-  const shortName=s.winner.split('/')[0].trim();
-  sb2.innerHTML+=`<tr${s.value>=9?' class="leader-row"':''}>
-    <td class="left" style="font-size:12px;font-weight:500">H${s.hole}${s.note?' *':''}</td>
-    <td class="left" style="font-size:12px;font-weight:500">${shortName}</td>
-    <td><span class="${relCls}" style="font-weight:600;font-size:12px">${s.score}(${relStr})</span></td>
-  </tr>`;
-});
+// skins — hardcoded in HTML
 buildStats(playerStats);
 });
 </script>
