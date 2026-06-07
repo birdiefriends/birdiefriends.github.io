@@ -124,6 +124,55 @@
   .divider{height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,76,0.3),transparent);margin:2.5rem 0;}
   .footer{text-align:center;padding:2rem 1rem;font-size:11px;color:rgba(245,240,232,0.25);letter-spacing:0.1em;border-top:1px solid rgba(245,240,232,0.07);}
   .footer-script{color:var(--gold-dim);font-family:'Pacifico',cursive;font-size:14px;display:block;margin-bottom:6px;}
+  /* ── FLOATING PHOTO BUBBLE ── */
+  #photo-bubble {
+    position:fixed; bottom:28px; right:16px; width:60px; height:60px;
+    border-radius:50%; border:2.5px solid var(--gold);
+    box-shadow:0 4px 20px rgba(0,0,0,0.5),0 0 0 4px rgba(201,168,76,0.15);
+    overflow:hidden; cursor:pointer; z-index:100;
+    transition:transform 0.2s ease,box-shadow 0.2s ease; background:var(--navy);
+  }
+  #photo-bubble:active { transform:scale(0.95); }
+  #photo-bubble img { width:100%; height:100%; object-fit:cover; transition:opacity 0.35s ease; }
+  #photo-bubble.pulse::after {
+    content:''; position:absolute; inset:-6px; border-radius:50%;
+    border:2px solid var(--gold); animation:ringpulse 0.6s ease-out forwards;
+  }
+  @keyframes ringpulse { 0%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(1.6)} }
+  #bubble-label {
+    position:fixed; bottom:96px; right:16px; background:rgba(201,168,76,0.15);
+    border:1px solid rgba(201,168,76,0.35); border-radius:99px; padding:4px 10px;
+    font-size:10px; font-weight:500; color:var(--gold-light); letter-spacing:0.08em;
+    white-space:nowrap; z-index:100; opacity:0; transform:translateX(8px);
+    transition:opacity 0.3s ease,transform 0.3s ease; pointer-events:none;
+  }
+  #bubble-label.show { opacity:1; transform:translateX(0); }
+
+  /* ── PHOTO OVERLAY ── */
+  #photo-overlay {
+    position:fixed; inset:0; background:rgba(8,15,35,0.94); z-index:200;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:2rem 1.5rem; opacity:0; pointer-events:none; transition:opacity 0.25s ease;
+  }
+  #photo-overlay.open { opacity:1; pointer-events:all; }
+  #po-img { max-width:100%; max-height:60vh; object-fit:contain; border-radius:14px; border:1px solid rgba(201,168,76,0.25); transition:opacity 0.2s; }
+  #po-section { font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--gold-dim); margin-bottom:6px; text-align:center; }
+  #po-caption { font-size:13px; color:var(--gold-light); margin-top:10px; text-align:center; }
+  #po-filmstrip { display:flex; gap:7px; margin-top:14px; overflow-x:auto; padding-bottom:4px; max-width:100%; }
+  #po-filmstrip::-webkit-scrollbar { display:none; }
+  .po-thumb { width:50px; height:50px; object-fit:cover; border-radius:8px; cursor:pointer; opacity:0.5; border:1.5px solid transparent; flex-shrink:0; transition:opacity 0.2s,border-color 0.2s; }
+  .po-thumb.active { opacity:1; border-color:var(--gold); }
+  #po-gallery-link {
+    margin-top:16px; display:inline-flex; align-items:center; gap:6px;
+    background:rgba(201,168,76,0.15); border:1px solid rgba(201,168,76,0.35);
+    border-radius:99px; padding:8px 18px; font-size:12px; font-weight:500;
+    color:var(--gold-light); text-decoration:none; letter-spacing:0.06em;
+  }
+  #po-close {
+    position:absolute; top:16px; right:16px; background:rgba(245,240,232,0.1);
+    border:none; color:var(--white); font-size:18px; width:36px; height:36px;
+    border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
 </style>
 </head>
 <body>
@@ -179,7 +228,7 @@
   </div>
 
   <!-- ── CHAPTER: Rd 1 · Shore Gate ── -->
-  <div style="margin-top:2rem;">
+  <div style="margin-top:2rem;" data-bubble="rd1">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:12px;">Round 1 · Shore Gate GC</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
       <img src="/gls-photo-1013.jpg" alt="" style="width:100%;height:160px;object-fit:cover;border-radius:12px;display:block;">
@@ -231,7 +280,7 @@
   </div>
 
   <!-- ── CHAPTER: Rd 2 · Cape May ── -->
-  <div style="margin-top:2rem;">
+  <div style="margin-top:2rem;" data-bubble="rd2">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:12px;">Round 2 · Cape May National</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
       <img src="/gls-photo-937.jpg" alt="" style="width:100%;height:160px;object-fit:cover;border-radius:12px;display:block;">
@@ -265,7 +314,7 @@
   </div>
 
   <!-- ── CHAPTER: Rd 3 · Cape May ── -->
-  <div style="margin-top:2rem;">
+  <div style="margin-top:2rem;" data-bubble="rd3">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:12px;">Round 3 · Cape May National · Final Round</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
       <img src="/gls-photo-926.jpg" alt="" style="width:100%;height:160px;object-fit:cover;border-radius:12px;display:block;">
@@ -292,7 +341,7 @@
   <!-- ── CHAPTER: Individual Standings ── -->
   <div style="margin-top:2rem;">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:12px;">The Victor · Individual Standings</div>
-    <div class="lb-card">
+    <div class="lb-card" data-bubble="standings">
       <table class="lb-table">
         <thead><tr>
           <th class="left" style="width:36px">#</th>
@@ -310,7 +359,7 @@
   <!-- ── CHAPTER: Match Play ── -->
   <div style="margin-top:2rem;">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:12px;">Match Play Champion</div>
-    <div class="lb-card">
+    <div class="lb-card" data-bubble="mp">
       <table class="lb-table">
         <thead><tr>
           <th class="left" style="width:36px">#</th>
@@ -326,7 +375,7 @@
   <!-- ── CHAPTER: Skins & CttP ── -->
   <div style="margin-top:2rem;">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:12px;">Rd 3 · Skins & Closest to the Pin</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div data-bubble="skins" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <div>
         <div style="font-size:11px;color:rgba(245,240,232,0.5);margin-bottom:8px;font-weight:500;">Skins</div>
         <div class="lb-card">
@@ -370,7 +419,7 @@
   <!-- ── CHAPTER: Payouts ── -->
   <div style="margin-top:2rem;">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:12px;">💰 Payouts · Skins $48/hole · CttP $44/hole</div>
-    <div class="lb-card">
+    <div class="lb-card" data-bubble="payouts">
       <table class="lb-table">
         <thead><tr>
           <th class="left">Name</th>
@@ -395,13 +444,13 @@
   <!-- ── CHAPTER: Pinch Hitters ── -->
   <div style="margin-top:2rem;">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:12px;">Pinch Hitters</div>
-    <div class="ph-grid" id="ph-grid"></div>
+    <div class="ph-grid" data-bubble="pinch" id="ph-grid"></div>
   </div>
 
   <!-- ── CHAPTER: Scoring Breakdown ── -->
   <div style="margin-top:2rem;">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:8px;">Scoring Breakdown</div>
-    <div style="font-size:11px;color:var(--white-dim);font-style:italic;margin-bottom:12px;padding:8px 12px;background:rgba(245,240,232,0.04);border-left:2px solid rgba(201,168,76,0.3);border-radius:0 8px 8px 0;">Scramble format — one ball, both teammates credited.</div>
+    <div data-bubble="stats" style="font-size:11px;color:var(--white-dim);font-style:italic;margin-bottom:12px;padding:8px 12px;background:rgba(245,240,232,0.04);border-left:2px solid rgba(201,168,76,0.3);border-radius:0 8px 8px 0;">Scramble format — one ball, both teammates credited.</div>
     <div class="filter-row">
       <button class="filter-btn active" onclick="filterStats('all',this)">All</button>
       <button class="filter-btn" onclick="filterStats('orig',this)">Original 8</button>
@@ -679,7 +728,80 @@ function filterStats(type,btn){
 // SKINS
 // skins — hardcoded in HTML
 buildStats(playerStats);
+
+// ── FLOATING BUBBLE ──
+const bubbleSections = [
+  { id:'rd1',       label:'Rd 1 · Shore Gate',   caption:'Friday morning · Shore Gate GC',       thumb:'/gls-photo-913.jpg',  full:'/gls-photo-947.jpg',  extras:['/gls-photo-916.jpg','/gls-photo-921.jpg','/gls-photo-1013.jpg'] },
+  { id:'rd2',       label:'Rd 2 · Cape May',      caption:'Friday afternoon · Cape May National',  thumb:'/gls-photo-943.jpg',  full:'/gls-photo-943.jpg',  extras:['/gls-photo-937.jpg','/gls-photo-932.jpg','/gls-photo-947.jpg'] },
+  { id:'rd3',       label:'Rd 3 · Cape May',      caption:'Saturday · Cape May National',          thumb:'/gls-photo-989.jpg',  full:'/gls-photo-989.jpg',  extras:['/gls-photo-961.jpg','/gls-photo-962.jpg','/gls-photo-1006.png'] },
+  { id:'standings', label:'The Victor',           caption:'Jon Hernandez · Champion',              thumb:'/garretts-last-swing-photo.jpg', full:'/garretts-last-swing-photo.jpg', extras:[] },
+  { id:'mp',        label:'Match Play',           caption:'Jason Dinkel · Match Play Champion',    thumb:'/gls-photo-1004.jpg', full:'/gls-photo-1004.jpg', extras:[] },
+  { id:'skins',     label:'Rd 3 Skins & CttP',    caption:'Garrett / Kyle cleaned up',             thumb:'/gls-photo-926.jpg',  full:'/gls-photo-926.jpg',  extras:['/gls-photo-932.jpg'] },
+  { id:'payouts',   label:'Payouts',              caption:'Cape May · June 2026',                  thumb:'/gls-photo-955.webp', full:'/gls-photo-955.webp', extras:[] },
+  { id:'pinch',     label:'Pinch Hitters',        caption:'The supporting cast',                   thumb:'/gls-photo-1021.jpg', full:'/gls-photo-1021.jpg', extras:['/gls-photo-1020.jpg'] },
+  { id:'stats',     label:'Scoring Breakdown',    caption:'54 holes of data',                      thumb:'/gls-photo-916.jpg',  full:'/gls-photo-933.jpg',  extras:['/gls-photo-921.jpg'] },
+];
+let currentBubble = bubbleSections[0];
+
+function updateBubble(s) {
+  if (s.id === currentBubble.id) return;
+  currentBubble = s;
+  const img = document.getElementById('bubble-img');
+  const label = document.getElementById('bubble-label');
+  const bubble = document.getElementById('photo-bubble');
+  img.style.opacity = '0';
+  setTimeout(() => { img.src = s.thumb; img.style.opacity = '1'; }, 200);
+  bubble.classList.remove('pulse'); void bubble.offsetWidth; bubble.classList.add('pulse');
+  label.textContent = s.label; label.classList.add('show');
+  clearTimeout(label._t); label._t = setTimeout(() => label.classList.remove('show'), 2000);
+}
+
+function openOverlay() {
+  const s = currentBubble;
+  document.getElementById('po-img').src = s.full;
+  document.getElementById('po-section').textContent = s.label;
+  document.getElementById('po-caption').textContent = s.caption;
+  const fs = document.getElementById('po-filmstrip');
+  fs.innerHTML = '';
+  [s.full, ...s.extras].forEach((src, i) => {
+    const t = document.createElement('img');
+    t.src = i === 0 ? s.thumb : src;
+    t.className = 'po-thumb' + (i === 0 ? ' active' : '');
+    t.onclick = () => { document.getElementById('po-img').src = src; fs.querySelectorAll('.po-thumb').forEach(x => x.classList.remove('active')); t.classList.add('active'); };
+    fs.appendChild(t);
+  });
+  document.getElementById('photo-overlay').classList.add('open');
+}
+
+function closeOverlay() { document.getElementById('photo-overlay').classList.remove('open'); }
+document.getElementById('photo-overlay').addEventListener('click', function(e) { if(e.target===this) closeOverlay(); });
+
+const bubbleObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const s = bubbleSections.find(x => x.id === e.target.dataset.bubble);
+      if (s) updateBubble(s);
+    }
+  });
+}, { threshold: 0.25 });
+document.querySelectorAll('[data-bubble]').forEach(el => bubbleObserver.observe(el));
 });
 </script>
+<!-- FLOATING PHOTO BUBBLE -->
+<div id="photo-bubble" onclick="openOverlay()">
+  <img id="bubble-img" src="/gls-photo-955.webp" alt="">
+</div>
+<div id="bubble-label"></div>
+
+<!-- PHOTO OVERLAY -->
+<div id="photo-overlay">
+  <button id="po-close" onclick="closeOverlay()">✕</button>
+  <div id="po-section"></div>
+  <img id="po-img" src="" alt="">
+  <div id="po-caption"></div>
+  <div id="po-filmstrip"></div>
+  <a id="po-gallery-link" href="/garretts-last-swing-gallery.html">📸 See all photos →</a>
+</div>
+
 </body>
 </html>
