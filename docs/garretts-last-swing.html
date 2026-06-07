@@ -133,30 +133,6 @@
     white-space:nowrap; float:right; margin-top:2px;
   }
   .photo-pill:active { background:rgba(201,168,76,0.22); }
-  /* ── FLOATING PHOTO BUBBLE ── */
-  #photo-bubble {
-    position:fixed; bottom:28px; right:16px; width:60px; height:60px;
-    border-radius:50%; border:2.5px solid var(--gold);
-    box-shadow:0 4px 20px rgba(0,0,0,0.5),0 0 0 4px rgba(201,168,76,0.15);
-    overflow:hidden; cursor:pointer; z-index:100;
-    transition:transform 0.2s ease,box-shadow 0.2s ease; background:var(--navy);
-  }
-  #photo-bubble:active { transform:scale(0.95); }
-  #photo-bubble img { width:100%; height:100%; object-fit:cover; transition:opacity 0.35s ease; }
-  #photo-bubble.pulse::after {
-    content:''; position:absolute; inset:-6px; border-radius:50%;
-    border:2px solid var(--gold); animation:ringpulse 0.6s ease-out forwards;
-  }
-  @keyframes ringpulse { 0%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(1.6)} }
-  #bubble-label {
-    position:fixed; bottom:96px; right:16px; background:rgba(201,168,76,0.15);
-    border:1px solid rgba(201,168,76,0.35); border-radius:99px; padding:4px 10px;
-    font-size:10px; font-weight:500; color:var(--gold-light); letter-spacing:0.08em;
-    white-space:nowrap; z-index:100; opacity:0; transform:translateX(8px);
-    transition:opacity 0.3s ease,transform 0.3s ease; pointer-events:none;
-  }
-  #bubble-label.show { opacity:1; transform:translateX(0); }
-
   /* ── PHOTO OVERLAY ── */
   #photo-overlay {
     position:fixed; inset:0; background:rgba(8,15,35,0.94); z-index:200;
@@ -226,8 +202,8 @@
   <!-- RD 1 -->
   <div style="margin-top:2rem;" data-bubble="rd1">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:12px;">Round 1 · Shore Gate GC · Par 72<a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-rd1">📷 Rd 1 Photos</a></div>
-    <div class="lb-card"><table class="lb-table">
-      <thead><tr><th class="left" style="width:36px">#</th><th class="left">Team</th><th style="width:52px">Front</th><th style="width:52px">Back</th><th style="width:60px">Total</th><th style="width:60px">vs Par</th></tr></thead>
+    <div class="lb-card"><table class="lb-table" style="table-layout:auto">
+      <thead><tr><th class="left">#</th><th class="left">Team</th><th>Front</th><th>Back</th><th>Total</th><th>vs Par</th></tr></thead>
       <tbody id="rd1-body"></tbody>
     </table></div>
   </div>
@@ -235,8 +211,8 @@
   <!-- RD 2 -->
   <div style="margin-top:2rem;" data-bubble="rd2">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:12px;">Round 2 · Cape May National · Par 71<a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-rd2">📷 Rd 2 Photos</a></div>
-    <div class="lb-card"><table class="lb-table">
-      <thead><tr><th class="left" style="width:36px">#</th><th class="left">Team</th><th style="width:52px">Front</th><th style="width:52px">Back</th><th style="width:60px">Total</th><th style="width:60px">vs Par</th></tr></thead>
+    <div class="lb-card"><table class="lb-table" style="table-layout:auto">
+      <thead><tr><th class="left">#</th><th class="left">Team</th><th>Front</th><th>Back</th><th>Total</th><th>vs Par</th></tr></thead>
       <tbody id="rd2-body"></tbody>
     </table></div>
   </div>
@@ -244,8 +220,8 @@
   <!-- RD 3 -->
   <div style="margin-top:2rem;" data-bubble="rd3">
     <div style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#8a6e2f;font-weight:600;margin-bottom:12px;">Round 3 · Cape May National · Par 71<a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-rd3">📷 Rd 3 Photos</a></div>
-    <div class="lb-card"><table class="lb-table">
-      <thead><tr><th class="left" style="width:36px">#</th><th class="left">Team</th><th style="width:52px">Front</th><th style="width:52px">Back</th><th style="width:60px">Total</th><th style="width:60px">vs Par</th></tr></thead>
+    <div class="lb-card"><table class="lb-table" style="table-layout:auto">
+      <thead><tr><th class="left">#</th><th class="left">Team</th><th>Front</th><th>Back</th><th>Total</th><th>vs Par</th></tr></thead>
       <tbody id="rd3-body"></tbody>
     </table></div>
   </div>
@@ -349,12 +325,6 @@
   </div>
 
 </div>
-<!-- FLOATING PHOTO BUBBLE -->
-<div id="photo-bubble" onclick="openOverlay()">
-  <img id="bubble-img" src="/gls-photo-955.webp" alt="">
-</div>
-<div id="bubble-label"></div>
-
 <!-- PHOTO OVERLAY -->
 <div id="photo-overlay">
   <button id="po-close" onclick="closeOverlay()">✕</button>
