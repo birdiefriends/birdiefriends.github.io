@@ -429,6 +429,7 @@
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
 const PAR={rd1:72,rd2:71,rd3:71};
 function rel(n){return n===0?{s:'E',c:'even'}:n>0?{s:`+${n}`,c:'over'}:{s:`${n}`,c:'under'};}
 function place(i){return i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:rgba(245,240,232,0.35);font-size:13px">${i+1}</span>`;}
@@ -695,6 +696,7 @@ skinsData.forEach(s=>{
   </tr>`;
 });
 buildStats(playerStats);
+}); // end DOMContentLoaded
 </script>
 </body>
 </html>
