@@ -134,13 +134,16 @@
     color:#8a6e2f; font-weight:600;
   }
   .photo-pill {
-    display:inline-flex; align-items:center; gap:5px; flex-shrink:0;
-    background:rgba(201,168,76,0.12); border:1px solid rgba(201,168,76,0.3);
-    border-radius:99px; padding:4px 10px; font-size:11px; font-weight:500;
-    color:var(--gold-light); text-decoration:none; letter-spacing:0.04em;
-    white-space:nowrap;
+    display:inline-flex; align-items:center; gap:6px; flex-shrink:0;
+    background:linear-gradient(135deg,rgba(201,168,76,0.25),rgba(201,168,76,0.1));
+    border:1.5px solid rgba(201,168,76,0.5);
+    border-radius:99px; padding:7px 14px; font-size:12px; font-weight:600;
+    color:var(--gold-light); text-decoration:none; letter-spacing:0.03em;
+    white-space:nowrap; box-shadow:0 2px 8px rgba(201,168,76,0.15);
+    transition:transform 0.15s ease, box-shadow 0.15s ease;
   }
-  .photo-pill:active { background:rgba(201,168,76,0.22); }
+  .photo-pill:active { transform:scale(0.96); box-shadow:none; }
+  .photo-pill .pill-icon { font-size:16px; line-height:1; }
   /* ── PHOTO OVERLAY ── */
   #photo-overlay {
     position:fixed; inset:0; background:rgba(8,15,35,0.94); z-index:200;
@@ -209,7 +212,7 @@
 
   <!-- RD 1 -->
   <div style="margin-top:2rem;" data-bubble="rd1">
-    <div class="section-eyebrow-row"><span class="section-eyebrow-label">Round 1 · Shore Gate GC · Par 72</span><a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-rd1">📷 Rd 1 Photos</a></div>
+    <div class="section-eyebrow-row"><span class="section-eyebrow-label">Round 1 · Shore Gate GC · Par 72</span><a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-rd1"><span class="pill-icon">📸</span>Rd 1 Photos</a></div>
     <div class="lb-card"><table class="lb-table" style="table-layout:auto">
       <thead><tr><th class="left">#</th><th class="left">Team</th><th>Front</th><th>Back</th><th>Total</th><th>vs Par</th></tr></thead>
       <tbody id="rd1-body"></tbody>
@@ -218,7 +221,7 @@
 
   <!-- RD 2 -->
   <div style="margin-top:2rem;" data-bubble="rd2">
-    <div class="section-eyebrow-row"><span class="section-eyebrow-label">Round 2 · Cape May National · Par 71</span><a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-rd2">📷 Rd 2 Photos</a></div>
+    <div class="section-eyebrow-row"><span class="section-eyebrow-label">Round 2 · Cape May National · Par 71</span><a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-rd2"><span class="pill-icon">📸</span>Rd 2 Photos</a></div>
     <div class="lb-card"><table class="lb-table" style="table-layout:auto">
       <thead><tr><th class="left">#</th><th class="left">Team</th><th>Front</th><th>Back</th><th>Total</th><th>vs Par</th></tr></thead>
       <tbody id="rd2-body"></tbody>
@@ -227,7 +230,7 @@
 
   <!-- RD 3 -->
   <div style="margin-top:2rem;" data-bubble="rd3">
-    <div class="section-eyebrow-row"><span class="section-eyebrow-label">Round 3 · Cape May National · Par 71</span><a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-rd3">📷 Rd 3 Photos</a></div>
+    <div class="section-eyebrow-row"><span class="section-eyebrow-label">Round 3 · Cape May National · Par 71</span><a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-rd3"><span class="pill-icon">📸</span>Rd 3 Photos</a></div>
     <div class="lb-card"><table class="lb-table" style="table-layout:auto">
       <thead><tr><th class="left">#</th><th class="left">Team</th><th>Front</th><th>Back</th><th>Total</th><th>vs Par</th></tr></thead>
       <tbody id="rd3-body"></tbody>
@@ -238,7 +241,7 @@
 
   <!-- THE VICTOR -->
   <div style="margin-top:2rem;" data-bubble="standings">
-    <div class="section-eyebrow-row"><span class="section-eyebrow-label">The Victor · Individual Standings</span><a class="photo-pill" href="/garretts-last-swing-gallery.html">📷 Photos</a></div>
+    <div class="section-eyebrow-row"><span class="section-eyebrow-label">The Victor · Individual Standings</span><a class="photo-pill" href="/garretts-last-swing-gallery.html"><span class="pill-icon">📸</span> Photos</a></div>
     <div class="lb-card"><table class="lb-table">
       <thead><tr><th class="left" style="width:36px">#</th><th class="left">Player</th>
         <th>Rd 1<br><span style="font-size:9px;letter-spacing:0;text-transform:none;color:rgba(201,168,76,0.45)">P72</span></th>
@@ -262,7 +265,7 @@
 
   <!-- SKINS & CTTP -->
   <div style="margin-top:2rem;" data-bubble="skins">
-    <div class="section-eyebrow-row"><span class="section-eyebrow-label">Rd 3 · Skins & Closest to the Pin</span><a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-rd3">📷 Rd 3 Photos</a></div>
+    <div class="section-eyebrow-row"><span class="section-eyebrow-label">Rd 3 · Skins & Closest to the Pin</span><a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-rd3"><span class="pill-icon">📸</span>Rd 3 Photos</a></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <div>
         <div style="font-size:11px;color:rgba(245,240,232,0.5);margin-bottom:8px;font-weight:500;">Skins</div>
@@ -316,7 +319,7 @@
 
   <!-- PINCH HITTERS -->
   <div style="margin-top:2rem;" data-bubble="pinch">
-    <div class="section-eyebrow-row"><span class="section-eyebrow-label">Pinch Hitters</span><a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-saturday">📷 Photos</a></div>
+    <div class="section-eyebrow-row"><span class="section-eyebrow-label">Pinch Hitters</span><a class="photo-pill" href="/garretts-last-swing-gallery.html#ch-saturday"><span class="pill-icon">📸</span> Photos</a></div>
     <div class="ph-grid" id="ph-grid"></div>
   </div>
 
