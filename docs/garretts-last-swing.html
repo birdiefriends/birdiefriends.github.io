@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v15 -->
+<!DOCTYPE html><!-- v16 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -144,30 +144,39 @@
   }
   .photo-pill:active { transform:scale(0.96); box-shadow:none; }
   .photo-pill .pill-icon { font-size:16px; line-height:1; }
-  /* ── PHOTO OVERLAY ── */
-  #photo-overlay {
-    position:fixed; inset:0; background:rgba(8,15,35,0.94); z-index:200;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    padding:2rem 1.5rem; opacity:0; pointer-events:none; transition:opacity 0.25s ease;
-  }
-  #photo-overlay.open { opacity:1; pointer-events:all; }
-  #po-img { max-width:100%; max-height:60vh; object-fit:contain; border-radius:14px; border:1px solid rgba(201,168,76,0.25); transition:opacity 0.2s; }
-  #po-section { font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--gold-dim); margin-bottom:6px; text-align:center; }
-  #po-caption { font-size:13px; color:var(--gold-light); margin-top:10px; text-align:center; }
-  #po-filmstrip { display:flex; gap:7px; margin-top:14px; overflow-x:auto; padding-bottom:4px; max-width:100%; }
-  #po-filmstrip::-webkit-scrollbar { display:none; }
-  .po-thumb { width:50px; height:50px; object-fit:cover; border-radius:8px; cursor:pointer; opacity:0.5; border:1.5px solid transparent; flex-shrink:0; transition:opacity 0.2s,border-color 0.2s; }
-  .po-thumb.active { opacity:1; border-color:var(--gold); }
-  #po-gallery-link {
-    margin-top:16px; display:inline-flex; align-items:center; gap:6px;
-    background:rgba(201,168,76,0.15); border:1px solid rgba(201,168,76,0.35);
-    border-radius:99px; padding:8px 18px; font-size:12px; font-weight:500;
-    color:var(--gold-light); text-decoration:none; letter-spacing:0.06em;
-  }
-  #po-close {
-    position:absolute; top:16px; right:16px; background:rgba(245,240,232,0.1);
-    border:none; color:var(--white); font-size:18px; width:36px; height:36px;
-    border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  /* ── PRINT / PDF ── */
+  .download-bar{display:flex;justify-content:center;gap:10px;margin:1.5rem 0 0.5rem;flex-wrap:wrap;}
+  .dl-btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:99px;font-size:12px;font-weight:600;cursor:pointer;letter-spacing:0.04em;border:none;text-decoration:none;font-family:'DM Sans',sans-serif;transition:transform 0.15s,opacity 0.15s;}
+  .dl-btn:active{transform:scale(0.96);opacity:0.8;}
+  .dl-btn-primary{background:linear-gradient(135deg,rgba(201,168,76,0.35),rgba(201,168,76,0.15));border:1.5px solid rgba(201,168,76,0.55);color:var(--gold-light);}
+  .dl-btn-secondary{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.15);color:var(--white-dim);}
+  @media print{
+    .download-bar,.photo-pill,.filter-row,.hero-eyebrow{display:none!important;}
+    body{background:#fff!important;color:#111!important;}
+    .hero{background:none!important;border-bottom:2px solid #c9a84c!important;padding:1.5rem 1rem!important;}
+    .hero-title{color:#0f1e3c!important;text-shadow:none!important;}
+    .hero-subtitle,.final-pill{color:#8a6e2f!important;}
+    .player-chip{border-color:#ccc!important;color:#444!important;background:#f5f5f5!important;}
+    .lb-card,.stat-card,.ph-card{border:1px solid #ccc!important;background:#fafafa!important;}
+    .lb-table th,.field-table th{color:#8a6e2f!important;}
+    .lb-table td,.field-table td{color:#111!important;border-color:#eee!important;}
+    .winner-banner{border:1px solid #c9a84c!important;background:#fffdf5!important;}
+    .winner-name{color:#8a6e2f!important;}
+    .winner-stat,.comp-label{color:#555!important;}
+    .section-eyebrow-label{color:#8a6e2f!important;}
+    .under{color:#1a7a4a!important;}.over{color:#b03030!important;}.even{color:#555!important;}
+    .pt-win{color:#1a7a4a!important;}.pt-half{color:#8a6e2f!important;}.pt-loss{color:#555!important;}
+    .divider{background:#c9a84c!important;}
+    .footer{color:#aaa!important;border-top-color:#ddd!important;}
+    .stat-avatar,.ph-avatar{background:#f5f5f5!important;border-color:#ddd!important;color:#8a6e2f!important;}
+    .dist-fill{print-color-adjust:exact;-webkit-print-color-adjust:exact;}
+    .f-eagle{background:#7F77DD!important;}.f-birdie{background:#1D9E75!important;}
+    .f-par{background:#ccc!important;}.f-bogey{background:#EF9F27!important;}
+    .f-double{background:#D85A30!important;}.f-worse{background:#A32D2D!important;}
+    .hero-photo-wrap img{display:block!important;max-height:280px!important;}
+    a{color:inherit!important;}
+    .page{padding-bottom:1rem!important;}
+    @page{margin:0.6in 0.5in;}
   }
 </style>
 </head>
@@ -201,6 +210,10 @@
   <img src="/garretts-last-swing-photo.jpg" alt="Garrett's Last Swing — the crew"
        style="width:100%;border-radius:16px;margin-top:1.5rem;display:block;object-fit:cover;max-height:420px;border:1px solid rgba(201,168,76,0.2);">
   <div style="text-align:center;font-size:11px;color:rgba(245,240,232,0.35);letter-spacing:0.08em;margin-top:8px;">Cape May · June 2026</div>
+  <div class="download-bar">
+    <button class="dl-btn dl-btn-primary" onclick="window.print()">🖨️ Save as PDF</button>
+    <a class="dl-btn dl-btn-secondary" href="/garretts-last-swing-gallery.html">📸 Photo Gallery</a>
+  </div>
 </div>
 
 <div style="max-width:700px;margin:0 auto;padding:0 1rem 5rem;">
@@ -259,6 +272,22 @@
       <thead><tr><th class="left" style="width:36px">#</th><th class="left">Player</th><th>Rd 1</th><th>Rd 2</th><th>Rd 3</th><th>Points</th></tr></thead>
       <tbody id="mp-body"></tbody>
     </table></div>
+  </div>
+
+  <!-- FULL FIELD RESULTS -->
+  <div style="margin-top:2rem;" data-bubble="field">
+    <div class="section-eyebrow-row"><span class="section-eyebrow-label">Full Field · All Rounds</span></div>
+    <div class="lb-card"><table class="field-table" style="table-layout:auto">
+      <thead><tr>
+        <th class="left" style="width:36px">#</th>
+        <th class="left">Player</th>
+        <th>Rd 1</th><th>Rd 2</th><th>Rd 3</th><th>Total</th><th>vs Par</th>
+      </tr></thead>
+      <tbody id="field-body"></tbody>
+    </table></div>
+    <div style="font-size:11px;color:var(--white-dim);font-style:italic;margin-top:8px;padding:6px 10px;background:rgba(245,240,232,0.04);border-left:2px solid rgba(201,168,76,0.3);border-radius:0 8px 8px 0;">
+      Scramble format — team score credited to each player individually. Pinch hitters prorated to 54 holes for ranking.
+    </div>
   </div>
 
   <div class="divider"></div>
@@ -336,17 +365,6 @@
   </div>
 
 </div>
-<!-- PHOTO OVERLAY -->
-<div id="photo-overlay">
-  <button id="po-close" onclick="closeOverlay()">✕</button>
-  <div id="po-section"></div>
-  <img id="po-img" src="" alt="">
-  <div id="po-caption"></div>
-  <div id="po-filmstrip"></div>
-  <a id="po-gallery-link" href="/garretts-last-swing-gallery.html">📸 See all photos →</a>
-</div>
-
-
 <script>
 // ── DATA ──
 const PAR={rd1:72,rd2:71,rd3:71};
@@ -435,6 +453,56 @@ mpData.forEach((p,i)=>{
     <td class="left"><div class="player-name">${p.name}</div></td>
     ${ptCell(p.rd1)}${ptCell(p.rd2)}${ptCell(p.rd3)}
     <td><div class="total-raw">${p.total}</div><div class="gap">${i===0?'🏆 Champion':gap===0?'tied':`${gap} back`}</div></td>
+  </tr>`;
+});
+
+// FULL FIELD
+// Each original 8: rd1, rd2, rd3 actual scores. Pinch hitters: use their actual rounds; 
+// missing rounds filled with their team's score for that round.
+const fieldData=[
+  {name:'Jon Hernandez',  rd1:76, rd2:70, rd3:74},
+  {name:'Tim Wargo',      rd1:81, rd2:68, rd3:72},
+  {name:'Jason Dinkel',   rd1:79, rd2:74, rd3:72},
+  {name:'Brian Hager',    rd1:79, rd2:75, rd3:75},
+  {name:'Garrett Perschy',rd1:85, rd2:74, rd3:71},
+  {name:'Jerry Snyder',   rd1:76, rd2:78, rd3:80},
+  {name:'Nate Breiner',   rd1:81, rd2:78, rd3:75},
+  {name:'Matt Falcone',   rd1:85, rd2:76, rd3:78},
+  // Pinch hitters — their actual rounds only; rd1 filled from their Rd1 team (not applicable)
+  {name:'Aaron Sebelin',  rd1:null,rd2:68,rd3:78, guest:true},
+  {name:'Kyle Sebelin',   rd1:null,rd2:70,rd3:71, guest:true},
+  {name:'Chase Sebelin',  rd1:null,rd2:75,rd3:74, guest:true},
+  {name:'Mike Falcone',   rd1:null,rd2:76,rd3:null,guest:true},
+  {name:'Justin Sebelin', rd1:null,rd2:null,rd3:80,guest:true},
+];
+const PAR_FULL={rd1:72,rd2:71,rd3:71};
+fieldData.forEach(p=>{
+  const rounds=[p.rd1,p.rd2,p.rd3].filter(v=>v!=null);
+  p.played=rounds.length;
+  p.total=rounds.reduce((a,b)=>a+b,0);
+  p.totalPar=rounds.reduce((s,v,i)=>{
+    const parArr=[PAR_FULL.rd1,PAR_FULL.rd2,PAR_FULL.rd3];
+    const rds=[p.rd1,p.rd2,p.rd3];
+    const nonNullIdx=rds.map((v,i)=>v!=null?i:null).filter(v=>v!=null);
+    return s+(v-parArr[nonNullIdx[i]]);
+  },0);
+  // For sorting, proate to 3 rounds
+  p.sortScore=p.played===3?p.totalPar:(p.totalPar/p.played)*3;
+});
+fieldData.sort((a,b)=>a.sortScore-b.sortScore);
+const fb=document.getElementById('field-body');
+fieldData.forEach((p,i)=>{
+  const r1=p.rd1!=null?`<div class="score-raw">${p.rd1}</div><div class="score-rel ${rel(p.rd1-PAR_FULL.rd1).c}" style="font-size:10px">${rel(p.rd1-PAR_FULL.rd1).s}</div>`:`<span style="color:rgba(245,240,232,0.25);font-size:11px">–</span>`;
+  const r2=p.rd2!=null?`<div class="score-raw">${p.rd2}</div><div class="score-rel ${rel(p.rd2-PAR_FULL.rd2).c}" style="font-size:10px">${rel(p.rd2-PAR_FULL.rd2).s}</div>`:`<span style="color:rgba(245,240,232,0.25);font-size:11px">–</span>`;
+  const r3=p.rd3!=null?`<div class="score-raw">${p.rd3}</div><div class="score-rel ${rel(p.rd3-PAR_FULL.rd3).c}" style="font-size:10px">${rel(p.rd3-PAR_FULL.rd3).s}</div>`:`<span style="color:rgba(245,240,232,0.25);font-size:11px">–</span>`;
+  const tot=rel(p.totalPar);
+  const rdsNote=p.played<3?`<span style="font-size:10px;color:rgba(245,240,232,0.35);margin-left:5px">(${p.played} rds)</span>`:'';
+  fb.innerHTML+=`<tr${i===0?' class="leader-row"':''}>
+    <td class="left place-cell">${place(i)}</td>
+    <td class="left"><div class="player-name" style="font-size:13px">${p.name}${p.guest?'<span class="pinch-tag">Pinch</span>':''}</div>${rdsNote}</td>
+    <td>${r1}</td><td>${r2}</td><td>${r3}</td>
+    <td><div class="total-raw">${p.total}</div></td>
+    <td><div class="total-rel ${tot.c}">${tot.s}</div></td>
   </tr>`;
 });
 
