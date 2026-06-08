@@ -35,9 +35,8 @@
   .chapter-count { font-size:11px; color:var(--white-dim); }
 
   /* PHOTO GRID */
-  .photo-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
-  .photo-grid .span-full { grid-column:1/-1; }
-  .photo-thumb { width:100%; object-fit:cover; border-radius:10px; display:block; cursor:pointer; transition:opacity 0.2s; }
+  .photo-stack { display:flex; flex-direction:column; gap:6px; }
+  .photo-thumb { width:100%; height:auto; border-radius:10px; display:block; cursor:pointer; transition:opacity 0.2s; }
   .photo-thumb:active { opacity:0.8; }
 
   /* LIGHTBOX */
@@ -225,11 +224,10 @@ chapters.forEach(ch => {
     <div class="chapter-date">${ch.date}</div>
   </div>`;
 
-  let grid = '<div class="photo-grid">';
+  let grid = '<div class="photo-stack">';
   ch.photos.forEach(p => {
     const idx = globalPhotoIndex++;
-    const cls = p.full ? 'photo-thumb span-full' : 'photo-thumb';
-    grid += `<img src="/${p.file}" class="${cls}" style="height:${p.h}px;object-position:${p.pos||'center center'}" onclick="openLightbox(${idx})" loading="lazy">`;
+    grid += `<img src="/${p.file}" class="photo-thumb" onclick="openLightbox(${idx})" loading="lazy">`;
   });
   grid += '</div>';
 
