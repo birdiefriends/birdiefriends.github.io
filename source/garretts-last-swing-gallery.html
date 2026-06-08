@@ -93,8 +93,8 @@ const chapters = [
     date: 'Jun 5 · Evening',
     photos: [
       { file: 'gls-photo-955.webp', h: 260, full: true },
-      { file: 'gls-photo-house.jpg', h: 240, full: true },
-      { file: 'gls-photo-1047.jpg', h: 220, full: true },
+      { file: 'gls-photo-house.jpg', h: 320, full: true, pos: 'center right' },
+      { file: 'gls-photo-1047.jpg', h: 280, full: true, pos: 'center top' },
     ]
   },
   {
@@ -229,7 +229,7 @@ chapters.forEach(ch => {
   ch.photos.forEach(p => {
     const idx = globalPhotoIndex++;
     const cls = p.full ? 'photo-thumb span-full' : 'photo-thumb';
-    grid += `<img src="/${p.file}" class="${cls}" style="height:${p.h}px" onclick="openLightbox(${idx})" loading="lazy">`;
+    grid += `<img src="/${p.file}" class="${cls}" style="height:${p.h}px;object-position:${p.pos||'center center'}" onclick="openLightbox(${idx})" loading="lazy">`;
   });
   grid += '</div>';
 
