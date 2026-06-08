@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Garrett's Last Swing · Photo Gallery</title>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:#0f1e3c; --gold:#c9a84c; --gold-light:#e2c97e; --gold-dim:#8a6e2f;
+    --white:#f5f0e8; --white-dim:rgba(245,240,232,0.6); --white-faint:rgba(245,240,232,0.12);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--navy); color:var(--white); font-family:'DM Sans',sans-serif; min-height:100vh; }
+
+  /* HEADER */
+  .header { text-align:center; padding:2.5rem 1rem 2rem; border-bottom:1px solid rgba(201,168,76,0.2); background:radial-gradient(ellipse at 50% 0%,rgba(201,168,76,0.08) 0%,transparent 70%); }
+  .header-script { font-family:'Pacifico',cursive; font-size:clamp(1.8rem,7vw,3rem); color:var(--white); line-height:1.1; }
+  .header-sub { font-size:11px; color:var(--gold-light); letter-spacing:0.15em; text-transform:uppercase; margin-top:6px; }
+  .back-btn { display:inline-flex; align-items:center; gap:6px; margin-top:1.25rem; background:rgba(201,168,76,0.12); border:1px solid rgba(201,168,76,0.3); border-radius:99px; padding:6px 16px; font-size:12px; font-weight:500; color:var(--gold-light); text-decoration:none; letter-spacing:0.06em; }
+
+  /* CHAPTER NAV */
+  .chapter-nav { display:flex; gap:8px; overflow-x:auto; padding:1rem; border-bottom:1px solid rgba(245,240,232,0.07); }
+  .chapter-nav::-webkit-scrollbar { display:none; }
+  .chapter-pill { flex-shrink:0; padding:6px 14px; border:1px solid rgba(245,240,232,0.15); border-radius:99px; font-size:12px; color:var(--white-dim); cursor:pointer; background:transparent; font-family:'DM Sans',sans-serif; white-space:nowrap; transition:all 0.2s; }
+  .chapter-pill.active { background:rgba(201,168,76,0.15); border-color:rgba(201,168,76,0.4); color:var(--gold-light); font-weight:500; }
+
+  /* CHAPTERS */
+  .page { max-width:700px; margin:0 auto; padding:0 1rem 5rem; }
+  .chapter { margin-top:2.5rem; }
+  .chapter-header { display:flex; align-items:baseline; gap:10px; margin-bottom:14px; }
+  .chapter-emoji { font-size:1.3rem; }
+  .chapter-title { font-size:15px; font-weight:600; color:var(--white); }
+  .chapter-date { font-size:11px; color:var(--gold-dim); margin-left:auto; letter-spacing:0.06em; }
+  .chapter-count { font-size:11px; color:var(--white-dim); }
+
+  /* PHOTO GRID */
+  .photo-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .photo-grid .span-full { grid-column:1/-1; }
+  .photo-thumb { width:100%; object-fit:cover; border-radius:10px; display:block; cursor:pointer; transition:opacity 0.2s; }
+  .photo-thumb:active { opacity:0.8; }
+
+  /* LIGHTBOX */
+  #lightbox { position:fixed; inset:0; background:rgba(8,15,35,0.96); z-index:500; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.25s; }
+  #lightbox.open { opacity:1; pointer-events:all; }
+  #lb-img { max-width:100%; max-height:70vh; object-fit:contain; border-radius:12px; transition:opacity 0.2s; }
+  #lb-caption { margin-top:12px; font-size:12px; color:var(--gold-light); letter-spacing:0.06em; text-align:center; }
+  #lb-counter { font-size:11px; color:var(--white-dim); margin-top:4px; }
+  #lb-close { position:absolute; top:16px; right:16px; background:rgba(245,240,232,0.1); border:none; color:var(--white); font-size:18px; width:36px; height:36px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  #lb-prev, #lb-next { position:absolute; top:50%; transform:translateY(-50%); background:rgba(245,240,232,0.1); border:none; color:var(--white); font-size:20px; width:42px; height:42px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  #lb-prev { left:12px; }
+  #lb-next { right:12px; }
+  #lb-filmstrip { display:flex; gap:6px; margin-top:16px; overflow-x:auto; padding:0 1rem 4px; max-width:100%; }
+  #lb-filmstrip::-webkit-scrollbar { display:none; }
+  .lb-thumb { width:48px; height:48px; object-fit:cover; border-radius:6px; cursor:pointer; opacity:0.5; border:1.5px solid transparent; flex-shrink:0; transition:opacity 0.2s, border-color 0.2s; }
+  .lb-thumb.active { opacity:1; border-color:var(--gold); }
+
+  /* ADD PHOTOS CTA */
+  .add-photos { margin:2.5rem 0; padding:1.25rem; background:var(--white-faint); border:1px dashed rgba(201,168,76,0.3); border-radius:14px; text-align:center; }
+  .add-photos p { font-size:13px; color:var(--white-dim); }
+  .add-photos strong { color:var(--gold-light); display:block; font-size:14px; margin-bottom:6px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Bachelor Weekend · Cape May 2026</div>
+  <div class="header-script">Last Swing</div>
+  <div class="header-sub">Photo Gallery · 28 photos</div>
+  <a class="back-btn" href="/garretts-last-swing.html">← Back to Results</a>
+</div>
+
+<div class="chapter-nav" id="chapter-nav"></div>
+
+<div class="page" id="page"></div>
+
+<div id="lightbox">
+  <button id="lb-close" onclick="closeLightbox()">✕</button>
+  <button id="lb-prev" onclick="lbNav(-1)">‹</button>
+  <button id="lb-next" onclick="lbNav(1)">›</button>
+  <img id="lb-img" src="" alt="">
+  <div id="lb-caption"></div>
+  <div id="lb-counter"></div>
+  <div id="lb-filmstrip"></div>
+</div>
+
+<script>
+const chapters = [
+  {
+    id: 'hat',
+    emoji: '🎩',
+    title: 'The Hat',
+    date: 'Cape May 2026',
+    photos: [
+      { file: 'gls-photo-955.webp', h: 300, full: true },
+    ]
+  },
+  {
+    id: 'thursday',
+    emoji: '🚗',
+    title: 'Thursday — Arrival',
+    date: 'Jun 5 · Evening',
+    photos: [
+      { file: 'gls-photo-999.jpg', h: 220, full: true },
+      { file: 'gls-photo-1020.jpg', h: 180 },
+      { file: 'gls-photo-1021.jpg', h: 180 },
+    ]
+  },
+  {
+    id: 'rd1',
+    emoji: '🏌️',
+    title: 'Friday — Rd 1 · Shore Gate GC',
+    date: 'Jun 5 · 8 AM – 2 PM',
+    photos: [
+      { file: 'gls-photo-beach1.webp', h: 200, full: true },
+      { file: 'gls-photo-beach2.webp', h: 200, full: true },
+      { file: 'gls-photo-913.jpg', h: 200, full: true },
+      { file: 'gls-photo-966c.jpg', h: 200, full: true },
+      { file: 'gls-photo-916.jpg', h: 160 },
+      { file: 'gls-photo-921.jpg', h: 160 },
+      { file: 'gls-photo-926.jpg', h: 160 },
+      { file: 'gls-photo-1013.jpg', h: 160 },
+    ]
+  },
+  {
+    id: 'rd2',
+    emoji: '⛳',
+    title: 'Friday — Rd 2 · Cape May National',
+    date: 'Jun 5 · 2 PM – 7 PM',
+    photos: [
+      { file: 'gls-photo-932c.jpg', h: 200, full: true },
+      { file: 'gls-photo-932.jpg', h: 200, full: true },
+      { file: 'gls-photo-933.jpg', h: 160 },
+      { file: 'gls-photo-937.jpg', h: 160 },
+      { file: 'gls-photo-943.jpg', h: 160 },
+      { file: 'gls-photo-947.jpg', h: 160 },
+      { file: 'gls-photo-1015.jpg', h: 160 },
+    ]
+  },
+  {
+    id: 'friday-after',
+    emoji: '🍺',
+    title: 'Friday — After the Rounds',
+    date: 'Jun 5 · Evening',
+    photos: [
+      { file: 'gls-photo-987.webp', h: 220, full: true },
+      { file: 'gls-photo-1022.jpg', h: 170 },
+      { file: 'gls-photo-1023.jpg', h: 170 },
+      { file: 'gls-photo-1019.jpg', h: 170, full: true },
+    ]
+  },
+  {
+    id: 'friday-night',
+    emoji: '🌙',
+    title: 'Friday Night',
+    date: 'Jun 5 · Late',
+    photos: [
+      { file: 'gls-photo-1016.jpg', h: 240, full: true },
+      { file: 'gls-photo-1017.jpg', h: 180 },
+      { file: 'gls-photo-1024.jpg', h: 180 },
+      { file: 'gls-photo-1014.jpg', h: 180, full: true },
+    ]
+  },
+  {
+    id: 'rd3',
+    emoji: '🏆',
+    title: 'Saturday — Rd 3 · Cape May National',
+    date: 'Jun 6 · Morning',
+    photos: [
+      { file: 'gls-photo-961.jpg', h: 180 },
+      { file: 'gls-photo-962.jpg', h: 180 },
+      { file: 'gls-photo-989.jpg', h: 240, full: true },
+      { file: 'gls-photo-1004.jpg', h: 180 },
+      { file: 'gls-photo-1006.png', h: 320, full: true },
+    ]
+  },
+  {
+    id: 'saturday-after',
+    emoji: '🎉',
+    title: 'Saturday — Celebration',
+    date: 'Jun 6 · Afternoon & Night',
+    photos: [
+      { file: 'garretts-last-swing-photo.jpg', h: 260, full: true },
+      { file: 'gls-photo-ski2.webp', h: 200, full: true },
+      { file: 'gls-photo-ski1.webp', h: 200, full: true },
+      { file: 'gls-photo-1014.jpg', h: 160 },
+      { file: 'gls-photo-1015.jpg', h: 160 },
+    ]
+  },
+];
+
+// Build all photo list for lightbox navigation
+const allPhotos = [];
+chapters.forEach(ch => {
+  ch.photos.forEach(p => {
+    allPhotos.push({ ...p, chapter: ch.title });
+  });
+});
+
+let lbIndex = 0;
+
+// Build chapter nav
+const nav = document.getElementById('chapter-nav');
+chapters.forEach((ch, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'chapter-pill' + (i === 0 ? ' active' : '');
+  btn.textContent = `${ch.emoji} ${ch.title.split('—')[1]?.trim() || ch.title}`;
+  btn.onclick = () => {
+    document.getElementById(`ch-${ch.id}`).scrollIntoView({ behavior:'smooth', block:'start' });
+    nav.querySelectorAll('.chapter-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  };
+  nav.appendChild(btn);
+});
+
+// Build chapters
+const page = document.getElementById('page');
+let globalPhotoIndex = 0;
+
+chapters.forEach(ch => {
+  const section = document.createElement('div');
+  section.className = 'chapter';
+  section.id = `ch-${ch.id}`;
+
+  const header = `<div class="chapter-header">
+    <span class="chapter-emoji">${ch.emoji}</span>
+    <div>
+      <div class="chapter-title">${ch.title}</div>
+      <div class="chapter-count">${ch.photos.length} photo${ch.photos.length>1?'s':''}</div>
+    </div>
+    <div class="chapter-date">${ch.date}</div>
+  </div>`;
+
+  let grid = '<div class="photo-grid">';
+  ch.photos.forEach(p => {
+    const idx = globalPhotoIndex++;
+    const cls = p.full ? 'photo-thumb span-full' : 'photo-thumb';
+    grid += `<img src="/${p.file}" class="${cls}" style="height:${p.h}px" onclick="openLightbox(${idx})" loading="lazy">`;
+  });
+  grid += '</div>';
+
+  section.innerHTML = header + grid;
+  page.appendChild(section);
+});
+
+// Add photos CTA
+page.innerHTML += `<div class="add-photos">
+  <strong>📸 Got photos from the weekend?</strong>
+  <p>Send them to Brian — we'll add them to the gallery.</p>
+</div>`;
+
+// Lightbox
+function openLightbox(idx) {
+  lbIndex = idx;
+  renderLightbox();
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+function lbNav(dir) {
+  lbIndex = (lbIndex + dir + allPhotos.length) % allPhotos.length;
+  renderLightbox();
+}
+
+function renderLightbox() {
+  const p = allPhotos[lbIndex];
+  const img = document.getElementById('lb-img');
+  img.style.opacity = '0';
+  setTimeout(() => {
+    img.src = '/' + p.file;
+    img.style.opacity = '1';
+  }, 150);
+  document.getElementById('lb-caption').textContent = p.chapter;
+  document.getElementById('lb-counter').textContent = `${lbIndex + 1} of ${allPhotos.length}`;
+
+  // Filmstrip — show 5 around current
+  const fs = document.getElementById('lb-filmstrip');
+  fs.innerHTML = '';
+  const start = Math.max(0, lbIndex - 2);
+  const end = Math.min(allPhotos.length - 1, start + 6);
+  for (let i = start; i <= end; i++) {
+    const t = document.createElement('img');
+    t.src = '/' + allPhotos[i].file;
+    t.className = 'lb-thumb' + (i === lbIndex ? ' active' : '');
+    t.onclick = () => { lbIndex = i; renderLightbox(); };
+    fs.appendChild(t);
+  }
+}
+
+// Swipe support
+let touchStartX = 0;
+document.getElementById('lightbox').addEventListener('touchstart', e => touchStartX = e.touches[0].clientX);
+document.getElementById('lightbox').addEventListener('touchend', e => {
+  const diff = touchStartX - e.changedTouches[0].clientX;
+  if (Math.abs(diff) > 50) lbNav(diff > 0 ? 1 : -1);
+});
+
+// Close on background tap
+document.getElementById('lightbox').addEventListener('click', function(e) {
+  if (e.target === this) closeLightbox();
+});
+
+// Keyboard nav
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('lightbox').classList.contains('open')) return;
+  if (e.key === 'ArrowRight') lbNav(1);
+  if (e.key === 'ArrowLeft') lbNav(-1);
+  if (e.key === 'Escape') closeLightbox();
+});
+
+// Update active chapter pill on scroll
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const id = e.target.id.replace('ch-','');
+      const pills = nav.querySelectorAll('.chapter-pill');
+      chapters.forEach((ch, i) => {
+        if (ch.id === id) pills[i].classList.add('active');
+        else pills[i].classList.remove('active');
+      });
+    }
+  });
+}, { threshold: 0.3 });
+
+document.querySelectorAll('.chapter').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
