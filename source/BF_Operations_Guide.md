@@ -759,6 +759,7 @@ const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
 | 2026-06-01 | Added DELETE /notifications/clear (PIN required; fetch list then delete; returns {deleted, failed, errors, total}) |
 | 2026-06-02 | OS_REST_KEY updated to OneSignal rich key format. DELETE /notifications/clear confirmed limited to cancelling scheduled messages only — cannot delete delivered messages. |
 | 2026-06-03 | Added GET /history, POST /deploy, POST /rollback — GitHub-backed version control and remote deploy system. GitHub token hardcoded in Worker. |
+| 2026-06-06 | v3.10.87: Garrett's Last Swing link added to Results section. v3.10.88: Admin panel quick links card for Garrett's Last Swing scorecard entry and leaderboard. |
 
 ### GolfScorer
 | Version | Key Change |
@@ -802,3 +803,39 @@ Pool the prizes for all tied positions, split evenly, floor to nearest dollar. S
 - **URL:** https://docs.google.com/spreadsheets/d/1QvnXGY8TLgCgAhXt8SBRbwa7eUz-Vouhu6Tyituee20
 - **Tabs:** Raw Data, Standings, Green Flight, Combo Flight, Gold Flight
 - **Workflow:** Calculate Results → Save to Series → Push to Sheets
+
+---
+
+## Event Sites — Garrett's Last Swing Pattern
+
+### Overview
+Standalone results pages for non-BFSeries events (bachelor parties, invitationals, etc.). Deployed to `birdiefriends.com/<slug>.html`. Schema documented in `source/BF_EventSite_Schema.md`.
+
+### Files deployed (Session 30)
+| File | URL | Purpose |
+|------|-----|---------|
+| `docs/garretts-last-swing.html` | birdiefriends.com/garretts-last-swing.html | Results page |
+| `docs/garretts-last-swing-gallery.html` | birdiefriends.com/garretts-last-swing-gallery.html | Photo gallery |
+| `docs/BF_EventSite_Schema.md` | source/BF_EventSite_Schema.md | Data contract spec |
+| `docs/BF_NextSession_Garrett.md` | source/BF_NextSession_Garrett.md | Session 31 pickup list |
+
+### Photo storage convention
+`docs/gls-photo-<id>.<ext>` — uploaded directly via GitHub API. Prefix `gls-` = Garrett's Last Swing. Future events use their own prefix.
+
+### Jotform reuse
+Form 253134098686163 (Turkey 2Man Scorecard) was repurposed for data entry. Filter by Event name field to separate events.
+
+### Key design decisions
+- Navy/gold theme derived from the event hats
+- Pacifico script font for title treatment
+- 📸 pill buttons per section → gallery chapter links
+- Gallery: chapter-based (by day/moment), lightbox with swipe, IntersectionObserver for chapter nav pill
+- State: FINAL (all 3 rounds complete)
+- `table-layout:auto` required for mobile column fit
+
+### Competition types used
+- `scramble_individual_cumulative` — team score credited to each player, lowest 3-round total wins
+- `match_play_cart_group` — hole-by-hole within foursome, 1pt win / 0.5pt tie
+- `skins_field` — all teams one pot, ties carry, $48/hole (12 players × $20 / 5 winning holes)
+- `cttp` — par 3s, individual winner per hole, $44/hole (11 players × $20 / 5 par 3s)
+
