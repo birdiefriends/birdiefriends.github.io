@@ -21,11 +21,11 @@ Worker changes require worker.js from the library (source/worker.js).
 Claude never reconstructs Worker code without the source file.
 -->
 
-# BirdieFriends Golf Scorer — Session 29 Starter
-**Date:** TBD (follows Session 28, 2026-06-03)
-**Portal Version (production):** v3.10.79 · 2026-06-03 ← fetched from library at session start
+# BirdieFriends Golf Scorer — Session 31 Starter
+**Date:** TBD (follows Session 30, 2026-06-08)
+**Portal Version (production):** v3.10.88 · 2026-06-06 ← fetched from library at session start
 **GolfScorer Version:** v8.6 · 2026-05-28d (deployed, unchanged)
-**Worker Version:** 2026-06-03 (deploy/history/rollback endpoints added)
+**Worker Version:** 2026-06-03 (KV Feed confirmed working end-to-end)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
 
@@ -56,6 +56,34 @@ Claude never reconstructs Worker code without the source file.
 > `source/portal_version.txt` is the sole version source of truth. `bf_deploy.py` reads it, increments patch, and pushes atomically. Works from any device.
 
 Example: current version is v3.10.79 → Claude runs bf_deploy.py → deploys as v3.10.80 ✅
+
+---
+
+## Session 30 Accomplishments (2026-06-08)
+
+### Garrett's Last Swing — Bachelor Weekend Event Site (primary focus)
+- Built complete 3-round scramble results page at `birdiefriends.com/garretts-last-swing.html`
+- Built standalone photo gallery at `birdiefriends.com/garretts-last-swing-gallery.html` (32 photos, chapter-based)
+- Pulled all scoring data from repurposed Jotform (form 253134098686163)
+- Computed Competition 1 (The Victor — Jon Hernandez +6) and Competition 2 (Match Play — Jason Dinkel 2.5 pts)
+- Computed Rd 3 Skins (Garrett/Kyle 12 skins, 5 winning holes, 1 pushed) and CttP (5 par 3 winners)
+- Calculated payouts: Skins $48/hole ($240 pot), CttP $44/hole ($220 pot)
+- Built per-player scoring breakdown (eagle/birdie/par/bogey/double/worse bars, 54 holes each)
+- Photo pipeline: 32 photos uploaded to GitHub, gallery with lightbox + swipe + chapter nav
+- Floating photo bubble (built + removed), settled on 📸 pill buttons per section linking to gallery chapters
+- Page design: navy/gold theme matching the hats, Pacifico script font, group photo hero
+- Linked from portal Results tab (v3.10.87), admin panel quick links (v3.10.88)
+- `BF_EventSite_Schema.md` committed to source/ — full data contract for repeatable event sites
+- `BF_NextSession_Garrett.md` committed to source/ — cleanup + archive feature spec
+
+### Portal changes
+- v3.10.87: Garrett's Last Swing link added to Results section
+- v3.10.88: Admin panel quick links (Enter Rd 3 Scorecard + View Leaderboard)
+
+### Known issues carried into Session 31
+- Results page tables accumulated ~22 versions of edits — candidate for clean rewrite
+- Photo overlay CSS still in page (dead code — overlay trigger removed)
+- Full field results section removed in redesign — decide if it returns
 
 ---
 
@@ -372,3 +400,5 @@ Session end:
 - BL-17: Two Series events same day → only first gets live banner
 - Active/Inactive auto-reset: Jeremy Burkett + Tony Hager
 - Push delivery sporadic on course — device-side (Focus Mode / Safari vs PWA icon)
+- Tim Wargo Android push notification: Samsung Internet PWA incompatible; Chrome PWA installed but BFUpdates was No — fixed; confirmed working after Jotform update
+- garretts-last-swing.html: dead photo overlay code, table width formatting, needs clean rewrite in Session 31
