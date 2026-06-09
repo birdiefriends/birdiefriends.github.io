@@ -1,5 +1,5 @@
 # BirdieFriends — Operations Guide
-**Last Updated:** 2026-06-09 (Session 32 — bf_deploy.deploy_file() added; GolfScorer now Claude-direct deployable; launch_golf_scorer.py auto-pulls GolfScorer HTML from GitHub on startup; Golden Rule #20 added)  
+**Last Updated:** 2026-06-09 (Session 32 — bf_deploy.deploy_file() added; GolfScorer Claude-direct deployable; launch auto-pulls GolfScorer HTML; no-HCP tee flow fixed end-to-end; publish guard added; Golden Rules #20 added)  
 **Maintained by:** Commissioner (Brian Hager) + Claude  
 **Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system.  
 Update this file at the end of every session.
@@ -53,6 +53,22 @@ sed -i "s/v3\.10\.[0-9]* · [0-9-]*/${LIVE_VER}/g" "$PORTAL"
 APPLIED=$(grep -o 'v3\.10\.[0-9]* · [0-9-]*' "$PORTAL" | head -1)
 echo "✅ Portal synced to: $APPLIED"
 ```
+
+---
+
+## GolfScorer — No-HCP Player Design Notes
+
+**isNoHcp vs null HCP:** `grpMergePlayers` sets `isNoHcp: false` for all new players by design. New-to-series ≠ no GHIN handicap — a first-event player with a real HCP should not be flagged NoHCP. The commissioner sets NoHCP by leaving the HCP field blank. However, a brand-new player with no series history also has `hcp: null`, so the tee dropdown must check `p.hcp === null || p.isNoHcp` — not just `isNoHcp`.
+
+**Tee assignment flow for no-HCP players:**
+1. Player fetched into Tab 1 with `hcp: null` → tee defaults to `'Combo'` via `grpCalcTeeAndQuota`
+2. HCP table and drag card show tee **dropdown** (not static pill) when `hcp === null`
+3. Commissioner selects correct tee → `grpTableSetTee` saves to `grpPlayers` → `grpSaveData()` persists to localStorage
+4. `grpPublish()` blocks if tee is blank — hard guard before groupings go out
+5. Kick Off → `addPlayerRow(name, '', tee)` passes tee to Tab 2
+6. Tab 2 `goToScorecard()` blocks if tee selector is blank — second guard on event day
+
+**Tab 1 / Tab 2 relationship:** These are independent data systems. Tab 1 (`grpPlayers` / localStorage) is pre-event. Tab 2 (`#player-list` DOM / `cachedPlayers`) is populated at Kick Off time. Tab 2 Tee & Quota Preview being empty before Kick Off is correct by design.
 
 ---
 
@@ -781,6 +797,15 @@ const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
 | 2026-05-28 | TEST_PREVIEW_MODE flag; /api/preview/list route; /api/netlify/status returns preview_mode; gsVersion in sheets push payload; build_sheets_data stamps GS version in sheet title row |
 | 2026-06-01 | GitHub token updated to match deploy_portal.py |
 | 2026-06-09 | Auto-pull: fetches latest BF_Golf_Scorer_8.html from GitHub source/ on every startup before serving; falls back to local file gracefully if offline; prints version pulled to console |
+
+### BF_Golf_Scorer_8.html
+| Version | Key Change |
+|---------|------------|
+| v8.17a | New Event button added to Actions banner (red/danger style, always visible) |
+| v8.17b | Fixed Players tab onclick syntax bug; resetAll() now clears grpPlayers + grpGroups + localStorage['bf_groups_data'] |
+| v8.17c | Tab 2 goToScorecard() blocks if no-HCP player has no tee selected; highlights offending row |
+| v8.17d | grpPublish() blocks if no-HCP/null-HCP player has no tee; highlights HCP table row red, scrolls into view; fixed hardcoded build-date stamp |
+| v8.17e | Tee dropdown shows for null-HCP players (hcp===null) in HCP table and drag cards — not just isNoHcp===true; fixes first-event no-GHIN players like Rich Potts |
 
 ### Tie Payout Rules (FINALIZED 2026-05-12)
 
