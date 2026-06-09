@@ -684,7 +684,7 @@
       <div id="grp-pool"
         ondragover="event.preventDefault()"
         ondrop="grpDropToPool(event)"
-        style="flex:1;min-height:200px;border:1.5px dashed var(--border);border-radius:8px;padding:6px;background:var(--surface)">
+        style="flex:1;min-height:200px;overflow-y:auto;border:1.5px dashed var(--border);border-radius:8px;padding:6px;background:var(--surface)">
         <div id="grp-pool-empty" style="font-size:0.8rem;color:var(--text-muted);padding:12px;text-align:center">
           Fetch registrants to populate
         </div>
@@ -695,7 +695,7 @@
     <div id="grp-groups-area" style="display:flex;flex-direction:column;min-height:0">
       <div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;flex-shrink:0">Groups</div>
       <div id="grp-groups-container"
-        style="flex:1;min-height:200px;padding-right:4px"></div>
+        style="min-height:200px;padding-right:4px"></div>
       <div id="grp-groups-empty" style="font-size:0.8rem;color:var(--text-muted);padding:20px;text-align:center;border:1.5px dashed var(--border);border-radius:8px;display:none">
         Add a group to start building
       </div>
