@@ -7115,9 +7115,13 @@ function grpKickOffEvent() {
 
   if (!confirm(`Kick off "${eventName}"?\n\nThis will load ${allAssigned.length} players into the Players tab and clear the current scorecard. Continue?`)) return;
 
-  // Set event name in Players tab
+  // Set event name + date in Players tab (date = today, since Kick Off is game-day)
   const evtNameEl = document.getElementById('event-name');
   if (evtNameEl) { evtNameEl.value = eventName; updateEventName(); }
+  const evtDateEl = document.getElementById('event-date');
+  if (evtDateEl && !evtDateEl.value) {
+    evtDateEl.value = new Date().toISOString().slice(0,10);
+  }
 
   // Clear existing player rows
   const playerList = document.getElementById('player-list');
@@ -7150,8 +7154,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-09j';
-const GS_VERSION = 'v8.17 · 2026-06-09j';
+document.getElementById('build-date').textContent = '2026-06-09k';
+const GS_VERSION = 'v8.17 · 2026-06-09k';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
