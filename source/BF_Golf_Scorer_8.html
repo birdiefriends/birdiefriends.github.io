@@ -6730,18 +6730,20 @@ function grpMergePlayers(registrants, eventName) {
   const season = Object.keys(seriesData.seasons || {}).sort().reverse()[0];
 
   // Prune players no longer in the current registrant list
-  const regNames = registrants.map(r => r.name.toLowerCase());
-  const pruned = grpPlayers.filter(p => !regNames.includes(p.name.toLowerCase()));
-  if (pruned.length) {
-    const names = pruned.map(p => p.name).join(', ');
-    console.log('[GRP] grpMergePlayers: pruning', pruned.length, 'unregistered player(s):', names);
-    grpPlayers = grpPlayers.filter(p => regNames.includes(p.name.toLowerCase()));
-    // Also remove from any group
-    grpGroups.forEach(g => {
-      g.players = g.players.filter(pid => grpPlayers.some(p => p.id === pid));
-    });
-    // Notify commissioner
-    setTimeout(() => grpSetStatus('warn', `&#x26A0; ${pruned.length} player(s) removed — no longer registered: <strong>${names}</strong>`), 100);
+  const regNames = Array.isArray(registrants) ? registrants.map(r => r.name.toLowerCase()) : [];
+  if (regNames.length > 0) {
+    const pruned = grpPlayers.filter(p => !regNames.includes(p.name.toLowerCase()));
+    if (pruned.length) {
+      const names = pruned.map(p => p.name).join(', ');
+      console.log('[GRP] grpMergePlayers: pruning', pruned.length, 'unregistered player(s):', names);
+      grpPlayers = grpPlayers.filter(p => regNames.includes(p.name.toLowerCase()));
+      // Also remove from any group
+      grpGroups.forEach(g => {
+        g.players = (g.players || []).filter(pid => grpPlayers.some(p => p.id === pid));
+      });
+      // Notify commissioner
+      setTimeout(() => grpSetStatus('warn', `&#x26A0; ${pruned.length} player(s) removed — no longer registered: <strong>${names}</strong>`), 100);
+    }
   }
 
   let added = 0, updated = 0;
@@ -7148,8 +7150,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-09g';
-const GS_VERSION = 'v8.17 · 2026-06-09g';
+document.getElementById('build-date').textContent = '2026-06-09h';
+const GS_VERSION = 'v8.17 · 2026-06-09h';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
