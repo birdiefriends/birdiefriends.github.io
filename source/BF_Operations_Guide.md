@@ -1,5 +1,5 @@
 # BirdieFriends — Operations Guide
-**Last Updated:** 2026-06-09 (Session 32 — bf_deploy.deploy_file() added; GolfScorer Claude-direct deployable; launch auto-pulls GolfScorer HTML; no-HCP tee flow fixed end-to-end; publish guard added; Golden Rules #20 added)  
+**Last Updated:** 2026-06-09 (Session 32 — bf_deploy.deploy_file() added; GolfScorer Claude-direct deployable; launch auto-pulls GolfScorer HTML; no-HCP tee flow fixed; publish guard; Fetch prunes unregistered; sticky pool drag UX; Golden Rule #20 added)  
 **Maintained by:** Commissioner (Brian Hager) + Claude  
 **Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system.  
 Update this file at the end of every session.
@@ -806,6 +806,11 @@ const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
 | v8.17c | Tab 2 goToScorecard() blocks if no-HCP player has no tee selected; highlights offending row |
 | v8.17d | grpPublish() blocks if no-HCP/null-HCP player has no tee; highlights HCP table row red, scrolls into view; fixed hardcoded build-date stamp |
 | v8.17e | Tee dropdown shows for null-HCP players (hcp===null) in HCP table and drag cards — not just isNoHcp===true; fixes first-event no-GHIN players like Rich Potts |
+| v8.17f | ✕ Remove button added to player drag cards (both pool and in-group); confirm dialog; removes from grpPlayers + group assignment |
+| v8.17g | Fetch Registrants prunes unregistered players on re-fetch; warn status style added to grpSetStatus |
+| v8.17h | Defensive guards on pruning block (Array.isArray + g.players\|\|[]); fixed fetch crash |
+| v8.17i | Removed overflow-y:auto from both panes; align-items:start on grid layout |
+| v8.17j | Sticky unassigned pool (position:sticky top:56px); groups grow to full content height; grpSizeDragZone reworked — pool sized to viewport, groups unconstrained |
 
 ### Tie Payout Rules (FINALIZED 2026-05-12)
 
