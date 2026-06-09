@@ -676,8 +676,8 @@
   <!-- Zone 2+3: Pool + Groups side by side — fills remaining viewport height -->
   <div style="display:grid;grid-template-columns:250px 1fr;gap:12px;margin-top:12px;align-items:start" id="grp-main-layout">
 
-    <!-- Unassigned pool — fills remaining height -->
-    <div style="display:flex;flex-direction:column;min-height:0">
+    <!-- Unassigned pool — sticky sidebar -->
+    <div style="display:flex;flex-direction:column;min-height:0;position:sticky;top:56px;align-self:start">
       <div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;flex-shrink:0">
         Unassigned (<span id="grp-pool-count">0</span>)
       </div>
@@ -5985,15 +5985,15 @@ function grpGetRank(name) {
 function grpClearRankCache() { grpRankCache = null; }
 
 function grpSizeDragZone() {
-  const layout = document.getElementById('grp-main-layout');
-  const pool   = document.getElementById('grp-pool');
+  // Pool is sticky sidebar — height = viewport minus its top offset so it stays fully visible
+  const pool = document.getElementById('grp-pool');
+  if (pool) {
+    const rect = pool.getBoundingClientRect();
+    pool.style.height = Math.max(200, window.innerHeight - rect.top - 16) + 'px';
+  }
+  // Groups container grows naturally with content — no fixed height
   const groups = document.getElementById('grp-groups-container');
-  if (!layout) return;
-  const rect = layout.getBoundingClientRect();
-  const available = window.innerHeight - rect.top - 12; // 12px bottom margin
-  const h = Math.max(200, available) + 'px';
-  if (pool)   pool.style.height   = h;
-  if (groups) groups.style.height = h;
+  if (groups) groups.style.height = '';
 }
 
 function grpOnTabOpen() {
@@ -7150,8 +7150,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-09i';
-const GS_VERSION = 'v8.17 · 2026-06-09i';
+document.getElementById('build-date').textContent = '2026-06-09j';
+const GS_VERSION = 'v8.17 · 2026-06-09j';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
