@@ -56,6 +56,26 @@ echo "✅ Portal synced to: $APPLIED"
 
 ---
 
+## GolfScorer — Groupings Archive System
+
+**How it works end-to-end:**
+1. `grpPublish` Final → writes `groupings-{slug}.html` to GitHub AND saves `groupingsFile` into matching event in series localStorage via `saveSeriesData()`
+2. `saveEventToSeries` / `Publish All Pages` → series data (including `groupingsFile`) embedded as `ALL_SERIES_DATA` in results.html
+3. Results template builds `GROUPINGS_ARCHIVE = {}` from `ALL_SERIES_DATA.events[].groupingsFile` on page load
+4. `loadEvent(name)` → calls `loadGroupsTab(name)` → sets iframe src to `/{archiveFile}?embed=1`
+5. Archive page detects `?embed=1` → hides `<header>` and `<nav>` for clean inline display
+
+**File naming convention:** `groupings-{YYYY}-{EventName}.html` e.g. `groupings-2026-BFSeries4.html`
+
+**Outliers:**
+- Series#2: no archive (pre-system) — Groups tab dimmed
+- Series#3: archive exists but embed mode not in file (published before v8.17o) — nav bar visible inside iframe; do NOT republish (would corrupt historical quotas with #4 HCP bleed)
+- Series#4+: fully automatic
+
+**Session-end checklist addition:** After each Final Groupings publish, verify `groupingsFile` is in series data, then run Publish All Pages to update results.html.
+
+---
+
 ## GolfScorer — No-HCP Player Design Notes
 
 **isNoHcp vs null HCP:** `grpMergePlayers` sets `isNoHcp: false` for all new players by design. New-to-series ≠ no GHIN handicap — a first-event player with a real HCP should not be flagged NoHCP. The commissioner sets NoHCP by leaving the HCP field blank. However, a brand-new player with no series history also has `hcp: null`, so the tee dropdown must check `p.hcp === null || p.isNoHcp` — not just `isNoHcp`.
@@ -811,6 +831,11 @@ const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
 | v8.17h | Defensive guards on pruning block (Array.isArray + g.players\|\|[]); fixed fetch crash |
 | v8.17i | Removed overflow-y:auto from both panes; align-items:start on grid layout |
 | v8.17j | Sticky unassigned pool (position:sticky top:56px); groups grow to full content height; grpSizeDragZone reworked — pool sized to viewport, groups unconstrained |
+| v8.17k | Kick Off auto-populates Tab 2 event date to today (only if blank) |
+| v8.17l | Tab 2 reframed as confirmation screen — event name read-only, date required, roster display-only, legacy tools hidden |
+| v8.17m | Groupings archive system: grpPublish Final saves groupingsFile to series localStorage; generateResultsPage template builds GROUPINGS_ARCHIVE from ALL_SERIES_DATA; loadEvent calls loadGroupsTab |
+| v8.17n | ⛳ Groups tab added to results tab bar after Money; openGroupingsForEvent → opens archive; tab dims when no archive |
+| v8.17o | Groups tab renders archive inline via iframe with embed=1; groupings template hides header/nav in embed mode; fixed </script> escaping in template literal |
 
 ### Tie Payout Rules (FINALIZED 2026-05-12)
 
