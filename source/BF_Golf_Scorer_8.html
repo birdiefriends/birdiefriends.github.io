@@ -565,7 +565,7 @@
 
 <nav>
   <button class="active" onclick="showTab('groups')"><span class="nav-full">1 · Groups</span><span class="nav-short">Groups</span></button>
-  <button onclick="showTab('players'"><span class="nav-full">2 · Players</span><span class="nav-short">Players</span></button>
+  <button onclick="showTab('players')"><span class="nav-full">2 · Players</span><span class="nav-short">Players</span></button>
   <button onclick="showTab('scorecard')"><span class="nav-full">3 · Scorecard</span><span class="nav-short">Scorecard</span></button>
   <button onclick="showTab('ctp')"><span class="nav-full">4 · Closest to Pin</span><span class="nav-short">CTP</span></button>
   <button onclick="showTab('results')"><span class="nav-full">5 · Results</span><span class="nav-short">Results</span></button>
@@ -2272,11 +2272,24 @@ function resetAll() {
   document.getElementById("event-date").value = "";
   document.getElementById("event-name-display").textContent = "";
 
-  // Clear player roster
+  // Clear player roster (Tab 2)
   document.getElementById("player-list").innerHTML = "";
   playerCount = 0;
   cachedPlayers = [];
   updateTeePreview();
+
+  // Clear Groups tab roster + localStorage (separate from cachedPlayers)
+  grpPlayers = [];
+  grpGroups  = [];
+  localStorage.removeItem('bf_groups_data');
+  const grpStatusEl = document.getElementById('grp-status');
+  if (grpStatusEl) grpStatusEl.innerHTML = '';
+  const grpHcpTable = document.getElementById('grp-hcp-table');
+  if (grpHcpTable) grpHcpTable.querySelector('tbody') && (grpHcpTable.querySelector('tbody').innerHTML = '');
+  const unassigned = document.getElementById('grp-unassigned');
+  if (unassigned) unassigned.innerHTML = '';
+  const groupsWrap = document.getElementById('grp-groups-wrap');
+  if (groupsWrap) groupsWrap.innerHTML = '';
 
   // Clear paste inputs
   const rosterPaste = document.getElementById("roster-paste-area");
@@ -7061,7 +7074,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-05-28m';
-const GS_VERSION = 'v8.17 · 2026-06-09a';
+const GS_VERSION = 'v8.17 · 2026-06-09b';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
