@@ -6882,7 +6882,7 @@ async function grpPublish() {
     pages[archiveFile] = html;
   }
 
-  try {
+    try {
     const resp = await fetch('/api/netlify/deploy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
