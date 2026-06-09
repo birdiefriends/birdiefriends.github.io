@@ -1267,7 +1267,7 @@ function addPlayerRow(name = "", hcp = "", manualTee = "") {
   div.innerHTML = `
     <input type="text" placeholder="Player name" value="${name}" oninput="updateTeePreview()" id="pname-${id}">
     <input type="number" placeholder="e.g. 12.5" step="0.1" min="0" max="54" value="${hcp}" oninput="onHcpInput(${id})" id="phcp-${id}" style="max-width:110px">
-    <select id="ptee-${id}" onchange="updateTeePreview()" style="max-width:90px;padding:4px 6px;font-size:0.82rem;display:${(hcp===''||hcp===null||hcp===undefined)?'inline-block':'none'}">
+    <select id="ptee-${id}" onchange="this.style.border='';this.style.background='';updateTeePreview()" style="max-width:90px;padding:4px 6px;font-size:0.82rem;display:${(hcp===''||hcp===null||hcp===undefined)?'inline-block':'none'}">
       <option value="">-- Tee --</option>
       <option value="Green" ${manualTee==='Green'?'selected':''}>🟢 Green</option>
       <option value="Combo" ${manualTee==='Combo'?'selected':''}>🟡 Combo</option>
@@ -1496,6 +1496,28 @@ function goToScorecard() {
     alert("Please enter an Event Name before starting the scorecard.");
     return;
   }
+  // Validate no-HCP players have a tee selected before proceeding
+  const unassigned = [];
+  document.querySelectorAll('#player-list .player-grid').forEach(row => {
+    const nameEl = row.querySelector('input[type=text]');
+    const hcpEl  = row.querySelector('input[type=number]');
+    const teeEl  = row.querySelector('select');
+    if (!nameEl) return;
+    const name   = nameEl.value.trim();
+    const hcpRaw = hcpEl ? hcpEl.value.trim() : '';
+    const teeVal = teeEl ? teeEl.value : '';
+    // No-HCP player = blank HCP field + visible tee selector
+    if (name && hcpRaw === '' && teeEl && teeEl.style.display !== 'none' && !teeVal) {
+      unassigned.push(name);
+      teeEl.style.border = '2px solid #a32d2d';
+      teeEl.style.background = '#fff5f5';
+    }
+  });
+  if (unassigned.length) {
+    alert('⚠ Tee box required for:\n\n' + unassigned.map(n => '  • ' + n).join('\n') + '\n\nSelect Green, Combo, or Gold for each player before continuing.');
+    return;
+  }
+
   const players = getPlayers();
   if (!players.length) {
     alert("Please add at least one player with a name and either a handicap or manual tee selection.");
@@ -7074,7 +7096,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-05-28m';
-const GS_VERSION = 'v8.17 · 2026-06-09b';
+const GS_VERSION = 'v8.17 · 2026-06-09c';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
