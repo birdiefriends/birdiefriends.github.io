@@ -71,6 +71,24 @@ Example: current version is v3.10.79 → Claude runs bf_deploy.py → deploys as
 - Desktop icon workflow: right-click `Launch_Golf_Scorer.bat` → Send to → Desktop (create shortcut) → one double-click launches and auto-updates
 - Fixed hardcoded `build-date` stamp — was showing `2026-05-28m` in header instead of current version date
 
+### GolfScorer — Groupings history in results.html (v8.17k–o)
+- Tab 2 Players reframed as confirmation screen: event name read-only (fed from Kick Off), date entry required as intentional pause, legacy roster entry tools hidden (preserved in DOM for non-series events), note linking back to Tab 1 Groups
+- Kick Off auto-populates Tab 2 event date to today (only if blank)
+- **Groupings archive system — proper end-to-end:**
+  - `grpPublish` Final → saves `groupingsFile` (e.g. `groupings-2026-BFSeries4.html`) into matching event record in series localStorage — survives New Event
+  - `generateResultsPage` template → builds `GROUPINGS_ARCHIVE` from `ALL_SERIES_DATA.events[].groupingsFile` — no manual maintenance needed
+  - `loadEvent()` → calls `loadGroupsTab()` → iframes archive file with `?embed=1` parameter
+  - Groupings archive page → hides header/nav when `?embed=1` (embed mode) — clean inline display
+  - **⛳ Groups tab** added to results tab bar after Money — consistent with Podium/Standings/etc
+  - Groups tab dimmed (opacity 0.45) when no archive exists for that event; fully lit when archive present
+- Series JSON patched: `groupingsFile: 'groupings-2026-BFSeries3.html'` added to Series#3 event record
+- results.html GROUPINGS_ARCHIVE seeded with Series#3 entry
+
+### Known outliers by design
+- **Series#2** — Groups tab dimmed, no archive (pre-system)
+- **Series#3** — Groups tab active, iframes archive but nav bar visible (archive published before embed mode; correct quotas preserved — intentionally NOT republished to avoid HCP bleed from #4 data)
+- **Series#4+** — fully automatic: Final publish → archive created → Groups tab inline embed with hidden nav
+
 ### GolfScorer — Groups tab drag UX (v8.17h–j)
 - Fixed Fetch Registrants crash (`Cannot read properties of undefined reading 'filter'`) — defensive `Array.isArray` guard on pruning block; `g.players || []` guard on group array
 - Fetch Registrants now prunes unregistered players on re-fetch — Jotform registration is source of truth; removed players also cleared from group assignments; yellow warning banner names pruned players
@@ -358,7 +376,7 @@ Audit ALL templates:
 | Component | Version | Status |
 |-----------|---------|--------|
 | Portal | v3.10.90 · 2026-06-08 | Production ✅ |
-| GolfScorer | v8.17 · 2026-06-09j | Deployed ✅ — See Session 32 accomplishments |
+| GolfScorer | v8.17 · 2026-06-09o | Deployed ✅ — See Session 32 accomplishments |
 | Worker | 2026-06-03 | Deployed ✅ |
 | deploy.html | 2026-06-03 | Live ✅ — birdiefriends.com/deploy.html |
 | launch_golf_scorer.py | 2026-06-09 | Current ✅ — auto-pulls GolfScorer HTML from GitHub on startup |
@@ -448,3 +466,5 @@ Session end:
 - GolfScorer Players tab (2·Players) onclick bug fixed Session 32 ✅
 - resetAll() Groups tab clear fixed Session 32 ✅
 - No-HCP tee dropdown fixed Session 32 ✅ — if tee dropdown ever shows as static pill for a null-HCP player, check isNoHcp flag and hcp===null condition in grpRenderHcpTable
+- Series#3 groupings archive iframe shows nav bar — acceptable, do not republish (would corrupt historical quotas)
+- Series#2 groupings lost — pre-system, no recovery
