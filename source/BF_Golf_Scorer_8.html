@@ -6221,7 +6221,7 @@ function grpMakeCard(p, inGroup) {
   const subBadge = p.isSub ? '<span style="font-size:0.65rem;background:#fff3cd;color:#856404;border:1px solid #ffd97d;border-radius:3px;padding:0 4px;margin-left:4px">Sub</span>' : '';
   const breakdown = grpQuotaBreakdown(p.name, p.hcp, p.tee);
 
-  const teeSelector = p.isNoHcp ? `
+  const teeSelector = (p.isNoHcp || p.hcp === null) ? `
     <select style="font-size:0.72rem;padding:2px 4px;border-radius:4px;border:1px solid var(--border);margin-top:2px;width:100%" onchange="grpSetManualTee('${p.id}',this.value)">
       <option value="Green" ${p.tee==='Green'?'selected':''}>Green</option>
       <option value="Combo" ${p.tee==='Combo'?'selected':''}>Combo</option>
@@ -6336,7 +6336,7 @@ function grpRenderHcpTable() {
       ? `<span style="font-size:0.68rem;background:var(--surface);color:var(--text-muted);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin-left:4px">in group</span>`
       : '';
 
-    const teeCell = p.isNoHcp
+    const teeCell = (p.isNoHcp || p.hcp === null)
       ? `<select style="font-size:0.78rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--card)" onchange="grpTableSetTee('${p.id}',this.value)">
            <option value="Green" ${p.tee==='Green'?'selected':''}>Green</option>
            <option value="Combo" ${p.tee==='Combo'?'selected':''}>Combo</option>
@@ -7114,8 +7114,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-09d';
-const GS_VERSION = 'v8.17 · 2026-06-09d';
+document.getElementById('build-date').textContent = '2026-06-09e';
+const GS_VERSION = 'v8.17 · 2026-06-09e';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
