@@ -6423,6 +6423,9 @@ function grpTableSetTee(id, tee) {
   p.quota = grpGetEstimatedQuota(p.name, null, tee);
   const quotaCell = document.getElementById(`grp-tcell-quota-${id}`);
   if (quotaCell) quotaCell.textContent = p.quota ? p.quota.toFixed(2) : 'Baseline';
+  // Clear any publish-error highlight on this row
+  const row = document.getElementById('grp-trow-' + id);
+  if (row) { row.style.background = ''; row.style.outline = ''; }
   const card = document.getElementById(`grp-card-${id}`);
   if (card) {
     const tmp = document.createElement('div');
@@ -6794,6 +6797,22 @@ async function grpPublish() {
   if (!eventName) { alert('Enter an event name first.'); return; }
   if (!grpGroups.length) { alert('Build at least one group before publishing.'); return; }
 
+  // Block publish if any no-HCP player has no tee assigned
+  const missingTee = grpPlayers.filter(p => p.isNoHcp && (!p.tee || p.tee === ''));
+  if (missingTee.length) {
+    alert('⚠ Tee box required before publishing:\n\n' + missingTee.map(p => '  • ' + p.name).join('\n') + '\n\nSet their tee in the HCP table above, then publish.');
+    // Scroll HCP table into view and highlight the offending rows
+    missingTee.forEach(p => {
+      const row = document.getElementById('grp-trow-' + p.id);
+      if (row) {
+        row.style.background = '#fff5f5';
+        row.style.outline = '2px solid #a32d2d';
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+    return;
+  }
+
   const status = document.querySelector('input[name="grp-status"]:checked')?.value || 'Preliminary';
   const firstTee = document.getElementById('grp-first-tee').value || '08:00';
   const [hh, mm] = firstTee.split(':').map(Number);
@@ -7096,7 +7115,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-05-28m';
-const GS_VERSION = 'v8.17 · 2026-06-09c';
+const GS_VERSION = 'v8.17 · 2026-06-09d';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
