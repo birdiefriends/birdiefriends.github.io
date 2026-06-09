@@ -24,7 +24,7 @@ Claude never reconstructs Worker code without the source file.
 # BirdieFriends Golf Scorer — Session 32 Starter
 **Date:** TBD (follows Session 31, 2026-06-09)
 **Portal Version (production):** v3.10.90 · 2026-06-08 ← fetched from library at session start
-**GolfScorer Version:** v8.17 · 2026-06-09b (deployed)
+**GolfScorer Version:** v8.17 · 2026-06-09e (deployed)
 **Worker Version:** 2026-06-03 (KV Feed confirmed working end-to-end)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
@@ -61,7 +61,7 @@ Example: current version is v3.10.79 → Claude runs bf_deploy.py → deploys as
 
 ## Session 32 Accomplishments (2026-06-09)
 
-### GolfScorer — Actions banner + deploy infrastructure
+### GolfScorer — Actions banner + deploy infrastructure + no-HCP tee flow
 - `↺ New Event` button added to Actions banner (always-visible, red/danger style) — accessible from any tab, not just Results
 - Fixed Players tab (2·Players) broken — missing `)` in onclick attribute silently disabled the button
 - Fixed `resetAll()` not clearing Groups tab: `grpPlayers`, `grpGroups`, and `localStorage['bf_groups_data']` now wiped on New Event; previously only `cachedPlayers` (Tab 2) was cleared, leaving stale roster in Groups tab
@@ -69,6 +69,15 @@ Example: current version is v3.10.79 → Claude runs bf_deploy.py → deploys as
 - GolfScorer (`source/BF_Golf_Scorer_8.html`) now Claude-direct deployable via `bf_deploy.py deploy_file`
 - `launch_golf_scorer.py` upgraded: auto-pulls latest `BF_Golf_Scorer_8.html` from GitHub on every startup — no manual download needed; graceful fallback if offline
 - Desktop icon workflow: right-click `Launch_Golf_Scorer.bat` → Send to → Desktop (create shortcut) → one double-click launches and auto-updates
+- Fixed hardcoded `build-date` stamp — was showing `2026-05-28m` in header instead of current version date
+
+### GolfScorer — No-HCP player tee assignment flow (Series#4 / Rich Potts)
+- **Root cause:** `grpMergePlayers` sets `isNoHcp: false` for all new players by design (correct — new-to-series ≠ no GHIN). But tee dropdown in HCP table and drag cards was gated on `isNoHcp` only, so null-HCP players got a static pill with no way to change it
+- **Fix:** tee dropdown now shows whenever `p.hcp === null` OR `p.isNoHcp === true` — both HCP table rows and drag cards
+- **Publish guard:** `grpPublish()` now blocks if any no-HCP/null-HCP player has no tee set — names offenders, highlights their HCP table row red, scrolls into view; clears on tee selection
+- **Tab 2 guard:** `goToScorecard()` also blocks if a no-HCP player's tee selector is blank — second safety net on event day
+- **Flow confirmed:** Tab 1 tee assignment → `grpTableSetTee` saves to `grpPlayers` → Publish Groupings uses it → Kick Off passes it to Tab 2 → scorecard and quota calc correct
+- **Workflow:** Tab 1 is pre-event (days before); Kick Off is game-day/post-round; Tab 2 Tee & Quota Preview being empty pre-Kick Off is by design
 
 ### Managed file registry (updated)
 | Key | GitHub path | Updated by |
@@ -342,7 +351,7 @@ Audit ALL templates:
 | Component | Version | Status |
 |-----------|---------|--------|
 | Portal | v3.10.90 · 2026-06-08 | Production ✅ |
-| GolfScorer | v8.17 · 2026-06-09b | Deployed ✅ — New Event banner btn; Players tab fix; resetAll clears Groups |
+| GolfScorer | v8.17 · 2026-06-09e | Deployed ✅ — New Event btn; Players tab fix; resetAll fix; no-HCP tee flow; publish guard |
 | Worker | 2026-06-03 | Deployed ✅ |
 | deploy.html | 2026-06-03 | Live ✅ — birdiefriends.com/deploy.html |
 | launch_golf_scorer.py | 2026-06-09 | Current ✅ — auto-pulls GolfScorer HTML from GitHub on startup |
@@ -429,5 +438,6 @@ Session end:
 - Push delivery sporadic on course — device-side (Focus Mode / Safari vs PWA icon)
 - Tim Wargo Android push notification: Samsung Internet PWA incompatible; Chrome PWA installed but BFUpdates was No — fixed; confirmed working after Jotform update
 - garretts-last-swing.html: dead photo overlay code, table width formatting, needs clean rewrite
-- GolfScorer Players tab (2·Players) onclick bug fixed Session 32 — monitor for any similar nav regressions
-- resetAll() Groups tab clear fixed Session 32 — if stale players ever reappear after New Event, check localStorage 'bf_groups_data'
+- GolfScorer Players tab (2·Players) onclick bug fixed Session 32 ✅
+- resetAll() Groups tab clear fixed Session 32 ✅
+- No-HCP tee dropdown fixed Session 32 ✅ — if tee dropdown ever shows as static pill for a null-HCP player, check isNoHcp flag and hcp===null condition in grpRenderHcpTable
