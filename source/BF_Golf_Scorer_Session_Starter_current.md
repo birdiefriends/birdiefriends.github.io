@@ -24,7 +24,7 @@ Claude never reconstructs Worker code without the source file.
 # BirdieFriends Golf Scorer — Session 32 Starter
 **Date:** TBD (follows Session 31, 2026-06-09)
 **Portal Version (production):** v3.10.90 · 2026-06-08 ← fetched from library at session start
-**GolfScorer Version:** v8.17 · 2026-06-09e (deployed)
+**GolfScorer Version:** v8.17 · 2026-06-09j (deployed)
 **Worker Version:** 2026-06-03 (KV Feed confirmed working end-to-end)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
@@ -70,6 +70,13 @@ Example: current version is v3.10.79 → Claude runs bf_deploy.py → deploys as
 - `launch_golf_scorer.py` upgraded: auto-pulls latest `BF_Golf_Scorer_8.html` from GitHub on every startup — no manual download needed; graceful fallback if offline
 - Desktop icon workflow: right-click `Launch_Golf_Scorer.bat` → Send to → Desktop (create shortcut) → one double-click launches and auto-updates
 - Fixed hardcoded `build-date` stamp — was showing `2026-05-28m` in header instead of current version date
+
+### GolfScorer — Groups tab drag UX (v8.17h–j)
+- Fixed Fetch Registrants crash (`Cannot read properties of undefined reading 'filter'`) — defensive `Array.isArray` guard on pruning block; `g.players || []` guard on group array
+- Fetch Registrants now prunes unregistered players on re-fetch — Jotform registration is source of truth; removed players also cleared from group assignments; yellow warning banner names pruned players
+- **Sticky unassigned pool** — left pane now `position:sticky` so it stays pinned in view while scrolling through groups; eliminates need to drag to screen edge to trigger auto-scroll
+- Groups container grows to full content height — no independent scroll trap; entire page scrolls as one
+- `grpSizeDragZone()` reworked: sizes pool height to viewport only, leaves groups height unconstrained
 
 ### GolfScorer — No-HCP player tee assignment flow (Series#4 / Rich Potts)
 - **Root cause:** `grpMergePlayers` sets `isNoHcp: false` for all new players by design (correct — new-to-series ≠ no GHIN). But tee dropdown in HCP table and drag cards was gated on `isNoHcp` only, so null-HCP players got a static pill with no way to change it
@@ -351,7 +358,7 @@ Audit ALL templates:
 | Component | Version | Status |
 |-----------|---------|--------|
 | Portal | v3.10.90 · 2026-06-08 | Production ✅ |
-| GolfScorer | v8.17 · 2026-06-09e | Deployed ✅ — New Event btn; Players tab fix; resetAll fix; no-HCP tee flow; publish guard |
+| GolfScorer | v8.17 · 2026-06-09j | Deployed ✅ — See Session 32 accomplishments |
 | Worker | 2026-06-03 | Deployed ✅ |
 | deploy.html | 2026-06-03 | Live ✅ — birdiefriends.com/deploy.html |
 | launch_golf_scorer.py | 2026-06-09 | Current ✅ — auto-pulls GolfScorer HTML from GitHub on startup |
