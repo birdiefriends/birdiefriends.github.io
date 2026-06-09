@@ -3121,6 +3121,7 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData)
   <div class="tab" onclick="switchTab('skins',this)">Skins</div>
   <div class="tab" onclick="switchTab('ctp',this)">CTP</div>
   <div class="tab" onclick="switchTab('money',this)">💰 Money</div>
+  <div class="tab" id="groups-tab" onclick="openGroupingsForEvent()" style="opacity:0.45" title="No groupings archive for this event">⛳ Groups</div>
 </div>
 
 <!-- ── PODIUM TAB ── -->
@@ -3267,6 +3268,17 @@ function updateEvtPills(activeBtn) {
   });
 }
 
+function openGroupingsForEvent() {
+  const activeEvt = document.querySelector('.tab-groups-active-event') || 
+    ALL_SERIES_DATA?.events?.slice(-1)[0]?.name;
+  const archiveFile = GROUPINGS_ARCHIVE[_currentEventName];
+  if (archiveFile) {
+    window.open('/' + archiveFile, '_blank');
+  } else {
+    alert('No groupings archive for this event.');
+  }
+}
+
 function updateGroupingsLink(eventName) {
   const link = document.getElementById('groupings-nav-link');
   if (!link) return;
@@ -3282,11 +3294,22 @@ function updateGroupingsLink(eventName) {
   }
 }
 
+let _currentEventName = ALL_SERIES_DATA?.events?.slice(-1)[0]?.name || '';
+
 function loadEvent(selectedName) {
   if (!ALL_SERIES_DATA) return;
   const evt = ALL_SERIES_DATA.events.find(e => e.name === selectedName);
   if (!evt) return;
+  _currentEventName = selectedName;
   updateGroupingsLink(selectedName);
+  // Update Groups tab state
+  const grpTab = document.getElementById('groups-tab');
+  if (grpTab) {
+    const hasArchive = !!GROUPINGS_ARCHIVE[selectedName];
+    grpTab.style.opacity = hasArchive ? '1' : '0.45';
+    grpTab.title = hasArchive ? 'View groupings for ' + selectedName : 'No groupings archive for this event';
+    grpTab.style.cursor = hasArchive ? 'pointer' : 'default';
+  }
 
   // Always 2 decimal places — the numbers are the numbers
   function fmtDiff(v) {
@@ -5145,6 +5168,7 @@ function generateSeriesPage(season, sd) {
   <div class="tab" onclick="switchTab('combo',this)">🟡 Combo</div>
   <div class="tab" onclick="switchTab('gold',this)">🟠 Gold</div>
   <div class="tab" onclick="switchTab('money',this)">💰 Money</div>
+  <div class="tab" id="groups-tab" onclick="openGroupingsForEvent()" style="opacity:0.45" title="No groupings archive for this event">⛳ Groups</div>
 </div>
 
 <!-- OVERALL -->
@@ -7169,8 +7193,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-09m';
-const GS_VERSION = 'v8.17 · 2026-06-09m';
+document.getElementById('build-date').textContent = '2026-06-09n';
+const GS_VERSION = 'v8.17 · 2026-06-09n';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
