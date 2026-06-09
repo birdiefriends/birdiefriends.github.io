@@ -684,7 +684,7 @@
       <div id="grp-pool"
         ondragover="event.preventDefault()"
         ondrop="grpDropToPool(event)"
-        style="flex:1;min-height:200px;overflow-y:auto;border:1.5px dashed var(--border);border-radius:8px;padding:6px;background:var(--surface)">
+        style="min-height:200px;max-height:calc(100vh - 140px);overflow-y:auto;border:1.5px dashed var(--border);border-radius:8px;padding:6px;background:var(--surface)">
         <div id="grp-pool-empty" style="font-size:0.8rem;color:var(--text-muted);padding:12px;text-align:center">
           Fetch registrants to populate
         </div>
@@ -6050,15 +6050,7 @@ function grpGetRank(name) {
 function grpClearRankCache() { grpRankCache = null; }
 
 function grpSizeDragZone() {
-  // Pool is sticky sidebar — height = viewport minus its top offset so it stays fully visible
-  const pool = document.getElementById('grp-pool');
-  if (pool) {
-    const rect = pool.getBoundingClientRect();
-    pool.style.height = Math.max(200, window.innerHeight - rect.top - 16) + 'px';
-  }
-  // Groups container grows naturally with content — no fixed height
-  const groups = document.getElementById('grp-groups-container');
-  if (groups) groups.style.height = '';
+  // No-op — layout handled entirely by CSS (sticky pool + free-grow groups)
 }
 
 function grpOnTabOpen() {
@@ -7231,8 +7223,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-09q';
-const GS_VERSION = 'v8.17 · 2026-06-09q';
+document.getElementById('build-date').textContent = '2026-06-09r';
+const GS_VERSION = 'v8.17 · 2026-06-09r';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
