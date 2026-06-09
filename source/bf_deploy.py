@@ -82,6 +82,21 @@ def history(n=10):
     for c in commits:
         print(c['sha'][:7], c['commit']['message'])
 
+
+def deploy_file(local_path, gh_path, commit_msg='update'):
+    """Deploy any single file directly to a GitHub path."""
+    with open(local_path, 'r', encoding='utf-8') as f:
+        file_content = f.read()
+    encoded = base64.b64encode(file_content.encode('utf-8')).decode()
+    cur = gh_get(f'/contents/{gh_path}?ref=main')
+    result = gh_put(f'/contents/{gh_path}', {
+        'message': commit_msg,
+        'content': encoded, 'sha': cur['sha'], 'branch': BRANCH
+    })
+    print(f'✅ {gh_path} → {result["commit"]["sha"][:7]}')
+    print(f'\n🚀 {gh_path} deployed — live in ~60s')
+    return result
+
 if __name__ == '__main__':
     cmd = sys.argv[1] if len(sys.argv) > 1 else 'deploy'
     if cmd == 'deploy':
@@ -90,5 +105,7 @@ if __name__ == '__main__':
         rollback(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
     elif cmd == 'history':
         history(int(sys.argv[2]) if len(sys.argv) > 2 else 10)
+    elif cmd == 'deploy_file':
+        deploy_file(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else 'update')
     else:
-        print('Usage: bf_deploy.py [deploy <path> <msg>] | [rollback <sha> <msg>] | [history <n>]')
+        print('Usage: bf_deploy.py [deploy <path> <msg>] | [deploy_file <local> <gh_path> <msg>] | [rollback <sha> <msg>] | [history <n>]')
