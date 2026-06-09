@@ -188,6 +188,8 @@
   .cmd-btn-export:hover { background: rgba(255,255,255,0.18); }
   .cmd-btn-import  { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
   .cmd-btn-import:hover { background: rgba(255,255,255,0.18); }
+  .cmd-btn-danger  { background: rgba(180,40,40,0.25); color: #f4a0a0; border-color: rgba(244,160,160,0.3); }
+  .cmd-btn-danger:hover { background: rgba(180,40,40,0.5); }
   .cmd-bar .cmd-divider {
     width: 1px; height: 20px;
     background: rgba(255,255,255,0.15);
@@ -556,7 +558,7 @@
   </div>
   <div style="text-align:right;min-width:0;flex-shrink:1">
     <div id="event-name-display" style="font-size:0.85rem;opacity:0.75;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px"></div>
-    <div style="font-size:0.7rem;opacity:0.45;letter-spacing:0.08em;margin-top:4px;font-family:'DM Mono',monospace">v8.16 · <span id="build-date"></span></div>
+    <div style="font-size:0.7rem;opacity:0.45;letter-spacing:0.08em;margin-top:4px;font-family:'DM Mono',monospace">v8.17 · <span id="build-date"></span></div>
     <div id="preview-mode-badge" style="display:none;margin-left:12px;padding:3px 10px;border-radius:100px;background:#f59e0b;color:#1a1a1a;font-size:0.7rem;font-weight:700;letter-spacing:0.06em;font-family:'DM Mono',monospace;">🔍 PREVIEW MODE</div>
   </div>
 </header>
@@ -581,6 +583,8 @@
   <div class="cmd-divider"></div>
   <button class="cmd-btn cmd-btn-export"  onclick="exportSeriesJSON()">⬇ Export JSON</button>
   <button class="cmd-btn cmd-btn-import"  onclick="showImportJSONModal()">⬆ Import JSON</button>
+  <div class="cmd-divider"></div>
+  <button class="cmd-btn cmd-btn-danger"  onclick="resetAll()">↺ New Event</button>
 </div>
 
 <main>
@@ -7057,7 +7061,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-05-28m';
-const GS_VERSION = 'v8.16 · 2026-05-28m';
+const GS_VERSION = 'v8.17 · 2026-06-09a';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
