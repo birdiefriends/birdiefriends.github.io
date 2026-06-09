@@ -21,10 +21,10 @@ Worker changes require worker.js from the library (source/worker.js).
 Claude never reconstructs Worker code without the source file.
 -->
 
-# BirdieFriends Golf Scorer — Session 31 Starter
-**Date:** TBD (follows Session 30, 2026-06-08)
-**Portal Version (production):** v3.10.88 · 2026-06-06 ← fetched from library at session start
-**GolfScorer Version:** v8.6 · 2026-05-28d (deployed, unchanged)
+# BirdieFriends Golf Scorer — Session 32 Starter
+**Date:** TBD (follows Session 31, 2026-06-09)
+**Portal Version (production):** v3.10.90 · 2026-06-08 ← fetched from library at session start
+**GolfScorer Version:** v8.17 · 2026-06-09b (deployed)
 **Worker Version:** 2026-06-03 (KV Feed confirmed working end-to-end)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
@@ -44,7 +44,7 @@ Claude never reconstructs Worker code without the source file.
 | File | When needed |
 |------|-------------|
 | `deploy_portal.py` | Only if changing the bat deploy script |
-| `launch_golf_scorer.py` | Only if changing the local GolfScorer launcher |
+| `launch_golf_scorer.py` | Only if changing the local GolfScorer launcher (now auto-pulls GolfScorer HTML from GitHub on startup) |
 
 > **Session starter convention (Golden Rule #17):** At session end, save the updated starter as `BF_Golf_Scorer_Session_Starter_current.md` in the GolfScorer folder and run the bat. GitHub history is the version archive — no numbered copies needed.
 
@@ -56,6 +56,35 @@ Claude never reconstructs Worker code without the source file.
 > `source/portal_version.txt` is the sole version source of truth. `bf_deploy.py` reads it, increments patch, and pushes atomically. Works from any device.
 
 Example: current version is v3.10.79 → Claude runs bf_deploy.py → deploys as v3.10.80 ✅
+
+---
+
+## Session 32 Accomplishments (2026-06-09)
+
+### GolfScorer — Actions banner + deploy infrastructure
+- `↺ New Event` button added to Actions banner (always-visible, red/danger style) — accessible from any tab, not just Results
+- Fixed Players tab (2·Players) broken — missing `)` in onclick attribute silently disabled the button
+- Fixed `resetAll()` not clearing Groups tab: `grpPlayers`, `grpGroups`, and `localStorage['bf_groups_data']` now wiped on New Event; previously only `cachedPlayers` (Tab 2) was cleared, leaving stale roster in Groups tab
+- `bf_deploy.py` upgraded: new `deploy_file(local_path, gh_path, commit_msg)` function for single-file Claude-direct deploys — any managed file now deployable without the bat
+- GolfScorer (`source/BF_Golf_Scorer_8.html`) now Claude-direct deployable via `bf_deploy.py deploy_file`
+- `launch_golf_scorer.py` upgraded: auto-pulls latest `BF_Golf_Scorer_8.html` from GitHub on every startup — no manual download needed; graceful fallback if offline
+- Desktop icon workflow: right-click `Launch_Golf_Scorer.bat` → Send to → Desktop (create shortcut) → one double-click launches and auto-updates
+
+### Managed file registry (updated)
+| Key | GitHub path | Updated by |
+|-----|-------------|------------|
+| portal | `docs/portal.html` + `source/portal.html` | bf_deploy.py (any device) |
+| guide | `docs/guide.html` + `source/guide.html` | Claude direct |
+| worker | `source/worker.js` | Claude direct |
+| golfscore | `source/BF_Golf_Scorer_8.html` | Claude direct (bf_deploy.deploy_file) |
+| ops_guide | `source/BF_Operations_Guide.md` | Claude direct |
+| deploy.html | `docs/deploy.html` + `source/deploy.html` | Claude direct |
+| session_starter | `source/BF_Golf_Scorer_Session_Starter_current.md` | Claude direct |
+| portal_version | `source/portal_version.txt` | bf_deploy.py |
+| bf_deploy.py | `source/bf_deploy.py` | Claude direct |
+| bootstrap | `source/BF_Session_Bootstrap.md` | Claude direct |
+
+**Not in library (secrets):** `deploy_portal.py`, `launch_golf_scorer.py` — laptop only, upload when changes needed.
 
 ---
 
@@ -312,12 +341,13 @@ Audit ALL templates:
 ### Versions
 | Component | Version | Status |
 |-----------|---------|--------|
-| Portal | v3.10.75 · 2026-06-03 | Production ✅ |
-| GolfScorer | v8.6 · 2026-05-28d | Deployed ✅ |
-| Worker | 2026-06-03 | Deployed ✅ — deploy/history/rollback added |
+| Portal | v3.10.90 · 2026-06-08 | Production ✅ |
+| GolfScorer | v8.17 · 2026-06-09b | Deployed ✅ — New Event banner btn; Players tab fix; resetAll clears Groups |
+| Worker | 2026-06-03 | Deployed ✅ |
 | deploy.html | 2026-06-03 | Live ✅ — birdiefriends.com/deploy.html |
-| launch_golf_scorer.py | 2026-06-01 | Current ✅ |
-| deploy_portal.py | 2026-06-03 | Current ✅ — source mirrors + version push |
+| launch_golf_scorer.py | 2026-06-09 | Current ✅ — auto-pulls GolfScorer HTML from GitHub on startup |
+| bf_deploy.py | 2026-06-09 | Current ✅ — deploy_file() added for single-file Claude-direct deploys |
+| deploy_portal.py | 2026-06-03 | Current ✅ |
 | guide.html | Session 25 | Live ✅ |
 
 ### Worker Endpoints
@@ -367,30 +397,27 @@ Session start (any device):
 1. Open deploy.html → Claude tab → Copy Session Start Command → paste into Claude
    OR paste directly: "Fetch ...BF_Session_Bootstrap.md and follow all instructions in it exactly."
 2. Claude auto-fetches everything from library — portal, worker, bf_deploy.py all staged
-3. Upload deploy_portal.py / launch_golf_scorer.py only if changing those secrets files
+3. Upload deploy_portal.py / launch_golf_scorer.py ONLY if changing those secrets files
 
-Portal (after Claude produces output):
-1. Download birdiefriends_portal.html from Claude output
-2. Place in GolfScorer folder (overwrite existing)
-3. Double-click deploy_portal.bat
-4. Confirm version bump in console output
-5. Wait ~60 seconds → hard refresh on phone
-6. Confirm new version in header
+Portal (Claude deploys directly — no download needed):
+- Claude runs bf_deploy.py → increments version → pushes docs/portal.html + source/portal.html + portal_version.txt atomically
+- Wait ~60 seconds → hard refresh on phone → confirm new version in header
 
-Worker (when changed):
-1. Download worker.js from Claude output
-2. Cloudflare → Workers → birdiefriends-push → Edit code → paste → Save and Deploy
-3. Save worker.js to GolfScorer folder (bat mirrors it to source/ on next run)
+Worker (Claude deploys directly — no download needed):
+- Claude runs bf_deploy.deploy_file('worker.js', 'source/worker.js', 'msg')
+- Then: Cloudflare → Workers → birdiefriends-push → Edit code → paste → Save and Deploy
+  (Worker still requires manual Cloudflare paste — GitHub source/ is the record, not the live worker)
 
-GolfScorer (when changed):
-1. Download BF_Golf_Scorer_8.html from Claude output
-2. Replace file in GolfScorer folder
-3. Double-click Launch_Golf_Scorer.bat
-4. VERIFY VERSION IN HEADER before doing anything
+GolfScorer (Claude deploys directly — no download needed):
+- Claude runs bf_deploy.deploy_file('BF_Golf_Scorer_8.html', 'source/BF_Golf_Scorer_8.html', 'msg')
+- Next Launch_Golf_Scorer.bat run auto-pulls the updated file from GitHub before serving
 
 Session end:
-1. Save updated session starter as BF_Golf_Scorer_Session_Starter_current.md
-2. Run bat — all source files mirror to GitHub library
+1. Claude deploys updated session starter:
+   bf_deploy.deploy_file('session_starter.md', 'source/BF_Golf_Scorer_Session_Starter_current.md', 'Session 3X handoff')
+2. Claude deploys updated ops guide:
+   bf_deploy.deploy_file('ops_guide.md', 'source/BF_Operations_Guide.md', 'Session 3X ops guide update')
+3. No bat needed — all managed files are Claude-direct
 ```
 
 ### Known Issues Carried Forward
@@ -401,4 +428,6 @@ Session end:
 - Active/Inactive auto-reset: Jeremy Burkett + Tony Hager
 - Push delivery sporadic on course — device-side (Focus Mode / Safari vs PWA icon)
 - Tim Wargo Android push notification: Samsung Internet PWA incompatible; Chrome PWA installed but BFUpdates was No — fixed; confirmed working after Jotform update
-- garretts-last-swing.html: dead photo overlay code, table width formatting, needs clean rewrite in Session 31
+- garretts-last-swing.html: dead photo overlay code, table width formatting, needs clean rewrite
+- GolfScorer Players tab (2·Players) onclick bug fixed Session 32 — monitor for any similar nav regressions
+- resetAll() Groups tab clear fixed Session 32 — if stale players ever reappear after New Event, check localStorage 'bf_groups_data'
