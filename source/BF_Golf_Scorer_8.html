@@ -6729,11 +6729,26 @@ function grpMergePlayers(registrants, eventName) {
   const seriesData = getSeriesData();
   const season = Object.keys(seriesData.seasons || {}).sort().reverse()[0];
 
+  // Prune players no longer in the current registrant list
+  const regNames = registrants.map(r => r.name.toLowerCase());
+  const pruned = grpPlayers.filter(p => !regNames.includes(p.name.toLowerCase()));
+  if (pruned.length) {
+    const names = pruned.map(p => p.name).join(', ');
+    console.log('[GRP] grpMergePlayers: pruning', pruned.length, 'unregistered player(s):', names);
+    grpPlayers = grpPlayers.filter(p => regNames.includes(p.name.toLowerCase()));
+    // Also remove from any group
+    grpGroups.forEach(g => {
+      g.players = g.players.filter(pid => grpPlayers.some(p => p.id === pid));
+    });
+    // Notify commissioner
+    setTimeout(() => grpSetStatus('warn', `&#x26A0; ${pruned.length} player(s) removed — no longer registered: <strong>${names}</strong>`), 100);
+  }
+
   let added = 0, updated = 0;
   registrants.forEach(reg => {
     const existing = grpPlayers.find(p => p.name.toLowerCase() === reg.name.toLowerCase());
     if (existing) {
-      // Update sub status but keep HCP/quota
+      // Update sub status but keep HCP/quota/tee/groupId
       existing.isSub = reg.isSub;
       updated++;
       return;
@@ -6801,8 +6816,12 @@ function grpMergePlayers(registrants, eventName) {
 function grpSetStatus(type, msg) {
   const el = document.getElementById('grp-fetch-status');
   el.style.display = 'block';
-  const colors = { error:'#a32d2d', success:'#085041', loading:'#185fa5', info:'#444' };
+  const colors = { error:'#a32d2d', success:'#085041', loading:'#185fa5', info:'#444', warn:'#856404' };
+  const bgColors = { warn:'#fff3cd', error:'#fff5f5' };
   el.style.color = colors[type] || '#444';
+  el.style.background = bgColors[type] || '';
+  el.style.padding = bgColors[type] ? '6px 10px' : '';
+  el.style.borderRadius = bgColors[type] ? '4px' : '';
   el.innerHTML = msg;
 }
 
@@ -7129,8 +7148,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-09f';
-const GS_VERSION = 'v8.17 · 2026-06-09f';
+document.getElementById('build-date').textContent = '2026-06-09g';
+const GS_VERSION = 'v8.17 · 2026-06-09g';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
