@@ -1,5 +1,5 @@
 # BirdieFriends — Operations Guide
-**Last Updated:** 2026-06-04 (Session 29 — KV Feed shipped; bat retired for library mirroring; Claude direct is now standard for all managed files; Golden Rule #19 added)  
+**Last Updated:** 2026-06-09 (Session 32 — bf_deploy.deploy_file() added; GolfScorer now Claude-direct deployable; launch_golf_scorer.py auto-pulls GolfScorer HTML from GitHub on startup; Golden Rule #20 added)  
 **Maintained by:** Commissioner (Brian Hager) + Claude  
 **Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system.  
 Update this file at the end of every session.
@@ -23,9 +23,10 @@ Update this file at the end of every session.
 14. **Version sync is a mandatory first bash step.** After copying the portal HTML to the working directory, immediately fetch the live version from GitHub and apply it. See hardened sync script below — never use the bare one-liner (empty LIVE_VER would wipe all version strings).
 15. **worker.js is fetched from the library automatically at session start.** Claude never reconstructs Worker code from scratch. `source/worker.js` in GitHub is the canonical source — the bootstrap fetches it to `/home/claude/worker.js` every session.
 16. **Always upload `deploy_portal.py` and `launch_golf_scorer.py` if changes to those files are planned.** These are the only files that cannot be in GitHub — they contain secrets. Claude never reconstructs them from scratch. Before modifying either `.py` file, upload the current version so changes are additive, not replacement. All other files (portal, worker, bf_deploy.py) are library-managed and fetched automatically.
-17. **Save the session starter as `BF_Golf_Scorer_Session_Starter_current.md` in the GolfScorer folder before running the bat.** The bat mirrors it to `source/` on every deploy — GitHub history is the version archive. No numbered copies needed.
+17. **At session end, Claude deploys the updated session starter directly.** `bf_deploy.deploy_file('session_starter.md', 'source/BF_Golf_Scorer_Session_Starter_current.md', 'Session 3X handoff')` — GitHub history is the version archive. No numbered copies, no bat needed.
 18. **For phone/tablet deploys, Claude pushes directly to the GitHub API — not via the Worker `/deploy` endpoint.** The Worker's `/deploy` endpoint has a ~100KB request body limit (Cloudflare free tier) which the portal (350KB+) exceeds, returning an empty response. Claude uses the GitHub token embedded in worker.js to call the GitHub Contents API directly. The Worker `/deploy` endpoint remains useful only for small files (ops guide, worker.js itself).
 19. **`deploy_portal.bat` is retired for library mirroring.** Claude direct (GitHub API via `bf_deploy.py`) is the standard deploy path for all managed files — portal, worker, session starter, ops guide, bootstrap, deploy.html. The bat is no longer needed and the GolfScorer folder archive does not need to be undone. The only files that still require laptop-local handling are the secrets files (`deploy_portal.py`, `launch_golf_scorer.py`) which never go to GitHub.
+20. **`bf_deploy.deploy_file(local_path, gh_path, msg)` is the standard for all non-portal Claude-direct deploys.** Use it for worker.js, GolfScorer, ops guide, session starter, bootstrap, deploy.html — any single managed file. `deploy()` is reserved for the portal triple (docs/ + source/ + version bump). GolfScorer is now fully Claude-direct: Claude edits → `deploy_file` pushes to `source/BF_Golf_Scorer_8.html` → `launch_golf_scorer.py` auto-pulls on next startup. No download, no manual copy.
 
 ---
 
@@ -779,6 +780,7 @@ const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
 | Pre-session 22 | GitHub Pages deploy, Google Sheets push, Jotform proxy, Claude Vision OCR, portal deploy |
 | 2026-05-28 | TEST_PREVIEW_MODE flag; /api/preview/list route; /api/netlify/status returns preview_mode; gsVersion in sheets push payload; build_sheets_data stamps GS version in sheet title row |
 | 2026-06-01 | GitHub token updated to match deploy_portal.py |
+| 2026-06-09 | Auto-pull: fetches latest BF_Golf_Scorer_8.html from GitHub source/ on every startup before serving; falls back to local file gracefully if offline; prints version pulled to console |
 
 ### Tie Payout Rules (FINALIZED 2026-05-12)
 
