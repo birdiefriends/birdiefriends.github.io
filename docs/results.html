@@ -989,7 +989,10 @@ function loadEvent(selectedName) {
 }
 
 // ── Groupings link — event-aware archive resolution ──
-const GROUPINGS_ARCHIVE = {};  // eventName → archive filename, populated from meta
+const GROUPINGS_ARCHIVE = {
+  '2026 BFSeries#3': 'groupings-2026-BFSeries3.html'
+  // Future events added here at Publish Groupings time
+};  // eventName → archive filename
 
 (async function initGroupingsLink() {
   try {
