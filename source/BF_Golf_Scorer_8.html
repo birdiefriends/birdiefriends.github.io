@@ -6251,6 +6251,8 @@ function grpMakeCard(p, inGroup) {
       <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
         <button onclick="grpToggleBreakdown('${p.id}')" title="Quota explanation"
           style="font-size:0.7rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);cursor:pointer;white-space:nowrap">&#x2139; Why?</button>
+        <button onclick="grpRemovePlayer('${p.id}')" title="Remove player"
+          style="font-size:0.7rem;padding:2px 6px;border:1px solid #c0392b;border-radius:4px;background:#fff5f5;color:#c0392b;cursor:pointer;white-space:nowrap">&#x2715; Remove</button>
         ${inGroup ? `<div style="display:flex;gap:2px;justify-content:flex-end">
           <button onclick="grpMoveUp('${p.id}')" title="Move up" style="font-size:0.65rem;padding:1px 5px;border:1px solid var(--border);border-radius:3px;background:var(--surface);cursor:pointer;line-height:1.4">&#x25B2;</button>
           <button onclick="grpMoveDown('${p.id}')" title="Move down" style="font-size:0.65rem;padding:1px 5px;border:1px solid var(--border);border-radius:3px;background:var(--surface);cursor:pointer;line-height:1.4">&#x25BC;</button>
@@ -6526,6 +6528,19 @@ function grpAddGroup() {
   grpGroups.push({ id, players: [] });
   grpRender();
   grpSaveData();
+}
+
+function grpRemovePlayer(pid) {
+  const p = grpPlayers.find(x => x.id === pid);
+  if (!p) return;
+  if (!confirm(`Remove ${p.name} from the roster?\n\nThis only removes them from the Groups tab — it does not affect Jotform registrations.`)) return;
+  // Remove from any group they're in
+  grpGroups.forEach(g => { g.players = g.players.filter(id => id !== pid); });
+  // Remove from grpPlayers
+  grpPlayers = grpPlayers.filter(x => x.id !== pid);
+  grpSaveData();
+  grpRenderHcpTable();
+  grpRenderAll();
 }
 
 function grpRemoveGroup(gid) {
@@ -7114,8 +7129,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-09e';
-const GS_VERSION = 'v8.17 · 2026-06-09e';
+document.getElementById('build-date').textContent = '2026-06-09f';
+const GS_VERSION = 'v8.17 · 2026-06-09f';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
