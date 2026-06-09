@@ -83,10 +83,52 @@ def history(n=10):
         print(c['sha'][:7], c['commit']['message'])
 
 
+def _bump_gs_version(content):
+    """Auto-increment GolfScorer version suffix (a→b→...→z→aa→ab...) and sync build-date.
+    Returns (new_content, old_ver, new_ver). Structural — cannot be skipped."""
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    # Match e.g. v8.17 · 2026-06-09p  or  v8.17 · 2026-06-09aa
+    m = re.search(r"GS_VERSION = '(v[\d.]+) · (\d{4}-\d{2}-\d{2})([a-z]+)'", content)
+    if not m:
+        return content, None, None
+    base_ver, old_date, old_suffix = m.group(1), m.group(2), m.group(3)
+    # Increment suffix: a→b, z→aa, az→ba, zz→aaa
+    def inc_suffix(s):
+        s = list(s)
+        i = len(s) - 1
+        while i >= 0:
+            if s[i] < 'z':
+                s[i] = chr(ord(s[i]) + 1)
+                return ''.join(s)
+            s[i] = 'a'
+            i -= 1
+        return 'a' + ''.join(s)
+    new_suffix = inc_suffix(old_suffix) if old_date == today else 'a'
+    new_ver = f'{base_ver} · {today}{new_suffix}'
+    old_ver = f'{base_ver} · {old_date}{old_suffix}'
+    # Update GS_VERSION constant and build-date textContent
+    content = content.replace(f"GS_VERSION = '{old_ver}'", f"GS_VERSION = '{new_ver}'")
+    content = re.sub(
+        r"document\.getElementById\('build-date'\)\.textContent = '[^']+'",
+        f"document.getElementById('build-date').textContent = '{today}{new_suffix}'",
+        content
+    )
+    return content, old_ver, new_ver
+
 def deploy_file(local_path, gh_path, commit_msg='update'):
-    """Deploy any single file directly to a GitHub path."""
+    """Deploy any single file directly to a GitHub path.
+    For GolfScorer (BF_Golf_Scorer_8.html), auto-bumps version — structurally enforced."""
     with open(local_path, 'r', encoding='utf-8') as f:
         file_content = f.read()
+    # Auto-bump GolfScorer version — cannot be skipped
+    if 'BF_Golf_Scorer' in gh_path or 'BF_Golf_Scorer' in local_path:
+        file_content, old_ver, new_ver = _bump_gs_version(file_content)
+        if new_ver:
+            print(f'📦 GS version: {old_ver} → {new_ver}')
+            commit_msg = f'{commit_msg} · {new_ver}'
+            # Write bumped content back to local file
+            with open(local_path, 'w', encoding='utf-8') as f:
+                f.write(file_content)
     encoded = base64.b64encode(file_content.encode('utf-8')).decode()
     cur = gh_get(f'/contents/{gh_path}?ref=main')
     result = gh_put(f'/contents/{gh_path}', {
