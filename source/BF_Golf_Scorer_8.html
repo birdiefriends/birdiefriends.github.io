@@ -708,11 +708,11 @@
 <div class="section" id="tab-players">
   <div class="row mb1">
     <div class="col">
-      <label>Event Name <span style="color:#a32d2d;font-size:0.8em">★ required</span></label>
-      <input type="text" id="event-name" placeholder="e.g. 2026 Series#3" oninput="updateEventName();this.style.border='';this.style.background='';this.placeholder='e.g. 2026 Series#3'">
+      <label>Event Name</label>
+      <input type="text" id="event-name" readonly style="background:var(--surface);color:var(--text-muted);cursor:default;font-weight:600" placeholder="Set via Groups tab → Kick Off Event">
     </div>
     <div class="col" style="max-width:180px">
-      <label>Event Date</label>
+      <label>Event Date <span style="color:#a32d2d;font-size:0.8em">★ required</span></label>
       <input type="date" id="event-date">
     </div>
   </div>
@@ -734,15 +734,8 @@
 
     <div id="player-list"></div>
 
-    <div class="row mt1 gap-sm" style="flex-wrap:wrap">
-      <button class="btn btn-secondary btn-sm" onclick="addPlayerRow()">+ Add Player</button>
-      <button class="btn btn-secondary btn-sm" onclick="loadFromProfiles()">⚡ Load from Profiles</button>
-      <button class="btn btn-secondary btn-sm" onclick="togglePastePanel('quick-hcp-panel')" style="background:linear-gradient(135deg,#e8f5e9,#f0fff4);border-color:#1a6b30;color:#085041;font-weight:600">🏌 Quick HCP Update</button>
-      <button class="btn btn-secondary btn-sm" onclick="loadDefaultRoster()">Load Default Roster</button>
-      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ghin-csv-input').click()">⬆ Import GHIN CSV</button>
-      <input type="file" id="ghin-csv-input" accept=".csv,.txt" style="display:none" onchange="importGHINCSV(event)">
-      <button class="btn btn-secondary btn-sm" onclick="togglePastePanel('roster-paste-panel')">📋 Paste Roster</button>
-      <button class="btn btn-secondary btn-sm" onclick="showTab('profiles')" style="background:linear-gradient(135deg,#f0f0ff,#e8e8ff);border-color:#5555aa;color:#333388;font-weight:600">👤 Manage Profiles</button>
+    <div class="row mt1 gap-sm" style="flex-wrap:wrap;align-items:center">
+      <span style="font-size:0.8rem;color:var(--text-muted);font-style:italic">Roster fed from Groups tab. Edit HCPs and tee assignments in <a href="#" onclick="showTab('groups');return false" style="color:var(--accent)">1 · Groups</a>.</span>
       <button class="btn btn-danger btn-sm" onclick="resetAll()" style="margin-left:auto">↺ Clear Event</button>
     </div>
 
@@ -790,7 +783,7 @@
     </div>
   </div>
 
-  <div class="card mt2" id="csv-help-card">
+  <div class="card mt2" id="csv-help-card" style="display:none">
     <div class="card-title">Importing from GHIN</div>
     <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.7">
       <strong style="color:var(--text)">How to export from GHIN:</strong><br>
@@ -7154,8 +7147,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-09k';
-const GS_VERSION = 'v8.17 · 2026-06-09k';
+document.getElementById('build-date').textContent = '2026-06-09l';
+const GS_VERSION = 'v8.17 · 2026-06-09l';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
