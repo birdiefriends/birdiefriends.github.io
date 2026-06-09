@@ -3107,7 +3107,7 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData)
 </header>
 <div style="display:flex;justify-content:center;gap:8px;padding:10px 16px;background:#f4f7f5;border-bottom:1px solid #d0e5dc">
   <a href="/portal.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">← Portal</a>
-  <a href="/groupings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">&#x26F3; Groupings</a>
+  <a id="groupings-nav-link" href="/groupings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">&#x26F3; Groupings</a>
   <a href="/standings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">🏆 Standings</a>
   <a href="/results.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">📋 Results</a>
   <a href="/mygame.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">⛳ My Game</a>
@@ -3244,6 +3244,12 @@ const ALL_SERIES_DATA = ${embeddedSeriesJson};
 const BSGC_PARS_DATA = [4,4,3,4,5,4,5,3,4, 3,5,4,4,4,3,4,5,3];
 const PTS_TO_DIFF    = { 0:2, 1:1, 2:0, 4:-1, 6:-2 };
 
+// Build groupings archive map from embedded series data (groupingsFile field on each event)
+const GROUPINGS_ARCHIVE = {};
+(ALL_SERIES_DATA.events || []).forEach(evt => {
+  if (evt.groupingsFile) GROUPINGS_ARCHIVE[evt.name] = evt.groupingsFile;
+});
+
 function switchTab(id, el) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -3261,10 +3267,26 @@ function updateEvtPills(activeBtn) {
   });
 }
 
+function updateGroupingsLink(eventName) {
+  const link = document.getElementById('groupings-nav-link');
+  if (!link) return;
+  const archiveFile = GROUPINGS_ARCHIVE[eventName];
+  if (archiveFile) {
+    link.href  = '/' + archiveFile;
+    link.title = 'Final groupings — ' + eventName;
+    link.style.opacity = '1';
+  } else {
+    link.href  = '/groupings.html';
+    link.title = '';
+    link.style.opacity = '0.45';
+  }
+}
+
 function loadEvent(selectedName) {
   if (!ALL_SERIES_DATA) return;
   const evt = ALL_SERIES_DATA.events.find(e => e.name === selectedName);
   if (!evt) return;
+  updateGroupingsLink(selectedName);
 
   // Always 2 decimal places — the numbers are the numbers
   function fmtDiff(v) {
@@ -4497,7 +4519,7 @@ select:focus{outline:none;border-color:var(--green)}
 </header>
 <div style="display:flex;justify-content:center;gap:8px;padding:10px 16px;background:#f7f6f2;border-bottom:1px solid #e0ddd7">
   <a href="/portal.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">← Portal</a>
-  <a href="/groupings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">&#x26F3; Groupings</a>
+  <a id="groupings-nav-link" href="/groupings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">&#x26F3; Groupings</a>
   <a href="/standings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">🏆 Standings</a>
   <a href="/results.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">📋 Results</a>
   <a href="/mygame.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">⛳ My Game</a>
@@ -5111,7 +5133,7 @@ function generateSeriesPage(season, sd) {
 </header>
 <div style="display:flex;justify-content:center;gap:8px;padding:10px 16px;background:#f4f7f5;border-bottom:1px solid #d0e5dc">
   <a href="/portal.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">← Portal</a>
-  <a href="/groupings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">&#x26F3; Groupings</a>
+  <a id="groupings-nav-link" href="/groupings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">&#x26F3; Groupings</a>
   <a href="/standings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">🏆 Standings</a>
   <a href="/results.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">📋 Results</a>
   <a href="/mygame.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">⛳ My Game</a>
@@ -7147,8 +7169,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-09l';
-const GS_VERSION = 'v8.17 · 2026-06-09l';
+document.getElementById('build-date').textContent = '2026-06-09m';
+const GS_VERSION = 'v8.17 · 2026-06-09m';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
