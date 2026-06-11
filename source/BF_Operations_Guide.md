@@ -1,5 +1,5 @@
 # BirdieFriends — Operations Guide
-**Last Updated:** 2026-06-09 (Session 32 — bf_deploy.deploy_file() added; GolfScorer Claude-direct deployable; launch auto-pulls GolfScorer HTML; no-HCP tee flow fixed; publish guard; Fetch prunes unregistered; sticky pool drag UX; Golden Rule #20 added)  
+**Last Updated:** 2026-06-11 (Session 33 — notification architecture overhaul; bfType taxonomy complete; Birdie/CttP message copy rewritten; admin cards all collapsible; Alerts/Inbox design captured)  
 **Maintained by:** Commissioner (Brian Hager) + Claude  
 **Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system.  
 Update this file at the end of every session.
@@ -479,12 +479,60 @@ Two sections (Jotform-based — no OneSignal read needed):
 | Named players only | `osSendToPlayers(names[])` | Event-scoped — looks up pushIds from memberData |
 | Specific device | `osSend({include_player_ids})` | Direct test or one-off push |
 
-### Announcement Feed — Known Limitation
-The portal announcement feed reads from **OneSignal notification history**. OneSignal's API only supports cancelling scheduled/in-flight messages — it cannot delete already-delivered messages via API. The "Delete All" button in Admin therefore cannot clear the feed for all players.
+### `bfType` taxonomy (Session 33 — complete)
+Every `osSend` call now carries a `bf_type` field. Worker writes it to KV feed as `type`. Used for feed filtering, inbox lifecycle TTLs, and analytics.
 
-**Workaround for now:** Use Commissioner Broadcast to send a cancellation/update message. Players can individually dismiss announcements.
+| Call site | `bfType` | KV feed label |
+|-----------|----------|---------------|
+| `notifyNewEvent` | `'new_event'` | New event posted |
+| `notifySubPromotion` | `'sub_promotion'` | Player promoted from sub list |
+| `notifyEventReminder` | `'event_reminder'` | Day-before reminder |
+| Admin broadcast card | `'broadcast'` | Commissioner free-form broadcast |
+| Commissioner modal — event-scoped | `'event_push'` | Scoped to registered players |
+| `submitBirdieAlert` | `'birdie'` | Live event birdie / skin alert |
+| `sendCtpNotification` | `'cttp'` | Live event CttP leader update |
+| `adminSendTestPush` | `'test'` | Dev test push — auto-expires |
 
-**Permanent fix (backlogged — Worker KV Feed):** Worker writes a structured entry to KV on every notification send. Portal reads `/feed` endpoint instead of OneSignal history. Commissioner controls the data completely. See backlog item below.
+### Notification message copy (Session 33 — rewritten)
+**Rule: full names always** — duplicate first names (multiple Toms) caused confusion at BFSeries#3.
+
+**CttP (`sendCtpNotification`):**
+- First on hole: `{Full Name} is Closest to the Pin on #3 at 6 ft.` (dist omitted if not entered)
+- Takes lead: `{Full Name} is Closer than {Prev Full Name} on #3 at 6 ft.`
+- Prior leader snapshot taken BEFORE `_ctpData` is overwritten — "Closer than" always accurate
+
+**Birdie / Skins (`submitBirdieAlert`):**
+- First birdie: heading `🦅 Birdie Alert` · `{Full Name} Birdied #4 — current Skin leader.`
+- Bust: heading `🦅 Skin Stopped` · `{Full Name} Birdied #4 and stopped {Prev Full Name}'s Skin.`
+- Already busted: heading `🦅 Birdie Alert` · `{Full Name} Birdied #4 — Skin not in play on this hole.`
+
+### Announcement Feed — KV-backed (live as of Session 27)
+Portal reads `/feed` endpoint from Worker — not OneSignal history. Worker writes a KV entry on every successful push send. Commissioner can clear entries via Admin → Announcement Feed card.
+
+**KV entry shape:** `{ id, key, title, body, sentAt, type }` — `type` is the `bfType` tag from the portal.
+**Current prune:** Worker deletes entries >48 hours on every send. (Planned: per-type TTL — see Alerts/Inbox design below.)
+
+### Alerts / Inbox — Design captured (Session 33), not yet built
+Player-accessible persistent message inbox. Key design decisions:
+
+**Lifecycle TTLs by type (to replace blanket 48h Worker prune):**
+| bfType | TTL | Rationale |
+|--------|-----|-----------|
+| `birdie` / `cttp` | 48h | Event-day only |
+| `broadcast` | 7 days | Commissioner editorial |
+| `new_event` | Until event date | Actionable until then |
+| `event_reminder` | 24h post tee-time | Gone after round |
+| `sub_promotion` | Until event date | Still relevant |
+| `event_push` | Until event date | Same |
+| `test` | 1h | Dev noise |
+
+**Architectural requirements:**
+1. `scope` field in KV entry (`'all'` / `'event:{name}'` / `'player:{name}'`) — personalized delivery prerequisite
+2. Per-player read state (soft dismiss — message stays, marked read)
+3. Worker `/inbox?player=` endpoint
+4. Portal inbox UI below Upcoming Events — unread badge, per-message dismiss
+
+**Build order:** Session A (Worker: scope field, per-type TTL, inbox endpoint) → Session B (Portal inbox UI) → Session C (commissioner send scoping UI)
 
 ### OneSignal API Keys
 | Key | Status | Notes |
@@ -704,7 +752,8 @@ const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
 
 | Item | Status | Notes |
 |------|--------|-------|
-| **Worker KV Feed** | 🔴 Priority — Session 27 | Replace OneSignal history as feed source of truth. Worker writes KV entry on every send. New GET /feed + DELETE /feed endpoints. Portal reads /feed. Commissioner can clear. Rolling 48hr/50-entry window. Prerequisite for Live Feed UI upgrade. Full spec in Session 26 starter. |
+| **Worker KV Feed** | ✅ Live (Session 27) | Worker writes KV entry on every send. GET /feed + DELETE /feed endpoints live. Portal reads /feed. 48hr prune active. |
+| **Alerts / Inbox** | 🔲 Session 34 (A) | Per-type TTL prune in Worker, scope field in KV entry, /inbox?player= endpoint. See Push Notifications section for full spec. |
 | **Cancelled Events** | 🔴 Priority — Session 27 | Commissioner marks event cancelled → push to registered players → card shows ❌ cancelled state → ghost entry on Schedule tab. Needs KV flag per event ID + Jotform row handling (hide vs delete). Full spec needed. |
 | Live Feed UI upgrade | 🔲 After KV Feed | Styled activity stream in live panel. Color-coded by type (birdie/CttP/commissioner). Auto-refresh 60s. Push becomes nudge not primary delivery. Requires KV Feed first. |
 | Push recipient scope | 🔲 Session 27 | Birdie Alerts + CttP → all members with pushId+bfw=Yes. Only registered-player filter for sub promotion. |
@@ -788,6 +837,11 @@ const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
 | v3.10.71 | 48hr lock: root fix — lock condition now includes !is4man — 4-player events never lock regardless of 48hr window |
 | v3.10.72 | Code Library: deploy_portal.py updated — deploys deploy.html, mirrors source files to source/ on every bat run |
 | v3.10.77–79 | Session 28 test deploys: Going→Registered→Going→Registered via Claude-direct bf_deploy.py flow |
+| v3.10.91 | Session 33: fix notification recipient scope — `osSendAll()` for Birdie Alert + CttP; rewrite message copy (full names, plain English, prior-leader CttP snapshot) |
+| v3.10.92 | Session 33: Push Subscribers card collapsible — collapsed by default, summary count in header, lazy-load on expand |
+| v3.10.93 | Session 33: complete bfType tagging on all notification call sites |
+| v3.10.94 | Session 33: Push Subscribers card — fix collapsed-by-default (was auto-opening on admin screen open), fix mobile summary wrapping |
+| v3.10.95 | Session 33: all 6 admin cards collapsible via shared `toggleAdminCard(cardId)` utility |
 
 ### Worker
 | Date | Key Change |
