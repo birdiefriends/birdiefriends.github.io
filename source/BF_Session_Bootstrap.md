@@ -10,13 +10,27 @@ Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/ma
 
 ## Claude — execute these steps automatically, in order, before anything else:
 
-1. Fetch and read `BF_Golf_Scorer_Session_Starter_current.md` from the library
-2. Fetch and read `BF_Operations_Guide.md` from the library
-3. Fetch `portal_version.txt` from the library — sole version source of truth
-4. Fetch `docs/portal.html` from GitHub → save to `/home/claude/birdiefriends_portal.html`
-5. Fetch `source/worker.js` from GitHub → save to `/home/claude/worker.js`
-6. Fetch `source/bf_deploy.py` from GitHub → save to `/home/claude/bf_deploy.py`
-7. Report: session #, portal version, worker version, file sizes — confirm fully loaded and ready
+> ⚠️ **FETCH METHOD — MANDATORY:** Use `bash_tool` with `curl` for ALL file fetches below.
+> Do NOT use the `web_fetch` tool for raw GitHub URLs — it requires a prior search result and will block the bootstrap. All six files must be fetched in a single `bash_tool` call.
+
+**Run this exact bash block first:**
+
+```bash
+BASE="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main"
+curl -s "$BASE/source/BF_Golf_Scorer_Session_Starter_current.md" -o /home/claude/BF_Golf_Scorer_Session_Starter_current.md && echo "Session Starter: OK"
+curl -s "$BASE/source/BF_Operations_Guide.md"                    -o /home/claude/BF_Operations_Guide.md && echo "Ops Guide: OK"
+curl -s "$BASE/source/portal_version.txt"                        -o /home/claude/portal_version.txt && echo "Version: $(cat /home/claude/portal_version.txt)"
+curl -s "$BASE/docs/portal.html"                                 -o /home/claude/birdiefriends_portal.html && echo "Portal: OK"
+curl -s "$BASE/source/worker.js"                                 -o /home/claude/worker.js && echo "Worker: OK"
+curl -s "$BASE/source/bf_deploy.py"                              -o /home/claude/bf_deploy.py && echo "Deploy: OK"
+echo "--- Sizes ---"
+ls -lh /home/claude/BF_Golf_Scorer_Session_Starter_current.md /home/claude/BF_Operations_Guide.md /home/claude/portal_version.txt /home/claude/birdiefriends_portal.html /home/claude/worker.js /home/claude/bf_deploy.py
+```
+
+**Then:**
+1. Read `BF_Golf_Scorer_Session_Starter_current.md` into context (view tool)
+2. Read `BF_Operations_Guide.md` into context (view tool)
+3. Report: session #, portal version, worker version, file sizes — confirm fully loaded and ready
 
 **All files are in the library. No uploads needed to start a session.**
 
