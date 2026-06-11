@@ -26,10 +26,10 @@ Worker changes require worker.js from the library (source/worker.js).
 Claude never reconstructs Worker code without the source file.
 -->
 
-# BirdieFriends Golf Scorer — Session 32 Starter
-**Date:** TBD (follows Session 31, 2026-06-09)
-**Portal Version (production):** v3.10.90 · 2026-06-08 ← fetched from library at session start
-**GolfScorer Version:** v8.17 · 2026-06-09j (deployed)
+# BirdieFriends Golf Scorer — Session 33 Starter
+**Date:** TBD (follows Session 33, 2026-06-11)
+**Portal Version (production):** v3.10.95 · 2026-06-11 ← fetched from library at session start
+**GolfScorer Version:** v8.17 · 2026-06-09o (deployed)
 **Worker Version:** 2026-06-03 (KV Feed confirmed working end-to-end)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
@@ -61,6 +61,56 @@ Claude never reconstructs Worker code without the source file.
 > `source/portal_version.txt` is the sole version source of truth. `bf_deploy.py` reads it, increments patch, and pushes atomically. Works from any device.
 
 Example: current version is v3.10.79 → Claude runs bf_deploy.py → deploys as v3.10.80 ✅
+
+---
+
+## Session 33 Accomplishments (2026-06-11)
+
+### Bootstrap — curl-only fetch rule
+- `BF_Session_Bootstrap.md` rewritten: replaced vague numbered steps with an explicit curl bash block fetching all 6 files in one shot — prevents `web_fetch` tool blocking on raw GitHub URLs (requires prior search result)
+- Claude Instructions block in session starter now leads with `FETCH RULE` to reinforce this at context-read time
+
+### Portal — Notification architecture overhaul (v3.10.91–v3.10.93)
+- **Recipient scope fixed:** `submitBirdieAlert()` and `sendCtpNotification()` were calling `fetch(OS_API)` raw with `included_segments: ['All']` — bypassed `bfw` opt-out, `InActive` filter, and KV feed entirely. Both now route through `osSendAll()`.
+- **`bfType` fully tagged on all call sites** — complete taxonomy now enforced:
+  | Call site | `bfType` |
+  |-----------|----------|
+  | `notifyNewEvent` | `'new_event'` |
+  | `notifySubPromotion` | `'sub_promotion'` |
+  | `notifyEventReminder` | `'event_reminder'` |
+  | Admin broadcast card | `'broadcast'` |
+  | Commissioner modal event-scoped | `'event_push'` |
+  | `submitBirdieAlert` | `'birdie'` |
+  | `sendCtpNotification` | `'cttp'` |
+  | `adminSendTestPush` | `'test'` |
+- **CttP message copy rewritten:** full names (no first-name-only — duplicate Toms issue in Series#3), dist optional (`at 6 ft` when entered, silent when not), prior leader snapshot taken BEFORE `_ctpData` overwritten so "Closer than" is always accurate
+  - First on board: `{Full Name} is Closest to the Pin on #3 at 6 ft.`
+  - Takes lead: `{Full Name} is Closer than {Prev Full Name} on #3 at 6 ft.`
+- **Birdie/Skin message copy rewritten:** three distinct headings, plain English, full names
+  - First birdie: heading `🦅 Birdie Alert` · `{Full Name} Birdied #4 — current Skin leader.`
+  - Bust: heading `🦅 Skin Stopped` · `{Full Name} Birdied #4 and stopped {Prev Full Name}'s Skin.`
+  - Already busted: heading `🦅 Birdie Alert` · `{Full Name} Birdied #4 — Skin not in play on this hole.`
+- **Negative CttP distance validation confirmed present** — backlog item closed ✅
+
+### Portal — Admin screen UX (v3.10.92–v3.10.95)
+- **Push Subscribers card collapsible** — starts collapsed, tap header to expand, chevron rotates 90°; lazy-loads on first expand; summary count (`26 subscribed · 2 not subscribed`) shown in header after first load
+- **All admin cards collapsible** — shared `toggleAdminCard(cardId)` utility; all 6 cards start collapsed:
+  - 🤖 Start Claude Session
+  - 📣 Push Notification to All Members
+  - 📱 Broadcast Text to All Members
+  - 🛠️ Dev Controls
+  - 📣 Announcement Feed (Refresh button expands and loads)
+  - 🔔 Push Subscribers (Refresh + Checklist buttons work without expanding)
+- Removed `loadAdminSubscribers()` auto-call on admin screen open — was forcing card open on every visit
+
+### Alerts / Inbox — Design captured, not yet built
+Full design spec in Ops Guide. Key decisions:
+- Player-controlled dismiss (soft — keeps message, marks read)
+- Message lifecycle by `bf_type` — TTLs: birdie/cttp 48h, broadcast 7d, new_event until event date, reminder 24h post-tee, test 1h
+- Personalized delivery (scope: all / event-registered / individual) is Req #1 architectural requirement
+- Worker needs: `scope` field in KV entry, per-type TTL prune replacing blanket 48h, `/inbox?player=` endpoint
+- Portal needs: inbox UI below Upcoming, read/unread state, per-message dismiss, lifecycle badges
+- Build order: Session A (Worker) → Session B (Portal inbox UI) → Session C (personalized send scoping)
 
 ---
 
@@ -356,18 +406,14 @@ Only `v1: true` formats shown in picker. Future formats flip to true as supporte
 
 ## 🔵 SESSION 30 — Priority 2: Remaining Backlog
 
-### Push notification message audit (before BFSeries#4)
-Audit ALL templates:
-- [ ] Birdie alert — first birdie / bust / already busted ✅ fixed Session 25
-- [ ] CttP leader announcement
-- [ ] Commissioner broadcast
-- [ ] Sub promotion
-- [ ] End of round / skins results
+### Push notification message audit ✅ COMPLETE Session 33
+- All templates rewritten with plain-English copy and full names
+- All `bfType` tags applied to every call site
+- Birdie/Skin and CttP message logic fixed — see Session 33 accomplishments
 
-### Push recipient scope
-- Birdie Alerts + CttP → ALL members with pushId + bfw=Yes (not just registered players)
-- Only registered-player filtering for: sub promotion, end-of-round scoring
-- Update `osSendToPlayers` filter logic per notification type
+### Push recipient scope ✅ COMPLETE Session 33
+- Birdie Alerts + CttP now route through `osSendAll` — `bfw=Yes` + InActive filter enforced
+- `included_segments: ['All']` removed from both functions
 
 ### Active/Inactive auto-reset (Jeremy Burkett + Tony Hager)
 - Fastest fix: hardcode exempt array like COMMISSIONERS array
@@ -380,7 +426,7 @@ Audit ALL templates:
 ### Versions
 | Component | Version | Status |
 |-----------|---------|--------|
-| Portal | v3.10.90 · 2026-06-08 | Production ✅ |
+| Portal | v3.10.95 · 2026-06-11 | Production ✅ |
 | GolfScorer | v8.17 · 2026-06-09o | Deployed ✅ — See Session 32 accomplishments |
 | Worker | 2026-06-03 | Deployed ✅ |
 | deploy.html | 2026-06-03 | Live ✅ — birdiefriends.com/deploy.html |
@@ -412,7 +458,7 @@ Audit ALL templates:
 | live_test | bool | Force live banner (dev only) |
 | live_override | bool | Commissioner manual event start |
 | live_override_since | ISO string | Timestamp of manual start |
-| feed::{timestamp} | JSON | **Planned** — KV feed entries |
+| feed::{timestamp} | JSON | ✅ Live — KV feed entries (title, body, sentAt, type) |
 
 ### Jotform Form IDs
 | Form | ID |
