@@ -1,4 +1,9 @@
 <!-- CLAUDE INSTRUCTIONS — READ FIRST
+FETCH RULE — NON-NEGOTIABLE:
+Use bash_tool with curl for ALL raw GitHub URL fetches. Do NOT use the web_fetch tool
+for raw.githubusercontent.com URLs — it requires a prior search result and will block.
+The bootstrap handles this automatically via its curl bash block.
+
 DEPLOY RULE — NON-NEGOTIABLE:
 Claude deploys the portal directly via the GitHub API using bf_deploy.py from the library.
 source/portal_version.txt in GitHub is the sole version source of truth.
