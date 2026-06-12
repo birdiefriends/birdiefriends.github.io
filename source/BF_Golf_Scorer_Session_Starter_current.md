@@ -26,15 +26,39 @@ Worker changes require worker.js from the library (source/worker.js).
 Claude never reconstructs Worker code without the source file.
 -->
 
-# BirdieFriends Golf Scorer — Session 33 Starter
-**Date:** TBD (follows Session 33, 2026-06-11)
-**Portal Version (production):** v3.10.95 · 2026-06-11 ← fetched from library at session start
-**GolfScorer Version:** v8.17 · 2026-06-09o (deployed)
+# BirdieFriends Golf Scorer — Session 34 Starter
+**Date:** TBD (follows Session 34, 2026-06-12)
+**Portal Version (production):** v3.10.99 · 2026-06-12 ← fetched from library at session start
+**GolfScorer Version:** v8.17 · 2026-06-12a (deployed)
 **Worker Version:** 2026-06-03 (KV Feed confirmed working end-to-end)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
 
 ---
+
+---
+
+## Session 34 Accomplishments (2026-06-12)
+
+### Bootstrap — session load fix
+- Root cause confirmed: Claude was using `web_fetch` for raw GitHub URLs after reading the Bootstrap, ignoring the FETCH RULE
+- Fix: updated `deploy.html` Claude tab copy button to front-load the method constraint: *"Use bash_tool with curl to fetch…"* — forces correct tool selection before any decision is made
+- Syntax check (`node --check`) added as mandatory pre-deploy step after blank-load incidents this session
+
+### GolfScorer — quota display bug fixed (v8.17 · 2026-06-12a)
+- **Bug:** `grpMergePlayers` existing-player branch only updated `isSub` and returned — stored `p.quota` (stale prev quota from localStorage) was never refreshed
+- **Symptom:** HCP table showed prev quota (e.g. 26.03) while "Why this quota?" tooltip correctly showed estimated quota (e.g. 24.51) — display only, no scoring impact
+- **Fix:** existing branch now re-fetches `currentHcp` from series history and recomputes via `grpGetEstimatedQuota` on every Fetch Registrants call
+- **Workflow note:** fix requires clicking Fetch Registrants after new GS loads — re-publish without re-fetching would still show stale value
+
+### Portal — Live panel delineation + CttP player picker (v3.10.96–v3.10.99)
+- **CttP player picker added** — `_ctpPlayer` state var, same `openPlayerSheet()` sheet as Birdie Alert, defaults to `currentPlayer`, resets after submit. Fixes Series#3 proxy issue where overseer couldn't submit CttP on behalf of group member
+- **All three live sections** (Birdie Alert, CttP, Post-Round Scorecard) now have distinct dark header strips (`rgba(0,0,0,0.45)`) with emoji + title in bright white, content body below in lighter dark card — `overflow:hidden` keeps corners crisp
+- **Operational review** confirmed: push routing, message copy, skin logic, scorecard flow, player picker all correct
+- Note: blank-load incidents on .96 and .97 — caused by nested template-literal/HTML-attribute/JS-string escaping in CttP picker onclick. Fixed by pre-computing `ctpPlayerEsc` before the template literal. Mandatory `node --check` now gates all future deploys
+
+### Future Considerations logged
+- GolfScorer phone/iPad executable documented in Ops Guide as Option A (GitHub Pages hosting) — deferred pending commercial rewrite
 
 ## ⚠️ FIRST THING EVERY SESSION — No uploads needed to start
 
