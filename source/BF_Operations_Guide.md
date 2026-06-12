@@ -1,570 +1,210 @@
 # BirdieFriends — Operations Guide
-**Last Updated:** 2026-06-12 (Session 34 — Chat#34 BF Dev - Series#4 Prep — GS quota display fix; live panel overhaul: CttP picker, section delineation, groupings iframe sheet, in-progress card state, event sunset, scorecard check; node --check deploy gate; versioning philosophy Golden Rule #22)  
-**Maintained by:** Commissioner (Brian Hager) + Claude  
-**Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system.  
-Update this file at the end of every session.
+**Last Updated:** 2026-06-12 (Session 34 — restructured for clarity)
+**Maintained by:** Commissioner (Brian Hager) + Claude
+**Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system. Update at the end of every session.
 
 ---
 
-## ⚠️ Golden Rules
-1. **Never test the portal from a local file for Jotform data.** The Jotform API blocks `file://` origins. UI testing locally is fine; data requires `https://birdiefriends.com/portal.html`.
-2. **The portal file on your laptop is named `birdiefriends_portal.html`.** GitHub stores it as `docs/portal.html`. The deploy scripts handle the rename automatically.
-3. **When something doesn't work, check the phone first, not the laptop.** The portal is a mobile-first PWA — swipe gestures, iOS rendering, and PWA chrome all require a real device.
-4. **After updating launch_golf_scorer.py, restart the server.** Close the console window and reopen `Launch_Golf_Scorer.bat`.
-5. **Always run a syntax check before deploying.** Node's `new Function()` tolerates some errors that Chrome rejects. Specifically: unescaped apostrophes in single-quoted strings (`'you're'` → `'you\'re'`), and complex onclick attributes with nested quotes — use `data-` attributes instead of inline string arguments.
-6. **Remote flags affect all devices instantly.** All flags are stored in Cloudflare KV — toggling from Admin takes effect on next page load for every user.
-7. **Use Event Control (not Live Test Mode) for production event starts.** Live Test Mode is for dev only. Event Control Start/Close is the operational path.
-8. **Export GolfScorer JSON before any mock/test run.** Rollback = reimport the JSON export.
-9. **After Publish Groupings, wait ~60 seconds before sharing the link.** Netlify CDN caches aggressively — the published page may serve stale content briefly.
-10. **Bump GS version on every output.** No file leaves Claude without a version increment. Verify header shows correct version before doing anything after deploy.
-11. **GS does not go to the course.** Laptop stays home. All scoring happens post-round at home. Groupings can be published the night before/morning of and GS closed.
-12. **TEST_PREVIEW_MODE must be False on event day.** Check `launch_golf_scorer.py` before launching. When True, publishes save to local preview/ folder only.
-13. **`source/portal_version.txt` in GitHub is the sole version source of truth.** Claude reads it at session start via the hardened sync script. When deploying via the Claude-direct flow (`bf_deploy.py`), Claude increments the patch and pushes `portal_version.txt` as part of the same atomic deploy. When deploying via the bat (laptop), `deploy_portal.bat` owns the increment. Claude never guesses or manually edits the version outside of `bf_deploy.py`.
-14. **Version sync is a mandatory first bash step.** After copying the portal HTML to the working directory, immediately fetch the live version from GitHub and apply it. See hardened sync script below — never use the bare one-liner (empty LIVE_VER would wipe all version strings).
-15. **worker.js is fetched from the library automatically at session start.** Claude never reconstructs Worker code from scratch. `source/worker.js` in GitHub is the canonical source — the bootstrap fetches it to `/home/claude/worker.js` every session.
-16. **Always upload `deploy_portal.py` and `launch_golf_scorer.py` if changes to those files are planned.** These are the only files that cannot be in GitHub — they contain secrets. Claude never reconstructs them from scratch. Before modifying either `.py` file, upload the current version so changes are additive, not replacement. All other files (portal, worker, bf_deploy.py) are library-managed and fetched automatically.
-17. **At session end, Claude deploys the updated session starter directly.** `bf_deploy.deploy_file('session_starter.md', 'source/BF_Golf_Scorer_Session_Starter_current.md', 'Session 3X handoff')` — GitHub history is the version archive. No numbered copies, no bat needed.
-18. **For phone/tablet deploys, Claude pushes directly to the GitHub API — not via the Worker `/deploy` endpoint.** The Worker's `/deploy` endpoint has a ~100KB request body limit (Cloudflare free tier) which the portal (350KB+) exceeds, returning an empty response. Claude uses the GitHub token embedded in worker.js to call the GitHub Contents API directly. The Worker `/deploy` endpoint remains useful only for small files (ops guide, worker.js itself).
-19. **`deploy_portal.bat` is retired for library mirroring.** Claude direct (GitHub API via `bf_deploy.py`) is the standard deploy path for all managed files — portal, worker, session starter, ops guide, bootstrap, deploy.html. The bat is no longer needed and the GolfScorer folder archive does not need to be undone. The only files that still require laptop-local handling are the secrets files (`deploy_portal.py`, `launch_golf_scorer.py`) which never go to GitHub.
-20. **`bf_deploy.deploy_file(local_path, gh_path, msg)` is the standard for all non-portal Claude-direct deploys.**
-21. **GolfScorer version bumping is structurally enforced by `deploy_file` — never manual.** `deploy_file` detects `BF_Golf_Scorer` in the path, auto-increments the version suffix (a→b→...→z→aa→ab...), resets to `a` on a new date, and syncs both `GS_VERSION` and `build-date` textContent atomically before pushing. Claude never manually bumps the GS version — the deploy function owns it unconditionally. Use it for worker.js, GolfScorer, ops guide, session starter, bootstrap, deploy.html — any single managed file. `deploy()` is reserved for the portal triple (docs/ + source/ + version bump). GolfScorer is now fully Claude-direct: Claude edits → `deploy_file` pushes to `source/BF_Golf_Scorer_8.html` → `launch_golf_scorer.py` auto-pulls on next startup. No download, no manual copy.
-22. **Always run `node --check` before deploying portal changes.** Extract all inline `<script>` blocks, concatenate, write to a temp `.js` file, run `node --check`. A passing check is mandatory — do not deploy on a failing check. This caught two blank-load incidents in Session 34 caused by nested template-literal/HTML-attribute/JS-string escaping. Resolution pattern: pre-compute escaped variables before template literals rather than inline `.replace()` inside onclick attributes.
-23. **Portal versioning philosophy — Patch / Minor / Major:**
-    - **Patch (3.10.x):** bug fixes, UI tweaks, copy changes, adding a button or link. No new capability.
-    - **Minor (3.10 → 3.11):** meaningful new feature or subsystem a player would notice. Examples: Alerts/Inbox, Self-Service Events, Live Scoring going live.
-    - **Major (3.x → 4.0):** architectural shift or breaking change — new backend, moving off Jotform, commercial multi-tenant.
-    - Current patch counter is high (3.10.106+) but intentional — next Minor bump triggers at Alerts/Inbox launch (planned Session A). Reset patch to 0 at that point → **3.11.0**. `deploy_file` detects `BF_Golf_Scorer` in the path, auto-increments the version suffix (a→b→...→z→aa→ab...), resets to `a` on a new date, and syncs both `GS_VERSION` and `build-date` textContent atomically before pushing. Claude never manually bumps the GS version — the deploy function owns it unconditionally. Use it for worker.js, GolfScorer, ops guide, session starter, bootstrap, deploy.html — any single managed file. `deploy()` is reserved for the portal triple (docs/ + source/ + version bump). GolfScorer is now fully Claude-direct: Claude edits → `deploy_file` pushes to `source/BF_Golf_Scorer_8.html` → `launch_golf_scorer.py` auto-pulls on next startup. No download, no manual copy.
+## 1. Quick Reference — Event Day
+
+### Key URLs
+| Resource | URL |
+|----------|-----|
+| Portal (live) | https://birdiefriends.com/portal.html |
+| Deploy panel | https://birdiefriends.com/deploy.html |
+| Groupings | https://birdiefriends.com/groupings.html |
+| Results | https://birdiefriends.com/results.html |
+| Worker | https://birdiefriends-push.birdiefriends01.workers.dev/ |
+| Flag check | https://birdiefriends-push.birdiefriends01.workers.dev/flags |
+| GitHub library | https://github.com/birdiefriends/birdiefriends.github.io/tree/main/source |
+| Architecture diagram | source/bf_architecture.html (PIN-locked) |
+
+### Key Credentials
+| Item | Value |
+|------|-------|
+| Commissioner PIN | 7797 |
+| Jotform API Key | dd0cb09a71eee7d0db3aa690e292660f |
+| OneSignal App ID | 88022359-a979-4814-8a52-6f1df9884be2 |
+| Cloudflare account | Birdiefriends01@gmail.com |
+| GitHub repo | birdiefriends/birdiefriends.github.io |
+
+### Event Day Sequence
+**Night before:**
+1. Finalize HCP / groups in GolfScorer → Publish Groupings (Preliminary) → close GS
+
+**Morning of event:**
+1. Set Final → Publish Groupings → close laptop
+
+**~60 min before tee time:**
+1. Admin → Event Control → ▶️ Start Live Now
+
+**On course:**
+- Players enter Birdie Alert and CttP from the live banner
+- Overseers proxy CttP/Birdie for their group using the 👤 Change picker
+- Admin → 📝 Scorecard Check to monitor submissions
+
+**Post-round (at home):**
+1. Admin → Event Control → ⏹️ Close Event
+2. Launch GS → update groups for actuals → Kick Off Event
+3. Scorecard tab: Fetch from Jotform → CttP: Auto-fill from Jotform
+4. Results: Calculate → Save to Series → Push to Sheets → Publish All Pages
+
+### Session Start (any device)
+1. Open `birdiefriends.com/deploy.html` → Claude tab → **📋 Copy Session Start Command** → paste into Claude
+2. Claude auto-fetches library and is ready
 
 ---
 
-## Hardened Version Sync Script (run at session start after cp)
+## 2. Golden Rules
 
+**Deploy & Version**
+1. **`source/portal_version.txt` is the sole version source of truth.** `bf_deploy.py` reads it, increments patch, pushes `docs/portal.html` + `source/portal.html` + `portal_version.txt` atomically. Never guess or manually edit the version.
+2. **Always run `node --check` before deploying portal changes.** Extract inline `<script>` blocks, concatenate, write to temp `.js`, run `node --check`. Non-negotiable — caught two blank-load incidents in Session 34.
+3. **`bf_deploy.deploy_file(local_path, gh_path, msg)` for all non-portal deploys.** `deploy()` is reserved for the portal triple. GolfScorer version bumping is owned by `deploy_file` — never manual.
+4. **`deploy_portal.bat` is retired.** Claude-direct via `bf_deploy.py` is the standard for all managed files. Only secrets files (`deploy_portal.py`, `launch_golf_scorer.py`) stay laptop-only.
+5. **Claude never reconstructs secrets files from scratch.** Upload `deploy_portal.py` or `launch_golf_scorer.py` before modifying — changes must be additive.
+6. **Claude never reconstructs `worker.js` from scratch.** `source/worker.js` is fetched from the library at every session start.
+7. **At session end, Claude deploys the updated session starter and ops guide directly.** No bat, no manual copy.
+
+**Testing & Safety**
+8. **Never test the portal from a local file for Jotform data.** Jotform API blocks `file://` origins. UI testing only; data requires `https://birdiefriends.com/portal.html`.
+9. **TEST_PREVIEW_MODE must be False on event day.** Check `launch_golf_scorer.py` before launching. When True, publishes go to local `preview/` only — players see nothing.
+10. **Export GolfScorer JSON before any mock/test run.** Rollback = reimport the JSON export.
+11. **Always run a syntax check before deploying.** Apostrophes in single-quoted strings (`'you\'re'`) and nested onclick quotes are the common failure modes. Pre-compute escaped variables rather than inline `.replace()` inside onclick attrs.
+
+**Operations**
+12. **GS does not go to the course.** Laptop stays home. All scoring happens post-round. Groupings can be published the night before.
+13. **Use Event Control (not Live Test Mode) for production event starts.** Live Test Mode is dev only.
+14. **Remote flags affect all devices instantly.** KV flags take effect on next page load for every user.
+15. **After Publish Groupings, wait ~60 seconds before sharing the link.** GitHub Pages CDN caches aggressively.
+16. **When something doesn't work, check the phone first.** The portal is mobile-first PWA — iOS rendering and PWA chrome require a real device.
+17. **After updating `launch_golf_scorer.py`, restart the server.** Close the console window and reopen `Launch_Golf_Scorer.bat`.
+
+**Versioning Philosophy**
+18. **Patch / Minor / Major:**
+    - **Patch (3.10.x):** bug fixes, UI tweaks, copy changes, adding a button. No new capability.
+    - **Minor (3.10 → 3.11):** meaningful new feature a player would notice. Next trigger: Alerts/Inbox launch → **3.11.0**.
+    - **Major (3.x → 4.0):** architectural shift — new backend, off Jotform, commercial multi-tenant.
+
+---
+
+## 3. Deploy Procedures
+
+### Portal (standard — any device)
+Claude makes the change and pushes directly to GitHub via `bf_deploy.py`. No download, no bat, no laptop required.
+
+```
+python3 /home/claude/bf_deploy.py /home/claude/birdiefriends_portal.html "<commit message>"
+```
+
+Increments version, pushes `docs/portal.html` + `source/portal.html` + `portal_version.txt`. Wait ~60s → hard refresh → confirm version in header.
+
+**Hardened version sync (run if version mismatch suspected):**
 ```bash
 PORTAL="/home/claude/birdiefriends_portal.html"
-GITHUB_URL="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/docs/portal.html"
 VER_URL="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/portal_version.txt"
-
-LIVE_VER=$(curl -s --max-time 10 "$GITHUB_URL" | grep -o 'v3\.10\.[0-9]* · [0-9-]*' | head -1)
-
-if [ -z "$LIVE_VER" ]; then
-  echo "⚠️  GitHub HTML fetch failed — trying source/portal_version.txt"
-  LIVE_VER=$(curl -s --max-time 10 "$VER_URL" | grep -o 'v3\.10\.[0-9]* · [0-9-]*' | head -1)
-fi
-
-if [ -z "$LIVE_VER" ]; then
-  echo "❌ Cannot determine live version — aborting. Do not proceed."
-  exit 1
-fi
-
-sed -i "s/v3\.10\.[0-9]* · [0-9-]*/${LIVE_VER}/g" "$PORTAL"
-APPLIED=$(grep -o 'v3\.10\.[0-9]* · [0-9-]*' "$PORTAL" | head -1)
-echo "✅ Portal synced to: $APPLIED"
+LIVE_VER=$(curl -s --max-time 10 "$VER_URL" | grep -o 'v3\.[0-9]*\.[0-9]* · [0-9-]*' | head -1)
+if [ -z "$LIVE_VER" ]; then echo "❌ Cannot determine live version — aborting."; exit 1; fi
+sed -i "s/v3\.[0-9]*\.[0-9]* · [0-9-]*/${LIVE_VER}/g" "$PORTAL"
+echo "✅ Portal synced to: $LIVE_VER"
 ```
 
----
+**If phone shows old version after 60s:** close tab fully and reopen, try `?v=X`, check raw file on GitHub.
 
-## GolfScorer — Groupings Archive System
+**If deploy fails:**
+- GitHub 401: Token expired — update in both `deploy_portal.py` AND `launch_golf_scorer.py`
+- GitHub 422: SHA mismatch — run again
+- File not found: confirm `birdiefriends_portal.html` is in working directory
 
-**How it works end-to-end:**
-1. `grpPublish` Final → writes `groupings-{slug}.html` to GitHub AND saves `groupingsFile` into matching event in series localStorage via `saveSeriesData()`
-2. `saveEventToSeries` / `Publish All Pages` → series data (including `groupingsFile`) embedded as `ALL_SERIES_DATA` in results.html
-3. Results template builds `GROUPINGS_ARCHIVE = {}` from `ALL_SERIES_DATA.events[].groupingsFile` on page load
-4. `loadEvent(name)` → calls `loadGroupsTab(name)` → sets iframe src to `/{archiveFile}?embed=1`
-5. Archive page detects `?embed=1` → hides `<header>` and `<nav>` for clean inline display
-
-**File naming convention:** `groupings-{YYYY}-{EventName}.html` e.g. `groupings-2026-BFSeries4.html`
-
-**Outliers:**
-- Series#2: no archive (pre-system) — Groups tab dimmed
-- Series#3: archive exists but embed mode not in file (published before v8.17o) — nav bar visible inside iframe; do NOT republish (would corrupt historical quotas with #4 HCP bleed)
-- Series#4+: fully automatic
-
-**Session-end checklist addition:** After each Final Groupings publish, verify `groupingsFile` is in series data, then run Publish All Pages to update results.html.
-
----
-
-## GolfScorer — No-HCP Player Design Notes
-
-**isNoHcp vs null HCP:** `grpMergePlayers` sets `isNoHcp: false` for all new players by design. New-to-series ≠ no GHIN handicap — a first-event player with a real HCP should not be flagged NoHCP. The commissioner sets NoHCP by leaving the HCP field blank. However, a brand-new player with no series history also has `hcp: null`, so the tee dropdown must check `p.hcp === null || p.isNoHcp` — not just `isNoHcp`.
-
-**Tee assignment flow for no-HCP players:**
-1. Player fetched into Tab 1 with `hcp: null` → tee defaults to `'Combo'` via `grpCalcTeeAndQuota`
-2. HCP table and drag card show tee **dropdown** (not static pill) when `hcp === null`
-3. Commissioner selects correct tee → `grpTableSetTee` saves to `grpPlayers` → `grpSaveData()` persists to localStorage
-4. `grpPublish()` blocks if tee is blank — hard guard before groupings go out
-5. Kick Off → `addPlayerRow(name, '', tee)` passes tee to Tab 2
-6. Tab 2 `goToScorecard()` blocks if tee selector is blank — second guard on event day
-
-**Tab 1 / Tab 2 relationship:** These are independent data systems. Tab 1 (`grpPlayers` / localStorage) is pre-event. Tab 2 (`#player-list` DOM / `cachedPlayers`) is populated at Kick Off time. Tab 2 Tee & Quota Preview being empty before Kick Off is correct by design.
-
----
-
-## Laptop Folder Structure
-
+### Single-file deploys (worker, GolfScorer, ops guide, etc.)
+```python
+import bf_deploy
+bf_deploy.deploy_file('local_filename.ext', 'source/github_path.ext', 'commit message')
 ```
-Downloads/
-└── GolfScorer/
-    ├── birdiefriends_portal.html     ← Portal source (edit/deploy this)
-    ├── worker.js                     ← Cloudflare Worker source ← NEW: upload each session
-    ├── deploy_portal.bat             ← Double-click to deploy portal
-    ├── deploy_portal.py              ← Called by the bat above
-    ├── deploy_landing_page.bat       ← Deploy birdiefriends.com homepage
-    ├── deploy_landing_page.py        ← Called by the bat above
-    ├── Launch_Golf_Scorer.bat        ← Starts local GolfScorer server + opens Chrome
-    ├── launch_golf_scorer.py         ← Python server (port 8743)
-    ├── BF_Golf_Scorer_8.html         ← GolfScorer app (local tool)
-    ├── manifest.json                 ← PWA manifest for portal
-    ├── sw.js                         ← Service worker stub (disabled)
-    ├── OneSignalSDKWorker.js         ← OneSignal push SW (deployed by deploy_portal.py)
-    ├── guide.html                            ← Player guide (deployed alongside portal)
-    ├── BF_Golf_Scorer_Session_Starter_current.md ← Session starter (bat pickup → source/)
-    └── BF_Operations_Guide.md        ← This file
-```
+GolfScorer auto-increments version suffix (a→b→…→z→aa). `launch_golf_scorer.py` auto-pulls updated GS on next startup.
 
-**Note:** `.tmp` files that appear in the GolfScorer folder are download artifacts from Claude sessions — safe to delete anytime.
+### Cloudflare Worker
+Worker changes still require manual Cloudflare paste — GitHub `source/worker.js` is the record, not the live worker.
+1. dash.cloudflare.com → Workers & Pages → birdiefriends-push → Edit code
+2. Paste `worker.js` contents (overwrite entire editor) → Save and Deploy
 
----
+### Generated Pages (MyGame, Results, Standings, Groupings)
+1. Launch GS → score event → Calculate Results
+2. Click **🌐 Publish All Pages** → wait ~60s
 
-## GitHub Repository
-- **Repo:** `birdiefriends/birdiefriends.github.io`
-- **Branch:** `main`
-- **Pages URL:** `https://birdiefriends.com`
-- **Token:** stored in `deploy_portal.py` and `deploy_landing_page.py`
-- **Key files in repo:**
-  - `docs/portal.html` → birdiefriends.com/portal.html
-  - `docs/index.html` → birdiefriends.com (landing page)
-  - `docs/mygame.html` → birdiefriends.com/mygame.html
-  - `docs/results.html` → birdiefriends.com/results.html
-  - `docs/standings.html` → birdiefriends.com/standings.html
-  - `docs/groupings.html` → birdiefriends.com/groupings.html
-  - `docs/groupings-meta.json` → groupings metadata (published by GolfScorer)
-  - `docs/manifest.json` → PWA manifest
-  - `docs/sw.js` → service worker stub
-  - `docs/OneSignalSDKWorker.js` → OneSignal push service worker
-  - `docs/guide.html` → birdiefriends.com/guide.html (player guide — deployed by deploy_portal.bat)
+**Groupings publish (separate):**
+- Click **🌐 Publish Groupings** in Groups tab
+- Set Status → **Final** before final publish
+- Deploys `groupings.html` + `groupings-meta.json`
+- Wait ~60s before sharing link
+
+**Session-end checklist addition:** After Final publish, verify `groupingsFile` is in series data → run Publish All Pages to update results.html.
+
+### Token Recovery
+GitHub token lost: github.com → Settings → Developer settings → Personal access tokens → GolfScorer → Regenerate. Paste new `ghp_...` into BOTH `deploy_portal.py` line 16 AND `launch_golf_scorer.py` line 39. Both must match or one will fail with 401.
 
 ---
 
-## Deploy: Portal
+## 4. System Reference
 
-### ✅ Standard flow (any device — phone, tablet, laptop)
-Claude makes the change, increments the version, and pushes directly to GitHub via the GitHub API. No file download, no bat, no laptop required.
+### Current Versions
+| Component | Version | Status |
+|-----------|---------|--------|
+| Portal | v3.10.106 · 2026-06-12 | Production ✅ |
+| GolfScorer | v8.17 · 2026-06-12a | Deployed ✅ |
+| Worker | 2026-06-03 | Deployed ✅ |
+| deploy.html | 2026-06-12 | Live ✅ |
+| bf_deploy.py | 2026-06-09 | Current ✅ |
+| bf_architecture.html | 2026-06-12 | Library ✅ |
 
-1. Describe the change to Claude
-2. Claude fetches portal from GitHub, makes the change, increments version, pushes to `docs/portal.html` + `source/portal.html` + `source/portal_version.txt`
-3. Wait ~60 seconds → hard refresh → confirm new version in header
+### Library Files (fetched at session start)
+| File | Path |
+|------|------|
+| Session Starter | `source/BF_Golf_Scorer_Session_Starter_current.md` |
+| Ops Guide | `source/BF_Operations_Guide.md` |
+| Portal version | `source/portal_version.txt` |
+| Portal HTML | `docs/portal.html` |
+| Worker | `source/worker.js` |
+| Deploy script | `source/bf_deploy.py` |
+| Architecture diagram | `source/bf_architecture.html` |
 
-Claude uses `source/bf_deploy.py` from the library for this. The script reads `portal_version.txt`, increments patch, updates the portal HTML, and pushes all three files atomically.
+### Cloudflare Worker Endpoints
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/` | None | Send OneSignal push notification |
+| GET | `/flags` | None | Read all KV flags |
+| POST | `/flags` | PIN | Write KV flag |
+| GET | `/subscriptions` | None | Fetch OneSignal subscriber list |
+| GET | `/notifications` | None | Fetch sent notification history |
+| DELETE | `/subscription/:id` | None | Delete one push subscription |
+| DELETE | `/notifications/clear` | PIN | Cancel scheduled notifications only — cannot delete delivered |
+| GET | `/history?file=X&n=20` | None | Last N commits for a managed file |
+| POST | `/deploy` | PIN | Push small file to GitHub + KV snapshot |
+| POST | `/rollback` | PIN | Restore file to prior commit SHA |
+| GET | `/feed` | None | Worker KV notification feed |
+| DELETE | `/feed` | PIN | Clear KV feed entries |
 
-**To start a new session from any device:** open `birdiefriends.com/deploy.html` → **Claude tab** → tap **📋 Copy Session Start Command** → paste into Claude. Claude auto-fetches the entire library and is ready to work.
-
-### 💻 Laptop-only flow (GolfScorer HTML only)
-The bat is retired for library mirroring. The only remaining laptop-only deploy is `BF_Golf_Scorer_8.html` — the local scoring tool that runs on localhost and is deployed via the bat.
-
-1. Download `BF_Golf_Scorer_8.html` from Claude output
-2. Place in `Downloads/GolfScorer/` (overwrite existing)
-3. Double-click **`deploy_portal.bat`** — mirrors GolfScorer HTML to `source/`
-4. All other files (portal, worker, ops guide, session starter, etc.) are deployed by Claude direct — no bat needed
-
-### Expected console output (healthy deploy)
-```
-Deploying BirdieFriends Portal...
-✅ Read birdiefriends_portal.html (XXX,XXX bytes)
-✅ Version bumped: v3.10.68 · 2026-06-01 → v3.10.69 · 2026-06-02  (2 occurrences)
-✅ birdiefriends_portal.html updated locally
-✅ Got current docs/portal.html (sha: XXXXXXXX…)
-✅ docs/portal.html deployed
-✅ Got current docs/OneSignalSDKWorker.js (sha: XXXXXXXX…)
-✅ docs/OneSignalSDKWorker.js deployed
-
-⛳ birdiefriends.com/portal.html → v3.10.69 · 2026-06-02
-   Allow ~60 seconds for GitHub Pages to update
-Press any key to continue . . .
-```
-
-### deploy_portal.py — Auto-Increment
-Every deploy automatically increments the patch version and updates the date. The local file is updated first, then pushed to GitHub. No manual version tracking needed.
-
-**Files deployed by deploy_portal.bat (in order):**
-1. `birdiefriends_portal.html` → `docs/portal.html` (version bumped)
-2. `OneSignalSDKWorker.js` → `docs/OneSignalSDKWorker.js` (if present)
-3. `guide.html` → `docs/guide.html` (if present)
-4. `deploy.html` → `docs/deploy.html` (if present)
-5. Source mirrors → `source/` (all silently skipped if file missing):
-   - `birdiefriends_portal.html` → `source/portal.html`
-   - `guide.html` → `source/guide.html`
-   - `deploy.html` → `source/deploy.html`
-   - `worker.js` → `source/worker.js`
-   - `BF_Golf_Scorer_8.html` → `source/BF_Golf_Scorer_8.html`
-   - `BF_Operations_Guide.md` → `source/BF_Operations_Guide.md`
-   - `BF_Golf_Scorer_Session_Starter_current.md` → `source/BF_Golf_Scorer_Session_Starter_current.md`
-
-**Session starter convention:** Save as `BF_Golf_Scorer_Session_Starter_current.md` in GolfScorer folder. Bat mirrors it to `source/` — GitHub history is the version archive.
-
-**Version rule:** `portal_version.txt` is the sole source of truth for the current production version. Claude reads it at session start via the bootstrap (fetched from `source/portal_version.txt`). deploy_portal.bat adds 1 on every laptop deploy; `bf_deploy.py` adds 1 on every Claude-direct deploy — both push the updated version file atomically.
-
-**Token recovery:** If token is lost, go to github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → GolfScorer → Regenerate. Paste new `ghp_...` value into BOTH `deploy_portal.py` line 16 AND `launch_golf_scorer.py` line 39. Both files must have the same token or one will fail with GitHub 401.
-
-### If the phone shows old version after 60 seconds
-- Close the tab completely and reopen
-- Try adding `?v=X` to the URL
-- Check GitHub directly to confirm version number in file
-
-### If deploy fails
-- **GitHub 401:** Token expired — update token in BOTH `deploy_portal.py` AND `launch_golf_scorer.py` (same token required in both)
-- **GitHub 422:** SHA mismatch — run again
-- **File not found:** Make sure `birdiefriends_portal.html` is in the GolfScorer folder
-
----
-
-## Deploy: Cloudflare Worker
-
-### Steps
-1. Go to dash.cloudflare.com → Workers & Pages → birdiefriends-push
-2. Click **Edit code**
-3. Paste contents of `worker.js` (overwrite entire editor)
-4. Click **Save and Deploy**
-5. Confirm new version in Deployments tab
-
-### Worker file management
-- `worker.js` is fetched from `source/worker.js` in the library automatically at session start — no upload needed
-- After any Worker deploy, Claude pushes the updated `worker.js` directly to `source/worker.js` in the library — no bat needed
-- Claude never reconstructs Worker code from scratch — `source/worker.js` is the canonical source
-
-### Worker `/deploy` endpoint — size limit
-The Cloudflare free tier enforces a ~100KB request body limit. The portal (~350KB) exceeds this — the Worker returns an empty response with no error. **For portal deploys from phone/tablet, Claude calls the GitHub Contents API directly** using the token in worker.js. The `/deploy` endpoint works fine for small files (worker.js, ops guide, etc.).
-
-### Worker secrets (Variables and Secrets tab → Settings)
-| Secret | Value | Notes |
-|--------|-------|-------|
-| `OS_REST_KEY` | Rich API key | Updated 2026-06-02 to new rich key format |
-
-**OS_REST_KEY recovery:** OneSignal dashboard → Settings → Keys & IDs → BirdieFriends Portal key → Rotate → copy full value → paste into Cloudflare Worker secret.
-
----
-
-## Deploy: Generated Pages (MyGame, Results, Standings, Groupings)
-
-1. Open GolfScorer at `http://localhost:8743/BF_Golf_Scorer_8.html`
-2. Score the event and calculate results
-3. Click **🌐 Publish All Pages**
-4. Wait ~60 seconds, check birdiefriends.com
-
-**Note:** All generated pages include a `← Portal` back-link in the nav pill row. Baked into `BF_Golf_Scorer_8.html` — no extra steps needed.
-
-### Groupings Publish (separate from Publish All Pages)
-- Click **🌐 Publish Groupings** in the Groups tab
-- Deploys both `groupings.html` AND `groupings-meta.json` to Netlify
-- `groupings-meta.json` contains: `{eventName, status, visibility, publishedAt}`
-- Portal reads meta on load — shows groupings link only on the matching event card
-- Wait ~60 seconds before sharing link (Netlify CDN cache)
-- Set Status to **Final** before final publish
-
----
-
-## Running GolfScorer (Local Scoring Tool)
-
-1. Double-click **`Launch_Golf_Scorer.bat`**
-2. Chrome opens at `http://localhost:8743/BF_Golf_Scorer_8.html`
-3. Console window minimizes — leave it running
-
-### GolfScorer Data Recovery
-- All Groups tab state saves to localStorage key: `bf_groups_data`
-- To inspect: open console → `localStorage.getItem('bf_groups_data')`
-- To reload after page refresh: open console → `grpOnTabOpen()`
-- To export for backup: Groups tab → Export JSON button
-- To restore: Groups tab → Import JSON button
-- **Always Export JSON before any mock/test run** — rollback = reimport
-
-### TEST_PREVIEW_MODE (Safe Testing)
-Set `TEST_PREVIEW_MODE = True` in `launch_golf_scorer.py` before any test run.  
-When True: all Publish calls (Publish All Pages, Publish Groupings) save HTML to local `preview/` folder instead of pushing to GitHub Pages. GS shows amber banner. Players see nothing.  
-**Set back to False for event day.** Confirm by checking GS header — no amber banner = live mode.
-
-### Post-Round GS Workflow (Laptop stays home)
-1. **Night before:** Finalize HCP/groups → Publish Groupings (Preliminary) → close GS
-2. **Morning of event:** Set Final → Publish Groupings → close laptop
-3. **Post-round at home:** Launch GS → update groups to reflect actuals (no-shows, subs) → Kick Off Event → Scorecard tab: Fetch from Jotform → CttP tab: Auto-fill from Jotform → Results tab: Calculate → Save to Series → Push to Sheets → Publish All Pages
-
----
-
-## Portal Navigation (v3.10.0+)
-
-### Bottom Nav Tabs
-| Tab | Icon | Screen | Notes |
-|-----|------|--------|-------|
-| My Events | ⛳ | Curated event list | Swipeable cards; parked events hidden |
-| Parked | 🅿️ | Set-aside events | Events swiped from My Events |
-| Schedule | 🗓️ | My registered events | Shows only events player is signed up for |
-| Results | 🏆 | Results links | Results, Standings, My Game, Groupings |
-
-### Commissioner Admin Access
-- **⚙️ gear icon** in the header (top right, next to bell and player pill)
-- Visible only when logged in as commissioner (PIN verified)
-- Taps into the full Admin screen — Event Control, Broadcast, Dev Controls, Push Subscribers, Notification Reset
-- Admin is no longer a bottom nav tab
-
-### About / Notifications
-- Notification settings and About info accessible via ⓘ button in header
-- Player guide linked from About screen: `birdiefriends.com/guide.html`
-
----
-
-## Maintenance Mode & Remote Flags
-
-### Architecture
-Flags are stored in **Cloudflare KV** (`BF_FLAGS` namespace) and served by the `birdiefriends-push` Worker. The portal fetches flags on every page load before rendering anything. All devices see the same state.
-
-### Cloudflare Resources
-| Resource | Details |
-|----------|---------|
-| Worker | `birdiefriends-push` |
-| Worker URL | `https://birdiefriends-push.birdiefriends01.workers.dev/` |
-| KV Namespace | `BF_FLAGS` |
-| Account | Birdiefriends01@gmail.com |
+**⚠️ Worker body size limit:** Cloudflare free tier ~100KB. Portal (~350KB+) exceeds this — use `bf_deploy.py` GitHub API direct for portal deploys, not the `/deploy` endpoint.
 
 ### KV Flags
 | Key | Type | Purpose |
 |-----|------|---------|
-| `maintenance` | bool | Portal offline for all players |
+| `maintenance` | bool | Portal offline for all players; bypass `?preview=7797` |
 | `live_test` | bool | Force live banner — dev/testing only |
-| `live_override` | bool | Commissioner manual event start (production) |
-| `live_override_since` | ISO string | Timestamp set when override starts |
+| `live_override` | bool | Commissioner manual event start — production |
+| `live_override_since` | ISO string | Timestamp of manual start |
+| `feed::{timestamp}` | JSON | Live notification feed entries |
 
-### Flag endpoints
-- **Read:** `GET /flags` → `{"maintenance":false,"live_test":false,"live_override":false}` — no auth, public
-- **Write:** `POST /flags` with `{pin:"7797", key:"...", value:true|false}` — PIN required
-
-### Toggling flags via Admin
-Tap **⚙️ gear icon** → **Dev Controls** (commissioner login required):
-
-**⛳ Event Control** (top of Dev Controls — production use)
-- **▶️ Start Live Now** — sets `live_override: true`, all players see live banner immediately
-- **⏹️ Close Event** — sets `live_override: false`, banner clears for everyone
-- Status shows: `🟢 LIVE — started 8:00 AM` or `⚪ Not live`
-- Auto-closes 8 hours after tee time regardless
-
-**Maintenance Mode**
-- Enable → all players see "Back Shortly" screen on next load
-- Commissioner bypass: `https://birdiefriends.com/portal.html?preview=7797`
-- Disable → portal returns to normal for everyone
-
-**Live Scorecard Test Mode**
-- Enable → live event banner appears on next upcoming BF Series event regardless of tee time
-- **DEV/TESTING ONLY** — use Event Control for production
-- ⚠️ Disable before any BF Series tee time
-
-### Verifying flag state
-Visit in browser: `https://birdiefriends-push.birdiefriends01.workers.dev/flags`
-
----
-
-## Live Event System (v3.9.26+)
-
-### Overview
-When a BF Series event's tee time arrives (or commissioner starts manually), the portal activates a **Live Event Banner** for all registered players. Non-registered players see no banner.
-
-### Live window
-- **Auto:** Tee time → tee time + 8 hours (`LIVE_EVENT_HOURS = 8`)
-- **Manual:** Commissioner taps Start Live Now → auto-closes at tee time + 8 hours
-
-### Event Control — Operational Sequence
-1. **~60 min before tee time** — tap **▶️ Start Live Now** in Admin → Event Control
-2. Players can now explore Birdie Alert, CttP, Scorecard before round starts
-3. **Post-round** — tap **⏹️ Close Event** (or wait for auto-close at tee time + 8h)
-
-### Banner sections (in order)
-1. **🦅 Birdie Alert** — any registered player announces a birdie; skin detection fires push notification
-2. **🎯 Closest to the Pin** — live CttP leaderboard; last submission per hole wins (timestamp)
-3. **📋 Post-round Scorecard** — hidden behind "🏁 End Round — Enter Scorecards" button; expands for overseer data entry
-
-### Birdie Alert
-- Player dropdown (defaults to current player, can pick any registered player)
-- Hole grid (#1–#18)
-- Tap "🦅 Announce Birdie" → push notification fires to all subscribers
-- **Skin detection (in-session memory only — no Jotform write):**
-  - First birdie on hole → "{Full Name} birdied #N — skin is live! Beat it to win."
-  - Second birdie on same hole → "Skin busted on #N — {Player2} matched {Player1}. No skin on this hole."
-  - Third+ birdie on busted hole → "{Player} birdied #N — hole already busted, no skin."
-  - Full names used throughout — avoids duplicate first name ambiguity
-
-### CttP (Closest to the Pin)
-- Active holes for BSGC: #3, #8, #10, #15, #18
-- Tap hole pill → optional distance entry (ft.in format e.g. 4.5) → submit
-- Last submission per hole = current leader (timestamp wins — honor system)
-- Push notification fires on each new leader
-- Reads from Jotform CttP form on panel open; refreshes each time
-- Distance input hardened: `oninput` strips non-numeric characters; `submitCttp()` rejects negatives
-- **Form ID:** `251002357493048`
-
-### Post-Round Scorecard
-- Tap "🏁 End Round — Enter Scorecards" to expand
-- Overseer selects player via player picker sheet, enters point scores hole by hole
-- Point values: Albatross=8, Eagle=6, Birdie=4, Par=2, Bogey=1, Bogey+=0
-- Front/Back/Total auto-calculate
-- Submit → green ✅ confirmation card shows (total pts + player name)
-- Two options after confirm: **👤 Enter Next Player's Scorecard** (resets, stays in panel) or **✓ Done — All Scorecards In** (closes panel)
-- **Form ID:** `250963587514163`
-
-### Groupings Link in Live Panel
-- 📋 Groupings & Tee Times link appears at top of expanded live panel
-- Same visibility conditions as event card groupings link (meta exists + visible + event name match)
-- Shows (Preliminary) or (Final) label
-
-### Point values (scorecard)
-**Left to right:** 0 Bogey+ · 1 Bogey · 2 Par · 4 Birdie · 6 Eagle · 8 Albatross
-
-### Golf course tag
-Standardized to `BSGC` for Blue Shamrock GC. Update when other courses added.
-
----
-
-## Push Notifications & Subscriber Management
-
-### Architecture — Jotform-First (v3.10.58+)
-**Jotform Membership form QID 23 (`pushId`)** is the single source of truth for notification identity.
-
-- **Subscribe flow:** OneSignal SDK grants a push ID → portal writes it to Jotform `pushId` field → done
-- **Send flow:** Load Jotform members where `bfw=Yes` + `active=Active` + `pushId` present → send to `include_player_ids`
-- **No OneSignal identity reads needed** — `external_user_id`, `OneSignal.login()`, aliases all removed
-- **OneSignal is purely a delivery pipe** — it doesn't need to know player names
-
-### How push notifications work
-Portal → Cloudflare Worker (`/`) → OneSignal API → player devices. Fire and forget.
-Targeting: `include_player_ids: [pushId, pushId, ...]` sourced from Jotform memberData.
-
-### iOS Requirements
-- iOS 16.4+ required
-- Portal must be **installed as PWA** (Add to Home Screen) — does NOT work in Safari browser tab
-- `window.navigator.standalone === true` detects PWA vs browser
-
-### PWA Install Flow
-**iOS (3 steps):**
-1. Tap Share button ⎋ at bottom of Safari (box with arrow pointing up)
-2. Tap "Add to Home Screen" — scroll share sheet, tap + icon, tap Add top-right
-3. Open from home screen icon → tap Allow when prompted for notifications
-
-**Android (one tap when available):**
-- Portal shows **"⬇️ Install App — one tap"** button if Chrome fires `beforeinstallprompt`
-- Tap → Chrome native install dialog → one more tap → done
-- If prompt not available: Chrome menu ⋮ → "Add to Home Screen"
-
-**First PWA launch auto-prompt:**
-- Portal detects first launch from home screen icon
-- Waits 2 seconds, shows toast "🔔 Tap Allow to get BirdieFriends notifications!"
-- Fires notification permission request automatically
-
-### Push ID Sync (replaces OneSignal identity)
-`writeSubscriptionToMember(pushId)` called at:
-1. Subscribe time (`osSubscribe`) — writes new pushId to Jotform
-2. Player select time (`selectPlayer`) — writes if Jotform record is missing pushId
-3. App load (`osIdentityRefresh`) — syncs if pushId changed since last session
-
-### Duplicate Subscription Cleanup
-- Retired — Jotform owns one pushId per player, no dupe management needed
-- Worker `DELETE /user/:id/stale` endpoint still exists but is no longer called
-- Admin Delete button still available for manual OneSignal cleanup if needed
-
-### Subscriber Admin Panel (⚙️ gear → Push Subscribers)
-Two sections (Jotform-based — no OneSignal read needed):
-- ✅ **Subscribed** — Active + BFUpdates=Yes members with a pushId in Jotform. Shows truncated Push ID (tap to copy). 📲 Test button sends direct push to verify delivery — shows actual OneSignal error on failure.
-- ❌ **Not subscribed** — Active + BFUpdates=Yes members with no pushId on file. Shows Member Since date. Instructions: open portal → select name → tap 🔕 bell.
-
-**📋 Checklist button** — opens Sunday-style hit list with persistent checkboxes (keyed by date). Works on phone. Shows same two tiers with iPhone/Android setup instructions.
-
-### Push Notification Diagnostics (from BFSeries#3)
-- **Sporadic delivery on course:** Most likely iOS Focus Mode silently swallowing pushes, or player opened portal from Safari tab instead of home screen icon. Ask players to check Settings → Focus before event.
-- **Player has no pushId in Jotform:** Manually paste OneSignal ID from OneSignal User Records dashboard into Jotform membership QID 23. Confirmed working — Ron Grow and Tony Choy added this way 2026-06-01.
-- **Player sees announcements but no pop notifications:** pushId is valid (subscription exists), problem is device-level display (notification banner style set to "None" in iOS Settings, or Focus Mode active).
-- **Message queue is reliable fallback:** Even when pop notifications fail, players can open the app and see all announcements in the feed. This is the intended fallback for on-course use.
-
-### Targeting methods
-| Method | Function | Use case |
-|--------|----------|----------|
-| All BFUpdates subscribers | `osSendAll()` | Broadcasts — uses Jotform pushIds |
-| Named players only | `osSendToPlayers(names[])` | Event-scoped — looks up pushIds from memberData |
-| Specific device | `osSend({include_player_ids})` | Direct test or one-off push |
-
-### `bfType` taxonomy (Session 33 — complete)
-Every `osSend` call now carries a `bf_type` field. Worker writes it to KV feed as `type`. Used for feed filtering, inbox lifecycle TTLs, and analytics.
-
-| Call site | `bfType` | KV feed label |
-|-----------|----------|---------------|
-| `notifyNewEvent` | `'new_event'` | New event posted |
-| `notifySubPromotion` | `'sub_promotion'` | Player promoted from sub list |
-| `notifyEventReminder` | `'event_reminder'` | Day-before reminder |
-| Admin broadcast card | `'broadcast'` | Commissioner free-form broadcast |
-| Commissioner modal — event-scoped | `'event_push'` | Scoped to registered players |
-| `submitBirdieAlert` | `'birdie'` | Live event birdie / skin alert |
-| `sendCtpNotification` | `'cttp'` | Live event CttP leader update |
-| `adminSendTestPush` | `'test'` | Dev test push — auto-expires |
-
-### Notification message copy (Session 33 — rewritten)
-**Rule: full names always** — duplicate first names (multiple Toms) caused confusion at BFSeries#3.
-
-**CttP (`sendCtpNotification`):**
-- First on hole: `{Full Name} is Closest to the Pin on #3 at 6 ft.` (dist omitted if not entered)
-- Takes lead: `{Full Name} is Closer than {Prev Full Name} on #3 at 6 ft.`
-- Prior leader snapshot taken BEFORE `_ctpData` is overwritten — "Closer than" always accurate
-
-**Birdie / Skins (`submitBirdieAlert`):**
-- First birdie: heading `🦅 Birdie Alert` · `{Full Name} Birdied #4 — current Skin leader.`
-- Bust: heading `🦅 Skin Stopped` · `{Full Name} Birdied #4 and stopped {Prev Full Name}'s Skin.`
-- Already busted: heading `🦅 Birdie Alert` · `{Full Name} Birdied #4 — Skin not in play on this hole.`
-
-### Announcement Feed — KV-backed (live as of Session 27)
-Portal reads `/feed` endpoint from Worker — not OneSignal history. Worker writes a KV entry on every successful push send. Commissioner can clear entries via Admin → Announcement Feed card.
-
-**KV entry shape:** `{ id, key, title, body, sentAt, type }` — `type` is the `bfType` tag from the portal.
-**Current prune:** Worker deletes entries >48 hours on every send. (Planned: per-type TTL — see Alerts/Inbox design below.)
-
-### Alerts / Inbox — Design captured (Session 33), not yet built
-Player-accessible persistent message inbox. Key design decisions:
-
-**Lifecycle TTLs by type (to replace blanket 48h Worker prune):**
-| bfType | TTL | Rationale |
-|--------|-----|-----------|
-| `birdie` / `cttp` | 48h | Event-day only |
-| `broadcast` | 7 days | Commissioner editorial |
-| `new_event` | Until event date | Actionable until then |
-| `event_reminder` | 24h post tee-time | Gone after round |
-| `sub_promotion` | Until event date | Still relevant |
-| `event_push` | Until event date | Same |
-| `test` | 1h | Dev noise |
-
-**Architectural requirements:**
-1. `scope` field in KV entry (`'all'` / `'event:{name}'` / `'player:{name}'`) — personalized delivery prerequisite
-2. Per-player read state (soft dismiss — message stays, marked read)
-3. Worker `/inbox?player=` endpoint
-4. Portal inbox UI below Upcoming Events — unread badge, per-message dismiss
-
-**Build order:** Session A (Worker: scope field, per-type TTL, inbox endpoint) → Session B (Portal inbox UI) → Session C (commissioner send scoping UI)
-
-### OneSignal API Keys
-| Key | Status | Notes |
-|-----|--------|-------|
-| Legacy API Key | ⚠️ Active (do not disable yet) | Still used for notification sends via Worker POST / |
-| BirdieFriends Portal | ✅ Active | Rich key — rotated 2026-06-02, stored in Worker OS_REST_KEY secret |
-
-**Key format:** Rich keys start with `os_v2_app_...` — much longer than legacy keys.
-
----
-
-## Jotform
-
-### API Key
-`dd0cb09a71eee7d0db3aa690e292660f`
-
-### Form IDs
+### Jotform Form IDs
 | Form | ID |
 |------|-----|
 | Event Registration | 233103072261037 |
 | Event Request | 233113019726045 |
 | Membership | 233083522910045 |
 | Series Scorecard | 250963587514163 |
-| Closest to the Pin (CttP) | 251002357493048 |
+| Closest to the Pin | 251002357493048 |
 
-### Membership Form QIDs
+### Jotform QIDs — Membership
 | QID | Field | Notes |
 |-----|-------|-------|
 | 3 | First Name | `name` |
@@ -573,349 +213,224 @@ Player-accessible persistent message inbox. Key design decisions:
 | 8 | Cell Phone | `cellPhone` |
 | 4 | Email | `email` |
 | 10 | Member Date | `memberDate` |
-| 20 | Broadcast opt-in | `bfw` — Values: `Yes` / `No` |
-| 22 | Active | `active` — Values: `Active` / `InActive` |
-| 23 | Push ID | `pushId` — Written at subscribe time |
+| 20 | Broadcast opt-in | `bfw` — Yes / No |
+| 22 | Active | `active` — Active / InActive |
+| 23 | Push ID | `pushId` — written at subscribe time |
 
-### Series Scorecard Form QIDs
-| QID | Field | Notes |
-|-----|-------|-------|
-| 31 | Name | Dropdown — pre-populated roster |
-| 30 | Event | Text, pre-filled |
-| 28 | Golf Course | Text, pre-filled (BSGC) |
-| 4 | Hole #1 | Points 0/1/2/4/6/8 |
-| 7–23 | Holes #2–#18 | QID sequence: 7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 |
-| 24 | Front | Auto-calc |
-| 25 | Back | Auto-calc |
-| 26 | Total | Auto-calc |
+### Jotform QIDs — Series Scorecard
+| QID | Field |
+|-----|-------|
+| 31 | Player Name |
+| 30 | Event |
+| 28 | Course (BSGC) |
+| 4,7–23 | Holes #1–#18 (points 0/1/2/4/6/8) |
+| 24 | Front 9 total |
+| 25 | Back 9 total |
+| 26 | Total |
 
-### CttP Form QIDs
-| QID | Field | Notes |
-|-----|-------|-------|
-| 3 | Hole # | Radio: #3, #8, #10, #15, #18 |
-| 4 | Player Name | Dropdown — roster |
-| 5 | Distance ft.in | Optional, e.g. 4.5 |
-| 7 | Event | Text, pre-filled |
+### Jotform QIDs — CttP
+| QID | Field |
+|-----|-------|
+| 3 | Hole # |
+| 4 | Player Name |
+| 5 | Distance (ft, optional) |
+| 7 | Event |
 
-### Event Request Form Fields
-| QID | Field | Notes |
-|-----|-------|-------|
-| 4 | Date & Time | Returns long-form: "Saturday, June 6, 2026 09:20 AM" |
-| 5 | Event Location | Default: BSGC |
-| 6 | Event Format | Radio |
-| 10 | Event Name | |
-| 11 | Requestor Name | |
-| 13 | Capacity | |
-
----
-
-## Portal Architecture Quick Reference
-
-### Key Constants
+### Portal Key Constants
 ```javascript
-const JOTFORM_API_KEY   = 'dd0cb09a71eee7d0db3aa690e292660f';
-const REQUEST_FORM_ID   = '233113019726045';
-const REGISTER_FORM_ID  = '233103072261037';
-const MEMBER_FORM_ID    = '233083522910045';
-const SCORECARD_FORM_ID = '250963587514163';
-const CTP_FORM_ID       = '251002357493048';
 const COMMISSIONERS     = ['Brian Hager'];
 const COMMISSIONER_PIN  = '7797';
-const COMMISH_PHONE     = '6177104755';
-const BATCH_SIZE        = 20;
-const OS_APP_ID         = '88022359-a979-4814-8a52-6f1df9884be2';
-const OS_API            = 'https://birdiefriends-push.birdiefriends01.workers.dev/';
 const LIVE_EVENT_HOURS  = 8;
 const CTP_HOLES_DEFAULT = [3,8,10,15,18];
-const MEMBER_PUSH_QID   = '23';
+const OS_APP_ID         = '88022359-a979-4814-8a52-6f1df9884be2';
+const OS_API            = 'https://birdiefriends-push.birdiefriends01.workers.dev/';
 ```
 
-### Remote Flags (Cloudflare KV)
-| Flag | KV Key | Effect |
-|------|--------|--------|
-| Maintenance Mode | `maintenance` | Hides portal for all users; bypass `?preview=7797` |
-| Live Test Mode | `live_test` | Forces live banner — dev/testing only |
-| Live Override | `live_override` | Commissioner manual event start — production use |
-| Live Override Since | `live_override_since` | ISO timestamp of manual start |
-
-### localStorage Keys
-- `bf_player` — selected player name
-- `bf_guest` — `'1'` when in Guest mode
-- `bf_player_initials` — initials for avatar
-- `bf_inactivity_check` — date of last inactivity check
-- `bf_commissioner` — `'verified'` when PIN confirmed
-- `bf_os_dismissed_{player}` — notification prompt dismissed per player
-- `bf_install_nudge_dismissed` — PWA install nudge dismissed (per device)
-- `bf_pwa_first_launch_done` — first PWA launch auto-prompt already fired
-- `bf_swipe_tip_dismissed` — swipe tip card dismissed (per device)
-- `bf_broadcast_state` — JSON batch state for in-progress broadcast
-- `bf_hidden_events_{player}` — JSON array of event IDs swiped off My Events
-- `bf_seen_events_{player}` — JSON set of event IDs marked as seen
-- `bf_first_load_{player}` — ISO timestamp of player's first app load
-- `bf_announcements_dismissed` — JSON array of dismissed announcement IDs
-
-### 5th Player Flow
-- `getCapacityStatus()` → `fivePending: true` when 5 registered on 8-man event
-- `getMyCapacityDisplay()` identifies 5th player by sorting `yesRegs` by `createdAt` — last registrant sees warning
-- Gold ⏳ banner on card: "Spot not yet confirmed — contact Commissioner if still 5th morning of event"
-- Warning clears automatically when 6th player joins
-
-### Groupings Link on Event Cards
-- Portal fetches `groupings-meta.json` on load (alongside remote flags)
-- Link shows only when: meta exists + `visibility === 'visible'` + `evt.name === meta.eventName`
-- Label shows "(Preliminary)" when `status === 'Preliminary'`
-- GolfScorer publishes meta automatically on every Publish Groupings click
-
----
-
-## Cloudflare Worker
-
-### Worker: birdiefriends-push
-| Property | Value |
-|----------|-------|
-| Name | `birdiefriends-push` |
-| URL | `https://birdiefriends-push.birdiefriends01.workers.dev/` |
-| Account | Birdiefriends01@gmail.com |
-| Secret | `OS_REST_KEY` — OneSignal rich API key (updated 2026-06-02) |
-| KV Binding | `BF_FLAGS` → `BF_FLAGS` namespace |
-
-### Worker Endpoints (complete — v2026-06-02)
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/` | None | Send OneSignal push notification |
-| GET | `/flags` | None | Read all KV flags |
-| POST | `/flags` | PIN 7797 | Write flag to KV (+ live_override_since timestamp) |
-| GET | `/subscriptions` | None | Fetch OneSignal subscriber list |
-| GET | `/notifications` | None | Fetch sent notification history |
-| DELETE | `/subscription/:id` | None | Delete one specific push subscription |
-| DELETE | `/user/:externalId/stale` | None | Delete all but newest subscription for named player |
-| DELETE | `/notifications/clear` | PIN 7797 | Attempt to cancel notifications (limited — see note below) |
-
-**⚠️ DELETE /notifications/clear limitation:** OneSignal's cancel API only works on scheduled/in-flight messages. Already-delivered messages cannot be deleted via API. This endpoint will return 0 deleted / N failed for all delivered messages. Permanent fix is the Worker KV Feed (backlogged).
+### Portal localStorage Keys
+| Key | Purpose |
+|-----|---------|
+| `bf_player` | Selected player name |
+| `bf_guest` | `'1'` when Guest mode |
+| `bf_commissioner` | `'verified'` when PIN confirmed |
+| `bf_hidden_events_{player}` | Events swiped off My Events |
+| `bf_seen_events_{player}` | Events marked seen |
+| `bf_announcements_dismissed` | Dismissed announcement IDs |
+| `bf_groups_data` | GolfScorer Groups tab state |
 
 ### OneSignal
 - **App ID:** `88022359-a979-4814-8a52-6f1df9884be2`
-- **REST Key:** stored in Cloudflare Worker secret `OS_REST_KEY` only — rich key format (`os_v2_app_...`)
-- **Legacy key:** still enabled in OneSignal dashboard — do not disable until Worker POST / is confirmed working with rich key
-- **Device type codes:** 0=Safari (iOS), 1=Android, 5=Chrome, 7=Safari, 8=Firefox, 9=Safari (iOS), 11=Edge, 17=Chrome (Android)
-- **Key rule:** When creating a new API key, leave IP Allowlist unchecked — Workers use rotating IPs
+- **REST Key:** Cloudflare Worker secret `OS_REST_KEY` — rich key format (`os_v2_app_...`)
+- **Legacy key:** still enabled — do not disable until confirmed unneeded
+- **IP Allowlist:** leave unchecked when creating keys — Workers use rotating IPs
 
-### OneSignal Feature Flags (in portal code)
-```javascript
-const OS_NOTIFY_NEW_EVENT      = false;  // auto-fire when new event published
-const OS_NOTIFY_SUB_PROMOTION  = false;  // flip true when ready
-const OS_NOTIFY_EVENT_REMINDER = false;  // needs scheduler
+### Laptop Folder Structure
+```
+Downloads/GolfScorer/
+├── birdiefriends_portal.html     ← Portal source (Claude deploys)
+├── deploy_portal.py              ← Secrets — never in GitHub
+├── launch_golf_scorer.py         ← Secrets — never in GitHub
+├── Launch_Golf_Scorer.bat        ← Starts local GolfScorer server
+├── BF_Golf_Scorer_8.html         ← Auto-pulled by launcher on startup
+└── worker.js                     ← Cloudflare Worker source
 ```
 
 ---
 
-## GolfScorer Reference
+## 5. Live Event System
 
-### Version History
-| Version | Key Change |
-|---------|-----------|
-| v8.0 | Initial release |
-| v8.1 | groupings-meta.json published alongside groupings.html; table-layout:fixed for quota column; version date bump |
-| v8.2 | grpOnTabOpen() called on page load (was missing — caused empty Groups tab on refresh); Quota column width increased to 62px |
-| v8.3 | Preview Mode UI (amber banner, relabeled buttons, local file links); GS_VERSION constant; quota fix attempt 1 |
-| v8.4 | getPlayers() quota fix attempt 2 (incorrect — iterative drift) |
-| v8.5 | getPlayers() quota fix: calls grpGetEstimatedQuota() directly — single source of truth matching groupings page exactly |
-| v8.15 | Tie payout fix: Math.floor on share, T-N podium labels, tie-aware medal display (live + published) |
-| v8.6 | fmtDiff: smart result display (2 decimals only when needed to show real difference) |
+### Overview
+When a BF Series event's tee time arrives, the portal activates a **Live Event Banner** for all registered players. Non-registered players see no banner.
 
-### Groups Tab — Data Persistence
-- State saves to `localStorage['bf_groups_data']` on every change
-- Contains: players, groups, eventName, firstTee, status, visibility
-- **v8.2 fix:** `grpOnTabOpen()` now called on page load — data restored even without switching tabs
-- Recovery command if UI shows empty: open console → `grpOnTabOpen()`
+### Live window
+- **Auto:** Tee time → tee time + 8 hours (`LIVE_EVENT_HOURS = 8`)
+- **Manual:** Commissioner taps Start Live Now in Admin → Event Control
 
-### Groupings Publish
-- Deploys `groupings.html` + `groupings-meta.json` to Netlify simultaneously
-- Meta format: `{eventName, status, visibility, publishedAt}`
-- Portal reads meta to show/hide groupings link on event cards
-- Set First Tee Time correctly before publishing — it's baked into the generated HTML
+### Event Card Lifecycle
+- **Pre-event:** normal register/unregister buttons
+- **During round (in-progress state):** Register/Unregister replaced by ⛳ "Round in progress · Xh Ym in · Tap the banner to enter scores"
+- **Sunset:** Series events visible until tee +6h; other events tee +5h (both format-aware)
+- **After sunset:** card disappears; banner stays active until tee +8h (commissioner controls)
 
-### Groupings Display (groupings.html)
-- Table uses `table-layout:fixed` — columns never clip regardless of name length
-- Column widths: Player=auto, Rank=48px, Evts=36px, Tee=58px, Quota=62px
-- Long names (Knappenberger) wrap within Player column
-- Netlify CDN cache: wait ~60s after publish before sharing link
+### Banner Sections
+1. **🦅 Birdie Alert** — player picker (defaults to current player, tap Change to proxy), hole grid, push fires on submit
+2. **🎯 Closest to the Pin** — player picker (same), hole pills, optional distance, live leaderboard
+3. **📋 Post-Round Scorecard** — hidden behind "🏁 End Round" button; overseer selects player, enters points hole-by-hole
 
----
+### Groupings Link in Live Panel
+📋 Groupings & Tee Times appears at top of live panel when groupings are published and visible. Opens as in-page iframe slide-up sheet — no tab switch, Done returns to portal.
 
-## iOS / WebKit Notes
+### Birdie / Skin Message Logic
+- First birdie: `🦅 Birdie Alert` · `{Full Name} Birdied #N — current Skin leader.`
+- Busts skin: `🦅 Skin Stopped` · `{Full Name} Birdied #N and stopped {Prev Full Name}'s Skin.`
+- Already busted: `🦅 Birdie Alert` · `{Full Name} Birdied #N — Skin not in play on this hole.`
 
-- Push notifications require **iOS 16.4+** and portal **installed as PWA**
-- Does NOT work in Safari browser tab — must launch from home screen icon
-- `window.navigator.standalone === true` detects PWA vs browser
-- Minimum 44px tap targets on all interactive elements
-- No hover-dependent functionality
-- `overflow:hidden` on full card breaks expand/collapse in older WebKit — apply to `.event-card-top` only
+### CttP Message Logic
+- First on hole: `{Full Name} is Closest to the Pin on #N at X ft.`
+- Takes lead: `{Full Name} is Closer than {Prev Full Name} on #N at X ft.`
+- Prior leader snapshot taken BEFORE `_ctpData` is overwritten — "Closer than" always accurate
+- Distance omitted silently when not entered; negative distance rejected at input
 
----
+### Point Values (Scorecard)
+| Score | Points |
+|-------|--------|
+| Albatross | 8 |
+| Eagle | 6 |
+| Birdie | 4 |
+| Par | 2 |
+| Bogey | 1 |
+| Bogey+ | 0 |
 
-## Backlog & Known Issues
-
-| Item | Status | Notes |
-|------|--------|-------|
-| **Worker KV Feed** | ✅ Live (Session 27) | Worker writes KV entry on every send. GET /feed + DELETE /feed endpoints live. Portal reads /feed. 48hr prune active. |
-| **Alerts / Inbox** | 🔲 Session 34 (A) | Per-type TTL prune in Worker, scope field in KV entry, /inbox?player= endpoint. See Push Notifications section for full spec. |
-| **Cancelled Events** | 🔴 Priority — Session 27 | Commissioner marks event cancelled → push to registered players → card shows ❌ cancelled state → ghost entry on Schedule tab. Needs KV flag per event ID + Jotform row handling (hide vs delete). Full spec needed. |
-| Live Feed UI upgrade | 🔲 After KV Feed | Styled activity stream in live panel. Color-coded by type (birdie/CttP/commissioner). Auto-refresh 60s. Push becomes nudge not primary delivery. Requires KV Feed first. |
-| Push recipient scope | 🔲 Session 27 | Birdie Alerts + CttP → all members with pushId+bfw=Yes. Only registered-player filter for sub promotion. |
-| Active/Inactive auto-reset | 🔲 Session 27 | Jeremy Burkett + Tony Hager reset after manual Active set. Fastest fix: hardcode exempt array like COMMISSIONERS array. |
-| Push notification message audit | 🔲 Before next event | Audit ALL notification templates before BFSeries#4: birdie alert, CttP leader, skins bust, sub promotion, end of round, commissioner broadcast. Skins message was wrong at BFSeries#3. |
-| BL-08 — Self-service event management | 🔲 Backlog | Member creates event, becomes temp commish |
-| BL-14 — Event type / badge field | 🔲 Backlog | Separate Event Type from Event Format; drives badge/visual treatment |
-| Live overseer group scoring | 🔲 Post May 31 | Read groupings data; overseer enters for whole group |
-| CttP holes per event | 🔲 Future | Add CttP Holes field to Event Request form |
-| Sub promotion notification | 🔲 Planned | Flip `OS_NOTIFY_SUB_PROMOTION = true` when ready |
-| Event reminder notification | 🔲 Planned | Needs scheduler |
-| Dead code cleanup | 🔲 Future | `buildHeroCard` still in portal — never called |
-| GS state persistence | 🔲 Session 23 Priority 1 | After Calculate Results, auto-save event state to localStorage `bf_pending_event`. On reload: "Resume pending event?" — avoids Jotform re-fetch |
-| Players list broken on one iPhone | 🔲 Parked | Suspected older WebKit |
-| BL-17: Two Series Events Same Day | 🔲 Low urgency | `getLiveEvent()` uses Array.find() — first match wins |
+### Scorecard Check (Admin)
+Admin → 📝 Scorecard Check → ↻ Refresh. Pulls Jotform submissions for live/next Series event. Shows ✅ player + total pts (color-coded: green ≥36, normal ≥28, gold <28) and ⚠️ missing players. Summary count in collapsed header.
 
 ---
 
-## Session Handoff Checklist
+## 6. Push Notifications
 
-- [ ] If portal changed: Claude deploys via `bf_deploy.py` — live in ~60s, no action needed
-- [ ] If worker.js changed: deploy to Cloudflare manually (Workers → birdiefriends-push → Edit code → paste → Save and Deploy)
-- [ ] If session starter / ops guide changed: Claude pushes directly to library — no action needed
-- [ ] Test on phone — confirm version number and basic functionality
-- [ ] Verify remote flags at `/flags` endpoint
-- [ ] Next session: open `deploy.html` → Claude tab → Copy Session Start Command → paste into Claude
-- [ ] Save worker.js to GolfScorer folder if it changed this session
-- [ ] Update this `BF_Operations_Guide.md` with anything new learned
+### Architecture
+**Jotform Membership QID 23 (`pushId`)** is the single source of truth for notification identity.
+
+- **Subscribe:** OneSignal SDK grants pushId → portal writes to Jotform → done
+- **Send:** Load Jotform members where `bfw=Yes` + `active=Active` + `pushId` present → `include_player_ids`
+- **OneSignal is a delivery pipe only** — no identity reads, no aliases, no external_user_id
+
+Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
+
+### Targeting Methods
+| Method | Function | Use case |
+|--------|----------|----------|
+| All BFUpdates subscribers | `osSendAll()` | Broadcasts, birdie alerts, CttP |
+| Named players only | `osSendToPlayers(names[])` | Event-scoped pushes |
+| Specific device | `osSend({include_player_ids})` | Direct test |
+
+### `bfType` Taxonomy
+| Call site | `bfType` |
+|-----------|----------|
+| `notifyNewEvent` | `'new_event'` |
+| `notifySubPromotion` | `'sub_promotion'` |
+| `notifyEventReminder` | `'event_reminder'` |
+| Admin broadcast | `'broadcast'` |
+| Commissioner modal | `'event_push'` |
+| `submitBirdieAlert` | `'birdie'` |
+| `sendCtpNotification` | `'cttp'` |
+| `adminSendTestPush` | `'test'` |
+
+### iOS Requirements
+- iOS 16.4+ required
+- Portal must be **installed as PWA** (Add to Home Screen) — does NOT work in Safari browser tab
+- PWA install: Safari → Share ⎋ → Add to Home Screen → open from home screen icon → tap Allow
+
+### Push Diagnostics
+- **Sporadic delivery on course:** Check iOS Focus Mode (Settings → Focus). Ask players before event.
+- **No pushId in Jotform:** Manually paste OneSignal ID from OneSignal User Records into Jotform membership QID 23.
+- **Pop notifications absent but announcements visible:** pushId valid, problem is device-level (notification banner = None in iOS Settings, or Focus Mode).
+- **Fallback:** Announcement feed in portal is always reliable even when pop notifications fail.
+
+### Alerts / Inbox — Design Captured (Session 33), Not Yet Built
+**Build order:** Session A (Worker: scope field, per-type TTL, `/inbox?player=` endpoint) → Session B (Portal inbox UI) → Session C (commissioner send scoping)
+
+**Lifecycle TTLs:**
+| bfType | TTL |
+|--------|-----|
+| `birdie` / `cttp` | 48h |
+| `broadcast` | 7 days |
+| `new_event` / `sub_promotion` / `event_push` | Until event date |
+| `event_reminder` | 24h post tee-time |
+| `test` | 1h |
 
 ---
 
-## GitHub Pages Deploy Troubleshooting
+## 7. GolfScorer Reference
 
-### Symptom: Deploy bat says success but old version still serving
-**Diagnosis steps:**
-1. Check raw file in repo: `raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/docs/portal.html`
-2. If raw file is correct → CDN caching problem
-3. If raw file is wrong → deploy script didn't push the right file
+### Running GolfScorer
+1. Double-click **`Launch_Golf_Scorer.bat`** — auto-pulls latest GS from GitHub on startup
+2. Chrome opens at `http://localhost:8743/BF_Golf_Scorer_8.html`
+3. Console window minimizes — leave it running
 
-**CDN cache fixes (in order):**
-1. Hard reload: Ctrl+Shift+R
-2. Incognito window
-3. Re-run deploy_portal.bat
-4. Edit portal.html directly in GitHub (add space → commit)
-5. Wait — can take several hours with custom domains
+### Data Recovery
+- All Groups tab state in localStorage key `bf_groups_data`
+- Recovery: open console → `grpOnTabOpen()`
+- Export: Groups tab → Export JSON. Import: Groups tab → Import JSON.
 
-**Note:** birdiefriends.com DNS is NOT proxied through Cloudflare. No Cloudflare cache to purge for the portal.
+### Groupings Archive System
+1. `grpPublish` Final → writes `groupings-{slug}.html` to GitHub + saves `groupingsFile` into series localStorage
+2. `Publish All Pages` → embeds `groupingsFile` references in `results.html` as `GROUPINGS_ARCHIVE`
+3. `loadEvent(name)` → iframes archive file with `?embed=1` (hides nav for clean display)
 
----
+**Outliers:**
+- Series#2: no archive (pre-system) — Groups tab dimmed
+- Series#3: embed mode missing (published before v8.17o) — nav visible in iframe; do NOT republish (would corrupt historical quotas)
+- Series#4+: fully automatic
 
-## Complete Version History
+### No-HCP Player Flow (e.g. Rich Potts)
+- `grpMergePlayers` sets `isNoHcp: false` by default — new player ≠ no GHIN handicap
+- Commissioner manually blanks HCP field → triggers `isNoHcp: true` → tee dropdown appears
+- `grpPublish()` blocks if tee is blank (hard guard)
+- Kick Off passes tee to Tab 2; `goToScorecard()` blocks again if blank (second guard)
+- Event 1 is baseline — no quota, no podium. Event 2+ enters full quota system.
 
-### Portal
-| Version | Key Change |
-|---------|-----------|
-| v3.10.0 | New nav, swipe-to-dismiss, Schedule tab, Admin to ⚙️ gear |
-| v3.10.1–19 | See Session 20 starter |
-| v3.10.23 | Nav renamed: Home→⛳ My Events, Events→🅿️ Parked |
-| v3.10.24–28 | Guide, pulseCard, About fixes |
-| v3.10.29–32 | Fivesome warning banner + detection |
-| v3.10.33–40 | Fivesome refinements, duplicate subscriber detection, pulseCard |
-| v3.10.41 | Fivesome: parseRegSubmissions adds createdAt; fivePending state; localStorage-free detection |
-| v3.10.42 | Subscriber panel: OneSignal ID column; Delete ↗ links |
-| v3.10.43 | Subscriber panel syntax fix (osBaseUrl scope, surrogate emoji encoding) |
-| v3.10.44 | osBaseUrl hoisted to function scope (was inside if-block — caused "not defined" error) |
-| v3.10.45 | Groupings link on event cards — 7-day time window (replaced by exact match in .47) |
-| v3.10.46 | Fivesome: suppress status badge when pending banner showing |
-| v3.10.47 | Groupings link: exact eventName match via groupings-meta.json; shows (Preliminary) label |
-| v3.10.48 | Worker DELETE routes wired up; adminDeleteSubscription(); osPruneStaleSubscriptions() |
-| v3.10.49 | Delete button shows actual HTTP status on failure; Worker tries v5 then v1 endpoint |
-| v3.10.50 | iOS 3-step visual install guide; Android one-tap native install; first-PWA-launch auto-prompt |
-| v3.10.51 | Event Control: Start Live Now / Close Event; live_override flag; updateEventControlUI() |
-| v3.10.52–57 | Notification identity investigation: v1/v5/jf source badges, osIdentityRefresh, osHealthCheck, iOS install guide improvements, syncNotifications button, How-to-fix guide modal (superseded by v3.10.58 rebuild) |
-| v3.10.58 | **Jotform-first notification architecture** — removed OneSignal.login(), osPruneStale, external_user_id reliance. osSendAll/osSendToPlayers use Jotform pushIds. loadAdminSubscribers rebuilt. Sunday Checklist + adminSendTestPush added. memberDate in parsed member object. |
-| v3.10.59–64 | Syntax fixes; Test button error detail; deploy_portal.py auto-increment wired in; Schedule tab unregister; 48hr lock scoped to cap>4 |
-| v3.10.65 | Text All Players multi-select dialog; GitHub token sync (launch_golf_scorer.py); guide.html added to deploy |
-| v3.10.66 | Skins message logic fixed (full names, 3 states); re-register bug fixed; scorecard submit→confirm→next flow; groupings link in live panel; CttP input hardened |
-| v3.10.67–68 | Session 25 cleanup; version sync hardened; Worker app_id fix prepared |
-| v3.10.69 | app_id added to both DELETE /notifications/clear portal calls (adminDeleteOneNotification + adminClearAllNotifications) |
-| v3.10.70 | 48hr lock: added yesCount===0 guard — never show Sub if nobody registered yet |
-| v3.10.71 | 48hr lock: root fix — lock condition now includes !is4man — 4-player events never lock regardless of 48hr window |
-| v3.10.72 | Code Library: deploy_portal.py updated — deploys deploy.html, mirrors source files to source/ on every bat run |
-| v3.10.77–79 | Session 28 test deploys: Going→Registered→Going→Registered via Claude-direct bf_deploy.py flow |
-| v3.10.91 | Session 33: fix notification recipient scope — `osSendAll()` for Birdie Alert + CttP; rewrite message copy (full names, plain English, prior-leader CttP snapshot) |
-| v3.10.92 | Session 33: Push Subscribers card collapsible — collapsed by default, summary count in header, lazy-load on expand |
-| v3.10.93 | Session 33: complete bfType tagging on all notification call sites |
-| v3.10.94 | Session 33: Push Subscribers card — fix collapsed-by-default (was auto-opening on admin screen open), fix mobile summary wrapping |
-| v3.10.95 | Session 33: all 6 admin cards collapsible via shared `toggleAdminCard(cardId)` utility |
+### Quota Display (fixed Session 34)
+- Always click **Fetch Registrants** after launching GS before publishing groupings
+- This triggers `grpMergePlayers` which refreshes `p.quota` from series history via `grpGetEstimatedQuota`
+- Re-publishing without re-fetching shows stale stored quota
 
-### Worker
-| Date | Key Change |
-|------|-----------|
-| Pre-session 21 | POST /, GET /flags, POST /flags, GET /subscriptions, GET /notifications |
-| 2026-05-27 | Added DELETE /subscription/:id, DELETE /user/:id/stale, live_override flag support, live_override_since timestamp, corsHeaders consolidated |
-| 2026-06-01 | Added DELETE /notifications/clear (PIN required; fetch list then delete; returns {deleted, failed, errors, total}) |
-| 2026-06-02 | OS_REST_KEY updated to OneSignal rich key format. DELETE /notifications/clear confirmed limited to cancelling scheduled messages only — cannot delete delivered messages. |
-| 2026-06-03 | Added GET /history, POST /deploy, POST /rollback — GitHub-backed version control and remote deploy system. GitHub token hardcoded in Worker. |
-| 2026-06-06 | v3.10.87: Garrett's Last Swing link added to Results section. v3.10.88: Admin panel quick links card for Garrett's Last Swing scorecard entry and leaderboard. |
+### Scoring Rules
+- **Quota formula:** `36 − (HCP × Slope / 113)` — Green slope 132, Combo 128, Gold 115
+- **Best 4 of N** events count toward series standings
+- **NoHCP E1 synthetic:** baseline event, no quota, no podium eligibility
 
-### GolfScorer
-| Version | Key Change |
-|---------|-----------|
-| v8.0 | Initial release |
-| v8.1 | groupings-meta.json publish; table-layout:fixed; version display |
-| v8.2 | grpOnTabOpen() on page load fix; Quota column 62px |
-| v8.3 | Preview Mode UI (amber banner, relabeled buttons, local file links); GS_VERSION constant; quota fix attempt 1 |
-| v8.4 | getPlayers() quota fix attempt 2 (incorrect — iterative drift) |
-| v8.5 | getPlayers() quota fix: calls grpGetEstimatedQuota() directly — single source of truth matching groupings page exactly |
-| v8.15 | Tie payout fix: Math.floor on share, T-N podium labels, tie-aware medal display (live + published) |
-| v8.6 | fmtDiff: smart result display (2 decimals only when needed to show real difference) |
+### Tie Payout Rules
+Pool prizes for tied positions, split evenly, floor to nearest dollar. Surplus to treasury.
 
-### launch_golf_scorer.py
-| Date | Key Change |
-|------|-----------|
-| Pre-session 22 | GitHub Pages deploy, Google Sheets push, Jotform proxy, Claude Vision OCR, portal deploy |
-| 2026-05-28 | TEST_PREVIEW_MODE flag; /api/preview/list route; /api/netlify/status returns preview_mode; gsVersion in sheets push payload; build_sheets_data stamps GS version in sheet title row |
-| 2026-06-01 | GitHub token updated to match deploy_portal.py |
-| 2026-06-09 | Auto-pull: fetches latest BF_Golf_Scorer_8.html from GitHub source/ on every startup before serving; falls back to local file gracefully if offline; prints version pulled to console |
-
-### BF_Golf_Scorer_8.html
-| Version | Key Change |
-|---------|------------|
-| v8.17a | New Event button added to Actions banner (red/danger style, always visible) |
-| v8.17b | Fixed Players tab onclick syntax bug; resetAll() now clears grpPlayers + grpGroups + localStorage['bf_groups_data'] |
-| v8.17c | Tab 2 goToScorecard() blocks if no-HCP player has no tee selected; highlights offending row |
-| v8.17d | grpPublish() blocks if no-HCP/null-HCP player has no tee; highlights HCP table row red, scrolls into view; fixed hardcoded build-date stamp |
-| v8.17e | Tee dropdown shows for null-HCP players (hcp===null) in HCP table and drag cards — not just isNoHcp===true; fixes first-event no-GHIN players like Rich Potts |
-| v8.17f | ✕ Remove button added to player drag cards (both pool and in-group); confirm dialog; removes from grpPlayers + group assignment |
-| v8.17g | Fetch Registrants prunes unregistered players on re-fetch; warn status style added to grpSetStatus |
-| v8.17h | Defensive guards on pruning block (Array.isArray + g.players\|\|[]); fixed fetch crash |
-| v8.17i | Removed overflow-y:auto from both panes; align-items:start on grid layout |
-| v8.17j | Sticky unassigned pool (position:sticky top:56px); groups grow to full content height; grpSizeDragZone reworked — pool sized to viewport, groups unconstrained |
-| v8.17k | Kick Off auto-populates Tab 2 event date to today (only if blank) |
-| v8.17l | Tab 2 reframed as confirmation screen — event name read-only, date required, roster display-only, legacy tools hidden |
-| v8.17m | Groupings archive system: grpPublish Final saves groupingsFile to series localStorage; generateResultsPage template builds GROUPINGS_ARCHIVE from ALL_SERIES_DATA; loadEvent calls loadGroupsTab |
-| v8.17n | ⛳ Groups tab added to results tab bar after Money; openGroupingsForEvent → opens archive; tab dims when no archive |
-| v8.17o | Groups tab renders archive inline via iframe with embed=1; groupings template hides header/nav in embed mode; fixed </script> escaping in template literal |
-
-### Tie Payout Rules (FINALIZED 2026-05-12)
-
-Pool the prizes for all tied positions, split evenly, floor to nearest dollar. Surplus stays in treasury.
-
-| Scenario | Each tied player gets | Next place |
+| Scenario | Each tied player gets | Below |
 |---|---|---|
-| Sole 1st, 2nd, 3rd | $40 / $20 / $10 | — |
-| 2-way tie 1st | $30 each | 3rd still gets $10 |
-| 3-way tie 1st | $23 each ($1 to treasury) | Nothing below |
-| 2-way tie 2nd | $15 each | Nothing below |
-| 3-way tie 2nd | $10 each | Nothing below |
-| 2-way tie 3rd | $5 each | Nothing below |
-| 3-way tie 3rd | $3 each ($1 to treasury) | Nothing below |
-| 4-way tie 3rd | $2 each ($2 to treasury) | Nothing below |
+| Sole 1st / 2nd / 3rd | $40 / $20 / $10 | — |
+| 2-way tie 1st | $30 each | 3rd gets $10 |
+| 3-way tie 1st | $23 each ($1 treasury) | Nothing |
+| 2-way tie 2nd | $15 each | Nothing |
+| 2-way tie 3rd | $5 each | Nothing |
 
-**Rule:** when N players tie for a position, sum all prizes from that position through the last position consumed by the tie group, floor-divide by N. Players below the tie group receive nothing.
-
-**Podium display:** tied players show T-1, T-2, or T-3 labels instead of 🥇🥈🥉. Both the live GS results tab and the published results.html apply this.
+**Podium display:** T-1, T-2, T-3 labels replace 🥇🥈🥉 on ties.
 
 ### Google Sheets
 - **URL:** https://docs.google.com/spreadsheets/d/1QvnXGY8TLgCgAhXt8SBRbwa7eUz-Vouhu6Tyituee20
@@ -924,54 +439,181 @@ Pool the prizes for all tied positions, split evenly, floor to nearest dollar. S
 
 ---
 
-## Event Sites — Garrett's Last Swing Pattern
+## 8. Portal Navigation & UX
 
-### Overview
-Standalone results pages for non-BFSeries events (bachelor parties, invitationals, etc.). Deployed to `birdiefriends.com/<slug>.html`. Schema documented in `source/BF_EventSite_Schema.md`.
+### Bottom Nav Tabs
+| Tab | Icon | Notes |
+|-----|------|-------|
+| My Events | ⛳ | Swipeable cards; parked events hidden |
+| Parked | 🅿️ | Events swiped from My Events |
+| Schedule | 🗓️ | Events player is registered for |
+| Results | 🏆 | Results, Standings, My Game, Groupings links |
 
-### Files deployed (Session 30)
-| File | URL | Purpose |
-|------|-----|---------|
-| `docs/garretts-last-swing.html` | birdiefriends.com/garretts-last-swing.html | Results page |
-| `docs/garretts-last-swing-gallery.html` | birdiefriends.com/garretts-last-swing-gallery.html | Photo gallery |
-| `docs/BF_EventSite_Schema.md` | source/BF_EventSite_Schema.md | Data contract spec |
-| `docs/BF_NextSession_Garrett.md` | source/BF_NextSession_Garrett.md | Session 31 pickup list |
+### Admin Access
+⚙️ gear icon in header (commissioner PIN required). Cards: Event Control, Push Broadcast, Text All, Dev Controls, Announcement Feed, Push Subscribers, Scorecard Check. All cards start collapsed.
 
-### Photo storage convention
-`docs/gls-photo-<id>.<ext>` — uploaded directly via GitHub API. Prefix `gls-` = Garrett's Last Swing. Future events use their own prefix.
+### Event Card Groupings Link
+Portal fetches `groupings-meta.json` on load. Link shows only when: meta exists + `visibility=visible` + `evt.name` matches. Opens as in-page iframe slide-up sheet.
 
-### Jotform reuse
-Form 253134098686163 (Turkey 2Man Scorecard) was repurposed for data entry. Filter by Event name field to separate events.
+### 5th Player Flow
+`getCapacityStatus()` → `fivePending: true` when 5 registered on 8-man event. Gold ⏳ warning on 5th registrant's card. Clears when 6th joins.
 
-### Key design decisions
-- Navy/gold theme derived from the event hats
-- Pacifico script font for title treatment
-- 📸 pill buttons per section → gallery chapter links
-- Gallery: chapter-based (by day/moment), lightbox with swipe, IntersectionObserver for chapter nav pill
-- State: FINAL (all 3 rounds complete)
-- `table-layout:auto` required for mobile column fit
-
-### Competition types used
-- `scramble_individual_cumulative` — team score credited to each player, lowest 3-round total wins
-- `match_play_cart_group` — hole-by-hole within foursome, 1pt win / 0.5pt tie
-- `skins_field` — all teams one pot, ties carry, $48/hole (12 players × $20 / 5 winning holes)
-- `cttp` — par 3s, individual winner per hole, $44/hole (11 players × $20 / 5 par 3s)
+### iOS / WebKit Notes
+- Push notifications: iOS 16.4+ + PWA install required
+- Minimum 44px tap targets on all interactive elements
+- No hover-dependent functionality
+- `overflow:hidden` on full card breaks expand/collapse in older WebKit — apply to `.event-card-top` only
 
 ---
 
-## Future Considerations — Commercial Path
+## 9. Event Sites Pattern (Garrett's Last Swing)
 
-### GolfScorer — Phone/iPad Executable (Option A: GitHub Pages hosting)
-**Decision (Session 34):** Logged as future option only. If BirdieFriends goes commercial, the entire GS will be rewritten — no point engineering a halfway solution onto the current single-file architecture.
+Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com/<slug>.html`. Schema: `source/BF_EventSite_Schema.md`.
 
-**What would be required for the current GS:**
-- Host `BF_Golf_Scorer_8.html` as a static page (e.g. `birdiefriends.com/gs.html`)
-- Replace all `fetch('/publish/...')` local Python server calls with GitHub Contents API calls (same pattern as `bf_deploy.py`)
-- Rework `TEST_PREVIEW_MODE` (preview writes to a `preview/` branch or skips push)
-- GitHub token would need to be proxied through the Worker (body size limit on free tier is a risk) or embedded
-- localStorage scoring state already works fine on any device — no changes needed there
+**Photo storage:** `docs/gls-photo-<id>.<ext>` — uploaded via GitHub API. Future events use their own prefix.
 
-**Why deferred:** GS stays home on event day (Golden Rule #11). A commercial rewrite would use a proper backend (React/Vue, real-time multi-group scoring, cloud DB) making this moot.
+**Competition types used:**
+- `scramble_individual_cumulative` — lowest 3-round total wins
+- `match_play_cart_group` — hole-by-hole, 1pt win / 0.5pt tie
+- `skins_field` — all teams one pot, ties carry
+- `cttp` — par 3s, individual winner per hole
 
-**Effort if pursued on current codebase:** ~2–3 sessions.
+---
+
+## 10. Backlog & Known Issues
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| **Alerts / Inbox** | 🔲 Next (Session A) | Worker: scope field, per-type TTL, `/inbox?player=` endpoint. Portal: inbox UI below Upcoming, read/unread, dismiss. |
+| **Cancelled Events** | 🔴 Priority | Commissioner marks cancelled → push → card shows ❌ → ghost on Schedule tab. Needs KV flag per event ID. |
+| Active/InActive auto-reset | 🔲 Quick fix | Jeremy Burkett + Tony Hager. Fastest: hardcode exempt array like COMMISSIONERS. |
+| Live Feed UI | 🔲 After Inbox | Styled activity stream in live panel. Color-coded by type. 60s auto-refresh. |
+| Self-service event management | 🔲 Backlog | Member creates event, becomes temp commish. |
+| GS state persistence | 🔲 Backlog | Auto-save event state after Calculate Results; "Resume pending event?" on reload. |
+| CttP holes per event | 🔲 Future | Add CttP Holes field to Event Request form. |
+| Sub promotion notification | 🔲 Planned | Flip `OS_NOTIFY_SUB_PROMOTION = true` when ready. |
+| BL-17: Two Series events same day | 🔲 Low | `getLiveEvent()` uses Array.find() — first match wins. |
+| Players list broken on one iPhone | 🔲 Parked | Suspected older WebKit. |
+
+---
+
+## 11. Future Considerations — Commercial Path
+
+### GolfScorer — Phone/iPad Executable
+**Decision (Session 34):** Deferred. If BirdieFriends goes commercial, GS will be fully rewritten — no point engineering onto the current single-file architecture.
+
+**Option A (GitHub Pages hosting) — what it would take:**
+- Host `BF_Golf_Scorer_8.html` at `birdiefriends.com/gs.html`
+- Replace all `fetch('/publish/...')` Python server calls with GitHub Contents API calls
+- Rework TEST_PREVIEW_MODE; proxy GitHub token through Worker (body size risk)
+- localStorage scoring state works fine on any device already
+
+**Why deferred:** GS stays home on event day (Rule #12). A commercial rewrite would use a proper backend (React/Vue, real-time multi-group scoring, cloud DB) making this moot. Effort if pursued on current codebase: ~2–3 sessions.
+
+---
+
+## 12. Session History
+
+### Session 34 — Chat#34 BF Dev - Series#4 Prep (2026-06-12)
+- **Bootstrap fix:** deploy.html copy button now enforces `bash_tool curl` method; `node --check` mandatory pre-deploy gate
+- **GS quota display bug (v8.17a):** `grpMergePlayers` existing-player branch now re-fetches `currentHcp` + recomputes quota via `grpGetEstimatedQuota` on every Fetch Registrants — was showing stale stored prev quota. Display only; no Series#3 scoring impact.
+- **Portal v3.10.96–v3.10.106:** CttP player picker (`_ctpPlayer` state + `openPlayerSheet`); live panel section delineation (dark header strips); groupings iframe sheet (both live panel + event card); event card in-progress state (⛳ + elapsed time); event card sunset (Series +6h, others +5h); Scorecard Check admin card; scorecard chevron fix; architecture diagram in library
+- **Versioning philosophy:** Golden Rule added; 3.11.0 triggers at Alerts/Inbox launch
+
+### Session 33 — 2026-06-11
+- **Notification architecture:** `submitBirdieAlert` + `sendCtpNotification` now route through `osSendAll()` — `bfw=Yes` + InActive filter enforced; `included_segments: ['All']` removed
+- **bfType taxonomy:** complete — all call sites tagged
+- **Message copy rewritten:** full names throughout; CttP prior-leader snapshot before `_ctpData` overwrite
+- **Admin cards:** all 6 collapsible via shared `toggleAdminCard()`; Push Subscribers lazy-loads
+- **Alerts/Inbox design captured** in this guide
+
+### Session 32 — 2026-06-09
+- **GS:** `↺ New Event` button; Players tab onclick fix; `resetAll()` clears Groups tab; `deploy_file()` added to `bf_deploy.py`; `launch_golf_scorer.py` auto-pulls GS from GitHub on startup
+- **Groupings archive:** `grpPublish Final` saves to series localStorage; `generateResultsPage` builds `GROUPINGS_ARCHIVE`; ⛳ Groups tab added to results; embed mode for iframe display
+
+### Session 31 — 2026-06-05/06
+- Garrett's Last Swing archive: self-contained `garretts-last-swing-ARCHIVE.html` with 36 base64-embedded photos, competition records, full scorecards
+
+### Session 30 — 2026-06-04
+- Garrett's Last Swing gallery page; event site schema documented in `BF_EventSite_Schema.md`
+
+### Session 29 — 2026-06-03
+- Worker KV Feed live: `feed::{timestamp}` entries on every push send; `GET /feed` + `DELETE /feed` endpoints; portal reads `/feed` not OneSignal history
+- `bf_deploy.py` established as canonical Claude-direct deploy script; bootstrap hardened
+
+### Session 28 — 2026-06-02/03
+- Worker: `GET /history`, `POST /deploy`, `POST /rollback` endpoints; GitHub token in Worker
+- deploy.html Claude tab with copy button; `start.html` for mobile session starts
+
+### Session 27 — 2026-05-31/06-01
+- OneSignal identity rebuilt: Jotform `pushId` (QID 23) as single source of truth; `external_user_id` removed; Admin shows clean two-tier subscribed/not-subscribed view
+
+### Session 26 — 2026-05-30
+- Push Broadcast card in Admin; Schrödinger 5th-player orange chip; fivesome warning scoped to 5th registrant only
+
+### Sessions 19–25 — May 2026
+- Live Event System built (gold banner, Birdie Alert, CttP, Scorecard)
+- Cloudflare KV feature flags (`BF_FLAGS` namespace)
+- Reusable dark-themed slide-up player picker
+- Portal v3.9.x → v3.10.x: new nav (My Events / Parked / Schedule / Results), swipe-to-dismiss, Schedule tab
+
+### Sessions 12–18 — May 2026
+- Member management switched to Jotform live feed; self-registration flow; Commissioner PIN lock
+- Full OneSignal push integration; Cloudflare Worker proxy; per-player subscription; Admin subscriber table
+
+### Sessions 1–9 — May 2026
+- GolfScorer v8.x built: Stableford quota scoring, Best 4 series formula, flight standings, player profiles
+- Groups tab: drag-drop builder, Jotform registrant fetch, tee time calculator, Preliminary/Final publish states
+- Synthetic 8-event test season validated scoring engine
+
+---
+
+## 13. Complete Version History
+
+### Portal
+| Version | Key Change |
+|---------|-----------|
+| v3.10.0 | New nav, swipe-to-dismiss, Schedule tab, Admin to ⚙️ gear |
+| v3.10.23 | Nav renamed: Home→⛳ My Events, Events→🅿️ Parked |
+| v3.10.29–32 | Fivesome warning banner + detection |
+| v3.10.50 | iOS 3-step visual install guide; Android one-tap native install; first-PWA-launch auto-prompt |
+| v3.10.51 | Event Control: Start Live Now / Close Event; live_override flag |
+| v3.10.58 | **Jotform-first notification architecture** — pushId as identity; osSendAll/osSendToPlayers rebuilt |
+| v3.10.65 | Text All Players; guide.html added to deploy |
+| v3.10.66 | Skins message logic; re-register bug; scorecard submit→confirm→next flow |
+| v3.10.91 | Fix notification recipient scope — osSendAll() for Birdie Alert + CttP |
+| v3.10.92 | Push Subscribers card collapsible |
+| v3.10.93 | Complete bfType tagging |
+| v3.10.95 | All 6 admin cards collapsible |
+| v3.10.96–98 | CttP player picker (blank-load hotfixes for escaping bug) |
+| v3.10.99 | Live section dark header strips |
+| v3.10.100 | Groupings iframe sheet + event card sunset tee+6h/+5h |
+| v3.10.101 | Groupings sheet on event card |
+| v3.10.102 | Event card in-progress state; sunset aligned |
+| v3.10.103–104 | Sunset tuning (Series +6h, others +5h, format-aware) |
+| v3.10.105 | Scorecard Check admin card |
+| v3.10.106 | Scorecard chevron fix; architecture diagram in library |
+
+### Worker
+| Date | Key Change |
+|------|-----------|
+| 2026-05-27 | DELETE /subscription/:id; live_override flag + timestamp |
+| 2026-06-01 | DELETE /notifications/clear (PIN required) |
+| 2026-06-02 | OS_REST_KEY → rich key format |
+| 2026-06-03 | GET /history, POST /deploy, POST /rollback; KV feed (feed::{timestamp}), GET /feed, DELETE /feed |
+
+### GolfScorer (v8.17 series)
+| Version | Key Change |
+|---------|------------|
+| v8.17a | New Event button in Actions banner |
+| v8.17b | Players tab onclick fix; resetAll() clears Groups tab |
+| v8.17c–d | No-HCP tee guards (grpPublish + goToScorecard both block) |
+| v8.17e | Tee dropdown for null-HCP players (not just isNoHcp flag) |
+| v8.17f | Remove button on drag cards |
+| v8.17g–h | Fetch Registrants prunes unregistered; defensive guards |
+| v8.17i–j | Layout fixes: overflow, sticky pool |
+| v8.17k | Kick Off auto-populates Tab 2 event date |
+| v8.17l | Tab 2 reframed as confirmation screen |
+| v8.17m–o | Groupings archive system end-to-end; Groups tab in results; embed mode |
+| v8.17 · 2026-06-12a | Quota display fix: grpMergePlayers refreshes existing player quotas on re-fetch |
 
