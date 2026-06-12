@@ -951,3 +951,21 @@ Form 253134098686163 (Turkey 2Man Scorecard) was repurposed for data entry. Filt
 - `skins_field` — all teams one pot, ties carry, $48/hole (12 players × $20 / 5 winning holes)
 - `cttp` — par 3s, individual winner per hole, $44/hole (11 players × $20 / 5 par 3s)
 
+---
+
+## Future Considerations — Commercial Path
+
+### GolfScorer — Phone/iPad Executable (Option A: GitHub Pages hosting)
+**Decision (Session 34):** Logged as future option only. If BirdieFriends goes commercial, the entire GS will be rewritten — no point engineering a halfway solution onto the current single-file architecture.
+
+**What would be required for the current GS:**
+- Host `BF_Golf_Scorer_8.html` as a static page (e.g. `birdiefriends.com/gs.html`)
+- Replace all `fetch('/publish/...')` local Python server calls with GitHub Contents API calls (same pattern as `bf_deploy.py`)
+- Rework `TEST_PREVIEW_MODE` (preview writes to a `preview/` branch or skips push)
+- GitHub token would need to be proxied through the Worker (body size limit on free tier is a risk) or embedded
+- localStorage scoring state already works fine on any device — no changes needed there
+
+**Why deferred:** GS stays home on event day (Golden Rule #11). A commercial rewrite would use a proper backend (React/Vue, real-time multi-group scoring, cloud DB) making this moot.
+
+**Effort if pursued on current codebase:** ~2–3 sessions.
+
