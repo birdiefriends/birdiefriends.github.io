@@ -6807,8 +6807,19 @@ function grpMergePlayers(registrants, eventName) {
   registrants.forEach(reg => {
     const existing = grpPlayers.find(p => p.name.toLowerCase() === reg.name.toLowerCase());
     if (existing) {
-      // Update sub status but keep HCP/quota/tee/groupId
+      // Update sub status; always refresh HCP + quota from latest series history
+      // so the table matches "Why this quota?" (which computes live via grpQuotaBreakdown).
       existing.isSub = reg.isSub;
+      if (!existing.isNoHcp) {
+        const ph2 = season ? seriesData.seasons[season]?.playerHistory?.[existing.name] : null;
+        const latestHcp = ph2?.currentHcp ?? existing.hcp;
+        if (latestHcp !== null) {
+          const { tee: refreshedTee } = grpCalcTeeAndQuota(latestHcp, existing.groupId ? existing.tee : null);
+          const teeToUse = existing.tee || refreshedTee; // keep manually-set tee if already assigned
+          existing.hcp   = latestHcp;
+          existing.quota = grpGetEstimatedQuota(existing.name, latestHcp, teeToUse) ?? existing.quota;
+        }
+      }
       updated++;
       return;
     }
@@ -7223,8 +7234,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-09r';
-const GS_VERSION = 'v8.17 · 2026-06-09r';
+document.getElementById('build-date').textContent = '2026-06-12a';
+const GS_VERSION = 'v8.17 · 2026-06-12a';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
