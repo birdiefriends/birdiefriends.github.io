@@ -461,6 +461,7 @@ Only `v1: true` formats shown in picker. Future formats flip to true as supporte
 | GolfScorer | v8.17 · 2026-06-09o | Deployed ✅ — See Session 32 accomplishments |
 | Worker | 2026-06-03 | Deployed ✅ |
 | deploy.html | 2026-06-03 | Live ✅ — birdiefriends.com/deploy.html |
+| bf_architecture.html | 2026-06-12 | Library ✅ — PIN-locked system architecture diagram |
 | launch_golf_scorer.py | 2026-06-09 | Current ✅ — auto-pulls GolfScorer HTML from GitHub on startup |
 | bf_deploy.py | 2026-06-09 | Current ✅ — deploy_file() added for single-file Claude-direct deploys |
 | deploy_portal.py | 2026-06-03 | Current ✅ |
