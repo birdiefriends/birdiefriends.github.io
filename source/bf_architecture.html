@@ -191,11 +191,11 @@
     </defs>
 
     <!-- ── USERS ── -->
-    <rect x="40" y="40" width="140" height="56" rx="8" fill="#0f2318" stroke="#1d9e75" stroke-width="1"/>
+    <rect x="40" y="40" width="140" height="56" rx="8" fill="#0f2318" stroke="#1d9e75" stroke-width="1" onclick="showDetail('commissioner')" style="cursor:pointer"/>
     <text x="110" y="64" text-anchor="middle" font-size="13" font-weight="600" fill="#9fe1cb">Commissioner</text>
     <text x="110" y="82" text-anchor="middle" font-size="11" fill="#5dcaa5">Brian · admin access</text>
 
-    <rect x="500" y="40" width="140" height="56" rx="8" fill="#0f2318" stroke="#1d9e75" stroke-width="1"/>
+    <rect x="500" y="40" width="140" height="56" rx="8" fill="#0f2318" stroke="#1d9e75" stroke-width="1" onclick="showDetail('players')" style="cursor:pointer"/>
     <text x="570" y="64" text-anchor="middle" font-size="13" font-weight="600" fill="#9fe1cb">Players</text>
     <text x="570" y="82" text-anchor="middle" font-size="11" fill="#5dcaa5">PWA · iOS / Android</text>
 
@@ -205,59 +205,59 @@
     <text x="340" y="195" text-anchor="middle" font-size="11" fill="#afa9ec">GitHub Pages · single HTML file · v3.10.106</text>
 
     <!-- Portal sub-boxes -->
-    <rect x="100" y="207" width="138" height="66" rx="6" fill="#26215c" stroke="#534ab7" stroke-width="0.5"/>
+    <rect x="100" y="207" width="138" height="66" rx="6" fill="#26215c" stroke="#534ab7" stroke-width="0.5" onclick="showDetail('live')" style="cursor:pointer"/>
     <text x="169" y="232" text-anchor="middle" font-size="12" font-weight="600" fill="#cecbf6">Live panel</text>
     <text x="169" y="250" text-anchor="middle" font-size="10" fill="#afa9ec">Birdie · CttP · Scorecard</text>
     <text x="169" y="264" text-anchor="middle" font-size="10" fill="#afa9ec">Groupings sheet</text>
 
-    <rect x="261" y="207" width="138" height="66" rx="6" fill="#26215c" stroke="#534ab7" stroke-width="0.5"/>
+    <rect x="261" y="207" width="138" height="66" rx="6" fill="#26215c" stroke="#534ab7" stroke-width="0.5" onclick="showDetail('events')" style="cursor:pointer"/>
     <text x="330" y="232" text-anchor="middle" font-size="12" font-weight="600" fill="#cecbf6">My Events</text>
     <text x="330" y="250" text-anchor="middle" font-size="10" fill="#afa9ec">Register · tee times</text>
     <text x="330" y="264" text-anchor="middle" font-size="10" fill="#afa9ec">In-progress card</text>
 
-    <rect x="422" y="207" width="158" height="66" rx="6" fill="#26215c" stroke="#534ab7" stroke-width="0.5"/>
+    <rect x="422" y="207" width="158" height="66" rx="6" fill="#26215c" stroke="#534ab7" stroke-width="0.5" onclick="showDetail('admin')" style="cursor:pointer"/>
     <text x="501" y="232" text-anchor="middle" font-size="12" font-weight="600" fill="#cecbf6">Admin panel</text>
     <text x="501" y="250" text-anchor="middle" font-size="10" fill="#afa9ec">Push · scorecard check</text>
     <text x="501" y="264" text-anchor="middle" font-size="10" fill="#afa9ec">Event control</text>
 
     <!-- ── CLOUDFLARE WORKER ── -->
-    <rect x="220" y="358" width="240" height="68" rx="8" fill="#2a1f04" stroke="#ba7517" stroke-width="1"/>
+    <rect x="220" y="358" width="240" height="68" rx="8" fill="#2a1f04" stroke="#ba7517" stroke-width="1" onclick="showDetail('worker')" style="cursor:pointer"/>
     <text x="340" y="383" text-anchor="middle" font-size="13" font-weight="600" fill="#fac775">Cloudflare Worker</text>
     <text x="340" y="401" text-anchor="middle" font-size="11" fill="#ef9f27">Push proxy · KV flags · feed</text>
 
     <!-- ── EXTERNAL SERVICES ── -->
-    <rect x="40" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1"/>
+    <rect x="40" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1" onclick="showDetail('github')" style="cursor:pointer"/>
     <text x="105" y="531" text-anchor="middle" font-size="13" font-weight="600" fill="#d3d1c7">GitHub</text>
     <text x="105" y="549" text-anchor="middle" font-size="11" fill="#888780">Pages · source</text>
     <text x="105" y="563" text-anchor="middle" font-size="11" fill="#888780">bf_deploy.py</text>
 
-    <rect x="200" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1"/>
+    <rect x="200" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1" onclick="showDetail('jotform')" style="cursor:pointer"/>
     <text x="265" y="531" text-anchor="middle" font-size="13" font-weight="600" fill="#d3d1c7">Jotform</text>
     <text x="265" y="549" text-anchor="middle" font-size="11" fill="#888780">Members · reg</text>
     <text x="265" y="563" text-anchor="middle" font-size="11" fill="#888780">Scorecards · CttP</text>
 
-    <rect x="360" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1"/>
+    <rect x="360" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1" onclick="showDetail('onesignal')" style="cursor:pointer"/>
     <text x="425" y="531" text-anchor="middle" font-size="13" font-weight="600" fill="#d3d1c7">OneSignal</text>
     <text x="425" y="549" text-anchor="middle" font-size="11" fill="#888780">Push notifications</text>
     <text x="425" y="563" text-anchor="middle" font-size="11" fill="#888780">Subscriber mgmt</text>
 
-    <rect x="510" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1"/>
+    <rect x="510" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1" onclick="showDetail('claude')" style="cursor:pointer"/>
     <text x="575" y="531" text-anchor="middle" font-size="13" font-weight="600" fill="#d3d1c7">Claude AI</text>
     <text x="575" y="549" text-anchor="middle" font-size="11" fill="#888780">Dev · deploy</text>
     <text x="575" y="563" text-anchor="middle" font-size="11" fill="#888780">bf_deploy.py</text>
 
     <!-- ── LOCAL TOOLS ── -->
-    <rect x="40" y="652" width="220" height="68" rx="8" fill="#2a0f08" stroke="#993c1d" stroke-width="1"/>
+    <rect x="40" y="652" width="220" height="68" rx="8" fill="#2a0f08" stroke="#993c1d" stroke-width="1" onclick="showDetail('golfscorer')" style="cursor:pointer"/>
     <text x="150" y="677" text-anchor="middle" font-size="13" font-weight="600" fill="#f0997b">GolfScorer v8.17</text>
     <text x="150" y="695" text-anchor="middle" font-size="11" fill="#d85a30">Laptop · Python server</text>
     <text x="150" y="709" text-anchor="middle" font-size="11" fill="#d85a30">Results · series standings</text>
 
-    <rect x="290" y="652" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1"/>
+    <rect x="290" y="652" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1" onclick="showDetail('sheets')" style="cursor:pointer"/>
     <text x="355" y="677" text-anchor="middle" font-size="13" font-weight="600" fill="#d3d1c7">Google Sheets</text>
     <text x="355" y="695" text-anchor="middle" font-size="11" fill="#888780">Standings</text>
     <text x="355" y="709" text-anchor="middle" font-size="11" fill="#888780">Flight results</text>
 
-    <rect x="450" y="652" width="190" height="68" rx="8" fill="#2a0f08" stroke="#993c1d" stroke-width="1"/>
+    <rect x="450" y="652" width="190" height="68" rx="8" fill="#2a0f08" stroke="#993c1d" stroke-width="1" onclick="showDetail('groupings')" style="cursor:pointer"/>
     <text x="545" y="677" text-anchor="middle" font-size="13" font-weight="600" fill="#f0997b">groupings.html</text>
     <text x="545" y="695" text-anchor="middle" font-size="11" fill="#d85a30">Published to GitHub Pages</text>
     <text x="545" y="709" text-anchor="middle" font-size="11" fill="#d85a30">iframe in live panel</text>
@@ -308,7 +308,7 @@
     <line x1="220" y1="762" x2="260" y2="762" fill="none" stroke="#5f5e5a" stroke-width="1" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
     <text x="268" y="766" font-size="11" fill="#6b9478" dominant-baseline="central">Deploy / config</text>
 
-    <rect x="390" y="756" width="12" height="12" rx="3" fill="#26215c" stroke="#534ab7" stroke-width="0.5"/>
+    <rect x="390" y="756" width="12" height="12" rx="3" fill="#26215c" stroke="#534ab7" stroke-width="0.5" onclick="showDetail('portal')" style="cursor:pointer"/>
     <text x="408" y="763" font-size="11" fill="#6b9478" dominant-baseline="central">Portal</text>
 
     <rect x="460" y="756" width="12" height="12" rx="3" fill="#2a0f08" stroke="#993c1d" stroke-width="0.5"/>
@@ -317,6 +317,19 @@
     <rect x="552" y="756" width="12" height="12" rx="3" fill="#161614" stroke="#5f5e5a" stroke-width="0.5"/>
     <text x="570" y="763" font-size="11" fill="#6b9478" dominant-baseline="central">Services</text>
   </svg>
+
+  
+<div id="detail-panel" style="display:none;margin-top:20px;background:#0f2318;border:1px solid #1d3d28;
+  border-radius:12px;padding:20px 22px;animation:fadeIn 0.2s ease">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
+    <div id="detail-title" style="font-size:1rem;font-weight:600;color:#9fe1cb"></div>
+    <button onclick="hideDetail()" style="background:rgba(255,255,255,0.08);border:1px solid #1d3d28;
+      color:#6b9478;border-radius:20px;padding:3px 12px;font-size:0.8rem;cursor:pointer;
+      font-family:inherit;white-space:nowrap;flex-shrink:0">✕ Close</button>
+  </div>
+  <div id="detail-body" style="font-size:0.85rem;color:#c8ddd2;line-height:1.65"></div>
+</div>
+<style>@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}</style>
 
   <div class="diag-footer">BirdieFriends · Internal architecture reference · Session 34 · June 2026</div>
 </div>
@@ -370,5 +383,22 @@
     else if (e.key === 'Escape') clearPin();
   });
 </script>
+
+<script>
+const DETAILS = {"commissioner": ["Commissioner — Brian Hager", "The sole operator of BirdieFriends. Manages all events, player registration, scoring, and system configuration. Has admin access to the portal via a PIN-protected gear icon. Uses Claude AI as a development partner to build and deploy all platform features directly from phone, tablet, or laptop."], "players": ["Players", "BirdieFriends members who access the platform via a Progressive Web App (PWA) installed on their iPhone or Android. The PWA must be installed from the home screen (not Safari browser tab) for push notifications to work. Players register for events, view groupings, enter birdie alerts and CttP during rounds, and submit scorecards post-round."], "portal": ["Portal — birdiefriends.com", "The entire player-facing application is a single HTML file (~370KB) hosted on GitHub Pages. It is a mobile-first PWA built with vanilla HTML/JS — no framework, no build step. Fetches all data live from Jotform. Deployed directly by Claude via the GitHub Contents API. Current version: v3.10.106."], "live": ["Live Panel", "Activates during a BF Series event (tee time to tee time +8h). Contains three sections: Birdie Alert (announces birdies and detects skins), Closest to the Pin (live CttP leaderboard), and Post-Round Scorecard (hole-by-hole score entry). Overseers can proxy entry for other players in their group via a player picker sheet."], "events": ["My Events", "The home screen of the portal. Shows upcoming events as swipeable cards. Players register, unregister, or park events from here. During a live round, the card shows an in-progress state with elapsed time. Cards sunset automatically after the round (Series events +6h, others +5h)."], "admin": ["Admin Panel", "Commissioner-only screen (PIN required). Contains: Event Control (start/close live banner), Push Broadcast, Text All Members, Dev Controls (maintenance mode, test flags), Announcement Feed, Push Subscribers (with setup checklist), and Scorecard Check (live submission monitor)."], "worker": ["Cloudflare Worker", "A serverless function running on Cloudflare"s edge network. Acts as a proxy between the portal and OneSignal (bypassing CORS restrictions). Also manages Cloudflare KV feature flags (maintenance mode, live event override) and a KV-backed notification feed. Free tier — ~100KB request body limit."], "github": ["GitHub", "The repository (birdiefriends/birdiefriends.github.io) serves dual purpose: GitHub Pages hosts the live site at birdiefriends.com, and the source/ folder is a versioned library of all managed files. Claude deploys directly to GitHub via the Contents API using a personal access token. No CI/CD pipeline — direct API pushes."], "jotform": ["Jotform", "The primary data store for BirdieFriends. Four forms: Membership (player directory + push subscription IDs), Event Registration (sign-ups), Series Scorecard (post-round scores), and Closest to the Pin (CttP entries). The portal fetches Jotform data live on every load. No backend database — Jotform is the database."], "onesignal": ["OneSignal", "Push notification delivery service. The portal writes each player"s OneSignal push ID to Jotform at subscribe time. When sending, the portal looks up push IDs from Jotform and passes them to the Cloudflare Worker, which forwards to OneSignal. OneSignal is purely a delivery pipe — it doesn"t need to know player names."], "claude": ["Claude AI — Development Partner", "Claude (Anthropic) is the development partner for all BirdieFriends features. Brian describes what he needs; Claude writes the code, runs syntax checks, increments versions, and deploys directly to GitHub — all within the chat session. A structured bootstrap system fetches all source files at session start so Claude has full context instantly."], "golfscorer": ["GolfScorer v8.17", "A local scoring tool that runs on Brian"s laptop via a Python server (localhost:8743). Handles pre-event groupings (drag-and-drop builder, HCP/quota calculation), event-day kick-off, and post-round scoring (Stableford quota system, Best 4 series formula, flight standings). Publishes results pages directly to GitHub. Never goes to the golf course — laptop stays home."], "sheets": ["Google Sheets", "Receives series standings data after each event via a push from GolfScorer. Contains tabs for Raw Data, overall Standings, and each flight (Green, Combo, Gold). Used as a human-readable backup and for sharing standings outside the portal."], "groupings": ["groupings.html", "A standalone page published by GolfScorer showing tee times and group assignments for an upcoming event. Embedded in the portal as a slide-up iframe sheet — players tap the 📋 button in the live panel or event card and the groupings appear in-page without leaving the portal. Also accessible directly at birdiefriends.com/groupings.html."]};
+
+function showDetail(key) {
+  const d = DETAILS[key];
+  if (!d) return;
+  document.getElementById('detail-title').textContent = d[0];
+  document.getElementById('detail-body').textContent = d[1];
+  document.getElementById('detail-panel').style.display = 'block';
+  document.getElementById('detail-panel').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+function hideDetail() {
+  document.getElementById('detail-panel').style.display = 'none';
+}
+</script>
+
 </body>
 </html>
