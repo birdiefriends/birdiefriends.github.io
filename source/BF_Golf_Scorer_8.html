@@ -6274,7 +6274,8 @@ function grpFlightOrder(tee) {
 
 function grpMakeCard(p, inGroup) {
   const teeStyle = grpTeeStyle(p.tee);
-  const quotaDisplay = p.isNoHcp && !p.quota ? 'Baseline' : (p.quota ? p.quota.toFixed(2) : '—');
+  const liveQuota = grpGetEstimatedQuota(p.name, p.hcp, p.tee);
+  const quotaDisplay = (p.isNoHcp && !liveQuota) ? 'Baseline' : (liveQuota !== null ? liveQuota.toFixed(2) : '—');
   const subBadge = p.isSub ? '<span style="font-size:0.65rem;background:#fff3cd;color:#856404;border:1px solid #ffd97d;border-radius:3px;padding:0 4px;margin-left:4px">Sub</span>' : '';
   const breakdown = grpQuotaBreakdown(p.name, p.hcp, p.tee);
 
@@ -6332,8 +6333,11 @@ function grpUpdateHcp(id, val) {
   if (!p) return;
   const hcp = val === '' ? null : parseFloat(val);
   p.hcp = hcp;
-  const { tee, quota, isNoHcp } = grpCalcTeeAndQuota(hcp, p.isNoHcp ? p.tee : null);
-  if (!p.isNoHcp) { p.tee = tee; p.quota = quota; }
+  const { tee, isNoHcp } = grpCalcTeeAndQuota(hcp, p.isNoHcp ? p.tee : null);
+  if (!p.isNoHcp) {
+    p.tee = tee;
+    p.quota = grpGetEstimatedQuota(p.name, hcp, tee); // adjustment formula — matches "Why this quota?"
+  }
   else {
     p.quota = grpGetEstimatedQuota(p.name, null, p.tee);
   }
@@ -6388,8 +6392,9 @@ function grpRenderHcpTable() {
       : p.tee === 'Gold'
         ? 'background:#fff3cd;color:#856404;border:1px solid #ffd97d'
         : 'background:#ede8fb;color:#3c3489;border:1px solid #c5baf5';
-    const quotaDisplay = (p.isNoHcp && !p.quota) ? 'Baseline'
-      : p.quota ? p.quota.toFixed(2) : '—';
+    const liveQuota = grpGetEstimatedQuota(p.name, p.hcp, p.tee);
+    const quotaDisplay = (p.isNoHcp && !liveQuota) ? 'Baseline'
+      : liveQuota !== null ? liveQuota.toFixed(2) : '—';
     const rowBg = idx % 2 === 0 ? '' : 'background:var(--surface)';
     const assignedBadge = p.groupId
       ? `<span style="font-size:0.68rem;background:var(--surface);color:var(--text-muted);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin-left:4px">in group</span>`
@@ -7008,7 +7013,8 @@ function grpGenerateGroupingsHTML(eventName, status, groupsData) {
         : p.tee === 'Gold'
           ? 'background:#fff3cd;color:#856404;border:1px solid #ffd97d'
           : 'background:#ede8fb;color:#3c3489;border:1px solid #c5baf5';
-      const quotaDisplay = (p.isNoHcp && !p.quota) ? 'Baseline' : (p.quota ? p.quota.toFixed(2) : '—');
+      const liveQuota = grpGetEstimatedQuota(p.name, p.hcp, p.tee);
+      const quotaDisplay = (p.isNoHcp && !liveQuota) ? 'Baseline' : (liveQuota !== null ? liveQuota.toFixed(2) : '—');
       const subBadge = p.isSub ? ' <span style="font-size:0.65rem;background:#fff3cd;color:#856404;border:1px solid #ffd97d;border-radius:3px;padding:0 4px">Sub</span>' : '';
       const breakdown = grpQuotaBreakdown(p.name, p.hcp, p.tee)
         .replace(/class="grp-breakdown-row grp-bd-label"/g, 'style="font-weight:600;color:#333;margin-bottom:2px"')
@@ -7234,8 +7240,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-12a';
-const GS_VERSION = 'v8.17 · 2026-06-12a';
+document.getElementById('build-date').textContent = '2026-06-14a';
+const GS_VERSION = 'v8.17 · 2026-06-14a';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
