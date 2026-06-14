@@ -7029,8 +7029,12 @@ function grpGenerateGroupingsHTML(eventName, status, groupsData) {
         ? `<span style="font-size:0.9rem;color:#666">${pRank.eventsPlayed}</span>`
         : `<span style="color:#bbb">New</span>`;
 
+      const hcpDisplay = (p.hcp !== null && !isNaN(p.hcp))
+        ? `<span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP ${p.hcp.toFixed(1)}</span>`
+        : `<span style="font-weight:400;font-size:0.78rem;color:#bbb">NoHCP</span>`;
+
       return `<tr style="background:${teeBg};border-top:1px solid rgba(0,0,0,0.05)">
-  <td style="padding:8px 10px;font-weight:600">${p.name}${subBadge}
+  <td style="padding:8px 10px;font-weight:600">${p.name} ${hcpDisplay}${subBadge}
     <div style="margin-top:4px">
       <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
         style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
@@ -7240,8 +7244,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-14a';
-const GS_VERSION = 'v8.17 · 2026-06-14a';
+document.getElementById('build-date').textContent = '2026-06-14b';
+const GS_VERSION = 'v8.17 · 2026-06-14b';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
