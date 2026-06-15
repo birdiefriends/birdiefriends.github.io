@@ -26,10 +26,10 @@ Worker changes require worker.js from the library (source/worker.js).
 Claude never reconstructs Worker code without the source file.
 -->
 
-# BirdieFriends Golf Scorer — Session 35 Starter
-**Date:** TBD (follows Session 34 — Chat#34 BF Dev - Series#4 Prep, 2026-06-12)
-**Portal Version (production):** v3.10.106 · 2026-06-12 ← fetched from library at session start
-**GolfScorer Version:** v8.17 · 2026-06-12a (deployed)
+# BirdieFriends Golf Scorer — Session 36 Starter
+**Date:** TBD (follows Session 34/35 — Chat#34 BF Dev - Series#4 Prep + Post-Round, 2026-06-14)
+**Portal Version (production):** v3.10.108 · 2026-06-14 ← fetched from library at session start
+**GolfScorer Version:** v8.17 · 2026-06-14b (deployed)
 **Worker Version:** 2026-06-03 (KV Feed confirmed working end-to-end)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
@@ -37,6 +37,34 @@ Claude never reconstructs Worker code without the source file.
 ---
 
 ---
+
+## Session 35 Accomplishments — Series#4 Post-Round (2026-06-14)
+
+### GolfScorer — Quota display bug v2 (v8.17 · 2026-06-14a/b)
+- **Bug:** Session 34's fix refreshed `p.quota` at merge time, but THREE separate render sites (player card, HCP table, published groupings HTML) still displayed cached `p.quota`, which could go stale again after any later HCP edit. Example: Brian Hager's card showed Q:28.52 (raw `36-HCP×Slope/113` formula) while "Why this quota?" breakdown correctly showed 24.05 (adjustment formula).
+- **Second root cause found:** `grpUpdateHcp` (card-view inline HCP edit) stored `p.quota` from the RAW formula instead of `grpGetEstimatedQuota` — likely how the stale value got written in the first place.
+- **Fix:** All three display sites now call `grpGetEstimatedQuota(p.name, p.hcp, p.tee)` live at render time — guaranteed to match the breakdown, since both use identical inputs. `grpUpdateHcp` also fixed to store the correct adjustment-formula quota.
+- **Confirmed:** Tab 2 scoring (`getPlayers()`) was already correct via `grpGetEstimatedQuota` — no scoring impact, display/publish only.
+
+### GolfScorer — HCP shown in published groupings (v8.17 · 2026-06-14b)
+- Player HCP now displays immediately after name in `groupings.html`, e.g. "Brian Hager HCP 6.4" (muted monospace). NoHCP players show "NoHCP".
+
+### Portal — Cross-device skin-stop detection fix (v3.10.107)
+- **Bug:** `_skinHoles` is per-device, in-memory only (`let _skinHoles = {}`, reset on every page load). When two different overseers on different phones each recorded a birdie on the same hole, BOTH saw "current Skin leader" instead of the second triggering "Skin Stopped" — confirmed live on BFSeries#4 hole #9 (Jeremy Burkett then Evan Lindermuth).
+- **Fix:** `submitBirdieAlert` now fetches the shared Worker `/feed` before composing its message, checks for prior birdie-type entries on the same hole across ALL devices, and derives skin-stop status + prior leader name from that. `_skinHoles` retained only as local fallback/"already entered" marker.
+- **No correction needed** for the bad Series#4 #9 announcements — display-only artifact, does not affect skins payout (computed by GS from scorecards).
+
+### Portal — Birdie/Eagle/Albatross selector (v3.10.108)
+- Added 3-way score-type selector (🦅 Birdie / 🦅🦅 Eagle / 🏆 Albatross) above the hole grid in the Birdie Alert section. Defaults to Birdie, resets after each submission.
+- Message wording adapts per type: "Birdied #N", "Eagled #N", "made an Albatross on #N".
+- Skin-stop detection recognizes all three types when scanning the shared feed.
+- **Known simplification:** skin-stop messaging doesn't account for relative severity (e.g., Birdie after Eagle on same hole would say "stopped" even though Eagle still wins outright). Money is unaffected — GS computes skins from scorecards. Flag for backlog if full severity-aware messaging is wanted.
+
+### Open Issue — HCP source mismatch (Groups tab vs Player Profiles)
+- **Discovered during Series#4 results prep:** Tab 2 "Tee & Quota Preview" (populated via "Load from Profiles", `bf_player_profiles` store) showed DIFFERENT HCPs than Groups tab/groupings.html (`playerHistory.currentHcp`, series-tracked) — every player differed by ~0.3–1.0 strokes.
+- **Decision (Brian):** Groups tab is the single source of truth going forward — no double HCP entry. HCP updates happen in Groups tab only.
+- **Immediate fix:** `grpKickOffEvent` already pulls `p.hcp` directly from `grpPlayers` (Groups tab) — re-running Kick Off repopulates Tab 2 correctly. Brian re-ran Kick Off at end of session; **verify Tab 2 now matches groupings.html before calculating Series#4 results**, and re-fetch Tab 3 scorecard data from Jotform if it was cleared by the re-Kick-Off.
+- **Pending decision:** retire "Load from Profiles" / Quick HCP Update panel (Tab 7) entirely since it's a stale, parallel HCP store that caused this drift. Offered to remove — not yet confirmed. **First task for next session if results aren't fully done.**
 
 ## Session 34 Accomplishments — Chat#34 BF Dev - Series#4 Prep (2026-06-12)
 
@@ -457,11 +485,12 @@ Only `v1: true` formats shown in picker. Future formats flip to true as supporte
 ### Versions
 | Component | Version | Status |
 |-----------|---------|--------|
-| Portal | v3.10.106 · 2026-06-12 | Production ✅ |
+| Portal | v3.10.108 · 2026-06-14 | Production ✅ |
 | GolfScorer | v8.17 · 2026-06-09o | Deployed ✅ — See Session 32 accomplishments |
 | Worker | 2026-06-03 | Deployed ✅ |
 | deploy.html | 2026-06-03 | Live ✅ — birdiefriends.com/deploy.html |
 | bf_architecture.html | 2026-06-12 | Library ✅ — PIN-locked system architecture diagram |
+| GolfScorer | v8.17 · 2026-06-14b | Deployed ✅ — quota display v2 + HCP in groupings |
 | launch_golf_scorer.py | 2026-06-09 | Current ✅ — auto-pulls GolfScorer HTML from GitHub on startup |
 | bf_deploy.py | 2026-06-09 | Current ✅ — deploy_file() added for single-file Claude-direct deploys |
 | deploy_portal.py | 2026-06-03 | Current ✅ |
