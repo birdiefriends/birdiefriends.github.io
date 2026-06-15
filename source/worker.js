@@ -297,9 +297,11 @@ export default {
     const data = await osResp.json();
 
     // Write to KV feed on successful send
+    let feedKey;
     if (osResp.status === 200 && data.id) {
       const sentAt  = Date.now();
       const kvKey   = `feed::${sentAt}`;
+      feedKey       = kvKey;
       const title   = (payload.headings   && (payload.headings.en   || Object.values(payload.headings)[0]))   || '';
       const body    = (payload.contents   && (payload.contents.en   || Object.values(payload.contents)[0]))   || '';
       const type    = payload.bf_type || 'broadcast'; // portal sets bf_type; default broadcast
@@ -320,7 +322,7 @@ export default {
       );
     }
 
-    return new Response(JSON.stringify(data), {
+    return new Response(JSON.stringify({ ...data, feedKey }), {
       status: osResp.status,
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
