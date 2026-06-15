@@ -150,8 +150,8 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 ### Current Versions
 | Component | Version | Status |
 |-----------|---------|--------|
-| Portal | v3.10.106 · 2026-06-12 | Production ✅ |
-| GolfScorer | v8.17 · 2026-06-12a | Deployed ✅ |
+| Portal | v3.10.108 · 2026-06-14 | Production ✅ |
+| GolfScorer | v8.17 · 2026-06-14b | Deployed ✅ |
 | Worker | 2026-06-03 | Deployed ✅ |
 | deploy.html | 2026-06-12 | Live ✅ |
 | bf_deploy.py | 2026-06-09 | Current ✅ |
@@ -300,9 +300,12 @@ When a BF Series event's tee time arrives, the portal activates a **Live Event B
 📋 Groupings & Tee Times appears at top of live panel when groupings are published and visible. Opens as in-page iframe slide-up sheet — no tab switch, Done returns to portal.
 
 ### Birdie / Skin Message Logic
-- First birdie: `🦅 Birdie Alert` · `{Full Name} Birdied #N — current Skin leader.`
-- Busts skin: `🦅 Skin Stopped` · `{Full Name} Birdied #N and stopped {Prev Full Name}'s Skin.`
-- Already busted: `🦅 Birdie Alert` · `{Full Name} Birdied #N — Skin not in play on this hole.`
+- **Score type selector:** 🦅 Birdie / 🦅🦅 Eagle / 🏆 Albatross — defaults to Birdie, resets after each submission. Verb adapts: "Birdied #N", "Eagled #N", "made an Albatross on #N".
+- First sub-par score on hole: `{emoji} {Type} Alert` · `{Full Name} {verb phrase} — current Skin leader.`
+- Second sub-par score on hole: `{emoji} Skin Stopped` · `{Full Name} {verb phrase} and stopped {Prev Full Name}'s Skin.`
+- Already busted: `{emoji} {Type} Alert` · `{Full Name} {verb phrase} — Skin not in play on this hole.`
+- **Cross-device detection:** skin status determined by querying the shared Worker `/feed` for prior birdie-type entries on the same hole — NOT the per-device `_skinHoles` object, which can't see entries from other overseers' phones. Critical fix (Session 35) — previously two different overseers on the same hole both saw "current Skin leader."
+- **Known simplification:** doesn't account for relative severity across types (Eagle then Birdie on same hole says "stopped" even though Eagle still wins outright). Doesn't affect skins payout — GS computes from scorecards.
 
 ### CttP Message Logic
 - First on hole: `{Full Name} is Closest to the Pin on #N at X ft.`
@@ -351,7 +354,7 @@ Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
 | `notifyEventReminder` | `'event_reminder'` |
 | Admin broadcast | `'broadcast'` |
 | Commissioner modal | `'event_push'` |
-| `submitBirdieAlert` | `'birdie'` |
+| `submitBirdieAlert` (Birdie/Eagle/Albatross) | `'birdie'` |
 | `sendCtpNotification` | `'cttp'` |
 | `adminSendTestPush` | `'test'` |
 
@@ -409,10 +412,18 @@ Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
 - Kick Off passes tee to Tab 2; `goToScorecard()` blocks again if blank (second guard)
 - Event 1 is baseline — no quota, no podium. Event 2+ enters full quota system.
 
-### Quota Display (fixed Session 34)
+### Quota Display (fixed Session 34, hardened Session 35)
 - Always click **Fetch Registrants** after launching GS before publishing groupings
-- This triggers `grpMergePlayers` which refreshes `p.quota` from series history via `grpGetEstimatedQuota`
-- Re-publishing without re-fetching shows stale stored quota
+- `grpMergePlayers` refreshes `p.hcp`/`p.quota` from series history via `grpGetEstimatedQuota` on every fetch
+- **Session 35:** all THREE display sites (player card, HCP table, published groupings) now compute quota LIVE via `grpGetEstimatedQuota(p.name, p.hcp, p.tee)` at render time — can never show a value that disagrees with "Why this quota?" again, regardless of when `p.quota` was last cached
+- `grpUpdateHcp` (card inline HCP edit) also fixed to store the adjustment-formula quota, not the raw `36-HCP×Slope/113` formula
+- Published groupings now shows player HCP next to name (e.g. "Brian Hager HCP 6.4"), NoHCP players show "NoHCP"
+
+### HCP Source of Truth (Session 35)
+- **Groups tab (`playerHistory.currentHcp`, series-tracked) is the SOLE source of truth for HCP.** No double entry.
+- The separate "Player Profiles" store (`bf_player_profiles`, Tab 7) and its "Load from Profiles" / Quick HCP Update workflow are a STALE, PARALLEL HCP source that caused a full-roster mismatch before Series#4 results (every player off by ~0.3–1.0 strokes between Tab 2 Quota Preview and Groups tab/groupings).
+- **If Tab 2 doesn't match Groups tab/groupings:** re-run Kick Off — `grpKickOffEvent` pulls `p.hcp` directly from `grpPlayers` (Groups tab), correcting Tab 2. Re-Kick-Off also clears Tab 3 scorecard inputs — re-fetch from Jotform afterward if needed.
+- **Pending:** retire "Load from Profiles" / Quick HCP panel entirely (offered, not yet confirmed) — first task next session if not already done.
 
 ### Scoring Rules
 - **Quota formula:** `36 − (HCP × Slope / 113)` — Green slope 132, Combo 128, Gold 115
@@ -514,6 +525,13 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 
 ## 12. Session History
 
+### Session 35 — Series#4 Post-Round (2026-06-14)
+- **GS quota display bug v2 (v8.17·2026-06-14a/b):** Session 34 fix refreshed `p.quota` at merge time, but 3 render sites (card, table, published groupings) still used the cached value — could go stale again after any HCP edit. Fixed all 3 to compute live via `grpGetEstimatedQuota`. Also fixed `grpUpdateHcp` (card inline edit), which stored the raw-formula quota instead of the adjustment-formula quota — likely the original source of the stale value. Confirmed Tab 2 scoring was already correct (display/publish only).
+- **HCP in published groupings (v8.17·2026-06-14b):** player HCP shown next to name, e.g. "Brian Hager HCP 6.4"; NoHCP players show "NoHCP".
+- **Cross-device skin-stop fix (v3.10.107):** `_skinHoles` is per-device in-memory only — two overseers on different phones both saw "current Skin leader" for the same hole (confirmed live on Series#4 #9). `submitBirdieAlert` now checks the shared Worker `/feed` for prior birdies on the hole across all devices before composing its message.
+- **Birdie/Eagle/Albatross selector (v3.10.108):** 3-way score-type selector added to Birdie Alert; message verb and emoji adapt per type; skin-stop detection recognizes all three.
+- **HCP source of truth confirmed:** Groups tab (`playerHistory.currentHcp`) is sole source — "Load from Profiles" (Tab 7, `bf_player_profiles`) is a stale parallel store that caused a full-roster HCP/quota mismatch ahead of Series#4 results. Re-running Kick Off corrects Tab 2. Retiring the Profiles HCP path is pending — first task next session if needed.
+
 ### Session 34 — Chat#34 BF Dev - Series#4 Prep (2026-06-12)
 - **Bootstrap fix:** deploy.html copy button now enforces `bash_tool curl` method; `node --check` mandatory pre-deploy gate
 - **GS quota display bug (v8.17a):** `grpMergePlayers` existing-player branch now re-fetches `currentHcp` + recomputes quota via `grpGetEstimatedQuota` on every Fetch Registrants — was showing stale stored prev quota. Display only; no Series#3 scoring impact.
@@ -593,6 +611,8 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 | v3.10.103–104 | Sunset tuning (Series +6h, others +5h, format-aware) |
 | v3.10.105 | Scorecard Check admin card |
 | v3.10.106 | Scorecard chevron fix; architecture diagram in library |
+| v3.10.107 | Cross-device skin-stop detection via shared /feed |
+| v3.10.108 | Birdie/Eagle/Albatross selector in Live Birdie Alert |
 
 ### Worker
 | Date | Key Change |
@@ -616,4 +636,6 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 | v8.17l | Tab 2 reframed as confirmation screen |
 | v8.17m–o | Groupings archive system end-to-end; Groups tab in results; embed mode |
 | v8.17 · 2026-06-12a | Quota display fix: grpMergePlayers refreshes existing player quotas on re-fetch |
+| v8.17 · 2026-06-14a | Quota display v2: 3 render sites compute live via grpGetEstimatedQuota; grpUpdateHcp fixed |
+| v8.17 · 2026-06-14b | Player HCP shown next to name in published groupings |
 
