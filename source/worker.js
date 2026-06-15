@@ -303,7 +303,8 @@ export default {
       const title   = (payload.headings   && (payload.headings.en   || Object.values(payload.headings)[0]))   || '';
       const body    = (payload.contents   && (payload.contents.en   || Object.values(payload.contents)[0]))   || '';
       const type    = payload.bf_type || 'broadcast'; // portal sets bf_type; default broadcast
-      const entry   = { id: data.id, key: kvKey, title, body, sentAt, type };
+      const meta    = payload.bf_meta || null;        // optional structured data, e.g. { hole, player, scoreType }
+      const entry   = { id: data.id, key: kvKey, title, body, sentAt, type, meta };
       await env.BF_FLAGS.put(kvKey, JSON.stringify(entry));
 
       // Prune entries older than 48 hours
