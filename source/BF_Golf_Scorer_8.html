@@ -190,6 +190,8 @@
   .cmd-btn-import:hover { background: rgba(255,255,255,0.18); }
   .cmd-btn-danger  { background: rgba(180,40,40,0.25); color: #f4a0a0; border-color: rgba(244,160,160,0.3); }
   .cmd-btn-danger:hover { background: rgba(180,40,40,0.5); }
+  .cmd-btn-eoe { background: linear-gradient(135deg,#b8860b,#d4af37); color:#1a1200; font-weight:700; border-color: rgba(212,175,55,0.6); }
+  .cmd-btn-eoe:hover { background: linear-gradient(135deg,#9c7209,#c19f2e); }
   .cmd-bar .cmd-divider {
     width: 1px; height: 20px;
     background: rgba(255,255,255,0.15);
@@ -576,6 +578,8 @@
 
 <div class="cmd-bar">
   <span class="cmd-label">Actions</span>
+  <button class="cmd-btn cmd-btn-eoe" onclick="endOfEvent()">🏁 End of Event</button>
+  <div class="cmd-divider"></div>
   <button class="cmd-btn cmd-btn-save"    onclick="saveEventToSeriesFromResults()">💾 Save to Series</button>
   <div class="cmd-divider"></div>
   <button class="cmd-btn cmd-btn-publish" onclick="publishAllPages()">🌐 Publish All Pages</button>
@@ -4196,6 +4200,48 @@ async function publishSeriesStandings() {
   }
 }
 
+// Core publish logic — returns {success, preview, url} or {success:false, error}.
+// No DOM/toast writes, so other flows (End of Event) can call this directly.
+async function publishAllPagesCore() {
+  const data = getSeriesData();
+  let season = document.getElementById('series-season')?.value;
+  if (!season || !data.seasons?.[season]?.events?.length) {
+    season = Object.keys(data.seasons || {}).sort().reverse()
+      .find(s => data.seasons[s]?.events?.length > 0);
+  }
+  const sd = season ? data.seasons[season] : null;
+
+  if (!sd || !sd.events || !sd.events.length) {
+    return { success: false, error: 'No series data to publish. Save an event to series first.' };
+  }
+
+  try {
+    const sortedEvents = [...sd.events].sort((a,b) => a.date.localeCompare(b.date));
+    const lastEvt      = sortedEvents[sortedEvents.length - 1];
+    const lastPh       = {};
+    Object.entries(sd.playerHistory).forEach(([name, ph]) => { lastPh[name] = ph; });
+
+    const resultsHtml  = generateResultsPage(lastEvt, lastPh, sd);
+    const seriesHtml   = generateSeriesPage(season, sd);
+    const myGameHtml   = generateMyGamePage(season, sd);
+
+    const resp = await fetch('/api/netlify/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pages: {
+        'results.html':   resultsHtml,
+        'standings.html': seriesHtml,
+        'mygame.html':    myGameHtml
+      }})
+    });
+    const result = await resp.json();
+    if (result.success) return { success: true, preview: result.preview, url: result.url };
+    return { success: false, error: result.error || 'Unknown error' };
+  } catch(err) {
+    return { success: false, error: err.message };
+  }
+}
+
 async function publishAllPages() {
   // Status display works from any tab — uses a toast instead of series-tab-only element
   function pubStatus(type, msg) {
@@ -4224,65 +4270,26 @@ async function publishAllPages() {
     if (statusEl) { statusEl.style.cssText = 'display:block;padding:10px;border-radius:8px;margin-bottom:12px;font-size:0.85rem;' + (styles[type]||styles.loading); statusEl.innerHTML = msg; }
   }
 
-  // Find the most recent season that has data
-  const data = getSeriesData();
-  let season = document.getElementById('series-season')?.value;
-  if (!season || !data.seasons?.[season]?.events?.length) {
-    // Fall back to most recent season with events
-    season = Object.keys(data.seasons || {}).sort().reverse()
-      .find(s => data.seasons[s]?.events?.length > 0);
-  }
-  const sd = season ? data.seasons[season] : null;
-
-  if (!sd || !sd.events || !sd.events.length) {
-    pubStatus('warn', '⚠ No series data to publish. Save an event to series first.');
-    return;
-  }
-
   pubStatus('loading', '⏳ Publishing all pages…');
+  const result = await publishAllPagesCore();
 
-  try {
-    // Build results.html from the most recent saved event
-    const sortedEvents = [...sd.events].sort((a,b) => a.date.localeCompare(b.date));
-    const lastEvt      = sortedEvents[sortedEvents.length - 1];
-    const lastPh       = {};
-    Object.entries(sd.playerHistory).forEach(([name, ph]) => { lastPh[name] = ph; });
-
-    const resultsHtml  = generateResultsPage(lastEvt, lastPh, sd);
-    const seriesHtml   = generateSeriesPage(season, sd);
-    const myGameHtml   = generateMyGamePage(season, sd);
-
-    const resp = await fetch('/api/netlify/deploy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pages: {
-        'results.html':   resultsHtml,
-        'standings.html': seriesHtml,
-        'mygame.html':    myGameHtml
-      }})
-    });
-    const result = await resp.json();
-    if (result.success) {
-      if (result.preview) {
-        // Preview mode — open local files via the server's /preview/ route
-        pubStatus('success', `🔍 <strong>Preview saved locally!</strong>
-          &nbsp;Files written to <code style="background:#d1fae5;padding:1px 5px;border-radius:4px">preview/</code> folder.
-          &nbsp;<a href="/preview/results.html"   target="_blank" style="color:#085041;font-weight:700">Results</a>
-          &nbsp;·&nbsp;<a href="/preview/standings.html" target="_blank" style="color:#085041;font-weight:700">Standings</a>
-          &nbsp;·&nbsp;<a href="/preview/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Game</a>
-          &nbsp;<span style="color:#6b7280;font-size:0.78rem">— Not published to birdiefriends.com</span>`);
-      } else {
-        const base = result.url.replace(/\/$/, '');
-        pubStatus('success', `✅ <strong>All pages published!</strong> &nbsp;
-          <a href="${base}/results.html"   target="_blank" style="color:#085041;font-weight:700">Results</a> &nbsp;·&nbsp;
-          <a href="${base}/standings.html" target="_blank" style="color:#085041;font-weight:700">Standings</a> &nbsp;·&nbsp;
-          <a href="${base}/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Game</a>`);
-      }
+  if (result.success) {
+    if (result.preview) {
+      pubStatus('success', `🔍 <strong>Preview saved locally!</strong>
+        &nbsp;Files written to <code style="background:#d1fae5;padding:1px 5px;border-radius:4px">preview/</code> folder.
+        &nbsp;<a href="/preview/results.html"   target="_blank" style="color:#085041;font-weight:700">Results</a>
+        &nbsp;·&nbsp;<a href="/preview/standings.html" target="_blank" style="color:#085041;font-weight:700">Standings</a>
+        &nbsp;·&nbsp;<a href="/preview/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Game</a>
+        &nbsp;<span style="color:#6b7280;font-size:0.78rem">— Not published to birdiefriends.com</span>`);
     } else {
-      throw new Error(result.error || 'Unknown error');
+      const base = result.url.replace(/\/$/, '');
+      pubStatus('success', `✅ <strong>All pages published!</strong> &nbsp;
+        <a href="${base}/results.html"   target="_blank" style="color:#085041;font-weight:700">Results</a> &nbsp;·&nbsp;
+        <a href="${base}/standings.html" target="_blank" style="color:#085041;font-weight:700">Standings</a> &nbsp;·&nbsp;
+        <a href="${base}/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Game</a>`);
     }
-  } catch(err) {
-    pubStatus('error', `❌ Publish failed: ${err.message}`);
+  } else {
+    pubStatus('error', `❌ Publish failed: ${result.error}`);
   }
 }
 
@@ -4480,23 +4487,14 @@ function printResults() {
   setTimeout(() => window.print(), 150);
 }
 
-async function pushToSheets() {
-  const btn      = document.getElementById('sheets-push-btn');
-  const statusEl = document.getElementById('series-save-status');
-  const season   = document.getElementById('series-season')?.value || '2026';
-  const sd       = getSeriesData()?.seasons?.[season];
-
+// Core network call — returns {success, url} or {success:false, error}.
+// No DOM writes, so other flows (End of Event) can call this directly.
+async function pushToSheetsCore(season) {
+  season = season || document.getElementById('series-season')?.value || '2026';
+  const sd = getSeriesData()?.seasons?.[season];
   if (!sd || !sd.events?.length) {
-    statusEl.style.cssText = 'display:block;background:#fee;color:#a32d2d;padding:10px;border-radius:8px;margin-bottom:12px';
-    statusEl.innerHTML = '❌ No series data to push. Save at least one event first.';
-    return;
+    return { success: false, error: 'No series data to push. Save at least one event first.' };
   }
-
-  btn.textContent = '⏳ Pushing…';
-  btn.disabled = true;
-  statusEl.style.cssText = 'display:block;background:#f0faf6;color:#085041;padding:10px;border-radius:8px;margin-bottom:12px';
-  statusEl.innerHTML = '⏳ Pushing series data to Google Sheets…';
-
   try {
     const resp = await fetch('/api/sheets/push', {
       method: 'POST',
@@ -4504,19 +4502,34 @@ async function pushToSheets() {
       body: JSON.stringify({ season, seriesData: sd, gsVersion: GS_VERSION })
     });
     const result = await resp.json();
-
-    if (result.success) {
-      statusEl.style.cssText = 'display:block;background:#e8f5e9;color:#085041;padding:10px;border-radius:8px;margin-bottom:12px';
-      statusEl.innerHTML = `✅ <strong>Google Sheets updated!</strong> &nbsp;
-        <a href="${result.url}" target="_blank" style="color:#085041;font-weight:700">Open Sheet →</a>`;
-      btn.textContent = '✅ Pushed';
-      setTimeout(() => { btn.textContent = '📊 Push to Google Sheets'; btn.disabled = false; }, 4000);
-    } else {
-      throw new Error(result.error || 'Unknown error');
-    }
+    if (result.success) return { success: true, url: result.url };
+    return { success: false, error: result.error || 'Unknown error' };
   } catch(err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function pushToSheets() {
+  const btn      = document.getElementById('sheets-push-btn');
+  const statusEl = document.getElementById('series-save-status');
+  const season   = document.getElementById('series-season')?.value || '2026';
+
+  btn.textContent = '⏳ Pushing…';
+  btn.disabled = true;
+  statusEl.style.cssText = 'display:block;background:#f0faf6;color:#085041;padding:10px;border-radius:8px;margin-bottom:12px';
+  statusEl.innerHTML = '⏳ Pushing series data to Google Sheets…';
+
+  const result = await pushToSheetsCore(season);
+
+  if (result.success) {
+    statusEl.style.cssText = 'display:block;background:#e8f5e9;color:#085041;padding:10px;border-radius:8px;margin-bottom:12px';
+    statusEl.innerHTML = `✅ <strong>Google Sheets updated!</strong> &nbsp;
+      <a href="${result.url}" target="_blank" style="color:#085041;font-weight:700">Open Sheet →</a>`;
+    btn.textContent = '✅ Pushed';
+    setTimeout(() => { btn.textContent = '📊 Push to Google Sheets'; btn.disabled = false; }, 4000);
+  } else {
     statusEl.style.cssText = 'display:block;background:#fee;color:#a32d2d;padding:10px;border-radius:8px;margin-bottom:12px';
-    statusEl.innerHTML = `❌ Sheets push failed: <pre style="margin-top:6px;font-size:0.75rem;white-space:pre-wrap">${err.message}</pre>`;
+    statusEl.innerHTML = `❌ Sheets push failed: <pre style="margin-top:6px;font-size:0.75rem;white-space:pre-wrap">${result.error}</pre>`;
     btn.textContent = '📊 Push to Google Sheets';
     btn.disabled = false;
   }
@@ -5750,6 +5763,128 @@ function saveEventToSeries() {
   statusEl.style.cssText = 'display:block;background:#e8f5e9;color:#085041;padding:10px;border-radius:8px';
   statusEl.innerHTML = `✅ Saved <strong>${eventName}</strong> — ${saved} players recorded to series.`;
   setTimeout(() => loadSeriesStandings(), 300);
+  return true;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ── END OF EVENT — one tracked action: Save to Series → Push to
+//    Sheets → Publish All Pages. Built for real conditions (spotty
+//    WiFi, post-round, low bandwidth): every step shows its own
+//    status, a failed step doesn't block the others where it's safe
+//    to continue, and only failed steps can be retried — nothing
+//    already succeeded gets redone or duplicated.
+// ══════════════════════════════════════════════════════════════════
+const EOE_STEPS = [
+  { key: 'save',    label: '💾 Save to Series' },
+  { key: 'sheets',  label: '📊 Push to Sheets' },
+  { key: 'publish', label: '🌐 Publish All Pages' }
+];
+let eoeState  = {};
+let eoeErrors = {};
+
+function eoeEnsurePanel() {
+  let panel = document.getElementById('eoe-panel');
+  if (panel) return panel;
+  panel = document.createElement('div');
+  panel.id = 'eoe-panel';
+  panel.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;background:#fff;border:1px solid #ddd;border-radius:12px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,0.22);min-width:280px;max-width:340px;font-size:0.85rem;color:#222';
+  document.body.appendChild(panel);
+  return panel;
+}
+
+function eoeRenderPanel(eventName) {
+  const panel = eoeEnsurePanel();
+  const icon = { pending:'⏳', running:'⏳', done:'✅', skipped:'✅', error:'❌' };
+  const rows = EOE_STEPS.map(s => {
+    const st = eoeState[s.key] || 'pending';
+    const note = st === 'skipped'
+      ? ' <span style="color:#888;font-size:0.74rem">(already saved)</span>'
+      : st === 'error'
+        ? `<div style="color:#a32d2d;font-size:0.74rem;margin-top:2px">${eoeErrors[s.key] || 'Failed'}</div>`
+        : '';
+    const retryBtn = st === 'error'
+      ? `<button onclick="eoeRetryStep('${s.key}')" style="margin-left:8px;font-size:0.72rem;padding:2px 9px;border:1px solid #a32d2d;color:#a32d2d;background:#fff;border-radius:6px;cursor:pointer;white-space:nowrap">Retry</button>`
+      : '';
+    return `<div style="padding:5px 0;border-bottom:1px solid #f0f0f0">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span>${icon[st]} ${s.label}${note}</span>${retryBtn}
+      </div>
+    </div>`;
+  }).join('');
+
+  const allGood = EOE_STEPS.every(s => ['done','skipped'].includes(eoeState[s.key]));
+
+  panel.innerHTML = `
+    <div style="font-weight:700;margin-bottom:8px;color:#085041">🏁 End of Event — ${eventName}</div>
+    ${rows}
+    <div style="margin-top:10px;text-align:right">
+      ${allGood ? '<span style="color:#085041;font-weight:600;font-size:0.8rem">All set — locked in.</span> ' : ''}
+      <button onclick="document.getElementById('eoe-panel').style.display='none'"
+        style="margin-left:8px;font-size:0.75rem;padding:3px 11px;border:1px solid #ccc;background:#f5f5f5;border-radius:6px;cursor:pointer">${allGood ? 'Close' : 'Hide'}</button>
+    </div>
+  `;
+  panel.style.display = 'block';
+}
+
+async function eoeRunStep(eventName, season, key) {
+  eoeState[key] = 'running';
+  eoeRenderPanel(eventName);
+
+  let result;
+  try {
+    if (key === 'save') {
+      const data = getSeriesData();
+      const sd = data.seasons?.[season];
+      const alreadySaved = sd?.events?.some(e => e.name === eventName);
+      result = alreadySaved
+        ? { success: true, skipped: true }
+        : { success: !!saveEventToSeries() };
+      if (!alreadySaved && !result.success) result.error = 'No players loaded for this event — check the scorecard.';
+    } else if (key === 'sheets') {
+      result = await pushToSheetsCore(season);
+    } else if (key === 'publish') {
+      result = await publishAllPagesCore();
+    }
+  } catch (err) {
+    result = { success: false, error: err.message };
+  }
+
+  eoeState[key] = result.success ? (result.skipped ? 'skipped' : 'done') : 'error';
+  if (!result.success) eoeErrors[key] = result.error || 'Failed';
+  eoeRenderPanel(eventName);
+  return result.success;
+}
+
+async function endOfEvent() {
+  const eventName = document.getElementById('event-name')?.value.trim();
+  if (!eventName) { alert('No event loaded — nothing to finalize yet.'); return; }
+  const season = document.getElementById('series-season')?.value || '2026';
+
+  eoeState  = { save: 'pending', sheets: 'pending', publish: 'pending' };
+  eoeErrors = {};
+  eoeRenderPanel(eventName);
+
+  // Save must succeed first — Sheets and Publish both read from saved series data.
+  const saved = await eoeRunStep(eventName, season, 'save');
+  if (!saved) return; // panel stays up showing the error + Retry; nothing else runs
+
+  // Sheets and Publish are independent of each other — a WiFi drop on one
+  // shouldn't block the other from getting through.
+  await eoeRunStep(eventName, season, 'sheets');
+  await eoeRunStep(eventName, season, 'publish');
+}
+
+async function eoeRetryStep(key) {
+  const eventName = document.getElementById('event-name')?.value.trim();
+  const season     = document.getElementById('series-season')?.value || '2026';
+  if (!eventName) return;
+
+  const ok = await eoeRunStep(eventName, season, key);
+  // If a retried Save now succeeds, continue the chain into whatever hasn't run yet.
+  if (key === 'save' && ok) {
+    if (!['done','skipped'].includes(eoeState.sheets))  await eoeRunStep(eventName, season, 'sheets');
+    if (!['done','skipped'].includes(eoeState.publish)) await eoeRunStep(eventName, season, 'publish');
+  }
 }
 
 // ── Build series standings ──
@@ -7383,8 +7518,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-17c';
-const GS_VERSION = 'v8.17 · 2026-06-17c';
+document.getElementById('build-date').textContent = '2026-06-17d';
+const GS_VERSION = 'v8.17 · 2026-06-17d';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
