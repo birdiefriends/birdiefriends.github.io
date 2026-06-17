@@ -934,6 +934,12 @@
 
 <!-- ══ TAB 4: RESULTS ══ -->
 <div class="section" id="tab-results">
+  <div id="results-history-bar" style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
+    <label style="font-size:0.82rem;font-weight:600;color:var(--text-muted)">📜 View saved event:</label>
+    <select id="results-history-select" onchange="onResultsHistorySelect(this.value)" style="padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:0.85rem;min-width:220px">
+      <option value="">— Live / Current —</option>
+    </select>
+  </div>
   <div id="results-content">
     <div class="empty-state"><p>Complete the scorecard first.</p></div>
   </div>
@@ -1902,9 +1908,10 @@ function formatVsPar(v) {
   return `<span style="font-family:'DM Mono',monospace;color:var(--green);font-weight:600">${actual} (${v})</span>`;
 }
 
-function renderResults(quotaResults, skinWinners, skinCounts, ctpData) {
-  const eventName = document.getElementById("event-name").value || "Event";
-  const eventDate = document.getElementById("event-date").value;
+function renderResults(quotaResults, skinWinners, skinCounts, ctpData, opts) {
+  opts = opts || {};
+  const eventName = opts.eventName || document.getElementById("event-name").value || "Event";
+  const eventDate = opts.eventDate || document.getElementById("event-date").value;
   const dateStr = eventDate ? new Date(eventDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }) : "";
 
   // Filter out no-HCP baseline players from podium (not eligible)
@@ -1939,7 +1946,7 @@ function renderResults(quotaResults, skinWinners, skinCounts, ctpData) {
   });
   podiumHTML += `</div>`;
 
-  const scores = getScores();
+  const scores = opts.scores || getScores();
 
   let fullTableHTML = `<table class="results-table"><thead><tr>
     <th>#</th><th>Player</th><th>Tees</th><th>Quota</th><th>Score</th><th>+/- Quota</th><th>vs Par</th><th>Skins</th>
@@ -2136,6 +2143,10 @@ function renderResults(quotaResults, skinWinners, skinCounts, ctpData) {
   strokeTableHTML += `</tbody></table>`;
 
     document.getElementById("results-content").innerHTML = `
+    ${opts.readOnly ? `
+    <div class="alert alert-info" style="margin-bottom:1.25rem;font-weight:600">
+      📜 Viewing saved results — <strong>${eventName}</strong>${dateStr ? ' · ' + dateStr : ''} — read-only. Use the selector above to return to Live.
+    </div>` : ''}
     <div class="summary-bar">
       <span class="stat-pill"><strong>${quotaResults.length}</strong> players</span>
       <span class="stat-pill"><strong>${skinWinners.length}</strong> skins awarded</span>
@@ -2204,13 +2215,95 @@ function renderResults(quotaResults, skinWinners, skinCounts, ctpData) {
 
     <div id="results-action-status" style="display:none;margin-bottom:12px;padding:12px 16px;border-radius:8px;font-size:0.85rem;text-align:center"></div>
     <div class="export-actions no-print">
-      <button class="btn btn-secondary" onclick="printResults()">🖨 Print Results</button>
-      <button class="btn btn-secondary" onclick="exportCSV()">⬇ Export CSV</button>
-      <button class="btn btn-primary" onclick="saveEventToSeriesFromResults()" id="save-series-btn" style="background:var(--green-dark)">📊 Save to Series</button>
-      <button class="btn btn-primary" onclick="publishAllPages()" id="netlify-publish-btn" style="background:linear-gradient(135deg,#0a3d6b,#1a6b9e);border-color:#0a3d6b">🌐 Publish All Pages</button>
-      <button class="btn btn-secondary" onclick="resetAll()">↺ New Event</button>
+      ${opts.readOnly ? `
+        <div class="alert alert-info" style="width:100%;text-align:center">
+          📜 Read-only saved event — Save to Series, Publish, Print and Export act on the live scorecard, so they're hidden here. Switch the selector above back to <strong>— Live / Current —</strong> to use them.
+        </div>
+      ` : `
+        <button class="btn btn-secondary" onclick="printResults()">🖨 Print Results</button>
+        <button class="btn btn-secondary" onclick="exportCSV()">⬇ Export CSV</button>
+        <button class="btn btn-primary" onclick="saveEventToSeriesFromResults()" id="save-series-btn" style="background:var(--green-dark)">📊 Save to Series</button>
+        <button class="btn btn-primary" onclick="publishAllPages()" id="netlify-publish-btn" style="background:linear-gradient(135deg,#0a3d6b,#1a6b9e);border-color:#0a3d6b">🌐 Publish All Pages</button>
+        <button class="btn btn-secondary" onclick="resetAll()">↺ New Event</button>
+      `}
     </div>
   `;
+}
+
+// ── View Saved Event (Tab 5 history selector) ──────────────────────────────
+// Populates the dropdown from whatever's already saved to series — does not
+// touch live Tab 2/3 scorecard state. Refreshed every time Tab 5 is opened.
+function populateResultsHistorySelect() {
+  const sel = document.getElementById('results-history-select');
+  if (!sel) return;
+  const prevValue = sel.value;
+  const season = document.getElementById('series-season')?.value || '2026';
+  const data = getSeriesData();
+  const sd = data.seasons?.[season];
+  const events = sd?.events ? [...sd.events].sort((a, b) => b.date.localeCompare(a.date)) : [];
+
+  sel.innerHTML = '<option value="">— Live / Current —</option>' +
+    events.map(e => `<option value="${e.name.replace(/"/g, '&quot;')}">${e.name} (${e.date})</option>`).join('');
+
+  // Preserve selection across re-populates (e.g. re-opening the tab)
+  if (prevValue && events.some(e => e.name === prevValue)) sel.value = prevValue;
+}
+
+function onResultsHistorySelect(eventName) {
+  if (!eventName) {
+    // Back to Live — show whatever's currently on the live scorecard, if anything
+    const players = getPlayers();
+    if (players.length) {
+      calculateResults();
+    } else {
+      document.getElementById('results-content').innerHTML = `<div class="empty-state"><p>Complete the scorecard first.</p></div>`;
+    }
+    return;
+  }
+  viewSavedEventResults(eventName);
+}
+
+// Renders a previously-saved event through the same renderResults() display
+// used for live results — read-only, sourced entirely from season_data.
+// Mirrors the historical-mode logic in generateResultsPage().
+function viewSavedEventResults(eventName) {
+  const season = document.getElementById('series-season')?.value || '2026';
+  const data = getSeriesData();
+  const sd = data.seasons?.[season];
+  if (!sd) return;
+  const evt = sd.events.find(e => e.name === eventName);
+  if (!evt) return;
+
+  const quotaResults = Object.entries(sd.playerHistory || {})
+    .map(([name, ph]) => {
+      const evtRecord = (ph.events || []).find(e => e.eventName === eventName);
+      if (!evtRecord) return null;
+      return {
+        name, hcp: evtRecord.hcp, tee: evtRecord.tee,
+        quota: evtRecord.quota, total: evtRecord.actual,
+        diff: evtRecord.quota !== null ? Math.round((evtRecord.actual - evtRecord.quota) * 100) / 100 : null,
+        noHcp: evtRecord.noHcp || false
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      if (a.diff === null && b.diff === null) return 0;
+      if (a.diff === null) return 1;
+      if (b.diff === null) return -1;
+      return b.diff - a.diff;
+    });
+
+  const skinWinners = evt.skins || [];
+  const skinCounts = {};
+  skinWinners.forEach(s => { skinCounts[s.winner] = (skinCounts[s.winner] || 0) + 1; });
+  const ctpData = evt.ctp || {};
+
+  renderResults(quotaResults, skinWinners, skinCounts, ctpData, {
+    scores: evt.scores || {},
+    eventName: evt.name,
+    eventDate: evt.date,
+    readOnly: true
+  });
 }
 
 function exportCSV() {
@@ -5981,6 +6074,7 @@ function showTab(id) {
   if (id === "series")   loadSeriesStandings();
   if (id === "profiles") renderProfilesList();
   if (id === "groups")   grpOnTabOpen();
+  if (id === "results")  populateResultsHistorySelect();
   if (id === "ctp") {
     const eventName = document.getElementById('event-name').value.trim();
     if (eventName) setTimeout(() => fetchCTPFromJotform(), 300);
@@ -7289,8 +7383,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-17b';
-const GS_VERSION = 'v8.17 · 2026-06-17b';
+document.getElementById('build-date').textContent = '2026-06-17c';
+const GS_VERSION = 'v8.17 · 2026-06-17c';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
