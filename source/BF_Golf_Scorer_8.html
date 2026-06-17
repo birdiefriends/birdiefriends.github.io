@@ -5493,7 +5493,14 @@ function saveEventToSeries() {
     const winners = holePts.filter(x => x.pts === maxPts);
     if (winners.length === 1) evtSkins.push({ hole: h + 1, winner: winners[0].name, pts: maxPts });
   }
-  season_data.events.push({ name: eventName, date: eventDate, season, scores: evtScores, ctp: evtCtp, skins: evtSkins });
+  // Attach the groupings archive pointer if one was published for this event —
+  // see grpPublish() Final-publish branch, which writes this map. Eliminates the
+  // recurring manual results.html patch (Series#3, Series#4 both needed it).
+  const archMap = JSON.parse(localStorage.getItem('bf_groupings_archive') || '{}');
+  const groupingsFile = archMap[eventName];
+  const newEventRecord = { name: eventName, date: eventDate, season, scores: evtScores, ctp: evtCtp, skins: evtSkins };
+  if (groupingsFile) newEventRecord.groupingsFile = groupingsFile;
+  season_data.events.push(newEventRecord);
   season_data.events.sort((a, b) => a.date.localeCompare(b.date));
 
   // Save each player's result
@@ -6979,6 +6986,14 @@ async function grpPublish() {
         const archiveNote = (status === 'Final' && visibility !== 'hidden')
           ? ` &nbsp;·&nbsp; <a href="https://birdiefriends.com/${archiveFile}" target="_blank" style="color:#4a6fbd;font-weight:600">📋 Archive saved</a>`
           : '';
+        // Persist the archive pointer keyed by event name — saveEventToSeries() reads this
+        // map and attaches groupingsFile to the event record automatically, post-round.
+        // Permanent fix for the recurring groupings-link gap (was manual every event: #3, #4).
+        if (status === 'Final' && visibility !== 'hidden') {
+          const archMap = JSON.parse(localStorage.getItem('bf_groupings_archive') || '{}');
+          archMap[eventName] = archiveFile;
+          localStorage.setItem('bf_groupings_archive', JSON.stringify(archMap));
+        }
         grpShowPublishStatus('success', `&#x2713; groupings.html published (${status})${visLabel} &mdash; <a href="https://birdiefriends.com/groupings.html" target="_blank" style="color:#085041;font-weight:600">birdiefriends.com/groupings.html</a>${archiveNote}`);
       }
     } else {
@@ -7244,8 +7259,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-14b';
-const GS_VERSION = 'v8.17 · 2026-06-14b';
+document.getElementById('build-date').textContent = '2026-06-17a';
+const GS_VERSION = 'v8.17 · 2026-06-17a';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
