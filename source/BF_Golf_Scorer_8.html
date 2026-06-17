@@ -2956,7 +2956,7 @@ async function publishToNetlify() {
         showActionStatus(`🔍 <strong>Preview saved locally!</strong>
           &nbsp;<a href="/preview/results.html" target="_blank" style="color:#085041;font-weight:700">Results</a>
           &nbsp;·&nbsp;<a href="/preview/standings.html" target="_blank" style="color:#085041;font-weight:700">Standings</a>
-          &nbsp;·&nbsp;<a href="/preview/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Game</a>
+          &nbsp;·&nbsp;<a href="/preview/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Series</a>
           &nbsp;<span style="color:#6b7280;font-size:0.78rem">— Not published to birdiefriends.com</span>`, 'ok');
         btn.textContent = '🔍 Preview saved';
         btn.style.background = '#b45309';
@@ -3237,7 +3237,7 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData)
   <a id="groupings-nav-link" href="/groupings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">&#x26F3; Groupings</a>
   <a href="/standings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">🏆 Standings</a>
   <a href="/results.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">📋 Results</a>
-  <a href="/mygame.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">⛳ My Game</a>
+  <a href="/mygame.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">⛳ My Series</a>
 </div>
 
 <div class="tabs">
@@ -4279,14 +4279,14 @@ async function publishAllPages() {
         &nbsp;Files written to <code style="background:#d1fae5;padding:1px 5px;border-radius:4px">preview/</code> folder.
         &nbsp;<a href="/preview/results.html"   target="_blank" style="color:#085041;font-weight:700">Results</a>
         &nbsp;·&nbsp;<a href="/preview/standings.html" target="_blank" style="color:#085041;font-weight:700">Standings</a>
-        &nbsp;·&nbsp;<a href="/preview/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Game</a>
+        &nbsp;·&nbsp;<a href="/preview/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Series</a>
         &nbsp;<span style="color:#6b7280;font-size:0.78rem">— Not published to birdiefriends.com</span>`);
     } else {
       const base = result.url.replace(/\/$/, '');
       pubStatus('success', `✅ <strong>All pages published!</strong> &nbsp;
         <a href="${base}/results.html"   target="_blank" style="color:#085041;font-weight:700">Results</a> &nbsp;·&nbsp;
         <a href="${base}/standings.html" target="_blank" style="color:#085041;font-weight:700">Standings</a> &nbsp;·&nbsp;
-        <a href="${base}/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Game</a>`);
+        <a href="${base}/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Series</a>`);
     }
   } else {
     pubStatus('error', `❌ Publish failed: ${result.error}`);
@@ -4616,7 +4616,7 @@ function generateMyGamePage(season, sd) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Game — BirdieFriends ${season}</title>
+<title>My Series — BirdieFriends ${season}</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -4697,7 +4697,7 @@ select:focus{outline:none;border-color:var(--green)}
 <body>
 <header>
   <div class="header-title">
-    <h1>⛳ My Game</h1>
+    <h1>⛳ My Series</h1>
     <p>BirdieFriends ${season} Championship Series</p>
   </div>
 
@@ -4707,7 +4707,7 @@ select:focus{outline:none;border-color:var(--green)}
   <a id="groupings-nav-link" href="/groupings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">&#x26F3; Groupings</a>
   <a href="/standings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">🏆 Standings</a>
   <a href="/results.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">📋 Results</a>
-  <a href="/mygame.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">⛳ My Game</a>
+  <a href="/mygame.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">⛳ My Series</a>
 </div>
 <div class="container">
   <div class="picker-card">
@@ -5321,7 +5321,7 @@ function generateSeriesPage(season, sd) {
   <a id="groupings-nav-link" href="/groupings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">&#x26F3; Groupings</a>
   <a href="/standings.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#fff;background:#085041;border:1.5px solid #085041">🏆 Standings</a>
   <a href="/results.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">📋 Results</a>
-  <a href="/mygame.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">⛳ My Game</a>
+  <a href="/mygame.html" style="padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;text-decoration:none;color:#085041;background:#fff;border:1.5px solid #d0e5dc">⛳ My Series</a>
 </div>
 
 <div class="tabs">
@@ -7396,7 +7396,7 @@ header{background:#085041;color:#fff;padding:16px 20px 12px;text-align:center}
   <a href="groupings.html" class="active">Groupings</a>
   <a href="results.html">Results</a>
   <a href="standings.html">Standings</a>
-  <a href="mygame.html">My Game</a>
+  <a href="mygame.html">My Series</a>
 </nav>
 <script>
 if (new URLSearchParams(location.search).get('embed') === '1') {
@@ -7458,7 +7458,7 @@ header{background:#085041;color:#fff;padding:16px 20px 12px;text-align:center}
   <a href="groupings.html" class="active">Groupings</a>
   <a href="results.html">Results</a>
   <a href="standings.html">Standings</a>
-  <a href="mygame.html">My Game</a>
+  <a href="mygame.html">My Series</a>
 </nav>
 <div class="holding">
   <div class="holding-icon">⛳</div>
@@ -7518,8 +7518,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-17d';
-const GS_VERSION = 'v8.17 · 2026-06-17d';
+document.getElementById('build-date').textContent = '2026-06-17e';
+const GS_VERSION = 'v8.17 · 2026-06-17e';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
