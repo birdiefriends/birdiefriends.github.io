@@ -2279,8 +2279,38 @@ function exportCSV() {
   a.click();
 }
 
+// ── Detect an unsaved scored round before destructive reset ──
+// Returns true only if: an event is loaded, it has actual entered scores,
+// AND it does not yet exist in season_data.events (i.e. Save to Series was never run).
+function hasUnsavedScoredRound() {
+  const eventName = document.getElementById('event-name')?.value.trim();
+  if (!eventName) return false;
+  const season = document.getElementById('series-season')?.value || '2026';
+  const data = getSeriesData();
+  const sd = data.seasons?.[season];
+  const alreadySaved = sd && sd.events && sd.events.some(e => e.name === eventName);
+  if (alreadySaved) return false;
+  const scores = getScores();
+  const players = getPlayers();
+  return players.some(p => {
+    const holeScores = scores[p.name] || [];
+    const total = holeScores.reduce((s, v) => s + (Number(v) || 0), 0);
+    return total > 0;
+  });
+}
+
 function resetAll() {
-  if (!confirm("Start a new event? This will clear all current scores and roster.")) return;
+  if (hasUnsavedScoredRound()) {
+    const eventName = document.getElementById('event-name').value.trim();
+    alert(`⚠ "${eventName}" has scores entered but hasn't been Saved to Series yet.\n\nStarting a new event now will permanently lose this round's results — no archive, no recovery.\n\nGo to the Results tab and click "📊 Save to Series" first.`);
+    const override = prompt(`To discard "${eventName}" anyway and start a new event, type DISCARD below:`);
+    if (override !== 'DISCARD') {
+      alert('New Event cancelled — nothing was cleared.');
+      return;
+    }
+  } else {
+    if (!confirm("Start a new event? This will clear all current scores and roster.")) return;
+  }
 
   // Clear event name and date
   document.getElementById("event-name").value = "";
@@ -7259,8 +7289,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-17a';
-const GS_VERSION = 'v8.17 · 2026-06-17a';
+document.getElementById('build-date').textContent = '2026-06-17b';
+const GS_VERSION = 'v8.17 · 2026-06-17b';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
