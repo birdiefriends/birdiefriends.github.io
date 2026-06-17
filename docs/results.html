@@ -806,6 +806,22 @@ function updateGroupingsLink(eventName) {
 
 let _currentEventName = ALL_SERIES_DATA?.events?.slice(-1)[0]?.name || '';
 
+// Sync the Groups tab + groupings link to the actual current data on first load.
+// loadEvent() below only ever ran on a pill click, so a freshly-loaded page kept
+// whatever disabled/enabled state was baked in at generation time -- even after
+// an archive existed for this event. Runs once, immediately, same logic as a click.
+(function syncGroupsOnLoad() {
+  updateGroupingsLink(_currentEventName);
+  loadGroupsTab(_currentEventName);
+  const grpTab = document.getElementById("groups-tab");
+  if (grpTab) {
+    const hasArchive = !!GROUPINGS_ARCHIVE[_currentEventName];
+    grpTab.style.opacity = hasArchive ? "1" : "0.45";
+    grpTab.title = hasArchive ? "View groupings for " + _currentEventName : "No groupings archive for this event";
+    grpTab.style.cursor = hasArchive ? "pointer" : "default";
+  }
+})();
+
 function loadEvent(selectedName) {
   if (!ALL_SERIES_DATA) return;
   const evt = ALL_SERIES_DATA.events.find(e => e.name === selectedName);
