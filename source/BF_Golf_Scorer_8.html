@@ -3248,7 +3248,7 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData)
   <div class="tab" onclick="switchTab('skins',this)">Skins</div>
   <div class="tab" onclick="switchTab('ctp',this)">CTP</div>
   <div class="tab" onclick="switchTab('money',this)">💰 Money</div>
-  <div class="tab" id="groups-tab" onclick="openGroupingsForEvent()" style="opacity:0.45" title="No groupings archive for this event">⛳ Groups</div>
+  <div class="tab" id="groups-tab" onclick="switchTab('groups',this)" style="opacity:0.45" title="No groupings archive for this event">⛳ Groups</div>
 </div>
 
 <!-- ── PODIUM TAB ── -->
@@ -7534,8 +7534,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-17f';
-const GS_VERSION = 'v8.17 · 2026-06-17f';
+document.getElementById('build-date').textContent = '2026-06-17g';
+const GS_VERSION = 'v8.17 · 2026-06-17g';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
