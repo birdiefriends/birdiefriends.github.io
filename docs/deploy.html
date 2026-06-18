@@ -521,8 +521,7 @@
     <div class="tab" onclick="showTab('snapshots')">Log</div>
   </div>
 
-  <!-- ── CLAUDE TAB ─────────────────────────────────────────────── -->\n  <div class="panel" id="panel-claude">\n    <div class="section-header">Start a Claude session</div>\n\n    <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Tap the button to copy the session start command, then paste it into Claude.</p>\n\n    <div class="info-chip" style="margin-bottom:20px;font-family:var(--mono);font-size:12px;line-height:1.6;word-break:break-all;">\n      Use bash_tool with curl to fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md, display its contents, then follow all instructions in it exactly using bash_tool curl for all subsequent fetches.\n    </div>\n\n    <button class="btn btn-primary" style="width:100%;margin-bottom:24px;" onclick="copySessionCommand()">\n      📋 Copy Session Start Command\n    </button>\n\n    <div class="section-header" style="margin-top:8px;">Useful links</div>\n    <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">\n      <a href="https://claude.ai" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">Open Claude ↗</a>\n      <a href="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">View Bootstrap in Library ↗</a>\n      <a href="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Golf_Scorer_Session_Starter_current.md" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">View Session Starter ↗</a>
-      <a href="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/bf_architecture.html" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">🏗 System Architecture ↗</a>\n    </div>\n\n    <div id="copy-confirm" style="display:none;margin-top:16px;text-align:center;color:var(--gold);font-size:13px;">✅ Copied — paste into Claude</div>\n  </div>\n\n  <!-- ── DEPLOY TAB ─────────────────────────────────────────────── -->
+  <!-- ── CLAUDE TAB ─────────────────────────────────────────────── -->\n  <div class="panel" id="panel-claude">\n    <div class="section-header">Start a Claude session</div>\n\n    <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Tap the button to copy the session start command, then paste it into Claude.</p>\n\n    <div class="info-chip" style="margin-bottom:20px;font-family:var(--mono);font-size:12px;line-height:1.6;word-break:break-all;">\n      Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md and follow all instructions in it exactly.\n    </div>\n\n    <button class="btn btn-primary" style="width:100%;margin-bottom:24px;" onclick="copySessionCommand()">\n      📋 Copy Session Start Command\n    </button>\n\n    <div class="section-header" style="margin-top:8px;">Useful links</div>\n    <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">\n      <a href="https://claude.ai" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">Open Claude ↗</a>\n      <a href="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">View Bootstrap in Library ↗</a>\n      <a href="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Golf_Scorer_Session_Starter_current.md" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">View Session Starter ↗</a>\n    </div>\n\n    <div id="copy-confirm" style="display:none;margin-top:16px;text-align:center;color:var(--gold);font-size:13px;">✅ Copied — paste into Claude</div>\n  </div>\n\n  <!-- ── DEPLOY TAB ─────────────────────────────────────────────── -->
   <div class="panel active" id="panel-deploy">
     <div class="section-header">Push a file to GitHub</div>
 
@@ -619,6 +618,16 @@
       <a href="https://github.com/birdiefriends/birdiefriends.github.io/tree/main/source"
          target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none;">↗ GitHub</a>
     </div>
+
+    <div class="section-header" style="margin-top:24px;">Business plan — source/bizplan/</div>
+    <div id="bizplan-list">
+      <div class="empty-state"><span class="spinner"></span> Loading…</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost btn-sm" onclick="bizplanLoaded=false;loadLibrary()">↻ Refresh</button>
+      <a href="https://github.com/birdiefriends/birdiefriends.github.io/tree/main/source/bizplan"
+         target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none;">↗ GitHub</a>
+    </div>
   </div>
 
   <!-- ── SNAPSHOTS / LOG TAB ────────────────────────────────────── -->
@@ -642,7 +651,7 @@ const WORKER_URL = 'https://birdiefriends-push.bgolfer4.workers.dev';
 const PIN_CORRECT = '7797';
 
 function copySessionCommand() {
-  const cmd = 'Use bash_tool with curl to fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md, display its contents, then follow all instructions in it exactly using bash_tool curl for all subsequent fetches.';
+  const cmd = 'Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md and follow all instructions in it exactly.';
   navigator.clipboard.writeText(cmd).then(() => {
     showCopyConfirm();
   }).catch(() => {
@@ -975,25 +984,49 @@ const FILE_ICONS = {
   'BF_Golf_Scorer_8.html': '⛳',
   'BF_Operations_Guide.md': '📋',
   'BF_Golf_Scorer_Session_Starter_current.md': '📝',
+  'BF_BizPlan_Vision.md': '🧭',
+  'BF_BizPlan_GateLog.md': '🚦',
+  'BF_BizPlan_Session_Log.md': '🗒️',
+  'BF_Capability_Inventory.md': '📊',
+  'BF_BizPlan_Bootstrap.md': '📝',
 };
 
+const LIBRARY_ORDER = ['portal.html','guide.html','deploy.html','worker.js','BF_Golf_Scorer_8.html','BF_Operations_Guide.md','BF_Golf_Scorer_Session_Starter_current.md'];
+
 let libraryLoaded = false;
+let bizplanLoaded = false;
 
 async function loadLibrary() {
-  if (libraryLoaded) return; // cache for session — use refresh button to force reload
-  const el = document.getElementById('library-list');
+  if (!libraryLoaded) {
+    await renderDirList('source', 'library-list', LIBRARY_ORDER);
+    libraryLoaded = true;
+  }
+  if (!bizplanLoaded) {
+    await renderDirList('source/bizplan', 'bizplan-list', null);
+    bizplanLoaded = true;
+  }
+}
+
+async function renderDirList(path, elId, order) {
+  const el = document.getElementById(elId);
   el.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading…</div>';
 
   try {
-    // Fetch directory listing for source/
-    const resp = await fetch(`${GITHUB_API}/contents/source?ref=main`, { headers: GH_HEADERS });
+    // Fetch directory listing
+    const resp = await fetch(`${GITHUB_API}/contents/${path}?ref=main`, { headers: GH_HEADERS });
     if (!resp.ok) throw new Error(`GitHub ${resp.status}`);
-    const files = await resp.json();
+    const entries = await resp.json();
+    const files = Array.isArray(entries) ? entries.filter(f => f.type === 'file') : [];
+
+    if (files.length === 0) {
+      el.innerHTML = '<div class="empty-state">No files found</div>';
+      return;
+    }
 
     // Fetch last commit for each file in parallel
     const withCommits = await Promise.all(files.map(async f => {
       try {
-        const cr = await fetch(`${GITHUB_API}/commits?path=source/${f.name}&per_page=1&sha=main`, { headers: GH_HEADERS });
+        const cr = await fetch(`${GITHUB_API}/commits?path=${path}/${f.name}&per_page=1&sha=main`, { headers: GH_HEADERS });
         const commits = cr.ok ? await cr.json() : [];
         const last = commits[0];
         return {
@@ -1010,13 +1043,14 @@ async function loadLibrary() {
       }
     }));
 
-    // Sort: known files first in registry order, then alphabetical
-    const ORDER = ['portal.html','guide.html','deploy.html','worker.js','BF_Golf_Scorer_8.html','BF_Operations_Guide.md','BF_Golf_Scorer_Session_Starter_current.md'];
+    // Sort: known files first in registry order (if provided), then alphabetical
     withCommits.sort((a, b) => {
-      const ai = ORDER.indexOf(a.name), bi = ORDER.indexOf(b.name);
-      if (ai >= 0 && bi >= 0) return ai - bi;
-      if (ai >= 0) return -1;
-      if (bi >= 0) return 1;
+      if (order) {
+        const ai = order.indexOf(a.name), bi = order.indexOf(b.name);
+        if (ai >= 0 && bi >= 0) return ai - bi;
+        if (ai >= 0) return -1;
+        if (bi >= 0) return 1;
+      }
       return a.name.localeCompare(b.name);
     });
 
@@ -1040,9 +1074,8 @@ async function loadLibrary() {
         </div>
       `).join('') +
     '</div>';
-    libraryLoaded = true;
   } catch(e) {
-    el.innerHTML = `<div class="empty-state">Error loading library: ${escHtml(e.message)}</div>`;
+    el.innerHTML = `<div class="empty-state">Error loading: ${escHtml(e.message)}</div>`;
   }
 }
 
