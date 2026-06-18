@@ -521,7 +521,31 @@
     <div class="tab" onclick="showTab('snapshots')">Log</div>
   </div>
 
-  <!-- ── CLAUDE TAB ─────────────────────────────────────────────── -->\n  <div class="panel" id="panel-claude">\n    <div class="section-header">Start a Claude session</div>\n\n    <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Tap the button to copy the session start command, then paste it into Claude.</p>\n\n    <div class="info-chip" style="margin-bottom:20px;font-family:var(--mono);font-size:12px;line-height:1.6;word-break:break-all;">\n      Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md and follow all instructions in it exactly.\n    </div>\n\n    <button class="btn btn-primary" style="width:100%;margin-bottom:24px;" onclick="copySessionCommand()">\n      📋 Copy Session Start Command\n    </button>\n\n    <div class="section-header" style="margin-top:8px;">Useful links</div>\n    <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">\n      <a href="https://claude.ai" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">Open Claude ↗</a>\n      <a href="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">View Bootstrap in Library ↗</a>\n      <a href="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Golf_Scorer_Session_Starter_current.md" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">View Session Starter ↗</a>\n    </div>\n\n    <div id="copy-confirm" style="display:none;margin-top:16px;text-align:center;color:var(--gold);font-size:13px;">✅ Copied — paste into Claude</div>\n  </div>\n\n  <!-- ── DEPLOY TAB ─────────────────────────────────────────────── -->
+  <!-- ── CLAUDE TAB ─────────────────────────────────────────────── -->
+  <div class="panel" id="panel-claude">
+    <div class="section-header">Start a Claude session</div>
+
+    <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Tap the button to copy the session start command, then paste it into Claude.</p>
+
+    <div class="info-chip" style="margin-bottom:20px;font-family:var(--mono);font-size:12px;line-height:1.6;word-break:break-all;">
+      Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md and follow all instructions in it exactly.
+    </div>
+
+    <button class="btn btn-primary" style="width:100%;margin-bottom:24px;" onclick="copySessionCommand()">
+      📋 Copy Session Start Command
+    </button>
+
+    <div class="section-header" style="margin-top:8px;">Useful links</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+      <a href="https://claude.ai" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">Open Claude ↗</a>
+      <a href="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">View Bootstrap in Library ↗</a>
+      <a href="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Golf_Scorer_Session_Starter_current.md" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">View Session Starter ↗</a>
+    </div>
+
+    <div id="copy-confirm" style="display:none;margin-top:16px;text-align:center;color:var(--gold);font-size:13px;">✅ Copied — paste into Claude</div>
+  </div>
+
+  <!-- ── DEPLOY TAB ─────────────────────────────────────────────── -->
   <div class="panel active" id="panel-deploy">
     <div class="section-header">Push a file to GitHub</div>
 
@@ -647,7 +671,7 @@
 
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────
-const WORKER_URL = 'https://birdiefriends-push.bgolfer4.workers.dev';
+const WORKER_URL = 'https://birdiefriends-push.birdiefriends01.workers.dev';
 const PIN_CORRECT = '7797';
 
 function copySessionCommand() {
