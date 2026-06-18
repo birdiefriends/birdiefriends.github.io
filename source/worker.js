@@ -200,6 +200,102 @@ export default {
       });
     }
 
+    // Shared path map used by /history and /rollback
+    const FILE_PATHS = {
+      portal:    'source/portal.html',
+      guide:     'source/guide.html',
+      worker:    'source/worker.js',
+      golfscore: 'source/BF_Golf_Scorer_8.html',
+      ops_guide: 'source/BF_Operations_Guide.md',
+    };
+    const GH_REPO    = 'birdiefriends/birdiefriends.github.io';
+    const GH_BRANCH  = 'main';
+    const ghHeaders  = {
+      'Authorization': 'token ' + env.GH_TOKEN,
+      'Accept':        'application/vnd.github.v3+json',
+      'User-Agent':    'birdiefriends-worker',
+    };
+
+    // GET /history?file=<key>&n=<count> — commit history for a source file (no auth)
+    if (request.method === 'GET' && url.pathname === '/history') {
+      const fileKey = url.searchParams.get('file');
+      const n       = Math.min(parseInt(url.searchParams.get('n') || '20', 10), 50);
+      const ghPath  = FILE_PATHS[fileKey];
+      if (!ghPath) {
+        return new Response(JSON.stringify({ error: 'Unknown file key' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const commitsUrl = `https://api.github.com/repos/${GH_REPO}/commits?path=${ghPath}&per_page=${n}&sha=${GH_BRANCH}`;
+      const resp = await fetch(commitsUrl, { headers: ghHeaders });
+      if (!resp.ok) {
+        const errText = await resp.text();
+        return new Response(JSON.stringify({ error: 'GitHub error', status: resp.status, detail: errText }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const commits = await resp.json();
+      return new Response(JSON.stringify({
+        commits: commits.map(c => ({
+          sha:     c.sha,
+          short:   c.sha.slice(0, 7),
+          message: c.commit.message,
+          date:    c.commit.committer.date,
+        }))
+      }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+    }
+
+    // POST /rollback — restore a source file to a prior commit SHA (PIN required)
+    // Body: { pin, file: <key>, sha: <full commit SHA to restore> }
+    // Response: { ok, newCommitSha } — creates a new forward commit with the old content
+    if (request.method === 'POST' && url.pathname === '/rollback') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { pin, file: fileKey, sha } = body;
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const ghPath = FILE_PATHS[fileKey];
+      if (!ghPath || !sha) {
+        return new Response(JSON.stringify({ error: 'Missing file or sha' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const contentsUrl = `https://api.github.com/repos/${GH_REPO}/contents/${ghPath}`;
+
+      // 1. Fetch file content at the target SHA
+      const atShaResp = await fetch(`${contentsUrl}?ref=${sha}`, { headers: ghHeaders });
+      if (!atShaResp.ok) {
+        return new Response(JSON.stringify({ error: 'Could not fetch file at target SHA', status: atShaResp.status }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const atShaData = await atShaResp.json();
+      // GitHub returns base64 with embedded newlines — strip them before re-PUT
+      const restoredContent = (atShaData.content || '').replace(/\n/g, '');
+
+      // 2. Get current SHA on main (required for the PUT)
+      const currentResp = await fetch(`${contentsUrl}?ref=${GH_BRANCH}`, { headers: ghHeaders });
+      if (!currentResp.ok) {
+        return new Response(JSON.stringify({ error: 'Could not fetch current file SHA' }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const currentData  = await currentResp.json();
+      const currentSha   = currentData.sha;
+
+      // 3. Push old content as a new forward commit
+      const putResp = await fetch(contentsUrl, {
+        method: 'PUT',
+        headers: { ...ghHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `Rollback ${ghPath} to ${sha.slice(0, 7)}`,
+          content: restoredContent,
+          sha:     currentSha,
+          branch:  GH_BRANCH,
+        }),
+      });
+      const putData = await putResp.json();
+      if (putResp.status !== 200 && putResp.status !== 201) {
+        return new Response(JSON.stringify({ error: 'GitHub commit failed', status: putResp.status, detail: putData }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      return new Response(JSON.stringify({ ok: true, newCommitSha: putData.commit.sha }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
     // GET /subscriptions — fetch all push subscribers
     if (request.method === 'GET' && url.pathname === '/subscriptions') {
       const appId = url.searchParams.get('app_id');
