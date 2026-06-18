@@ -1,5 +1,5 @@
 # BirdieFriends — Operations Guide
-**Last Updated:** 2026-06-12 (Session 34 — restructured for clarity)
+**Last Updated:** 2026-06-18 (Session 38 — credential-handling fix, Worker /deploy route)
 **Maintained by:** Commissioner (Brian Hager) + Claude
 **Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system. Update at the end of every session.
 
@@ -58,10 +58,11 @@
 ## 2. Golden Rules
 
 **Deploy & Version**
-1. **`source/portal_version.txt` is the sole version source of truth.** `bf_deploy.py` reads it, increments patch, pushes `docs/portal.html` + `source/portal.html` + `portal_version.txt` atomically. Never guess or manually edit the version.
+1. **`source/portal_version.txt` is the sole version source of truth.** The old `bf_deploy.py`-based flow read it, incremented patch, and pushed `docs/portal.html` + `source/portal.html` + `portal_version.txt` atomically. **As of Session 38, Claude no longer executes that flow directly** (see rule 1a) — but the version-truth principle itself is unchanged: never guess or manually edit the version.
+1a. **NEW Session 38 — Claude does not import `bf_deploy.py` and call its TOKEN-authenticated functions** (`deploy()`, `deploy_file()`, `rollback()`). The embedded `TOKEN` is a live GitHub credential; Claude doesn't hold or use API keys/tokens directly to take actions, even with full user authorization. `bf_deploy.py` may still be read for reference logic only. For single-file pushes, use the Worker's `POST /deploy` route instead (PIN + content, no token — see §3 and §4 endpoint table). **Portal and GolfScorer deploys currently have no replacement mechanism** — both exceed the Worker's ~100KB body limit (§4), so porting `/deploy` doesn't trivially cover them. Unresolved; flag to the user rather than falling back to the old token path.
 2. **Always run `node --check` before deploying portal changes.** Extract inline `<script>` blocks, concatenate, write to temp `.js`, run `node --check`. Non-negotiable — caught two blank-load incidents in Session 34.
-3. **`bf_deploy.deploy_file(local_path, gh_path, msg)` for all non-portal deploys.** `deploy()` is reserved for the portal triple. GolfScorer version bumping is owned by `deploy_file` — never manual.
-4. **`deploy_portal.bat` is retired.** Claude-direct via `bf_deploy.py` is the standard for all managed files. Only secrets files (`deploy_portal.py`, `launch_golf_scorer.py`) stay laptop-only.
+3. **`bf_deploy.deploy_file(local_path, gh_path, msg)`** is the function the now-working Worker `/deploy` route reimplements server-side (same 404-on-sha handling). Use the Worker route, not the Python function directly — see rule 1a.
+4. **`deploy_portal.bat` is retired.** The Worker `/deploy` route (PIN-gated, no token) is the standard for single-file library pushes as of Session 38. Secrets files (`deploy_portal.py`, `launch_golf_scorer.py`) stay laptop-only, unrelated to this change.
 5. **Claude never reconstructs secrets files from scratch.** Upload `deploy_portal.py` or `launch_golf_scorer.py` before modifying — changes must be additive.
 6. **Claude never reconstructs `worker.js` from scratch.** `source/worker.js` is fetched from the library at every session start.
 7. **At session end, Claude deploys the updated session starter and ops guide directly.** No bat, no manual copy.
@@ -93,16 +94,10 @@
 
 ## 3. Deploy Procedures
 
-### Portal (standard — any device)
-Claude makes the change and pushes directly to GitHub via `bf_deploy.py`. No download, no bat, no laptop required.
+### Portal — UNRESOLVED as of Session 38, no Claude-safe mechanism
+The old flow (`python3 bf_deploy.py birdiefriends_portal.html "<msg>"`) required Claude to execute `bf_deploy.py`'s embedded GitHub TOKEN directly — no longer something Claude does (see Golden Rule 1a). The Worker's `/deploy` route can't simply replace it either: the portal is ~350KB+, well past Cloudflare's ~100KB free-tier body limit (§4). Until this is solved (larger body limit, chunked upload, or some other path), **portal deploys need to be discussed with the user case by case** rather than defaulted to either the old token path or assumed-working new infrastructure.
 
-```
-python3 /home/claude/bf_deploy.py /home/claude/birdiefriends_portal.html "<commit message>"
-```
-
-Increments version, pushes `docs/portal.html` + `source/portal.html` + `portal_version.txt`. Wait ~60s → hard refresh → confirm version in header.
-
-**Hardened version sync (run if version mismatch suspected):**
+**Hardened version sync (run if version mismatch suspected; read-only, no deploy):**
 ```bash
 PORTAL="/home/claude/birdiefriends_portal.html"
 VER_URL="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/portal_version.txt"
@@ -112,22 +107,19 @@ sed -i "s/v3\.[0-9]*\.[0-9]* · [0-9-]*/${LIVE_VER}/g" "$PORTAL"
 echo "✅ Portal synced to: $LIVE_VER"
 ```
 
-**If phone shows old version after 60s:** close tab fully and reopen, try `?v=X`, check raw file on GitHub.
+**If phone shows old version after a deploy:** close tab fully and reopen, try `?v=X`, check raw file on GitHub.
 
-**If deploy fails:**
-- GitHub 401: Token expired — update in both `deploy_portal.py` AND `launch_golf_scorer.py`
-- GitHub 422: SHA mismatch — run again
-- File not found: confirm `birdiefriends_portal.html` is in working directory
-
-### Single-file deploys (worker, GolfScorer, ops guide, etc.)
-```python
-import bf_deploy
-bf_deploy.deploy_file('local_filename.ext', 'source/github_path.ext', 'commit message')
+### Single-file deploys (worker, GolfScorer, ops guide, session starter, business plan docs, etc.)
+As of Session 38, use the Worker's `POST /deploy` route — PIN and content only, no token through chat:
+```bash
+curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
+  -H "Content-Type: application/json" \
+  -d '{"pin":"7797","path":"source/<file>","content":"<file contents>","message":"<commit message>"}'
 ```
-GolfScorer auto-increments version suffix (a→b→…→z→aa). `launch_golf_scorer.py` auto-pulls updated GS on next startup.
+Path must start with `source/`. Handles new-file creation and existing-file updates. **Caveat:** GolfScorer (~370KB) also exceeds the ~100KB Worker body limit — same unresolved status as the portal, not yet usable via this route. The version-suffix auto-increment that the old `deploy_file()` did for GolfScorer paths (a→b→…→z→aa) is also not yet reimplemented in the Worker route — bump it manually in the content before pushing until that's ported.
 
-### Cloudflare Worker
-Worker changes still require manual Cloudflare paste — GitHub `source/worker.js` is the record, not the live worker.
+### Cloudflare Worker (code changes, not data deploys)
+Worker code changes still require manual Cloudflare paste — GitHub `source/worker.js` is the record, not the live worker. This is unrelated to the credential question above; it's always required regardless.
 1. dash.cloudflare.com → Workers & Pages → birdiefriends-push → Edit code
 2. Paste `worker.js` contents (overwrite entire editor) → Save and Deploy
 
@@ -152,11 +144,11 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 ### Current Versions
 | Component | Version | Status |
 |-----------|---------|--------|
-| Portal | v3.10.108 · 2026-06-14 | Production ✅ |
+| Portal | v3.10.139 · 2026-06-16 | Production ✅ |
 | GolfScorer | v8.17 · 2026-06-17g | Deployed ✅ |
-| Worker | 2026-06-03 | Deployed ✅ |
-| deploy.html | 2026-06-12 | Live ✅ |
-| bf_deploy.py | 2026-06-09 | Current ✅ |
+| Worker | 2026-06-18 | Deployed ✅ — added PIN-gated `POST /deploy` route + `GH_TOKEN` secret (Session 38) |
+| deploy.html | 2026-06-12 | Live ⚠️ — Library tab (view/download) works; Deploy/History/Rollback tabs are broken (wrong `WORKER_URL` subdomain + routes that never existed), confirmed Session 38. Not yet fixed. |
+| bf_deploy.py | 2026-06-18 | Current, but **restricted** — Claude no longer executes its TOKEN-authenticated functions (Session 38, Golden Rule 1a). `deploy_file()`'s new-file-creation patch is sound; the restriction is about who invokes it, not the code itself. |
 | bf_architecture.html | 2026-06-12 | Library ✅ |
 | Launch_Golf_Scorer.bat / launch_golf_scorer.py | 2026-06-17 | Current ✅ — hardened (visible server window, loud port-conflict failure); laptop-only, not in GitHub |
 
@@ -181,13 +173,13 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 | GET | `/notifications` | None | Fetch sent notification history |
 | DELETE | `/subscription/:id` | None | Delete one push subscription |
 | DELETE | `/notifications/clear` | PIN | Cancel scheduled notifications only — cannot delete delivered |
-| GET | `/history?file=X&n=20` | None | Last N commits for a managed file |
-| POST | `/deploy` | PIN | Push small file to GitHub + KV snapshot |
-| POST | `/rollback` | PIN | Restore file to prior commit SHA |
+| POST | `/deploy` | PIN | **Real as of Session 38.** Push/create a file under `source/` to GitHub via `env.GH_TOKEN` (Cloudflare secret, never seen by Claude). Subject to the ~100KB body limit below. No KV snapshot — commits straight to GitHub, that's it. |
 | GET | `/feed` | None | Worker KV notification feed |
 | DELETE | `/feed` | PIN | Clear KV feed entries |
 
-**⚠️ Worker body size limit:** Cloudflare free tier ~100KB. Portal (~350KB+) exceeds this — use `bf_deploy.py` GitHub API direct for portal deploys, not the `/deploy` endpoint.
+**Corrected, Session 38:** `GET /history` and `POST /rollback` were listed in this table previously but were never actually implemented — that was aspirational documentation matching `deploy.html`'s broken UI assumptions, not Worker reality (confirmed by direct inspection of `worker.js`'s route table). They don't exist. If/when built, they'd belong here.
+
+**⚠️ Worker body size limit:** Cloudflare free tier ~100KB. Portal (~350KB+) and GolfScorer (~370KB+) both exceed this — `/deploy` can't currently take either. See Golden Rule 1a and §3 for the resulting unresolved gap.
 
 ### KV Flags
 | Key | Type | Purpose |
