@@ -631,6 +631,7 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 - **`/deploy` expanded to accept `docs/` paths:** Portal live file is at `docs/portal.html` (GitHub Pages). Worker previously restricted to `source/` only. Updated to accept `source/` or `docs/` — confirmed working. Worker version 2026-06-18b.
 - **Deploy procedures rewritten in Ops Guide and Session Starter** to reflect actual current state — all legacy "unresolved" and "no Claude-safe mechanism" language removed.
 - **`bf_deploy.py` role clarified:** The rule against Claude executing its TOKEN-authenticated functions is a credential hygiene rule, not a capability limitation. The Worker `/deploy` route covers all files Claude needs to push. `bf_deploy.py` remains in the library for reference only.
+- **`launch_golf_scorer.py` secrets cleanup:** GITHUB_TOKEN removed from auto-pull (public repo, unauthenticated). Token retained for Publish All Pages writes (legitimate, laptop-only). Old classic token rotated — new token in place. ANTHROPIC_API_KEY removed entirely; OCR feature retired (digital scorecard is the settled solution); Anthropic key revoked. `deploy_portal.py` deleted from laptop. Launcher tested and confirmed: unauthenticated pull working, new token valid, GolfScorer v8.17·2026-06-17g pulled successfully.
 
 ### Session BP-1 / Chat#39 — 2026-06-18
 - Business plan library bootstrapped (`source/bizplan/`): BF_BizPlan_Vision.md, BF_BizPlan_GateLog.md, BF_BizPlan_Session_Log.md, BF_Capability_Inventory.md deployed.
