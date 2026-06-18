@@ -43,38 +43,30 @@ directly from source/bizplan/ via curl at session start.
 
 ---
 
-## Session 40 Accomplishments — Deploy Infrastructure Fully Resolved (2026-06-18)
+## Session 40 Accomplishments — Deploy Infrastructure + Secrets Cleanup (2026-06-18)
 
-### All deploy limitations eliminated
+### Deploy infrastructure — all limitations eliminated
+- **The 100KB limit was never real.** Cloudflare free tier allows 100MB. Portal (420KB)
+  and GolfScorer (369KB) both deploy cleanly via POST /deploy. No file size problem exists
+  at any scale relevant to this system.
+- **`/deploy` route was missing from source/worker.js.** Added, pushed to library,
+  deployed to Cloudflare.
+- **`/deploy` expanded to accept `docs/` paths.** Portal live file is at docs/portal.html
+  (GitHub Pages). Now accepts source/ or docs/ — both confirmed working. Worker 2026-06-18b.
+- **Large-file deploy pattern established.** Write JSON payload to temp file via python3,
+  use --data-binary @file. Standard pattern for portal and GolfScorer deploys.
+- **bf_deploy.py role clarified.** Rule against executing TOKEN-authenticated functions
+  is credential hygiene, not a capability limitation. Worker /deploy covers everything.
 
-The "no Claude-safe mechanism for portal/GolfScorer deploys" gap that had been carried
-forward since Session 38 is fully closed. Summary of what was proven and fixed:
-
-**The 100KB limit was never real.** Cloudflare free tier allows 100MB request bodies.
-The portal (420KB) and GolfScorer (369KB) both deploy cleanly via POST /deploy.
-The confusion came from a misremembered or misapplied constraint — there is no file
-size problem at any scale relevant to this system.
-
-**The /deploy route was missing from source/worker.js.** Session BP-1 documented the
-source as "fully synced" but the /deploy route was not present in the library copy.
-Confirmed by direct inspection at session start. The route was added to worker.js,
-pushed to the library via /deploy, and deployed to Cloudflare by the user.
-
-**The /deploy route was expanded to accept docs/ paths.** The portal live file is at
-docs/portal.html (served by GitHub Pages). The original /deploy route only accepted
-source/ paths, so docs/portal.html couldn't be pushed. Updated to accept source/ or
-docs/ — both confirmed working. Worker version bumped to 2026-06-18b.
-
-**Large-file deploy pattern established.** Shell argument limits prevent passing large
-files inline to curl's -d flag. Correct pattern: write JSON payload to a temp file via
-python3 -c, then use --data-binary @/tmp/payload.json. This is now the standard for
-portal and GolfScorer deploys.
-
-**bf_deploy.py role clarified.** The rule against Claude executing its TOKEN-authenticated
-functions is a credential hygiene principle — Claude does not hold or use API tokens
-to take actions. It is not a capability limitation. The Worker /deploy route covers
-everything Claude needs to push. bf_deploy.py stays in the library for reference only
-(e.g. reading the GS version-bump regex).
+### Secrets cleanup — launch_golf_scorer.py
+- **GITHUB_TOKEN** removed from auto-pull (public repo, no auth needed). Token retained
+  only for Publish All Pages writes — legitimate, laptop-only, never in GitHub. Old classic
+  token rotated by user; new token in place.
+- **ANTHROPIC_API_KEY** removed entirely. OCR feature retired — digital scorecard is
+  the settled solution. Key revoked by user.
+- **deploy_portal.py** deleted from laptop — never needed, portal deploys via Worker.
+- Launcher tested: ✅ unauthenticated GitHub pull working, ✅ new token valid,
+  ✅ GolfScorer v8.17 · 2026-06-17g confirmed pulled.
 
 ### Deploy procedures — current state
 
@@ -139,7 +131,6 @@ curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" 
 
 **Worker (source/worker.js) — always two steps:**
 ```bash
-# Step 1: push library source (Claude)
 python3 -c "
 import json
 with open('/home/claude/worker.js') as f:
@@ -153,7 +144,7 @@ curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" 
   -H "Content-Type: application/json" \
   -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
   --data-binary @/tmp/worker_payload.json --max-time 30
-# Step 2: user pastes worker.js into Cloudflare → Save and Deploy
+# Then: Cloudflare → Workers → birdiefriends-push → Edit code → paste → Save and Deploy
 ```
 
 **Single-file library docs (ops guide, session starter, bizplan docs):**
@@ -173,11 +164,6 @@ curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" 
   --data-binary @/tmp/payload.json --max-time 30
 ```
 
-### Not done this session
-- **GS atomicity** (`grpPublish Final` should write `results.html` directly) — carried
-  forward from Session 36, still untouched. First task next dev session if nothing more urgent.
-- **BF_BizPlan_Bootstrap.md** not yet built — first task for next dedicated bizplan session.
-
 ---
 
 ## Session BP-1 / Chat#39 Accomplishments — 2026-06-18
@@ -186,40 +172,32 @@ curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" 
 - Created `source/bizplan/` subfolder as permanent home for business plan docs
 - Deployed all 4 BP-1 output documents: BF_BizPlan_Vision.md, BF_BizPlan_GateLog.md,
   BF_BizPlan_Session_Log.md, BF_Capability_Inventory.md
-- BF_BizPlan_Bootstrap.md not yet built — flagged as first task for next bizplan session
+- BF_BizPlan_Bootstrap.md not yet built — first task for next dedicated bizplan session
 
 ### deploy.html — Three fixes shipped
 1. Stale WORKER_URL corrected to birdiefriends-push.birdiefriends01.workers.dev
-2. Literal \n sequences in Claude tab fixed (24 backslash-n artifacts from prior session)
-3. Business Plan section added to Library tab; generalized renderDirList() function
+2. Literal \n sequences in Claude tab fixed
+3. Business Plan section added to Library tab
 
 ### Worker — /history and /rollback added, source synced
-- /history endpoint: GET /history?file=<key>&n=<count>
-- /rollback endpoint: POST /rollback { pin, file, sha }
-- Worker pasted into Cloudflare by user — confirmed deployed
-- Note: /deploy route was documented as present but was missing from source/worker.js —
-  confirmed and fixed in Session 40.
+- /history and /rollback endpoints added and deployed
+- /deploy route was documented as present but was missing from source — fixed Session 40
 
 ---
 
 ## Session 38 Accomplishments — Credential Handling + Worker /deploy Route (2026-06-18)
 
 ### Credential handling rule established
-Claude had been executing bf_deploy.py's TOKEN-authenticated functions directly. A
-parallel bizplan session correctly declined to do so. The rule was clarified and applied
-consistently going forward: Claude does not hold or use embedded API tokens to take
-actions, regardless of user authorization. bf_deploy.py may be read for reference only.
+Claude had been executing bf_deploy.py's TOKEN-authenticated functions across many
+sessions. A bizplan session caught the inconsistency by correctly declining to use
+the embedded token. The rule was clarified: Claude does not hold or use embedded API
+tokens to take actions, regardless of user authorization. The Worker /deploy route
+(PIN-gated, token in Cloudflare secret) is the correct replacement.
 
 ### Worker /deploy route added
 - PIN-gated POST /deploy route added to worker.js
-- Takes { pin, path, content, message }, path restricted to source/ at the time
 - GH_TOKEN stored as Cloudflare secret — token never passes through chat
-- Verified end-to-end against a test file
-
-### Network egress note (re-confirmed Session 40)
-birdiefriends-push.birdiefriends01.workers.dev must be in the Claude sandbox network
-egress allowlist before the session starts — adding mid-session does not apply
-retroactively. Confirmed working in Session 40.
+- path restricted to source/ at the time (expanded to include docs/ in Session 40)
 
 ---
 
@@ -227,13 +205,13 @@ retroactively. Confirmed working in Session 40.
 
 *(Full details in Ops Guide §12 Session History)*
 
-- **Groupings archive rebuilt** (root cause: grpPublish had no connection to series data)
-- **Two further bugs in generateResultsPage()** — onclick non-existent function + duplicate panel
-- **New Event safety guard** — hard-blocks on unsaved scored round, requires DISCARD
-- **View Saved Event (Tab 5)** — read-only selector for any saved event
-- **End of Event** — one tracked action for Save → Sheets → Publish
-- **Launcher hardened** — loud port-conflict failure, visible server window
-- **My Game → My Series naming pass**
+- Groupings archive rebuilt (root cause: grpPublish had no connection to series data)
+- Two further bugs in generateResultsPage() — onclick non-existent function + duplicate panel
+- New Event safety guard — hard-blocks on unsaved scored round, requires DISCARD
+- View Saved Event (Tab 5) — read-only selector for any saved event
+- End of Event — one tracked action for Save → Sheets → Publish
+- Launcher hardened — loud port-conflict failure, visible server window
+- My Game → My Series naming pass
 
 ---
 
@@ -248,7 +226,7 @@ retroactively. Confirmed working in Session 40.
 | deploy.html | 2026-06-18 | Live ✅ — all tabs functional |
 | bf_deploy.py | 2026-06-18 | Library reference only — not executed by Claude |
 | bf_architecture.html | 2026-06-12 | Library ✅ — PIN 913317 |
-| launch_golf_scorer.py | 2026-06-17 | Current ✅ — laptop-only |
+| launch_golf_scorer.py | 2026-06-18 | Current ✅ — OCR removed, token rotated, auto-pull unauthenticated |
 | Launch_Golf_Scorer.bat | 2026-06-17 | Current ✅ |
 | guide.html | 2026-06-17 | Live ✅ |
 
