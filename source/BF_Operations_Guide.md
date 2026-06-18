@@ -1,5 +1,5 @@
 # BirdieFriends — Operations Guide
-**Last Updated:** 2026-06-18 (Session 38 — credential-handling fix, Worker /deploy route)
+**Last Updated:** 2026-06-18 (Session 40 — /deploy proven for all files; docs/ path added; deploy limitations eliminated)
 **Maintained by:** Commissioner (Brian Hager) + Claude
 **Purpose:** Ground truth for running, deploying, and testing the BirdieFriends system. Update at the end of every session.
 
@@ -58,84 +58,176 @@
 ## 2. Golden Rules
 
 **Deploy & Version**
-1. **`source/portal_version.txt` is the sole version source of truth.** The old `bf_deploy.py`-based flow read it, incremented patch, and pushed `docs/portal.html` + `source/portal.html` + `portal_version.txt` atomically. **As of Session 38, Claude no longer executes that flow directly** (see rule 1a) — but the version-truth principle itself is unchanged: never guess or manually edit the version.
-1a. **NEW Session 38 — Claude does not import `bf_deploy.py` and call its TOKEN-authenticated functions** (`deploy()`, `deploy_file()`, `rollback()`). The embedded `TOKEN` is a live GitHub credential; Claude doesn't hold or use API keys/tokens directly to take actions, even with full user authorization. `bf_deploy.py` may still be read for reference logic only. For single-file pushes, use the Worker's `POST /deploy` route instead (PIN + content, no token — see §3 and §4 endpoint table). **Portal and GolfScorer deploys currently have no replacement mechanism** — both exceed the Worker's ~100KB body limit (§4), so porting `/deploy` doesn't trivially cover them. Unresolved; flag to the user rather than falling back to the old token path.
-2. **Always run `node --check` before deploying portal changes.** Extract inline `<script>` blocks, concatenate, write to temp `.js`, run `node --check`. Non-negotiable — caught two blank-load incidents in Session 34.
-3. **`bf_deploy.deploy_file(local_path, gh_path, msg)`** is the function the now-working Worker `/deploy` route reimplements server-side (same 404-on-sha handling). Use the Worker route, not the Python function directly — see rule 1a.
-4. **`deploy_portal.bat` is retired.** The Worker `/deploy` route (PIN-gated, no token) is the standard for single-file library pushes as of Session 38. Secrets files (`deploy_portal.py`, `launch_golf_scorer.py`) stay laptop-only, unrelated to this change.
-5. **Claude never reconstructs secrets files from scratch.** Upload `deploy_portal.py` or `launch_golf_scorer.py` before modifying — changes must be additive.
-6. **Claude never reconstructs `worker.js` from scratch.** `source/worker.js` is fetched from the library at every session start.
-7. **At session end, Claude deploys the updated session starter and ops guide directly.** No bat, no manual copy.
+1. **`source/portal_version.txt` is the sole version source of truth.** Never guess or manually edit the version string. Claude reads it at session start, increments the patch number, updates the portal HTML, and pushes all three files atomically via `/deploy` (see §3).
+
+2. **Claude does not import `bf_deploy.py` and execute its TOKEN-authenticated functions** (`deploy()`, `deploy_file()`, `rollback()`). The file contains an embedded GitHub token — Claude does not hold or use API tokens directly to take actions, regardless of user authorization. `bf_deploy.py` may be fetched and read for reference logic, but never executed. The Worker's `POST /deploy` route handles all deploys instead — PIN and content only, token stays in Cloudflare.
+
+3. **All file deploys use `POST /deploy` on the Worker.** This covers portal, GolfScorer, worker source, ops guide, session starter, and all other managed files. No file size limitation in practice (tested to 445KB on Cloudflare free tier). For files larger than shell argument limits, write the JSON payload to a temp file and use `--data-binary @file`. See §3 for the exact pattern.
+
+4. **Always run `node --check` before deploying portal changes.** Extract inline `<script>` blocks, concatenate, write to temp `.js`, run `node --check`. Non-negotiable — caught two blank-load incidents in Session 34.
+
+5. **Worker code changes require a manual Cloudflare paste.** `/deploy` updates `source/worker.js` in the library (the source of record), but the live Cloudflare Worker is only updated by pasting into the dashboard. These are two separate steps — always do both.
+
+6. **Claude never reconstructs secrets files from scratch.** Upload `deploy_portal.py` or `launch_golf_scorer.py` before modifying — changes must be additive.
+
+7. **Claude never reconstructs `worker.js` from scratch.** `source/worker.js` is fetched from the library at every session start.
+
+8. **At session end, Claude deploys the updated session starter and ops guide via `/deploy`.** No bat, no manual copy, no download needed.
 
 **Testing & Safety**
-8. **Never test the portal from a local file for Jotform data.** Jotform API blocks `file://` origins. UI testing only; data requires `https://birdiefriends.com/portal.html`.
-9. **TEST_PREVIEW_MODE must be False on event day.** Check `launch_golf_scorer.py` before launching. When True, publishes go to local `preview/` only — players see nothing.
-10. **Export GolfScorer JSON before any mock/test run.** Rollback = reimport the JSON export.
-11. **Always run a syntax check before deploying.** Apostrophes in single-quoted strings (`'you\'re'`) and nested onclick quotes are the common failure modes. Pre-compute escaped variables rather than inline `.replace()` inside onclick attrs.
+9. **Never test the portal from a local file for Jotform data.** Jotform API blocks `file://` origins. UI testing only; data requires `https://birdiefriends.com/portal.html`.
+10. **TEST_PREVIEW_MODE must be False on event day.** Check `launch_golf_scorer.py` before launching. When True, publishes go to local `preview/` only — players see nothing.
+11. **Export GolfScorer JSON before any mock/test run.** Rollback = reimport the JSON export.
+12. **Always run a syntax check before deploying.** Apostrophes in single-quoted strings (`'you\'re'`) and nested onclick quotes are the common failure modes. Pre-compute escaped variables rather than inline `.replace()` inside onclick attrs.
 
 **Operations**
-12. **GS does not go to the course.** Laptop stays home. All scoring happens post-round. Groupings can be published the night before.
-13. **Use Event Control (not Live Test Mode) for production event starts.** Live Test Mode is dev only.
-14. **Remote flags affect all devices instantly.** KV flags take effect on next page load for every user.
-15. **After Publish Groupings, wait ~60 seconds before sharing the link.** GitHub Pages CDN caches aggressively.
-16. **When something doesn't work, check the phone first.** The portal is mobile-first PWA — iOS rendering and PWA chrome require a real device.
-17. **After updating `launch_golf_scorer.py`, restart the server.** Close the console window and reopen `Launch_Golf_Scorer.bat`. As of Session 37 the server window no longer auto-minimizes — leave it visible; a GitHub pull failure or port conflict now prints a loud, explicit message there instead of failing silently.
+13. **GS does not go to the course.** Laptop stays home. All scoring happens post-round. Groupings can be published the night before.
+14. **Use Event Control (not Live Test Mode) for production event starts.** Live Test Mode is dev only.
+15. **Remote flags affect all devices instantly.** KV flags take effect on next page load for every user.
+16. **After Publish Groupings, wait ~60 seconds before sharing the link.** GitHub Pages CDN caches aggressively.
+17. **When something doesn't work, check the phone first.** The portal is mobile-first PWA — iOS rendering and PWA chrome require a real device.
+18. **After updating `launch_golf_scorer.py`, restart the server.** Close the console window and reopen `Launch_Golf_Scorer.bat`. As of Session 37 the server window no longer auto-minimizes — leave it visible; a GitHub pull failure or port conflict now prints a loud, explicit message there instead of failing silently.
 
 **Versioning Philosophy**
-18. **Patch / Minor / Major:**
+19. **Patch / Minor / Major:**
     - **Patch (3.10.x):** bug fixes, UI tweaks, copy changes, adding a button. No new capability.
     - **Minor (3.10 → 3.11):** meaningful new feature a player would notice. Next trigger: Alerts/Inbox launch → **3.11.0**.
     - **Major (3.x → 4.0):** architectural shift — new backend, off Jotform, commercial multi-tenant.
 
 **Template Integrity**
-19. **Generated HTML templates (results.html, standings.html, mygame.html, groupings.html) must have every `onclick` reference a function that actually exists in that same file, and no duplicate element IDs.** A `node --check` syntax gate catches JS errors but catches neither of these — both fail completely silently (nothing happens on click, no console error visible at a glance). Confirmed bug, Session 37: the Groups tab's `onclick="openGroupingsForEvent()"` called a function that was never defined anywhere in `generateResultsPage()`'s output, and the `tab-groups` content panel was duplicated wholesale in the same template. Spot-check before trusting a template fix: `grep` every `onclick="X("` target and confirm `function X` exists; `grep -c 'id="..."'` for anything that should be unique.
+20. **Generated HTML templates (results.html, standings.html, mygame.html, groupings.html) must have every `onclick` reference a function that actually exists in that same file, and no duplicate element IDs.** A `node --check` syntax gate catches JS errors but catches neither of these — both fail completely silently (nothing happens on click, no console error visible at a glance). Confirmed bug, Session 37: the Groups tab's `onclick="openGroupingsForEvent()"` called a function that was never defined anywhere in `generateResultsPage()`'s output, and the `tab-groups` content panel was duplicated wholesale in the same template. Spot-check before trusting a template fix: `grep` every `onclick="X("` target and confirm `function X` exists; `grep -c 'id="..."'` for anything that should be unique.
 
 ---
 
 ## 3. Deploy Procedures
 
-### Portal — UNRESOLVED as of Session 38, no Claude-safe mechanism
-The old flow (`python3 bf_deploy.py birdiefriends_portal.html "<msg>"`) required Claude to execute `bf_deploy.py`'s embedded GitHub TOKEN directly — no longer something Claude does (see Golden Rule 1a). The Worker's `/deploy` route can't simply replace it either: the portal is ~350KB+, well past Cloudflare's ~100KB free-tier body limit (§4). Until this is solved (larger body limit, chunked upload, or some other path), **portal deploys need to be discussed with the user case by case** rather than defaulted to either the old token path or assumed-working new infrastructure.
+### Portal (docs/portal.html)
+Claude handles this entirely — no download or laptop needed.
 
-**Hardened version sync (run if version mismatch suspected; read-only, no deploy):**
+**Full deploy sequence (version increment + publish):**
+```python
+# Run as a python3 script in bash_tool — handles all three files atomically
+
+import json, re
+
+# 1. Read current version and increment patch
+with open('/home/claude/portal_version.txt') as f:
+    ver_txt = f.read()
+match = re.search(r'v3\.(\d+)\.(\d+)', ver_txt)
+minor, patch = int(match.group(1)), int(match.group(2))
+new_patch = patch + 1
+today = '2026-06-18'  # update to actual date
+new_ver = f'v3.{minor}.{new_patch} · {today}'
+new_ver_txt = f'{new_ver}\nDeployed: {today} {__import__("datetime").datetime.now().strftime("%H:%M")}\n'
+
+# 2. Update version string in portal HTML
+with open('/home/claude/birdiefriends_portal.html') as f:
+    portal = f.read()
+portal = re.sub(r'v3\.\d+\.\d+ · \d{4}-\d{2}-\d{2}', new_ver, portal)
+
+# 3. Write payload files
+for path, content in [
+    ('docs/portal.html',          portal),
+    ('source/portal.html',        portal),
+    ('source/portal_version.txt', new_ver_txt),
+]:
+    with open(f'/tmp/deploy_{path.replace("/","_")}.json', 'w') as f:
+        json.dump({'pin':'7797','path':path,'content':content,
+                   'message':f'Portal {new_ver}'}, f)
+
+print(f'Ready to push: {new_ver}')
+```
+Then push each payload file:
 ```bash
-PORTAL="/home/claude/birdiefriends_portal.html"
-VER_URL="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/portal_version.txt"
-LIVE_VER=$(curl -s --max-time 10 "$VER_URL" | grep -o 'v3\.[0-9]*\.[0-9]* · [0-9-]*' | head -1)
-if [ -z "$LIVE_VER" ]; then echo "❌ Cannot determine live version — aborting."; exit 1; fi
-sed -i "s/v3\.[0-9]*\.[0-9]* · [0-9-]*/${LIVE_VER}/g" "$PORTAL"
-echo "✅ Portal synced to: $LIVE_VER"
+for f in /tmp/deploy_docs_portal.html.json /tmp/deploy_source_portal.html.json /tmp/deploy_source_portal_version.txt.json; do
+  curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
+    -H "Content-Type: application/json" \
+    -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+    --data-binary @$f --max-time 60
+  echo ""
+done
 ```
 
 **If phone shows old version after a deploy:** close tab fully and reopen, try `?v=X`, check raw file on GitHub.
 
-### Single-file deploys (worker, GolfScorer, ops guide, session starter, business plan docs, etc.)
-As of Session 38, use the Worker's `POST /deploy` route — PIN and content only, no token through chat:
+**Hardened version sync (read-only check, no deploy):**
 ```bash
+VER_URL="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/portal_version.txt"
+curl -s "$VER_URL"
+```
+
+### GolfScorer (source/BF_Golf_Scorer_8.html)
+Claude handles this entirely — no download needed. The version suffix (a→b→…→z→aa) must be bumped manually in the file content before pushing. `Launch_Golf_Scorer.bat` auto-pulls the updated file from GitHub on next startup.
+
+```bash
+python3 -c "
+import json
+with open('/home/claude/BF_Golf_Scorer_8.html') as f:
+    content = f.read()
+payload = {'pin':'7797','path':'source/BF_Golf_Scorer_8.html',
+           'content':content,'message':'GolfScorer v8.17·YYYY-MM-DDx — description'}
+with open('/tmp/gs_payload.json','w') as f:
+    json.dump(payload, f)
+print(len(content), 'bytes')
+"
 curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
   -H "Content-Type: application/json" \
-  -d '{"pin":"7797","path":"source/<file>","content":"<file contents>","message":"<commit message>"}'
+  -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+  --data-binary @/tmp/gs_payload.json --max-time 60
 ```
-Path must start with `source/`. Handles new-file creation and existing-file updates. **Caveat:** GolfScorer (~370KB) also exceeds the ~100KB Worker body limit — same unresolved status as the portal, not yet usable via this route. The version-suffix auto-increment that the old `deploy_file()` did for GolfScorer paths (a→b→…→z→aa) is also not yet reimplemented in the Worker route — bump it manually in the content before pushing until that's ported.
 
-### Cloudflare Worker (code changes, not data deploys)
-Worker code changes still require manual Cloudflare paste — GitHub `source/worker.js` is the record, not the live worker. This is unrelated to the credential question above; it's always required regardless.
-1. dash.cloudflare.com → Workers & Pages → birdiefriends-push → Edit code
-2. Paste `worker.js` contents (overwrite entire editor) → Save and Deploy
+### Cloudflare Worker (source/worker.js)
+Two steps — both required:
+
+**Step 1 — Push source to library (Claude):**
+```bash
+python3 -c "
+import json
+with open('/home/claude/worker.js') as f:
+    content = f.read()
+payload = {'pin':'7797','path':'source/worker.js',
+           'content':content,'message':'Worker YYYY-MM-DDx — description'}
+with open('/tmp/worker_payload.json','w') as f:
+    json.dump(payload, f)
+"
+curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+  --data-binary @/tmp/worker_payload.json --max-time 30
+```
+
+**Step 2 — Paste live (user):**
+> dash.cloudflare.com → Workers & Pages → birdiefriends-push → Edit code → paste → Save and Deploy
+
+### Single-file library docs (ops guide, session starter, business plan, etc.)
+```bash
+python3 -c "
+import json
+with open('/home/claude/<filename>') as f:
+    content = f.read()
+payload = {'pin':'7797','path':'source/<filename>',
+           'content':content,'message':'Session 4X — description'}
+with open('/tmp/payload.json','w') as f:
+    json.dump(payload, f)
+"
+curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+  --data-binary @/tmp/payload.json --max-time 30
+```
 
 ### Generated Pages (My Series, Results, Standings, Groupings)
 1. Launch GS → score event → Calculate Results
-2. Click **🏁 End of Event** (Session 37+) — runs Save to Series → Push to Sheets → Publish All Pages as one tracked action, with per-step status and per-step retry. Or run the three individually via the Actions bar if preferred.
+2. Click **🏁 End of Event** — runs Save to Series → Push to Sheets → Publish All Pages as one tracked action, with per-step status and per-step retry. Or run the three individually via the Actions bar if preferred.
 
 **Groupings publish (separate, pre-round):**
-- Click **🌐 Publish Groupings** in Groups tab
-- Set Status → **Final** before final publish
+- Click **🌐 Publish Groupings** in Groups tab → set Status → **Final** before final publish
 - Deploys `groupings.html` + `groupings-meta.json` + the permanent archive copy
 - Wait ~60s before sharing link
-- **As of Session 37, no manual follow-up needed:** `grpPublish` Final now writes the archive pointer into a durable `bf_groupings_archive` localStorage map keyed by event name; `saveEventToSeries()` reads that map and attaches `groupingsFile` to the event record automatically when the round is saved. The old manual checklist step ("verify groupingsFile is in series data, then re-publish") is gone — this is what it replaced.
+- `grpPublish Final` writes the archive pointer into `bf_groupings_archive` localStorage; `saveEventToSeries()` attaches `groupingsFile` automatically — no manual follow-up needed.
 
 ### Token Recovery
-GitHub token lost: github.com → Settings → Developer settings → Personal access tokens → GolfScorer → Regenerate. Paste new `ghp_...` into BOTH `deploy_portal.py` line 16 AND `launch_golf_scorer.py` line 39. Both must match or one will fail with 401.
+GitHub token lost: github.com → Settings → Developer settings → Personal access tokens → GolfScorer → Regenerate. Paste new `ghp_...` into BOTH `deploy_portal.py` line 16 AND `launch_golf_scorer.py` line 39. Both must match or one will fail with 401. Note: this is the classic token used by those laptop-only scripts — separate from the Worker's `GH_TOKEN` Cloudflare secret, which is a fine-grained PAT managed entirely in Cloudflare.
 
 ---
 
@@ -146,11 +238,11 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 |-----------|---------|--------|
 | Portal | v3.10.139 · 2026-06-16 | Production ✅ |
 | GolfScorer | v8.17 · 2026-06-17g | Deployed ✅ |
-| Worker | 2026-06-18 | Deployed ✅ — added PIN-gated `POST /deploy` route + `GH_TOKEN` secret (Session 38) |
-| deploy.html | 2026-06-12 | Live ⚠️ — Library tab (view/download) works; Deploy/History/Rollback tabs are broken (wrong `WORKER_URL` subdomain + routes that never existed), confirmed Session 38. Not yet fixed. |
-| bf_deploy.py | 2026-06-18 | Current, but **restricted** — Claude no longer executes its TOKEN-authenticated functions (Session 38, Golden Rule 1a). `deploy_file()`'s new-file-creation patch is sound; the restriction is about who invokes it, not the code itself. |
+| Worker | 2026-06-18b | Deployed ✅ — `/deploy` accepts `source/` and `docs/` paths |
+| deploy.html | 2026-06-18 | Live ✅ — all tabs functional (Session BP-1 fix) |
+| bf_deploy.py | 2026-06-18 | In library for reference only — TOKEN-authenticated functions not invoked by Claude |
 | bf_architecture.html | 2026-06-12 | Library ✅ |
-| Launch_Golf_Scorer.bat / launch_golf_scorer.py | 2026-06-17 | Current ✅ — hardened (visible server window, loud port-conflict failure); laptop-only, not in GitHub |
+| Launch_Golf_Scorer.bat / launch_golf_scorer.py | 2026-06-17 | Current ✅ — laptop-only, not in GitHub |
 
 ### Library Files (fetched at session start)
 | File | Path |
@@ -160,7 +252,7 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 | Portal version | `source/portal_version.txt` |
 | Portal HTML | `docs/portal.html` |
 | Worker | `source/worker.js` |
-| Deploy script | `source/bf_deploy.py` |
+| Deploy script | `source/bf_deploy.py` (reference only) |
 | Architecture diagram | `source/bf_architecture.html` |
 
 ### Cloudflare Worker Endpoints
@@ -172,14 +264,12 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 | GET | `/subscriptions` | None | Fetch OneSignal subscriber list |
 | GET | `/notifications` | None | Fetch sent notification history |
 | DELETE | `/subscription/:id` | None | Delete one push subscription |
-| DELETE | `/notifications/clear` | PIN | Cancel scheduled notifications only — cannot delete delivered |
-| POST | `/deploy` | PIN | **Real as of Session 38.** Push/create a file under `source/` to GitHub via `env.GH_TOKEN` (Cloudflare secret, never seen by Claude). Subject to the ~100KB body limit below. No KV snapshot — commits straight to GitHub, that's it. |
+| DELETE | `/notifications/clear` | PIN | Cancel scheduled notifications — cannot delete delivered |
+| GET | `/history?file=X&n=20` | None | Last N commits for a managed file |
+| POST | `/rollback` | PIN | Restore file to a prior commit SHA |
+| POST | `/deploy` | PIN | Push file content to GitHub. Accepts `source/` or `docs/` paths. No meaningful size limit on free tier (tested to 445KB). |
 | GET | `/feed` | None | Worker KV notification feed |
 | DELETE | `/feed` | PIN | Clear KV feed entries |
-
-**Corrected, Session 38:** `GET /history` and `POST /rollback` were listed in this table previously but were never actually implemented — that was aspirational documentation matching `deploy.html`'s broken UI assumptions, not Worker reality (confirmed by direct inspection of `worker.js`'s route table). They don't exist. If/when built, they'd belong here.
-
-**⚠️ Worker body size limit:** Cloudflare free tier ~100KB. Portal (~350KB+) and GolfScorer (~370KB+) both exceed this — `/deploy` can't currently take either. See Golden Rule 1a and §3 for the resulting unresolved gap.
 
 ### KV Flags
 | Key | Type | Purpose |
@@ -261,7 +351,7 @@ const OS_API            = 'https://birdiefriends-push.birdiefriends01.workers.de
 ### Laptop Folder Structure
 ```
 Downloads/GolfScorer/
-├── birdiefriends_portal.html     ← Portal source (Claude deploys)
+├── birdiefriends_portal.html     ← Portal source (Claude deploys via Worker /deploy)
 ├── deploy_portal.py              ← Secrets — never in GitHub
 ├── launch_golf_scorer.py         ← Secrets — never in GitHub
 ├── Launch_Golf_Scorer.bat        ← Starts local GolfScorer server
@@ -299,7 +389,7 @@ When a BF Series event's tee time arrives, the portal activates a **Live Event B
 - First sub-par score on hole: `{emoji} {Type} Alert` · `{Full Name} {verb phrase} — current Skin leader.`
 - Second sub-par score on hole: `{emoji} Skin Stopped` · `{Full Name} {verb phrase} and stopped {Prev Full Name}'s Skin.`
 - Already busted: `{emoji} {Type} Alert` · `{Full Name} {verb phrase} — Skin not in play on this hole.`
-- **Cross-device detection:** skin status determined by querying the shared Worker `/feed` for prior birdie-type entries on the same hole — NOT the per-device `_skinHoles` object, which can't see entries from other overseers' phones. Critical fix (Session 35) — previously two different overseers on the same hole both saw "current Skin leader."
+- **Cross-device detection:** skin status determined by querying the shared Worker `/feed` for prior birdie-type entries on the same hole — NOT the per-device `_skinHoles` object, which can't see entries from other overseers' phones. Critical fix (Session 35).
 - **Known simplification:** doesn't account for relative severity across types (Eagle then Birdie on same hole says "stopped" even though Eagle still wins outright). Doesn't affect skins payout — GS computes from scorecards.
 
 ### CttP Message Logic
@@ -383,7 +473,7 @@ Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
 ### Running GolfScorer
 1. Double-click **`Launch_Golf_Scorer.bat`** — auto-pulls latest GS from GitHub on startup
 2. Chrome opens at `http://localhost:8743/BF_Golf_Scorer_8.html`
-3. As of Session 37, the server runs in its own titled window ("BF Golf Scorer Server") and does **not** auto-minimize — leave it visible. A GitHub pull failure or a port-8743 conflict (most likely cause: an old server process still running) now prints a loud, explicit message there instead of dying silently behind a hidden window.
+3. The server runs in its own titled window ("BF Golf Scorer Server") and does not auto-minimize — leave it visible. A GitHub pull failure or a port-8743 conflict prints a loud, explicit message there.
 
 ### Data Recovery
 - All Groups tab state in localStorage key `bf_groups_data`
@@ -395,14 +485,14 @@ Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
 1. `grpPublish('Final')` writes `groupings-{slug}.html` to GitHub (the permanent archive copy) **and** persists `{ eventName: archiveFile }` into a durable `bf_groupings_archive` localStorage map — independent of any other state, survives New Event resets.
 2. `saveEventToSeries()` (runs post-round, when the event record is first created) reads that map and attaches `groupingsFile` to the event's record **at creation time** — fully automatic, no manual step.
 3. `generateResultsPage()` builds `GROUPINGS_ARCHIVE` from `ALL_SERIES_DATA.events[].groupingsFile` on every page load.
-4. The Groups tab's enabled/disabled look and the groupings-nav-link both re-sync on page load now too (a separate fix — see below), not only on an event-pill click.
+4. The Groups tab's enabled/disabled look and the groupings-nav-link both re-sync on page load now too (a separate fix), not only on an event-pill click.
 
-**Why this needed rebuilding:** the *old* description of this system (steps 1–3 above existed in the docs but step 1 never actually wrote to series data — `grpPublish` had no connection at all to the event record, which doesn't even exist yet at Final-groupings time, since that's pre-round). Every event needed a manual patch to results.html to wire the archive in. This silently broke for Series#4 — the archive file existed and was live on GitHub, but the pointer never made it into series data, on the live site *or* in the local GS export. Confirmed via direct JSON inspection three separate times this session before being trusted as fixed.
+**Why this needed rebuilding:** the old description of this system existed in the docs but `grpPublish` had no connection at all to the event record, which doesn't even exist yet at Final-groupings time (that's pre-round). Every event needed a manual patch to results.html. This silently broke for Series#4. Confirmed via direct JSON inspection before being trusted as fixed.
 
-**Two further, separate real bugs found and fixed in `generateResultsPage()`'s output (Session 37), after the data-sync fix above was already verified correct:**
-- The Groups tab's `onclick="openGroupingsForEvent()"` called a function that didn't exist anywhere in the file — clicking it did nothing, full stop, regardless of archive state. Fixed to `onclick="switchTab('groups',this)"`, the same pattern every sibling tab already uses.
-- The `tab-groups` content panel (containing the iframe) was duplicated wholesale in the template — two identical `id="tab-groups"` divs. Removed the duplicate.
-- **Lesson:** a correct tooltip/opacity state (proof the *data* logic ran) is not proof the *click* works — these are two independent failure modes and both need checking. See Golden Rule #19.
+**Two further, separate real bugs found and fixed in `generateResultsPage()`'s output (Session 37):**
+- The Groups tab's `onclick="openGroupingsForEvent()"` called a function that didn't exist anywhere in the file. Fixed to `onclick="switchTab('groups',this)"`.
+- The `tab-content` panel was duplicated wholesale in the template — two identical `id="tab-groups"` divs. Removed the duplicate.
+- **Lesson:** a correct tooltip/opacity state (proof the data logic ran) is not proof the click works — these are two independent failure modes. See Golden Rule #20.
 
 **Outliers:**
 - Series#2: no archive (pre-system) — Groups tab dimmed, by design, no recovery
@@ -410,7 +500,7 @@ Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
 - Series#4: fixed retroactively this session (live results.html + local GS export both patched)
 - Series#5+: fully automatic, no manual step
 
-**Known separate issue, not fixed:** `generateSeriesPage()` (standings.html) has its own copy of the Groups tab button with the same broken `onclick="openGroupingsForEvent()"`, but standings.html has *no* `GROUPINGS_ARCHIVE`, `loadGroupsTab`, or `tab-groups` content panel behind it at all — it's vestigial, likely copy-pasted from the results.html template early on. Whether standings.html should have a working Groups tab at all is an open question (it's a season-wide view, not a single-event view) — bigger than a quick fix, parked for a future session.
+**Known separate issue, not fixed:** `generateSeriesPage()` (standings.html) has the same broken onclick with no supporting JS/content panel at all — vestigial, parked.
 
 ### No-HCP Player Flow (e.g. Rich Potts)
 - `grpMergePlayers` sets `isNoHcp: false` by default — new player ≠ no GHIN handicap
@@ -420,26 +510,23 @@ Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
 - Event 1 is baseline — no quota, no podium. Event 2+ enters full quota system.
 
 ### View Saved Event (Tab 5, Session 37)
-A selector above the Results content, defaulting to "— Live / Current —". Picking any already-saved event renders it through the same `renderResults()` display (Podium/Skins/CTP/Money) used for live results, sourced entirely from series data — no scorecard re-import needed. Read-only by design: Save to Series, Publish, Print, and Export are hidden in this view since they act on the live scorecard, not whatever's being browsed. Built because Tab 2/3 (Players/Scorecard) state has never persisted across a page reload — before this, looking at a past event again meant re-running the entire Jotform/paste import from scratch.
+A selector above the Results content, defaulting to "— Live / Current —". Picking any already-saved event renders it through the same `renderResults()` display (Podium/Skins/CTP/Money) used for live results, sourced entirely from series data — no scorecard re-import needed. Read-only by design.
 
 ### New Event Safety Guard (Session 37)
-`resetAll()` now detects an unsaved scored round before clearing anything: if the loaded event has entered scores but isn't yet in `season_data.events`, it skips the normal confirm entirely and hard-blocks — explains the risk, points to Save to Series, and requires typing `DISCARD` verbatim to proceed anyway. Falls back to the original lightweight confirm when nothing's at risk (event already saved, or no scores entered yet).
+`resetAll()` now detects an unsaved scored round before clearing anything: hard-blocks if the loaded event has entered scores but isn't yet in `season_data.events`, requires typing `DISCARD` verbatim to proceed. Falls back to the original lightweight confirm when nothing's at risk.
 
 ### End of Event (Session 37)
-Gold button, first position in the Actions bar, always available. Runs Save to Series → Push to Sheets → Publish All Pages as one tracked sequence with a small status panel (⏳/✅/❌ per step). If Save finds the event already saved, it shows "✅ (already saved)" and skips rather than re-running — never duplicates. If Sheets or Publish fails (the realistic failure mode — spotty WiFi at the course), only that step gets a Retry button; the other one isn't blocked, since getting results live for players matters more than the Sheets visual-check. Save failing (missing players/event) stops the chain early, since there'd be nothing new for the other two steps to act on. Gates on whatever's in the live `event-name` field — has no effect if nothing's loaded (e.g. right after a fresh GS restart).
+Gold button, first position in the Actions bar. Runs Save to Series → Push to Sheets → Publish All Pages as one tracked sequence with per-step status and per-step retry. Save finding the event already saved shows "✅ (already saved)" and skips rather than re-running. Gates on whatever's in the live `event-name` field.
 
 ### Quota Display (fixed Session 34, hardened Session 35)
 - Always click **Fetch Registrants** after launching GS before publishing groupings
-- `grpMergePlayers` refreshes `p.hcp`/`p.quota` from series history via `grpGetEstimatedQuota` on every fetch
-- **Session 35:** all THREE display sites (player card, HCP table, published groupings) now compute quota LIVE via `grpGetEstimatedQuota(p.name, p.hcp, p.tee)` at render time — can never show a value that disagrees with "Why this quota?" again, regardless of when `p.quota` was last cached
-- `grpUpdateHcp` (card inline HCP edit) also fixed to store the adjustment-formula quota, not the raw `36-HCP×Slope/113` formula
-- Published groupings now shows player HCP next to name (e.g. "Brian Hager HCP 6.4"), NoHCP players show "NoHCP"
+- All three display sites (player card, HCP table, published groupings) compute quota LIVE via `grpGetEstimatedQuota(p.name, p.hcp, p.tee)` at render time
+- `grpUpdateHcp` (card inline HCP edit) stores adjustment-formula quota, not raw formula
 
 ### HCP Source of Truth (Session 35)
 - **Groups tab (`playerHistory.currentHcp`, series-tracked) is the SOLE source of truth for HCP.** No double entry.
-- The separate "Player Profiles" store (`bf_player_profiles`, Tab 7) and its "Load from Profiles" / Quick HCP Update workflow are a STALE, PARALLEL HCP source that caused a full-roster mismatch before Series#4 results (every player off by ~0.3–1.0 strokes between Tab 2 Quota Preview and Groups tab/groupings).
-- **If Tab 2 doesn't match Groups tab/groupings:** re-run Kick Off — `grpKickOffEvent` pulls `p.hcp` directly from `grpPlayers` (Groups tab), correcting Tab 2. Re-Kick-Off also clears Tab 3 scorecard inputs — re-fetch from Jotform afterward if needed.
-- **Pending:** retire "Load from Profiles" / Quick HCP panel entirely (offered, not yet confirmed) — first task next session if not already done.
+- The "Player Profiles" store (`bf_player_profiles`, Tab 7) is a stale, parallel HCP source — caused a full-roster mismatch before Series#4 results. Retiring it is pending.
+- **If Tab 2 doesn't match Groups tab/groupings:** re-run Kick Off.
 
 ### Scoring Rules
 - **Quota formula:** `36 − (HCP × Slope / 113)` — Green slope 132, Combo 128, Gold 115
@@ -462,8 +549,7 @@ Pool prizes for tied positions, split evenly, floor to nearest dollar. Surplus t
 ### Google Sheets
 - **URL:** https://docs.google.com/spreadsheets/d/1QvnXGY8TLgCgAhXt8SBRbwa7eUz-Vouhu6Tyituee20
 - **Tabs:** Raw Data, Standings, Green Flight, Combo Flight, Gold Flight
-- **Workflow:** Calculate Results → Save to Series → Push to Sheets (or just **End of Event**, Session 37+, which runs all three)
-- **Setup requirement (diagnosed Session 37, not a code bug):** Push to Sheets needs `bf-golf-scorer-key.json` (Google service account key) physically present in the GolfScorer folder — `Service account key not found` means the file is missing from disk, full stop, not a permissions or token issue. It's a local-file-existence check. Service account: `bf-golf-scorer@birdiefriends-golf.iam.gserviceaccount.com` — already exists and is already shared on the Sheet; if the key file ever goes missing again, generate a *new* key for that *same* existing service account (Google Cloud Console → IAM & Admin → Service Accounts → Keys → Add Key → JSON) rather than redoing setup from scratch. No effect on anything player-facing if it's broken — purely a secondary visual cross-check.
+- **Setup requirement:** Push to Sheets needs `bf-golf-scorer-key.json` physically present in the GolfScorer folder. Service account: `bf-golf-scorer@birdiefriends-golf.iam.gserviceaccount.com`. If the key file goes missing, generate a new key for the same existing service account (Google Cloud Console → IAM & Admin → Service Accounts → Keys → Add Key → JSON).
 
 ---
 
@@ -476,7 +562,7 @@ Pool prizes for tied positions, split evenly, floor to nearest dollar. Surplus t
 | Parked | 🅿️ | Events swiped from My Events |
 | Schedule | 🗓️ | Events player is registered for |
 | Results | 🏆 | Results, Standings, My Series, Groupings links |
-| My Game | ⛳ | Added Session 36 — live, portal-native screen (donut chart, money/nemesis callouts) for the current/most recent event. Distinct from the static "My Series" page (the old `mygame.html`, renamed Session 37) reachable from the Results hub — that one shows historical breakdown across all past events, not the live one. Content noted as still settling; `guide.html` doesn't document this tab yet (gap, not urgent). |
+| My Game | ⛳ | Portal-native screen (donut chart, money/nemesis callouts) for the current/most recent event. Distinct from the static "My Series" page reachable from the Results hub — that one shows historical breakdown across all past events. |
 
 ### Admin Access
 ⚙️ gear icon in header (commissioner PIN required). Cards: Event Control, Push Broadcast, Text All, Dev Controls, Announcement Feed, Push Subscribers, Scorecard Check. All cards start collapsed.
@@ -513,19 +599,20 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| **GS atomicity — `grpPublish Final` should write `results.html` directly** | 🔲 Carried over, untouched | Pre-dates Session 37 — flagged at end of Session 36, not started this session either. Currently two separate steps (pre-round groupings publish vs. post-round results publish) depend on manual ordering; collapsing into one atomic action removes that dependency. |
+| **GS atomicity — `grpPublish Final` should write `results.html` directly** | 🔲 Carried over | Flagged end of Session 36, still untouched. Removes manual-ordering dependency between pre-round groupings publish and post-round results publish. |
 | **Alerts / Inbox** | 🔲 Next (Session A) | Worker: scope field, per-type TTL, `/inbox?player=` endpoint. Portal: inbox UI below Upcoming, read/unread, dismiss. |
 | **Cancelled Events** | 🔴 Priority | Commissioner marks cancelled → push → card shows ❌ → ghost on Schedule tab. Needs KV flag per event ID. |
-| standings.html Groups tab is dead | 🔲 Low, found Session 37 | Same broken `onclick` as the now-fixed results.html, but no `GROUPINGS_ARCHIVE`/content panel behind it at all. Bigger question first: does a per-event Groups tab even belong on a season-wide standings page? |
-| guide.html missing My Game tab | 🔲 Low, found Session 37 | The portal-native My Game bottom-nav button (Session 36) was never added to the player guide. Held off writing copy since the screen's own content was still being iterated on. |
+| standings.html Groups tab is dead | 🔲 Low | Same broken onclick as the now-fixed results.html, but no supporting JS/content panel at all. Bigger question: does a per-event Groups tab belong on a season-wide standings page? |
+| guide.html missing My Game tab | 🔲 Low | The portal-native My Game bottom-nav button (Session 36) was never added to the player guide. Deferred while screen content was settling. |
 | Active/InActive auto-reset | 🔲 Quick fix | Jeremy Burkett + Tony Hager. Fastest: hardcode exempt array like COMMISSIONERS. |
 | Live Feed UI | 🔲 After Inbox | Styled activity stream in live panel. Color-coded by type. 60s auto-refresh. |
 | Self-service event management | 🔲 Backlog | Member creates event, becomes temp commish. |
-| GS state persistence | 🔲 Backlog | Auto-save event state after Calculate Results; "Resume pending event?" on reload. Tab 2/3 state loss after any reload is also why View Saved Event (Session 37) exists — works around this, doesn't fix it. |
+| GS state persistence | 🔲 Backlog | Auto-save event state after Calculate Results; "Resume pending event?" on reload. |
 | CttP holes per event | 🔲 Future | Add CttP Holes field to Event Request form. |
 | Sub promotion notification | 🔲 Planned | Flip `OS_NOTIFY_SUB_PROMOTION = true` when ready. |
 | BL-17: Two Series events same day | 🔲 Low | `getLiveEvent()` uses Array.find() — first match wins. |
 | Players list broken on one iPhone | 🔲 Parked | Suspected older WebKit. |
+| Retire "Load from Profiles" / Quick HCP panel in GolfScorer | 🔲 Pending | Tab 7 `bf_player_profiles` is a stale parallel HCP source — caused Series#4 mismatch. Offered for retirement in Session 35, not yet confirmed. |
 
 ---
 
@@ -534,87 +621,89 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 ### GolfScorer — Phone/iPad Executable
 **Decision (Session 34):** Deferred. If BirdieFriends goes commercial, GS will be fully rewritten — no point engineering onto the current single-file architecture.
 
-**Option A (GitHub Pages hosting) — what it would take:**
-- Host `BF_Golf_Scorer_8.html` at `birdiefriends.com/gs.html`
-- Replace all `fetch('/publish/...')` Python server calls with GitHub Contents API calls
-- Rework TEST_PREVIEW_MODE; proxy GitHub token through Worker (body size risk)
-- localStorage scoring state works fine on any device already
-
-**Why deferred:** GS stays home on event day (Rule #12). A commercial rewrite would use a proper backend (React/Vue, real-time multi-group scoring, cloud DB) making this moot. Effort if pursued on current codebase: ~2–3 sessions.
-
 ---
 
 ## 12. Session History
 
+### Session 40 — 2026-06-18
+- **Deploy infrastructure — all limitations eliminated:** Proven via live testing that Cloudflare free tier allows 100MB request bodies (not 100KB as previously documented). Portal (420KB) and GolfScorer (369KB) both deploy successfully via `POST /deploy`. The "no Claude-safe mechanism for portal/GolfScorer deploys" gap is fully closed.
+- **`/deploy` route added to Worker (was missing):** Session BP-1 noted the source was synced, but the `/deploy` route was not present in `source/worker.js`. Added and deployed (Session 40). Worker source in library now matches live.
+- **`/deploy` expanded to accept `docs/` paths:** Portal live file is at `docs/portal.html` (GitHub Pages). Worker previously restricted to `source/` only. Updated to accept `source/` or `docs/` — confirmed working. Worker version 2026-06-18b.
+- **Deploy procedures rewritten in Ops Guide and Session Starter** to reflect actual current state — all legacy "unresolved" and "no Claude-safe mechanism" language removed.
+- **`bf_deploy.py` role clarified:** The rule against Claude executing its TOKEN-authenticated functions is a credential hygiene rule, not a capability limitation. The Worker `/deploy` route covers all files Claude needs to push. `bf_deploy.py` remains in the library for reference only.
+
+### Session BP-1 / Chat#39 — 2026-06-18
+- Business plan library bootstrapped (`source/bizplan/`): BF_BizPlan_Vision.md, BF_BizPlan_GateLog.md, BF_BizPlan_Session_Log.md, BF_Capability_Inventory.md deployed.
+- deploy.html: stale WORKER_URL fixed, literal `\n` sequences in Claude tab fixed, Business Plan section added to Library tab.
+- Worker: `/history` and `/rollback` endpoints added; source synced to library (partially — `/deploy` route was still missing, fixed Session 40).
+
+### Session 38 — 2026-06-18
+- **Finding:** Claude had been directly executing `bf_deploy.py`'s embedded GitHub TOKEN — identified as inconsistent with credential handling rules. Going forward, Claude does not invoke TOKEN-authenticated functions.
+- **Worker `/deploy` route added** (PIN-gated, `env.GH_TOKEN` Cloudflare secret, `source/` path restriction at the time). Verified end-to-end against a test file.
+- **`deploy_file()` patched** in `bf_deploy.py` to handle new-file creation (404-on-missing-sha).
+- **Network egress note:** `birdiefriends-push.birdiefriends01.workers.dev` must be in the sandbox allowlist before session start — adding mid-session doesn't apply retroactively.
+
 ### Session 37 — 2026-06-17/18
-- **Groupings archive rebuilt (the actual fix, not a patch):** root cause was `grpPublish` never connecting to series data at all — Final-groupings happens pre-round, before the event record even exists. New mechanism: `grpPublish('Final')` persists `{eventName: archiveFile}` to a durable `bf_groupings_archive` localStorage map; `saveEventToSeries()` reads it and attaches `groupingsFile` automatically at event-creation time. Series#4 fixed retroactively (live results.html + local GS export, both verified by direct JSON inspection, not assumption).
-- **Two further, separate real bugs found in `generateResultsPage()`'s Groups tab**, discovered only after the data-sync fix above was already confirmed correct: `onclick="openGroupingsForEvent()"` called a function that didn't exist anywhere in the file, and the `tab-groups` content panel was duplicated wholesale in the template. Both fixed; new Golden Rule #19 added so this class of bug gets checked for by default next time. standings.html has the same broken onclick with no supporting panel at all behind it — separate, lower-priority, parked.
-- **New Event safety guard:** `resetAll()` hard-blocks (requires typing `DISCARD`) if the loaded event has scores entered but isn't yet saved to series — was previously a single generic confirm regardless of risk.
-- **View Saved Event (Tab 5):** read-only selector for any already-saved event, rendered through the same display as live results, sourced from series data — no scorecard re-import needed. Verified against known values (Series#4 podium) before trusting it.
-- **End of Event:** one action runs Save to Series → Push to Sheets → Publish All Pages with per-step status and per-step retry — built for real conditions (spotty WiFi, post-round, low bandwidth), not the calm-office case the four separate buttons assumed.
-- **Launcher hardened:** `launch_golf_scorer.py` now fails loudly (not silently) on a port-8743 conflict, explaining that an old server is likely still running; `Launch_Golf_Scorer.bat`'s server window no longer auto-minimizes, and its kill-old-server step now verifies the port actually freed up instead of assuming success.
-- **My Game → My Series naming pass:** the static historical page (`mygame.html`) and every reference to it (nav pills on results/standings/groupings, publish toasts, guide.html) renamed to "My Series," disambiguating it from the separate, newer portal-native live "My Game" screen (Session 36), which was already correctly named and untouched.
-- **Diagnosed, not a regression:** Sheets push failure was a missing `bf-golf-scorer-key.json` on disk (moved during a folder cleanup), not a token or code issue — confirmed by replicating the GitHub pull call directly and finding it worked fine.
-- **Not done this session:** GS atomicity (`grpPublish Final` → write `results.html` directly) — carried over from Session 36, still untouched. First task next session if nothing more urgent.
+- **Groupings archive rebuilt (the actual fix):** `grpPublish('Final')` now persists `{eventName: archiveFile}` to `bf_groupings_archive` localStorage; `saveEventToSeries()` reads it and attaches `groupingsFile` automatically. Series#4 fixed retroactively.
+- **Two further bugs in `generateResultsPage()`:** onclick pointed at a non-existent function; `tab-groups` content panel duplicated. Both fixed. New Golden Rule #20 added.
+- **New Event safety guard:** hard-blocks on unsaved scored round, requires typing `DISCARD`.
+- **View Saved Event (Tab 5):** read-only selector for any saved event.
+- **End of Event:** one tracked action — Save to Series → Push to Sheets → Publish All Pages.
+- **Launcher hardened:** loud port-conflict failure, visible server window, kill-old-server verified.
+- **My Game → My Series naming pass** across all generated pages.
 
 ### Session 35 — Series#4 Post-Round (2026-06-14)
-- **GS quota display bug v2 (v8.17·2026-06-14a/b):** Session 34 fix refreshed `p.quota` at merge time, but 3 render sites (card, table, published groupings) still used the cached value — could go stale again after any HCP edit. Fixed all 3 to compute live via `grpGetEstimatedQuota`. Also fixed `grpUpdateHcp` (card inline edit), which stored the raw-formula quota instead of the adjustment-formula quota — likely the original source of the stale value. Confirmed Tab 2 scoring was already correct (display/publish only).
-- **HCP in published groupings (v8.17·2026-06-14b):** player HCP shown next to name, e.g. "Brian Hager HCP 6.4"; NoHCP players show "NoHCP".
-- **Cross-device skin-stop fix (v3.10.107):** `_skinHoles` is per-device in-memory only — two overseers on different phones both saw "current Skin leader" for the same hole (confirmed live on Series#4 #9). `submitBirdieAlert` now checks the shared Worker `/feed` for prior birdies on the hole across all devices before composing its message.
-- **Birdie/Eagle/Albatross selector (v3.10.108):** 3-way score-type selector added to Birdie Alert; message verb and emoji adapt per type; skin-stop detection recognizes all three.
-- **HCP source of truth confirmed:** Groups tab (`playerHistory.currentHcp`) is sole source — "Load from Profiles" (Tab 7, `bf_player_profiles`) is a stale parallel store that caused a full-roster HCP/quota mismatch ahead of Series#4 results. Re-running Kick Off corrects Tab 2. Retiring the Profiles HCP path is pending — first task next session if needed.
+- Quota display bug v2 fixed: all three render sites now compute live via `grpGetEstimatedQuota`. `grpUpdateHcp` fixed to store adjustment-formula quota.
+- HCP in published groupings: player HCP shown next to name.
+- Cross-device skin-stop fix (v3.10.107): `submitBirdieAlert` checks shared Worker `/feed` for prior birdies across all devices.
+- Birdie/Eagle/Albatross selector (v3.10.108).
+- HCP source of truth confirmed: Groups tab is sole source; "Load from Profiles" is stale.
 
 ### Session 34 — Chat#34 BF Dev - Series#4 Prep (2026-06-12)
-- **Bootstrap fix:** deploy.html copy button now enforces `bash_tool curl` method; `node --check` mandatory pre-deploy gate
-- **GS quota display bug (v8.17a):** `grpMergePlayers` existing-player branch now re-fetches `currentHcp` + recomputes quota via `grpGetEstimatedQuota` on every Fetch Registrants — was showing stale stored prev quota. Display only; no Series#3 scoring impact.
-- **Portal v3.10.96–v3.10.106:** CttP player picker (`_ctpPlayer` state + `openPlayerSheet`); live panel section delineation (dark header strips); groupings iframe sheet (both live panel + event card); event card in-progress state (⛳ + elapsed time); event card sunset (Series +6h, others +5h); Scorecard Check admin card; scorecard chevron fix; architecture diagram in library
-- **Versioning philosophy:** Golden Rule added; 3.11.0 triggers at Alerts/Inbox launch
+- Bootstrap fix; `node --check` mandatory pre-deploy gate established.
+- GS quota display bug (v8.17a): `grpMergePlayers` re-fetches `currentHcp` + recomputes quota on every Fetch Registrants.
+- Portal v3.10.96–v3.10.106: CttP player picker, live panel dark header strips, groupings iframe sheet, event card in-progress state, Scorecard Check admin card.
 
 ### Session 33 — 2026-06-11
-- **Notification architecture:** `submitBirdieAlert` + `sendCtpNotification` now route through `osSendAll()` — `bfw=Yes` + InActive filter enforced; `included_segments: ['All']` removed
-- **bfType taxonomy:** complete — all call sites tagged
-- **Message copy rewritten:** full names throughout; CttP prior-leader snapshot before `_ctpData` overwrite
-- **Admin cards:** all 6 collapsible via shared `toggleAdminCard()`; Push Subscribers lazy-loads
-- **Alerts/Inbox design captured** in this guide
+- Notification architecture: `submitBirdieAlert` + `sendCtpNotification` now route through `osSendAll()`.
+- Complete `bfType` taxonomy applied. Message copy rewritten with full names.
+- All 6 admin cards collapsible via shared `toggleAdminCard()`.
 
 ### Session 32 — 2026-06-09
-- **GS:** `↺ New Event` button; Players tab onclick fix; `resetAll()` clears Groups tab; `deploy_file()` added to `bf_deploy.py`; `launch_golf_scorer.py` auto-pulls GS from GitHub on startup
-- **Groupings archive:** `grpPublish Final` saves to series localStorage; `generateResultsPage` builds `GROUPINGS_ARCHIVE`; ⛳ Groups tab added to results; embed mode for iframe display
+- GS: `↺ New Event` button; Players tab onclick fix; `resetAll()` clears Groups tab.
+- Groupings archive system end-to-end; Groups tab in results; embed mode.
 
 ### Session 31 — 2026-06-05/06
-- Garrett's Last Swing archive: self-contained `garretts-last-swing-ARCHIVE.html` with 36 base64-embedded photos, competition records, full scorecards
+- Garrett's Last Swing archive: self-contained HTML with 36 base64-embedded photos.
 
 ### Session 30 — 2026-06-04
-- Garrett's Last Swing gallery page; event site schema documented in `BF_EventSite_Schema.md`
+- Garrett's Last Swing gallery page; event site schema documented.
 
 ### Session 29 — 2026-06-03
-- Worker KV Feed live: `feed::{timestamp}` entries on every push send; `GET /feed` + `DELETE /feed` endpoints; portal reads `/feed` not OneSignal history
-- `bf_deploy.py` established as canonical Claude-direct deploy script; bootstrap hardened
+- Worker KV Feed live. `bf_deploy.py` established as canonical deploy script.
 
 ### Session 28 — 2026-06-02/03
-- Worker: `GET /history`, `POST /deploy`, `POST /rollback` endpoints; GitHub token in Worker
-- deploy.html Claude tab with copy button; `start.html` for mobile session starts
+- Worker: `GET /history`, `POST /deploy`, `POST /rollback` endpoints added.
+- deploy.html Claude tab with copy button.
 
 ### Session 27 — 2026-05-31/06-01
-- OneSignal identity rebuilt: Jotform `pushId` (QID 23) as single source of truth; `external_user_id` removed; Admin shows clean two-tier subscribed/not-subscribed view
+- OneSignal identity rebuilt: Jotform `pushId` (QID 23) as single source of truth.
 
 ### Session 26 — 2026-05-30
-- Push Broadcast card in Admin; Schrödinger 5th-player orange chip; fivesome warning scoped to 5th registrant only
+- Push Broadcast card in Admin; Schrödinger 5th-player orange chip.
 
 ### Sessions 19–25 — May 2026
 - Live Event System built (gold banner, Birdie Alert, CttP, Scorecard)
-- Cloudflare KV feature flags (`BF_FLAGS` namespace)
-- Reusable dark-themed slide-up player picker
-- Portal v3.9.x → v3.10.x: new nav (My Events / Parked / Schedule / Results), swipe-to-dismiss, Schedule tab
+- Cloudflare KV feature flags; reusable dark-themed player picker
+- Portal v3.9.x → v3.10.x
 
 ### Sessions 12–18 — May 2026
 - Member management switched to Jotform live feed; self-registration flow; Commissioner PIN lock
-- Full OneSignal push integration; Cloudflare Worker proxy; per-player subscription; Admin subscriber table
+- Full OneSignal push integration; Cloudflare Worker proxy
 
 ### Sessions 1–9 — May 2026
-- GolfScorer v8.x built: Stableford quota scoring, Best 4 series formula, flight standings, player profiles
-- Groups tab: drag-drop builder, Jotform registrant fetch, tee time calculator, Preliminary/Final publish states
-- Synthetic 8-event test season validated scoring engine
+- GolfScorer v8.x built: Stableford quota scoring, Best 4 series formula, flight standings
+- Groups tab: drag-drop builder, Jotform registrant fetch, tee time calculator
 
 ---
 
@@ -626,9 +715,9 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 | v3.10.0 | New nav, swipe-to-dismiss, Schedule tab, Admin to ⚙️ gear |
 | v3.10.23 | Nav renamed: Home→⛳ My Events, Events→🅿️ Parked |
 | v3.10.29–32 | Fivesome warning banner + detection |
-| v3.10.50 | iOS 3-step visual install guide; Android one-tap native install; first-PWA-launch auto-prompt |
+| v3.10.50 | iOS 3-step visual install guide; Android one-tap native install |
 | v3.10.51 | Event Control: Start Live Now / Close Event; live_override flag |
-| v3.10.58 | **Jotform-first notification architecture** — pushId as identity; osSendAll/osSendToPlayers rebuilt |
+| v3.10.58 | Jotform-first notification architecture — pushId as identity |
 | v3.10.65 | Text All Players; guide.html added to deploy |
 | v3.10.66 | Skins message logic; re-register bug; scorecard submit→confirm→next flow |
 | v3.10.91 | Fix notification recipient scope — osSendAll() for Birdie Alert + CttP |
@@ -653,6 +742,8 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 | 2026-06-01 | DELETE /notifications/clear (PIN required) |
 | 2026-06-02 | OS_REST_KEY → rich key format |
 | 2026-06-03 | GET /history, POST /deploy, POST /rollback; KV feed (feed::{timestamp}), GET /feed, DELETE /feed |
+| 2026-06-18a | /deploy route confirmed present in library source; source synced to live |
+| 2026-06-18b | /deploy expanded to accept docs/ paths in addition to source/ |
 
 ### GolfScorer (v8.17 series)
 | Version | Key Change |
@@ -670,11 +761,10 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 | v8.17 · 2026-06-12a | Quota display fix: grpMergePlayers refreshes existing player quotas on re-fetch |
 | v8.17 · 2026-06-14a | Quota display v2: 3 render sites compute live via grpGetEstimatedQuota; grpUpdateHcp fixed |
 | v8.17 · 2026-06-14b | Player HCP shown next to name in published groupings |
-| v8.17 · 2026-06-17a | Permanent groupings-archive fix: grpPublish persists `bf_groupings_archive` map; saveEventToSeries attaches groupingsFile automatically |
-| v8.17 · 2026-06-17b | New Event safety guard — hard-blocks on unsaved scored round, requires typing DISCARD to override |
+| v8.17 · 2026-06-17a | Permanent groupings-archive fix: grpPublish persists bf_groupings_archive map; saveEventToSeries attaches groupingsFile automatically |
+| v8.17 · 2026-06-17b | New Event safety guard — hard-blocks on unsaved scored round, requires typing DISCARD |
 | v8.17 · 2026-06-17c | View Saved Event selector added to Tab 5 |
 | v8.17 · 2026-06-17d | End of Event — Save to Series → Push to Sheets → Publish All Pages as one tracked, retryable action |
 | v8.17 · 2026-06-17e | My Game → My Series naming fix across all generated-page nav and publish-toast text |
-| v8.17 · 2026-06-17f | Groups tab initial-load sync fix (opacity/title/cursor were only ever updated on a pill click, never on first load) |
-| v8.17 · 2026-06-17g | Real Groups tab click fix: onclick pointed at a non-existent function, plus duplicate tab-content panel removed, in generateResultsPage |
-
+| v8.17 · 2026-06-17f | Groups tab initial-load sync fix |
+| v8.17 · 2026-06-17g | Real Groups tab click fix: onclick pointed at non-existent function; duplicate tab-content panel removed |
