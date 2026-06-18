@@ -296,9 +296,9 @@ export default {
       });
     }
 
-    // POST /deploy — push arbitrary content to a source/ file in GitHub (PIN required)
-    // Body: { pin, path: "source/<file>", content: "<file contents>", message: "<commit msg>" }
-    // path must start with "source/" (enforced server-side, defense-in-depth)
+    // POST /deploy — push arbitrary content to a source/ or docs/ file in GitHub (PIN required)
+    // Body: { pin, path: "source/<file>" or "docs/<file>", content: "<file contents>", message: "<commit msg>" }
+    // path must start with "source/" or "docs/" (enforced server-side)  VERSION: 2026-06-18b
     // Handles both new-file creation (no sha) and existing-file updates (fetches current sha)
     // Response: { ok, commitSha }
     if (request.method === 'POST' && url.pathname === '/deploy') {
