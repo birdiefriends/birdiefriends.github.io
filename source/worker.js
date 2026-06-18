@@ -200,7 +200,7 @@ export default {
       });
     }
 
-    // Shared path map used by /history and /rollback
+    // Shared path map used by /history, /rollback, and /deploy
     const FILE_PATHS = {
       portal:    'source/portal.html',
       guide:     'source/guide.html',
@@ -266,7 +266,8 @@ export default {
       }
       const atShaData = await atShaResp.json();
       // GitHub returns base64 with embedded newlines — strip them before re-PUT
-      const restoredContent = (atShaData.content || '').replace(/\n/g, '');
+      const restoredContent = (atShaData.content || '').replace(/
+/g, '');
 
       // 2. Get current SHA on main (required for the PUT)
       const currentResp = await fetch(`${contentsUrl}?ref=${GH_BRANCH}`, { headers: ghHeaders });
@@ -292,6 +293,65 @@ export default {
         return new Response(JSON.stringify({ error: 'GitHub commit failed', status: putResp.status, detail: putData }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       return new Response(JSON.stringify({ ok: true, newCommitSha: putData.commit.sha }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // POST /deploy — push arbitrary content to a source/ file in GitHub (PIN required)
+    // Body: { pin, path: "source/<file>", content: "<file contents>", message: "<commit msg>" }
+    // path must start with "source/" (enforced server-side, defense-in-depth)
+    // Handles both new-file creation (no sha) and existing-file updates (fetches current sha)
+    // Response: { ok, commitSha }
+    if (request.method === 'POST' && url.pathname === '/deploy') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { pin, path: ghPath, content, message } = body;
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (!ghPath || !ghPath.startsWith('source/')) {
+        return new Response(JSON.stringify({ error: 'path must start with source/' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (!content) {
+        return new Response(JSON.stringify({ error: 'Missing content' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+
+      const contentsUrl = `https://api.github.com/repos/${GH_REPO}/contents/${ghPath}`;
+
+      // Encode content as base64
+      const encoded = btoa(unescape(encodeURIComponent(content)));
+
+      // Try to get current file SHA (needed for updates; omit for new files)
+      let currentSha;
+      const currentResp = await fetch(`${contentsUrl}?ref=${GH_BRANCH}`, { headers: ghHeaders });
+      if (currentResp.ok) {
+        const currentData = await currentResp.json();
+        currentSha = currentData.sha;
+      } else if (currentResp.status !== 404) {
+        const errText = await currentResp.text();
+        return new Response(JSON.stringify({ error: 'GitHub error fetching current SHA', status: currentResp.status, detail: errText }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      // 404 = new file, currentSha stays undefined — omit sha from PUT body
+
+      const putBody = {
+        message: message || `Deploy ${ghPath}`,
+        content: encoded,
+        branch:  GH_BRANCH,
+      };
+      if (currentSha) putBody.sha = currentSha;
+
+      const putResp = await fetch(contentsUrl, {
+        method: 'PUT',
+        headers: { ...ghHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify(putBody),
+      });
+      const putData = await putResp.json();
+      if (putResp.status !== 200 && putResp.status !== 201) {
+        return new Response(JSON.stringify({ error: 'GitHub commit failed', status: putResp.status, detail: putData }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      return new Response(JSON.stringify({ ok: true, commitSha: putData.commit.sha }), {
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
     }
