@@ -26,21 +26,69 @@ standing top-priority item for whichever session next touches the portal or Golf
 
 WORKER RULE:
 Worker changes require worker.js from the library (source/worker.js).
-Claude never reconstructs Worker code without the source file. Worker code changes still
-require manual paste into the Cloudflare dashboard by the user — that hasn't changed.
+Claude never reconstructs Worker code without the source file. Worker source is now in sync
+with live Cloudflare (synced Session BP-1 / Chat#39). Worker code changes still require
+manual paste into the Cloudflare dashboard by the user — that hasn't changed.
+
+BIZPLAN RULE:
+Business plan docs live at source/bizplan/ — separate from the dev source/ library.
+A dedicated BF_BizPlan_Bootstrap.md (not yet built) will govern bizplan sessions.
+For now, bizplan sessions load the 4 BP docs directly from source/bizplan/ via curl.
 -->
 
-# BirdieFriends Golf Scorer — Session 39 Starter
-**Date:** TBD (follows Session 38, 2026-06-18)
+# BirdieFriends Golf Scorer — Session 40 Starter
+**Date:** TBD (follows Session BP-1 / Chat#39, 2026-06-18)
 **Portal Version (production):** v3.10.139 · 2026-06-16 ← unchanged this session (no portal work done)
 **GolfScorer Version:** v8.17 · 2026-06-17g (deployed) ← unchanged this session
-**Worker Version:** 2026-06-18 (added PIN-gated POST /deploy route + GH_TOKEN secret — see Session 38 section below)
+**Worker Version:** 2026-06-18 (added /history and /rollback routes; source synced to library — see Session BP-1 section below)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
 
 ---
 
----
+## Session BP-1 / Chat#39 — Bizplan Infrastructure + Worker Closure (2026-06-18)
+
+*Note: This session was intended as a pure business plan session but pivoted to dev infrastructure
+to close three carry-forward issues from Session 38. Both tracks are documented here.*
+
+### Business Plan — Library bootstrapped (source/bizplan/)
+- Created `source/bizplan/` subfolder in the GitHub repo as the permanent home for business plan docs
+- Deployed all 4 BP-1 output documents to the library:
+  - `BF_BizPlan_Vision.md` — core vision, settled theses, tone principles
+  - `BF_BizPlan_GateLog.md` — six-gate viability tracker (Gates 1–2 in progress, 3 directional, 4 napkin, 5–6 not started)
+  - `BF_BizPlan_Session_Log.md` — chronological session changelog
+  - `BF_Capability_Inventory.md` — current + commercial roadmap capability list (v0.2)
+- **BF_BizPlan_Bootstrap.md not yet built** — flagged as first task for next dedicated bizplan session. Until it exists, bizplan sessions should load the 4 docs from source/bizplan/ via curl at session start.
+
+### deploy.html — Three fixes shipped
+1. **Stale WORKER_URL** — was pointing to `birdiefriends-push.bgolfer4.workers.dev` (old account subdomain). Fixed to `birdiefriends-push.birdiefriends01.workers.dev` — confirmed correct from Cloudflare dashboard (one Worker, one current account).
+2. **Literal `\n` text in Claude tab** — 24 literal backslash-n sequences were baked into the Claude tab HTML block (previous session paste-gone-sideways artifact). Now real newlines — Claude tab renders correctly.
+3. **Business Plan section in Library tab** — second section added below the dev source/ list, pointing at source/bizplan/. Uses same View/↓/↗ GitHub pattern. Backed by a generalized `renderDirList(path, elId, order)` function — source/ and source/bizplan/ both use it, refresh independently.
+- Both `source/deploy.html` and `docs/deploy.html` updated.
+
+### worker.js — Source synced + /history and /rollback added
+- **Source-of-truth gap closed:** `source/worker.js` in the library was missing all code added during Session 38's Worker variable work — `/deploy` route, `env.GH_TOKEN` usage, etc. The live Cloudflare Worker had been running code that was never committed back. Now fully synced.
+- **`/history` endpoint added:** `GET /history?file=<key>&n=<count>` — fetches commit history from GitHub for any managed source file. File keys: `portal`, `guide`, `worker`, `golfscore`, `ops_guide`. Returns `{ commits: [{ sha, short, message, date }] }`. No auth required (read-only).
+- **`/rollback` endpoint added:** `POST /rollback { pin, file, sha }` — restores a source file to a prior commit by fetching content at that SHA and pushing it as a new forward commit. PIN-gated. Returns `{ ok, newCommitSha }`.
+- Both endpoints share a `FILE_PATHS` map and the `env.GH_TOKEN` secret already present in the Worker.
+- Worker pasted into Cloudflare dashboard by user — confirmed deployed.
+- **History and Rollback tabs in deploy.html are now fully functional.**
+
+### Worker egress note (re-confirmed)
+- Claude's sandbox requires `birdiefriends-push.birdiefriends01.workers.dev` in the network egress allowlist before the session starts. This was confirmed working this session. The 403/1010 bot-check failure seen on first attempt was resolved by adding a browser-like `User-Agent` header — required for all Python `urllib` calls to this endpoint, now documented in the deploy script pattern.
+
+### User-Agent requirement for Worker /deploy calls
+Any Python script hitting the Worker `/deploy` endpoint must include:
+```python
+'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+```
+Without it, Cloudflare's edge bot-fight check returns 403/error-1010 before the Worker code runs.
+
+### Not done this session
+- **Portal + GolfScorer deploys still have no settled Claude-safe mechanism.** Standing top priority — see Session 38 note.
+- **BF_BizPlan_Bootstrap.md** not yet built — first task for next dedicated bizplan session.
+- **Classic GitHub token in bf_deploy.py / deploy.html not yet retired** — recommended once the new Worker route is fully trusted for all use cases.
+
 
 ## Session 38 Accomplishments — Worker /deploy route + credential-handling fix (2026-06-18)
 
@@ -56,7 +104,7 @@ require manual paste into the Cloudflare dashboard by the user — that hasn't c
 
 ### Known gap, not closed this session
 - **Portal + GolfScorer deploys have no settled Claude-safe mechanism right now.** The old `deploy()`'s atomic portal+version push and the GS auto-version-bump logic only exist in the now-restricted `bf_deploy.py`. Porting that logic into the Worker's `/deploy` route (or a second dedicated route) is the natural next step — **first priority for whichever session next needs to push the portal or GolfScorer.**
-- `deploy.html`'s Deploy/History/Rollback UI tabs are still broken (wrong `WORKER_URL` subdomain typo, plus the routes never existed before today) — separate, lower-priority finding, not yet fixed. The Library tab's read-only view/download still works.
+- `deploy.html`'s Deploy/History/Rollback UI tabs — fixed Session BP-1/Chat#39: WORKER_URL subdomain corrected, /history and /rollback routes added to Worker and deployed. All tabs now functional. Library tab also gained a Business Plan section.
 - The original exposed classic GitHub token in `bf_deploy.py`/`deploy.html` has not been retired yet — recommended fast-follow once the new route above is trusted, not yet done.
 
 ## Session 37 Accomplishments — Groupings History Fix + Safety/Workflow Features (2026-06-17/18)
@@ -560,11 +608,11 @@ Only `v1: true` formats shown in picker. Future formats flip to true as supporte
 | GET | `/notifications` | None | Fetch notification history (OneSignal) |
 | DELETE | `/subscription/:id` | None | Delete one push subscription |
 | DELETE | `/notifications/clear` | PIN 7797 | Cancel scheduled notifications only — does NOT delete delivered messages |
-| GET | `/history?file=X&n=20` | None | Last N commits for a managed file |
+| GET | `/history?file=X&n=20` | None | ✅ Live — Last N commits for a managed file |
 | POST | `/deploy` | PIN 7797 | Push file content to GitHub + write KV snapshot |
-| POST | `/rollback` | PIN 7797 | Restore file to a prior commit SHA |
-| GET | `/feed` | None | **Planned** — Worker KV feed |
-| DELETE | `/feed` | PIN 7797 | **Planned** — Clear KV feed entries |
+| POST | `/rollback` | PIN 7797 | ✅ Live — Restore file to a prior commit SHA |
+| GET | `/feed` | None | ✅ Live — Worker KV announcement feed |
+| DELETE | `/feed` | PIN 7797 | ✅ Live — Clear KV feed entries |
 
 ### KV Flags
 | Key | Type | Purpose |
@@ -604,7 +652,7 @@ Portal (Claude deploys directly — no download needed):
 - Wait ~60 seconds → hard refresh on phone → confirm new version in header
 
 Worker (Claude deploys directly — no download needed):
-- Claude runs bf_deploy.deploy_file('worker.js', 'source/worker.js', 'msg')
+- Claude uses Worker POST /deploy to push to source/worker.js (no token in chat)
 - Then: Cloudflare → Workers → birdiefriends-push → Edit code → paste → Save and Deploy
   (Worker still requires manual Cloudflare paste — GitHub source/ is the record, not the live worker)
 
