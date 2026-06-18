@@ -5,7 +5,7 @@ Functions:
   deploy(portal_path, commit_msg)  — push local file, increment version
   rollback(sha, commit_msg)        — restore portal to a prior commit SHA, increment version
 """
-import sys, urllib.request, json, base64, re
+import sys, urllib.request, urllib.error, json, base64, re
 from datetime import datetime, timezone
 
 TOKEN  = 'ghp_zNaEDRNPhn' + 'eWP7FuYpFcyrMvVSjxCx3vfYjK'
@@ -117,7 +117,9 @@ def _bump_gs_version(content):
 
 def deploy_file(local_path, gh_path, commit_msg='update'):
     """Deploy any single file directly to a GitHub path.
-    For GolfScorer (BF_Golf_Scorer_8.html), auto-bumps version — structurally enforced."""
+    For GolfScorer (BF_Golf_Scorer_8.html), auto-bumps version — structurally enforced.
+    Creates the file if it doesn't exist yet in the repo (no sha required by the GitHub
+    Contents API for new files); updates it in place if it does."""
     with open(local_path, 'r', encoding='utf-8') as f:
         file_content = f.read()
     # Auto-bump GolfScorer version — cannot be skipped
@@ -130,11 +132,16 @@ def deploy_file(local_path, gh_path, commit_msg='update'):
             with open(local_path, 'w', encoding='utf-8') as f:
                 f.write(file_content)
     encoded = base64.b64encode(file_content.encode('utf-8')).decode()
-    cur = gh_get(f'/contents/{gh_path}?ref=main')
-    result = gh_put(f'/contents/{gh_path}', {
-        'message': commit_msg,
-        'content': encoded, 'sha': cur['sha'], 'branch': BRANCH
-    })
+    payload = {'message': commit_msg, 'content': encoded, 'branch': BRANCH}
+    try:
+        cur = gh_get(f'/contents/{gh_path}?ref=main')
+        payload['sha'] = cur['sha']
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f'ℹ️  {gh_path} not found in repo — creating new file')
+        else:
+            raise
+    result = gh_put(f'/contents/{gh_path}', payload)
     print(f'✅ {gh_path} → {result["commit"]["sha"][:7]}')
     print(f'\n🚀 {gh_path} deployed — live in ~60s')
     return result
