@@ -78,13 +78,16 @@
 14. **Remote flags affect all devices instantly.** KV flags take effect on next page load for every user.
 15. **After Publish Groupings, wait ~60 seconds before sharing the link.** GitHub Pages CDN caches aggressively.
 16. **When something doesn't work, check the phone first.** The portal is mobile-first PWA — iOS rendering and PWA chrome require a real device.
-17. **After updating `launch_golf_scorer.py`, restart the server.** Close the console window and reopen `Launch_Golf_Scorer.bat`.
+17. **After updating `launch_golf_scorer.py`, restart the server.** Close the console window and reopen `Launch_Golf_Scorer.bat`. As of Session 37 the server window no longer auto-minimizes — leave it visible; a GitHub pull failure or port conflict now prints a loud, explicit message there instead of failing silently.
 
 **Versioning Philosophy**
 18. **Patch / Minor / Major:**
     - **Patch (3.10.x):** bug fixes, UI tweaks, copy changes, adding a button. No new capability.
     - **Minor (3.10 → 3.11):** meaningful new feature a player would notice. Next trigger: Alerts/Inbox launch → **3.11.0**.
     - **Major (3.x → 4.0):** architectural shift — new backend, off Jotform, commercial multi-tenant.
+
+**Template Integrity**
+19. **Generated HTML templates (results.html, standings.html, mygame.html, groupings.html) must have every `onclick` reference a function that actually exists in that same file, and no duplicate element IDs.** A `node --check` syntax gate catches JS errors but catches neither of these — both fail completely silently (nothing happens on click, no console error visible at a glance). Confirmed bug, Session 37: the Groups tab's `onclick="openGroupingsForEvent()"` called a function that was never defined anywhere in `generateResultsPage()`'s output, and the `tab-groups` content panel was duplicated wholesale in the same template. Spot-check before trusting a template fix: `grep` every `onclick="X("` target and confirm `function X` exists; `grep -c 'id="..."'` for anything that should be unique.
 
 ---
 
@@ -128,17 +131,16 @@ Worker changes still require manual Cloudflare paste — GitHub `source/worker.j
 1. dash.cloudflare.com → Workers & Pages → birdiefriends-push → Edit code
 2. Paste `worker.js` contents (overwrite entire editor) → Save and Deploy
 
-### Generated Pages (MyGame, Results, Standings, Groupings)
+### Generated Pages (My Series, Results, Standings, Groupings)
 1. Launch GS → score event → Calculate Results
-2. Click **🌐 Publish All Pages** → wait ~60s
+2. Click **🏁 End of Event** (Session 37+) — runs Save to Series → Push to Sheets → Publish All Pages as one tracked action, with per-step status and per-step retry. Or run the three individually via the Actions bar if preferred.
 
-**Groupings publish (separate):**
+**Groupings publish (separate, pre-round):**
 - Click **🌐 Publish Groupings** in Groups tab
 - Set Status → **Final** before final publish
-- Deploys `groupings.html` + `groupings-meta.json`
+- Deploys `groupings.html` + `groupings-meta.json` + the permanent archive copy
 - Wait ~60s before sharing link
-
-**Session-end checklist addition:** After Final publish, verify `groupingsFile` is in series data → run Publish All Pages to update results.html.
+- **As of Session 37, no manual follow-up needed:** `grpPublish` Final now writes the archive pointer into a durable `bf_groupings_archive` localStorage map keyed by event name; `saveEventToSeries()` reads that map and attaches `groupingsFile` to the event record automatically when the round is saved. The old manual checklist step ("verify groupingsFile is in series data, then re-publish") is gone — this is what it replaced.
 
 ### Token Recovery
 GitHub token lost: github.com → Settings → Developer settings → Personal access tokens → GolfScorer → Regenerate. Paste new `ghp_...` into BOTH `deploy_portal.py` line 16 AND `launch_golf_scorer.py` line 39. Both must match or one will fail with 401.
@@ -151,11 +153,12 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 | Component | Version | Status |
 |-----------|---------|--------|
 | Portal | v3.10.108 · 2026-06-14 | Production ✅ |
-| GolfScorer | v8.17 · 2026-06-14b | Deployed ✅ |
+| GolfScorer | v8.17 · 2026-06-17g | Deployed ✅ |
 | Worker | 2026-06-03 | Deployed ✅ |
 | deploy.html | 2026-06-12 | Live ✅ |
 | bf_deploy.py | 2026-06-09 | Current ✅ |
 | bf_architecture.html | 2026-06-12 | Library ✅ |
+| Launch_Golf_Scorer.bat / launch_golf_scorer.py | 2026-06-17 | Current ✅ — hardened (visible server window, loud port-conflict failure); laptop-only, not in GitHub |
 
 ### Library Files (fetched at session start)
 | File | Path |
@@ -388,22 +391,34 @@ Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
 ### Running GolfScorer
 1. Double-click **`Launch_Golf_Scorer.bat`** — auto-pulls latest GS from GitHub on startup
 2. Chrome opens at `http://localhost:8743/BF_Golf_Scorer_8.html`
-3. Console window minimizes — leave it running
+3. As of Session 37, the server runs in its own titled window ("BF Golf Scorer Server") and does **not** auto-minimize — leave it visible. A GitHub pull failure or a port-8743 conflict (most likely cause: an old server process still running) now prints a loud, explicit message there instead of dying silently behind a hidden window.
 
 ### Data Recovery
 - All Groups tab state in localStorage key `bf_groups_data`
 - Recovery: open console → `grpOnTabOpen()`
 - Export: Groups tab → Export JSON. Import: Groups tab → Import JSON.
 
-### Groupings Archive System
-1. `grpPublish` Final → writes `groupings-{slug}.html` to GitHub + saves `groupingsFile` into series localStorage
-2. `Publish All Pages` → embeds `groupingsFile` references in `results.html` as `GROUPINGS_ARCHIVE`
-3. `loadEvent(name)` → iframes archive file with `?embed=1` (hides nav for clean display)
+### Groupings Archive System (rebuilt Session 37 — read this before touching it again)
+**The mechanism, as it actually works now:**
+1. `grpPublish('Final')` writes `groupings-{slug}.html` to GitHub (the permanent archive copy) **and** persists `{ eventName: archiveFile }` into a durable `bf_groupings_archive` localStorage map — independent of any other state, survives New Event resets.
+2. `saveEventToSeries()` (runs post-round, when the event record is first created) reads that map and attaches `groupingsFile` to the event's record **at creation time** — fully automatic, no manual step.
+3. `generateResultsPage()` builds `GROUPINGS_ARCHIVE` from `ALL_SERIES_DATA.events[].groupingsFile` on every page load.
+4. The Groups tab's enabled/disabled look and the groupings-nav-link both re-sync on page load now too (a separate fix — see below), not only on an event-pill click.
+
+**Why this needed rebuilding:** the *old* description of this system (steps 1–3 above existed in the docs but step 1 never actually wrote to series data — `grpPublish` had no connection at all to the event record, which doesn't even exist yet at Final-groupings time, since that's pre-round). Every event needed a manual patch to results.html to wire the archive in. This silently broke for Series#4 — the archive file existed and was live on GitHub, but the pointer never made it into series data, on the live site *or* in the local GS export. Confirmed via direct JSON inspection three separate times this session before being trusted as fixed.
+
+**Two further, separate real bugs found and fixed in `generateResultsPage()`'s output (Session 37), after the data-sync fix above was already verified correct:**
+- The Groups tab's `onclick="openGroupingsForEvent()"` called a function that didn't exist anywhere in the file — clicking it did nothing, full stop, regardless of archive state. Fixed to `onclick="switchTab('groups',this)"`, the same pattern every sibling tab already uses.
+- The `tab-groups` content panel (containing the iframe) was duplicated wholesale in the template — two identical `id="tab-groups"` divs. Removed the duplicate.
+- **Lesson:** a correct tooltip/opacity state (proof the *data* logic ran) is not proof the *click* works — these are two independent failure modes and both need checking. See Golden Rule #19.
 
 **Outliers:**
-- Series#2: no archive (pre-system) — Groups tab dimmed
+- Series#2: no archive (pre-system) — Groups tab dimmed, by design, no recovery
 - Series#3: embed mode missing (published before v8.17o) — nav visible in iframe; do NOT republish (would corrupt historical quotas)
-- Series#4+: fully automatic
+- Series#4: fixed retroactively this session (live results.html + local GS export both patched)
+- Series#5+: fully automatic, no manual step
+
+**Known separate issue, not fixed:** `generateSeriesPage()` (standings.html) has its own copy of the Groups tab button with the same broken `onclick="openGroupingsForEvent()"`, but standings.html has *no* `GROUPINGS_ARCHIVE`, `loadGroupsTab`, or `tab-groups` content panel behind it at all — it's vestigial, likely copy-pasted from the results.html template early on. Whether standings.html should have a working Groups tab at all is an open question (it's a season-wide view, not a single-event view) — bigger than a quick fix, parked for a future session.
 
 ### No-HCP Player Flow (e.g. Rich Potts)
 - `grpMergePlayers` sets `isNoHcp: false` by default — new player ≠ no GHIN handicap
@@ -411,6 +426,15 @@ Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
 - `grpPublish()` blocks if tee is blank (hard guard)
 - Kick Off passes tee to Tab 2; `goToScorecard()` blocks again if blank (second guard)
 - Event 1 is baseline — no quota, no podium. Event 2+ enters full quota system.
+
+### View Saved Event (Tab 5, Session 37)
+A selector above the Results content, defaulting to "— Live / Current —". Picking any already-saved event renders it through the same `renderResults()` display (Podium/Skins/CTP/Money) used for live results, sourced entirely from series data — no scorecard re-import needed. Read-only by design: Save to Series, Publish, Print, and Export are hidden in this view since they act on the live scorecard, not whatever's being browsed. Built because Tab 2/3 (Players/Scorecard) state has never persisted across a page reload — before this, looking at a past event again meant re-running the entire Jotform/paste import from scratch.
+
+### New Event Safety Guard (Session 37)
+`resetAll()` now detects an unsaved scored round before clearing anything: if the loaded event has entered scores but isn't yet in `season_data.events`, it skips the normal confirm entirely and hard-blocks — explains the risk, points to Save to Series, and requires typing `DISCARD` verbatim to proceed anyway. Falls back to the original lightweight confirm when nothing's at risk (event already saved, or no scores entered yet).
+
+### End of Event (Session 37)
+Gold button, first position in the Actions bar, always available. Runs Save to Series → Push to Sheets → Publish All Pages as one tracked sequence with a small status panel (⏳/✅/❌ per step). If Save finds the event already saved, it shows "✅ (already saved)" and skips rather than re-running — never duplicates. If Sheets or Publish fails (the realistic failure mode — spotty WiFi at the course), only that step gets a Retry button; the other one isn't blocked, since getting results live for players matters more than the Sheets visual-check. Save failing (missing players/event) stops the chain early, since there'd be nothing new for the other two steps to act on. Gates on whatever's in the live `event-name` field — has no effect if nothing's loaded (e.g. right after a fresh GS restart).
 
 ### Quota Display (fixed Session 34, hardened Session 35)
 - Always click **Fetch Registrants** after launching GS before publishing groupings
@@ -446,7 +470,8 @@ Pool prizes for tied positions, split evenly, floor to nearest dollar. Surplus t
 ### Google Sheets
 - **URL:** https://docs.google.com/spreadsheets/d/1QvnXGY8TLgCgAhXt8SBRbwa7eUz-Vouhu6Tyituee20
 - **Tabs:** Raw Data, Standings, Green Flight, Combo Flight, Gold Flight
-- **Workflow:** Calculate Results → Save to Series → Push to Sheets
+- **Workflow:** Calculate Results → Save to Series → Push to Sheets (or just **End of Event**, Session 37+, which runs all three)
+- **Setup requirement (diagnosed Session 37, not a code bug):** Push to Sheets needs `bf-golf-scorer-key.json` (Google service account key) physically present in the GolfScorer folder — `Service account key not found` means the file is missing from disk, full stop, not a permissions or token issue. It's a local-file-existence check. Service account: `bf-golf-scorer@birdiefriends-golf.iam.gserviceaccount.com` — already exists and is already shared on the Sheet; if the key file ever goes missing again, generate a *new* key for that *same* existing service account (Google Cloud Console → IAM & Admin → Service Accounts → Keys → Add Key → JSON) rather than redoing setup from scratch. No effect on anything player-facing if it's broken — purely a secondary visual cross-check.
 
 ---
 
@@ -458,7 +483,8 @@ Pool prizes for tied positions, split evenly, floor to nearest dollar. Surplus t
 | My Events | ⛳ | Swipeable cards; parked events hidden |
 | Parked | 🅿️ | Events swiped from My Events |
 | Schedule | 🗓️ | Events player is registered for |
-| Results | 🏆 | Results, Standings, My Game, Groupings links |
+| Results | 🏆 | Results, Standings, My Series, Groupings links |
+| My Game | ⛳ | Added Session 36 — live, portal-native screen (donut chart, money/nemesis callouts) for the current/most recent event. Distinct from the static "My Series" page (the old `mygame.html`, renamed Session 37) reachable from the Results hub — that one shows historical breakdown across all past events, not the live one. Content noted as still settling; `guide.html` doesn't document this tab yet (gap, not urgent). |
 
 ### Admin Access
 ⚙️ gear icon in header (commissioner PIN required). Cards: Event Control, Push Broadcast, Text All, Dev Controls, Announcement Feed, Push Subscribers, Scorecard Check. All cards start collapsed.
@@ -495,12 +521,15 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 
 | Item | Priority | Notes |
 |------|----------|-------|
+| **GS atomicity — `grpPublish Final` should write `results.html` directly** | 🔲 Carried over, untouched | Pre-dates Session 37 — flagged at end of Session 36, not started this session either. Currently two separate steps (pre-round groupings publish vs. post-round results publish) depend on manual ordering; collapsing into one atomic action removes that dependency. |
 | **Alerts / Inbox** | 🔲 Next (Session A) | Worker: scope field, per-type TTL, `/inbox?player=` endpoint. Portal: inbox UI below Upcoming, read/unread, dismiss. |
 | **Cancelled Events** | 🔴 Priority | Commissioner marks cancelled → push → card shows ❌ → ghost on Schedule tab. Needs KV flag per event ID. |
+| standings.html Groups tab is dead | 🔲 Low, found Session 37 | Same broken `onclick` as the now-fixed results.html, but no `GROUPINGS_ARCHIVE`/content panel behind it at all. Bigger question first: does a per-event Groups tab even belong on a season-wide standings page? |
+| guide.html missing My Game tab | 🔲 Low, found Session 37 | The portal-native My Game bottom-nav button (Session 36) was never added to the player guide. Held off writing copy since the screen's own content was still being iterated on. |
 | Active/InActive auto-reset | 🔲 Quick fix | Jeremy Burkett + Tony Hager. Fastest: hardcode exempt array like COMMISSIONERS. |
 | Live Feed UI | 🔲 After Inbox | Styled activity stream in live panel. Color-coded by type. 60s auto-refresh. |
 | Self-service event management | 🔲 Backlog | Member creates event, becomes temp commish. |
-| GS state persistence | 🔲 Backlog | Auto-save event state after Calculate Results; "Resume pending event?" on reload. |
+| GS state persistence | 🔲 Backlog | Auto-save event state after Calculate Results; "Resume pending event?" on reload. Tab 2/3 state loss after any reload is also why View Saved Event (Session 37) exists — works around this, doesn't fix it. |
 | CttP holes per event | 🔲 Future | Add CttP Holes field to Event Request form. |
 | Sub promotion notification | 🔲 Planned | Flip `OS_NOTIFY_SUB_PROMOTION = true` when ready. |
 | BL-17: Two Series events same day | 🔲 Low | `getLiveEvent()` uses Array.find() — first match wins. |
@@ -524,6 +553,17 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 ---
 
 ## 12. Session History
+
+### Session 37 — 2026-06-17/18
+- **Groupings archive rebuilt (the actual fix, not a patch):** root cause was `grpPublish` never connecting to series data at all — Final-groupings happens pre-round, before the event record even exists. New mechanism: `grpPublish('Final')` persists `{eventName: archiveFile}` to a durable `bf_groupings_archive` localStorage map; `saveEventToSeries()` reads it and attaches `groupingsFile` automatically at event-creation time. Series#4 fixed retroactively (live results.html + local GS export, both verified by direct JSON inspection, not assumption).
+- **Two further, separate real bugs found in `generateResultsPage()`'s Groups tab**, discovered only after the data-sync fix above was already confirmed correct: `onclick="openGroupingsForEvent()"` called a function that didn't exist anywhere in the file, and the `tab-groups` content panel was duplicated wholesale in the template. Both fixed; new Golden Rule #19 added so this class of bug gets checked for by default next time. standings.html has the same broken onclick with no supporting panel at all behind it — separate, lower-priority, parked.
+- **New Event safety guard:** `resetAll()` hard-blocks (requires typing `DISCARD`) if the loaded event has scores entered but isn't yet saved to series — was previously a single generic confirm regardless of risk.
+- **View Saved Event (Tab 5):** read-only selector for any already-saved event, rendered through the same display as live results, sourced from series data — no scorecard re-import needed. Verified against known values (Series#4 podium) before trusting it.
+- **End of Event:** one action runs Save to Series → Push to Sheets → Publish All Pages with per-step status and per-step retry — built for real conditions (spotty WiFi, post-round, low bandwidth), not the calm-office case the four separate buttons assumed.
+- **Launcher hardened:** `launch_golf_scorer.py` now fails loudly (not silently) on a port-8743 conflict, explaining that an old server is likely still running; `Launch_Golf_Scorer.bat`'s server window no longer auto-minimizes, and its kill-old-server step now verifies the port actually freed up instead of assuming success.
+- **My Game → My Series naming pass:** the static historical page (`mygame.html`) and every reference to it (nav pills on results/standings/groupings, publish toasts, guide.html) renamed to "My Series," disambiguating it from the separate, newer portal-native live "My Game" screen (Session 36), which was already correctly named and untouched.
+- **Diagnosed, not a regression:** Sheets push failure was a missing `bf-golf-scorer-key.json` on disk (moved during a folder cleanup), not a token or code issue — confirmed by replicating the GitHub pull call directly and finding it worked fine.
+- **Not done this session:** GS atomicity (`grpPublish Final` → write `results.html` directly) — carried over from Session 36, still untouched. First task next session if nothing more urgent.
 
 ### Session 35 — Series#4 Post-Round (2026-06-14)
 - **GS quota display bug v2 (v8.17·2026-06-14a/b):** Session 34 fix refreshed `p.quota` at merge time, but 3 render sites (card, table, published groupings) still used the cached value — could go stale again after any HCP edit. Fixed all 3 to compute live via `grpGetEstimatedQuota`. Also fixed `grpUpdateHcp` (card inline edit), which stored the raw-formula quota instead of the adjustment-formula quota — likely the original source of the stale value. Confirmed Tab 2 scoring was already correct (display/publish only).
@@ -638,4 +678,11 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 | v8.17 · 2026-06-12a | Quota display fix: grpMergePlayers refreshes existing player quotas on re-fetch |
 | v8.17 · 2026-06-14a | Quota display v2: 3 render sites compute live via grpGetEstimatedQuota; grpUpdateHcp fixed |
 | v8.17 · 2026-06-14b | Player HCP shown next to name in published groupings |
+| v8.17 · 2026-06-17a | Permanent groupings-archive fix: grpPublish persists `bf_groupings_archive` map; saveEventToSeries attaches groupingsFile automatically |
+| v8.17 · 2026-06-17b | New Event safety guard — hard-blocks on unsaved scored round, requires typing DISCARD to override |
+| v8.17 · 2026-06-17c | View Saved Event selector added to Tab 5 |
+| v8.17 · 2026-06-17d | End of Event — Save to Series → Push to Sheets → Publish All Pages as one tracked, retryable action |
+| v8.17 · 2026-06-17e | My Game → My Series naming fix across all generated-page nav and publish-toast text |
+| v8.17 · 2026-06-17f | Groups tab initial-load sync fix (opacity/title/cursor were only ever updated on a pill click, never on first load) |
+| v8.17 · 2026-06-17g | Real Groups tab click fix: onclick pointed at a non-existent function, plus duplicate tab-content panel removed, in generateResultsPage |
 
