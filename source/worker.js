@@ -266,8 +266,7 @@ export default {
       }
       const atShaData = await atShaResp.json();
       // GitHub returns base64 with embedded newlines — strip them before re-PUT
-      const restoredContent = (atShaData.content || '').replace(/
-/g, '');
+      const restoredContent = (atShaData.content || '').replace(/\n/g, '');
 
       // 2. Get current SHA on main (required for the PUT)
       const currentResp = await fetch(`${contentsUrl}?ref=${GH_BRANCH}`, { headers: ghHeaders });
@@ -311,8 +310,8 @@ export default {
       if (String(pin) !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      if (!ghPath || !ghPath.startsWith('source/')) {
-        return new Response(JSON.stringify({ error: 'path must start with source/' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      if (!ghPath || (!ghPath.startsWith('source/') && !ghPath.startsWith('docs/'))) {
+        return new Response(JSON.stringify({ error: 'path must start with source/ or docs/' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       if (!content) {
         return new Response(JSON.stringify({ error: 'Missing content' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
