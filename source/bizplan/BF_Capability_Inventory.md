@@ -1,12 +1,12 @@
 # BirdieFriends — Capability Inventory
-*Business Plan Exhibit · Draft v0.2 · June 2026*
+*Business Plan Exhibit · Draft v0.3 · June 2026*
 
 ---
 
 ## Vision Statement
 > BirdieFriends is a **gathering design platform** that turns shared golf experiences into permanent memories.
 > The scoring engine is infrastructure. The recommendation engine is the product. The memorial artifact — digital and physical — is what people pay for and carry forward.
-> *"Cheap golfers aren't our customer."*
+> *"BF is built for golfers who want their gatherings to mean something — not every golfer does, and that's okay."*
 
 ---
 
@@ -168,7 +168,7 @@
 | Cross-community events | Ambassador communities compete against each other — BF as neutral platform | 🟡 Medium |
 | Cross-region competitions | Regional championships seeded from local community standings | 🟡 Medium |
 | National leaderboards | Skill-adjusted rankings across all BF communities | 🟢 Future |
-| Non-golf gathering expansion | Architecture supports any cockroach-organizing use case | 🟢 Future |
+| Non-golf gathering expansion | Architecture supports any group-organizing use case | 🟢 Future |
 
 > **The network flywheel:** Each Ambassador builds a community node. BF connects the nodes. Cross-community competition makes every node more valuable as the network grows. A competitor can replicate the scoring engine. They cannot replicate the network.
 
@@ -206,4 +206,4 @@
 ---
 
 *This document is a living asset. Updated each business planning session.*
-*Last updated: Session BP-1 · June 11, 2026 · v0.2*
+*Last updated: Session BP-2 · June 19, 2026 · v0.3*
