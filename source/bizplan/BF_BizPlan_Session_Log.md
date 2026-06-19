@@ -58,11 +58,14 @@ Founder was "still chewing" on the overall picture at end of session — next se
 - Money Group ($MG) tested as a possible standalone population segment, rejected — it's a role (stakes/pot runner) that occurs inside Trips and League populations, not its own population. Ambassador confirmed as the same kind of cross-cutting role.
 - **New Gate 3 proof point added:** founder's own customer-discovery anecdote — GS formalizes in software what a manual $MG was already doing on paper — gives BF a second independent real-world validation pattern (alongside the GLS hat) that it productizes existing human behavior rather than inventing new behavior
 - New "isolated golfer" persona captured as a Gate 1 customer-discovery thread in Vision doc — broadens customer understanding beyond "the organizer" to include the participant who gets socially found and pulled in
+- **New Vision Core Thesis 9 added:** BF's responsibility is infrastructure and barrier removal, not predicting or prescribing who plays what role. Founder challenged the segmentation work itself mid-session with real counter-examples (a league commissioner who dislikes the role but honors his late father's legacy; the founder's own unplanned path into running BF; a possible future case of someone stepping in for an injured Wrangler; someone finding an Ambassador slot as unplanned income opportunity) — motivation is unpredictable and BF shouldn't need to sort by it. This reframed the segmentation tables from "the four types of BF user" into explicitly illustrative planning archetypes, not a taxonomy imposed on users.
+- Population × role segmentation formalized into clean tables in Gate Log (was prose-only before), with explicit framing as illustrative, non-prescriptive
+- **New capability gap surfaced:** role succession/handoff (someone stepping into a vacated Wrangler/Organizer/Ambassador role) is not currently a named platform capability — added to Capability Inventory roadmap
 
 **Artifacts updated:**
-- `BF_BizPlan_Vision.md` → added Customer Discovery Threads section (isolated golfer arc)
-- `BF_BizPlan_GateLog.md` → Gate 1 (pricing philosophy, persona pointer, cockroach language removed), Gate 2 (segmentation framework, multi-vector entry model), Gate 3 ($MG/GS validation point)
-- `BF_Capability_Inventory.md` → cockroach language removed, tone quote updated, version bumped to v0.3
+- `BF_BizPlan_Vision.md` → added Customer Discovery Threads section (isolated golfer arc); added Core Thesis 9 (infrastructure/barrier removal, not role prescription)
+- `BF_BizPlan_GateLog.md` → Gate 1 (pricing philosophy, persona pointer, cockroach language removed, status closed at big-picture level), Gate 2 (segmentation formalized into tables with non-prescriptive framing, multi-vector entry model), Gate 3 ($MG/GS validation point, cockroach language removed)
+- `BF_Capability_Inventory.md` → cockroach language removed, tone quote updated, role-succession capability gap added, version bumped to v0.4
 - `BF_BizPlan_Session_Log.md` (this entry)
 
 **Open / carried forward:**
@@ -70,6 +73,9 @@ Founder was "still chewing" on the overall picture at end of session — next se
 - Photo workflow automation vs. manual premium tier — not addressed this session
 - Participant billing mechanics (organizer-collected vs. participant-direct) — not addressed this session
 - Gate 5 vector-prioritization decision now explicitly flagged as the home for "which entry vector(s) to fund first"
-- Segmentation table itself (population × role) is directionally settled but not yet formally written up as a standalone Gate 2 exhibit/table in the Gate Log beyond prose — could be tabulated more formally in a future session if useful
+- BF Pay sequencing trigger point (Gate 2) — identified as answerable now (not blocked on Gate 4 rigor), queued as next Gate 2 item
+- Ambassador commission structure adjustment — blocked on Gate 4 rigor, stays open
+- Multi-tenant architecture scoping — flagged as a dev-session task, not a bizplan-session task; Gate 2 just needs the one-line acknowledgment it's required-but-unscoped
+- Role succession/handoff — new capability gap, not yet scoped technically or commercially
 
 **Deploy note:** `/deploy` route confirmed reachable and writable to `source/bizplan/` paths this session; PIN provided by founder for this session's pushes.
