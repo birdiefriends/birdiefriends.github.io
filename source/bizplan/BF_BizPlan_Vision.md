@@ -8,6 +8,8 @@
 
 > BirdieFriends is a **gathering design platform**. The scoring engine is infrastructure. The recommendation engine — tuned to the specific people, skill mix, and occasion — is the product. The memorial artifact, digital and physical, is what people pay for and carry forward.
 
+**Tagline: "Tee off, play great."** Captures the promise at the organizer/player level — show up and the logistics, scoring, and memorialization are handled. Multi-tenant architecture (see Cross-Gate Risks Register, Gate Log) is core infrastructure for this promise to scale beyond the founder hand-operating every community.
+
 Golf is the wedge. Gathering design is the business. The architecture is built to diversify beyond golf over time, but golf is the focus for the foreseeable future — a master plan to diversify, not a launch requirement.
 
 ---
