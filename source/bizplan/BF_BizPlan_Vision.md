@@ -16,6 +16,8 @@ Golf is the wedge. Gathering design is the business. The architecture is built t
 
 Brian is retired and does not need this to succeed financially. He was considering buying a golf course and concluded it was a losing proposition. BirdieFriends, by contrast, looks like a low-investment, sweat-equity opportunity with a real ceiling — viable as a small self-sustaining asset, with optionality to hand off to a management team or sell once proven. This is approached as **a meaningful contribution**, not a retirement income plan. That framing should shape tone, pacing, and risk tolerance throughout the plan — this is not VC-style growth-at-all-costs thinking.
 
+**Dev track and commercial-decision track are intentionally decoupled (settled, Gate 2).** Founder remains genuinely undecided whether to commercialize BF at all, and continues building the platform regardless, for personal/community use. This plan's refinement process is itself part of how that decision gets made — not documentation of a decision already settled. No future session should treat "the plan is more complete" as evidence that commercialization is the intended outcome.
+
 ---
 
 ## Core Theses (Settled — Do Not Re-Litigate Without Cause)
