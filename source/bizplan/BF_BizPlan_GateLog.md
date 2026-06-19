@@ -82,6 +82,7 @@ Distinguishing social gambling (legal pot-splitting, no house cut) from commerci
 ### Open
 - Whether Ambassador commission structure (20% origination + residual %) needs adjustment once Gate 4 economics are modeled rigorously
 - Multi-tenant architecture requirements — not yet scoped technically; treated as a dev-session scoping task, not a bizplan-session task
+- **Execution capacity, distinct from model soundness:** two real execution gaps identified — architecture/dev-at-scale and community sweat-equity catalyst (see Cross-Gate Risks Register). These test whether the model can actually be *built and seeded*, not whether it's conceptually worthy — a different failure mode than anything else logged in Gate 2 so far. Not yet resolved; explicitly separate from the founder's personal financial investment decisions, which remain his own.
 
 ---
 
@@ -147,3 +148,5 @@ Needs Gates 1–5 substantially closed first. Will define the concrete 6–12 mo
 | Ambassador lifetime attribution liability | 2, 4 | Principle settled (intentional moat/scaling mechanism); permanence vs. expiration mechanics not yet modeled — needs rigor before formalizing any Ambassador agreement |
 | Photo ingestion bottleneck at multi-event scale | 1, 4, 6 | Known constraint, automation not yet built or costed |
 | Founder time/capacity as hidden cost | 4, 6 | Flagged, not addressed |
+| **Architecture/dev-at-scale gap** | 2, 4, 5, 6 | Current platform is a working prototype that proves the concept (scoring, memorialization, live event flow — GLS-validated) but was not built for what Gates 1–2 now describe (multi-tenant architecture, payment processing, automated photo ingestion, recommendation engine, BF Pay compliance surface). Listed in Capability Inventory roadmap but not previously flagged as a viability dependency — unclear whether this gets closed by sustained solo effort, contracting, or a technical partner. Not yet answered. |
+| **Community sweat-equity catalyst gap** | 2, 5, 6 | Ambassador model assumes Ambassadors emerge once the product exists, but the network has a cold-start problem — someone has to be the unglamorous first mover, physically present and building trust in golf communities before there's a network to point to as proof. GLS is real evidence the founder can do this once, organically, for friends; doing it repeatedly and deliberately as the actual growth engine is a different, larger commitment. Who does this long-term (founder, hire, partner) is unresolved. Explicitly separate from the founder's personal financial investment decisions, which remain his own and outside this plan's scope. |
