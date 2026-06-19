@@ -59,3 +59,25 @@ infrastructure created for the dev track (mirroring the bizplan track's existing
   (e.g. `Dev#42 - <topic>`) — paste it into the chat title at session start.
 - At session close, append the next entry to this file (or the bizplan log) before
   ending — that's what keeps the counter authoritative instead of drifting again.
+
+**Session closed clean** — this work was incidental cleanup noticed on entry, not the
+original intent for the chat. Closing here rather than continuing into new feature work,
+so Dev-42 starts focused.
+
+---
+
+## Session Dev-42 · TBD
+
+**Focus:** Multi-tenant event management (large effort — title to be refined once scope
+is clearer)
+
+**Context carried in from bizplan track:** `BF_BizPlan_GateLog.md` Cross-Gate Risks
+register already flags "architecture/dev-at-scale gap" as a named risk — current
+platform is a validated single-tenant prototype, not built for multi-tenant. Per
+`BF_BizPlan_Session_Log.md` (BP-2), at least 3 other BF-style groups have expressed
+direct interest, and the tagline "Tee off, play great" is tied to this capability
+existing. This session is the technical side of closing that gap.
+
+**Not yet started — placeholder entry only.** Bootstrap will report this as `Dev#42`
+on next session start; rename string to use:
+`Dev#42 - Multi-tenant Event Management` (or refined title once scope is clearer).
