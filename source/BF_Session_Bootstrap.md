@@ -24,11 +24,20 @@ in the initial command above) — every step below uses `curl`.
 
 1. Fetch and read `BF_Golf_Scorer_Session_Starter_current.md` from the library (curl)
 2. Fetch and read `BF_Operations_Guide.md` from the library (curl)
-3. Fetch `portal_version.txt` from the library — sole version source of truth (curl)
-4. Fetch `docs/portal.html` from GitHub → save to `/home/claude/birdiefriends_portal.html` (curl)
-5. Fetch `source/worker.js` from GitHub → save to `/home/claude/worker.js` (curl)
-6. Fetch `source/bf_deploy.py` from GitHub → save to `/home/claude/bf_deploy.py` (curl)
-7. Report: session #, portal version, worker version, file sizes — confirm fully loaded and ready
+3. Fetch and read `BF_Session_Log.md` from the library (curl) — sole source of truth for
+   the current Dev session number (last entry's `Dev-N` + 1)
+4. Fetch `portal_version.txt` from the library — sole version source of truth (curl)
+5. Fetch `docs/portal.html` from GitHub → save to `/home/claude/birdiefriends_portal.html` (curl)
+6. Fetch `source/worker.js` from GitHub → save to `/home/claude/worker.js` (curl)
+7. Fetch `source/bf_deploy.py` from GitHub → save to `/home/claude/bf_deploy.py` (curl)
+8. Report: session #, portal version, worker version, file sizes — confirm fully loaded
+   and ready. **Also state the exact chat-rename string** (e.g. `Dev#42 - <topic>`,
+   topic filled in once the session's focus is clear) so the chat title can be pasted
+   directly rather than guessed.
+
+**At session close:** append a new entry to `BF_Session_Log.md` (mirroring the existing
+entries' format) and push it via `/deploy` before ending — this is what keeps the
+counter authoritative instead of drifting back into manual numbering.
 
 **All files are in the library. No uploads needed to start a session.**
 
