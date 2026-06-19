@@ -11,13 +11,15 @@ Each gate answers a viability question before the plan moves on. If a gate fails
 | Gate | Question | Status |
 |------|----------|--------|
 | 1. Problem/Market Fit | Is there a real, underserved problem worth solving commercially? | 🟢 Big-picture closed |
-| 2. Product/Model Fit | Which model (or blend) matches what's buildable in 6–12 months? | 🟡 In progress |
+| 2. Product/Model Fit | Does the model (or blend) cohere as something worth building? Timeline to build is not yet a constraint — see note below. | 🟡 In progress |
 | 3. Competitive & Moat | Why BF, why now, what's defensible? | 🟢 Directionally answered |
 | 4. Unit Economics | Can this make money at a unit level? | 🟡 Napkin done, needs rigor |
 | 5. Go-to-Market | How do you get the first paying customers in 6 months? | ⚪ Not started |
 | 6. Launch Plan & Milestones | What does launch-ready actually require? | ⚪ Not started |
 
 Legend: ⚪ Not started · 🟡 In progress · 🟢 Closed/settled · 🔴 Blocked
+
+**Note on Gate 2's original "6–12 months" framing (corrected BP-2):** The original Gate 2 question's timeline constraint was identified by the founder as a reflexive answer to a survey question — an emotional avoidance of an open-ended multi-year process, not a deliberate planning constraint. Founder is not yet invested in any timeline; this remains a feasibility and planning exercise. The framework question has been softened accordingly. **The actual staged process the founder expects this plan to follow:** (1) reach an intellectual conclusion on whether there's something worthy here at all; (2) if yes, identify possible paths to making it real; (3) only then do the actual commitment questions need answering; (4) at that point, risk-profile debate becomes the live, "interesting" conversation. Gates should not force-skip ahead to (3) or (4) before (1) and (2) are genuinely settled.
 
 ---
 
