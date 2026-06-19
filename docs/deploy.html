@@ -993,10 +993,13 @@ function renderSnaps() {
 
 // ── LIBRARY ──────────────────────────────────────────────────────
 const GITHUB_API = 'https://api.github.com/repos/birdiefriends/birdiefriends.github.io';
-// Token split to prevent GitHub secret scanning from blocking deploy.html
-const GITHUB_TOKEN = ['ghp_zNaEDRNPhn', 'eWP7FuYpFcyrMvVSjxCx3vfYjK'].join('');
+// Public repo — no token needed for read-only directory/commit listings.
+// Unauthenticated GitHub API is rate-limited to 60 req/hr per IP, which is
+// far more than this panel needs. Never hardcode a write-scoped token here;
+// this file is served publicly via GitHub Pages and its source is visible
+// to anyone. Writes (deploy/rollback) go through the Worker's PIN-gated
+// /deploy and /rollback routes instead — see the Deploy and History tabs.
 const GH_HEADERS = {
-  'Authorization': `token ${GITHUB_TOKEN}`,
   'Accept': 'application/vnd.github.v3+json',
 };
 
