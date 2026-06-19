@@ -1,5 +1,5 @@
 # BirdieFriends — Capability Inventory
-*Business Plan Exhibit · Draft v0.4 · June 2026*
+*Business Plan Exhibit · Draft v0.5 · June 2026*
 
 ---
 
@@ -176,7 +176,7 @@
 ### ⚙️ Platform (Scale)
 | Capability | Description | Priority |
 |-----------|-------------|----------|
-| Multi-tenant architecture | Each Ambassador/community has isolated, portable data | 🔴 High |
+| Multi-tenant architecture | Each Ambassador/community has isolated, portable data. **Active dev experiment underway (parallel track, BP-2)** — validated by 3 BFs with expressed direct interest; previously infeasible under old Jotform single-tenant model, no longer blocked. Core to the "Tee off, play great" tagline. | 🔴 High |
 | Production hosting migration | Off GitHub Pages onto scalable infrastructure | 🔴 High |
 | Support model | FAQ, Ambassador as first-line support for their community | 🟡 Medium |
 | Legal entity & terms of service | Commercial agreements, Ambassador contracts, user TOS | 🔴 High |
@@ -207,4 +207,4 @@
 ---
 
 *This document is a living asset. Updated each business planning session.*
-*Last updated: Session BP-2 · June 19, 2026 · v0.4*
+*Last updated: Session BP-2 · June 19, 2026 · v0.5*
