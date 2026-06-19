@@ -1,6 +1,6 @@
 # BirdieFriends — Business Plan Vision & Positioning
 *Foundational document · Load at start of every business plan session*
-*Last updated: Session BP-1 · June 18, 2026*
+*Last updated: Session BP-2 · June 19, 2026*
 
 ---
 
@@ -37,6 +37,12 @@ Brian is retired and does not need this to succeed financially. He was consideri
 7. **BF Rewards is core, not optional.** Physical and digital achievement recognition is a fundamental human need that golf expresses clearly. This is a required capability, not a nice-to-have add-on.
 
 8. **Low overhead is a design feature.** Break-even is achievable at a handful of active Ambassadors running a few events per month — not a venture-scale customer base. This supports a deliberately unambitious, low-capital-risk launch posture.
+
+---
+
+## Customer Discovery Threads
+
+- **The isolated golfer arc (Gate 1):** Founder's own lived anecdote — joining a club skilled-but-uncertain and self-conscious, playing alone, eventually drawn in by a "natural wrangler" (a social connector, not a formal role) who invites them into a group. That group, in turn, introduces them to a Money Group ($MG) — someone who runs the stakes/pot, happy to take their money because that's the value they offer: structure and a reason to keep showing up. This is a real recruitment narrative distinct from the GLS proof point: BF isn't only valuable to confident organizers running events — it's also "how a lonely golfer gets found and pulled into a community." Worth carrying into messaging and persona work alongside GLS.
 
 ---
 
