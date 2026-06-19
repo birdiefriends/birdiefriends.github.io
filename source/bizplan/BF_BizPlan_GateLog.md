@@ -55,10 +55,25 @@ Distinguishing social gambling (legal pot-splitting, no house cut) from commerci
 - **Lifetime attribution, not residual:** Ambassador compensation reframed from "residual" (which implies ongoing service/royalty) to **lifetime attribution credit** — a player is permanently tagged to the Ambassador who originated their enrollment, and every future transaction by that player triggers a payout to that Ambassador, regardless of elapsed time or whether the Ambassador did any additional work. Founder principle: "do the work once, get paid a lot, build your own ATM." This is treated as a deliberate scaling and moat-building mechanism, not just a compensation nicety — it creates compounding incentive for Ambassadors to keep growing the community. **Flagged open question (not settled):** whether attribution is permanent for the life of the player or can expire/be reassigned under certain conditions (long inactivity, regional moves, etc.). The principle is settled; the mechanics and liability profile are not — see Gate 4.
 - **BF Rewards confirmed as core**, not Phase 2 — physical/digital achievement recognition (CttP coins, skins medallions, season trophies) validated by the Garrett's Last Swing hat as an organic, pre-commercial proof point.
 - **Network effect identified:** Ambassador-anchored communities create a future cross-community/cross-region competition layer — a real network effect moat that compounds as the Ambassador network grows. Not a launch requirement, but an important long-term differentiator to capture in the plan now.
-- **Buyer segmentation is two axes, not one list — population segments × roles:**
-  - *Population segments (who someone is):* Organizers (general — any group herder, free-hook entry point), Trip Groups (occasion-driven, GLS-style), League Players/Organizers (recurring season groups, BF Series-style).
-  - *Roles (function someone serves, can occur inside any population segment):* Wrangler/Connector (social organizer who pulls people in), Money Group / $MG (runs stakes and pot — validated by founder's own GS-replicates-manual-$MG experience, see Gate 3), Ambassador (distribution role, paid via origination + lifetime attribution).
-  - Money Group was tested as a possible standalone population segment and rejected — it's a role that shows up inside Trips and League groups, not a separate population. Ambassador is likewise a role, not a population, drawn from any of the segments above.
+- **Buyer segmentation framework — illustrative archetypes for planning, not a taxonomy imposed on users.** Per Vision Thesis 9, BF does not sort or require users into these categories; people arrive at roles for reasons (duty, accident, opportunity, necessity) the platform doesn't need to know. Two axes — population segments and cross-cutting roles:
+
+  **Population segments**
+
+  | Segment | Description | Primary value sought | Economic shape |
+  |---|---|---|---|
+  | Organizers (general) | Anyone responsible for herding a group — one-off corporate outing, charity scramble, reunion | Logistics relief | Free hook entry point; converts to paid via repeat use + add-ons |
+  | Trip Groups | Occasion-driven gatherings — bachelor weekends, milestone trips, bucket-list golf (GLS-style) | Memorialization, emotional stakes | Premium tier upsell candidates, highest WTP per event |
+  | League Players/Organizers | Recurring season groups (BF Series-style) | Structure, handicap tracking, repeatability | Steady recurring low-per-touch fee, volume base |
+
+  **Cross-cutting roles** (can occur inside any population segment above; one person may hold several over time, or hold a role for reasons unrelated to the population they're in)
+
+  | Role | Function | Compensation/value mechanism |
+  |---|---|---|
+  | Wrangler/Connector | Social organizer who notices someone isolated and pulls them into a group; distinct from Organizer's logistics-administrative function even though often the same person | Not directly monetized as a role — often *is* the Organizer, sometimes an informal node inside an existing League/Trip |
+  | Money Group ($MG) | Runs stakes/pot, manually or via GS | Highest fee tolerance per round (fee is a rounding error against the pot); primary future BF Pay buyer |
+  | Ambassador | Distribution/community role | Origination commission + lifetime attribution payout |
+
+  Money Group was tested as a possible standalone population segment and rejected — it's a role that shows up inside Trips and League groups, not a separate population. Ambassador is likewise a role, not a population, drawn from any of the segments above.
 - **Multiple entry vectors exist, not a single funnel:** Free organizer tooling ("Schedule an Event"), direct-to-player marketing (Trips/SEO/app stores), and Ambassador-led community capture are three distinct, non-exclusive on-ramps — not stages of one funnel. Once anyone enters via any vector, the full capability set (memorialization, league structure, Ambassador economics, Trips) becomes organically exposed to them; that cross-exposure between vectors, not the entry vector itself, is the primary stickiness mechanism (e.g., an Ambassador-built league community gets exposed to Trips once players see BF's broader capability; a Trips-acquired group can convert into an ongoing league or spin off its own Ambassador). **Which vector(s) to prioritize and fund is a Gate 5 (Go-to-Market) decision, not a Gate 2 model decision** — Gate 2's job is only to confirm the architecture supports all three without conflict, which it does.
 
 ### Open
