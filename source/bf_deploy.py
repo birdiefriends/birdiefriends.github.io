@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-BirdieFriends Claude-Direct Deploy
+BirdieFriends Claude-Direct Deploy — SUPERSEDED, REFERENCE ONLY (Session 40)
+This script is no longer executed by Claude. All deploys go through the Worker's
+PIN-gated POST /deploy and /rollback routes (see source/worker.js), which keep the
+GitHub write token in Cloudflare's secret store instead of a script Claude imports
+and runs. Kept here only for the version-bump regex logic. Do not paste a live
+token below — this file is public via GitHub Pages.
 Functions:
   deploy(portal_path, commit_msg)  — push local file, increment version
   rollback(sha, commit_msg)        — restore portal to a prior commit SHA, increment version
@@ -8,7 +13,7 @@ Functions:
 import sys, urllib.request, urllib.error, json, base64, re
 from datetime import datetime, timezone
 
-TOKEN  = 'ghp_zNaEDRNPhn' + 'eWP7FuYpFcyrMvVSjxCx3vfYjK'
+TOKEN  = ''  # intentionally blank — see header note. Use Worker /deploy instead.
 REPO   = 'birdiefriends/birdiefriends.github.io'
 BRANCH = 'main'
 
