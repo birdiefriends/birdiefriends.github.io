@@ -61,10 +61,11 @@ Founder was "still chewing" on the overall picture at end of session — next se
 - **New Vision Core Thesis 9 added:** BF's responsibility is infrastructure and barrier removal, not predicting or prescribing who plays what role. Founder challenged the segmentation work itself mid-session with real counter-examples (a league commissioner who dislikes the role but honors his late father's legacy; the founder's own unplanned path into running BF; a possible future case of someone stepping in for an injured Wrangler; someone finding an Ambassador slot as unplanned income opportunity) — motivation is unpredictable and BF shouldn't need to sort by it. This reframed the segmentation tables from "the four types of BF user" into explicitly illustrative planning archetypes, not a taxonomy imposed on users.
 - Population × role segmentation formalized into clean tables in Gate Log (was prose-only before), with explicit framing as illustrative, non-prescriptive
 - **New capability gap surfaced:** role succession/handoff (someone stepping into a vacated Wrangler/Organizer/Ambassador role) is not currently a named platform capability — added to Capability Inventory roadmap
+- **BF Pay legal review sequencing settled:** gated on an explicit founder commercialization commitment, not cost/time/volume. Founder is genuinely undecided whether to commercialize at all; platform development continues regardless as an intentional disconnect. Reframed the plan itself as part of how that decision gets made, not documentation of a decision already made — captured as a standing note in Vision's Founder Context section so future sessions don't assume plan completion implies commercialization intent.
 
 **Artifacts updated:**
-- `BF_BizPlan_Vision.md` → added Customer Discovery Threads section (isolated golfer arc); added Core Thesis 9 (infrastructure/barrier removal, not role prescription)
-- `BF_BizPlan_GateLog.md` → Gate 1 (pricing philosophy, persona pointer, cockroach language removed, status closed at big-picture level), Gate 2 (segmentation formalized into tables with non-prescriptive framing, multi-vector entry model), Gate 3 ($MG/GS validation point, cockroach language removed)
+- `BF_BizPlan_Vision.md` → added Customer Discovery Threads section (isolated golfer arc); added Core Thesis 9 (infrastructure/barrier removal, not role prescription); added dev-track/commercial-track disconnect note to Founder Context
+- `BF_BizPlan_GateLog.md` → Gate 1 (pricing philosophy, persona pointer, cockroach language removed, status closed at big-picture level), Gate 2 (segmentation formalized into tables with non-prescriptive framing, multi-vector entry model, BF Pay sequencing moved Open→Settled), Gate 3 ($MG/GS validation point, cockroach language removed)
 - `BF_Capability_Inventory.md` → cockroach language removed, tone quote updated, role-succession capability gap added, version bumped to v0.4
 - `BF_BizPlan_Session_Log.md` (this entry)
 
@@ -73,7 +74,6 @@ Founder was "still chewing" on the overall picture at end of session — next se
 - Photo workflow automation vs. manual premium tier — not addressed this session
 - Participant billing mechanics (organizer-collected vs. participant-direct) — not addressed this session
 - Gate 5 vector-prioritization decision now explicitly flagged as the home for "which entry vector(s) to fund first"
-- BF Pay sequencing trigger point (Gate 2) — identified as answerable now (not blocked on Gate 4 rigor), queued as next Gate 2 item
 - Ambassador commission structure adjustment — blocked on Gate 4 rigor, stays open
 - Multi-tenant architecture scoping — flagged as a dev-session task, not a bizplan-session task; Gate 2 just needs the one-line acknowledgment it's required-but-unscoped
 - Role succession/handoff — new capability gap, not yet scoped technically or commercially
