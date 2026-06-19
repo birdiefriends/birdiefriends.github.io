@@ -41,3 +41,35 @@
 
 **Carry-forward for next session:**
 Founder was "still chewing" on the overall picture at end of session — next session should check whether new thinking has emerged before proceeding, rather than assuming Gate 1 is ready to formally close.
+
+---
+
+## Session BP-2 · June 19, 2026
+
+**Focus:** Tidy Gate 1 to close; open Gate 2 buyer segmentation and entry-vector model
+
+**Key decisions:**
+- Gate 1 confirmed ready to close at the direction/tone/vision level — founder confirmed no new thinking emerged since BP-1 that changes the big-picture frame
+- Pricing **philosophy** settled (low per-unit, volume + repeatability + add-on driven) — distinct from the pricing **number**, which stays open and parked at Gate 4
+- "Cockroach wrangling" language retired from all bizplan docs — entertaining internally but wrong tone externally; replaced with neutral "group-organizing" language (Vision, Gate Log Gate 1, Capability Inventory all updated)
+- Outdated "cheap golfers aren't our customer" quote in Capability Inventory updated to match the empathetic tone principle already established in Vision
+- Buyer segmentation reframed twice during the session: first attempt (single funnel: free hook → four monetization layers) was correctly rejected by founder as not actually true; second attempt (population segments × roles, two axes not one list) was validated by founder's own isolated-golfer/$MG anecdote and adopted
+- **Multi-vector entry model settled:** free organizer hook, direct-to-player marketing, and Ambassador-led community capture are three independent, non-exclusive on-ramps, not stages of one funnel — cross-exposure between vectors (not the entry vector itself) is the real stickiness mechanism. Vector prioritization explicitly deferred to Gate 5, not decided at Gate 2.
+- Money Group ($MG) tested as a possible standalone population segment, rejected — it's a role (stakes/pot runner) that occurs inside Trips and League populations, not its own population. Ambassador confirmed as the same kind of cross-cutting role.
+- **New Gate 3 proof point added:** founder's own customer-discovery anecdote — GS formalizes in software what a manual $MG was already doing on paper — gives BF a second independent real-world validation pattern (alongside the GLS hat) that it productizes existing human behavior rather than inventing new behavior
+- New "isolated golfer" persona captured as a Gate 1 customer-discovery thread in Vision doc — broadens customer understanding beyond "the organizer" to include the participant who gets socially found and pulled in
+
+**Artifacts updated:**
+- `BF_BizPlan_Vision.md` → added Customer Discovery Threads section (isolated golfer arc)
+- `BF_BizPlan_GateLog.md` → Gate 1 (pricing philosophy, persona pointer, cockroach language removed), Gate 2 (segmentation framework, multi-vector entry model), Gate 3 ($MG/GS validation point)
+- `BF_Capability_Inventory.md` → cockroach language removed, tone quote updated, version bumped to v0.3
+- `BF_BizPlan_Session_Log.md` (this entry)
+
+**Open / carried forward:**
+- Final pricing number ($3/$5/tiered) — still parked at Gate 4
+- Photo workflow automation vs. manual premium tier — not addressed this session
+- Participant billing mechanics (organizer-collected vs. participant-direct) — not addressed this session
+- Gate 5 vector-prioritization decision now explicitly flagged as the home for "which entry vector(s) to fund first"
+- Segmentation table itself (population × role) is directionally settled but not yet formally written up as a standalone Gate 2 exhibit/table in the Gate Log beyond prose — could be tabulated more formally in a future session if useful
+
+**Deploy note:** `/deploy` route confirmed reachable and writable to `source/bizplan/` paths this session; PIN provided by founder for this session's pushes.
