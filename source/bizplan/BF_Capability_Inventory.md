@@ -1,5 +1,5 @@
 # BirdieFriends — Capability Inventory
-*Business Plan Exhibit · Draft v0.5 · June 2026*
+*Business Plan Exhibit · Draft v0.6 · June 2026*
 
 ---
 
@@ -87,6 +87,8 @@
 | Re-register bug fix | Operations | Known issue |
 | Live panel UX overhaul | Operations | Known issue |
 | Photo upload-time metadata capture | Memorialization | Documented in schema |
+| Official GHIN handicap integration | Platform | Future — ~$6k/yr economic barrier today, possibly viable at scale |
+| Tee-time reservation API integration / course partnership | Operations | Future — some reservation systems offer fee-based APIs; not a launch dependency |
 
 ---
 
@@ -207,4 +209,4 @@
 ---
 
 *This document is a living asset. Updated each business planning session.*
-*Last updated: Session BP-2 · June 19, 2026 · v0.5*
+*Last updated: Session BP-2 · June 19, 2026 · v0.6*
