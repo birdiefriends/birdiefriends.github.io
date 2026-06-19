@@ -1,5 +1,5 @@
 # BirdieFriends — Capability Inventory
-*Business Plan Exhibit · Draft v0.3 · June 2026*
+*Business Plan Exhibit · Draft v0.4 · June 2026*
 
 ---
 
@@ -157,6 +157,7 @@
 | Community management tools | Ambassador-owned group portal — their community, their brand, BF infrastructure | 🟡 Medium |
 | Participant attribution tracking | Every enrolled participant permanently tagged to originating Ambassador — basis for lifetime attribution payouts | 🔴 High |
 | Ambassador recruiting tools | BF-supplied materials, pitch deck, demo event capability | 🟡 Medium |
+| Role succession / handoff | Mechanism for one person to step into a vacated Wrangler, Organizer, or Ambassador role (injury, burnout, life change) without losing group continuity or, where applicable, reassigning attribution. Surfaced via Gate 2 discussion (Vision Thesis 9) — not yet scoped technically or commercially. | 🟡 Medium |
 
 > **Ambassador vs. Entrepreneur:** Ambassadors are community advocates — motivated organizers who love what BF does and get paid to share it with people they already know. They are not a sales channel dependency. BF sells directly to any organizer who finds it. Ambassadors accelerate reach into communities BF couldn't cost-effectively penetrate otherwise. The product doesn't need them. The network becomes dramatically more valuable with them.
 
@@ -206,4 +207,4 @@
 ---
 
 *This document is a living asset. Updated each business planning session.*
-*Last updated: Session BP-2 · June 19, 2026 · v0.3*
+*Last updated: Session BP-2 · June 19, 2026 · v0.4*
