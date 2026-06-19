@@ -39,9 +39,17 @@ ls -lh /home/claude/BF_BizPlan_Vision.md /home/claude/BF_BizPlan_GateLog.md /hom
 **Then:**
 1. Read `BF_BizPlan_Vision.md` into context (view tool)
 2. Read `BF_BizPlan_GateLog.md` into context (view tool)
-3. Read `BF_BizPlan_Session_Log.md` into context (view tool)
+3. Read `BF_BizPlan_Session_Log.md` into context (view tool) — sole source of truth for
+   the current BZP session number (last entry's `BP-N` + 1)
 4. Read `BF_Capability_Inventory.md` into context (view tool)
-5. Report: session #, last session's gate status, file sizes, and confirm whether the `/deploy` Worker route is reachable (a quick test push is fine) — confirm fully loaded and ready
+5. Report: session #, last session's gate status, file sizes, and confirm whether the
+   `/deploy` Worker route is reachable (a quick test push is fine) — confirm fully
+   loaded and ready. **Also state the exact chat-rename string** (e.g. `BZP#3 - <topic>`,
+   topic filled in once the session's focus is clear) so the chat title can be pasted
+   directly rather than guessed.
+
+**At session close:** append a new entry to `BF_BizPlan_Session_Log.md` and push it via
+`/deploy` before ending — this is what keeps the counter authoritative.
 
 **All files are in the library. No uploads needed to start a session.**
 
