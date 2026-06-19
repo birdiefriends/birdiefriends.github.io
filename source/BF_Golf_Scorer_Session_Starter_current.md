@@ -29,12 +29,19 @@ Worker code changes require TWO steps: (1) push source/worker.js via /deploy,
 
 BIZPLAN RULE:
 Business plan docs live at source/bizplan/ — separate from the dev source/ library.
-BF_BizPlan_Bootstrap.md not yet built. For now, bizplan sessions load the 4 BP docs
-directly from source/bizplan/ via curl at session start.
+Bizplan sessions use their own bootstrap: source/bizplan/BF_BizPlan_Bootstrap.md
+(built in BZP#2). It loads the 4 BP docs via curl, mirroring this dev bootstrap's pattern.
+
+SESSION NUMBER RULE:
+This file does NOT track the current session number — that drifted out of sync with
+manual chat-title numbering and caused real confusion (a Dev-42 session self-identified
+as "Session 41" by reading the line below instead of the log). `source/BF_Session_Log.md`
+is now the sole source of truth for the current Dev-N number. Read it, not this header.
 -->
 
-# BirdieFriends Golf Scorer — Session 41 Starter
-**Date:** TBD (follows Session 40, 2026-06-18)
+# BirdieFriends Golf Scorer — Session Starter
+**Current session number:** see `BF_Session_Log.md` (this file no longer tracks it)
+**Date:** TBD
 **Portal Version (production):** v3.10.139 · 2026-06-16
 **GolfScorer Version:** v8.17 · 2026-06-17g (deployed)
 **Worker Version:** 2026-06-18b (deployed — /deploy accepts source/ and docs/ paths)
