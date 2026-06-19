@@ -1,6 +1,6 @@
 # BirdieFriends — Business Plan Gate Log
 *Tracks the six-gate viability framework · Update at the end of every session*
-*Last updated: Session BP-1 · June 18, 2026*
+*Last updated: Session BP-2 · June 19, 2026*
 
 ---
 
@@ -10,7 +10,7 @@ Each gate answers a viability question before the plan moves on. If a gate fails
 
 | Gate | Question | Status |
 |------|----------|--------|
-| 1. Problem/Market Fit | Is there a real, underserved problem worth solving commercially? | 🟡 Nearly closed |
+| 1. Problem/Market Fit | Is there a real, underserved problem worth solving commercially? | 🟢 Big-picture closed |
 | 2. Product/Model Fit | Which model (or blend) matches what's buildable in 6–12 months? | 🟡 In progress |
 | 3. Competitive & Moat | Why BF, why now, what's defensible? | 🟢 Directionally answered |
 | 4. Unit Economics | Can this make money at a unit level? | 🟡 Napkin done, needs rigor |
@@ -23,17 +23,19 @@ Legend: ⚪ Not started · 🟡 In progress · 🟢 Closed/settled · 🔴 Block
 
 ## Gate 1 — Problem/Market Fit
 
-**Status: 🟡 Nearly closed — ready to write up as formal section**
+**Status: 🟢 Big-picture closed (direction, tone, vision, pricing philosophy) — specific dollar figures and billing mechanics remain open at Gates 1/4**
 
 ### Settled
 - **Customer:** The organizer leads. Participants are the enrollment pipeline. Ambassadors are an optional distribution accelerant, not a dependency.
 - **Anchor use case:** GLS-style private event/gathering, not the day-to-day subscription. Subscription is a future Layer 3, fed organically by event enrollment — founder has low confidence golfers will pay recurring fees directly.
-- **Domain scope:** Golf-first, with an explicit master plan to diversify into other "organize cockroaches" use cases (corporate meetups, charity events, reunions) over time. Architecture should stay domain-flexible without requiring a rebuild.
+- **Domain scope:** Golf-first, with an explicit master plan to diversify into other group-organizing use cases (corporate meetups, charity events, reunions) over time. Architecture should stay domain-flexible without requiring a rebuild.
 - **Gathering spectrum identified:** Serious golf groups (BF Series) vs. social/mixed-skill trips (GLS) vs. bucket-list trips vs. non-golfer-inclusive corporate/charity events are emotionally and economically distinct products sharing the same scoring infrastructure.
 - **Core value prop:** Gathering design (recommendation engine) + memorialization (digital + physical), not scoring software. Scoring is commodity infrastructure.
+- **Pricing approach (settled — not the pricing number):** Low per-unit price, made up in volume, repeatability, and paid add-ons — not a high-margin-per-transaction model. Consistent with thesis 8 (low overhead, no venture-scale requirement) but sharper: the business is designed to feel cheap per-touch so adoption friction stays near zero, with margin coming from frequency + upsells rather than sticker price. The actual $3/$5/tiered decision remains open and stays parked at Gate 4.
+- **Isolated golfer persona identified (customer discovery):** See Vision doc, "Customer Discovery Threads" — a real recruitment narrative where a lonely, skill-insecure golfer is socially wrangled into a group and from there introduced to a Money Group ($MG). Distinct from the GLS proof point; broadens Gate 1's customer understanding beyond "the organizer" to include the participant who gets found and pulled in.
 
 ### Open
-- Final pricing decision: $3 vs $5 vs tiered per-player/per-round (leaning $5, based on GLS pot behavior — see Gate 4)
+- Final pricing number: $3 vs $5 vs tiered per-player/per-round (leaning $5, based on GLS pot behavior — see Gate 4). Philosophy (low per-unit, volume-driven) is now settled above; this item is the specific dollar figure only.
 - Photo workflow: automated base tier vs. manual premium tier (cost/build tradeoff, not yet resolved)
 - Participant billing mechanics: organizer-collected vs. participant-direct-billed at registration (leaning toward participant-direct to remove organizer friction and fraud exposure — not finalized)
 
@@ -53,6 +55,11 @@ Distinguishing social gambling (legal pot-splitting, no house cut) from commerci
 - **Lifetime attribution, not residual:** Ambassador compensation reframed from "residual" (which implies ongoing service/royalty) to **lifetime attribution credit** — a player is permanently tagged to the Ambassador who originated their enrollment, and every future transaction by that player triggers a payout to that Ambassador, regardless of elapsed time or whether the Ambassador did any additional work. Founder principle: "do the work once, get paid a lot, build your own ATM." This is treated as a deliberate scaling and moat-building mechanism, not just a compensation nicety — it creates compounding incentive for Ambassadors to keep growing the community. **Flagged open question (not settled):** whether attribution is permanent for the life of the player or can expire/be reassigned under certain conditions (long inactivity, regional moves, etc.). The principle is settled; the mechanics and liability profile are not — see Gate 4.
 - **BF Rewards confirmed as core**, not Phase 2 — physical/digital achievement recognition (CttP coins, skins medallions, season trophies) validated by the Garrett's Last Swing hat as an organic, pre-commercial proof point.
 - **Network effect identified:** Ambassador-anchored communities create a future cross-community/cross-region competition layer — a real network effect moat that compounds as the Ambassador network grows. Not a launch requirement, but an important long-term differentiator to capture in the plan now.
+- **Buyer segmentation is two axes, not one list — population segments × roles:**
+  - *Population segments (who someone is):* Organizers (general — any group herder, free-hook entry point), Trip Groups (occasion-driven, GLS-style), League Players/Organizers (recurring season groups, BF Series-style).
+  - *Roles (function someone serves, can occur inside any population segment):* Wrangler/Connector (social organizer who pulls people in), Money Group / $MG (runs stakes and pot — validated by founder's own GS-replicates-manual-$MG experience, see Gate 3), Ambassador (distribution role, paid via origination + lifetime attribution).
+  - Money Group was tested as a possible standalone population segment and rejected — it's a role that shows up inside Trips and League groups, not a separate population. Ambassador is likewise a role, not a population, drawn from any of the segments above.
+- **Multiple entry vectors exist, not a single funnel:** Free organizer tooling ("Schedule an Event"), direct-to-player marketing (Trips/SEO/app stores), and Ambassador-led community capture are three distinct, non-exclusive on-ramps — not stages of one funnel. Once anyone enters via any vector, the full capability set (memorialization, league structure, Ambassador economics, Trips) becomes organically exposed to them; that cross-exposure between vectors, not the entry vector itself, is the primary stickiness mechanism (e.g., an Ambassador-built league community gets exposed to Trips once players see BF's broader capability; a Trips-acquired group can convert into an ongoing league or spin off its own Ambassador). **Which vector(s) to prioritize and fund is a Gate 5 (Go-to-Market) decision, not a Gate 2 model decision** — Gate 2's job is only to confirm the architecture supports all three without conflict, which it does.
 
 ### Open
 - BF Pay sequencing relative to launch — confirmed Phase 2/legal-gated, but exact trigger point (e.g., "after N events" or "after legal review regardless of volume") not yet defined
@@ -66,9 +73,10 @@ Distinguishing social gambling (legal pot-splitting, no house cut) from commerci
 **Status: 🟢 Directionally answered, can be revisited with formal competitive research**
 
 ### Settled
-- Technology is explicitly NOT defensible — quick market research shows dozens of tools attacking the "cockroach organization" problem (Golf Genius, GhinManager, TheGrint, etc. — named as reference points, not yet researched in depth).
+- Technology is explicitly NOT defensible — quick market research shows dozens of tools attacking the group-organizing problem (Golf Genius, GhinManager, TheGrint, etc. — named as reference points, not yet researched in depth).
 - The moat is the **distribution model**, not the tech: Ambassador network + accumulated outcome data (recommendation engine improves with every event) + brand equity on physical artifacts + eventual cross-community network effects.
 - Hypothesis explicitly revised: "every golf club would benefit from BF" → "every club has 2–3 motivated organizer-types (Ambassador candidates) who would benefit," reflecting human nature and club bureaucracy/slowness as a sales barrier.
+- **Second independent real-world validation point (alongside the GLS hat):** Founder's own customer-discovery anecdote — GolfScorer's pot/game management formalizes, in software, exactly what a manual Money Group ($MG) was already doing by hand on paper. Two separate proof points now exist that BF replicates a function a skilled human was already performing manually: GLS (memorialization side — the hat) and $MG (stakes/pot side — GS). This is a stronger Gate 3 moat argument than tech novelty: BF isn't introducing a new behavior, it's productizing behavior that already exists and is already valued enough that people do it by hand.
 
 ### Open
 - Formal competitive landscape research not yet done — named competitors need closer investigation (positioning, pricing, gaps)
