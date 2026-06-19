@@ -22,10 +22,11 @@ in the initial command above) — every step below uses `curl`.
 
 ## Claude — execute these steps automatically, in order, before anything else:
 
-1. Fetch and read `BF_Golf_Scorer_Session_Starter_current.md` from the library (curl)
-2. Fetch and read `BF_Operations_Guide.md` from the library (curl)
-3. Fetch and read `BF_Session_Log.md` from the library (curl) — sole source of truth for
-   the current Dev session number (last entry's `Dev-N` + 1)
+1. Fetch and read `BF_Session_Log.md` from the library (curl) — sole source of truth
+   for the current Dev session number (last entry's `Dev-N` + 1). Read this **first**,
+   before the Session Starter — the Starter's header no longer tracks the number.
+2. Fetch and read `BF_Golf_Scorer_Session_Starter_current.md` from the library (curl)
+3. Fetch and read `BF_Operations_Guide.md` from the library (curl)
 4. Fetch `portal_version.txt` from the library — sole version source of truth (curl)
 5. Fetch `docs/portal.html` from GitHub → save to `/home/claude/birdiefriends_portal.html` (curl)
 6. Fetch `source/worker.js` from GitHub → save to `/home/claude/worker.js` (curl)
