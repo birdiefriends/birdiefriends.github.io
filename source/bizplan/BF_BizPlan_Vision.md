@@ -38,6 +38,8 @@ Brian is retired and does not need this to succeed financially. He was consideri
 
 8. **Low overhead is a design feature.** Break-even is achievable at a handful of active Ambassadors running a few events per month — not a venture-scale customer base. This supports a deliberately unambitious, low-capital-risk launch posture.
 
+9. **BF's responsibility is infrastructure and barrier removal, not predicting or prescribing who plays what role.** People arrive at roles (Organizer, Wrangler/Connector, Ambassador, Money Group) through duty, accident, opportunity, grief, redundancy, or ambition — motivations the platform shouldn't need to know or sort by in order to function. Examples surfaced in founder discussion: a league commissioner who privately dislikes the role but honors a deceased father who founded the league; the founder himself, who never planned to build BF and simply stepped up when someone had to; a person who steps into a vacated Wrangler role when the original organizer is injured or unavailable; someone who finds an Ambassador slot as unplanned cash-flow opportunity. Any segmentation or persona work in this plan (see Gate 2) describes common patterns to aid planning — it is not a taxonomy BF imposes on or requires of users. The platform's job is to make stepping into, sharing, or handing off any role low-friction whenever someone needs or wants to.
+
 ---
 
 ## Customer Discovery Threads
