@@ -543,6 +543,24 @@
     </div>
 
     <div id="copy-confirm" style="display:none;margin-top:16px;text-align:center;color:var(--gold);font-size:13px;">✅ Copied — paste into Claude</div>
+
+    <div class="section-header" style="margin-top:32px;">Start a Business Plan session</div>
+
+    <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Tap to copy the BZP session start command, then paste it into a new Claude chat.</p>
+
+    <div class="info-chip" style="margin-bottom:20px;font-family:var(--mono);font-size:12px;line-height:1.6;word-break:break-all;">
+      Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/bizplan/BF_BizPlan_Bootstrap.md and follow all instructions in it exactly.
+    </div>
+
+    <button class="btn btn-primary" style="width:100%;margin-bottom:24px;" onclick="copyBZPCommand()">
+      📝 Copy BZP Session Start Command
+    </button>
+
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
+      <a href="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/bizplan/BF_BizPlan_Bootstrap.md" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">View BZP Bootstrap in Library ↗</a>
+    </div>
+
+    <div id="bzp-copy-confirm" style="display:none;margin-top:16px;text-align:center;color:var(--gold);font-size:13px;">✅ Copied — paste into Claude</div>
   </div>
 
   <!-- ── DEPLOY TAB ─────────────────────────────────────────────── -->
@@ -689,6 +707,25 @@ function copySessionCommand() {
 }
 function showCopyConfirm() {
   const el = document.getElementById('copy-confirm');
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 3000);
+}
+
+function copyBZPCommand() {
+  const cmd = 'Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/bizplan/BF_BizPlan_Bootstrap.md and follow all instructions in it exactly.';
+  navigator.clipboard.writeText(cmd).then(() => {
+    showBZPCopyConfirm();
+  }).catch(() => {
+    // Fallback for older iOS Safari
+    const ta = document.createElement('textarea');
+    ta.value = cmd; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showBZPCopyConfirm();
+  });
+}
+function showBZPCopyConfirm() {
+  const el = document.getElementById('bzp-copy-confirm');
   el.style.display = 'block';
   setTimeout(() => el.style.display = 'none', 3000);
 }
