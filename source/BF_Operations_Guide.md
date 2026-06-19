@@ -599,6 +599,7 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 
 | Item | Priority | Notes |
 |------|----------|-------|
+| **Jotform API key off client-side** | 🔲 Backlog, low urgency | `JOTFORM_API_KEY` hardcoded in `portal.html`. Fix: move to Cloudflare Worker secret (`env.JOTFORM_API_KEY`, same pattern as `OS_REST_KEY`/`GH_TOKEN`), add Worker proxy routes, migrate every portal call site. Larger lift than the GitHub token fix (Session 40) — many call sites across registration, scorecard, CttP, membership. Needs its own focused session with careful testing since portal.html is live-player-facing. Not urgent: lower-risk key than a GitHub write token, and current dev/bizplan capability isn't blocked by it. |
 | **GS atomicity — `grpPublish Final` should write `results.html` directly** | 🔲 Carried over | Flagged end of Session 36, still untouched. Removes manual-ordering dependency between pre-round groupings publish and post-round results publish. |
 | **Alerts / Inbox** | 🔲 Next (Session A) | Worker: scope field, per-type TTL, `/inbox?player=` endpoint. Portal: inbox UI below Upcoming, read/unread, dismiss. |
 | **Cancelled Events** | 🔴 Priority | Commissioner marks cancelled → push → card shows ❌ → ghost on Schedule tab. Needs KV flag per event ID. |
