@@ -1,0 +1,52 @@
+-- BF Gatherings — D1 Schema Log
+-- Database: birdiefriends-gatherings (D1, bound to Worker as env.DB)
+-- This file is the authoritative migration history. Append new entries below,
+-- never edit history. Each entry should be run in the D1 Console and then
+-- mirrored here via /deploy, in that order.
+
+-- ============================================================
+-- Entry 1 — 2026-06-20 — Session Dev-43
+-- Initial MLP schema: gatherings, crews, crew_members, registrations
+-- Per BF_Gatherings_Spec.md §9 / §11 Q7 — MLP scope only.
+-- Deferred to a later entry: fill_list_members, host_exclusions,
+-- player_host_mutes (Post-MLP, see spec §11 Q2).
+-- ============================================================
+
+CREATE TABLE gatherings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  host_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  venue TEXT,
+  event_time TEXT NOT NULL,
+  size INTEGER,
+  crew_id INTEGER REFERENCES crews(id),
+  fill_list_enabled INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE crews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  host_id TEXT NOT NULL,
+  name TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE crew_members (
+  crew_id INTEGER NOT NULL REFERENCES crews(id),
+  player_id TEXT NOT NULL,
+  PRIMARY KEY (crew_id, player_id)
+);
+
+CREATE TABLE registrations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gathering_id INTEGER NOT NULL REFERENCES gatherings(id),
+  player_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('yes','no','sub')),
+  registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (gathering_id, player_id)
+);
+
+-- Confirmed live via D1 Console, Session Dev-43:
+-- SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%';
+-- → gatherings, crews, crew_members, registrations
