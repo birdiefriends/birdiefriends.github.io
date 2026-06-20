@@ -652,6 +652,16 @@
       <a href="https://github.com/birdiefriends/birdiefriends.github.io/tree/main/source/bizplan"
          target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none;">↗ GitHub</a>
     </div>
+
+    <div class="section-header" style="margin-top:24px;">Capability specs — source/specs/</div>
+    <div id="specs-list">
+      <div class="empty-state"><span class="spinner"></span> Loading…</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost btn-sm" onclick="specsLoaded=false;loadLibrary()">↻ Refresh</button>
+      <a href="https://github.com/birdiefriends/birdiefriends.github.io/tree/main/source/specs"
+         target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none;">↗ GitHub</a>
+    </div>
   </div>
 
   <!-- ── SNAPSHOTS / LOG TAB ────────────────────────────────────── -->
@@ -1016,12 +1026,14 @@ const FILE_ICONS = {
   'BF_BizPlan_Session_Log.md': '🗒️',
   'BF_Capability_Inventory.md': '📊',
   'BF_BizPlan_Bootstrap.md': '📝',
+  'BF_Gatherings_Spec.md': '📐',
 };
 
 const LIBRARY_ORDER = ['portal.html','guide.html','deploy.html','worker.js','BF_Golf_Scorer_8.html','BF_Operations_Guide.md','BF_Golf_Scorer_Session_Starter_current.md'];
 
 let libraryLoaded = false;
 let bizplanLoaded = false;
+let specsLoaded = false;
 
 async function loadLibrary() {
   if (!libraryLoaded) {
@@ -1031,6 +1043,10 @@ async function loadLibrary() {
   if (!bizplanLoaded) {
     await renderDirList('source/bizplan', 'bizplan-list', null);
     bizplanLoaded = true;
+  }
+  if (!specsLoaded) {
+    await renderDirList('source/specs', 'specs-list', null);
+    specsLoaded = true;
   }
 }
 
