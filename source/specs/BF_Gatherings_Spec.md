@@ -289,6 +289,47 @@ Surfaced in discussion, not designed yet. Capturing so it's not lost.
 
 ---
 
+## 15. Addendum (Dev-43) — Gathering Panel is Host-only; Crew members use existing views
+
+Clarified during D1/API planning, correcting an assumption made earlier in this session:
+the Live-Panel-style pop-out (anchored off "+ New Gathering" / My Gatherings) is **Host
+management surface only** — create, view responses, cancel. It is not shown to Crew
+members at all.
+
+**Crew members never see a new screen.** A Gathering they're invited to appears as a card
+in the **existing** My Events, Parked, and Calendar views — identical mechanics to a
+Series Event card, including swipe-as-No (§11 Q13). No new UI to learn on the invitee
+side; the only new surface in the whole spec is the Host's own management panel.
+
+**Implication for §3/§7 build-out:** the work isn't "build a Gathering view for Crew
+members" — it's "extend My Events/Parked/Calendar's existing card-rendering logic to
+also pull from `GET /gatherings?player_id=X` (Dev-43 API, see below) and render a
+Gathering card the same way it renders a Series Event card, backed by `registrations`
+instead of the Jotform Event Registration form." Smaller lift than initially framed;
+no parallel UI system needed.
+
+---
+
+## 16. Worker API — D1-backed routes (Dev-43)
+
+Implemented and deployed (`worker.js`, commit `de6c4ee757de5e69e83e7dd2f739fe380c4895ae`).
+No PIN — hosting is open per §6; trust model matches existing Jotform client writes.
+
+| Route | Purpose |
+|---|---|
+| `POST /gatherings` | Create a Gathering |
+| `POST /gatherings/:id/cancel` | Cancel — host-only, verified server-side against `host_id` |
+| `GET /gatherings?player_id=X` | Gatherings visible to a player — hosted by them + any they're a Crew member of. `status='active'` only — cancelled rows excluded, matching "past ones quietly disappear." This is the query both the Host Panel *and* My Events/Parked/Calendar (§15) consume. |
+| `POST /crews` | Create a Crew (saved or ad hoc) + members, one call |
+| `GET /crews?host_id=X` | A host's saved (named) Crews |
+| `POST /registrations` | Upsert a player's yes/no/sub response — re-registering updates, not duplicates (`UNIQUE(gathering_id, player_id)`) |
+| `GET /gatherings/:id/registrations` | Host's view of who's responded |
+
+Schema reference: `source/specs/BF_Gatherings_Schema.sql`. Tables: `gatherings`,
+`crews`, `crew_members`, `registrations` (MLP scope only, per §11 Q7).
+
+---
+
 ## 14. Carry-forward
 
 This spec is planning-stage only — no code written yet. Storage (D1), the reach model (§4 funnel), Host-initiated onboarding (§5 — stub creation, de-dup, claim link, Pending status), the multi-club question (§12, deferred), MLP scope (§11 Q2), the rendering/query approach (§11 Q4), and the swipe/No interaction (§11 Q13) are all now settled. Only Q7 (D1 setup mechanics) remains open in MLP's critical path — laptop work, not a discussion item. §13 (operational fix scaling / Claude-as-proxy) and §5's picker-narrowing-at-scale note are both flagged for future sessions, neither blocking MLP. Focus going forward: get Host capability operating per the MLP scope, with community noise control (§4) as the core discipline — not chasing further scope.
