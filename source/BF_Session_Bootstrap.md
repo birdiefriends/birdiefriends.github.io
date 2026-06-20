@@ -22,9 +22,25 @@ in the initial command above) — every step below uses `curl`.
 
 ## Claude — execute these steps automatically, in order, before anything else:
 
-1. Fetch and read `BF_Session_Log.md` from the library (curl) — sole source of truth
-   for the current Dev session number (last entry's `Dev-N` + 1). Read this **first**,
-   before the Session Starter — the Starter's header no longer tracks the number.
+1. Fetch `BF_Session_Log.md` with a cache-busting query string — `raw.githubusercontent.com`
+   sits behind a CDN with a several-minute cache TTL, which has caused stale reads
+   shortly after a same-night close-out/seed. A unique query string forces a fresh
+   fetch with no added rate-limit risk:
+   ```
+   curl -s "https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Log.md?cb=$(date +%s%N)"
+   ```
+   This is the sole source of truth for the current Dev session number (last entry's
+   `Dev-N` + 1). Read this **first**, before the Session Starter — the Starter's header
+   no longer tracks the number. If the result still looks stale (e.g. shows a session
+   you'd expect to already be closed), fall back to the GitHub Contents API:
+   ```
+   curl -s "https://api.github.com/repos/birdiefriends/birdiefriends.github.io/contents/source/BF_Session_Log.md" \
+     | python3 -c "import json,sys,base64; print(base64.b64decode(json.load(sys.stdin)['content']).decode())"
+   ```
+   Note: the API fallback is unauthenticated (60 req/hr/IP) and can itself be
+   rate-limited by other activity that hour (e.g. heavy `deploy.html` Library tab use) —
+   if both methods fail to produce a confident answer, say so plainly in the step 8
+   report rather than guessing.
 2. Fetch and read `BF_Golf_Scorer_Session_Starter_current.md` from the library (curl)
 3. Fetch and read `BF_Operations_Guide.md` from the library (curl)
 4. Fetch `portal_version.txt` from the library — sole version source of truth (curl)
