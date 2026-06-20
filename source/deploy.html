@@ -527,9 +527,10 @@
 
     <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Tap the button to copy the session start command, then paste it into Claude.</p>
 
-    <div class="info-chip" style="margin-bottom:20px;font-family:var(--mono);font-size:12px;line-height:1.6;word-break:break-all;">
+    <div class="info-chip" style="margin-bottom:8px;font-family:var(--mono);font-size:12px;line-height:1.6;word-break:break-all;">
       Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md and follow all instructions in it exactly.
     </div>
+    <p style="color:var(--muted);font-size:11px;margin:0 0 20px;">A unique cache-buster is appended automatically when copied, to avoid stale reads right after a deploy.</p>
 
     <button class="btn btn-primary" style="width:100%;margin-bottom:24px;" onclick="copySessionCommand()">
       📋 Copy Session Start Command
@@ -685,7 +686,8 @@ const WORKER_URL = 'https://birdiefriends-push.birdiefriends01.workers.dev';
 const PIN_CORRECT = '7797';
 
 function copySessionCommand() {
-  const cmd = 'Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md and follow all instructions in it exactly.';
+  const cb = Date.now();
+  const cmd = `Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md?cb=${cb} and follow all instructions in it exactly.`;
   navigator.clipboard.writeText(cmd).then(() => {
     showCopyConfirm();
   }).catch(() => {
