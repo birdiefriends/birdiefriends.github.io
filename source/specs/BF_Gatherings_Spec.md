@@ -78,17 +78,41 @@ A domain-wide pool of players who've personally opted in to "ping me for open sp
 
 Both directions are personal, asymmetric, and require no agreement from the other side — either party can end the match without the other knowing why.
 
-**Fill List availability, not just opt-in.** A flat "ping me for anything" toggle creates its own noise problem once multiple Hosts are pinging the same pool — v1 needs at least a coarse signal so pings only reach players who'd plausibly say yes. Simplest version: a day-of-week availability set per Fill List member (e.g. "available Wed, Sat"). A Fill List ping for a Wednesday Gathering only reaches players who've marked Wednesday. This is intentionally coarse for v1 — see §10 for richer-granularity as a future question, not a v1 requirement.
+**Fill List availability, not just opt-in.** A flat "ping me for anything" toggle creates its own noise problem once multiple Hosts are pinging the same pool — v1 needs at least a coarse signal so pings only reach players who'd plausibly say yes. Simplest version: a day-of-week availability set per Fill List member (e.g. "available Wed, Sat"). A Fill List ping for a Wednesday Gathering only reaches players who've marked Wednesday. This is intentionally coarse for v1 — see §11 for richer-granularity as a future question, not a v1 requirement.
 
-**Note on the Commissioner's own broadcast capability:** the Lord's Valley Scramble example (broadcast to everyone, self-selected foursome, then needed a fill when a player dropped) is a real-world validation of this exact funnel pattern — but the initial "broadcast to everyone" step was the Commissioner's existing, unrestricted capability (§6), not a Host action. That distinction matters: the Commissioner is not bound by the Crew/Fill-List/Exclusion model described here — only Hosts are.
+**Note on the Commissioner's own broadcast capability:** the Lord's Valley Scramble example (broadcast to everyone, self-selected foursome, then needed a fill when a player dropped) is a real-world validation of this exact funnel pattern — but the initial "broadcast to everyone" step was the Commissioner's existing, unrestricted capability (§7), not a Host action. That distinction matters: the Commissioner is not bound by the Crew/Fill-List/Exclusion model described here — only Hosts are.
 
 **"Spot goes unfilled" is an acceptable, expected outcome.** If Crew + Fill List doesn't produce enough players, that's fine — it keeps the system from pressuring Hosts toward wider reach than the community norm supports, and matches how this already works informally (frantic texting that doesn't pan out is normal, not a failure).
 
-**Content inherits the same boundary.** Any results page, photo gallery, or scorecard generated from a Gathering is visible only to that Gathering's Crew ∪ Fill List participants by default (Use Case D — GLS). Making content public afterward, if ever wanted, is a separate explicit action — not a side effect of the event happening. (Mechanics of that "publish" action are out of scope for v1 — see §9.)
+**Content inherits the same boundary.** Any results page, photo gallery, or scorecard generated from a Gathering is visible only to that Gathering's Crew ∪ Fill List participants by default (Use Case D — GLS). Making content public afterward, if ever wanted, is a separate explicit action — not a side effect of the event happening. (Mechanics of that "publish" action are out of scope for v1 — see §10.)
 
 ---
 
-## 5. Roles and tiering
+---
+
+## 5. Host-initiated onboarding (new Crew members)
+
+Surfaced late in planning, resolved in detail. A Host building a Crew will routinely want to add someone who isn't a BF member yet (Use Case A/C territory — "need a 4th," pickup games). This section defines how that works.
+
+**Decision: a stub is a real Membership record, not a separate identity layer.** Earlier discussion floated a D1-only "guest table" with a later graduation path; rejected. Membership's actual field list is lean (First/Last/Nick Name, Cell, Email, Member Date, `bfw`, `active`, `pushId` — confirmed, no deeper profile exists today), so creating a minimal real Membership record costs little and avoids ever needing a separate identity system or a migration between two player concepts later. Once personalized, this person is a normal BF member — scoring, HCP, everything downstream already works, because nothing about them is special-cased.
+
+**Flow:**
+1. **Host adds a name not on the list.** Crew-builder picker → "Add new" → Host enters Name + Cell. Cell is required — it's both the de-dup anchor and the only channel available to reach someone with no PWA presence yet.
+2. **De-dup runs before creation.** Cell is the strong match key, checked against *all* Membership records regardless of status (not just Active) — this is what catches the cross-Host case, e.g. Host A stubs "Jane" one week, Host B tries to invite a "Jane" with the same cell the next week. Name is a weak fallback only. A likely match surfaces to the Host for confirmation rather than silently merging or silently duplicating — a wrong auto-merge is worse than asking.
+3. **New status value: `Pending`** (not `InActive`). Reusing `InActive` risks getting swept into the existing Active/InActive auto-reset backlog item, which wasn't written with "never-yet-real person" in mind. `Pending` sidesteps that, and naturally falls outside the existing notification filter (`bfw=Yes` + `active=Active` + `pushId` present) with zero changes to that logic.
+4. **Pending entries stay out of the standard "Who are you?" picker** — confirmed against the live picker (screenshot), which already has a precedent for collapsing a status bucket out of the default view ("Show inactive players (41) ›"). Pending follows the same pattern: never in the visible, tappable list (a stranger self-selecting their own name from a list is a misclick-onto-someone-else's-identity risk, not just clutter), available in a similar named, collapsed bucket if a Host wants to glance at who's pending. Claiming never happens through the picker — only through the claim link (next).
+5. **Claim link, not self-selection.** A short code in Worker KV (`invite:{code}` → the stub's Jotform submission ID) resolves to a new, minimal portal landing route with a pre-filled "confirm your info" screen. The person confirms name/cell, explicitly grants `bfw` consent (cannot be set by the Host on their behalf — this is a real consent boundary, not a UX nicety), and grants push permission. That write flips `Pending → Active` and writes `pushId`.
+6. **First-contact delivery is manual for MLP, deliberately.** No SMS-sending infrastructure exists in the stack (OneSignal needs a `pushId` that doesn't exist yet for a Pending stub — chicken-and-egg), so getting the link to the new person is the Host texting/calling directly, or the new person calling the Commissioner if they're stuck on PWA install. Fine at ~30-player scale; automated delivery is a deferred idea, not an MLP requirement.
+
+**Second entry point needs the same de-dup, or this doesn't hold.** The portal already has a generic self-serve path — *"📐 Not on the list? Join BirdieFriends"* — independent of anything built here (confirmed via live screenshot). A new person who finds the portal organically, rather than through a Host's claim link, must run through the same Cell-based de-dup check before a record is created — otherwise they fork a second, disconnected record instead of claiming the Host's stub, and the whole de-dup design in step 2 doesn't actually prevent duplicates. This is existing-code retrofit work, not new-code work, but it's required for this design to hold.
+
+**Security note, consistent with §13:** stub creation and the claim-link confirmation are both writes into the live Membership roster — a meaningfully bigger trust boundary than anything else a Host does (everything else in MLP is scoped to the Host's own Gatherings; this reaches shared, platform-wide data). Both should route through a dedicated Worker endpoint, not a client-side Jotform write — same discipline already established for `/deploy`, scoped narrowly to just this one new path rather than waiting on the broader `JOTFORM_API_KEY` backlog item to be resolved first.
+
+**Flagged, not resolved — picker narrowing at scale.** The "Who are you?" picker deliberately shows only Active members today, narrowing the selection domain — a real, deliberate design choice, not an oversight. It's valuable in places like live-action overseer flows (Birdie Alert/CttP, where someone's acting on behalf of players under time pressure and a short, accurate list matters most). Adding `Pending` as a third bucket doesn't break this, since Pending stays hidden by the same mechanism — but as the roster grows (more Pending stubs, more Hosts, eventually multi-club per §12) the active/inactive/pending narrowing logic will need real attention rather than continuing to work by accident. Not an MLP blocker; flagged for a future UX/data session.
+
+---
+
+## 6. Roles and tiering
 
 Hosting is **open, not gated** — any player can create a Gathering. To preserve community quality without adding upfront friction, every player who creates their first Gathering is silently moved into a monitored tier:
 
@@ -99,7 +123,7 @@ Hosting is **open, not gated** — any player can create a Gathering. To preserv
 
 ---
 
-## 6. Capability matrix
+## 7. Capability matrix
 
 | Capability | Commissioner | Host |
 |---|---|---|
@@ -107,12 +131,12 @@ Hosting is **open, not gated** — any player can create a Gathering. To preserv
 | Delete/cancel | Any | Own only |
 | Scope (size, venue, time) | Any | Own only |
 | Communicate | All players | Crew, plus Fill List if opted in for that Gathering — never wider. See §4. |
-| Score | Full GS | **Out of scope v1** — see §9 |
-| Payout | — | **Out of scope v1** — see §9 |
+| Score | Full GS | **Out of scope v1** — see §10 |
+| Payout | — | **Out of scope v1** — see §10 |
 
 ---
 
-## 7. Storage architecture — decided
+## 8. Storage architecture — decided
 
 Gatherings, Crews, and Gathering registrations will be built on **Cloudflare D1** (SQLite, natively bound to the Worker — no new vendor, no new domain to allowlist). This replaces the earlier KV-vs-Jotform framing.
 
@@ -129,7 +153,9 @@ Gatherings, Crews, and Gathering registrations will be built on **Cloudflare D1*
 
 ---
 
-## 8. Data model (draft)
+## 9. Data model (draft)
+
+**What `player_id` actually is, everywhere it appears below:** every `player_id`/`host_id`/`excluded_player_id`/`muted_host_id` column in this section is the player's **Jotform Membership submission ID** — D1 has no native player table of its own (§5 resolved this; no separate identity layer, no D1-side `players` table). D1 can't enforce this as a real foreign key across systems, so the Worker is responsible for validity at write time. This also means a brand-new Crew member (§5's `Pending` stub) gets a real `player_id` the moment the stub is created — D1 references work identically for Pending and Active players, no special-casing needed in any table below.
 
 **`gatherings`**
 | Column | Notes |
@@ -142,7 +168,7 @@ Gatherings, Crews, and Gathering registrations will be built on **Cloudflare D1*
 | `fill_list_enabled` | bool — Host's per-Gathering choice to extend reach into the Fill List (§4) |
 | `status` | active / cancelled |
 
-No `recurrence` field. Every Gathering is one date, one tee-time-group action — same as how tee time reservations actually work today (§10, Q3 resolved). "Recurring" isn't a data-model property; continuity (Charlie's Tuesday league) comes entirely from reusing a saved Crew to create a new Gathering quickly each time, not from a repeat rule on a single row.
+No `recurrence` field. Every Gathering is one date, one tee-time-group action — same as how tee time reservations actually work today (§11, Q3 resolved). "Recurring" isn't a data-model property; continuity (Charlie's Tuesday league) comes entirely from reusing a saved Crew to create a new Gathering quickly each time, not from a repeat rule on a single row.
 
 No `visibility` field — there is no public/private toggle. Reach is always computed (§4), never stored as a single enum.
 
@@ -184,37 +210,43 @@ No `visibility` field — there is no public/private toggle. Reach is always com
 | `id` | PK |
 | `gathering_id` | FK → gatherings |
 | `player_id` | FK → player |
-| `status` | `yes` / `no` / `sub` — reusing the existing Event Registration vocabulary (§10 Q13), not a new state set |
+| `status` | `yes` / `no` / `sub` — reusing the existing Event Registration vocabulary (§11 Q13), not a new state set |
 | `registered_at` | timestamp |
 
 **Player record addition** (still lives wherever the player record lives today — Membership/Jotform, not D1)
-- `tier` — `member` | `host` (see §5)
+- `tier` — `member` | `host` (see §6)
+- `active` — gains a third value, `Pending` (§5), alongside the existing `Active`/`InActive`
 
-Note: `crew_members` as a junction table (rather than a `playerIds[]` array) was a deliberate choice once D1 was selected — explicit list per Crew, not tag-based self-service membership (decided in §3/§8: a Host curates their own list rather than players opting themselves in). `fill_list_members` is the one deliberate exception — it's tag-based by design, because Fill List membership is the player's own choice, not the Host's.
+**Worker KV — claim-link shortcode (§5)**
+| Key pattern | Value | Notes |
+|---|---|---|
+| `invite:{shortcode}` | Jotform Membership submission ID | Short, textable code resolving to a Pending stub. Same KV namespace as existing flags/feed — not a new store. |
+
+Note: `crew_members` as a junction table (rather than a `playerIds[]` array) was a deliberate choice once D1 was selected — explicit list per Crew, not tag-based self-service membership (decided in §3/§9: a Host curates their own list rather than players opting themselves in). `fill_list_members` is the one deliberate exception — it's tag-based by design, because Fill List membership is the player's own choice, not the Host's.
 
 ---
 
-## 9. Explicitly out of scope for v1
+## 10. Explicitly out of scope for v1
 
 - Scoring (GS integration) — Charlie's first use case is registration-only
 - Payout handling
 - True multi-tenant SaaS (separate orgs, isolated data, new backend) — BizPlan-track concern, not this spec
 - Tag-based/self-service Crew membership (players opting themselves into a group) — decided against; Crews are Host-curated lists
-- Migrating the 4 existing Jotform forms (Membership, CttP, Series Scorecard, Event Registration) to D1 — deliberately parked, see §7. Candidate trigger: winter offseason project, or commercialization push.
+- Migrating the 4 existing Jotform forms (Membership, CttP, Series Scorecard, Event Registration) to D1 — deliberately parked, see §8. Candidate trigger: winter offseason project, or commercialization push.
 - Any public/Discover browsing surface — architecturally rejected, not deferred. See §4.
 - "Publish" action for making private Gathering content (results/photos) public after the fact — concept named in §4, mechanics not designed.
 
 ---
 
-## 10. Open questions (next planning pass)
+## 11. Open questions (next planning pass)
 
-1. ~~Where does Gathering/Crew data live?~~ **Resolved — Cloudflare D1.** See §7.
+1. ~~Where does Gathering/Crew data live?~~ **Resolved — Cloudflare D1.** See §8.
 2. ~~MVP feature list~~ **Resolved — renamed MLP (Minimum Lovable Product) per Brian's preferred framing.** Scope:
-   - **In MLP:** Create Gathering (title, venue, date/time, size, Crew), Cancel Gathering, Notify Crew on create/cancel, Register/unregister via required Yes/No/Sub response (Crew members only — see §10 Q13, re-exposing existing Event Registration vocabulary, mandatory rather than optional for Crew outreach), saved/reusable Crews (confirmed — without this, Charlie re-picks the same names every Tuesday, which fails the "lovable" bar)
-   - **Post-MLP:** Fill List + availability (§4), Exclusion List + Mute List (§4), Host tiering (§5 — cheap to include early if convenient, not required to ship), "duplicate my last Gathering" shortcut (§3 footnote)
+   - **In MLP:** Create Gathering (title, venue, date/time, size, Crew), Cancel Gathering, Notify Crew on create/cancel, Register/unregister via required Yes/No/Sub response (Crew members only — see §11 Q13, re-exposing existing Event Registration vocabulary, mandatory rather than optional for Crew outreach), saved/reusable Crews (confirmed — without this, Charlie re-picks the same names every Tuesday, which fails the "lovable" bar)
+   - **Post-MLP:** Fill List + availability (§4), Exclusion List + Mute List (§4), Host tiering (§6 — cheap to include early if convenient, not required to ship), "duplicate my last Gathering" shortcut (§3 footnote)
    - Note: MLP can ship with Crew-only reach (no Fill List), since Crew ∪ Fill List − Exclusions − Mutes degrades gracefully to just Crew when Fill List doesn't exist yet — no contradiction with §4's no-public-broadcast rule.
 3. ~~Recurrence mechanics~~ **Resolved — no recurrence engine.** Every Gathering is one date (matches how tee time reservations actually work). Continuity comes from Crew reuse, not a repeat rule. New, smaller question: should creating a new Gathering offer a "duplicate my last one" shortcut (pre-fill venue/time/size/Crew from a prior Gathering) as a pure UX convenience? Post-MLP per Q2.
-4. ~~Event card / Schedule rendering~~ **Resolved — Worker-side, D1 query.** Gatherings slot into the existing My Events flow (swipe, register, calendar-add all stay as-is) — but the Worker endpoint behind My Events needs a Crew-membership join (`gatherings` → `crew_members` filtered by viewer) added, so a player only ever receives Gatherings they're actually in. Filtering client-side was rejected — it would mean Crew data for Gatherings a player *isn't* in still crosses the wire, undercutting the privacy model in §4. This is the concrete case D1 was chosen for in §7.
+4. ~~Event card / Schedule rendering~~ **Resolved — Worker-side, D1 query.** Gatherings slot into the existing My Events flow (swipe, register, calendar-add all stay as-is) — but the Worker endpoint behind My Events needs a Crew-membership join (`gatherings` → `crew_members` filtered by viewer) added, so a player only ever receives Gatherings they're actually in. Filtering client-side was rejected — it would mean Crew data for Gatherings a player *isn't* in still crosses the wire, undercutting the privacy model in §4. This is the concrete case D1 was chosen for in §8.
 5. **Communication mechanics** — confirm Host pings to Crew reuse the same `osSendToPlayers` recipient-filtering work already flagged in the backlog (notification domain by type), rather than a parallel send path. MLP scope: Crew only.
 6. **Which event tier does v1 cover?** Since Gatherings can in principle resemble anything from a casual one-off to a Production-tier series, v1 almost certainly can't guardrail all of them at once. Likely starting point: casual one-off + standing/registration-only (Use Cases A and B), deferring Production-tier self-service (full GS scoring/standings) — but this should be made explicit rather than assumed.
 7. **D1 setup mechanics** — binding a new D1 database to the Worker, schema migration tooling/process, and whether `bf_deploy.py`/the deploy panel need new capability to manage D1 schema changes alongside the existing file-deploy flow. MLP only needs `gatherings`, `crews`, `crew_members`, `registrations` — the other 3 tables can be added in a later migration when their features ship.
@@ -223,11 +255,11 @@ Note: `crew_members` as a junction table (rather than a `playerIds[]` array) was
 10. **[Post-MLP] Mute List UI** — player-facing mirror of the Exclusion List UI above: where does a player mute a specific Host? Likely lives in My Gatherings or Profile, needs a way to find/search Hosts to mute (probably search-by-name rather than a picker, since the player isn't selecting from a list they already manage).
 11. **[Post-MLP] Availability granularity** — v1 lands on day-of-week only (§4). Worth a future pass on whether that's enough or whether time-of-day / explicit recurring patterns (e.g. "available Tuesday evenings only") are needed once real usage shows the day-level signal is too coarse.
 12. **[Post-MLP] Fill List scale/fairness** — once there are many Hosts pinging the same Fill List, does a player get flooded by everyone's open-spot requests, even after availability filtering and mutes? May need its own rate consideration once Hosting is in real use — not a v1 blocker, but worth watching.
-13. ~~"No" response~~ **Resolved — swipe IS the No action for Gatherings.** Yes/No/Sub already exist in the Event Registration Jotform field; No was hidden in the UI specifically because the old single-table Jotform model made a raw, never-registered "No" clutter the same view used to see who's actually coming — the established convention was to only ever show a No that followed a Yes (i.e. unregister), never a cold decline. D1 removes that constraint: "who's registered" becomes a simple `WHERE status = 'yes'` filter (§8), so storing every response — including a cold No that never passed through Yes — doesn't pollute anything. For Gatherings, swiping a Crew-invited card sets `registrations.status = 'no'`, whether or not the player had previously said Yes; this satisfies the "Crew outreach requires an answer" rule without a separate interaction. Series Event swipe behavior (silent personal hide, `bf_hidden_events_{player}`) is unaffected — this is Gathering-specific.
+13. ~~"No" response~~ **Resolved — swipe IS the No action for Gatherings.** Yes/No/Sub already exist in the Event Registration Jotform field; No was hidden in the UI specifically because the old single-table Jotform model made a raw, never-registered "No" clutter the same view used to see who's actually coming — the established convention was to only ever show a No that followed a Yes (i.e. unregister), never a cold decline. D1 removes that constraint: "who's registered" becomes a simple `WHERE status = 'yes'` filter (§9), so storing every response — including a cold No that never passed through Yes — doesn't pollute anything. For Gatherings, swiping a Crew-invited card sets `registrations.status = 'no'`, whether or not the player had previously said Yes; this satisfies the "Crew outreach requires an answer" rule without a separate interaction. Series Event swipe behavior (silent personal hide, `bf_hidden_events_{player}`) is unaffected — this is Gathering-specific.
 
 ---
 
-## 11. Multi-club dimension — resolved (deferred)
+## 12. Multi-club dimension — resolved (deferred)
 
 **Decision:** v1 carries no club concept at all. No `club_id`, no club table, no eligibility filtering. `venue` stays a plain text field. Fulfillment — whether a given player is appropriate to invite to a given venue (a guest at Moselem vs. anyone at BSGC) — is entirely the Host's manual judgment, not a system concern. BF doesn't model or enforce club policy in v1.
 
@@ -235,15 +267,15 @@ Note: `crew_members` as a junction table (rather than a `playerIds[]` array) was
 
 **Why this is explicitly deferred, not closed:** the real complexity here isn't "add a club field" — it's what happens if BF's reach grows past its current regional footprint. That's a materially bigger problem than this spec, and it's the same one already named in the Ops Guide as the v4.0 trigger (true multi-tenant, off Jotform). National/worldwide BF reach is a different order of magnitude than today's regional, single-club-cluster reality — multi-club and multi-tenant become the same conversation at that scale, not two separate ones. Revisit only if/when BF's community footprint actually expands beyond its current regional reach — not a near-term planning item.
 
-**Status:** Resolved for v1 purposes. Not blocking anything in §10.
+**Status:** Resolved for v1 purposes. Not blocking anything in §11.
 
 ---
 
-## 12. Flagged — operational fix scaling & Claude's role as proxy
+## 13. Flagged — operational fix scaling & Claude's role as proxy
 
 Surfaced in discussion, not designed yet. Capturing so it's not lost.
 
-**The gap:** unlike Jotform, D1 has no hosted record-editing UI (§7's tradeoff). Without it, "fix this player's registration" or "this Crew got corrupted" becomes a dev-session prompt to Claude rather than something Brian clicks into and resolves himself. At MLP's expected scale (a handful of Hosts) this is fine — possibly faster than a form UI. It stops being fine if Hosting volume grows the way Use Case C suggests it might: "ping Claude to fix it" turns into a queue, not a tool. Same shape of concern as §10 Q12 (Fill List noise scaling), one layer down in operations rather than UX.
+**The gap:** unlike Jotform, D1 has no hosted record-editing UI (§8's tradeoff). Without it, "fix this player's registration" or "this Crew got corrupted" becomes a dev-session prompt to Claude rather than something Brian clicks into and resolves himself. At MLP's expected scale (a handful of Hosts) this is fine — possibly faster than a form UI. It stops being fine if Hosting volume grows the way Use Case C suggests it might: "ping Claude to fix it" turns into a queue, not a tool. Same shape of concern as §11 Q12 (Fill List noise scaling), one layer down in operations rather than UX.
 
 **Two mitigations already available, not yet decided between:**
 - Cloudflare's D1 dashboard has its own SQL console — a genuine self-serve fallback that doesn't route through Claude at all, just less friendly than Jotform's record UI.
@@ -257,6 +289,6 @@ Surfaced in discussion, not designed yet. Capturing so it's not lost.
 
 ---
 
-## 13. Carry-forward
+## 14. Carry-forward
 
-This spec is planning-stage only — no code written yet. Storage (D1), the reach model (§4 funnel), the multi-club question (§11, deferred), MLP scope (§10 Q2), the rendering/query approach (§10 Q4), and the swipe/No interaction (§10 Q13) are all now settled. Only Q7 (D1 setup mechanics) remains open in MLP's critical path — laptop work, not a discussion item. §12 (operational fix scaling / Claude-as-proxy) is flagged for a future dedicated session, not blocking MLP. Focus going forward: get Host capability operating per the MLP scope, with community noise control (§4) as the core discipline — not chasing further scope.
+This spec is planning-stage only — no code written yet. Storage (D1), the reach model (§4 funnel), Host-initiated onboarding (§5 — stub creation, de-dup, claim link, Pending status), the multi-club question (§12, deferred), MLP scope (§11 Q2), the rendering/query approach (§11 Q4), and the swipe/No interaction (§11 Q13) are all now settled. Only Q7 (D1 setup mechanics) remains open in MLP's critical path — laptop work, not a discussion item. §13 (operational fix scaling / Claude-as-proxy) and §5's picker-narrowing-at-scale note are both flagged for future sessions, neither blocking MLP. Focus going forward: get Host capability operating per the MLP scope, with community noise control (§4) as the core discipline — not chasing further scope.
