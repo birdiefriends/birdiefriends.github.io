@@ -200,6 +200,143 @@ export default {
       });
     }
 
+    // ============================================================
+    // GATHERINGS — Dev-43, D1-backed (env.DB), MLP scope only.
+    // No PIN: hosting is open to any player (spec §6). Trust model
+    // matches existing Jotform client writes — host_id/player_id is
+    // whatever the calling client says it is, no session auth layer.
+    // ============================================================
+
+    // POST /gatherings — create a Gathering
+    if (request.method === 'POST' && url.pathname === '/gatherings') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled } = body;
+      if (!host_id || !title || !event_time) {
+        return new Response(JSON.stringify({ error: 'host_id, title, and event_time are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const result = await env.DB.prepare(
+        `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`
+      ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0).run();
+      return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // POST /gatherings/:id/cancel — cancel a Gathering (host only)
+    if (request.method === 'POST' && /^\/gatherings\/\d+\/cancel$/.test(url.pathname)) {
+      const gatheringId = url.pathname.split('/')[2];
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { host_id } = body;
+      if (!host_id) {
+        return new Response(JSON.stringify({ error: 'host_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const gathering = await env.DB.prepare(`SELECT host_id FROM gatherings WHERE id = ?`).bind(gatheringId).first();
+      if (!gathering) {
+        return new Response(JSON.stringify({ error: 'Gathering not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (gathering.host_id !== host_id) {
+        return new Response(JSON.stringify({ error: 'Only the host can cancel this Gathering' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      await env.DB.prepare(`UPDATE gatherings SET status = 'cancelled' WHERE id = ?`).bind(gatheringId).run();
+      return new Response(JSON.stringify({ ok: true, id: Number(gatheringId), status: 'cancelled' }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // GET /gatherings?player_id=X — Gatherings visible to a player:
+    // their own (as host) + any they're invited to via Crew membership.
+    // Cancelled Gatherings excluded — "past ones quietly disappear."
+    if (request.method === 'GET' && url.pathname === '/gatherings') {
+      const playerId = url.searchParams.get('player_id');
+      if (!playerId) {
+        return new Response(JSON.stringify({ error: 'player_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { results } = await env.DB.prepare(
+        `SELECT DISTINCT g.* FROM gatherings g
+         LEFT JOIN crew_members cm ON cm.crew_id = g.crew_id
+         WHERE g.status = 'active' AND (g.host_id = ? OR cm.player_id = ?)
+         ORDER BY g.event_time ASC`
+      ).bind(playerId, playerId).all();
+      return new Response(JSON.stringify({ ok: true, gatherings: results }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // POST /crews — create a Crew (ad hoc or saved; name null = ad hoc/unsaved)
+    if (request.method === 'POST' && url.pathname === '/crews') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { host_id, name, player_ids } = body;
+      if (!host_id || !Array.isArray(player_ids) || player_ids.length === 0) {
+        return new Response(JSON.stringify({ error: 'host_id and a non-empty player_ids array are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const crewResult = await env.DB.prepare(
+        `INSERT INTO crews (host_id, name) VALUES (?, ?)`
+      ).bind(host_id, name || null).run();
+      const crewId = crewResult.meta.last_row_id;
+      const inserts = player_ids.map(pid =>
+        env.DB.prepare(`INSERT INTO crew_members (crew_id, player_id) VALUES (?, ?)`).bind(crewId, pid)
+      );
+      await env.DB.batch(inserts);
+      return new Response(JSON.stringify({ ok: true, id: crewId }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // GET /crews?host_id=X — a host's saved Crews (name not null; ad hoc Crews omitted)
+    if (request.method === 'GET' && url.pathname === '/crews') {
+      const hostId = url.searchParams.get('host_id');
+      if (!hostId) {
+        return new Response(JSON.stringify({ error: 'host_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { results } = await env.DB.prepare(
+        `SELECT * FROM crews WHERE host_id = ? AND name IS NOT NULL ORDER BY name ASC`
+      ).bind(hostId).all();
+      return new Response(JSON.stringify({ ok: true, crews: results }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // POST /registrations — set a player's Yes/No/Sub response for a Gathering (upsert)
+    if (request.method === 'POST' && url.pathname === '/registrations') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { gathering_id, player_id, status } = body;
+      if (!gathering_id || !player_id || !['yes','no','sub'].includes(status)) {
+        return new Response(JSON.stringify({ error: 'gathering_id, player_id, and status (yes/no/sub) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      await env.DB.prepare(
+        `INSERT INTO registrations (gathering_id, player_id, status, registered_at)
+         VALUES (?, ?, ?, datetime('now'))
+         ON CONFLICT (gathering_id, player_id) DO UPDATE SET status = excluded.status, registered_at = excluded.registered_at`
+      ).bind(gathering_id, player_id, status).run();
+      return new Response(JSON.stringify({ ok: true, gathering_id: Number(gathering_id), player_id, status }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // GET /gatherings/:id/registrations — host's view of who's responded
+    if (request.method === 'GET' && /^\/gatherings\/\d+\/registrations$/.test(url.pathname)) {
+      const gatheringId = url.pathname.split('/')[2];
+      const { results } = await env.DB.prepare(
+        `SELECT player_id, status, registered_at FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
+      ).bind(gatheringId).all();
+      return new Response(JSON.stringify({ ok: true, registrations: results }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
     // Shared path map used by /history, /rollback, and /deploy
     const FILE_PATHS = {
       portal:    'source/portal.html',
