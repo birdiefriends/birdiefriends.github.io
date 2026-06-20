@@ -134,13 +134,83 @@ mid-decision. Next session (laptop) starts on Q7.
 
 ---
 
-## Session Dev-43 · TBD
+## Session Dev-43 · 2026-06-20
 
-**Focus:** Gatherings — D1 setup mechanics (§14 Q7 of `BF_Gatherings_Spec.md`): bind a
-new D1 database to the Worker, create the MLP schema (`gatherings`, `crews`,
-`crew_members`, `registrations`), and decide whether schema changes get a tracked
-migration process from the start or stay manual until the second change is needed.
+**Focus:** Gatherings — D1 setup mechanics (§14/§11 Q7), then Worker API plumbing on top
+of it (originally scoped as next-session work, pulled forward since time allowed).
 
-**Not yet started — placeholder entry only.** Bootstrap will report this as `Dev#43`
+**What happened — D1 setup (Q7, resolved):**
+- Created `birdiefriends-gatherings` D1 database via Cloudflare dashboard.
+- Bound to the Worker as `env.DB` (binding name `DB`).
+- Created MLP schema: `gatherings`, `crews`, `crew_members`, `registrations` — the 3
+  Post-MLP tables (`fill_list_members`, `host_exclusions`, `player_host_mutes`)
+  deliberately deferred, per spec §11 Q2/Q7.
+- Migration-tracking decision: lightest viable option — `source/specs/BF_Gatherings_Schema.sql`
+  is the authoritative append-only schema log. Each future D1 change gets run in the
+  Console, then mirrored into that file via `/deploy`. No tooling/framework adopted.
+
+**What happened — Worker API (pulled forward from "next session"):**
+Built and deployed 7 D1-backed routes in `worker.js` — `POST /gatherings`,
+`POST /gatherings/:id/cancel` (host-only, server-verified), `GET /gatherings?player_id=X`
+(host's own + Crew-member visibility, cancelled rows excluded), `POST /crews` (create +
+members in one call), `GET /crews?host_id=X`, `POST /registrations` (upsert, not
+duplicate — `UNIQUE(gathering_id, player_id)`), `GET /gatherings/:id/registrations`.
+No PIN — hosting is open per §6, same trust model as existing Jotform client writes.
+
+**Design correction caught mid-session (now spec §15):** the Live-Panel-style pop-out
+is **Host-management-only** — create/view-responses/cancel. Crew members do **not** get
+a parallel UI; a Gathering they're invited to is just another card in the *existing*
+My Events / Parked / Calendar views, same swipe-as-No mechanics as a Series Event card.
+This shrinks the eventual #3 (UI) lift considerably — it's "extend existing card
+rendering to also query `/gatherings`," not "build a new screen."
+
+**Real bug caught in smoke testing, fixed same session:** an invalid `crew_id` or
+`gathering_id` was crashing requests with a raw Cloudflare `error code: 1101`
+(unhandled exception — D1 enforces foreign keys by default) instead of a clean 400.
+Added try/catch around every new D1 call; verified post-fix that bad input now returns
+`{"error":"crew_id does not exist"}` with proper status codes, and valid creates still
+succeed. Two Worker deploys this session: routes first, error handling second.
+
+**Smoke-tested end to end:** create, host-view list, register, upsert-not-duplicate,
+host-only cancel auth (403 for wrong host), cancelled-Gatherings-disappear, Crew
+creation + Crew-member visibility, FK error handling. All passed. Test rows cleaned
+from D1 via Console after each round.
+
+**Artifacts created/updated:**
+- `birdiefriends-gatherings` D1 database (new, Cloudflare)
+- `source/specs/BF_Gatherings_Schema.sql` (new — schema migration log)
+- `source/worker.js` (Gatherings/Crews/Registrations routes + D1 error handling;
+  two deploys, commits `de6c4ee7…` and `bde14338…`)
+- `source/specs/BF_Gatherings_Spec.md` — §15 (Host-only panel correction) and §16
+  (Worker API reference) added, commit `ad2ca979…`
+
+**Carry-forward for next session:**
+- **#2 — Crew onboarding (spec §5):** stub Membership creation, cell-based de-dup,
+  `Pending` status, claim-link via KV. Flagged as the most security-sensitive piece
+  (writes into the live Membership roster) — deserves its own focused session, not a
+  tail-end add-on.
+- **#3 — Portal UI:** extend My Events/Parked/Calendar card-rendering to also pull from
+  `GET /gatherings?player_id=X` and render Gathering cards alongside Series Event cards,
+  backed by `/registrations` instead of the Jotform Event Registration form. Per §15,
+  this is now a smaller lift than originally framed — no parallel UI system needed.
+  Host-management panel (mirroring the Live Panel paradigm) is the other half of #3.
+
+**Session closed clean** — D1 setup, full API layer, and a real bug all landed and
+verified working, with the design correction logged before it could cause rework later.
+
+---
+
+## Session Dev-44 · TBD
+
+**Focus:** Choice between two carry-forward items from Dev-43 — to be decided at session
+start:
+- **#2 — Crew onboarding (spec §5):** stub Membership creation, cell-based de-dup,
+  `Pending` status, claim-link via KV. Security-sensitive (writes into live Membership
+  roster); warrants a dedicated, focused session.
+- **#3 — Portal UI:** extend My Events/Parked/Calendar to render Gathering cards
+  (Crew-member side) + build the Host-management panel mirroring the Live Panel
+  paradigm (Host side). Smaller lift than originally scoped, per Dev-43's §15 correction.
+
+**Not yet started — placeholder entry only.** Bootstrap will report this as `Dev#44`
 on next session start; rename string to use:
-`Dev#43 - Gatherings: D1 Setup`
+`Dev#44 - Gatherings: <#2 or #3, topic TBD>`
