@@ -66,18 +66,81 @@ so Dev-42 starts focused.
 
 ---
 
-## Session Dev-42 · TBD
+## Session Dev-42 · 2026-06-20
 
-**Focus:** Multi-tenant event management (large effort — title to be refined once scope
-is clearer)
+**Focus:** Gatherings — self-service Host capability, full planning pass (no code
+written; spec only).
 
-**Context carried in from bizplan track:** `BF_BizPlan_GateLog.md` Cross-Gate Risks
-register already flags "architecture/dev-at-scale gap" as a named risk — current
-platform is a validated single-tenant prototype, not built for multi-tenant. Per
-`BF_BizPlan_Session_Log.md` (BP-2), at least 3 other BF-style groups have expressed
-direct interest, and the tagline "Tee off, play great" is tied to this capability
-existing. This session is the technical side of closing that gap.
+**What happened:** Reframed the original "multi-tenant event management" placeholder
+down to its actual scope — self-service hosting with guardrails, explicitly distinct
+from the BizPlan's true multi-tenant/commercial track. Built `BF_Gatherings_Spec.md`
+from scratch across a long single session:
+- Terminology: Gathering / Host / Crew / My Gatherings, chosen to align with existing
+  "gathering design platform" bizplan positioning.
+- Reach model (§4): Crew ∪ Fill List (opt-in, day-of-week filtered) − Host Exclusions
+  − Player Mutes. No public/Discover surface exists at all — architecturally rejected,
+  not deferred.
+- Storage decision (§8): Cloudflare D1 for Gatherings/Crews/registrations — KV rejected
+  (no query layer), full Jotform migration explicitly declined and parked (winter
+  project / commercialization trigger), Jotform keeps doing exactly what it does today.
+- MLP scope (§11 Q2) locked: Create/Cancel/Notify Crew/Register via required Yes-No-Sub
+  response/saved reusable Crews. Fill List, Exclusion/Mute UI, Host tiering UI, and a
+  "duplicate last Gathering" shortcut all pushed Post-MLP.
+- Registration/swipe behavior (§11 Q13) resolved: swipe IS the No action for Gatherings,
+  re-exposing dormant Yes/No/Sub Jotform vocabulary rather than inventing new states.
+- Host-initiated onboarding (§5) fully designed: new Crew members become real Jotform
+  Membership stubs (`Pending` status, not `InActive`), Cell-based de-dup against all
+  records, short Worker-KV claim-link (`invite:{code}`), explicit `bfw` consent captured
+  from the person themselves (never set by the Host), existing "Join BirdieFriends"
+  self-serve path flagged as needing the same de-dup retrofit.
+- Multi-club dimension (§12) raised, discussed at length, explicitly deferred — no club
+  modeling in v1, fulfillment trust sits with the Host, real version of this problem
+  folds into the same future multi-tenant/national-scale question already named in the
+  Ops Guide as the v4.0 trigger.
+- Flagged for future sessions, not blocking MLP: operational fix scaling / Claude's role
+  as a safe proxy for community-requested actions (§13), and the existing player-picker's
+  active-only narrowing needing real attention once Pending volume grows (§5).
 
-**Not yet started — placeholder entry only.** Bootstrap will report this as `Dev#42`
+**Architecture diagram + deploy panel updated to match:**
+- `bf_architecture.html`: added a "planned" Cloudflare D1 node, Worker→D1 connector,
+  new legend entry, updated Worker/D1 detail panels.
+- `deploy.html` Library tab: added a third section, "Capability specs — source/specs/",
+  mirroring the existing bizplan-folder pattern.
+- New `source/specs/` folder created — first home for capability spec docs, separate
+  from process docs and live app code.
+
+**Real bug caught and fixed mid-session:** both `deploy.html` and `bf_architecture.html`
+were deployed to `source/` only and never mirrored to `docs/` — the actual GitHub Pages
+live tree is `docs/`, not `source/`. Both files now match across both trees. Worth
+carrying forward as a standing checklist item: any player/Host-facing file deploy needs
+a `docs/` mirror push, not just `source/`, or the live site silently doesn't change.
+
+**Artifacts created/updated:**
+- `source/specs/BF_Gatherings_Spec.md` (new, full spec, §1–§14)
+- `source/bf_architecture.html` + `docs/bf_architecture.html` (D1 node added, mirrored)
+- `source/deploy.html` + `docs/deploy.html` (Specs section added, mirrored)
+- `BF_Operations_Guide.md` — new backlog item: deploy.html Library tab unauthenticated
+  GitHub API rate limit (surfaced by adding the third Library section)
+
+**Carry-forward for next session:**
+- Q7 (D1 setup mechanics) — binding D1 to the Worker, schema creation, deploy-flow gap
+  for future schema changes. Laptop work, explicitly not a chat discussion item.
+- §13 (operational fix scaling / Claude-as-proxy) — flagged for its own dedicated
+  planning session once Host volume or the proxy concept itself is ready to design.
+- §5 (picker active-only narrowing at scale) — flagged for a future UX/data session.
+
+**Session closed clean** — full spec resolved end to end, no open threads left dangling
+mid-decision. Next session (laptop) starts on Q7.
+
+---
+
+## Session Dev-43 · TBD
+
+**Focus:** Gatherings — D1 setup mechanics (§14 Q7 of `BF_Gatherings_Spec.md`): bind a
+new D1 database to the Worker, create the MLP schema (`gatherings`, `crews`,
+`crew_members`, `registrations`), and decide whether schema changes get a tracked
+migration process from the start or stay manual until the second change is needed.
+
+**Not yet started — placeholder entry only.** Bootstrap will report this as `Dev#43`
 on next session start; rename string to use:
-`Dev#42 - Multi-tenant Event Management` (or refined title once scope is clearer).
+`Dev#43 - Gatherings: D1 Setup`
