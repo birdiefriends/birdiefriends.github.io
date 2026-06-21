@@ -200,17 +200,109 @@ verified working, with the design correction logged before it could cause rework
 
 ---
 
-## Session Dev-44 · TBD
+## Session Dev-44 · 2026-06-21
 
-**Focus:** Choice between two carry-forward items from Dev-43 — to be decided at session
-start:
+**Focus:** Gatherings — #3 chosen (Portal UI, Crew-member side only). Crew-member card
+rendering for Home/Parked/Schedule, plus an isolated admin test harness so Brian can
+exercise the D1-backed flow without involving real members.
+
+**What happened — Crew-member card rendering:**
+- `eventData`/`regData` (already global, shared by Home/Parked/Schedule/capacity engine)
+  extended to merge in Gatherings: `loadGatherings()` pulls `GET /gatherings?player_id=X`
+  + per-gathering `GET /gatherings/:id/registrations`, normalizes into the same shape
+  Jotform events use (`source:'gathering'` flag added for branching).
+- Capacity engine branched (`getGatheringCapacityStatus`) — simple open/full model,
+  deliberately skipping the Series-Event-only 48hr-lock/fivesome logic, which doesn't
+  apply to Gatherings.
+- Register/unregister branched to a parallel D1 write path (`submitGatheringRegistration`,
+  `changeGatheringRegistration`) alongside the existing Jotform path, selected by
+  `evt.source`.
+- Swipe wired per spec §11 Q13 — Gatherings write `status:'no'` to D1 on swipe (even
+  after a prior Yes), bypassing the Series-Event "can't swipe while registered" guard,
+  which doesn't apply here.
+- New `format-gathering` badge — labeled **"Host Gathering"** (not "Gathering") per
+  Brian's call mid-session, to read clearly as host-run rather than BF-run.
+- **Schedule tab needed zero extra code.** Verified `renderSchedule()` was already
+  fully generic over the shared `eventData`/`regData` arrays with no Jotform-specific
+  logic — Gatherings a player registers for show up there automatically. The
+  "Calendar/Schedule wiring" carry-forward item from Dev-43 turned out to already be
+  covered by building the data layer generically from the start.
+- **Host-management panel — not built.** Scoped for #3 but explicitly deferred to a
+  future session (budget-conscious call late in this session); Brian still hosts test
+  Gatherings via the new admin test button rather than a real Host UI.
+
+**What happened — Gathering Test Mode (admin panel):**
+- New Dev Controls section: **Create Test Gathering** / **Delete My Test Gatherings**.
+- Isolation strategy: ad hoc Crew = [commissioner only] per test Gathering — reuses
+  the same Crew visibility filter (§4) that scopes real Gatherings, so test data is
+  invisible to every real player without a separate test/prod flag. Host identity is
+  the commissioner's real name (`currentPlayer`); considered a dedicated "Test Host"
+  identity, decided against — no real confusion risk at current scale.
+- **New Worker route, `POST /gatherings/purge-test`** (PIN-gated, unlike the rest of
+  the open-trust Gatherings routes — deletion warrants `/deploy`-level discipline).
+  True `DELETE` across all 4 tables (registrations → gatherings, then crew_members →
+  crews, child-before-parent per D1's enforced FKs), not a soft cancel. Smoke-tested
+  end to end via curl before handoff: create → register → purge → confirmed zero rows
+  left in any table; wrong PIN rejected; re-running with nothing to delete returns
+  clean zeroes.
+- Status feedback upgraded mid-session — first pass was a quiet hint-text line easy to
+  miss; rebuilt as a bordered, color-coded box showing real details (Gathering #,
+  title, venue/time) plus a "→ View card on Home" button that jumps tabs and pulses
+  the card, so success is visually obvious without hunting for it.
+
+**Real bug caught and fixed (Brian, via screenshot):** Gatherings were landing at the
+very *end* of the Home list regardless of date — `parseEventSubmissions` already sorts
+Jotform events by date, but `mergeGatherings` was appending Gatherings after that sort
+instead of before it. Fixed: `mergeGatherings` now sorts the combined list by date.
+(Verified after the fix that a same-day test Gathering correctly sorting to position #1
+ahead of a July event was *not* a bug — Brian's own read on a second look.)
+
+**Version scheme changed:** Brian called this significant enough to leave 3.10.x patch
+bumps behind. New convention: minor version (3.X.0) for real feature work, patch
+(3.X.Y) for fixes/tweaks within that feature arc. Portal moved 3.10.139 → 3.11.0 this
+session, then patched forward to 3.11.3 for the fixes above. Considered 4.0 and
+rejected — that number is already reserved in the Ops Guide for the true multi-tenant/
+off-Jotform architectural rewrite, a materially different and larger effort than
+Gatherings; reusing it here would collide with that meaning in the changelog.
+
+**Artifacts created/updated:**
+- `docs/portal.html` + `source/portal.html` — v3.10.139 → v3.11.3 across 6 deploys
+  this session (card rendering, test-mode admin button, version scheme change,
+  feedback UX rebuild, sort fix + badge rename)
+- `source/worker.js` — `POST /gatherings/purge-test` added; pushed to library and
+  manually deployed to Cloudflare by Brian (Claude cannot deploy Worker code directly)
+- `source/portal_version.txt` — tracks 3.11.3
+
+**Carry-forward for next session:**
+- **#2 — Crew onboarding (spec §5):** unchanged from Dev-43 — stub Membership
+  creation, cell-based de-dup, `Pending` status, claim-link via KV. Still the most
+  security-sensitive piece (writes into the live Membership roster); still warrants
+  its own focused session.
+- **#3 (remainder) — Host Management panel:** create/view-responses/cancel UI for
+  Hosts, mirroring the Live Panel paradigm per spec §15. Crew-member side is done;
+  this is the other half.
+- Doc sync: this entry, plus `BF_Gatherings_Spec.md` and the session starter header,
+  updated same-session as a deliberate close-out step (budget-conscious — chose doc
+  sync over starting new feature work at 71% usage).
+
+**Session closed clean** — Crew-member rendering shipped and smoke-tested live, a
+real sort bug was caught and fixed same-session via Brian's screenshot, and the test
+harness (create/delete + visible feedback) is in solid shape for whoever picks up the
+Host panel next.
+
+---
+
+## Session Dev-45 · TBD
+
+**Focus:** Choice between two carry-forward items from Dev-44 — to be decided at
+session start:
 - **#2 — Crew onboarding (spec §5):** stub Membership creation, cell-based de-dup,
   `Pending` status, claim-link via KV. Security-sensitive (writes into live Membership
   roster); warrants a dedicated, focused session.
-- **#3 — Portal UI:** extend My Events/Parked/Calendar to render Gathering cards
-  (Crew-member side) + build the Host-management panel mirroring the Live Panel
-  paradigm (Host side). Smaller lift than originally scoped, per Dev-43's §15 correction.
+- **#3 (remainder) — Host Management panel:** create/view-responses/cancel UI for
+  Hosts (Live-Panel-style pop-out), per spec §15. Crew-member card rendering is done
+  (Dev-44); this is the other half of #3.
 
-**Not yet started — placeholder entry only.** Bootstrap will report this as `Dev#44`
+**Not yet started — placeholder entry only.** Bootstrap will report this as `Dev#45`
 on next session start; rename string to use:
-`Dev#44 - Gatherings: <#2 or #3, topic TBD>`
+`Dev#45 - Gatherings: <#2 or #3 remainder, topic TBD>`
