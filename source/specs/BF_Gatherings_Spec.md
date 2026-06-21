@@ -289,6 +289,18 @@ Surfaced in discussion, not designed yet. Capturing so it's not lost.
 
 ---
 
+## 18. Addendum (Dev-45) — Host Management Panel built; Sub is a deliberate standing-backup response
+
+Host Management panel (§3/§15's other half) built: create/view-responses/cancel UI, saved/reusable Crews, ad hoc Crew builder matching the Live Panel's player-picker visual style (search + alphabetical + avatars), Notify on create/cancel via `osSendToPlayers`. Gated behind a KV flag (`gathering_panel_live`, off by default) so the entry point stays invisible to real players until explicitly enabled for testing.
+
+**Sub redefined for Gatherings — confirmed Dev-45.** Originally Sub only appeared as a waitlist consequence (event full → forced onto Sub). Brian's real-world case (he's in Charlie's Whitetail Crew, routinely tells Charlie "I'll play as a last resort") showed Sub needs to be a first-class, always-available crew response — not just overflow. Gathering cards now offer Yes / Sub / No as three equal buttons regardless of capacity. No backend change needed — `yes/sub/no` was already the full status vocabulary (§9); this was purely a UI gap (the card only ever exposed Register or, when full, a waitlist Sub).
+
+**Host self-registration.** New Gathering form has an "Are you playing?" toggle, default Yes — most Hosts also play (Brian's point: he had to separately register on his own card after creating the event). Auto-fires `POST /registrations` for the Host on creation if Yes.
+
+**Explicit No alongside swipe.** Gatherings already had swipe-as-No (§11 Q13). Added an explicit "Can't make it" button too — swipe isn't discoverable for everyone. Caught and fixed a real bug while building it: the button initially reused the Yes/Sub registration function, which showed a misleading "Sub registered" toast and left the card active instead of parking it. Now correctly mirrors swipe's behavior (parks the card, accurate toast) when the explicit button is used for No.
+
+---
+
 ## 15. Addendum (Dev-43) — Gathering Panel is Host-only; Crew members use existing views
 
 Clarified during D1/API planning, correcting an assumption made earlier in this session:
