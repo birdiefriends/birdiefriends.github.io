@@ -307,17 +307,77 @@ Host panel next.
 
 ---
 
-## Session Dev-45 · TBD
+## Session Dev-45 · 2026-06-21
 
-**Focus:** Choice between two carry-forward items from Dev-44 — to be decided at
-session start:
-- **#2 — Crew onboarding (spec §5):** stub Membership creation, cell-based de-dup,
-  `Pending` status, claim-link via KV. Security-sensitive (writes into live Membership
-  roster); warrants a dedicated, focused session.
-- **#3 (remainder) — Host Management panel:** create/view-responses/cancel UI for
-  Hosts (Live-Panel-style pop-out), per spec §15. Crew-member card rendering is done
-  (Dev-44); this is the other half of #3.
+**Focus:** Neither carry-forward item from Dev-44 — instead, a budget-constrained
+debate/capture pass on the in-progress card bug (confirmed live via Brian's screenshot
+of a Gathering test card), followed by a full-budget implementation pass once usage
+reset, scoped per Brian's direction to "solidify any underlying portal, jotform, or
+operations constructs which might impact the Gathering function" before further
+Gathering feature work.
 
-**Not yet started — placeholder entry only.** Bootstrap will report this as `Dev#45`
-on next session start; rename string to use:
-`Dev#45 - Gatherings: <#2 or #3 remainder, topic TBD>`
+**Part 1 — Architecture debate (constrained budget, capture-only):**
+Confirmed the screenshot bug via code: `buildEventCard()`'s in-progress block fires for
+any format with no check, while `getLiveEvent()` (the real scoring/Live Panel entry
+point) was hardcoded `format-series` only. Settled a two-tier model — Tier 1 (generic
+"In-Progress" collapsed row, no scoring promise, registration blocked, available to
+every format) vs. Tier 2 (capability-gated tap-target into the real Live Panel).
+Reframed the Tier 2 gating question away from format entirely, surfacing two
+independent triggers: **Coordination Live** (multi-group visibility — a large Gathering
+has the same cross-group problem a Series event does, small ones don't) and
+**Integrity Live** (auditable shared scoring/stakes — Tony Choy's private side-game as
+the originating example, parked as a future custom-games/recommendation-engine
+consideration, not Dev-45 scope). Full writeup captured in `BF_Operations_Guide.md` §10.
+
+**Part 2 — Implementation (full budget):** Working through the Tier 2 gating question
+in chat surfaced a deeper issue: the "is this Series" test conflated three unrelated
+things — reservation logistics (BSGC's 2-tee-time/48hr-lock pattern), scoring/GS
+support, and Live Panel access. Brian clarified via a screenshot of the live Event
+Format options that several formats (ParTee, Practice, Private Event — now retired)
+weren't even in the `formatClass()` taxonomy at all. Resolved by:
+
+- **New Event Format option "BF Weekend Times"** added directly to the Request Event
+  form (Brian, live, no new QID — same field). Confirmed scope: this is reservation
+  logistics only (BF's own 2-tee-time booking pattern, course releases the 2nd tee time
+  if 6+ confirmed registrations aren't secured within 48hrs), not a scoring/format
+  distinction. Hosts never need this — they manage their own tee times with the venue
+  directly, BirdieFriends has no role there.
+- **`getCapacityStatus()` refactored:** dispatches to `getWeekendCapacityStatus()`
+  (the original 48hr-lock/5th-player engine, untouched logic, now isolated to
+  `format-weekend` only) or `getSimpleCapacityStatus()` (shared open/full/waitlist
+  model — also absorbs the old Gathering-only path, now the default for everything
+  else: Series, Wally, Cup, Scramble, blank/Individual Play, ParTee, Practice).
+- **New `hasLivePanelSupport(evt)` chokepoint**, decoupled from `formatClass()`
+  entirely. Surfaced from Brian's point that CttP/Scorecard is the foundational
+  data-capture step (Skins reads from Scorecard data; Birdie Alerts are a notification
+  layer on top, not the substance) — so Live Panel access is its own concern, not a
+  byproduct of format string matching. Today: Series only. Wally Cup/BF Cup/Scramble
+  wired with `// TODO` flip markers (Wally Cup targeted Sept 2026, others Oct/Nov
+  2026 — confirmed GS hasn't been extended to their scoring models yet, intentionally
+  kept separate to avoid confusion). BF Weekend Times and Gatherings permanently
+  excluded by design. `getLiveEvent()` and the live-banner styling check rewired to
+  use it — also fixes a latent gap where the Live Panel never actually checked
+  `LIVE_EVENT_HOURS` (8hr) consistently against the in-progress card's 6hr window.
+- Sunset/in-progress windows (6hr) extended to `format-weekend` alongside Series,
+  since both are full BSGC rounds of identical duration.
+
+**Deployed:** `docs/portal.html` + `source/portal.html` (v3.11.4, `node --check`
+clean), `source/portal_version.txt`, `source/BF_Operations_Guide.md` (§10 backlog
+updated — capacity logic and Live Panel gating marked ✅ Shipped; Live Panel docs
+section rewritten to describe the new gating).
+
+**Carried forward — explicitly NOT done this session:**
+- **Tier 1 card-copy fix** — `buildEventCard()`'s in-progress block still hardcodes
+  "⛳ Round in progress · Tap the banner to enter scores" for every format, regardless
+  of `hasLivePanelSupport()`. The *gating* is now correct (Gatherings/Weekend/Wally
+  genuinely can't open the Live Panel), but the *card text* hasn't been updated to stop
+  promising it. This was the original Dev-44 screenshot bug's visible symptom — still
+  visible until the Tier 1/Tier 2 card UI split (fully speced, see Ops Guide §10) is
+  built. Logged as 🔴 Next up.
+- Crew onboarding (Dev-44 #2) — still untouched, still flagged security-sensitive,
+  still warrants its own dedicated session.
+- Host Management panel (Dev-44 #3 remainder) — still untouched.
+- 48hr-lock / capacity *logic* shipped this session, but **not smoke-tested live**
+  against a real BF Weekend Times event yet — recommend a quick live check next
+  session before trusting it under real registration pressure.
+
