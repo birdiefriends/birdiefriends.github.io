@@ -362,6 +362,12 @@ Gatherings via the admin test button for now, not a real Host UI.
 
 ## 14. Carry-forward
 
+**🔴 Blocking, read before continuing any Gathering card/UI work:** Dev-44's late-session
+review surfaced that in-progress card behavior (post-tee-time messaging) and the 48hr-lock/
+5th-player capacity logic are both format-blind in ways that misrepresent Gatherings —
+see `BF_Operations_Guide.md` §10 for full detail. Brian wants these resolved first so the
+Host Management panel below isn't built assuming card behavior that's actually wrong.
+
 Storage (D1), the reach model (§4 funnel), Host-initiated onboarding (§5 — stub creation, de-dup, claim link, Pending status), the multi-club question (§12, deferred), MLP scope (§11 Q2), the rendering/query approach (§11 Q4), and the swipe/No interaction (§11 Q13) are all settled and built per §16/§17. Remaining for MLP completion:
 - **Host Management panel** (§15/§3) — create/view-responses/cancel UI for Hosts. Crew-member rendering is done (§17); this is the only piece left before Gatherings is usable end-to-end by a real Host rather than via the admin test button.
 - **#2 — Crew onboarding** (§5) — stub Membership creation, cell-based de-dup, `Pending` status, claim-link via KV. Flagged as the most security-sensitive piece in the whole spec (writes into the live, shared Membership roster); warrants its own dedicated session rather than a tail-end add-on.
