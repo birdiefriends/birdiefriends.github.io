@@ -367,6 +367,84 @@ export default {
       }
     }
 
+    // POST /gatherings/purge-test — true DELETE of test Gatherings + their Crews,
+    // crew_members, and registrations (PIN required — destructive, unlike the rest
+    // of the Gatherings routes which trust the client per §6; deletion warrants the
+    // same discipline as /deploy and /rollback).
+    // Body: { pin, host_id, prefix } — prefix defaults to "TEST — " if omitted.
+    // Deletes child rows before parents to satisfy D1's enforced foreign keys:
+    //   registrations → gatherings, then crew_members → crews. A crew is only
+    //   deleted if no remaining (non-deleted) gathering still references it.
+    if (request.method === 'POST' && url.pathname === '/gatherings/purge-test') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (String(body.pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Invalid PIN' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { host_id, prefix } = body;
+      if (!host_id) {
+        return new Response(JSON.stringify({ error: 'host_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const titlePrefix = (prefix || 'TEST — ') + '%';
+
+      try {
+        const { results: matches } = await env.DB.prepare(
+          `SELECT id, crew_id FROM gatherings WHERE host_id = ? AND title LIKE ?`
+        ).bind(host_id, titlePrefix).all();
+
+        if (!matches.length) {
+          return new Response(JSON.stringify({ ok: true, gatherings_deleted: 0, crews_deleted: 0, registrations_deleted: 0 }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const gatheringIds = matches.map(m => m.id);
+        const crewIds = [...new Set(matches.map(m => m.crew_id).filter(id => id !== null))];
+        const gPlaceholders = gatheringIds.map(() => '?').join(',');
+
+        const regResult = await env.DB.prepare(
+          `DELETE FROM registrations WHERE gathering_id IN (${gPlaceholders})`
+        ).bind(...gatheringIds).run();
+
+        const gathResult = await env.DB.prepare(
+          `DELETE FROM gatherings WHERE id IN (${gPlaceholders})`
+        ).bind(...gatheringIds).run();
+
+        let crewsDeleted = 0;
+        if (crewIds.length) {
+          const cPlaceholders = crewIds.map(() => '?').join(',');
+          // Only delete crews no longer referenced by any remaining gathering
+          const { results: stillUsed } = await env.DB.prepare(
+            `SELECT DISTINCT crew_id FROM gatherings WHERE crew_id IN (${cPlaceholders})`
+          ).bind(...crewIds).all();
+          const stillUsedIds = new Set(stillUsed.map(r => r.crew_id));
+          const safeToDeleteIds = crewIds.filter(id => !stillUsedIds.has(id));
+
+          if (safeToDeleteIds.length) {
+            const sPlaceholders = safeToDeleteIds.map(() => '?').join(',');
+            await env.DB.prepare(
+              `DELETE FROM crew_members WHERE crew_id IN (${sPlaceholders})`
+            ).bind(...safeToDeleteIds).run();
+            const crewResult = await env.DB.prepare(
+              `DELETE FROM crews WHERE id IN (${sPlaceholders})`
+            ).bind(...safeToDeleteIds).run();
+            crewsDeleted = crewResult.meta.changes || 0;
+          }
+        }
+
+        return new Response(JSON.stringify({
+          ok: true,
+          gatherings_deleted: gathResult.meta.changes || 0,
+          crews_deleted: crewsDeleted,
+          registrations_deleted: regResult.meta.changes || 0
+        }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error purging test Gatherings: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // Shared path map used by /history, /rollback, and /deploy
     const FILE_PATHS = {
       portal:    'source/portal.html',
