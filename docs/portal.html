@@ -4065,18 +4065,30 @@ function buildEventCard(evt, isPast) {
 
   let actionHtml = '';
   if (isInProgress) {
-    // Round is underway — suppress register/unregister, show status message
+    // Round is underway — suppress register/unregister, show status message.
+    // Tier 2 (real Live Panel tap-target) vs Tier 1 (generic, no scoring
+    // promise) — gated on hasLivePanelSupport(), not format directly. Dev-45.
     const hoursIn = Math.floor(msSinceTee / 3600000);
     const minsIn  = Math.floor((msSinceTee % 3600000) / 60000);
     const timeInStr = hoursIn > 0 ? `${hoursIn}h ${minsIn}m in` : `${minsIn}m in`;
-    actionHtml = `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;
-      background:rgba(29,158,117,0.15);border-radius:10px;border:1px solid rgba(29,158,117,0.3)">
-      <span style="font-size:1.1rem">⛳</span>
-      <div>
-        <div style="font-size:0.82rem;font-weight:700;color:#1D9E75">Round in progress</div>
-        <div style="font-size:0.75rem;color:rgba(255,255,255,0.55);margin-top:1px">${timeInStr} · Tap the banner to enter scores</div>
-      </div>
-    </div>`;
+    if (hasLivePanelSupport(evt)) {
+      // Tier 2 — Live Panel is actually available; tap-to-score promise is honest.
+      actionHtml = `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;
+        background:rgba(29,158,117,0.15);border-radius:10px;border:1px solid rgba(29,158,117,0.3)">
+        <span style="font-size:1.1rem">⛳</span>
+        <div>
+          <div style="font-size:0.82rem;font-weight:700;color:#1D9E75">Round in progress</div>
+          <div style="font-size:0.75rem;color:rgba(255,255,255,0.55);margin-top:1px">${timeInStr} · Tap the banner to enter scores</div>
+        </div>
+      </div>`;
+    } else {
+      // Tier 1 — no Live Panel for this format/event. Minimal, no fake tap affordance.
+      actionHtml = `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;
+        background:rgba(255,255,255,0.04);border-radius:10px;border:1px solid var(--border)">
+        <span style="font-size:0.95rem">⛳</span>
+        <div style="font-size:0.78rem;color:var(--text-muted)">In-Progress · ${timeInStr}</div>
+      </div>`;
+    }
   } else if (!isPast) {
     actionHtml = buildActionButtons(evt, myReg, capStatus);
   }
