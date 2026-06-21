@@ -381,3 +381,79 @@ section rewritten to describe the new gating).
   against a real BF Weekend Times event yet — recommend a quick live check next
   session before trusting it under real registration pressure.
 
+---
+
+**Dev-45 continued — same session, budget refreshed mid-session.** Picked the
+Tier 1 card-copy fix back up, then built the full Host Management Panel
+(Dev-44 #3 remainder), then several rounds of bugfix/UX iteration once Brian
+started live-testing it. Versions: v3.12.2 → v3.13.2 across this stretch.
+
+**Tier 1 card-copy fix shipped (v3.12.2):** `buildEventCard()`'s in-progress block
+now branches on `hasLivePanelSupport(evt)` — Tier 2 (Series) keeps the real
+"tap to enter scores" copy, Tier 1 (everything else) shows a minimal
+"⛳ In-Progress · Xh Ym in" with no scoring promise. Closes the original
+Dev-44 screenshot bug end-to-end.
+
+**Bug found independently — Schedule tab "Can't Make It" button invisible
+(v3.12.3).** Pre-existing, unrelated to Gatherings — `.btn-cant-make-it` (white-ish,
+built for dark Home cards) was reused inside My Schedule's white card list,
+rendering as a near-invisible sliver. Brian reported it as "a random character."
+Fixed by swapping to `.btn-ghost`. First Gathering ever to land in someone's
+Schedule is what finally put eyes on this corner of the UI.
+
+**Host Management Panel built (v3.12.0 → v3.13.2), spec §3/§15's other half:**
+- **v3.12.0:** Core panel — entry point on Home, create/view-responses/cancel,
+  saved + ad hoc Crews, Notify Crew via `osSendToPlayers`. New Worker route
+  `GET /crews/:id/members` (needed so reusing a saved Crew can still notify its
+  current members).
+- **v3.12.1:** Gated behind a new KV flag `gathering_panel_live` (off by default) —
+  Brian's call after realizing a live test would push a real notification to real
+  Crew members. Dev Controls → 🏌️ Host Management Panel toggle, same pattern as
+  Maintenance/Live Test.
+- **v3.12.2:** Fixed a real stuck-loading bug Brian hit live — none of the
+  Gatherings/Crews fetches had a timeout, including `loadGatherings()`'s
+  per-gathering registration `Promise.all` (runs after every create/cancel via
+  `refreshGatherings()`). A single hung request left the Create button spinning
+  forever with no way out but a hard refresh. New `gatheringsFetchJSON()` helper,
+  10s timeout via `AbortController`, applied to all 7 Gatherings/Crews call sites.
+- **v3.13.0 — full UX pass per Brian's feedback after live-testing:**
+  "Cancel" → "Cancel Gathering"; new Crew Picker sheet matching the Live Panel's
+  player picker (search + alphabetical groups + avatars + multi-select with a
+  Done footer) replacing a plain 2-column button grid; "Are you playing?" toggle
+  (default Yes) auto-registers the Host on create — Brian's point: "I setup the
+  event, and then had to also register on the card, most hosts will also play";
+  status pills (color-coded Yes/Sub/No) on the Host's Gathering list; explicit
+  "✕ Can't make it" button on Gathering cards alongside swipe. Building that last
+  one caught a real bug: it would have shown a misleading "Sub registered" toast
+  and left the card active — fixed `submitGatheringRegistration()` to handle No
+  correctly (parks the card, accurate toast), matching what swipe already did.
+- **v3.13.1 — Sub redefined as a deliberate response, not just overflow.**
+  Brian's real example: he's in Charlie's Whitetail Crew, routinely tells Charlie
+  "I'll play as a last resort." Gathering cards now always offer Yes / Sub / No as
+  three equal buttons regardless of capacity, not just when full. No backend
+  change needed — `yes/sub/no` was already the full status vocabulary (spec §9);
+  this was purely a UI gap.
+- **v3.13.2 — more live-testing feedback:** light green sheet background (`#EAF6F0`,
+  inputs stay white) with tighter form spacing per Brian's request; **unified the
+  saved-Crew and ad-hoc-picker data paths** — selecting a saved Crew now fetches
+  its real members via the v3.12.0 route and loads them directly into the picker's
+  state. Fixes a real bug Brian hit: reopening "Select players…" after picking a
+  saved Crew showed an empty grid, because the two were previously disconnected
+  (saved Crew stored only a `crew_id`, the picker only ever read/wrote a separate
+  ad hoc set). Editing the list after loading a saved Crew now forks it into a
+  fresh ad hoc list rather than silently rewriting the original.
+
+**Schema migration — run, not yet wired.** `ALTER TABLE gatherings ADD COLUMN
+gathering_type TEXT;` run live by Brian via D1 Console (Entry 2,
+`BF_Gatherings_Schema.sql`) for a descriptive sub-format field (Individual Play,
+4 Man Scramble, etc. — the Host-relevant subset of the Request Event form's
+Event Format list). Worker insert + portal dropdown + display **not yet built**
+— session ended at 90% budget before this piece. Full carry-forward detail in
+`BF_Gatherings_Spec.md` §19.
+
+**Session ended deliberately at ~90% budget, mid-arc, by Brian's call** — documented
+rather than pushed further. Next session should pick up gathering_type wiring
+first (small, well-scoped, schema already in place), then the remaining Dev-44
+items (Crew onboarding, still flagged security-sensitive) whenever there's a
+dedicated block for them.
+
