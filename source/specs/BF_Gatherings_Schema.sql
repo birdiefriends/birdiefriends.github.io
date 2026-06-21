@@ -50,3 +50,16 @@ CREATE TABLE registrations (
 -- Confirmed live via D1 Console, Session Dev-43:
 -- SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%';
 -- → gatherings, crews, crew_members, registrations
+
+-- ============================================================
+-- Entry 2 — 2026-06-21 — Session Dev-45
+-- Added gathering_type column for descriptive sub-format (Individual Play,
+-- 4 Man Scramble, 2 Man Scramble, 1 Man Scramble, etc.) — Host-facing only,
+-- kept deliberately separate from the existing badge/format-class machinery
+-- (which stays "Gathering" → "Host Gathering" badge, untouched). Confirmed
+-- live via D1 Console, Brian, 2026-06-21.
+-- Worker (POST /gatherings insert, GET /gatherings select) and portal
+-- (dropdown + display) wiring NOT YET DONE — carried to next session.
+-- ============================================================
+
+ALTER TABLE gatherings ADD COLUMN gathering_type TEXT;
