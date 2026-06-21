@@ -5793,7 +5793,8 @@ function saveEventToSeries() {
 const EOE_STEPS = [
   { key: 'save',    label: '💾 Save to Series' },
   { key: 'sheets',  label: '📊 Push to Sheets' },
-  { key: 'publish', label: '🌐 Publish All Pages' }
+  { key: 'publish', label: '🌐 Publish All Pages' },
+  { key: 'groupings', label: '🔄 Reset Groupings' }
 ];
 let eoeState  = {};
 let eoeErrors = {};
@@ -5860,6 +5861,8 @@ async function eoeRunStep(eventName, season, key) {
       result = await pushToSheetsCore(season);
     } else if (key === 'publish') {
       result = await publishAllPagesCore();
+    } else if (key === 'groupings') {
+      result = await resetGroupingsToHoldingCore();
     }
   } catch (err) {
     result = { success: false, error: err.message };
@@ -5876,7 +5879,7 @@ async function endOfEvent() {
   if (!eventName) { alert('No event loaded — nothing to finalize yet.'); return; }
   const season = document.getElementById('series-season')?.value || '2026';
 
-  eoeState  = { save: 'pending', sheets: 'pending', publish: 'pending' };
+  eoeState  = { save: 'pending', sheets: 'pending', publish: 'pending', groupings: 'pending' };
   eoeErrors = {};
   eoeRenderPanel(eventName);
 
@@ -5884,10 +5887,12 @@ async function endOfEvent() {
   const saved = await eoeRunStep(eventName, season, 'save');
   if (!saved) return; // panel stays up showing the error + Retry; nothing else runs
 
-  // Sheets and Publish are independent of each other — a WiFi drop on one
-  // shouldn't block the other from getting through.
+  // Sheets, Publish, and the Groupings reset are all independent of each other —
+  // a WiFi drop on one shouldn't block the others from getting through. Groupings
+  // reset doesn't depend on series data at all, so it's safe to run regardless.
   await eoeRunStep(eventName, season, 'sheets');
   await eoeRunStep(eventName, season, 'publish');
+  await eoeRunStep(eventName, season, 'groupings');
 }
 
 async function eoeRetryStep(key) {
@@ -7439,13 +7444,18 @@ ${groupCards}
 }
 
 
-function grpGenerateHoldingHTML(eventName) {
+function grpGenerateHoldingHTML(eventName, generic) {
+  const pageTitle  = generic ? 'Groupings' : eventName;
+  const subtitle   = generic ? '' : `<p>${eventName}</p>`;
+  const bodyText   = generic
+    ? `<p>Groupings for the next BFSeries event will be posted here once they're finalized.<br>Check back soon!</p>`
+    : `<p>Pairings for <strong>${eventName}</strong> will be posted here shortly.<br>Check back soon!</p>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Groupings — ${eventName}</title>
+<title>Groupings — ${pageTitle}</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -7466,7 +7476,7 @@ header{background:#085041;color:#fff;padding:16px 20px 12px;text-align:center}
 <header>
   <div class="header-title">
     <h1>BirdieFriends</h1>
-    <p>${eventName}</p>
+    ${subtitle}
   </div>
 </header>
 <nav class="pill-nav">
@@ -7479,10 +7489,40 @@ header{background:#085041;color:#fff;padding:16px 20px 12px;text-align:center}
 <div class="holding">
   <div class="holding-icon">⛳</div>
   <h2>Groupings Coming Soon</h2>
-  <p>Pairings for <strong>${eventName}</strong> will be posted here shortly.<br>Check back soon!</p>
+  ${bodyText}
 </div>
 </body>
 </html>`;
+}
+
+// ── Reset groupings.html to the generic holding state — no event tied to it.
+// Core logic only (no DOM/status writes) so End of Event can call it directly.
+// This is the fix for: groupings.html kept showing the last published event's
+// pairings indefinitely after that event ended, since nothing ever re-published
+// it. Safe to run any time — next "Publish Groupings" for a real event overwrites it.
+async function resetGroupingsToHoldingCore() {
+  const html = grpGenerateHoldingHTML('', true);
+  const pages = {
+    'groupings.html': html,
+    'groupings-meta.json': JSON.stringify({
+      eventName: null,
+      status: 'none',
+      visibility: 'hidden',
+      publishedAt: new Date().toISOString()
+    })
+  };
+  try {
+    const resp = await fetch('/api/netlify/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pages })
+    });
+    const result = await resp.json();
+    if (result.success) return { success: true, preview: result.preview };
+    return { success: false, error: result.error || 'Unknown error' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 }
 
 // ── Kick Off Event ──────────────────────────────────────────────────
@@ -7534,8 +7574,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-17g';
-const GS_VERSION = 'v8.17 · 2026-06-17g';
+document.getElementById('build-date').textContent = '2026-06-21a';
+const GS_VERSION = 'v8.17 · 2026-06-21a';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
