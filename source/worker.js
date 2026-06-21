@@ -163,7 +163,7 @@ export default {
 
     // GET /flags — read all flags from KV (public, no auth)
     if (request.method === 'GET' && url.pathname === '/flags') {
-      const keys = ['maintenance', 'live_test', 'live_override', 'live_override_since'];
+      const keys = ['maintenance', 'live_test', 'live_override', 'live_override_since', 'gathering_panel_live'];
       const entries = await Promise.all(keys.map(async k => [k, await env.BF_FLAGS.get(k)]));
       const flags = {};
       entries.forEach(([k, v]) => {
@@ -185,7 +185,7 @@ export default {
       if (pin !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const allowed = ['maintenance', 'live_test', 'live_override'];
+      const allowed = ['maintenance', 'live_test', 'live_override', 'gathering_panel_live'];
       if (!allowed.includes(key)) {
         return new Response(JSON.stringify({ error: 'Unknown flag key' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
