@@ -2209,6 +2209,22 @@ body {
             <div id="gathering-test-status" style="display:none;font-size:0.85rem;color:var(--text);margin-top:10px;line-height:1.6;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);background:rgba(255,255,255,0.04)"></div>
           </div>
           <div style="border-top:1px solid var(--border);padding-top:14px">
+            <div style="font-size:0.83rem;font-weight:600;color:var(--text);margin-bottom:6px">🏌️ Host Management Panel</div>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
+              Shows/hides the "My Gatherings" entry point on Home for every player. <strong>Off by default</strong> —
+              creating a real Gathering sends a live push to its Crew, so keep this off except during an active testing window.
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-secondary btn-sm" id="btn-gatheringpanel-on"
+                onclick="devToggle('gatheringpanel',true)"
+                style="font-size:0.82rem">Enable</button>
+              <button class="btn btn-secondary btn-sm" id="btn-gatheringpanel-off"
+                onclick="devToggle('gatheringpanel',false)"
+                style="font-size:0.82rem">Disable</button>
+              <span id="gathering-panel-status" style="font-size:0.78rem;color:var(--text-hint)"></span>
+            </div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:14px">
             <div style="font-size:0.83rem;font-weight:600;color:var(--text);margin-bottom:6px">New Events Reset</div>
             <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
               Clears the "seen events" record for the current player on this device — the 🆕 new events button will reappear on next Home load.
@@ -2647,6 +2663,7 @@ let MAINTENANCE_MODE     = false;
 let LIVE_EVENT_TEST_MODE = false;
 let LIVE_OVERRIDE        = false;  // commissioner manual start
 let LIVE_OVERRIDE_SINCE  = null;   // ISO timestamp when override was set
+let GATHERING_PANEL_LIVE = false;  // Host Management panel visibility — off by default, Dev-45
 let groupingsMeta        = null;  // {eventName, status, visibility, publishedAt}
 
 async function loadRemoteFlags() {
@@ -2657,6 +2674,7 @@ async function loadRemoteFlags() {
     LIVE_EVENT_TEST_MODE = flags.live_test     === true;
     LIVE_OVERRIDE        = flags.live_override === true;
     LIVE_OVERRIDE_SINCE  = flags.live_override_since || null;
+    GATHERING_PANEL_LIVE  = flags.gathering_panel_live === true;
   } catch(e) {
     console.warn('[Flags] Could not load remote flags — defaulting to false:', e.message);
   }
@@ -7171,6 +7189,7 @@ let _hostSelectedCrewName = null;
 function renderHostEntryPoint() {
   const el = document.getElementById('home-host-entry');
   if (!el) return;
+  if (!GATHERING_PANEL_LIVE) { el.innerHTML = ''; return; }  // Dev-45 — off until toggled on via Admin
   if (!currentPlayer || isGuest()) { el.innerHTML = ''; return; }
   const mine = gatheringData.filter(g => g.hostId === currentPlayer);
   const label = mine.length
@@ -7487,7 +7506,7 @@ function updateEventControlUI() {
 }
 
 async function devToggle(flag, enable) {
-  const key = flag === 'maintenance' ? 'maintenance' : 'live_test';
+  const key = flag === 'maintenance' ? 'maintenance' : flag === 'livetest' ? 'live_test' : 'gathering_panel_live';
   try {
     const resp = await fetch(OS_API + 'flags', {
       method: 'POST',
@@ -7497,10 +7516,11 @@ async function devToggle(flag, enable) {
     const data = await resp.json();
     if (data.ok) {
       // Update local vars immediately
-      if (key === 'maintenance')  MAINTENANCE_MODE     = enable;
-      if (key === 'live_test')    LIVE_EVENT_TEST_MODE = enable;
+      if (key === 'maintenance')          MAINTENANCE_MODE     = enable;
+      if (key === 'live_test')            LIVE_EVENT_TEST_MODE = enable;
+      if (key === 'gathering_panel_live') GATHERING_PANEL_LIVE = enable;
       updateDevControlsUI();
-      showToast(enable ? `🔴 ${flag === 'maintenance' ? 'Maintenance' : 'Live Test'} mode ON` : `✅ ${flag === 'maintenance' ? 'Maintenance' : 'Live Test'} mode OFF`);
+      showToast(enable ? `🔴 ${flag === 'maintenance' ? 'Maintenance' : flag === 'livetest' ? 'Live Test' : 'Host Panel'} mode ON` : `✅ ${flag === 'maintenance' ? 'Maintenance' : flag === 'livetest' ? 'Live Test' : 'Host Panel'} mode OFF`);
       // Reload after short delay so all state refreshes
       setTimeout(() => location.reload(), 800);
     } else {
@@ -7515,6 +7535,7 @@ function updateDevControlsUI() {
   updateEventControlUI();
   const mStatus = document.getElementById('maintenance-status');
   const lStatus = document.getElementById('livetest-status');
+  const gStatus = document.getElementById('gathering-panel-status');
   if (mStatus) {
     mStatus.textContent = MAINTENANCE_MODE     ? '🔴 ON' : '⚪ Off';
     mStatus.style.color = MAINTENANCE_MODE     ? '#e05252' : 'var(--text-hint)';
@@ -7522,6 +7543,10 @@ function updateDevControlsUI() {
   if (lStatus) {
     lStatus.textContent = LIVE_EVENT_TEST_MODE ? '🟢 ON' : '⚪ Off';
     lStatus.style.color = LIVE_EVENT_TEST_MODE ? 'var(--green)' : 'var(--text-hint)';
+  }
+  if (gStatus) {
+    gStatus.textContent = GATHERING_PANEL_LIVE ? '🟢 ON' : '⚪ Off';
+    gStatus.style.color = GATHERING_PANEL_LIVE ? 'var(--green)' : 'var(--text-hint)';
   }
 }
 
