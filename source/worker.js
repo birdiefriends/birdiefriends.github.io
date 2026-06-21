@@ -327,6 +327,23 @@ export default {
       }
     }
 
+    // GET /crews/:id/members — a Crew's player_ids. Needed by the Host
+    // Management panel (Dev-45) so reusing a saved Crew can still notify its
+    // members on Gathering create/cancel without re-picking the list each time.
+    if (request.method === 'GET' && /^\/crews\/\d+\/members$/.test(url.pathname)) {
+      const crewId = url.pathname.split('/')[2];
+      try {
+        const { results } = await env.DB.prepare(
+          `SELECT player_id FROM crew_members WHERE crew_id = ?`
+        ).bind(crewId).all();
+        return new Response(JSON.stringify({ ok: true, player_ids: results.map(r => r.player_id) }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error fetching Crew members' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // POST /registrations — set a player's Yes/No/Sub response for a Gathering (upsert)
     if (request.method === 'POST' && url.pathname === '/registrations') {
       let body;
