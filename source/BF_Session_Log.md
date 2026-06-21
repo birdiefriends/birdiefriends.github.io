@@ -285,6 +285,21 @@ Gatherings; reusing it here would collide with that meaning in the changelog.
   updated same-session as a deliberate close-out step (budget-conscious — chose doc
   sync over starting new feature work at 71% usage).
 
+**Late addendum — card behavior review (discussion only, no code):** Reviewing a
+live test card screenshot during the post-tee-time window surfaced two cross-cutting
+issues, both pre-existing and not Gathering-specific, just newly visible because this
+was the first time anyone looked closely at a non-Series card in that state:
+1. The in-progress card content ("Round in progress · Tap the banner to enter scores")
+   fires for any format, but the actual scoring entry point (`getLiveEvent()`) is
+   hardcoded to Series only — so Wally/Cup/Scramble/Individual/Gathering cards have
+   likely been showing a misleading scoring callout in that window all along.
+2. The 48hr-lock/5th-player capacity logic triggers off "has a capacity number," not
+   off format — it's really a Sat/Sun-BSGC-specific rule that was never formally scoped
+   to just that case.
+Logged to `BF_Operations_Guide.md` §10 (Backlog) as two 🔴 blocking items — Brian wants
+these resolved before continuing Gathering Dev, so the Host panel and any further card
+work isn't built on a misleading foundation. See Ops Guide for full detail.
+
 **Session closed clean** — Crew-member rendering shipped and smoke-tested live, a
 real sort bug was caught and fixed same-session via Brian's screenshot, and the test
 harness (create/delete + visible feedback) is in solid shape for whoever picks up the
