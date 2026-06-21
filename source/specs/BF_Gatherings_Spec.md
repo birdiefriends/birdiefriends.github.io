@@ -1,6 +1,6 @@
 # BF Gatherings — Capability Spec (Dev-42)
 
-**Status:** Draft — planning stage, not yet built
+**Status:** In progress — D1 + Worker API (Dev-43) and Crew-member Portal UI (Dev-44) built and live. Remaining: Host Management panel, Crew onboarding (§5).
 **Created:** 2026-06-19, Session Dev-42
 **Author:** Brian Hager + Claude
 
@@ -324,12 +324,46 @@ No PIN — hosting is open per §6; trust model matches existing Jotform client 
 | `GET /crews?host_id=X` | A host's saved (named) Crews |
 | `POST /registrations` | Upsert a player's yes/no/sub response — re-registering updates, not duplicates (`UNIQUE(gathering_id, player_id)`) |
 | `GET /gatherings/:id/registrations` | Host's view of who's responded |
+| `POST /gatherings/purge-test` | **(Dev-44)** True `DELETE` of a host's test Gatherings + their Crews, crew_members, and registrations — matched by title prefix (default `"TEST — "`). **PIN-gated**, unlike the routes above — deletion is destructive, so it carries the same discipline as `/deploy`/`/rollback` rather than the open-trust model the rest of this section uses. Deletes child rows before parents to satisfy D1's enforced foreign keys; a Crew is only deleted if no remaining Gathering still references it. |
 
 Schema reference: `source/specs/BF_Gatherings_Schema.sql`. Tables: `gatherings`,
 `crews`, `crew_members`, `registrations` (MLP scope only, per §11 Q7).
 
 ---
 
+## 17. Portal UI — Crew-member side (Dev-44)
+
+§15's build-out implemented: `eventData`/`regData` (the existing globals driving
+Home/Parked/Schedule and the capacity engine) merge in Gatherings via `loadGatherings()`,
+normalized to the same shape Jotform events use (`source:'gathering'` flag added for
+branching). Capacity, register/unregister, and swipe each got a Gathering-specific
+branch where Series-Event logic didn't apply (48hr-lock/fivesome skipped; swipe writes
+`status:'no'` to D1 per §11 Q13 instead of/in addition to the local park).
+
+**Schedule needed no extra code.** It was already generic over the shared arrays with
+no Jotform-specific logic — Gatherings a player's registered for appear there for free.
+The "Calendar/Schedule wiring" item implied by §15's "My Events/Parked/Calendar" phrasing
+turned out to already be covered.
+
+**Badge label:** "Gathering" → **"Host Gathering"** (Brian's call) — reads more clearly
+as host-run rather than BF-run to the community.
+
+**Admin test harness** (not part of MLP scope, but needed to test safely against live
+D1): Dev Controls → Create/Delete Test Gathering. Isolation is Crew = [commissioner
+only] — the same visibility filter real Gatherings use, so test data never reaches a
+real player without needing a separate test/prod flag. Cleanup is a true delete (see
+§16's `/gatherings/purge-test`), not a soft cancel — test runs leave zero residue.
+
+**Not built this session:** the Host Management panel (the other half of §15/§3 —
+create/view-responses/cancel UI for Hosts, Live-Panel-style). Brian hosts test
+Gatherings via the admin test button for now, not a real Host UI.
+
+---
+
 ## 14. Carry-forward
 
-This spec is planning-stage only — no code written yet. Storage (D1), the reach model (§4 funnel), Host-initiated onboarding (§5 — stub creation, de-dup, claim link, Pending status), the multi-club question (§12, deferred), MLP scope (§11 Q2), the rendering/query approach (§11 Q4), and the swipe/No interaction (§11 Q13) are all now settled. Only Q7 (D1 setup mechanics) remains open in MLP's critical path — laptop work, not a discussion item. §13 (operational fix scaling / Claude-as-proxy) and §5's picker-narrowing-at-scale note are both flagged for future sessions, neither blocking MLP. Focus going forward: get Host capability operating per the MLP scope, with community noise control (§4) as the core discipline — not chasing further scope.
+Storage (D1), the reach model (§4 funnel), Host-initiated onboarding (§5 — stub creation, de-dup, claim link, Pending status), the multi-club question (§12, deferred), MLP scope (§11 Q2), the rendering/query approach (§11 Q4), and the swipe/No interaction (§11 Q13) are all settled and built per §16/§17. Remaining for MLP completion:
+- **Host Management panel** (§15/§3) — create/view-responses/cancel UI for Hosts. Crew-member rendering is done (§17); this is the only piece left before Gatherings is usable end-to-end by a real Host rather than via the admin test button.
+- **#2 — Crew onboarding** (§5) — stub Membership creation, cell-based de-dup, `Pending` status, claim-link via KV. Flagged as the most security-sensitive piece in the whole spec (writes into the live, shared Membership roster); warrants its own dedicated session rather than a tail-end add-on.
+
+§13 (operational fix scaling / Claude-as-proxy) and §5's picker-narrowing-at-scale note remain flagged for future sessions, neither blocking MLP.
