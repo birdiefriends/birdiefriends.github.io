@@ -3614,8 +3614,22 @@ function renderAll() {
 // ── Capacity engine ──────────────────────────────────────────────────────
 // Returns a status object describing the capacity situation for an event.
 // capacity=null means unrestricted — all logic skipped.
+// Single entry point. Dispatches to the BSGC 2-tee-time/48hr-lock engine
+// only for "BF Weekend Times" events; everything else (Gatherings, Series,
+// Wally Cup, BF Cup, Scramble, Individual Play, ParTee, Practice, etc.) gets
+// the simple open/full/waitlist model. Dev-45 — previously this dispatched
+// on "is this a Gathering" only, so any non-Gathering event with a capacity
+// number silently inherited the 2-tee-time lock logic regardless of format,
+// even though that mechanic is specific to BF's own Sat/Sun reservation
+// pattern (2 tee times booked, 2nd one released back to the course if 6+
+// confirmed registrations aren't secured within 48hrs).
 function getCapacityStatus(evt) {
-  if (evt.source === 'gathering') return getGatheringCapacityStatus(evt);
+  if (formatClass(evt.format) === 'format-weekend') return getWeekendCapacityStatus(evt);
+  return getSimpleCapacityStatus(evt);
+}
+
+// BF Weekend Times only — the 2-tee-time/48hr-lock/5th-player engine.
+function getWeekendCapacityStatus(evt) {
   if (!evt.capacity) return { restricted: false };
 
   const cap      = evt.capacity;
@@ -3674,10 +3688,12 @@ function getCapacityStatus(evt) {
   };
 }
 
-// Gatherings: simple open/full model. No 48hr lock, no fivesome/Schrödinger
-// logic — that complexity belongs to Series Events' 2nd-tee-time mechanics,
-// which Gatherings don't have (spec §10 — scoring/tee-time logistics out of v1 scope).
-function getGatheringCapacityStatus(evt) {
+// Default for every event type without BSGC's 2-tee-time reservation
+// pattern: simple open/full model. No 48hr lock, no fivesome/Schrödinger
+// logic — that complexity is specific to BF Weekend Times' 2nd-tee-time
+// mechanics (spec §10 confirmed this is out of scope for Gatherings; Dev-45
+// confirmed it's equally out of scope for every other BF format event).
+function getSimpleCapacityStatus(evt) {
   if (!evt.capacity) return { restricted: false };
   const yesRegs  = regData.filter(r => r.eventName === evt.name && r.status === 'Yes');
   const subRegs  = regData.filter(r => r.eventName === evt.name && r.status === 'Sub');
@@ -3792,7 +3808,8 @@ function renderHome() {
   const now      = new Date();
   const upcoming = eventData.filter(e => {
     if (!e.dt) return e.dt >= now;
-    const sunsetMs = formatClass(e.format) === 'format-series' ? 6 * 3600000 : 5 * 3600000;
+    const fc6h = formatClass(e.format) === 'format-series' || formatClass(e.format) === 'format-weekend';
+    const sunsetMs = fc6h ? 6 * 3600000 : 5 * 3600000;
     return e.dt >= now - sunsetMs;
   });
 
@@ -4043,7 +4060,8 @@ function buildEventCard(evt, isPast) {
 
   const now2 = new Date();
   const msSinceTee = evt.dt ? now2 - evt.dt : -1;
-  const isInProgress = msSinceTee >= 0 && msSinceTee <= (formatClass(evt.format) === 'format-series' ? 6 : 5) * 3600000;
+  const fc6hCard = formatClass(evt.format) === 'format-series' || formatClass(evt.format) === 'format-weekend';
+  const isInProgress = msSinceTee >= 0 && msSinceTee <= (fc6hCard ? 6 : 5) * 3600000;
 
   let actionHtml = '';
   if (isInProgress) {
@@ -4696,11 +4714,38 @@ function formatClass(fmt) {
   if (!fmt) return '';
   const f = fmt.toLowerCase();
   if (f === 'gathering') return 'format-gathering';
+  if (f.includes('weekend')) return 'format-weekend';
   if (f.includes('championship') || f.includes('series')) return 'format-series';
   if (f.includes('wally')) return 'format-wally';
   if (f.includes('cup') && !f.includes('wally')) return 'format-cup';
   if (f.includes('scramble')) return 'format-scramble';
   return '';
+}
+
+// Live Panel (CttP, Scorecard submission, Skins) eligibility — a single,
+// decoupled chokepoint, intentionally separate from formatClass(). CttP/
+// Scorecard is the foundational data-capture step (Skins reads from
+// Scorecard data; Birdie Alerts are a notification layer on top of it),
+// so this gate controls access to the whole scoring pipeline, not just
+// notifications. Dev-45.
+//
+// "BF Weekend Times" (2-tee-time/48hr-lock events) is explicitly excluded —
+// confirmed Dev-45: if a weekend round ever needed live scoring, it would
+// get its own event type rather than reusing this one. Gatherings excluded
+// per spec §10 (no scoring in v1). Wally Cup / BF Cup / Scramble formats are
+// architecturally ready but GS hasn't been extended to their scoring models
+// yet (Wally Cup targeted Sept 2026, others Oct/Nov 2026) — flip each to
+// true individually as GS support lands, no other code changes needed.
+function hasLivePanelSupport(evt) {
+  if (!evt) return false;
+  if (evt.source === 'gathering') return false;
+  const fc = formatClass(evt.format);
+  if (fc === 'format-series') return true;
+  // TODO: flip true once GS supports this format
+  if (fc === 'format-wally')    return false;  // targeted Sept 2026
+  if (fc === 'format-cup')      return false;  // targeted Oct/Nov 2026
+  if (fc === 'format-scramble') return false;  // targeted Oct/Nov 2026
+  return false;  // format-weekend, blank, ParTee, Practice, etc.
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -5971,14 +6016,14 @@ let _birdieSubmitting = false;
 // Returns event object or null
 function getLiveEvent() {
   const now = new Date();
-  // Override or test mode: next upcoming Series event goes live immediately
+  // Override or test mode: next upcoming Live-Panel-eligible event goes live immediately
   if (LIVE_OVERRIDE || LIVE_EVENT_TEST_MODE) {
-    return eventData.find(e => e.dt && formatClass(e.format) === 'format-series'
+    return eventData.find(e => e.dt && hasLivePanelSupport(e)
       && e.dt >= now - LIVE_EVENT_HOURS * 3600000) || null;
   }
   return eventData.find(e => {
     if (!e.dt) return false;
-    if (formatClass(e.format) !== 'format-series') return false;
+    if (!hasLivePanelSupport(e)) return false;
     const msSinceTee = now - e.dt;
     return msSinceTee >= 0 && msSinceTee <= LIVE_EVENT_HOURS * 3600000;
   }) || null;
@@ -6004,7 +6049,7 @@ function renderLiveBanner() {
     return;
   }
   const teeStr = evt.dt.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
-  const isSeriesEvt = formatClass(evt.format) === 'format-series';
+  const isSeriesEvt = hasLivePanelSupport(evt);
   el.innerHTML = `<div class="live-banner${isSeriesEvt ? ' live-series' : ''}">
     <div class="live-banner-header" onclick="toggleLivePanel()">
       <div class="live-dot"></div>
