@@ -301,6 +301,18 @@ Host Management panel (§3/§15's other half) built: create/view-responses/cance
 
 ---
 
+## 19. Carry-forward (Dev-45, end of session — budget exhausted)
+
+**Migration done, wiring not done.** `gathering_type TEXT` column added to `gatherings` (D1 Console, confirmed live by Brian, Entry 2 in `BF_Gatherings_Schema.sql`). Next session needs:
+1. Worker: `POST /gatherings` insert statement needs `gathering_type` added to the column list and bind params. `GET /gatherings` already does `SELECT *`, picks it up automatically.
+2. Portal create form: add a dropdown under "⛳ The Basics" — proposed values (Brian to confirm/adjust): Individual Play, 4 Man Scramble, 2 Man Scramble, 1 Man Scramble. Deliberately excludes BF-only tags (BF Championship, BF Weekend Times, Wally Cup, BF Cup) — those don't apply to generic Hosts.
+3. Display: show the chosen type on the Gathering card and Host panel list — **as its own field, not folded into `evt.format`**, which must stay `"Gathering"` for the existing badge ("Host Gathering") and format-class machinery (sunset window, capacity dispatch, `hasLivePanelSupport`) to keep working unchanged. Likely lands in `loadGatherings()`'s mapping as a new `gatheringType` field alongside `format`.
+4. **Parked, not this pass:** Brian flagged the hardcoded dropdown list will likely need real editability over time (a proper D1 lookup table, similar in spirit to how Jotform's Event Format list grows). Worth a dedicated design pass once the list actually starts changing — not blocking the simple dropdown version above.
+
+**Also shipped this session, not yet captured elsewhere:** saved-Crew/ad-hoc picker unification (selecting a saved Crew now loads its real members into the same picker state — fixes the bug where reopening the picker showed nobody selected), Host Panel visual pass (light green sheet body, tighter form spacing), Yes/Sub/No three-way Gathering response (§18), Host self-registration toggle (§18), explicit Can't Make It button (§18).
+
+---
+
 ## 15. Addendum (Dev-43) — Gathering Panel is Host-only; Crew members use existing views
 
 Clarified during D1/API planning, correcting an assumption made earlier in this session:
