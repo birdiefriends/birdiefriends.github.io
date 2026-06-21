@@ -236,7 +236,7 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 ### Current Versions
 | Component | Version | Status |
 |-----------|---------|--------|
-| Portal | v3.11.5 · 2026-06-21 | Production ✅ |
+| Portal | v3.13.2 · 2026-06-21 | Production ✅ |
 | GolfScorer | v8.17 · 2026-06-17g | Deployed ✅ |
 | Worker | 2026-06-18b | Deployed ✅ — `/deploy` accepts `source/` and `docs/` paths |
 | deploy.html | 2026-06-18 | Live ✅ — all tabs functional (Session BP-1 fix) |
