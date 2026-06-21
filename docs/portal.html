@@ -1079,6 +1079,82 @@ body {
   -webkit-overflow-scrolling: touch;
   padding: 4px 0;
 }
+/* Host Management Panel slide-up sheet (Dev-45) — same visual language as
+   the groupings sheet, but body holds rendered HTML, not an iframe. */
+.host-sheet-overlay {
+  position: fixed; inset: 0; z-index: 9200;
+  background: rgba(0,0,0,0.7);
+  display: none; align-items: flex-end;
+}
+.host-sheet-overlay.open { display: flex; }
+.host-sheet {
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  width: 100%; height: 92vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 -4px 32px rgba(0,0,0,0.4);
+}
+.host-sheet-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 12px;
+  background: #085041;
+  flex-shrink: 0;
+}
+.host-sheet-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.3); margin: 0 auto 10px;
+  position: absolute; left: 50%; transform: translateX(-50%); top: 8px;
+}
+.host-sheet-title { font-size: 0.9rem; font-weight: 700; color: #fff; }
+.host-sheet-close {
+  background: rgba(255,255,255,0.15); border: none;
+  color: #fff; border-radius: 20px; padding: 5px 14px;
+  font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  font-family: inherit;
+}
+.host-sheet-body {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 14px 16px 24px;
+}
+.host-entry-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; margin-bottom: 10px;
+  background: rgba(232,160,60,0.12); border: 1px solid rgba(232,160,60,0.35);
+  border-radius: 12px; cursor: pointer;
+}
+.host-entry-row:hover { background: rgba(232,160,60,0.18); }
+.host-gathering-card {
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 14px; margin-bottom: 10px; background: rgba(255,255,255,0.03);
+}
+.host-form-field { margin-bottom: 14px; }
+.host-form-field label {
+  display: block; font-size: 0.78rem; font-weight: 700;
+  color: var(--text-muted); margin-bottom: 5px;
+}
+.host-form-field input, .host-form-field select {
+  width: 100%; box-sizing: border-box; padding: 9px 12px;
+  border-radius: 10px; border: 1px solid var(--border);
+  font-size: 0.9rem; font-family: inherit; background: #fff; color: var(--text);
+}
+.host-crew-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 16px; margin: 0 6px 6px 0;
+  border: 1px solid var(--border); background: #fff; cursor: pointer;
+  font-size: 0.82rem;
+}
+.host-crew-chip.selected { background: var(--green-light); border-color: var(--green); color: var(--green-dark); font-weight: 700; }
+.host-picker-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  max-height: 260px; overflow-y: auto; padding: 4px 0;
+}
+.host-picker-btn {
+  padding: 9px 10px; border-radius: 10px; border: 1px solid var(--border);
+  background: #fff; font-size: 0.85rem; text-align: left; cursor: pointer;
+  font-family: inherit; color: var(--text);
+}
+.host-picker-btn.selected { background: var(--green-light); border-color: var(--green); color: var(--green-dark); font-weight: 700; }
 .player-sheet-item {
   padding: 12px 16px; font-size: 0.9rem;
   color: rgba(255,255,255,0.8); cursor: pointer;
@@ -1751,6 +1827,7 @@ body {
   <!-- ── HOME SCREEN ── -->
   <div class="bf-screen active" id="screen-home">
     <div id="home-live-banner"></div>
+    <div id="home-host-entry"></div>
     <div id="home-hero"></div>
     <div id="home-announcements"></div>
     <div id="home-install-nudge"></div>
@@ -3815,6 +3892,9 @@ function renderHome() {
 
   // ── Live event banner ─────────────────────────────────────────────────────
   renderLiveBanner();
+
+  // ── Host Management entry point (Dev-45) ──────────────────────────────────
+  renderHostEntryPoint();
 
   // ── Announcements + install nudge + swipe tip ─────────────────────────────
   renderAnnouncementsCard();
@@ -7074,6 +7154,296 @@ async function cancelAllTestGatherings() {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+// HOST MANAGEMENT PANEL (Dev-45) — spec §3/§15. Create/view-responses/
+// cancel UI for Hosts, Live-Panel-style pop-out. Hosting is open to any
+// player (spec §6) — no PIN gate, same trust model as the Gatherings
+// Worker API itself.
+// ══════════════════════════════════════════════════════════════════
+
+let _hostSavedCrews     = [];        // this host's saved (named) Crews
+let _hostCrewPicked     = new Set(); // ad hoc crew-builder selections (player display names)
+let _hostSelectedCrewId = null;      // set when reusing a saved Crew instead of building ad hoc
+let _hostSelectedCrewName = null;
+
+// Home screen entry point — shows whenever the current player hosts 1+ active
+// Gatherings, or always offers "+ Host a Gathering" if they host none yet.
+function renderHostEntryPoint() {
+  const el = document.getElementById('home-host-entry');
+  if (!el) return;
+  if (!currentPlayer || isGuest()) { el.innerHTML = ''; return; }
+  const mine = gatheringData.filter(g => g.hostId === currentPlayer);
+  const label = mine.length
+    ? `🏌️ My Gatherings — hosting ${mine.length}`
+    : `🏌️ Host a Gathering`;
+  el.innerHTML = `<div class="host-entry-row" onclick="openHostPanel()">
+    <span style="font-size:1.05rem">⛳</span>
+    <div style="flex:1;font-size:0.85rem;font-weight:700;color:var(--green-dark)">${label}</div>
+    <span style="color:var(--text-muted)">›</span>
+  </div>`;
+}
+
+function openHostPanel() {
+  document.getElementById('host-sheet-overlay').classList.add('open');
+  renderHostPanelList();
+}
+function closeHostPanel(e) {
+  if (e && e.target !== document.getElementById('host-sheet-overlay')) return;
+  document.getElementById('host-sheet-overlay').classList.remove('open');
+}
+
+// ── List view: host's active Gatherings + New Gathering entry ─────────────
+function renderHostPanelList() {
+  const body = document.getElementById('host-sheet-body');
+  const mine = gatheringData.filter(g => g.hostId === currentPlayer)
+    .sort((a, b) => a.dt - b.dt);
+
+  let listHtml = '';
+  if (mine.length === 0) {
+    listHtml = `<div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:20px 0">
+      You're not hosting any Gatherings yet.</div>`;
+  } else {
+    listHtml = mine.map(g => {
+      const regs = gatheringRegData.filter(r => r.gatheringId === g.gatheringId);
+      const yes = regs.filter(r => r.status === 'Yes').length;
+      const no  = regs.filter(r => r.status === 'No').length;
+      const sub = regs.filter(r => r.status === 'Sub').length;
+      const dateStr = g.dt ? g.dt.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '';
+      const timeStr = g.dt ? formatTime(g.dt) : '';
+      return `<div class="host-gathering-card">
+        <div style="font-weight:700;font-size:0.9rem">${g.name}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin:3px 0 8px">
+          📅 ${dateStr} · ⏰ ${timeStr}${g.location ? ` · 📍 ${g.location}` : ''}
+        </div>
+        <div style="font-size:0.8rem;margin-bottom:8px">✅ ${yes} Yes &nbsp; 🔄 ${sub} Sub &nbsp; ❌ ${no} No</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="viewGatheringDetail(${g.gatheringId})">View Responses</button>
+          <button class="btn btn-ghost btn-sm" style="color:#c0392b" onclick="cancelGatheringFromPanel(${g.gatheringId},'${g.name.replace(/'/g,"\\'")}')">Cancel</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  body.innerHTML = `
+    <button class="btn btn-primary" style="width:100%;margin-bottom:16px" onclick="showNewGatheringForm()">+ New Gathering</button>
+    ${listHtml}
+  `;
+}
+
+// ── Detail view: who's responded ───────────────────────────────────────────
+function viewGatheringDetail(gatheringId) {
+  const body = document.getElementById('host-sheet-body');
+  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  if (!g) { renderHostPanelList(); return; }
+  const regs = gatheringRegData.filter(r => r.gatheringId === gatheringId);
+  const byStatus = { Yes: [], Sub: [], No: [] };
+  regs.forEach(r => { (byStatus[r.status] || byStatus.No).push(r.player); });
+
+  const section = (label, emoji, names) => names.length
+    ? `<div style="margin-bottom:14px">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:6px">${emoji} ${label} (${names.length})</div>
+        <div style="font-size:0.85rem;line-height:1.7">${names.join(', ')}</div>
+      </div>` : '';
+
+  body.innerHTML = `
+    <button class="btn btn-ghost btn-sm" style="margin-bottom:12px" onclick="renderHostPanelList()">‹ Back</button>
+    <div style="font-weight:700;font-size:0.95rem;margin-bottom:10px">${g.name}</div>
+    ${section('Yes', '✅', byStatus.Yes)}
+    ${section('Sub', '🔄', byStatus.Sub)}
+    ${section('No', '❌', byStatus.No)}
+    ${regs.length === 0 ? '<div style="color:var(--text-muted);font-size:0.85rem">No responses yet.</div>' : ''}
+  `;
+}
+
+async function cancelGatheringFromPanel(gatheringId, title) {
+  if (!confirm(`Cancel "${title}"? Crew members will be notified.`)) return;
+  try {
+    const resp = await fetch(`${GATHERINGS_API}/gatherings/${gatheringId}/cancel`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: currentPlayer })
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Cancel failed');
+
+    // Notify Crew — best-effort, doesn't block the cancel itself
+    const regs = gatheringRegData.filter(r => r.gatheringId === gatheringId);
+    const names = [...new Set(regs.map(r => r.player))];
+    if (names.length) {
+      osSendToPlayers(names, 'Gathering Cancelled', `"${title}" has been cancelled.`, '', 'gathering_cancelled')
+        .catch(e => console.warn('Cancel notify failed:', e));
+    }
+
+    showToast(`✅ "${title}" cancelled`);
+    await refreshGatherings();
+    renderHostPanelList();
+  } catch(e) {
+    showToast('❌ Cancel failed — ' + e.message, true);
+    console.error('cancelGatheringFromPanel error:', e);
+  }
+}
+
+// ── New Gathering form ──────────────────────────────────────────────────
+async function showNewGatheringForm() {
+  _hostCrewPicked.clear();
+  _hostSelectedCrewId = null;
+  _hostSelectedCrewName = null;
+
+  const body = document.getElementById('host-sheet-body');
+  body.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:20px 0">Loading…</div>`;
+
+  try {
+    const resp = await fetch(`${GATHERINGS_API}/crews?host_id=${encodeURIComponent(currentPlayer)}`);
+    const data = await resp.json();
+    _hostSavedCrews = data.ok ? (data.crews || []) : [];
+  } catch(e) {
+    _hostSavedCrews = [];
+  }
+
+  const today = new Date();
+  const dateDefault = today.toISOString().slice(0,10);
+
+  body.innerHTML = `
+    <button class="btn btn-ghost btn-sm" style="margin-bottom:12px" onclick="renderHostPanelList()">‹ Back</button>
+
+    <div class="host-form-field">
+      <label>Title</label>
+      <input type="text" id="host-new-title" placeholder="e.g. Saturday Foursome">
+    </div>
+    <div class="host-form-field">
+      <label>Venue</label>
+      <input type="text" id="host-new-venue" placeholder="e.g. BSGC">
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="host-form-field" style="flex:1">
+        <label>Date</label>
+        <input type="date" id="host-new-date" value="${dateDefault}">
+      </div>
+      <div class="host-form-field" style="flex:1">
+        <label>Time</label>
+        <input type="time" id="host-new-time" value="08:00">
+      </div>
+    </div>
+    <div class="host-form-field" style="max-width:120px">
+      <label>Size</label>
+      <input type="number" id="host-new-size" value="4" min="1" max="16">
+    </div>
+
+    <div class="host-form-field">
+      <label>Crew</label>
+      ${_hostSavedCrews.length ? `
+        <div style="margin-bottom:8px">
+          ${_hostSavedCrews.map(c => `<span class="host-crew-chip" id="saved-crew-${c.id}" onclick="selectSavedCrew(${c.id},'${c.name.replace(/'/g,"\\'")}')">${c.name}</span>`).join('')}
+        </div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">— or build a new list below —</div>
+      ` : ''}
+      <div class="host-picker-grid" id="host-crew-picker-grid"></div>
+    </div>
+    <div class="host-form-field" id="host-crew-save-field">
+      <label>Save this list as a Crew? (optional name)</label>
+      <input type="text" id="host-new-crew-name" placeholder="e.g. Saturday Regulars">
+    </div>
+
+    <button class="btn btn-primary" style="width:100%;margin-top:6px" onclick="submitNewGathering()" id="btn-submit-gathering">Create Gathering</button>
+  `;
+  buildHostCrewPickerGrid();
+}
+
+function buildHostCrewPickerGrid() {
+  const grid = document.getElementById('host-crew-picker-grid');
+  if (!grid) return;
+  const active = memberData.filter(m => m.active !== 'InActive' && m.active !== 'Pending')
+    .sort((a,b) => a.display.localeCompare(b.display));
+  grid.innerHTML = active.map(m => {
+    const sel = _hostCrewPicked.has(m.display) ? ' selected' : '';
+    return `<button type="button" class="host-picker-btn${sel}" onclick="toggleCrewPickerMember('${m.display.replace(/'/g,"\\'")}')">${m.display}</button>`;
+  }).join('');
+}
+
+function toggleCrewPickerMember(name) {
+  // Picking ad hoc members clears any saved-Crew selection — the two are mutually exclusive
+  _hostSelectedCrewId = null;
+  _hostSelectedCrewName = null;
+  document.querySelectorAll('.host-crew-chip.selected').forEach(c => c.classList.remove('selected'));
+
+  if (_hostCrewPicked.has(name)) _hostCrewPicked.delete(name);
+  else _hostCrewPicked.add(name);
+  buildHostCrewPickerGrid();
+}
+
+function selectSavedCrew(crewId, crewName) {
+  _hostSelectedCrewId = crewId;
+  _hostSelectedCrewName = crewName;
+  _hostCrewPicked.clear();
+  document.querySelectorAll('.host-crew-chip').forEach(c => c.classList.remove('selected'));
+  const chip = document.getElementById(`saved-crew-${crewId}`);
+  if (chip) chip.classList.add('selected');
+  buildHostCrewPickerGrid();
+  const saveField = document.getElementById('host-crew-save-field');
+  if (saveField) saveField.style.display = 'none';
+}
+
+async function submitNewGathering() {
+  const title = (document.getElementById('host-new-title').value || '').trim();
+  const venue = (document.getElementById('host-new-venue').value || '').trim();
+  const dateVal = document.getElementById('host-new-date').value;
+  const timeVal = document.getElementById('host-new-time').value;
+  const size = parseInt(document.getElementById('host-new-size').value, 10) || null;
+
+  if (!title) { showToast('Title is required', true); return; }
+  if (!dateVal || !timeVal) { showToast('Date and time are required', true); return; }
+  if (!_hostSelectedCrewId && _hostCrewPicked.size === 0) { showToast('Pick a Crew or select at least one player', true); return; }
+
+  const eventTime = new Date(`${dateVal}T${timeVal}:00`);
+  const btn = document.getElementById('btn-submit-gathering');
+  if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); }
+
+  try {
+    let crewId = _hostSelectedCrewId;
+    let notifyNames;
+
+    if (crewId) {
+      // Reusing a saved Crew — fetch its current members to notify
+      const memResp = await fetch(`${GATHERINGS_API}/crews/${crewId}/members`);
+      const memData = await memResp.json();
+      notifyNames = memData.ok ? (memData.player_ids || []) : [];
+    } else {
+      const crewName = (document.getElementById('host-new-crew-name').value || '').trim() || null;
+      notifyNames = [..._hostCrewPicked];
+      const crewResp = await fetch(`${GATHERINGS_API}/crews`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host_id: currentPlayer, name: crewName, player_ids: notifyNames })
+      });
+      const crewData = await crewResp.json();
+      if (!crewData.ok) throw new Error(crewData.error || 'Crew creation failed');
+      crewId = crewData.id;
+    }
+
+    const gathResp = await fetch(`${GATHERINGS_API}/gatherings`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        host_id: currentPlayer, title, venue: venue || null,
+        event_time: eventTime.toISOString(), size, crew_id: crewId, fill_list_enabled: false
+      })
+    });
+    const gathData = await gathResp.json();
+    if (!gathData.ok) throw new Error(gathData.error || 'Gathering creation failed');
+
+    if (notifyNames.length) {
+      osSendToPlayers(notifyNames, 'New Gathering', `${currentPlayer} invited you to "${title}" — ${formatDate(eventTime)} at ${formatTime(eventTime)}.`, '', 'gathering_invite')
+        .catch(e => console.warn('Invite notify failed:', e));
+    }
+
+    showToast('✅ Gathering created');
+    await refreshGatherings();
+    renderHostPanelList();
+  } catch(e) {
+    showToast('❌ ' + e.message, true);
+    console.error('submitNewGathering error:', e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.classList.remove('btn-loading'); }
+  }
+}
+
 // ── Dev toggle helpers (commissioner admin panel) ───────────────────────────
 async function eventControl(action) {
   const enable = action === 'start';
@@ -8228,6 +8598,17 @@ if ('caches' in window) {
       <button class="groupings-sheet-close" onclick="closeGroupingsSheet()">Done</button>
     </div>
     <iframe class="groupings-sheet-iframe" id="groupings-sheet-iframe" src="" title="Groupings"></iframe>
+  </div>
+</div>
+
+<div class="host-sheet-overlay" id="host-sheet-overlay" onclick="closeHostPanel(event)">
+  <div class="host-sheet" onclick="event.stopPropagation()">
+    <div class="host-sheet-header">
+      <div class="host-sheet-handle"></div>
+      <div class="host-sheet-title">🏌️ My Gatherings</div>
+      <button class="host-sheet-close" onclick="closeHostPanel()">Done</button>
+    </div>
+    <div class="host-sheet-body" id="host-sheet-body"></div>
   </div>
 </div>
 
