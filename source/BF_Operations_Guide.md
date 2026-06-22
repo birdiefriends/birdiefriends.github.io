@@ -66,7 +66,7 @@
 
 4. **Always run `node --check` before deploying portal changes.** Extract inline `<script>` blocks, concatenate, write to temp `.js`, run `node --check`. Non-negotiable — caught two blank-load incidents in Session 34.
 
-5. **Worker code changes require a manual Cloudflare paste.** `/deploy` updates `source/worker.js` in the library (the source of record), but the live Cloudflare Worker is only updated by pasting into the dashboard. These are two separate steps — always do both.
+5. **Worker code changes: Claude pushes `source/worker.js` to GitHub AND presents the file for Cloudflare paste — both in the same turn.** Claude never waits for Brian to push the library copy; handing Brian the file without immediately syncing the library is the root cause of source drift. The correct sequence every time: (1) Claude writes the change, (2) Claude pushes `source/worker.js` via `/deploy`, (3) Claude presents the file via `present_files` for Brian to paste into Cloudflare dashboard. If Brian confirms the paste failed, the library is still current to what Claude built — no gap is created. Never split these steps across turns.
 
 6. **Claude never reconstructs secrets files from scratch.** Upload `deploy_portal.py` or `launch_golf_scorer.py` before modifying — changes must be additive.
 
