@@ -618,3 +618,43 @@ dedicated block for them.
 - Verify Host:Yes write on fresh Gathering create (confirmed this session but worth a clean retest)
 
 **Final portal version: v3.16.1 · 2026-06-22**
+
+## Session Dev-47 · 2026-06-22
+
+**Focus:** Gatherings Host panel polish and bug fixes from Dev-46 live testing; portal UX hardening across several discovery-driven iterations with Brian testing live throughout.
+
+**What happened — bugs fixed:**
+- **Announcement bleed** (`gathering_invite` notifications appearing for all members): root cause was the KV feed being global while `osSendToPlayers` early-returned when no push IDs existed, bypassing the feed write entirely. Two-part fix: (1) `feed_only: true` path added to Worker `POST /` handler — skips OneSignal, writes KV directly; (2) `osSendToPlayers` now calls `osSend({ feed_only: true })` instead of returning `{ ok: false }` when no push IDs. Portal filter in `buildAnnouncementsHTML` hides `gathering_invite` entries whose `meta.invited` doesn't include `currentPlayer`.
+- **Toast invisible behind Host sheet** (z-index 300 vs sheet z-index 9200): `.bf-toast` z-index bumped to 9999 in both CSS blocks — fixes all validation toasts (title required, venue required, capacity, past datetime) when sheet is open.
+- **Gathering notification URL → birdiefriends.com root**: all three `osSendToPlayers`/`osSendAll` calls for `gathering_invite` and `gathering_cancelled` had empty string URL; updated to `portal.html`.
+- **Cell Phone label missing** in "Add to BirdieFriends" mini-form: added visible label + `autocomplete="off"` to suppress browser phone picker dropdown.
+- **Pending crew name not shown** after save-crew dialog: `renderHostCrewSummary` now checks `_pendingCrewName` as middle case; `dismissCrewSaveDialog` calls `renderHostCrewSummary()` on exit.
+- **Host could invite themselves** via Invite Others: `hostInviteOthers` now unions `currentPlayer` into the exclusion list — host is implicit member-zero via `host_id`, not in `crew_members`.
+- **"OR SELECT INDIVIDUAL PLAYERS" label shown even when named crew active**: label gets `id="who-coming-individual-label"`; `renderHostCrewSummary` hides it when `namedCrew` is truthy, shows it otherwise.
+
+**What happened — features shipped:**
+- **Gathering Description field**: D1 Entry 3 (`ALTER TABLE gatherings ADD COLUMN description TEXT`), Worker `POST /gatherings` updated, portal form textarea (optional, resizable), `buildEventCard` expandable `📋 Details ▸` toggle on Crew cards, Host panel shows inline.
+- **`feed_only` Worker path**: push-free KV feed write for players without push subscriptions.
+- **Who's Coming UX overhaul**: three labelled navigation paths — "Select an existing Crew" / "Create a New Crew" / "Or Select Individual Players". `openCrewPickerForNew()` clears all crew state before opening. Dynamic button: `✏️ "CrewName" · N players · tap to adjust` vs `👥 Select players…`.
+- **Crew name on Host Panel card**: Worker `GET /gatherings` now LEFT JOINs `crews` and returns `crew_name`; normalized as `crewName` in `loadGatherings`; displayed as `👥 CrewName` on host panel card.
+- **D1 schema ERD** added to `bf_architecture.html` — PIN-gated, shows all 4 tables with FK relationships, migration log, entry annotations. D1 node click drills to schema section. Corrected "planned" → "live" throughout.
+
+**Decisions made:**
+- **Host → Commissioner feedback button**: killed. Players can text. Avoids BirdieFriends becoming a helpdesk for use errors.
+- **Attachment URL (gathering flyer)**: right feature, wrong session. Jotform file upload is an available interim path (proven via scorecard photo) but acknowledged as a hack. Proper implementation is Cloudflare R2 (Worker upload endpoint, presigned URLs, image display on Crew card) — scoped as a future dedicated session.
+- **Crew onboarding (spec §5)**: still parked, still security-sensitive, still warrants its own session.
+
+**Artifacts created/updated:**
+- `docs/portal.html` + `source/portal.html` — v3.16.1 → v3.16.13 across 13 deploys
+- `source/portal_version.txt` — v3.16.13 · 2026-06-22
+- `source/worker.js` — `feed_only` path + `gathering_type` description + `crew_name` JOIN
+- `source/specs/BF_Gatherings_Schema.sql` — Entry 3 (description column)
+- `source/bf_architecture.html` + `docs/bf_architecture.html` — D1 schema ERD added, PIN-gated
+
+**Carry-forward for Dev-48:**
+- **Gathering attachments (R2)** — Cloudflare R2 storage, Worker upload endpoint, image/file display on Crew card. Interim: Jotform file upload path exists if pressure comes before R2 session.
+- **Crew onboarding (spec §5)** — Pending stub, claim-link, bfw consent. Security-sensitive, own session.
+- **BF Weekend Times live check** — 48hr-lock capacity logic shipped Dev-45 but not smoke-tested against a real event yet.
+- **Host:Yes verification** — confirmed Dev-46, worth a clean retest on fresh Gathering create.
+
+**Final portal version: v3.16.13 · 2026-06-22**
