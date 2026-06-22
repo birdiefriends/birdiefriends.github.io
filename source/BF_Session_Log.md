@@ -483,3 +483,103 @@ dedicated block for them.
 - Crew onboarding (Dev-44 #2) — still untouched, still flagged security-sensitive, still warrants its own dedicated session.
 
 **Session closed at near-full budget** — single focused item fully shipped.
+
+## Session Dev-46 · 2026-06-22
+
+**Focus:** `gathering_type` wiring — the carry-forward item from Dev-45 (schema column already in D1, wiring not yet built).
+
+**What happened:**
+- **Worker (`worker.js`):** `POST /gatherings` destructure extended to include `gathering_type`; INSERT column list and `.bind()` updated to persist it (nullable — existing Gatherings without a type unaffected; `GET /gatherings` `SELECT *` already picked it up automatically).
+- **Portal (`docs/portal.html` + `source/portal.html`, v3.13.3):**
+  - `loadGatherings()` maps `g.gathering_type` → `gatheringType` on the normalized event object.
+  - `showNewGatheringForm()` — new **Format** dropdown added under ⛳ The Basics (between date/time/size row and "Who's Coming"). Options: Individual Play, 4 Man Scramble, 2 Man Scramble, 1 Man Scramble, Best Ball, Match Play, Stroke Play. Optional field — passes `null` if left blank.
+  - `submitNewGathering()` reads `host-new-type` and includes `gathering_type` in the POST body.
+  - `buildEventCard()` — shows `⛳ {gatheringType}` as a meta-line on the Gathering event card when set.
+  - `renderHostPanelList()` — shows `⛳ {gatheringType}` under the date/time line in the Host panel list when set.
+- **`source/portal_version.txt`** updated to v3.13.3 · 2026-06-22.
+- All three files deployed via Worker `/deploy` route (commits `d33e95f`, `6f6aa80`, `4550321`).
+
+**Artifacts created/updated:**
+- `source/worker.js` — `gathering_type` added to `POST /gatherings` (deployed by Brian via Cloudflare dashboard)
+- `docs/portal.html` + `source/portal.html` — v3.13.3
+- `source/portal_version.txt` — v3.13.3 · 2026-06-22
+
+**Carry-forward for next session:**
+- Further test & enhance work on the Gatherings Host panel (Brian's call at session close — more to do, budget ran out).
+- Crew onboarding (Dev-44 #2) — still untouched, still flagged security-sensitive, still warrants its own dedicated session.
+
+**Session closed at near-full budget** — single focused item fully shipped.
+
+---
+
+## Session Dev-46 continued (same session, extended work)
+
+**Portal versions across this session:** v3.13.3 → v3.15.7 across ~25 deploys
+
+**Major work completed:**
+
+**gathering_type wiring (spec §19, carry-forward from Dev-45):**
+- Worker `POST /gatherings` now persists `gathering_type`
+- Host form: Golf Format dropdown (defaults Individual Play)
+- `loadGatherings()` maps `gatheringType` to normalized event object
+- Displayed on event card meta line and Host panel list
+
+**Host panel UX overhaul (many iterations with Brian live-testing):**
+- View Responses → inline toggle on pills row (▸/▾ caret), no drill-down screen
+- Pills row is the tap target — removed "View Responses" button entirely
+- Two-button action row: ➕ Invite Others + Cancel Gathering
+- Card visual polish: warm `#f7fbf9` background, divider line above actions
+
+**Invite Others (post-create crew expansion):**
+- New Worker route `POST /crews/:id/members/add` (INSERT OR IGNORE, idempotent)
+- `hostInviteOthers()` fetches actual D1 crew members for exclusion list (not just responders)
+- Crew picker opens in `invite` mode, pre-excludes existing members
+- On Done: adds to D1, sends gathering_invite push, refreshes panel
+
+**New to BirdieFriends? inline form in crew picker:**
+- Full-width button stacked below search in picker header
+- Mini-form (first, last, cell) drops in above the list
+- Cell de-dup against all members (digits-only normalize, 10+ digit match)
+- On dup: auto-selects existing member, shows warning, closes form
+- On clean: posts to Membership form, adds to local memberData, auto-selects
+
+**Crew picker UX:**
+- All members shown regardless of InActive/Pending status (scoped fix — identity picker and Live Panel unchanged)
+- Single-char search = starts-with (jump to letter); multi-char = substring
+- Header label white/bold, mode-aware ("Select players" vs "Invite Others")
+
+**Save-crew dialog:**
+- Blocking modal after picker Done (not inline — forces the decision)
+- Crew name stored in `_pendingCrewName` JS var (not DOM element which gets removed)
+- Skip clears name, Enter confirms, `submitNewGathering` reads the var safely
+
+**New Gathering form UX:**
+- Date/Time: full click area via `showPicker()` on div wrapper
+- Size on own line, labeled "Tee Time Capacity" with hint text
+- Golf Format dropdown defaults Individual Play
+- Are You Playing: single toggle button (green=yes, muted outline=not playing)
+- Section order: Basics → Are You Playing → Who's Coming → Create Gathering
+- Back button in header (hidden on list view), Cancel replaces Done on create form (red-tinted)
+- Title and Venue marked required (*)
+
+**Tier 1 in-progress card:** brighter — green tint, bold label, time sub-line
+
+**Admin panel:**
+- ☢️ Clear ALL My D1 Data button — `POST /gatherings/purge-all` Worker route (no title filter, deletes everything for host)
+- Confirmed working: cleared Paupack Hills test event
+
+**Host promotion:**
+- `HOST_QID = '25'` confirmed (Brian added Host Yes/No field to Membership form)
+- `host` parsed from memberData alongside `bfw`
+- `submitNewGathering` silently writes Host:Yes on first create (best-effort, non-blocking)
+
+**Crew picker filter fix:** Invite Others exclusion now fetches actual D1 crew members, not just responders (players who hadn't responded were showing in the invite list)
+
+**Parked for future sessions:**
+- Gathering Description (free text, `description TEXT` D1 column needed)
+- Attachment URL (paste-a-link, `attachment_url TEXT` D1 column needed)
+- Host → Commissioner feedback button (mailto: bridge)
+- Full Crew onboarding / spec §5 (Pending stub, claim-link, bfw consent) — still security-sensitive, own session
+- Host promotion auto-tracking (QID wired, needs live verification)
+
+**Session closed:** Brian live-testing 2nd and 3rd Gathering creates to verify saved Crew chips appear on subsequent New Gathering forms.
