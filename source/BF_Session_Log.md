@@ -583,3 +583,38 @@ dedicated block for them.
 - Host promotion auto-tracking (QID wired, needs live verification)
 
 **Session closed:** Brian live-testing 2nd and 3rd Gathering creates to verify saved Crew chips appear on subsequent New Gathering forms.
+
+---
+
+## Dev-46 addendum — late-session work (v3.15.8 → v3.16.1)
+
+**Validation hardening:**
+- Capacity check on create: crew size + host (if playing) must ≥ capacity. Applies to both ad hoc and saved Crews (`_hostCrewPicked` always populated via `selectSavedCrew`). Toast: "Add more players — X selected but capacity is N"
+- Venue required: was marked * but not enforced — now blocked at submit
+- Past date/time: rejected with "Date and time must be in the future"
+
+**Live testing results (Brian, 3 Gatherings):**
+- Notifications fired correctly on create
+- Gathering cards showing HOST GATHERING badge, capacity (1/4), In-Progress at 1h 50m ✅
+- Saved Crew chip appeared correctly on 3rd Gathering create ✅
+- Capacity validation caught under-crew bug ✅
+- Host:Yes confirmed written to Jotform Membership ✅
+- purge-all confirmed working (cleared Paupack Hills) ✅
+
+**Visual polish:**
+- My Gatherings home entry: BF green gradient, bold white text, shadow — replaces peachy gold
+- Host panel cards: capacity shown inline on meta line (👥 N)
+- Save-crew: blocking modal dialog (not inline) forces decision after picker Done
+- Cancel (red-tinted) replaces Done on create form header; Done restored on list view
+
+**Remaining bugs found during testing:**
+- RoughRiders Gathering (Jun 22 today, already in-progress) was creatable with a past datetime — now blocked by validation
+
+**Carry-forward for Dev-47:**
+- Branch findings from live testing (Brian's call at close — specific items TBD at Dev-47 start)
+- Gathering Description + Attachment URL (D1 columns needed first)
+- Host → Commissioner feedback button
+- Crew onboarding spec §5 (own dedicated session)
+- Verify Host:Yes write on fresh Gathering create (confirmed this session but worth a clean retest)
+
+**Final portal version: v3.16.1 · 2026-06-22**
