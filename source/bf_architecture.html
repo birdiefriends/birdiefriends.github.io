@@ -360,82 +360,8 @@
 </div>
 <style>@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}</style>
 
-  <div class="diag-footer">BirdieFriends · Internal architecture reference · Session 42 · June 2026</div>
-</div>
-
-<script>
-  const CODE = '913317';
-  let entry = '';
-
-  function press(d) {
-    if (entry.length >= 6) return;
-    entry += d;
-    updateDots();
-    if (entry.length === 6) setTimeout(check, 120);
-  }
-
-  function del() {
-    entry = entry.slice(0, -1);
-    updateDots();
-    document.getElementById('lock-err').textContent = '';
-  }
-
-  function clearPin() {
-    entry = '';
-    updateDots();
-    document.getElementById('lock-err').textContent = '';
-  }
-
-  function updateDots() {
-    for (let i = 0; i < 6; i++) {
-      const d = document.getElementById('d' + i);
-      d.classList.toggle('filled', i < entry.length);
-      d.classList.remove('error');
-    }
-  }
-
-  function check() {
-    if (entry === CODE) {
-      document.getElementById('lock').style.display = 'none';
-      document.getElementById('diagram').style.display = 'flex';
-      document.body.style.alignItems = 'flex-start';
-    } else {
-      for (let i = 0; i < 6; i++) document.getElementById('d' + i).classList.add('error');
-      document.getElementById('lock-err').textContent = 'Incorrect code';
-      setTimeout(() => { entry = ''; updateDots(); document.getElementById('lock-err').textContent = ''; }, 1000);
-    }
-  }
-
-  document.addEventListener('keydown', e => {
-    if (e.key >= '0' && e.key <= '9') press(e.key);
-    else if (e.key === 'Backspace') del();
-    else if (e.key === 'Escape') clearPin();
-  });
-</script>
 
 
-
-<script>
-const DETAILS = {"commissioner": ["Commissioner — Brian Hager", "The sole operator of BirdieFriends. Manages all events, player registration, scoring, and system configuration. Has admin access to the portal via a PIN-protected gear icon. Uses Claude AI as a development partner to build and deploy all platform features directly from phone, tablet, or laptop."], "players": ["Players", "BirdieFriends members who access the platform via a Progressive Web App installed on their iPhone or Android. The PWA must be installed from the home screen — not the Safari browser tab — for push notifications to work. Players register for events, view groupings, enter birdie alerts and CttP during rounds, and submit scorecards post-round."], "portal": ["Portal — birdiefriends.com", "The entire player-facing application is a single HTML file (~370KB) hosted on GitHub Pages. It is a mobile-first PWA built with vanilla HTML/JS — no framework, no build step. Fetches all data live from Jotform. Deployed directly by Claude via the GitHub Contents API. Current version: v3.10.106."], "live": ["Live Panel", "Activates during a BF Series event (tee time to tee time +8h). Contains three sections: Birdie Alert (announces birdies and detects skins), Closest to the Pin (live CttP leaderboard), and Post-Round Scorecard (hole-by-hole score entry). Overseers can proxy entry for other players in their group via a player picker sheet."], "events": ["My Events", "The home screen of the portal. Shows upcoming events as swipeable cards. Players register, unregister, or park events from here. During a live round, the card shows an in-progress state with elapsed time. Cards sunset automatically after the round — Series events +6h, others +5h."], "admin": ["Admin Panel", "Commissioner-only screen. Contains: Event Control (start/close live banner), Push Broadcast, Text All Members, Dev Controls (maintenance mode, test flags), Announcement Feed, Push Subscribers, and Scorecard Check (live submission monitor showing who has and has not submitted a scorecard)."], "worker": ["Cloudflare Worker", "A serverless function running on Cloudflare edge network. Acts as a proxy between the portal and OneSignal, bypassing CORS restrictions. Also manages Cloudflare KV feature flags (maintenance mode, live event override) and a KV-backed notification feed. Free tier with ~100KB request body limit. Planned: a Cloudflare D1 binding (env.BF_DB) for the Gatherings feature (Dev-42) — see the D1 node for details."], "d1": ["Cloudflare D1 — birdiefriends-gatherings", "A relational SQLite database natively bound to the Worker as env.DB. Live since Dev-43. Supports the Gatherings self-service hosting feature (BF_Gatherings_Spec.md). Chosen over KV because Gatherings needs real query capability. 4 tables: gatherings, crews, crew_members, registrations. Schema migrations tracked in source/specs/BF_Gatherings_Schema.sql (append-only log). See the D1 Schema section below for the full ERD. Scoped to Gatherings only — Jotform forms are not migrating to D1."], "github": ["GitHub", "The repository serves dual purpose: GitHub Pages hosts the live site at birdiefriends.com, and the source/ folder is a versioned library of all managed files. Claude deploys directly to GitHub via the Contents API using a personal access token. No CI/CD pipeline — direct API pushes only."], "jotform": ["Jotform", "The primary data store for BirdieFriends. Four forms: Membership (player directory and push subscription IDs), Event Registration (sign-ups), Series Scorecard (post-round scores), and Closest to the Pin entries. The portal fetches Jotform data live on every load. No backend database — Jotform is the database."], "onesignal": ["OneSignal", "Push notification delivery service. The portal writes each player push ID to Jotform at subscribe time. When sending, the portal looks up push IDs from Jotform and passes them to the Cloudflare Worker, which forwards to OneSignal. OneSignal is purely a delivery pipe — it does not need to know player names."], "claude": ["Claude AI — Development Partner", "Claude (Anthropic) is the development partner for all BirdieFriends features. Brian describes what he needs; Claude writes the code, runs syntax checks, increments versions, and deploys directly to GitHub — all within the chat session. A structured bootstrap system fetches all source files at session start so Claude has full context instantly."], "golfscorer": ["GolfScorer v8.17", "A local scoring tool that runs on a laptop via a Python server. Handles pre-event groupings (drag-and-drop builder, handicap and quota calculation), event kick-off, and post-round scoring (Stableford quota system, Best 4 series formula, flight standings). Publishes results pages directly to GitHub. Never goes to the golf course — laptop stays home."], "sheets": ["Google Sheets", "Receives series standings data after each event via a push from GolfScorer. Contains tabs for Raw Data, overall Standings, and each flight (Green, Combo, Gold). Used as a human-readable backup and for sharing standings outside the portal."], "groupings": ["groupings.html", "A standalone page published by GolfScorer showing tee times and group assignments. Embedded in the portal as a slide-up iframe sheet — players tap the Groupings button in the live panel or event card and the page appears in-place without leaving the portal. Also accessible directly at birdiefriends.com/groupings.html."]};
-
-function showDetail(key) {
-  var d = DETAILS[key];
-  if (!d) return;
-  document.getElementById('detail-title').textContent = d[0];
-  document.getElementById('detail-body').textContent = d[1];
-  document.getElementById('detail-panel').style.display = 'block';
-  setTimeout(function() {
-    document.getElementById('detail-panel').scrollIntoView({behavior:'smooth', block:'nearest'});
-  }, 50);
-}
-function hideDetail() {
-  document.getElementById('detail-panel').style.display = 'none';
-}
-</script>
-
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!--  D1 SCHEMA — birdiefriends-gatherings                                  -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
 <div id="d1-schema" style="margin-top:32px;background:#0a1e11;border:1px solid #1d3d28;border-radius:10px;padding:20px 24px;font-family:'DM Mono',monospace">
   <div style="font-size:1rem;font-weight:700;color:#9fe1cb;margin-bottom:4px">🗄 D1 Schema — birdiefriends-gatherings</div>
   <div style="font-size:0.75rem;color:#4e8c6a;margin-bottom:20px">Database ID: 26ea8a78-3cb3-4769-8bfe-f0bd21b2c882 · Bound as env.DB · Source: source/specs/BF_Gatherings_Schema.sql</div>
@@ -533,7 +459,88 @@ function hideDetail() {
     Entry&nbsp;2 · Dev-45 · 2026-06-21 — ALTER TABLE gatherings ADD COLUMN gathering_type TEXT<br>
     Entry&nbsp;3 · Dev-47 · 2026-06-22 — ALTER TABLE gatherings ADD COLUMN description TEXT
   </div>
+
+  <div class="diag-footer">BirdieFriends · Internal architecture reference · Session 42 · June 2026</div>
 </div>
+
+<script>
+  const CODE = '913317';
+  let entry = '';
+
+  function press(d) {
+    if (entry.length >= 6) return;
+    entry += d;
+    updateDots();
+    if (entry.length === 6) setTimeout(check, 120);
+  }
+
+  function del() {
+    entry = entry.slice(0, -1);
+    updateDots();
+    document.getElementById('lock-err').textContent = '';
+  }
+
+  function clearPin() {
+    entry = '';
+    updateDots();
+    document.getElementById('lock-err').textContent = '';
+  }
+
+  function updateDots() {
+    for (let i = 0; i < 6; i++) {
+      const d = document.getElementById('d' + i);
+      d.classList.toggle('filled', i < entry.length);
+      d.classList.remove('error');
+    }
+  }
+
+  function check() {
+    if (entry === CODE) {
+      document.getElementById('lock').style.display = 'none';
+      document.getElementById('diagram').style.display = 'flex';
+      document.body.style.alignItems = 'flex-start';
+    } else {
+      for (let i = 0; i < 6; i++) document.getElementById('d' + i).classList.add('error');
+      document.getElementById('lock-err').textContent = 'Incorrect code';
+      setTimeout(() => { entry = ''; updateDots(); document.getElementById('lock-err').textContent = ''; }, 1000);
+    }
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key >= '0' && e.key <= '9') press(e.key);
+    else if (e.key === 'Backspace') del();
+    else if (e.key === 'Escape') clearPin();
+  });
+</script>
+
+
+
+<script>
+const DETAILS = {"commissioner": ["Commissioner — Brian Hager", "The sole operator of BirdieFriends. Manages all events, player registration, scoring, and system configuration. Has admin access to the portal via a PIN-protected gear icon. Uses Claude AI as a development partner to build and deploy all platform features directly from phone, tablet, or laptop."], "players": ["Players", "BirdieFriends members who access the platform via a Progressive Web App installed on their iPhone or Android. The PWA must be installed from the home screen — not the Safari browser tab — for push notifications to work. Players register for events, view groupings, enter birdie alerts and CttP during rounds, and submit scorecards post-round."], "portal": ["Portal — birdiefriends.com", "The entire player-facing application is a single HTML file (~370KB) hosted on GitHub Pages. It is a mobile-first PWA built with vanilla HTML/JS — no framework, no build step. Fetches all data live from Jotform. Deployed directly by Claude via the GitHub Contents API. Current version: v3.10.106."], "live": ["Live Panel", "Activates during a BF Series event (tee time to tee time +8h). Contains three sections: Birdie Alert (announces birdies and detects skins), Closest to the Pin (live CttP leaderboard), and Post-Round Scorecard (hole-by-hole score entry). Overseers can proxy entry for other players in their group via a player picker sheet."], "events": ["My Events", "The home screen of the portal. Shows upcoming events as swipeable cards. Players register, unregister, or park events from here. During a live round, the card shows an in-progress state with elapsed time. Cards sunset automatically after the round — Series events +6h, others +5h."], "admin": ["Admin Panel", "Commissioner-only screen. Contains: Event Control (start/close live banner), Push Broadcast, Text All Members, Dev Controls (maintenance mode, test flags), Announcement Feed, Push Subscribers, and Scorecard Check (live submission monitor showing who has and has not submitted a scorecard)."], "worker": ["Cloudflare Worker", "A serverless function running on Cloudflare edge network. Acts as a proxy between the portal and OneSignal, bypassing CORS restrictions. Also manages Cloudflare KV feature flags (maintenance mode, live event override) and a KV-backed notification feed. Free tier with ~100KB request body limit. Planned: a Cloudflare D1 binding (env.BF_DB) for the Gatherings feature (Dev-42) — see the D1 node for details."], "d1": ["Cloudflare D1 — birdiefriends-gatherings", "A relational SQLite database natively bound to the Worker as env.DB. Live since Dev-43. Supports the Gatherings self-service hosting feature (BF_Gatherings_Spec.md). Chosen over KV because Gatherings needs real query capability. 4 tables: gatherings, crews, crew_members, registrations. Schema migrations tracked in source/specs/BF_Gatherings_Schema.sql (append-only log). See the D1 Schema section below for the full ERD. Scoped to Gatherings only — Jotform forms are not migrating to D1."], "github": ["GitHub", "The repository serves dual purpose: GitHub Pages hosts the live site at birdiefriends.com, and the source/ folder is a versioned library of all managed files. Claude deploys directly to GitHub via the Contents API using a personal access token. No CI/CD pipeline — direct API pushes only."], "jotform": ["Jotform", "The primary data store for BirdieFriends. Four forms: Membership (player directory and push subscription IDs), Event Registration (sign-ups), Series Scorecard (post-round scores), and Closest to the Pin entries. The portal fetches Jotform data live on every load. No backend database — Jotform is the database."], "onesignal": ["OneSignal", "Push notification delivery service. The portal writes each player push ID to Jotform at subscribe time. When sending, the portal looks up push IDs from Jotform and passes them to the Cloudflare Worker, which forwards to OneSignal. OneSignal is purely a delivery pipe — it does not need to know player names."], "claude": ["Claude AI — Development Partner", "Claude (Anthropic) is the development partner for all BirdieFriends features. Brian describes what he needs; Claude writes the code, runs syntax checks, increments versions, and deploys directly to GitHub — all within the chat session. A structured bootstrap system fetches all source files at session start so Claude has full context instantly."], "golfscorer": ["GolfScorer v8.17", "A local scoring tool that runs on a laptop via a Python server. Handles pre-event groupings (drag-and-drop builder, handicap and quota calculation), event kick-off, and post-round scoring (Stableford quota system, Best 4 series formula, flight standings). Publishes results pages directly to GitHub. Never goes to the golf course — laptop stays home."], "sheets": ["Google Sheets", "Receives series standings data after each event via a push from GolfScorer. Contains tabs for Raw Data, overall Standings, and each flight (Green, Combo, Gold). Used as a human-readable backup and for sharing standings outside the portal."], "groupings": ["groupings.html", "A standalone page published by GolfScorer showing tee times and group assignments. Embedded in the portal as a slide-up iframe sheet — players tap the Groupings button in the live panel or event card and the page appears in-place without leaving the portal. Also accessible directly at birdiefriends.com/groupings.html."]};
+
+function showDetail(key) {
+  var d = DETAILS[key];
+  if (!d) return;
+  document.getElementById('detail-title').textContent = d[0];
+  document.getElementById('detail-body').textContent = d[1];
+  document.getElementById('detail-panel').style.display = 'block';
+  setTimeout(function() {
+    document.getElementById('detail-panel').scrollIntoView({behavior:'smooth', block:'nearest'});
+    if (key === 'd1') {
+      setTimeout(function() {
+        document.getElementById('d1-schema').scrollIntoView({behavior:'smooth', block:'start'});
+      }, 400);
+    }
+  }, 50);
+}
+function hideDetail() {
+  document.getElementById('detail-panel').style.display = 'none';
+}
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!--  D1 SCHEMA — birdiefriends-gatherings                                  -->
+<!-- ═══════════════════════════════════════════════════════════════════════ --></div>
 
 </body>
 </html>
