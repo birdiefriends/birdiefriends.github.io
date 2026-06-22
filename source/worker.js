@@ -213,15 +213,15 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled, gathering_type } = body;
+      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled, gathering_type, description } = body;
       if (!host_id || !title || !event_time) {
         return new Response(JSON.stringify({ error: 'host_id, title, and event_time are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       try {
         const result = await env.DB.prepare(
-          `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, gathering_type)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)`
-        ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0, gathering_type || null).run();
+          `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, gathering_type, description)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`
+        ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0, gathering_type || null, description || null).run();
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
