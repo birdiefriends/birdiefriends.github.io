@@ -269,8 +269,9 @@ export default {
       }
       try {
         const { results } = await env.DB.prepare(
-          `SELECT DISTINCT g.* FROM gatherings g
+          `SELECT DISTINCT g.*, c.name AS crew_name FROM gatherings g
            LEFT JOIN crew_members cm ON cm.crew_id = g.crew_id
+           LEFT JOIN crews c ON c.id = g.crew_id
            WHERE g.status = 'active' AND (g.host_id = ? OR cm.player_id = ?)
            ORDER BY g.event_time ASC`
         ).bind(playerId, playerId).all();
