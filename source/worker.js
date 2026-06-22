@@ -213,15 +213,15 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled } = body;
+      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled, gathering_type } = body;
       if (!host_id || !title || !event_time) {
         return new Response(JSON.stringify({ error: 'host_id, title, and event_time are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       try {
         const result = await env.DB.prepare(
-          `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`
-        ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0).run();
+          `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, gathering_type)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+        ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0, gathering_type || null).run();
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -344,6 +344,37 @@ export default {
       }
     }
 
+    // POST /crews/:id/members/add — add new members to an existing Crew (Dev-46).
+    // Idempotent: INSERT OR IGNORE skips duplicates, so re-inviting an existing
+    // member is safe. Returns the full updated member list so the caller can
+    // notify only the newly added players without a second fetch.
+    // Body: { player_ids: [...] }
+    if (request.method === 'POST' && /^\/crews\/\d+\/members\/add$/.test(url.pathname)) {
+      const crewId = url.pathname.split('/')[2];
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { player_ids } = body;
+      if (!Array.isArray(player_ids) || player_ids.length === 0) {
+        return new Response(JSON.stringify({ error: 'player_ids must be a non-empty array' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const inserts = player_ids.map(pid =>
+          env.DB.prepare(`INSERT OR IGNORE INTO crew_members (crew_id, player_id) VALUES (?, ?)`).bind(crewId, pid)
+        );
+        await env.DB.batch(inserts);
+        const { results } = await env.DB.prepare(
+          `SELECT player_id FROM crew_members WHERE crew_id = ?`
+        ).bind(crewId).all();
+        return new Response(JSON.stringify({ ok: true, player_ids: results.map(r => r.player_id) }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error adding Crew members' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // POST /registrations — set a player's Yes/No/Sub response for a Gathering (upsert)
     if (request.method === 'POST' && url.pathname === '/registrations') {
       let body;
@@ -459,6 +490,72 @@ export default {
         }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error purging test Gatherings: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /gatherings/purge-all — true DELETE of ALL Gatherings for a host
+    // (not just test ones). PIN required. Wipes gatherings, crews, crew_members,
+    // and registrations. Commissioner-only nuclear option for D1 cleanup.
+    // Body: { pin, host_id }
+    if (request.method === 'POST' && url.pathname === '/gatherings/purge-all') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (String(body.pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Invalid PIN' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { host_id } = body;
+      if (!host_id) {
+        return new Response(JSON.stringify({ error: 'host_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const { results: matches } = await env.DB.prepare(
+          `SELECT id, crew_id FROM gatherings WHERE host_id = ?`
+        ).bind(host_id).all();
+
+        if (!matches.length) {
+          return new Response(JSON.stringify({ ok: true, gatherings_deleted: 0, crews_deleted: 0, registrations_deleted: 0 }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const gatheringIds = matches.map(m => m.id);
+        const crewIds = [...new Set(matches.map(m => m.crew_id).filter(id => id !== null))];
+        const gPlaceholders = gatheringIds.map(() => '?').join(',');
+
+        const regResult = await env.DB.prepare(
+          `DELETE FROM registrations WHERE gathering_id IN (${gPlaceholders})`
+        ).bind(...gatheringIds).run();
+
+        const gathResult = await env.DB.prepare(
+          `DELETE FROM gatherings WHERE id IN (${gPlaceholders})`
+        ).bind(...gatheringIds).run();
+
+        let crewsDeleted = 0;
+        if (crewIds.length) {
+          const cPlaceholders = crewIds.map(() => '?').join(',');
+          const { results: stillUsed } = await env.DB.prepare(
+            `SELECT DISTINCT crew_id FROM gatherings WHERE crew_id IN (${cPlaceholders})`
+          ).bind(...crewIds).all();
+          const stillUsedIds = new Set(stillUsed.map(r => r.crew_id));
+          const safeToDeleteIds = crewIds.filter(id => !stillUsedIds.has(id));
+          if (safeToDeleteIds.length) {
+            const sPlaceholders = safeToDeleteIds.map(() => '?').join(',');
+            await env.DB.prepare(`DELETE FROM crew_members WHERE crew_id IN (${sPlaceholders})`).bind(...safeToDeleteIds).run();
+            const crewResult = await env.DB.prepare(`DELETE FROM crews WHERE id IN (${sPlaceholders})`).bind(...safeToDeleteIds).run();
+            crewsDeleted = crewResult.meta.changes || 0;
+          }
+        }
+
+        return new Response(JSON.stringify({
+          ok: true,
+          gatherings_deleted: gathResult.meta.changes || 0,
+          crews_deleted: crewsDeleted,
+          registrations_deleted: regResult.meta.changes || 0
+        }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error purging all Gatherings: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
