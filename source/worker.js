@@ -802,6 +802,23 @@ export default {
 
     delete payload.api_key;
 
+    // feed_only: true — skip OneSignal, write directly to KV feed.
+    // Used when invited players have no push subscriptions but still need
+    // to see the announcement when they open the portal.
+    if (payload.feed_only) {
+      const sentAt  = Date.now();
+      const kvKey   = `feed::${sentAt}`;
+      const title   = (payload.headings && (payload.headings.en || Object.values(payload.headings)[0])) || '';
+      const body    = (payload.contents && (payload.contents.en || Object.values(payload.contents)[0])) || '';
+      const type    = payload.bf_type || 'broadcast';
+      const meta    = payload.bf_meta || null;
+      const entry   = { id: `feed-${sentAt}`, key: kvKey, title, body, sentAt, type, meta };
+      await env.BF_FLAGS.put(kvKey, JSON.stringify(entry));
+      return new Response(JSON.stringify({ ok: true, feedKey: kvKey, recipients: 0 }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
     const osResp = await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
