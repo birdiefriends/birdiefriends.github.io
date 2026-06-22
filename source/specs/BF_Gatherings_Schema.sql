@@ -63,3 +63,14 @@ CREATE TABLE registrations (
 -- ============================================================
 
 ALTER TABLE gatherings ADD COLUMN gathering_type TEXT;
+
+-- ============================================================
+-- Entry 3 — 2026-06-22 — Session Dev-47
+-- Added description column (optional free-text, Host-authored). Displayed
+-- as an expandable "📋 Details ▸" section on Crew member event cards;
+-- shown inline on Host Management Panel card. Worker POST /gatherings
+-- and portal form/card wiring shipped same session (v3.16.3).
+-- Confirmed live via D1 Console, Brian, 2026-06-22.
+-- ============================================================
+
+ALTER TABLE gatherings ADD COLUMN description TEXT;
