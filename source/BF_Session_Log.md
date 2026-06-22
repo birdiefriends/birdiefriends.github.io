@@ -658,3 +658,32 @@ dedicated block for them.
 - **Host:Yes verification** — confirmed Dev-46, worth a clean retest on fresh Gathering create.
 
 **Final portal version: v3.16.13 · 2026-06-22**
+
+## Dev-47 addendum — late-session fixes (v3.16.14)
+
+**Announcement visibility fix:**
+- Root cause: host filtered out of their own `gathering_invite` announcements because `meta.invited` only contains crew members, not the host.
+- Fix: `buildAnnouncementsHTML` filter now passes if `currentPlayer` is in `meta.invited` OR is the host of that gathering (matched via `meta.gathering_id` against `gatheringData`).
+- Verified: Brian now sees all 3 test gathering announcements in his feed.
+
+**Crew name on Host Panel:**
+- Worker `GET /gatherings` now LEFT JOINs `crews` and returns `crew_name`.
+- Normalized as `crewName` in `loadGatherings`; displayed as `👥 CrewName` on host panel card.
+
+**Attachment URL / R2 discussion:**
+- Feature confirmed desirable — host has a flyer (photo or digital), crew needs to see it.
+- Paste-a-link rejected: players aren't consistently capable of the URL-copy workflow.
+- Jotform file upload acknowledged as a proven interim path (scorecard photo precedent) but a hack.
+- Decision: proper implementation is Cloudflare R2. Scoped for a future dedicated session.
+
+**Feedback button:**
+- Killed. Players can text. Avoids BirdieFriends becoming a helpdesk.
+
+**Soft-launch readiness assessment:**
+- Gatherings feature ready for soft-launch to trusted hosts with existing BF members in their crew.
+- Pre-launch checklist: (1) flip `gathering_panel_live` KV flag, (2) mark hosts with Host:Yes on Membership form.
+- Crew onboarding (spec §5) not a blocker — same manual process as any new BF member.
+- Gathering edit (#4) needed before full community open — next session priority.
+- BF Weekend Times capacity logic unsmoke-tested — real verification Thu Jun 26 morning before Sat 6/27 event.
+
+**Final portal version: v3.16.14 · 2026-06-22**
