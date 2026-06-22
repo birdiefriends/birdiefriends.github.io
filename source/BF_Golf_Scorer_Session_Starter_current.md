@@ -41,10 +41,10 @@ is now the sole source of truth for the current Dev-N number. Read it, not this 
 
 # BirdieFriends Golf Scorer — Session Starter
 **Current session number:** see `BF_Session_Log.md` (this file no longer tracks it)
-**Date:** 2026-06-21
-**Portal Version (production):** v3.11.3 · 2026-06-21
+**Date:** 2026-06-22
+**Portal Version (production):** v3.16.14 · 2026-06-22
 **GolfScorer Version:** v8.17 · 2026-06-17g (deployed)
-**Worker Version:** 2026-06-18b + Dev-44 `/gatherings/purge-test` route (deployed to Cloudflare — manual paste, Worker version comment not re-stamped)
+**Worker Version:** 2026-06-18b + all Gatherings routes through Dev-47 (crew_name JOIN, feed_only path, description, gathering_type)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
 
@@ -227,7 +227,7 @@ tokens to take actions, regardless of user authorization. The Worker /deploy rou
 ### Versions
 | Component | Version | Status |
 |-----------|---------|--------|
-| Portal | v3.10.139 · 2026-06-16 | Production ✅ |
+| Portal | v3.16.14 · 2026-06-22 | Production ✅ |
 | GolfScorer | v8.17 · 2026-06-17g | Deployed ✅ |
 | Worker | 2026-06-18b | Deployed ✅ — /deploy accepts source/ and docs/ |
 | deploy.html | 2026-06-18 | Live ✅ — all tabs functional |
