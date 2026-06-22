@@ -457,3 +457,29 @@ first (small, well-scoped, schema already in place), then the remaining Dev-44
 items (Crew onboarding, still flagged security-sensitive) whenever there's a
 dedicated block for them.
 
+
+## Session Dev-46 · 2026-06-22
+
+**Focus:** `gathering_type` wiring — the carry-forward item from Dev-45 (schema column already in D1, wiring not yet built).
+
+**What happened:**
+- **Worker (`worker.js`):** `POST /gatherings` destructure extended to include `gathering_type`; INSERT column list and `.bind()` updated to persist it (nullable — existing Gatherings without a type unaffected; `GET /gatherings` `SELECT *` already picked it up automatically).
+- **Portal (`docs/portal.html` + `source/portal.html`, v3.13.3):**
+  - `loadGatherings()` maps `g.gathering_type` → `gatheringType` on the normalized event object.
+  - `showNewGatheringForm()` — new **Format** dropdown added under ⛳ The Basics (between date/time/size row and "Who's Coming"). Options: Individual Play, 4 Man Scramble, 2 Man Scramble, 1 Man Scramble, Best Ball, Match Play, Stroke Play. Optional field — passes `null` if left blank.
+  - `submitNewGathering()` reads `host-new-type` and includes `gathering_type` in the POST body.
+  - `buildEventCard()` — shows `⛳ {gatheringType}` as a meta-line on the Gathering event card when set.
+  - `renderHostPanelList()` — shows `⛳ {gatheringType}` under the date/time line in the Host panel list when set.
+- **`source/portal_version.txt`** updated to v3.13.3 · 2026-06-22.
+- All three files deployed via Worker `/deploy` route (commits `d33e95f`, `6f6aa80`, `4550321`).
+
+**Artifacts created/updated:**
+- `source/worker.js` — `gathering_type` added to `POST /gatherings` (deployed by Brian via Cloudflare dashboard)
+- `docs/portal.html` + `source/portal.html` — v3.13.3
+- `source/portal_version.txt` — v3.13.3 · 2026-06-22
+
+**Carry-forward for next session:**
+- Further test & enhance work on the Gatherings Host panel (Brian's call at session close — more to do, budget ran out).
+- Crew onboarding (Dev-44 #2) — still untouched, still flagged security-sensitive, still warrants its own dedicated session.
+
+**Session closed at near-full budget** — single focused item fully shipped.
