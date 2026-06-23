@@ -554,3 +554,165 @@ Run in D1 Console before deploying Worker routes.
   "Save as Template?" line disappear from that Gathering's post-create state on
   subsequent views, or stay (allowing re-save after crew edits)? Lean: hide after
   first save to reduce noise, but allow re-template from the ⋯ secondary action.
+
+---
+
+## 21. Gathering Edit (Dev-48)
+
+### Scope
+
+Host can edit a Gathering's metadata after creation. Crew membership is explicitly
+excluded from edit scope — "Invite Others" (Dev-46, `POST /crews/:id/members/add`) is
+the established path for crew expansion; removing a confirmed player is not supported
+(socially loaded, operationally messy, and not a realistic Host need at this scale).
+
+**Editable fields:**
+- Title
+- Venue
+- Date / Time
+- Capacity
+- Golf Format (`gathering_type`)
+- Description
+
+**Not editable via Edit:** Crew membership, Host, Gathering ID, status.
+
+### Date/Time Change — Full Re-confirmation Flow
+
+A date/time change is the highest-impact edit: players said Yes to a *specific* date.
+The system treats it as a material change requiring explicit re-confirmation from the
+crew, mirroring the IRL instinct to text the group when plans shift.
+
+**On save with a changed date/time:**
+
+1. **Automatic push notification** to all crew members (full crew, not just Yes
+   responders — Sub and No players need to know too; a No might become a Yes on the
+   new date):
+   > *"📅 [Title] has moved to [new date/time]. Please re-confirm — tap to update
+   > your response."*
+   Notification deep-links to `portal.html` (existing pattern).
+
+2. **Stale-response flag** set on all existing registrations for this Gathering.
+   D1: new `confirmed_for` column on `registrations` stores the `date_time` value
+   at the time of the player's last response. On load, `loadGatherings()` compares
+   `confirmed_for` against the Gathering's current `date_time` — a mismatch marks
+   the registration stale client-side. No D1 values are cleared or reset; the
+   player's last answer (Yes/Sub/No) is preserved and visible to the Host as
+   historical context ("4 said Yes — before the date changed").
+
+3. **Card banner** on each crew member's Gathering card:
+   > *"📅 Date changed — please re-confirm"*
+   Shown whenever the player's `confirmed_for` doesn't match the Gathering's current
+   `date_time`. Disappears the moment they tap Yes, Sub, or No (which writes the
+   current `date_time` into `confirmed_for`). This is the safety net for players who
+   miss the push notification — assumes the least attentive player, benefits everyone.
+
+**Design principle:** old response is never silently discarded. Host always sees what
+the crew said *before* the change, clearly labeled as pre-change. Players always see
+a prompt that tells them exactly what happened and what to do next.
+
+### Capacity Change Guards
+
+**Reducing capacity below current Yes count:**
+Soft warning — not a hard block. Host sees a modal:
+> *"X players have already confirmed. Reduce capacity anyway?"*
+Host confirms → capacity updates, no registrations touched. Host owns the mismatch
+(social text, Invite Others to expand crew, etc.). BF Weekend 48hr-lock/fivesome
+logic is not involved — Gatherings never used it.
+
+**Raising capacity:** Silent, no notification. A Host finding more room is good news
+the crew doesn't need to be alerted about.
+
+**Lowering capacity, no conflict (below current Yes count not reached):** Silent.
+
+### Worker API
+
+**New route:**
+
+| Route | Purpose |
+|---|---|
+| `PATCH /gatherings/:id` | Update editable fields — host ownership verified server-side. Returns `{ ok, dateChanged }` so portal knows whether to trigger re-confirmation flow. |
+
+Request body (all fields optional — only send what changed):
+```json
+{
+  "host_id": "...",
+  "title": "...",
+  "venue": "...",
+  "date_time": "...",
+  "capacity": 8,
+  "gathering_type": "...",
+  "description": "..."
+}
+```
+
+Server logic:
+- Verify `host_id` matches `gatherings.host_id` — 403 if not
+- Build dynamic `UPDATE` from only the fields present in the body
+- Compare incoming `date_time` against stored value — set `dateChanged: true` in
+  response if different
+- If `dateChanged`: Worker fires `osSendToPlayers` for the full crew (existing
+  push pattern)
+
+**Schema migration — `registrations` table:**
+
+Entry 5 in `source/specs/BF_Gatherings_Schema.sql`:
+```sql
+-- Entry 5 · Dev-48 · 2026-06-23
+-- Stale-response tracking: store the date_time the player responded to.
+-- Client compares against gathering's current date_time to detect post-edit staleness.
+ALTER TABLE registrations ADD COLUMN confirmed_for TEXT;
+```
+
+Existing registrations get `confirmed_for = NULL` — treated as non-stale (no
+retroactive confusion for existing confirmed players).
+
+### Portal UX
+
+**Entry point:** "✏️ Edit" button on each Gathering card in the Host panel list view,
+alongside the existing "➕ Invite Others" and "Cancel Gathering" actions.
+
+**Edit form:** Same visual as the create form (reuses `showNewGatheringForm()` structure),
+pre-populated with current values. Date/time fields pre-filled (unlike the template
+flow where date is always blank). Clear header: "Edit Gathering."
+
+**On save:**
+1. `PATCH /gatherings/:id`
+2. If `dateChanged` in response:
+   - Show confirmation: *"Date updated. Crew notified to re-confirm."*
+   - Re-render crew member cards with stale-response banner logic active
+3. If capacity conflict detected client-side (new capacity < current Yes count):
+   - Show warning modal before sending the PATCH
+   - Host confirms → PATCH sent; Host dismisses → form stays open
+4. Refresh Host panel via `refreshGatherings()`
+
+**Card banner implementation (`buildEventCard`):**
+```javascript
+// Stale-response check — runs for Gathering cards on the crew-member side
+if (evt.source === 'gathering' && reg && reg.confirmedFor &&
+    reg.confirmedFor !== evt.dateTime) {
+  // Show banner: "📅 Date changed — please re-confirm"
+}
+```
+`confirmedFor` written to D1 `registrations.confirmed_for` on every Yes/Sub/No tap
+(existing `submitGatheringRegistration` / `changeGatheringRegistration` — add field
+to the POST body, Worker upsert picks it up).
+
+### Build Sequence
+
+1. Run `ALTER TABLE registrations ADD COLUMN confirmed_for TEXT` in D1 Console
+2. Mirror to `BF_Gatherings_Schema.sql` (Entry 5) → push
+3. Add `PATCH /gatherings/:id` to `worker.js`:
+   - Host auth check
+   - Dynamic UPDATE builder
+   - Date-change detection → `osSendToPlayers` for full crew
+   - Return `{ ok, dateChanged }`
+4. Update `POST /registrations` Worker upsert to persist `confirmed_for`
+5. Push `worker.js` → Brian pastes to Cloudflare
+6. Portal:
+   a. `submitGatheringRegistration` / `changeGatheringRegistration` — include
+      current `evt.dateTime` as `confirmed_for` in POST body
+   b. `loadGatherings()` — map `r.confirmed_for` → `confirmedFor` on reg object
+   c. `buildEventCard()` — stale-response banner when `confirmedFor !== evt.dateTime`
+   d. Host panel: "✏️ Edit" button + `showEditGatheringForm()` (pre-populated create form)
+   e. Capacity conflict guard (client-side, before PATCH fires)
+   f. Post-save confirmation messaging
