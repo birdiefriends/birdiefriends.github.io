@@ -7470,6 +7470,9 @@ function renderHostEntryPoint() {
   if (!el) return;
   if (!GATHERING_PANEL_LIVE) { el.innerHTML = ''; return; }  // Dev-45 — off until toggled on via Admin
   if (!currentPlayer || isGuest()) { el.innerHTML = ''; return; }
+  // Only show to members marked Host:Yes — non-hosts shouldn't see the entry point
+  const myMemberRec = memberData.find(m => m.display === currentPlayer);
+  if (!myMemberRec || myMemberRec.host !== 'Yes') { el.innerHTML = ''; return; }
   const mine = gatheringData.filter(g => g.hostId === currentPlayer);
   const label = mine.length
     ? `🏌️ My Gatherings — hosting ${mine.length}`
