@@ -213,15 +213,15 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled, gathering_type, description } = body;
+      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled, gathering_type, description, tee_time_status } = body;
       if (!host_id || !title || !event_time) {
         return new Response(JSON.stringify({ error: 'host_id, title, and event_time are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       try {
         const result = await env.DB.prepare(
-          `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, gathering_type, description)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`
-        ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0, gathering_type || null, description || null).run();
+          `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, gathering_type, description, tee_time_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`
+        ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0, gathering_type || null, description || null, tee_time_status || 'confirmed').run();
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -336,7 +336,7 @@ export default {
         }
 
         // Build dynamic UPDATE — only set fields present in the request body.
-        const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description'];
+        const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description', 'tee_time_status'];
         const setClauses = [];
         const binds = [];
         for (const field of allowed) {
