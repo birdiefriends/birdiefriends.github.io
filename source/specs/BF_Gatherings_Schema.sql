@@ -99,3 +99,13 @@ CREATE TABLE IF NOT EXISTS member_preferences (
 -- ============================================================
 
 ALTER TABLE gatherings ADD COLUMN tee_time_status TEXT NOT NULL DEFAULT 'confirmed';
+
+-- ============================================================
+-- Entry 6 — 2026-06-23 — Session Dev-49 (addendum)
+-- Added host_note column to registrations table.
+-- Optional free-text message from crew member to host, submitted
+-- alongside Yes/No/Sub response. Shown in Host Management Panel
+-- per-player response detail. Blank/null = no note.
+-- ============================================================
+
+ALTER TABLE registrations ADD COLUMN host_note TEXT;
