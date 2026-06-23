@@ -103,3 +103,68 @@
 
 **Final portal version: v3.16.30 · 2026-06-23**
 **Dev-48 fully closed.**
+
+---
+
+## Session Dev-49 · 2026-06-23
+
+**Focus:** Gathering crew notification controls, member preferences, filter engine, Host UX polish, Gatherings announcement draft.
+
+**Opening incident — Shamwedensday:**
+- Mohamed Walli found the Dev Controls panel (left on by Brian), created "Shamwedensday" gathering, registered himself. Purged via `POST /gatherings/purge-all` with `host_id: "Mohamed Walli"`. No D1 admin tools in portal — flagged as Dev-50 opener.
+- Walli's instinct was valid: "I just want to find anyone to play" = the open broadcast use case. Proved the need before launch.
+
+**Gathering crew notification controls — full implementation:**
+
+**Architecture decisions:**
+- `bfw=Yes` (commissioner channel) kept separate from Gathering open broadcasts — needs its own opt-in field.
+- New Jotform Membership field: **GatheringAlerts** (QID 26, field name `gatheringalerts`), hidden, Yes/No. Default: Yes (opt-out model — blank = Yes in parser).
+- Two hosting modes: **Invite a Crew** (named crew, targeted notify) vs **Open to Members** (`fill_list_enabled=true`, notifies all `gatheringAlerts=Yes` members).
+- Notification type `gathering_open_invite` added for open broadcasts — separate from `gathering_invite` (crew-only).
+
+**Worker changes (deployed, paste confirmed):**
+- `GET /gatherings` — `?gathering_alerts=true` param: includes `fill_list_enabled=1` Gatherings in results.
+- `POST /gatherings/:id/cancel` — moved notifications Worker-side. Crew mode: notifies full `crew_members` via OneSignal tag filter. Open mode: notifies Yes/Sub registrants only. Removes stale `gatheringRegData` dependency.
+- `GET /members/:player_id/prefs` — fetch Tier-2 prefs from `member_preferences` D1.
+- `PUT /members/:player_id/prefs` — upsert Tier-2 prefs.
+
+**D1 migration (Entry 4, run by Brian):**
+- `member_preferences` table: `player_id TEXT PK, prefs TEXT DEFAULT '{}', updated_at TEXT`.
+
+**Portal changes (v3.16.31 → v3.16.41):**
+- `memberData` parser: `gatheringAlerts` field from QID 26. Opt-out default: blank = Yes.
+- `loadGatherings`: passes `&gathering_alerts=true/false`; fetches `member_preferences` prefs before filtering; `fillListEnabled` added to gatheringData normalization.
+- **Create form mode selector**: 👥 Invite a Crew / 📢 Open to Members pill buttons with subtitles ("Pick specific people" / "Anyone available can join"). `_hostMode` state var. `setHostMode()` shows/hides crew picker vs open explanation.
+- `submitNewGathering`: open mode skips crew creation, notifies all `gatheringAlerts=Yes` members with `gathering_open_invite` type. Crew validation and capacity check gated to crew mode only.
+- Cancel: portal-side notification removed — Worker handles it.
+- `buildAnnouncementsHTML`: `gathering_open_invite` visible to `gatheringAlerts=Yes` members only.
+- **⚙️ Gear button**: now visible to all logged-in non-guest members (was commissioner-only). `updateAdminNav()` updated. Title changed to "Settings".
+- **screen-admin restructure**: My Preferences section above Commissioner Admin. Commissioner admin cards wrapped in `#commissioner-admin-section` div, hidden for non-commissioners. `showScreen('admin')` toggles visibility based on `isCommissioner()`.
+- **My Preferences card**: 🔔 Gathering Alerts toggle (On/Off, writes to Jotform QID 26 via edit API, optimistic update + revert on failure). Filter panel shown when Alerts is On.
+- **Declarative filter engine** (`gatheringFilters` rule array in `member_preferences`):
+  - `FILTER_FIELDS`: day, time, format, venue, capacity, host extractors.
+  - `FILTER_OPS`: in, nin, eq, neq, gte, lte.
+  - `gatheringMatchesFilters(g, filters)` — AND logic across rules, pass-through on unknown field/op or null value.
+  - **Exclusion paradigm** (opt-out): all chips green by default, tap to exclude. Rules use `op: 'nin'`. Empty rule array = all Gatherings visible.
+  - Three filter dimensions in UI: 📅 Day (Mon–Sun chips), ⏰ Time (Morning/Afternoon/Evening), ⛳ Format (Individual/4-Man/2-Man/Best Ball/Match Play).
+  - Hint text: "All open Gatherings visible" or "Hiding: Days: Mon, Tue · Formats: Match Play".
+  - Instruction: "Everything is on by default. Tap to hide..."
+  - `toggleFilterChip()` — adds/removes values from nin exclusion rules, drops rule when empty, saves to D1, re-runs `refreshGatherings()`.
+  - `renderFilterPanel()` — renders chip states and hint from current `_memberPrefs`.
+- **Active restore fix**: `restoreActiveIfNeeded()` now wired to `submitRegistration` (Jotform events) on Yes/Sub, not just Gathering registrations. Mike Nagle diagnosed as trigger for fix.
+
+**Announcement drafted (ready to send when gathering_panel_live flipped):**
+- Push + portal announcement card to be sent manually via Admin → Push Notification to All Members.
+- Copy locked. Signed off: "More golf. Less group chat. / Questions or feedback? Text Brian."
+
+**Carry-forward for Dev-50:**
+- **D1 admin tools** (priority — must have before real Gathering volume): portal Commissioner Admin card showing all active Gatherings (any host), per-Gathering registration detail, delete button (PIN-gated). Also: member_preferences viewer (who has Gathering Alerts on, what filters set).
+- Flip `gathering_panel_live` KV flag → send announcement.
+- Venue dropdown (D1-backed: BSGC, Whitetail, Moselem Springs, Other).
+- Gathering Templates implementation (§20).
+- deploy.html — copy instruction to BFM repair (flagged Dev-48 close).
+- Gathering attachments via R2 (backlog).
+- Crew onboarding spec §5 (own session).
+
+**Final portal version: v3.16.41 · 2026-06-23**
+**Dev-49 fully closed.**
