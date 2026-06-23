@@ -7815,6 +7815,14 @@ async function submitEditGathering(gatheringId) {
 
   const newEventTime = new Date(`${dateVal}T${timeVal}:00`);
   if (isNaN(newEventTime.getTime())) { showToast('Invalid date or time', true); return; }
+  // Build a local ISO string (no UTC shift) — D1 stores as text; display parses
+  // with new Date() which treats a Z-suffixed string as UTC. Sending local avoids
+  // the 4-hour Eastern-offset error seen when using toISOString() directly.
+  const off = -newEventTime.getTimezoneOffset();
+  const offSign = off >= 0 ? '+' : '-';
+  const offH = String(Math.floor(Math.abs(off)/60)).padStart(2,'0');
+  const offM = String(Math.abs(off)%60).padStart(2,'0');
+  const localEventTimeISO = `${dateVal}T${timeVal}:00${offSign}${offH}:${offM}`;
 
   // Capacity soft-warning: if reducing below current Yes count, prompt first
   if (size) {
@@ -7832,7 +7840,7 @@ async function submitEditGathering(gatheringId) {
     const patchBody = {
       host_id: currentPlayer,
       title, venue: venue || null,
-      event_time: newEventTime.toISOString(),
+      event_time: localEventTimeISO,
       gathering_type: gatheringType,
       description
     };
@@ -8286,7 +8294,13 @@ async function submitNewGathering() {
     }
   }
 
-  const eventTime = new Date(`${dateVal}T${timeVal}:00`);
+  // Build local ISO string (no UTC shift) — same pattern as submitEditGathering
+  const _etRaw = new Date(`${dateVal}T${timeVal}:00`);
+  const _off = -_etRaw.getTimezoneOffset();
+  const _offSign = _off >= 0 ? '+' : '-';
+  const _offH = String(Math.floor(Math.abs(_off)/60)).padStart(2,'0');
+  const _offM = String(Math.abs(_off)%60).padStart(2,'0');
+  const eventTime = `${dateVal}T${timeVal}:00${_offSign}${_offH}:${_offM}`;
   const btn = document.getElementById('btn-submit-gathering');
   if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); }
 
@@ -8313,7 +8327,7 @@ async function submitNewGathering() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         host_id: currentPlayer, title, venue: venue || null,
-        event_time: eventTime.toISOString(), size, crew_id: crewId, fill_list_enabled: false,
+        event_time: eventTime, size, crew_id: crewId, fill_list_enabled: false,
         gathering_type: gatheringType,
         description
       })
