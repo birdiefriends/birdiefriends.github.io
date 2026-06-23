@@ -76,3 +76,19 @@
 - deploy.html — copy instruction to BFM lost (Brian flagged at session close, repair next session)
 - Gathering attachments via R2 (backlog)
 - Crew onboarding spec §5 (own dedicated session, security-sensitive)
+
+## Dev-48 addendum 2 — final session work (v3.16.24 → v3.16.27)
+
+**Action sub-bar (seamless header extension):**
+- Moved all action icons out of the header into a sticky sub-bar below it — same dark green, seamless visual, works on any phone width regardless of screen size. Solves the player-pill overflow issue seen on other members' phones.
+- Header now: brand left · 🔕 Bell + Player Pill right (bell moved here — tied to player identity/PWA setup)
+- Sub-bar: 👥 Gather (orange circle, labeled) · 🆕 New (blue pill with count) · ⓘ About · ⚙️ Gear
+- Gather: orange circle badge (`#E8711A`) with "Gather" label — distinctive, action-oriented
+- New: blue pill (`#2980B9`) — matches existing blue that players recognized from the old header button
+
+**About page cleanup:**
+- Removed "Request an Event" card — no longer relevant now that Gatherings handles self-service hosting
+
+**Final portal version: v3.16.27 · 2026-06-23**
+
+**Dev-48 fully closed.**
