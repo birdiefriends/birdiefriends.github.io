@@ -544,6 +544,25 @@
     </div>
 
     <div id="copy-confirm" style="display:none;margin-top:16px;text-align:center;color:var(--gold);font-size:13px;">✅ Copied — paste into Claude</div>
+
+    <div class="section-header" style="margin-top:28px;">Start a BizPlan session</div>
+
+    <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Use this to start a session focused on the BirdieFriends business plan (BP-N track).</p>
+
+    <div class="info-chip" style="margin-bottom:8px;font-family:var(--mono);font-size:12px;line-height:1.6;word-break:break-all;">
+      Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/bizplan/BF_BizPlan_Bootstrap.md and follow all instructions in it exactly.
+    </div>
+    <p style="color:var(--muted);font-size:11px;margin:0 0 20px;">A unique cache-buster is appended automatically when copied.</p>
+
+    <button class="btn btn-primary" style="width:100%;margin-bottom:24px;" onclick="copyBizPlanCommand()">
+      📋 Copy BizPlan Session Command
+    </button>
+
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
+      <a href="https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/bizplan/BF_BizPlan_Bootstrap.md" target="_blank" class="btn btn-ghost" style="text-align:center;text-decoration:none;">View BizPlan Bootstrap in Library ↗</a>
+    </div>
+
+    <div id="copy-confirm-biz" style="display:none;margin-top:16px;text-align:center;color:var(--gold);font-size:13px;">✅ Copied — paste into Claude</div>
   </div>
 
   <!-- ── DEPLOY TAB ─────────────────────────────────────────────── -->
@@ -698,6 +717,24 @@ function copySessionCommand() {
     document.execCommand('copy'); document.body.removeChild(ta);
     showCopyConfirm();
   });
+}
+function copyBizPlanCommand() {
+  const cb = Date.now();
+  const cmd = `Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/bizplan/BF_BizPlan_Bootstrap.md?cb=${cb} and follow all instructions in it exactly.`;
+  navigator.clipboard.writeText(cmd).then(() => {
+    showCopyConfirmBiz();
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = cmd; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showCopyConfirmBiz();
+  });
+}
+function showCopyConfirmBiz() {
+  const el = document.getElementById('copy-confirm-biz');
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 3000);
 }
 function showCopyConfirm() {
   const el = document.getElementById('copy-confirm');
