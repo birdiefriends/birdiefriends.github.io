@@ -92,3 +92,14 @@
 **Final portal version: v3.16.27 · 2026-06-23**
 
 **Dev-48 fully closed.**
+
+## Dev-48 addendum 3 — closing polish (v3.16.28 → v3.16.30)
+
+- Golf Format select styled to match white field treatment (both create and edit forms)
+- Gathering create form: Date, Time, Capacity marked required (*); capacity validated on submit
+- Placeholders cleaned up: Title → "Name your Gathering", Description → "Share something interesting with the crew.", Venue → "BSGC" (no e.g.)
+- Venue dropdown (D1-backed venues table) flagged as Dev-49 backlog — BSGC, Whitetail, Moselem Springs, Other
+- deploy.html Claude tab: BizPlan session start section restored (was missing)
+
+**Final portal version: v3.16.30 · 2026-06-23**
+**Dev-48 fully closed.**
