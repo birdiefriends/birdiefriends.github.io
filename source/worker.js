@@ -565,21 +565,23 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { gathering_id, player_id, status, confirmed_for } = body;
+      const { gathering_id, player_id, status, confirmed_for, host_note } = body;
       if (!gathering_id || !player_id || !['yes','no','sub'].includes(status)) {
         return new Response(JSON.stringify({ error: 'gathering_id, player_id, and status (yes/no/sub) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       try {
         // confirmed_for stores the event_time the player responded to.
         // Portal uses it to detect stale responses after a date change (Dev-48).
+        // host_note is an optional free-text message from crew to host (Dev-49).
         await env.DB.prepare(
-          `INSERT INTO registrations (gathering_id, player_id, status, registered_at, confirmed_for)
-           VALUES (?, ?, ?, datetime('now'), ?)
+          `INSERT INTO registrations (gathering_id, player_id, status, registered_at, confirmed_for, host_note)
+           VALUES (?, ?, ?, datetime('now'), ?, ?)
            ON CONFLICT (gathering_id, player_id) DO UPDATE SET
              status = excluded.status,
              registered_at = excluded.registered_at,
-             confirmed_for = excluded.confirmed_for`
-        ).bind(gathering_id, player_id, status, confirmed_for || null).run();
+             confirmed_for = excluded.confirmed_for,
+             host_note = excluded.host_note`
+        ).bind(gathering_id, player_id, status, confirmed_for || null, host_note || null).run();
         return new Response(JSON.stringify({ ok: true, gathering_id: Number(gathering_id), player_id, status }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -594,7 +596,7 @@ export default {
       const gatheringId = url.pathname.split('/')[2];
       try {
         const { results } = await env.DB.prepare(
-          `SELECT player_id, status, registered_at, confirmed_for FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
+          `SELECT player_id, status, registered_at, confirmed_for, host_note FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
         ).bind(gatheringId).all();
         return new Response(JSON.stringify({ ok: true, registrations: results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
