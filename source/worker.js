@@ -318,8 +318,29 @@ export default {
             const notifyIds = crewMembers.map(r => r.player_id).filter(id => id !== host_id);
             if (notifyIds.length) {
               const newTitle = Object.prototype.hasOwnProperty.call(body, 'title') ? body.title : gathering.title;
-              const newDt    = new Date(body.event_time);
-              const dateStr  = newDt.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+              // Parse date/time directly from the ISO string the portal sends
+              // (e.g. "2026-06-25T11:00:00-04:00") — Workers run in UTC so
+              // toLocaleDateString() would shift the hour. Extract wall-clock
+              // components from the string itself instead.
+              const etStr   = body.event_time; // e.g. "2026-06-25T11:00:00-04:00"
+              const etParts = etStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+              let dateStr;
+              if (etParts) {
+                const [,yr,mo,dy,hr,mn] = etParts;
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const days   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                // Use UTC date object just for day-of-week (date part is unambiguous)
+                const dowDt  = new Date(`${yr}-${mo}-${dy}T12:00:00Z`);
+                const dow    = days[dowDt.getUTCDay()];
+                const mon    = months[parseInt(mo,10)-1];
+                const h24    = parseInt(hr,10);
+                const h12    = h24 % 12 || 12;
+                const ampm   = h24 < 12 ? 'AM' : 'PM';
+                const minStr = mn === '00' ? '' : `:${mn}`;
+                dateStr = `${dow}, ${mon} ${parseInt(dy,10)}, ${h12}${minStr} ${ampm}`;
+              } else {
+                dateStr = new Date(etStr).toUTCString(); // fallback
+              }
               // Fire-and-forget to Worker's own POST / route — same pattern as cancel/invite
               const notifyPayload = {
                 app_id: env.OS_APP_ID,
