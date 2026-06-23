@@ -4295,7 +4295,7 @@ function buildEventCard(evt, isPast) {
       </div>`;
     }
   } else if (!isPast) {
-    actionHtml = buildActionButtons(evt, myReg, capStatus);
+    actionHtml = buildActionButtons(evt, myReg, capStatus, isStaleResponse);
   }
 
   const subCount  = regData.filter(r => r.eventName === evt.name && r.status === 'Sub').length;
@@ -5055,7 +5055,7 @@ function _runToastUndo() {
 // ── Build action buttons for a card ───────────────────────────────
 // Returns HTML string. Handles all states:
 //   unregistered (open/sub/waitlist/locked) and registered (Yes/Sub → change)
-function buildActionButtons(evt, myReg, capStatus) {
+function buildActionButtons(evt, myReg, capStatus, isStaleResponse) {
   // GATHERINGS — explicit three-way crew response (Yes / Sub / No), always
   // all three available regardless of capacity. Sub here is a deliberate
   // standing-backup choice ("I'll play as a last resort" — Brian's Whitetail/
@@ -5063,6 +5063,28 @@ function buildActionButtons(evt, myReg, capStatus) {
   // capacity-driven Sub is. Bypasses the Series lock/fivesome logic entirely
   // — none of it applies to Gatherings. Dev-45 round 3.
   if (evt.source === 'gathering') {
+    // Stale response (date changed after player responded) — always show the
+    // full three-way picker so there's something to actually tap. The banner
+    // above says "Tap Yes, Sub, or No below" — the buttons need to be there.
+    if (isStaleResponse) {
+      const waitlistNote = capStatus.isWaitlist
+        ? `<div class="cap-note">Gathering is at capacity — Register still adds you to the waitlist, or pick I Can Sub to be on standby.</div>`
+        : '';
+      return `
+        ${waitlistNote}
+        <button class="btn btn-register-yes"
+          onclick="submitRegistration('${evt.id}','${evt.name.replace(/'/g,"\\'")}',this,'Yes')">
+          ⛳ Yes, I'm In
+        </button>
+        <button class="btn btn-register-sub" style="margin-top:8px"
+          onclick="submitRegistration('${evt.id}','${evt.name.replace(/'/g,"\\'")}',this,'Sub')">
+          🔄 I Can Sub
+        </button>
+        <button class="btn btn-register-no" style="margin-top:8px"
+          onclick="submitRegistration('${evt.id}','${evt.name.replace(/'/g,"\\'")}',this,'No')">
+          ✕ Can't Make It
+        </button>`;
+    }
     if (myReg && myReg.status !== 'No') {
       const myDisp = getMyCapacityDisplay(evt, myReg, capStatus);
       const icon   = myDisp ? myDisp.icon  : (myReg.status === 'Sub' ? '🔄' : '✅');
