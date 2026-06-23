@@ -74,3 +74,18 @@ ALTER TABLE gatherings ADD COLUMN gathering_type TEXT;
 -- ============================================================
 
 ALTER TABLE gatherings ADD COLUMN description TEXT;
+
+-- ============================================================
+-- Entry 4 — 2026-06-23 — Session Dev-49
+-- Added member_preferences table for Tier-2 notification prefs.
+-- Binary Gathering Alerts gate lives in Jotform QID 26 (gatheringalerts).
+-- This table stores richer per-member preferences (days/times/venues)
+-- for future Tier-2 matching — JSON blob in `prefs` column.
+-- Worker routes: GET /members/:player_id/prefs, PUT /members/:player_id/prefs.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS member_preferences (
+  player_id  TEXT PRIMARY KEY,
+  prefs      TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
