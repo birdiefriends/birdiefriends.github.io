@@ -89,3 +89,13 @@ CREATE TABLE IF NOT EXISTS member_preferences (
   prefs      TEXT NOT NULL DEFAULT '{}',
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ============================================================
+-- Entry 5 — 2026-06-23 — Session Dev-49 (addendum)
+-- Added tee_time_status column to gatherings table.
+-- Values: 'confirmed' (default) | 'suggested' (host still working it out).
+-- Shown on crew cards as "(suggested)" beside the time when not confirmed.
+-- Worker: POST /gatherings insert + PATCH /gatherings/:id allowed fields updated.
+-- ============================================================
+
+ALTER TABLE gatherings ADD COLUMN tee_time_status TEXT NOT NULL DEFAULT 'confirmed';
