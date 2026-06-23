@@ -42,3 +42,37 @@
 - BF Weekend Times capacity smoke test — before Sat Jun 27 event
 - Gathering attachments via R2 (backlog)
 - Crew onboarding spec §5 (own dedicated session, security-sensitive)
+
+## Dev-48 addendum — late-session work (v3.16.19 → v3.16.23)
+
+**BL-18 fix — Gathering registration restores InActive members:**
+- New `restoreActiveIfNeeded()` helper fires immediately on Yes/Sub Gathering registration — writes `submission[22]: Active` to Jotform Membership, updates local `memberData`. Best-effort, non-blocking.
+- `runInactivityCheck` daily batch extended to include `gatheringRegData` future Yes/Sub registrations when evaluating restore eligibility. Both paths now consistent.
+- Confirmed live: Test1 registered Yes for a Gathering → flipped to Active in Jotform immediately.
+
+**Model shift — Gatherings open to all BF members:**
+- Host:Yes gate removed from `renderHostEntryPoint`. Any logged-in BF member sees the 🏌️ header icon when `gathering_panel_live` is on.
+- Auto-promote to Host:Yes on first successful Gathering create remains — it's now tracking, not access control.
+- Rationale: intended model at scale is any member can host; Host:Yes gate was a dev-period safety measure, not a permanent design.
+
+**Header icon entry point:**
+- 🏌️ button added to header bar (alongside ⚙️ gear, ⓘ about, 🔕 bell). Tapping opens Host panel directly from anywhere in the app. Shown only when `gathering_panel_live` is on and player is logged in.
+- Home screen "My Gatherings" row removed — header icon is the sole entry point now.
+
+**Announcement privacy extended:**
+- `gathering_date_changed` and `gathering_cancelled` types now crew-scoped in `buildAnnouncementsHTML` (was `gathering_invite` only). Confirmed Scott no longer sees Woodloch Play Day date-change announcements.
+
+**eventTime string/Date split fix:**
+- `submitNewGathering` — `eventTime` was changed to a local ISO string for the POST body, but `formatDate()`/`formatTime()` calls still treated it as a Date object → `dt.toLocaleDateString is not a function` error on Gathering create. Fixed: `eventTimeDate` Date object kept for all formatting; `eventTime` string used only for POST body and `rawEventTime` storage.
+
+**Final state:**
+- Portal: v3.16.23 · 2026-06-23
+- `gathering_panel_live` KV flag: still `false` — ready to flip
+- BF Weekend Times smoke test: deferred to IRL Thu Jun 26 (5th-man gate confirmed working in prior test)
+
+**Carry-forward for Dev-49:**
+- Flip `gathering_panel_live` → Gatherings live for all members
+- Gathering Templates implementation (§20)
+- deploy.html — copy instruction to BFM lost (Brian flagged at session close, repair next session)
+- Gathering attachments via R2 (backlog)
+- Crew onboarding spec §5 (own dedicated session, security-sensitive)
