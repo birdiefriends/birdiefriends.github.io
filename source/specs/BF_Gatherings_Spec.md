@@ -397,3 +397,160 @@ Storage (D1), the reach model (§4 funnel), Host-initiated onboarding (§5 — s
 - **#2 — Crew onboarding** (§5) — stub Membership creation, cell-based de-dup, `Pending` status, claim-link via KV. Flagged as the most security-sensitive piece in the whole spec (writes into the live, shared Membership roster); warrants its own dedicated session rather than a tail-end add-on.
 
 §13 (operational fix scaling / Claude-as-proxy) and §5's picker-narrowing-at-scale note remain flagged for future sessions, neither blocking MLP.
+
+---
+
+## 20. Gathering Templates (Dev-48)
+
+### Background
+
+Initially scoped out of MLP. Reconsidered in Dev-48 after identifying a real recurring
+need: Chooch and Tony each host semi-regular groups — same crew, same venue/format,
+irregular schedule (weather/availability driven, not calendar-rigid). A traditional
+calendar recurrence model (auto-generate future events) was evaluated and rejected.
+The correct model mirrors how saved Crews work: **pull, not push.** The Host decides
+when to use a template; the system never auto-creates events.
+
+### Why Template, Not Calendar Recurrence
+
+| Calendar recurrence | Template model |
+|---|---|
+| Generates future events automatically | Host pulls a template when ready |
+| Rigid schedule breaks on weather/cancellation | No stale future events |
+| Hard to adjust crew per-instance | Crew loads into picker, fully editable before create |
+| Implies commitment to a schedule | Just a starting point — Host owns the decision |
+
+### Data Model
+
+**New D1 table: `gathering_templates`**
+
+```sql
+CREATE TABLE gathering_templates (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  host_id     TEXT    NOT NULL,
+  name        TEXT    NOT NULL,
+  title       TEXT    NOT NULL,
+  venue       TEXT,
+  capacity    INTEGER,
+  gathering_type TEXT,
+  description TEXT,
+  crew_snapshot TEXT,  -- JSON array of player IDs snapshotted at save time
+  created_at  TEXT    DEFAULT (datetime('now'))
+);
+```
+
+**Crew snapshot, not live crew reference.** When a template is saved, the current
+crew member IDs are serialized into `crew_snapshot`. When the template is used, those
+IDs are resolved against current `memberData` and loaded into the picker. Players who
+left BirdieFriends since the template was made are silently dropped (no ID match);
+players whose names changed are fine (ID resolves to current record). Host can
+add/remove anyone in the picker before creating — the template is a starting point,
+not a constraint.
+
+**Date and time are never stored in a template.** They are always blank when the
+"Use Template" form opens. The date is the one field that always needs to change;
+pre-filling it creates a silent-error risk (Host forgets to change it).
+
+### Worker API Routes
+
+| Route | Purpose |
+|---|---|
+| `POST /gathering-templates` | Save a new template — `host_id`, `name`, `title`, `venue`, `capacity`, `gathering_type`, `description`, `crew_snapshot` (JSON) |
+| `GET /gathering-templates?host_id=X` | List a host's templates — returns all fields |
+| `DELETE /gathering-templates/:id` | Delete a template — host ownership verified server-side |
+
+No PIN — same open-trust model as the rest of the Gatherings API (§16). Template
+saves are non-destructive; deletion is explicitly Host-initiated and scoped to their
+own records by server-side `host_id` check.
+
+### UX — Save as Template
+
+Two entry points:
+
+**1. Immediately after create (primary path):**
+After a Gathering is successfully created, the confirmation state in the Host panel
+shows a prompt alongside the success feedback:
+
+> ☆ Save as template for next time?  `[Save Template]`
+
+Tapping opens a single-field modal (template name, defaulting to the Gathering title).
+Confirm saves to D1 via `POST /gathering-templates`. Dismiss skips silently — no
+pressure, no repeated ask.
+
+**2. From an existing Gathering in the Host panel (secondary path):**
+A "⋯" or secondary action on a Host panel Gathering card reveals "Save as Template."
+Same single-field name modal. Useful for Hosts who didn't template on create but
+want to after the event went well.
+
+### UX — Use Template
+
+**Entry point:** Host panel list view — alongside the "＋ New Gathering" button, a
+secondary button: "📋 From Template" (shown only when the host has ≥ 1 saved template).
+
+**Flow:**
+1. Tapping opens a template picker sheet — list of saved templates, each showing
+   name + venue + crew member count + format. Tap one to select.
+2. The New Gathering form opens pre-populated:
+   - Title, venue, capacity, format, description — from template
+   - Date / Time — **blank** (Host must set)
+   - Who's Coming — crew snapshot loaded into the picker as the starting selection,
+     editable before create (add players, remove players, replace crew entirely)
+3. Host reviews, adjusts anything, creates. Normal create flow from here.
+4. After create, the same "Save as Template?" prompt appears — if the crew changed
+   significantly, the Host can save an updated template.
+
+**Template picker also allows deletion** — swipe or a trash icon, with a confirmation
+step. No edit-in-place: if a template needs meaningful changes, use it, adjust the
+form, save a new template.
+
+### UX — Template Management
+
+No dedicated management screen needed at this scale. Everything lives inline:
+- See templates: template picker sheet (accessed via "📋 From Template")
+- Delete: from the template picker sheet
+- Update: use → adjust → save as template (replaces old one manually if desired —
+  no auto-replace, Host controls this)
+
+### Schema Migration
+
+Entry 4 in `source/specs/BF_Gatherings_Schema.sql`:
+
+```sql
+-- Entry 4 · Dev-48 · 2026-06-23
+-- Gathering Templates: reusable starting points for recurring host groups
+CREATE TABLE gathering_templates (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  host_id         TEXT    NOT NULL,
+  name            TEXT    NOT NULL,
+  title           TEXT    NOT NULL,
+  venue           TEXT,
+  capacity        INTEGER,
+  gathering_type  TEXT,
+  description     TEXT,
+  crew_snapshot   TEXT,
+  created_at      TEXT    DEFAULT (datetime('now'))
+);
+```
+
+Run in D1 Console before deploying Worker routes.
+
+### Build Sequence (next implementation session)
+
+1. Run schema migration in D1 Console → mirror to `BF_Gatherings_Schema.sql` → push
+2. Add three Worker routes to `worker.js` → push to library → Brian pastes to Cloudflare
+3. Portal:
+   a. "Save as Template?" prompt in post-create confirmation state
+   b. "📋 From Template" button in Host panel list view (conditional on templates existing)
+   c. Template picker sheet (list + delete)
+   d. Pre-populate create form from selected template
+   e. Secondary "Save as Template" on existing Host panel Gathering cards
+
+### Open Questions (not blocking spec, resolve at build time)
+
+- **"From Template" button label:** "📋 From Template" is compact but may not be
+  immediately obvious. Alternative: "Use Template" or "Repeat a Gathering." Decide
+  at build time with Brian.
+- **After-create template prompt dismissal:** if Host saves a template, should the
+  "Save as Template?" line disappear from that Gathering's post-create state on
+  subsequent views, or stay (allowing re-save after crew edits)? Lean: hide after
+  first save to reduce noise, but allow re-template from the ⋯ secondary action.
