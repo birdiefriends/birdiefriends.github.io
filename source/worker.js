@@ -259,6 +259,111 @@ export default {
       }
     }
 
+    // PATCH /gatherings/:id — edit a Gathering's metadata (host only, Dev-48)
+    // Editable fields: title, venue, event_time, size, gathering_type, description.
+    // Crew membership changes are out of scope — use POST /crews/:id/members/add.
+    // Returns { ok, dateChanged } so the portal knows whether to trigger
+    // re-confirmation flow (notification + stale-response flag on cards).
+    if (request.method === 'PATCH' && /^\\/gatherings\\/\d+$/.test(url.pathname)) {
+      const gatheringId = url.pathname.split('/')[2];
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { host_id } = body;
+      if (!host_id) {
+        return new Response(JSON.stringify({ error: 'host_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const gathering = await env.DB.prepare(
+          `SELECT host_id, event_time, title, crew_id FROM gatherings WHERE id = ? AND status = 'active'`
+        ).bind(gatheringId).first();
+        if (!gathering) {
+          return new Response(JSON.stringify({ error: 'Gathering not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (gathering.host_id !== host_id) {
+          return new Response(JSON.stringify({ error: 'Only the host can edit this Gathering' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+
+        // Build dynamic UPDATE — only set fields present in the request body.
+        const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description'];
+        const setClauses = [];
+        const binds = [];
+        for (const field of allowed) {
+          if (Object.prototype.hasOwnProperty.call(body, field)) {
+            setClauses.push(`${field} = ?`);
+            binds.push(body[field] ?? null);
+          }
+        }
+        if (setClauses.length === 0) {
+          return new Response(JSON.stringify({ error: 'No editable fields provided' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        binds.push(gatheringId);
+        await env.DB.prepare(
+          `UPDATE gatherings SET ${setClauses.join(', ')} WHERE id = ?`
+        ).bind(...binds).run();
+
+        // Detect date change — if event_time changed, portal will trigger
+        // re-confirmation flow (notification + stale banner on crew cards).
+        const dateChanged = Object.prototype.hasOwnProperty.call(body, 'event_time') &&
+          body.event_time !== gathering.event_time;
+
+        // If date changed, notify full crew via push so they can re-confirm.
+        // Fetch crew members using the same crew_id stored on the Gathering.
+        if (dateChanged && gathering.crew_id) {
+          try {
+            const { results: crewMembers } = await env.DB.prepare(
+              `SELECT player_id FROM crew_members WHERE crew_id = ?`
+            ).bind(gathering.crew_id).all();
+            const notifyIds = crewMembers.map(r => r.player_id).filter(id => id !== host_id);
+            if (notifyIds.length) {
+              const newTitle = Object.prototype.hasOwnProperty.call(body, 'title') ? body.title : gathering.title;
+              const newDt    = new Date(body.event_time);
+              const dateStr  = newDt.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+              // Fire-and-forget to Worker's own POST / route — same pattern as cancel/invite
+              const notifyPayload = {
+                app_id: env.OS_APP_ID,
+                headings: { en: '📅 Gathering Updated' },
+                contents: { en: `"${newTitle}" has moved to ${dateStr}. Please re-confirm your plans.` },
+                filters: notifyIds.flatMap((id, i) => [
+                  ...(i > 0 ? [{ operator: 'OR' }] : []),
+                  { field: 'tag', key: 'player_name', relation: '=', value: id }
+                ]),
+                url: 'https://birdiefriends.com/portal.html',
+                bf_type: 'gathering_date_changed',
+                bf_meta: { gathering_id: Number(gatheringId), invited: notifyIds }
+              };
+              // Write to KV feed directly (same pattern as feed_only path)
+              const sentAt = Date.now();
+              const kvKey  = `feed::${sentAt}`;
+              const entry  = {
+                id: `feed-${sentAt}`, key: kvKey,
+                title: notifyPayload.headings.en,
+                body: notifyPayload.contents.en,
+                sentAt, type: 'gathering_date_changed',
+                meta: notifyPayload.bf_meta
+              };
+              await env.BF_FLAGS.put(kvKey, JSON.stringify(entry));
+              // Push via OneSignal (best-effort — edit succeeds even if notify fails)
+              fetch('https://onesignal.com/api/v1/notifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
+                body: JSON.stringify(notifyPayload)
+              }).catch(e => console.warn('PATCH date-change notify failed:', e));
+            }
+          } catch(notifyErr) {
+            console.warn('PATCH: crew notify fetch failed (non-blocking):', notifyErr);
+          }
+        }
+
+        return new Response(JSON.stringify({ ok: true, id: Number(gatheringId), dateChanged }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error editing Gathering' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // GET /gatherings?player_id=X — Gatherings visible to a player:
     // their own (as host) + any they're invited to via Crew membership.
     // Cancelled Gatherings excluded — "past ones quietly disappear."
@@ -382,16 +487,21 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { gathering_id, player_id, status } = body;
+      const { gathering_id, player_id, status, confirmed_for } = body;
       if (!gathering_id || !player_id || !['yes','no','sub'].includes(status)) {
         return new Response(JSON.stringify({ error: 'gathering_id, player_id, and status (yes/no/sub) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       try {
+        // confirmed_for stores the event_time the player responded to.
+        // Portal uses it to detect stale responses after a date change (Dev-48).
         await env.DB.prepare(
-          `INSERT INTO registrations (gathering_id, player_id, status, registered_at)
-           VALUES (?, ?, ?, datetime('now'))
-           ON CONFLICT (gathering_id, player_id) DO UPDATE SET status = excluded.status, registered_at = excluded.registered_at`
-        ).bind(gathering_id, player_id, status).run();
+          `INSERT INTO registrations (gathering_id, player_id, status, registered_at, confirmed_for)
+           VALUES (?, ?, ?, datetime('now'), ?)
+           ON CONFLICT (gathering_id, player_id) DO UPDATE SET
+             status = excluded.status,
+             registered_at = excluded.registered_at,
+             confirmed_for = excluded.confirmed_for`
+        ).bind(gathering_id, player_id, status, confirmed_for || null).run();
         return new Response(JSON.stringify({ ok: true, gathering_id: Number(gathering_id), player_id, status }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -406,7 +516,7 @@ export default {
       const gatheringId = url.pathname.split('/')[2];
       try {
         const { results } = await env.DB.prepare(
-          `SELECT player_id, status, registered_at FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
+          `SELECT player_id, status, registered_at, confirmed_for FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
         ).bind(gatheringId).all();
         return new Response(JSON.stringify({ ok: true, registrations: results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
