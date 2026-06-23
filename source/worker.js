@@ -251,6 +251,56 @@ export default {
           return new Response(JSON.stringify({ error: 'Only the host can cancel this Gathering' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         await env.DB.prepare(`UPDATE gatherings SET status = 'cancelled' WHERE id = ?`).bind(gatheringId).run();
+
+        // Notify on cancel — Worker-side so we always reach the full crew/respondents,
+        // not just whoever the portal's gatheringRegData happened to have loaded.
+        // Crew mode: notify all crew_members. Open mode: notify Yes/Sub registrants only.
+        try {
+          const fullG = await env.DB.prepare(`SELECT * FROM gatherings WHERE id = ?`).bind(gatheringId).first();
+          const gTitle = fullG ? fullG.title : 'a Gathering';
+          let notifyIds = [];
+          if (fullG && fullG.fill_list_enabled) {
+            const { results: regs } = await env.DB.prepare(
+              `SELECT player_id FROM registrations WHERE gathering_id = ? AND status IN ('yes','sub')`
+            ).bind(gatheringId).all();
+            notifyIds = regs.map(r => r.player_id).filter(id => id !== host_id);
+          } else if (fullG && fullG.crew_id) {
+            const { results: members } = await env.DB.prepare(
+              `SELECT player_id FROM crew_members WHERE crew_id = ?`
+            ).bind(fullG.crew_id).all();
+            notifyIds = members.map(r => r.player_id).filter(id => id !== host_id);
+          }
+          if (notifyIds.length) {
+            const sentAt = Date.now();
+            const kvKey  = `feed::${sentAt}`;
+            const bfMeta = { gathering_id: Number(gatheringId), invited: notifyIds };
+            const notifyPayload = {
+              app_id: env.OS_APP_ID,
+              headings: { en: '❌ Gathering Cancelled' },
+              contents: { en: `"${gTitle}" has been cancelled.` },
+              filters: notifyIds.flatMap((id, i) => [
+                ...(i > 0 ? [{ operator: 'OR' }] : []),
+                { field: 'tag', key: 'player_name', relation: '=', value: id }
+              ]),
+              url: 'https://birdiefriends.com/portal.html',
+              bf_type: 'gathering_cancelled',
+              bf_meta: bfMeta
+            };
+            await env.BF_FLAGS.put(kvKey, JSON.stringify({
+              id: `feed-${sentAt}`, key: kvKey,
+              title: notifyPayload.headings.en, body: notifyPayload.contents.en,
+              sentAt, type: 'gathering_cancelled', meta: bfMeta
+            }));
+            fetch('https://onesignal.com/api/v1/notifications', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
+              body: JSON.stringify(notifyPayload)
+            }).catch(e => console.warn('Cancel notify push failed:', e));
+          }
+        } catch(notifyErr) {
+          console.warn('Cancel: notify failed (non-blocking):', notifyErr);
+        }
+
         return new Response(JSON.stringify({ ok: true, id: Number(gatheringId), status: 'cancelled' }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -394,13 +444,20 @@ export default {
         return new Response(JSON.stringify({ error: 'player_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       try {
-        const { results } = await env.DB.prepare(
-          `SELECT DISTINCT g.*, c.name AS crew_name FROM gatherings g
-           LEFT JOIN crew_members cm ON cm.crew_id = g.crew_id
-           LEFT JOIN crews c ON c.id = g.crew_id
-           WHERE g.status = 'active' AND (g.host_id = ? OR cm.player_id = ?)
-           ORDER BY g.event_time ASC`
-        ).bind(playerId, playerId).all();
+        // gathering_alerts=true → also return fill_list_enabled gatherings (open broadcast)
+        const gatheringAlerts = url.searchParams.get('gathering_alerts') === 'true';
+        const sql = gatheringAlerts
+          ? `SELECT DISTINCT g.*, c.name AS crew_name FROM gatherings g
+             LEFT JOIN crew_members cm ON cm.crew_id = g.crew_id
+             LEFT JOIN crews c ON c.id = g.crew_id
+             WHERE g.status = 'active' AND (g.host_id = ? OR cm.player_id = ? OR g.fill_list_enabled = 1)
+             ORDER BY g.event_time ASC`
+          : `SELECT DISTINCT g.*, c.name AS crew_name FROM gatherings g
+             LEFT JOIN crew_members cm ON cm.crew_id = g.crew_id
+             LEFT JOIN crews c ON c.id = g.crew_id
+             WHERE g.status = 'active' AND (g.host_id = ? OR cm.player_id = ?)
+             ORDER BY g.event_time ASC`;
+        const { results } = await env.DB.prepare(sql).bind(playerId, playerId).all();
         return new Response(JSON.stringify({ ok: true, gatherings: results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -873,6 +930,44 @@ export default {
         status: osResp.status,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
+    }
+
+    // GET /members/:player_id/prefs — fetch Tier-2 preferences from member_preferences D1 table
+    if (request.method === 'GET' && /^\/members\/[^/]+\/prefs$/.test(url.pathname)) {
+      const playerId = decodeURIComponent(url.pathname.split('/')[2]);
+      try {
+        const row = await env.DB.prepare(`SELECT prefs FROM member_preferences WHERE player_id = ?`).bind(playerId).first();
+        const prefs = row ? JSON.parse(row.prefs) : {};
+        return new Response(JSON.stringify({ ok: true, player_id: playerId, prefs }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error fetching prefs' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // PUT /members/:player_id/prefs — upsert Tier-2 preferences (player-scoped, no PIN)
+    if (request.method === 'PUT' && /^\/members\/[^/]+\/prefs$/.test(url.pathname)) {
+      const playerId = decodeURIComponent(url.pathname.split('/')[2]);
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { prefs } = body;
+      if (typeof prefs !== 'object' || prefs === null || Array.isArray(prefs)) {
+        return new Response(JSON.stringify({ error: 'prefs must be a plain object' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        await env.DB.prepare(
+          `INSERT INTO member_preferences (player_id, prefs, updated_at) VALUES (?, ?, datetime('now'))
+           ON CONFLICT (player_id) DO UPDATE SET prefs = excluded.prefs, updated_at = excluded.updated_at`
+        ).bind(playerId, JSON.stringify(prefs)).run();
+        return new Response(JSON.stringify({ ok: true, player_id: playerId, prefs }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error saving prefs' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
     }
 
     // GET /feed — read KV announcement feed, newest-first, max 50
