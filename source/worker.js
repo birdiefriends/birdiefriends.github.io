@@ -264,7 +264,7 @@ export default {
     // Crew membership changes are out of scope — use POST /crews/:id/members/add.
     // Returns { ok, dateChanged } so the portal knows whether to trigger
     // re-confirmation flow (notification + stale-response flag on cards).
-    if (request.method === 'PATCH' && /^\\/gatherings\\/\d+$/.test(url.pathname)) {
+    if (request.method === 'PATCH' && /^\/gatherings\/\d+$/.test(url.pathname)) {
       const gatheringId = url.pathname.split('/')[2];
       let body;
       try { body = await request.json(); } catch(e) {
