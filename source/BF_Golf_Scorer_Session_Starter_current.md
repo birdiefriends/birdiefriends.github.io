@@ -41,14 +41,50 @@ is now the sole source of truth for the current Dev-N number. Read it, not this 
 
 # BirdieFriends Golf Scorer — Session Starter
 **Current session number:** see `BF_Session_Log.md` (this file no longer tracks it)
-**Date:** 2026-06-22
-**Portal Version (production):** v3.16.14 · 2026-06-22
+**Date:** 2026-06-24
+**Portal Version (production):** v3.16.56 · 2026-06-24
 **GolfScorer Version:** v8.17 · 2026-06-17g (deployed)
-**Worker Version:** 2026-06-18b + all Gatherings routes through Dev-47 (crew_name JOIN, feed_only path, description, gathering_type)
+**Worker Version:** 2026-06-18b + all Gatherings routes through Dev-49 (tee_time_status, member_preferences GET/PUT, host_note in registrations, gathering_alerts param, cancel Worker-side)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
 
 ---
+
+## Dev-49 Architecture Notes (2026-06-24) — CORRECTIONS
+
+### Host:Yes in Jotform — TAG not GATE
+`Host: Yes` (Jotform Membership, QID for host field) is a **collector/tag**, NOT an
+access gate. It records who has hosted a Gathering — for future analytics, targeted
+communications, and host reputation. It does NOT gate access to the Gather UI.
+
+**The actual gate is `gathering_panel_live` KV flag** (commissioner-controlled, whole
+community on/off). Once that flag is true, ANY member can host. `Host:Yes` is written
+as a side-effect of hosting, not a prerequisite.
+
+Previous references to Host:Yes as a gate were incorrect. Walli receiving Host:Yes
+after creating a Gathering is the intended behavior.
+
+### Gatherings — D1 schema as of Dev-49
+- `gatherings`: + `tee_time_status TEXT NOT NULL DEFAULT 'confirmed'` (Entry 5)
+- `registrations`: + `host_note TEXT` (Entry 6 — schema kept, UI removed)
+- `member_preferences`: `player_id PK, prefs TEXT DEFAULT '{}', updated_at TEXT` (Entry 4)
+- All previous entries (1–3) unchanged
+
+### Gatherings — notification architecture as of Dev-49
+- `gathering_alerts` (Jotform QID 26, field `gatheringalerts`): member opt-out for open
+  broadcast notifications. Default Yes (blank = Yes in parser). Toggle in ⚙️ Settings.
+- `gatheringFilters` in `member_preferences` D1: declarative rule array for Tier-2
+  filtering. Exclusion paradigm (nin operator). Empty = show all.
+- `gathering_panel_live` KV flag: still false (not yet launched as of Dev-49 close).
+
+### Gatherings — registration routing (fixed Dev-49)
+- Unregister button and Schedule tab "Can't Make It": now correctly route through
+  `submitRegistration('No')` → D1. Were incorrectly calling `changeRegistration`
+  (Jotform path) with synthetic D1 IDs.
+- `regData` sync: after registration, portal now updates both `gatheringRegData` AND
+  `regData` (load-time snapshot) so `renderAll()` sees the change immediately.
+
+
 
 ## Session 40 Accomplishments — Deploy Infrastructure + Secrets Cleanup (2026-06-18)
 
