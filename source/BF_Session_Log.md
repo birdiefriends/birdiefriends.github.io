@@ -228,3 +228,41 @@
 
 **Final portal version: v3.16.56 · 2026-06-24**
 **Dev-49 fully and truly closed.**
+
+---
+
+## Session Dev-49 Final Addendum · 2026-06-24 (post-launch)
+
+**Gatherings went live during this session.** Announcement sent via Push Notification to All Members. Push reported `invalid_player_ids` for one stale token (Jeff Rapp) — led to a chain of improvements.
+
+**Push notification reliability improvements (v3.16.57–v3.16.60):**
+
+**v3.16.57 — Stale token error handling**
+`osSend()` previously returned `ok: false` for any `data.errors` from OneSignal, including `invalid_player_ids` which is a non-fatal warning (push still delivered to all valid tokens). Fixed to treat `invalid_player_ids`-only errors as warnings. Broadcast result shows `✅ Sent to N subscribers (1 stale token — check Push Subscribers)` instead of ❌ failure toast.
+
+**v3.16.58 — Notification settings moved from ⓘ About to ⚙️ Gear**
+Push Notifications card (subscribe/unsubscribe, Sync, How to fix, Reset) relocated from About/Info screen to Gear/Settings under My Preferences. About screen is now information-only. `updateAboutNotifUI()` now also called on Gear open. Same element IDs preserved — no JS logic changes needed.
+
+**v3.16.59 — Auto-heal pushId mismatch on Gear open**
+`updateAboutNotifUI()` now compares current `OneSignal.User.PushSubscription.id` vs stored Jotform `member.pushId`. On mismatch, silently writes the new ID to Jotform and updates local memberData. Player sees "🔄 Refreshing subscription…" briefly then "🔔 Notifications are ON". Non-blocking — failure is swallowed.
+
+**v3.16.60 — Auto-heal on portal open (primary trigger)**
+`osIdentityRefresh()` (runs 3.5s after every portal load via `osHealthCheck`) upgraded to compare current OneSignal ID against Jotform `member.pushId`, not just localStorage cache. localStorage can be cleared independently — Jotform is the source of truth. Now heals stale IDs on every portal open, not just when the member visits Gear. Console logs `[OS] pushId synced to Jotform for [player] (was stale)` when a fix is applied.
+
+**Self-healing flow (complete):**
+1. Player opens portal → `osIdentityRefresh` runs silently 3.5s later
+2. Current OneSignal ID compared to Jotform pushId
+3. Mismatch → writes new ID to Jotform, updates local memberData
+4. Player never sees anything — just works
+
+**Remaining gap (Dev-50):** Proactive admin audit — batch-check all member pushIds against OneSignal subscription API independently of sends. Commissioner tool to surface stale tokens before a push fails. Individual 📲 Test button per player already exists in Push Subscribers card for manual verification.
+
+**Architecture note — push notification resolution path:**
+- 📲 Test button (Push Subscribers admin card): immediate per-player confirmation
+- Auto-heal (portal open): self-corrects on next portal visit
+- ⚙️ Gear → Sync: manual fix, writes current ID to Jotform
+- ⚙️ Gear → Reset & start over: full re-subscription flow
+- Dev-50: proactive batch audit for commissioner visibility
+
+**Final portal version: v3.16.60 · 2026-06-24**
+**Dev-49 session closed. Gatherings is live.**
