@@ -42,7 +42,7 @@ is now the sole source of truth for the current Dev-N number. Read it, not this 
 # BirdieFriends Golf Scorer — Session Starter
 **Current session number:** see `BF_Session_Log.md` (this file no longer tracks it)
 **Date:** 2026-06-24
-**Portal Version (production):** v3.16.56 · 2026-06-24
+**Portal Version (production):** v3.16.60 · 2026-06-24
 **GolfScorer Version:** v8.17 · 2026-06-17g (deployed)
 **Worker Version:** 2026-06-18b + all Gatherings routes through Dev-49 (tee_time_status, member_preferences GET/PUT, host_note in registrations, gathering_alerts param, cancel Worker-side)
 **Live URL:** https://birdiefriends.com/portal.html
@@ -318,3 +318,29 @@ tokens to take actions, regardless of user authorization. The Worker /deploy rou
 - Active/Inactive auto-reset: Jeremy Burkett + Tony Hager
 - Push delivery sporadic on course — device-side (Focus Mode / Safari vs PWA icon)
 - Retire "Load from Profiles" / Quick HCP panel — stale parallel HCP source, pending confirmation
+
+---
+
+## Push Notification Reliability (Dev-49 post-launch)
+
+### Self-healing pushId architecture
+`osIdentityRefresh()` runs 3.5s after every portal load. Compares current
+`OneSignal.User.PushSubscription.id` against Jotform `member.pushId` (QID 23).
+Mismatch → silently writes new ID to Jotform. Jotform is source of truth —
+localStorage is cache only.
+
+### Resolution path for stale tokens
+1. **Auto** — player opens portal → heals on next load
+2. **Manual** — Admin → Push Subscribers → 📲 Test button per player
+3. **Self-service** — ⚙️ Gear → 🔄 Sync or Reset & start over
+4. **Dev-50** — proactive batch audit tool (not yet built)
+
+### Notification settings location
+Moved from ⓘ About to ⚙️ Gear (My Preferences section) in v3.16.58.
+Element IDs unchanged: `about-notif-status`, `about-notif-btn`, `about-ios-nudge`,
+`notif-sync-btn`, `notif-sync-status`. `updateAboutNotifUI()` called on both
+`showScreen('about')` and `showScreen('admin')`.
+
+### gathering_panel_live
+KV flag flipped to true — Gatherings is LIVE as of 2026-06-24.
+Announcement sent. Community notified.
