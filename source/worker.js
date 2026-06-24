@@ -617,7 +617,7 @@ export default {
       try {
         const { results } = await env.DB.prepare(`
           SELECT
-            g.id, g.host_id, g.title, g.event_time, g.venue, g.format,
+            g.id, g.host_id, g.title, g.event_time, g.venue, g.gathering_type,
             g.capacity, g.fill_list_enabled, g.tee_time_status, g.status,
             g.created_at,
             COALESCE(cm_count.cnt, 0) AS crew_size,
