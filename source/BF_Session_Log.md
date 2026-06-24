@@ -266,3 +266,45 @@ Push Notifications card (subscribe/unsubscribe, Sync, How to fix, Reset) relocat
 
 **Final portal version: v3.16.60 · 2026-06-24**
 **Dev-49 session closed. Gatherings is live.**
+
+---
+
+## Session Dev-50 · 2026-06-24
+
+**Focus:** Gear screen cleanup, Commissioner Admin restructure, Gatherings Admin D1 tools (first pass).
+
+**Confirmed done from Dev-49 carry-forward:**
+- `gathering_panel_live` KV flag flipped → Gatherings live for all members
+- Mike Nagle InActive status fixed in Jotform
+- Lord's Valley unregister→re-register bug confirmed resolved (Dev-49 fix held)
+
+**Gear screen / My Preferences:**
+- 🔔 Notification Settings card migrated from About screen to Gear (My Preferences section). `updateAboutNotifUI()` now fires on Gear open. About screen is now information-only.
+- Notification Settings card made collapsible (same pattern as Gathering Alerts). Header summary shows "On — tap to manage" / "Off — tap to turn on" reflecting live subscription state.
+
+**Commissioner Admin restructure — Dev Controls dissolved:**
+All tools redistributed into four labeled sections:
+- **Communicate:** Push Notification to All, Broadcast Text to All, Announcement Feed, Push Subscribers
+- **Gatherings:** 🏌️ Gatherings Admin (Host Management Panel + Gathering Test Mode + D1 tools)
+- **Event Day:** Event Day Controls card (Live Panel Event Control + Live Scorecard Test Mode), Scorecard Check
+- **System:** Start Claude Session, Maintenance Mode, Notification Prompt Reset, Request an Event
+- "Dev Controls" card eliminated — contents fully redistributed
+- "New Events Reset" tool removed entirely (dev utility, no production value)
+- "Event Control" renamed to "Live Panel Event Control"
+- Maintenance Mode promoted to its own top-level System card
+
+**Gatherings Admin D1 tools (first pass):**
+- New Worker route: `GET /gatherings/all?pin=7797` — commissioner view of all active Gatherings, all hosts, with crew size + yes/sub/no counts via JOINs. PIN-gated.
+- New Worker route: `DELETE /gatherings/:id/admin?pin=7797` — hard-delete any Gathering (registrations + crew + crew_members + gathering row). PIN-gated.
+- Portal: "📋 All Active Gatherings" sub-section in Gatherings Admin. Auto-loads on first expand, Refresh button. Groups rows by host. Per-Gathering actions: 🗑️ Delete (confirm dialog), 📣 Broadcast to Crew (pre-fills Push composer), 👥 Registrations (alert with yes/sub/no list).
+- Bugs fixed: `g.format` → `g.gathering_type`, `g.capacity` → `g.size` (D1 column names differ from portal display labels).
+
+**Carry-forward for Dev-51:**
+- Test Data Seeder — seed `TEST — ` prefixed Gatherings with varied formats/modes/registrations for admin tool verification. Paired pruner deletes only `TEST — %` rows, safe against real member data.
+- Proactive pushId health check (Dev-49/50 carry-forward) — batch validator + admin tool.
+- Venue dropdown (D1-backed: BSGC, Whitetail, Moselem Springs, Other).
+- Gathering Templates §20 implementation.
+- deploy.html — copy instruction to BFM repair.
+
+**Final portal version: v3.16.67 · 2026-06-24**
+**Dev-50 closed.**
