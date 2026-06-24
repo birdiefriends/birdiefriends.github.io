@@ -606,6 +606,77 @@ export default {
       }
     }
 
+    // GET /gatherings/all?pin=X — commissioner view of ALL active gatherings
+    // grouped by host, with crew member count and registration counts per status.
+    // PIN-gated (same PIN as /deploy and /flags).
+    if (request.method === 'GET' && url.pathname === '/gatherings/all') {
+      const pin = url.searchParams.get('pin');
+      if (pin !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const { results } = await env.DB.prepare(`
+          SELECT
+            g.id, g.host_id, g.title, g.event_time, g.venue, g.format,
+            g.capacity, g.fill_list_enabled, g.tee_time_status, g.status,
+            g.created_at,
+            COALESCE(cm_count.cnt, 0) AS crew_size,
+            COALESCE(yes_count.cnt, 0) AS yes_count,
+            COALESCE(sub_count.cnt, 0) AS sub_count,
+            COALESCE(no_count.cnt, 0) AS no_count
+          FROM gatherings g
+          LEFT JOIN (
+            SELECT crew_id, COUNT(*) AS cnt FROM crew_members GROUP BY crew_id
+          ) cm_count ON cm_count.crew_id = g.crew_id
+          LEFT JOIN (
+            SELECT gathering_id, COUNT(*) AS cnt FROM registrations WHERE status = 'yes' GROUP BY gathering_id
+          ) yes_count ON yes_count.gathering_id = g.id
+          LEFT JOIN (
+            SELECT gathering_id, COUNT(*) AS cnt FROM registrations WHERE status = 'sub' GROUP BY gathering_id
+          ) sub_count ON sub_count.gathering_id = g.id
+          LEFT JOIN (
+            SELECT gathering_id, COUNT(*) AS cnt FROM registrations WHERE status = 'no' GROUP BY gathering_id
+          ) no_count ON no_count.gathering_id = g.id
+          WHERE g.status = 'active'
+          ORDER BY g.host_id ASC, g.event_time ASC
+        `).all();
+        return new Response(JSON.stringify({ ok: true, gatherings: results }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + e.message }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // DELETE /gatherings/:id/admin?pin=X — commissioner hard-delete of any Gathering
+    // Removes registrations, crew_members, crew, and gathering rows.
+    if (request.method === 'DELETE' && /^\/gatherings\/\d+\/admin$/.test(url.pathname)) {
+      const pin = url.searchParams.get('pin');
+      if (pin !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const gatheringId = url.pathname.split('/')[2];
+      try {
+        const g = await env.DB.prepare(`SELECT crew_id FROM gatherings WHERE id = ?`).bind(gatheringId).first();
+        if (!g) return new Response(JSON.stringify({ error: 'Gathering not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        await env.DB.batch([
+          env.DB.prepare(`DELETE FROM registrations WHERE gathering_id = ?`).bind(gatheringId),
+          env.DB.prepare(`DELETE FROM gatherings WHERE id = ?`).bind(gatheringId),
+        ]);
+        if (g.crew_id) {
+          await env.DB.batch([
+            env.DB.prepare(`DELETE FROM crew_members WHERE crew_id = ?`).bind(g.crew_id),
+            env.DB.prepare(`DELETE FROM crews WHERE id = ?`).bind(g.crew_id),
+          ]);
+        }
+        return new Response(JSON.stringify({ ok: true, deleted: Number(gatheringId) }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + e.message }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // POST /gatherings/purge-test — true DELETE of test Gatherings + their Crews,
     // crew_members, and registrations (PIN required — destructive, unlike the rest
     // of the Gatherings routes which trust the client per §6; deletion warrants the
