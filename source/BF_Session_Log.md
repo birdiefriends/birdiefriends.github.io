@@ -168,3 +168,63 @@
 
 **Final portal version: v3.16.41 · 2026-06-23**
 **Dev-49 fully closed.**
+
+---
+
+## Session Dev-49 Addendum · 2026-06-24
+
+**Additional work shipped (v3.16.42 → v3.16.56):**
+
+**Tee time status (Suggested/Confirmed):**
+- D1 migration Entry 5: `tee_time_status TEXT NOT NULL DEFAULT 'confirmed'` on `gatherings`.
+- Create and edit forms: segmented toggle (Suggested / Confirmed) replacing two-button layout.
+- Crew card: `(suggested)` indicator beside time when not confirmed.
+- Host panel: amber `📅 Suggested` / green `✅ Confirmed` badge on time line.
+- **🔒 Confirmed Tee Time — Notify Crew** button in host panel when Suggested — PATCH to confirmed, notifies Yes/Sub crew via push (`gathering_date_changed` type), re-renders immediately.
+- Tee time confirmed notification body: `"[title]" is confirmed — [date] at [time]. See you out there!`
+
+**Crew → Host note (built then unwound):**
+- D1 migration Entry 6: `host_note TEXT` on `registrations` (schema kept, UI removed).
+- Built: textarea on crew cards, host panel note display per player. Removed: same session — pivoted to Text the Host as the right mechanism. D1 column and Worker route preserved.
+
+**Text the Host:**
+- 💬 Text [FirstName] link in Gathering card meta row for non-host members with a known cell.
+- Uses `sms:` URL scheme — opens native messaging. No BF infrastructure. BirdieFriends handles structure, iMessage handles nuance.
+
+**Gathering card UX:**
+- Compact horizontal meta row for Gatherings: `📍 venue · ⛳ format · 💬 Text [host]` — single line instead of three.
+- Mode selector (Invite a Crew / Open to Members) and tee time toggle both converted to segmented controls.
+- Button subtitles: "Pick specific people" / "Anyone available can join"; "Still working it out" / "Tee time is locked".
+
+**Gathering Alerts UI:**
+- ⚙️ Gear screen: My Preferences card now collapsible/expandable via chevron ▸/▾.
+- Filter panel hidden by default, expands on tap, resets collapsed each time screen opens.
+- Commissioner Admin cards now properly hidden for non-commissioners (were exposed when gear became visible to all).
+
+**Registration bug fixes:**
+- `regData` sync bug: after Gathering registration, `regData` (load-time snapshot) wasn't updated — card stayed unregistered. Fixed by also upserting into `regData` in `submitGatheringRegistration`.
+- Gathering Unregister button was calling `changeRegistration` (Jotform path) with synthetic D1 ID — routed to wrong backend. Fixed to `submitRegistration('No')` → correct D1 path.
+- Schedule tab "Can't Make It" had same crossover — fixed with source check.
+- `myGatheringReg` scope error: defined in `buildEventCard` but used in `buildActionButtons` (separate function). Fixed by adding local lookup in `buildActionButtons`.
+- Edit form tee time status read used `.style.background` (inline style) — broken after switch to CSS classes. Fixed to `.classList.contains('seg-btn-active')`.
+- `restoreActiveIfNeeded()` wired to Jotform event registration (Yes/Sub) — previously only Gathering registrations triggered it.
+
+**Architecture correction (confirmed Dev-49):**
+- `Host: Yes` in Jotform Membership (QID for host field) is a **collector/tag**, NOT a gate. It records who has hosted a Gathering — for future analytics, targeted communications, host reputation features. It does NOT gate access to the Gather UI.
+- The actual gate is the `gathering_panel_live` KV flag (commissioner-controlled, whole community).
+- Any member can host once `gathering_panel_live` is true. Host:Yes is written as a side-effect of hosting, not a prerequisite. Previous session log entries and documentation referencing Host:Yes as a gate were incorrect.
+- Walli (Mohamed Walli) correctly received Host:Yes after creating a Gathering — this is the intended behavior.
+
+**Carry-forward for Dev-50 (updated):**
+- **D1 admin tools** (priority): all Gatherings view, per-Gathering registrations, delete button — must have before real volume builds.
+- Flip `gathering_panel_live` KV flag → send Gatherings announcement.
+- Fix Mike Nagle InActive status in Jotform Membership (manual).
+- Venue dropdown (D1-backed: BSGC, Whitetail, Moselem Springs, Other).
+- Gathering Templates implementation (§20).
+- deploy.html — copy instruction to BFM repair.
+- Gathering attachments via R2 (backlog).
+- Crew onboarding spec §5 (own session).
+- Original Lord's Valley unregister→re-register bug (non-Gathering Jotform events) — may still exist, investigate.
+
+**Final portal version: v3.16.56 · 2026-06-24**
+**Dev-49 fully and truly closed.**
