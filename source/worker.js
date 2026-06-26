@@ -435,6 +435,22 @@ export default {
       }
     }
 
+    // GET /venues — return all active venues ordered by sort_order, name
+    if (request.method === 'GET' && url.pathname === '/venues') {
+      try {
+        const rows = await env.DB.prepare(
+          `SELECT id, name FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`
+        ).all();
+        return new Response(JSON.stringify({ ok: true, venues: rows.results }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error fetching venues' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
     // GET /gatherings?player_id=X — Gatherings visible to a player:
     // their own (as host) + any they're invited to via Crew membership.
     // Cancelled Gatherings excluded — "past ones quietly disappear."
