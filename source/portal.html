@@ -2332,6 +2332,9 @@ body {
             <button class="btn btn-ghost" style="font-size:0.78rem;padding:4px 10px"
                     onclick="event.stopPropagation();loadAdminSubscribers()">↻ Refresh</button>
             <button class="btn btn-ghost" style="font-size:0.78rem;padding:4px 10px"
+                    onclick="event.stopPropagation();runPushIdAudit()"
+                    title="Cross-check Jotform pushIds against OneSignal — surface stale tokens">🔍 Audit</button>
+            <button class="btn btn-ghost" style="font-size:0.78rem;padding:4px 10px"
                     onclick="event.stopPropagation();showSundayChecklist()"
                     title="Show Sunday hit list — who needs setup">📋 Checklist</button>
           </div>
@@ -9651,6 +9654,172 @@ async function adminSendTestPush(btn) {
   }
 }
 
+
+// ── Push ID Audit — cross-reference Jotform pushIds vs OneSignal live subscriptions ──
+async function runPushIdAudit() {
+  if (!isCommissioner()) return;
+  const body = document.getElementById('admin-subscribers-body');
+
+  // Ensure card is open
+  if (body.style.display === 'none') {
+    toggleAdminCard('admin-subscribers');
+  }
+  body.innerHTML = '<div style="color:var(--text-hint);font-size:0.85rem">🔍 Fetching OneSignal subscriptions…</div>';
+  body.style.display = 'block';
+
+  const thStyle = 'padding:6px 10px;text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-hint);font-family:DM Mono,monospace';
+  const tdStyle = 'padding:8px 10px;border-bottom:1px solid var(--border);font-size:0.83rem';
+
+  try {
+    // Fetch live OneSignal subscriber list
+    const res = await fetch(OS_API + 'subscriptions?app_id=' + OS_APP_ID);
+    const data = await res.json();
+    if (!data.players) throw new Error('Unexpected response from OneSignal');
+
+    // Build Set of all valid OneSignal subscription IDs
+    const validIds = new Set(data.players.map(p => p.id));
+
+    // Classify members (active BFW=Yes only)
+    const roster = (memberData || [])
+      .filter(m => m.active !== 'InActive' && m.bfw === 'Yes')
+      .sort((a, b) => a.display.localeCompare(b.display));
+
+    const valid   = roster.filter(m => m.pushId && validIds.has(m.pushId));
+    const stale   = roster.filter(m => m.pushId && !validIds.has(m.pushId));
+    const missing = roster.filter(m => !m.pushId);
+
+    // Update summary line
+    const summaryEl = document.getElementById('admin-subscribers-summary');
+    if (summaryEl) {
+      summaryEl.textContent = `Audit: ${valid.length} valid · ${stale.length} stale · ${missing.length} no token`;
+      summaryEl.style.display = 'block';
+    }
+
+    let html = '<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:14px">'
+      + `✅ ${valid.length} valid &nbsp;·&nbsp; ⚠️ ${stale.length} stale &nbsp;·&nbsp; ❌ ${missing.length} no token`
+      + `<span style="float:right;font-size:0.72rem;color:var(--text-hint)">${data.players.length} total OS subscriptions</span>`
+      + '</div>';
+
+    // ── Stale section ──
+    if (stale.length) {
+      html += '<div style="font-size:0.78rem;font-weight:700;color:#e8a400;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">⚠️ Stale Token (' + stale.length + ')</div>'
+        + '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">'
+        + 'pushId is on file in Jotform but OneSignal doesn\'t recognise it. Clear it — auto-heal will write the correct ID next time they open the portal.'
+        + '</div>'
+        + '<div style="overflow-x:auto;margin-bottom:16px"><table style="width:100%;border-collapse:collapse">'
+        + '<thead><tr>'
+        + '<th style="' + thStyle + '">Player</th>'
+        + '<th style="' + thStyle + '">Stale ID</th>'
+        + '<th style="' + thStyle + '">Action</th>'
+        + '</tr></thead><tbody>';
+
+      stale.forEach(m => {
+        const shortId = m.pushId.slice(0, 10) + '…';
+        html += '<tr>'
+          + '<td style="' + tdStyle + ';font-weight:600;color:#e8a400">' + m.display + '</td>'
+          + '<td style="' + tdStyle + ';font-family:DM Mono,monospace;font-size:0.72rem;color:var(--text-muted)" title="' + m.pushId + '">' + shortId + '</td>'
+          + '<td style="' + tdStyle + '">'
+          + '<button data-mid="' + m.id + '" data-name="' + m.display.replace(/"/g, '&quot;') + '"'
+          + ' onclick="clearStalePushId(this)"'
+          + ' style="font-size:0.72rem;color:#e8a400;font-weight:600;background:none;'
+          + 'border:1px solid #e8a400;border-radius:4px;cursor:pointer;padding:2px 7px">🗑️ Clear</button>'
+          + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+
+    // ── Valid section ──
+    if (valid.length) {
+      html += '<div style="font-size:0.78rem;font-weight:700;color:var(--green-dark);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">✅ Valid (' + valid.length + ')</div>'
+        + '<div style="overflow-x:auto;margin-bottom:16px"><table style="width:100%;border-collapse:collapse">'
+        + '<thead><tr>'
+        + '<th style="' + thStyle + '">Player</th>'
+        + '<th style="' + thStyle + '">Push ID</th>'
+        + '<th style="' + thStyle + '">Action</th>'
+        + '</tr></thead><tbody>';
+
+      valid.forEach(m => {
+        const shortId = m.pushId.slice(0, 10) + '…';
+        const copySpan = '<span data-pid="' + m.pushId + '" onclick="navigator.clipboard.writeText(this.dataset.pid).then(()=>showToast(\'ID copied\'))"'
+          + ' title="' + m.pushId + '" style="font-family:DM Mono,monospace;font-size:0.72rem;cursor:pointer;'
+          + 'color:var(--text-muted);border-bottom:1px dashed var(--border)">' + shortId + '</span>';
+        const testBtn = '<button data-pid="' + m.pushId + '" data-name="' + m.display.replace(/"/g, '&quot;') + '"'
+          + ' onclick="adminSendTestPush(this)"'
+          + ' style="font-size:0.72rem;color:var(--green-dark);font-weight:600;background:none;'
+          + 'border:1px solid var(--green);border-radius:4px;cursor:pointer;padding:2px 7px">📲 Test</button>';
+        html += '<tr>'
+          + '<td style="' + tdStyle + ';font-weight:600">' + m.display + '</td>'
+          + '<td style="' + tdStyle + '">' + copySpan + '</td>'
+          + '<td style="' + tdStyle + '">' + testBtn + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+
+    // ── Missing section ──
+    if (missing.length) {
+      html += '<div style="font-size:0.78rem;font-weight:700;color:#e05252;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">❌ No Token (' + missing.length + ')</div>'
+        + '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">'
+        + 'No push ID on file. Ask them to open the portal, select their name, and tap the 🔕 bell.'
+        + '</div>'
+        + '<div style="overflow-x:auto;margin-bottom:8px"><table style="width:100%;border-collapse:collapse">'
+        + '<thead><tr>'
+        + '<th style="' + thStyle + '">Player</th>'
+        + '<th style="' + thStyle + '">Member Since</th>'
+        + '</tr></thead><tbody>';
+
+      missing.forEach(m => {
+        html += '<tr>'
+          + '<td style="' + tdStyle + ';font-weight:600;color:#e05252">' + m.display + '</td>'
+          + '<td style="' + tdStyle + ';color:var(--text-muted);font-size:0.78rem">' + (m.memberDate || '—') + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+
+    body.innerHTML = html;
+    body.dataset.loaded = '1';
+
+  } catch(e) {
+    body.innerHTML = '<div style="color:#e05252;font-size:0.85rem">Audit error: ' + e.message + '</div>';
+  }
+}
+
+async function clearStalePushId(btn) {
+  if (!isCommissioner()) return;
+  const memberId = btn.dataset.mid;
+  const name     = btn.dataset.name;
+  if (!memberId || !confirm(`Clear stale push token for ${name}?\n\nThey'll re-register automatically next time they open the portal.`)) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳';
+
+  try {
+    const body = new URLSearchParams({ [`submission[${MEMBER_PUSH_QID}]`]: '' });
+    const res = await fetch(
+      `${JF_API}/submission/${memberId}?apiKey=${JOTFORM_API_KEY}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() }
+    );
+    const data = await res.json();
+    if (data.responseCode === 200) {
+      // Update local memberData
+      const m = memberData.find(x => x.id === memberId);
+      if (m) m.pushId = '';
+      btn.textContent = '✅ Cleared';
+      btn.style.color = 'var(--green)';
+      btn.style.borderColor = 'var(--green)';
+      showToast(`${name.split(' ')[0]}'s stale token cleared`);
+    } else {
+      throw new Error('Jotform returned ' + data.responseCode);
+    }
+  } catch(e) {
+    btn.textContent = '❌ Failed';
+    btn.style.color = '#e05252';
+    btn.disabled = false;
+    showToast('Clear failed: ' + e.message, true);
+  }
+}
 
 // ── Sunday Checklist — Jotform-based notification status for active roster ──
 async function showSundayChecklist() {
