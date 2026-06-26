@@ -308,3 +308,23 @@ All tools redistributed into four labeled sections:
 
 **Final portal version: v3.16.67 · 2026-06-24**
 **Dev-50 closed.**
+
+---
+
+## Session Dev-50 Addendum · 2026-06-26
+
+**Live production issues resolved same session:**
+
+**v3.16.68 — Open mode Gathering visibility bug fixed**
+Chooch Wernett created "Woodstone this sunday" as an Open mode Gathering — push notification reached Dave Sherwin and others, but the card was invisible in the portal. Root cause: `gaParam` was derived from the member's `gatheringAlerts` preference (`Yes/No`), gating both notification delivery AND card visibility. Members with Gathering Alerts off couldn't see Open mode Gatherings at all — notification with no card to act on.
+
+Fix: hardcode `gaParam = 'true'` in the portal Gatherings fetch so all active members always receive Open mode Gathering cards. Gathering Alerts preference now controls **notifications only**, not card visibility. Crew-mode Gatherings (invite-only) are unaffected — they remain visible only to invited crew members.
+
+**Mohamed Walli push notifications:**
+Android Chrome had `birdiefriends.com` blocked at the site-level permissions layer (prior blocking event). Unblocked via Chrome Settings → Site Settings → Notifications. Gear → Notification Settings → Sync Notifications re-registered his token. Confirmed working.
+
+**Schema note for future sessions:**
+D1 `gatherings` table uses `size` (not `capacity`) and `gathering_type` (not `format`). Portal display labels differ from D1 column names — always verify against Worker INSERT statements, not portal UI copy.
+
+**Final portal version: v3.16.68 · 2026-06-26**
+**Dev-50 fully closed.**
