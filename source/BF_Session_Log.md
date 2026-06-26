@@ -328,3 +328,60 @@ D1 `gatherings` table uses `size` (not `capacity`) and `gathering_type` (not `fo
 
 **Final portal version: v3.16.68 · 2026-06-26**
 **Dev-50 fully closed.**
+
+---
+
+## Session Dev-51 · 2026-06-26
+
+**Focus:** Commissioner Admin tooling improvements, proactive pushId audit, Gatherings Admin UX, venue autocomplete with Google Places.
+
+**Bugs fixed:**
+- **Admin section visible after player switch:** `commissioner-admin-section` visibility was only re-evaluated inside `showScreen('admin')`. If Gear was already open when switching players (e.g. Brian → Walli on Walli's phone), admin tools stayed visible. Fixed by adding explicit visibility update directly in `selectPlayer()` after `renderAll()`. (v3.16.69)
+
+**Push ID Audit:**
+- **Manual audit tool (🔍 Audit button):** Added to Push Subscribers card header. Fetches live OneSignal subscriptions, cross-references against Jotform pushIds, classifies each active BFW=Yes member as Valid / Stale / Missing. Stale rows get a 🗑️ Clear button that writes empty string to Jotform QID 23 — auto-heal picks up the correct ID on next portal open. (v3.16.69)
+- **Silent daily auto-audit:** `osCommissionerAudit()` added to `osHealthCheck` — fires 5s after portal load when commissioner is logged in. Gated by `bf_push_audit_YYYY-MM-DD` localStorage key — runs once per calendar day. Silently clears any stale tokens, shows a single toast if anything was cleared. Ron Grow's stale token found and cleared on first run. (v3.16.70)
+
+**Gatherings Admin card improvements:**
+- **💬 Text Host:** Host name header now includes an `sms:` link to host's cell from `memberData`. Shown only when cell is on file.
+- **Capacity fill indicator:** Yes count now shows as "X/Y" when size is set (e.g. "4/8"), plain count for uncapped Open Gatherings.
+- **Inline Registrations:** Replaced `alert()` with inline toggle panel below action row. Shows Yes/Sub/No groups with player names. Button toggles to "👥 Hide" when open. (v3.16.71)
+
+**Venue Autocomplete:**
+- Replaced plain `<input>` venue fields in both create and edit forms with smart autocomplete.
+- `GET /venues` Worker route added — returns active venues from D1 `venues` table ordered by `sort_order`.
+- `loadVenues()` fetches D1 list once per session, pre-warmed on `openHostPanel()`.
+- On focus (empty field): shows full "Your Courses" D1 list immediately.
+- On type: narrows D1 matches + fires Google Places `AutocompleteSuggestion` API (new API — migrated away from deprecated `AutocompleteService`).
+- Smart golf hint: appends " golf" to query only if query doesn't already contain golf/country/club/links.
+- Result filter: main text only, keywords golf/country/club/links — catches Woodstone, Lord's Valley, etc. while filtering noise.
+- Free-form hint text below field: "Can't find your course? Just type the name and continue."
+- Google Places API key: `AIzaSyAn1TR2p6JbWR2fr5ydhkurygKpYU9HYtw` (restricted to `https://birdiefriends.com/*`).
+- D1 migration required (Entry 7): `venues` table with BSGC, Whitetail, Moselem Springs, Woodstone, Lord's Valley, Other.
+
+**Carry-forward for Dev-52:**
+- **D1 migrations to run** (Cloudflare Console → D1 → birdiefriends-gatherings):
+  ```sql
+  CREATE TABLE IF NOT EXISTS venues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 99
+  );
+  INSERT INTO venues (name, sort_order) VALUES
+    ('Blue Shamrock Golf Club', 1),
+    ('Whitetail Golf Club', 2),
+    ('Moselem Springs Golf Club', 3),
+    ('Woodstone Country Club', 4),
+    ('Lord''s Valley Country Club', 5),
+    ('Other', 99);
+  ```
+- **Venue manager in Gatherings Admin** — add/deactivate venues without D1 Console. Planned this session, not built.
+- **Worker paste** — `GET /venues` route added to worker this session; confirm it was pasted into Cloudflare dashboard.
+- Venue dropdown: test new Places API (`AutocompleteSuggestion`) on device — Lord's Valley investigation ongoing (not in Google Places data).
+- Gathering Templates §20 implementation.
+- Gathering attachments via R2 (backlog).
+- Crew onboarding spec §5 (own session).
+
+**Final portal version: v3.16.78 · 2026-06-26**
+**Dev-51 closed.**
