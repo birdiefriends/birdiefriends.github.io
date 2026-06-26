@@ -41,12 +41,39 @@ is now the sole source of truth for the current Dev-N number. Read it, not this 
 
 # BirdieFriends Golf Scorer — Session Starter
 **Current session number:** see `BF_Session_Log.md` (this file no longer tracks it)
-**Date:** 2026-06-24
-**Portal Version (production):** v3.16.60 · 2026-06-24
+**Date:** 2026-06-26
+**Portal Version (production):** v3.16.78 · 2026-06-26
 **GolfScorer Version:** v8.17 · 2026-06-17g (deployed)
-**Worker Version:** 2026-06-18b + all Gatherings routes through Dev-49 (tee_time_status, member_preferences GET/PUT, host_note in registrations, gathering_alerts param, cancel Worker-side)
+**Worker Version:** 2026-06-18b + all Gatherings routes through Dev-51 (GET /venues added)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
+**Google Places API Key:** AIzaSyAn1TR2p6JbWR2fr5ydhkurygKpYU9HYtw (restricted to birdiefriends.com)
+
+---
+
+## Dev-51 Architecture Notes (2026-06-26)
+
+### Venue Autocomplete
+Venue field in create + edit Gathering forms is now a smart autocomplete:
+- On focus: shows full D1 `venues` table ("Your Courses") immediately
+- On type: narrows D1 matches + fires Google Places `AutocompleteSuggestion` API
+- Smart golf hint: appends " golf" only if query lacks golf/country/club/links
+- Filter: main text only, keywords golf/country/club/links
+- Free-form fallback: host can always type a name directly
+- `GET /venues` Worker route — D1 `venues` table, `sort_order ASC, name ASC`
+- **D1 migration (Entry 7) still needed** — `venues` table not yet created. SQL in Dev-51 log entry.
+
+### Push ID Audit
+- Manual: 🔍 Audit button in Push Subscribers card — cross-references Jotform pushIds vs OneSignal live subscriptions. Stale = 🗑️ Clear button writes empty QID 23 to Jotform.
+- Auto: `osCommissionerAudit()` runs 5s after portal load (commissioner only), once per day via `bf_push_audit_YYYY-MM-DD` localStorage key. Silently clears stale tokens, toast if anything cleared.
+
+### Admin section visibility fix
+`selectPlayer()` now explicitly re-evaluates `commissioner-admin-section` visibility on every player switch — not just on `showScreen('admin')`.
+
+### Gatherings Admin improvements
+- 💬 Text Host link per host section header (sms: using cell from memberData)
+- Capacity fill "X/Y" when size is set
+- Inline registration expand (replaces alert()) — Yes/Sub/No groups with names
 
 ---
 
