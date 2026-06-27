@@ -441,3 +441,34 @@ D1 `gatherings` table uses `size` (not `capacity`) and `gathering_type` (not `fo
 
 **Final portal version: v3.16.83 · 2026-06-27**
 **Dev-52 closed.**
+
+## Dev-52 Addendum · 2026-06-27 (post-close backlog work)
+
+**Backlog review and cleanup:**
+
+**Killed:**
+- CttP negative distance input validation — deferred indefinitely
+- Push notification message copy audit — deferred
+- Live panel UX overhaul — deferred
+- Chooch IRL template feedback as a tracked item — will surface naturally
+- Session versioning discipline — **fixed**: deploy script now always fetches `portal_version.txt` fresh from GitHub via `subprocess.check_output(curl)` before computing next version. Never reads local file. Session Starter updated and pushed.
+
+**Shipped during backlog review (v3.16.84 → v3.16.85):**
+
+**v3.16.84 — Crew name on member-facing Gathering card**
+- `buildEventCard()` now renders `👥 {crewName}` in the Gathering meta row for crew-mode Gatherings (`fillListEnabled = false`). Open-mode Gatherings excluded (no crew name). Data was already in `gatheringData.crewName` — just not surfaced on the card.
+
+**v3.16.85 — Type-aware Announcement Feed styling**
+- `buildAnnouncementsHTML()` rewritten with `typeConfig()` lookup — each `bf_type` gets its own icon, accent background, border color, and label:
+  - 🦅 Birdie Alert (gold), 🎯 Closest to Pin (green), ⛳ Gathering Invite (blue), 📢 Open Gathering (blue), 📅 Date Changed (amber), ❌ Cancelled (red), 🎉 You're In! (green), 🗓️ New Event (green), ⏰ Reminder (green), 📣 Broadcast (neutral)
+- Timestamp now includes time of day, not just date
+- Entries render as rounded pill cards with matching accent fill — replaces flat divider-row list
+
+**Live Feed backlog item killed** — existing Announcements card *is* the feed; type-aware styling delivers the same value without a second component.
+
+**Open backlog carrying to Dev-53:**
+- Push notification preference center — single Settings home for all BF notification types (Gathering Alerts + BF event notifications unified)
+- Player picker rethink — mirror gathering crew selector / live panel pattern
+
+**Final portal version: v3.16.85 · 2026-06-27**
+**Dev-52 fully closed.**
