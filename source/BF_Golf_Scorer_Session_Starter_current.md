@@ -41,17 +41,57 @@ is now the sole source of truth for the current Dev-N number. Read it, not this 
 
 # BirdieFriends Golf Scorer — Session Starter
 **Current session number:** see `BF_Session_Log.md` (this file no longer tracks it)
-**Date:** 2026-06-26
-**Portal Version (production):** v3.16.78 · 2026-06-26
+**Date:** 2026-06-27
+**Portal Version (production):** v3.16.85 · 2026-06-27
 **GolfScorer Version:** v8.17 · 2026-06-17g (deployed)
-**Worker Version:** 2026-06-18b + all Gatherings routes through Dev-51 (GET /venues added)
+**Worker Version:** 2026-06-18b + all Gatherings routes through Dev-52 (GET/POST /venues, PATCH /venues/:id, GET/POST/DELETE /gathering-templates)
 **Live URL:** https://birdiefriends.com/portal.html
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
 **Google Places API Key:** AIzaSyAn1TR2p6JbWR2fr5ydhkurygKpYU9HYtw (restricted to birdiefriends.com)
 
 ---
 
-## Dev-51 Architecture Notes (2026-06-26)
+## Dev-52 Architecture Notes (2026-06-27)
+
+### Gathering Templates (§20 — fully shipped)
+- `_hostTemplates` cache, loaded on every Host panel open via `loadHostTemplates()`
+- `📋 From Template` CTA button — same dark green pill style as New Gathering, shown when host has ≥1 template
+- Template picker: `host-gathering-card` style cards, green meta chips, ⛳ Use Template + Delete action strip
+- `applyTemplate()` — pre-fills create form; date/time always blank; crew snapshot resolved against current memberData; silently drops departed members
+- `promptSaveAsTemplate()` — fires after every successful create; also on ☆ Template button on existing host cards
+- Worker routes: `POST /gathering-templates`, `GET /gathering-templates?host_id=X`, `DELETE /gathering-templates/:id?host_id=X`
+- D1 table: `gathering_templates` (id, host_id, name, title, venue, capacity, gathering_type, description, crew_snapshot, created_at)
+
+### Text Formatting (enforced on all Gathering creates/edits)
+- `toTitleCase()` — title, format/type, template name; skips articles/prepositions mid-string
+- `toSentenceCase()` — description only
+- Applied in `submitNewGathering`, `submitEditGathering`, `saveTemplate`
+- Venue field never transformed (host knows the correct name)
+
+### Venue Manager (Commissioner Admin → Gatherings Admin)
+- Collapsible 📍 Venue Manager sub-section — auto-loads on first expand
+- `GET /venues?pin=7797` returns all venues including inactive (commissioner); no pin = active only
+- `POST /venues` (PIN) — add venue, sort_order 90 by default (before Other at 99)
+- `PATCH /venues/:id` (PIN) — toggle active status
+- `adminAddVenue()` auto-title-cases name, clears `_venues` autocomplete cache on change
+- 📋 All Active Gatherings also collapsible, max-height 420px with scroll
+
+### Announcement Feed (type-aware styling)
+`buildAnnouncementsHTML()` uses `typeConfig(bf_type)` for per-type icon + accent color:
+- 🦅 birdie (gold) · 🎯 cttp (green) · ⛳ gathering_invite (blue) · 📢 gathering_open_invite (blue)
+- 📅 gathering_date_changed (amber) · ❌ gathering_cancelled (red) · 🎉 sub_promotion (green)
+- 🗓️ new_event (green) · ⏰ event_reminder (green) · 📣 broadcast (neutral)
+Timestamp includes time of day. Entries render as rounded pill cards.
+
+### D1 Schema — current entries
+| Entry | Session | Description |
+|-------|---------|-------------|
+| 1–3 | Dev-42/43 | gatherings, crews, crew_members, registrations |
+| 4 | Dev-49 | member_preferences |
+| 5 | Dev-49 | gatherings.tee_time_status |
+| 6 | Dev-49 | registrations.host_note (schema kept, UI removed) |
+| 7 | Dev-51/52 | venues table (6 rows seeded) |
+| 8 | Dev-52 | gathering_templates |
 
 ### Venue Autocomplete
 Venue field in create + edit Gathering forms is now a smart autocomplete:
