@@ -2360,25 +2360,33 @@ body {
         <div style="display:flex;flex-direction:column;gap:14px">
 
           <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <div style="font-size:0.83rem;font-weight:600;color:var(--text)">📍 Venue Manager</div>
-              <button class="btn btn-ghost" style="font-size:0.78rem;padding:4px 10px" onclick="loadAdminVenues()">↻ Refresh</button>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;cursor:pointer" onclick="toggleAdminSubSection('admin-venues-body','admin-venues-chev')">
+              <div style="display:flex;align-items:center;gap:6px">
+                <div style="font-size:0.83rem;font-weight:600;color:var(--text)">📍 Venue Manager</div>
+                <span id="admin-venues-chev" style="font-size:1rem;color:var(--text-muted);transition:transform 0.2s;display:inline-block;transform:rotate(0deg)">›</span>
+              </div>
             </div>
-            <div id="admin-venues-list" style="font-size:0.82rem;color:var(--text-muted);margin-bottom:10px">Tap Refresh to load.</div>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-              <input id="admin-venue-new-name" type="text" placeholder="New venue name…"
-                style="flex:1;font-size:0.82rem;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text)"
-                onkeydown="if(event.key==='Enter')adminAddVenue()">
-              <button class="btn btn-secondary btn-sm" style="font-size:0.82rem;white-space:nowrap" onclick="adminAddVenue()">＋ Add</button>
+            <div id="admin-venues-body" style="display:none">
+              <div id="admin-venues-list" style="font-size:0.82rem;color:var(--text-muted);margin-bottom:10px">Loading…</div>
+              <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+                <input id="admin-venue-new-name" type="text" placeholder="New venue name…"
+                  style="flex:1;font-size:0.82rem;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text)"
+                  onkeydown="if(event.key==='Enter')adminAddVenue()">
+                <button class="btn btn-secondary btn-sm" style="font-size:0.82rem;white-space:nowrap" onclick="adminAddVenue()">＋ Add</button>
+              </div>
             </div>
           </div>
 
           <div style="border-top:1px solid var(--border);padding-top:14px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <div style="font-size:0.83rem;font-weight:600;color:var(--text)">📋 All Active Gatherings</div>
-              <button class="btn btn-ghost" style="font-size:0.78rem;padding:4px 10px" onclick="loadAdminGatherings()">↻ Refresh</button>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;cursor:pointer" onclick="toggleAdminSubSection('admin-gatherings-body-inner','admin-gatherings-inner-chev',true)">
+              <div style="display:flex;align-items:center;gap:6px">
+                <div style="font-size:0.83rem;font-weight:600;color:var(--text)">📋 All Active Gatherings</div>
+                <span id="admin-gatherings-inner-chev" style="font-size:1rem;color:var(--text-muted);transition:transform 0.2s;display:inline-block;transform:rotate(0deg)">›</span>
+              </div>
             </div>
-            <div id="admin-gatherings-list" style="font-size:0.82rem;color:var(--text-muted)">Tap Refresh to load.</div>
+            <div id="admin-gatherings-body-inner" style="display:none;max-height:420px;overflow-y:auto">
+              <div id="admin-gatherings-list" style="font-size:0.82rem;color:var(--text-muted)">Loading…</div>
+            </div>
           </div>
 
           <div style="border-top:1px solid var(--border);padding-top:14px">
@@ -9827,12 +9835,28 @@ function toggleAdminCard(cardId) {
   if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
+// Toggle a sub-section within a card (Venue Manager, All Active Gatherings)
+// autoLoad: if true, fires the associated load function on first expand
+function toggleAdminSubSection(bodyId, chevId, autoLoad) {
+  const body = document.getElementById(bodyId);
+  const chev = document.getElementById(chevId);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+  if (!open && autoLoad && !body.dataset.loaded) {
+    if (bodyId === 'admin-gatherings-body-inner') loadAdminGatherings();
+    if (bodyId === 'admin-venues-body')           loadAdminVenues();
+    body.dataset.loaded = '1';
+  }
+}
+
 // ── Push Subscribers card — collapsible ─────────────────────────────────────
 function toggleAdminGatherings() {
   const body = document.getElementById('admin-gatherings-body');
   toggleAdminCard('admin-gatherings');
   if (body && body.style.display !== 'none' && !body.dataset.loaded) {
-    loadAdminGatherings();
+    body.dataset.loaded = '1';
   }
 }
 
@@ -9841,7 +9865,7 @@ async function loadAdminGatherings() {
   const listEl = document.getElementById('admin-gatherings-list');
   if (!listEl) return;
   listEl.innerHTML = '<div style="color:var(--text-hint);font-size:0.82rem">Loading…</div>';
-  const body = document.getElementById('admin-gatherings-body');
+  const body = document.getElementById('admin-gatherings-body-inner');
 
   try {
     const res = await fetch(`${GATHERINGS_API}/gatherings/all?pin=7797`);
@@ -9941,7 +9965,7 @@ async function adminDeleteGathering(id, title, host) {
     if (!data.ok) throw new Error(data.error || 'Delete failed');
     showToast(`✅ "${title}" deleted`);
     // Reload the list
-    const body = document.getElementById('admin-gatherings-body');
+    const body = document.getElementById('admin-gatherings-body-inner');
     if (body) delete body.dataset.loaded;
     loadAdminGatherings();
   } catch(e) {
