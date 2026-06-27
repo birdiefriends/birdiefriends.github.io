@@ -143,12 +143,17 @@ after creating a Gathering is the intended behavior.
 **Portal (docs/portal.html + source/portal.html + source/portal_version.txt):**
 ```python
 # python3 in bash_tool — write three payload files, then push all three
-import json, re, datetime
+import json, re, datetime, subprocess
 
 with open('/home/claude/birdiefriends_portal.html') as f:
     portal = f.read()
-with open('/home/claude/portal_version.txt') as f:
-    ver_txt = f.read()
+
+# Always fetch portal_version.txt fresh from GitHub — never read local file.
+# Local copy goes stale after the first deploy in a session, causing duplicate version numbers.
+ver_txt = subprocess.check_output([
+    'curl', '-s',
+    f'https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/portal_version.txt?cb={int(datetime.datetime.now().timestamp()*1000)}'
+]).decode()
 
 match = re.search(r'v3\.(\d+)\.(\d+)', ver_txt)
 minor, patch = int(match.group(1)), int(match.group(2))
