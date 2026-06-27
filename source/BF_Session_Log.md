@@ -385,3 +385,59 @@ D1 `gatherings` table uses `size` (not `capacity`) and `gathering_type` (not `fo
 
 **Final portal version: v3.16.78 · 2026-06-26**
 **Dev-51 closed.**
+
+---
+
+## Session Dev-52 · 2026-06-27
+
+**Focus:** Venue Manager (Gatherings Admin), Gathering Templates (§20), text formatting enforcement.
+
+**Pre-session D1 migrations (Brian ran in Cloudflare Console):**
+- `gathering_templates` table created (id, host_id, name, title, venue, capacity, gathering_type, description, crew_snapshot, created_at)
+- `venues` table confirmed populated: Blue Shamrock Golf Club, Whitetail Golf Club, Moselem Springs Golf Club, Woodstone Country Club, Lord's Valley Country Club, Other (6 rows, IDs 1–6)
+
+**Worker changes (deployed, paste confirmed):**
+- `GET /venues?pin=7797` — commissioner view returns all venues (active + inactive); no pin returns active only (supersedes old active-only route)
+- `POST /venues` — PIN-gated, adds new venue at sort_order 90 (just before Other at 99)
+- `PATCH /venues/:id` — PIN-gated, toggles active status (0/1)
+- `POST /gathering-templates` — save template; host_id, name, title, venue, capacity, gathering_type, description, crew_snapshot (JSON)
+- `GET /gathering-templates?host_id=X` — list host's templates, crew_snapshot parsed from JSON
+- `DELETE /gathering-templates/:id?host_id=X` — delete with server-side host_id ownership check
+
+**Portal changes (v3.16.78 → v3.16.83):**
+
+**Text formatting utilities:**
+- `toTitleCase()` — capitalizes words, skips articles/prepositions mid-string (a, an, the, at, by, for, in, of, on, or, and, but, nor, to, up, as, is)
+- `toSentenceCase()` — capitalizes first letter only
+- Applied in `submitNewGathering` and `submitEditGathering`: title → title case, format → title case, description → sentence case, venue untransformed
+- Also applied to template name on save
+
+**Gathering Templates (§20 — fully implemented):**
+- `_hostTemplates` module-level cache, loaded on every Host panel open via `loadHostTemplates()`
+- `📋 From Template` button — appears alongside New Gathering when host has ≥1 template; styled as dark green CTA pill matching New Gathering
+- `showTemplatePicker()` — sheet listing saved templates as host-gathering-card style cards with green meta chips (venue, format, crew count); ⛳ Use Template + Delete action strip
+- `applyTemplate()` — pre-fills create form (title, venue, capacity, format, description); date/time always blank; resolves crew snapshot against current memberData; silently drops departed members with toast count; sets crew mode
+- `promptSaveAsTemplate()` — fires after every successful create via native prompt (default = Gathering title); also triggered by ☆ Template button on existing host panel cards
+- `saveTemplate()` — POST to Worker, refreshes `_hostTemplates` cache silently
+- `deleteTemplate()` — confirm → DELETE → re-renders picker or returns to list if last template deleted
+- ☆ Template secondary action added to each Gathering card in host panel action row
+
+**Venue Manager (Gatherings Admin card):**
+- New 📍 Venue Manager collapsible sub-section (auto-loads on first expand)
+- `loadAdminVenues()` — fetches GET /venues?pin=7797, renders rows with Active/Inactive badge + Deactivate/Reactivate button
+- `adminToggleVenue()` — PATCH /venues/:id, clears `_venues` autocomplete cache on change
+- `adminAddVenue()` — POST /venues, name auto-title-cased, clears cache, refreshes list; Enter key supported
+- 📋 All Active Gatherings also converted to collapsible sub-section (auto-loads on first expand, max-height 420px with scroll)
+- `toggleAdminSubSection()` helper added for both sub-sections
+
+**Style fixes:**
+- From Template button: matches New Gathering CTA pill exactly (slightly darker green gradient to distinguish)
+- Template picker cards: use host-gathering-card class (green left border, #f7fbf9 background, shadow), green pill chips for meta, action strip matches rest of host panel
+
+**Carry-forward for Dev-53:**
+- Chooch IRL testing of Templates — gather feedback
+- Crew name display on member-facing Gathering card (observed in Dev-52 screenshots — "Rough Riders" visible in host panel but absent from member card)
+- Session versioning discipline: local portal_version.txt must be re-fetched from GitHub at start of each deploy sequence within a session to avoid duplicate version numbers (happened twice this session)
+
+**Final portal version: v3.16.83 · 2026-06-27**
+**Dev-52 closed.**
