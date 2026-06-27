@@ -435,22 +435,6 @@ export default {
       }
     }
 
-    // GET /venues — return all active venues ordered by sort_order, name
-    if (request.method === 'GET' && url.pathname === '/venues') {
-      try {
-        const rows = await env.DB.prepare(
-          `SELECT id, name FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`
-        ).all();
-        return new Response(JSON.stringify({ ok: true, venues: rows.results }), {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
-      } catch(e) {
-        return new Response(JSON.stringify({ error: 'Database error fetching venues' }), {
-          status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
-      }
-    }
-
     // GET /gatherings?player_id=X — Gatherings visible to a player:
     // their own (as host) + any they're invited to via Crew membership.
     // Cancelled Gatherings excluded — "past ones quietly disappear."
@@ -619,6 +603,140 @@ export default {
         });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error fetching registrations' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /venues?pin=X — commissioner view returns ALL venues (active + inactive)
+    // GET /venues        — public view returns active venues only (existing behaviour preserved)
+    if (request.method === 'GET' && url.pathname === '/venues') {
+      const pin = url.searchParams.get('pin');
+      const isCommissioner = (pin === '7797');
+      try {
+        const sql = isCommissioner
+          ? `SELECT id, name, active, sort_order FROM venues ORDER BY sort_order ASC, name ASC`
+          : `SELECT id, name FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`;
+        const rows = await env.DB.prepare(sql).all();
+        return new Response(JSON.stringify({ ok: true, venues: rows.results }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error fetching venues' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
+    // POST /venues — commissioner adds a new venue. PIN-gated.
+    if (request.method === 'POST' && url.pathname === '/venues') {
+      const body = await request.json();
+      const { pin, name, sort_order } = body;
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      if (!name || !name.trim()) return new Response(JSON.stringify({ error: 'name is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        // Place new venue just before "Other" (sort_order 99) by default
+        const order = (sort_order != null) ? sort_order : 90;
+        const result = await env.DB.prepare(
+          `INSERT INTO venues (name, active, sort_order) VALUES (?, 1, ?)`
+        ).bind(name.trim(), order).run();
+        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error adding venue' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
+    // PATCH /venues/:id — commissioner toggles active status. PIN-gated.
+    const venuePatchMatch = url.pathname.match(/^\/venues\/(\d+)$/);
+    if (request.method === 'PATCH' && venuePatchMatch) {
+      const venueId = venuePatchMatch[1];
+      const body = await request.json();
+      const { pin, active } = body;
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      if (active == null) return new Response(JSON.stringify({ error: 'active is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        await env.DB.prepare(`UPDATE venues SET active = ? WHERE id = ?`).bind(active ? 1 : 0, venueId).run();
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error updating venue' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
+    // POST /gathering-templates — save a new template. No PIN (open-trust model per §16).
+    if (request.method === 'POST' && url.pathname === '/gathering-templates') {
+      const body = await request.json();
+      const { host_id, name, title, venue, capacity, gathering_type, description, crew_snapshot } = body;
+      if (!host_id || !name || !title) {
+        return new Response(JSON.stringify({ error: 'host_id, name, and title are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const result = await env.DB.prepare(
+          `INSERT INTO gathering_templates (host_id, name, title, venue, capacity, gathering_type, description, crew_snapshot)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        ).bind(
+          host_id, name, title,
+          venue || null, capacity || null,
+          gathering_type || null, description || null,
+          crew_snapshot ? JSON.stringify(crew_snapshot) : null
+        ).run();
+        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error saving template' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
+    // GET /gathering-templates?host_id=X — list all templates for a host.
+    if (request.method === 'GET' && url.pathname === '/gathering-templates') {
+      const hostId = url.searchParams.get('host_id');
+      if (!hostId) return new Response(JSON.stringify({ error: 'host_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        const rows = await env.DB.prepare(
+          `SELECT id, name, title, venue, capacity, gathering_type, description, crew_snapshot, created_at
+           FROM gathering_templates WHERE host_id = ? ORDER BY created_at DESC`
+        ).bind(hostId).all();
+        const templates = rows.results.map(t => ({
+          ...t,
+          crew_snapshot: t.crew_snapshot ? JSON.parse(t.crew_snapshot) : []
+        }));
+        return new Response(JSON.stringify({ ok: true, templates }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error fetching templates' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
+    // DELETE /gathering-templates/:id?host_id=X — delete a template, ownership verified.
+    const templateDeleteMatch = url.pathname.match(/^\/gathering-templates\/(\d+)$/);
+    if (request.method === 'DELETE' && templateDeleteMatch) {
+      const templateId = templateDeleteMatch[1];
+      const hostId = url.searchParams.get('host_id');
+      if (!hostId) return new Response(JSON.stringify({ error: 'host_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        // Verify ownership before deleting
+        const row = await env.DB.prepare(`SELECT host_id FROM gathering_templates WHERE id = ?`).bind(templateId).first();
+        if (!row) return new Response(JSON.stringify({ error: 'Template not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        if (row.host_id !== hostId) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        await env.DB.prepare(`DELETE FROM gathering_templates WHERE id = ?`).bind(templateId).run();
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error deleting template' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
       }
     }
 
