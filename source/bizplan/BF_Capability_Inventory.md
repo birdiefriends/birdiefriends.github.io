@@ -1,5 +1,5 @@
 # BirdieFriends — Capability Inventory
-*Business Plan Exhibit · Draft v0.6 · June 2026*
+*Business Plan Exhibit · Draft v0.7 · June 2026*
 
 ---
 
@@ -189,11 +189,11 @@
 
 | Stream | Mechanism | Phase |
 |--------|-----------|-------|
-| **Platform fee** | Per-player/per-round embedded in event cost | Launch |
+| **Platform fee** | Flat $5/player/round, embedded in event cost ($3 floor, $4 likely blended average with promo pricing — settled BP-3) | Launch |
 | **Event package upsell** | Photo, premium archive, rewards tiers | Launch |
 | **BF Rewards** | Physical artifacts ordered at event close | Launch |
 | **Ambassador origination** | Credit for bringing a player into the BF ecosystem | Launch |
-| **Ambassador lifetime attribution** | Re-rewarded whenever an originated player transacts with BF again, in any future context — "build your own ATM" (permanence mechanics still TBD) | Launch |
+| **Ambassador lifetime attribution** | 5% recurring override on an originated player's future bookings, conditioned on the Ambassador remaining active (~1 new group/month illustrative bar) — self-limiting, not unconditional (settled BP-3) | Launch |
 | **BF Pay** | Treasury and settlement fees | Phase 2 |
 | **Cross-community events** | Entry fees, sponsored competitions | Future |
 
@@ -209,4 +209,4 @@
 ---
 
 *This document is a living asset. Updated each business planning session.*
-*Last updated: Session BP-2 · June 19, 2026 · v0.6*
+*Last updated: Session BP-3 · June 30, 2026 · v0.7*
