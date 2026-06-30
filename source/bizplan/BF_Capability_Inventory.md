@@ -62,7 +62,7 @@
 | Match play table | Head-to-head records |
 | Branded event site | Custom design per event (GLS proof of concept ✅) |
 
-> **Proof point:** Garrett's Last Swing hat — organizer-initiated physical memorialization, BF co-branded, organic. Happened before commercialization existed. This is the value proposition working in the wild.
+> **Proof point:** Garrett's Last Swing hat — Host-initiated physical memorialization, BF co-branded, organic. Happened before commercialization existed. This is the value proposition working in the wild.
 
 ### 🛠️ Platform Infrastructure
 | Capability | Notes |
@@ -110,7 +110,7 @@
 
 | Capability | Description | Priority |
 |-----------|-------------|----------|
-| Self-serve event booking | Public-facing, organizer books and pays online | 🔴 High |
+| Self-serve event booking | Public-facing, Host books and pays online | 🔴 High |
 | Per-player/per-round billing | Platform fee embedded in event cost — VIG model, participant-split | 🔴 High |
 | Participant enrollment | Auto-enroll all attendees into BF ecosystem at event close | 🔴 High |
 | Event package tiers | Base (scoring + portal) / Standard (+ photos) / Premium (+ rewards) | 🟡 Medium |
@@ -131,8 +131,8 @@
 | Capability | Description | Priority |
 |-----------|-------------|----------|
 | Digital achievement system | Permanent badges — skins won, CttP, champion, season awards | 🔴 High |
-| Physical artifact fulfillment | Engraved coins, pins, plaques — ordered through platform, ships to organizer | 🔴 High |
-| Event branded merchandise | Hats, shirts — event-named, BF co-branded, organizer-customized | 🟡 Medium |
+| Physical artifact fulfillment | Engraved coins, pins, plaques — ordered through platform, ships to Host | 🔴 High |
+| Event branded merchandise | Hats, shirts — event-named, BF co-branded, Host-customized | 🟡 Medium |
 | Season trophy program | Series champion physical award — annual, perpetual | 🟡 Medium |
 
 > **Positioning:** BF Rewards is not merchandise. It is the physical layer of the memorial product. Every artifact that leaves an event carries both the event brand and the BF mark — compounding brand equity with every gathering run on the platform.
@@ -154,14 +154,14 @@
 
 | Capability | Description | Priority |
 |-----------|-------------|----------|
-| Ambassador onboarding | Application, credentialing, community territory assignment | 🔴 High |
+| Ambassador onboarding | Application, credentialing — no territory/regional restriction; Ambassadors build attribution-based business wherever it takes them (settled BP-3) | 🔴 High |
 | Ambassador dashboard | Origination earnings, lifetime attribution payout tracking, community book of business | 🔴 High |
 | Community management tools | Ambassador-owned group portal — their community, their brand, BF infrastructure | 🟡 Medium |
 | Participant attribution tracking | Every enrolled participant permanently tagged to originating Ambassador — basis for lifetime attribution payouts | 🔴 High |
 | Ambassador recruiting tools | BF-supplied materials, pitch deck, demo event capability | 🟡 Medium |
-| Role succession / handoff | Mechanism for one person to step into a vacated Wrangler, Organizer, or Ambassador role (injury, burnout, life change) without losing group continuity or, where applicable, reassigning attribution. Surfaced via Gate 2 discussion (Vision Thesis 9) — not yet scoped technically or commercially. | 🟡 Medium |
+| Role succession / handoff | Mechanism for one person to step into a vacated Wrangler, Host, or Ambassador role (injury, burnout, life change) without losing group continuity or, where applicable, reassigning attribution. Surfaced via Gate 2 discussion (Vision Thesis 9) — not yet scoped technically or commercially. | 🟡 Medium |
 
-> **Ambassador vs. Entrepreneur:** Ambassadors are community advocates — motivated organizers who love what BF does and get paid to share it with people they already know. They are not a sales channel dependency. BF sells directly to any organizer who finds it. Ambassadors accelerate reach into communities BF couldn't cost-effectively penetrate otherwise. The product doesn't need them. The network becomes dramatically more valuable with them.
+> **Ambassador vs. Entrepreneur:** Ambassadors are community advocates — motivated Hosts who love what BF does and get paid to share it with people they already know. They are not a sales channel dependency. BF sells directly to any Host who finds it. Ambassadors accelerate reach into communities BF couldn't cost-effectively penetrate otherwise. The product doesn't need them. The network becomes dramatically more valuable with them.
 
 ### 🌐 Community Network (The Long Game)
 *Where Ambassador-anchored communities become interconnected — the network effect*
@@ -178,7 +178,7 @@
 ### ⚙️ Platform (Scale)
 | Capability | Description | Priority |
 |-----------|-------------|----------|
-| Multi-tenant architecture | Each Ambassador/community has isolated, portable data. **Active dev experiment underway (parallel track, BP-2)** — validated by 3 BFs with expressed direct interest; previously infeasible under old Jotform single-tenant model, no longer blocked. Core to the "Tee off, play great" tagline. | 🔴 High |
+| Proximity-aware discovery | One shared BirdieFriends platform (not multi-tenant/isolated instances — settled BP-3); scopes Gatherings, course, and community relevance by player home course + occasional travel, Craigslist-style. Builds on Gatherings (Dev-49–52), already live and self-service. Not yet scoped technically — dev-session task. | 🔴 High |
 | Production hosting migration | Off GitHub Pages onto scalable infrastructure | 🔴 High |
 | Support model | FAQ, Ambassador as first-line support for their community | 🟡 Medium |
 | Legal entity & terms of service | Commercial agreements, Ambassador contracts, user TOS | 🔴 High |
