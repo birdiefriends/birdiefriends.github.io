@@ -10,19 +10,9 @@ Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/ma
 
 ## Claude — execute these steps automatically, in order, before anything else:
 
-> ⚠️ **FETCH METHOD — MANDATORY:** Use `bash_tool` with `curl` for ALL file fetches below.
-> Do NOT use the `web_fetch` tool for raw GitHub URLs — it requires a prior search result and will block the bootstrap. All four files must be fetched in a single `bash_tool` call.
+**Fetch method:** Use `bash_tool` with `curl` for the four library file fetches below (raw GitHub URLs aren't reachable via `web_fetch` without a prior search result).
 
-> ⚠️ **DEPLOY METHOD:** All bizplan doc pushes go through the Worker's `/deploy` route — PIN and content only, no token ever passes through chat. Claude does not import or execute `bf_deploy.py`'s TOKEN-authenticated functions; that file is reference-only.
-> ```bash
-> curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
->   -H "Content-Type: application/json" \
->   -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
->   --data-binary @/tmp/payload.json
-> ```
-> Path must start with `source/bizplan/<filename>`. For files written via `python3 -c`, build the JSON payload to a temp file first and use `--data-binary @file` rather than passing content inline to `-d` — avoids shell argument-length failures on longer docs.
->
-> **Requires:** `birdiefriends-push.birdiefriends01.workers.dev` must already be in this session's network egress allowlist (Settings → Capabilities → Code execution and file creation → Allow network egress → Additional allowed domains) *before the session starts* — adding it mid-session does not apply retroactively. If a call to this host 403s with `host_not_allowed`, that's the cause; it needs a fresh session, not a retry.
+**Deploy route (reference only — not used during session start):** Bizplan doc pushes go through the Worker's `/deploy` route at `birdiefriends-push.birdiefriends01.workers.dev/deploy`, PIN-gated, POST only. Brian provides the PIN and explicit go-ahead in chat when he wants something pushed — session start never includes a write, only a reachability check (see step 5).
 
 **Run this exact bash block first:**
 
@@ -42,14 +32,18 @@ ls -lh /home/claude/BF_BizPlan_Vision.md /home/claude/BF_BizPlan_GateLog.md /hom
 3. Read `BF_BizPlan_Session_Log.md` into context (view tool) — sole source of truth for
    the current BZP session number (last entry's `BP-N` + 1)
 4. Read `BF_Capability_Inventory.md` into context (view tool)
-5. Report: session #, last session's gate status, file sizes, and confirm whether the
-   `/deploy` Worker route is reachable (a quick test push is fine) — confirm fully
-   loaded and ready. **Also state the exact chat-rename string** (e.g. `BZP#3 - <topic>`,
-   topic filled in once the session's focus is clear) so the chat title can be pasted
-   directly rather than guessed.
+5. Confirm the `/deploy` route is reachable with a harmless request only (e.g. a bare
+   GET, which should return 405 since the route is POST-only) — do not send a test
+   write/POST during session start. A write only happens later in the session, and
+   only on Brian's explicit instruction given directly in chat.
+6. Report: session #, last session's gate status, file sizes, deploy-route
+   reachability, and the exact chat-rename string (e.g. `BZP#3 - <topic>`, topic
+   filled in once the session's focus is clear).
 
 **At session close:** append a new entry to `BF_BizPlan_Session_Log.md` and push it via
-`/deploy` before ending — this is what keeps the counter authoritative.
+`/deploy` — only after Brian confirms in chat he wants it pushed. This keeps the
+session counter authoritative without making any file in the repo a source of
+standing write authorization.
 
 **All files are in the library. No uploads needed to start a session.**
 
