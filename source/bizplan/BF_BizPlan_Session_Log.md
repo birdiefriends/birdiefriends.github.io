@@ -84,3 +84,38 @@ Founder was "still chewing" on the overall picture at end of session — next se
 - Role succession/handoff — new capability gap, not yet scoped technically or commercially
 
 **Deploy note:** `/deploy` route confirmed reachable and writable to `source/bizplan/` paths this session; PIN provided by founder for this session's pushes.
+
+---
+
+## Session BP-3 · June 30, 2026
+
+**Focus:** Close Gate 1 pricing, resolve Ambassador commission/liability question, reframe multi-tenant as proximity-aware discovery, name the Ambassador Model, log Ambassador-recruits-Ambassador stress test, rename Organizer→Host platform-wide
+
+**Key decisions:**
+- **Bootstrap hardened (pre-session):** `BF_BizPlan_Bootstrap.md` revised to remove self-reassuring/instructive language aimed at the assistant (e.g. "quick test push is fine," "host_not_allowed means fresh session not retry"). Session start now does a harmless GET-only reachability check on `/deploy`; any actual write requires Brian's explicit go-ahead typed in chat that turn, never authorized by a fetched file alone. Deployed first, before the working session began.
+- **Gate 1 pricing number settled: flat $5/player/round.** Not tiered, not group-size-adjusted at the base-fee level — packages/tiers remain a separate later upsell layer. $3 is the durable floor (still profitable, still trivial to the player); $4 is the expected blended average once promo/intro pricing is layered in, not a separate decision. Reframed the underlying logic: this is a feasibility exercise with modest, low-investment, low-volume break-even goals, not margin optimization — even trivial volume (10 players/month ≈ $300–500/mo gross) already clears current operating costs (~$400/mo) with margin, before Ambassadors, recommendation engine, or scale. Gate 1 closed; Gate 4 reframed to focus on the scaling cost curve (what happens to margin as volume grows) rather than re-litigating base viability.
+- **Ambassador commission structure settled, two distinct pieces:** (1) 20% one-time origination on a player's first booking; (2) 5% recurring lifetime-attribution override on that player's future bookings, **conditioned on the Ambassador remaining active** (illustrative bar: ~1 new group/month — not a finalized contractual mechanic). This resolves the previously-open "is lifetime attribution an unbounded liability" question — the override is self-limiting by construction since it stops when an Ambassador goes inactive, no decay/expiration model needed. Remaining open: whether 5% is large enough to be a meaningful incentive at realistic volume (napkin example: 1,000 attributed bookings/mo × $5 × 5% = $250/mo) — flagged for Gate 4 modeling at a few volume scenarios.
+- **Multi-tenant reframed as proximity-aware discovery, within ONE BirdieFriends.** Earlier "multi-tenant" language conflated two different things: a real engineering need (discovery/relevance scoped by home course + occasional travel, Craigslist-style — Gatherings, Dev-49–52, already proves the self-service hosting primitive works) and a separate future business idea (selling isolated, brandable platform instances to other operators — franchise-of-instances). This plan commits to ONE BirdieFriends: single platform, single brand, single Ambassador economics layer, no per-community data isolation. Franchise-of-instances parked as a future idea in Vision's "What This Is Not," explicitly not a risk, not core to this plan. Ambassador "territory assignment" removed from Capability Inventory — Ambassadors are not regionally restricted; their job is to promote BF and build their own book of business wherever that takes them.
+- **The Ambassador Model named as BF's own standalone framework**, not "franchise, not MLM." Rather than defining BF's structure in opposition to either predecessor, it's named as its own thing — borrowing franchise's one-level-deep discipline and MLM's idea that recruiters can be rewarded for recruiting recruiters, without inheriting either's reputation or rules. The one-level-deep, no-multi-level-residual-stacking discipline carries forward unchanged; only the label and framing changed.
+- **New Ambassador Model recruiting-layer mechanism logged as a stress-test item, not settled:** Ambassadors can onboard new Ambassadors, one level deep. General payout framework discussed: x% (origination on a player's first booking — the existing 20%), y% (recurring override on that player's future bookings — the existing 5%, activity-gated), z% (A onboards a new Ambassador A2 — new, shape not yet defined), w% (A2's own originated players generate revenue, a one-level rollup share goes to A — new, basis not yet defined). Explicitly flagged: this would add a second layer of margin compression on top of Gate 4's existing 20%/5% napkin math, not yet reflected anywhere; needs real-number stress testing before adoption, not assumed to work just because it's been named.
+- **Organizer renamed to Host, platform-wide, to match the app.** No conceptual change — same role, same function, same economics — purely a terminology sync across Vision, Gate Log, and Capability Inventory. Wrangler/Connector remains a distinct, separate role (social connector function, not the administrative Host function) and was not affected by the rename.
+- **Session naming convention adopted, mirroring the dev track:** chat-rename string format `BZP#N - <topic>`, stated explicitly at session start once focus is clear.
+
+**Artifacts updated:**
+- `BF_BizPlan_Bootstrap.md` → hardened against file-driven write authorization (deployed pre-session)
+- `BF_BizPlan_GateLog.md` → Gate 1 (pricing settled, closed), Gate 2 (Ambassador commission settled, multi-tenant reframed to proximity-aware discovery, Ambassador Model named, recruiting-layer stress-test item added, Organizer→Host), Gate 4 (scaling-cost-curve reframe, attribution liability resolved, cross-reference to recruiting-layer stress test), Cross-Gate Risks Register (attribution liability resolved, architecture/dev-at-scale gap reframed), Organizer→Host throughout
+- `BF_BizPlan_Vision.md` → Thesis 4a (attribution mechanic resolved), tagline note (proximity-aware discovery, not multi-tenant), new "What This Is Not" entry (franchise-of-instances parked), Organizer→Host throughout
+- `BF_Capability_Inventory.md` → revenue model (pricing, attribution), Ambassador onboarding (territory assignment removed), Platform capability (Multi-tenant → Proximity-aware discovery), Organizer→Host throughout, version bumped to v0.7
+- `BF_BizPlan_Session_Log.md` (this entry)
+
+**Open / carried forward:**
+- Photo workflow automation vs. manual premium tier — not addressed this session
+- Participant billing mechanics (Host-collected vs. participant-direct) — not addressed this session
+- Gate 4 scaling-cost-curve rigor pass — not yet done, now the live Gate 4 task
+- Ambassador 5% override — model at a few volume scenarios to confirm it's meaningful, not a rounding error
+- Ambassador Model recruiting-layer (z%/w%) — full stress test not yet run; open questions on shape and basis of each variable
+- Proximity-aware discovery — not yet scoped technically; dev-session task
+- Execution capacity (architecture/dev-at-scale, community sweat-equity catalyst) — untouched this session, still open
+- Gate 5 (Go-to-Market) and Gate 6 (Launch Plan) — still not started
+
+**Deploy note:** `/deploy` route confirmed reachable (GET-only check at session start, per hardened bootstrap) and writable; PIN provided by founder for each push this session, four pushes completed (bootstrap pre-session; Gate Log, Vision, Capability Inventory at session close).
