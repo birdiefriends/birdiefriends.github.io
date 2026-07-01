@@ -329,6 +329,8 @@ Chapters are the gallery's navigation backbone. Each chapter maps a named moment
 
 Chapters should be defined in chronological order. New chapters can be added at any state without breaking existing links.
 
+*Superseded by the Section Manager in §9f — chapters become Host-managed Sections, with golf-round sections auto-populated from Rounds data (§4) and non-golf sections (dinner, party, games, adventures) added manually by the Host. This subsection is kept for the current hand-built chapter ID convention, which the Section Manager formalizes rather than replaces.*
+
 #### 9e. Upload Flow (current — Session 31)
 
 Photos are currently uploaded manually via the GitHub API (Claude direct). The process:
@@ -341,24 +343,37 @@ Photos are currently uploaded manually via the GitHub API (Claude direct). The p
 
 **Known gap:** metadata currently lives only in the gallery JS — not in a queryable, portable format. A photo's chapter, caption, and subjects are implicit in the gallery code, not stored as a separate record.
 
-#### 9f. Future: Photo Metadata Capture (planned)
+#### 9f. Future: Self-Service Photo & Event-Site System (planned)
 
-The goal is for every photo to carry its timeline context from the moment of upload — not reconstructed afterward from memory. This requires a structured capture step at upload time.
+*Design session: BZP#3 / Dev-53 · 2026-07-01. Status: planned — not built. Candidate for its own dedicated spec/build session before any implementation starts.*
 
-**Planned upload flow:**
+**Design principle:** the Commissioner is not in the photo-management business. Every flagship (GLS-style) experience is sold with a Host, and the Host runs their own event's photo workflow end to end — upload, sort, curate, publish — with no founder involvement required.
 
-1. Any group member submits photos via a **Photo Upload form** in the portal (event-scoped, available during LIVE and FINAL states)
-2. The form captures:
-   - Photo file(s)
-   - **Moment** — dropdown of chapter options for this event (e.g. "Friday Round 1", "Friday Evening", "Saturday Night")
-   - **Who's in it** — multi-select from the event player roster
-   - **Caption** (optional free text, ≤120 chars)
-   - Submitter name (auto-filled from portal identity)
-3. On submit: photo is staged to a `pending/` prefix in GitHub (not yet live), metadata written to Worker KV as `photo_meta::<slug>::<id>`
-4. Commissioner reviews pending uploads in Admin, approves/rejects individually, assigns `full_width` and final chapter position
-5. On approval: photo moves from `pending/` to `docs/`, gallery JS regenerated from KV metadata, site redeployed
+**Section Manager (supersedes ad hoc Chapter definition in §9d):**
+- An event's photo timeline is backed by an ordered list of **Sections** the Host manages directly, not a flat chapter array buried in gallery code.
+- **Golf sections auto-populate** from the event's Rounds data (§4) — Round 1, Round 2, Round 3 appear on the timeline automatically, no Host setup required.
+- **Non-golf sections are Host-defined** — Arrival, Dinner, Casino Night, Beach Day, Departure, or anything else the trip actually had. These carry no golf context and aren't tied to any GS data; they're free-text Sections the Host adds directly (name + rough time window).
+- Sections stay in chronological order; the Host can insert a new one at any point without breaking existing photo assignments (same non-breaking guarantee the old Chapter model had).
 
-**Metadata written to KV at upload:**
+**BF Upload — fixing metadata at the source, not after:**
+- The real GLS pain point wasn't the matching logic — it was that photos arriving via text/AirDrop/group-chat have already lost their EXIF timestamp by the time anyone sees them (iMessage compression, re-saves, screenshots).
+- Every crew member gets a first-party **BF Upload** button (camera roll or live capture, during the event) — a direct device-to-BF path that never touches a lossy delivery channel. This is the primary defense: avoid stripping metadata rather than trying to recover it afterward.
+
+**Timeline vs. Scrapbook — not every photo needs a moment:**
+- **Timeline:** photos cleanly mapped to a Section — this is where the narrative arc lives, and where BF Upload's intact timestamps do the automatic matching (photo timestamp → nearest Section window).
+- **Scrapbook:** a second, no-pressure home for photos worth keeping that don't need precise placement — no Section required, loosely ordered (upload order or day-level only). This is the pressure-release valve for photos with weak or missing metadata: by default they land in Scrapbook, and the Host only promotes one to the Timeline if it earns a specific spot.
+- This reframes "Unsorted" from a mandatory cleanup queue into an actual choice, which is what makes self-service viable instead of still being a part-time job for the Host.
+
+**Host review — two jobs that remain even with good metadata:**
+1. **Placement** for anything that didn't land cleanly — batch-assign a group of same-source photos to a Section at once (metadata tends to fail for a whole batch together, not randomly) rather than one-by-one.
+2. **Cut / no-cut** — every photo, Timeline or Scrapbook, needs a Host go/no-go before it's eligible for the published gallery. This is what keeps the result feeling like a keepsake instead of a photo dump, and it's explicitly the Host's call, not the founder's.
+
+**Open infrastructure questions — unresolved, needed before building:**
+- **Metadata store:** D1 (recommended — matches the Gatherings/Templates/venues convention already established; KV's flat-key shape doesn't support the querying/ordering/batch-editing a Host-facing manager needs) vs. the original KV sketch below (superseded).
+- **Photo storage:** commit to the GitHub Pages repo (current convention, `docs/<slug>-photo-<id>.<ext>`) vs. Cloudflare R2 (avoids binary bloat in git history; would also resolve the parked "Gathering attachments via R2" backlog item in the same stroke).
+- **Site rendering:** one data-driven template that fetches event data from a Worker API by slug at render time (matches how portal.html already works — instant edits, no per-event redeploy) vs. a static-generation "publish" step that bakes a real static HTML file per event (closer to how GLS actually shipped, heavier pipeline, no live-API dependency).
+
+**Original KV metadata sketch (superseded, kept for reference):**
 ```json
 {
   "file": "gls-photo-1047.jpg",
@@ -374,9 +389,9 @@ The goal is for every photo to carry its timeline context from the moment of upl
 }
 ```
 
-**Key principle:** the submitter — who was there — provides the timeline context. The commissioner provides editorial control. Neither has to reconstruct from memory later.
+**Key principle (unchanged):** whoever was there provides the timeline context; the Host provides editorial control (cut/no-cut, Section placement). Neither has to reconstruct anything from memory later.
 
-*Photo storage convention: `docs/<slug>-photo-<id>.<ext>` in GitHub Pages repo. Pending: `docs/pending/<slug>-photo-<id>.<ext>`*
+*Photo storage convention pending the open question above — see Infrastructure Notes.*
 
 ---
 
@@ -431,7 +446,7 @@ Derived from hole-by-hole scorecard data vs course par per hole.
 - **Site deploy:** GitHub API via `bf_deploy.py` or Worker `/deploy` endpoint (event sites are small enough for Worker deploy)
 - **URL convention:** `birdiefriends.com/<slug>.html`
 - **Portal link:** Auto-added to Results section in portal at SETUP
-- **Photo storage:** `docs/<slug>-photo-<id>.<ext>` in GitHub Pages repo
+- **Photo storage:** `docs/<slug>-photo-<id>.<ext>` in GitHub Pages repo (current convention) — **open question:** may move to Cloudflare R2 per §9f self-service redesign, not yet decided
 
 ---
 
@@ -453,7 +468,7 @@ The *site template* is stable. The *competition definitions* are the variable. N
 - Hard asset loader UI in portal Admin panel (course par, event config, player roster)
 - Competition configurator UI (pick types, set pots, define cart groups)
 - State transition controls in Admin (SETUP → LIVE → FINAL buttons)
-- **Photo upload with metadata capture** — portal form for group members to submit photos with timeline context (chapter, subjects, caption) at upload time; KV-backed pending queue; commissioner approval flow. Full spec in §9f.
+- **Self-service photo & event-site system** — Section Manager, BF Upload, Timeline/Scrapbook split, Host cut/no-cut review; no Commissioner involvement required. Full spec (planned, not built) in §9f. Candidate for its own dedicated build session — three infrastructure questions (metadata store, photo storage, site rendering) still open.
 - Worker-driven site auto-deploy on state change
 - Payout engine as a Worker endpoint
 - Competition registry as a versioned library in `source/`
