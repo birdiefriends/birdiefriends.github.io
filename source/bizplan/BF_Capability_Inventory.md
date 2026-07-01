@@ -1,5 +1,5 @@
 # BirdieFriends — Capability Inventory
-*Business Plan Exhibit · Draft v0.7 · June 2026*
+*Business Plan Exhibit · Draft v0.8 · July 2026*
 
 ---
 
@@ -86,7 +86,7 @@
 | Personalized push scoping | Platform | Specced |
 | Re-register bug fix | Operations | Known issue |
 | Live panel UX overhaul | Operations | Known issue |
-| Photo upload-time metadata capture | Memorialization | Documented in schema |
+| Photo capture & curation (self-service, staged) | Memorialization | Designed — `BF_EventSite_Schema.md` §9f (full system) + §9g (BF Series/Cup pilot, candidate launch 7/19 or 8/16/2026) |
 | Official GHIN handicap integration | Platform | Future — ~$6k/yr economic barrier today, possibly viable at scale |
 | Tee-time reservation API integration / course partnership | Operations | Future — some reservation systems offer fee-based APIs; not a launch dependency |
 
@@ -121,7 +121,7 @@
 
 | Capability | Description | Priority |
 |-----------|-------------|----------|
-| Automated photo ingestion | Mobile upload → auto chapter suggestion → archive build | 🔴 High |
+| Automated photo ingestion | Two-stage (settled 2026-07-01): (1) BF Series/Cup pilot — human-tagged capture via the existing Live Panel eligibility gate, Host curation, no auto-suggestion needed; (2) WallyCup/flagship scale — BF Upload + metadata-matched Section Manager. See schema §9f/§9g | 🔴 High |
 | Shareable highlight cards | Social-ready achievement graphics — CttP, skins, champion | 🟡 Medium |
 | Personalized scorecards | Printable/downloadable per-player keepsake | 🟡 Medium |
 
