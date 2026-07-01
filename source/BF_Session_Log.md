@@ -472,3 +472,36 @@ D1 `gatherings` table uses `size` (not `capacity`) and `gathering_type` (not `fo
 
 **Final portal version: v3.16.85 · 2026-06-27**
 **Dev-52 fully closed.**
+
+---
+
+## Session Dev-53 · 2026-07-01
+
+**Focus:** Gathering issues surfaced by Chooch's IRL recurring-host use (Templates, crew naming, response clarity).
+
+**Host Gathering Archive (v3.16.86):**
+- Expired Gatherings (`dt < now`) now drop out of the main Host panel list automatically — pure client-side filter against `gatheringData`, no D1 change.
+- New **📦 Archive (N)** link opens a read-only view of past Gatherings (info + tappable Yes/Sub/No response breakdown). No Edit/Invite/Cancel — those don't apply once the round is over. ☆ Save as Template kept available (reusing a good past one-off is still useful).
+
+**Clickable crew name + crew-name title-case bug (v3.16.87):**
+- New `showCrewMembers(crewId, crewName)` modal — tap `👥 [crew name]` (Host panel active list, Archive list, and member-facing event card) to see the roster (avatar initials, name, inactive flag), fetched from `GET /crews/:id/members`.
+- **Bug found:** the Dev-52 title-case mandate only covered Gathering title/type/description and template names — it never touched `dismissCrewSaveDialog()`. Crew names typed into the "💾 Save this Crew?" prompt were stored verbatim. Root-caused as a coverage gap, not a regression. Fixed at the point of capture.
+- Chooch's existing "Rough riders" crew corrected to "Rough Riders" via one-time manual D1 UPDATE (Brian ran in Console) — code fix only prevents new occurrences, doesn't retroactively fix stored data.
+
+**Recurring-host template duplication (v3.16.88):**
+- Chooch's "CGA Tuesday Golf League" had spawned two near-identical templates (different venue spelling, one missing its crew snapshot).
+- **Root cause:** `promptSaveAsTemplate()` auto-fires after *every* successful Gathering create, regardless of whether a template with that name already exists — a recurring host gets re-prompted every single occurrence.
+- **Fix:** auto-fire path now skips the prompt when a same-name template already exists for the host (case-insensitive match against `_hostTemplates`). The explicit ☆ Template button (manual save from an existing card) is unaffected — still always prompts, so a host can deliberately save a genuine variant.
+- Cleaned up Chooch's data directly via the Worker API: deleted the incomplete duplicate (id 3, empty crew snapshot), kept the complete one (id 4, 10-person crew snapshot).
+
+**Gathering "Can't Make It" status indicator (v3.16.89):**
+- **Bug found:** Gatherings show a status badge above the three response buttons when Yes/Sub, but a "No" response fell through to the exact same three-button block as never having responded at all — no badge, no indication.
+- **Fix:** "No" now shows a `✕ Can't Make It` badge and highlights the active button (`btn-selected` ring), while keeping all three buttons live so the response can still be changed — matches the Gathering's always-three-way toggle model.
+
+**Carry-forward for Dev-54:**
+- Push notification preference center — single Settings home for all BF notification types (carried from Dev-52).
+- Player picker rethink — mirror gathering crew selector / live panel pattern (carried from Dev-52).
+- Optional: PIN-gated crew-rename route, if manual D1 fixes for crew names recur.
+
+**Final portal version: v3.16.89 · 2026-07-01**
+**Dev-53 closed.**
