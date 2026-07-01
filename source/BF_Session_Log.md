@@ -505,3 +505,31 @@ D1 `gatherings` table uses `size` (not `capacity`) and `gathering_type` (not `fo
 
 **Final portal version: v3.16.89 · 2026-07-01**
 **Dev-53 closed.**
+
+## Dev-53 Addendum · 2026-07-01 (continued — GLS photo capability planning)
+
+**Focus:** Debate-and-document session on the recurring "photo workflow" open item from the BZP track — charted the full self-service design, then staged it down to a small, buildable first proof case, and synced the resolution back into the bizplan docs.
+
+**Design arc (full detail in `BF_EventSite_Schema.md` §9f and §9g):**
+- Reframed the long-open "automated base tier vs. manual premium tier" bizplan question — it wasn't actually a binary. Settled model: self-service capture (metadata-light, human-tagged at the moment of capture) + Host-owned curation that's never the founder's job for community Gatherings.
+- §9f — general self-service system: Section Manager (golf sections auto-populate from Rounds data, non-golf sections Host-defined), BF Upload (first-party capture, avoids lossy delivery channels that strip EXIF), Timeline vs. Scrapbook split (not every photo needs precise placement), Host cut/no-cut review. Three infrastructure questions flagged open: metadata store (D1 recommended), photo storage (GitHub Pages vs. R2), site rendering (data-driven template vs. static generation).
+- §9g — staged the design down to a real, small, buildable first test: **BF Series/Cup capture-first pilot.** No Section Manager needed (rounds already exist as GS data); 3 fixed story sections (working titles, not locked): Pre-Competition, On the Course, Post-Round (West Saloon). Capture button lives inside the existing Live Panel, inheriting the same Tier-2 eligibility gate already governing Scorecard/CttP — any registered player on the course can use it, no new access model. Brian captures the winner shot himself, tagged with the existing `trophy_moment` role. Curation happens in a Commissioner Admin collection card (same shape as Gatherings Admin) before publish. Publish inserts the approved photo collage into GolfScorer's existing `results.html` output — flagged as a cross-dependency on GS's own codebase (separate from portal.html), to be scoped in a session where GS source is actually available.
+- WallyCup identified as the eventual flagship-scale target (full GLS-equivalent treatment), timed alongside the already-known-necessary GS production re-architecture — deliberately *not* the first build.
+- Backlog item surfaced but not scoped in: auto-expire the Live Panel eligibility window (safety net alongside manual close) — would improve Scorecard/CttP eligibility too, not just photos.
+
+**BZP sync (this session's last task):**
+- `BF_BizPlan_GateLog.md` — Gate 1 Open item resolved into Settled (photo workflow model, with the build-cost/effort question narrowed and left genuinely open); Gate 4 Open item and Cross-Gate Risk Register row both updated to point at the resolved model and the pilot as the mechanism for getting a real cost number.
+- `BF_Capability_Inventory.md` — near-term roadmap and commercial roadmap photo entries rewritten to describe the two-stage (pilot → flagship) model instead of the old single automated-ingestion description; version bumped to v0.8.
+- `BF_BizPlan_Vision.md` — left untouched; this was a tactical/viability-tracking sync (Gate Log, Capability Inventory), not a positioning change.
+
+**Candidate launch dates (not committed to either):** BF Series Event #5 · 7/19/2026, or Event #6 · 8/16/2026.
+
+**Carry-forward for Dev-54:**
+- Build the BF Series/Cup pilot: Live Panel capture button (reusing existing Tier-2 eligibility gate), small D1 table for photo metadata, Commissioner Admin collection/curation card.
+- GS `results.html` photo-collage insertion — needs a session with GolfScorer source available (separate local app, not fetchable from this session).
+- Auto-expire Live Panel eligibility window — small standalone item, affects Scorecard/CttP too.
+- Decide (at build time, not before): whether the 3 story-section labels are hard-fixed or per-event editable.
+
+**Chat rename suggestion for next session:** `Dev#54 - BF Series Photo Pilot`
+
+**Dev-53 fully closed (addendum included).**
