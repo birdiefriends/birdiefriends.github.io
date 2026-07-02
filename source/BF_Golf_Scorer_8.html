@@ -2458,6 +2458,22 @@ function resetAll() {
 
   // Navigate to Players tab
   showTab("players");
+
+  // Reset live groupings.html to holding state — mirrors the reset End of
+  // Event already runs, which New Event never did (Dev-54: groupings.html
+  // was found stuck showing the prior event's "Final" pairings indefinitely
+  // after New Event, since New Event only cleared local GS state and never
+  // touched the deployed site).
+  // Fire-and-forget: New Event stays a fast, fully-local reset even offline;
+  // this just tries to sync the live page in the background. Failure is
+  // logged, not alerted — same non-blocking pattern as osIdentityRefresh.
+  resetGroupingsToHoldingCore().then(result => {
+    if (result && result.success) {
+      console.log('[New Event] Live groupings.html reset to holding state.');
+    } else {
+      console.warn('[New Event] Groupings reset failed — live groupings.html may still show the prior event:', result && result.error);
+    }
+  });
 }
 
 
@@ -7575,7 +7591,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.17 · 2026-06-21a';
+const GS_VERSION = 'v8.17 · 2026-07-02a';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
