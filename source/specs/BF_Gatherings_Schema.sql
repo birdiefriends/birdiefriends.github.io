@@ -109,3 +109,34 @@ ALTER TABLE gatherings ADD COLUMN tee_time_status TEXT NOT NULL DEFAULT 'confirm
 -- ============================================================
 
 ALTER TABLE registrations ADD COLUMN host_note TEXT;
+
+-- ============================================================
+-- Entry 7 — 2026-07-03 — Session Dev-54
+-- Photo Capture architecture (§9g pilot testbed). Deliberately bypasses
+-- Jotform — capture goes straight to the Worker (POST /photos/upload),
+-- which writes bytes to R2 (env.PHOTOS_BUCKET) and metadata to D1 in the
+-- same request. No sync/polling step needed as a result.
+-- REQUIRES: PHOTOS_BUCKET R2 bucket created + bound to the Worker in the
+-- Cloudflare dashboard BEFORE the new Worker routes will function —
+-- this is a manual one-time step, not something /deploy can do.
+-- Worker routes added same session: POST /photos/upload, GET /photos,
+-- PATCH /photos/:id (curation), GET /photos/serve/:id (R2 stream, gated
+-- to approved-only unless pin supplied).
+-- Portal: Photo Capture Test panel added to Commissioner Admin →
+-- Event Day Controls (Dev-54).
+-- ============================================================
+
+CREATE TABLE event_photos (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_name        TEXT NOT NULL,
+  section           TEXT NOT NULL CHECK (section IN ('pre_competition','on_course','post_round')),
+  r2_key            TEXT NOT NULL,
+  captured_by       TEXT,
+  caption           TEXT,
+  is_trophy_moment  INTEGER NOT NULL DEFAULT 0,
+  curation_status   TEXT NOT NULL DEFAULT 'pending' CHECK (curation_status IN ('pending','approved','rejected')),
+  sort_order        INTEGER,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_event_photos_lookup ON event_photos(event_name, section, curation_status);
