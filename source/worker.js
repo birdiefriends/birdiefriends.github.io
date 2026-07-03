@@ -1,3 +1,24 @@
+// Retry wrapper for D1 read-only queries. Cloudflare's own documented guidance
+// for the "D1 DB storage... object to be reset" class of errors is: retry the
+// operation. Safe here specifically because these are read-only/idempotent —
+// NOT used on writes (INSERT/UPDATE/DELETE), where a blind retry could risk
+// double-applying a mutation if the first attempt actually succeeded before
+// the error surfaced. (Dev-54, in response to a real D1 hiccup hit live.)
+async function d1RetryRead(fn, retries = 3, delayMs = 300) {
+  let lastErr;
+  for (let i = 0; i < retries; i++) {
+    try { return await fn(); }
+    catch (e) {
+      lastErr = e;
+      const msg = String(e.message || e);
+      const transient = /D1_ERROR|reset|timeout|Network connection lost/i.test(msg);
+      if (!transient || i === retries - 1) throw e;
+      await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 export default {
   async fetch(request, env) {
 
@@ -1041,7 +1062,7 @@ export default {
         if (status)      { sql += ` AND curation_status = ?`; binds.push(status); }
         sql += ` ORDER BY section, sort_order IS NULL, sort_order, created_at`;
 
-        const { results } = await env.DB.prepare(sql).bind(...binds).all();
+        const { results } = await d1RetryRead(() => env.DB.prepare(sql).bind(...binds).all());
         return new Response(JSON.stringify({ photos: results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -1115,7 +1136,7 @@ export default {
         const pin     = url.searchParams.get('pin');
         const isAdmin = String(pin) === '7797';
 
-        const row = await env.DB.prepare(`SELECT r2_key, curation_status FROM event_photos WHERE id = ?`).bind(photoId).first();
+        const row = await d1RetryRead(() => env.DB.prepare(`SELECT r2_key, curation_status FROM event_photos WHERE id = ?`).bind(photoId).first());
         if (!row) return new Response('Not found', { status: 404, headers: corsHeaders });
         if (row.curation_status !== 'approved' && !isAdmin) {
           return new Response('Not found', { status: 404, headers: corsHeaders });
