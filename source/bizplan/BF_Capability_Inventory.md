@@ -1,5 +1,5 @@
 # BirdieFriends — Capability Inventory
-*Business Plan Exhibit · Draft v0.8 · July 2026*
+*Business Plan Exhibit · Draft v0.9 · July 2026*
 
 ---
 
@@ -89,6 +89,7 @@
 | Photo capture & curation (self-service, staged) | Memorialization | Designed — `BF_EventSite_Schema.md` §9f (full system) + §9g (BF Series/Cup pilot, candidate launch 7/19 or 8/16/2026) |
 | Official GHIN handicap integration | Platform | Future — ~$6k/yr economic barrier today, possibly viable at scale |
 | Tee-time reservation API integration / course partnership | Operations | Future — some reservation systems offer fee-based APIs; not a launch dependency |
+| Dues ledger (per-player, per-product monthly recognition schedule + lifetime Host-credit counter) | Platform | New (BP-4) — small D1 schema addition to support Membership tier recognition (Competitive/Host, independently billed) and Ambassador remit-share payout timing; not yet scoped as a dev-session task |
 
 ---
 
@@ -155,9 +156,9 @@
 | Capability | Description | Priority |
 |-----------|-------------|----------|
 | Ambassador onboarding | Application, credentialing — no territory/regional restriction; Ambassadors build attribution-based business wherever it takes them (settled BP-3) | 🔴 High |
-| Ambassador dashboard | Origination earnings, lifetime attribution payout tracking, community book of business | 🔴 High |
-| Community management tools | Ambassador-owned group portal — their community, their brand, BF infrastructure | 🟡 Medium |
-| Participant attribution tracking | Every enrolled participant permanently tagged to originating Ambassador — basis for lifetime attribution payouts | 🔴 High |
+| Ambassador dashboard | Community remit share earnings, origination bonus tracking, community book of business (updated BP-4 — see Gate Log Gate 2) | 🔴 High |
+| Community management tools | Ambassador-owned group portal — their community, their brand, BF infrastructure. Now the basis for remit-share accounting, not just a nice-to-have (BP-4) | 🟡 Medium |
+| Participant attribution tracking | Every enrolled participant tagged to their community for remit-share accounting; personal origination still tracked for the stacked one-time bonus (updated BP-4) | 🔴 High |
 | Ambassador recruiting tools | BF-supplied materials, pitch deck, demo event capability | 🟡 Medium |
 | Role succession / handoff | Mechanism for one person to step into a vacated Wrangler, Host, or Ambassador role (injury, burnout, life change) without losing group continuity or, where applicable, reassigning attribution. Surfaced via Gate 2 discussion (Vision Thesis 9) — not yet scoped technically or commercially. | 🟡 Medium |
 
@@ -192,8 +193,9 @@
 | **Platform fee** | Flat $5/player/round, embedded in event cost ($3 floor, $4 likely blended average with promo pricing — settled BP-3) | Launch |
 | **Event package upsell** | Photo, premium archive, rewards tiers | Launch |
 | **BF Rewards** | Physical artifacts ordered at event close | Launch |
-| **Ambassador origination** | Credit for bringing a player into the BF ecosystem | Launch |
-| **Ambassador lifetime attribution** | 5% recurring override on an originated player's future bookings, conditioned on the Ambassador remaining active (~1 new group/month illustrative bar) — self-limiting, not unconditional (settled BP-3) | Launch |
+| **Membership tiers** | Free (BF Member, non-competitive Gatherings), $2/player/mo (Competitive Member, required for BF Series), $1/player/mo (Host, 2 free lifetime trial credits then required) — independent, mutually-exclusive products, each recognized monthly (settled BP-4, see Gate Log Gate 2) — the predictability floor for Ambassador income | Launch |
+| **Ambassador origination** | 20% one-time credit for bringing a new player into the BF ecosystem, stacked on top of Community Remit Share (settled BP-4) | Launch |
+| **Ambassador Community Remit Share** | 50% of a seeded community's total remit (round fees + package upsells + rewards margin + recognized dues) — replaces the old per-player 5% recurring override (settled BP-4, see Gate Log Gate 2 and Vision Thesis 4a/10) | Launch |
 | **BF Pay** | Treasury and settlement fees | Phase 2 |
 | **Cross-community events** | Entry fees, sponsored competitions | Future |
 
@@ -209,4 +211,4 @@
 ---
 
 *This document is a living asset. Updated each business planning session.*
-*Last updated: Session BP-3 · June 30, 2026 · v0.7*
+*Last updated: Session BP-4 · July 2, 2026 · v0.9*
