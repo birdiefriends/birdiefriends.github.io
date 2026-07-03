@@ -140,3 +140,18 @@ CREATE TABLE event_photos (
 );
 
 CREATE INDEX idx_event_photos_lookup ON event_photos(event_name, section, curation_status);
+
+-- ============================================================
+-- Entry 8 — 2026-07-03 — Session Dev-54
+-- Video capture support for the Photo Capture Test panel. Deliberately
+-- minimal: no thumbnail generation (no ffmpeg-class processing available in
+-- a Worker), no Range/seek support on GET /photos/serve/:id (fine at the
+-- ~20-second clip lengths this enforces). Constraints enforced both
+-- client-side (UX) and server-side (real limit, per Worker request body
+-- size ceiling): 25MB max file size, ~20s soft max clip duration (checked
+-- client-side via <video> loadedmetadata before upload attempt).
+-- media_type is inferred server-side from the uploaded file's MIME type,
+-- never trusted from the client.
+-- ============================================================
+
+ALTER TABLE event_photos ADD COLUMN media_type TEXT NOT NULL DEFAULT 'image';
