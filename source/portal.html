@@ -2479,6 +2479,31 @@ body {
             </div>
           </div>
 
+          <div style="border-top:1px solid var(--border);padding-top:14px">
+            <div style="font-size:0.83rem;font-weight:600;color:var(--text);margin-bottom:6px">📸 Photo Capture Test</div>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px;line-height:1.5">
+              Dev-54 photo pilot testbed. Uploads go to R2 + D1 directly — no Jotform involved.
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <input id="photo-test-event" type="text" placeholder="Event name — e.g. 2026 BFSeries#5"
+                style="font-size:0.82rem;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text)">
+              <select id="photo-test-section"
+                style="font-size:0.82rem;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text)">
+                <option value="pre_competition">🌅 Pre-Competition</option>
+                <option value="on_course">⛳ On the Course</option>
+                <option value="post_round">🏆 Post-Round (West Saloon)</option>
+              </select>
+              <input id="photo-test-file" type="file" accept="image/*" capture="environment"
+                style="font-size:0.82rem">
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn btn-secondary btn-sm" onclick="uploadTestPhoto()" style="font-size:0.82rem">⬆️ Upload</button>
+                <button class="btn btn-secondary btn-sm" onclick="loadAdminPhotos()" style="font-size:0.82rem">↻ Load Photos</button>
+                <span id="photo-test-status" style="font-size:0.78rem;color:var(--text-hint)"></span>
+              </div>
+            </div>
+            <div id="photo-test-list" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px"></div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -8556,6 +8581,96 @@ async function adminAddVenue() {
     if (input) input.value = '';
     _venues = null; // reset cache
     loadAdminVenues();
+  } catch(e) {
+    showToast('Error: ' + e.message, true);
+  }
+}
+
+// ── Photo Capture Test (Dev-54 pilot) ──────────────────────────────────────
+async function uploadTestPhoto() {
+  const eventName = (document.getElementById('photo-test-event').value || '').trim();
+  const section    = document.getElementById('photo-test-section').value;
+  const fileInput  = document.getElementById('photo-test-file');
+  const file       = fileInput.files[0];
+  const statusEl   = document.getElementById('photo-test-status');
+
+  if (!eventName) { showToast('Enter an event name', true); return; }
+  if (!file)        { showToast('Choose a photo first', true); return; }
+
+  statusEl.textContent = 'Uploading…';
+  try {
+    const form = new FormData();
+    form.append('pin', COMMISSIONER_PIN);
+    form.append('event_name', eventName);
+    form.append('section', section);
+    form.append('captured_by', currentPlayer || '');
+    form.append('file', file);
+
+    const res = await fetch(`${GATHERINGS_API}/photos/upload`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Upload failed');
+
+    statusEl.textContent = '';
+    showToast('✅ Photo uploaded — pending curation');
+    fileInput.value = '';
+    loadAdminPhotos();
+  } catch(e) {
+    statusEl.textContent = '';
+    showToast('Error: ' + e.message, true);
+  }
+}
+
+async function loadAdminPhotos() {
+  const eventName = (document.getElementById('photo-test-event').value || '').trim();
+  const listEl    = document.getElementById('photo-test-list');
+  listEl.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted)">Loading…</div>';
+  try {
+    const params = new URLSearchParams({ pin: COMMISSIONER_PIN });
+    if (eventName) params.set('event', eventName);
+    const res = await fetch(`${GATHERINGS_API}/photos?${params.toString()}`);
+    const data = await res.json();
+    const photos = data.photos || [];
+    if (!photos.length) {
+      listEl.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted)">No photos yet for this event.</div>';
+      return;
+    }
+    listEl.innerHTML = photos.map(p => renderTestPhotoThumb(p)).join('');
+  } catch(e) {
+    listEl.innerHTML = '';
+    showToast('Error loading photos: ' + e.message, true);
+  }
+}
+
+function renderTestPhotoThumb(p) {
+  const statusColor = p.curation_status === 'approved' ? '#2e8b57'
+                     : p.curation_status === 'rejected' ? '#c0392b' : '#b8860b';
+  const sectionLabel = { pre_competition: '🌅 Pre-Comp', on_course: '⛳ On-Course', post_round: '🏆 Post-Round' }[p.section] || p.section;
+  const src = `${GATHERINGS_API}/photos/serve/${p.id}?pin=${COMMISSIONER_PIN}`;
+  return `
+    <div style="width:130px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface)">
+      <img src="${src}" style="width:100%;height:90px;object-fit:cover;display:block" loading="lazy">
+      <div style="padding:6px 8px">
+        <div style="font-size:0.7rem;color:var(--text-muted)">${sectionLabel}</div>
+        <div style="font-size:0.7rem;font-weight:600;color:${statusColor};margin:2px 0 6px">${p.curation_status}${p.is_trophy_moment ? ' · 🏆' : ''}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchTestPhoto(${p.id},{curation_status:'approved'})">✓</button>
+          <button class="btn btn-ghost btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchTestPhoto(${p.id},{curation_status:'rejected'})">✕</button>
+          <button class="btn btn-ghost btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchTestPhoto(${p.id},{is_trophy_moment:${p.is_trophy_moment ? 'false' : 'true'}})">🏆</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function patchTestPhoto(id, fields) {
+  try {
+    const res = await fetch(`${GATHERINGS_API}/photos/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: COMMISSIONER_PIN, ...fields })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Update failed');
+    loadAdminPhotos();
   } catch(e) {
     showToast('Error: ' + e.message, true);
   }
