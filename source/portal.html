@@ -2496,7 +2496,7 @@ body {
 
               <div style="border-top:1px dashed var(--border);padding-top:10px;margin-top:2px">
                 <div style="font-size:0.76rem;font-weight:600;color:var(--text-muted);margin-bottom:6px">Classic upload</div>
-                <input id="photo-test-file" type="file" accept="image/*"
+                <input id="photo-test-file" type="file" accept="image/*,video/*"
                   style="font-size:0.82rem">
                 <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
                   <button class="btn btn-secondary btn-sm" onclick="uploadTestPhoto()" style="font-size:0.82rem">⬆️ Upload</button>
@@ -2505,11 +2505,13 @@ body {
 
               <div style="border-top:1px dashed var(--border);padding-top:10px;margin-top:4px">
                 <div style="font-size:0.76rem;font-weight:600;color:var(--text-muted);margin-bottom:6px">Quick capture</div>
-                <input id="photo-test-file-quick" type="file" accept="image/*" capture="environment"
+                <input id="photo-test-file-quick" type="file" accept="image/*,video/*" capture="environment"
                   style="display:none" onchange="quickCaptureUpload()">
                 <button class="btn btn-secondary btn-sm" onclick="document.getElementById('photo-test-file-quick').click()"
                   style="font-size:0.82rem">📸 Open Camera &amp; Auto-Upload</button>
               </div>
+
+              <div style="font-size:0.7rem;color:var(--text-hint);margin-top:2px">Photos or short video · 25MB max · keep clips under ~20 seconds</div>
 
               <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
                 <button class="btn btn-secondary btn-sm" onclick="loadAdminPhotos()" style="font-size:0.82rem">↻ Load Photos</button>
@@ -8618,8 +8620,24 @@ async function adminAddVenue() {
 }
 
 // ── Photo Capture Test (Dev-54 pilot) ──────────────────────────────────────
+const PHOTO_MAX_BYTES    = 25 * 1024 * 1024;
+const VIDEO_MAX_SECONDS  = 20;
+
+// Reads a video file's duration client-side without uploading it first —
+// avoids sending an oversized/overlong clip only to have the server reject it.
+function readVideoDuration(file) {
+  return new Promise((resolve) => {
+    const el = document.createElement('video');
+    el.preload = 'metadata';
+    el.onloadedmetadata = () => { URL.revokeObjectURL(el.src); resolve(el.duration || null); };
+    el.onerror = () => { URL.revokeObjectURL(el.src); resolve(null); };
+    el.src = URL.createObjectURL(file);
+  });
+}
+
 // Shared core — both entry points (classic file picker, quick camera capture)
-// funnel through here so upload logic and error handling only live in one place.
+// funnel through here so upload logic, validation, and error handling only
+// live in one place.
 async function uploadPhotoCore(file, sourceLabel) {
   const eventName = (document.getElementById('photo-test-event').value || '').trim();
   const section    = document.getElementById('photo-test-section').value;
@@ -8627,6 +8645,18 @@ async function uploadPhotoCore(file, sourceLabel) {
 
   if (!eventName) { showToast('Enter an event name', true); return false; }
   if (!file)        { showToast('No photo selected', true); return false; }
+
+  if (file.size > PHOTO_MAX_BYTES) {
+    showToast(`Too large (${(file.size/1024/1024).toFixed(1)}MB) — 25MB max`, true);
+    return false;
+  }
+  if (file.type.startsWith('video/')) {
+    const duration = await readVideoDuration(file);
+    if (duration && duration > VIDEO_MAX_SECONDS) {
+      showToast(`Clip is ${Math.round(duration)}s — keep it under ${VIDEO_MAX_SECONDS}s, please retake`, true);
+      return false;
+    }
+  }
 
   statusEl.textContent = (sourceLabel === 'quick' ? 'Capturing…' : 'Uploading…');
   try {
@@ -8642,7 +8672,7 @@ async function uploadPhotoCore(file, sourceLabel) {
     if (!data.ok) throw new Error(data.error || 'Upload failed');
 
     statusEl.textContent = '';
-    showToast('✅ Photo uploaded — pending curation');
+    showToast(data.media_type === 'video' ? '✅ Video uploaded — pending curation' : '✅ Photo uploaded — pending curation');
     loadAdminPhotos();
     return true;
   } catch(e) {
@@ -8696,11 +8726,18 @@ function renderTestPhotoThumb(p) {
                      : p.curation_status === 'rejected' ? '#c0392b' : '#b8860b';
   const sectionLabel = { pre_competition: '🌅 Pre-Comp', on_course: '⛳ On-Course', post_round: '🏆 Post-Round' }[p.section] || p.section;
   const src = `${GATHERINGS_API}/photos/serve/${p.id}?pin=${COMMISSIONER_PIN}`;
+  // No server-side video thumbnails (Dev-54 constraint — no ffmpeg-class processing
+  // in a Worker). Video renders as a native <video controls> element instead of a
+  // still preview frame; full download-then-play, no seeking optimization needed
+  // at ~20-second clip lengths.
+  const media = p.media_type === 'video'
+    ? `<video src="${src}" controls preload="metadata" style="width:100%;height:90px;object-fit:cover;display:block;background:#000"></video>`
+    : `<img src="${src}" style="width:100%;height:90px;object-fit:cover;display:block" loading="lazy">`;
   return `
     <div style="width:130px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface)">
-      <img src="${src}" style="width:100%;height:90px;object-fit:cover;display:block" loading="lazy">
+      ${media}
       <div style="padding:6px 8px">
-        <div style="font-size:0.7rem;color:var(--text-muted)">${sectionLabel}</div>
+        <div style="font-size:0.7rem;color:var(--text-muted)">${sectionLabel}${p.media_type === 'video' ? ' · 🎥' : ''}</div>
         <div style="font-size:0.7rem;font-weight:600;color:${statusColor};margin:2px 0 6px">${p.curation_status}${p.is_trophy_moment ? ' · 🏆' : ''}</div>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchTestPhoto(${p.id},{curation_status:'approved'})">✓</button>
