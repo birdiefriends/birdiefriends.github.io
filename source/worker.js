@@ -964,7 +964,10 @@ export default {
     // POST /photos/upload — accepts multipart/form-data, writes bytes to R2 and
     // a metadata row to D1. Body fields: pin, event_name, section, file, caption? (optional)
     // section must be one of: pre_competition | on_course | post_round
-    // Response: { ok, id, r2_key }
+    // 25MB server-side cap regardless of what the client already checked — client-side
+    // checks are a UX nicety, not a guarantee. media_type is inferred from file.type,
+    // never trusted from the client directly. Response: { ok, id, r2_key, media_type }
+    const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
     if (request.method === 'POST' && url.pathname === '/photos/upload') {
       let form;
       try { form = await request.formData(); } catch(e) {
@@ -989,24 +992,28 @@ export default {
       if (!file || typeof file === 'string') {
         return new Response(JSON.stringify({ error: 'Missing file' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        return new Response(JSON.stringify({ error: `File too large (${(file.size/1024/1024).toFixed(1)}MB) — 25MB max. For video, keep clips under ~20 seconds.` }), { status: 413, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
       if (!env.PHOTOS_BUCKET) {
         return new Response(JSON.stringify({ error: 'PHOTOS_BUCKET binding not configured on this Worker yet' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
 
-      const ext    = (file.name && file.name.includes('.')) ? file.name.split('.').pop().toLowerCase() : 'jpg';
+      const mediaType = (file.type || '').startsWith('video/') ? 'video' : 'image';
+      const ext    = (file.name && file.name.includes('.')) ? file.name.split('.').pop().toLowerCase() : (mediaType === 'video' ? 'mp4' : 'jpg');
       const slug   = eventName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const key    = `photos/${slug}/${section}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
 
       await env.PHOTOS_BUCKET.put(key, await file.arrayBuffer(), {
-        httpMetadata: { contentType: file.type || 'image/jpeg' }
+        httpMetadata: { contentType: file.type || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg') }
       });
 
       const result = await env.DB.prepare(
-        `INSERT INTO event_photos (event_name, section, r2_key, captured_by, caption)
-         VALUES (?, ?, ?, ?, ?)`
-      ).bind(eventName, section, key, capturedBy, caption).run();
+        `INSERT INTO event_photos (event_name, section, r2_key, captured_by, caption, media_type)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(eventName, section, key, capturedBy, caption, mediaType).run();
 
-      return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id, r2_key: key }), {
+      return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id, r2_key: key, media_type: mediaType }), {
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
     }
@@ -1022,7 +1029,7 @@ export default {
       const isAdmin     = String(pin) === '7797';
       const status      = isAdmin ? (url.searchParams.get('status') || null) : 'approved';
 
-      let sql = `SELECT id, event_name, section, r2_key, captured_by, caption, is_trophy_moment, curation_status, sort_order, created_at FROM event_photos WHERE 1=1`;
+      let sql = `SELECT id, event_name, section, r2_key, media_type, captured_by, caption, is_trophy_moment, curation_status, sort_order, created_at FROM event_photos WHERE 1=1`;
       const binds = [];
       if (eventName) { sql += ` AND event_name = ?`; binds.push(eventName); }
       if (section)    { sql += ` AND section = ?`;    binds.push(section); }
