@@ -3543,6 +3543,22 @@ function restoreEvent(evtId) {
 // INIT
 // ══════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
+  // Live version display — fetches portal_version.txt (same file Claude bumps
+  // on every deploy) rather than relying on hardcoded strings in this HTML,
+  // which drifted out of sync twice (Dev-45, Dev-54). Fire-and-forget: never
+  // blocks page load, silently keeps the static fallback text on failure.
+  fetch('portal_version.txt?_=' + Date.now())
+    .then(r => r.ok ? r.text() : Promise.reject())
+    .then(txt => {
+      const line = txt.trim().split('\n')[0];
+      if (!line) return;
+      const h = document.getElementById('portal-build-header');
+      const f = document.getElementById('portal-build');
+      if (h) h.textContent = line;
+      if (f) f.textContent = line;
+    })
+    .catch(() => {}); // keep static fallback silently
+
   // First PWA launch: auto-prompt notifications after settle delay
   if (isInstalledPWA()) setTimeout(maybeAutoPromptAfterInstall, 2000);
   // Load remote flags from Cloudflare KV before anything else
