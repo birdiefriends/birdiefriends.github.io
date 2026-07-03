@@ -1042,6 +1042,26 @@ export default {
       });
     }
 
+    // DELETE /photos/:id — permanent removal (R2 object + D1 row). PIN required, query param
+    // ?pin=7797. This is deliberately separate from PATCH curation_status='rejected' — reject
+    // is reversible (can be flipped back to pending/approved), delete is not. No trash/undo.
+    if (request.method === 'DELETE' && url.pathname.startsWith('/photos/')) {
+      const photoId = url.pathname.split('/photos/')[1];
+      const pin     = url.searchParams.get('pin');
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const row = await env.DB.prepare(`SELECT r2_key FROM event_photos WHERE id = ?`).bind(photoId).first();
+      if (!row) {
+        return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (env.PHOTOS_BUCKET) {
+        await env.PHOTOS_BUCKET.delete(row.r2_key);
+      }
+      await env.DB.prepare(`DELETE FROM event_photos WHERE id = ?`).bind(photoId).run();
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+    }
+
     // PATCH /photos/:id — curation actions (approve/reject/trophy toggle/reorder). PIN required.
     // Body: { pin, curation_status?, is_trophy_moment?, sort_order? }
     if (request.method === 'PATCH' && url.pathname.startsWith('/photos/')) {
