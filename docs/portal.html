@@ -8792,6 +8792,7 @@ function renderTestPhotoThumb(p) {
           <button class="btn btn-ghost btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchTestPhoto(${p.id},{curation_status:'approved'})">✓</button>
           <button class="btn btn-ghost btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchTestPhoto(${p.id},{curation_status:'rejected'})">✕</button>
           <button class="btn btn-ghost btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchTestPhoto(${p.id},{is_trophy_moment:${p.is_trophy_moment ? 'false' : 'true'}})">🏆</button>
+          <button class="btn btn-ghost btn-sm" style="font-size:0.68rem;padding:2px 6px;color:#c0392b" onclick="deleteTestPhoto(${p.id})">🗑️</button>
         </div>
       </div>
     </div>`;
@@ -8806,6 +8807,23 @@ async function patchTestPhoto(id, fields) {
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Update failed');
+    loadAdminPhotos();
+  } catch(e) {
+    showToast('Error: ' + e.message, true);
+  }
+}
+
+// Permanent — removes the R2 object and D1 row, no undo. Kept separate from
+// reject (which is just a curation_status flip, reversible via the ✓ button).
+// Confirm dialog is the one speed bump in this whole panel, deliberately —
+// everything else here is freely reversible.
+async function deleteTestPhoto(id) {
+  if (!confirm('Delete this permanently? This cannot be undone.')) return;
+  try {
+    const res = await fetch(`${GATHERINGS_API}/photos/${id}?pin=${COMMISSIONER_PIN}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Delete failed');
+    showToast('🗑️ Deleted');
     loadAdminPhotos();
   } catch(e) {
     showToast('Error: ' + e.message, true);
