@@ -969,53 +969,57 @@ export default {
     // never trusted from the client directly. Response: { ok, id, r2_key, media_type }
     const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
     if (request.method === 'POST' && url.pathname === '/photos/upload') {
-      let form;
-      try { form = await request.formData(); } catch(e) {
-        return new Response(JSON.stringify({ error: 'Invalid form data' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      const pin        = form.get('pin');
-      const eventName  = form.get('event_name');
-      const section    = form.get('section');
-      const caption    = form.get('caption') || null;
-      const capturedBy = form.get('captured_by') || null;
-      const file       = form.get('file');
+      try {
+        let form;
+        try { form = await request.formData(); } catch(e) {
+          return new Response(JSON.stringify({ error: 'Invalid form data' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const pin        = form.get('pin');
+        const eventName  = form.get('event_name');
+        const section    = form.get('section');
+        const caption    = form.get('caption') || null;
+        const capturedBy = form.get('captured_by') || null;
+        const file       = form.get('file');
 
-      if (String(pin) !== '7797') {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      if (!eventName || !section) {
-        return new Response(JSON.stringify({ error: 'Missing event_name or section' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      if (!['pre_competition','on_course','post_round'].includes(section)) {
-        return new Response(JSON.stringify({ error: 'section must be pre_competition, on_course, or post_round' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      if (!file || typeof file === 'string') {
-        return new Response(JSON.stringify({ error: 'Missing file' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      if (file.size > MAX_UPLOAD_BYTES) {
-        return new Response(JSON.stringify({ error: `File too large (${(file.size/1024/1024).toFixed(1)}MB) — 25MB max. For video, keep clips under ~20 seconds.` }), { status: 413, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      if (!env.PHOTOS_BUCKET) {
-        return new Response(JSON.stringify({ error: 'PHOTOS_BUCKET binding not configured on this Worker yet' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
+        if (String(pin) !== '7797') {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (!eventName || !section) {
+          return new Response(JSON.stringify({ error: 'Missing event_name or section' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (!['pre_competition','on_course','post_round'].includes(section)) {
+          return new Response(JSON.stringify({ error: 'section must be pre_competition, on_course, or post_round' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (!file || typeof file === 'string') {
+          return new Response(JSON.stringify({ error: 'Missing file' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (file.size > MAX_UPLOAD_BYTES) {
+          return new Response(JSON.stringify({ error: `File too large (${(file.size/1024/1024).toFixed(1)}MB) — 25MB max. For video, keep clips under ~20 seconds.` }), { status: 413, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (!env.PHOTOS_BUCKET) {
+          return new Response(JSON.stringify({ error: 'PHOTOS_BUCKET binding not configured on this Worker yet' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
 
-      const mediaType = (file.type || '').startsWith('video/') ? 'video' : 'image';
-      const ext    = (file.name && file.name.includes('.')) ? file.name.split('.').pop().toLowerCase() : (mediaType === 'video' ? 'mp4' : 'jpg');
-      const slug   = eventName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      const key    = `photos/${slug}/${section}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+        const mediaType = (file.type || '').startsWith('video/') ? 'video' : 'image';
+        const ext    = (file.name && file.name.includes('.')) ? file.name.split('.').pop().toLowerCase() : (mediaType === 'video' ? 'mp4' : 'jpg');
+        const slug   = eventName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+        const key    = `photos/${slug}/${section}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
 
-      await env.PHOTOS_BUCKET.put(key, await file.arrayBuffer(), {
-        httpMetadata: { contentType: file.type || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg') }
-      });
+        await env.PHOTOS_BUCKET.put(key, await file.arrayBuffer(), {
+          httpMetadata: { contentType: file.type || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg') }
+        });
 
-      const result = await env.DB.prepare(
-        `INSERT INTO event_photos (event_name, section, r2_key, captured_by, caption, media_type)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).bind(eventName, section, key, capturedBy, caption, mediaType).run();
+        const result = await env.DB.prepare(
+          `INSERT INTO event_photos (event_name, section, r2_key, captured_by, caption, media_type)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        ).bind(eventName, section, key, capturedBy, caption, mediaType).run();
 
-      return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id, r2_key: key, media_type: mediaType }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id, r2_key: key, media_type: mediaType }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Upload error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
     }
 
     // GET /photos?event=X&section=Y&status=Z&pin=W
@@ -1023,94 +1027,110 @@ export default {
     // of what status= they pass — the filter is enforced server-side, not trusted
     // from the query string. Commissioner Admin passes pin to see pending/rejected too.
     if (request.method === 'GET' && url.pathname === '/photos') {
-      const eventName = url.searchParams.get('event');
-      const section    = url.searchParams.get('section');
-      const pin        = url.searchParams.get('pin');
-      const isAdmin     = String(pin) === '7797';
-      const status      = isAdmin ? (url.searchParams.get('status') || null) : 'approved';
+      try {
+        const eventName = url.searchParams.get('event');
+        const section    = url.searchParams.get('section');
+        const pin        = url.searchParams.get('pin');
+        const isAdmin     = String(pin) === '7797';
+        const status      = isAdmin ? (url.searchParams.get('status') || null) : 'approved';
 
-      let sql = `SELECT id, event_name, section, r2_key, media_type, captured_by, caption, is_trophy_moment, curation_status, sort_order, created_at FROM event_photos WHERE 1=1`;
-      const binds = [];
-      if (eventName) { sql += ` AND event_name = ?`; binds.push(eventName); }
-      if (section)    { sql += ` AND section = ?`;    binds.push(section); }
-      if (status)      { sql += ` AND curation_status = ?`; binds.push(status); }
-      sql += ` ORDER BY section, sort_order IS NULL, sort_order, created_at`;
+        let sql = `SELECT id, event_name, section, r2_key, media_type, captured_by, caption, is_trophy_moment, curation_status, sort_order, created_at FROM event_photos WHERE 1=1`;
+        const binds = [];
+        if (eventName) { sql += ` AND event_name = ?`; binds.push(eventName); }
+        if (section)    { sql += ` AND section = ?`;    binds.push(section); }
+        if (status)      { sql += ` AND curation_status = ?`; binds.push(status); }
+        sql += ` ORDER BY section, sort_order IS NULL, sort_order, created_at`;
 
-      const { results } = await env.DB.prepare(sql).bind(...binds).all();
-      return new Response(JSON.stringify({ photos: results }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+        const { results } = await env.DB.prepare(sql).bind(...binds).all();
+        return new Response(JSON.stringify({ photos: results }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'List error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
     }
 
     // DELETE /photos/:id — permanent removal (R2 object + D1 row). PIN required, query param
     // ?pin=7797. This is deliberately separate from PATCH curation_status='rejected' — reject
     // is reversible (can be flipped back to pending/approved), delete is not. No trash/undo.
     if (request.method === 'DELETE' && url.pathname.startsWith('/photos/')) {
-      const photoId = url.pathname.split('/photos/')[1];
-      const pin     = url.searchParams.get('pin');
-      if (String(pin) !== '7797') {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        const photoId = url.pathname.split('/photos/')[1];
+        const pin     = url.searchParams.get('pin');
+        if (String(pin) !== '7797') {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const row = await env.DB.prepare(`SELECT r2_key FROM event_photos WHERE id = ?`).bind(photoId).first();
+        if (!row) {
+          return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (env.PHOTOS_BUCKET) {
+          await env.PHOTOS_BUCKET.delete(row.r2_key);
+        }
+        await env.DB.prepare(`DELETE FROM event_photos WHERE id = ?`).bind(photoId).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Delete error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const row = await env.DB.prepare(`SELECT r2_key FROM event_photos WHERE id = ?`).bind(photoId).first();
-      if (!row) {
-        return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      if (env.PHOTOS_BUCKET) {
-        await env.PHOTOS_BUCKET.delete(row.r2_key);
-      }
-      await env.DB.prepare(`DELETE FROM event_photos WHERE id = ?`).bind(photoId).run();
-      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
     }
 
     // PATCH /photos/:id — curation actions (approve/reject/trophy toggle/reorder). PIN required.
     // Body: { pin, curation_status?, is_trophy_moment?, sort_order? }
     if (request.method === 'PATCH' && url.pathname.startsWith('/photos/')) {
-      const photoId = url.pathname.split('/photos/')[1];
-      let body;
-      try { body = await request.json(); } catch(e) {
-        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      if (String(body.pin) !== '7797') {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      const fields = [];
-      const binds  = [];
-      if (body.curation_status !== undefined) {
-        if (!['pending','approved','rejected'].includes(body.curation_status)) {
-          return new Response(JSON.stringify({ error: 'Invalid curation_status' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        const photoId = url.pathname.split('/photos/')[1];
+        let body;
+        try { body = await request.json(); } catch(e) {
+          return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        fields.push('curation_status = ?'); binds.push(body.curation_status);
+        if (String(body.pin) !== '7797') {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const fields = [];
+        const binds  = [];
+        if (body.curation_status !== undefined) {
+          if (!['pending','approved','rejected'].includes(body.curation_status)) {
+            return new Response(JSON.stringify({ error: 'Invalid curation_status' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+          fields.push('curation_status = ?'); binds.push(body.curation_status);
+        }
+        if (body.is_trophy_moment !== undefined) { fields.push('is_trophy_moment = ?'); binds.push(body.is_trophy_moment ? 1 : 0); }
+        if (body.sort_order !== undefined)        { fields.push('sort_order = ?');        binds.push(body.sort_order); }
+        if (!fields.length) {
+          return new Response(JSON.stringify({ error: 'No updatable fields provided' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        binds.push(photoId);
+        await env.DB.prepare(`UPDATE event_photos SET ${fields.join(', ')} WHERE id = ?`).bind(...binds).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Patch error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      if (body.is_trophy_moment !== undefined) { fields.push('is_trophy_moment = ?'); binds.push(body.is_trophy_moment ? 1 : 0); }
-      if (body.sort_order !== undefined)        { fields.push('sort_order = ?');        binds.push(body.sort_order); }
-      if (!fields.length) {
-        return new Response(JSON.stringify({ error: 'No updatable fields provided' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      binds.push(photoId);
-      await env.DB.prepare(`UPDATE event_photos SET ${fields.join(', ')} WHERE id = ?`).bind(...binds).run();
-      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
     }
 
     // GET /photos/serve/:id — streams the actual image bytes from R2.
     // Unapproved photos are only servable with a valid pin (Commissioner Admin preview).
     if (request.method === 'GET' && url.pathname.startsWith('/photos/serve/')) {
-      const photoId = url.pathname.split('/photos/serve/')[1];
-      const pin     = url.searchParams.get('pin');
-      const isAdmin = String(pin) === '7797';
+      try {
+        const photoId = url.pathname.split('/photos/serve/')[1];
+        const pin     = url.searchParams.get('pin');
+        const isAdmin = String(pin) === '7797';
 
-      const row = await env.DB.prepare(`SELECT r2_key, curation_status FROM event_photos WHERE id = ?`).bind(photoId).first();
-      if (!row) return new Response('Not found', { status: 404, headers: corsHeaders });
-      if (row.curation_status !== 'approved' && !isAdmin) {
-        return new Response('Not found', { status: 404, headers: corsHeaders });
+        const row = await env.DB.prepare(`SELECT r2_key, curation_status FROM event_photos WHERE id = ?`).bind(photoId).first();
+        if (!row) return new Response('Not found', { status: 404, headers: corsHeaders });
+        if (row.curation_status !== 'approved' && !isAdmin) {
+          return new Response('Not found', { status: 404, headers: corsHeaders });
+        }
+        if (!env.PHOTOS_BUCKET) {
+          return new Response(JSON.stringify({ error: 'PHOTOS_BUCKET binding not configured on this Worker yet' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const obj = await env.PHOTOS_BUCKET.get(row.r2_key);
+        if (!obj) return new Response('Not found', { status: 404, headers: corsHeaders });
+        return new Response(obj.body, {
+          headers: { 'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg', 'Cache-Control': 'public, max-age=3600', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Serve error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      if (!env.PHOTOS_BUCKET) {
-        return new Response(JSON.stringify({ error: 'PHOTOS_BUCKET binding not configured on this Worker yet' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      const obj = await env.PHOTOS_BUCKET.get(row.r2_key);
-      if (!obj) return new Response('Not found', { status: 404, headers: corsHeaders });
-      return new Response(obj.body, {
-        headers: { 'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg', 'Cache-Control': 'public, max-age=3600', ...corsHeaders }
-      });
     }
 
     // Shared path map used by /history, /rollback, and /deploy
