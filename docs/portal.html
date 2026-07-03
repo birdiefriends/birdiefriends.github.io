@@ -2493,10 +2493,25 @@ body {
                 <option value="on_course">⛳ On the Course</option>
                 <option value="post_round">🏆 Post-Round (West Saloon)</option>
               </select>
-              <input id="photo-test-file" type="file" accept="image/*" capture="environment"
-                style="font-size:0.82rem">
-              <div style="display:flex;gap:8px;align-items:center">
-                <button class="btn btn-secondary btn-sm" onclick="uploadTestPhoto()" style="font-size:0.82rem">⬆️ Upload</button>
+
+              <div style="border-top:1px dashed var(--border);padding-top:10px;margin-top:2px">
+                <div style="font-size:0.76rem;font-weight:600;color:var(--text-muted);margin-bottom:6px">Classic upload</div>
+                <input id="photo-test-file" type="file" accept="image/*"
+                  style="font-size:0.82rem">
+                <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+                  <button class="btn btn-secondary btn-sm" onclick="uploadTestPhoto()" style="font-size:0.82rem">⬆️ Upload</button>
+                </div>
+              </div>
+
+              <div style="border-top:1px dashed var(--border);padding-top:10px;margin-top:4px">
+                <div style="font-size:0.76rem;font-weight:600;color:var(--text-muted);margin-bottom:6px">Quick capture</div>
+                <input id="photo-test-file-quick" type="file" accept="image/*" capture="environment"
+                  style="display:none" onchange="quickCaptureUpload()">
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('photo-test-file-quick').click()"
+                  style="font-size:0.82rem">📸 Open Camera &amp; Auto-Upload</button>
+              </div>
+
+              <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
                 <button class="btn btn-secondary btn-sm" onclick="loadAdminPhotos()" style="font-size:0.82rem">↻ Load Photos</button>
                 <span id="photo-test-status" style="font-size:0.78rem;color:var(--text-hint)"></span>
               </div>
@@ -8603,17 +8618,17 @@ async function adminAddVenue() {
 }
 
 // ── Photo Capture Test (Dev-54 pilot) ──────────────────────────────────────
-async function uploadTestPhoto() {
+// Shared core — both entry points (classic file picker, quick camera capture)
+// funnel through here so upload logic and error handling only live in one place.
+async function uploadPhotoCore(file, sourceLabel) {
   const eventName = (document.getElementById('photo-test-event').value || '').trim();
   const section    = document.getElementById('photo-test-section').value;
-  const fileInput  = document.getElementById('photo-test-file');
-  const file       = fileInput.files[0];
   const statusEl   = document.getElementById('photo-test-status');
 
-  if (!eventName) { showToast('Enter an event name', true); return; }
-  if (!file)        { showToast('Choose a photo first', true); return; }
+  if (!eventName) { showToast('Enter an event name', true); return false; }
+  if (!file)        { showToast('No photo selected', true); return false; }
 
-  statusEl.textContent = 'Uploading…';
+  statusEl.textContent = (sourceLabel === 'quick' ? 'Capturing…' : 'Uploading…');
   try {
     const form = new FormData();
     form.append('pin', COMMISSIONER_PIN);
@@ -8628,12 +8643,31 @@ async function uploadTestPhoto() {
 
     statusEl.textContent = '';
     showToast('✅ Photo uploaded — pending curation');
-    fileInput.value = '';
     loadAdminPhotos();
+    return true;
   } catch(e) {
     statusEl.textContent = '';
     showToast('Error: ' + e.message, true);
+    return false;
   }
+}
+
+// Classic upload — file already chosen via the visible picker, explicit Upload click.
+async function uploadTestPhoto() {
+  const fileInput = document.getElementById('photo-test-file');
+  const file      = fileInput.files[0];
+  const ok = await uploadPhotoCore(file, 'classic');
+  if (ok) fileInput.value = '';
+}
+
+// Quick capture — hidden input with capture="environment" launches the camera
+// directly; firing on 'change' means there's no separate Upload click at all,
+// simple & fast per Brian's ask (Dev-54).
+async function quickCaptureUpload() {
+  const fileInput = document.getElementById('photo-test-file-quick');
+  const file      = fileInput.files[0];
+  const ok = await uploadPhotoCore(file, 'quick');
+  if (ok) fileInput.value = '';
 }
 
 async function loadAdminPhotos() {
