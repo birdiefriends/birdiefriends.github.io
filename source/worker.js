@@ -356,6 +356,21 @@ export default {
           return new Response(JSON.stringify({ error: 'Only the host can edit this Gathering' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
 
+        // Dev-54 guard: block pushing an already-past Gathering's date into the
+        // future via Edit. Edit exists to adjust logistics on something upcoming,
+        // not to resurrect a finished one — that's what "Use as Template" is for.
+        // Real incident: a host tried exactly this for a recurring weekly game,
+        // which fired a confusing date-changed → cancelled → new-invite sequence
+        // to the whole crew within minutes (Dev-54 investigation, gathering #27).
+        if (Object.prototype.hasOwnProperty.call(body, 'event_time')) {
+          const currentEventTime = new Date(gathering.event_time);
+          if (!isNaN(currentEventTime.getTime()) && currentEventTime < new Date()) {
+            return new Response(JSON.stringify({
+              error: 'This Gathering has already happened — Edit can\'t move it into the future. Use "Use as Template" to set up a new one instead.'
+            }), { status: 409, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+        }
+
         // Build dynamic UPDATE — only set fields present in the request body.
         const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description', 'tee_time_status'];
         const setClauses = [];
