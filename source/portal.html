@@ -498,6 +498,11 @@ body {
   font-size: 0.9rem;
   padding: 12px 16px;
 }
+.btn-secondary-danger {
+  background: #fbe4e4;
+  color: #c0392b;
+  border: 1px solid rgba(192,57,43,0.2);
+}
 .btn-sm { padding: 10px 14px; font-size: 0.85rem; }
 
 /* ── Section labels ── */
@@ -8450,7 +8455,7 @@ function showTemplatePicker() {
       </div>` : ''}
       <div class="host-gathering-actions" onclick="event.stopPropagation()">
         <button class="btn btn-secondary btn-sm" style="flex:1;font-size:0.82rem" onclick="applyTemplate(${safeId})">⛳ Use Template</button>
-        <button class="btn btn-ghost btn-sm" style="color:#c0392b;border-color:rgba(192,57,43,0.3);font-size:0.82rem"
+        <button class="btn btn-secondary-danger btn-sm" style="font-size:0.82rem"
           onclick="deleteTemplate(${safeId},'${t.name.replace(/'/g,"\\'")}')">Delete</button>
       </div>
     </div>`;
@@ -8982,12 +8987,11 @@ function renderHostPanelList() {
             onclick="showEditGatheringForm(${g.gatheringId})">✏️ Edit</button>
           <button class="btn btn-secondary btn-sm"
             onclick="hostInviteOthers(${g.gatheringId})">➕ Invite Others</button>
-          <button class="btn btn-ghost btn-sm" style="color:var(--green-dark);font-weight:600"
+          <button class="btn btn-secondary btn-sm"
             onclick="repeatGathering(${g.gatheringId})">🔁 Repeat</button>
-          <button class="btn btn-ghost btn-sm"
-            onclick="promptSaveAsTemplate({title:'${g.name.replace(/'/g,"\\'")}',venue:'${(g.location||'').replace(/'/g,"\\'")}',gathering_type:'${(g.gatheringType||'').replace(/'/g,"\\'")}',description:'${(g.description||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',capacity:${g.capacity||null},crew_snapshot:[]},true)"
-            style="color:var(--text-muted)">☆ Template</button>
-          <button class="btn btn-ghost btn-sm" style="color:#c0392b;border-color:rgba(192,57,43,0.3)"
+          <button class="btn btn-secondary btn-sm"
+            onclick="promptSaveAsTemplate({title:'${g.name.replace(/'/g,"\\'")}',venue:'${(g.location||'').replace(/'/g,"\\'")}',gathering_type:'${(g.gatheringType||'').replace(/'/g,"\\'")}',description:'${(g.description||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',capacity:${g.capacity||null},crew_snapshot:[]},true)">☆ Template</button>
+          <button class="btn btn-secondary-danger btn-sm"
             onclick="cancelGatheringFromPanel(${g.gatheringId},'${g.name.replace(/'/g, "\\'")}')">Cancel Gathering</button>
         </div>
       </div>`;
@@ -9124,12 +9128,10 @@ function renderHostArchiveList() {
           ${detailHtml}
         </div>
         <div class="host-gathering-actions">
-          <button class="btn btn-ghost btn-sm"
-            onclick="repeatGathering(${g.gatheringId})"
-            style="color:var(--accent-2, #0f7a5e);font-weight:600">🔁 Repeat</button>
-          <button class="btn btn-ghost btn-sm"
-            onclick="promptSaveAsTemplate({title:'${g.name.replace(/'/g,"\\'")}',venue:'${(g.location||'').replace(/'/g,"\\'")}',gathering_type:'${(g.gatheringType||'').replace(/'/g,"\\'")}',description:'${(g.description||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',capacity:${g.capacity||null},crew_snapshot:[]},true)"
-            style="color:var(--text-muted)">☆ Save as Template</button>
+          <button class="btn btn-secondary btn-sm"
+            onclick="repeatGathering(${g.gatheringId})">🔁 Repeat</button>
+          <button class="btn btn-secondary btn-sm"
+            onclick="promptSaveAsTemplate({title:'${g.name.replace(/'/g,"\\'")}',venue:'${(g.location||'').replace(/'/g,"\\'")}',gathering_type:'${(g.gatheringType||'').replace(/'/g,"\\'")}',description:'${(g.description||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',capacity:${g.capacity||null},crew_snapshot:[]},true)">☆ Save as Template</button>
         </div>
       </div>`;
     }).join('');
