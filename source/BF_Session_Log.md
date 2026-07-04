@@ -533,3 +533,62 @@ D1 `gatherings` table uses `size` (not `capacity`) and `gathering_type` (not `fo
 **Chat rename suggestion for next session:** `Dev#54 - BF Series Photo Pilot`
 
 **Dev-53 fully closed (addendum included).**
+
+## Session Dev-54 · 2026-07-03/04
+
+**Focus:** Built the BF Series photo pilot end-to-end (D1 + R2 architecture, capture, curation, video support). Surfaced and fixed a recurring-Gathering UX/notification bug via a new Repeat feature, iterated through several rounds of design polish on it. Investigated two separate live infrastructure outages (Cloudflare D1/Durable Objects, GitHub Pages). Closed with an architecture audit of device-local state that's incomplete — carried forward as the next session's primary focus.
+
+**Photo Capture architecture (D1 + R2, deliberately bypasses Jotform):**
+- New `event_photos` D1 table (`birdiefriends-gatherings` DB) — `event_name`, `section` (`pre_competition`/`on_course`/`post_round`), `r2_key`, `media_type`, `curation_status`, `is_trophy_moment`, `sort_order`. Schema logged as Entries 7–8 in `BF_Gatherings_Schema.sql`.
+- New R2 bucket `birdiefriends-photos` (Standard storage class — Infrequent Access was considered and rejected, wrong fit for an actively-served gallery), bound to the Worker as `PHOTOS_BUCKET`.
+- Four new Worker routes: `POST /photos/upload` (multipart, writes R2 + D1 in one request — no Jotform, no sync/polling step needed as a result), `GET /photos` (public reads forced to `curation_status='approved'` server-side, admin reads via pin), `PATCH /photos/:id` (curation), `DELETE /photos/:id` (permanent — deliberately separate from reject, which stays reversible), `GET /photos/serve/:id` (streams from R2, unapproved photos 404 without pin).
+- Video support added same session: `media_type` inferred server-side from MIME type (never trusted from client), 25MB server-enforced cap (client-side duration/size checks are UX only), no thumbnail generation (no ffmpeg-class processing in a Worker — native `<video controls>` instead), no Range/seek support (fine at ~20s clip lengths).
+- Portal UI: capture tool moved from buried Commissioner Admin → a Home-screen collapsible banner (Live-Panel visual pattern), gated to `isCommissioner()` only (i.e., Brian's profile specifically, not just "logged in"). Two capture entry points: classic file picker + upload button, and a quick-capture path (hidden camera input, auto-uploads on selection, no second tap).
+- All Worker routes wrapped in try/catch after a live debugging session traced a generic Cloudflare 500 back to an actual D1 infrastructure incident (see below) — the try/catch itself was the right fix regardless of cause, since it turns future opaque crashes into real error messages.
+- Live end-to-end test confirmed working: upload → R2 write → D1 insert → serve → curation gate (unapproved 404s publicly, approved 200s) — all verified via direct curl round-trip, not just UI observation.
+
+**Infrastructure incidents (both external, not app bugs):**
+- **Cloudflare D1/Durable Objects outage** (mid-session) — `D1_ERROR: Internal error while starting up D1 DB storage caused object to be reset`, confirmed via Cloudflare's own status page (D1 + Durable Objects both showing Degraded Performance, active ENAM incident). Diagnosed by testing two completely unrelated, long-stable D1 routes (Gatherings, Venues) and confirming they failed identically — proved database-wide, not photos-code-specific, before any rollback was attempted. Added `d1RetryRead()` — auto-retry wrapper for read-only D1 queries only (writes deliberately excluded — blind-retrying a POST risks double-applying a mutation if the first attempt actually succeeded before the error surfaced).
+- **GitHub Pages deployment outage** (separate incident, later same session) — repeated failed/stuck-queued `pages build and deployment` runs, unrelated to content (confirmed via a `source/worker.js`-only commit, which touches nothing Pages serves, still triggering and failing a rebuild). Fresh pushes reliably cleared stuck queued runs (new commit cancels the old one via the workflow's concurrency group); plain re-runs did not. Resolved on its own after ~1 hour; no permanent mitigation needed since GitHub's Contents API (used by `/deploy`) is a separate subsystem from Actions/Pages and was never actually down — commits kept succeeding throughout, only the live-site rebuild was affected.
+
+**Portal version display — hardened, recurrence closed out:**
+- Same bug as Dev-45 (`portal_version.txt` disconnected from the actual on-page version string) recurred here. Root-fixed instead of re-patched this time: `portal.html`'s version spans now fetch `docs/portal_version.txt` live at `DOMContentLoaded` and populate themselves, rather than two hardcoded literals that had to be remembered and updated by hand on every version bump. `docs/portal_version.txt` added as a required file (previously `source/` only was a tracking doc, never read by the live page).
+
+**Gathering fixes — guard + Repeat feature (multi-pass):**
+- **Root cause investigated:** Chooch tried to edit an already-past Gathering's date forward to set up "next Tuesday," which fired a confusing date-changed → cancelled → new-invite notification burst to his crew within 3 minutes (traced via KV feed entries — two different gathering IDs, #27 cancelled then #30 created fresh under the same title).
+- **Guard added:** `PATCH /gatherings/:id` now rejects a date-change if the Gathering's current `event_time` has already passed (409, clear error message).
+- **Repeat feature built:** one-tap reuse from any Gathering card (any status — active or archived, not just past ones, after a real gap was caught: Charlie's exact scenario was wanting to repeat a still-*upcoming* card). Computes the next occurrence of the same weekday from *today* (not +7 from whatever old date happened to be on the card), inherits title/venue/format/crew, skips the New Gathering form entirely, confirms with a concrete preview (actual computed date + real audience count) before sending. Guard's error message updated to point at Repeat instead of Templates once it existed.
+- **Discoverability iterated twice:** Repeat started buried inside Archive-only (invisible for the exact recurring-host use case it was built for) → promoted to a top-level action alongside New/From Template, via a purpose-built picker (not the full Archive) deduplicated by title so a host with months of the same weekly game sees one row per distinct series, not every historical instance.
+- **Visual iterated twice more:** initial purple gradient action-bar replaced with a fixed icon bar matching the bottom nav's exact visual language (flat `--green-dark`, icon-top/label-below, no gradients) — then relocated from a bottom-footer position to blend directly under the sheet header, at Brian's request, since it read as a second competing nav bar at the bottom of the screen.
+- **Button consistency pass:** all white/transparent "ghost" buttons in this panel (Repeat, Template, Cancel Gathering, Delete) migrated to two real semantic variants — `.btn-secondary` (light green, existing) for normal actions, new `.btn-secondary-danger` (light red fill) for destructive ones — replacing several one-off inline color overrides that had drifted inconsistent from each other. Scoped to this panel only; `.btn-ghost` itself untouched globally (used elsewhere in an 11,800-line file not audited this session).
+- **Section labels added:** "Upcoming (N)" / "Past (N)" headers on the main list and Archive respectively, reusing the existing `.section-label` style already used in Admin — Brian had correctly flagged both views lacked any heading identifying what the cards represented.
+
+**Architecture audit — "Parked syndrome" (open, carried forward):**
+- Investigated at Brian's request after he suspected the "Parked" nav concept (bottom nav, one of five slots) might be poorly understood or simply unused.
+- Finding was more decisive than expected: **`bf_hidden_events_<player>` is stored only in `localStorage`** — zero references anywhere in `worker.js`, never synced to D1/KV/Jotform. Usage is genuinely unknowable, including by Brian — not just hard to check, structurally invisible to every admin tool that exists.
+- Confirmed via direct testing that this also breaks across Brian's own multi-device usage (laptop/iPad/phone) — parking on one device is invisible on another, since `localStorage` doesn't sync.
+- Widened the audit per Brian's request ("what else suffers from this") — found two more instances of the same root problem: `bf_seen_events_<player>` (drives the "NEW" badge; reappears on a different device even after being seen) and `bf_first_load_<player>` (stamps "first ever use" per-device; logging into a second device for the first time floods every historical event back in as "NEW" simultaneously — arguably the most visible/jarring of the three).
+- Cross-checked the rest of the app's `localStorage` usage and confirmed several other keys are *correctly* device-local and should stay that way: `bf_commissioner` (PIN-verified-this-device — syncing would be a security regression, not a fix), `bf_os_sub_id`/`bf_os_player`/`bf_os_health` (push subscription identifiers, inherently tied to one device's push endpoint), `bf_os_dismissed_` (notification-permission-prompt state, tied to device-level OS permission), `bf_player`/`bf_player_name` (who's logged in on this specific device).
+
+**Carry-forward for Dev-55 — the actual next-session focus, per Brian's explicit request to close out documentation now so the next session deals with just this:**
+- **Build:** consolidate `bf_hidden_events_`, `bf_seen_events_`, and `bf_first_load_` from `localStorage` into D1 — chosen over a KV-blob approach specifically because a normalized table directly answers "how many players actually use Parked" as a real query (`SELECT COUNT(DISTINCT player_id) ...`), which was the whole reason this investigation started, and because the naive version costs barely more effort than KV would here.
+- **Proposed schema** (not yet run — needs a fresh-session D1 migration):
+  ```sql
+  CREATE TABLE player_event_state (
+    player_id  TEXT NOT NULL,
+    event_id   TEXT NOT NULL,
+    state      TEXT NOT NULL CHECK (state IN ('parked','seen')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (player_id, event_id, state)
+  );
+  CREATE TABLE player_meta (
+    player_id  TEXT PRIMARY KEY,
+    first_load TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  ```
+- **Scope of the client-side change:** small on purpose — none of the existing call sites across the app that check "is this parked" or "is this new" need to change. Only the insides of three existing helper-function groups need rewriting: `getDismissedEvents()`/`dismissEvent()`/`restoreEvent()`, `getSeenEvents()`/`markEventSeen()`/`markAllNewSeen()`, `getPlayerFirstLoad()`. Swap their `localStorage` calls for a fetch backed by an in-memory cache loaded once at login, same shape as how `gatheringData` is already loaded.
+- **Explicitly NOT decided yet, worth resolving early next session:** whether "Parked" deserves its permanent bottom-nav slot at all once real usage becomes visible, versus folding into something lighter (e.g. auto-filtering cards already marked "Can't Make It," which wouldn't need its own gesture or storage). Fixing the sync bug makes the feature correct; it doesn't answer whether it should exist in its current form. Cheapest path to a real answer: ship the D1 fix, instrument it, look at actual usage in a few weeks before deciding.
+- Do **not** re-litigate the Photo Capture architecture, Repeat feature, or Gathering guard next session — all fully built, deployed, and confirmed working as of this session's close. Only remaining Photo Capture item is the eventual `results.html` photo-collage insertion, which needs a session with GS source available (unrelated to Dev-55's actual focus).
+
+**Final portal version: v3.17.01 · 2026-07-04**
+**Dev-54 closed.**
