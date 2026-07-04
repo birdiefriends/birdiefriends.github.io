@@ -5549,16 +5549,29 @@ function buildActionButtons(evt, myReg, capStatus, isStaleResponse) {
           ✕ Can't Make It
         </button>`;
     }
-    // Already registered
+    // Already registered — Dev-55: same principle as the Can't Make It fix.
+    // "Unregister" was really just submitRegistration(...,'No') wearing a
+    // different label — replaced with the actual two switchable actions
+    // directly, same as every other status branch in this function.
     if (myReg && myReg.status !== 'No') {
       const myDisp = getMyCapacityDisplay(evt, myReg, capStatus);
       const icon   = myDisp ? myDisp.icon  : (myReg.status === 'Sub' ? '🔄' : '✅');
       const label  = myDisp ? myDisp.label : (myReg.status === 'Sub' ? 'Registered — Sub' : 'Registered');
+      const isSub  = myReg.status === 'Sub';
       return `
         <div class="my-status-badge">${icon} ${label}</div>
-        <button class="btn btn-cant-make-it"
+        ${isSub ? `
+        <button class="btn btn-register-yes" style="margin-top:8px"
+          onclick="submitRegistration('${evt.id}','${evt.name.replace(/'/g,"\\'")}',this,'Yes')">
+          ⛳ Register
+        </button>` : `
+        <button class="btn btn-register-sub" style="margin-top:8px"
+          onclick="submitRegistration('${evt.id}','${evt.name.replace(/'/g,"\\'")}',this,'Sub')">
+          🔄 I Can Sub
+        </button>`}
+        <button class="btn btn-register-no" style="margin-top:8px"
           onclick="submitRegistration('${evt.id}','${evt.name.replace(/'/g,"\\'")}',this,'No')">
-          Unregister
+          ✕ Can't Make It
         </button>`;
     }
     // Responded "Can't make it" — Dev-53 added the badge so a "No" response
