@@ -358,7 +358,7 @@ export default {
 
         // Dev-54 guard: block pushing an already-past Gathering's date into the
         // future via Edit. Edit exists to adjust logistics on something upcoming,
-        // not to resurrect a finished one — that's what "Use as Template" is for.
+        // not to resurrect a finished one — that's what "Repeat" (Archive) is for.
         // Real incident: a host tried exactly this for a recurring weekly game,
         // which fired a confusing date-changed → cancelled → new-invite sequence
         // to the whole crew within minutes (Dev-54 investigation, gathering #27).
@@ -366,7 +366,7 @@ export default {
           const currentEventTime = new Date(gathering.event_time);
           if (!isNaN(currentEventTime.getTime()) && currentEventTime < new Date()) {
             return new Response(JSON.stringify({
-              error: 'This Gathering has already happened — Edit can\'t move it into the future. Use "Use as Template" to set up a new one instead.'
+              error: 'This Gathering has already happened — Edit can\'t move it into the future. Use 🔁 Repeat from the Archive to set up the next one instead.'
             }), { status: 409, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
           }
         }
