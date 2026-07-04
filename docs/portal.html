@@ -190,6 +190,27 @@ body {
 }
 .bf-nav-btn.active .bf-nav-label { color: var(--gold-bright); }
 
+/* ── Host sheet action bar — same visual language as .bf-nav, Dev-54 ── */
+.host-action-bar {
+  display: flex; flex-shrink: 0;
+  background: var(--green-dark);
+  border-top: 1px solid rgba(255,255,255,0.12);
+}
+.host-action-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 3px; background: none; border: none;
+  cursor: pointer; padding: 10px 4px; font-family: inherit;
+  transition: background 0.15s;
+}
+.host-action-btn:hover { background: rgba(255,255,255,0.06); }
+.host-action-btn:disabled { opacity: 0.35; cursor: default; }
+.host-action-btn:disabled:hover { background: none; }
+.host-action-icon { font-size: 1.4rem; line-height: 1; }
+.host-action-label {
+  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.03em;
+  text-transform: uppercase; color: rgba(255,255,255,0.75);
+}
+
 /* ── Main content area ── */
 .bf-main {
   padding: 12px 0 calc(var(--nav-h) + env(safe-area-inset-bottom) + 20px);
@@ -8410,6 +8431,7 @@ async function loadHostTemplates() {
 function showTemplatePicker() {
   const templates = _hostTemplates || [];
   if (templates.length === 0) { showToast('No saved templates yet'); return; }
+  clearHostActionBar();
 
   const body = document.getElementById('host-sheet-body');
   const backBtn = document.getElementById('host-sheet-back');
@@ -8861,6 +8883,15 @@ async function deleteTestPhoto(id) {
 }
 
 // ── List view: host's active Gatherings + New Gathering entry ─────────────
+// Clears the persistent action bar — called by every sub-view (Archive,
+// Template picker, Repeat picker, New/Edit forms) so "New Gathering" etc.
+// don't linger while the host is mid-flow doing something else. Only the
+// main list view (renderHostPanelList) populates it.
+function clearHostActionBar() {
+  const bar = document.getElementById('host-action-bar');
+  if (bar) bar.innerHTML = '';
+}
+
 function renderHostPanelList() {
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) backBtn.style.display = 'none';
@@ -8873,6 +8904,22 @@ function renderHostPanelList() {
     .sort((a, b) => a.dt - b.dt);
   const archived = allMine.filter(g => g.dt && g.dt < now)
     .sort((a, b) => b.dt - a.dt);
+
+  const actionBar = document.getElementById('host-action-bar');
+  if (actionBar) {
+    actionBar.innerHTML = `
+      <button class="host-action-btn" onclick="showNewGatheringForm()">
+        <span class="host-action-icon">⛳</span><span class="host-action-label">New</span>
+      </button>
+      <button class="host-action-btn" ${(_hostTemplates && _hostTemplates.length > 0) ? '' : 'disabled'}
+        onclick="showTemplatePicker()">
+        <span class="host-action-icon">📋</span><span class="host-action-label">From Template</span>
+      </button>
+      <button class="host-action-btn" ${allMine.length > 0 ? '' : 'disabled'} onclick="showRepeatPicker()">
+        <span class="host-action-icon">🔁</span><span class="host-action-label">Repeat</span>
+      </button>
+    `;
+  }
 
   let listHtml = '';
   if (mine.length === 0) {
@@ -8935,6 +8982,8 @@ function renderHostPanelList() {
             onclick="showEditGatheringForm(${g.gatheringId})">✏️ Edit</button>
           <button class="btn btn-secondary btn-sm"
             onclick="hostInviteOthers(${g.gatheringId})">➕ Invite Others</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--green-dark);font-weight:600"
+            onclick="repeatGathering(${g.gatheringId})">🔁 Repeat</button>
           <button class="btn btn-ghost btn-sm"
             onclick="promptSaveAsTemplate({title:'${g.name.replace(/'/g,"\\'")}',venue:'${(g.location||'').replace(/'/g,"\\'")}',gathering_type:'${(g.gatheringType||'').replace(/'/g,"\\'")}',description:'${(g.description||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',capacity:${g.capacity||null},crew_snapshot:[]},true)"
             style="color:var(--text-muted)">☆ Template</button>
@@ -8946,15 +8995,6 @@ function renderHostPanelList() {
   }
 
   body.innerHTML = `
-    <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">
-      <button class="host-cta-btn" style="flex:1 1 45%;min-width:140px" onclick="showNewGatheringForm()">⛳ New Gathering</button>
-      ${(_hostTemplates && _hostTemplates.length > 0)
-        ? `<button class="host-cta-btn" style="flex:1 1 45%;min-width:140px;background:linear-gradient(135deg,#2c7a5a,#1a4a36)" onclick="showTemplatePicker()">📋 From Template</button>`
-        : ''}
-      ${archived.length > 0
-        ? `<button class="host-cta-btn" style="flex:1 1 45%;min-width:140px;background:linear-gradient(135deg,#4a2f6b,#2f1d47)" onclick="showRepeatPicker()">🔁 Repeat</button>`
-        : ''}
-    </div>
     ${listHtml}
     ${archived.length > 0 ? `
     <div style="text-align:center;margin-top:14px">
@@ -8971,11 +9011,24 @@ function renderHostPanelList() {
 // use case it exists for (a host running the same weekly game). Purpose-built
 // list rather than dropping the host into the full Archive view, which is
 // built for reviewing responses, not for this decision.
+// Repeat is status-agnostic — a host thinking about next week's game while
+// looking at THIS week's still-upcoming card shouldn't have to wait for it
+// to lapse into Archive first (Dev-54, Charlie's exact scenario: browsing
+// the archive for CGA when the current one hadn't happened yet).
+//
+// Deduplicated by title, one row per distinct recurring series (most recent
+// instance represents it) — a host running the same weekly game for months
+// would otherwise see that same title dozens of times in a flat list here.
 function showRepeatPicker() {
-  const now = new Date();
-  const archived = gatheringData.filter(g => g.hostId === currentPlayer && g.dt && g.dt < now)
-    .sort((a, b) => b.dt - a.dt);
-  if (archived.length === 0) { showToast('No past Gatherings yet to repeat'); return; }
+  const mine = gatheringData.filter(g => g.hostId === currentPlayer && g.dt);
+  const byTitle = new Map();
+  mine.forEach(g => {
+    const existing = byTitle.get(g.name);
+    if (!existing || g.dt > existing.dt) byTitle.set(g.name, g);
+  });
+  const series = Array.from(byTitle.values()).sort((a, b) => b.dt - a.dt);
+  if (series.length === 0) { showToast('No Gatherings yet to repeat'); return; }
+  clearHostActionBar();
 
   const body = document.getElementById('host-sheet-body');
   const backBtn = document.getElementById('host-sheet-back');
@@ -8983,13 +9036,15 @@ function showRepeatPicker() {
   const closeBtn = document.getElementById('host-sheet-close-btn');
   if (closeBtn) { closeBtn.textContent = 'Done'; }
 
-  const rows = archived.map(g => {
+  const now = new Date();
+  const rows = series.map(g => {
     const dateStr = formatDate(g.dt);
     const timeStr = formatTime(g.dt);
+    const whenLabel = g.dt < now ? 'Last' : 'Upcoming';
     const metaParts = [g.location, g.crewName].filter(Boolean);
     return `<div class="host-gathering-card" style="cursor:pointer" onclick="repeatGathering(${g.gatheringId})">
       <div style="font-size:0.95rem;font-weight:700;color:var(--text);margin-bottom:4px">${g.name}</div>
-      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:${metaParts.length ? '8px' : '10px'}">Last: ${dateStr} at ${timeStr}</div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:${metaParts.length ? '8px' : '10px'}">${whenLabel}: ${dateStr} at ${timeStr}</div>
       ${metaParts.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
         ${metaParts.map(p => `<span style="font-size:0.75rem;font-weight:600;color:var(--green-dark);background:var(--green-light);border-radius:20px;padding:2px 10px;white-space:nowrap">${p}</span>`).join('')}
       </div>` : ''}
@@ -9000,7 +9055,7 @@ function showRepeatPicker() {
   }).join('');
 
   body.innerHTML = `
-    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:16px;line-height:1.5">Tap a past Gathering to repeat it — same details, next occurrence of the same weekday. You'll confirm the date and audience before it sends.</div>
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:16px;line-height:1.5">One row per recurring game — tap to set up the next occurrence of the same weekday. You'll confirm the date and audience before it sends.</div>
     ${rows}
   `;
 }
@@ -9013,6 +9068,7 @@ function showRepeatPicker() {
 // next occurrence directly from an archived card (see repeatGathering()).
 
 function renderHostArchiveList() {
+  clearHostActionBar();
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'block'; backBtn.onclick = () => renderHostPanelList(); }
   const closeBtn = document.getElementById('host-sheet-close-btn');
@@ -9266,6 +9322,7 @@ async function cancelGatheringFromPanel(gatheringId, title) {
 async function showEditGatheringForm(gatheringId) {
   const g = gatheringData.find(x => x.gatheringId === gatheringId);
   if (!g) { showToast('Could not find Gathering', true); return; }
+  clearHostActionBar();
 
   const body = document.getElementById('host-sheet-body');
   const backBtn = document.getElementById('host-sheet-back');
@@ -9430,6 +9487,7 @@ async function showNewGatheringForm() {
   _pendingCrewName = null;
   _hostMode = 'crew';
   _hostTeeTimeStatus = 'confirmed';
+  clearHostActionBar();
 
   const body = document.getElementById('host-sheet-body');
   body.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:20px 0">Loading…</div>`;
@@ -11678,6 +11736,7 @@ if ('caches' in window) {
       </div>
     </div>
     <div class="host-sheet-body" id="host-sheet-body"></div>
+    <div class="host-action-bar" id="host-action-bar"></div>
   </div>
 </div>
 
