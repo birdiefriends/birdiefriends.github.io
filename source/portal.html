@@ -5357,6 +5357,36 @@ function formatTime(dt) {
   if (!dt) return '';
   return dt.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', hour12:true });
 }
+
+// Local ISO string (no UTC shift) for a Date object — same offset-preserving
+// approach as the New Gathering form's inline construction, factored out so
+// Repeat (Dev-54) can reuse it without duplicating the timezone math.
+function toLocalISOString(d) {
+  const off = -d.getTimezoneOffset();
+  const offSign = off >= 0 ? '+' : '-';
+  const offH = String(Math.floor(Math.abs(off)/60)).padStart(2,'0');
+  const offM = String(Math.abs(off)%60).padStart(2,'0');
+  const pad2 = n => String(n).padStart(2,'0');
+  const datePart = `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  const timePart = `${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
+  return `${datePart}T${timePart}${offSign}${offH}:${offM}`;
+}
+
+// Next occurrence of sourceDate's weekday, computed from today, keeping the
+// same time-of-day. Always strictly future — if today happens to share the
+// weekday, rolls a full week ahead rather than "later today" (Dev-54: Repeat
+// is for weekly-cadence Gatherings, not same-day reruns).
+function nextOccurrenceOfWeekday(sourceDate) {
+  const now = new Date();
+  const targetDow = sourceDate.getDay();
+  let daysToAdd = (targetDow - now.getDay() + 7) % 7;
+  if (daysToAdd === 0) daysToAdd = 7;
+  const next = new Date(now);
+  next.setDate(now.getDate() + daysToAdd);
+  next.setHours(sourceDate.getHours(), sourceDate.getMinutes(), 0, 0);
+  return next;
+}
+
 function formatBadge(fmt) {
   if (!fmt) return 'Individual Score';
   if (fmt === 'Gathering') return 'Host Gathering';
@@ -8932,10 +8962,12 @@ function renderHostPanelList() {
   `;
 }
 
-// ── Gathering Archive — expired Gatherings, view-only ─────────────────────
+// ── Gathering Archive — expired Gatherings ─────────────────────────────────
 // Dev-53: any Gathering whose date/time has passed drops out of the main
 // Host panel list automatically and lands here instead. Same data source
 // (gatheringData), just time-filtered — no separate storage or D1 change.
+// Dev-54: no longer purely view-only — 🔁 Repeat lets the host spin up the
+// next occurrence directly from an archived card (see repeatGathering()).
 
 function renderHostArchiveList() {
   const backBtn = document.getElementById('host-sheet-back');
@@ -8994,6 +9026,9 @@ function renderHostArchiveList() {
         </div>
         <div class="host-gathering-actions">
           <button class="btn btn-ghost btn-sm"
+            onclick="repeatGathering(${g.gatheringId})"
+            style="color:var(--accent-2, #0f7a5e);font-weight:600">🔁 Repeat</button>
+          <button class="btn btn-ghost btn-sm"
             onclick="promptSaveAsTemplate({title:'${g.name.replace(/'/g,"\\'")}',venue:'${(g.location||'').replace(/'/g,"\\'")}',gathering_type:'${(g.gatheringType||'').replace(/'/g,"\\'")}',description:'${(g.description||'').replace(/'/g,"\\'").replace(/\n/g,' ')}',capacity:${g.capacity||null},crew_snapshot:[]},true)"
             style="color:var(--text-muted)">☆ Save as Template</button>
         </div>
@@ -9003,7 +9038,7 @@ function renderHostArchiveList() {
 
   body.innerHTML = `
     <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-      Past Gatherings — view-only. Tap Responses to see who was in.
+      Past Gatherings. Tap Responses to see who was in, or 🔁 Repeat to set up the next one.
     </div>
     ${listHtml}
   `;
@@ -9972,6 +10007,90 @@ async function submitNewGathering() {
     console.error('submitNewGathering error:', e);
   } finally {
     if (btn) { btn.disabled = false; btn.classList.remove('btn-loading'); }
+  }
+}
+
+// ── Repeat (Dev-54) ──────────────────────────────────────────────────────
+// One-tap reuse of an Archive card: same title/venue/format/crew, next
+// occurrence of the same weekday (computed from today, not from the old
+// date), same time-of-day. Skips the New Gathering form entirely — goes
+// straight to a concrete confirm ("this date, this crew") then fires the
+// same create+notify path submitNewGathering uses. Host-only, matches the
+// existing "Host controls their Gatherings" boundary (Edit/Cancel/Template
+// are all host-only too).
+async function repeatGathering(gatheringId) {
+  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  if (!g) { showToast('Gathering not found', true); return; }
+  if (g.hostId !== currentPlayer) { showToast('Only the host can repeat this Gathering', true); return; }
+  if (!g.dt) { showToast('This Gathering has no date on record', true); return; }
+
+  const nextDate  = nextOccurrenceOfWeekday(g.dt);
+  const dateLabel = formatDate(nextDate);
+  const timeLabel = formatTime(nextDate);
+
+  // Resolve the audience up front so the confirm dialog shows a real count,
+  // not a guess — same logic submitNewGathering uses for open vs. crew mode.
+  let notifyNames = [];
+  if (g.fillListEnabled) {
+    notifyNames = memberData
+      .filter(m => m.gatheringAlerts === 'Yes' && m.active !== 'InActive' && m.display !== currentPlayer)
+      .map(m => m.display);
+  } else if (g.crewId) {
+    try {
+      const memData = await gatheringsFetchJSON(`${GATHERINGS_API}/crews/${g.crewId}/members`);
+      notifyNames = memData.ok ? (memData.player_ids || []) : [];
+    } catch(e) {
+      showToast('Could not load crew — try again', true);
+      return;
+    }
+  }
+
+  const audienceLabel = g.fillListEnabled
+    ? `all members with Gathering Alerts on (${notifyNames.length})`
+    : `${g.crewName || 'the crew'} (${notifyNames.length} player${notifyNames.length === 1 ? '' : 's'})`;
+
+  const confirmed = confirm(
+    `Repeat "${g.name}"?\n\n${dateLabel} at ${timeLabel}\nNotify: ${audienceLabel}`
+  );
+  if (!confirmed) return;
+
+  try {
+    const gathData = await gatheringsFetchJSON(`${GATHERINGS_API}/gatherings`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        host_id: currentPlayer,
+        title: g.name,
+        venue: g.location || null,
+        event_time: toLocalISOString(nextDate),
+        size: g.capacity || null,
+        crew_id: g.crewId || null,
+        fill_list_enabled: g.fillListEnabled,
+        gathering_type: g.gatheringType,
+        description: g.description,
+        tee_time_status: g.teeTimeStatus
+      })
+    });
+    if (!gathData.ok) throw new Error(gathData.error || 'Repeat failed');
+
+    if (notifyNames.length) {
+      const notifType  = g.fillListEnabled ? 'gathering_open_invite' : 'gathering_invite';
+      const notifTitle = g.fillListEnabled ? '📢 Open Gathering' : 'New Gathering';
+      const notifBody  = g.fillListEnabled
+        ? `${currentPlayer} is hosting "${g.name}" — ${dateLabel} at ${timeLabel}. Open to all members.`
+        : `${currentPlayer} invited you to "${g.name}" — ${dateLabel} at ${timeLabel}.`;
+      const notifMeta  = g.fillListEnabled
+        ? { gathering_id: gathData.id }
+        : { gathering_id: gathData.id, invited: notifyNames };
+      osSendToPlayers(notifyNames, notifTitle, notifBody, 'https://birdiefriends.com/portal.html', notifType, notifMeta)
+        .catch(e => console.warn('Repeat invite notify failed:', e));
+    }
+
+    showToast(`✅ Repeated — ${dateLabel} at ${timeLabel}`);
+    await refreshGatherings();
+    renderHostArchiveList();
+  } catch(e) {
+    showToast('❌ ' + e.message, true);
+    console.error('repeatGathering error:', e);
   }
 }
 
