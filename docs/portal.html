@@ -5561,11 +5561,12 @@ function buildActionButtons(evt, myReg, capStatus, isStaleResponse) {
           Unregister
         </button>`;
     }
-    // Responded "Can't make it" — Dev-53: previously fell through to the
-    // unregistered state below with no indicator at all, so a "No" response
-    // looked identical to never having responded. Now shows a clear badge and
-    // highlights which button is active, while still allowing all three
-    // responses (matches the always-three-way Gathering model above).
+    // Responded "Can't make it" — Dev-53 added the badge so a "No" response
+    // wasn't indistinguishable from never having responded. Dev-54: the
+    // already-active choice no longer renders as a button too — the badge
+    // already says it, a highlighted-but-still-clickable duplicate of it was
+    // confusing ("didn't I already do this?"). Only the two switchable
+    // actions show now.
     if (myReg && myReg.status === 'No') {
       const waitlistNote = capStatus.isWaitlist
         ? `<div class="cap-note">Gathering is at capacity — Register still adds you to the waitlist, or pick I Can Sub to be on standby.</div>`
@@ -5580,10 +5581,6 @@ function buildActionButtons(evt, myReg, capStatus, isStaleResponse) {
         <button class="btn btn-register-sub" style="margin-top:8px"
           onclick="submitRegistration('${evt.id}','${evt.name.replace(/'/g,"\\'")}',this,'Sub')">
           🔄 I Can Sub
-        </button>
-        <button class="btn btn-register-no btn-selected" style="margin-top:8px"
-          onclick="submitRegistration('${evt.id}','${evt.name.replace(/'/g,"\\'")}',this,'No')">
-          ✕ Can't make it
         </button>`;
     }
     // Not yet registered
