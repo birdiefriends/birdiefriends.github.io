@@ -8999,6 +8999,7 @@ function renderHostPanelList() {
   }
 
   body.innerHTML = `
+    ${mine.length > 0 ? `<div class="section-label">Upcoming (${mine.length})</div>` : ''}
     ${listHtml}
     ${archived.length > 0 ? `
     <div style="text-align:center;margin-top:14px">
@@ -9138,8 +9139,9 @@ function renderHostArchiveList() {
   }
 
   body.innerHTML = `
+    <div class="section-label">Past (${archived.length})</div>
     <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-      Past Gatherings. Tap Responses to see who was in, or 🔁 Repeat to set up the next one.
+      Tap Responses to see who was in, or 🔁 Repeat to set up the next one.
     </div>
     ${listHtml}
   `;
