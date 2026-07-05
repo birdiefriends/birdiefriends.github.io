@@ -685,3 +685,48 @@ CREATE TABLE IF NOT EXISTS commissioner_checklist_state (
 
 **Final portal version: v3.17.05 · 2026-07-05**
 **Dev-55 closed.**
+
+---
+
+## Session Dev-56 · 2026-07-05
+
+**Focus:** Closed a real data-integrity gap in the Dev-55 migration design (proxy registration could falsely mark a player "already migrated"), fixed a silent routing bug, and built a Commissioner Engagement tool to actually answer the "does anyone use Parked" question Dev-54 originally raised — directly in response to Brian's own instinct to test the personalization selector like Chooch's Repeat-feature mismatch: watch real behavior instead of assuming the design is right.
+
+**Migration-integrity fix — proxy registration could falsely trip "already migrated":**
+- Root cause: Dev-55's `migrated` check was "does this player have any rows in `player_event_state`." Proxy registration (anyone registering *for* another player via the name-switcher — a normal, frequent action in this app) writes a real row under the target player's identity via `restoreEvent()`/`markEventSeen()` — before that player's own device has ever opened the app. That incidental row would falsely satisfy the row-presence check, causing the real player's actual first load to skip capturing their genuine local Parked/Seen history and silently lose it.
+- Fix: added `migrated_at`/`announcements_migrated_at` columns to `player_meta` (D1 migration run by Brian), set only by `POST .../migrate` via `COALESCE` (never overwrites a genuine first-migration timestamp). `GET /player-state/:player_id` now checks these flags instead of row-presence. No portal.html change needed — client already just reads a `migrated` boolean.
+- **Verified live** with a full simulated scenario: proxy write (Chooch-style registering for a test "Dave") → confirmed `migrated` stayed `false` → real `/migrate` call with the target's own local history → confirmed `migrated` flipped `true` with **both** the incidental row and the real local history intact, nothing lost or overwritten.
+- Confirmed real Chooch, Walli, and Dave Sherwin still showed `migrated: false` at time of fix — not a hypothetical, actively protecting three real upcoming first-loads.
+- Explicitly scoped: MyGame/Live Panel proxy entry (Birdie Alert, CttP, Scorecard) writes directly to Jotform under an explicit "who is this for" field, separate from `currentPlayer` — confirmed unrelated to this gap, no exposure there.
+
+**Route-ordering bug — `/player-state/stats` silently shadowed:**
+- `GET /player-state/stats` (added this session for the Engagement tool) was being intercepted by the earlier, more general `GET /player-state/:player_id` catch-all, since `stats` matched the `:player_id` regex like any literal string and that route was checked first in the file.
+- Symptom was quiet: request returned 200 with `ok:true`, just the wrong response shape — so the portal's `.forEach` on a missing field threw client-side, leaving the UI stuck on "Loading engagement stats…" with no visible error. Brian caught this from a screenshot, not a console log.
+- Fixed with an explicit exclusion (`psGetMatch[1] !== 'stats'`) on the catch-all rather than reordering the file.
+- Documented as a general pattern in the Ops Guide: any new literal-path route added under an existing `:param`-style catch-all needs to either be checked first or explicitly excluded — this class of bug won't throw at deploy time, only silently misroute at request time.
+
+**Commissioner Engagement tool — built, then relocated, then extended:**
+- New Worker route `GET /player-state/stats?pin=` — single table scan + JS aggregation over `player_event_state`, returns per-player `parked_count`/`seen_count`/`last_parked_at` plus (added later this session) `parked_ids`/`seen_ids` arrays, needed for the "Right Now" cross-reference below.
+- **First-pass placement mistake, caught and fixed:** initially bolted onto the Push Subscribers card as a fourth header button — visually clipped on a phone screen (Brian's screenshot showed the label cut off), and thematically wrong (subscriber/push-health tools vs. app-usage analytics). Relocated to its own standalone collapsible card under Communicate, using the existing generic `toggleAdminCard()` pattern — set up to scale cleanly since Brian expects to add more tools like it.
+- **Two-picture design, per Brian's explicit framing** ("history is an indicator of historic BF engagement, the now is a picture of a player's playing plan"):
+  - **History (lifetime)** — total Parked/Seen counts ever. Explicitly flagged as biased by tenure (every row is permanent, nothing prunes on event expiry) — useful as a broad engagement signal, not a live-behavior one.
+  - **Right Now (of N open)** — of everything currently on Home today (same denominator across all players), how much is 📦 Parked / ✅ Seen / ◌ Untouched per player. Directly tests the Series-only-player hypothesis: high Untouched + minimal Parked would mean "ignored, not actively hidden" — a different UX conclusion than "Parked is broken."
+- Table sorted by all-time registration frequency (most frequent players first) so the correlation Brian's testing — does Parked usage cluster among infrequent players — reads directly off the row order.
+
+**D1 migration (Brian ran in Cloudflare Console, this session):**
+```sql
+ALTER TABLE player_meta ADD COLUMN migrated_at TEXT;
+ALTER TABLE player_meta ADD COLUMN announcements_migrated_at TEXT;
+```
+
+**Docs updated:**
+- `BF_Operations_Guide.md` — "Player Personalization" section rewritten to cover the `migrated_at` fix (with the exact failure mode explained, not just "fixed"), the route-ordering lesson generalized for future sessions, and the Engagement tool's two-picture design and purpose.
+
+**Carry-forward for Dev-57:**
+- Check the Engagement tool's Right Now breakdown after Series #5 recruitment brings a real mix of frequent/infrequent players through an actual registration push — this is the real test of the original Dev-54 "does Parked deserve its nav slot" question.
+- `bf_architecture.html` full ERD redraw — still deferred from Dev-55, now further behind (Dev-56 added `player_meta.migrated_at`/`announcements_migrated_at` columns on top of the four Dev-55 tables the diagram already doesn't show).
+- Cloudflare Worker Endpoints quick-reference table in `BF_Operations_Guide.md` — predates Dev-43, has never listed any Gatherings/venues/templates/photos/player-state/checklist route. Flagged, not fixed — the Player Personalization section serves as the authoritative reference for the newest routes in the meantime.
+- Everything else from Dev-55/54/53 backlog not touched: push notification preference center, player picker rethink, GS `results.html` photo-collage insertion.
+
+**Final portal version: v3.17.08 · 2026-07-05**
+**Dev-56 closed.**
