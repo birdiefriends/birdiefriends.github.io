@@ -808,7 +808,17 @@ export default {
           meta = { first_load: now };
         }
 
-        return new Response(JSON.stringify({ ok: true, parked, seen, migrated, first_load: meta.first_load }), {
+        // Announcements-dismissed (Dev-55 sweep — was a single GLOBAL, non-player-scoped
+        // localStorage key shared by anyone using that device; now per-player in D1).
+        const { results: annRows } = await d1RetryRead(() =>
+          env.DB.prepare(`SELECT announcement_id FROM player_announcement_dismissals WHERE player_id = ?`).bind(playerId).all()
+        );
+        const announcementsDismissed = annRows.map(r => r.announcement_id);
+
+        return new Response(JSON.stringify({
+          ok: true, parked, seen, migrated, first_load: meta.first_load,
+          announcementsDismissed, migratedAnnouncements: annRows.length > 0
+        }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       } catch(e) {
@@ -817,9 +827,8 @@ export default {
     }
 
     // POST /player-state/:player_id/migrate — one-time capture of a device's
-    // local Parked/Seen sets into D1. INSERT OR IGNORE makes this idempotent —
-    // safe even if called more than once (e.g. a second device races in before
-    // seeing migrated=true, or a zero-activity player triggers it every load).
+    // local Parked/Seen (+ Announcements-dismissed) sets into D1. INSERT OR
+    // IGNORE makes this idempotent — safe even if called more than once.
     const psMigrateMatch = url.pathname.match(/^\/player-state\/([^\/]+)\/migrate$/);
     if (request.method === 'POST' && psMigrateMatch) {
       const playerId = decodeURIComponent(psMigrateMatch[1]);
@@ -827,9 +836,11 @@ export default {
         const body = await request.json();
         const parked = Array.isArray(body.parked) ? body.parked : [];
         const seen   = Array.isArray(body.seen)   ? body.seen   : [];
+        const anns   = Array.isArray(body.announcements) ? body.announcements : [];
         const inserts = [
           ...parked.map(id => env.DB.prepare(`INSERT OR IGNORE INTO player_event_state (player_id, event_id, state) VALUES (?, ?, 'parked')`).bind(playerId, id)),
           ...seen.map(id   => env.DB.prepare(`INSERT OR IGNORE INTO player_event_state (player_id, event_id, state) VALUES (?, ?, 'seen')`).bind(playerId, id)),
+          ...anns.map(id   => env.DB.prepare(`INSERT OR IGNORE INTO player_announcement_dismissals (player_id, announcement_id) VALUES (?, ?)`).bind(playerId, id)),
         ];
         if (inserts.length) await env.DB.batch(inserts);
         return new Response(JSON.stringify({ ok: true, inserted: inserts.length }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -877,6 +888,87 @@ export default {
         return new Response(JSON.stringify({ ok: true, inserted: inserts.length }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch(e) {
         return new Response(JSON.stringify({ error: 'Database error bulk-marking seen' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /player-state/:player_id/announcement — single Announcement dismiss toggle.
+    // body: { announcement_id, action: 'add'|'remove' }
+    const psAnnMatch = url.pathname.match(/^\/player-state\/([^\/]+)\/announcement$/);
+    if (request.method === 'POST' && psAnnMatch) {
+      const playerId = decodeURIComponent(psAnnMatch[1]);
+      try {
+        const body = await request.json();
+        const { announcement_id, action } = body;
+        if (!announcement_id || !['add','remove'].includes(action)) {
+          return new Response(JSON.stringify({ error: "announcement_id and action ('add'|'remove') are required" }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (action === 'add') {
+          await env.DB.prepare(`INSERT OR IGNORE INTO player_announcement_dismissals (player_id, announcement_id) VALUES (?, ?)`).bind(playerId, announcement_id).run();
+        } else {
+          await env.DB.prepare(`DELETE FROM player_announcement_dismissals WHERE player_id = ? AND announcement_id = ?`).bind(playerId, announcement_id).run();
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error updating announcement dismissal' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /player-state/:player_id/announcements-bulk — dismiss several at once
+    // (used by "Dismiss All"). body: { announcement_ids: [...] }
+    const psAnnBulkMatch = url.pathname.match(/^\/player-state\/([^\/]+)\/announcements-bulk$/);
+    if (request.method === 'POST' && psAnnBulkMatch) {
+      const playerId = decodeURIComponent(psAnnBulkMatch[1]);
+      try {
+        const body = await request.json();
+        const ids = Array.isArray(body.announcement_ids) ? body.announcement_ids : [];
+        if (!ids.length) return new Response(JSON.stringify({ ok: true, inserted: 0 }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        const inserts = ids.map(id => env.DB.prepare(`INSERT OR IGNORE INTO player_announcement_dismissals (player_id, announcement_id) VALUES (?, ?)`).bind(playerId, id));
+        await env.DB.batch(inserts);
+        return new Response(JSON.stringify({ ok: true, inserted: inserts.length }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error bulk-dismissing announcements' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // ── Commissioner Sunday Checklist (Dev-55 sweep) ───────────────────────
+    // Was device-local (bf_sunday_done_YYYY-MM-DD) — broke across Brian's own
+    // phone/iPad/laptop use exactly like Parked/Seen did. Presence of a row =
+    // done; toggling off deletes the row. PIN-gated like other commissioner tools.
+
+    // GET /commissioner-checklist?date=YYYY-MM-DD&pin=7797
+    if (request.method === 'GET' && url.pathname === '/commissioner-checklist') {
+      const pin = url.searchParams.get('pin');
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      const date = url.searchParams.get('date');
+      if (!date) return new Response(JSON.stringify({ error: 'date is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        const { results } = await d1RetryRead(() =>
+          env.DB.prepare(`SELECT player_name FROM commissioner_checklist_state WHERE checklist_date = ?`).bind(date).all()
+        );
+        return new Response(JSON.stringify({ ok: true, done: results.map(r => r.player_name) }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error fetching checklist state' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /commissioner-checklist/toggle?pin=7797 — body: { date, player_name, action }
+    if (request.method === 'POST' && url.pathname === '/commissioner-checklist/toggle') {
+      const pin = url.searchParams.get('pin');
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        const body = await request.json();
+        const { date, player_name, action } = body;
+        if (!date || !player_name || !['add','remove'].includes(action)) {
+          return new Response(JSON.stringify({ error: "date, player_name, and action ('add'|'remove') are required" }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (action === 'add') {
+          await env.DB.prepare(`INSERT OR IGNORE INTO commissioner_checklist_state (checklist_date, player_name) VALUES (?, ?)`).bind(date, player_name).run();
+        } else {
+          await env.DB.prepare(`DELETE FROM commissioner_checklist_state WHERE checklist_date = ? AND player_name = ?`).bind(date, player_name).run();
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error updating checklist state' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
