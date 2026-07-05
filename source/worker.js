@@ -972,6 +972,42 @@ export default {
       }
     }
 
+    // GET /player-state/stats?pin=7797 — aggregate Parked/Seen counts per player,
+    // for the Commissioner Engagement tool (Dev-56). Single table scan + JS
+    // aggregation rather than N queries — player_event_state is small.
+    if (request.method === 'GET' && url.pathname === '/player-state/stats') {
+      const pin = url.searchParams.get('pin');
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        const { results } = await d1RetryRead(() =>
+          env.DB.prepare(`SELECT player_id, state, created_at FROM player_event_state`).all()
+        );
+        const byPlayer = {};
+        for (const r of results) {
+          if (!byPlayer[r.player_id]) byPlayer[r.player_id] = { player_id: r.player_id, parked_count: 0, seen_count: 0, last_parked_at: null };
+          const p = byPlayer[r.player_id];
+          if (r.state === 'parked') {
+            p.parked_count++;
+            if (!p.last_parked_at || r.created_at > p.last_parked_at) p.last_parked_at = r.created_at;
+          } else if (r.state === 'seen') {
+            p.seen_count++;
+          }
+        }
+        const players = Object.values(byPlayer);
+        const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+        const totals = {
+          players_with_parked: players.filter(p => p.parked_count > 0).length,
+          players_with_seen: players.filter(p => p.seen_count > 0).length,
+          parked_active_last_7_days: players.filter(p => p.last_parked_at && p.last_parked_at > sevenDaysAgo).length,
+        };
+        return new Response(JSON.stringify({ ok: true, players, totals }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error fetching engagement stats' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // POST /player-meta/seed?pin=7797 — one-time (re-runnable) bulk backdated
     // seed of player_meta for the current Jotform Membership roster. This is
     // the load-bearing piece of the migration: without it, a returning member's
