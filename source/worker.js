@@ -999,17 +999,19 @@ export default {
       if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       try {
         const { results } = await d1RetryRead(() =>
-          env.DB.prepare(`SELECT player_id, state, created_at FROM player_event_state`).all()
+          env.DB.prepare(`SELECT player_id, event_id, state, created_at FROM player_event_state`).all()
         );
         const byPlayer = {};
         for (const r of results) {
-          if (!byPlayer[r.player_id]) byPlayer[r.player_id] = { player_id: r.player_id, parked_count: 0, seen_count: 0, last_parked_at: null };
+          if (!byPlayer[r.player_id]) byPlayer[r.player_id] = { player_id: r.player_id, parked_count: 0, seen_count: 0, last_parked_at: null, parked_ids: [], seen_ids: [] };
           const p = byPlayer[r.player_id];
           if (r.state === 'parked') {
             p.parked_count++;
+            p.parked_ids.push(r.event_id);
             if (!p.last_parked_at || r.created_at > p.last_parked_at) p.last_parked_at = r.created_at;
           } else if (r.state === 'seen') {
             p.seen_count++;
+            p.seen_ids.push(r.event_id);
           }
         }
         const players = Object.values(byPlayer);
