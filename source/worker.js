@@ -789,7 +789,7 @@ export default {
     // a genuinely brand-new player_id never seen before — existing members
     // were bulk-seeded with a backdated value via POST /player-meta/seed.
     const psGetMatch = url.pathname.match(/^\/player-state\/([^\/]+)$/);
-    if (request.method === 'GET' && psGetMatch) {
+    if (request.method === 'GET' && psGetMatch && psGetMatch[1] !== 'stats') {
       const playerId = decodeURIComponent(psGetMatch[1]);
       try {
         const { results } = await d1RetryRead(() =>
