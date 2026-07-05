@@ -797,16 +797,27 @@ export default {
         );
         const parked = results.filter(r => r.state === 'parked').map(r => r.event_id);
         const seen   = results.filter(r => r.state === 'seen').map(r => r.event_id);
-        const migrated = results.length > 0;
 
+        // migrated / migratedAnnouncements come from explicit migrated_at flags on
+        // player_meta — NOT from row-presence in player_event_state/player_announcement_
+        // dismissals. Row-presence used to be the check, but a proxy action (someone
+        // registering *for* another player via the name-switcher — a normal, common
+        // thing in this app, not a security bypass) writes real rows under that
+        // player's id via /event or /announcement without ever calling /migrate.
+        // Under the old check, that incidental row would falsely mark them "already
+        // migrated," causing their own device's real first-load to skip capturing
+        // their actual local Parked/Seen history and silently lose it. migrated_at
+        // is only ever set by /migrate itself, so incidental writes can't trigger it.
         let meta = await d1RetryRead(() =>
-          env.DB.prepare(`SELECT first_load FROM player_meta WHERE player_id = ?`).bind(playerId).first()
+          env.DB.prepare(`SELECT first_load, migrated_at, announcements_migrated_at FROM player_meta WHERE player_id = ?`).bind(playerId).first()
         );
         if (!meta) {
           const now = new Date().toISOString();
           await env.DB.prepare(`INSERT OR IGNORE INTO player_meta (player_id, first_load) VALUES (?, ?)`).bind(playerId, now).run();
-          meta = { first_load: now };
+          meta = { first_load: now, migrated_at: null, announcements_migrated_at: null };
         }
+        const migrated = !!meta.migrated_at;
+        const migratedAnnouncements = !!meta.announcements_migrated_at;
 
         // Announcements-dismissed (Dev-55 sweep — was a single GLOBAL, non-player-scoped
         // localStorage key shared by anyone using that device; now per-player in D1).
@@ -817,7 +828,7 @@ export default {
 
         return new Response(JSON.stringify({
           ok: true, parked, seen, migrated, first_load: meta.first_load,
-          announcementsDismissed, migratedAnnouncements: annRows.length > 0
+          announcementsDismissed, migratedAnnouncements
         }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -828,7 +839,10 @@ export default {
 
     // POST /player-state/:player_id/migrate — one-time capture of a device's
     // local Parked/Seen (+ Announcements-dismissed) sets into D1. INSERT OR
-    // IGNORE makes this idempotent — safe even if called more than once.
+    // IGNORE makes the row inserts idempotent. Also sets migrated_at /
+    // announcements_migrated_at on player_meta — the ONLY place these are ever
+    // set, and via COALESCE so a genuine first migration timestamp is never
+    // overwritten by a later no-op call from an already-migrated device.
     const psMigrateMatch = url.pathname.match(/^\/player-state\/([^\/]+)\/migrate$/);
     if (request.method === 'POST' && psMigrateMatch) {
       const playerId = decodeURIComponent(psMigrateMatch[1]);
@@ -843,6 +857,11 @@ export default {
           ...anns.map(id   => env.DB.prepare(`INSERT OR IGNORE INTO player_announcement_dismissals (player_id, announcement_id) VALUES (?, ?)`).bind(playerId, id)),
         ];
         if (inserts.length) await env.DB.batch(inserts);
+        await env.DB.prepare(
+          `UPDATE player_meta SET migrated_at = COALESCE(migrated_at, datetime('now')),
+                                   announcements_migrated_at = COALESCE(announcements_migrated_at, datetime('now'))
+           WHERE player_id = ?`
+        ).bind(playerId).run();
         return new Response(JSON.stringify({ ok: true, inserted: inserts.length }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch(e) {
         return new Response(JSON.stringify({ error: 'Database error migrating player state' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
