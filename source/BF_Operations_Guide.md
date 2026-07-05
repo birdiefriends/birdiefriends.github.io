@@ -360,7 +360,7 @@ purely as a first-device migration source — never written to again after that.
 `seedFivesomeFlags()` function that maintained it.
 
 
-### Player Personalization (D1-backed, Dev-55)
+### Player Personalization (D1-backed, Dev-55/56)
 Replaces what used to be per-device `localStorage` for anything that affects what
 a player actually sees — Parked events, "NEW" badges, and dismissed Announcements
 used to silently reset or duplicate across a player's own phone/iPad/laptop.
@@ -369,33 +369,73 @@ used to silently reset or duplicate across a player's own phone/iPad/laptop.
 | Table | Shape | Purpose |
 |-------|-------|---------|
 | `player_event_state` | `player_id, event_id, state('parked'\|'seen')` — PK all three | Parked (swiped-off) events + Seen events (clears "NEW" badge) |
-| `player_meta` | `player_id` PK, `first_load` | Anchor timestamp for "is this event new to me" — bulk-seeded backdated to `2020-01-01` for the existing roster at migration time specifically so no returning member's first post-migration visit floods every existing event back in as "NEW" |
+| `player_meta` | `player_id` PK, `first_load`, `migrated_at`, `announcements_migrated_at` | `first_load` anchors "is this new to me" (bulk-seeded backdated to `2020-01-01` for the existing roster at migration time, so no returning member's first visit floods everything as "NEW"). `migrated_at`/`announcements_migrated_at` (Dev-56) are the migration-complete flags — see below, these are NOT the same thing as row-presence in the tables above |
 | `player_announcement_dismissals` | `player_id, announcement_id` — PK both | Dismissed Announcement feed entries (was a single non-player-scoped global key before Dev-55) |
 | `commissioner_checklist_state` | `checklist_date, player_name` — PK both | Sunday Checklist "handled" checkboxes (commissioner-only) |
 
 **Migration pattern (first-device-wins):** `GET /player-state/:player_id` returns
-`migrated`/`migratedAnnouncements` booleans (true if that player already has any
-rows in the relevant table). If false, the client captures whatever's in this
-device's local `localStorage` and pushes it once via `POST /player-state/:player_id/migrate`
+`migrated`/`migratedAnnouncements` booleans. If false, the client captures whatever's
+in this device's local `localStorage` and pushes it once via `POST /player-state/:player_id/migrate`
 — idempotent (`INSERT OR IGNORE`), safe to fire from more than one device. Every
 other device for that player sees `migrated: true` from then on and just reads D1.
-No flag needed to track "is this player migrated yet" — row presence in the table
-*is* the check, which also means a brand-new player's first-ever device migrating
-empty sets is indistinguishable from (and correctly doubles as) their first real
-D1 rows — one code path for both cases.
+
+**Dev-56 fix — migrated flag is NOT row-presence.** The original Dev-55 design used
+"does this player have any rows in `player_event_state`" as the migration-complete
+check. That broke under a very normal, common action in this app: **proxy
+registration** — anyone registering *for* another player via the name-switcher
+(e.g. Charlie registers Dave). That proxy action calls `restoreEvent()`/`markEventSeen()`
+under the target player's identity, writing a real row via `POST .../event` — before
+that player's own device has ever opened the app. Under row-presence logic, that
+incidental row would falsely mark them "already migrated," so their real device's
+first load would skip capturing their actual local Parked/Seen history and silently
+lose it. Fixed by adding explicit `migrated_at`/`announcements_migrated_at` columns
+on `player_meta`, set **only** by `POST .../migrate` itself — never by `.../event`
+or `.../announcement`. Verified live: a simulated proxy write followed by a real
+`/migrate` call correctly preserved both the incidental row and the player's real
+local history, with `migrated` staying `false` in between.
 
 **Worker routes:** `GET /player-state/:player_id`, `POST /player-state/:player_id/migrate`,
 `.../event` (single Parked/Seen toggle), `.../seen-bulk`, `.../announcement`,
-`.../announcements-bulk`, `GET /commissioner-checklist?date=X&pin=`,
+`.../announcements-bulk`, `GET /player-state/stats?pin=` (aggregate — see Engagement
+tool below), `GET /commissioner-checklist?date=X&pin=`,
 `POST /commissioner-checklist/toggle?pin=`, and the one-time `POST /player-meta/seed?pin=`
 (fetches the live Jotform roster server-side, bulk-seeds `player_meta` with a backdated
 `first_load` — re-runnable for stragglers who join mid-migration).
+
+**Route-ordering gotcha (Dev-56):** `GET /player-state/stats` was silently shadowed
+by the generic `GET /player-state/:player_id` catch-all, since `stats` matched the
+`:player_id` regex like any other string and that route was checked first in the
+file. Symptom was subtle — request succeeded (200, `ok:true`) but with the wrong
+response shape, so the portal's `.forEach` on a missing field threw and left the UI
+stuck on "Loading…" forever, no visible error. Fixed with an explicit exclusion
+(`psGetMatch[1] !== 'stats'`) rather than reordering the file. **General lesson:**
+any new literal-path route added under an existing `/:param`-style catch-all needs
+either to be checked first, or explicitly excluded from the catch-all's match — this
+class of bug won't throw at deploy time, only silently misroute at request time.
 
 **Portal side:** all reads/writes stay **synchronous** against an in-memory
 `_playerStateCache`, populated once (async) by `loadPlayerState()` at login and at
 portal-open for a returning player — same pattern as `gatheringData`. This means
 none of the existing call sites throughout the app (`dismissEvent`, `markEventSeen`,
 `isNewToPlayer`, etc.) needed to change signature; only their internals did.
+
+**Engagement tool (Commissioner Admin → Communicate → 📊 Engagement, Dev-56):**
+Standalone collapsible card (not squeezed into Push Subscribers — that was a
+first-pass placement mistake, moved to its own card once flagged). Shows two
+distinct pictures per player, sorted by all-time registration frequency:
+- **History (lifetime)** — total Parked/Seen counts ever. An engagement indicator,
+  but biased by tenure — every row is permanent, nothing prunes when an event
+  expires, so it only ever grows and doesn't reflect *current* behavior.
+- **Right Now (of N open)** — of everything currently on Home today (same
+  denominator for every player), how much is 📦 Parked / ✅ Seen / ◌ Untouched.
+  This is the actual "playing plan" view — a Series-only player should show high
+  Untouched (everything else is just noise to them) with minimal Parked (never
+  bothered to actively hide anything, just ignored it).
+Purpose: testing whether Parked is genuinely used/understood, or whether low
+event volume just means nobody's hit the need yet — ties back to the still-open
+"does Parked deserve its own nav slot" question from the original Dev-54 investigation.
+Check back after Series #5 recruitment brings a real mix of frequent/infrequent
+players through a real registration push.
 
 
 - **App ID:** `88022359-a979-4814-8a52-6f1df9884be2`
