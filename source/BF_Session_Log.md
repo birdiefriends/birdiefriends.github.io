@@ -616,3 +616,72 @@ D1 `gatherings` table uses `size` (not `capacity`) and `gathering_type` (not `fo
 - Everything else from the original Dev-54 carry-forward (schema shape, effort estimate, the still-open "does Parked deserve its nav slot" question) stands as written above — this addendum only replaces the migration-mechanics portion of the plan.
 
 **Dev-54 fully closed (addendum included).**
+
+---
+
+## Session Dev-55 · 2026-07-05
+
+**Focus:** D1-backed player personalization migration (Parked/Seen/FirstLoad), a real production version-display bug and its permanent fix, a full assessment sweep of every localStorage key and admin tool, and a resulting second round of the same D1 migration for two more findings.
+
+**Player Personalization migration (Parked/Seen/FirstLoad → D1):**
+- New D1 tables: `player_event_state` (`player_id, event_id, state['parked'|'seen']`), `player_meta` (`player_id, first_load`).
+- New Worker routes: `GET /player-state/:player_id`, `POST .../migrate`, `POST .../event`, `POST .../seen-bulk`, and admin `POST /player-meta/seed?pin=` (fetches the live Jotform roster server-side, bulk-seeds `player_meta` with a backdated `first_load` — ran once this session, seeded 73 players to `2020-01-01`, re-runnable for stragglers).
+- Migration pattern: first-device-wins. `migrated` boolean (row presence in `player_event_state`) tells the client whether to capture local `localStorage` state once via `/migrate`, or just read D1. No separate migration-complete flag needed — row presence *is* the check, which also means a brand-new player's first device migrating empty sets is indistinguishable from (and correctly doubles as) their first real D1 rows.
+- Portal side: `_playerStateCache` (in-memory, loaded once via `loadPlayerState()` at login/portal-open) keeps `getDismissedEvents`/`dismissEvent`/`restoreEvent`/`getSeenEvents`/`markEventSeen`/`markAllNewSeen`/`getPlayerFirstLoad` fully synchronous — zero call-site changes needed anywhere else in the app.
+- **Verified live end-to-end** same session: seeded roster confirmed via curl round-trip (migrate → event toggle → restore, all correct); Brian's own device (Brian Hager) did a real first-device capture — 14 Parked + 23 Seen events landed in D1 correctly, `first_load` stayed backdated.
+
+**Real production bug — `docs/portal_version.txt` never deployed:**
+- Root cause: the portal deploy script only pushed 3 files (`docs/portal.html`, `source/portal.html`, `source/portal_version.txt`) — copied verbatim from the Session Starter's reference script, which was never updated after Dev-54 added `docs/portal_version.txt` as a 4th required file. Result: the live app was running fully-correct v3.17.04 code the whole time, it just never got told its own version number — header stuck on v3.17.03 across phone, laptop, and even a fresh Incognito window (ruling out any caching explanation before the real cause was found).
+- Diagnosed via GitHub's Contents API (uncached) confirming `docs/portal_version.txt` genuinely lagged `source/portal_version.txt` — not a CDN/propagation issue as first suspected.
+- **Permanently fixed at the source of the recurring pattern**: `BF_Golf_Scorer_Session_Starter_current.md`'s reference deploy script now pushes all 4 files unconditionally, with an explicit comment flagging `docs/portal_version.txt` as the one the live app actually reads. Also fixed an adjacent bug in the same script: the version-bump patch number wasn't zero-padded (`v3.17.4` instead of `v3.17.04`).
+- Third occurrence of the same root problem on record (Dev-45, Dev-54, Dev-55) — this time the fix lives in the script text itself, not just a note to remember.
+
+**Full assessment sweep (every localStorage key + every admin tool, on request):**
+- Confirmed correctly device-local (no action): `bf_commissioner`, `bf_player`/`bf_guest`/`bf_player_name`, `bf_os_sub_id`/`bf_os_player`/`bf_os_health`, `bf_os_dismissed_`, `bf_photo_banner_open`, `bf_pwa_first_launch_done`, `bf_install_nudge_dismissed`, `bf_push_audit_{date}`, `bf_inactivity_check`, `bf_swipe_tip_dismissed` (low-stakes judgment call — left local).
+- **Found — Announcements dismissed (`bf_announcements_dismissed`):** was a single GLOBAL key, not even per-player. Migrated to D1 (`player_announcement_dismissals`), folded into the same `GET /player-state` response (`announcementsDismissed`/`migratedAnnouncements`) and the same `/migrate` call (extended to accept an `announcements` array). New routes `POST /player-state/:player_id/announcement` and `.../announcements-bulk`.
+- **Found — Commissioner Sunday Checklist (`bf_sunday_done_{date}`):** device-local "handled" checkboxes for the notification-setup checklist — didn't sync across Brian's own devices. Migrated to D1 (`commissioner_checklist_state`), new PIN-gated routes `GET /commissioner-checklist?date=&pin=` and `POST /commissioner-checklist/toggle?pin=`. `sundayToggle()` rewritten with optimistic UI update.
+- **Found and removed — `bf_fivesome_pending_{eventId}`:** not a sync bug — dead, write-only code. Set/cleared on registration but confirmed via full-file grep that nothing ever reads it; the real "you're the 5th player" banner is computed live from `regData` each render via `getCapacityStatus().fivePending`. Removed along with the now-pointless `seedFivesomeFlags()` function and its call site.
+- All four D1 migrations for this session verified live via direct curl round-trips before moving on to docs.
+
+**D1 migration (Brian ran in Cloudflare Console, this session):**
+```sql
+CREATE TABLE IF NOT EXISTS player_event_state (
+  player_id  TEXT NOT NULL,
+  event_id   TEXT NOT NULL,
+  state      TEXT NOT NULL CHECK (state IN ('parked','seen')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (player_id, event_id, state)
+);
+CREATE TABLE IF NOT EXISTS player_meta (
+  player_id  TEXT PRIMARY KEY,
+  first_load TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS player_announcement_dismissals (
+  player_id       TEXT NOT NULL,
+  announcement_id TEXT NOT NULL,
+  dismissed_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (player_id, announcement_id)
+);
+CREATE TABLE IF NOT EXISTS commissioner_checklist_state (
+  checklist_date TEXT NOT NULL,
+  player_name    TEXT NOT NULL,
+  done_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (checklist_date, player_name)
+);
+```
+
+**Docs updated this session:**
+- `BF_Operations_Guide.md` — Portal localStorage Keys table rewritten (device-local vs. migrated-to-D1 vs. removed); new "Player Personalization (D1-backed, Dev-55)" architecture section; Known Issues rows for "Parked syndrome" and `portal_version.txt` both updated to reflect resolution/third-occurrence.
+- `bf_architecture.html` — `d1` node description updated to list the full current table set and the personalization layer's purpose; added an explicit currency warning under the Migration Log that the ERD diagram itself still only shows the original Dev-43 Gatherings core (Entries 4–12+ not yet drawn in) — flagged as a known gap rather than silently left stale.
+- `BF_Golf_Scorer_Session_Starter_current.md` — deploy script fix (see above), covered in its own commit earlier this session.
+
+**Deferred (budget-conscious call, not forgotten):**
+- Full SVG ERD redraw in `bf_architecture.html` to visually include venues, gathering_templates, member_preferences, event_photos, and all four Dev-55 tables. Already been stale since Dev-49 (predates this session) — sizable enough to warrant its own dedicated pass rather than folding into this sweep.
+
+**Carry-forward for Dev-56:**
+- Full `bf_architecture.html` ERD redraw (see above).
+- Instrument real "Parked" nav-slot usage now that `player_event_state` is a real, queryable table (`SELECT COUNT(DISTINCT player_id) ... WHERE state='parked'`) — the original motivating question from the Dev-54 investigation, now actually answerable. Still explicitly undecided whether Parked deserves its own bottom-nav slot.
+- Everything else from Dev-53/54 backlog not touched this session: push notification preference center, player picker rethink, GS `results.html` photo-collage insertion (needs a session with GolfScorer source available).
+
+**Final portal version: v3.17.05 · 2026-07-05**
+**Dev-55 closed.**
