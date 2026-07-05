@@ -360,7 +360,7 @@ purely as a first-device migration source — never written to again after that.
 `seedFivesomeFlags()` function that maintained it.
 
 
-### Player Personalization (D1-backed, Dev-55/56)
+### Player Personalization (D1-backed, Dev-55)
 Replaces what used to be per-device `localStorage` for anything that affects what
 a player actually sees — Parked events, "NEW" badges, and dismissed Announcements
 used to silently reset or duplicate across a player's own phone/iPad/laptop.
@@ -369,7 +369,7 @@ used to silently reset or duplicate across a player's own phone/iPad/laptop.
 | Table | Shape | Purpose |
 |-------|-------|---------|
 | `player_event_state` | `player_id, event_id, state('parked'\|'seen')` — PK all three | Parked (swiped-off) events + Seen events (clears "NEW" badge) |
-| `player_meta` | `player_id` PK, `first_load`, `migrated_at`, `announcements_migrated_at` | `first_load` anchors "is this new to me" (bulk-seeded backdated to `2020-01-01` for the existing roster at migration time, so no returning member's first visit floods everything as "NEW"). `migrated_at`/`announcements_migrated_at` (Dev-56) are the migration-complete flags — see below, these are NOT the same thing as row-presence in the tables above |
+| `player_meta` | `player_id` PK, `first_load`, `migrated_at`, `announcements_migrated_at` | `first_load` anchors "is this new to me" (bulk-seeded backdated to `2020-01-01` for the existing roster at migration time, so no returning member's first visit floods everything as "NEW"). `migrated_at`/`announcements_migrated_at` (added later same session) are the migration-complete flags — see below, these are NOT the same thing as row-presence in the tables above |
 | `player_announcement_dismissals` | `player_id, announcement_id` — PK both | Dismissed Announcement feed entries (was a single non-player-scoped global key before Dev-55) |
 | `commissioner_checklist_state` | `checklist_date, player_name` — PK both | Sunday Checklist "handled" checkboxes (commissioner-only) |
 
@@ -379,7 +379,7 @@ in this device's local `localStorage` and pushes it once via `POST /player-state
 — idempotent (`INSERT OR IGNORE`), safe to fire from more than one device. Every
 other device for that player sees `migrated: true` from then on and just reads D1.
 
-**Dev-56 fix — migrated flag is NOT row-presence.** The original Dev-55 design used
+**Fix (later same session) — migrated flag is NOT row-presence.** The original design used
 "does this player have any rows in `player_event_state`" as the migration-complete
 check. That broke under a very normal, common action in this app: **proxy
 registration** — anyone registering *for* another player via the name-switcher
@@ -402,7 +402,7 @@ tool below), `GET /commissioner-checklist?date=X&pin=`,
 (fetches the live Jotform roster server-side, bulk-seeds `player_meta` with a backdated
 `first_load` — re-runnable for stragglers who join mid-migration).
 
-**Route-ordering gotcha (Dev-56):** `GET /player-state/stats` was silently shadowed
+**Route-ordering gotcha:** `GET /player-state/stats` was silently shadowed
 by the generic `GET /player-state/:player_id` catch-all, since `stats` matched the
 `:player_id` regex like any other string and that route was checked first in the
 file. Symptom was subtle — request succeeded (200, `ok:true`) but with the wrong
@@ -419,7 +419,7 @@ portal-open for a returning player — same pattern as `gatheringData`. This mea
 none of the existing call sites throughout the app (`dismissEvent`, `markEventSeen`,
 `isNewToPlayer`, etc.) needed to change signature; only their internals did.
 
-**Engagement tool (Commissioner Admin → Communicate → 📊 Engagement, Dev-56):**
+**Engagement tool (Commissioner Admin → Communicate → 📊 Engagement):**
 Standalone collapsible card (not squeezed into Push Subscribers — that was a
 first-pass placement mistake, moved to its own card once flagged). Shows two
 distinct pictures per player, sorted by all-time registration frequency:
