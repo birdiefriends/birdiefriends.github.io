@@ -776,6 +776,181 @@ export default {
       }
     }
 
+    // ── Player personalization state (Dev-55) ──────────────────────────────
+    // player_event_state (player_id, event_id, state['parked'|'seen']) and
+    // player_meta (player_id, first_load) replace the old device-local
+    // localStorage keys (bf_hidden_events_, bf_seen_events_, bf_first_load_).
+
+    // GET /player-state/:player_id — returns this player's D1 state.
+    // `migrated` tells the client whether player_event_state already has any
+    // rows for this player — false means the client should capture its local
+    // Parked/Seen sets once via POST /migrate (first-device-wins).
+    // first_load is read from player_meta, creating it lazily (now) only for
+    // a genuinely brand-new player_id never seen before — existing members
+    // were bulk-seeded with a backdated value via POST /player-meta/seed.
+    const psGetMatch = url.pathname.match(/^\/player-state\/([^\/]+)$/);
+    if (request.method === 'GET' && psGetMatch) {
+      const playerId = decodeURIComponent(psGetMatch[1]);
+      try {
+        const { results } = await d1RetryRead(() =>
+          env.DB.prepare(`SELECT event_id, state FROM player_event_state WHERE player_id = ?`).bind(playerId).all()
+        );
+        const parked = results.filter(r => r.state === 'parked').map(r => r.event_id);
+        const seen   = results.filter(r => r.state === 'seen').map(r => r.event_id);
+        const migrated = results.length > 0;
+
+        let meta = await d1RetryRead(() =>
+          env.DB.prepare(`SELECT first_load FROM player_meta WHERE player_id = ?`).bind(playerId).first()
+        );
+        if (!meta) {
+          const now = new Date().toISOString();
+          await env.DB.prepare(`INSERT OR IGNORE INTO player_meta (player_id, first_load) VALUES (?, ?)`).bind(playerId, now).run();
+          meta = { first_load: now };
+        }
+
+        return new Response(JSON.stringify({ ok: true, parked, seen, migrated, first_load: meta.first_load }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error fetching player state' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /player-state/:player_id/migrate — one-time capture of a device's
+    // local Parked/Seen sets into D1. INSERT OR IGNORE makes this idempotent —
+    // safe even if called more than once (e.g. a second device races in before
+    // seeing migrated=true, or a zero-activity player triggers it every load).
+    const psMigrateMatch = url.pathname.match(/^\/player-state\/([^\/]+)\/migrate$/);
+    if (request.method === 'POST' && psMigrateMatch) {
+      const playerId = decodeURIComponent(psMigrateMatch[1]);
+      try {
+        const body = await request.json();
+        const parked = Array.isArray(body.parked) ? body.parked : [];
+        const seen   = Array.isArray(body.seen)   ? body.seen   : [];
+        const inserts = [
+          ...parked.map(id => env.DB.prepare(`INSERT OR IGNORE INTO player_event_state (player_id, event_id, state) VALUES (?, ?, 'parked')`).bind(playerId, id)),
+          ...seen.map(id   => env.DB.prepare(`INSERT OR IGNORE INTO player_event_state (player_id, event_id, state) VALUES (?, ?, 'seen')`).bind(playerId, id)),
+        ];
+        if (inserts.length) await env.DB.batch(inserts);
+        return new Response(JSON.stringify({ ok: true, inserted: inserts.length }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error migrating player state' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /player-state/:player_id/event — single Parked or Seen toggle.
+    // body: { event_id, state: 'parked'|'seen', action: 'add'|'remove' }
+    const psEventMatch = url.pathname.match(/^\/player-state\/([^\/]+)\/event$/);
+    if (request.method === 'POST' && psEventMatch) {
+      const playerId = decodeURIComponent(psEventMatch[1]);
+      try {
+        const body = await request.json();
+        const { event_id, state, action } = body;
+        if (!event_id || !['parked','seen'].includes(state) || !['add','remove'].includes(action)) {
+          return new Response(JSON.stringify({ error: "event_id, state ('parked'|'seen'), and action ('add'|'remove') are required" }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (action === 'add') {
+          await env.DB.prepare(`INSERT OR IGNORE INTO player_event_state (player_id, event_id, state) VALUES (?, ?, ?)`).bind(playerId, event_id, state).run();
+        } else {
+          await env.DB.prepare(`DELETE FROM player_event_state WHERE player_id = ? AND event_id = ? AND state = ?`).bind(playerId, event_id, state).run();
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error updating player state' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /player-state/:player_id/seen-bulk — mark several events seen in
+    // one call (used by markAllNewSeen instead of firing N sequential POSTs).
+    // body: { event_ids: [...] }
+    const psSeenBulkMatch = url.pathname.match(/^\/player-state\/([^\/]+)\/seen-bulk$/);
+    if (request.method === 'POST' && psSeenBulkMatch) {
+      const playerId = decodeURIComponent(psSeenBulkMatch[1]);
+      try {
+        const body = await request.json();
+        const eventIds = Array.isArray(body.event_ids) ? body.event_ids : [];
+        if (!eventIds.length) {
+          return new Response(JSON.stringify({ ok: true, inserted: 0 }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const inserts = eventIds.map(id => env.DB.prepare(`INSERT OR IGNORE INTO player_event_state (player_id, event_id, state) VALUES (?, ?, 'seen')`).bind(playerId, id));
+        await env.DB.batch(inserts);
+        return new Response(JSON.stringify({ ok: true, inserted: inserts.length }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error bulk-marking seen' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /player-meta/seed?pin=7797 — one-time (re-runnable) bulk backdated
+    // seed of player_meta for the current Jotform Membership roster. This is
+    // the load-bearing piece of the migration: without it, a returning member's
+    // first_load would otherwise be created lazily at "now" the first time they
+    // hit GET /player-state post-migration, which would incorrectly flag every
+    // pre-existing event as newly-created for them. INSERT OR IGNORE — safe to
+    // re-run later for stragglers who joined mid-migration.
+    // body: { jotform_api_key, member_form_id, backdate: ISO string }
+    if (request.method === 'POST' && url.pathname === '/player-meta/seed') {
+      const pin = url.searchParams.get('pin');
+      if (pin !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const body = await request.json();
+        const { jotform_api_key, member_form_id, backdate } = body;
+        if (!jotform_api_key || !member_form_id || !backdate) {
+          return new Response(JSON.stringify({ error: 'jotform_api_key, member_form_id, and backdate are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const jfUrl = `https://api.jotform.com/form/${member_form_id}/submissions?apiKey=${jotform_api_key}&limit=1000`;
+        const jfResp = await fetch(jfUrl);
+        const jfJson = await jfResp.json();
+        if (jfJson.responseCode !== 200) {
+          return new Response(JSON.stringify({ error: 'Jotform error: ' + jfJson.message }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const submissions = jfJson.content || [];
+
+        // Minimal port of portal.html's getAnswer()/parseMemberSubmissions() —
+        // only the name fields needed to compute a player's display-name identity.
+        function getAnswer(answers, keys) {
+          for (const key of keys) {
+            for (const ans of Object.values(answers)) {
+              const label = (ans.text || ans.name || '').toLowerCase().replace(/[^a-z]/g,'');
+              const keyN  = key.toLowerCase().replace(/[^a-z]/g,'');
+              if (label === keyN || ans.name === key) {
+                const v = ans.answer;
+                if (!v) continue;
+                if (typeof v === 'object') {
+                  if (v.first || v.last) return [v.first||'', v.last||''].join(' ').trim();
+                  continue;
+                }
+                return v;
+              }
+            }
+          }
+          return '';
+        }
+
+        const playerIds = [];
+        for (const s of submissions) {
+          const a = s.answers || {};
+          const firstName = getAnswer(a, ['First Name','name','firstName']);
+          const lastName  = getAnswer(a, ['Last Name','lastname','lastName']);
+          const display   = [firstName, lastName].filter(Boolean).join(' ').trim();
+          if (display) playerIds.push(display);
+        }
+
+        const unique = [...new Set(playerIds)];
+        const inserts = unique.map(pid =>
+          env.DB.prepare(`INSERT OR IGNORE INTO player_meta (player_id, first_load) VALUES (?, ?)`).bind(pid, backdate)
+        );
+        if (inserts.length) await env.DB.batch(inserts);
+
+        return new Response(JSON.stringify({ ok: true, seeded: unique.length, players: unique }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Seed error: ' + e.message }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // GET /gatherings/all?pin=X — commissioner view of ALL active gatherings
     // grouped by host, with crew member count and registration counts per status.
     // PIN-gated (same PIN as /deploy and /flags).
