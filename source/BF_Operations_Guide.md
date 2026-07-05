@@ -332,17 +332,72 @@ const OS_API            = 'https://birdiefriends-push.birdiefriends01.workers.de
 ```
 
 ### Portal localStorage Keys
+Device-local only — genuinely tied to this specific device (push subscription
+endpoint, this-device's PWA install/PIN state, this-browser's UI dismissals).
 | Key | Purpose |
 |-----|---------|
-| `bf_player` | Selected player name |
+| `bf_player` / `bf_player_name` (legacy) | Selected player name on this device |
 | `bf_guest` | `'1'` when Guest mode |
-| `bf_commissioner` | `'verified'` when PIN confirmed |
-| `bf_hidden_events_{player}` | Events swiped off My Events |
-| `bf_seen_events_{player}` | Events marked seen |
-| `bf_announcements_dismissed` | Dismissed announcement IDs |
-| `bf_groups_data` | GolfScorer Groups tab state |
+| `bf_commissioner` | `'verified'` when PIN confirmed on this device |
+| `bf_os_sub_id` / `bf_os_player` / `bf_os_health` | This device's OneSignal push subscription identity/health cache |
+| `bf_os_dismissed_{player}` | Notification-permission-prompt dismissed on this device |
+| `bf_pwa_first_launch_done` / `bf_install_nudge_dismissed` | This device's PWA install state/nudge |
+| `bf_photo_banner_open` | Photo Capture banner collapsed/expanded (UI convenience only) |
+| `bf_push_audit_{date}` / `bf_inactivity_check` | Once-per-day background-job throttles (idempotent if they fire on >1 device) |
+| `bf_swipe_tip_dismissed` | "Swipe to park" onboarding tip — low-stakes if it reappears on a new device |
+| `bf_groups_data` | GolfScorer (separate app) Groups tab state |
 
-### OneSignal
+**Migrated to D1 (Dev-55)** — these used to be `localStorage` and broke across
+a player's own multiple devices; now backed by `player_event_state`,
+`player_meta`, `player_announcement_dismissals`, and `commissioner_checklist_state`.
+See "Player Personalization (D1-backed, Dev-55)" below. The legacy keys
+(`bf_hidden_events_{player}`, `bf_seen_events_{player}`, `bf_first_load_{player}`,
+`bf_announcements_dismissed`, `bf_sunday_done_{date}`) are still read once, client-side,
+purely as a first-device migration source — never written to again after that.
+
+**Removed (Dev-55)** — `bf_fivesome_pending_{eventId}` was write-only dead code
+(set/cleared on registration but never read by anything); deleted along with the
+`seedFivesomeFlags()` function that maintained it.
+
+
+### Player Personalization (D1-backed, Dev-55)
+Replaces what used to be per-device `localStorage` for anything that affects what
+a player actually sees — Parked events, "NEW" badges, and dismissed Announcements
+used to silently reset or duplicate across a player's own phone/iPad/laptop.
+
+**Tables:**
+| Table | Shape | Purpose |
+|-------|-------|---------|
+| `player_event_state` | `player_id, event_id, state('parked'\|'seen')` — PK all three | Parked (swiped-off) events + Seen events (clears "NEW" badge) |
+| `player_meta` | `player_id` PK, `first_load` | Anchor timestamp for "is this event new to me" — bulk-seeded backdated to `2020-01-01` for the existing roster at migration time specifically so no returning member's first post-migration visit floods every existing event back in as "NEW" |
+| `player_announcement_dismissals` | `player_id, announcement_id` — PK both | Dismissed Announcement feed entries (was a single non-player-scoped global key before Dev-55) |
+| `commissioner_checklist_state` | `checklist_date, player_name` — PK both | Sunday Checklist "handled" checkboxes (commissioner-only) |
+
+**Migration pattern (first-device-wins):** `GET /player-state/:player_id` returns
+`migrated`/`migratedAnnouncements` booleans (true if that player already has any
+rows in the relevant table). If false, the client captures whatever's in this
+device's local `localStorage` and pushes it once via `POST /player-state/:player_id/migrate`
+— idempotent (`INSERT OR IGNORE`), safe to fire from more than one device. Every
+other device for that player sees `migrated: true` from then on and just reads D1.
+No flag needed to track "is this player migrated yet" — row presence in the table
+*is* the check, which also means a brand-new player's first-ever device migrating
+empty sets is indistinguishable from (and correctly doubles as) their first real
+D1 rows — one code path for both cases.
+
+**Worker routes:** `GET /player-state/:player_id`, `POST /player-state/:player_id/migrate`,
+`.../event` (single Parked/Seen toggle), `.../seen-bulk`, `.../announcement`,
+`.../announcements-bulk`, `GET /commissioner-checklist?date=X&pin=`,
+`POST /commissioner-checklist/toggle?pin=`, and the one-time `POST /player-meta/seed?pin=`
+(fetches the live Jotform roster server-side, bulk-seeds `player_meta` with a backdated
+`first_load` — re-runnable for stragglers who join mid-migration).
+
+**Portal side:** all reads/writes stay **synchronous** against an in-memory
+`_playerStateCache`, populated once (async) by `loadPlayerState()` at login and at
+portal-open for a returning player — same pattern as `gatheringData`. This means
+none of the existing call sites throughout the app (`dismissEvent`, `markEventSeen`,
+`isNewToPlayer`, etc.) needed to change signature; only their internals did.
+
+
 - **App ID:** `88022359-a979-4814-8a52-6f1df9884be2`
 - **REST Key:** Cloudflare Worker secret `OS_REST_KEY` — rich key format (`os_v2_app_...`)
 - **Legacy key:** still enabled — do not disable until confirmed unneeded
@@ -607,7 +662,7 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 | guide.html missing My Game tab | 🔲 Low | The portal-native My Game bottom-nav button (Session 36) was never added to the player guide. Deferred while screen content was settling. |
 | Active/InActive auto-reset | 🔲 Quick fix | Jeremy Burkett + Tony Hager. Fastest: hardcode exempt array like COMMISSIONERS. |
 | **My Schedule's "Can't Make It — Unregister" button was invisible (white-on-white)** | ✅ Fixed Dev-45 | Pre-existing bug, unrelated to Gatherings work — `.btn-cant-make-it` (white-ish translucent text/bg/border) was designed for the dark green event cards on Home, where its 3 other usages all live. `renderSchedule()`'s instance reused the same class inside a white `.schedule-event-row` card (`var(--card): #ffffff`), rendering as a near-invisible sliver — reported by Brian as "a random character" on the first Gathering ever to land in someone's My Schedule, which is what finally put eyes on this corner of the UI. Fixed by swapping to `.btn-ghost`, already styled correctly for white backgrounds and used elsewhere. Worth a glance at other rarely-visited screens for the same dark-card-class-on-white-card mismatch — this one went unnoticed for a long time. |
-| **`portal_version.txt` disconnected from the in-app version display** | ✅ Fixed Dev-45, recurred Dev-54, ✅ hardened Dev-54 | Recurred exactly as predicted — Dev-45's fix updated both hardcoded strings for that session but didn't remove the underlying two-sources-of-truth problem, and it drifted again (Brian's screenshot, header still showing v3.16.89 after the Dev-54 photo-panel deploy). Root-fixed this time instead of re-patched: `portal.html`'s `#portal-build-header` and `#portal-build` spans now fetch `docs/portal_version.txt` live at `DOMContentLoaded` (cache-busted query param) and populate themselves, falling back to static text on fetch failure. `docs/portal_version.txt` added as a new required file, pushed alongside the other three on every version bump. One source of truth now instead of two — verify on the next few sessions that this actually holds. |
+| **`portal_version.txt` disconnected from the in-app version display** | ✅ Fixed Dev-45, recurred Dev-54, hardened Dev-54, **recurred a third time Dev-55, ✅ permanently fixed Dev-55** | Recurred exactly as predicted a third time — Dev-54's fix made the live app fetch `docs/portal_version.txt`, but the *reference deploy script* in `BF_Golf_Scorer_Session_Starter_current.md` was never updated to actually push that file, so a Dev-55 deploy that copied the stale 3-file script left `docs/portal_version.txt` on the old version while everything else (code, `source/portal_version.txt`) was current — header showed the wrong version for real, not just a display glitch. Root-fixed this time in the place that actually matters: the reference script itself now writes and pushes **four** files every time, with an explicit comment calling out `docs/portal_version.txt` as the one the live app reads. Also fixed a smaller adjacent bug in the same script: the patch-number bump wasn't zero-padded (`v3.17.4` instead of `v3.17.04`). |
 | Live Feed UI | 🔲 After Inbox | Styled activity stream in live panel. Color-coded by type. 60s auto-refresh. |
 | **deploy.html Library tab — unauthenticated GitHub API rate limit** | 🔲 Backlog | Each Library section (Source, Business plan, Specs) does 1 directory-listing call + 1 commit-lookup call per file, unauthenticated (60 req/hr/IP cap by design — see code comment in `deploy.html`, no write-scoped token in a publicly-served file). Adding the Specs section (Dev-42) pushed total calls per full Library load high enough to hit the cap in normal use, surfacing as silent "No commits found" fallbacks or "Error loading: GitHub 403" per section. Not a bug — a pre-existing constraint that bit harder once a third section was added, and will keep biting as the library grows. Fix: batch each section into one call via GitHub's tree API instead of N+1 (one listing call + one tree call per section, vs. one call per file). |
 | Self-service event management | 🔲 Backlog | Member creates event, becomes temp commish. |
@@ -625,7 +680,7 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 | **D1 transient infrastructure errors ("DB storage... object to be reset")** | ✅ Hardened Dev-54 | Hit live during Dev-54 — confirmed via Cloudflare's own status page as an active Durable Objects/D1 incident (ENAM), not an app bug. Diagnosed by testing two unrelated, long-stable D1 routes (Gatherings, Venues) and confirming identical failures before considering any rollback. Added `d1RetryRead()` — auto-retry wrapper for READ-ONLY D1 queries only. Deliberately not applied to writes (INSERT/UPDATE/DELETE): blind-retrying a write risks double-applying a mutation if the first attempt actually succeeded before the error surfaced. All photo routes also wrapped in try/catch as part of the same fix — turns any future opaque Cloudflare 500 into a real, readable error message instead of a generic crash page. |
 | **GitHub Pages stuck-queue / failed-deploy remediation** | 📝 Process note | Learned live Dev-54 across two separate incidents. A **failed** run: re-running it directly often works if the underlying build artifact is already valid (check the run's own step-by-step breakdown — if `build` succeeded and only `deploy` failed with "Deployment failed, try again later," that's GitHub's own admission it's on their end). A run **stuck in Queued** (even after a manual re-run): re-running again just re-queues behind itself — doesn't help. The fix that actually works: push any small new commit. The workflow's concurrency group cancels the stuck/queued run and starts a fresh one, same mechanism that normally cancels an in-progress run when a newer commit lands. Confirmed GitHub's Contents API (`/deploy` route) is a fully separate subsystem from Actions/Pages — commits keep succeeding even during a Pages outage; only the live-site rebuild is affected. BZP work (docs-only, no Pages deployment involved) is entirely unaffected by this class of outage. |
 | **Photo Capture R2 setup** | 📝 Reference | Bucket `birdiefriends-photos`, Standard storage class (Infrequent Access considered and rejected — wrong fit for an actively-served gallery; adds a per-GB retrieval fee and 30-day minimum duration for content read on every page view). Bound to the Worker as `PHOTOS_BUCKET` via Cloudflare dashboard → Worker → Settings → Bindings (manual, one-time, not something `/deploy` can do — that route only handles GitHub commits). If this Worker is ever redeployed from scratch, this binding must be re-added manually before any `/photos/*` route will function — they return a clear "binding not configured" error rather than crashing if it's missing. |
-| **Device-local state that should be player-synced ("Parked syndrome")** | 🔴 Next session (Dev-55) | `bf_hidden_events_`, `bf_seen_events_`, and `bf_first_load_` are stored only in `localStorage`, never synced to D1/KV/Jotform — confirmed zero references in `worker.js`. Real consequences, not just a data gap: Parked events silently reappear on a different device; NEW badges resurface on things already seen elsewhere; logging into a second device for the first time floods every historical event back in as "NEW" simultaneously (worst of the three — loud, not just inconsistent). Full investigation, proposed D1 schema, and scope notes in `BF_Session_Log.md` Dev-54 carry-forward — do not re-derive from scratch, the plan is already written. Other `localStorage` keys audited and confirmed correctly device-local (do NOT sync these): `bf_commissioner`, `bf_os_sub_id`/`bf_os_player`/`bf_os_health`, `bf_os_dismissed_`, `bf_player`/`bf_player_name`, `bf_guest`. |
+| **Device-local state that should be player-synced ("Parked syndrome")** | ✅ Resolved Dev-55 | `bf_hidden_events_`, `bf_seen_events_`, and `bf_first_load_` moved to D1 (`player_event_state`, `player_meta`) — first device per player captures local state once and pushes it, every other device reads from D1 from then on. Dev-55's full assessment sweep of *every* localStorage key and admin tool found two more instances of the same root problem: `bf_announcements_dismissed` (was global, not even per-player — now per-player in `player_announcement_dismissals`) and the Commissioner Sunday Checklist's `bf_sunday_done_{date}` (now `commissioner_checklist_state`). Also found and removed `bf_fivesome_pending_{eventId}` — not a sync bug, just dead write-only code that nothing ever read. Full architecture in "Player Personalization (D1-backed, Dev-55)" below. |
 
 ---
 
