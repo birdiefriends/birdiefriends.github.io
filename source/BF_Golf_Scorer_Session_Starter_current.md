@@ -180,9 +180,17 @@ after creating a Gathering is the intended behavior.
 
 ### Deploy procedures — current state
 
-**Portal (docs/portal.html + source/portal.html + source/portal_version.txt):**
+**Portal (docs/portal.html + source/portal.html + source/portal_version.txt + docs/portal_version.txt):**
+
+⚠️ **All FOUR files, every time — not three.** `docs/portal_version.txt` is the file the
+*live app actually fetches* (relative path `portal_version.txt` resolves against `docs/`,
+where portal.html is served from). `source/portal_version.txt` is only a tracking copy for
+the next session's version-bump read. Missing the `docs/` copy was the exact bug that hit
+Dev-45, Dev-54, **and Dev-55** — three separate occurrences of the same gap, the last one
+caused directly by an outdated 3-file version of this exact script. Closed out for good here.
+
 ```python
-# python3 in bash_tool — write three payload files, then push all three
+# python3 in bash_tool — write four payload files, then push all four
 import json, re, datetime, subprocess
 
 with open('/home/claude/birdiefriends_portal.html') as f:
@@ -198,7 +206,9 @@ ver_txt = subprocess.check_output([
 match = re.search(r'v3\.(\d+)\.(\d+)', ver_txt)
 minor, patch = int(match.group(1)), int(match.group(2))
 today = datetime.date.today().isoformat()
-new_ver = f'v3.{minor}.{patch + 1} · {today}'
+new_patch = patch + 1
+new_patch_str = str(new_patch).zfill(2) if new_patch < 100 else str(new_patch)  # keep v3.17.04 not v3.17.4
+new_ver = f'v3.{minor}.{new_patch_str} · {today}'
 new_ver_txt = f'{new_ver}\nDeployed: {today} {datetime.datetime.now().strftime("%H:%M")}\n'
 portal = re.sub(r'v3\.\d+\.\d+ · \d{4}-\d{2}-\d{2}', new_ver, portal)
 
@@ -206,6 +216,7 @@ for path, content in [
     ('docs/portal.html',          portal),
     ('source/portal.html',        portal),
     ('source/portal_version.txt', new_ver_txt),
+    ('docs/portal_version.txt',   new_ver_txt),   # ← the file the live app actually reads. Never skip this one.
 ]:
     safe = path.replace('/','_')
     with open(f'/tmp/deploy_{safe}.json', 'w') as f:
@@ -216,7 +227,8 @@ print(f'Payloads ready: {new_ver}')
 ```bash
 for f in /tmp/deploy_docs_portal.html.json \
           /tmp/deploy_source_portal.html.json \
-          /tmp/deploy_source_portal_version.txt.json; do
+          /tmp/deploy_source_portal_version.txt.json \
+          /tmp/deploy_docs_portal_version.txt.json; do
   curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
     -H "Content-Type: application/json" \
     -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
