@@ -437,6 +437,75 @@ event volume just means nobody's hit the need yet — ties back to the still-ope
 Check back after Series #5 recruitment brings a real mix of frequent/infrequent
 players through a real registration push.
 
+### BF Series Recruiting Tools — Registration Tracker, AWR, Inactive Player Interest (Dev-56)
+Built for BF Series #5 recruiting. Three pieces, two of them D1-backed, one pure client-side.
+
+**Registration Tracker (Commissioner Admin → Communicate → 🎯 Registration Tracker):**
+Per-event roster list with tap-to-set Yes/Sub/No — lets the commissioner correct a
+player's status directly (e.g. someone who replied No by text instead of in-app)
+without switching identity via the name-switcher. Pure client-side: reuses
+`eventData`/`regData`/`memberData` already loaded, writes go straight to Jotform via
+the same PUT-beats-POST pattern `submitRegistration()` uses for a player's own
+registration (`adminSetRegistration()`). No new D1/Worker needed for this base piece.
+
+Event picker is restricted to **BF Series events only** (via `formatBadge(e.format)
+=== 'BF Series'` — excludes Gatherings, WallyCup, etc.) and **current/upcoming only**
+(`e.dt >= startOfToday`), with the soonest one pre-selected — fixes a recurring
+wrong-event-selection mistake.
+
+Each row also shows a **Registered → status timeline** when Jotform's `updated_at`
+differs meaningfully from `created_at` (e.g. "Registered Jul 1 → No Jul 4") — tells
+the commissioner who bailed early (low concern) vs. who flipped right before the
+event (worth a follow-up text). `parseRegSubmissions()` now captures `updated_at`
+(falls back to `created_at` if the submission was never edited); all local
+optimistic writes stamp `updatedAt` too so the timeline is accurate immediately,
+not just after the next full reload.
+
+**AWR — Awaiting Registration (commissioner flag, separate from Jotform):**
+A per-event flag for "I know they're playing, they just haven't registered" —
+learned via text/conversation, not something Jotform can represent. Deliberately
+kept **out of** the real Register? answer/`regData`: that status flows through
+capacity counts, Text All Players, push targeting, and event-card rendering
+everywhere else in the app, all of which assume only Yes/Sub/No. A 4th real
+registration value there would ripple into all of it. Instead it's a standalone
+flag table, same shape as `commissioner_checklist_state` — presence of a row = flagged.
+
+| Table | Shape | Purpose |
+|-------|-------|---------|
+| `registration_intent` | `event_name, player_name` — PK both | AWR flag, **event-scoped** |
+
+Tracker shows five buckets, sorted true-unknowns-first: ⬜ No reply → 🟡 AWR (flagged)
+→ ✅ Yes → 🔄 Sub → ❌ No. Worker routes: `GET /registration-intent?event=&pin=`,
+`POST /registration-intent/toggle?pin=` (body: `event_name, player_name, action`).
+
+**Inactive Player Interest (Commissioner Admin → Communicate → 💤 Inactive Players):**
+Jotform has no "interested in BF Series" field for Inactive members, and the full
+Inactive roster is too large to recruit against blindly — but the commissioner often
+knows specific individuals want back in. A ☆/⭐ toggle per Inactive member builds a
+persistent recruiting shortlist over time; a "📱 Text Interested" button group-texts
+just the starred set (reuses the existing `sms:` multi-recipient pattern from
+`textAllPlayers()`).
+
+| Table | Shape | Purpose |
+|-------|-------|---------|
+| `inactive_player_interest` | `player_name` PK | Interest flag, **NOT event-scoped** — durable across events, unlike `registration_intent` above |
+
+Worker routes: `GET /inactive-interest?pin=`, `POST /inactive-interest/toggle?pin=`
+(body: `player_name, action`).
+
+**Tied into Registration Tracker:** starred Inactive players merge into the tracker
+roster for the selected event, tagged 💤 Inactive, with the full Yes/Sub/No/AWR
+button set. Registering one Yes/Sub calls `restoreActiveIfNeededByName()` (a
+name-parameterized twin of the existing `restoreActiveIfNeeded()`) to auto-restore
+them to Active in Jotform — closes the loop from "known interested" → "registered" →
+"active member" in one action instead of a separate manual reactivation step.
+
+**Gear-panel Refresh fix (applies beyond this feature):** tapping a collapsed
+card's header ↻ Refresh button used to fetch into a hidden body — looked like
+nothing happened. Fixed generically with `expandAdminCard(cardId)` (force-open,
+never closes), wired into all five affected cards: Announcements, Push Subscribers,
+Engagement, Registration Tracker, Scorecard Check.
+
 
 - **App ID:** `88022359-a979-4814-8a52-6f1df9884be2`
 - **REST Key:** Cloudflare Worker secret `OS_REST_KEY` — rich key format (`os_v2_app_...`)
@@ -721,6 +790,7 @@ Standalone results pages for non-BFSeries events. Deployed to `birdiefriends.com
 | **GitHub Pages stuck-queue / failed-deploy remediation** | 📝 Process note | Learned live Dev-54 across two separate incidents. A **failed** run: re-running it directly often works if the underlying build artifact is already valid (check the run's own step-by-step breakdown — if `build` succeeded and only `deploy` failed with "Deployment failed, try again later," that's GitHub's own admission it's on their end). A run **stuck in Queued** (even after a manual re-run): re-running again just re-queues behind itself — doesn't help. The fix that actually works: push any small new commit. The workflow's concurrency group cancels the stuck/queued run and starts a fresh one, same mechanism that normally cancels an in-progress run when a newer commit lands. Confirmed GitHub's Contents API (`/deploy` route) is a fully separate subsystem from Actions/Pages — commits keep succeeding even during a Pages outage; only the live-site rebuild is affected. BZP work (docs-only, no Pages deployment involved) is entirely unaffected by this class of outage. |
 | **Photo Capture R2 setup** | 📝 Reference | Bucket `birdiefriends-photos`, Standard storage class (Infrequent Access considered and rejected — wrong fit for an actively-served gallery; adds a per-GB retrieval fee and 30-day minimum duration for content read on every page view). Bound to the Worker as `PHOTOS_BUCKET` via Cloudflare dashboard → Worker → Settings → Bindings (manual, one-time, not something `/deploy` can do — that route only handles GitHub commits). If this Worker is ever redeployed from scratch, this binding must be re-added manually before any `/photos/*` route will function — they return a clear "binding not configured" error rather than crashing if it's missing. |
 | **Device-local state that should be player-synced ("Parked syndrome")** | ✅ Resolved Dev-55 | `bf_hidden_events_`, `bf_seen_events_`, and `bf_first_load_` moved to D1 (`player_event_state`, `player_meta`) — first device per player captures local state once and pushes it, every other device reads from D1 from then on. Dev-55's full assessment sweep of *every* localStorage key and admin tool found two more instances of the same root problem: `bf_announcements_dismissed` (was global, not even per-player — now per-player in `player_announcement_dismissals`) and the Commissioner Sunday Checklist's `bf_sunday_done_{date}` (now `commissioner_checklist_state`). Also found and removed `bf_fivesome_pending_{eventId}` — not a sync bug, just dead write-only code that nothing ever read. Full architecture in "Player Personalization (D1-backed, Dev-55)" below. |
+| **D1 schema log / architecture doc had silently drifted stale** | ✅ Resolved Dev-56 | `source/specs/BF_Gatherings_Schema.sql` — the *authoritative* migration log — had stopped at Entry 8 (Dev-54), missing venues, gathering_templates, the whole Dev-55 personalization migration, and Dev-56's two new tables. Caught while updating `bf_architecture.html` per Brian's request; fixed at the source (Entries 9–15 appended) rather than just patching the downstream doc. `bf_architecture.html`'s `DETAILS.d1`/`.worker`/`.admin`/`.portal` entries also rewritten to drop stale claims (4-table D1 count, "planned D1 binding," dissolved Dev Controls card, hardcoded version number). The visual SVG ERD itself still only draws the original 4-table core — explicitly still deferred as its own dedicated redraw session, now with an accurate, complete text log to draw from. |
 
 ---
 
