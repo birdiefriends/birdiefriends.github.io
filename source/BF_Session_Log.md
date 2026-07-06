@@ -730,3 +730,64 @@ ALTER TABLE player_meta ADD COLUMN announcements_migrated_at TEXT;
 
 **Final portal version: v3.17.08 · 2026-07-05**
 **Dev-55 fully closed (addendum included).**
+
+---
+
+## Session Dev-56 · 2026-07-06
+
+**Focus:** BF Series recruiting tools — Registration Tracker (roster + commissioner status override, Jotform updated_at timeline, AWR flag, Inactive Player recruiting integration), gear-panel Refresh UX fix, and a full catch-up of the D1 architecture documentation that had silently drifted stale.
+
+**Registration Tracker — new Commissioner Admin tool (Communicate section):**
+- Built in response to BF Series #5 recruiting need: a simple per-event roster list showing every active member's Yes/Sub/No status, with tap-to-set buttons so the commissioner can correct a status directly (e.g. a player who replied No by text instead of in-app).
+- Pure client-side — reuses `eventData`/`regData`/`memberData` already loaded, writes go straight to Jotform via the same PUT-beats-POST pattern `submitRegistration()` uses. No new Worker/D1 needed for the base feature.
+- Diagnosed why "No" statuses existed at all despite the card only ever offering Yes/Sub to register: "No" is only ever written via Unregister (`changeRegistration(...,'No',...)`) flipping an existing Yes/Sub submission — never a direct registration path. Confirmed via `buildActionButtons()`.
+- **Jotform `updated_at` wired in:** `parseRegSubmissions()` now captures `s.updated_at` (falls back to `created_at` if never edited) alongside `createdAt`. All local optimistic writes (`submitRegistration`, `changeRegistration`, `adminSetRegistration`) now stamp `updatedAt` too. Tracker rows show a timeline (e.g. "Registered Jul 1 → No Jul 4") whenever a submission's answer was actually edited (>1min gap heuristic to exclude create-then-immediately-same-value noise).
+- Event picker restricted to **BF Series events only** (via the existing `formatBadge()` classifier — excludes Gatherings, WallyCup, etc.), current/upcoming only (`dt >= startOfToday`), soonest one pre-selected. Fixes recurring wrong-event-selection mistakes.
+
+**AWR (Awaiting Registration) — commissioner-set flag, separate from Jotform:**
+- Initially mislabeled the plain "no reply" bucket as AWR — corrected same session once Brian clarified AWR should mean "I know they're playing, they just haven't registered" (a fact only the commissioner knows), not "unknown."
+- Deliberately kept OUT of the real Jotform Register? field/regData: that status flows through capacity counts, Text All Players, push targeting, and event-card rendering everywhere else in the app, all of which assume only Yes/Sub/No. A 4th real registration value there would have rippled into all of it.
+- New D1 table `registration_intent` (event-scoped, presence = flagged) + Worker routes `GET /registration-intent`, `POST /registration-intent/toggle` (both PIN-gated). Tracker now shows five buckets: Yes / Sub / No / 🟡 AWR (flagged) / ⬜ No reply (true unknown) — sorted with true unknowns first, then AWR, then real statuses.
+
+**Inactive Players — recruiting shortlist (new Admin card, Communicate section):**
+- Problem: Jotform has no "interested in BF Series" field for Inactive members, and the full Inactive roster is too large to act on blindly, but Brian often knows specific individuals want back in.
+- New D1 table `inactive_player_interest` (player-level, NOT event-scoped — durable across events) + Worker routes `GET /inactive-interest`, `POST /inactive-interest/toggle`. Card lists all Inactive members with a ☆/⭐ Mark Interested toggle; starred players float to top; a "📱 Text Interested" button group-texts just that shortlist (reuses the existing `sms:` multi-recipient pattern from `textAllPlayers()`).
+- **Tied into Registration Tracker per Brian's request:** starred Inactive players now merge into the tracker roster for the selected event, tagged 💤 Inactive, with the full Yes/Sub/No/AWR button set. Registering one Yes/Sub auto-restores them to Active in Jotform via a new `restoreActiveIfNeededByName()` helper (name-parameterized twin of the existing `restoreActiveIfNeeded()` used for self-registration) — closes the loop from "known interested" → "registered" → "active member" without a separate manual step.
+
+**Gear panel — Refresh auto-expand fix:**
+- Bug: tapping a card's header ↻ Refresh button when the card was collapsed still fetched data into the (hidden) body — looked like nothing happened.
+- Fixed generically via a new `expandAdminCard(cardId)` helper (force-open, never closes) wired into all five affected Refresh buttons: Announcements, Push Subscribers, Engagement, Registration Tracker, Scorecard Check.
+
+**Architecture documentation catch-up (`bf_architecture.html` + `BF_Gatherings_Schema.sql`):**
+- Requested by Brian to close the long-standing "ERD redraw" punchlist gap (deferred at Dev-55 as too large for that session's budget).
+- Found the actual authoritative source, `source/specs/BF_Gatherings_Schema.sql`, had itself silently stalled at Entry 8 (Dev-54) — missing venues, gathering_templates, the entire Dev-55 player-personalization migration, and this session's two new tables. Fixed at the source: appended Entries 9–15 covering all of it, with the same per-entry rationale-comment style as the existing log.
+- `bf_architecture.html` migration log extended to match (Entries 1–15); `DETAILS.d1`, `.worker`, `.admin`, `.portal` entries rewritten to drop stale claims (old 4-table D1 count, "planned D1 binding" language, dissolved "Dev Controls" admin card, hardcoded portal version number that goes stale immediately) and reflect current reality (14 D1 tables, /deploy-based Worker deploy flow, four-section Admin panel).
+- **Did not** attempt the full visual SVG ERD redraw (new boxes/FKs for the 11 tables added since Entry 3) — confirmed still a real, sizable dedicated-session task, not something to rush into a documentation-catchup pass. Currency note in the doc itself now says so explicitly and lists exactly what's missing from the picture.
+
+**Deploy-flow note (carried forward from this session, worth remembering):** the Worker's `/deploy` route 403'd (Cloudflare error 1010) on a plain Python `urllib` request — fixed by sending a browser-style `User-Agent` header. Not a code bug, a WAF quirk on the deploy mechanism itself.
+
+**Workflow preference set this session (now in memory, applies going forward):** whenever a change needs Brian's manual action outside chat — Worker paste, D1 migration — the relevant file(s) get shared as a downloadable chat artifact in the same turn, not just referenced as "pushed to GitHub."
+
+**D1 migrations run by Brian this session:**
+```sql
+CREATE TABLE IF NOT EXISTS registration_intent (
+  event_name  TEXT NOT NULL,
+  player_name TEXT NOT NULL,
+  marked_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (event_name, player_name)
+);
+CREATE TABLE IF NOT EXISTS inactive_player_interest (
+  player_name TEXT PRIMARY KEY,
+  marked_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+Worker pasted/deployed twice this session (once for each new table's routes).
+
+**Carry-forward for Dev-57:**
+- Full `bf_architecture.html` SVG ERD redraw — now has an accurate, complete text-based migration log to draw from (Entries 1–15), so the redraw itself is the only remaining work; still its own dedicated session.
+- Cloudflare Worker Endpoints quick-reference table in `BF_Operations_Guide.md` — still stale (predates Dev-43), still flagged not fixed.
+- Check the Engagement tool's Right Now breakdown once BF Series #5 recruitment brings a real registration push through (original Dev-54 "does Parked deserve its nav slot" question).
+- Everything else from Dev-53/54/55 backlog not touched: push notification preference center, player picker rethink, GS `results.html` photo-collage insertion.
+
+**Final portal version: v3.17.15 · 2026-07-06**
+**Dev-56 closed.**
