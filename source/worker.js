@@ -1038,6 +1038,51 @@ export default {
       }
     }
 
+    // ── Inactive Player Interest (Dev-56) ───────────────────────────────────
+    // A durable, player-level flag — NOT event-scoped like registration_intent
+    // above. Jotform has no "interested in BF Series" field for Inactive
+    // members, and the full membership list is too large to recruit against
+    // blindly. This lets the commissioner tag specific Inactive players as
+    // known-interested once (learned via text/conversation), building a
+    // reusable recruiting shortlist over time instead of re-deriving it every
+    // event. Presence of a row = flagged interested; row is dropped if the
+    // player reactivates or is unflagged.
+
+    // GET /inactive-interest?pin=7797
+    if (request.method === 'GET' && url.pathname === '/inactive-interest') {
+      const pin = url.searchParams.get('pin');
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        const { results } = await d1RetryRead(() =>
+          env.DB.prepare(`SELECT player_name FROM inactive_player_interest`).all()
+        );
+        return new Response(JSON.stringify({ ok: true, players: results.map(r => r.player_name) }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error fetching inactive player interest' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /inactive-interest/toggle?pin=7797 — body: { player_name, action: 'add'|'remove' }
+    if (request.method === 'POST' && url.pathname === '/inactive-interest/toggle') {
+      const pin = url.searchParams.get('pin');
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        const body = await request.json();
+        const { player_name, action } = body;
+        if (!player_name || !['add','remove'].includes(action)) {
+          return new Response(JSON.stringify({ error: "player_name and action ('add'|'remove') are required" }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (action === 'add') {
+          await env.DB.prepare(`INSERT OR IGNORE INTO inactive_player_interest (player_name) VALUES (?)`).bind(player_name).run();
+        } else {
+          await env.DB.prepare(`DELETE FROM inactive_player_interest WHERE player_name = ?`).bind(player_name).run();
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error updating inactive player interest' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // GET /player-state/stats?pin=7797 — aggregate Parked/Seen counts per player,
     // for the Commissioner Engagement tool (Dev-56). Single table scan + JS
     // aggregation rather than N queries — player_event_state is small.
