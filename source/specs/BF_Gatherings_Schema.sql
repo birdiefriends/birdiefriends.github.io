@@ -155,3 +155,145 @@ CREATE INDEX idx_event_photos_lookup ON event_photos(event_name, section, curati
 -- ============================================================
 
 ALTER TABLE event_photos ADD COLUMN media_type TEXT NOT NULL DEFAULT 'image';
+
+-- ============================================================
+-- Entry 9 — 2026-06-26 — Session Dev-51
+-- Venue Manager / autocomplete. Backs the "Your Courses" D1-first
+-- suggestion list in Gathering create/edit forms, ahead of falling
+-- through to the Google Places AutocompleteSuggestion API.
+-- Worker routes: GET /venues (public, active-only), GET /venues?pin=
+-- (commissioner, all rows), POST /venues, PATCH /venues/:id (toggle active).
+-- Seeded same session: Blue Shamrock, Whitetail, Moselem Springs,
+-- Woodstone, Lord's Valley, Other.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS venues (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 99
+);
+
+-- ============================================================
+-- Entry 10 — 2026-06-27 — Session Dev-52
+-- Gathering Templates (§20) — pull-based reuse for recurring hosts
+-- (Chooch/Tony use case). crew_snapshot is a point-in-time JSON copy,
+-- not a live reference — departed members are silently dropped with a
+-- toast count when a template is applied. Date/time never stored.
+-- Worker routes: POST/GET/DELETE /gathering-templates.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS gathering_templates (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  host_id        TEXT NOT NULL,
+  name           TEXT NOT NULL,
+  title          TEXT,
+  venue          TEXT,
+  capacity       INTEGER,
+  gathering_type TEXT,
+  description    TEXT,
+  crew_snapshot  TEXT,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- Entry 11 — 2026-07-05 — Session Dev-55
+-- Player Personalization migration — Parked/Seen/FirstLoad moved off
+-- localStorage (was device-local, broke across Brian's own laptop/
+-- iPad/phone use — "Parked syndrome", open since Dev-54's audit).
+-- First-device-wins capture pattern: row presence in player_event_state
+-- is what tells a client whether to capture local state once via
+-- /migrate, or just read D1 from then on.
+-- Worker routes: GET /player-state/:player_id, POST .../migrate,
+-- POST .../event, POST .../seen-bulk, admin POST /player-meta/seed.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS player_event_state (
+  player_id  TEXT NOT NULL,
+  event_id   TEXT NOT NULL,
+  state      TEXT NOT NULL CHECK (state IN ('parked','seen')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (player_id, event_id, state)
+);
+
+CREATE TABLE IF NOT EXISTS player_meta (
+  player_id  TEXT PRIMARY KEY,
+  first_load TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- Entry 12 — 2026-07-05 — Session Dev-55
+-- Same sweep as Entry 11 — two more localStorage keys found to have
+-- the identical device-local bug: bf_announcements_dismissed (was a
+-- single GLOBAL key, not even per-player) and bf_sunday_done_{date}
+-- (Commissioner Sunday Checklist, didn't sync across Brian's devices).
+-- Worker routes: POST /player-state/:player_id/announcement,
+-- .../announcements-bulk; GET/POST /commissioner-checklist(/toggle).
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS player_announcement_dismissals (
+  player_id       TEXT NOT NULL,
+  announcement_id TEXT NOT NULL,
+  dismissed_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (player_id, announcement_id)
+);
+
+CREATE TABLE IF NOT EXISTS commissioner_checklist_state (
+  checklist_date TEXT NOT NULL,
+  player_name    TEXT NOT NULL,
+  done_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (checklist_date, player_name)
+);
+
+-- ============================================================
+-- Entry 13 — 2026-07-05 — Session Dev-55 (addendum)
+-- Migration-integrity fix: the original "migrated = any row exists in
+-- player_event_state" check could be falsely tripped by proxy
+-- registration (registering a Gathering slot for another player writes
+-- a real row under their identity before their own device ever opens
+-- the app) — silently skipping their real first-device capture and
+-- losing their genuine local Parked/Seen history.
+-- migrated_at is set only via POST .../migrate using COALESCE, so it
+-- never overwrites a genuine first-migration timestamp.
+-- ============================================================
+
+ALTER TABLE player_meta ADD COLUMN migrated_at TEXT;
+ALTER TABLE player_meta ADD COLUMN announcements_migrated_at TEXT;
+
+-- ============================================================
+-- Entry 14 — 2026-07-06 — Session Dev-56
+-- Registration Intent / AWR (Awaiting Registration) flag. A
+-- commissioner-only side-note for the Registration Tracker tool —
+-- "I know they're playing, they just haven't registered yet" — kept
+-- deliberately OUT of the real Jotform Register? answer/regData, since
+-- that status flows through capacity counts, Text All Players, push
+-- targeting, and event-card rendering across the whole app. Row
+-- presence = flagged; per-event, unlike Entry 15 below.
+-- Worker routes: GET /registration-intent, POST /registration-intent/toggle.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS registration_intent (
+  event_name  TEXT NOT NULL,
+  player_name TEXT NOT NULL,
+  marked_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (event_name, player_name)
+);
+
+-- ============================================================
+-- Entry 15 — 2026-07-06 — Session Dev-56
+-- Inactive Player Interest — a durable, player-level flag (NOT
+-- event-scoped like Entry 14) marking Inactive members the
+-- commissioner knows want back in. Jotform has no "interested in BF
+-- Series" field, and the full Inactive roster is too large to recruit
+-- against blindly; this builds a reusable shortlist over time. Tied
+-- into the Registration Tracker (starred players appear there too,
+-- tagged 💤 Inactive; registering one Yes/Sub auto-restores them to
+-- Active in Jotform via the existing restoreActiveIfNeeded pattern).
+-- Worker routes: GET /inactive-interest, POST /inactive-interest/toggle.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS inactive_player_interest (
+  player_name TEXT PRIMARY KEY,
+  marked_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
