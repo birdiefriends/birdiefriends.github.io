@@ -991,6 +991,53 @@ export default {
       }
     }
 
+    // ── Registration Intent / AWR flag (Dev-56) ─────────────────────────────
+    // Purely a commissioner side-note — "I know they're playing, they just
+    // haven't registered yet" (learned via text, in person, etc.). Deliberately
+    // kept OUT of the real Jotform Register? field/regData: that status flows
+    // through capacity counts, Text All Players, push targeting, and event-card
+    // rendering across the whole app, all of which assume only Yes/Sub/No.
+    // Adding a 4th real registration value there would ripple everywhere.
+    // This is a standalone flag table instead — same shape as
+    // commissioner_checklist_state, presence of a row = flagged.
+
+    // GET /registration-intent?event=<name>&pin=7797
+    if (request.method === 'GET' && url.pathname === '/registration-intent') {
+      const pin = url.searchParams.get('pin');
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      const eventName = url.searchParams.get('event');
+      if (!eventName) return new Response(JSON.stringify({ error: 'event is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        const { results } = await d1RetryRead(() =>
+          env.DB.prepare(`SELECT player_name FROM registration_intent WHERE event_name = ?`).bind(eventName).all()
+        );
+        return new Response(JSON.stringify({ ok: true, players: results.map(r => r.player_name) }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error fetching registration intent' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /registration-intent/toggle?pin=7797 — body: { event_name, player_name, action: 'add'|'remove' }
+    if (request.method === 'POST' && url.pathname === '/registration-intent/toggle') {
+      const pin = url.searchParams.get('pin');
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        const body = await request.json();
+        const { event_name, player_name, action } = body;
+        if (!event_name || !player_name || !['add','remove'].includes(action)) {
+          return new Response(JSON.stringify({ error: "event_name, player_name, and action ('add'|'remove') are required" }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (action === 'add') {
+          await env.DB.prepare(`INSERT OR IGNORE INTO registration_intent (event_name, player_name) VALUES (?, ?)`).bind(event_name, player_name).run();
+        } else {
+          await env.DB.prepare(`DELETE FROM registration_intent WHERE event_name = ? AND player_name = ?`).bind(event_name, player_name).run();
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error updating registration intent' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // GET /player-state/stats?pin=7797 — aggregate Parked/Seen counts per player,
     // for the Commissioner Engagement tool (Dev-56). Single table scan + JS
     // aggregation rather than N queries — player_event_state is small.
