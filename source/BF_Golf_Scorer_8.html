@@ -7265,6 +7265,41 @@ async function grpPublish() {
     pages[archiveFile] = html;
   }
 
+  // Push per-player group/tee-time data to D1 alongside the static page —
+  // this is what lets the portal's Photo Capture auto-classify Pre-Comp/
+  // On-Course/Post-Round by each player's real tee time instead of guessing
+  // off the event's overall start time (Dev-57). Best-effort and independent
+  // of the Netlify publish below: a D1 hiccup here shouldn't block groupings
+  // from going live, so it's fire-and-forget with its own status line rather
+  // than wired into the main try/catch's success/failure path.
+  (async () => {
+    try {
+      const gRes = await fetch('https://birdiefriends-push.birdiefriends01.workers.dev/groupings/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pin: '7797',
+          event_name: eventName,
+          players: groupsData.flatMap(g => g.players.map(p => ({
+            player_name: p.name,
+            group_number: g.groupNum,
+            tee_time: g.teeTime
+          })))
+        })
+      });
+      const gData = await gRes.json();
+      const noteEl = document.getElementById('grp-publish-status');
+      if (noteEl && gData.ok) {
+        noteEl.innerHTML += ` &nbsp;·&nbsp; <span style="color:#4a6fbd">📊 ${gData.count} tee times synced to D1</span>`;
+      } else if (noteEl) {
+        noteEl.innerHTML += ` &nbsp;·&nbsp; <span style="color:#a32d2d">D1 sync failed: ${gData.error || 'unknown error'}</span>`;
+      }
+    } catch (e) {
+      const noteEl = document.getElementById('grp-publish-status');
+      if (noteEl) noteEl.innerHTML += ` &nbsp;·&nbsp; <span style="color:#a32d2d">D1 sync failed: ${e.message}</span>`;
+    }
+  })();
+
     try {
     const resp = await fetch('/api/netlify/deploy', {
       method: 'POST',
