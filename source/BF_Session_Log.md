@@ -783,11 +783,33 @@ CREATE TABLE IF NOT EXISTS inactive_player_interest (
 ```
 Worker pasted/deployed twice this session (once for each new table's routes).
 
+**Addendum (post-close, same session):**
+- **AWR tidiness fix (v3.17.16):** the `registration_intent` row wasn't being cleaned
+  up once a real Yes/Sub registration existed for that player+event — harmless
+  (bucket logic in `renderRegTrackList()` already hides AWR once a real status
+  exists) but silently accumulating dead rows. Added `clearRegistrationIntent()`,
+  a fire-and-forget helper (Worker route is a no-op DELETE if no row exists), wired
+  into every path that can produce a real Yes/Sub: self-registration
+  (`submitRegistration`), unregister-then-Undo (`changeRegistration`), and the
+  commissioner override (`adminSetRegistration`). No Worker/D1 change needed —
+  reused the existing `/registration-intent/toggle` route.
+- **BZP track — deploy contract finally documented:** unrelated to the Dev track
+  directly, but done in this chat: a BZP session had no working knowledge of the
+  `/deploy` request contract (JSON body shape, PIN field, and critically the
+  Cloudflare-WAF-blocks-non-browser-User-Agent gotcha) despite every session
+  needing to push files — it had never been written down anywhere fetchable,
+  only ever explained fresh in-chat or done by Brian directly. Fixed at the
+  source: `source/BF_BizPlan_Bootstrap.md` now has the full contract, the same
+  WAF gotcha this Dev track already knew about, and a working Python example.
+  Cross-referencing here since it's the kind of gap that could easily recur on
+  the Dev side too if `BF_Session_Bootstrap.md` ever lost this section — worth
+  a periodic sanity check that it's still there.
+
 **Carry-forward for Dev-57:**
 - Full `bf_architecture.html` SVG ERD redraw — now has an accurate, complete text-based migration log to draw from (Entries 1–15), so the redraw itself is the only remaining work; still its own dedicated session.
 - Cloudflare Worker Endpoints quick-reference table in `BF_Operations_Guide.md` — still stale (predates Dev-43), still flagged not fixed.
 - Check the Engagement tool's Right Now breakdown once BF Series #5 recruitment brings a real registration push through (original Dev-54 "does Parked deserve its nav slot" question).
 - Everything else from Dev-53/54/55 backlog not touched: push notification preference center, player picker rethink, GS `results.html` photo-collage insertion.
 
-**Final portal version: v3.17.15 · 2026-07-06**
+**Final portal version: v3.17.16 · 2026-07-06**
 **Dev-56 closed.**
