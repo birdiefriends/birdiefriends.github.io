@@ -813,3 +813,58 @@ Worker pasted/deployed twice this session (once for each new table's routes).
 
 **Final portal version: v3.17.16 · 2026-07-06**
 **Dev-56 closed.**
+
+---
+
+## Session Dev-57 · 2026-07-07
+
+**Focus:** Photo Capture event-picker correction, GS groupings → D1 sync (closing the tee-time data gap), a reactive Worker security sweep, and full Live Panel Photo Capture — player-facing capture with server-side auto-classification.
+
+**Photo Capture — event picker + containerization:**
+- Free-text event name field replaced with a real dropdown — non-hosted events (`source !== 'gathering'`), 7-day-back-through-upcoming window, soonest-first default, plus a **📁 All Events** option that surfaces legacy/test rows too.
+- Photo list now containerizes by Event → Section (story order: Pre-Comp → On-Course → Post-Round) instead of a flat thumbnail wrap.
+- Uploads now resolve `event_name` from the selected `eventData` entry, not typed text — prevents future drift between photos and real events.
+- `PATCH /photos/:id` extended to accept `event_name`/`section` corrections. Used to retag the 3 existing test photos onto `"2026 BFSeries#5"` (confirmed live via curl).
+
+**GS groupings → D1 sync (closes the tee-time data gap):**
+- New D1 table `event_groupings` (`event_name, player_name, group_number, tee_time`).
+- New Worker routes: `POST /groupings/publish` (replace-on-publish — every GS Publish Groupings click, including day-of audibles, fully replaces the prior set for that event) and `GET /groupings` (PIN-gated, no public tier).
+- `BF_Golf_Scorer_8.html`'s `grpPublish()` now fires a fire-and-forget POST to `/groupings/publish` alongside its existing Netlify deploy, with its own status-line note (`📊 N tee times synced` / sync failure) so a D1 hiccup never blocks the public groupings page from going live.
+- **Verified live:** Brian published a Preliminary #5 grouping — 19 players, 5 groups, 07:06–07:38 tee times, confirmed correct via `GET /groupings?pin=7797&event=2026%20BFSeries%235`.
+- Preliminary/Final/Hidden status is unchanged GS-side logic — only governs what's written to the public `groupings.html` page. The D1 write is independent and fires regardless of visibility, which is fine specifically because the read route is PIN-gated (see below) — Hidden's "players can't see it" guarantee holds end-to-end.
+
+**Reactive Worker security sweep — PIN gating:**
+- `GET /groupings` shipped with no PIN originally — caught same-session when Brian asked about the Hidden/testing interaction. Fixed: PIN required, full stop (no public tier, unlike `/photos`).
+- Prompted a full audit of all 39 Worker routes. Found 3 more pre-existing (not new) unauthenticated routes with real exposure: `DELETE /subscription/:id` (a mutation — could delete any subscriber's push subscription), `GET /subscriptions` (up to 300 OneSignal subscriber records), `GET /notifications` (send history). All 3 PIN-gated; portal's 3 caller sites updated to pass `pin=COMMISSIONER_PIN` (both were already behind `isCommissioner()` client-side, so no behavior change for Brian).
+- Deliberately did **not** gate `GET /members/:player_id/prefs` — that one's genuinely self-service (players read/write their own Gathering Alerts filters, no PIN today), and gating it would break the feature rather than fix a gap. Consistent with the app's original trust-based identity model, not an inconsistency to correct.
+- Brian flagged the pattern itself — gates keep getting added route-by-route with no overall plan. Logged as its own backlog line in `BF_Operations_Guide.md` (§10), explicitly tied to the same shape as the existing `JOTFORM_API_KEY`-in-client-source row: a real fix (session token, or full per-commissioner auth) deferred until it's a priority, not urgent today.
+
+**Live Panel Photo Capture — full player-facing build:**
+- Two hot buttons — **Open Camera** (zero-tap, capture and upload in the same instant) and **Upload** (existing file, inherently ambiguous timing) — added to Live Panel, moved to the top section for no-scroll access per Brian's request.
+- `/photos/upload` split into two modes: **admin** (pin=7797, explicit section, unchanged from Dev-54) and **player** (no PIN — trust-based on `currentPlayer`, same model as Scorecard/CttP submission, not a new precedent). Player mode's `section` is optional.
+- **Server-side auto-classification** (`classifyPhotoSection()`): scorecard-submitted (client-reported, Worker has no Jotform credentials of its own) → `post_round` full stop; else compares `captured_at` (EXIF if available, else "now") against the real tee time from `event_groupings`; falls back to the event's own published start time if no groupings row exists for that player (late sub, unpublished); falls back to `on_course` if no reference time at all.
+- **Upload path — layered timeline design** (Brian's spec: metadata → upload time → curation): client attempts a minimal hand-rolled JPEG EXIF `DateTimeOriginal` read before upload (deliberately scoped to JPEG only — HEIC and metadata-stripped files, including Brian's Oakley camera glasses, correctly return null). Upload always shows a 3-chip dialog (🌅/⛳/🏆) pre-selected with the best available guess, one tap to confirm or correct — Open Camera skips this entirely since capture/upload timing is unambiguous.
+- New `.icon-action-btn` CSS component — fixed circular icon-top/label-below buttons matching the header nav's existing visual language, replacing oval `btn-secondary` buttons for Open Camera/Upload specifically. Scoped as a first migrated surface, not an app-wide rewrite; documented in its own comment block as the intended pattern going forward.
+- **UX rationalization discussed, not yet written down elsewhere:** icon-action-btn fits parallel peer actions, short/nameable-in-one-icon, high-frequency/muscle-memory, space-constrained. Oval buttons fit a single primary per-screen action, state-dependent labels, infrequent/high-stakes/destructive actions, linear flow steps. Candidate next migration target flagged in-conversation: Gathering panel's Repeat/Template/Cancel row (looks like 3 peer actions, currently oval).
+- **Known limitations, by design:** classification keys off the *photographer's* own tee time/scorecard, not the subject's; EXIF read is JPEG-only.
+
+**Bug found and fixed — Android 14/15 Chrome camera-picker regression:**
+- Confirmed live via Brian's own device: tapping Open Camera opened the Google Photos picker sheet instead of the camera, same as Upload. Root cause is a known, currently-open Chrome bug (issue 317289301) — `capture="environment"` is being silently ignored on Android 14/15, more likely to degrade when `accept` spans both `image/*` and `video/*` (needed here since Live Panel supports both). Not an app bug.
+- Fixed via the documented (unofficial) workaround: appending a bogus MIME type (`android/allowCamera`) to the `accept` list, which forces Chrome back to the fuller system chooser that still includes an explicit Camera tile. Applied to both the Live Panel camera input and the commissioner test panel's Quick Capture input. Flagged as fragile — not part of any spec, could stop working on a future Chrome update without warning. **Not yet confirmed working on-device** — Brian was going to test and report back.
+
+**⚠️ Worker library ahead of Cloudflare at session close (BL-19 pattern):** the final `worker.js` — containing the player-mode `/photos/upload` split, `classifyPhotoSection()`, and the 3-route security PIN gates — was pushed to GitHub and shared as a downloadable artifact, but **paste-into-Cloudflare was not confirmed for this exact version** before the session ended (only the earlier groupings-routes version was confirmed pasted, mid-session). **The Open Camera/Upload buttons will 403 on actual upload** until this is pasted — the camera-picker fix (portal-side only) can be tested independently, but a full end-to-end capture test needs this Worker version live first. **First thing to check at Dev-58 start.**
+
+**Carry-forward for Dev-58:**
+- **Confirm the Cloudflare paste above happened** before any further Photo Capture work or testing.
+- Confirm the Android camera-picker workaround actually launches the camera on Brian's device (pending his report).
+- Once both confirmed: full end-to-end test of auto-classification — Open Camera before/after a real tee time, Upload with/without EXIF, a scorecard-submitted player forcing Post-Round.
+- GS `results.html` photo-collage insertion — previously blocked on "needs a session with GS source available," but `BF_Golf_Scorer_8.html` is confirmed in the library now (used this session to add the groupings sync). Block is stale; unblock whenever it's prioritized.
+- Icon-action-btn migration — Gathering panel's Repeat/Template/Cancel row flagged as the next candidate; UX rationalization framework (peer actions/icon vs. single-primary-or-stateful/oval) discussed in-chat but not yet written into a doc — worth formalizing in the Ops Guide if the migration continues.
+- `worker.js` is over 2,000 lines — Brian flagged this organically mid-session. Not urgent, but worth a table-of-contents comment block or module split whenever there's a light session, to make future security-style audits faster than a full manual scan.
+- Full `bf_architecture.html` SVG ERD redraw — still open, still its own dedicated session (now further behind: `event_groupings` and the 3 newly-PIN-gated routes aren't reflected either).
+- Cloudflare Worker Endpoints quick-reference table in `BF_Operations_Guide.md` — still stale.
+- Commissioner PIN architecture — logged as backlog (§10), not urgent, deferred until it's a real priority.
+- Everything else from Dev-53/54/55/56 backlog not touched: push notification preference center, player picker rethink.
+
+**Final portal version: v3.17.21 · 2026-07-07**
+**Dev-57 closed — pending Brian's Cloudflare paste confirmation and camera-fix device test.**
