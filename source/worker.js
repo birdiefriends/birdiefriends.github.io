@@ -652,6 +652,38 @@ export default {
       }
     }
 
+    // POST /crews/:id/members/remove — remove one member from an existing Crew.
+    // PIN-gated (unlike add, which is host-initiated from the picker; removal is
+    // a data-correction tool, not a normal host action). Added Dev-58 to clean up
+    // crews that had the host accidentally included in their own member list.
+    // Body: { player_id }
+    if (request.method === 'POST' && /^\/crews\/\d+\/members\/remove$/.test(url.pathname)) {
+      const pin = url.searchParams.get('pin');
+      if (pin !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const crewId = url.pathname.split('/')[2];
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { player_id } = body;
+      if (!player_id) {
+        return new Response(JSON.stringify({ error: 'player_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        await env.DB.prepare(`DELETE FROM crew_members WHERE crew_id = ? AND player_id = ?`).bind(crewId, player_id).run();
+        const { results } = await env.DB.prepare(
+          `SELECT player_id FROM crew_members WHERE crew_id = ?`
+        ).bind(crewId).all();
+        return new Response(JSON.stringify({ ok: true, player_ids: results.map(r => r.player_id) }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error removing Crew member' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // POST /registrations — set a player's Yes/No/Sub response for a Gathering (upsert)
     if (request.method === 'POST' && url.pathname === '/registrations') {
       let body;
