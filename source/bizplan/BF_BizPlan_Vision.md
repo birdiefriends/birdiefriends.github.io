@@ -1,12 +1,12 @@
 # BirdieFriends — Business Plan Vision & Positioning
 *Foundational document · Load at start of every business plan session*
-*Last updated: Session BP-4 · July 2, 2026*
+*Last updated: Session BP-5 · July 6, 2026*
 
 ---
 
 ## Core Vision Statement
 
-> BirdieFriends is a **gathering design platform**. The scoring engine is infrastructure. The recommendation engine — tuned to the specific people, skill mix, and occasion — is the product. The memorial artifact, digital and physical, is what people pay for and carry forward.
+> BirdieFriends is a **gathering design platform**. The **BirdieFriends Engine** (dev name: GS; rename settled Session BP-5) is the infrastructure — the brain and heart that converts what players actually did into something meaningful and monetizable. Scheduling, hosting, scoring, photo capture, and recommendation logic are all capabilities of the Engine, not separate layers each competing to be "the product." **BF-Experiences (BF-E) and BF-Competitive (BF-C) are use-case monetization models built on top of the Engine** — two different ways of packaging and selling what it produces, not two products with separate identities. The memorial artifact, digital and physical, is what people pay for and carry forward.
 
 **Tagline: "Tee off, play great."** Captures the promise at the Host/player level — show up and the logistics, scoring, and memorialization are handled. Proximity-aware discovery within ONE BirdieFriends (see Gate Log, Gate 2 and Cross-Gate Risks Register) is core infrastructure for this promise to scale beyond the founder hand-operating every community — not multi-tenant/isolated instances, which is a separate, parked future idea (see "What This Is Not" below).
 
@@ -39,7 +39,7 @@ Brian is retired and does not need this to succeed financially. He was consideri
 
 1. **The tech is not the moat.** Scoring and event management functionality is replicable by competitors within months. The moat is the distribution model, the accumulated outcome data, the brand equity built into physical artifacts, and the community network itself.
 
-2. **The product is experience design, not software.** BF's differentiator is a recommendation engine that tunes event format to the specific group and occasion — proven informally via GLS's 2-Man scramble design, which kept a mixed-skill, not-all-golf-nuts group consistently engaged and fair.
+2. **The product is experience design, not software.** BF's differentiator is the BirdieFriends Engine's recommendation capability — tuning event format to the specific group and occasion — proven informally via GLS's 2-Man scramble design, which kept a mixed-skill, not-all-golf-nuts group consistently engaged and fair. (Corrected BP-5: recommendation logic is a capability of the Engine, not a separate "product" competing with BF-E/BF-C for identity — see Core Vision Statement.)
 
 3. **Memorialization, not scoring, is the emotional core.** People will pay for a permanent, shareable record of a meaningful gathering. The Garrett's Last Swing hat — organically ordered, BF co-branded — is real-world proof this works before the commercial product even existed.
 
@@ -95,3 +95,4 @@ Brian is retired and does not need this to succeed financially. He was consideri
 | `BF_BizPlan_GateLog.md` | Six-gate framework tracker — decisions, open questions, status |
 | `BF_Capability_Inventory.md` | Current + future capability list, living roadmap document |
 | `BF_BizPlan_Session_Log.md` | Chronological session-by-session changelog |
+| `BF_Investment_Inventory.md` | Ranged/timescoped ledger of unscoped cost & effort items across market, competitive, Engine, and marketing workstreams (added BP-5) |
