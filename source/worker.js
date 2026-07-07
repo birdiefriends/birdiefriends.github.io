@@ -36,8 +36,14 @@ export default {
     const url = new URL(request.url);
 
     // DELETE /subscription/:id — delete one specific push subscription (stale dupe cleanup)
-    // Called by portal Admin subscriber panel "Delete" button
+    // Called by portal Admin subscriber panel "Delete" button. PIN-required — this
+    // deletes real subscriber data and was previously callable by anyone who knew or
+    // guessed a subscription ID (Dev-57 security sweep, same audit that caught /groupings).
     if (request.method === 'DELETE' && url.pathname.startsWith('/subscription/')) {
+      const pin = url.searchParams.get('pin');
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
       const subId = url.pathname.split('/subscription/')[1];
       if (!subId) return new Response(JSON.stringify({ error: 'Missing subscription ID' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       const appId = url.searchParams.get('app_id');
@@ -1821,6 +1827,10 @@ export default {
 
     // GET /subscriptions — fetch all push subscribers
     if (request.method === 'GET' && url.pathname === '/subscriptions') {
+      const pin = url.searchParams.get('pin');
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
       const appId = url.searchParams.get('app_id');
       const osUrl = `https://api.onesignal.com/players?app_id=${appId}&limit=300`;
       const osResp = await fetch(osUrl, {
@@ -1835,6 +1845,10 @@ export default {
 
     // GET /notifications — fetch sent notification history
     if (request.method === 'GET' && url.pathname === '/notifications') {
+      const pin = url.searchParams.get('pin');
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
       const appId = url.searchParams.get('app_id');
       const limit = url.searchParams.get('limit') || '50';
       const osUrl = `https://api.onesignal.com/notifications?app_id=${appId}&limit=${limit}&kind=1`;
