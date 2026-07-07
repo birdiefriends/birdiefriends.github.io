@@ -852,11 +852,10 @@ Worker pasted/deployed twice this session (once for each new table's routes).
 - Confirmed live via Brian's own device: tapping Open Camera opened the Google Photos picker sheet instead of the camera, same as Upload. Root cause is a known, currently-open Chrome bug (issue 317289301) — `capture="environment"` is being silently ignored on Android 14/15, more likely to degrade when `accept` spans both `image/*` and `video/*` (needed here since Live Panel supports both). Not an app bug.
 - Fixed via the documented (unofficial) workaround: appending a bogus MIME type (`android/allowCamera`) to the `accept` list, which forces Chrome back to the fuller system chooser that still includes an explicit Camera tile. Applied to both the Live Panel camera input and the commissioner test panel's Quick Capture input. Flagged as fragile — not part of any spec, could stop working on a future Chrome update without warning. **Not yet confirmed working on-device** — Brian was going to test and report back.
 
-**⚠️ Worker library ahead of Cloudflare at session close (BL-19 pattern):** the final `worker.js` — containing the player-mode `/photos/upload` split, `classifyPhotoSection()`, and the 3-route security PIN gates — was pushed to GitHub and shared as a downloadable artifact, but **paste-into-Cloudflare was not confirmed for this exact version** before the session ended (only the earlier groupings-routes version was confirmed pasted, mid-session). **The Open Camera/Upload buttons will 403 on actual upload** until this is pasted — the camera-picker fix (portal-side only) can be tested independently, but a full end-to-end capture test needs this Worker version live first. **First thing to check at Dev-58 start.**
+**Worker library ahead of Cloudflare, closed out post-session:** the final `worker.js` — containing the player-mode `/photos/upload` split, `classifyPhotoSection()`, and the 3-route security PIN gates — was pushed to GitHub and shared as a downloadable artifact. Paste-into-Cloudflare wasn't confirmed before the session ended, but Brian confirmed shortly after that this exact version was deployed. No longer a blocker — Open Camera/Upload should work end-to-end (camera-picker fix + upload + auto-classification) pending Brian's on-device test.
 
 **Carry-forward for Dev-58:**
-- **Confirm the Cloudflare paste above happened** before any further Photo Capture work or testing.
-- Confirm the Android camera-picker workaround actually launches the camera on Brian's device (pending his report).
+- Confirm the Android camera-picker workaround actually launches the camera on Brian's device, and that a real capture uploads successfully end-to-end (pending his report).
 - Once both confirmed: full end-to-end test of auto-classification — Open Camera before/after a real tee time, Upload with/without EXIF, a scorecard-submitted player forcing Post-Round.
 - GS `results.html` photo-collage insertion — previously blocked on "needs a session with GS source available," but `BF_Golf_Scorer_8.html` is confirmed in the library now (used this session to add the groupings sync). Block is stale; unblock whenever it's prioritized.
 - Icon-action-btn migration — Gathering panel's Repeat/Template/Cancel row flagged as the next candidate; UX rationalization framework (peer actions/icon vs. single-primary-or-stateful/oval) discussed in-chat but not yet written into a doc — worth formalizing in the Ops Guide if the migration continues.
@@ -867,4 +866,4 @@ Worker pasted/deployed twice this session (once for each new table's routes).
 - Everything else from Dev-53/54/55/56 backlog not touched: push notification preference center, player picker rethink.
 
 **Final portal version: v3.17.21 · 2026-07-07**
-**Dev-57 closed — pending Brian's Cloudflare paste confirmation and camera-fix device test.**
+**Dev-57 closed — Cloudflare deploy confirmed. Camera-fix on-device test still pending Brian's report.**
