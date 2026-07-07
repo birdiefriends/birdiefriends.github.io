@@ -1636,11 +1636,18 @@ export default {
       }
     }
 
-    // GET /groupings?event=X — bulk read for a whole event (used to render/debug).
-    // GET /groupings?event=X&player=Y — single player's tee time (used by the Photo
-    // Capture auto-section logic to find their group's actual tee time).
+    // GET /groupings?pin=7797&event=X — bulk read for a whole event (used to render/
+    // debug). GET /groupings?pin=7797&event=X&player=Y — single player's tee time
+    // (will be used by the future Photo Capture auto-section logic). PIN-required,
+    // full stop — unlike /photos there's no "approved" public tier here, player
+    // names + tee times have no legitimate public-read case, so this stays fully
+    // admin-gated regardless of the source event's Preliminary/Final/Hidden status.
     if (request.method === 'GET' && url.pathname === '/groupings') {
       try {
+        const pin = url.searchParams.get('pin');
+        if (String(pin) !== '7797') {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
         const eventName = url.searchParams.get('event');
         const player     = url.searchParams.get('player');
         if (!eventName) return new Response(JSON.stringify({ error: 'event required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
