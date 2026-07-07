@@ -867,3 +867,40 @@ Worker pasted/deployed twice this session (once for each new table's routes).
 
 **Final portal version: v3.17.21 · 2026-07-07**
 **Dev-57 closed — Cloudflare deploy confirmed. Camera-fix on-device test still pending Brian's report.**
+
+---
+
+## Session Dev-58 · 2026-07-07
+
+**Focus:** Unplanned — investigated and fixed a Gathering title-collision bug reported live by Brian while Chooch was actively using the app to set up next week's recurring "CGA Tuesday Golf League." Not the intended session topic, but blocked everything else until resolved.
+
+**Bug #1 — host accidentally self-invited on every recurring Gathering:**
+- Chooch's saved "Rough Riders" Crew (id 19, reused across every weekly instance) had his own name baked into its D1 membership from whenever it was first built — likely an oversight, since nothing in the crew picker ever prevented a host from selecting themselves.
+- Every Gathering create/repeat that reused this Crew therefore notified Chooch of his own event ("Chooch Wernett invited you to..."), which read as a confusing duplicate and triggered a create → cancel → recreate loop (gathering #31 cancelled, #32 recreated with the same bug) while he tried to fix what looked broken.
+- **Fixed at three layers:** `openCrewPicker()`/`openCrewPickerForInvite()` now exclude the host from the selectable list; `applyTemplate()` strips the host from an older template's `crew_snapshot` on load; `submitNewGathering()`/`submitInviteMore()` both got a defensive filter so the host can never end up in a notify list regardless of source.
+- **Data cleanup:** Chooch's stale template (id 4, self-included) deleted and recreated clean (id 5, 9 members). New Worker route `POST /crews/:id/members/remove?pin=` added (no prior removal endpoint existed) and used to strip Chooch from the actual "Rough Riders" Crew (id 19) so future reuse doesn't rely on the defensive filter alone.
+
+**Bug #2 — the real root cause, found after Bug #1's fix: Gathering registration/capacity data was matched by title, not by unique ID:**
+- Once #30 (today, Jul 7) and #32 (next week, Jul 14) both existed as active Gatherings sharing the identical title "CGA Tuesday Golf League" — the normal, expected outcome of a recurring weekly series — every place that displays "my status" or headcount for a Gathering was matching `regData` rows by `eventName === evt.name` (title) instead of `gatheringId`. This silently merged #30's real data into #32's card: Brian saw #30's 4/4 Yes count and his own July 4th "Can't Make It" response to *today's* round showing on *next week's* card.
+- Worse: the write path itself was affected. `submitGatheringRegistration()`'s local `regData` upsert matched an existing row by title+player, not `gatheringId`+player — so registering for #32 could silently overwrite #30's stored row in the local mirror rather than creating #32's own row.
+- **Fixed across every call site:** `findMyReg()` (added optional `gatheringId` param, used at all 3 call sites — buildEventCard, swipe handler, Schedule tab), `buildEventCard()`'s yes/reg/sub counts (new `regMatchesEvt()` helper), `getSimpleCapacityStatus()` (drives Gatherings' waitlist/capacity state directly), `getMyCapacityDisplay()`'s waitlist-position lookup, and `submitGatheringRegistration()`'s local upsert index.
+- **Bug #3 (caught by Brian reviewing a follow-up screenshot, same root cause, different code path):** `buildPlayerChips()` — the "Players ›" expand list under each card — was still matching by title even after the above fixes landed. Headcount showed correctly (0/4 for #32) but tapping Players still showed #30's real Yes-list (BJ, Chooch, Jake, Jordan) instead of #32's actual 0 Yes / 2 No. Fixed the same way: function now takes the full `evt` object and matches Gatherings by `gatheringId`.
+- **Known residual, left untouched:** `buildLivePanel()`'s `evtPlayers` dropdown (~line 7375) still matches by title. Only exercised during an active live round; two same-titled Gatherings would need to be live simultaneously to collide, which won't happen for a weekly series a week apart. Documented rather than risked touching live-round code without on-the-spot testing.
+- Verified complete: audited every remaining `regData.filter(... eventName === evt.name ...)` in the file; all non-Gathering call sites (BF Weekend Times' `getWeekendCapacityStatus`, the capacity-collapse job which explicitly excludes Gatherings, regular Jotform-event branches) intentionally left on title-matching since it's correct for their event types.
+
+**Confirmed clean via live data after each fix:**
+- All 3 active Gatherings pulled and checked for title collisions — only #30/#32 collided (both Chooch's, both the same series). No other host has Gatherings yet, so no other collisions exist to find.
+- Chooch's own device screenshots (My Events, Parked, Rough Riders roster, Host Gatherings dashboard) confirmed correct post-fix: #32 card now shows its own real 0 Yes / 0 Sub / 2 No, accurate "Can't Make It" (his own real response to #32, not bleed from #30), and Rough Riders roster now 9 members without him.
+
+**Root-cause note for future sessions:** this class of bug has likely been latent since Gatherings launched (Dev-49) — `eventName`-based matching only breaks when two Gatherings share a title, which requires either two hosts naming things identically or (as here) a single host's recurring series reaching its second occurrence. Repeat/Templates (Dev-54) made recurring same-titled Gatherings the *normal* case, so this was always going to surface once any host's weekly series hit week 2. Chooch's series is the first to get there.
+
+**Worker deployed:** `POST /crews/:id/members/remove?pin=` (new route), pasted and confirmed live by Brian mid-session.
+
+**Carry-forward for Dev-59:**
+- Original Dev-58 intent was never reached — check with Brian on what that was.
+- Live Panel `evtPlayers` title-matching (buildLivePanel, ~line 7375) — same class of bug as this session's fixes, deliberately left alone as low-risk/untested. Worth a defensive fix in a calmer session.
+- Watch Chooch's "CGA Tuesday Golf League" series for its 3rd occurrence (week after next) to confirm the fix holds with zero manual checking needed.
+- Everything carried from Dev-57 untouched this session: camera-picker on-device confirmation, GS `results.html` photo-collage insertion, icon-action-btn migration, `worker.js` size/organization, full ERD redraw, stale Worker Endpoints table, Commissioner PIN architecture, push notification preference center, player picker rethink.
+
+**Final portal version: v3.17.24 · 2026-07-07**
+**Dev-58 closed.**
