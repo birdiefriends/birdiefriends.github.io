@@ -1526,8 +1526,10 @@ export default {
       }
     }
 
-    // PATCH /photos/:id — curation actions (approve/reject/trophy toggle/reorder). PIN required.
-    // Body: { pin, curation_status?, is_trophy_moment?, sort_order? }
+    // PATCH /photos/:id — curation actions (approve/reject/trophy toggle/reorder),
+    // plus event_name/section correction (retagging legacy/test rows onto a real
+    // event descriptor). PIN required.
+    // Body: { pin, curation_status?, is_trophy_moment?, sort_order?, event_name?, section? }
     if (request.method === 'PATCH' && url.pathname.startsWith('/photos/')) {
       try {
         const photoId = url.pathname.split('/photos/')[1];
@@ -1548,6 +1550,17 @@ export default {
         }
         if (body.is_trophy_moment !== undefined) { fields.push('is_trophy_moment = ?'); binds.push(body.is_trophy_moment ? 1 : 0); }
         if (body.sort_order !== undefined)        { fields.push('sort_order = ?');        binds.push(body.sort_order); }
+        if (body.event_name !== undefined) {
+          const eventName = String(body.event_name).trim();
+          if (!eventName) return new Response(JSON.stringify({ error: 'event_name cannot be blank' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          fields.push('event_name = ?'); binds.push(eventName);
+        }
+        if (body.section !== undefined) {
+          if (!['pre_competition','on_course','post_round'].includes(body.section)) {
+            return new Response(JSON.stringify({ error: 'Invalid section' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+          fields.push('section = ?'); binds.push(body.section);
+        }
         if (!fields.length) {
           return new Response(JSON.stringify({ error: 'No updatable fields provided' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
