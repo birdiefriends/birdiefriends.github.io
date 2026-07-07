@@ -165,3 +165,39 @@ Founder was "still chewing" on the overall picture at end of session — next se
 **Next session should:** (1) check whether the BF-E/BF-C split holds up on reflection; (2) if so, propagate it into Gate 1 and Gate 4 as separate per-product models rather than one blended one; (3) pick up Gate 5's open items (marketing/acceptance strategy, Ambassador-discovery mechanism design, phase timing).
 
 **Deploy note:** write-up completed this session; push to `/deploy` pending — awaiting founder's PIN and explicit go-ahead.
+
+---
+
+## Session BP-5 · July 6, 2026
+
+**Focus:** Correct the Vision doc's core infrastructure/product framing (GS/BirdieFriends Engine vs. BF-E/BF-C); name and scope the Engine's GTM-readiness gap; establish a new standalone Investment Inventory doc
+
+**Key decisions:**
+- **Core Vision Statement corrected: the engine (dev name GS) is infrastructure — the brain/heart that converts player effort into something meaningful and monetizable — not "the recommendation engine is the product."** Recommendation logic, scheduling, hosting, scoring, and photo capture are all capabilities of the engine, not separate layers competing for "the product" label. **BF-Experiences (BF-E) and BF-Competitive (BF-C) are the actual products — use-case monetization models built on top of the engine**, resolving an inconsistency where the old framing had both the recommendation engine and (per Thesis 3) memorialization implicitly competing to be "the product."
+- **Engine renamed: BirdieFriends Engine (dev name GS retained for continuity).** Considered and set aside: names in the "BF-X" pattern (BF-Platform, etc.) — rejected because that pattern is reserved for customer-facing products (BF-E, BF-C, and likely future spinoffs like BF-Gadgets, BF-Training), and infrastructure naming should stay visually/conceptually distinct to avoid confusion with "ONE BirdieFriends" (the platform). "BirdieFriends Engine" uses the full company name rather than the abbreviated pattern, keeping the two naming conventions cleanly separated.
+- **Thesis 2 corrected to match** — differentiator reframed as the Engine's recommendation capability, not a standalone "recommendation engine as the product."
+- **BirdieFriends Engine GTM-readiness gap identified and logged as a new Cross-Gate Risk**, prompted directly by Dev-55's D1 migration (which surfaced device-dependence as a real production gap, not theoretical). Three concrete items, all tagged as launch-gate requirements (not blockers to continued dev/personal use):
+  1. **Showstopper:** the Engine is currently accessible only from the founder's laptop — no multi-device/multi-operator access exists.
+  2. **No recommendation-engine capability yet exists** — event-format tuning is currently founder judgment, not a built Engine capability.
+  3. **Hardened, scalable architecture still needed beyond Dev-55's D1 migration**, which addressed player-personalization state specifically, not a full production-readiness pass.
+  This gap now blocks Gate 4 from producing a rigorous, separately-costed BF-E/BF-C economic split — build cost/effort for closing it is currently unscoped.
+- **New standalone document established: `BF_Investment_Inventory.md`.** A ranged/timescoped ledger (cost range, timescope, status, candidate next session) covering every previously-scattered unscoped cost/effort item: competitive research (Gate 3), BF-E marketing/acceptance strategy and Ambassador-discovery mechanism (Gate 5), the three Engine GTM-readiness items (Gate 2/4/6), dues ledger, legal/compliance items (BF Pay, GHIN, tee-time API), and founder-capacity items. Explicitly a ledger, not a plan — ranges are working estimates, replaced with real numbers as focused single-topic BZP# or Dev sessions each pick up one row. Kept deliberately separate and short (not folded into Gate Log) for easier review and as a likely source doc for an eventual succinct public-facing presentation.
+- **Approach for closing the plan, going forward: organize and rationalize first, then launch a series of focused single-topic BZP# sessions** (e.g., "BZP#N - Competitive Research," "BZP#N - BF-E Go-to-Market," a Dev-session Engine GTM-readiness audit) rather than one broad research push — each session updates its corresponding Investment Inventory row with real numbers.
+
+**Artifacts updated:**
+- `BF_BizPlan_Vision.md` → Core Vision Statement rewritten (BirdieFriends Engine as infrastructure, BF-E/BF-C as monetization models), Thesis 2 corrected, Reference Documents table updated to include Investment Inventory, version/date bumped
+- `BF_BizPlan_GateLog.md` → new Cross-Gate Risk ("BirdieFriends Engine GTM-readiness gap"), Gate 4 Open items cross-referenced to it, version/date bumped
+- `BF_Investment_Inventory.md` (new) → full doc established, five sections populated from existing plan content
+- `BF_BizPlan_Session_Log.md` (this entry)
+
+**Open / carried forward:**
+- BF-E/BF-C split pressure-test and propagation into Gates 1 & 4 — still the logically next step, paused again this session in favor of the Engine/naming correction and Investment Inventory work
+- Formal competitive landscape research — still not done; now has a named home in Investment Inventory
+- BF-E marketing/acceptance strategy and Ambassador-discovery mechanism design — still not designed; now has a named home in Investment Inventory
+- BirdieFriends Engine GTM-readiness gap — named and risk-logged, not yet scoped for cost/effort; candidate for a dedicated Dev-session audit
+- Dedicated Dev-session scoping audit (GTM-ready vs. dev-era-shortcut components) — logged as a general note only, not yet scheduled as a concrete next-session action item, per founder's preference this session
+- Engine rename to "BirdieFriends Engine" is settled for plan-document purposes; dev-session/code-level naming (if any) remains a separate, lower-priority question
+
+**Chat-rename string:** `BZP#5 - BirdieFriends Engine Correction & Investment Inventory`
+
+**Deploy note:** four files pushed this session (Vision, Gate Log, new Investment Inventory, Session Log) — PIN provided by founder for this session's push.
