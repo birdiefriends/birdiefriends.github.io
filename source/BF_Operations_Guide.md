@@ -478,6 +478,13 @@ Tracker shows five buckets, sorted true-unknowns-first: ⬜ No reply → 🟡 AW
 → ✅ Yes → 🔄 Sub → ❌ No. Worker routes: `GET /registration-intent?event=&pin=`,
 `POST /registration-intent/toggle?pin=` (body: `event_name, player_name, action`).
 
+**Tidiness (v3.17.16):** once a real Yes/Sub exists for that player+event, any
+lingering `registration_intent` row is auto-cleared via `clearRegistrationIntent()`
+— fired from every path that can produce a real Yes/Sub (self-registration,
+unregister-then-Undo, commissioner override). Fire-and-forget; the toggle route's
+`remove` action is a no-op DELETE if there was never a flag, so it's safe to call
+unconditionally.
+
 **Inactive Player Interest (Commissioner Admin → Communicate → 💤 Inactive Players):**
 Jotform has no "interested in BF Series" field for Inactive members, and the full
 Inactive roster is too large to recruit against blindly — but the commissioner often
