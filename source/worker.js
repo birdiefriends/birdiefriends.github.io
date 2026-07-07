@@ -1598,6 +1598,65 @@ export default {
       }
     }
 
+    // POST /groupings/publish?pin=7797 — called by GolfScorer's grpPublish() alongside
+    // its existing Netlify deploy, so per-player tee times land in D1 (not just the
+    // static groupings.html page) the moment groups are published pre-event. Closes
+    // the gap that previously blocked auto-classifying Photo Capture sections by real
+    // tee time (Dev-57) — GS is the only system that knows group/tee assignments.
+    // Body: { pin, event_name, players: [{ player_name, group_number, tee_time }, ...] }
+    // Replace-on-publish: deletes all existing rows for event_name first, so a
+    // re-publish (groups changed pre-event) always reflects the latest lineup —
+    // matches how GS itself treats re-publishing groupings.html.
+    if (request.method === 'POST' && url.pathname === '/groupings/publish') {
+      try {
+        let body;
+        try { body = await request.json(); } catch(e) {
+          return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (String(body.pin) !== '7797') {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const eventName = String(body.event_name || '').trim();
+        const players    = Array.isArray(body.players) ? body.players : [];
+        if (!eventName)     return new Response(JSON.stringify({ error: 'event_name required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        if (!players.length) return new Response(JSON.stringify({ error: 'players array required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+
+        const stmts = [ env.DB.prepare(`DELETE FROM event_groupings WHERE event_name = ?`).bind(eventName) ];
+        for (const p of players) {
+          const playerName = String(p.player_name || '').trim();
+          if (!playerName) continue;
+          stmts.push(env.DB.prepare(
+            `INSERT INTO event_groupings (event_name, player_name, group_number, tee_time) VALUES (?, ?, ?, ?)`
+          ).bind(eventName, playerName, p.group_number ?? null, p.tee_time ?? null));
+        }
+        await env.DB.batch(stmts);
+        return new Response(JSON.stringify({ ok: true, count: stmts.length - 1 }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Groupings publish error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /groupings?event=X — bulk read for a whole event (used to render/debug).
+    // GET /groupings?event=X&player=Y — single player's tee time (used by the Photo
+    // Capture auto-section logic to find their group's actual tee time).
+    if (request.method === 'GET' && url.pathname === '/groupings') {
+      try {
+        const eventName = url.searchParams.get('event');
+        const player     = url.searchParams.get('player');
+        if (!eventName) return new Response(JSON.stringify({ error: 'event required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+
+        let sql = `SELECT event_name, player_name, group_number, tee_time FROM event_groupings WHERE event_name = ?`;
+        const binds = [eventName];
+        if (player) { sql += ` AND player_name = ? COLLATE NOCASE`; binds.push(player); }
+        sql += ` ORDER BY group_number, player_name`;
+
+        const { results } = await d1RetryRead(() => env.DB.prepare(sql).bind(...binds).all());
+        return new Response(JSON.stringify({ groupings: results }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Groupings read error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // Shared path map used by /history, /rollback, and /deploy
     const FILE_PATHS = {
       portal:    'source/portal.html',
