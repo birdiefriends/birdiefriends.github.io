@@ -19,6 +19,57 @@ async function d1RetryRead(fn, retries = 3, delayMs = 300) {
   throw lastErr;
 }
 
+// Auto-classifies a Photo Capture upload into pre_competition / on_course /
+// post_round when the client didn't already resolve one itself (Dev-57 —
+// Live Panel Open Camera path; the Upload path always sends an explicit
+// section from its dialog, so this rarely runs for Upload).
+//
+// Priority, matching Brian's stated design:
+//   1. scorecard_submitted (client-reported, Worker has no Jotform creds of
+//      its own) → post_round, full stop, regardless of timing.
+//   2. Real tee time from event_groupings (synced from GS's grpPublish(),
+//      Dev-57) for this player+event, compared against captured_at (EXIF,
+//      when the client had it) or "now" (accurate for Open Camera, since
+//      capture and upload happen in the same instant).
+//   3. No groupings row for this player (late sub, walk-on, not yet
+//      published) — fall back to the event's own published start time
+//      (event_start, sent by the client from its own eventData).
+//   4. No reference time at all — default on_course rather than guessing
+//      pre_competition; curation catches anything actually wrong.
+async function classifyPhotoSection(env, { eventName, capturedBy, eventStart, capturedAt, scorecardSubmitted }) {
+  if (scorecardSubmitted) return 'post_round';
+
+  const refTime = capturedAt ? new Date(capturedAt) : new Date();
+  if (isNaN(refTime.getTime())) return 'on_course';
+
+  let threshold = null;
+  if (capturedBy) {
+    try {
+      const row = await d1RetryRead(() => env.DB.prepare(
+        `SELECT tee_time FROM event_groupings WHERE event_name = ? AND player_name = ? COLLATE NOCASE`
+      ).bind(eventName, capturedBy).first());
+      if (row && row.tee_time && eventStart) {
+        const [hh, mm] = String(row.tee_time).split(':').map(Number);
+        if (!isNaN(hh) && !isNaN(mm)) {
+          const d = new Date(eventStart);
+          d.setHours(hh, mm, 0, 0);
+          threshold = d;
+        }
+      }
+    } catch (e) {
+      // Groupings lookup failing shouldn't block the upload — fall through
+      // to the event_start fallback below.
+    }
+  }
+  if (!threshold && eventStart) {
+    const d = new Date(eventStart);
+    if (!isNaN(d.getTime())) threshold = d;
+  }
+  if (!threshold) return 'on_course';
+
+  return refTime < threshold ? 'pre_competition' : 'on_course';
+}
+
 export default {
   async fetch(request, env) {
 
@@ -1420,11 +1471,28 @@ export default {
     // ============================================================
 
     // POST /photos/upload — accepts multipart/form-data, writes bytes to R2 and
-    // a metadata row to D1. Body fields: pin, event_name, section, file, caption? (optional)
-    // section must be one of: pre_competition | on_course | post_round
+    // a metadata row to D1.
+    //
+    // Two modes:
+    //  ADMIN  — pin=7797 provided. Explicit section required (commissioner test
+    //           panel / manual retagging), behavior unchanged from Dev-54.
+    //  PLAYER — no pin. Live Panel capture (Dev-57) — any registered player, no
+    //           PIN, same trust-based model as Scorecard/CttP submission (no new
+    //           precedent). event_name + captured_by required; section is optional
+    //           — if the client already resolved it (Upload dialog's chip picker),
+    //           use it as-is; otherwise the server auto-classifies using real tee
+    //           time from event_groupings (Dev-57 GS sync) + a client-reported
+    //           scorecard_submitted flag (Worker has no Jotform credentials, so
+    //           that specific signal has to come from the client) + captured_at
+    //           if the client extracted a photo's own EXIF timestamp, falling
+    //           back to server upload time otherwise.
+    //
+    // Body fields: pin?, event_name, section?, captured_by, event_start?,
+    // captured_at?, scorecard_submitted?, file, caption? (optional)
+    // section, if provided, must be one of: pre_competition | on_course | post_round
     // 25MB server-side cap regardless of what the client already checked — client-side
     // checks are a UX nicety, not a guarantee. media_type is inferred from file.type,
-    // never trusted from the client directly. Response: { ok, id, r2_key, media_type }
+    // never trusted from the client directly. Response: { ok, id, r2_key, media_type, section }
     const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
     if (request.method === 'POST' && url.pathname === '/photos/upload') {
       try {
@@ -1432,20 +1500,27 @@ export default {
         try { form = await request.formData(); } catch(e) {
           return new Response(JSON.stringify({ error: 'Invalid form data' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        const pin        = form.get('pin');
-        const eventName  = form.get('event_name');
-        const section    = form.get('section');
-        const caption    = form.get('caption') || null;
-        const capturedBy = form.get('captured_by') || null;
-        const file       = form.get('file');
+        const pin               = form.get('pin');
+        const eventName         = form.get('event_name');
+        const eventStart        = form.get('event_start');       // ISO — client's known event start, fallback reference
+        const capturedAt        = form.get('captured_at');       // ISO — EXIF-derived, when available
+        const scorecardSubmitted = form.get('scorecard_submitted') === 'true';
+        let   section            = form.get('section') || null;
+        const caption            = form.get('caption') || null;
+        const capturedBy         = form.get('captured_by') || null;
+        const file                = form.get('file');
+        const isAdmin             = String(pin) === '7797';
 
-        if (String(pin) !== '7797') {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        if (!eventName) {
+          return new Response(JSON.stringify({ error: 'Missing event_name' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        if (!eventName || !section) {
-          return new Response(JSON.stringify({ error: 'Missing event_name or section' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        if (isAdmin && !section) {
+          return new Response(JSON.stringify({ error: 'Missing section' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        if (!['pre_competition','on_course','post_round'].includes(section)) {
+        if (!isAdmin && !capturedBy) {
+          return new Response(JSON.stringify({ error: 'Missing captured_by' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (section && !['pre_competition','on_course','post_round'].includes(section)) {
           return new Response(JSON.stringify({ error: 'section must be pre_competition, on_course, or post_round' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         if (!file || typeof file === 'string') {
@@ -1456,6 +1531,13 @@ export default {
         }
         if (!env.PHOTOS_BUCKET) {
           return new Response(JSON.stringify({ error: 'PHOTOS_BUCKET binding not configured on this Worker yet' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+
+        // Player mode, no explicit section from the client (i.e. the Open Camera
+        // path — Upload always resolves one via its dialog before this request
+        // ever fires) — auto-classify server-side.
+        if (!section) {
+          section = await classifyPhotoSection(env, { eventName, capturedBy, eventStart, capturedAt, scorecardSubmitted });
         }
 
         const mediaType = (file.type || '').startsWith('video/') ? 'video' : 'image';
@@ -1472,7 +1554,7 @@ export default {
            VALUES (?, ?, ?, ?, ?, ?)`
         ).bind(eventName, section, key, capturedBy, caption, mediaType).run();
 
-        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id, r2_key: key, media_type: mediaType }), {
+        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id, r2_key: key, media_type: mediaType, section }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       } catch (e) {
