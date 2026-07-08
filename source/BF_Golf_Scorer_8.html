@@ -6291,14 +6291,101 @@ const PHOTOS_WORKER_BASE = 'https://birdiefriends-push.birdiefriends01.workers.d
 const PHOTOS_PIN = '7797';
 const PHOTOS_SECTION_ORDER = ['pre_competition', 'on_course', 'post_round'];
 const PHOTOS_SECTION_LABEL = { pre_competition: '🌅 Pre-Competition', on_course: '⛳ On the Course', post_round: '🏆 Post-Round' };
+const REQUEST_FORM_ID = '233113019726045'; // Request Event form — has the real Date & Time field
 let _photosEventsLoaded = false;
+
+// Ported verbatim from portal.html (Dev-57/58) — matches Jotform fields by
+// label text rather than a hardcoded QID number, so it doesn't break if
+// Jotform renumbers a field. Same function, same behavior, two codebases.
+function getAnswer(answers, keys) {
+  for (const key of keys) {
+    for (const [qid, ans] of Object.entries(answers)) {
+      const label = (ans.text || ans.name || '').toLowerCase().replace(/[^a-z]/g,'');
+      const keyN  = key.toLowerCase().replace(/[^a-z]/g,'');
+      if (label === keyN || ans.name === key) {
+        const v = ans.answer;
+        if (!v) continue;
+        if (typeof v === 'object') {
+          if (v.first || v.last) return [v.first||'', v.last||''].join(' ').trim();
+          if (v.datetime) return v.datetime;
+          if (v.date) return v.time ? `${v.date} ${v.time}` : v.date;
+          if ('month' in v || 'year' in v) {
+            if (!v.year) return '';
+            const mo = String(v.month||'').padStart(2,'0');
+            const dy = String(v.day||'').padStart(2,'0');
+            const yr = v.year;
+            const hr = v.hour || v.timeInput || '7';
+            const mn = String(v.min||'0').padStart(2,'0');
+            const ap = v.ampm || 'AM';
+            return `${mo}-${dy}-${yr} ${hr}:${mn} ${ap}`;
+          }
+          return Object.values(v).filter(Boolean).join(' ').trim();
+        }
+        return String(v).trim();
+      }
+    }
+  }
+  return '';
+}
+
+function parseDateFromJF(str) {
+  if (!str) return null;
+  function parseTime(timeStr) {
+    if (!timeStr) return [0, 0];
+    const ampm = timeStr.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)/i);
+    if (ampm) {
+      let h = +ampm[1], min = +ampm[2];
+      const period = ampm[3].toUpperCase();
+      if (period === 'PM' && h !== 12) h += 12;
+      if (period === 'AM' && h === 12) h = 0;
+      return [h, min];
+    }
+    const plain = timeStr.match(/(\d{1,2}):(\d{2})/);
+    if (plain) return [+plain[1], +plain[2]];
+    return [0, 0];
+  }
+  str = str.trim();
+  let m;
+  if ((m = str.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}:\d{2}.*)/))) {
+    const [h, min] = parseTime(m[4]);
+    return new Date(+m[1], +m[2]-1, +m[3], h, min, 0);
+  }
+  if ((m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/))) {
+    return new Date(+m[1], +m[2]-1, +m[3], 7, 0, 0);
+  }
+  if ((m = str.match(/(\d{2})\s(\d{2})\s(\d{4})\s+([\d:]+(?:\s*[AP]M)?)/i))) {
+    const [h, min] = parseTime(m[4]);
+    return new Date(+m[3], +m[1]-1, +m[2], h, min, 0);
+  }
+  if ((m = str.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})\s+([\d:]+(?:\s*[AP]M)?)/i))) {
+    const [h, min] = parseTime(m[4]);
+    return new Date(+m[3], +m[1]-1, +m[2], h, min, 0);
+  }
+  if ((m = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/))) {
+    return new Date(+m[3], +m[1]-1, +m[2], 7, 0, 0);
+  }
+  if ((m = str.match(/\w+,\s+(\w+)\s+(\d{1,2}),?\s+(\d{4})\s+([\d:]+(?:\s*[AP]M)?)/i))) {
+    const months = {january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11};
+    const mo = months[m[1].toLowerCase()];
+    if (mo !== undefined) {
+      const [h, min] = parseTime(m[4]);
+      return new Date(+m[3], mo, +m[2], h, min, 0);
+    }
+  }
+  const d = new Date(str);
+  return isNaN(d) ? null : d;
+}
 
 // Independent event picker, deliberately NOT tied to `event-name` (which only
 // populates via Groups tab → Kick Off Event, a heavyweight pre-round flow).
 // Photo curation is retroactive and event-independent of any live scoring
 // session — you should be able to open GS and curate a past event's photos
-// without spinning up a scoring session for it first. Mirrors grpLoadEventNames()
-// exactly (same Registration form, same QIDs) but writes to its own dropdown.
+// without spinning up a scoring session for it first.
+//
+// Queries the Request Event form (233113019726045) — not the Registration/RSVP
+// form Groups tab uses — since that's the one with a real Date & Time field.
+// getAnswer()/parseDateFromJF() ported verbatim from the portal's own
+// parseEventSubmissions(), so date parsing behaves identically in both places.
 async function loadPhotosEventNames(preselectName) {
   const loadBtn = document.getElementById('photos-load-events-btn');
   const sel      = document.getElementById('photos-event-select');
@@ -6306,10 +6393,10 @@ async function loadPhotosEventNames(preselectName) {
   if (!sel) return;
   loadBtn.disabled = true;
   loadBtn.textContent = '⏳';
-  if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Loading event names from Registration form…'; }
+  if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Loading events from Request Event form…'; }
 
   try {
-    const resp = await fetch(`/api/jotform/submissions/${REG_FORM_ID_REG}`, {
+    const resp = await fetch(`/api/jotform/submissions/${REQUEST_FORM_ID}`, {
       headers: { 'Content-Type': 'application/json' }
     });
     if (!resp.ok) {
@@ -6321,47 +6408,38 @@ async function loadPhotosEventNames(preselectName) {
     if (data.responseCode !== 200) throw new Error(data.message || `Jotform error (${data.responseCode})`);
 
     const subs = data.content || [];
-    if (!subs.length) throw new Error('No submissions found in Registration form.');
+    if (!subs.length) throw new Error('No submissions found in Request Event form.');
 
-    // Scope to "active" events — recent registration activity, not the full
-    // historical archive Groups tab needs. Filtering by the submission's own
-    // created_at (not the event name) since these names aren't year-prefixed
-    // like BF Series names, so there's no reliable date to parse out of the
-    // name itself. Registration timing correlates well with event recency.
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
-    const recentSubs = subs.filter(sub => {
-      const created = new Date(sub.created_at);
-      return !isNaN(created) && created >= cutoff;
-    });
-    if (!recentSubs.length) throw new Error('No registrations in the last 30 days — nothing "active" to show.');
+    const parsed = subs.map(s => {
+      const a = s.answers || {};
+      const name    = getAnswer(a, ['Event Name','eventName']);
+      const dateStr = getAnswer(a, ['Date & Time','dateTime','date']);
+      const dt      = parseDateFromJF(dateStr);
+      return { name, dt };
+    }).filter(e => e.name && e.dt);
 
-    const REG_QID_EVT = '3'; // Event Name — same QID as Groups tab
-    // Sort by each event's most recent registration timestamp, not a string
-    // sort on the name — string order doesn't reflect real chronology for
-    // names like "Sat 7/18" vs "Sat 7/11" (no year prefix to sort on).
-    const lastActivity = new Map();
-    recentSubs.forEach(sub => {
-      const ans = sub.answers || {};
-      const name = ans[REG_QID_EVT]?.answer;
-      if (typeof name !== 'string' || !name.trim()) return;
-      const n = name.trim();
-      const t = new Date(sub.created_at).getTime();
-      if (!lastActivity.has(n) || t > lastActivity.get(n)) lastActivity.set(n, t);
-    });
-    const eventNames = [...lastActivity.keys()].sort((a, b) => lastActivity.get(b) - lastActivity.get(a));
+    if (!parsed.length) throw new Error('No events with a valid name + date found.');
 
-    if (!eventNames.length) throw new Error('No event names found in form answers.');
+    // Active window — same 7-days-back-through-upcoming scope as the portal's
+    // Photo Capture event picker (Dev-57), for consistency across both tools.
+    const windowStart = new Date(); windowStart.setDate(windowStart.getDate() - 7); windowStart.setHours(0,0,0,0);
+    const active = parsed.filter(e => e.dt >= windowStart);
+    if (!active.length) throw new Error('No events in the active window (last 7 days through upcoming).');
 
-    // Preselect: explicit arg, else whatever's live in event-name (harmless
-    // bonus if a scoring session happens to be active), else nothing.
+    // Dedupe by name (a Request Event submission is normally one row per
+    // event, but guard against duplicates), sort soonest-first by real date.
+    const byName = new Map();
+    active.forEach(e => { if (!byName.has(e.name)) byName.set(e.name, e.dt); });
+    const eventNames = [...byName.entries()].sort((a,b) => a[1] - b[1]).map(([n]) => n);
+
     const savedName = preselectName || document.getElementById('event-name')?.value?.trim() || '';
     sel.innerHTML = '<option value="">— select event —</option>' +
       eventNames.map(n =>
-        `<option value="${n.replace(/"/g,'&quot;')}"${n === savedName ? ' selected' : ''}>${n}</option>`
+        `<option value="${n.replace(/"/g,'&quot;')}"${n === savedName ? ' selected' : ''}>${n} · ${byName.get(n).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</option>`
       ).join('');
 
     _photosEventsLoaded = true;
-    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = `✓ Loaded ${eventNames.length} event${eventNames.length!==1?'s':''}.`; }
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = `✓ Loaded ${eventNames.length} active event${eventNames.length!==1?'s':''}.`; }
     if (sel.value) loadPhotosTab();
 
   } catch(err) {
@@ -7839,7 +7917,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.20 · 2026-07-07';
+const GS_VERSION = 'v8.21 · 2026-07-07';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
