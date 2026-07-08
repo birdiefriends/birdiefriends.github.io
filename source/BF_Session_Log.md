@@ -904,3 +904,64 @@ Worker pasted/deployed twice this session (once for each new table's routes).
 
 **Final portal version: v3.17.24 · 2026-07-07**
 **Dev-58 closed.**
+
+---
+
+### Addendum to Dev-58 — same calendar day, appended in error, kept intentionally
+
+Brian opened a fresh chat the same morning intending to start Dev-59, but the conversation continued directly from Dev-58's close without a session boundary — an accidental append, not a planning choice. Rather than retroactively split the record, Brian chose to document this whole block as part of Dev-58 as-is, and start a **legitimate Dev-59** fresh next time. Everything below happened after the "Dev-58 closed" line above, in the same chat.
+
+**Photo Capture — event picker + containerization corrections (portal, v3.17.17–v3.17.20):**
+- Free-text event name field replaced with a dropdown — non-hosted events, 7-day-back-through-upcoming window, plus a 📁 All Events option surfacing legacy/test rows.
+- Photo list containerizes by Event → Section (story order) instead of a flat wrap.
+- `PATCH /photos/:id` extended to accept `event_name`/`section` corrections — used to retag 3 test photos onto `2026 BFSeries#5`.
+- Photos moved to the top of the Live Panel (no-scroll access); new `.icon-action-btn` component (fixed circle, icon-top/label-below) replaced oval buttons for Open Camera/Upload specifically — scoped as the first migrated surface, not an app-wide rewrite. UX rationalization discussed in-chat (icon-action-btn for parallel/frequent/space-constrained actions; oval for single-primary/stateful-label/high-stakes actions) — not yet written into a doc.
+
+**GS groupings → D1 sync — closes the tee-time data gap:**
+- New D1 table `event_groupings`; `POST /groupings/publish` (replace-on-publish, fires from GS's `grpPublish()` alongside its existing Netlify deploy) and `GET /groupings` (PIN-gated).
+- Verified live with real data: 19 players, 5 groups, Series #5 Preliminary grouping.
+
+**Reactive security sweep:** `GET /groupings` shipped with no PIN originally, caught same-session — fixed. Prompted a full 39-route audit; found and PIN-gated 3 more pre-existing open routes (`DELETE /subscription/:id`, `GET /subscriptions`, `GET /notifications`). Deliberately left `GET /members/:player_id/prefs` open — genuinely self-service, gating it would break the feature. Brian flagged the reactive pattern itself; logged as its own backlog item (Commissioner PIN architecture, no overall plan) rather than just fixed and forgotten.
+
+**Live Panel Photo Capture — full player-facing build (portal, v3.17.19–v3.17.21):**
+- Two hot buttons — Open Camera (zero-tap) and Upload (existing file) — added to Live Panel.
+- `/photos/upload` split into admin (PIN, explicit section) and player (no PIN, trust-based on `currentPlayer`, same model as Scorecard/CttP) modes.
+- Server-side auto-classification (`classifyPhotoSection()`): scorecard-submitted (client-reported) → post_round; else compares `captured_at` against real tee time from `event_groupings`, falling back to event start time, falling back to on_course.
+- Upload path: minimal hand-rolled JPEG EXIF reader (DateTimeOriginal), always resolves through a 3-chip dialog pre-selected with the best guess — Open Camera skips this since timing is unambiguous.
+- **Bug found and fixed:** Android 14/15 Chrome regression silently drops `capture="environment"` to the Photo Picker instead of the camera (Chrome issue 317289301, not an app bug). Fixed via the `android/allowCamera` bogus-MIME-type workaround, restoring an explicit Camera option in the chooser (a 3-tap path now, not zero-tap — Android's `Intent.createChooser()` deliberately disables "remember this choice" by design, confirmed via Google's own docs, not fixable from the web side). **Confirmed working on Brian's device** — camera launches after a chooser dialog.
+
+**Photo metadata investigation — real-world test:** Brian's Oakley Meta Vanguard photo, shared via a direct connector, retained full EXIF (`Make: Meta, Model: Vanguard, DateTimeOriginal` present) — contradicting his earlier GLS experience, suggesting export *path* (direct share vs. re-share through another platform) determines EXIF survival, not the glasses themselves.
+
+**Oakley Meta live integration — scoped, not built:** Meta's Wearables Device Access Toolkit (DAT) is real (developer preview, supports Oakley Meta HSTN, 18Birdies cited as an early partner) but is a native iOS/Kotlin SDK — a separate app project, not a portal.html change, and gated on Meta's still-limited developer access. **MacroDroid folder-watch alternative discussed and scoped in detail** (trigger on Meta AI's phone-sync folder → HTTP POST to the existing `/photos/upload` route, zero new backend code) as the actual near-term plan — not built, explicitly held for later testing. Confirmed the real import chain: glasses → Meta AI app auto-import (case-close trigger, or manual) → phone gallery → (future) automation → Worker. No true real-time path without the native SDK.
+
+**Capture-window debate — captured, not resolved:** `LIVE_EVENT_HOURS = 8` gates the whole Live Panel including Photos. Brian's real post-round pattern often runs longer. Decision: **keep 8hrs for now**, observe real player behavior at #5 before changing anything. Options discussed but not built: a separate longer-window Gear-menu capture path (simpler than Live Panel's, since post-window is definitionally post_round, no classification needed) vs. relying on players to contact Brian directly. Explicitly distinguished from an eventual GSL-type always-on capture surface — different tier of the same capability, not a stretched version of today's bounded-round assumptions. Photo republish flagged as coupled to the (still unbuilt) Publish step, not a separate problem.
+
+**GS Photo Organizer — native panel, full build (GS v8.18–v8.26):**
+- New nav tab 6 "📸 Photos" — reuses the Dev-57 Worker routes wholesale, zero new backend for the base feature.
+- **Design correction mid-build:** initially coupled to `event-name` (only set via Groups tab → Kick Off Event) — Brian caught this immediately as the wrong coupling (photo curation is retroactive, shouldn't require spinning up a live scoring session). Rebuilt with its own independent event picker.
+- **Second correction:** that independent picker initially queried the Registration/RSVP form with no filtering, surfacing the full historical archive back to May — fixed to query the correct form (**Request Event**, which has the real Date & Time field, not Registration) with the same 7-day-back-through-upcoming window as the portal's picker, using `getAnswer()`/`parseDateFromJF()` ported verbatim from the portal for identical parsing behavior in both tools.
+- **Chronological sort bug found and fixed:** `captured_at` was computed for classification purposes only and then discarded — photos were actually sorting by upload time, not real capture time. Added a `captured_at` column (D1 migration executed), persisted at upload (EXIF value, or upload-instant for Open Camera since those are simultaneous), `GET /photos` now sorts by it.
+- **Redesigned to 3-column layout** (one column per chapter) per Brian's request, anticipating ~40 photos/event at scale — chronological within each column, visible capture-time label per thumbnail so the order is verifiable at a glance, not just trusted.
+- **Chapter-edit dropdown** added to every thumbnail — direct one-click reassignment, replacing the need for a manual PATCH/curl correction.
+
+**GHIN → GS HCP import — built and iterated three times against real failures, not shipped speculatively:**
+- "Paste GHIN List" feature added to Groups tab HCP table, reusing `grpCalcTeeAndQuota`/`grpGetEstimatedQuota` for identical tee/quota derivation to manual entry.
+- **v1** assumed clean tab-separated column paste — broken immediately: GHIN's drag-select triggers the browser's link-drag gesture instead of a text selection (a real GHIN/browser interaction issue, confirmed by Brian, not fixable from our side), forcing Ctrl+A (whole-page select) as the only viable method, which a column-based parser can't handle.
+- **v2** attempted a markdown-link-smashed-text fallback — insufficient once real full-page paste data (nav, footer, copyright junk) was actually tested against it.
+- **v3 (shipped, v8.25):** complete rewrite — searches the whole pasted blob for each roster player's name anywhere in the text, grabs the nearest plausible handicap number (-10 to 54 range, handles `+1.7` plus-handicaps) within a window after it. No row/column assumptions at all. Verified 23/23 against Brian's actual real GHIN data plus realistic nav/footer noise before shipping.
+- **v4 (shipped, v8.26):** real-world test came back 10/20 matched. Diagnosed the 10 "not found" as two distinct causes, not one bug — genuine BF-nickname-vs-GHIN-formal-name mismatches (BJ Kolonia↔Brian Kolonia, Chooch Wernett↔Charlie Wernett, Rich Penberg↔Richard Penberg) vs. players simply absent from what was pasted (including Brian Hager himself — GHIN's `/following` page excludes the account owner by definition). Repurposed the existing Profiles-tab `nickname` field (previously just a display label) as a manual GHIN-alias slot, checked as a fallback search term. **Not yet re-tested with real aliases entered** — first thing to verify at Dev-59.
+
+**Also touched:** GS_VERSION was being silently left stale across edits — caught and corrected (now bumped every GS deploy, v8.17→v8.26, matching the portal's existing version-bump discipline). Clarified GS's actual local-pull mechanism is `Launch_Golf_Scorer.bat` (local-only, not in the GitHub library, auto-pulls on launch) — corrected an earlier wrong claim that no pull mechanism existed.
+
+**Carry-forward for the real Dev-59:**
+- **BF name ↔ GHIN name mapping table, with a "no GHIN record" map** — Brian's explicit next-session starting focus. The Profiles-tab nickname-as-alias fix is a stopgap; a proper dedicated mapping (plus a way to flag players who genuinely have no GHIN account, so they stop showing as false "not found" every time) is the real ask.
+- Re-verify the GHIN paste import end-to-end once BJ/Chooch/Rich aliases are actually entered in Profiles.
+- Confirm Ron Grow, Wilbur Hlay, Mohamed Walli, Jeremy Burkett, Lou Strohl, Rich Potts are actually on Brian's GHIN "Following" list (open question, not a code issue).
+- GS `results.html` photo-collage insertion (Publish) — Photo Organizer curation is fully built; taking the *approved* set and actually inserting it into the public page is not. Real gap Brian named himself, not yet scoped in detail.
+- Photo republish process — deferred with Publish itself, captured so it isn't a surprise later.
+- Capture-window (`LIVE_EVENT_HOURS = 8`) — holding as-is, revisit after observing real player behavior at #5.
+- Everything still carried from Dev-57/58 untouched: icon-action-btn migration beyond Live Panel Photos (Gathering panel's Repeat/Template/Cancel row flagged as next candidate), `worker.js` size/organization (now even larger after this session's additions), full `bf_architecture.html` ERD redraw, stale Worker Endpoints reference table, Commissioner PIN architecture (logged, not urgent), push notification preference center, player picker rethink.
+
+**Portal work in this addendum topped out at v3.17.21** (Live Panel Photo Capture + icon-action-btn). The live `portal.html` currently reflects v3.17.24, from the separate parallel session that used the actual Dev-58 slot for Gatherings bug fixes — no conflict, that work simply landed after this block's.
+**Final GS version: v8.26 · 2026-07-07**
+**Addendum closed. Next session opens as a legitimate Dev-59.**
