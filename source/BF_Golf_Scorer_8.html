@@ -658,6 +658,18 @@
       <div class="card-title" style="margin-bottom:0">Player HCPs <span id="grp-hcp-count" style="font-size:0.8rem;font-weight:400;color:var(--text-muted)"></span></div>
       <div style="display:flex;gap:8px;align-items:center">
         <span style="font-size:0.78rem;color:var(--text-muted)">Tab through to update HCPs, then drag into groups below</span>
+        <button class="btn btn-secondary btn-sm" onclick="grpToggleGhinPaste()">📋 Paste GHIN List</button>
+      </div>
+    </div>
+    <div id="grp-ghin-paste-panel" style="display:none;margin-bottom:12px;padding:10px;border:1.5px dashed var(--border);border-radius:8px;background:var(--surface)">
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">
+        Select the GHIN table (drag or Ctrl+A), Ctrl+C, then paste below. One row per line — Name, Club, HCP in any tab/space-separated order works.
+      </div>
+      <textarea id="grp-ghin-paste-input" rows="6" style="width:100%;font-family:monospace;font-size:0.8rem;padding:8px;border:1px solid var(--border);border-radius:6px" placeholder="Tom Arnold&#9;Allentown Municipal&#9;5.1&#10;Adam Costa&#9;Blue Shamrock Golf Club&#9;18.8"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <button class="btn btn-primary btn-sm" onclick="grpApplyGhinPaste()">Apply to Matching Players</button>
+        <button class="btn btn-secondary btn-sm" onclick="grpToggleGhinPaste()">Cancel</button>
+        <span id="grp-ghin-paste-result" style="font-size:0.8rem"></span>
       </div>
     </div>
     <div style="overflow-x:auto">
@@ -7106,6 +7118,86 @@ function grpTableUpdateHcp(id, val) {
   grpSaveData();
 }
 
+function grpToggleGhinPaste() {
+  const panel = document.getElementById('grp-ghin-paste-panel');
+  if (!panel) return;
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  if (opening) {
+    document.getElementById('grp-ghin-paste-input').value = '';
+    document.getElementById('grp-ghin-paste-result').textContent = '';
+    document.getElementById('grp-ghin-paste-input').focus();
+  }
+}
+
+// Parses pasted GHIN table text (Name / Club / HCP, tab-separated when copied
+// straight from an HTML table — Chrome preserves that structure on copy) and
+// applies matched HCPs through the same recalculation path as manual entry
+// (grpCalcTeeAndQuota/grpGetEstimatedQuota), so tee/quota derivation is
+// identical either way. Matching is name-based, case/whitespace-insensitive —
+// unmatched rows (GHIN name not in the current roster, or a spelling
+// mismatch) are reported, never silently dropped or guessed at.
+function grpApplyGhinPaste() {
+  const raw = document.getElementById('grp-ghin-paste-input').value;
+  const resultEl = document.getElementById('grp-ghin-paste-result');
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) { resultEl.textContent = 'Nothing pasted.'; resultEl.style.color = '#a32d2d'; return; }
+
+  const norm = s => (s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const rosterByNorm = new Map(grpPlayers.map(p => [norm(p.name), p]));
+
+  let matched = 0;
+  const unmatchedNames = [];
+  const badRows = [];
+
+  lines.forEach(line => {
+    // Prefer real tabs (genuine table copy); fall back to 2+ spaces as a
+    // column break if tabs got collapsed somewhere in the copy path.
+    let cols = line.includes('\t') ? line.split('\t') : line.split(/ {2,}/);
+    cols = cols.map(c => c.trim()).filter(c => c !== '');
+    if (cols.length < 2) { badRows.push(line); return; }
+
+    // HCP is whichever column parses as a number (handles +1.7, 20.0, etc.)
+    // — scanned from the end since Name/Club could theoretically contain
+    // stray digits, so don't assume a fixed column position blindly.
+    let hcpStr = null;
+    for (let i = cols.length - 1; i >= 0; i--) {
+      if (/^[+\-]?\d+(\.\d+)?$/.test(cols[i])) { hcpStr = cols[i]; break; }
+    }
+    if (hcpStr === null) { badRows.push(line); return; }
+
+    const name = cols[0]; // Name is always the first column in GHIN's export
+    const player = rosterByNorm.get(norm(name));
+    if (!player) { unmatchedNames.push(name); return; }
+
+    const hcp = parseFloat(hcpStr);
+    if (isNaN(hcp)) { badRows.push(line); return; }
+
+    player.hcp = hcp;
+    matched++;
+  });
+
+  // Recalculate tee/quota for every matched player, then re-render the whole
+  // table once — simpler than patching each row's DOM individually the way
+  // single-field manual entry does via grpTableUpdateHcp's live-update path.
+  grpPlayers.forEach(p => {
+    if (p.hcp !== null && !isNaN(p.hcp)) {
+      p.isNoHcp = false;
+      const { tee, quota } = grpCalcTeeAndQuota(p.hcp, null);
+      p.tee   = tee;
+      p.quota = grpGetEstimatedQuota(p.name, p.hcp, tee) ?? quota;
+    }
+  });
+  grpRenderHcpTable();
+  grpSaveData();
+
+  const parts = [`✓ ${matched} matched and updated`];
+  if (unmatchedNames.length) parts.push(`⚠ ${unmatchedNames.length} not found: ${unmatchedNames.join(', ')}`);
+  if (badRows.length) parts.push(`${badRows.length} row${badRows.length!==1?'s':''} couldn't be parsed`);
+  resultEl.textContent = parts.join(' · ');
+  resultEl.style.color = unmatchedNames.length || badRows.length ? '#856404' : '#1a6b30';
+}
+
 function grpTableSetTee(id, tee) {
   const p = grpPlayers.find(x => x.id === id);
   if (!p) return;
@@ -7949,7 +8041,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.22 · 2026-07-07';
+const GS_VERSION = 'v8.23 · 2026-07-07';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
