@@ -663,7 +663,7 @@
     </div>
     <div id="grp-ghin-paste-panel" style="display:none;margin-bottom:12px;padding:10px;border:1.5px dashed var(--border);border-radius:8px;background:var(--surface)">
       <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">
-        Ctrl+A on the GHIN page, Ctrl+C, paste below — the whole page is fine, nav/footer junk gets ignored automatically. Just needs each player's name to appear somewhere near their HCP.
+        Ctrl+A on the GHIN page, Ctrl+C, paste below — the whole page is fine, nav/footer junk gets ignored automatically. Just needs each player's name to appear somewhere near their HCP. If GHIN uses a formal name (e.g. "Brian Kolonia") but your roster uses a nickname ("BJ Kolonia"), set the GHIN name in that player's <strong>Nickname</strong> field on the Profiles tab once — it'll be checked automatically from then on.
       </div>
       <textarea id="grp-ghin-paste-input" rows="6" style="width:100%;font-family:monospace;font-size:0.8rem;padding:8px;border:1px solid var(--border);border-radius:6px" placeholder="Paste the whole GHIN page here — Ctrl+A, Ctrl+C is fine"></textarea>
       <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
@@ -7130,14 +7130,15 @@ function grpToggleGhinPaste() {
   }
 }
 
-// Searches the ENTIRE pasted blob for each known player's name — not a
-// per-line/per-column parse — because Ctrl+A on GHIN selects the whole page
-// (nav, footer, everything), not just the table, and the exact line/column
-// structure of that plain-text dump varies by browser and paste target in
-// ways that aren't worth chasing. For each roster player found anywhere in
-// the blob, grabs the first number that looks like a real handicap (-10 to
-// 54, so +1.7 plus-handicaps and 54.0 max both work) within a short window
-// of text right after the name. Doesn't care about rows, columns, tabs,
+// Searches the ENTIRE pasted blob for each known player's name (or, as a
+// fallback, their Profile nickname — see below) — not a per-line/per-column
+// parse — because Ctrl+A on GHIN selects the whole page (nav, footer,
+// everything), not just the table, and the exact line/column structure of
+// that plain-text dump varies by browser and paste target in ways that
+// aren't worth chasing. For each roster player found anywhere in the blob,
+// grabs the first number that looks like a real handicap (-10 to 54, so
+// +1.7 plus-handicaps and 54.0 max both work) within a short window of text
+// right after the matched name. Doesn't care about rows, columns, tabs,
 // brackets, or URLs at all — just proximity between a known name and a
 // plausible number, which holds regardless of exactly how GHIN's page dumps
 // as plain text.
@@ -7147,19 +7148,35 @@ function grpApplyGhinPaste() {
   if (!raw || !raw.trim()) { resultEl.textContent = 'Nothing pasted.'; resultEl.style.color = '#a32d2d'; return; }
 
   const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Profiles tab's `nickname` field, repurposed as a manual GHIN-alias slot —
+  // roster name is often the casual name BF uses ("BJ Kolonia"), while GHIN
+  // registers the formal one ("Brian Kolonia"). Checked as a fallback search
+  // term whenever it differs from the roster name, so a one-time nickname
+  // entry in Profiles fixes the mismatch for every future paste, not just this one.
+  const profiles = getProfiles();
+
   let matched = 0;
   const notFound = [];
 
   grpPlayers.forEach(p => {
     if (!p.name) return;
-    const nameRe = new RegExp(escapeRegex(p.name), 'i');
-    const idx = raw.search(nameRe);
+    const searchTerms = [p.name];
+    const nick = profiles[p.name]?.nickname;
+    if (nick && nick.trim() && nick.trim().toLowerCase() !== p.name.trim().toLowerCase()) {
+      searchTerms.push(nick.trim());
+    }
+
+    let idx = -1, matchedTerm = p.name;
+    for (const term of searchTerms) {
+      const found = raw.search(new RegExp(escapeRegex(term), 'i'));
+      if (found !== -1) { idx = found; matchedTerm = term; break; }
+    }
     if (idx === -1) { notFound.push(p.name); return; }
 
-    // Look in a window right after the name match — covers smashed
+    // Look in a window right after the matched term — covers smashed
     // "NameClub12.5", tab/space-separated "Name  Club  12.5", and
     // newline-separated layouts alike without needing to know which.
-    const windowText = raw.slice(idx + p.name.length, idx + p.name.length + 300);
+    const windowText = raw.slice(idx + matchedTerm.length, idx + matchedTerm.length + 300);
     const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
     const hcp = numMatches
       .map(n => parseFloat(n))
@@ -8033,7 +8050,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.25 · 2026-07-07';
+const GS_VERSION = 'v8.26 · 2026-07-07';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
