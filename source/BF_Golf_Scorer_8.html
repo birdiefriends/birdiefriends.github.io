@@ -663,9 +663,9 @@
     </div>
     <div id="grp-ghin-paste-panel" style="display:none;margin-bottom:12px;padding:10px;border:1.5px dashed var(--border);border-radius:8px;background:var(--surface)">
       <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">
-        Select the GHIN table (drag or Ctrl+A), Ctrl+C, then paste below. One row per line — Name, Club, HCP in any tab/space-separated order works.
+        Ctrl+A on the GHIN page, Ctrl+C, paste below — the whole page is fine, nav/footer junk gets ignored automatically. Just needs each player's name to appear somewhere near their HCP.
       </div>
-      <textarea id="grp-ghin-paste-input" rows="6" style="width:100%;font-family:monospace;font-size:0.8rem;padding:8px;border:1px solid var(--border);border-radius:6px" placeholder="Tom Arnold&#9;Allentown Municipal&#9;5.1&#10;Adam Costa&#9;Blue Shamrock Golf Club&#9;18.8"></textarea>
+      <textarea id="grp-ghin-paste-input" rows="6" style="width:100%;font-family:monospace;font-size:0.8rem;padding:8px;border:1px solid var(--border);border-radius:6px" placeholder="Paste the whole GHIN page here — Ctrl+A, Ctrl+C is fine"></textarea>
       <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
         <button class="btn btn-primary btn-sm" onclick="grpApplyGhinPaste()">Apply to Matching Players</button>
         <button class="btn btn-secondary btn-sm" onclick="grpToggleGhinPaste()">Cancel</button>
@@ -7130,71 +7130,43 @@ function grpToggleGhinPaste() {
   }
 }
 
-// Parses pasted GHIN table text (Name / Club / HCP, tab-separated when copied
-// straight from an HTML table — Chrome preserves that structure on copy) and
-// applies matched HCPs through the same recalculation path as manual entry
-// (grpCalcTeeAndQuota/grpGetEstimatedQuota), so tee/quota derivation is
-// identical either way. Matching is name-based, case/whitespace-insensitive —
-// unmatched rows (GHIN name not in the current roster, or a spelling
-// mismatch) are reported, never silently dropped or guessed at.
+// Searches the ENTIRE pasted blob for each known player's name — not a
+// per-line/per-column parse — because Ctrl+A on GHIN selects the whole page
+// (nav, footer, everything), not just the table, and the exact line/column
+// structure of that plain-text dump varies by browser and paste target in
+// ways that aren't worth chasing. For each roster player found anywhere in
+// the blob, grabs the first number that looks like a real handicap (-10 to
+// 54, so +1.7 plus-handicaps and 54.0 max both work) within a short window
+// of text right after the name. Doesn't care about rows, columns, tabs,
+// brackets, or URLs at all — just proximity between a known name and a
+// plausible number, which holds regardless of exactly how GHIN's page dumps
+// as plain text.
 function grpApplyGhinPaste() {
   const raw = document.getElementById('grp-ghin-paste-input').value;
   const resultEl = document.getElementById('grp-ghin-paste-result');
-  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-  if (!lines.length) { resultEl.textContent = 'Nothing pasted.'; resultEl.style.color = '#a32d2d'; return; }
+  if (!raw || !raw.trim()) { resultEl.textContent = 'Nothing pasted.'; resultEl.style.color = '#a32d2d'; return; }
 
-  const norm = s => (s || '').toLowerCase().replace(/[^a-z]/g, '');
-  const rosterByNorm = new Map(grpPlayers.map(p => [norm(p.name), p]));
-
+  const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   let matched = 0;
-  const unmatchedNames = [];
-  const badRows = [];
+  const notFound = [];
 
-  lines.forEach(line => {
-    // Prefer real tabs (genuine table copy); fall back to 2+ spaces as a
-    // column break if tabs got collapsed somewhere in the copy path.
-    let cols = line.includes('\t') ? line.split('\t') : line.split(/ {2,}/);
-    cols = cols.map(c => c.trim()).filter(c => c !== '');
+  grpPlayers.forEach(p => {
+    if (!p.name) return;
+    const nameRe = new RegExp(escapeRegex(p.name), 'i');
+    const idx = raw.search(nameRe);
+    if (idx === -1) { notFound.push(p.name); return; }
 
-    // Fallback: some paste paths (e.g. rich/linked content pasted somewhere
-    // that markdown-ifies it first) yield "[NameClubSmashedTogether](url)[12.5](url)"
-    // with no delimiter between Name and Club at all. Can't cleanly split those
-    // two, but don't need to — only the player name (always first) and the
-    // trailing HCP number actually matter for matching, so strip markdown
-    // link/URL noise and try a "does this line start with a known player
-    // name" match instead of requiring a clean column split.
-    if (cols.length < 2) {
-      const stripped = line
-        .replace(/^[\*\-•]\s*/, '')
-        .replace(/\]\(https?:\/\/[^\)]*\)/g, ']')
-        .replace(/[\[\]]/g, '');
-      const nums = stripped.match(/[+\-]?\d+\.\d+/g);
-      const hcpGuess = nums && nums.length ? nums[nums.length - 1] : null;
-      if (hcpGuess) {
-        const smashedLower = stripped.toLowerCase();
-        const found = grpPlayers.find(p => p.name && smashedLower.startsWith(p.name.toLowerCase()));
-        if (found) { cols = [found.name, '', hcpGuess]; }
-      }
-    }
-    if (cols.length < 2) { badRows.push(line); return; }
+    // Look in a window right after the name match — covers smashed
+    // "NameClub12.5", tab/space-separated "Name  Club  12.5", and
+    // newline-separated layouts alike without needing to know which.
+    const windowText = raw.slice(idx + p.name.length, idx + p.name.length + 300);
+    const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
+    const hcp = numMatches
+      .map(n => parseFloat(n))
+      .find(n => !isNaN(n) && n >= -10 && n <= 54);
 
-    // HCP is whichever column parses as a number (handles +1.7, 20.0, etc.)
-    // — scanned from the end since Name/Club could theoretically contain
-    // stray digits, so don't assume a fixed column position blindly.
-    let hcpStr = null;
-    for (let i = cols.length - 1; i >= 0; i--) {
-      if (/^[+\-]?\d+(\.\d+)?$/.test(cols[i])) { hcpStr = cols[i]; break; }
-    }
-    if (hcpStr === null) { badRows.push(line); return; }
-
-    const name = cols[0]; // Name is always the first column in GHIN's export
-    const player = rosterByNorm.get(norm(name));
-    if (!player) { unmatchedNames.push(name); return; }
-
-    const hcp = parseFloat(hcpStr);
-    if (isNaN(hcp)) { badRows.push(line); return; }
-
-    player.hcp = hcp;
+    if (hcp === undefined) { notFound.push(`${p.name} (no HCP-looking number nearby)`); return; }
+    p.hcp = hcp;
     matched++;
   });
 
@@ -7213,10 +7185,9 @@ function grpApplyGhinPaste() {
   grpSaveData();
 
   const parts = [`✓ ${matched} matched and updated`];
-  if (unmatchedNames.length) parts.push(`⚠ ${unmatchedNames.length} not found: ${unmatchedNames.join(', ')}`);
-  if (badRows.length) parts.push(`${badRows.length} row${badRows.length!==1?'s':''} couldn't be parsed`);
+  if (notFound.length) parts.push(`⚠ ${notFound.length} not found in pasted text: ${notFound.join(', ')}`);
   resultEl.textContent = parts.join(' · ');
-  resultEl.style.color = unmatchedNames.length || badRows.length ? '#856404' : '#1a6b30';
+  resultEl.style.color = notFound.length ? '#856404' : '#1a6b30';
 }
 
 function grpTableSetTee(id, tee) {
@@ -8062,7 +8033,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.24 · 2026-07-07';
+const GS_VERSION = 'v8.25 · 2026-07-07';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
