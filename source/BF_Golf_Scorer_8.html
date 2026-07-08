@@ -7155,6 +7155,27 @@ function grpApplyGhinPaste() {
     // column break if tabs got collapsed somewhere in the copy path.
     let cols = line.includes('\t') ? line.split('\t') : line.split(/ {2,}/);
     cols = cols.map(c => c.trim()).filter(c => c !== '');
+
+    // Fallback: some paste paths (e.g. rich/linked content pasted somewhere
+    // that markdown-ifies it first) yield "[NameClubSmashedTogether](url)[12.5](url)"
+    // with no delimiter between Name and Club at all. Can't cleanly split those
+    // two, but don't need to — only the player name (always first) and the
+    // trailing HCP number actually matter for matching, so strip markdown
+    // link/URL noise and try a "does this line start with a known player
+    // name" match instead of requiring a clean column split.
+    if (cols.length < 2) {
+      const stripped = line
+        .replace(/^[\*\-•]\s*/, '')
+        .replace(/\]\(https?:\/\/[^\)]*\)/g, ']')
+        .replace(/[\[\]]/g, '');
+      const nums = stripped.match(/[+\-]?\d+\.\d+/g);
+      const hcpGuess = nums && nums.length ? nums[nums.length - 1] : null;
+      if (hcpGuess) {
+        const smashedLower = stripped.toLowerCase();
+        const found = grpPlayers.find(p => p.name && smashedLower.startsWith(p.name.toLowerCase()));
+        if (found) { cols = [found.name, '', hcpGuess]; }
+      }
+    }
     if (cols.length < 2) { badRows.push(line); return; }
 
     // HCP is whichever column parses as a number (handles +1.7, 20.0, etc.)
@@ -8041,7 +8062,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.23 · 2026-07-07';
+const GS_VERSION = 'v8.24 · 2026-07-07';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
