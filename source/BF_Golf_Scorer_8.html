@@ -6323,14 +6323,32 @@ async function loadPhotosEventNames(preselectName) {
     const subs = data.content || [];
     if (!subs.length) throw new Error('No submissions found in Registration form.');
 
+    // Scope to "active" events — recent registration activity, not the full
+    // historical archive Groups tab needs. Filtering by the submission's own
+    // created_at (not the event name) since these names aren't year-prefixed
+    // like BF Series names, so there's no reliable date to parse out of the
+    // name itself. Registration timing correlates well with event recency.
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+    const recentSubs = subs.filter(sub => {
+      const created = new Date(sub.created_at);
+      return !isNaN(created) && created >= cutoff;
+    });
+    if (!recentSubs.length) throw new Error('No registrations in the last 30 days — nothing "active" to show.');
+
     const REG_QID_EVT = '3'; // Event Name — same QID as Groups tab
-    const eventNames = [...new Set(
-      subs.map(sub => {
-        const ans = sub.answers || {};
-        const evtAnswer = ans[REG_QID_EVT]?.answer;
-        return typeof evtAnswer === 'string' ? evtAnswer.trim() : null;
-      }).filter(Boolean)
-    )].sort().reverse(); // most recent first
+    // Sort by each event's most recent registration timestamp, not a string
+    // sort on the name — string order doesn't reflect real chronology for
+    // names like "Sat 7/18" vs "Sat 7/11" (no year prefix to sort on).
+    const lastActivity = new Map();
+    recentSubs.forEach(sub => {
+      const ans = sub.answers || {};
+      const name = ans[REG_QID_EVT]?.answer;
+      if (typeof name !== 'string' || !name.trim()) return;
+      const n = name.trim();
+      const t = new Date(sub.created_at).getTime();
+      if (!lastActivity.has(n) || t > lastActivity.get(n)) lastActivity.set(n, t);
+    });
+    const eventNames = [...lastActivity.keys()].sort((a, b) => lastActivity.get(b) - lastActivity.get(a));
 
     if (!eventNames.length) throw new Error('No event names found in form answers.');
 
@@ -7821,7 +7839,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.19 · 2026-07-07';
+const GS_VERSION = 'v8.20 · 2026-07-07';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
