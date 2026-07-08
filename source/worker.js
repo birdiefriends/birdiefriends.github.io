@@ -652,38 +652,6 @@ export default {
       }
     }
 
-    // POST /crews/:id/members/remove — remove one member from an existing Crew.
-    // PIN-gated (unlike add, which is host-initiated from the picker; removal is
-    // a data-correction tool, not a normal host action). Added Dev-58 to clean up
-    // crews that had the host accidentally included in their own member list.
-    // Body: { player_id }
-    if (request.method === 'POST' && /^\/crews\/\d+\/members\/remove$/.test(url.pathname)) {
-      const pin = url.searchParams.get('pin');
-      if (pin !== '7797') {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      const crewId = url.pathname.split('/')[2];
-      let body;
-      try { body = await request.json(); } catch(e) {
-        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      const { player_id } = body;
-      if (!player_id) {
-        return new Response(JSON.stringify({ error: 'player_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      try {
-        await env.DB.prepare(`DELETE FROM crew_members WHERE crew_id = ? AND player_id = ?`).bind(crewId, player_id).run();
-        const { results } = await env.DB.prepare(
-          `SELECT player_id FROM crew_members WHERE crew_id = ?`
-        ).bind(crewId).all();
-        return new Response(JSON.stringify({ ok: true, player_ids: results.map(r => r.player_id) }), {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
-      } catch (e) {
-        return new Response(JSON.stringify({ error: 'Database error removing Crew member' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-    }
-
     // POST /registrations — set a player's Yes/No/Sub response for a Gathering (upsert)
     if (request.method === 'POST' && url.pathname === '/registrations') {
       let body;
@@ -1571,6 +1539,14 @@ export default {
         if (!section) {
           section = await classifyPhotoSection(env, { eventName, capturedBy, eventStart, capturedAt, scorecardSubmitted });
         }
+        // Persist the real capture moment, not just use it transiently for
+        // classification then discard it — needed for true chronological sort/
+        // display, not upload-order (Dev-58, caught when 40+ photos/event made
+        // upload-order visibly wrong for storytelling). Open Camera never sends
+        // capturedAt (capture/upload are simultaneous, so upload time IS accurate);
+        // Upload sends it only when EXIF was readable. Either way, fall back to
+        // "now" so this column is always populated with the best available time.
+        const capturedAtFinal = capturedAt || new Date().toISOString();
 
         const mediaType = (file.type || '').startsWith('video/') ? 'video' : 'image';
         const ext    = (file.name && file.name.includes('.')) ? file.name.split('.').pop().toLowerCase() : (mediaType === 'video' ? 'mp4' : 'jpg');
@@ -1582,9 +1558,9 @@ export default {
         });
 
         const result = await env.DB.prepare(
-          `INSERT INTO event_photos (event_name, section, r2_key, captured_by, caption, media_type)
-           VALUES (?, ?, ?, ?, ?, ?)`
-        ).bind(eventName, section, key, capturedBy, caption, mediaType).run();
+          `INSERT INTO event_photos (event_name, section, r2_key, captured_by, caption, media_type, captured_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        ).bind(eventName, section, key, capturedBy, caption, mediaType, capturedAtFinal).run();
 
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id, r2_key: key, media_type: mediaType, section }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -1606,12 +1582,15 @@ export default {
         const isAdmin     = String(pin) === '7797';
         const status      = isAdmin ? (url.searchParams.get('status') || null) : 'approved';
 
-        let sql = `SELECT id, event_name, section, r2_key, media_type, captured_by, caption, is_trophy_moment, curation_status, sort_order, created_at FROM event_photos WHERE 1=1`;
+        let sql = `SELECT id, event_name, section, r2_key, media_type, captured_by, caption, is_trophy_moment, curation_status, sort_order, captured_at, created_at FROM event_photos WHERE 1=1`;
         const binds = [];
         if (eventName) { sql += ` AND event_name = ?`; binds.push(eventName); }
         if (section)    { sql += ` AND section = ?`;    binds.push(section); }
         if (status)      { sql += ` AND curation_status = ?`; binds.push(status); }
-        sql += ` ORDER BY section, sort_order IS NULL, sort_order, created_at`;
+        // Chronological by real capture time (falls back to upload time for
+        // pre-Dev-58 rows with no captured_at) — sort_order stays first-priority
+        // as a manual-override hook for whenever drag-reordering gets built.
+        sql += ` ORDER BY section, sort_order IS NULL, sort_order, COALESCE(captured_at, created_at)`;
 
         const { results } = await d1RetryRead(() => env.DB.prepare(sql).bind(...binds).all());
         return new Response(JSON.stringify({ photos: results }), {
