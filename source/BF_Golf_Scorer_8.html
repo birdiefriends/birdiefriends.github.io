@@ -6479,6 +6479,11 @@ async function loadPhotosTab() {
 
 // Groups by section only (event is already fixed by the Event field above —
 // no cross-event browsing here, unlike the portal's "All Events" admin view).
+// 3-column layout (one per chapter) rather than stacked rows — chosen for
+// scale: a 20-player event averaging 2 photos/player is ~40 photos to curate,
+// and a single vertical stack of stacked groups gets unwieldy fast. Columns
+// keep the whole event's story visible at a glance; each column is internally
+// chronological by real capture time.
 function renderPhotosGrouped(photos) {
   const bySection = new Map();
   photos.forEach(p => {
@@ -6488,11 +6493,28 @@ function renderPhotosGrouped(photos) {
   });
   const ordered = [...PHOTOS_SECTION_ORDER, ...[...bySection.keys()].filter(s => !PHOTOS_SECTION_ORDER.includes(s))];
 
-  return ordered.filter(s => bySection.has(s)).map(s => `
-    <div style="margin-bottom:16px">
-      <div style="font-size:0.8rem;font-weight:700;color:var(--text);margin-bottom:8px">${PHOTOS_SECTION_LABEL[s] || s} (${bySection.get(s).length})</div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px">${bySection.get(s).map(p => renderPhotoThumb(p)).join('')}</div>
-    </div>`).join('');
+  const columns = ordered.map(s => {
+    const items = bySection.get(s) || [];
+    return `
+      <div style="flex:1;min-width:220px">
+        <div style="font-size:0.8rem;font-weight:700;color:var(--text);margin-bottom:8px;position:sticky;top:0;background:var(--card);padding:4px 0;z-index:1">
+          ${PHOTOS_SECTION_LABEL[s] || s} (${items.length})
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${items.length ? items.map(p => renderPhotoThumb(p)).join('') : '<div style="font-size:0.78rem;color:var(--text-muted);padding:8px 0">—</div>'}
+        </div>
+      </div>`;
+  }).join('');
+
+  return `<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">${columns}</div>`;
+}
+
+function fmtCapturedTime(p) {
+  const t = p.captured_at || p.created_at;
+  if (!t) return '';
+  const d = new Date(t.replace(' ', 'T'));
+  if (isNaN(d)) return '';
+  return d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
 function renderPhotoThumb(p) {
@@ -6500,14 +6522,24 @@ function renderPhotoThumb(p) {
                      : p.curation_status === 'rejected' ? '#a32d2d' : '#7a5a00';
   const src = `${PHOTOS_WORKER_BASE}/photos/serve/${p.id}?pin=${PHOTOS_PIN}`;
   const media = p.media_type === 'video'
-    ? `<video src="${src}" controls preload="metadata" style="width:100%;height:100px;object-fit:cover;display:block;background:#000"></video>`
-    : `<img src="${src}" style="width:100%;height:100px;object-fit:cover;display:block" loading="lazy">`;
+    ? `<video src="${src}" controls preload="metadata" style="width:100%;height:120px;object-fit:cover;display:block;background:#000"></video>`
+    : `<img src="${src}" style="width:100%;height:120px;object-fit:cover;display:block" loading="lazy">`;
+  const timeLabel = fmtCapturedTime(p);
+  const sectionOptions = PHOTOS_SECTION_ORDER.map(s =>
+    `<option value="${s}"${p.section === s ? ' selected' : ''}>${PHOTOS_SECTION_LABEL[s]}</option>`
+  ).join('');
   return `
-    <div style="width:140px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card)">
+    <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card)">
       ${media}
       <div style="padding:6px 8px">
-        <div style="font-size:0.68rem;color:var(--text-muted)">${p.captured_by || 'Unknown'}${p.media_type === 'video' ? ' · 🎥' : ''}</div>
+        <div style="font-size:0.68rem;color:var(--text-muted);display:flex;justify-content:space-between">
+          <span>${p.captured_by || 'Unknown'}${p.media_type === 'video' ? ' · 🎥' : ''}</span>
+          <span>${timeLabel}</span>
+        </div>
         <div style="font-size:0.7rem;font-weight:600;color:${statusColor};margin:2px 0 6px">${p.curation_status}${p.is_trophy_moment ? ' · 🏆' : ''}</div>
+        <select onchange="patchPhoto(${p.id},{section:this.value})" style="width:100%;font-size:0.68rem;padding:3px 4px;margin-bottom:5px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text)" title="Reassign chapter">
+          ${sectionOptions}
+        </select>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
           <button class="btn btn-secondary btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchPhoto(${p.id},{curation_status:'approved'})">✓</button>
           <button class="btn btn-secondary btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchPhoto(${p.id},{curation_status:'rejected'})">✕</button>
@@ -7917,7 +7949,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.21 · 2026-07-07';
+const GS_VERSION = 'v8.22 · 2026-07-07';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
