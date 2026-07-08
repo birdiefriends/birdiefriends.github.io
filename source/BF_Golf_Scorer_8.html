@@ -961,10 +961,16 @@
   <div class="card">
     <div class="card-title">📸 Photo Organizer</div>
     <div class="row mb1" style="gap:10px;align-items:center;flex-wrap:wrap">
-      <div style="font-size:0.85rem;color:var(--text-muted)">Event: <strong id="photos-event-label">—</strong></div>
-      <button class="btn btn-secondary btn-sm" onclick="loadPhotosTab()">↻ Refresh</button>
+      <div class="col" style="min-width:220px;flex:1">
+        <select id="photos-event-select" onchange="loadPhotosTab()" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:0.9rem;background:var(--card);color:var(--text)">
+          <option value="">— load events from Jotform —</option>
+        </select>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="loadPhotosEventNames()" id="photos-load-events-btn" title="Reload event list from Jotform Registration form">&#x21BA; Load Events</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadPhotosTab()">↻ Refresh Photos</button>
     </div>
-    <div id="photos-tab-content"><div class="empty-state"><p>Set an event via Groups tab → Kick Off Event first.</p></div></div>
+    <div id="photos-load-status" style="display:none;margin-bottom:10px;font-size:0.85rem"></div>
+    <div id="photos-tab-content"><div class="empty-state"><p>Click "Load Events" to select an event.</p></div></div>
   </div>
 </div>
 
@@ -6285,16 +6291,77 @@ const PHOTOS_WORKER_BASE = 'https://birdiefriends-push.birdiefriends01.workers.d
 const PHOTOS_PIN = '7797';
 const PHOTOS_SECTION_ORDER = ['pre_competition', 'on_course', 'post_round'];
 const PHOTOS_SECTION_LABEL = { pre_competition: '🌅 Pre-Competition', on_course: '⛳ On the Course', post_round: '🏆 Post-Round' };
+let _photosEventsLoaded = false;
+
+// Independent event picker, deliberately NOT tied to `event-name` (which only
+// populates via Groups tab → Kick Off Event, a heavyweight pre-round flow).
+// Photo curation is retroactive and event-independent of any live scoring
+// session — you should be able to open GS and curate a past event's photos
+// without spinning up a scoring session for it first. Mirrors grpLoadEventNames()
+// exactly (same Registration form, same QIDs) but writes to its own dropdown.
+async function loadPhotosEventNames(preselectName) {
+  const loadBtn = document.getElementById('photos-load-events-btn');
+  const sel      = document.getElementById('photos-event-select');
+  const statusEl = document.getElementById('photos-load-status');
+  if (!sel) return;
+  loadBtn.disabled = true;
+  loadBtn.textContent = '⏳';
+  if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Loading event names from Registration form…'; }
+
+  try {
+    const resp = await fetch(`/api/jotform/submissions/${REG_FORM_ID_REG}`, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!resp.ok) {
+      let errMsg = `Server error ${resp.status}`;
+      try { const b = await resp.json(); errMsg = b.error || b.message || errMsg; } catch(e) {}
+      throw new Error(errMsg);
+    }
+    const data = await resp.json();
+    if (data.responseCode !== 200) throw new Error(data.message || `Jotform error (${data.responseCode})`);
+
+    const subs = data.content || [];
+    if (!subs.length) throw new Error('No submissions found in Registration form.');
+
+    const REG_QID_EVT = '3'; // Event Name — same QID as Groups tab
+    const eventNames = [...new Set(
+      subs.map(sub => {
+        const ans = sub.answers || {};
+        const evtAnswer = ans[REG_QID_EVT]?.answer;
+        return typeof evtAnswer === 'string' ? evtAnswer.trim() : null;
+      }).filter(Boolean)
+    )].sort().reverse(); // most recent first
+
+    if (!eventNames.length) throw new Error('No event names found in form answers.');
+
+    // Preselect: explicit arg, else whatever's live in event-name (harmless
+    // bonus if a scoring session happens to be active), else nothing.
+    const savedName = preselectName || document.getElementById('event-name')?.value?.trim() || '';
+    sel.innerHTML = '<option value="">— select event —</option>' +
+      eventNames.map(n =>
+        `<option value="${n.replace(/"/g,'&quot;')}"${n === savedName ? ' selected' : ''}>${n}</option>`
+      ).join('');
+
+    _photosEventsLoaded = true;
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = `✓ Loaded ${eventNames.length} event${eventNames.length!==1?'s':''}.`; }
+    if (sel.value) loadPhotosTab();
+
+  } catch(err) {
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = '⚠ ' + err.message; }
+  } finally {
+    loadBtn.disabled = false;
+    loadBtn.innerHTML = '&#x21BA; Load Events';
+  }
+}
 
 async function loadPhotosTab() {
-  const eventName = document.getElementById('event-name').value.trim();
-  const labelEl   = document.getElementById('photos-event-label');
+  if (!_photosEventsLoaded) { loadPhotosEventNames(); return; }
+  const eventName = document.getElementById('photos-event-select')?.value?.trim() || '';
   const bodyEl    = document.getElementById('photos-tab-content');
-  if (labelEl) labelEl.textContent = eventName || '—';
   if (!bodyEl) return;
 
   if (!eventName) {
-    bodyEl.innerHTML = '<div class="empty-state"><p>Set an event via Groups tab → Kick Off Event first.</p></div>';
+    bodyEl.innerHTML = '<div class="empty-state"><p>Select an event above.</p></div>';
     return;
   }
 
@@ -7754,7 +7821,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.18 · 2026-07-07';
+const GS_VERSION = 'v8.19 · 2026-07-07';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
