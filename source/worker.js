@@ -1515,9 +1515,19 @@ export default {
           section            = form.get('section') || null;
           caption            = form.get('caption') || null;
           capturedBy         = form.get('captured_by') || null;
-          const file          = form.get('file');
+          // Prefer the 'file' field name, but fall back to whatever non-string
+          // (i.e. file-shaped) entry is present under ANY field name — some
+          // clients (e.g. MacroDroid's HTTP Request action) build multipart
+          // bodies without a way to control the part's field name.
+          let file = form.get('file');
           if (!file || typeof file === 'string') {
-            return new Response(JSON.stringify({ error: 'Missing file' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+            for (const [, v] of form.entries()) {
+              if (v && typeof v !== 'string') { file = v; break; }
+            }
+          }
+          if (!file || typeof file === 'string') {
+            const fieldNames = [...form.keys()];
+            return new Response(JSON.stringify({ error: 'Missing file', fields_received: fieldNames, content_type: reqContentType }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
           }
           fileBytes = await file.arrayBuffer();
           fileType  = file.type;
