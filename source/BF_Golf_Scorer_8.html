@@ -6833,6 +6833,15 @@ function grpGetEstimatedQuota(name, newHcp, newTee) {
 
   // NoHCP players
   if (newHcp === null || newHcp === undefined || isNaN(newHcp)) {
+    // E1→E2 transition: E1 was baseline (quota===null), so there's no real
+    // quota yet to regress from. The authoritative rule (see the event-save
+    // logic) is a direct pass-through — E2's quota = E1's raw actual score,
+    // no 50% regression applied until E3. Must be checked before the
+    // quota!==null filter below, since E1's record legitimately has quota:null.
+    if (ph.events.length === 1) {
+      const e1 = ph.events[0];
+      return (e1 && e1.actual !== null && e1.actual !== undefined) ? e1.actual : null;
+    }
     const scoredEvents = ph.events.filter(e => e.quota !== null && e.quota !== undefined);
     if (scoredEvents.length === 0) return null; // still baseline
     const lastEvt = ph.events[ph.events.length - 1];
@@ -6869,6 +6878,17 @@ function grpQuotaBreakdown(name, newHcp, newTee) {
   const lastEvt = ph.events[ph.events.length - 1];
 
   if (isNoHcp) {
+    // Same E1→E2 pass-through as grpGetEstimatedQuota — must be checked before
+    // the quota!==null filter, since E1's own record legitimately has quota:null.
+    if (ph.events.length === 1) {
+      const e1 = ph.events[0];
+      if (e1.actual === null || e1.actual === undefined) {
+        return '<div class="grp-breakdown-row"><b>Baseline event</b> — no quota yet (E1 was baseline).</div>';
+      }
+      return `<div class="grp-breakdown-row grp-bd-label">NoHCP E1 → E2 (pass-through, no regression yet)</div>
+<div class="grp-breakdown-row">E1 (${e1.eventName}) achievement: <b>${e1.actual}</b> pts</div>
+<div class="grp-breakdown-row grp-bd-result">Estimated quota: <b>${Number(e1.actual).toFixed(2)}</b></div>`;
+    }
     if (scoredEvents.length === 0) {
       return '<div class="grp-breakdown-row"><b>Baseline event</b> — no quota yet (E1 was baseline).</div>';
     }
@@ -8131,7 +8151,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.30 · 2026-07-09';
+const GS_VERSION = 'v8.31 · 2026-07-09';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
