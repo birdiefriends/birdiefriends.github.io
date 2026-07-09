@@ -1495,9 +1495,18 @@ export default {
     // never trusted from the client directly. Response: { ok, id, r2_key, media_type, section }
     const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
     if (request.method === 'POST' && url.pathname === '/photos/upload') {
+      // TEMP DEBUG (Dev-59, MacroDroid diagnosis — remove once resolved): captures
+      // exactly what the request looked like regardless of which path/error it
+      // hits, readable via GET /debug/last-upload?pin=7797 without needing the
+      // sending client to be able to display its own response.
+      const dbg = { at: new Date().toISOString() };
       try {
         const reqContentType = (request.headers.get('content-type') || '').toLowerCase();
+        dbg.contentType   = reqContentType;
+        dbg.contentLength = request.headers.get('content-length') || '';
+        dbg.rawQuery      = url.search;
         const isMultipart = reqContentType.includes('multipart/form-data');
+        dbg.isMultipart = isMultipart;
 
         let pin, eventName, eventStart, capturedAt, scorecardSubmitted, section, caption, capturedBy;
         let fileBytes, fileType, fileName, fileSize;
@@ -1505,8 +1514,10 @@ export default {
         if (isMultipart) {
           let form;
           try { form = await request.formData(); } catch(e) {
+            dbg.formDataError = String(e.message || e);
             return new Response(JSON.stringify({ error: 'Invalid form data' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
           }
+          dbg.multipartFields = [...form.keys()];
           pin                = form.get('pin');
           eventName          = form.get('event_name');
           eventStart         = form.get('event_start');
@@ -1526,8 +1537,8 @@ export default {
             }
           }
           if (!file || typeof file === 'string') {
-            const fieldNames = [...form.keys()];
-            return new Response(JSON.stringify({ error: 'Missing file', fields_received: fieldNames, content_type: reqContentType }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+            dbg.result = 'missing_file_multipart';
+            return new Response(JSON.stringify({ error: 'Missing file', fields_received: dbg.multipartFields, content_type: reqContentType }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
           }
           fileBytes = await file.arrayBuffer();
           fileType  = file.type;
@@ -1552,29 +1563,44 @@ export default {
           fileType  = reqContentType || 'application/octet-stream';
           fileName  = url.searchParams.get('filename') || '';
           fileSize  = fileBytes.byteLength;
+          dbg.rawBodyBytes = fileSize;
           if (!fileSize) {
+            dbg.result = 'missing_file_raw';
             return new Response(JSON.stringify({ error: 'Missing file (empty request body)' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
           }
         }
 
+        dbg.eventName  = eventName;
+        dbg.capturedBy = capturedBy;
+        dbg.section    = section;
+        dbg.fileType   = fileType;
+        dbg.fileName   = fileName;
+        dbg.fileSize   = fileSize;
+
         const isAdmin = String(pin) === '7797';
 
         if (!eventName) {
+          dbg.result = 'missing_event_name';
           return new Response(JSON.stringify({ error: 'Missing event_name' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         if (isAdmin && !section) {
+          dbg.result = 'missing_section_admin';
           return new Response(JSON.stringify({ error: 'Missing section' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         if (!isAdmin && !capturedBy) {
+          dbg.result = 'missing_captured_by';
           return new Response(JSON.stringify({ error: 'Missing captured_by' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         if (section && !['pre_competition','on_course','post_round'].includes(section)) {
+          dbg.result = 'bad_section';
           return new Response(JSON.stringify({ error: 'section must be pre_competition, on_course, or post_round' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         if (fileSize > MAX_UPLOAD_BYTES) {
+          dbg.result = 'too_large';
           return new Response(JSON.stringify({ error: `File too large (${(fileSize/1024/1024).toFixed(1)}MB) — 25MB max. For video, keep clips under ~20 seconds.` }), { status: 413, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         if (!env.PHOTOS_BUCKET) {
+          dbg.result = 'no_bucket_binding';
           return new Response(JSON.stringify({ error: 'PHOTOS_BUCKET binding not configured on this Worker yet' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
 
@@ -1607,12 +1633,27 @@ export default {
            VALUES (?, ?, ?, ?, ?, ?, ?)`
         ).bind(eventName, section, key, capturedBy, caption, mediaType, capturedAtFinal).run();
 
+        dbg.result = 'ok';
+        dbg.insertedId = result.meta.last_row_id;
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id, r2_key: key, media_type: mediaType, section }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       } catch (e) {
+        dbg.result = 'exception';
+        dbg.error = String(e.message || e);
         return new Response(JSON.stringify({ error: 'Upload error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } finally {
+        try { await env.BF_FLAGS.put('debug_last_upload', JSON.stringify(dbg)); } catch (_) {}
       }
+    }
+
+    // GET /debug/last-upload?pin=7797 — TEMP (Dev-59), remove once MacroDroid issue resolved.
+    if (request.method === 'GET' && url.pathname === '/debug/last-upload') {
+      if (url.searchParams.get('pin') !== '7797') {
+        return new Response(JSON.stringify({ error: 'PIN required' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const raw = await env.BF_FLAGS.get('debug_last_upload');
+      return new Response(raw || '{}', { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
     }
 
     // GET /photos?event=X&section=Y&status=Z&pin=W
