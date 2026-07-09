@@ -663,7 +663,7 @@
     </div>
     <div id="grp-ghin-paste-panel" style="display:none;margin-bottom:12px;padding:10px;border:1.5px dashed var(--border);border-radius:8px;background:var(--surface)">
       <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">
-        Ctrl+A on the GHIN page, Ctrl+C, paste below — the whole page is fine, nav/footer junk gets ignored automatically. Just needs each player's name to appear somewhere near their HCP. If GHIN uses a formal name (e.g. "Brian Kolonia") but your roster uses a nickname ("BJ Kolonia"), set the <strong>GHIN Name</strong> field on that player's Membership record in Jotform once — it'll be checked automatically from then on, here and in the portal. If a player genuinely has no GHIN account, set their GHIN Name field to "N/A" so they stop showing up as not-found every time.
+        Ctrl+A on the GHIN page, Ctrl+C, paste below — the whole page is fine, nav/footer junk gets ignored automatically. Just needs each player's name to appear somewhere near their HCP. If GHIN uses a formal name (e.g. "Brian Kolonia") but your roster uses a nickname ("BJ Kolonia"), set the <strong>GHIN Name</strong> field on that player's Membership record in Jotform once — it'll be checked automatically from then on, here and in the portal. If a player genuinely has no GHIN account, set their GHIN Name field to "N/A" and they'll be marked NoHCP (baseline quota) instead of showing up as not-found every time.
       </div>
       <textarea id="grp-ghin-paste-input" rows="6" style="width:100%;font-family:monospace;font-size:0.8rem;padding:8px;border:1px solid var(--border);border-radius:6px" placeholder="Paste the whole GHIN page here — Ctrl+A, Ctrl+C is fine"></textarea>
       <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
@@ -7197,12 +7197,21 @@ async function grpApplyGhinPaste() {
 
   let matched = 0;
   const notFound = [];
-  const skipped = [];
+  const markedNoHcp = [];
 
   grpPlayers.forEach(p => {
     if (!p.name) return;
     const alias = (ghinMap[p.name] || '').trim();
-    if (alias && NO_GHIN.has(alias.toLowerCase())) { skipped.push(p.name); return; }
+    if (alias && NO_GHIN.has(alias.toLowerCase())) {
+      // Same mechanism grpTableUpdateHcp uses for a manually-blanked HCP field —
+      // blank HCP = NoHCP. Keeps existing manual tee, recomputes NoHCP/baseline
+      // quota from history via grpGetEstimatedQuota, same as the manual path.
+      p.hcp = null;
+      p.isNoHcp = true;
+      p.quota = grpGetEstimatedQuota(p.name, null, p.tee);
+      markedNoHcp.push(p.name);
+      return;
+    }
 
     const searchTerms = [p.name];
     if (alias && alias.toLowerCase() !== p.name.trim().toLowerCase()) {
@@ -7230,9 +7239,11 @@ async function grpApplyGhinPaste() {
     matched++;
   });
 
-  // Recalculate tee/quota for every matched player, then re-render the whole
-  // table once — simpler than patching each row's DOM individually the way
-  // single-field manual entry does via grpTableUpdateHcp's live-update path.
+  // Recalculate tee/quota for every matched (real-HCP) player, then re-render
+  // the whole table once — simpler than patching each row's DOM individually
+  // the way single-field manual entry does via grpTableUpdateHcp's live-update
+  // path. NoHCP players were already handled above and are untouched here
+  // (p.hcp === null skips this branch, same guard grpTableUpdateHcp relies on).
   grpPlayers.forEach(p => {
     if (p.hcp !== null && !isNaN(p.hcp)) {
       p.isNoHcp = false;
@@ -7245,7 +7256,7 @@ async function grpApplyGhinPaste() {
   grpSaveData();
 
   const parts = [`✓ ${matched} matched and updated`];
-  if (skipped.length) parts.push(`⏭ ${skipped.length} skipped (no GHIN account on file): ${skipped.join(', ')}`);
+  if (markedNoHcp.length) parts.push(`🏳 ${markedNoHcp.length} marked NoHCP (no GHIN account on file): ${markedNoHcp.join(', ')}`);
   if (notFound.length) parts.push(`⚠ ${notFound.length} not found in pasted text: ${notFound.join(', ')}`);
   resultEl.textContent = parts.join(' · ');
   resultEl.style.color = notFound.length ? '#856404' : '#1a6b30';
@@ -8094,7 +8105,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.27 · 2026-07-09';
+const GS_VERSION = 'v8.28 · 2026-07-09';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
