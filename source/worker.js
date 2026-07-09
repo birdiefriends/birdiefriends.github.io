@@ -1496,20 +1496,58 @@ export default {
     const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
     if (request.method === 'POST' && url.pathname === '/photos/upload') {
       try {
-        let form;
-        try { form = await request.formData(); } catch(e) {
-          return new Response(JSON.stringify({ error: 'Invalid form data' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        const reqContentType = (request.headers.get('content-type') || '').toLowerCase();
+        const isMultipart = reqContentType.includes('multipart/form-data');
+
+        let pin, eventName, eventStart, capturedAt, scorecardSubmitted, section, caption, capturedBy;
+        let fileBytes, fileType, fileName, fileSize;
+
+        if (isMultipart) {
+          let form;
+          try { form = await request.formData(); } catch(e) {
+            return new Response(JSON.stringify({ error: 'Invalid form data' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+          pin                = form.get('pin');
+          eventName          = form.get('event_name');
+          eventStart         = form.get('event_start');
+          capturedAt         = form.get('captured_at');
+          scorecardSubmitted = form.get('scorecard_submitted') === 'true';
+          section            = form.get('section') || null;
+          caption            = form.get('caption') || null;
+          capturedBy         = form.get('captured_by') || null;
+          const file          = form.get('file');
+          if (!file || typeof file === 'string') {
+            return new Response(JSON.stringify({ error: 'Missing file' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+          fileBytes = await file.arrayBuffer();
+          fileType  = file.type;
+          fileName  = file.name;
+          fileSize  = file.size;
+        } else {
+          // Raw-body mode — for clients that can't build multipart/form-data with
+          // named fields (e.g. MacroDroid's HTTP Request action, which only offers
+          // a single Text-or-File body). Metadata comes from the query string
+          // instead; the whole request body IS the file. Content-Type header is
+          // trusted as a hint only, same trust level file.type gets in multipart
+          // mode — media_type below is derived from it, never assumed safe.
+          pin                = url.searchParams.get('pin');
+          eventName          = url.searchParams.get('event_name');
+          eventStart         = url.searchParams.get('event_start');
+          capturedAt         = url.searchParams.get('captured_at');
+          scorecardSubmitted = url.searchParams.get('scorecard_submitted') === 'true';
+          section            = url.searchParams.get('section') || null;
+          caption            = url.searchParams.get('caption') || null;
+          capturedBy         = url.searchParams.get('captured_by') || null;
+          fileBytes = await request.arrayBuffer();
+          fileType  = reqContentType || 'application/octet-stream';
+          fileName  = url.searchParams.get('filename') || '';
+          fileSize  = fileBytes.byteLength;
+          if (!fileSize) {
+            return new Response(JSON.stringify({ error: 'Missing file (empty request body)' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
         }
-        const pin               = form.get('pin');
-        const eventName         = form.get('event_name');
-        const eventStart        = form.get('event_start');       // ISO — client's known event start, fallback reference
-        const capturedAt        = form.get('captured_at');       // ISO — EXIF-derived, when available
-        const scorecardSubmitted = form.get('scorecard_submitted') === 'true';
-        let   section            = form.get('section') || null;
-        const caption            = form.get('caption') || null;
-        const capturedBy         = form.get('captured_by') || null;
-        const file                = form.get('file');
-        const isAdmin             = String(pin) === '7797';
+
+        const isAdmin = String(pin) === '7797';
 
         if (!eventName) {
           return new Response(JSON.stringify({ error: 'Missing event_name' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -1523,11 +1561,8 @@ export default {
         if (section && !['pre_competition','on_course','post_round'].includes(section)) {
           return new Response(JSON.stringify({ error: 'section must be pre_competition, on_course, or post_round' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        if (!file || typeof file === 'string') {
-          return new Response(JSON.stringify({ error: 'Missing file' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-        }
-        if (file.size > MAX_UPLOAD_BYTES) {
-          return new Response(JSON.stringify({ error: `File too large (${(file.size/1024/1024).toFixed(1)}MB) — 25MB max. For video, keep clips under ~20 seconds.` }), { status: 413, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        if (fileSize > MAX_UPLOAD_BYTES) {
+          return new Response(JSON.stringify({ error: `File too large (${(fileSize/1024/1024).toFixed(1)}MB) — 25MB max. For video, keep clips under ~20 seconds.` }), { status: 413, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         if (!env.PHOTOS_BUCKET) {
           return new Response(JSON.stringify({ error: 'PHOTOS_BUCKET binding not configured on this Worker yet' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -1548,13 +1583,13 @@ export default {
         // "now" so this column is always populated with the best available time.
         const capturedAtFinal = capturedAt || new Date().toISOString();
 
-        const mediaType = (file.type || '').startsWith('video/') ? 'video' : 'image';
-        const ext    = (file.name && file.name.includes('.')) ? file.name.split('.').pop().toLowerCase() : (mediaType === 'video' ? 'mp4' : 'jpg');
+        const mediaType = (fileType || '').startsWith('video/') ? 'video' : 'image';
+        const ext    = (fileName && fileName.includes('.')) ? fileName.split('.').pop().toLowerCase() : (mediaType === 'video' ? 'mp4' : 'jpg');
         const slug   = eventName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
         const key    = `photos/${slug}/${section}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
 
-        await env.PHOTOS_BUCKET.put(key, await file.arrayBuffer(), {
-          httpMetadata: { contentType: file.type || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg') }
+        await env.PHOTOS_BUCKET.put(key, fileBytes, {
+          httpMetadata: { contentType: fileType || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg') }
         });
 
         const result = await env.DB.prepare(
