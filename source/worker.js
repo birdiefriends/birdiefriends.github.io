@@ -1604,6 +1604,51 @@ export default {
           return new Response(JSON.stringify({ error: 'PHOTOS_BUCKET binding not configured on this Worker yet' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
 
+        // Meta AI's filename format is YYYYMMDD_HHMMSS_xxxxxxxx.ext — the actual
+        // capture timestamp is embedded right there, and the trailing hex is a
+        // real per-capture unique ID. Both get used below for bulk-import runs
+        // (MacroDroid looping over the whole camera-roll folder, which contains
+        // years of unrelated history mixed with the event's own photos):
+        //   1. If captured_at wasn't explicitly sent, derive it from the filename
+        //      instead of falling back to "now" — critical for section
+        //      classification to work at all on a bulk run days/weeks later.
+        //   2. If it falls outside a window around event_start, skip storing it
+        //      entirely (old glasses footage) rather than filing it under this event.
+        //   3. Use the trailing hex as a dedup key so re-running the same bulk
+        //      import doesn't create duplicate rows/storage every time.
+        const fnMatch = (fileName || '').match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})_([a-f0-9]+)/i);
+        let dedupSuffix = null;
+        if (fnMatch) {
+          dedupSuffix = fnMatch[7];
+          if (!capturedAt) {
+            const [, y, mo, d, h, mi, s] = fnMatch;
+            capturedAt = `${y}-${mo}-${d}T${h}:${mi}:${s}.000Z`;
+          }
+        }
+        dbg.derivedCapturedAt = capturedAt;
+        dbg.dedupSuffix = dedupSuffix;
+
+        if (eventStart && capturedAt) {
+          const evtMs = Date.parse(eventStart);
+          const capMs = Date.parse(capturedAt);
+          const WINDOW_BEFORE_MS = 3 * 60 * 60 * 1000;  // 3h before tee time — covers early arrival
+          const WINDOW_AFTER_MS  = 10 * 60 * 60 * 1000; // 10h after — covers a full round + post-round
+          if (!isNaN(evtMs) && !isNaN(capMs) && (capMs < evtMs - WINDOW_BEFORE_MS || capMs > evtMs + WINDOW_AFTER_MS)) {
+            dbg.result = 'skipped_outside_window';
+            return new Response(JSON.stringify({ ok: true, skipped: true, reason: 'outside_event_window', captured_at: capturedAt }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+        }
+
+        if (dedupSuffix) {
+          const existing = await env.DB.prepare(
+            `SELECT id FROM event_photos WHERE event_name = ? AND r2_key LIKE ? LIMIT 1`
+          ).bind(eventName, `%${dedupSuffix}%`).first();
+          if (existing) {
+            dbg.result = 'skipped_duplicate';
+            return new Response(JSON.stringify({ ok: true, skipped: true, reason: 'duplicate', existing_id: existing.id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+        }
+
         // Player mode, no explicit section from the client (i.e. the Open Camera
         // path — Upload always resolves one via its dialog before this request
         // ever fires) — auto-classify server-side.
