@@ -666,6 +666,7 @@
         Ctrl+A on the GHIN page, Ctrl+C, paste below — the whole page is fine, nav/footer junk gets ignored automatically. Just needs each player's name to appear somewhere near their HCP. The Membership form's hidden <strong>GHIN Name</strong> field controls matching per player: leave it <strong>blank</strong> for a normal player (searched under their roster name); set it to their <strong>formal GHIN name</strong> if it differs from the roster ("Brian Kolonia" vs. roster "BJ Kolonia"); set it to <strong>NoHCP</strong> if they genuinely have no GHIN account (marked NoHCP/baseline quota, ignored silently every paste); set it to <strong>DiffHCP</strong> if they have a real handicap from a different system (flagged every paste as a reminder to update it by hand, never treated as missing).
       </div>
       <textarea id="grp-ghin-paste-input" rows="6" style="width:100%;font-family:monospace;font-size:0.8rem;padding:8px;border:1px solid var(--border);border-radius:6px" placeholder="Paste the whole GHIN page here — Ctrl+A, Ctrl+C is fine"></textarea>
+      <div id="grp-ghin-map-status" style="font-size:0.72rem;color:var(--text-muted);margin-top:4px"></div>
       <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
         <button class="btn btn-primary btn-sm" onclick="grpApplyGhinPaste()">Apply to Matching Players</button>
         <button class="btn btn-secondary btn-sm" onclick="grpToggleGhinPaste()">Cancel</button>
@@ -2721,7 +2722,7 @@ const JF_HOLE_MAP  = {       // qid → hole number
 // name when it differs from the BF roster name (e.g. "BJ Kolonia" on the roster,
 // "Brian Kolonia" on GHIN). Single source of truth — no separate GS-side mapping.
 const MEMBER_FORM_ID = '233083522910045';
-let _ghinNameMap = null; // { [rosterFullName]: ghinName } — lazy-loaded, cached for the session
+let _ghinNameMap = null; // { [rosterFullName]: ghinName } — refetched fresh every panel-open and every Apply, never trusted stale
 
 let jfExtracted = []; // [{name, holes:[18], front, back, total}]
 
@@ -7126,36 +7127,47 @@ function grpTableUpdateHcp(id, val) {
 }
 
 // Fetches the Membership form and builds { rosterFullName: ghinNameFieldValue }
-// from its hidden "GHIN Name" field. Lazy + cached per session (_ghinNameMap) —
-// only hit once per GS launch. That one field carries four states, read by
-// grpApplyGhinPaste:
+// from its hidden "GHIN Name" field. Always fetches fresh — no session cache —
+// so a Jotform edit made mid-session (or in the browser tab) is always picked
+// up on the next open/Apply rather than silently reusing stale data. That one
+// field carries four states, read by grpApplyGhinPaste:
 //   blank              → normal player, search the pasted GHIN text under their roster name
 //   a different name   → alias — GHIN's formal name differs from the BF roster name
 //                         (e.g. roster "BJ Kolonia", GHIN "Brian Kolonia") — searched too
 //   "NoHCP"/"N/A"/etc  → genuinely no GHIN account — marked isNoHcp (baseline quota), silent
 //   "DiffHCP"          → has a real handicap, just not sourced from GHIN (state/club system) —
 //                         left alone, flagged for manual entry, never counted as "not found"
-async function loadGhinNameMap(force) {
-  if (_ghinNameMap && !force) return _ghinNameMap;
+async function loadGhinNameMap() {
   const map = {};
+  const statusEl = document.getElementById('grp-ghin-map-status');
+  if (statusEl) { statusEl.textContent = 'Loading GHIN Name flags from Jotform…'; statusEl.style.color = 'var(--text-muted)'; }
   try {
     const resp = await fetch(`/api/jotform/submissions/${MEMBER_FORM_ID}`, {
       headers: { 'Accept': 'application/json' }
     });
     const data = await resp.json();
     if (data.responseCode !== 200) throw new Error(data.message || `Jotform error (${data.responseCode})`);
+    let flagCount = 0;
     (data.content || []).forEach(s => {
       const a = s.answers || {};
-      const first = getAnswer(a, ['First Name','firstName']);
-      const last  = getAnswer(a, ['Last Name','lastName']);
+      // Exact key fallbacks portal.html uses for this same form (Membership) —
+      // 'name'/'lastname' cover older submissions where Jotform's internal
+      // field name is the generic default rather than a text-label match.
+      const first = getAnswer(a, ['First Name','name','firstName']);
+      const last  = getAnswer(a, ['Last Name','lastname','lastName']);
       const fullName = [first, last].filter(Boolean).join(' ').trim();
       const ghinName = getAnswer(a, ['GHIN Name','ghinName','ghinname']).trim();
-      if (fullName && ghinName) map[fullName] = ghinName;
+      if (fullName && ghinName) { map[fullName] = ghinName; flagCount++; }
     });
     _ghinNameMap = map;
+    if (statusEl) {
+      statusEl.textContent = `✓ ${flagCount} GHIN Name flag${flagCount!==1?'s':''} loaded from Jotform (${(data.content||[]).length} members total)`;
+      statusEl.style.color = flagCount ? '#1a6b30' : '#a32d2d';
+    }
   } catch (e) {
-    console.warn('[GHIN] Membership fetch failed, proceeding without alias map:', e.message);
-    _ghinNameMap = _ghinNameMap || {}; // keep any prior successful load rather than wiping it
+    console.warn('[GHIN] Membership fetch failed:', e.message);
+    _ghinNameMap = {}; // don't silently reuse a stale map from a prior page load
+    if (statusEl) { statusEl.textContent = `⚠ Couldn't load GHIN Name flags from Jotform: ${e.message} — matching by roster name only.`; statusEl.style.color = '#a32d2d'; }
   }
   return _ghinNameMap;
 }
@@ -7169,7 +7181,7 @@ function grpToggleGhinPaste() {
     document.getElementById('grp-ghin-paste-input').value = '';
     document.getElementById('grp-ghin-paste-result').textContent = '';
     document.getElementById('grp-ghin-paste-input').focus();
-    loadGhinNameMap(); // warm the cache while Brian is copying from GHIN
+    loadGhinNameMap(); // fetch fresh + populate the status line while Brian is copying from GHIN
   }
 }
 
@@ -8119,7 +8131,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.29 · 2026-07-09';
+const GS_VERSION = 'v8.30 · 2026-07-09';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
