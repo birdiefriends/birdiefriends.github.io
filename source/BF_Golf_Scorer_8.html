@@ -663,7 +663,7 @@
     </div>
     <div id="grp-ghin-paste-panel" style="display:none;margin-bottom:12px;padding:10px;border:1.5px dashed var(--border);border-radius:8px;background:var(--surface)">
       <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">
-        Ctrl+A on the GHIN page, Ctrl+C, paste below — the whole page is fine, nav/footer junk gets ignored automatically. Just needs each player's name to appear somewhere near their HCP. If GHIN uses a formal name (e.g. "Brian Kolonia") but your roster uses a nickname ("BJ Kolonia"), set the <strong>GHIN Name</strong> field on that player's Membership record in Jotform once — it'll be checked automatically from then on, here and in the portal. If a player genuinely has no GHIN account, set their GHIN Name field to "N/A" and they'll be marked NoHCP (baseline quota) instead of showing up as not-found every time.
+        Ctrl+A on the GHIN page, Ctrl+C, paste below — the whole page is fine, nav/footer junk gets ignored automatically. Just needs each player's name to appear somewhere near their HCP. The Membership form's hidden <strong>GHIN Name</strong> field controls matching per player: leave it <strong>blank</strong> for a normal player (searched under their roster name); set it to their <strong>formal GHIN name</strong> if it differs from the roster ("Brian Kolonia" vs. roster "BJ Kolonia"); set it to <strong>NoHCP</strong> if they genuinely have no GHIN account (marked NoHCP/baseline quota, ignored silently every paste); set it to <strong>DiffHCP</strong> if they have a real handicap from a different system (flagged every paste as a reminder to update it by hand, never treated as missing).
       </div>
       <textarea id="grp-ghin-paste-input" rows="6" style="width:100%;font-family:monospace;font-size:0.8rem;padding:8px;border:1px solid var(--border);border-radius:6px" placeholder="Paste the whole GHIN page here — Ctrl+A, Ctrl+C is fine"></textarea>
       <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
@@ -7125,12 +7125,16 @@ function grpTableUpdateHcp(id, val) {
   grpSaveData();
 }
 
-// Fetches the Membership form and builds { rosterFullName: ghinName } from its
-// hidden "GHIN Name" field. Lazy + cached per session (_ghinNameMap) — only hit
-// once per GS launch, refetched only via grpRefreshGhinNameMap(). A blank GHIN
-// Name field means "same as roster name" (no entry); a field value of "N/A" or
-// "No GHIN" means the player genuinely has no GHIN account — grpApplyGhinPaste
-// skips those instead of reporting them as not-found every single paste.
+// Fetches the Membership form and builds { rosterFullName: ghinNameFieldValue }
+// from its hidden "GHIN Name" field. Lazy + cached per session (_ghinNameMap) —
+// only hit once per GS launch. That one field carries four states, read by
+// grpApplyGhinPaste:
+//   blank              → normal player, search the pasted GHIN text under their roster name
+//   a different name   → alias — GHIN's formal name differs from the BF roster name
+//                         (e.g. roster "BJ Kolonia", GHIN "Brian Kolonia") — searched too
+//   "NoHCP"/"N/A"/etc  → genuinely no GHIN account — marked isNoHcp (baseline quota), silent
+//   "DiffHCP"          → has a real handicap, just not sourced from GHIN (state/club system) —
+//                         left alone, flagged for manual entry, never counted as "not found"
 async function loadGhinNameMap(force) {
   if (_ghinNameMap && !force) return _ghinNameMap;
   const map = {};
@@ -7187,22 +7191,25 @@ async function grpApplyGhinPaste() {
   if (!raw || !raw.trim()) { resultEl.textContent = 'Nothing pasted.'; resultEl.style.color = '#a32d2d'; return; }
 
   const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const NO_GHIN = new Set(['n/a','na','no ghin','none']);
-  // Membership form's hidden "GHIN Name" field — roster name is often the
-  // casual name BF uses ("BJ Kolonia"), while GHIN registers the formal one
-  // ("Brian Kolonia"). Checked as a fallback search term whenever set, so a
-  // one-time entry in Jotform fixes the mismatch for every future paste,
-  // in both GS and the portal, not just this one.
+  const NO_HCP   = new Set(['nohcp','n/a','na','no ghin','none']);
+  const DIFF_HCP = new Set(['diffhcp','diff hcp','different','different hcp']);
+  // Membership form's hidden "GHIN Name" field does four jobs — see the block
+  // comment above loadGhinNameMap for the full state table. Checked here so a
+  // one-time entry in Jotform fixes/flags a player for every future paste, in
+  // both GS and the portal, not just this one.
   const ghinMap = await loadGhinNameMap();
 
   let matched = 0;
   const notFound = [];
   const markedNoHcp = [];
+  const diffHcp = [];
 
   grpPlayers.forEach(p => {
     if (!p.name) return;
-    const alias = (ghinMap[p.name] || '').trim();
-    if (alias && NO_GHIN.has(alias.toLowerCase())) {
+    const fieldVal = (ghinMap[p.name] || '').trim();
+    const fieldKey = fieldVal.toLowerCase();
+
+    if (fieldVal && NO_HCP.has(fieldKey)) {
       // Same mechanism grpTableUpdateHcp uses for a manually-blanked HCP field —
       // blank HCP = NoHCP. Keeps existing manual tee, recomputes NoHCP/baseline
       // quota from history via grpGetEstimatedQuota, same as the manual path.
@@ -7213,10 +7220,15 @@ async function grpApplyGhinPaste() {
       return;
     }
 
-    const searchTerms = [p.name];
-    if (alias && alias.toLowerCase() !== p.name.trim().toLowerCase()) {
-      searchTerms.push(alias);
+    if (fieldVal && DIFF_HCP.has(fieldKey)) {
+      // Has a real number, just not GHIN's — never searched, never touched.
+      // Flagged every paste as a standing reminder to update it by hand.
+      diffHcp.push(p.name);
+      return;
     }
+
+    const searchTerms = [p.name];
+    if (fieldVal) searchTerms.push(fieldVal); // an actual alias name, not a sentinel
 
     let idx = -1, matchedTerm = p.name;
     for (const term of searchTerms) {
@@ -7242,8 +7254,9 @@ async function grpApplyGhinPaste() {
   // Recalculate tee/quota for every matched (real-HCP) player, then re-render
   // the whole table once — simpler than patching each row's DOM individually
   // the way single-field manual entry does via grpTableUpdateHcp's live-update
-  // path. NoHCP players were already handled above and are untouched here
-  // (p.hcp === null skips this branch, same guard grpTableUpdateHcp relies on).
+  // path. NoHCP and DiffHCP players were already handled above and are
+  // untouched here (p.hcp === null skips this branch for NoHCP; DiffHCP
+  // players' p.hcp is never modified at all).
   grpPlayers.forEach(p => {
     if (p.hcp !== null && !isNaN(p.hcp)) {
       p.isNoHcp = false;
@@ -7256,10 +7269,11 @@ async function grpApplyGhinPaste() {
   grpSaveData();
 
   const parts = [`✓ ${matched} matched and updated`];
-  if (markedNoHcp.length) parts.push(`🏳 ${markedNoHcp.length} marked NoHCP (no GHIN account on file): ${markedNoHcp.join(', ')}`);
-  if (notFound.length) parts.push(`⚠ ${notFound.length} not found in pasted text: ${notFound.join(', ')}`);
-  resultEl.textContent = parts.join(' · ');
-  resultEl.style.color = notFound.length ? '#856404' : '#1a6b30';
+  if (diffHcp.length) parts.push(`🔄 ${diffHcp.length} DiffHCP — verify/update manually: ${diffHcp.join(', ')}`);
+  if (notFound.length) parts.push(`⚠ ${notFound.length} not found in pasted text — check for typos or a missing GHIN Name/NoHCP flag: ${notFound.join(', ')}`);
+  if (markedNoHcp.length) parts.push(`<span style="color:#999">${markedNoHcp.length} already NoHCP (no action needed)</span>`);
+  resultEl.innerHTML = parts.join(' · ');
+  resultEl.style.color = notFound.length ? '#a32d2d' : (diffHcp.length ? '#856404' : '#1a6b30');
 }
 
 function grpTableSetTee(id, tee) {
@@ -8105,7 +8119,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.28 · 2026-07-09';
+const GS_VERSION = 'v8.29 · 2026-07-09';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
