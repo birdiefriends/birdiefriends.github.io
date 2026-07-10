@@ -985,6 +985,15 @@
     <div id="photos-load-status" style="display:none;margin-bottom:10px;font-size:0.85rem"></div>
     <div id="photos-tab-content"><div class="empty-state"><p>Click "Load Events" to select an event.</p></div></div>
   </div>
+
+  <!-- Photo expand lightbox (Dev-60) — double-click a thumbnail to view full
+       size. Single shared overlay, populated per-open rather than one per
+       thumbnail, since only one can ever be open at a time. -->
+  <div id="photo-expand-overlay" onclick="if(event.target===this) closePhotoExpand()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;align-items:center;justify-content:center;flex-direction:column;padding:20px;box-sizing:border-box">
+    <button onclick="closePhotoExpand()" title="Close (Esc)" style="position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:2rem;line-height:1;cursor:pointer;padding:4px 10px">&times;</button>
+    <div id="photo-expand-media" style="max-width:92vw;max-height:80vh;display:flex;align-items:center;justify-content:center"></div>
+    <div id="photo-expand-caption" style="color:#eee;font-size:0.85rem;margin-top:14px;text-align:center"></div>
+  </div>
 </div>
 
 <!-- ══ TAB 7: SERIES ══ -->
@@ -6541,10 +6550,15 @@ function renderPhotoThumb(p) {
   const statusColor = p.curation_status === 'approved' ? '#1a6b30'
                      : p.curation_status === 'rejected' ? '#a32d2d' : '#7a5a00';
   const src = `${PHOTOS_WORKER_BASE}/photos/serve/${p.id}?pin=${PHOTOS_PIN}`;
-  const media = p.media_type === 'video'
-    ? `<video src="${src}" controls preload="metadata" style="width:100%;height:120px;object-fit:cover;display:block;background:#000"></video>`
-    : `<img src="${src}" style="width:100%;height:120px;object-fit:cover;display:block" loading="lazy">`;
   const timeLabel = fmtCapturedTime(p);
+  // Double-click opens the full-size lightbox (Dev-60). Caption text passed
+  // through as escaped JS string args rather than re-derived inside
+  // expandPhoto — this function already has everything needed right here.
+  const capturedByEsc = (p.captured_by || 'Unknown').replace(/'/g, "\\'");
+  const dblclick = `expandPhoto('${src}','${p.media_type}','${capturedByEsc}','${timeLabel}')`;
+  const media = p.media_type === 'video'
+    ? `<video src="${src}" controls preload="metadata" ondblclick="${dblclick}" style="width:100%;height:120px;object-fit:cover;display:block;background:#000;cursor:zoom-in"></video>`
+    : `<img src="${src}" ondblclick="${dblclick}" style="width:100%;height:120px;object-fit:cover;display:block;cursor:zoom-in" loading="lazy" title="Double-click to expand">`;
   const sectionOptions = PHOTOS_SECTION_ORDER.map(s =>
     `<option value="${s}"${p.section === s ? ' selected' : ''}>${PHOTOS_SECTION_LABEL[s]}</option>`
   ).join('');
@@ -6568,6 +6582,35 @@ function renderPhotoThumb(p) {
         </div>
       </div>
     </div>`;
+}
+
+// Photo expand lightbox (Dev-60). Single overlay reused for every thumbnail —
+// built fresh each open rather than kept in the DOM per-thumbnail, since only
+// one can ever be open. Images get a plain <img>; video gets its own
+// <video controls autoplay> so a double-click-to-expand still lets you play
+// the clip at full size instead of just viewing a static frame.
+function expandPhoto(src, mediaType, capturedBy, timeLabel) {
+  const overlay = document.getElementById('photo-expand-overlay');
+  const mediaEl = document.getElementById('photo-expand-media');
+  const capEl   = document.getElementById('photo-expand-caption');
+  mediaEl.innerHTML = mediaType === 'video'
+    ? `<video src="${src}" controls autoplay style="max-width:92vw;max-height:80vh"></video>`
+    : `<img src="${src}" style="max-width:92vw;max-height:80vh;object-fit:contain">`;
+  capEl.textContent = [capturedBy, timeLabel].filter(Boolean).join(' · ');
+  overlay.style.display = 'flex';
+  document.addEventListener('keydown', _photoExpandEscHandler);
+}
+
+function closePhotoExpand() {
+  const overlay = document.getElementById('photo-expand-overlay');
+  const mediaEl = document.getElementById('photo-expand-media');
+  overlay.style.display = 'none';
+  mediaEl.innerHTML = ''; // stop any playing video immediately on close
+  document.removeEventListener('keydown', _photoExpandEscHandler);
+}
+
+function _photoExpandEscHandler(e) {
+  if (e.key === 'Escape') closePhotoExpand();
 }
 
 async function patchPhoto(id, fields) {
@@ -8150,8 +8193,8 @@ function grpKickOffEvent() {
 
 
 // Set build date in header
-document.getElementById('build-date').textContent = '2026-06-21a';
-const GS_VERSION = 'v8.31 · 2026-07-09';
+document.getElementById('build-date').textContent = '2026-07-10a';
+const GS_VERSION = 'v8.32 · 2026-07-10a';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
