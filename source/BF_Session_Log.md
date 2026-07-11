@@ -1002,3 +1002,39 @@ Brian opened a fresh chat the same morning intending to start Dev-59, but the co
 
 **Final versions this session: GS v8.31 · 2026-07-09. Worker: library pushed through commit `e1b2c348` (bulk-import filename/window/dedup logic, built on top of the debug-logging revision Brian confirmed pasting into Cloudflare earlier) — but Brian's paste-confirmation for this specific last commit was never explicitly given in-session. Verify at Dev-60 start whether it's actually live before relying on the window-skip/dedup behavior.**
 **Dev-59 closed. Next session opens as Dev-60.**
+
+---
+
+## Session Dev-60 · 2026-07-10
+
+**Focus:** Oakley Meta Vanguard bulk photo import — resolved MacroDroid per-file field extraction, added upload-path safety guards after a Cloudflare KV usage scare, shipped a Photo Organizer lightbox feature.
+
+**MacroDroid bulk loop — file-path extraction solved:**
+- Confirmed live via `/photos/upload` debug logging (added Dev-59): `{lv=meta_files_arr}[iterator_array_index][fullPath]`-style bracket chaining could not be made to resolve to a real per-file value — abandoned after further testing.
+- Solved instead with a Text Manipulation (regex) step on `[iterator_value]`'s string form: correct Split delimiter (a leading-space bug from an earlier unconfirmed instruction cost several debug cycles before being caught), Group 1 capture mode — critically **not** "First match," which was returning the entire regex match including trailing `--` junk.
+- HTTP Request file path constructed as `/storage/emulated/0/Download/MetaTest/{lv=current_filename}`.
+- 3 test photos (ids 7, 8, 9) uploaded successfully end-to-end with correct filenames and `captured_at` timestamps derived from Meta AI's filename convention. Retagged from test event name to `2026 BFSeries#5` via `PATCH /photos/:id`.
+
+**KV usage scare and safety guards (all confirmed live via curl round-trip):**
+- Cloudflare KV usage hit 50% of the daily free-tier limit mid-session. Root cause: every `/photos/upload` call — success, duplicate-skip, or error — was writing to KV via the Dev-59 debug-logging feature (`BF_FLAGS.put('debug_last_upload', ...)`), and MacroDroid's iterative testing was hitting that endpoint repeatedly.
+- **Kill switch:** new `photos_upload_paused` flag (`GET/POST /flags`, PIN-gated) — Admin panel "Photo Upload Pause" card. While paused, upload attempts get a clean `503` before touching D1, KV, or R2. Verified live.
+- **D1 rate counter:** new `upload_attempts_log` D1 table (Brian ran the migration SQL) — tracks attempts as a daily-cap backstop independent of the manual kill switch. Verified writing correctly under live test.
+- **Debug logging filtered:** confirmed the "only log meaningful results" filter is working as intended — dedup/window-skip requests don't spam the debug log, but genuine errors and successes still do.
+
+**GS Photo Organizer — double-click expand lightbox (GS v8.32):**
+- Double-click any thumbnail (photo or video) in the Photo Organizer opens it full-size in an overlay — dark background, media scaled to fit, caption showing capturer + timestamp underneath.
+- Dismiss via × button, click-outside, or Esc.
+- Video gets a full-size `<video controls autoplay>` — double-click both expands and starts playback rather than showing a frozen frame.
+- Deployed to `source/BF_Golf_Scorer_8.html`, commit `9aba600`.
+
+**Carry-forward for Dev-61:**
+- Full 296-file production run against the real Meta AI folder — Brian clearing the folder first so only the real usable photo set gets processed (avoids reprocessing today's test noise).
+- Swap MacroDroid trigger from manual "Shortcut Launched" to automatic folder-watch for true hands-off capture.
+- Clean up 6 test photo rows (ids 2, 3, 4, 7, 8, 9) before BFSeries#5.
+- Everything else carried from Dev-57/58/59 untouched: icon-action-btn migration beyond Live Panel Photos, `worker.js` size/organization, full `bf_architecture.html` ERD redraw, stale Worker Endpoints reference table, Commissioner PIN architecture, push notification preference center, push notification recipient domain (all-`bfw=Yes` vs. registered-only), notification feed → Worker KV redesign, player picker rethink, Player Analytics/Insights layer, proactive pushId health check, GS `results.html` photo-collage Publish step, GHIN "Following" list confirmation (Ron Grow, Wilbur Hlay, Mohamed Walli, Jeremy Burkett, Lou Strohl, Rich Potts).
+
+**Session note:** this session's close-out was not logged at the time (chat ended at 82% budget without an explicit close-out pass) — reconstructed and appended retroactively at the start of Dev-61, from the Dev#60 chat transcript. Portal/worker exact final version numbers for this specific session weren't independently re-confirmed during reconstruction; verify against the live `portal_version.txt` / Cloudflare paste state if precision matters before relying on them.
+
+**GS version: v8.32 · 2026-07-10**
+**Dev-60 closed (logged retroactively at Dev-61 open).**
+**Dev-61 opens next.**
