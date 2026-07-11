@@ -1038,3 +1038,75 @@ Brian opened a fresh chat the same morning intending to start Dev-59, but the co
 **GS version: v8.32 · 2026-07-10**
 **Dev-60 closed (logged retroactively at Dev-61 open).**
 **Dev-61 opens next.**
+
+---
+
+## Session Dev-61 · 2026-07-11
+
+**Focus:** MacroDroid bulk photo import — production-hardened the macro (trigger, safety guard, correct tagging, per-file move scoping, cleaned up a wasted-request quirk). Confirmed Live Panel photo capture access and metadata sort logic already correct via code review. Decided against a full 296-file production run — not representative of real event volume.
+
+**Scope decision:** the 296-file Meta AI folder sweep (Dev-59/60 goal) was dropped — it's accumulated personal-glasses history, not a realistic BF event volume, and would only exercise the bulk-loop mechanics without real value. Real events will run a handful of photos at a time.
+
+**MacroDroid — trigger hardened (home-screen icon):**
+- "Shortcut Launched" trigger (already present) turned out to be the correct mechanism — no new trigger type needed. The actual missing piece was placement: Android's native "pin to home screen" flow needed to be re-triggered by deleting and re-adding the trigger, which surfaced the system pin dialog. Appears in the System Log as "Widget Button (Custom)."
+- Custom icon: extracted the existing BirdieFriends PWA icon from `docs/manifest.json`'s embedded base64 (`BF_icon.png`, 256×256) and applied it via MacroDroid's icon picker.
+
+**MacroDroid — accidental-trigger guard added:**
+- Option Dialog ("Meta Glasses Upload — Proceed with Upload?") added as the first action, with "Block next actions until complete" checked so the macro waits for a response before doing anything.
+- Left button ("Cancel") wired to **Stop Macro** via the button's own action dropdown — no separate If/condition action needed, Option Dialog supports per-button actions natively.
+
+**MacroDroid — event tagging fixed:**
+- The HTTP Request's `event_name` query param was still hardcoded to the placeholder `MacroDroid Test` from earlier testing. Changed to `2026 BFSeries#5` — MacroDroid URL-encodes the `#`/space automatically, no manual encoding needed.
+- 4 stray photo rows (ids 6, 10, 11, 12) that had landed under `MacroDroid Test` were retagged via `PATCH /photos/:id` (PIN must be in the JSON body, not the query string — a real gotcha, first attempt 403'd). Brian later deleted these 4 himself as routine housekeeping — not a bug, initial alarm over "disappeared" rows was a false trail.
+
+**MacroDroid — real bug found and fixed: "Move All Files" instead of per-file move.**
+- The Move step (File Operation, Storage Framework) was configured with **Select File Type → All Files**, not scoped to the current loop iteration. Consequence: the moment *any* file in the loop succeeded, the action swept the *entire* Meta AI folder to Meta History — including files still waiting their turn that had never actually uploaded. This is what caused an earlier false "both files moved successfully" report when only one had actually reached the server.
+- Fixed: **Select File Type → Specify File Pattern → `{lv=current_filename}`** (inserted via the variable picker, not typed) — now each iteration only ever moves its own file, verified via a fully clean two-file test run in the System Log.
+
+**MacroDroid — async race condition fixed:**
+- HTTP Request's "Block next actions until complete" was unchecked, so the macro evaluated `http_status` before the network response had actually returned — the `If` check was reading a *stale* value left over from a previous request, not the current one. This was the root cause of the "file moved but never uploaded" scenario for Testmove2.jpg earlier in the session. Checked the box; confirmed via System Log timestamps that HTTP Request → `http_status` update → `If` check now land together.
+
+**MacroDroid — content-body file path corrected:**
+- Content Body's file-attachment path still referenced the old `MetaTest` test folder from initial development; updated to the real `/storage/emulated/0/Download/Meta AI/{lv=current_filename}`.
+
+**MacroDroid — wasted-request quirk eliminated (cosmetic, not urgent, done anyway):**
+- The `Split to array` step (needed to make per-item field extraction work at all, back in Dev-59/60 — confirmed still required, not dead code) reliably produces one garbage `[0]`-style fragment ahead of each real file's data, costing one harmless-but-wasted 400 per run.
+- Fixed with a guard rather than touching the fragile Split/Iterate mechanism: new `If [{lv=current_filename} Excludes "."]  → Continue Loop` inserted between Extract text and HTTP Request. Real filenames always contain a period (`.jpg`/`.mp4`); the garbage fragment never does, so the guard can't false-positive on a real file. Verified via System Log: garbage pass now skips straight to the next iteration with zero HTTP Request, zero log noise.
+
+**Final macro shape (Meta Upload), confirmed working end-to-end:**
+```
+Trigger: Shortcut Launched (home-screen icon, custom BF icon)
+→ Option Dialog (Cancel → Stop Macro; Run → continue)
+→ List Files (Meta AI, All Files) → meta_files_arr
+→ Split to array → chunks_arr
+→ Iterate Dictionary/Array (chunks_arr)
+    → Extract text → current_filename
+    → If [excludes "."] → Continue Loop
+    → HTTP Request POST (raw body, Meta AI/{current_filename}, event_name=2026 BFSeries#5)
+    → If [http_status = 200]
+        → Move File (Specify File Pattern: {current_filename}, Meta AI → Meta History)
+→ End Loop
+```
+
+**Live Panel photo capture — re-confirmed via code review (no changes needed):**
+- `buildLivePanelPhotoSection()` renders unconditionally inside `buildLivePanel()`, which only renders when the live banner is showing — requiring the player be registered AND within `LIVE_EVENT_HOURS` (8hrs) of tee time. Same Tier-2 gate as Scorecard/CttP, already correct.
+- Open capture-window question from Dev-58 remains genuinely unresolved (whether 8hrs is long enough for real round pace) — still deferred pending real Series #5 data.
+
+**GS Photo Organizer sort logic — re-confirmed via code review (no changes needed):**
+- `GET /photos` already sorts `ORDER BY section, sort_order IS NULL, sort_order, COALESCE(captured_at, created_at)` — true capture-time chronological order within each chapter, confirmed correct.
+
+**40-photo GS-O scale test — not started.** Discussion began (synthetic seed vs. real photos vs. live upload batch) but the session pivoted to the MacroDroid deep-dive before a method was chosen.
+
+**Publish step design — not started.** Flagged as next session's focus.
+
+**D1 state at close — 8 test photo rows under `2026 BFSeries#5`, all need cleanup before real event traffic:**
+ids 2, 3, 4, 7, 8, 9 (older test-era photos) + 17, 18 (tonight's final clean Testmove1/Testmove2 run).
+
+**Carry-forward for Dev-62:**
+- **Clean up all 8 test photo rows** (ids 2, 3, 4, 7, 8, 9, 17, 18) before BFSeries#5 real traffic — delete via `DELETE /photos/:id?pin=7797` (permanent, R2 + D1) once no longer needed for reference.
+- **40-photo GS Photo Organizer scale test** — decide method (synthetic seed script vs. real batch upload) and run it; verify 3-column layout, chronological accuracy, and general usability at that volume.
+- **Design the photo publish step** — inserting the curated/approved set into GolfScorer's `results.html` output. Real gap Brian flagged himself at Dev-58; not yet scoped in any detail. This is the last major open piece of the photo system.
+- Everything else carried from Dev-57/58/59/60 untouched: icon-action-btn migration beyond Live Panel Photos, `worker.js` size/organization, full `bf_architecture.html` ERD redraw, stale Worker Endpoints reference table, Commissioner PIN architecture, push notification preference center, push notification recipient domain (all-`bfw=Yes` vs. registered-only), notification feed → Worker KV redesign, player picker rethink, Player Analytics/Insights layer, proactive pushId health check, GHIN "Following" list confirmation (Ron Grow, Wilbur Hlay, Mohamed Walli, Jeremy Burkett, Lou Strohl, Rich Potts).
+
+**Portal/Worker/GS versions: unchanged this session — no worker.js, portal.html, or BF_Golf_Scorer_8.html edits were made. All work was MacroDroid configuration + Worker API calls (PATCH retag) using the existing deployed Worker.**
+**Dev-61 closed.**
