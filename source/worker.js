@@ -36,6 +36,28 @@ async function d1RetryRead(fn, retries = 3, delayMs = 300) {
 //      (event_start, sent by the client from its own eventData).
 //   4. No reference time at all — default on_course rather than guessing
 //      pre_competition; curation catches anything actually wrong.
+// Converts a wall-clock time in a named IANA timezone (e.g. Eastern local
+// time from a phone's filename timestamp) into the true UTC Date instant it
+// represents. Handles DST correctly (EDT vs EST) by asking Intl how the given
+// timezone actually rendered that moment, rather than a hardcoded fixed
+// offset that would silently go wrong across the DST boundary. No external
+// timezone database needed — Intl.DateTimeFormat has this built in.
+function localWallTimeToUTC(y, mo, d, h, mi, s, timeZone) {
+  const guessUTC = Date.UTC(y, mo - 1, d, h, mi, s);
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+  const parts = {};
+  dtf.formatToParts(new Date(guessUTC)).forEach(p => { if (p.type !== 'literal') parts[p.type] = p.value; });
+  // Intl can render midnight as "24" for hour in some locales/environments — normalize.
+  const hh = parts.hour === '24' ? '00' : parts.hour;
+  const renderedAsUTC = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(hh), Number(parts.minute), Number(parts.second));
+  const offsetMs = renderedAsUTC - guessUTC;
+  return new Date(guessUTC - offsetMs);
+}
+
 async function classifyPhotoSection(env, { eventName, capturedBy, eventStart, capturedAt, scorecardSubmitted }) {
   if (scorecardSubmitted) return 'post_round';
 
@@ -1622,7 +1644,13 @@ export default {
           dedupSuffix = fnMatch[7];
           if (!capturedAt) {
             const [, y, mo, d, h, mi, s] = fnMatch;
-            capturedAt = `${y}-${mo}-${d}T${h}:${mi}:${s}.000Z`;
+            // BUG FIX (Dev-62): Meta's HHMMSS is the phone's LOCAL (Eastern) time,
+            // not UTC — appending '.000Z' directly, as this used to do, stamped
+            // local digits as if they were already UTC, so every filename-derived
+            // photo displayed 4-5 hours early (e.g. a real 7:38 AM capture showed
+            // as 3:38 AM). localWallTimeToUTC does a real Eastern→UTC conversion
+            // via Intl, so it stays correct across the EDT/EST boundary too.
+            capturedAt = localWallTimeToUTC(Number(y), Number(mo), Number(d), Number(h), Number(mi), Number(s), 'America/New_York').toISOString();
           }
         }
         dbg.derivedCapturedAt = capturedAt;
@@ -1827,6 +1855,14 @@ export default {
             return new Response(JSON.stringify({ error: 'Invalid media_type' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
           }
           fields.push('media_type = ?'); binds.push(body.media_type);
+        }
+        // captured_at correction (Dev-62) — for rows affected by the pre-fix
+        // timezone bug in the Meta-filename derivation (see localWallTimeToUTC).
+        if (body.captured_at !== undefined) {
+          if (isNaN(Date.parse(body.captured_at))) {
+            return new Response(JSON.stringify({ error: 'Invalid captured_at' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+          fields.push('captured_at = ?'); binds.push(body.captured_at);
         }
         if (!fields.length) {
           return new Response(JSON.stringify({ error: 'No updatable fields provided' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
