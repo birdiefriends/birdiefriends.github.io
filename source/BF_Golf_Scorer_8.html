@@ -7341,6 +7341,8 @@ async function grpApplyGhinPaste() {
     }
   });
   grpRenderHcpTable();
+  grpRenderPool();
+  grpRenderGroups();
   grpSaveData();
 
   const parts = [`✓ ${matched} matched and updated`];
@@ -8194,7 +8196,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-07-10a';
-const GS_VERSION = 'v8.32 · 2026-07-10a';
+const GS_VERSION = 'v8.33 · 2026-07-13a';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
