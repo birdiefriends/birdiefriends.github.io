@@ -1664,13 +1664,33 @@ export default {
         // "now" so this column is always populated with the best available time.
         const capturedAtFinal = capturedAt || new Date().toISOString();
 
-        const mediaType = (fileType || '').startsWith('video/') ? 'video' : 'image';
-        const ext    = (fileName && fileName.includes('.')) ? fileName.split('.').pop().toLowerCase() : (mediaType === 'video' ? 'mp4' : 'jpg');
+        // media_type detection (fixed Dev-62): Content-Type header alone isn't
+        // reliable for raw-body uploads (MacroDroid's HTTP Request action doesn't
+        // reliably set a per-file video/* Content-Type — real .mp4 files were
+        // arriving with a generic/wrong header and getting stored as media_type
+        // 'image', which broke playback since the frontend renders <img> not
+        // <video> for those rows). Filename extension (always correct — it comes
+        // from the actual filename on disk) is now checked too; either signal
+        // saying "video" is enough.
+        const extFromName = (fileName && fileName.includes('.')) ? fileName.split('.').pop().toLowerCase() : '';
+        const VIDEO_EXTS = ['mp4', 'mov', 'm4v', 'webm'];
+        const looksLikeVideo = (fileType || '').startsWith('video/') || VIDEO_EXTS.includes(extFromName);
+        const mediaType = looksLikeVideo ? 'video' : 'image';
+        const ext    = extFromName || (mediaType === 'video' ? 'mp4' : 'jpg');
         const slug   = eventName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
         const key    = `photos/${slug}/${section}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
 
+        // Same fix applied to what actually gets stored on the R2 object itself —
+        // previously `fileType || ...` would store a generic/wrong header (e.g.
+        // application/octet-stream) verbatim whenever fileType was truthy but not
+        // a real image/* or video/* value, regardless of what mediaType detection
+        // above concluded. Now prefers a real image/* or video/* value, falling
+        // back to a mediaType-derived default only when the header wasn't specific.
+        const isSpecificType = /^(image|video)\//.test(fileType || '');
+        const storedContentType = isSpecificType ? fileType : (mediaType === 'video' ? 'video/mp4' : 'image/jpeg');
+
         await env.PHOTOS_BUCKET.put(key, fileBytes, {
-          httpMetadata: { contentType: fileType || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg') }
+          httpMetadata: { contentType: storedContentType }
         });
 
         // curation_status explicitly set to 'approved' (Dev-62) — was previously left
@@ -1797,6 +1817,16 @@ export default {
             return new Response(JSON.stringify({ error: 'Invalid section' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
           }
           fields.push('section = ?'); binds.push(body.section);
+        }
+        // media_type correction (Dev-62) — for rows misclassified at upload time
+        // (e.g. MacroDroid raw-body uploads where Content-Type wasn't a reliable
+        // video/* signal). Doesn't touch R2 — only the D1 label the frontend uses
+        // to decide <img> vs <video> rendering.
+        if (body.media_type !== undefined) {
+          if (!['image','video'].includes(body.media_type)) {
+            return new Response(JSON.stringify({ error: 'Invalid media_type' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+          fields.push('media_type = ?'); binds.push(body.media_type);
         }
         if (!fields.length) {
           return new Response(JSON.stringify({ error: 'No updatable fields provided' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
