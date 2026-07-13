@@ -1857,8 +1857,32 @@ function calculatePayout(quotaResults, skinWinners, ctpData) {
   const playerCount = quotaResults.length;
   const totalPool = playerCount * 20;
 
-  // ── Quota pool: $40 / $20 / $10, ties split the combined prize ──
-  const QUOTA_PRIZES = [40, 20, 10];
+  // ── Proportional payout structure (Dev-62, replaces old flat $40/$20/$10 +
+  // $10/hole CTP model). Podium 20% of pool (weighted 2:1:0.5), CTP 15% of
+  // pool (split evenly across 5 holes), balance to skins — each rounded to
+  // the nearest $5 for cash-payout simplicity. Ratio chosen so an average
+  // skin (~5.5/round, from 2024-2026 history) lands close to the 1st place
+  // podium prize at a ~22-player field. Mirrored in generateResultsPage()'s
+  // embedded results.html payout calc below — update both together. Does NOT
+  // apply to generateSeriesPage()'s Overall/flights money leaderboard, which
+  // is a separate, not-yet-finalized system (BFSeries#5 Overall pot, own
+  // dedicated session).
+  const PODIUM_PCT = 0.20;
+  const CTP_PCT = 0.15;
+  const PODIUM_WEIGHTS = [2, 1, 0.5]; // 1st:2nd:3rd ratio
+  const round5 = x => Math.round(x / 5) * 5;
+  const weightSum = PODIUM_WEIGHTS.reduce((a, b) => a + b, 0);
+  let QUOTA_PRIZES = PODIUM_WEIGHTS.map(w => round5(totalPool * PODIUM_PCT * w / weightSum));
+  let CTP_PRIZE = round5((totalPool * CTP_PCT) / CTP_HOLES.length);
+  // Safety clamp: podium + max CTP can never exceed 90% of the pool (only
+  // reachable in pathologically small fields via rounding drift) — scale
+  // both down together rather than risk skins going negative.
+  const nonSkinMax = QUOTA_PRIZES.reduce((a, b) => a + b, 0) + CTP_PRIZE * CTP_HOLES.length;
+  if (nonSkinMax > totalPool * 0.9) {
+    const scale = (totalPool * 0.9) / nonSkinMax;
+    QUOTA_PRIZES = QUOTA_PRIZES.map(x => round5(x * scale));
+    CTP_PRIZE = round5(CTP_PRIZE * scale);
+  }
   const payouts = {};
   quotaResults.forEach(p => { payouts[p.name] = { quota: 0, skin: 0, ctp: 0 }; });
 
@@ -1881,9 +1905,8 @@ function calculatePayout(quotaResults, skinWinners, ctpData) {
     placeIdx = scan;
   }
 
-  // ── CTP pool: $10 per hole; unclaimed holes roll into skin pool ──
-  const CTP_PRIZE = 10;
-  const ctpPoolMax = CTP_HOLES.length * CTP_PRIZE; // max possible CTP ($50)
+  // ── CTP pool: rounded proportional prize per hole; unclaimed holes roll into skin pool ──
+  const ctpPoolMax = CTP_HOLES.length * CTP_PRIZE; // max possible CTP
   let unclaimedCTP = 0;
   const ctpPayouts = {}; // hole -> { winner, amount }
   CTP_HOLES.forEach(h => {
@@ -3684,7 +3707,20 @@ function loadEvent(selectedName) {
   // ── Money ──
   const playerCount = quotaResults.length;
   const totalPool = playerCount * 20;
-  const QUOTA_PRIZES = [40,20,10];
+  // ── Proportional payout structure (Dev-62) — mirrors calculatePayout() above. Update both together. ──
+  const PODIUM_PCT = 0.20;
+  const CTP_PCT = 0.15;
+  const PODIUM_WEIGHTS = [2, 1, 0.5];
+  const round5 = x => Math.round(x / 5) * 5;
+  const weightSum = PODIUM_WEIGHTS.reduce((a,b)=>a+b,0);
+  let QUOTA_PRIZES = PODIUM_WEIGHTS.map(w => round5(totalPool * PODIUM_PCT * w / weightSum));
+  let CTP_PRIZE = round5((totalPool * CTP_PCT) / ctpHoles.length);
+  const nonSkinMax = QUOTA_PRIZES.reduce((a,b)=>a+b,0) + CTP_PRIZE * ctpHoles.length;
+  if (nonSkinMax > totalPool * 0.9) {
+    const scale = (totalPool * 0.9) / nonSkinMax;
+    QUOTA_PRIZES = QUOTA_PRIZES.map(x => round5(x * scale));
+    CTP_PRIZE = round5(CTP_PRIZE * scale);
+  }
   const payouts = {};
   quotaResults.forEach(p => { payouts[p.name] = {quota:0, skin:0, ctp:0}; });
   let placeIdx=0;
@@ -3701,7 +3737,6 @@ function loadEvent(selectedName) {
     tiedGroup.forEach(n => { if (payouts[n]) payouts[n].quota = share; });
     placeIdx = scan;
   }
-  const CTP_PRIZE = 10;
   ctpHoles.forEach(h => {
     const winner = ctpData && ctpData[h] ? ctpData[h] : '';
     if (winner) { if (payouts[winner]) payouts[winner].ctp += CTP_PRIZE; else payouts[winner]={quota:0,skin:0,ctp:CTP_PRIZE}; }
@@ -8196,7 +8231,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-07-10a';
-const GS_VERSION = 'v8.33 · 2026-07-13a';
+const GS_VERSION = 'v8.34 · 2026-07-13';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
