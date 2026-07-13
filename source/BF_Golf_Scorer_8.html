@@ -6547,6 +6547,98 @@ async function loadPhotosTab() {
   }
 }
 
+// ── Bulk selection (Dev-62) — reject-by-exception + real event volume (dozens
+// of photos) made one-at-a-time actions too slow. Selection resets on every
+// reload (loadPhotosTab) rather than trying to survive a data refresh, since
+// a bulk action always triggers a reload immediately after anyway.
+let _photoSelection = new Set();
+
+function togglePhotoSelect(id, checked) {
+  if (checked) _photoSelection.add(id); else _photoSelection.delete(id);
+  updatePhotoBulkBar();
+}
+
+function selectAllPhotosVisible() {
+  document.querySelectorAll('.photo-select-cb').forEach(cb => {
+    cb.checked = true;
+    _photoSelection.add(Number(cb.dataset.photoId));
+  });
+  updatePhotoBulkBar();
+}
+
+function clearPhotoSelection() {
+  _photoSelection.clear();
+  document.querySelectorAll('.photo-select-cb').forEach(cb => { cb.checked = false; });
+  updatePhotoBulkBar();
+}
+
+function updatePhotoBulkBar() {
+  const bar = document.getElementById('photo-bulk-bar');
+  const countEl = document.getElementById('photo-bulk-count');
+  if (!bar || !countEl) return;
+  const n = _photoSelection.size;
+  countEl.textContent = n === 0 ? 'None selected' : `${n} selected`;
+  bar.querySelectorAll('.photo-bulk-action').forEach(btn => { btn.disabled = n === 0; });
+}
+
+async function bulkPatchSelected(fields, confirmMsg) {
+  if (_photoSelection.size === 0) return;
+  if (confirmMsg && !confirm(confirmMsg)) return;
+  const ids = [..._photoSelection];
+  try {
+    const results = await Promise.all(ids.map(id =>
+      fetch(`${PHOTOS_WORKER_BASE}/photos/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: PHOTOS_PIN, ...fields })
+      }).then(r => r.json())
+    ));
+    const failed = results.filter(r => !r.ok).length;
+    _photoSelection.clear();
+    loadPhotosTab();
+    if (failed > 0) alert(`${failed} of ${ids.length} updates failed — check individual photos.`);
+  } catch (e) {
+    alert('Bulk update error: ' + e.message);
+  }
+}
+
+async function bulkDeleteSelected() {
+  if (_photoSelection.size === 0) return;
+  const ids = [..._photoSelection];
+  if (!confirm(`Delete ${ids.length} photo${ids.length !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+  try {
+    const results = await Promise.all(ids.map(id =>
+      fetch(`${PHOTOS_WORKER_BASE}/photos/${id}?pin=${PHOTOS_PIN}`, { method: 'DELETE' }).then(r => r.json())
+    ));
+    const failed = results.filter(r => !r.ok).length;
+    _photoSelection.clear();
+    loadPhotosTab();
+    if (failed > 0) alert(`${failed} of ${ids.length} deletes failed — check individual photos.`);
+  } catch (e) {
+    alert('Bulk delete error: ' + e.message);
+  }
+}
+
+function renderPhotoBulkBar() {
+  const sectionOptions = PHOTOS_SECTION_ORDER.map(s =>
+    `<option value="${s}">${PHOTOS_SECTION_LABEL[s]}</option>`
+  ).join('');
+  return `
+    <div id="photo-bulk-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;margin-bottom:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:0.78rem">
+      <span id="photo-bulk-count" style="font-weight:600;color:var(--text-muted);min-width:90px">None selected</span>
+      <button class="btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" onclick="selectAllPhotosVisible()">Select All</button>
+      <button class="btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" onclick="clearPhotoSelection()">Clear</button>
+      <span style="border-left:1px solid var(--border);height:18px;margin:0 2px"></span>
+      <button class="photo-bulk-action btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" disabled onclick="bulkPatchSelected({curation_status:'approved'})">✓ Approve</button>
+      <button class="photo-bulk-action btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" disabled onclick="bulkPatchSelected({curation_status:'rejected'})">✕ Reject</button>
+      <select id="photo-bulk-move-select" style="font-size:0.72rem;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text)">
+        ${sectionOptions}
+      </select>
+      <button class="photo-bulk-action btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" disabled onclick="bulkPatchSelected({section:document.getElementById('photo-bulk-move-select').value})">Move to Chapter</button>
+      <button class="photo-bulk-action btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px;color:#a32d2d" disabled onclick="bulkDeleteSelected()">🗑️ Delete</button>
+    </div>`;
+}
+
 // Groups by section only (event is already fixed by the Event field above —
 // no cross-event browsing here, unlike the portal's "All Events" admin view).
 // 3-column layout (one per chapter) rather than stacked rows — chosen for
@@ -6555,6 +6647,7 @@ async function loadPhotosTab() {
 // keep the whole event's story visible at a glance; each column is internally
 // chronological by real capture time.
 function renderPhotosGrouped(photos) {
+  _photoSelection.clear();
   const bySection = new Map();
   photos.forEach(p => {
     const key = p.section || 'other';
@@ -6576,7 +6669,7 @@ function renderPhotosGrouped(photos) {
       </div>`;
   }).join('');
 
-  return `<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">${columns}</div>`;
+  return `${renderPhotoBulkBar()}<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">${columns}</div>`;
 }
 
 function fmtCapturedTime(p) {
@@ -6605,7 +6698,12 @@ function renderPhotoThumb(p) {
   ).join('');
   return `
     <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card)">
-      ${media}
+      <div style="position:relative">
+        <input type="checkbox" class="photo-select-cb" data-photo-id="${p.id}"
+          onchange="togglePhotoSelect(${p.id},this.checked)" onclick="event.stopPropagation()"
+          style="position:absolute;top:6px;left:6px;width:20px;height:20px;z-index:2;cursor:pointer;accent-color:#085041;box-shadow:0 0 0 2px rgba(255,255,255,0.9);border-radius:3px">
+        ${media}
+      </div>
       <div style="padding:6px 8px">
         <div style="font-size:0.68rem;color:var(--text-muted);display:flex;justify-content:space-between">
           <span>${p.captured_by || 'Unknown'}${p.media_type === 'video' ? ' · 🎥' : ''}</span>
@@ -8237,7 +8335,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-07-10a';
-const GS_VERSION = 'v8.35 · 2026-07-13';
+const GS_VERSION = 'v8.36 · 2026-07-13';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
