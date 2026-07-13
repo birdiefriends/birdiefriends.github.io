@@ -1673,9 +1673,16 @@ export default {
           httpMetadata: { contentType: fileType || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg') }
         });
 
+        // curation_status explicitly set to 'approved' (Dev-62) — was previously left
+        // to the D1 schema default of 'pending', requiring every photo to be manually
+        // approved before going public. Brian's workflow doesn't scale that way at
+        // real event volume (dozens of photos/event) — flipped to reject-by-exception:
+        // photos go live immediately, commissioner spot-checks and rejects/deletes only
+        // the bad ones. curation_status remains a real column (not removed) so ✓/✕ in
+        // the GS Photo Organizer still work exactly as before for manual overrides.
         const result = await env.DB.prepare(
-          `INSERT INTO event_photos (event_name, section, r2_key, captured_by, caption, media_type, captured_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO event_photos (event_name, section, r2_key, captured_by, caption, media_type, captured_at, curation_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'approved')`
         ).bind(eventName, section, key, capturedBy, caption, mediaType, capturedAtFinal).run();
 
         dbg.result = 'ok';
