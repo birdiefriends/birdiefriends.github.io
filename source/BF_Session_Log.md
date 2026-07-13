@@ -1110,3 +1110,76 @@ ids 2, 3, 4, 7, 8, 9 (older test-era photos) + 17, 18 (tonight's final clean Tes
 
 **Portal/Worker/GS versions: unchanged this session — no worker.js, portal.html, or BF_Golf_Scorer_8.html edits were made. All work was MacroDroid configuration + Worker API calls (PATCH retag) using the existing deployed Worker.**
 **Dev-61 closed.**
+
+## Session Dev-62 · 2026-07-13
+
+**Focus:** Started as three carry-forward items from Dev-61 (test photo cleanup, 40-photo scale test, photo publish step design) but pivoted almost entirely into real-time bug hunting once BFSeries#5 payout planning and live MacroDroid/Photo Organizer testing surfaced a chain of genuine production bugs. Results.html consolidation (Highlights tab + Photos tab) was explicitly deferred to Dev-63 once the scope became clear.
+
+**GHIN import / Groups tab sync bug (GS v8.33):**
+- `grpApplyGhinPaste()` correctly updated `p.hcp`/`p.quota` in the underlying player data for every matched player, but only called `grpRenderHcpTable()` afterward — never `grpRenderPool()`/`grpRenderGroups()`. Any player already placed in a group kept showing the stale pre-import HCP/quota card (Brian's own case: HCP updated to 7.2 in the ranking table, but his Group 4 card still showed 6.1).
+- Fixed by adding the missing re-renders after the batch update, matching what the single-player manual edit path (`grpTableUpdateHcp`) already did correctly.
+
+**Proportional payout formula (GS v8.34 → v8.35):**
+- Replaced the old flat $40/$20/$10 podium + $10/hole CTP model — which had become disproportionate to skins as BFSeries#5 grew to 22-24 players (skins pool was ballooning toward ~75% of the pool).
+- New model: podium 20% of pool (weighted 2:1:0.5 across 1st/2nd/3rd), CTP 15% of pool (split across 5 holes), each rounded to nearest $5, balance to skins. Ratio reverse-engineered so a real skin (~5.5/round average, computed from actual 2024-2026 history Brian pulled from GS's own season data) lands close to the 1st-place podium prize at BFSeries#5's ~22-player size — confirmed live: 22 players → $50/$25/$15 podium, $15/hole CTP.
+- Real historical skins-per-round data (20 events, 2024-2026) showed essentially zero correlation between field size and skin count (r=0.12) — contrary to intuition, bigger fields don't reliably produce fewer skins via tie-suppression in this dataset.
+- v8.35 follow-up: skins now floor to the nearest whole dollar (was fractional cents, unpayable in cash) — leftover from the floor is tracked (`skinLeftover`) and displayed on the Results tab ("$X left over from rounding — keep it, don't try to split it") rather than silently disappearing.
+- Fix applied identically to both `calculatePayout()` (live Results tab) and the duplicate calc embedded in `generateResultsPage()`'s results.html template — cross-verified byte-identical output across 12 field sizes before shipping. Full test suite (money-conservation invariant, no negatives, boundary ties, tiny/huge fields) run against the actual extracted deployed function, not just reasoned about.
+- Explicitly scoped away from `generateSeriesPage()`'s Season Money/Overall leaderboard (`QUOTA_PRIZES_M`, still flat $40/$20/$10) — that's a separate, not-yet-designed system (BFSeries#5 Overall pot, $20 buy-in, % podiums across Overall/Green/Combo/Gold flights) that needs its own dedicated session.
+
+**Payout Cheat Sheet (new portal admin card, v3.17.25 → v3.17.29):**
+- New Commissioner Admin card mirroring the GS proportional formula exactly — reference table for players 8-32, with an adjustable "avg skins" input estimating $/skin. Verified byte-identical to GS's real output before shipping.
+- Initially placed in System section, corrected to Event Day per Brian's feedback (v3.17.27) — gameday reference material belongs where gameday tools live.
+- Updated to match the whole-dollar skins rounding (v3.17.28).
+
+**Photo curation paradigm shift — approved-by-default (worker.js):**
+- `/photos/upload`'s INSERT now explicitly sets `curation_status='approved'` instead of relying on the D1 schema default of `'pending'`. Brian's workflow doesn't scale at real event volume (dozens of photos/event) with approve-everything — flipped to reject-by-exception: photos go live immediately, commissioner spot-checks and rejects/deletes only the bad ones.
+- D1 schema's `DEFAULT 'pending'` was deliberately left as-is (now just unused dead text) rather than migrated — the explicit INSERT value achieves the goal without a schema change.
+
+**Video media_type bug (worker.js):**
+- MacroDroid's raw-body uploads don't reliably send a per-file `video/*` Content-Type header — real .mp4 files were landing with `media_type: 'image'`, causing the Photo Organizer to render a broken `<img>` tag instead of `<video>`.
+- Fixed with a filename-extension fallback (`.mp4`/`.mov`/`.m4v`/`.webm` treated as video regardless of Content-Type) — also fixed the same blind-trust problem in what gets stored as the R2 object's own Content-Type header.
+- Added `media_type` as a PATCH-able field so existing misclassified rows can be corrected without re-upload. Found and fixed 3 affected rows (confirmed via a full 16-photo, all-events sweep — no other events affected).
+
+**Meta filename timezone bug (worker.js) — real, non-obvious root cause:**
+- Meta AI's `YYYYMMDD_HHMMSS` filename timestamp is the phone's **local** (Eastern) time, but the old derivation code appended `.000Z` directly, stamping local digits as if already UTC — every filename-derived `captured_at` displayed 4-5 hours early (a real 7:38 AM capture showed as 3:38 AM in the photo lightbox).
+- Fixed with `localWallTimeToUTC()`, a proper Eastern→UTC conversion via `Intl.DateTimeFormat` that correctly handles the EDT/EST boundary (tested against both summer and winter dates plus a round-trip check) rather than a hardcoded fixed offset.
+- Root-cause isolated to the server-side MacroDroid filename-parsing path only — the portal's client-side EXIF reader (regular Live Panel uploads) was already correct, since it runs on the phone itself in the phone's own timezone.
+- Added `captured_at` as a PATCH-able field; corrected the 8 real rows affected by the pre-fix bug (ids 27-34) using the proper conversion. One of Claude's own correction-script bugs caught mid-fix: id 27 had already been manually corrected in an isolated diagnostic test earlier and got double-offset by the batch script — caught in verification, fixed before calling it done.
+- Diagnosed a false alarm along the way: Brian's first re-test after pasting the fix still showed old (wrong) values — traced to Cloudflare deploy propagation lag (his test ran right at the edge of the rollout window), not a persisting code bug. Confirmed via a direct isolated re-test moments later.
+
+**Bulk photo actions (GS v8.36):**
+- Photo Organizer gained checkbox-based multi-select with a bulk action bar (Select All / Clear / Approve / Reject / Move to Chapter / Delete) — all actions fire concurrently via `Promise.all`, not sequentially. Pure GS-side change, no Worker/Cloudflare paste needed.
+- Direct response to real-volume pain: approve-by-exception at dozens-of-photos scale still needed a way to act on multiple bad ones at once.
+
+**Live Event Test Mode investigation (not a bug):**
+- Brian reported the BFSeries#5 event card had vanished from the portal Home screen. Traced to `live_test: true` on the Worker's KV flags — when Live Event Test Mode is on, the portal pulls the next Live-Panel-eligible event out of the normal card list and shows it via the Live Banner instead (by design). Leftover from earlier testing, not a data or code bug. Brian confirmed and disabled it himself.
+
+**Photo Capture banner → read-only Photo Viewer modal (portal v3.17.29):**
+- The Dev-54 pilot's persistent purple "Photo Capture" banner (upload + curation UI) never had a dismiss path — only collapse/expand — so it sat permanently on Home regardless of relevance.
+- Fully superseded by Live Panel's own capture buttons (Dev-57) and GS's Photo Organizer curation (Dev-58, now with bulk actions) — removed entirely and replaced with a lean read-only viewer (event picker + story-grouped thumbnail grid, no upload/curation buttons) opened via the existing header camera icon instead of occupying permanent Home space.
+- Caught a real self-inflicted bug mid-edit: `PHOTO_MAX_BYTES`/`VIDEO_MAX_SECONDS`/`readVideoDuration` turned out to be shared with Live Panel's own upload validation, not exclusive to the old banner — first deletion pass would have silently broken Live Panel's file-size/video-length checks. Caught via reference check before deploying, restored.
+
+**Results.html consolidation — investigated, deliberately deferred to Dev-63:**
+- Searched past-session notes per Brian's request and found a full, previously-designed-but-never-shipped mockup (Dev-54, Jul 5): consolidate Podium/Skins/CTP into one "Highlights" tab, add a dedicated "📸 Photos" tab with the 3-section story (Pre-Competition/On the Course/Post-Round), trophy_moment icon on the podium card. Verified directly against live `generateResultsPage()` — confirmed none of it ever shipped (still the original 8 separate tabs).
+- Also found a second, further exploratory thread (dated Jul 9, chat-title-mismatched — likely another "appended in error" case like Dev-58's addendum) that started wiring a native GS panel version but didn't reach `generateResultsPage()` either.
+- The actual publish mechanism (curated photos → static results.html at publish time) was confirmed still fully unbuilt — the real remaining gap, unchanged since Dev-53/58.
+- Explicitly held for Dev-63 as its own focused session rather than squeezed in after today's bug-fixing chain.
+
+**Still not done — carried forward again from Dev-61 (unblocked, just not reached):**
+- **Delete the 8 test photo rows** (ids 2, 3, 4, 7, 8, 9, 17, 18 — confirmed some still present, e.g. ids 2/3/4) before real BFSeries#5 traffic muddies the data. Now trivial with the new bulk-delete feature.
+- **40-photo GS Photo Organizer scale test** — still not run; method (synthetic seed vs. real batch) still undecided.
+
+**Carry-forward for Dev-63:**
+- **Results.html rebuild — the actual next-session focus:** Highlights tab (consolidate Podium/Skins/CTP), Photos tab (3-section story, wired to real approved photos via `GET /photos?event=X`), and the publish-time mechanism in `grpPublish Final`/`generateResultsPage()` to actually embed the curated set into the static page. Prior mockup design (Dev-54) available as a starting reference, not a finished spec.
+- Delete the 8 lingering test photo rows before real traffic.
+- 40-photo GS Photo Organizer scale test.
+- Season Money / Overall-pot flight system (Overall, Green, Combo, Gold, % podiums, $20 buy-in) — flagged this session as needing its own dedicated design pass, separate from the per-event payout formula fixed today.
+- Everything else carried from Dev-57/58/59/60/61 untouched: icon-action-btn migration beyond Live Panel Photos, `worker.js` size/organization, full `bf_architecture.html` ERD redraw, stale Worker Endpoints reference table, Commissioner PIN architecture, push notification preference center, push notification recipient domain (all-`bfw=Yes` vs. registered-only), notification feed → Worker KV redesign, player picker rethink, Player Analytics/Insights layer, proactive pushId health check, GHIN "Following" list confirmation (Ron Grow, Wilbur Hlay, Mohamed Walli, Jeremy Burkett, Lou Strohl, Rich Potts).
+
+**Final versions this session:**
+- GS: v8.36 · 2026-07-13 (v8.33 Groups sync fix → v8.34 proportional payout → v8.35 whole-dollar skins → v8.36 bulk photo actions)
+- Portal: v3.17.29 · 2026-07-13 (v3.17.25 Payout Cheat Sheet → v3.17.26 add card → v3.17.27 move to Event Day → v3.17.28 whole-dollar skins → v3.17.29 Photo Viewer modal)
+- Worker: 3 deploys this session, all confirmed live and tested — approved-by-default photo curation, video media_type + R2 content-type fix, Meta filename timezone fix (`localWallTimeToUTC`) with `captured_at`/`media_type` now PATCH-able for future corrections.
+
+**Dev-62 closed.**
