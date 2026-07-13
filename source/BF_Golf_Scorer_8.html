@@ -1926,12 +1926,17 @@ function calculatePayout(quotaResults, skinWinners, ctpData) {
   const ctpPaid   = Object.values(payouts).reduce((s, p) => s + p.ctp, 0);
   const skinPool  = totalPool - quotaPaid - ctpPaid;
 
-  // Distribute skin pool equally among unique skin winners (by hole count)
+  // Distribute skin pool equally among unique skin winners (by hole count).
+  // Floored to whole dollars (Dev-62) — cents/fractional-dollar splits can't
+  // actually be handed out in cash at the table. Leftover from the floor
+  // (always < $1 × totalSkins) stays with the bank rather than being forced
+  // into an unpayable fractional split.
   const skinHoleCounts = {};
   skinWinners.forEach(s => { skinHoleCounts[s.winner] = (skinHoleCounts[s.winner] || 0) + 1; });
   const totalSkins = skinWinners.length;
+  const perSkin = totalSkins > 0 ? Math.floor(skinPool / totalSkins) : 0;
+  const skinLeftover = totalSkins > 0 ? skinPool - (perSkin * totalSkins) : skinPool;
   if (totalSkins > 0) {
-    const perSkin = skinPool / totalSkins;
     Object.entries(skinHoleCounts).forEach(([name, count]) => {
       if (payouts[name]) payouts[name].skin += perSkin * count;
       else payouts[name] = { quota: 0, skin: perSkin * count, ctp: 0 };
@@ -1952,7 +1957,7 @@ function calculatePayout(quotaResults, skinWinners, ctpData) {
   return {
     totalPool, skinPool, unclaimedCTP, ctpPoolMax,
     quotaPaid, ctpPaid,
-    perSkin: totalSkins > 0 ? skinPool / totalSkins : 0,
+    perSkin, skinLeftover,
     totalSkins,
     payoutRows, ctpPayouts,
     skinHoleCounts
@@ -2116,8 +2121,9 @@ function renderResults(quotaResults, skinWinners, skinCounts, ctpData, opts) {
   if (payout.totalSkins > 0) {
     payoutStatsHTML += `<div class="alert alert-info" style="margin-bottom:1rem;font-size:0.83rem">
       <strong>${payout.totalSkins} skin${payout.totalSkins !== 1 ? "s" : ""} won</strong> across the field &nbsp;·&nbsp;
-      Skin pool <strong>$${payout.skinPool.toFixed(2)}</strong> ÷ ${payout.totalSkins} skins = <strong>$${payout.perSkin.toFixed(2)} per skin</strong>
+      Skin pool <strong>$${payout.skinPool.toFixed(2)}</strong> ÷ ${payout.totalSkins} skins = <strong>$${payout.perSkin} per skin</strong> (rounded down)
       ${payout.unclaimedCTP > 0 ? `&nbsp;<em>(includes $${payout.unclaimedCTP} rolled in from ${payout.unclaimedCTP / 10} unclaimed CTP hole${payout.unclaimedCTP > 10 ? "s" : ""})</em>` : ""}
+      ${payout.skinLeftover >= 0.01 ? `<br><span style="color:var(--text-muted)">$${payout.skinLeftover.toFixed(2)} left over from rounding — keep it, don't try to split it.</span>` : ""}
     </div>`;
   }
 
@@ -3745,8 +3751,8 @@ function loadEvent(selectedName) {
   const ctpPaid   = Object.values(payouts).reduce((s,p)=>s+p.ctp,0);
   const skinPool  = totalPool - quotaPaid - ctpPaid;
   const totalSkins = skinWinners.length;
+  const perSkin = totalSkins > 0 ? Math.floor(skinPool / totalSkins) : 0;
   if (totalSkins > 0) {
-    const perSkin = skinPool / totalSkins;
     Object.entries(skinCounts).forEach(([name,count]) => {
       if (payouts[name]) payouts[name].skin += perSkin * count;
       else payouts[name] = {quota:0, skin: perSkin*count, ctp:0};
@@ -8231,7 +8237,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-07-10a';
-const GS_VERSION = 'v8.34 · 2026-07-13';
+const GS_VERSION = 'v8.35 · 2026-07-13';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
