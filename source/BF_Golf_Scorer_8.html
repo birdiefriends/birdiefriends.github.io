@@ -560,7 +560,7 @@
   </div>
   <div style="text-align:right;min-width:0;flex-shrink:1">
     <div id="event-name-display" style="font-size:0.85rem;opacity:0.75;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px"></div>
-    <div style="font-size:0.7rem;opacity:0.45;letter-spacing:0.08em;margin-top:4px;font-family:'DM Mono',monospace">v8.17 · <span id="build-date"></span></div>
+    <div style="font-size:0.7rem;opacity:0.45;letter-spacing:0.08em;margin-top:4px;font-family:'DM Mono',monospace"><span id="header-version-display"></span></div>
   </div>
 </header>
 
@@ -8342,9 +8342,12 @@ function grpKickOffEvent() {
 }
 
 
-// Set build date in header
-document.getElementById('build-date').textContent = '2026-07-10a';
-const GS_VERSION = 'v8.39 · 2026-07-14';
+// Header version display — reads directly from GS_VERSION so it can never drift
+// out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
+// two hardcoded copies of the same fact will eventually disagree; one source of
+// truth can't). Declare GS_VERSION first — the header write depends on it.
+const GS_VERSION = 'v8.40 · 2026-07-14';
+document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
 // This ensures localStorage state is restored even if user never switches tabs
