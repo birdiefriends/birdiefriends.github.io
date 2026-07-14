@@ -561,7 +561,6 @@
   <div style="text-align:right;min-width:0;flex-shrink:1">
     <div id="event-name-display" style="font-size:0.85rem;opacity:0.75;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px"></div>
     <div style="font-size:0.7rem;opacity:0.45;letter-spacing:0.08em;margin-top:4px;font-family:'DM Mono',monospace">v8.17 · <span id="build-date"></span></div>
-    <div id="preview-mode-badge" style="display:none;margin-left:12px;padding:3px 10px;border-radius:100px;background:#f59e0b;color:#1a1a1a;font-size:0.7rem;font-weight:700;letter-spacing:0.06em;font-family:'DM Mono',monospace;">🔍 PREVIEW MODE</div>
   </div>
 </header>
 
@@ -2303,7 +2302,7 @@ function renderResults(quotaResults, skinWinners, skinCounts, ctpData, opts) {
         <button class="btn btn-secondary" onclick="printResults()">🖨 Print Results</button>
         <button class="btn btn-secondary" onclick="exportCSV()">⬇ Export CSV</button>
         <button class="btn btn-primary" onclick="saveEventToSeriesFromResults()" id="save-series-btn" style="background:var(--green-dark)">📊 Save to Series</button>
-        <button class="btn btn-primary" onclick="publishAllPages()" id="netlify-publish-btn" style="background:linear-gradient(135deg,#0a3d6b,#1a6b9e);border-color:#0a3d6b">🌐 Publish All Pages</button>
+        <button class="btn btn-primary" onclick="publishAllPages()" id="publish-pages-btn" style="background:linear-gradient(135deg,#0a3d6b,#1a6b9e);border-color:#0a3d6b">🌐 Publish All Pages</button>
         <button class="btn btn-secondary" onclick="resetAll()">↺ New Event</button>
       `}
     </div>
@@ -2974,7 +2973,7 @@ function clearJotformPanel() {
 }
 
 // ══════════════════════════════════════════════
-// ── NETLIFY PUBLISH ──
+// ── PUBLISH HELPERS ──
 // ══════════════════════════════════════════════
 
 // ── Helper to show status above buttons ──
@@ -3031,74 +3030,42 @@ async function fetchPhotosForEvents(eventNames) {
   return photosData;
 }
 
-async function publishToNetlify() {
-  const btn = document.getElementById('netlify-publish-btn');
-
-  // Check Netlify is configured
-  try {
-    const check = await fetch('/api/netlify/status');
-    const cfg = await check.json();
-    if (!cfg.configured) {
-      showActionStatus('⚠ Netlify not configured. Edit <strong>launch_golf_scorer.py</strong>.', 'warning');
-      return;
-    }
-  } catch(e) {
-    showActionStatus('❌ Could not reach local server. Make sure the Python launcher is running.', 'error');
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = '⏳ Publishing…';
-  showActionStatus('⏳ Fetching photos and generating results page…', 'loading');
-
-  try {
-    const season = document.getElementById('series-season')?.value || '2026';
-    const seriesData = getSeriesData();
-    const sd = seriesData.seasons?.[season];
-    const liveEventName = document.getElementById('event-name').value || 'BF Golf Event';
-    const eventNamesForPhotos = (sd?.events || []).map(e => e.name).concat([liveEventName]);
-    const photosData = await fetchPhotosForEvents(eventNamesForPhotos);
-    // Pass full series data so results.html can show all events with correct per-event quotas
-    const resultsHtml = generateResultsPage(null, null, sd, photosData);
-    const pages = { 'results.html': resultsHtml };
-    if (sd && sd.events?.length) {
-      pages['standings.html'] = generateSeriesPage(season, sd);
-      pages['mygame.html']    = generateMyGamePage(season, sd);
-    }
-
-    const resp = await fetch('/api/netlify/deploy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pages })
-    });
-    const result = await resp.json();
-
-    if (result.success) {
-      if (result.preview) {
-        showActionStatus(`🔍 <strong>Preview saved locally!</strong>
-          &nbsp;<a href="/preview/results.html" target="_blank" style="color:#085041;font-weight:700">Results</a>
-          &nbsp;·&nbsp;<a href="/preview/standings.html" target="_blank" style="color:#085041;font-weight:700">Standings</a>
-          &nbsp;·&nbsp;<a href="/preview/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Series</a>
-          &nbsp;<span style="color:#6b7280;font-size:0.78rem">— Not published to birdiefriends.com</span>`, 'ok');
-        btn.textContent = '🔍 Preview saved';
-        btn.style.background = '#b45309';
-      } else {
-        const resultsUrl = result.url.replace(/\/$/, '') + '/results.html';
-        showActionStatus(`✅ <strong>Published!</strong> &nbsp;
-          <a href="${resultsUrl}" target="_blank" style="color:#085041;font-weight:700">${resultsUrl}</a>
-          &nbsp;— share with players`, 'ok');
-        btn.textContent = '✅ Published';
-        btn.style.background = '#1a6b30';
+// Pushes one or more generated static pages straight into docs/ on GitHub Pages
+// via the Worker's existing PIN-gated POST /deploy route — the exact mechanism
+// docs/portal.html already uses. Replaces the old local-launcher "Netlify" relay
+// (Dev-63 cleanup): that endpoint's actual behavior was opaque from here (lived
+// in launch_golf_scorer.py, a local-only file never visible to a session), and
+// the real production birdiefriends.com results/standings/mygame/groupings pages
+// were confirmed to already be served from docs/ via GitHub Pages, not Netlify —
+// the Netlify project itself was a stale, disconnected relic (last touched via
+// manual Netlify Drop, unrelated to any of these publishes). Deploying straight
+// to docs/ here makes every publish a real, visible GitHub commit — same
+// commit-history rollback story as portal.html/worker.js/BF_Golf_Scorer_8.html.
+// pages: { 'results.html': '<html>...', ... } — filenames only, docs/ prefix added here.
+async function deployPagesToGitHub(pages, commitMsgPrefix) {
+  const commits = {};
+  for (const [filename, content] of Object.entries(pages)) {
+    try {
+      const resp = await fetch('https://birdiefriends-push.birdiefriends01.workers.dev/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pin: '7797',
+          path: 'docs/' + filename,
+          content: content,
+          message: `${commitMsgPrefix} · ${filename}`
+        })
+      });
+      const data = await resp.json();
+      if (!data.ok) {
+        return { success: false, error: (data.error || 'Unknown deploy error') + ' (file: ' + filename + ')' };
       }
-    } else {
-      throw new Error(result.error || 'Unknown error');
+      commits[filename] = data.commitSha;
+    } catch (e) {
+      return { success: false, error: e.message + ' (file: ' + filename + ')' };
     }
-  } catch(err) {
-    showActionStatus(`❌ Publish failed: ${err.message}`, 'error');
-    btn.textContent = '🌐 Publish Results';
-  } finally {
-    btn.disabled = false;
   }
+  return { success: true, url: 'https://birdiefriends.com', commits };
 }
 
 // historicalEvt: optional saved event object from series data (has .scores, .ctp, .skins,
@@ -3202,7 +3169,7 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
       + '</div></div>';
   }).join('');
 
-  // Birdie / Eagle counts for Netlify page
+  // Birdie / Eagle counts for the Highlights/Birdies tab
   const birdieData = quotaResults.map(p => {
     const hs = scores[p.name] || [];
     const birdies = hs.filter(s => s === 4).length;
@@ -3210,7 +3177,7 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
     return { name: p.name, birdies, eagles, total: birdies + eagles };
   }).sort((a, b) => b.total - a.total || b.eagles - a.eagles).filter(p => p.total > 0);
 
-  const birdieRowsNetlify = birdieData.length === 0
+  const birdieRowsHtml = birdieData.length === 0
     ? '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">No birdies or eagles recorded</td></tr>'
     : birdieData.map((p, i) => `
         <tr>
@@ -3516,7 +3483,7 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
     <div class="card-label">🐦 Birdie Count — Birdies &amp; Eagles Only</div>
     <table>
       <thead><tr><th></th><th>Player</th><th class="r">🦅 Eagles</th><th class="r">🐦 Birdies</th><th class="r">Total</th></tr></thead>
-      <tbody>${birdieRowsNetlify}</tbody>
+      <tbody>${birdieRowsHtml}</tbody>
     </table>
   </div>
 </div>
@@ -4399,48 +4366,6 @@ function exportProfiles() {
   a.click();
 }
 
-// ══════════════════════════════════════════════
-// ── PUBLISH SERIES STANDINGS ──
-// ══════════════════════════════════════════════
-
-async function publishSeriesStandings() {
-  const statusEl = document.getElementById('series-save-status');
-  const season   = document.getElementById('series-season').value;
-  const data     = getSeriesData();
-  const sd       = data.seasons[season];
-
-  if (!sd || !sd.events || !sd.events.length) {
-    statusEl.style.cssText = 'display:block;background:#fff3cd;color:#7a5a00;padding:10px;border-radius:8px;margin-bottom:12px';
-    statusEl.innerHTML = '⚠ No series data to publish. Save an event to series first.';
-    return;
-  }
-
-  statusEl.style.cssText = 'display:block;background:#e8f5e9;color:#085041;padding:10px;border-radius:8px;margin-bottom:12px';
-  statusEl.innerHTML = '⏳ Publishing series standings…';
-
-  try {
-    const seriesHtml = generateSeriesPage(season, sd);
-    const myGameHtml = generateMyGamePage(season, sd);
-    const resp = await fetch('/api/netlify/deploy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pages: { 'standings.html': seriesHtml, 'mygame.html': myGameHtml } })
-    });
-    const result = await resp.json();
-    if (result.success) {
-      const standingsUrl = result.url.replace(/\/$/, '') + '/standings.html';
-      statusEl.innerHTML = `✅ <strong>Series published!</strong> &nbsp;
-        <a href="${standingsUrl}" target="_blank" style="color:#085041;font-weight:700">${standingsUrl}</a>
-        &nbsp;— share with players`;
-    } else {
-      throw new Error(result.error || 'Unknown error');
-    }
-  } catch(err) {
-    statusEl.style.cssText = 'display:block;background:#fee;color:#a32d2d;padding:10px;border-radius:8px;margin-bottom:12px';
-    statusEl.innerHTML = `❌ Publish failed: ${err.message}`;
-  }
-}
-
 // Core publish logic — returns {success, preview, url} or {success:false, error}.
 // No DOM/toast writes, so other flows (End of Event) can call this directly.
 async function publishAllPagesCore() {
@@ -4466,17 +4391,12 @@ async function publishAllPagesCore() {
     const seriesHtml   = generateSeriesPage(season, sd);
     const myGameHtml   = generateMyGamePage(season, sd);
 
-    const resp = await fetch('/api/netlify/deploy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pages: {
-        'results.html':   resultsHtml,
-        'standings.html': seriesHtml,
-        'mygame.html':    myGameHtml
-      }})
-    });
-    const result = await resp.json();
-    if (result.success) return { success: true, preview: result.preview, url: result.url };
+    const result = await deployPagesToGitHub({
+      'results.html':   resultsHtml,
+      'standings.html': seriesHtml,
+      'mygame.html':    myGameHtml
+    }, `Publish All Pages — ${lastEvt.name}`);
+    if (result.success) return { success: true, url: result.url };
     return { success: false, error: result.error || 'Unknown error' };
   } catch(err) {
     return { success: false, error: err.message };
@@ -4515,20 +4435,11 @@ async function publishAllPages() {
   const result = await publishAllPagesCore();
 
   if (result.success) {
-    if (result.preview) {
-      pubStatus('success', `🔍 <strong>Preview saved locally!</strong>
-        &nbsp;Files written to <code style="background:#d1fae5;padding:1px 5px;border-radius:4px">preview/</code> folder.
-        &nbsp;<a href="/preview/results.html"   target="_blank" style="color:#085041;font-weight:700">Results</a>
-        &nbsp;·&nbsp;<a href="/preview/standings.html" target="_blank" style="color:#085041;font-weight:700">Standings</a>
-        &nbsp;·&nbsp;<a href="/preview/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Series</a>
-        &nbsp;<span style="color:#6b7280;font-size:0.78rem">— Not published to birdiefriends.com</span>`);
-    } else {
-      const base = result.url.replace(/\/$/, '');
-      pubStatus('success', `✅ <strong>All pages published!</strong> &nbsp;
-        <a href="${base}/results.html"   target="_blank" style="color:#085041;font-weight:700">Results</a> &nbsp;·&nbsp;
-        <a href="${base}/standings.html" target="_blank" style="color:#085041;font-weight:700">Standings</a> &nbsp;·&nbsp;
-        <a href="${base}/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Series</a>`);
-    }
+    const base = result.url.replace(/\/$/, '');
+    pubStatus('success', `✅ <strong>All pages published!</strong> &nbsp;
+      <a href="${base}/results.html"   target="_blank" style="color:#085041;font-weight:700">Results</a> &nbsp;·&nbsp;
+      <a href="${base}/standings.html" target="_blank" style="color:#085041;font-weight:700">Standings</a> &nbsp;·&nbsp;
+      <a href="${base}/mygame.html"    target="_blank" style="color:#085041;font-weight:700">My Series</a>`);
   } else {
     pubStatus('error', `❌ Publish failed: ${result.error}`);
   }
@@ -8092,7 +8003,7 @@ async function grpPublish() {
   // this is what lets the portal's Photo Capture auto-classify Pre-Comp/
   // On-Course/Post-Round by each player's real tee time instead of guessing
   // off the event's overall start time (Dev-57). Best-effort and independent
-  // of the Netlify publish below: a D1 hiccup here shouldn't block groupings
+  // of the GitHub Pages publish below: a D1 hiccup here shouldn't block groupings
   // from going live, so it's fire-and-forget with its own status line rather
   // than wired into the main try/catch's success/failure path.
   (async () => {
@@ -8124,32 +8035,21 @@ async function grpPublish() {
   })();
 
     try {
-    const resp = await fetch('/api/netlify/deploy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pages })
-    });
-    const result = await resp.json();
+    const result = await deployPagesToGitHub(pages, `Publish Groupings — ${eventName} (${status})`);
     if (result.success) {
-      if (result.preview) {
-        grpShowPublishStatus('success', `🔍 <strong>Preview saved locally!</strong>
-          &nbsp;<a href="/preview/groupings.html" target="_blank" style="color:#085041;font-weight:600">groupings.html</a>
-          &nbsp;<span style="color:#6b7280;font-size:0.78rem">— Not published to birdiefriends.com</span>`);
-      } else {
-        const visLabel = visibility === 'hidden' ? ' — <strong>Hidden (holding page live)</strong>' : '';
-        const archiveNote = (status === 'Final' && visibility !== 'hidden')
-          ? ` &nbsp;·&nbsp; <a href="https://birdiefriends.com/${archiveFile}" target="_blank" style="color:#4a6fbd;font-weight:600">📋 Archive saved</a>`
-          : '';
-        // Persist the archive pointer keyed by event name — saveEventToSeries() reads this
-        // map and attaches groupingsFile to the event record automatically, post-round.
-        // Permanent fix for the recurring groupings-link gap (was manual every event: #3, #4).
-        if (status === 'Final' && visibility !== 'hidden') {
-          const archMap = JSON.parse(localStorage.getItem('bf_groupings_archive') || '{}');
-          archMap[eventName] = archiveFile;
-          localStorage.setItem('bf_groupings_archive', JSON.stringify(archMap));
-        }
-        grpShowPublishStatus('success', `&#x2713; groupings.html published (${status})${visLabel} &mdash; <a href="https://birdiefriends.com/groupings.html" target="_blank" style="color:#085041;font-weight:600">birdiefriends.com/groupings.html</a>${archiveNote}`);
+      const visLabel = visibility === 'hidden' ? ' — <strong>Hidden (holding page live)</strong>' : '';
+      const archiveNote = (status === 'Final' && visibility !== 'hidden')
+        ? ` &nbsp;·&nbsp; <a href="https://birdiefriends.com/${archiveFile}" target="_blank" style="color:#4a6fbd;font-weight:600">📋 Archive saved</a>`
+        : '';
+      // Persist the archive pointer keyed by event name — saveEventToSeries() reads this
+      // map and attaches groupingsFile to the event record automatically, post-round.
+      // Permanent fix for the recurring groupings-link gap (was manual every event: #3, #4).
+      if (status === 'Final' && visibility !== 'hidden') {
+        const archMap = JSON.parse(localStorage.getItem('bf_groupings_archive') || '{}');
+        archMap[eventName] = archiveFile;
+        localStorage.setItem('bf_groupings_archive', JSON.stringify(archMap));
       }
+      grpShowPublishStatus('success', `&#x2713; groupings.html published (${status})${visLabel} &mdash; <a href="https://birdiefriends.com/groupings.html" target="_blank" style="color:#085041;font-weight:600">birdiefriends.com/groupings.html</a>${archiveNote}`);
     } else {
       throw new Error(result.error || 'Unknown error');
     }
@@ -8386,13 +8286,8 @@ async function resetGroupingsToHoldingCore() {
     })
   };
   try {
-    const resp = await fetch('/api/netlify/deploy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pages })
-    });
-    const result = await resp.json();
-    if (result.success) return { success: true, preview: result.preview };
+    const result = await deployPagesToGitHub(pages, 'Reset groupings to holding state');
+    if (result.success) return { success: true };
     return { success: false, error: result.error || 'Unknown error' };
   } catch (err) {
     return { success: false, error: err.message };
@@ -8449,82 +8344,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-07-10a';
-const GS_VERSION = 'v8.38 · 2026-07-14';
-
-// ── Preview Mode Detection ─────────────────────────────────────────────────────
-// Check if Python server is running in preview mode and surface it visually.
-(async function checkPreviewMode() {
-  try {
-    const resp = await fetch('/api/netlify/status');
-    const cfg  = await resp.json();
-    if (cfg.preview_mode) {
-      // Badge in header
-      const badge = document.getElementById('preview-mode-badge');
-      if (badge) badge.style.display = 'inline-block';
-
-      // Amber banner below header
-      const banner = document.createElement('div');
-      banner.id = 'preview-mode-banner';
-      banner.style.cssText = [
-        'background:#fffbeb',
-        'border-bottom:2px solid #f59e0b',
-        'color:#92400e',
-        'padding:9px 20px',
-        'font-size:0.82rem',
-        'display:flex',
-        'align-items:center',
-        'gap:10px',
-        'position:sticky',
-        'top:60px',
-        'z-index:90'
-      ].join(';');
-      banner.innerHTML = `
-        <strong>🔍 PREVIEW MODE ACTIVE</strong>
-        &nbsp;—&nbsp;
-        "Publish All Pages" and "Publish Groupings" will save files to the
-        <code style="background:#fef3c7;padding:1px 5px;border-radius:4px;font-size:0.78rem">preview/</code>
-        folder on your laptop instead of deploying to birdiefriends.com.
-        Players are not affected.
-        &nbsp;·&nbsp;
-        <a id="preview-folder-link" href="#" style="color:#92400e;font-weight:700;text-decoration:underline"
-           onclick="openPreviewFolder(event)">Open preview/ folder</a>
-      `;
-      // Insert after the nav bar (first child of body or after header)
-      const nav = document.querySelector('header, nav') || document.body.firstElementChild;
-      nav.insertAdjacentElement('afterend', banner);
-
-      // Relabel all publish buttons
-      document.querySelectorAll('#netlify-publish-btn, [onclick*="publishAllPages"]').forEach(btn => {
-        if (btn.tagName === 'BUTTON') {
-          btn.textContent = '🔍 Preview Pages (local)';
-          btn.style.background = 'linear-gradient(135deg,#92400e,#b45309)';
-          btn.style.borderColor = '#92400e';
-        }
-      });
-    }
-  } catch(e) {
-    // Server not running or no status endpoint — silent fail
-  }
-})();
-
-async function openPreviewFolder(e) {
-  e.preventDefault();
-  try {
-    const resp  = await fetch('/api/preview/list');
-    const data  = await resp.json();
-    const files = data.files || [];
-    if (!files.length) {
-      alert('No preview files yet — run Publish first.');
-      return;
-    }
-    // Open each HTML preview file in a new tab
-    files.filter(f => f.name.endsWith('.html')).forEach(f => {
-      window.open(`/preview/${f.name}`, '_blank');
-    });
-  } catch(e2) {
-    alert('Could not reach local server.');
-  }
-}
+const GS_VERSION = 'v8.39 · 2026-07-14';
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
 // This ensures localStorage state is restored even if user never switches tabs
