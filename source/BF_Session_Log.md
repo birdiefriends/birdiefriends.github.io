@@ -1183,3 +1183,52 @@ ids 2, 3, 4, 7, 8, 9 (older test-era photos) + 17, 18 (tonight's final clean Tes
 - Worker: 3 deploys this session, all confirmed live and tested — approved-by-default photo curation, video media_type + R2 content-type fix, Meta filename timezone fix (`localWallTimeToUTC`) with `captured_at`/`media_type` now PATCH-able for future corrections.
 
 **Dev-62 closed.**
+
+---
+
+## Session Dev-63 · 2026-07-14
+
+**Focus:** Results.html rebuild — the item deferred from Dev-62. Consolidated Podium/Skins/CTP/Money into a single Highlights tab, added a Photos tab (3-section story, embedded at publish time), and fixed a pre-existing duplicate-Groups-tab bug found during the review.
+
+**Scope decisions (confirmed with Brian before build):**
+- **Photos tab data source:** embedded at GS publish time (matches how series/event data is already embedded for client-side event switching) rather than live-fetched by the static page — a photo approved/rejected after publish won't show until the next Publish. Brian's explicit call.
+- **Highlights tab scope:** Podium + Skins + CTP + Money, all four folded into one tab (Brian expanded the original Dev-54 mockup's Podium+Skins+CTP scope to include Money too).
+- **Historical events (Series 2-4):** confirmed zero risk to underlying scores/quotas/standings data — the rebuild only reorganizes tab markup and adds a new embed step. Series 2-4 simply show an empty Photos tab (no photo capture existed yet for those events) — expected, not a bug.
+
+**Bug found and fixed — duplicate Groups tab:** `generateResultsPage()` had two identical `<div class="tab-content" id="tab-groups">` blocks back to back (both with `id="groups-iframe"`/`id="groups-no-archive"`), a duplicate-ID landmine that happened to be harmless only because both copies were byte-identical. Deduped to one.
+
+**Tab consolidation (8 tabs → 6):**
+- New tab order: Highlights · Standings · vs Par · 🐦 Birdies · 📸 Photos · ⛳ Groups.
+- Highlights tab = 4 stacked cards (Podium, Skins, CTP, Money) with stable IDs (`highlights-podium-card`/`-skins-card`/`-ctp-card`/`-money-card`) added specifically so the client-side `loadEvent()` event-switcher function — which previously targeted `#tab-podium`/`#tab-skins`/`#tab-ctp`/`#tab-money` — could be re-pointed without breaking the event-pill switcher. All four selectors updated; verified via extraction + `node --check`.
+- No data/calculation logic touched — purely a markup reorganization, confirming the zero-impact-to-history requirement above.
+
+**Photos tab — built end-to-end:**
+- Server-side: `generateResultsPage()` now accepts a 4th `photosData` param (`{ eventName: [approved photo rows] }`), groups the current event's photos into the three story sections (🌅 Pre-Competition / ⛳ On the Course / 🏆 Post-Round), renders a 3-column thumbnail grid per section (images via `<img>`, videos via `<video>`, 🏆 trophy-moment badge overlay), and shows a plain empty state when an event has no photos.
+- Client-side: `ALL_PHOTOS_DATA` embedded alongside the existing `ALL_SERIES_DATA` JSON; new `renderPhotosTab(eventName)` mirrors the server-side grouping logic and is called from `loadEvent()` so the event-pill switcher updates Photos along with every other tab.
+- Simple click-to-expand lightbox added (`openPhotoLightbox`/`closePhotoLightbox`) — dark overlay, tap outside or × to dismiss, video gets `controls autoplay` on open.
+- Photos served via the existing public `GET /photos/serve/:id` route (approved-only, no PIN needed) — no Worker changes required for this session.
+
+**Publish-time photo fetch — new `fetchPhotosForEvents()` helper:**
+- Added a standalone async helper: takes a list of event names, calls `GET /photos?event=X` (Worker's existing public-approved-only tier) for each, returns `{eventName: [...]}`. Fail-open per event (a Worker/D1 hiccup never blocks the public page from publishing) — same philosophy as the Dev-57 groupings-sync fire-and-forget pattern.
+- Wired into both publish paths: `publishAllPagesCore()` (the real End-of-Event/Publish-All flow — fetches photos for every event in the season) and `publishToNetlify()` (the manual live-mode Publish Results button — fetches for the season's events plus the current live event name).
+
+**Verification performed (no live Worker/D1 access needed — pure code review + Node syntax tooling):**
+- Extracted the outer `<script>` block and ran `node --check` — valid.
+- Extracted the *nested* client-side script (the one embedded inside `generateResultsPage()`'s returned HTML string), reversed the outer template-literal escaping (`` \` ``→`` ` ``, `\$`→`$`, `\\`→`\`), stubbed the 3 real interpolation points (`ALL_SERIES_DATA`/`ALL_PHOTOS_DATA`/`PHOTOS_SERVE_BASE_CLIENT`), and ran `node --check` again — valid. Confirmed the double-escaped onclick-handler string concatenation in `renderPhotosTab()` (nested inside the template literal) resolves to correct HTML via a standalone Node repro of the exact same string-building logic.
+- Confirmed no leftover references anywhere in the file to the removed `#tab-podium`/`#tab-skins`/`#tab-ctp`/`#tab-money` IDs.
+
+**Deployed:** `source/BF_Golf_Scorer_8.html` pushed via `POST /deploy`, confirmed live via a fresh raw-GitHub fetch (Highlights/Photos tab markers and `GS_VERSION` both present in the pulled copy). No Worker or portal.html changes this session — Brian's local GS app picks this up on next launch via its existing auto-pull mechanism.
+
+**Carry-forward for Dev-64:**
+- **Live on-device verification** — this session's work was built and syntax-verified but not yet exercised against real live data (a real Publish click, real approved photos rendering in the grid, real event-switcher pill clicks moving Photos/Highlights correctly). First priority next session.
+- Delete the 8 lingering test photo rows (ids 2, 3, 4, 7, 8, 9, 17, 18) — still not done, carried since Dev-61.
+- 40-photo GS Photo Organizer scale test — still not run.
+- Season Money / Overall-pot flight system (Overall, Green, Combo, Gold, % podiums, $20 buy-in) — still needs its own dedicated design pass (flagged Dev-62).
+- Everything else carried from Dev-57/58/59/60/61/62 untouched: icon-action-btn migration beyond Live Panel Photos, `worker.js` size/organization, full `bf_architecture.html` ERD redraw, stale Worker Endpoints reference table, Commissioner PIN architecture, push notification preference center, push notification recipient domain (all-`bfw=Yes` vs. registered-only), notification feed → Worker KV redesign, player picker rethink, Player Analytics/Insights layer, proactive pushId health check, GHIN "Following" list confirmation (Ron Grow, Wilbur Hlay, Mohamed Walli, Jeremy Burkett, Lou Strohl, Rich Potts).
+
+**Final versions this session:**
+- GS: v8.37 · 2026-07-14 (v8.36 → v8.37, results.html rebuild)
+- Portal: unchanged (v3.17.31, no portal.html edits this session)
+- Worker: unchanged (no worker.js edits this session — Photos tab reuses existing public `GET /photos` and `GET /photos/serve/:id` routes as-is)
+
+**Dev-63 closed.**
