@@ -3387,7 +3387,7 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
 </div>
 
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('highlights',this)">Highlights</div>
+  <div class="tab active" onclick="switchTab('highlights',this)">Winners</div>
   <div class="tab" onclick="switchTab('standings',this)">Standings</div>
   <div class="tab" onclick="switchTab('strokes',this)">vs Par</div>
   <div class="tab" onclick="switchTab('birdies',this)">🐦 Birdies</div>
@@ -8444,7 +8444,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.42 · 2026-07-14';
+const GS_VERSION = 'v8.43 · 2026-07-14';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
