@@ -1020,6 +1020,7 @@
       <button class="btn btn-primary" onclick="pushToSheets()" id="sheets-push-btn" style="background:linear-gradient(135deg,#1a6b30,#2a8a40);border-color:#1a6b30">📊 Push to Google Sheets</button>
       <button class="btn btn-secondary" onclick="exportSeriesJSON()" title="Download series data as JSON backup">⬇ Export JSON</button>
       <button class="btn btn-secondary" onclick="showImportJSONModal()" title="Load series data from GS_Data folder">⬆ Import JSON</button>
+      <button class="btn btn-secondary" onclick="patchHistoricalPayoutSnapshots()" id="payout-patch-btn" title="One-time fix: restores the real paid-out amounts for Series#2/3/4, overwritten by the Dev-62 formula change" style="background:#fff3cd;color:#7a5a00;border-color:#ffd97d">⚕ Fix Historical Payouts</button>
     </div>
 
     <div id="series-save-status" style="display:none;padding:10px;border-radius:8px;margin-bottom:12px;font-size:0.85rem"></div>
@@ -3188,8 +3189,18 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
           <td class="r" style="font-weight:700">${p.total}</td>
         </tr>`).join('');
 
-  const payout = calculatePayout(quotaResults, skinWinners, ctpData);
-  const moneyEarners = payout.payoutRows.filter(p => p.total > 0);
+  // Historical events use their frozen payoutSnapshot (set at save-time — see
+  // saveEventToSeries()) so a later formula change (e.g. Dev-62's proportional
+  // payout replacing the old flat model) can never retroactively rewrite what
+  // was actually paid out. Live mode (no historicalEvt, event not yet saved)
+  // has no snapshot to fall back on — recalculates from the current formula,
+  // which is correct there since nothing's actually been paid yet. Pre-Dev-63
+  // saved events without a snapshot also fall back to live recalculation —
+  // Series#2/3/4 specifically were backfilled with their real historical
+  // amounts via a one-time patch, so this fallback shouldn't fire for them.
+  const moneyEarners = (historicalEvt && Array.isArray(historicalEvt.payoutSnapshot))
+    ? historicalEvt.payoutSnapshot.filter(p => p.total > 0)
+    : calculatePayout(quotaResults, skinWinners, ctpData).payoutRows.filter(p => p.total > 0);
 
   const moneyRowsHTML = moneyEarners.length === 0
     ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:12px">No payouts recorded</td></tr>'
@@ -3789,57 +3800,66 @@ function loadEvent(selectedName) {
   });
 
   // ── Money ──
-  const playerCount = quotaResults.length;
-  const totalPool = playerCount * 20;
-  // ── Proportional payout structure (Dev-62) — mirrors calculatePayout() above. Update both together. ──
-  const PODIUM_PCT = 0.20;
-  const CTP_PCT = 0.15;
-  const PODIUM_WEIGHTS = [2, 1, 0.5];
-  const round5 = x => Math.round(x / 5) * 5;
-  const weightSum = PODIUM_WEIGHTS.reduce((a,b)=>a+b,0);
-  let QUOTA_PRIZES = PODIUM_WEIGHTS.map(w => round5(totalPool * PODIUM_PCT * w / weightSum));
-  let CTP_PRIZE = round5((totalPool * CTP_PCT) / ctpHoles.length);
-  const nonSkinMax = QUOTA_PRIZES.reduce((a,b)=>a+b,0) + CTP_PRIZE * ctpHoles.length;
-  if (nonSkinMax > totalPool * 0.9) {
-    const scale = (totalPool * 0.9) / nonSkinMax;
-    QUOTA_PRIZES = QUOTA_PRIZES.map(x => round5(x * scale));
-    CTP_PRIZE = round5(CTP_PRIZE * scale);
-  }
-  const payouts = {};
-  quotaResults.forEach(p => { payouts[p.name] = {quota:0, skin:0, ctp:0}; });
-  let placeIdx=0;
-  while (placeIdx < Math.min(3, quotaResults.length)) {
-    const thisDiff = quotaResults[placeIdx].diff;
-    const tiedGroup = [];
-    let scan = placeIdx;
-    while (scan < quotaResults.length && Math.abs((quotaResults[scan].diff||0) - (thisDiff||0)) < 0.001) {
-      tiedGroup.push(quotaResults[scan].name); scan++;
+  // Historical events use their frozen payoutSnapshot (see saveEventToSeries())
+  // instead of recalculating with whatever formula is live today — same fix as
+  // the server-side render above, needed here too since switching event pills
+  // client-side re-renders this card from ALL_SERIES_DATA.
+  let moneyRows;
+  if (Array.isArray(evt.payoutSnapshot)) {
+    moneyRows = evt.payoutSnapshot.filter(p => p.total > 0).sort((a,b) => b.total - a.total);
+  } else {
+    const playerCount = quotaResults.length;
+    const totalPool = playerCount * 20;
+    // ── Proportional payout structure (Dev-62) — mirrors calculatePayout() above. Update both together. ──
+    const PODIUM_PCT = 0.20;
+    const CTP_PCT = 0.15;
+    const PODIUM_WEIGHTS = [2, 1, 0.5];
+    const round5 = x => Math.round(x / 5) * 5;
+    const weightSum = PODIUM_WEIGHTS.reduce((a,b)=>a+b,0);
+    let QUOTA_PRIZES = PODIUM_WEIGHTS.map(w => round5(totalPool * PODIUM_PCT * w / weightSum));
+    let CTP_PRIZE = round5((totalPool * CTP_PCT) / ctpHoles.length);
+    const nonSkinMax = QUOTA_PRIZES.reduce((a,b)=>a+b,0) + CTP_PRIZE * ctpHoles.length;
+    if (nonSkinMax > totalPool * 0.9) {
+      const scale = (totalPool * 0.9) / nonSkinMax;
+      QUOTA_PRIZES = QUOTA_PRIZES.map(x => round5(x * scale));
+      CTP_PRIZE = round5(CTP_PRIZE * scale);
     }
-    let prizeSum = 0;
-    for (let k=placeIdx; k<Math.min(scan,3); k++) prizeSum += QUOTA_PRIZES[k];
-    const share = Math.floor(prizeSum / tiedGroup.length); // floor per tie rule spec
-    tiedGroup.forEach(n => { if (payouts[n]) payouts[n].quota = share; });
-    placeIdx = scan;
-  }
-  ctpHoles.forEach(h => {
-    const winner = ctpData && ctpData[h] ? ctpData[h] : '';
-    if (winner) { if (payouts[winner]) payouts[winner].ctp += CTP_PRIZE; else payouts[winner]={quota:0,skin:0,ctp:CTP_PRIZE}; }
-  });
-  const quotaPaid = Object.values(payouts).reduce((s,p)=>s+p.quota,0);
-  const ctpPaid   = Object.values(payouts).reduce((s,p)=>s+p.ctp,0);
-  const skinPool  = totalPool - quotaPaid - ctpPaid;
-  const totalSkins = skinWinners.length;
-  const perSkin = totalSkins > 0 ? Math.floor(skinPool / totalSkins) : 0;
-  if (totalSkins > 0) {
-    Object.entries(skinCounts).forEach(([name,count]) => {
-      if (payouts[name]) payouts[name].skin += perSkin * count;
-      else payouts[name] = {quota:0, skin: perSkin*count, ctp:0};
+    const payouts = {};
+    quotaResults.forEach(p => { payouts[p.name] = {quota:0, skin:0, ctp:0}; });
+    let placeIdx=0;
+    while (placeIdx < Math.min(3, quotaResults.length)) {
+      const thisDiff = quotaResults[placeIdx].diff;
+      const tiedGroup = [];
+      let scan = placeIdx;
+      while (scan < quotaResults.length && Math.abs((quotaResults[scan].diff||0) - (thisDiff||0)) < 0.001) {
+        tiedGroup.push(quotaResults[scan].name); scan++;
+      }
+      let prizeSum = 0;
+      for (let k=placeIdx; k<Math.min(scan,3); k++) prizeSum += QUOTA_PRIZES[k];
+      const share = Math.floor(prizeSum / tiedGroup.length); // floor per tie rule spec
+      tiedGroup.forEach(n => { if (payouts[n]) payouts[n].quota = share; });
+      placeIdx = scan;
+    }
+    ctpHoles.forEach(h => {
+      const winner = ctpData && ctpData[h] ? ctpData[h] : '';
+      if (winner) { if (payouts[winner]) payouts[winner].ctp += CTP_PRIZE; else payouts[winner]={quota:0,skin:0,ctp:CTP_PRIZE}; }
     });
+    const quotaPaid = Object.values(payouts).reduce((s,p)=>s+p.quota,0);
+    const ctpPaid   = Object.values(payouts).reduce((s,p)=>s+p.ctp,0);
+    const skinPool  = totalPool - quotaPaid - ctpPaid;
+    const totalSkins = skinWinners.length;
+    const perSkin = totalSkins > 0 ? Math.floor(skinPool / totalSkins) : 0;
+    if (totalSkins > 0) {
+      Object.entries(skinCounts).forEach(([name,count]) => {
+        if (payouts[name]) payouts[name].skin += perSkin * count;
+        else payouts[name] = {quota:0, skin: perSkin*count, ctp:0};
+      });
+    }
+    moneyRows = Object.entries(payouts)
+      .map(([name,p]) => ({name, ...p, total:p.quota+p.skin+p.ctp}))
+      .filter(p => p.total > 0)
+      .sort((a,b) => b.total - a.total);
   }
-  const moneyRows = Object.entries(payouts)
-    .map(([name,p]) => ({name, ...p, total:p.quota+p.skin+p.ctp}))
-    .filter(p => p.total > 0)
-    .sort((a,b) => b.total - a.total);
   document.querySelector('#highlights-money-card table tbody').innerHTML = moneyRows.length===0
     ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:12px">No payouts recorded</td></tr>'
     : moneyRows.map((p,i) => \`<tr>
@@ -5786,7 +5806,31 @@ function saveEventToSeries() {
   // recurring manual results.html patch (Series#3, Series#4 both needed it).
   const archMap = JSON.parse(localStorage.getItem('bf_groupings_archive') || '{}');
   const groupingsFile = archMap[eventName];
-  const newEventRecord = { name: eventName, date: eventDate, season, scores: evtScores, ctp: evtCtp, skins: evtSkins };
+
+  // ── Payout snapshot (Dev-63 fix) ──
+  // Root cause of a real bug found post-fact: calculatePayout() is a pure function
+  // with no awareness of which formula version was in effect for a given event —
+  // it was being recalculated live from scratch every time results.html regenerated,
+  // using whatever the CURRENT formula happens to be. That silently rewrote what
+  // Series#2/#3/#4 showed as paid out the moment the Dev-62 proportional formula
+  // replaced the old flat $40/$20/$10 model, even though real cash had already
+  // changed hands under the old numbers. Same class of bug the per-event quota/
+  // actual snapshot below already prevents for quota — payout gets the same
+  // treatment: computed once, frozen here, never recalculated from this point on.
+  const payoutQuotaResults = players.map(p => {
+    const holeScores = evtScores[p.name] || [];
+    const total = holeScores.reduce((s, v) => s + (Number(v) || 0), 0);
+    const diff = p.quota !== null && p.quota !== undefined ? Math.round((total - p.quota) * 100) / 100 : null;
+    return { name: p.name, quota: p.quota, total, diff };
+  }).sort((a, b) => {
+    if (a.diff === null && b.diff === null) return 0;
+    if (a.diff === null) return 1;
+    if (b.diff === null) return -1;
+    return b.diff - a.diff;
+  });
+  const payoutSnapshot = calculatePayout(payoutQuotaResults, evtSkins, evtCtp).payoutRows.filter(p => p.total > 0);
+
+  const newEventRecord = { name: eventName, date: eventDate, season, scores: evtScores, ctp: evtCtp, skins: evtSkins, payoutSnapshot };
   if (groupingsFile) newEventRecord.groupingsFile = groupingsFile;
   season_data.events.push(newEventRecord);
   season_data.events.sort((a, b) => a.date.localeCompare(b.date));
@@ -5917,6 +5961,63 @@ function saveEventToSeries() {
   setTimeout(() => loadSeriesStandings(), 300);
   return true;
 }
+
+// ── ONE-TIME FIX (Dev-63): restore real historical payouts for Series#2/3/4 ──
+// Root-cause bug: calculatePayout() has no per-event formula versioning — it's
+// a pure function recalculated fresh every time results.html regenerates, using
+// whatever formula is CURRENT. When the Dev-62 proportional payout structure
+// replaced the old flat $40/$20/$10 podium + $10/hole CTP model, every already-
+// paid-out historical event silently got its Money List rewritten to what the
+// NEW formula would have paid, not what was actually handed out in cash.
+// saveEventToSeries() now snapshots payoutSnapshot at save-time going forward
+// (see above) so this can't recur — this function is the one-time backfill for
+// the three events that predate that fix. Values below were reconstructed by
+// pulling the last pre-Dev-62 commit of docs/results.html (commit 79c07c8d,
+// 2026-06-17) directly from GitHub history and recomputing with the exact old
+// formula recovered from that same commit's source — verified against Brian's
+// own pre-regression screenshot for Series#4 (exact match) before applying.
+// Safe to run more than once — idempotent, just overwrites with the same values.
+const HISTORICAL_PAYOUT_PATCH = {
+    "2026 BFSeries#2": [{name:"Chooch Wernett",quota:40,skin:55,ctp:10,total:105}, {name:"Bill Steirer",quota:0,skin:55,ctp:10,total:65}, {name:"Jeff Rapp",quota:0,skin:55,ctp:0,total:55}, {name:"Kadri Gashi",quota:0,skin:55,ctp:0,total:55}, {name:"Mohamed Walli",quota:20,skin:0,ctp:0,total:20}, {name:"Jeremy Burkett",quota:10,skin:0,ctp:0,total:10}, {name:"BJ Kolonia",quota:0,skin:0,ctp:10,total:10}, {name:"Nate Stettler",quota:0,skin:0,ctp:10,total:10}, {name:"Evan Lindermuth",quota:0,skin:0,ctp:10,total:10}],
+    "2026 BFSeries#3": [{name:"Adam Costa",quota:40,skin:40,ctp:0,total:80}, {name:"Harry Pry",quota:0,skin:80,ctp:0,total:80}, {name:"BJ Kolonia",quota:10,skin:40,ctp:0,total:50}, {name:"Dave Sherwin",quota:0,skin:40,ctp:10,total:50}, {name:"Tom Arnold",quota:0,skin:40,ctp:10,total:50}, {name:"Justin Lindenmuth",quota:0,skin:40,ctp:0,total:40}, {name:"Scott Justus",quota:0,skin:40,ctp:0,total:40}, {name:"Carl Stadtmueller",quota:20,skin:0,ctp:10,total:30}, {name:"Brian Hager",quota:0,skin:0,ctp:10,total:10}, {name:"Bill Steirer",quota:0,skin:0,ctp:10,total:10}],
+    "2026 BFSeries#4": [{name:"Wilbur Hlay",quota:40,skin:70,ctp:0,total:110}, {name:"Bill Steirer",quota:10,skin:70,ctp:0,total:80}, {name:"Justin Lindenmuth",quota:0,skin:70,ctp:10,total:80}, {name:"Scott Justus",quota:0,skin:70,ctp:10,total:80}, {name:"Tom Stitt",quota:20,skin:0,ctp:0,total:20}, {name:"Lou Strohl",quota:0,skin:0,ctp:10,total:10}, {name:"Mohamed Walli",quota:0,skin:0,ctp:10,total:10}, {name:"Evan Lindermuth",quota:0,skin:0,ctp:10,total:10}]
+};
+
+function patchHistoricalPayoutSnapshots() {
+  if (!confirm('This restores the real paid-out Money List amounts for Series#2, #3, and #4 ' +
+    '(overwritten when the payout formula changed). It only touches those three events\' ' +
+    'payoutSnapshot field — scores, quotas, and standings are untouched.\n\n' +
+    'Recommend clicking Export JSON first as a backup. Continue?')) return;
+
+  const data = getSeriesData();
+  const season_data = data.seasons && data.seasons['2026'];
+  if (!season_data || !season_data.events) {
+    alert('No 2026 season data found — nothing to patch.');
+    return;
+  }
+
+  const results = [];
+  Object.entries(HISTORICAL_PAYOUT_PATCH).forEach(([eventName, payoutRows]) => {
+    const evt = season_data.events.find(e => e.name === eventName);
+    if (!evt) {
+      results.push(`❌ ${eventName} — not found in local data, skipped`);
+      return;
+    }
+    evt.payoutSnapshot = payoutRows;
+    results.push(`✅ ${eventName} — payoutSnapshot restored (${payoutRows.length} earners)`);
+  });
+
+  saveSeriesData(data);
+
+  const statusEl = document.getElementById('series-save-status');
+  if (statusEl) {
+    statusEl.style.cssText = 'display:block;background:#e8f5e9;color:#085041;padding:10px;border-radius:8px;margin-bottom:12px';
+    statusEl.innerHTML = '<strong>Historical payout fix applied:</strong><br>' + results.join('<br>') +
+      '<br><br>Click <strong>🌐 Publish All Pages</strong> now to push the corrected Money List live.';
+  }
+  alert(results.join('\n') + '\n\nNow click "Publish All Pages" to push the fix to birdiefriends.com.');
+}
+
 
 // ══════════════════════════════════════════════════════════════════
 // ── END OF EVENT — one tracked action: Save to Series → Push to
@@ -8346,7 +8447,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.40 · 2026-07-14';
+const GS_VERSION = 'v8.41 · 2026-07-14';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
