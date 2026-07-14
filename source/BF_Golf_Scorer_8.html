@@ -3432,6 +3432,11 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
     </div>
   </div>
 
+  <div class="card" id="highlights-ctp-card">
+    <div class="card-label">Closest to the Pin · Par 3 Holes</div>
+    ${ctpRowsHTML}
+  </div>
+
   <div class="card" id="highlights-skins-card">
     <div class="card-label">${skinWinners.length} Skin${skinWinners.length!==1?'s':''} Won</div>
     <div class="skins-body">
@@ -3446,11 +3451,6 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
             </div>
           </div>`).join('')}
     </div>
-  </div>
-
-  <div class="card" id="highlights-ctp-card">
-    <div class="card-label">Closest to the Pin · Par 3 Holes</div>
-    ${ctpRowsHTML}
   </div>
 
   <div class="card" id="highlights-money-card">
@@ -8449,7 +8449,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-07-10a';
-const GS_VERSION = 'v8.37 · 2026-07-14';
+const GS_VERSION = 'v8.38 · 2026-07-14';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
