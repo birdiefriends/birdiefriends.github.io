@@ -1232,3 +1232,195 @@ ids 2, 3, 4, 7, 8, 9 (older test-era photos) + 17, 18 (tonight's final clean Tes
 - Worker: unchanged (no worker.js edits this session — Photos tab reuses existing public `GET /photos` and `GET /photos/serve/:id` routes as-is)
 
 **Dev-63 closed.**
+
+## Dev-63 Addendum — same chat, appended after a premature close-out
+
+The line above ("Dev-63 closed") was written after just the initial results.html
+rebuild — the session actually continued for a substantial amount of further work,
+triggered by Brian catching a real production discrepancy. Documenting it all here
+rather than retroactively editing the closed entry above.
+
+**Highlights tab polish:** CTP and Skins cards swapped to Podium → CTP → Skins →
+Money order (Brian's call). Verified in the real generated output, not just the
+source edit. Tab later renamed from "Highlights" to "Winners" (label only — internal
+`tab-highlights`/`highlights-*` IDs left untouched, zero functional risk for a
+one-word display change).
+
+**Photo ordering confirmed, not changed:** Brian asked to confirm photo grid order
+reflects real capture-time metadata, not upload order. Traced the full chain — the
+Worker's `GET /photos` already sorts by `section, sort_order, COALESCE(captured_at,
+created_at)` (real EXIF/filename-derived timestamp first); the new GS-side code only
+ever `.filter()`s that list, never re-sorts. Proved it with a standalone Node repro
+using deliberately-scrambled upload-vs-capture order. No code change needed, already
+correct.
+
+**Netlify investigation — real production discovery:** Brian noticed the Netlify
+project dashboard (`birdiefriends.netlify.app`) showed "Last deployed from Netlify
+Drop... 2 months ago," and separately that `docs/results.html` hadn't updated since
+June 17 despite Publish clicks in between. Investigated by directly fetching
+`birdiefriends.com/results.html` — confirmed it's served via GitHub Pages
+(`docs/results.html`), not Netlify at all; the Netlify project is a stale, disconnected
+relic unrelated to what's actually live. Brian confirmed he has no memory of Netlify
+being genuinely wired in during early development and `bf_architecture.html` never
+referenced it either.
+
+**Netlify relay retirement (shipped this session, GS v8.39):**
+- Found and removed 5 real call sites hitting `/api/netlify/deploy` on the local
+  launcher's Python server: `publishAllPagesCore()` (live, wired to 3 buttons),
+  `grpPublish()`'s groupings deploy, `resetGroupingsToHoldingCore()`. Two more
+  functions calling the same dead endpoint — `publishToNetlify()` and
+  `publishSeriesStandings()` — turned out to be entirely unused dead code (no button,
+  no caller anywhere in the file) and were deleted outright rather than migrated.
+- New `deployPagesToGitHub()` helper: pushes each generated page straight to `docs/`
+  on GitHub via the Worker's existing PIN-gated `POST /deploy` route — the same
+  mechanism `docs/portal.html` already uses. Every publish is now a real, inspectable
+  GitHub commit with the same rollback story as any other managed file.
+- Removed the entire "Preview Mode" banner/badge system (`checkPreviewMode()` IIFE,
+  `openPreviewFolder()`, the `preview-mode-badge` DOM element) — it only existed to
+  relabel buttons when the local server reported `preview_mode`, which no longer
+  applies now that publishing doesn't route through that server.
+- Cosmetic cleanup: `netlify-publish-btn` → `publish-pages-btn`, `birdieRowsNetlify` →
+  `birdieRowsHtml`, stray comments reworded.
+- Verified via `node --check` on both the outer script and the unescaped nested
+  client-side script (same rigor as the original rebuild), then re-ran the real
+  `generateResultsPage()` function against sample data in-sandbox to confirm nothing
+  broke — plumbing-only change, visually identical output.
+
+**Real production verification — genuine success, initially looked like a failure:**
+Brian ran a real "Publish All Pages" and saw the live page still showing old content
+in his browser — turned out to be a stale browser cache, not a failed publish.
+Confirmed via a cache-busted direct fetch of `docs/results.html`: the new content
+(GS v8.40, correct Highlights card order, Photos tab) was genuinely live. Real lesson
+for future verification: always fetch with a cache-buster before concluding a publish
+failed, browser tabs can and do hold stale responses.
+
+**Header version display — same root-cause class as the Dev-55 portal_version.txt
+bug, found via a screenshot (GS v8.43):** GS's own in-app header showed a hardcoded
+`v8.17 · 2026-07-10a` — two separate literal strings, completely disconnected from
+`GS_VERSION`, last synced who-knows-when and never touched since. Root-fixed rather
+than re-patched: removed both hardcoded strings, header now reads directly from
+`GS_VERSION` (single source of truth, same fix philosophy as Dev-55's
+`portal_version.txt` — two copies of the same fact will eventually disagree, one
+source of truth can't).
+
+**Money List history bug — the significant one, real financial data integrity issue:**
+Brian caught the Series#4 Money List showing different dollar amounts than before
+(compared against his own earlier screenshot). Root cause: `calculatePayout()` is a
+pure function with zero per-event formula versioning — recalculated fresh from raw
+scores every time results.html regenerates, using whatever formula is CURRENT. When
+Dev-62's proportional payout structure replaced the old flat $40/$20/$10 podium +
+$10/hole CTP model, every already-paid-out historical event (Series#2/3/4) silently
+had its Money List rewritten to what the NEW formula would pay, not what was actually
+handed out in cash.
+- **Recovery:** pulled the last pre-Dev-62 commit of `docs/results.html` (`79c07c8d`,
+  June 17) directly from GitHub commit history via the public web UI's embedded JSON
+  payload (worked around `api.github.com`'s unauthenticated rate limit, which was hit
+  repeatedly this session), extracted the embedded `ALL_SERIES_DATA`, and recomputed
+  all three events' correct historical payouts using the exact old formula (also
+  recovered from that era's source commit). Series#4's reconstructed numbers matched
+  Brian's own screenshot exactly, validating the method before trusting it for
+  Series#2/#3 (which had no independent screenshot to check against).
+- **Root fix:** `saveEventToSeries()` now computes and freezes a `payoutSnapshot` on
+  the event record at save-time — identical protection pattern to the existing
+  per-event quota/actual snapshot, which exists for exactly this reason. Both
+  `generateResultsPage()`'s server-render path and its embedded client-side
+  event-pill-switcher duplicate now check for a stored snapshot first and only fall
+  back to live recalculation for events that predate the fix.
+- **Backfill:** new **⚕ Fix Historical Payouts** button (Series tab) — confirm-gated,
+  idempotent, restores the exact recovered dollar amounts for Series#2/3/4 by setting
+  their `payoutSnapshot` field only (scores/quotas/standings untouched). Brian still
+  needs to click it (and Export JSON first as backup) — not yet confirmed run as of
+  this addendum.
+- Verified the fix mechanically: a synthetic historical event with deliberately
+  wrong/garbage live score data still rendered its frozen snapshot dollar amounts
+  correctly, proving the snapshot-first logic actually short-circuits live
+  recalculation rather than just running alongside it.
+
+**Two more real bugs found via a single screenshot (results.html header + top nav):**
+- **Header title/date frozen on event-pill switch:** the header `<div>`s for event
+  title/date had no `id` attributes at all in the markup; `loadEvent()`'s
+  header-update code targeted `document.getElementById('hdr-event-date')`, an ID that
+  simply didn't exist — silent no-op every single time. Every other tab updated
+  correctly on pill click; only the header stayed stuck on whatever was
+  server-rendered at initial page load. Fixed: real IDs added to both divs,
+  `loadEvent()` now updates title, date, and `document.title` (browser tab title —
+  also never wired up before).
+- **Top nav "⛳ Groupings" link hijacked by the event-pill selector:**
+  `updateGroupingsLink()` dynamically rewrote the white nav bar's Groupings href to
+  match whichever event was selected via the results.html pills — so browsing to an
+  old event silently redirected general-purpose navigation to that event's archive
+  instead of the live/current groupings page. Per Brian's explicit design intent: the
+  top nav should always be a static link to the live page; only the **Groups tab**
+  (in the in-page tab bar) should be event-aware. Removed the function and both call
+  sites entirely — nav link is now the static `/groupings.html` baked into the
+  markup, full stop. Groups tab behavior untouched.
+
+**New idea captured, not built — AI-generated event narratives:** Brian's concept —
+short, humorous per-player + overall event write-ups generated from historical data
+already in GS (quota/skins/CTP/season trends), to accompany the Photos tab as a way
+to memorialize events without anyone writing anything. Full concept captured in new
+`source/specs/BF_EventNarratives_Spec.md`: batched LLM call at Publish time (not
+live per-page-view — static site, no backend to hold credentials), new PIN-gated
+Worker route holding an Anthropic key as a Cloudflare secret (explicitly learning
+from a real precedent already in this codebase — a prior `ANTHROPIC_API_KEY` in
+`launch_golf_scorer.py` was deliberately revoked and removed during the Session 40
+credential-hygiene pass), tone guardrails (good-natured ribbing, never personal or
+repeatedly-negative about one person), and a preview-before-publish step recommended
+at least initially. Not scoped for a build — open questions listed in the spec for
+Dev-64 to resolve before any code gets written.
+
+**Docs updated this addendum:**
+- `BF_Operations_Guide.md` — Generated Pages deploy procedure rewritten for the new
+  `docs/`-direct mechanism; Token Recovery section updated (flagged
+  `launch_golf_scorer.py`'s Publish-relay token as possibly now-unused, Brian's to
+  confirm/remove); Current Versions table brought current across the board (was
+  stale since ~Dev-40/Session-40 era for several rows); four new Backlog & Known
+  Issues rows (money-list history bug, Netlify retirement, header title/date fix,
+  top-nav Groupings fix); new forward-looking row for the narrative concept.
+- `bf_architecture.html` — `golfscorer` DETAILS node rewritten (v8.43, new publish
+  mechanism, payoutSnapshot). New Dev-63-specific currency note added, kept
+  deliberately separate from the existing Dev-56 D1/ERD currency note — no
+  schema/Worker changes this session, ERD redraw still its own deferred session as
+  before.
+- `source/specs/BF_EventNarratives_Spec.md` — new file, full concept spec (see above).
+
+**Carry-forward for Dev-64 — final, supersedes the shorter list in the entry above:**
+- **Brian needs to click "⚕ Fix Historical Payouts" (Series tab) and then re-Publish**
+  — the code fix and backfill data are deployed, but the actual localStorage
+  correction hasn't been applied/republished as of this addendum. First thing to
+  verify next session.
+- **AI-generated event narratives** — candidate main focus, per `BF_EventNarratives_Spec.md`.
+  Needs the open questions in that doc resolved (API key provisioning, preview-vs-auto
+  publish, v1 scope) before any code gets written.
+- **Live on-device verification of the full results.html rebuild** — real Publish
+  click, real photos rendering, real event-switcher behavior. Largely done this
+  addendum via Brian's own screenshots (nav fixed, payout fixed, title/date fixed
+  live) but worth a final confirmation pass.
+- `launch_golf_scorer.py` GitHub token — possibly unused now, Brian to check/remove
+  next time that file is open (see Token Recovery in Ops Guide).
+- Delete the 8 lingering test photo rows (ids 2, 3, 4, 7, 8, 9, 17, 18) — still not
+  done, carried since Dev-61.
+- 40-photo GS Photo Organizer scale test — still not run.
+- Season Money / Overall-pot flight system — still needs its own dedicated design pass
+  (flagged Dev-62).
+- Everything else carried from Dev-57 through Dev-62 untouched: icon-action-btn
+  migration beyond Live Panel Photos, `worker.js` size/organization, full
+  `bf_architecture.html` ERD redraw (D1/ERD specifically, unrelated to this session's
+  GolfScorer-node update), stale Worker Endpoints reference table, Commissioner PIN
+  architecture, push notification preference center, push notification recipient
+  domain (all-`bfw=Yes` vs. registered-only), notification feed → Worker KV redesign,
+  player picker rethink, Player Analytics/Insights layer, proactive pushId health
+  check, GHIN "Following" list confirmation (Ron Grow, Wilbur Hlay, Mohamed Walli,
+  Jeremy Burkett, Lou Strohl, Rich Potts).
+
+**Final versions this addendum:**
+- GS: v8.43 · 2026-07-14 (v8.37 rebuild → v8.38 CTP/Skins order → v8.39 Netlify
+  retirement → v8.40 header version fix → v8.41 payout history fix → v8.42 title/nav
+  fixes → v8.43 Winners rename)
+- Portal: unchanged (v3.17.31, no portal.html edits this session)
+- Worker: unchanged (no worker.js edits — everything reused existing routes)
+- `bf_architecture.html`: updated this addendum (GolfScorer node + Dev-63 currency note)
+- `BF_Operations_Guide.md`: updated this addendum
+- New: `source/specs/BF_EventNarratives_Spec.md`
+
+**Dev-63 fully closed (addendum included).**
