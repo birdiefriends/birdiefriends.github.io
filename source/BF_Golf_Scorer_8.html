@@ -3011,6 +3011,26 @@ function saveEventToSeriesFromResults() {
   }, 500);
 }
 
+// Fetch approved photos per event at publish time, embedded into results.html
+// rather than live-fetched by the page itself (Brian's call, Dev-63) — a photo
+// approved/rejected after publish won't show until the next Publish. Fail-open
+// per event: a Worker/D1 hiccup here must never block the public page from
+// publishing, mirrors the groupings-sync philosophy (Dev-57).
+async function fetchPhotosForEvents(eventNames) {
+  const photosData = {};
+  const uniqueNames = [...new Set((eventNames || []).filter(Boolean))];
+  await Promise.all(uniqueNames.map(async (name) => {
+    try {
+      const res = await fetch(`https://birdiefriends-push.birdiefriends01.workers.dev/photos?event=${encodeURIComponent(name)}`);
+      const data = await res.json();
+      photosData[name] = (data.photos || []).filter(p => p.curation_status === 'approved');
+    } catch (e) {
+      photosData[name] = [];
+    }
+  }));
+  return photosData;
+}
+
 async function publishToNetlify() {
   const btn = document.getElementById('netlify-publish-btn');
 
@@ -3029,14 +3049,17 @@ async function publishToNetlify() {
 
   btn.disabled = true;
   btn.textContent = '⏳ Publishing…';
-  showActionStatus('⏳ Generating results page and publishing…', 'loading');
+  showActionStatus('⏳ Fetching photos and generating results page…', 'loading');
 
   try {
     const season = document.getElementById('series-season')?.value || '2026';
     const seriesData = getSeriesData();
     const sd = seriesData.seasons?.[season];
+    const liveEventName = document.getElementById('event-name').value || 'BF Golf Event';
+    const eventNamesForPhotos = (sd?.events || []).map(e => e.name).concat([liveEventName]);
+    const photosData = await fetchPhotosForEvents(eventNamesForPhotos);
     // Pass full series data so results.html can show all events with correct per-event quotas
-    const resultsHtml = generateResultsPage(null, null, sd);
+    const resultsHtml = generateResultsPage(null, null, sd, photosData);
     const pages = { 'results.html': resultsHtml };
     if (sd && sd.events?.length) {
       pages['standings.html'] = generateSeriesPage(season, sd);
@@ -3081,7 +3104,8 @@ async function publishToNetlify() {
 // historicalEvt: optional saved event object from series data (has .scores, .ctp, .skins,
 //                and playerHistory entries with per-event quota/actual)
 // seriesData: optional full season data (sd) — when provided, results.html embeds all events
-function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData) {
+function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData, photosData) {
+  photosData = photosData || {}; // { eventName: [approved photo rows] }, fetched at publish time (Dev-63)
   const ptsToDiff = { 0:+2, 1:+1, 2:0, 4:-1, 6:-2 };
 
   let eventName, eventDate, scores, skinWinners, ctpData;
@@ -3212,6 +3236,34 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData)
           <td class="r" style="font-weight:700;color:var(--green)">$${p.total.toFixed(2)}</td>
         </tr>`).join('');
 
+  // ── Photos for this event (Dev-63) — embedded at publish time, grouped by story section ──
+  const PHOTOS_SERVE_BASE = 'https://birdiefriends-push.birdiefriends01.workers.dev';
+  const photosForEvent = photosData[eventName] || [];
+  function buildPhotoGridHtml(section) {
+    const photos = photosForEvent.filter(p => p.section === section);
+    if (!photos.length) return '';
+    return photos.map(p => {
+      const src = PHOTOS_SERVE_BASE + '/photos/serve/' + p.id;
+      const trophy = p.is_trophy_moment ? '<div class="photo-trophy">🏆</div>' : '';
+      const media = p.media_type === 'video'
+        ? '<video src="' + src + '" muted playsinline preload="metadata"></video>'
+        : '<img src="' + src + '" loading="lazy" alt="">';
+      return '<div class="photo-thumb" onclick="openPhotoLightbox(\'' + src + '\',\'' + p.media_type + '\')">' + trophy + media + '</div>';
+    }).join('');
+  }
+  const photoSections = [
+    { key:'pre_competition', label:'🌅 Pre-Competition' },
+    { key:'on_course',       label:'⛳ On the Course' },
+    { key:'post_round',      label:'🏆 Post-Round' }
+  ];
+  const photosTabBodyHtml = !photosForEvent.length
+    ? '<div class="photo-empty">No photos for this event yet.</div>'
+    : photoSections.map(s => {
+        const grid = buildPhotoGridHtml(s.key);
+        if (!grid) return '';
+        return '<div class="photo-section-label">' + s.label + '</div><div class="photo-grid">' + grid + '</div>';
+      }).join('');
+
   // ── Build event selector HTML (computed before template literal to avoid nesting issues) ──
   const evtSelectorHtml = (seriesData && seriesData.events && seriesData.events.length > 1)
     ? '<div style="margin-top:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;'
@@ -3234,6 +3286,7 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData)
 
   // ── Embed series JSON for client-side event switching ──
   const embeddedSeriesJson = seriesData ? JSON.stringify(seriesData).replace(/<\/script>/gi,'<\\/script>') : 'null';
+  const embeddedPhotosJson = JSON.stringify(photosData).replace(/<\/script>/gi,'<\\/script>');
 
   // ── Build mobile HTML page ──
   return `<!DOCTYPE html>
@@ -3315,6 +3368,22 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData)
   .ctp-row:last-child { border-bottom:none; }
   .par3-badge { width:36px; height:36px; border-radius:8px; background:var(--gold); color:#fff; font-weight:700; font-size:0.82rem; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   .updated { text-align:center; font-size:0.72rem; color:var(--muted); padding:20px 0 8px; }
+
+  /* Highlights tab (Dev-63 — consolidated Podium/Skins/CTP/Money) */
+  .highlights-spacer { height:14px; }
+
+  /* Photos tab (Dev-63) */
+  .photo-section-label { font-size:0.68rem; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); margin:18px 0 8px; }
+  .photo-section-label:first-child { margin-top:0; }
+  .photo-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .photo-thumb { position:relative; aspect-ratio:1; border-radius:8px; overflow:hidden; background:#e8f0ec; cursor:pointer; }
+  .photo-thumb img, .photo-thumb video { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; }
+  .photo-trophy { position:absolute; top:4px; right:4px; font-size:0.9rem; filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
+  .photo-empty { text-align:center; color:var(--muted); font-size:0.85rem; padding:24px 0; }
+  .photo-lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:1000; align-items:center; justify-content:center; padding:24px; }
+  .photo-lightbox.active { display:flex; }
+  .photo-lightbox img, .photo-lightbox video { max-width:100%; max-height:100%; border-radius:8px; }
+  .photo-lightbox-close { position:absolute; top:16px; right:16px; color:#fff; font-size:1.8rem; cursor:pointer; line-height:1; padding:6px 10px; }
 </style>
 </head>
 <body>
@@ -3340,19 +3409,17 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData)
 </div>
 
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('podium',this)">Podium</div>
+  <div class="tab active" onclick="switchTab('highlights',this)">Highlights</div>
   <div class="tab" onclick="switchTab('standings',this)">Standings</div>
   <div class="tab" onclick="switchTab('strokes',this)">vs Par</div>
   <div class="tab" onclick="switchTab('birdies',this)">🐦 Birdies</div>
-  <div class="tab" onclick="switchTab('skins',this)">Skins</div>
-  <div class="tab" onclick="switchTab('ctp',this)">CTP</div>
-  <div class="tab" onclick="switchTab('money',this)">💰 Money</div>
+  <div class="tab" onclick="switchTab('photos',this)">📸 Photos</div>
   <div class="tab" id="groups-tab" onclick="switchTab('groups',this)" style="opacity:0.45" title="No groupings archive for this event">⛳ Groups</div>
 </div>
 
-<!-- ── PODIUM TAB ── -->
-<div class="tab-content active" id="tab-podium">
-  <div class="card">
+<!-- ── HIGHLIGHTS TAB (Dev-63 — consolidates Podium + Skins + CTP + Money) ── -->
+<div class="tab-content active" id="tab-highlights">
+  <div class="card" id="highlights-podium-card">
     <div class="card-label">Top 3 Finishers</div>
     <div class="podium">
       ${top3.map((p,i) => `
@@ -3363,6 +3430,35 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData)
           <div class="pdiff">${p.diff!==null?fmtDiff(p.diff):'—'}</div>
         </div>`).join('')}
     </div>
+  </div>
+
+  <div class="card" id="highlights-skins-card">
+    <div class="card-label">${skinWinners.length} Skin${skinWinners.length!==1?'s':''} Won</div>
+    <div class="skins-body">
+    ${skinWinners.length === 0
+      ? '<div style="color:var(--muted);font-size:0.85rem;text-align:center;padding:12px">No outright skins — all holes tied</div>'
+      : skinWinners.map(s => `
+          <div class="skin-row">
+            <div class="hole-badge">#${s.hole}</div>
+            <div class="skin-info">
+              <div class="skin-name">${s.winner}</div>
+              <div class="skin-detail">Outright winner · ${s.pts} pts</div>
+            </div>
+          </div>`).join('')}
+    </div>
+  </div>
+
+  <div class="card" id="highlights-ctp-card">
+    <div class="card-label">Closest to the Pin · Par 3 Holes</div>
+    ${ctpRowsHTML}
+  </div>
+
+  <div class="card" id="highlights-money-card">
+    <div class="card-label">💰 Money List — Total Earnings</div>
+    <table>
+      <thead><tr><th></th><th>Player</th><th class="r">Podium</th><th class="r">Skins</th><th class="r">CTP</th><th class="r">Total</th></tr></thead>
+      <tbody>${moneyRowsHTML}</tbody>
+    </table>
   </div>
 </div>
 
@@ -3425,53 +3521,16 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData)
   </div>
 </div>
 
-<!-- ── SKINS TAB ── -->
-<div class="tab-content" id="tab-skins">
+<!-- ── PHOTOS TAB (Dev-63 — approved photos, embedded at publish time) ── -->
+<div class="tab-content" id="tab-photos">
   <div class="card">
-    <div class="card-label">${skinWinners.length} Skin${skinWinners.length!==1?'s':''} Won</div>
-    <div class="skins-body">
-    ${skinWinners.length === 0
-      ? '<div style="color:var(--muted);font-size:0.85rem;text-align:center;padding:12px">No outright skins — all holes tied</div>'
-      : skinWinners.map(s => `
-          <div class="skin-row">
-            <div class="hole-badge">#${s.hole}</div>
-            <div class="skin-info">
-              <div class="skin-name">${s.winner}</div>
-              <div class="skin-detail">Outright winner · ${s.pts} pts</div>
-            </div>
-          </div>`).join('')}
-    </div>
+    <div class="card-label">📸 Event Photos</div>
+    ${photosTabBodyHtml}
   </div>
 </div>
-
-<!-- ── CTP TAB ── -->
-<div class="tab-content" id="tab-ctp">
-  <div class="card">
-    <div class="card-label">Closest to the Pin · Par 3 Holes</div>
-    ${ctpRowsHTML}
-  </div>
-</div>
-
-<!-- ── MONEY TAB ── -->
-<div class="tab-content" id="tab-money">
-  <div class="card">
-    <div class="card-label">💰 Money List — Total Earnings</div>
-    <table>
-      <thead><tr><th></th><th>Player</th><th class="r">Podium</th><th class="r">Skins</th><th class="r">CTP</th><th class="r">Total</th></tr></thead>
-      <tbody>${moneyRowsHTML}</tbody>
-    </table>
-  </div>
-</div>
-
-
-<!-- ── GROUPS TAB ── -->
-<div class="tab-content" id="tab-groups">
-  <div id="groups-iframe-wrap" style="border-radius:12px;overflow:hidden;background:#fff">
-    <iframe id="groups-iframe" src="" style="width:100%;height:80vh;border:none;display:none"></iframe>
-    <div id="groups-no-archive" style="padding:40px;text-align:center;color:#6b7280;font-size:0.9rem">
-      No groupings archive for this event.
-    </div>
-  </div>
+<div class="photo-lightbox" id="photo-lightbox" onclick="if(event.target===this)closePhotoLightbox()">
+  <span class="photo-lightbox-close" onclick="closePhotoLightbox()">×</span>
+  <div id="photo-lightbox-media"></div>
 </div>
 
 <!-- ── GROUPS TAB ── -->
@@ -3488,6 +3547,8 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData)
 <script>
 // ── Embedded series data for event selector ──
 const ALL_SERIES_DATA = ${embeddedSeriesJson};
+const ALL_PHOTOS_DATA = ${embeddedPhotosJson};
+const PHOTOS_SERVE_BASE_CLIENT = '${PHOTOS_SERVE_BASE}';
 const BSGC_PARS_DATA = [4,4,3,4,5,4,5,3,4, 3,5,4,4,4,3,4,5,3];
 const PTS_TO_DIFF    = { 0:2, 1:1, 2:0, 4:-1, 6:-2 };
 
@@ -3496,6 +3557,56 @@ const GROUPINGS_ARCHIVE = {};
 (ALL_SERIES_DATA.events || []).forEach(evt => {
   if (evt.groupingsFile) GROUPINGS_ARCHIVE[evt.name] = evt.groupingsFile;
 });
+
+// ── Photo lightbox (Dev-63) ──
+function openPhotoLightbox(src, mediaType) {
+  const box = document.getElementById('photo-lightbox');
+  const holder = document.getElementById('photo-lightbox-media');
+  holder.innerHTML = mediaType === 'video'
+    ? '<video src="' + src + '" controls autoplay playsinline></video>'
+    : '<img src="' + src + '" alt="">';
+  box.classList.add('active');
+}
+function closePhotoLightbox() {
+  const box = document.getElementById('photo-lightbox');
+  box.classList.remove('active');
+  document.getElementById('photo-lightbox-media').innerHTML = '';
+}
+
+// Render the Photos tab for a given event from embedded ALL_PHOTOS_DATA (Dev-63)
+function renderPhotosTab(eventName) {
+  const wrap = document.querySelector('#tab-photos .card');
+  if (!wrap) return;
+  const photos = ALL_PHOTOS_DATA[eventName] || [];
+  const sections = [
+    { key:'pre_competition', label:'🌅 Pre-Competition' },
+    { key:'on_course',       label:'⛳ On the Course' },
+    { key:'post_round',      label:'🏆 Post-Round' }
+  ];
+  function gridFor(sectionKey) {
+    const rows = photos.filter(p => p.section === sectionKey);
+    if (!rows.length) return '';
+    return rows.map(p => {
+      const src = PHOTOS_SERVE_BASE_CLIENT + '/photos/serve/' + p.id;
+      const trophy = p.is_trophy_moment ? '<div class="photo-trophy">🏆</div>' : '';
+      const media = p.media_type === 'video'
+        ? '<video src="' + src + '" muted playsinline preload="metadata"></video>'
+        : '<img src="' + src + '" loading="lazy" alt="">';
+      return '<div class="photo-thumb" onclick="openPhotoLightbox(\\'' + src + '\\',\\'' + p.media_type + '\\')">' + trophy + media + '</div>';
+    }).join('');
+  }
+  let bodyHtml = photos.length === 0
+    ? '<div class="photo-empty">No photos for this event yet.</div>'
+    : sections.map(s => {
+        const grid = gridFor(s.key);
+        return grid ? '<div class="photo-section-label">' + s.label + '</div><div class="photo-grid">' + grid + '</div>' : '';
+      }).join('');
+  // Replace everything after the card-label
+  const label = wrap.querySelector('.card-label');
+  wrap.innerHTML = '';
+  wrap.appendChild(label);
+  wrap.insertAdjacentHTML('beforeend', bodyHtml);
+}
 
 function switchTab(id, el) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -3625,7 +3736,7 @@ function loadEvent(selectedName) {
     for (let j = pi; j < ti; j++) placeLabels.push(tied ? \`T-\${pi+1}\` : \`\${pi+1}\`);
     pi = ti;
   }
-  document.querySelector('#tab-podium .podium').innerHTML = top3.map((p,i) => \`
+  document.querySelector('#highlights-podium-card .podium').innerHTML = top3.map((p,i) => \`
     <div class="podium-card \${i===0&&placeLabels[0]==='1'?'p1':''}">
       <div class="medal">\${placeLabels[i]==='1'?'🥇':placeLabels[i]==='2'?'🥈':placeLabels[i]==='3'?'🥉':placeLabels[i]}</div>
       <div class="pname">\${p.name}</div>
@@ -3686,7 +3797,7 @@ function loadEvent(selectedName) {
       </tr>\`).join('');
 
   // ── Skins ──
-  const skinsCard = document.querySelector('#tab-skins .card');
+  const skinsCard = document.querySelector('#highlights-skins-card');
   skinsCard.querySelector('.card-label').textContent = skinWinners.length + ' Skin' + (skinWinners.length!==1?'s':'') + ' Won';
   const skinBody = skinsCard.querySelector('.skins-body') || (() => {
     const d = document.createElement('div'); d.className='skins-body'; skinsCard.appendChild(d); return d;
@@ -3704,7 +3815,7 @@ function loadEvent(selectedName) {
 
   // ── CTP ──
   const ctpHoles = [3,8,10,15,18];
-  document.querySelector('#tab-ctp .card').querySelectorAll('.ctp-row').forEach((row,i) => {
+  document.querySelector('#highlights-ctp-card').querySelectorAll('.ctp-row').forEach((row,i) => {
     const h = ctpHoles[i];
     const w = ctpData && ctpData[h];
     row.querySelector('.skin-name').textContent = w || '—';
@@ -3762,7 +3873,7 @@ function loadEvent(selectedName) {
     .map(([name,p]) => ({name, ...p, total:p.quota+p.skin+p.ctp}))
     .filter(p => p.total > 0)
     .sort((a,b) => b.total - a.total);
-  document.querySelector('#tab-money table tbody').innerHTML = moneyRows.length===0
+  document.querySelector('#highlights-money-card table tbody').innerHTML = moneyRows.length===0
     ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:12px">No payouts recorded</td></tr>'
     : moneyRows.map((p,i) => \`<tr>
         <td class="rank">\${i+1}</td>
@@ -3773,6 +3884,9 @@ function loadEvent(selectedName) {
         <td class="r" style="font-weight:700;color:var(--green)">$\${p.total.toFixed(2)}</td>
       </tr>\`).join('');
 
+  // ── Photos (Dev-63) ──
+  renderPhotosTab(selectedName);
+
   // Update header date
   const dateStr = evt.date
     ? new Date(evt.date + 'T00:00:00').toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})
@@ -3780,8 +3894,8 @@ function loadEvent(selectedName) {
   const hdrDate = document.getElementById('hdr-event-date');
   if (hdrDate) hdrDate.textContent = dateStr;
 
-  // Reset to podium tab
-  switchTab('podium', document.querySelector('.tabs .tab'));
+  // Reset to highlights tab
+  switchTab('highlights', document.querySelector('.tabs .tab'));
 }
 <\/script>
 <\/body>
@@ -4348,7 +4462,7 @@ async function publishAllPagesCore() {
     const lastPh       = {};
     Object.entries(sd.playerHistory).forEach(([name, ph]) => { lastPh[name] = ph; });
 
-    const resultsHtml  = generateResultsPage(lastEvt, lastPh, sd);
+    const resultsHtml  = generateResultsPage(lastEvt, lastPh, sd, await fetchPhotosForEvents(sd.events.map(e => e.name)));
     const seriesHtml   = generateSeriesPage(season, sd);
     const myGameHtml   = generateMyGamePage(season, sd);
 
@@ -8335,7 +8449,7 @@ function grpKickOffEvent() {
 
 // Set build date in header
 document.getElementById('build-date').textContent = '2026-07-10a';
-const GS_VERSION = 'v8.36 · 2026-07-13';
+const GS_VERSION = 'v8.37 · 2026-07-14';
 
 // ── Preview Mode Detection ─────────────────────────────────────────────────────
 // Check if Python server is running in preview mode and surface it visually.
