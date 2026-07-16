@@ -649,6 +649,11 @@
       <button class="btn btn-primary" onclick="grpKickOffEvent()" id="grp-kickoff-btn">&#x26F3; Kick Off Event</button>
     </div>
     <div id="grp-publish-status" style="width:100%;font-size:0.82rem;display:none;margin-top:4px"></div>
+    <div id="grp-unpublished-banner" style="display:none;width:100%;margin-top:6px;padding:8px 12px;
+      background:#fff8e8;border:1px solid #e8b84b;border-radius:6px;
+      font-size:0.82rem;color:#7a4a00;align-items:center;gap:6px">
+      &#x26A0; Groupings changed since last publish — the public page doesn't reflect this yet. Click Publish Groupings to update it.
+    </div>
   </div>
 
   <!-- Zone 1: HCP Editor table -->
@@ -7634,7 +7639,37 @@ function grpTableSetTee(id, tee) {
   grpSaveData();
 }
 
+// ── Unpublished-changes indicator (Dev-65) ─────────────────────────────
+// grpPublish() bakes a one-time snapshot of grpPlayers into the static
+// groupings.html — there is no live connection between GS's Groups tab and
+// the public page afterward. A GHIN import, a manual HCP edit, or a group/
+// tee-time change made after the last Publish click silently goes stale on
+// the public page until Publish is clicked again. Caught live (Dev-64) when
+// a GHIN-corrected HCP for Wilbur Hlay didn't match the already-published
+// page. This tracks a lightweight fingerprint of exactly what generates the
+// published output (group assignment, sort order, HCP, quota, tee) and
+// shows a banner whenever the live data has drifted from what was actually
+// published — no more relying on someone noticing a mismatched screenshot.
+let _grpPublishedFingerprint = null; // null = nothing published yet this session — nothing to compare against
+
+function grpComputePublishFingerprint() {
+  return grpPlayers
+    .slice()
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+    .map(p => [p.id, p.groupId || '', p.sortOrder || 0, p.hcp ?? '', p.quota ?? '', p.tee || ''].join('|'))
+    .join('~');
+}
+
+function grpUpdatePublishStatusBanner() {
+  const banner = document.getElementById('grp-unpublished-banner');
+  if (!banner) return;
+  if (_grpPublishedFingerprint === null) { banner.style.display = 'none'; return; }
+  const stale = grpComputePublishFingerprint() !== _grpPublishedFingerprint;
+  banner.style.display = stale ? 'flex' : 'none';
+}
+
 function grpRenderPool() {
+  grpUpdatePublishStatusBanner();
   const pool = document.getElementById('grp-pool');
   const empty = document.getElementById('grp-pool-empty');
   const unassigned = grpPlayers.filter(p => !p.groupId);
@@ -7653,6 +7688,7 @@ function grpRenderPool() {
 }
 
 function grpRenderGroups() {
+  grpUpdatePublishStatusBanner();
   const container = document.getElementById('grp-groups-container');
   const emptyMsg  = document.getElementById('grp-groups-empty');
   if (!grpGroups.length) {
@@ -7854,6 +7890,10 @@ async function grpFetchRegistrants() {
   const btn = document.getElementById('grp-fetch-btn');
   btn.disabled = true; btn.textContent = '⏳ Fetching…';
   grpSetStatus('loading', `Fetching registrants for "${eventName}"…`);
+  // Fresh fetch = fresh start for the unpublished-changes tracker (Dev-65) —
+  // nothing published yet against this data, so the banner shouldn't compare
+  // against whatever a previous event's publish looked like.
+  _grpPublishedFingerprint = null;
 
   try {
     // Fetch from Registration form via proxy
@@ -8148,6 +8188,13 @@ async function grpPublish() {
         localStorage.setItem('bf_groupings_archive', JSON.stringify(archMap));
       }
       grpShowPublishStatus('success', `&#x2713; groupings.html published (${status})${visLabel} &mdash; <a href="https://birdiefriends.com/groupings.html" target="_blank" style="color:#085041;font-weight:600">birdiefriends.com/groupings.html</a>${archiveNote}`);
+      // Snapshot what's now actually live — only for a real (non-Hidden) publish,
+      // since a Hidden/holding-page publish doesn't show grouping data at all and
+      // shouldn't be treated as "current data now matches the public page."
+      if (visibility !== 'hidden') {
+        _grpPublishedFingerprint = grpComputePublishFingerprint();
+        grpUpdatePublishStatusBanner();
+      }
     } else {
       throw new Error(result.error || 'Unknown error');
     }
@@ -8444,7 +8491,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.43 · 2026-07-14';
+const GS_VERSION = 'v8.44 · 2026-07-16';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
