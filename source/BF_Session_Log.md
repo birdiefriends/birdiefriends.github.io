@@ -1444,6 +1444,7 @@ This file had never been backed up anywhere, by design (laptop-only, holds `JOTF
 - `source/launch_golf_scorer.py` — new library backup, sanitized (key blanked), threading fix included
 - `source/BF_Operations_Guide.md` — Token Recovery note + new Known Issues rows for this session's fixes
 - `docs/portal.html` + `source/portal.html` + `docs/portal_version.txt` + `source/portal_version.txt` — gatheringId-aware matching fix (v3.17.32), then universal RSVP icon-row redesign (v3.17.33)
+- `source/BF_Golf_Scorer_8.html` — unpublished-groupings-changes banner (v8.44)
 
 **Per-event "Send Notification" — already existed, surfaced + hardened:**
 Brian asked to add a way to push OneSignal notifications to only the players registered for a specific event, from the event card. Found this was already fully built (commissioner-only "📣 Send Notification" button under the card's "Players ›" expand, `openCommissionerPush()`/`sendCommissionerPush()`, targets via `osSendToPlayers()`, documented in Ops Guide §6 as `bfType: 'event_push'`) — just not discoverable from the card face itself, one tap deeper than expected.
@@ -1470,8 +1471,25 @@ Brian reported real player feedback: a couple of players were registering Yes an
 
 **Portal deployed:** v3.17.33 · 2026-07-16, all 4 files.
 
+**Groupings/GS quota mismatch — real staleness, root cause found, banner shipped:**
+Brian caught Wilbur Hlay showing a different quota on the live `groupings.html` (HCP 8.6, no adjustment) than in GS's Groups tab (HCP 8.3, with a visible "HCP change (8.6→8.3)" quota-adjustment breakdown), and flagged that other players could be affected too. Investigated by pulling the live `docs/groupings.html` directly — it already showed HCP 8.3 by the time of investigation (the file's `publishedAt` timestamp was very recent, same day), meaning the mismatch had already resolved itself via a subsequent Publish click before or during this conversation.
+
+**Root cause confirmed:** `grpPublish()` bakes a one-time snapshot of GS's in-memory `grpPlayers` into the static `groupings.html` at the moment "Publish Groupings" is clicked — there's no live connection between the Groups tab and the public page afterward. Any HCP/quota correction made in GS after the last publish (GHIN import, manual table edit, group/tee-time change) silently goes stale on the public page with zero warning, until Publish is clicked again. This is the existing, intentional "replace-on-publish" architecture from Dev-57 — not a new bug, but a real blind spot: nothing ever told the commissioner the two had drifted apart.
+
+**Fix shipped (GS v8.44) — unpublished-changes banner:**
+- New `grpComputePublishFingerprint()` — a lightweight fingerprint of exactly what generates the published page (each player's group assignment, sort order, HCP, quota, tee), independent of anything irrelevant like admin panel state.
+- `_grpPublishedFingerprint` module-level snapshot, captured on every successful **non-Hidden** publish (a Hidden/holding-page publish doesn't show real grouping data, so it's deliberately excluded from marking things "in sync").
+- `grpUpdatePublishStatusBanner()` compares the live fingerprint against the last-published one and shows/hides a new amber banner ("⚠ Groupings changed since last publish — the public page doesn't reflect this yet") next to the Publish button.
+- Hooked into `grpRenderPool()` and `grpRenderGroups()` — both already fire after every meaningful mutation (confirmed via the Dev-62 fix that made GHIN imports re-render both), so the banner check runs automatically after any relevant change without needing to instrument each individual mutation call site (GHIN paste, manual HCP edit, drag-and-drop reassignment, etc. all funnel through these two renders).
+- `_grpPublishedFingerprint` resets to `null` on a fresh `grpFetchRegistrants()` call, so switching events or starting a new session doesn't spuriously compare against an unrelated prior publish.
+
+`node --check` clean on the full extracted script; confirmed the new banner element ID is unique and both new functions are singly-defined before deploy.
+
+**Portal follow-up:** none needed — this was entirely GS-side (native app), no worker.js or portal.html changes.
+
 **Carry-forward / still open from Dev-63, untouched so far this session:**
 - **Live on-device verification of the RSVP icon row** — built and syntax-checked but not yet exercised against real live data (real Yes/Sub/No taps on both a Series card and a Gathering card, capacity-lock/overflow edge cases, the new direct-No park/toast behavior). First priority next session.
+- **Live on-device verification of the unpublished-changes banner** — built and syntax-checked but not yet exercised against a real GHIN import/HCP edit followed by a Publish click. Second priority next session.
 - Brian still needs to click **⚕ Fix Historical Payouts** (Series tab) and re-Publish — money-list history fix deployed but not yet applied/republished
 - Delete the 8 lingering test photo rows (ids 2, 3, 4, 7, 8, 9, 17, 18) — carried since Dev-61
 - 40-photo GS Photo Organizer scale test — still not run
