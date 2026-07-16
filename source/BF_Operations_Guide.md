@@ -242,7 +242,7 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 | Component | Version | Status |
 |-----------|---------|--------|
 | Portal | v3.17.33 · 2026-07-16 | Production ✅ — universal RSVP icon-row redesign, gatheringId-aware matching fix (Dev-64) |
-| GolfScorer | v8.43 · 2026-07-14 | Deployed ✅ — results.html rebuild (Highlights/Photos tabs), Netlify-relay retirement, payoutSnapshot fix all Dev-63 |
+| GolfScorer | v8.44 · 2026-07-16 | Deployed ✅ — unpublished-groupings-changes banner (Dev-64); results.html rebuild (Highlights/Photos tabs), Netlify-relay retirement, payoutSnapshot fix all Dev-63 |
 | Worker | 2026-06-18b | Deployed ✅ — `/deploy` accepts `source/` and `docs/` paths. No Worker changes Dev-63/64. |
 | deploy.html | 2026-06-18 | Live ✅ — all tabs functional (Session BP-1 fix) |
 | bf_deploy.py | 2026-06-18 | In library for reference only — TOKEN-authenticated functions not invoked by Claude |
@@ -676,6 +676,13 @@ Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
 - Series#5+: fully automatic, no manual step
 
 **Known separate issue, not fixed:** `generateSeriesPage()` (standings.html) has the same broken onclick with no supporting JS/content panel at all — vestigial, parked.
+
+### Unpublished Groupings Changes Banner (Dev-64)
+`grpPublish()` bakes a one-time snapshot of `grpPlayers` into the static `groupings.html` at click time — there's no live connection to the Groups tab afterward. Any HCP/quota correction made after the last publish (GHIN import, manual table edit, group/tee-time change) silently goes stale on the public page with no warning. Caught live when a GHIN-corrected HCP for Wilbur Hlay didn't match the already-published page.
+
+**Mechanism:** `grpComputePublishFingerprint()` builds a lightweight fingerprint of exactly what generates the published page (per-player group assignment, sort order, HCP, quota, tee). `_grpPublishedFingerprint` is captured on every successful **non-Hidden** publish (a Hidden/holding-page publish is deliberately excluded — it doesn't show real grouping data). `grpUpdatePublishStatusBanner()` compares live vs. last-published and shows/hides the amber banner next to the Publish button — hooked into `grpRenderPool()`/`grpRenderGroups()`, both of which already fire after every meaningful mutation, so no individual mutation site needed separate instrumentation. Resets to `null` on a fresh `grpFetchRegistrants()` call so switching events doesn't compare against an unrelated prior publish.
+
+**Not yet live-verified** — built and syntax-checked (GS v8.44) but not yet exercised against a real GHIN import/HCP edit followed by Publish. First thing to check next session.
 
 ### No-HCP Player Flow (e.g. Rich Potts)
 - `grpMergePlayers` sets `isNoHcp: false` by default — new player ≠ no GHIN handicap
