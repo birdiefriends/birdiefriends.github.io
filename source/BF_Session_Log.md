@@ -1443,6 +1443,14 @@ This file had never been backed up anywhere, by design (laptop-only, holds `JOTF
 **Files touched this session:**
 - `source/launch_golf_scorer.py` — new library backup, sanitized (key blanked), threading fix included
 - `source/BF_Operations_Guide.md` — Token Recovery note + new Known Issues row for this fix
+- `docs/portal.html` + `source/portal.html` + `docs/portal_version.txt` + `source/portal_version.txt` — gatheringId-aware matching fix in Text All/Send Notification (v3.17.32)
+
+**Per-event "Send Notification" — already existed, surfaced + hardened:**
+Brian asked to add a way to push OneSignal notifications to only the players registered for a specific event, from the event card. Found this was already fully built (commissioner-only "📣 Send Notification" button under the card's "Players ›" expand, `openCommissionerPush()`/`sendCommissionerPush()`, targets via `osSendToPlayers()`, documented in Ops Guide §6 as `bfType: 'event_push'`) — just not discoverable from the card face itself, one tap deeper than expected.
+
+While confirming it, found a real latent gap: `textAllPlayers()`, `openCommissionerPush()`, and `sendCommissionerPush()` all matched registrations by raw `eventName` string, not the gathering-ID-aware matching Dev-58 applied everywhere else after the Chooch recurring-Gathering title-collision bug (same class: a same-titled recurring Gathering in its 2nd+ week could pull in the wrong week's registrants). Harmless for BF Series events (unique titles) but real for Gatherings. Fixed all three functions to match by `gatheringId` when `evt.source === 'gathering'`, falling back to title match otherwise — same pattern already used in `findMyReg`/`buildEventCard`/`getSimpleCapacityStatus`. `node --check` run on all extracted inline script blocks before deploy, clean.
+
+**Portal deployed:** v3.17.32 · 2026-07-16, all 4 files (`docs/portal.html`, `source/portal.html`, `source/portal_version.txt`, `docs/portal_version.txt`).
 
 **Carry-forward / still open from Dev-63, untouched so far this session:**
 - Brian still needs to click **⚕ Fix Historical Payouts** (Series tab) and re-Publish — money-list history fix deployed but not yet applied/republished
