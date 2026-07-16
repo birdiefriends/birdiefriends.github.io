@@ -1442,8 +1442,8 @@ This file had never been backed up anywhere, by design (laptop-only, holds `JOTF
 
 **Files touched this session:**
 - `source/launch_golf_scorer.py` — new library backup, sanitized (key blanked), threading fix included
-- `source/BF_Operations_Guide.md` — Token Recovery note + new Known Issues row for this fix
-- `docs/portal.html` + `source/portal.html` + `docs/portal_version.txt` + `source/portal_version.txt` — gatheringId-aware matching fix in Text All/Send Notification (v3.17.32)
+- `source/BF_Operations_Guide.md` — Token Recovery note + new Known Issues rows for this session's fixes
+- `docs/portal.html` + `source/portal.html` + `docs/portal_version.txt` + `source/portal_version.txt` — gatheringId-aware matching fix (v3.17.32), then universal RSVP icon-row redesign (v3.17.33)
 
 **Per-event "Send Notification" — already existed, surfaced + hardened:**
 Brian asked to add a way to push OneSignal notifications to only the players registered for a specific event, from the event card. Found this was already fully built (commissioner-only "📣 Send Notification" button under the card's "Players ›" expand, `openCommissionerPush()`/`sendCommissionerPush()`, targets via `osSendToPlayers()`, documented in Ops Guide §6 as `bfType: 'event_push'`) — just not discoverable from the card face itself, one tap deeper than expected.
@@ -1452,7 +1452,26 @@ While confirming it, found a real latent gap: `textAllPlayers()`, `openCommissio
 
 **Portal deployed:** v3.17.32 · 2026-07-16, all 4 files (`docs/portal.html`, `source/portal.html`, `source/portal_version.txt`, `docs/portal_version.txt`).
 
+**RSVP redesign — universal icon-row Yes/Sub/No control (Series + Gatherings):**
+Brian reported real player feedback: a couple of players were registering Yes and immediately unregistering as a workaround, because Series/Weekend events had no explicit "No" option before registering — only "Register." (Gatherings already had Yes/No/Sub as three separate full-width stacked buttons, but Brian doesn't like the real-estate cost of that pattern either.) Mocked up three compact alternatives (segmented toggle, icon row, inline compact buttons) styled directly on the actual dark-green card colors before building anything; Brian picked the icon row — small circular Yes/Sub/No icons with the current status shown filled/gold, matching the existing `icon-action-btn` component already used for Live Panel Photo Capture (Dev-57) and explicitly flagged then as the intended pattern for exactly this kind of control (parallel, short-nameable, space-constrained peer actions).
+
+**Scope, per Brian's explicit "universal approach" request:** replaced `buildActionButtons()` entirely for both Gatherings and standard (Series/Weekend/etc.) events with a new shared `buildRsvpIconRow(evt, myReg, opts)` helper. Every prior status branch (never responded, registered Yes/Sub, declined, stale-response, hard-capacity-locked, 5th-player-pending) now renders the same three-icon row instead of its own bespoke button set — current status highlighted, tapping any icon submits that status directly via the existing `submitRegistration()`, which already routes Gatherings to `submitGatheringRegistration()` and handles new-vs-existing PUT/POST internally.
+
+**Capacity semantics preserved exactly, not simplified away:**
+- Series' existing overflow behavior (a full event's "eager Yes" tap actually submits as `Sub`, not `Yes`, to avoid literally exceeding the cap) is preserved via a `yesSubmitsAs` override — the icon still reads "Yes," the literal submitted value changes underneath, same as the old single-button label swap did.
+- Gatherings' existing behavior (Yes tap always submits literal `Yes` even over capacity — an intentional over-cap waitlist model, different from Series on purpose) is untouched — no override applied there.
+- The hard-capacity-lock edge case (Series only) disables the Yes icon (grayed, non-interactive) unless the player is already Yes, mirroring the old lock's intent exactly; Sub and No stay live.
+
+**Real gap closed as a side effect:** `submitRegistration()`'s direct-`'No'` path was previously unreachable for Series events (only `changeRegistration()`'s Unregister button ever produced `'No'`, with its own correct toast/park behavior) — now that the icon row lets players submit `No` directly, that path had to be made correct too. Fixed to park the card and show "Marked as not attending [event]" (mirroring `submitGatheringRegistration()`'s existing `'No'` handling) instead of falling through to a wrong "🔄 Sub registered" toast.
+
+**Trade-off, stated plainly:** the old Series-only "Unregister" button routed through `changeRegistration()`, which shows an Undo toast on cancel. The new universal icon row routes every tap (including No) through `submitRegistration()` uniformly for both event types — matching how Gatherings' three buttons already worked (no Undo toast) rather than preserving a Series-only affordance during the merge. Switching back is still one tap on the Yes/Sub icon, just without the toast's explicit Undo action.
+
+`node --check` run on all extracted inline script blocks before deploy, clean. Spot-checked every new `onclick` target and CSS class resolves.
+
+**Portal deployed:** v3.17.33 · 2026-07-16, all 4 files.
+
 **Carry-forward / still open from Dev-63, untouched so far this session:**
+- **Live on-device verification of the RSVP icon row** — built and syntax-checked but not yet exercised against real live data (real Yes/Sub/No taps on both a Series card and a Gathering card, capacity-lock/overflow edge cases, the new direct-No park/toast behavior). First priority next session.
 - Brian still needs to click **⚕ Fix Historical Payouts** (Series tab) and re-Publish — money-list history fix deployed but not yet applied/republished
 - Delete the 8 lingering test photo rows (ids 2, 3, 4, 7, 8, 9, 17, 18) — carried since Dev-61
 - 40-photo GS Photo Organizer scale test — still not run
