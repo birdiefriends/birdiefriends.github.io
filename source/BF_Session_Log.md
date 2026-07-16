@@ -1424,3 +1424,32 @@ Dev-64 to resolve before any code gets written.
 - New: `source/specs/BF_EventNarratives_Spec.md`
 
 **Dev-63 fully closed (addendum included).**
+
+---
+
+## Session Dev-64 · 2026-07-16 (in progress)
+
+**Focus so far:** Diagnosed and fixed the recurring "Failed to fetch... GHIN Name flags from Jotform" bug Brian flagged from the Groups tab GHIN paste-import UI — traced to `launch_golf_scorer.py`'s local proxy server, not Jotform or GS itself.
+
+**Root cause — single-threaded local proxy server:**
+`launch_golf_scorer.py` used `socketserver.TCPServer`, which handles exactly one HTTP request at a time. GS fires several proxy calls in close succession — the GHIN Name map fetch on every Groups-panel open/Apply (Dev-59 removed its cache specifically to always refetch fresh), plus portal events/registrations, sheets/netlify status, groupings, scorecard submissions. While the server was busy on one call, others queued behind it; if any single call ever hung on the network, the entire server froze for every caller — matching Brian's report that it "usually needs a relaunch" to clear, since only killing the process actually released a stuck connection.
+
+**Fix — threaded local server:**
+Swapped `socketserver.TCPServer` for a `socketserver.ThreadingMixIn` + `http.server.HTTPServer` combination (`daemon_threads=True`, `allow_reuse_address=True`). Each request now runs on its own thread, so one slow/stuck call can no longer block the rest. `allow_reuse_address` also reduces "port already in use" on quick relaunches (a related, previously-undiagnosed annoyance). No route/proxy logic touched — purely how the server is constructed. Not yet confirmed fixed on Brian's device — first thing to verify next time GS is launched.
+
+**`launch_golf_scorer.py` backup — real gap closed:**
+This file had never been backed up anywhere, by design (laptop-only, holds `JOTFORM_API_KEY` in plaintext). Brian caught this while reviewing the fix and asked for a backup. Pushed a sanitized copy to `source/launch_golf_scorer.py` with `JOTFORM_API_KEY` blanked to `""` — confirmed via grep on the pulled raw file that the real key is not present. **Brian must paste the real key back into the local runtime copy only** (not done as of this entry) — the library copy must stay blank on every future push of this file. Documented in Ops Guide §3 Token Recovery and added a Known Issues row (§10).
+
+**Files touched this session:**
+- `source/launch_golf_scorer.py` — new library backup, sanitized (key blanked), threading fix included
+- `source/BF_Operations_Guide.md` — Token Recovery note + new Known Issues row for this fix
+
+**Carry-forward / still open from Dev-63, untouched so far this session:**
+- Brian still needs to click **⚕ Fix Historical Payouts** (Series tab) and re-Publish — money-list history fix deployed but not yet applied/republished
+- Delete the 8 lingering test photo rows (ids 2, 3, 4, 7, 8, 9, 17, 18) — carried since Dev-61
+- 40-photo GS Photo Organizer scale test — still not run
+- AI-generated event narratives (`BF_EventNarratives_Spec.md`) — open questions need resolving before any code
+- Season Money / Overall-pot flight system — needs its own dedicated design pass
+- Everything else carried from Dev-57 through Dev-63 untouched: icon-action-btn migration beyond Live Panel Photos, `worker.js` size/organization, full `bf_architecture.html` D1/ERD redraw, stale Worker Endpoints reference table, Commissioner PIN architecture, push notification preference center, push notification recipient domain (all-`bfw=Yes` vs. registered-only), notification feed → Worker KV redesign, player picker rethink, Player Analytics/Insights layer, proactive pushId health check, GHIN "Following" list confirmation (Ron Grow, Wilbur Hlay, Mohamed Walli, Jeremy Burkett, Lou Strohl, Rich Potts), `launch_golf_scorer.py` GitHub token possibly-unused cleanup.
+
+**Session still open — not yet closed.**
