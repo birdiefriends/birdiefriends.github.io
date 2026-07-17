@@ -1443,7 +1443,7 @@ This file had never been backed up anywhere, by design (laptop-only, holds `JOTF
 **Files touched this session:**
 - `source/launch_golf_scorer.py` — new library backup, sanitized (key blanked), threading fix included
 - `source/BF_Operations_Guide.md` — Token Recovery note + new Known Issues rows for this session's fixes
-- `docs/portal.html` + `source/portal.html` + `docs/portal_version.txt` + `source/portal_version.txt` — gatheringId-aware matching fix (v3.17.32), then universal RSVP icon-row redesign (v3.17.33)
+- `docs/portal.html` + `source/portal.html` + `docs/portal_version.txt` + `source/portal_version.txt` — gatheringId-aware matching fix (v3.17.32), universal RSVP icon-row redesign (v3.17.33), Share BirdieFriends button (v3.17.34)
 - `source/BF_Golf_Scorer_8.html` — unpublished-groupings-changes banner (v8.44), then DiffHCP persistence fix (v8.45)
 
 **Per-event "Send Notification" — already existed, surfaced + hardened:**
@@ -1494,10 +1494,14 @@ Brian reported Wilbur Hlay and Jeremy Burkett (both DiffHCP — real handicaps, 
 
 **Portal follow-up:** none — GS-side only, same as the groupings banner fix above.
 
+**Share BirdieFriends button — About screen (portal v3.17.34):**
+Brian asked for a way to share the app, suggested the Info/About area. Added a new card in `screen-about`, matching the existing "New to BirdieFriends?" card's styling exactly (dark green card, gold button) — sits right below it. New `shareApp()` function uses the native Web Share API (`navigator.share`) when available, which is the standard mobile share-sheet pattern (iOS/Android — the two platforms the app is actually used on, per the existing iOS/WebKit notes in Ops Guide §8); falls back to clipboard-copy with a toast, then a raw `prompt()` as a last resort for anything with neither. Shares `https://birdiefriends.com` (the public landing page) rather than `portal.html` directly — a first-time recipient needs the sign-up flow, not the existing-member Player Picker gate. `AbortError` (user backing out of the native share sheet) is treated as a normal cancel, not a logged/toasted failure. `node --check` clean; confirmed `shareApp` is singly-defined and the button's `onclick` resolves to it.
+
 **Carry-forward / still open from Dev-63, untouched so far this session:**
 - **Live on-device verification of the RSVP icon row** — built and syntax-checked but not yet exercised against real live data (real Yes/Sub/No taps on both a Series card and a Gathering card, capacity-lock/overflow edge cases, the new direct-No park/toast behavior). First priority next session.
 - **Live on-device verification of the unpublished-changes banner** — built and syntax-checked but not yet exercised against a real GHIN import/HCP edit followed by a Publish click. Second priority next session.
 - **Live on-device verification of the DiffHCP fix** — re-enter Wilbur/Jeremy's HCP, click Fetch Registrants again, confirm it holds this time. Third priority next session.
+- **Live on-device verification of the Share button** — tap it on an actual phone (iOS + Android if possible) and confirm the native share sheet opens rather than falling through to clipboard. Fourth priority next session.
 - Brian still needs to click **⚕ Fix Historical Payouts** (Series tab) and re-Publish — money-list history fix deployed but not yet applied/republished
 - Delete the 8 lingering test photo rows (ids 2, 3, 4, 7, 8, 9, 17, 18) — carried since Dev-61
 - 40-photo GS Photo Organizer scale test — still not run
