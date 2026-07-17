@@ -241,7 +241,7 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 ### Current Versions
 | Component | Version | Status |
 |-----------|---------|--------|
-| Portal | v3.17.33 · 2026-07-16 | Production ✅ — universal RSVP icon-row redesign, gatheringId-aware matching fix (Dev-64) |
+| Portal | v3.17.34 · 2026-07-17 | Production ✅ — Share BirdieFriends button (About screen), universal RSVP icon-row redesign, gatheringId-aware matching fix (Dev-64) |
 | GolfScorer | v8.45 · 2026-07-16 | Deployed ✅ — DiffHCP persistence fix (Dev-64); unpublished-groupings-changes banner (Dev-64); results.html rebuild (Highlights/Photos tabs), Netlify-relay retirement, payoutSnapshot fix all Dev-63 |
 | Worker | 2026-06-18b | Deployed ✅ — `/deploy` accepts `source/` and `docs/` paths. No Worker changes Dev-63/64. |
 | deploy.html | 2026-06-18 | Live ✅ — all tabs functional (Session BP-1 fix) |
@@ -767,6 +767,9 @@ Every icon tap calls `submitRegistration(evtId, evtName, this, answer)` directly
 
 ### Admin Access
 ⚙️ gear icon in header (commissioner PIN required). Cards: Event Control, Push Broadcast, Text All, Dev Controls, Announcement Feed, Push Subscribers, Scorecard Check. All cards start collapsed.
+
+### About Screen (ℹ️ icon in header)
+`screen-about`. Cards top to bottom: **New to BirdieFriends?** (links to `guide.html`), **Share BirdieFriends** (Dev-64 — `shareApp()`, native Web Share API with clipboard-copy fallback, shares `birdiefriends.com` not `portal.html` since a first-time recipient needs the sign-up flow, not the existing-member Player Picker gate), **About the App** (home course/tee info, GHIN signup pointer, Message the Commish), build version footer.
 
 ### Event Card Groupings Link
 Portal fetches `groupings-meta.json` on load. Link shows only when: meta exists + `visibility=visible` + `evt.name` matches. Opens as in-page iframe slide-up sheet.
