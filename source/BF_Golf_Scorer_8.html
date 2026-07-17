@@ -7565,9 +7565,20 @@ async function grpApplyGhinPaste() {
     if (fieldVal && DIFF_HCP.has(fieldKey)) {
       // Has a real number, just not GHIN's — never searched, never touched.
       // Flagged every paste as a standing reminder to update it by hand.
+      // isDiffHcp persists on the player record itself (Dev-64) — see the
+      // guard in grpMergePlayers below; without this flag a later "Fetch
+      // Registrants" click would silently overwrite the manually-entered
+      // HCP with stale series history, since that refresh step only knew
+      // to skip isNoHcp players, not DiffHCP ones.
+      p.isDiffHcp = true;
       diffHcp.push(p.name);
       return;
     }
+
+    // Normal player (or alias) matched via the search path — clear any
+    // stale DiffHCP flag in case their Membership GHIN Name field was later
+    // reset to blank (they got a real GHIN account, etc.)
+    p.isDiffHcp = false;
 
     const searchTerms = [p.name];
     if (fieldVal) searchTerms.push(fieldVal); // an actual alias name, not a sentinel
@@ -7989,8 +8000,12 @@ function grpMergePlayers(registrants, eventName) {
     if (existing) {
       // Update sub status; always refresh HCP + quota from latest series history
       // so the table matches "Why this quota?" (which computes live via grpQuotaBreakdown).
+      // DiffHCP players excluded (Dev-64) — their real bug: this refresh only ever
+      // checked isNoHcp, so a DiffHCP player's manually-entered HCP (no reliable
+      // series-history source — GHIN doesn't track them at all) got silently
+      // stomped by stale history data on every "Fetch Registrants" click.
       existing.isSub = reg.isSub;
-      if (!existing.isNoHcp) {
+      if (!existing.isNoHcp && !existing.isDiffHcp) {
         const ph2 = season ? seriesData.seasons[season]?.playerHistory?.[existing.name] : null;
         const latestHcp = ph2?.currentHcp ?? existing.hcp;
         if (latestHcp !== null) {
@@ -8027,6 +8042,7 @@ function grpMergePlayers(registrants, eventName) {
       tee,
       quota: estimatedQuota,
       isNoHcp,
+      isDiffHcp: false,
       isSub: reg.isSub,
       groupId: null,
       sortOrder: grpPlayers.length
@@ -8491,7 +8507,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.44 · 2026-07-16';
+const GS_VERSION = 'v8.45 · 2026-07-16';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
