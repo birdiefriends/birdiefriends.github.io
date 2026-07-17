@@ -1501,7 +1501,7 @@ Brian asked for a way to share the app, suggested the Info/About area. Added a n
 - **Live on-device verification of the RSVP icon row** — built and syntax-checked but not yet exercised against real live data (real Yes/Sub/No taps on both a Series card and a Gathering card, capacity-lock/overflow edge cases, the new direct-No park/toast behavior). First priority next session.
 - **Live on-device verification of the unpublished-changes banner** — built and syntax-checked but not yet exercised against a real GHIN import/HCP edit followed by a Publish click. Second priority next session.
 - **Live on-device verification of the DiffHCP fix** — re-enter Wilbur/Jeremy's HCP, click Fetch Registrants again, confirm it holds this time. Third priority next session.
-- **Live on-device verification of the Share button** — tap it on an actual phone (iOS + Android if possible) and confirm the native share sheet opens rather than falling through to clipboard. Fourth priority next session.
+- **Live on-device verification of the Share button** — tap it on an actual phone (iOS + Android if possible) and confirm the native share sheet opens rather than falling through to clipboard. Fourth priority next session. (Revised v3.17.35: share text shortened to "Welcome to BirdieFriends." and target link changed to `portal.html` instead of the landing page, per Brian's follow-up.)
 - Brian still needs to click **⚕ Fix Historical Payouts** (Series tab) and re-Publish — money-list history fix deployed but not yet applied/republished
 - Delete the 8 lingering test photo rows (ids 2, 3, 4, 7, 8, 9, 17, 18) — carried since Dev-61
 - 40-photo GS Photo Organizer scale test — still not run
