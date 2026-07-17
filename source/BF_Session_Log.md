@@ -1444,7 +1444,7 @@ This file had never been backed up anywhere, by design (laptop-only, holds `JOTF
 - `source/launch_golf_scorer.py` — new library backup, sanitized (key blanked), threading fix included
 - `source/BF_Operations_Guide.md` — Token Recovery note + new Known Issues rows for this session's fixes
 - `docs/portal.html` + `source/portal.html` + `docs/portal_version.txt` + `source/portal_version.txt` — gatheringId-aware matching fix (v3.17.32), then universal RSVP icon-row redesign (v3.17.33)
-- `source/BF_Golf_Scorer_8.html` — unpublished-groupings-changes banner (v8.44)
+- `source/BF_Golf_Scorer_8.html` — unpublished-groupings-changes banner (v8.44), then DiffHCP persistence fix (v8.45)
 
 **Per-event "Send Notification" — already existed, surfaced + hardened:**
 Brian asked to add a way to push OneSignal notifications to only the players registered for a specific event, from the event card. Found this was already fully built (commissioner-only "📣 Send Notification" button under the card's "Players ›" expand, `openCommissionerPush()`/`sendCommissionerPush()`, targets via `osSendToPlayers()`, documented in Ops Guide §6 as `bfType: 'event_push'`) — just not discoverable from the card face itself, one tap deeper than expected.
@@ -1487,9 +1487,17 @@ Brian caught Wilbur Hlay showing a different quota on the live `groupings.html` 
 
 **Portal follow-up:** none needed — this was entirely GS-side (native app), no worker.js or portal.html changes.
 
+**DiffHCP manual HCP entries silently overwritten on re-fetch — real bug, fixed:**
+Brian reported Wilbur Hlay and Jeremy Burkett (both DiffHCP — real handicaps, no GHIN account) needed their manually-entered HCP re-typed repeatedly, not holding persistently. Traced to `grpMergePlayers()` (runs on every "Fetch Registrants" click): its "always refresh HCP + quota from latest series history" step only ever checked `!existing.isNoHcp` — DiffHCP players were never distinguished from normal GHIN-tracked players at the data level (the DiffHCP concept only ever existed transiently, re-derived each paste from the Membership form's GHIN Name field, never stored on the player object itself). So every re-fetch silently overwrote their manually-typed HCP with stale `playerHistory[name].currentHcp` from series data — the same value every time, since GHIN never has a real number for these two.
+
+**Fix (GS v8.45):** added a persistent `isDiffHcp` flag actually stored on the player record. Set `true` in `grpApplyGhinPaste()`'s existing DIFF_HCP branch; cleared back to `false` if a later paste finds the Membership form's GHIN Name field reset to blank/normal (so it doesn't outlive the situation that caused it). `grpMergePlayers()`'s refresh guard changed from `!existing.isNoHcp` to `!existing.isNoHcp && !existing.isDiffHcp`. New players default to `isDiffHcp: false`. `grpSaveData()`/`grpGetData()` already persist `grpPlayers` generically (JSON round-trip), so no separate storage-layer change needed. `node --check` clean; confirmed the four edit sites landed via the commit patch directly (raw.githubusercontent.com was showing its usual multi-minute-stale cache).
+
+**Portal follow-up:** none — GS-side only, same as the groupings banner fix above.
+
 **Carry-forward / still open from Dev-63, untouched so far this session:**
 - **Live on-device verification of the RSVP icon row** — built and syntax-checked but not yet exercised against real live data (real Yes/Sub/No taps on both a Series card and a Gathering card, capacity-lock/overflow edge cases, the new direct-No park/toast behavior). First priority next session.
 - **Live on-device verification of the unpublished-changes banner** — built and syntax-checked but not yet exercised against a real GHIN import/HCP edit followed by a Publish click. Second priority next session.
+- **Live on-device verification of the DiffHCP fix** — re-enter Wilbur/Jeremy's HCP, click Fetch Registrants again, confirm it holds this time. Third priority next session.
 - Brian still needs to click **⚕ Fix Historical Payouts** (Series tab) and re-Publish — money-list history fix deployed but not yet applied/republished
 - Delete the 8 lingering test photo rows (ids 2, 3, 4, 7, 8, 9, 17, 18) — carried since Dev-61
 - 40-photo GS Photo Organizer scale test — still not run
