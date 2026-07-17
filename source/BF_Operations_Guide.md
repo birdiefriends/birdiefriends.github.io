@@ -242,7 +242,7 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 | Component | Version | Status |
 |-----------|---------|--------|
 | Portal | v3.17.33 · 2026-07-16 | Production ✅ — universal RSVP icon-row redesign, gatheringId-aware matching fix (Dev-64) |
-| GolfScorer | v8.44 · 2026-07-16 | Deployed ✅ — unpublished-groupings-changes banner (Dev-64); results.html rebuild (Highlights/Photos tabs), Netlify-relay retirement, payoutSnapshot fix all Dev-63 |
+| GolfScorer | v8.45 · 2026-07-16 | Deployed ✅ — DiffHCP persistence fix (Dev-64); unpublished-groupings-changes banner (Dev-64); results.html rebuild (Highlights/Photos tabs), Netlify-relay retirement, payoutSnapshot fix all Dev-63 |
 | Worker | 2026-06-18b | Deployed ✅ — `/deploy` accepts `source/` and `docs/` paths. No Worker changes Dev-63/64. |
 | deploy.html | 2026-06-18 | Live ✅ — all tabs functional (Session BP-1 fix) |
 | bf_deploy.py | 2026-06-18 | In library for reference only — TOKEN-authenticated functions not invoked by Claude |
@@ -690,6 +690,13 @@ Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
 - `grpPublish()` blocks if tee is blank (hard guard)
 - Kick Off passes tee to Tab 2; `goToScorecard()` blocks again if blank (second guard)
 - Event 1 is baseline — no quota, no podium. Event 2+ enters full quota system.
+
+### DiffHCP Player Flow — manual entries used to get silently overwritten (fixed Dev-64)
+DiffHCP players (e.g. Wilbur Hlay, Jeremy Burkett) have a real handicap, just not sourced from GHIN — the Membership form's hidden GHIN Name field is set to `DiffHCP`, which tells `grpApplyGhinPaste()` to never search for or touch their HCP during a paste, only flag it as a standing reminder to update by hand.
+
+**The bug that was here:** that DiffHCP status only ever existed transiently, re-derived from the Membership form on each paste — never actually stored on the player object. `grpMergePlayers()` (runs on every "Fetch Registrants" click) has an "always refresh HCP from latest series history" step that only checked `!existing.isNoHcp`, so it couldn't tell a DiffHCP player apart from a normal one and silently overwrote the commissioner's manually-typed HCP with stale `playerHistory.currentHcp` every time. Reported live: Brian kept having to re-enter Wilbur/Jeremy's HCP.
+
+**Fix (v8.45):** `p.isDiffHcp` is now a real, persisted flag — set `true` in the DIFF_HCP paste branch, cleared back to `false` if a later paste finds the Membership field reset to normal. `grpMergePlayers`'s refresh guard is now `!existing.isNoHcp && !existing.isDiffHcp`. Not yet live-verified — first thing to check next session: re-enter Wilbur/Jeremy's HCP, click Fetch Registrants, confirm it holds.
 
 ### View Saved Event (Tab 5, Session 37)
 A selector above the Results content, defaulting to "— Live / Current —". Picking any already-saved event renders it through the same `renderResults()` display (Podium/Skins/CTP/Money) used for live results, sourced entirely from series data — no scorecard re-import needed. Read-only by design.
