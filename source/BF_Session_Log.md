@@ -1443,7 +1443,7 @@ This file had never been backed up anywhere, by design (laptop-only, holds `JOTF
 **Files touched this session:**
 - `source/launch_golf_scorer.py` — new library backup, sanitized (key blanked), threading fix included
 - `source/BF_Operations_Guide.md` — Token Recovery note + new Known Issues rows for this session's fixes
-- `docs/portal.html` + `source/portal.html` + `docs/portal_version.txt` + `source/portal_version.txt` — gatheringId-aware matching fix (v3.17.32), universal RSVP icon-row redesign (v3.17.33), Share BirdieFriends button (v3.17.34)
+- `docs/portal.html` + `source/portal.html` + `docs/portal_version.txt` + `source/portal_version.txt` — gatheringId-aware matching fix (v3.17.32), universal RSVP icon-row redesign (v3.17.33), Share BirdieFriends button (v3.17.34), share message/link revision (v3.17.35), Live Panel camera fix (v3.17.36)
 - `source/BF_Golf_Scorer_8.html` — unpublished-groupings-changes banner (v8.44), DiffHCP persistence fix (v8.45), Quota Stability Rule 25% cap (v8.46), badge indicator finalized (v8.47)
 
 **Per-event "Send Notification" — already existed, surfaced + hardened:**
@@ -1521,12 +1521,32 @@ Caught and fixed a real bug in my own first pass before deploying: the badge's w
 
 `node --check` clean; confirmed `grpQuotaCapBadge` is singly-defined and both call sites resolve to it; confirmed via the commit patch that the old range-based sentence is fully gone from both branches.
 
+**Live Panel camera capture failure — real incident, root cause unconfirmed but two fixes shipped:**
+Brian reported several players used the Live Panel's Open Camera button at BFSeries#5, but only one photo (Jeff Rapp's) actually showed up. Investigated with real server data rather than guessing:
+- Queried `GET /debug/last-upload?pin=7797` and `GET /photos?event=2026 BFSeries#5` directly — D1 confirms exactly one successful row for the event. No trace of any other attempt, successful or failed.
+- Ruled out the Dev-60 "Photo Upload Pause" kill switch as a cause — and found it's actually dead code while checking: `PHOTOS_UPLOAD_PAUSED` is set from the flags fetch and drives the admin toggle's own status text, but is never checked anywhere in `livePanelCameraPicked()`/`livePanelUploadCore()` (portal) or in `/photos/upload` (worker.js). Flipping it currently does nothing to actual uploads. Not the cause of this incident (nothing was toggled), but a real separate gap — flagged to Brian as a follow-up decision (wire it up for real vs. remove the vestigial toggle), not fixed this session.
+- Ruled out server-side rejection generally — any Worker-side failure (bad event name, oversized file, invalid section) returns a JSON error the client already surfaces as a toast, and Jeff's successful upload proves R2/D1/classification are healthy.
+- Confirmed via `livePanelUploadCore()`'s own try/catch that server-side/network failures during the actual upload *would* have shown an error toast — so the failure point for the missing photos is almost certainly earlier, client-side, before any request ever left the browser.
+- Found the real, previously-unnoticed bug: `livePanelCameraPicked()`/`livePanelUploadPicked()` both did `if (!file) return;` with **zero user feedback** — a completely silent failure path. A player tapping Open Camera and having it not work (for any reason) would see nothing at all, no error, no indication to retry.
+- Asked Brian which platforms were involved — mix of iOS and Android, not isolated to one OS.
+
+**Two fixes shipped (portal v3.17.36):**
+1. Removed the `android/allowCamera` bogus-MIME entry from the camera input's `accept` list — flagged as fragile since Dev-57 (added to force a cosmetic Camera tile in some Android choosers) and never confirmed working on a real device. Best-evidence hypothesis for the actual capture failures across a mixed device group, though **not confirmed** — this is the honest limitation, nothing server-side can prove a client-side capture-chooser quirk after the fact. `capture="environment"` alone (the standards-compliant hint) remains; only the non-standard third accept entry was removed.
+2. Replaced the silent `if (!file) return;` in both `livePanelCameraPicked()` and `livePanelUploadPicked()` with a quiet status-text update ("No photo captured — try again" / "No file selected") — deliberately *not* an alarming error toast, since this path also fires on a completely normal, deliberate cancel (not an error). Low-key enough to not misrepresent a routine cancel as a failure, but visible enough that a real failure won't go unnoticed next time.
+
+`node --check` clean; confirmed both accept-attribute and silent-return changes landed via string checks pre-deploy.
+
+**Not yet confirmed fixed** — same honest caveat as the MIME-hack removal: there's no way to prove this from server-side data alone. First priority next live event: watch whether Open Camera behaves consistently across the mixed iOS/Android group now.
+
 **Carry-forward / still open from Dev-63, untouched so far this session:**
 - **Live on-device verification of the RSVP icon row** — built and syntax-checked but not yet exercised against real live data (real Yes/Sub/No taps on both a Series card and a Gathering card, capacity-lock/overflow edge cases, the new direct-No park/toast behavior). First priority next session.
 - **Live on-device verification of the unpublished-changes banner** — built and syntax-checked but not yet exercised against a real GHIN import/HCP edit followed by a Publish click. Second priority next session.
 - **Live on-device verification of the DiffHCP fix** — re-enter Wilbur/Jeremy's HCP, click Fetch Registrants again, confirm it holds this time. Third priority next session.
 - **Live on-device verification of the Share button** — tap it on an actual phone (iOS + Android if possible) and confirm the native share sheet opens rather than falling through to clipboard. Fourth priority next session. (Revised v3.17.35: share text shortened to "Welcome to BirdieFriends." and target link changed to `portal.html` instead of the landing page, per Brian's follow-up.)
 - **Re-publish BFSeries#5 groupings** after the Quota Stability Rule deploy, to confirm Rich's live quota bumps to 5.25 and the "Why this quota?" panel shows the new Full calculation / amber badge / Actual quota format correctly (badge finalized v8.47 — icon pill, not the earlier sentence-with-range draft). Fifth priority next session — Brian's own next step.
+- **Live Panel camera capture fix — needs real confirmation at a future live event.** Removed the risky Android MIME hack and fixed the silent failure path (v3.17.36), but the actual root cause was never confirmed — no server-side evidence could prove or disprove the client-side hypothesis. Watch next live event.
+- **Photo Upload Pause kill switch is dead code** — `PHOTOS_UPLOAD_PAUSED` drives only the admin toggle's own status display; nothing in the Worker or portal actually checks it before allowing an upload. Brian needs to decide: wire it up for real, or remove the vestigial toggle so it stops implying a protection that doesn't exist. Not fixed this session — found while investigating the camera capture incident, out of scope for that fix.
+- **Use/Retake/Cancel preview for the Live Panel photo flow** — Brian raised this, then pivoted to the missing-photos investigation before answering which flow(s) it should apply to (Open Camera only vs. both vs. just adding Cancel to the existing Upload dialog). Still open, unanswered.
 - Brian still needs to click **⚕ Fix Historical Payouts** (Series tab) and re-Publish — money-list history fix deployed but not yet applied/republished
 - Delete the 8 lingering test photo rows (ids 2, 3, 4, 7, 8, 9, 17, 18) — carried since Dev-61
 - 40-photo GS Photo Organizer scale test — still not run
