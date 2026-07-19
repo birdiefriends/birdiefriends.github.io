@@ -242,7 +242,7 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 | Component | Version | Status |
 |-----------|---------|--------|
 | Portal | v3.17.35 · 2026-07-17 | Production ✅ — Share BirdieFriends button (About screen), universal RSVP icon-row redesign, gatheringId-aware matching fix (Dev-64) |
-| GolfScorer | v8.45 · 2026-07-16 | Deployed ✅ — DiffHCP persistence fix (Dev-64); unpublished-groupings-changes banner (Dev-64); results.html rebuild (Highlights/Photos tabs), Netlify-relay retirement, payoutSnapshot fix all Dev-63 |
+| GolfScorer | v8.46 · 2026-07-18 | Deployed ✅ — Quota Stability Rule, 25% per-event cap (Dev-64); DiffHCP persistence fix, unpublished-groupings-changes banner (Dev-64); results.html rebuild, Netlify-relay retirement, payoutSnapshot fix all Dev-63 |
 | Worker | 2026-06-18b | Deployed ✅ — `/deploy` accepts `source/` and `docs/` paths. No Worker changes Dev-63/64. |
 | deploy.html | 2026-06-18 | Live ✅ — all tabs functional (Session BP-1 fix) |
 | bf_deploy.py | 2026-06-18 | In library for reference only — TOKEN-authenticated functions not invoked by Claude |
@@ -718,7 +718,11 @@ Gold button, first position in the Actions bar. Runs Save to Series → Push to 
 - **If Tab 2 doesn't match Groups tab/groupings:** re-run Kick Off.
 
 ### Scoring Rules
-- **Quota formula:** `36 − (HCP × Slope / 113)` — Green slope 132, Combo 128, Gold 115
+- **Initial quota formula (first scored event):** `36 − (HCP × Slope / 113)` — Green slope 132, Combo 128, Gold 115
+- **Adjustment formula (every event after):** `adjustQuota()` — `newQuota = prevQuota + perfAdj + hcpAdj`, where `perfAdj = 0.5 × (actualScore − prevQuota)` (50% regression toward last performance) and `hcpAdj = (prevHcp − newHcp) × (slope / 113)`. NoHCP players skip the HCP term entirely.
+- **Quota Stability Rule (Dev-64, GS v8.46):** the combined per-event adjustment (`perfAdj + hcpAdj`) is capped at 25% of `prevQuota` in either direction — `QUOTA_CAP_PCT = 0.25`, applied via `applyQuotaCap()` inside `adjustQuota()`, so it governs both the real post-event scoring update and the Groupings-tab pre-event estimate from one place. Surfaced when Rich Penberg's BFSeries#5 quota compounded down to 0.95 (a bad round and a 3-stroke HCP jump landed the same cycle on an already-modest base) — nearly guaranteeing a runaway "performance" differential on his next round regardless of true current form. Backtested against BFSeries#2–#4 real data: 25% would have capped Carl Stadtmueller and Jake Knappenberger's #2→#3 drops (nobody else); 50% would have capped nobody historically. **Applies prospectively only** — `adjustQuota()` always reads `prevQuota` from whatever's already recorded in `playerHistory`, so past events are never recalculated (confirmed this wouldn't have even changed Carl's #3 podium placement, but the decision not to touch history stands regardless of what any specific recalculation would show).
+  - `grpQuotaBreakdown()` ("Why this quota?" panel — same function both the live Groups tab and the published `groupings.html` call) always shows a **Full calculation** line (uncapped) followed by a bold **Actual quota** line (capped), plus an inline rule explanation whenever the cap actually triggers. Player-facing definition text lives in the `QUOTA_STABILITY_RULE_TEXT` constant, next to `QUOTA_CAP_PCT` — single source of truth.
+  - **Not added to `guide.html`** — deliberate scope decision, since the guide doesn't explain quota mechanics at any technical depth today and a rule definition without its surrounding formula would be inconsistent with the rest of that document. Revisit if Brian wants a plain-language quota section added there.
 - **Best 4 of N** events count toward series standings
 - **NoHCP E1 synthetic:** baseline event, no quota, no podium eligibility
 
