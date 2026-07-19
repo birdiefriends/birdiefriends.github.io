@@ -5608,6 +5608,31 @@ function fmtDiff(v) {
   return (v >= 0 ? '+' : '') + v.toFixed(2);
 }
 
+// ── Quota Stability Rule (Dev-64) ──────────────────────────────────────
+// A single event's combined adjustment (performance + HCP change) can't
+// move a player's quota more than 25%, up or down, from their previous
+// quota. Prevents two adjustments stacking in the same direction from
+// producing an unrealistically low (or high) target — surfaced when Rich
+// Penberg's quota dropped to 0.95 for BFSeries#5 after a bad round (-3.00)
+// and a 3-stroke HCP increase (-3.05) landed the same cycle, on an already-
+// modest 7.00 base. Backtested against BFSeries#2-#4: would have capped
+// Carl Stadtmueller and Jake Knappenberger's #2→#3 drops, nobody else.
+// Applies prospectively only, from BFSeries#5 forward — adjustQuota always
+// reads prevQuota from whatever's already recorded in playerHistory, so
+// past events are never recalculated or rewritten.
+const QUOTA_CAP_PCT = 0.25;
+// Player-facing definition — shown inline wherever the cap actually triggers
+// (grpQuotaBreakdown), so a capped number is always explained in place
+// rather than requiring a separate rules page.
+const QUOTA_STABILITY_RULE_TEXT = 'Quota Stability Rule: each event, your quota adjusts based on your last round\u2019s performance and any handicap change since. To keep things fair, that adjustment is capped at 25% of your previous quota in either direction. So even after a rough round or a big handicap swing, your new target stays within a reasonable range of where it was \u2014 never so low it\u2019s an easy freebie, never so high it\u2019s out of reach.';
+function applyQuotaCap(prevQuota, rawQuota) {
+  if (!prevQuota) return { capped: rawQuota, floor: null, ceil: null, wasClamped: false };
+  const floor = prevQuota * (1 - QUOTA_CAP_PCT);
+  const ceil  = prevQuota * (1 + QUOTA_CAP_PCT);
+  const capped = Math.max(floor, Math.min(ceil, rawQuota));
+  return { capped, floor, ceil, wasClamped: Math.abs(capped - rawQuota) > 0.0001 };
+}
+
 function adjustQuota(prevQuota, actualScore, prevHcp, newHcp, tee) {
   const slope   = SLOPE_RATES[tee] || 128;
   const perfAdj = 0.50 * (actualScore - prevQuota);
@@ -5615,7 +5640,9 @@ function adjustQuota(prevQuota, actualScore, prevHcp, newHcp, tee) {
   const hcpAdj  = (prevHcp !== null && prevHcp !== undefined && newHcp !== null && newHcp !== undefined)
     ? (prevHcp - newHcp) * (slope / 113)
     : 0;
-  return Math.round((prevQuota + perfAdj + hcpAdj) * 10000) / 10000;
+  const raw = prevQuota + perfAdj + hcpAdj;
+  const { capped } = applyQuotaCap(prevQuota, raw);
+  return Math.round(capped * 10000) / 10000;
 }
 
 // ── Save current event results to series ──
@@ -7206,11 +7233,17 @@ function grpQuotaBreakdown(name, newHcp, newTee) {
     const prevQ = lastEvt.quota;
     const actual = lastEvt.actual;
     const perf = 0.5 * (actual - prevQ);
-    const newQ = prevQ + perf;
-    return `<div class="grp-breakdown-row grp-bd-label">NoHCP adjustment (no HCP term)</div>
+    const rawQ = prevQ + perf;
+    const { capped: newQ, floor, ceil, wasClamped } = applyQuotaCap(prevQ, rawQ);
+    let html = `<div class="grp-breakdown-row grp-bd-label">NoHCP adjustment (no HCP term)</div>
 <div class="grp-breakdown-row">Prev quota: <b>${prevQ.toFixed(2)}</b></div>
 <div class="grp-breakdown-row">Last score: ${actual} pts &nbsp;→&nbsp; performance adj: ${perf >= 0?'+':''}${perf.toFixed(2)} (50% regression)</div>
-<div class="grp-breakdown-row grp-bd-result">Estimated quota: <b>${newQ.toFixed(2)}</b></div>`;
+<div class="grp-breakdown-row">Full calculation: ${prevQ.toFixed(2)} ${perf >= 0?'+':''}${perf.toFixed(2)} = ${rawQ.toFixed(2)}</div>`;
+    if (wasClamped) {
+      html += `<div class="grp-breakdown-row" style="color:#a32d2d">${QUOTA_STABILITY_RULE_TEXT} This event's raw calculation (${rawQ.toFixed(2)}) fell outside the allowed range (${floor.toFixed(2)}–${ceil.toFixed(2)}), so it was capped.</div>`;
+    }
+    html += `<div class="grp-breakdown-row grp-bd-result">Actual quota: <b>${newQ.toFixed(2)}</b></div>`;
+    return html;
   }
 
   // Standard player
@@ -7227,14 +7260,20 @@ function grpQuotaBreakdown(name, newHcp, newTee) {
   const perf    = 0.5 * (actual - prevQ);
   const hcpAdj  = (prevHcp !== null && prevHcp !== undefined)
     ? (prevHcp - newHcp) * (slope / 113) : 0;
-  const newQ    = prevQ + perf + hcpAdj;
+  const rawQ    = prevQ + perf + hcpAdj;
+  const { capped: newQ, floor, ceil, wasClamped } = applyQuotaCap(prevQ, rawQ);
   const sign = v => v >= 0 ? '+' : '';
 
-  return `<div class="grp-breakdown-row grp-bd-label">Quota adjustment formula</div>
+  let html = `<div class="grp-breakdown-row grp-bd-label">Quota adjustment formula</div>
 <div class="grp-breakdown-row">Prev quota (${lastEvt.eventName}): <b>${prevQ.toFixed(2)}</b></div>
 <div class="grp-breakdown-row">Last score: ${actual} pts vs quota ${prevQ.toFixed(2)} &nbsp;→&nbsp; perf adj: ${sign(perf)}${perf.toFixed(2)}</div>
 ${hcpAdj !== 0 ? `<div class="grp-breakdown-row">HCP change (${prevHcp !== null ? prevHcp.toFixed(1):'—'} → ${newHcp.toFixed(1)}, slope ${slope}/113): ${sign(hcpAdj)}${hcpAdj.toFixed(2)}</div>` : `<div class="grp-breakdown-row">HCP unchanged (${newHcp.toFixed(1)}) — no HCP adjustment</div>`}
-<div class="grp-breakdown-row grp-bd-result">Estimated quota: ${prevQ.toFixed(2)} ${sign(perf)}${perf.toFixed(2)} ${sign(hcpAdj)}${hcpAdj.toFixed(2)} = <b>${newQ.toFixed(2)}</b></div>`;
+<div class="grp-breakdown-row">Full calculation: ${prevQ.toFixed(2)} ${sign(perf)}${perf.toFixed(2)} ${sign(hcpAdj)}${hcpAdj.toFixed(2)} = ${rawQ.toFixed(2)}</div>`;
+  if (wasClamped) {
+    html += `<div class="grp-breakdown-row" style="color:#a32d2d">${QUOTA_STABILITY_RULE_TEXT} This event's raw calculation (${rawQ.toFixed(2)}) fell outside the allowed range (${floor.toFixed(2)}–${ceil.toFixed(2)}), so it was capped.</div>`;
+  }
+  html += `<div class="grp-breakdown-row grp-bd-result">Actual quota: <b>${newQ.toFixed(2)}</b></div>`;
+  return html;
 }
 
 // ── Player card HTML ────────────────────────────────────────────────
@@ -8507,7 +8546,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.45 · 2026-07-16';
+const GS_VERSION = 'v8.46 · 2026-07-18';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
