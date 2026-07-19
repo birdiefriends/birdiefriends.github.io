@@ -1444,7 +1444,7 @@ This file had never been backed up anywhere, by design (laptop-only, holds `JOTF
 - `source/launch_golf_scorer.py` — new library backup, sanitized (key blanked), threading fix included
 - `source/BF_Operations_Guide.md` — Token Recovery note + new Known Issues rows for this session's fixes
 - `docs/portal.html` + `source/portal.html` + `docs/portal_version.txt` + `source/portal_version.txt` — gatheringId-aware matching fix (v3.17.32), universal RSVP icon-row redesign (v3.17.33), Share BirdieFriends button (v3.17.34)
-- `source/BF_Golf_Scorer_8.html` — unpublished-groupings-changes banner (v8.44), DiffHCP persistence fix (v8.45), Quota Stability Rule 25% cap (v8.46)
+- `source/BF_Golf_Scorer_8.html` — unpublished-groupings-changes banner (v8.44), DiffHCP persistence fix (v8.45), Quota Stability Rule 25% cap (v8.46), badge indicator finalized (v8.47)
 
 **Per-event "Send Notification" — already existed, surfaced + hardened:**
 Brian asked to add a way to push OneSignal notifications to only the players registered for a specific event, from the event card. Found this was already fully built (commissioner-only "📣 Send Notification" button under the card's "Players ›" expand, `openCommissionerPush()`/`sendCommissionerPush()`, targets via `osSendToPlayers()`, documented in Ops Guide §6 as `bfType: 'event_push'`) — just not discoverable from the card face itself, one tap deeper than expected.
@@ -1512,12 +1512,21 @@ Verified the cap math directly against Rich's real numbers in Node before deploy
 
 **Not yet re-published** — Brian is going to re-run the Preliminary groupings for BFSeries#5, which should bump Rich's live quota from 0.95 to 5.25.
 
+**Quota Stability Rule indicator — finalized to a compact badge (GS v8.47):**
+Brian reviewed the first draft (a "However, ..." sentence restating the full rule definition plus the numeric floor/ceiling range) live against Rich's real card and asked for something shorter: drop the range, keep just the applicable capped number, and find a cleaner way than "However" to flag that the rule fired. Mocked three options with the Visualizer against Rich's actual numbers — plain label, icon badge, inline strikethrough-replace — before touching code. Brian picked the icon badge.
+
+Finalized as a small amber pill ("🔒 25% cap applied"), reusing the exact warning color already established for the unpublished-changes banner (Dev-64) — consistent visual language for "a guardrail fired here" rather than inventing a new color meaning. The full player-facing rule definition (`QUOTA_STABILITY_RULE_TEXT`) didn't get deleted — it's now a native `title` tooltip on the badge, available on hover/long-press for anyone curious, without permanently occupying space for the common case where nobody needs it. New shared `grpQuotaCapBadge()` helper, called from both the standard-player and NoHCP breakdown branches — single source of truth for the badge markup, same pattern as `applyQuotaCap()` itself.
+
+Caught and fixed a real bug in my own first pass before deploying: the badge's wrapping `<div>` initially carried both `class="grp-breakdown-row"` and an inline `style="margin-top:2px"` — harmless in GS's own Groups tab (real CSS class handles it), but `grpGenerateGroupingsHTML()`'s class→inline-style conversion for the published static page does a literal string replace on `class="grp-breakdown-row"`, which would have produced two `style` attributes on one tag on the public page specifically. Removed the redundant inline style before deploying — the class alone is sufficient, matching every other row.
+
+`node --check` clean; confirmed `grpQuotaCapBadge` is singly-defined and both call sites resolve to it; confirmed via the commit patch that the old range-based sentence is fully gone from both branches.
+
 **Carry-forward / still open from Dev-63, untouched so far this session:**
 - **Live on-device verification of the RSVP icon row** — built and syntax-checked but not yet exercised against real live data (real Yes/Sub/No taps on both a Series card and a Gathering card, capacity-lock/overflow edge cases, the new direct-No park/toast behavior). First priority next session.
 - **Live on-device verification of the unpublished-changes banner** — built and syntax-checked but not yet exercised against a real GHIN import/HCP edit followed by a Publish click. Second priority next session.
 - **Live on-device verification of the DiffHCP fix** — re-enter Wilbur/Jeremy's HCP, click Fetch Registrants again, confirm it holds this time. Third priority next session.
 - **Live on-device verification of the Share button** — tap it on an actual phone (iOS + Android if possible) and confirm the native share sheet opens rather than falling through to clipboard. Fourth priority next session. (Revised v3.17.35: share text shortened to "Welcome to BirdieFriends." and target link changed to `portal.html` instead of the landing page, per Brian's follow-up.)
-- **Re-publish BFSeries#5 groupings** after the Quota Stability Rule deploy, to confirm Rich's live quota bumps to 5.25 and the "Why this quota?" panel shows the new Full calculation / Actual quota / rule-explanation format correctly. Fifth priority next session — Brian's own next step.
+- **Re-publish BFSeries#5 groupings** after the Quota Stability Rule deploy, to confirm Rich's live quota bumps to 5.25 and the "Why this quota?" panel shows the new Full calculation / amber badge / Actual quota format correctly (badge finalized v8.47 — icon pill, not the earlier sentence-with-range draft). Fifth priority next session — Brian's own next step.
 - Brian still needs to click **⚕ Fix Historical Payouts** (Series tab) and re-Publish — money-list history fix deployed but not yet applied/republished
 - Delete the 8 lingering test photo rows (ids 2, 3, 4, 7, 8, 9, 17, 18) — carried since Dev-61
 - 40-photo GS Photo Organizer scale test — still not run
