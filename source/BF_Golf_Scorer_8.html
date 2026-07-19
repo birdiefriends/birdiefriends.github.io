@@ -7196,6 +7196,20 @@ function grpGetEstimatedQuota(name, newHcp, newTee) {
   return adjustQuota(lastEvt.quota, lastEvt.actual, prevHcp, newHcp, newTee);
 }
 
+// Compact indicator badge shown in the "Why this quota?" breakdown whenever
+// the Quota Stability Rule actually caps a player's quota. Reuses the amber
+// warning style already established for the unpublished-changes banner
+// (Dev-64) — consistent visual language for "a guardrail fired here."
+// Full player-facing definition lives as a native tooltip (title attr) —
+// available on hover/long-press without taking up permanent space for the
+// common case where nobody needs it.
+function grpQuotaCapBadge() {
+  return `<span title="${QUOTA_STABILITY_RULE_TEXT}"
+    style="display:inline-flex;align-items:center;gap:5px;background:#fff8e8;color:#7a4a00;
+      font-size:0.72rem;padding:3px 10px;border-radius:10px;border:1px solid #e8b84b;cursor:help">
+    🔒 25% cap applied</span>`;
+}
+
 // Build quota transparency breakdown string for a player
 function grpQuotaBreakdown(name, newHcp, newTee) {
   const seriesData = getSeriesData();
@@ -7240,7 +7254,7 @@ function grpQuotaBreakdown(name, newHcp, newTee) {
 <div class="grp-breakdown-row">Last score: ${actual} pts &nbsp;→&nbsp; performance adj: ${perf >= 0?'+':''}${perf.toFixed(2)} (50% regression)</div>
 <div class="grp-breakdown-row">Full calculation: ${prevQ.toFixed(2)} ${perf >= 0?'+':''}${perf.toFixed(2)} = ${rawQ.toFixed(2)}</div>`;
     if (wasClamped) {
-      html += `<div class="grp-breakdown-row" style="color:#a32d2d">${QUOTA_STABILITY_RULE_TEXT} This event's raw calculation (${rawQ.toFixed(2)}) fell outside the allowed range (${floor.toFixed(2)}–${ceil.toFixed(2)}), so it was capped.</div>`;
+      html += `<div class="grp-breakdown-row">${grpQuotaCapBadge()}</div>`;
     }
     html += `<div class="grp-breakdown-row grp-bd-result">Actual quota: <b>${newQ.toFixed(2)}</b></div>`;
     return html;
@@ -7270,7 +7284,7 @@ function grpQuotaBreakdown(name, newHcp, newTee) {
 ${hcpAdj !== 0 ? `<div class="grp-breakdown-row">HCP change (${prevHcp !== null ? prevHcp.toFixed(1):'—'} → ${newHcp.toFixed(1)}, slope ${slope}/113): ${sign(hcpAdj)}${hcpAdj.toFixed(2)}</div>` : `<div class="grp-breakdown-row">HCP unchanged (${newHcp.toFixed(1)}) — no HCP adjustment</div>`}
 <div class="grp-breakdown-row">Full calculation: ${prevQ.toFixed(2)} ${sign(perf)}${perf.toFixed(2)} ${sign(hcpAdj)}${hcpAdj.toFixed(2)} = ${rawQ.toFixed(2)}</div>`;
   if (wasClamped) {
-    html += `<div class="grp-breakdown-row" style="color:#a32d2d">${QUOTA_STABILITY_RULE_TEXT} This event's raw calculation (${rawQ.toFixed(2)}) fell outside the allowed range (${floor.toFixed(2)}–${ceil.toFixed(2)}), so it was capped.</div>`;
+    html += `<div class="grp-breakdown-row">${grpQuotaCapBadge()}</div>`;
   }
   html += `<div class="grp-breakdown-row grp-bd-result">Actual quota: <b>${newQ.toFixed(2)}</b></div>`;
   return html;
@@ -8546,7 +8560,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.46 · 2026-07-18';
+const GS_VERSION = 'v8.47 · 2026-07-18';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
