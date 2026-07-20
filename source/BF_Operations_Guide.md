@@ -242,7 +242,7 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 | Component | Version | Status |
 |-----------|---------|--------|
 | Portal | v3.17.36 · 2026-07-19 | Production ✅ — Live Panel camera fix (removed risky Android MIME hack, fixed silent capture failure), Share BirdieFriends button, universal RSVP icon-row redesign, gatheringId-aware matching fix (Dev-64) |
-| GolfScorer | v8.47 · 2026-07-18 | Deployed ✅ — Quota Stability Rule badge finalized (Dev-64); 25% per-event cap, DiffHCP persistence fix, unpublished-groupings-changes banner (Dev-64); results.html rebuild, Netlify-relay retirement, payoutSnapshot fix all Dev-63 |
+| GolfScorer | v8.48 · 2026-07-20 | Deployed ✅ — NoHCP retroactive E1 correctness fix (Dev-64); Quota Stability Rule badge finalized, 25% per-event cap, DiffHCP persistence fix, unpublished-groupings-changes banner (Dev-64); results.html rebuild, Netlify-relay retirement, payoutSnapshot fix all Dev-63 |
 | Worker | 2026-06-18b | Deployed ✅ — `/deploy` accepts `source/` and `docs/` paths. No Worker changes Dev-63/64. |
 | deploy.html | 2026-06-18 | Live ✅ — all tabs functional (Session BP-1 fix) |
 | bf_deploy.py | 2026-06-18 | In library for reference only — TOKEN-authenticated functions not invoked by Claude |
@@ -690,6 +690,19 @@ Portal → Cloudflare Worker (`/`) → OneSignal → player devices.
 - `grpPublish()` blocks if tee is blank (hard guard)
 - Kick Off passes tee to Tab 2; `goToScorecard()` blocks again if blank (second guard)
 - Event 1 is baseline — no quota, no podium. Event 2+ enters full quota system.
+
+### NoHCP Retroactive E1 — corrected Dev-64 (was silently doubling low-sample results)
+A NoHCP player's baseline E1 has a real recorded `actual` score but no `quota` (no HCP existed to compute one from). Since Chat #5 (mid-project — original test player "Joe Guest," Chat #3), a synthetic E1 gets injected into series aggregation so these players can still qualify/rank despite the missing baseline quota — `buildRetroactiveE1Event(evts, scorableEvts)`, recalculated live every time it's called.
+
+**The bug that was here:** the synthetic E1 averaged `result` (the differential) across real scored events and fabricated a synthetic `actual` from that average, discarding the player's real E1 score entirely. At n=1 real scored event, "average of one result" trivially equals that result — the synthetic E1 became an exact duplicate rather than an estimate, doubling the player's true differential in the aggregate. Caught live: Rich Potts showed Performance +16.00 after one real scored event whose true differential was +8.00.
+
+**Fix (v8.48):** retroactive E1 quota = average of (quota, actual) across all real scored events so far; retroactive E1 actual = the player's **real, untouched** recorded score. As designed with Brian: the real E1 score should count as a fact, not be neutralized away — only the missing quota input gets estimated, and it self-refines as the player accumulates more real HCP-based rounds (functions like a retroactively-inferred handicap parameter). Verified against Rich's real numbers: retroactive quota 23.00 (avg of his real E2's 19.0/27.0), paired with his real E1 actual of 19 → true aggregate Performance +4.00, not +16.00.
+
+**Consolidation:** this logic was duplicated three separate times (`generateMyGamePage`, `generateSeriesPage`, `grpBuildRankings` — the last claiming in a comment to "mirror" the first, which was only aspirationally true). All three now call the single shared `buildRetroactiveE1Event()`.
+
+**Blast radius confirmed before shipping:** searched the live `standings.html` for the ⚙ (NoHCP) marker across every flight table — Rich Potts is currently the only player it appears for. This fix changes only his number; nobody else's ranking moves. Future NoHCP players will hit the same corrected math once they cross the same threshold (baseline + first real scored event).
+
+**Why the original test season didn't catch this:** the 12-player synthetic test season (Chat #3/#5) included a NoHCP player (Joe Guest) who played a full 8-event season, with standings checked only near/at completion. By then his averaging sample was large enough (6-7 real events) that the same distortion mechanism produces only a mild overstatement, not a 2x doubling — the bug's severity is inversely proportional to real-event sample size, and the original test never happened to check standings at the n=1 checkpoint where it's most visible. Not a sign of a deeper testing gap — a narrow, specific blind spot in *when* the feature was checked.
 
 ### DiffHCP Player Flow — manual entries used to get silently overwritten (fixed Dev-64)
 DiffHCP players (e.g. Wilbur Hlay, Jeremy Burkett) have a real handicap, just not sourced from GHIN — the Membership form's hidden GHIN Name field is set to `DiffHCP`, which tells `grpApplyGhinPaste()` to never search for or touch their HCP during a paste, only flag it as a standing reminder to update by hand.
