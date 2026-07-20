@@ -1874,20 +1874,21 @@ export default {
       }
     }
 
-    // GET /scorecards?event=<key> — all scores for one event/gathering, or
-    // ?player=<name> for one player's full history. No PIN — self-reported
-    // scores, same openness as approved photos, nothing sensitive to gate.
+    // GET /scorecards?event=<key> for one event/gathering, ?player=<name> for
+    // one player's full history, or neither for everything (Dev-65, mirrors
+    // GET /photos' same no-filter-returns-all shape) — used by My History to
+    // show every player's score for an event, not just the viewer's own.
+    // No PIN — self-reported scores, same openness as approved photos.
     if (request.method === 'GET' && url.pathname === '/scorecards') {
       try {
         const event  = url.searchParams.get('event');
         const player = url.searchParams.get('player');
-        let query, param;
-        if (event)  { query = `SELECT * FROM scorecards WHERE event_name = ? ORDER BY captured_at DESC`; param = event; }
-        else if (player) { query = `SELECT * FROM scorecards WHERE player = ? ORDER BY captured_at DESC`; param = player; }
-        else {
-          return new Response(JSON.stringify({ error: 'event or player query param required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-        }
-        const { results } = await env.DB.prepare(query).bind(param).all();
+        let sql = `SELECT * FROM scorecards WHERE 1=1`;
+        const binds = [];
+        if (event)  { sql += ` AND event_name = ?`; binds.push(event); }
+        if (player) { sql += ` AND player = ?`;      binds.push(player); }
+        sql += ` ORDER BY captured_at DESC`;
+        const { results } = await env.DB.prepare(sql).bind(...binds).all();
         const scorecards = results.map(r => ({ ...r, holes: JSON.parse(r.holes), marks: r.marks ? JSON.parse(r.marks) : null }));
         return new Response(JSON.stringify({ ok: true, scorecards }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
