@@ -9645,11 +9645,30 @@ function buildMyPhotoMomentsList(photos) {
     }));
     return latest(b[1]) - latest(a[1]);
   });
-  return groups.map(([key, evtPhotos]) => `
-    <div style="margin-bottom:16px">
-      <div style="font-size:0.8rem;font-weight:700;color:var(--text);margin-bottom:8px">${myPhotoGroupLabel(key)} <span style="font-weight:400;color:var(--text-muted)">(${evtPhotos.length})</span></div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px">${evtPhotos.map(p => renderCardPhotoThumb(p)).join('')}</div>
-    </div>`).join('');
+  // Each event/gathering is its own collapsible section — most recent starts
+  // open, the rest collapsed, so the list stays scannable once someone has
+  // more than a handful of events with photos (Dev-65).
+  return groups.map(([key, evtPhotos], idx) => {
+    const isOpen = idx === 0;
+    return `
+    <div style="margin-bottom:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;background:var(--surface)"
+        onclick="toggleMyPhotoGroup(${idx})">
+        <span style="font-size:0.8rem;font-weight:700;color:var(--text)">${myPhotoGroupLabel(key)} <span style="font-weight:400;color:var(--text-muted)">(${evtPhotos.length})</span></span>
+        <span id="mpm-chev-${idx}" style="font-size:0.75rem;color:var(--text-muted);transition:transform 0.2s;transform:rotate(${isOpen ? 90 : 0}deg);display:inline-block">▸</span>
+      </div>
+      <div id="mpm-body-${idx}" style="display:${isOpen ? 'flex' : 'none'};flex-wrap:wrap;gap:10px;padding:12px">${evtPhotos.map(p => renderCardPhotoThumb(p)).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleMyPhotoGroup(idx) {
+  const body = document.getElementById(`mpm-body-${idx}`);
+  const chev = document.getElementById(`mpm-chev-${idx}`);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'flex';
+  if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
 // Synthetic 'gathering:<id>' keys aren't human-readable on their own — look
