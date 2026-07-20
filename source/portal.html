@@ -8938,6 +8938,17 @@ async function loadVenues() {
   return _venues;
 }
 
+// D1 returns venues by sort_order (insertion order), not alphabetical — real
+// courses read better A-Z; "Other" is a catch-all, not a course name, so it
+// always sorts to the bottom regardless of where its own name would land.
+function sortVenuesAlpha(venues) {
+  return [...venues].sort((a, b) => {
+    if (a.name === 'Other') return 1;
+    if (b.name === 'Other') return -1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 function placesApiAvailable() {
   return typeof google !== 'undefined' &&
     google.maps && google.maps.places &&
@@ -8956,7 +8967,7 @@ async function venueInputHandler(inputId, suggestionsId) {
     loadVenues().then(venues => {
       if (!venues.length) { box.style.display = 'none'; return; }
       let html = `<div style="font-size:0.68rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.08em;padding:6px 12px 2px">Your Courses</div>`;
-      venues.forEach(v => {
+      sortVenuesAlpha(venues).forEach(v => {
         html += `<div class="venue-suggestion" onclick="selectVenue('${v.name.replace(/'/g,"\\'")}','${inputId}','${suggestionsId}')"
           style="padding:9px 12px;cursor:pointer;font-size:0.88rem;border-bottom:1px solid var(--border)"
           onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''"
@@ -8974,7 +8985,7 @@ async function venueInputHandler(inputId, suggestionsId) {
     const q = query.toLowerCase();
 
     // D1 confirmed venues that match — shown first
-    const d1Matches = venues.filter(v => v.name.toLowerCase().includes(q));
+    const d1Matches = sortVenuesAlpha(venues.filter(v => v.name.toLowerCase().includes(q)));
 
     let html = '';
 
