@@ -1427,7 +1427,7 @@ Dev-64 to resolve before any code gets written.
 
 ---
 
-## Session Dev-64 · 2026-07-16 (in progress)
+## Session Dev-64 · 2026-07-16 – 2026-07-20 · "Quota Integrity, RSVP Redesign & Live Event Fixes" (closed)
 
 **Focus so far:** Diagnosed and fixed the recurring "Failed to fetch... GHIN Name flags from Jotform" bug Brian flagged from the Groups tab GHIN paste-import UI — traced to `launch_golf_scorer.py`'s local proxy server, not Jotform or GS itself.
 
@@ -1552,20 +1552,49 @@ Brian noticed Rich Potts showing Performance +16.00 in the Overall standings aft
 
 **Implementation:** found this exact retroactive-E1 logic duplicated **three separate times** in GS (`generateMyGamePage`, `generateSeriesPage`, `grpBuildRankings` — the last of which even carried a comment claiming to "mirror exact logic from generateMyGamePage," which was only aspirationally true before this fix). Consolidated into one shared `buildRetroactiveE1Event(evts, scorableEvts)` function, called from all three sites, so they can't silently drift out of sync with each other the way the original triplication already invited. Updated the player-facing "My Game" explanation text to accurately describe the corrected mechanism (real score counts, quota is what's estimated) rather than the old wording ("estimated result"). `node --check` clean; verified the corrected math in Node directly against Rich's real numbers before deploying, matching the agreed design exactly.
 
-**Carry-forward / still open from Dev-63, untouched so far this session:**
-- **Live on-device verification of the RSVP icon row** — built and syntax-checked but not yet exercised against real live data (real Yes/Sub/No taps on both a Series card and a Gathering card, capacity-lock/overflow edge cases, the new direct-No park/toast behavior). First priority next session.
-- **Live on-device verification of the unpublished-changes banner** — built and syntax-checked but not yet exercised against a real GHIN import/HCP edit followed by a Publish click. Second priority next session.
-- **Live on-device verification of the DiffHCP fix** — re-enter Wilbur/Jeremy's HCP, click Fetch Registrants again, confirm it holds this time. Third priority next session.
-- **Live on-device verification of the Share button** — tap it on an actual phone (iOS + Android if possible) and confirm the native share sheet opens rather than falling through to clipboard. Fourth priority next session. (Revised v3.17.35: share text shortened to "Welcome to BirdieFriends." and target link changed to `portal.html` instead of the landing page, per Brian's follow-up.)
-- **Re-publish BFSeries#5 groupings** after the Quota Stability Rule deploy, to confirm Rich's live quota bumps to 5.25 and the "Why this quota?" panel shows the new Full calculation / amber badge / Actual quota format correctly (badge finalized v8.47 — icon pill, not the earlier sentence-with-range draft). Fifth priority next session — Brian's own next step.
-- **Live Panel camera capture fix — encouraging signal, not yet conclusive.** Removed the risky Android MIME hack and fixed the silent failure path (v3.17.36). Same session, post-deploy: Paul Kametz and Nate Stettler both successfully uploaded post-round photos (ids 38, 39) — two new distinct players succeeding on a mixed device group, not just a repeat of Jeff Rapp's earlier working case. Three total successful uploads across one event isn't enough to fully rule out an intermittent issue — keep watching at the next live event with a fuller field.
-- **Photo Upload Pause kill switch is dead code** — `PHOTOS_UPLOAD_PAUSED` drives only the admin toggle's own status display; nothing in the Worker or portal actually checks it before allowing an upload. Brian needs to decide: wire it up for real, or remove the vestigial toggle so it stops implying a protection that doesn't exist. Not fixed this session — found while investigating the camera capture incident, out of scope for that fix.
-- **Use/Retake/Cancel preview for the Live Panel photo flow** — Brian raised this, then pivoted to the missing-photos investigation before answering which flow(s) it should apply to (Open Camera only vs. both vs. just adding Cancel to the existing Upload dialog). Still open, unanswered.
-- Brian still needs to click **⚕ Fix Historical Payouts** (Series tab) and re-Publish — money-list history fix deployed but not yet applied/republished
+**Carry-forward / still open, going into Dev-65 — consolidated and prioritized:**
+
+*Live-verification needed (built and syntax-checked this session, not yet exercised on a real device/live event):*
+1. RSVP icon row — real Yes/Sub/No taps on both a Series card and a Gathering card, capacity-lock/overflow edge cases, direct-No park/toast behavior
+2. Unpublished-changes groupings banner — real GHIN import/HCP edit followed by a Publish click
+3. DiffHCP persistence fix — re-enter Wilbur/Jeremy's HCP, click Fetch Registrants again, confirm it holds
+4. Share BirdieFriends button — tap it on an actual phone (iOS + Android if possible)
+5. Quota Stability Rule badge — re-publish BFSeries#5 groupings, confirm Rich Penberg's card shows 5.25 and the Full calculation / amber badge / Actual quota format renders correctly
+6. Live Panel camera fix — encouraging signal (2 new distinct players succeeded post-deploy: Paul Kametz, Nate Stettler) but 3 total successful uploads across one event isn't enough to fully rule out an intermittent issue; keep watching at the next live event with a fuller field
+
+*Decisions needed from Brian:*
+- **Photo Upload Pause kill switch is dead code** — `PHOTOS_UPLOAD_PAUSED` drives only the admin toggle's own status display; nothing in the Worker or portal actually checks it before allowing an upload. Wire it up for real, or remove the vestigial toggle?
+- **Use/Retake/Cancel preview for the Live Panel photo flow** — raised, not yet scoped (Open Camera only vs. both Camera+Upload vs. just adding Cancel to the existing Upload dialog)
+
+*Standing items, unchanged since Dev-63 or earlier:*
+- Click **⚕ Fix Historical Payouts** (Series tab) and re-Publish — money-list history fix deployed but not yet applied/republished
 - Delete the 8 lingering test photo rows (ids 2, 3, 4, 7, 8, 9, 17, 18) — carried since Dev-61
 - 40-photo GS Photo Organizer scale test — still not run
 - AI-generated event narratives (`BF_EventNarratives_Spec.md`) — open questions need resolving before any code
 - Season Money / Overall-pot flight system — needs its own dedicated design pass
 - Everything else carried from Dev-57 through Dev-63 untouched: icon-action-btn migration beyond Live Panel Photos, `worker.js` size/organization, full `bf_architecture.html` D1/ERD redraw, stale Worker Endpoints reference table, Commissioner PIN architecture, push notification preference center, push notification recipient domain (all-`bfw=Yes` vs. registered-only), notification feed → Worker KV redesign, player picker rethink, Player Analytics/Insights layer, proactive pushId health check, GHIN "Following" list confirmation (Ron Grow, Wilbur Hlay, Mohamed Walli, Jeremy Burkett, Lou Strohl, Rich Potts), `launch_golf_scorer.py` GitHub token possibly-unused cleanup.
 
-**Session still open — not yet closed.**
+---
+
+## Dev-64 Summary
+
+An unusually long, mixed infrastructure-and-fairness session — started from a "why is GHIN Failed to fetch" bug report and grew into eight separate real fixes across three files, spanning four calendar days (Jul 16–20):
+
+**Infrastructure:**
+- `launch_golf_scorer.py` threaded-server fix (confirmed resolved live) + first-ever sanitized library backup
+- Per-event push-notification feature — discovered it already existed, surfaced it, fixed a real gatheringId-matching gap in it
+- Live Panel camera capture incident — investigated with real server data, removed a risky unconfirmed MIME hack, fixed a genuinely silent failure path; encouraging but not fully conclusive results since
+
+**Portal UX:**
+- Universal RSVP icon-row redesign (Yes/Sub/No) replacing the old stacked-button/no-decline-option design, shared by Series and Gatherings
+- Share BirdieFriends button (About screen), revised once on Brian's feedback
+
+**GS scoring integrity — the core thread of the session:**
+- Unpublished-groupings-changes banner (closes a real "commissioner didn't know the public page was stale" gap)
+- DiffHCP manual-HCP-entry persistence fix (real data-loss bug)
+- **Quota Stability Rule** — new, designed collaboratively end-to-end (modeled 50% vs 25% against live data and full season backtest, confirmed zero blast radius beyond the triggering case, iterated the UI indicator through three rounds of feedback to a compact badge)
+- **NoHCP retroactive E1 correctness fix** — a second, independently-discovered algorithm bug in the same family, found by Brian eyeballing an obviously-wrong number, root-caused with real historical chat evidence (Chat #3/#5) to explain why original testing never surfaced it, and consolidated from three duplicated implementations into one shared function
+
+Both scoring fixes follow the same shape: a mechanism that behaves reasonably at normal scale broke down at a low-sample-size edge case, invisible until a real player's data happened to land exactly there.
+
+**Session Dev-64 fully closed.**
