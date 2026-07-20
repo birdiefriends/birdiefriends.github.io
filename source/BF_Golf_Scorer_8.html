@@ -4709,6 +4709,47 @@ async function pushToSheets() {
   }
 }
 
+// ── Retroactive E1 for NoHCP players (Dev-64, corrected) ─────────────────
+// A NoHCP player's baseline first event has a real recorded `actual` score
+// but no `quota` (no HCP existed yet to compute one from). This estimates
+// what that missing quota probably should have been — the average of
+// (quota, actual) across all the player's real scored events so far,
+// recalculated live every time it's called — and pairs it with the
+// player's REAL, untouched baseline actual score to produce a genuine,
+// non-neutral result for that event. As the player proves their true
+// level in later real events, this retroactively-estimated E1 quota
+// self-refines — that's the intended behavior (Brian, Dev-64), not
+// something to neutralize away.
+//
+// Previous version averaged *results* (not quota+actual) and fabricated a
+// synthetic `actual`, discarding the player's real baseline score entirely
+// — at n=1 real scored event, "average of one result" equals that result
+// exactly, silently doubling it in the aggregate (surfaced: Rich Potts,
+// BFSeries#5, showed +16.00 instead of his true +8.00).
+//
+// Was previously duplicated three times (generateMyGamePage, generateSeriesPage,
+// grpBuildRankings) — consolidated here so all three can't drift out of sync
+// with each other again.
+//
+// Returns null if there's no baseline event, no real actual recorded for
+// it, or no real scored events yet to estimate a quota from.
+function buildRetroactiveE1Event(evts, scorableEvts) {
+  if (!scorableEvts.length) return null;
+  const baselineEvt = evts.find(e => e.quota === null && e.result === null);
+  if (!baselineEvt) return null;
+  const realActual = baselineEvt.actual;
+  if (realActual === null || realActual === undefined) return null;
+  const allVals = scorableEvts.flatMap(e => [e.quota, e.actual]);
+  const retroQuota = allVals.reduce((s,v) => s + v, 0) / allVals.length;
+  return {
+    quota: retroQuota,
+    actual: realActual,
+    result: realActual - retroQuota,
+    retroactive: true,
+    eventName: '~E1 (retroactive)'
+  };
+}
+
 // ── MY GAME PAGE GENERATOR ──────────────────────────────────────────────────
 function generateMyGamePage(season, sd) {
   const SLOPE_RATES = { Green: 132, Combo: 128, Gold: 115 };
@@ -4722,16 +4763,12 @@ function generateMyGamePage(season, sd) {
       return da.localeCompare(db);
     });
     let scorableEvts = evts.filter(e => e.quota !== null && e.result !== null);
-    const hasBaselineE1 = evts.some(e => e.quota === null && e.result === null);
-    let hasRetroE1 = false;
-    let retroAvg = null;
-    if (hasBaselineE1 && scorableEvts.length >= 1) {
-      retroAvg = scorableEvts.reduce((s,e) => s + e.result, 0) / scorableEvts.length;
-      hasRetroE1 = true;
-    }
+    const retroE1 = buildRetroactiveE1Event(evts, scorableEvts);
+    const hasRetroE1 = !!retroE1;
+    const retroAvg = hasRetroE1 ? retroE1.quota : null; // now the retroactive QUOTA, not a result average — kept as retroAvg for downstream compat
     let calcEvts = [...scorableEvts];
     if (hasRetroE1) {
-      calcEvts = [{ quota:20, actual:20+retroAvg, result:retroAvg, retroactive:true, eventName:'~E1 (retroactive)' }, ...calcEvts];
+      calcEvts = [retroE1, ...calcEvts];
     }
     const sorted = [...calcEvts].sort((a,b) => b.result - a.result);
     const best4  = sorted.slice(0, Math.min(4, sorted.length));
@@ -5146,7 +5183,7 @@ function showPlayer(name) {
   }
 
   let retroNote = p.hasRetroE1
-    ? \`<div class="note">~ Event 1 (baseline) has been retroactively included as an estimated result using the average of your scored events (\${fmt2(p.retroAvg)}). This recalculates as more events are played.</div>\`
+    ? \`<div class="note">~ Your Event 1 (baseline) score counts — since you didn't have a handicap yet, a fair starting quota (\${fmt2(p.retroAvg)}) has been estimated from how you've scored since. This recalculates as more events are played.</div>\`
     : '';
 
   wrap.innerHTML = \`
@@ -5197,15 +5234,12 @@ function generateSeriesPage(season, sd) {
     // For series performance, only use events where quota was set (not 1st event of no-HCP)
     let scorableEvts = evts.filter(e => e.quota !== null && e.result !== null);
 
-    // Retroactive E1 for NoHCP players: inject synthetic E1 = avg achievement of scored events
+    // Retroactive E1 for NoHCP players — see buildRetroactiveE1Event() (Dev-64, corrected)
     // Recalculates live each time standings are generated
-    const hasBaselineE1 = evts.some(e => e.quota === null && e.result === null);
-    let hasRetroE1 = false;
-    if (hasBaselineE1 && scorableEvts.length >= 1) {
-      const avgResult = scorableEvts.reduce((s,e) => s + e.result, 0) / scorableEvts.length;
-      const retroE1 = { quota: 20, actual: 20 + avgResult, result: avgResult, retroactive: true };
-      scorableEvts = [retroE1, ...scorableEvts];
-      hasRetroE1 = true;
+    const retroE1Evt = buildRetroactiveE1Event(evts, scorableEvts);
+    const hasRetroE1 = !!retroE1Evt;
+    if (hasRetroE1) {
+      scorableEvts = [retroE1Evt, ...scorableEvts];
     }
 
     const perf = calcSeriesPerformance(scorableEvts);
@@ -6986,12 +7020,12 @@ function grpBuildRankings() {
       const db = (sd.events||[]).find(e=>e.name===b.eventName)?.date||b.eventName||'';
       return da.localeCompare(db);
     });
+    // Mirrors generateMyGamePage — via the same shared buildRetroactiveE1Event() (Dev-64)
     const scorableEvts = evts.filter(e => e.quota !== null && e.result !== null);
-    const hasBaselineE1 = evts.some(e => e.quota === null && e.result === null);
+    const retroE1Evt = buildRetroactiveE1Event(evts, scorableEvts);
     let calcEvts = [...scorableEvts];
-    if (hasBaselineE1 && scorableEvts.length >= 1) {
-      const retroAvg = scorableEvts.reduce((s,e) => s + e.result, 0) / scorableEvts.length;
-      calcEvts = [{ quota:20, actual:20+retroAvg, result:retroAvg, retroactive:true }, ...calcEvts];
+    if (retroE1Evt) {
+      calcEvts = [retroE1Evt, ...calcEvts];
     }
     if (!calcEvts.length) {
       playerData[name] = { overallRank: null, seriesScore: null, eventsPlayed: 0 };
@@ -8560,7 +8594,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.47 · 2026-07-18';
+const GS_VERSION = 'v8.48 · 2026-07-20';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
