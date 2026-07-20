@@ -1837,24 +1837,29 @@ export default {
     // POST /scorecards — player-submitted, no PIN, same trust model as
     // Scorecard/CttP/photo capture. Upserts on (event_name, player) so
     // re-opening the grid and resubmitting corrects rather than duplicates.
-    // Body: { event_name, player, holes: [18 numbers|null], front9?, back9?, total? }
+    // Body: { event_name, player, holes: [18 numbers|null], marks?: [18 strings|null], front9?, back9?, total? }
+    // marks is a player-declared "how did it feel" tag per hole (eagle/birdie/
+    // par/bogey/double) — NOT computed against real course par, since that
+    // data doesn't exist for most venues (see BZP Vision Thesis 3a discussion,
+    // Dev-65). Purely self-reported, defaults to 'par' client-side.
     if (request.method === 'POST' && url.pathname === '/scorecards') {
       let body;
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { event_name, player, holes, front9, back9, total } = body;
+      const { event_name, player, holes, marks, front9, back9, total } = body;
       if (!event_name || !player || !Array.isArray(holes) || holes.length !== 18) {
         return new Response(JSON.stringify({ error: 'event_name, player, and an 18-entry holes array are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
+      const marksJson = Array.isArray(marks) && marks.length === 18 ? JSON.stringify(marks) : null;
       try {
         const result = await env.DB.prepare(
-          `INSERT INTO scorecards (event_name, player, holes, front9, back9, total, captured_at)
-           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+          `INSERT INTO scorecards (event_name, player, holes, marks, front9, back9, total, captured_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
            ON CONFLICT(event_name, player) DO UPDATE SET
-             holes = excluded.holes, front9 = excluded.front9, back9 = excluded.back9,
+             holes = excluded.holes, marks = excluded.marks, front9 = excluded.front9, back9 = excluded.back9,
              total = excluded.total, captured_at = excluded.captured_at`
-        ).bind(event_name, player, JSON.stringify(holes), front9 ?? null, back9 ?? null, total ?? null).run();
+        ).bind(event_name, player, JSON.stringify(holes), marksJson, front9 ?? null, back9 ?? null, total ?? null).run();
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error saving scorecard: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -1875,7 +1880,7 @@ export default {
           return new Response(JSON.stringify({ error: 'event or player query param required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         const { results } = await env.DB.prepare(query).bind(param).all();
-        const scorecards = results.map(r => ({ ...r, holes: JSON.parse(r.holes) }));
+        const scorecards = results.map(r => ({ ...r, holes: JSON.parse(r.holes), marks: r.marks ? JSON.parse(r.marks) : null }));
         return new Response(JSON.stringify({ ok: true, scorecards }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
