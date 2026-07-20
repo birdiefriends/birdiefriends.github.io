@@ -1,6 +1,6 @@
 # BirdieFriends — Business Plan Vision & Positioning
 *Foundational document · Load at start of every business plan session*
-*Last updated: Session BP-5 · July 6, 2026*
+*Last updated: Session BP-5 · July 6, 2026 · Thesis 3a added from Dev-65 (July 20, 2026), a direct Dev-session cross-post rather than a formal BZP session
 
 ---
 
@@ -42,6 +42,8 @@ Brian is retired and does not need this to succeed financially. He was consideri
 2. **The product is experience design, not software.** BF's differentiator is the BirdieFriends Engine's recommendation capability — tuning event format to the specific group and occasion — proven informally via GLS's 2-Man scramble design, which kept a mixed-skill, not-all-golf-nuts group consistently engaged and fair. (Corrected BP-5: recommendation logic is a capability of the Engine, not a separate "product" competing with BF-E/BF-C for identity — see Core Vision Statement.)
 
 3. **Memorialization, not scoring, is the emotional core.** People will pay for a permanent, shareable record of a meaningful gathering. The Garrett's Last Swing hat — organically ordered, BF co-branded — is real-world proof this works before the commercial product even existed.
+
+3a. **The historic package — Event + Crew + Photos + Score, wrapped by the Event (surfaced Dev-65).** Memorialization isn't a single artifact bolted onto scoring — it's what happens when an event card stops being a disposable scheduling object and becomes a persistent container for everything that happened that day: who was there (Crew), what it looked like (Photos), and how it went (Score). This reframes BirdieFriends from primarily a scheduler into an experience-history platform — the event card is the wrapper, not the destination. Surfaced concretely through two Dev-65 threads that turned out to be the same finding from different angles: building a photo viewer independent of a card's visibility on Home (access shouldn't disappear once the card ages off the schedule), and a bug where recurring Gatherings blurred one week's RSVP into another (the schedule list and the historical record are two different jobs, and BF has only deliberately built the first one so far). Practical validation: the founder could not recall scores or day-of details for past events he intends to repeat, with no capture mechanism in place to have told him — direct evidence the gap is real, not hypothetical. Score capture on its own is a thin justification (GHIN and personal devices already own that job better); its value is as the third leg of the historic package alongside Crew and Photos, not as a standalone stats feature.
 
 4. **Ambassadors are community advocates, not a sales dependency.** The product sells directly to any Host who finds it (search, word of mouth, GLS-style enrollment). Ambassadors are a margin-for-reach trade — they accelerate penetration into communities BF couldn't otherwise cost-effectively reach, in exchange for origination credit plus lifetime attribution payouts. They are not gatekeepers.
 
