@@ -1598,3 +1598,56 @@ An unusually long, mixed infrastructure-and-fairness session — started from a 
 Both scoring fixes follow the same shape: a mechanism that behaves reasonably at normal scale broke down at a low-sample-size edge case, invisible until a real player's data happened to land exactly there.
 
 **Session Dev-64 fully closed.**
+
+---
+
+## Dev-65 Summary
+
+The longest session yet, and the one where BirdieFriends' framing actually shifted — from "the app that schedules golf" toward "the app that remembers golf." Started with a small feature (Split the Bill) and ended with a genuine architectural pivot (the historic package: Event + Crew + Photos + Score) that got written into the business plan mid-session, then built out live.
+
+**Split the Bill (Gear panel):** even split with tax/tip, quick-percent chips, round-up-to-nearest-dollar with leftover tracking, and an "Already Collected" field for people who chipped in and left before the tab was settled. Self-contained, no backend.
+
+**Photo capture — from zero to a real, working system:**
+- Deleted a stale test photo (Jeff Rapp, BFSeries#5) via new PIN/self-service `DELETE /photos/:id` route.
+- Built basic capture+view directly on every event/Gathering card (📷 Photos row → capture sheet), deliberately scoped down from "launch Live Panel for every event type" after concluding Live Panel's live-window gate, Birdie Alert, and CTP leaderboard don't map to casual Gatherings — card-pinned functions won out.
+- Self-service delete added (captor can delete their own; commissioner can delete any) — required extending `DELETE /photos/:id` to accept `requested_by` as an alternate auth path to the PIN.
+- **My Photo Moments** built as a persistent, card-independent viewer — the real fix for "cards expire and view access disappears": reads from the full in-memory registration data already loaded at session start, not the filtered subset actually rendered on Home.
+- Moved to the header 📸 icon for every player (was commissioner-only); the old admin Photo Viewer (all statuses, PIN-gated) relocated to Gear → Event Day.
+- **Root-caused a real Android camera failure:** Chrome's Photo Picker (Android 14–16) increasingly ignores `capture="environment"` when `accept` spans multiple types. Fix: split combined `image/*,video/*` inputs into separate single-type Photo/Video buttons, applied to both the card capture sheet and Live Panel. **Confirmed working on real Android 16 and iOS devices post-deploy** — the one fix this session with hard field confirmation, not just a syntax check.
+- Added **⬆️ Upload from Gallery** (no `capture` attribute) alongside the camera buttons — a path that never existed before for an already-taken photo (screenshot, AirDropped shot, texted photo).
+
+**Two real bugs found and fixed along the way:**
+- **Venue Manager stuck on "Loading…" forever** — the expand toggle was missing its `autoLoad` argument entirely; one-line fix.
+- **My Schedule showing a Gathering as "Registered" after a "No" response** — the exact Dev-58 bug class (recurring same-titled Gatherings need `gatheringId` matching, not title matching) had one spot missed at the time: `renderSchedule()`'s inline filter never got the fix `findMyReg`/`buildEventCard` already had. Found by Brian testing his own "No" response, not by a report.
+- Also: alphabetical venue-picker sort (Other pinned last).
+
+**BZP Vision — Thesis 3a added (direct Dev-session cross-post, not a formal BZP#N session):** "The historic package — Event + Crew + Photos + Score, wrapped by the Event." Surfaced from two Dev-65 threads that turned out to be the same finding — My Photo Moments' card-independence fix, and the My Schedule bug — both pointing at "the schedule list and the historical record are two different jobs, and BF's only deliberately built the first one." Practical validation: Brian couldn't recall scores/details for past events he intends to repeat, with no capture mechanism in place to have told him.
+
+**General Scorecard — built from planning through several rounds of real-device iteration:**
+- Deliberately separate from `SCORECARD_FORM_ID` (the Jotform pipeline feeding Series quota/points/payouts, left untouched) — new `scorecards` D1 table, `POST/GET/DELETE /scorecards` routes, same `event_name`/`gathering:<id>` key convention as photos.
+- Entry UI mirrors Live Panel's tap-hole → tap-value → auto-advance flow rather than 18 text inputs, per Brian's specific ask for that same efficiency.
+- **Marks (birdie/eagle/bogey/double)** went through the most visual iteration of the session: double-tap gesture (unreliable — layout shift during the timing window could land the second tap on a different button) → dedicated corner tap target (fixed the reliability problem) → several rounds of visual legibility fixes (box-shadow rings too subtle → bold borders competing with the gold active-indicator → background shading → final design: white background always, colored score number, and a **real second DOM element with genuine padding** for eagle/double rather than any border trick, since a thin double-border never reads as "two" at ~32px) → reordered cycle to par→bogey→double→birdie→eagle (fewer taps to the statistically common outcomes) → **changed the default from `'par'` to `null`**, a data-integrity fix so a player who only marks birdies leaves everything else honestly unknown rather than falsely recorded as par — directly preserves future extrapolation potential.
+- **Quick/Full modes added** after Brian's own reflection: full 18-hole entry is "optional fidelity," not the baseline — not every round is memorable enough to justify it, and requiring that much effort risked players skipping capture entirely. Quick (Front/Back/Total, no grid) is now the default; Full is opt-in. Both write to the identical row shape (`holes` stays all-null for a Quick entry) — no schema branching.
+- **Tee box chip selector** added (Front/Middle/Back/Combo + eight color names) — deliberately not freeform text, since course tee naming genuinely isn't standardized and freeform can't be aggregated later.
+- **My Photo Moments expanded into "My History"** — Crew + Photos + Score per event, one wrapper per event instead of three separate features. `GET /scorecards` extended to support "no filter = everything" (mirroring `GET /photos`) so History shows every player's score, not just the viewer's own; a `›` on any full-18 entry opens a read-only detail view reusing the exact same mark visuals.
+- Cancel button, explicit ✕ close button, and a data-loss guard added late: switching from a saved Full entry to Quick mode and saving would silently discard the hole-by-hole detail underneath it — now confirms first and prefills Quick's fields from the existing total either way.
+
+**Process note worth logging:** mid-session, a `worker.js` change (the `GET /scorecards` no-filter fix) was pushed to the GitHub source but never flagged for Brian's manual Cloudflare paste or handed over as a file — a real miss against the standing workflow rule, caught only because "My History isn't showing any scorecard insights" surfaced it. Worth double-checking every worker.js edit ends with an explicit handoff, not just a source push.
+
+**Artifacts:**
+- `docs/portal.html` / `source/portal.html` — from v3.17.46 through v3.17.63 (many small deploys; final state has Split the Bill, card photo capture + My History, general Scorecard with Quick/Full modes and tee box, Venue Manager fix, My Schedule fix, alphabetical venue sort, split camera inputs)
+- `source/worker.js` — `DELETE /photos/:id` self-service path, `scorecards` table routes (POST/GET/DELETE), `marks` and `tee_box` columns, `GET /scorecards` no-filter tier
+- D1 — new `scorecards` table (`holes`, `marks`, `tee_box`, `front9`, `back9`, `total`, unique on event+player), `event_photos` unaffected beyond the delete path
+- `source/bizplan/BF_BizPlan_Vision.md` — Thesis 3a added
+
+**Carry-forward into Dev-66:**
+- *Live-verification still needed* (built and syntax-checked, not yet exercised for real): general Scorecard end-to-end on a real round (Quick and Full both), tee box selector, My History's all-players view and score-detail tap-through, the Quick-mode overwrite confirm dialog
+- *Real round pending*: Brian's memorable 7/20 morning round at Blue Shamrock — the actual gathering (#37) can't be reopened (Dev-54's date-guard correctly blocked it), so a fresh copy via 🔁 Repeat was the agreed path; not yet confirmed done
+- *Decision still open*: Tier 2 (real course/hole par data, `venue_holes` table) — explicitly scoped as a separate, larger follow-on, not started
+- *Decision still open*: "formal round" flag on events/Gatherings — surfaced by the "big Gatherings might want Birdie Alert too" observation, not yet designed
+- D1 schema log doc (if it still exists under that name) — not updated this session for the new `scorecards` table/columns; worth confirming the filename and appending next session
+- All standing items from Dev-63/Dev-64 not touched this session carry forward unchanged (Photo Upload Pause kill switch decision, icon-action-btn migration, `worker.js` size/organization, notification/push items, Player Analytics/Insights layer, GHIN Following list confirmation, etc.)
+
+**Session Dev-65 fully closed.**
+
+**Chat-rename string:** `Dev-65 - Photo History, General Scorecard & the Historic Package Pivot`
