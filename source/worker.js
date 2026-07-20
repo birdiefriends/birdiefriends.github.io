@@ -1787,20 +1787,34 @@ export default {
       }
     }
 
-    // DELETE /photos/:id — permanent removal (R2 object + D1 row). PIN required, query param
-    // ?pin=7797. This is deliberately separate from PATCH curation_status='rejected' — reject
+    // DELETE /photos/:id — permanent removal (R2 object + D1 row). Two auth paths:
+    //   ADMIN  — ?pin=7797, can delete any photo. Unchanged from Dev-54.
+    //   PLAYER — ?requested_by=<name>, no PIN. Self-service: only allowed when
+    //            requested_by matches the photo's own captured_by, checked
+    //            server-side against the D1 row (never trust a client claim of
+    //            "this is mine" without verifying it against the stored record).
+    //            Mirrors the trust model already used for registration/scorecard
+    //            self-edits — a player can act on their own record, nothing else.
+    // This is deliberately separate from PATCH curation_status='rejected' — reject
     // is reversible (can be flipped back to pending/approved), delete is not. No trash/undo.
     if (request.method === 'DELETE' && url.pathname.startsWith('/photos/')) {
       try {
-        const photoId = url.pathname.split('/photos/')[1];
-        const pin     = url.searchParams.get('pin');
-        if (String(pin) !== '7797') {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-        }
-        const row = await env.DB.prepare(`SELECT r2_key FROM event_photos WHERE id = ?`).bind(photoId).first();
+        const photoId     = url.pathname.split('/photos/')[1];
+        const pin         = url.searchParams.get('pin');
+        const requestedBy = url.searchParams.get('requested_by');
+        const isAdmin     = String(pin) === '7797';
+
+        const row = await env.DB.prepare(`SELECT r2_key, captured_by FROM event_photos WHERE id = ?`).bind(photoId).first();
         if (!row) {
           return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
+
+        const norm = s => (s || '').trim().toLowerCase();
+        const isOwner = requestedBy && norm(requestedBy) === norm(row.captured_by);
+        if (!isAdmin && !isOwner) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+
         if (env.PHOTOS_BUCKET) {
           await env.PHOTOS_BUCKET.delete(row.r2_key);
         }
