@@ -1825,6 +1825,89 @@ export default {
       }
     }
 
+    // ── Scorecards (general historic record, Dev-65) ──────────────────────────
+    // Deliberately separate from SCORECARD_FORM_ID (Jotform) — that pipeline
+    // feeds the Series quota/points/payout engine and stays untouched. This is
+    // "what did I shoot" for any event or Gathering, raw and course-agnostic —
+    // Tier 1 of the historic-package plan (Event + Crew + Photos + Score). Same
+    // event_name key convention as photos: real event name for Series/Weekend,
+    // synthetic 'gathering:<id>' for Gatherings (recurring same-titled
+    // Gatherings can't share a key — see Dev-58/Dev-65 photos notes).
+    //
+    // POST /scorecards — player-submitted, no PIN, same trust model as
+    // Scorecard/CttP/photo capture. Upserts on (event_name, player) so
+    // re-opening the grid and resubmitting corrects rather than duplicates.
+    // Body: { event_name, player, holes: [18 numbers|null], front9?, back9?, total? }
+    if (request.method === 'POST' && url.pathname === '/scorecards') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { event_name, player, holes, front9, back9, total } = body;
+      if (!event_name || !player || !Array.isArray(holes) || holes.length !== 18) {
+        return new Response(JSON.stringify({ error: 'event_name, player, and an 18-entry holes array are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const result = await env.DB.prepare(
+          `INSERT INTO scorecards (event_name, player, holes, front9, back9, total, captured_at)
+           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(event_name, player) DO UPDATE SET
+             holes = excluded.holes, front9 = excluded.front9, back9 = excluded.back9,
+             total = excluded.total, captured_at = excluded.captured_at`
+        ).bind(event_name, player, JSON.stringify(holes), front9 ?? null, back9 ?? null, total ?? null).run();
+        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error saving scorecard: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /scorecards?event=<key> — all scores for one event/gathering, or
+    // ?player=<name> for one player's full history. No PIN — self-reported
+    // scores, same openness as approved photos, nothing sensitive to gate.
+    if (request.method === 'GET' && url.pathname === '/scorecards') {
+      try {
+        const event  = url.searchParams.get('event');
+        const player = url.searchParams.get('player');
+        let query, param;
+        if (event)  { query = `SELECT * FROM scorecards WHERE event_name = ? ORDER BY captured_at DESC`; param = event; }
+        else if (player) { query = `SELECT * FROM scorecards WHERE player = ? ORDER BY captured_at DESC`; param = player; }
+        else {
+          return new Response(JSON.stringify({ error: 'event or player query param required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const { results } = await env.DB.prepare(query).bind(param).all();
+        const scorecards = results.map(r => ({ ...r, holes: JSON.parse(r.holes) }));
+        return new Response(JSON.stringify({ ok: true, scorecards }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // DELETE /scorecards/:id — same two-path auth as DELETE /photos/:id:
+    // ?pin=7797 (any), or ?requested_by=<name> matching the row's own player
+    // (self-service, checked server-side against the stored record).
+    if (request.method === 'DELETE' && url.pathname.startsWith('/scorecards/')) {
+      try {
+        const scId        = url.pathname.split('/scorecards/')[1];
+        const pin         = url.searchParams.get('pin');
+        const requestedBy = url.searchParams.get('requested_by');
+        const isAdmin     = String(pin) === '7797';
+
+        const row = await env.DB.prepare(`SELECT player FROM scorecards WHERE id = ?`).bind(scId).first();
+        if (!row) {
+          return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const norm = s => (s || '').trim().toLowerCase();
+        const isOwner = requestedBy && norm(requestedBy) === norm(row.player);
+        if (!isAdmin && !isOwner) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        await env.DB.prepare(`DELETE FROM scorecards WHERE id = ?`).bind(scId).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Delete error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // PATCH /photos/:id — curation actions (approve/reject/trophy toggle/reorder),
     // plus event_name/section correction (retagging legacy/test rows onto a real
     // event descriptor). PIN required.
