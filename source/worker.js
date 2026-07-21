@@ -723,13 +723,17 @@ export default {
 
     // GET /venues?pin=X — commissioner view returns ALL venues (active + inactive)
     // GET /venues        — public view returns active venues only (existing behaviour preserved)
+    // Both now include `pars` (Dev-66) — a JSON-stringified 18-length array
+    // of hole pars, or null if not yet entered. Exposed publicly (no pin
+    // needed to read it) since the scorecard's auto-mark feature needs any
+    // player to be able to resolve a venue's par, not just the commissioner.
     if (request.method === 'GET' && url.pathname === '/venues') {
       const pin = url.searchParams.get('pin');
       const isCommissioner = (pin === '7797');
       try {
         const sql = isCommissioner
-          ? `SELECT id, name, active, sort_order FROM venues ORDER BY sort_order ASC, name ASC`
-          : `SELECT id, name FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`;
+          ? `SELECT id, name, active, sort_order, pars FROM venues ORDER BY sort_order ASC, name ASC`
+          : `SELECT id, name, pars FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`;
         const rows = await env.DB.prepare(sql).all();
         return new Response(JSON.stringify({ ok: true, venues: rows.results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -778,6 +782,42 @@ export default {
         });
       } catch(e) {
         return new Response(JSON.stringify({ error: 'Database error updating venue' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
+    // PATCH /venues/:id/pars — commissioner saves or clears a venue's
+    // 18-hole par table (Dev-66, Venue Manager "Vs Par"). PIN-gated. This
+    // is what powers the scorecard's auto-mark feature for any venue
+    // beyond the previously-hardcoded BSGC — enter a course's pars here
+    // once and the scorecard picks it up automatically for that venue's
+    // events going forward, same mechanism BSGC already used.
+    // pars: null clears the table (falls back to fully manual marking);
+    // otherwise must be exactly 18 entries, each a real par (3-6) — loose
+    // sanity bound, not a rules enforcement, just catches obvious typos.
+    const venueParsMatch = url.pathname.match(/^\/venues\/(\d+)\/pars$/);
+    if (request.method === 'PATCH' && venueParsMatch) {
+      const venueId = venueParsMatch[1];
+      const body = await request.json();
+      const { pin, pars } = body;
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      let parsJson = null;
+      if (pars !== null) {
+        if (!Array.isArray(pars) || pars.length !== 18 || pars.some(p => !Number.isInteger(p) || p < 3 || p > 6)) {
+          return new Response(JSON.stringify({ error: 'pars must be an 18-length array of integers 3-6, or null to clear' }), {
+            status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+        parsJson = JSON.stringify(pars);
+      }
+      try {
+        await env.DB.prepare(`UPDATE venues SET pars = ? WHERE id = ?`).bind(parsJson, venueId).run();
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error updating venue pars' }), {
           status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
