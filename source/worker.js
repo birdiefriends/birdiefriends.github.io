@@ -733,7 +733,7 @@ export default {
       const isCommissioner = (pin === '7797');
       try {
         const sql = isCommissioner
-          ? `SELECT id, name, active, sort_order, pars FROM venues ORDER BY sort_order ASC, name ASC`
+          ? `SELECT id, name, active, sort_order, pars, lat, lng FROM venues ORDER BY sort_order ASC, name ASC`
           : `SELECT id, name, pars FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`;
         const rows = await env.DB.prepare(sql).all();
         return new Response(JSON.stringify({ ok: true, venues: rows.results }), {
@@ -819,6 +819,42 @@ export default {
         });
       } catch(e) {
         return new Response(JSON.stringify({ error: 'Database error updating venue pars' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
+    // PATCH /venues/:id/coords — commissioner sets or clears a venue's
+    // lat/lng (Dev-67, weather history). PIN-gated. Deliberately manual
+    // rather than auto-geocoded — a small local golf course often isn't
+    // resolvable by name through a general geocoding service, and getting
+    // it wrong silently would produce confidently-wrong weather. Paste
+    // coordinates from Google Maps (long-press a point → the lat,lng shown
+    // at the bottom) once per venue; this is what event_weather capture
+    // looks up by venue name to know where to ask for weather.
+    // { lat, lng } both null clears; otherwise both required, sane ranges.
+    const venueCoordsMatch = url.pathname.match(/^\/venues\/(\d+)\/coords$/);
+    if (request.method === 'PATCH' && venueCoordsMatch) {
+      const venueId = venueCoordsMatch[1];
+      const body = await request.json();
+      const { pin, lat, lng } = body;
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      let latVal = null, lngVal = null;
+      if (lat !== null || lng !== null) {
+        latVal = Number(lat); lngVal = Number(lng);
+        if (!Number.isFinite(latVal) || !Number.isFinite(lngVal) || latVal < -90 || latVal > 90 || lngVal < -180 || lngVal > 180) {
+          return new Response(JSON.stringify({ error: 'lat/lng must be valid coordinates, or both null to clear' }), {
+            status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+      }
+      try {
+        await env.DB.prepare(`UPDATE venues SET lat = ?, lng = ? WHERE id = ?`).bind(latVal, lngVal, venueId).run();
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error updating venue coordinates' }), {
           status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
@@ -1972,6 +2008,106 @@ export default {
         return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Delete error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // ── Weather history (Dev-67) ───────────────────────────────────────────────
+    // Same key convention as photos/scorecards: real event name for Series/
+    // Weekend, synthetic 'gathering:<id>' for Gatherings. One row per event,
+    // fetched-and-cached once — historical weather for a fixed date never
+    // changes, so unlike the archive-elsewhere-in-this-app pattern there's
+    // no re-derivation concern, just a straightforward cache.
+    //
+    // GET /weather?event=<key> for one event, or no filter = everything
+    // (mirrors GET /photos/GET /scorecards' shape) — used by My History to
+    // batch-load weather for every group in one call. No PIN — same openness
+    // as approved photos/scorecards, it's just weather.
+    if (request.method === 'GET' && url.pathname === '/weather') {
+      try {
+        const event = url.searchParams.get('event');
+        let sql = `SELECT * FROM event_weather WHERE 1=1`;
+        const binds = [];
+        if (event) { sql += ` AND event_name = ?`; binds.push(event); }
+        const { results } = await env.DB.prepare(sql).bind(...binds).all();
+        return new Response(JSON.stringify({ ok: true, weather: results }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /weather/capture — fire-and-forget, called by the portal right
+    // after a photo or scorecard is captured for an event (whichever happens
+    // first — Dev-67). No PIN, trust-based like every other player-facing
+    // capture call in this app. Body: { event_name, venue, event_date }
+    // (event_date is YYYY-MM-DD, the event's own local calendar date).
+    //
+    // Deliberately does NOT auto-geocode the venue — see the coords route's
+    // comment above. If the venue has no lat/lng on file yet (new venue, or
+    // an existing one Brian hasn't set coordinates for), this returns
+    // ok:false with no error thrown client-side — same fail-open shape as
+    // the groupings-sync fire-and-forget pattern (Dev-57). Nothing is lost:
+    // the very next photo/scorecard capture for the same event will try
+    // again automatically once coordinates are set, no retry job needed.
+    //
+    // Same self-healing shape covers Open-Meteo's archive-data reporting lag
+    // (recent days can come back with null values before the archive is
+    // fully populated, typically a few days) — a null high/low is treated
+    // as "not ready yet" and nothing is cached, so the next capture call
+    // for that event retries against the live API rather than locking in
+    // an incomplete row forever.
+    if (request.method === 'POST' && url.pathname === '/weather/capture') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ ok: false, error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { event_name, venue, event_date } = body;
+      if (!event_name || !venue || !event_date) {
+        return new Response(JSON.stringify({ ok: false, error: 'event_name, venue, and event_date are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        // Already cached — return it, no re-fetch.
+        const existing = await env.DB.prepare(`SELECT * FROM event_weather WHERE event_name = ?`).bind(event_name).first();
+        if (existing) {
+          return new Response(JSON.stringify({ ok: true, cached: true, weather: existing }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+
+        const venueRow = await env.DB.prepare(`SELECT lat, lng FROM venues WHERE name = ?`).bind(venue).first();
+        if (!venueRow || venueRow.lat == null || venueRow.lng == null) {
+          return new Response(JSON.stringify({ ok: false, reason: 'no_coordinates' }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+
+        const wxUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${venueRow.lat}&longitude=${venueRow.lng}` +
+          `&start_date=${event_date}&end_date=${event_date}` +
+          `&daily=temperature_2m_max,temperature_2m_min,windspeed_10m_max,precipitation_sum,weathercode` +
+          `&temperature_unit=fahrenheit&windspeed_unit=mph&precipitation_unit=inch&timezone=America%2FNew_York`;
+        const wxRes = await fetch(wxUrl);
+        if (!wxRes.ok) {
+          return new Response(JSON.stringify({ ok: false, reason: 'weather_api_error' }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const wxData = await wxRes.json();
+        const d = wxData.daily;
+        const tempHigh = d?.temperature_2m_max?.[0];
+        const tempLow  = d?.temperature_2m_min?.[0];
+        // Archive not caught up yet for a very recent date — don't cache a
+        // half-empty row, let the next capture call retry for real.
+        if (tempHigh == null || tempLow == null) {
+          return new Response(JSON.stringify({ ok: false, reason: 'not_available_yet' }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+
+        const windSpeed    = d?.windspeed_10m_max?.[0] ?? null;
+        const precipAmount = d?.precipitation_sum?.[0] ?? null;
+        const weatherCode  = d?.weathercode?.[0] ?? null;
+
+        await env.DB.prepare(
+          `INSERT INTO event_weather (event_name, venue, event_date, temp_high, temp_low, wind_speed, precip_amount, weather_code)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(event_name) DO NOTHING`
+        ).bind(event_name, venue, event_date, tempHigh, tempLow, windSpeed, precipAmount, weatherCode).run();
+
+        const saved = await env.DB.prepare(`SELECT * FROM event_weather WHERE event_name = ?`).bind(event_name).first();
+        return new Response(JSON.stringify({ ok: true, cached: false, weather: saved }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ ok: false, error: String(e.message || e) }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
