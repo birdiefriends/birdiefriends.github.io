@@ -2071,12 +2071,45 @@ export default {
           return new Response(JSON.stringify({ ok: true, cached: true, weather: existing }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
 
-        const venueRow = await env.DB.prepare(`SELECT lat, lng FROM venues WHERE name = ?`).bind(venue).first();
-        if (!venueRow || venueRow.lat == null || venueRow.lng == null) {
+        // Coordinate resolution, in priority order:
+        //   1. venues table — Brian's manually-set, precise course location (Venue Manager)
+        //   2. geocode_cache — a name this Worker has already resolved once before
+        //   3. live geocode against Open-Meteo's free geocoding API — best-effort,
+        //      resolves to the nearest named place rather than the exact course, but
+        //      that's plenty accurate for weather purposes (a few miles doesn't move
+        //      the forecast), and the result is cached so it's a one-time cost per
+        //      venue name. This is what makes a host picking or typing a brand new
+        //      course "just work" without Brian having to add it to Venue Manager first.
+        const normVenue = venue.trim().toLowerCase();
+        let lat = null, lng = null, source = null;
+
+        const venueRow = await env.DB.prepare(`SELECT lat, lng FROM venues WHERE LOWER(TRIM(name)) = ?`).bind(normVenue).first();
+        if (venueRow && venueRow.lat != null && venueRow.lng != null) {
+          lat = venueRow.lat; lng = venueRow.lng; source = 'venue';
+        } else {
+          const cacheRow = await env.DB.prepare(`SELECT lat, lng FROM geocode_cache WHERE venue_key = ?`).bind(normVenue).first();
+          if (cacheRow) {
+            lat = cacheRow.lat; lng = cacheRow.lng; source = 'cache';
+          } else {
+            const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(venue)}&count=1&language=en&format=json`);
+            if (geoRes.ok) {
+              const geoData = await geoRes.json();
+              const hit = geoData.results && geoData.results[0];
+              if (hit) {
+                lat = hit.latitude; lng = hit.longitude; source = 'auto';
+                await env.DB.prepare(
+                  `INSERT INTO geocode_cache (venue_key, lat, lng, source) VALUES (?, ?, ?, 'auto') ON CONFLICT(venue_key) DO NOTHING`
+                ).bind(normVenue, lat, lng).run();
+              }
+            }
+          }
+        }
+
+        if (lat == null || lng == null) {
           return new Response(JSON.stringify({ ok: false, reason: 'no_coordinates' }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
 
-        const wxUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${venueRow.lat}&longitude=${venueRow.lng}` +
+        const wxUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}` +
           `&start_date=${event_date}&end_date=${event_date}` +
           `&daily=temperature_2m_max,temperature_2m_min,windspeed_10m_max,precipitation_sum,weathercode` +
           `&temperature_unit=fahrenheit&windspeed_unit=mph&precipitation_unit=inch&timezone=America%2FNew_York`;
@@ -2097,6 +2130,7 @@ export default {
         const windSpeed    = d?.windspeed_10m_max?.[0] ?? null;
         const precipAmount = d?.precipitation_sum?.[0] ?? null;
         const weatherCode  = d?.weathercode?.[0] ?? null;
+
 
         await env.DB.prepare(
           `INSERT INTO event_weather (event_name, venue, event_date, temp_high, temp_low, wind_speed, precip_amount, weather_code)
