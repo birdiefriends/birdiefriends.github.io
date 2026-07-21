@@ -1651,3 +1651,56 @@ The longest session yet, and the one where BirdieFriends' framing actually shift
 **Session Dev-65 fully closed.**
 
 **Chat-rename string:** `Dev-65 - Photo History, General Scorecard & the Historic Package Pivot`
+
+---
+
+## Dev-66 Summary
+
+Started as "add a drag-able shape/number scorecard idea" and ended up rebuilding the entire mark-entry mechanism twice over, adding real 9-hole support end to end, and giving the general Scorecard a working par-aware fast-capture path — plus two real data-integrity bugs caught before they shipped to real rounds.
+
+**Mark entry — three full iterations in one session:**
+- **Long-press full-range strip** added first: quick-tap cycle kept for common marks (bogey→double→birdie→eagle), a long-press on the corner dot or the stroke number opens a 7-value strip (-3 albatross through +4 snowman), later reordered worst-to-best per correction. Marks and strokes stayed decoupled — trust-based, no validation, per explicit direction ("golf is a trust game").
+- **Rebuilt as bidirectional up/down dots**, replacing the fixed cycle entirely: ▲ steps +1 (worse), ▼ steps -1 (better) — direction flipped once from an initial better/worse framing to match how a player actually thinks about score vs. par. Dots hidden except on the actively-selected hole (decluttering fix), extreme-value numeral badges move with whichever dot reaches them.
+- **Coupled to real par as the final design**: every hole prefills to par wherever venue par data is known; ▲/▼ now edit the actual stroke count directly (not just the display mark) when par is known, so cycling the toggle *is* the entry action. Manual number entry still works and still auto-recomputes the mark. Long-press strip picks do the same coupling. Venues without par data fall back to the original fully-manual, mark-only behavior untouched.
+- Auto-advance removed (was hiding the dots right when adjustment was needed) then reinstated *conditionally* — advances when par is known (mark's usually already right, speed wins), stays put when marking is fully manual (dots need to be visible).
+
+**Venue Manager — "Vs Par" table, the mechanism that makes the above real:**
+- New `pars` column on `venues`; per-venue 18-hole editor in the admin panel (Front 9 / Back 9 grids, live Front/Back/Total display computed from the fields — deliberately not stored, always derivable). BSGC gets a one-tap prefill from the pre-existing hardcoded `BSGC_PARS` constant.
+- Scorecard's par lookup checks dynamic Venue Manager data first, falls back to the hardcoded BSGC constant so nothing regressed for the one venue that already had data before this existed.
+
+**9-hole round support — Gathering management and scorecard entry, in response to Chooch's CGA Tuesday league (9 holes) not being representable at all before this:**
+- New `holes` field (9|18) on Gatherings, create and edit forms both got a toggle.
+- Scorecard entry auto-configures hole count from the event — **no player-facing 18-vs-9 toggle at all** (a mid-session correction: the toggle initially let players override per-instance, which read as confusing rather than flexible once tested against a real fixed-9 event). The only remaining choice is Front/Back on a fixed-9 event, one single cycling button.
+- New `hole_count`/`hole_half`/`venue` columns on `scorecards`. `holes` JSON array itself stays a fixed 18-length shape either way (unused half left null) so every existing reader kept working with zero changes.
+- **Real bug caught and fixed before it shipped**: toggling Front→Back after filling/prefilling the front could leave *both* halves saved with real numbers, directly contradicting `hole_count`/`hole_half` on the same row — `submitCardScore` summed whatever was non-null in each half completely unconditionally. Fixed at two layers: the toggle now clears the abandoned half immediately, and save time forces the inactive half to null regardless of what's actually in state, as a belt-and-suspenders guarantee.
+
+**Tee box — multi-select rebuild:**
+- Converted from single-select to ordered multi-select (combo tees, e.g. "Blue/White" vs "White/Blue" — order preserved as clicked, not a fixed canonical order, since which tee is played first is real information).
+- Added Other with a freeform text field, Selected-summary line with a Clear action, removed the old Front/Middle/Back/Combo position-based options (redundant now that multi-select expresses combos directly; every real course uses colors).
+- **Venue-scoped last-known default**: new `venue` column on `scorecards`, normalized consistently between Series' bare `'BSGC'` and Gatherings' full venue name. Default now queries the player's last tee box *at this specific venue* rather than their single most recent entry anywhere — different courses don't share color schemes (BSGC Green vs. Moselem Blue/White), so a cross-venue default would confidently mislead rather than help.
+
+**Quick mode — Total auto-calc:**
+- Total auto-calculates and read-only-locks the instant both Front and Back are filled; unlocks and clears the instant either is cleared. Second bug caught by Brian testing: the initial fix removed the *readonly* lock on unlock but never actually cleared the stale computed number, leaving old data sitting in an editable-looking field. Fixed to clear only on the locked→unlocked transition specifically (not on every keystroke), so the "Total alone" flow (typing a total with no front/back) can't have its value wiped by an unrelated later edit.
+
+**My History — event context added:** venue, tee time, event type, and Crew name now show per group (and in the score detail modal), resolved from the same event objects already loaded for cards elsewhere. Distinguished the named Crew group (👥) from who actually confirmed attendance (✅ — was about to collide as two identical-looking 👥 lines).
+
+**UI decluttering, several rounds:**
+- Quick/Full and the holes toggle collapsed from multi-button segmented rows to single cycling-toggle buttons ("less buttons the better").
+- "Full" renamed to "Detailed" once the 18-hole toggle button was removed (the pairing had been ambiguous).
+- **Modal close-button audit**: found 4 of ~14 modals relying purely on invisible tap-outside-to-close (Score Detail — the one that prompted the audit, My Score entry, Photo capture, Photo Viewer). All four got the same upper-right ✕ already used correctly by My History's own panel. Modals with a genuine Cancel-paired-with-a-real-action (Register/Cancel, Send/Cancel, etc.) deliberately left alone — different mental model (backing out of a commit vs. just leaving), not the same bug class.
+
+**Process note:** the computer/container tool environment went fully unresponsive mid-session (bash and view both erroring on trivial calls) for several user turns. Correctly held off making blind edits without being able to view/verify the file rather than guessing; resumed cleanly once the environment recovered with no lost work.
+
+**Artifacts:**
+- `docs/portal.html` / `source/portal.html` — v3.17.63 through v3.17.86 (many deploys)
+- `source/worker.js` — new `PATCH /venues/:id/pars`, `pars` exposed on `GET /venues`; `holes` on Gatherings create/edit; `hole_count`/`hole_half`/`venue` on scorecards create + `GET /scorecards?venue=` filter
+- D1 — `venues.pars`, `gatherings.holes`, `scorecards.hole_count`/`hole_half`/`venue` (all ALTER TABLE, all executed by Brian this session)
+
+**Carry-forward into Dev-67:**
+- **D1 schema log (`source/specs/BF_Gatherings_Schema.sql`) has drifted stale again** — stops at Entry 15 (Dev-56), missing every migration from Dev-57 through Dev-66 including this session's five new columns. `bf_architecture.html` almost certainly has the same drift (last confirmed accurate at Dev-56, per that session's own catch-up entry). Brian flagged this explicitly at session close — **proposed as Dev-67's primary focus**, deliberately not attempted in Dev-66's own tail end given the size of the backlog (multiple sessions' worth of undocumented schema) and the value of a clean, dedicated pass rather than a rushed one.
+- *Live-verification still needed* (built and syntax-checked, not yet exercised for real): 9-hole entry end-to-end on a real Gathering, par-prefill/dot-coupling on a real BSGC round, venue-scoped tee box default in practice, the modal close-X changes on a real device
+- All Dev-65 carry-forward items not addressed this session remain open (formal-round flag design, Photo Upload Pause kill switch decision, Player Analytics/Insights layer, GHIN Following list confirmation, etc.)
+
+**Session Dev-66 fully closed.**
+
+**Chat-rename string:** `Dev-66 - Par-Aware Scorecard, 9-Hole Support & Modal Consistency`
