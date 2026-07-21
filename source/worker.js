@@ -1895,7 +1895,7 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { event_name, player, holes, marks, tee_box, front9, back9, total, hole_count, hole_half } = body;
+      const { event_name, player, holes, marks, tee_box, front9, back9, total, hole_count, hole_half, venue } = body;
       if (!event_name || !player || !Array.isArray(holes) || holes.length !== 18) {
         return new Response(JSON.stringify({ error: 'event_name, player, and an 18-entry holes array are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -1911,14 +1911,14 @@ export default {
       const holeHalf = (holeCount === 9 && (hole_half === 'back' || hole_half === 'front')) ? hole_half : null;
       try {
         const result = await env.DB.prepare(
-          `INSERT INTO scorecards (event_name, player, holes, marks, tee_box, front9, back9, total, hole_count, hole_half, captured_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `INSERT INTO scorecards (event_name, player, holes, marks, tee_box, front9, back9, total, hole_count, hole_half, venue, captured_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
            ON CONFLICT(event_name, player) DO UPDATE SET
              holes = excluded.holes, marks = excluded.marks, tee_box = excluded.tee_box,
              front9 = excluded.front9, back9 = excluded.back9,
              total = excluded.total, hole_count = excluded.hole_count, hole_half = excluded.hole_half,
-             captured_at = excluded.captured_at`
-        ).bind(event_name, player, JSON.stringify(holes), marksJson, tee_box || null, front9 ?? null, back9 ?? null, total ?? null, holeCount, holeHalf).run();
+             venue = excluded.venue, captured_at = excluded.captured_at`
+        ).bind(event_name, player, JSON.stringify(holes), marksJson, tee_box || null, front9 ?? null, back9 ?? null, total ?? null, holeCount, holeHalf, venue || null).run();
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error saving scorecard: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -1934,10 +1934,12 @@ export default {
       try {
         const event  = url.searchParams.get('event');
         const player = url.searchParams.get('player');
+        const venue  = url.searchParams.get('venue'); // Dev-66 — last-known-tee-box-per-venue lookup
         let sql = `SELECT * FROM scorecards WHERE 1=1`;
         const binds = [];
         if (event)  { sql += ` AND event_name = ?`; binds.push(event); }
         if (player) { sql += ` AND player = ?`;      binds.push(player); }
+        if (venue)  { sql += ` AND venue = ?`;       binds.push(venue); }
         sql += ` ORDER BY captured_at DESC`;
         const { results } = await env.DB.prepare(sql).bind(...binds).all();
         const scorecards = results.map(r => ({ ...r, holes: JSON.parse(r.holes), marks: r.marks ? JSON.parse(r.marks) : null }));
