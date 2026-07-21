@@ -2145,6 +2145,87 @@ export default {
       }
     }
 
+    // ── Sticky notes (Dev-67) ──────────────────────────────────────────────────
+    // Same event_name key convention as photos/scorecards/weather. Unlike
+    // scorecards (one row per player, upsert), notes are a running thread —
+    // multiple entries per player over time are expected (a quick "great
+    // weather!" now, a follow-up thought later). Client-side eligibility is
+    // stricter than Photos/Score's fully-open card model — only registered
+    // Yes/Sub players or Crew/Host (for invite-only Gatherings) can add one —
+    // but that gate lives in the portal, same trust-based shape as every
+    // other write in this app; the Worker itself doesn't hold registration
+    // data to check server-side.
+    //
+    // POST /notes — no PIN. Body: { event_name, player, note }. Server-side
+    // length cap only (1-200 chars, trimmed) — a sanity bound, not a rules
+    // enforcement, matching the pattern used elsewhere (e.g. venue pars).
+    if (request.method === 'POST' && url.pathname === '/notes') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { event_name, player, note } = body;
+      const trimmed = (note || '').trim();
+      if (!event_name || !player || !trimmed) {
+        return new Response(JSON.stringify({ error: 'event_name, player, and note are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (trimmed.length > 200) {
+        return new Response(JSON.stringify({ error: 'Notes are capped at 200 characters' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const result = await env.DB.prepare(
+          `INSERT INTO event_notes (event_name, player, note) VALUES (?, ?, ?)`
+        ).bind(event_name, player, trimmed).run();
+        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error saving note: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /notes?event=<key> for one event, or no filter = everything (mirrors
+    // GET /photos/GET /scorecards' same shape) — used by My History to batch-
+    // load notes for every group in one call. No PIN — same openness as
+    // approved photos/scorecards.
+    if (request.method === 'GET' && url.pathname === '/notes') {
+      try {
+        const event = url.searchParams.get('event');
+        let sql = `SELECT * FROM event_notes WHERE 1=1`;
+        const binds = [];
+        if (event) { sql += ` AND event_name = ?`; binds.push(event); }
+        sql += ` ORDER BY created_at ASC`;
+        const { results } = await env.DB.prepare(sql).bind(...binds).all();
+        return new Response(JSON.stringify({ ok: true, notes: results }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // DELETE /notes/:id — same two-path auth as DELETE /photos/:id and
+    // DELETE /scorecards/:id: ?pin=7797 (any), or ?requested_by=<n> matching
+    // the row's own player (self-service, checked server-side).
+    if (request.method === 'DELETE' && url.pathname.startsWith('/notes/')) {
+      try {
+        const noteId       = url.pathname.split('/notes/')[1];
+        const pin          = url.searchParams.get('pin');
+        const requestedBy  = url.searchParams.get('requested_by');
+        const isAdmin      = String(pin) === '7797';
+
+        const row = await env.DB.prepare(`SELECT player FROM event_notes WHERE id = ?`).bind(noteId).first();
+        if (!row) {
+          return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const norm = s => (s || '').trim().toLowerCase();
+        const isOwner = requestedBy && norm(requestedBy) === norm(row.player);
+        if (!isAdmin && !isOwner) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        await env.DB.prepare(`DELETE FROM event_notes WHERE id = ?`).bind(noteId).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Delete error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // PATCH /photos/:id — curation actions (approve/reject/trophy toggle/reorder),
     // plus event_name/section correction (retagging legacy/test rows onto a real
     // event descriptor). PIN required.
