@@ -313,15 +313,16 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled, gathering_type, description, tee_time_status } = body;
+      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled, gathering_type, description, tee_time_status, holes } = body;
       if (!host_id || !title || !event_time) {
         return new Response(JSON.stringify({ error: 'host_id, title, and event_time are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
+      const holeCount = (holes === 9) ? 9 : 18; // Dev-66 — a Gathering's typical round length, defaults to 18
       try {
         const result = await env.DB.prepare(
-          `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, gathering_type, description, tee_time_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`
-        ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0, gathering_type || null, description || null, tee_time_status || 'confirmed').run();
+          `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, gathering_type, description, tee_time_status, holes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`
+        ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0, gathering_type || null, description || null, tee_time_status || 'confirmed', holeCount).run();
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -451,7 +452,7 @@ export default {
         }
 
         // Build dynamic UPDATE — only set fields present in the request body.
-        const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description', 'tee_time_status'];
+        const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description', 'tee_time_status', 'holes'];
         const setClauses = [];
         const binds = [];
         for (const field of allowed) {
@@ -1894,20 +1895,30 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { event_name, player, holes, marks, tee_box, front9, back9, total } = body;
+      const { event_name, player, holes, marks, tee_box, front9, back9, total, hole_count, hole_half } = body;
       if (!event_name || !player || !Array.isArray(holes) || holes.length !== 18) {
         return new Response(JSON.stringify({ error: 'event_name, player, and an 18-entry holes array are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       const marksJson = Array.isArray(marks) && marks.length === 18 ? JSON.stringify(marks) : null;
+      // Dev-66 — 9-hole round support. The holes array itself stays a fixed
+      // 18-length shape either way (unused half left null, same convention
+      // Quick mode already uses for a missing segment) so every existing
+      // reader of this table keeps working unmodified. hole_count (9|18)
+      // and hole_half ('front'|'back', only meaningful when count is 9)
+      // are the explicit signal for which 9 was actually played, rather
+      // than readers having to infer it from which half is all-null.
+      const holeCount = (hole_count === 9) ? 9 : 18;
+      const holeHalf = (holeCount === 9 && (hole_half === 'back' || hole_half === 'front')) ? hole_half : null;
       try {
         const result = await env.DB.prepare(
-          `INSERT INTO scorecards (event_name, player, holes, marks, tee_box, front9, back9, total, captured_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `INSERT INTO scorecards (event_name, player, holes, marks, tee_box, front9, back9, total, hole_count, hole_half, captured_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
            ON CONFLICT(event_name, player) DO UPDATE SET
              holes = excluded.holes, marks = excluded.marks, tee_box = excluded.tee_box,
              front9 = excluded.front9, back9 = excluded.back9,
-             total = excluded.total, captured_at = excluded.captured_at`
-        ).bind(event_name, player, JSON.stringify(holes), marksJson, tee_box || null, front9 ?? null, back9 ?? null, total ?? null).run();
+             total = excluded.total, hole_count = excluded.hole_count, hole_half = excluded.hole_half,
+             captured_at = excluded.captured_at`
+        ).bind(event_name, player, JSON.stringify(holes), marksJson, tee_box || null, front9 ?? null, back9 ?? null, total ?? null, holeCount, holeHalf).run();
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error saving scorecard: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
