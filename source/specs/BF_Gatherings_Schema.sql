@@ -365,19 +365,24 @@ CREATE TABLE IF NOT EXISTS scorecards (
 -- Par-aware fast-capture scorecard entry + real 9-hole support.
 -- venues.pars stores the 18-hole par layout per venue (Front 9/Back 9
 -- grids in Venue Manager); scorecard mark entry couples to it directly
--- when known. gatherings.holes and scorecards.hole_count/hole_half/venue
+-- when known. gatherings.holes and scorecards.hole_count/hole_half
 -- carry 9-vs-18-hole and which-half state through the whole capture
 -- and history path.
 -- Worker routes: PATCH /venues/:id/pars, pars exposed on GET /venues;
--- holes on Gatherings create/edit; hole_count/hole_half/venue on
--- scorecards create + GET /scorecards?venue= filter.
+-- holes on Gatherings create/edit; hole_count/hole_half on scorecards
+-- create.
+-- NOTE (added Dev-67): this entry originally also listed
+-- "ALTER TABLE scorecards ADD COLUMN venue TEXT" as executed this
+-- session. It wasn't -- confirmed via live PRAGMA table_info after
+-- Save My Score started throwing D1_ERROR "no column named venue"
+-- in production. See Entry 21 for the actual fix. Log corrected
+-- rather than left wrong.
 -- ============================================================
 
 ALTER TABLE venues ADD COLUMN pars TEXT;
 ALTER TABLE gatherings ADD COLUMN holes INTEGER;
 ALTER TABLE scorecards ADD COLUMN hole_count INTEGER;
 ALTER TABLE scorecards ADD COLUMN hole_half TEXT;
-ALTER TABLE scorecards ADD COLUMN venue TEXT;
 
 -- ============================================================
 -- Entry 20 -- 2026-07-22 -- Session Dev-67
@@ -430,3 +435,17 @@ CREATE TABLE IF NOT EXISTS event_notes (
 
 ALTER TABLE venues ADD COLUMN lat REAL;
 ALTER TABLE venues ADD COLUMN lng REAL;
+
+-- ============================================================
+-- Entry 21 -- 2026-07-22 -- Session Dev-67
+-- The real fix behind Entry 19's correction above: scorecards.venue
+-- was documented as added in Dev-66 but never actually was. "Save My
+-- Score" started throwing D1_ERROR ("no column named venue") in
+-- production. Diagnosed via a temporary PRAGMA table_info debug
+-- route (GET /debug/schema?table=X&pin=..., worker.js) rather than
+-- guessing from this log -- which is exactly what caught the log
+-- itself being wrong, not just the table. Verify live schema before
+-- trusting the paper trail; this file included.
+-- ============================================================
+
+ALTER TABLE scorecards ADD COLUMN venue TEXT;
