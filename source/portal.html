@@ -9453,7 +9453,7 @@ async function loadAdminVenues() {
             🖼️ Logo${v.logo_key ? ' ✓' : ''} ${_adminVenueLogoOpen[v.id] ? '▾' : '▸'}
           </button>
           <span style="display:flex;align-items:center;gap:4px">
-            <input type="text" id="admin-motif-${v.id}" placeholder="🍀" maxlength="8" value="${v.theme_motif || ''}"
+            <input type="text" id="admin-motif-${v.id}" placeholder="🍀 or paste a custom SVG icon" maxlength="2000" value="${v.theme_motif || ''}"
               style="width:44px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);font-size:0.85rem;text-align:center;box-sizing:border-box">
             <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px" onclick="adminSaveVenueMotif(${v.id})">Save Motif</button>
           </span>
