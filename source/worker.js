@@ -2226,6 +2226,44 @@ export default {
       }
     }
 
+    // PATCH /notes/:id — edit a note's text (Dev-67). Same two-path auth as
+    // DELETE /notes/:id, just carried in the JSON body instead of query
+    // params (PATCH naturally has a body already, unlike DELETE). Body:
+    // { note, pin, requested_by }. Same 200-char cap as POST /notes.
+    if (request.method === 'PATCH' && url.pathname.startsWith('/notes/')) {
+      try {
+        const noteId = url.pathname.split('/notes/')[1];
+        let body;
+        try { body = await request.json(); } catch(e) {
+          return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const { note, pin, requested_by } = body;
+        const trimmed = (note || '').trim();
+        if (!trimmed) {
+          return new Response(JSON.stringify({ error: 'note is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (trimmed.length > 200) {
+          return new Response(JSON.stringify({ error: 'Notes are capped at 200 characters' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+
+        const row = await env.DB.prepare(`SELECT player FROM event_notes WHERE id = ?`).bind(noteId).first();
+        if (!row) {
+          return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const norm = s => (s || '').trim().toLowerCase();
+        const isAdmin = String(pin) === '7797';
+        const isOwner = requested_by && norm(requested_by) === norm(row.player);
+        if (!isAdmin && !isOwner) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+
+        await env.DB.prepare(`UPDATE event_notes SET note = ? WHERE id = ?`).bind(trimmed, noteId).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Update error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // PATCH /photos/:id — curation actions (approve/reject/trophy toggle/reorder),
     // plus event_name/section correction (retagging legacy/test rows onto a real
     // event descriptor). PIN required.
