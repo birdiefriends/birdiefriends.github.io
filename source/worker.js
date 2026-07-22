@@ -733,8 +733,8 @@ export default {
       const isCommissioner = (pin === '7797');
       try {
         const sql = isCommissioner
-          ? `SELECT id, name, active, sort_order, pars, lat, lng FROM venues ORDER BY sort_order ASC, name ASC`
-          : `SELECT id, name, pars FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`;
+          ? `SELECT id, name, active, sort_order, pars, lat, lng, logo_key FROM venues ORDER BY sort_order ASC, name ASC`
+          : `SELECT id, name, pars, logo_key FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`;
         const rows = await env.DB.prepare(sql).all();
         return new Response(JSON.stringify({ ok: true, venues: rows.results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -860,7 +860,93 @@ export default {
       }
     }
 
-    // POST /gathering-templates — save a new template. No PIN (open-trust model per §16).
+    // POST /venues/:id/logo — commissioner uploads a small venue crest/logo
+    // image (Dev-67, scrapbook-style My History). Same R2 pipeline as event
+    // photos, just one image per venue rather than many, stored under
+    // venue-logos/. Brian's real acquisition path is web search -> copy
+    // image or screenshot -> upload here, not a stable hotlink URL, hence
+    // upload rather than a logo_url text field: a club's own website often
+    // blocks hotlinking anyway, and a URL breaks the moment their site
+    // changes, where an uploaded copy just sits in R2 indefinitely.
+    const venueLogoMatch = url.pathname.match(/^\/venues\/(\d+)\/logo$/);
+    if (request.method === 'POST' && venueLogoMatch) {
+      const venueId = venueLogoMatch[1];
+      try {
+        const reqContentType = (request.headers.get('content-type') || '').toLowerCase();
+        if (!reqContentType.includes('multipart/form-data')) {
+          return new Response(JSON.stringify({ error: 'Expected multipart/form-data' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const form = await request.formData();
+        if (form.get('pin') !== '7797') {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const file = form.get('file');
+        if (!file || typeof file === 'string') {
+          return new Response(JSON.stringify({ error: 'Missing file' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (!env.PHOTOS_BUCKET) {
+          return new Response(JSON.stringify({ error: 'PHOTOS_BUCKET binding not configured on this Worker yet' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const fileBytes = await file.arrayBuffer();
+        const isSpecificType = /^image\//.test(file.type || '');
+        const contentType = isSpecificType ? file.type : 'image/png';
+        const ext = contentType.split('/')[1] || 'png';
+        const key = `venue-logos/${venueId}.${ext}`;
+
+        await env.PHOTOS_BUCKET.put(key, fileBytes, { httpMetadata: { contentType } });
+        await env.DB.prepare(`UPDATE venues SET logo_key = ? WHERE id = ?`).bind(key, venueId).run();
+
+        return new Response(JSON.stringify({ ok: true, logo_key: key }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Logo upload error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /venues/:id/logo/clear — removes the logo reference (and the R2
+    // object itself, best-effort). Separate from the coords clear pattern
+    // since this needs to touch R2, not just a D1 column.
+    const venueLogoClearMatch = url.pathname.match(/^\/venues\/(\d+)\/logo\/clear$/);
+    if (request.method === 'POST' && venueLogoClearMatch) {
+      const venueId = venueLogoClearMatch[1];
+      try {
+        const body = await request.json().catch(() => ({}));
+        if (body.pin !== '7797') {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const row = await env.DB.prepare(`SELECT logo_key FROM venues WHERE id = ?`).bind(venueId).first();
+        if (row?.logo_key && env.PHOTOS_BUCKET) {
+          await env.PHOTOS_BUCKET.delete(row.logo_key).catch(() => {});
+        }
+        await env.DB.prepare(`UPDATE venues SET logo_key = NULL WHERE id = ?`).bind(venueId).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Logo clear error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /venues/:id/logo — streams the logo image bytes from R2. Public,
+    // no PIN — a club crest isn't sensitive, same openness as approved
+    // event photos. 404s cleanly (not an error) when a venue has no logo
+    // set yet, so the portal can just hide the badge rather than show a
+    // broken image.
+    if (request.method === 'GET' && venueLogoMatch) {
+      const venueId = venueLogoMatch[1];
+      try {
+        const row = await env.DB.prepare(`SELECT logo_key FROM venues WHERE id = ?`).bind(venueId).first();
+        if (!row || !row.logo_key || !env.PHOTOS_BUCKET) {
+          return new Response('Not found', { status: 404, headers: corsHeaders });
+        }
+        const obj = await env.PHOTOS_BUCKET.get(row.logo_key);
+        if (!obj) return new Response('Not found', { status: 404, headers: corsHeaders });
+        return new Response(obj.body, {
+          headers: { 'Content-Type': obj.httpMetadata?.contentType || 'image/png', 'Cache-Control': 'public, max-age=86400', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Logo serve error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+
     if (request.method === 'POST' && url.pathname === '/gathering-templates') {
       const body = await request.json();
       const { host_id, name, title, venue, capacity, gathering_type, description, crew_snapshot } = body;
