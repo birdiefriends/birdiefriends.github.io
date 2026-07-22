@@ -844,7 +844,11 @@ export default {
       const body = await request.json();
       const { pin, motif } = body;
       if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      const trimmed = (motif || '').trim().slice(0, 8) || null;
+      // 2000 chars is generous headroom for a small hand-drawn SVG icon
+      // (Dev-67 v2 — was capped at 8, fine for a bare emoji but truncated
+      // any SVG motif into garbage); still a sane upper bound against
+      // someone pasting something enormous by mistake.
+      const trimmed = (motif || '').trim().slice(0, 2000) || null;
       try {
         await env.DB.prepare(`UPDATE venues SET theme_motif = ? WHERE id = ?`).bind(trimmed, venueId).run();
         return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
