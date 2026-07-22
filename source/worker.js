@@ -2876,7 +2876,14 @@ export default {
       const body    = (payload.contents   && (payload.contents.en   || Object.values(payload.contents)[0]))   || '';
       const type    = payload.bf_type || 'broadcast'; // portal sets bf_type; default broadcast
       const meta    = payload.bf_meta || null;        // optional structured data, e.g. { hole, player, scoreType }
-      const entry   = { id: data.id, key: kvKey, title, body, sentAt, type, meta };
+      // recipients (Dev-67) — OneSignal's own create-notification response
+      // includes this count; it was never being captured before, so the
+      // admin feed's "delivered" column was permanently stuck at 0 for
+      // every message ever sent, not a reporting lag. This is recipients
+      // targeted, not a confirmed-open receipt — that would need polling
+      // OneSignal's View Notification endpoint separately, out of scope here.
+      const recipients = typeof data.recipients === 'number' ? data.recipients : null;
+      const entry   = { id: data.id, key: kvKey, title, body, sentAt, type, meta, recipients };
       await env.BF_FLAGS.put(kvKey, JSON.stringify(entry));
 
       // Prune entries older than 48 hours
