@@ -178,174 +178,12 @@
       <div class="diag-title">BirdieFriends — System Architecture</div>
       <div class="diag-sub">How the platform, services, and users connect</div>
     </div>
-    <div class="diag-badge">Confidential · June 2026</div>
+    <div class="diag-badge">Confidential · Updated Dev-67 · July 2026</div>
   </div>
 
-  <svg width="100%" viewBox="0 0 680 820" role="img">
-    <title>BirdieFriends system architecture</title>
-    <desc>Architecture diagram showing how the BirdieFriends portal, Cloudflare Worker, Cloudflare D1, GitHub Pages, Jotform, and OneSignal interact with the commissioner and players.</desc>
-    <defs>
-      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </marker>
-    </defs>
-
-    <!-- ── USERS ── -->
-    <rect x="40" y="40" width="140" height="56" rx="8" fill="#0f2318" stroke="#1d9e75" stroke-width="1"/>
-    <text x="110" y="64" text-anchor="middle" font-size="13" font-weight="600" fill="#9fe1cb">Commissioner</text>
-    <text x="110" y="82" text-anchor="middle" font-size="11" fill="#5dcaa5">Brian · admin access</text>
-
-    <rect x="500" y="40" width="140" height="56" rx="8" fill="#0f2318" stroke="#1d9e75" stroke-width="1"/>
-    <text x="570" y="64" text-anchor="middle" font-size="13" font-weight="600" fill="#9fe1cb">Players</text>
-    <text x="570" y="82" text-anchor="middle" font-size="11" fill="#5dcaa5">PWA · iOS / Android</text>
-
-    <!-- ── PORTAL container ── -->
-    <rect x="80" y="155" width="520" height="138" rx="12" fill="#1a0f35" stroke="#7f77dd" stroke-width="1"/>
-    <text x="340" y="178" text-anchor="middle" font-size="13" font-weight="600" fill="#cec bf6">Portal — birdiefriends.com</text>
-    <text x="340" y="195" text-anchor="middle" font-size="11" fill="#afa9ec">GitHub Pages · single HTML file · v3.10.106</text>
-
-    <!-- Portal sub-boxes -->
-    <rect x="100" y="207" width="138" height="66" rx="6" fill="#26215c" stroke="#534ab7" stroke-width="0.5"/>
-    <text x="169" y="232" text-anchor="middle" font-size="12" font-weight="600" fill="#cecbf6">Live panel</text>
-    <text x="169" y="250" text-anchor="middle" font-size="10" fill="#afa9ec">Birdie · CttP · Scorecard</text>
-    <text x="169" y="264" text-anchor="middle" font-size="10" fill="#afa9ec">Groupings sheet</text>
-
-    <rect x="261" y="207" width="138" height="66" rx="6" fill="#26215c" stroke="#534ab7" stroke-width="0.5"/>
-    <text x="330" y="232" text-anchor="middle" font-size="12" font-weight="600" fill="#cecbf6">My Events</text>
-    <text x="330" y="250" text-anchor="middle" font-size="10" fill="#afa9ec">Register · tee times</text>
-    <text x="330" y="264" text-anchor="middle" font-size="10" fill="#afa9ec">In-progress card</text>
-
-    <rect x="422" y="207" width="158" height="66" rx="6" fill="#26215c" stroke="#534ab7" stroke-width="0.5"/>
-    <text x="501" y="232" text-anchor="middle" font-size="12" font-weight="600" fill="#cecbf6">Admin panel</text>
-    <text x="501" y="250" text-anchor="middle" font-size="10" fill="#afa9ec">Push · scorecard check</text>
-    <text x="501" y="264" text-anchor="middle" font-size="10" fill="#afa9ec">Event control</text>
-
-    <!-- ── CLOUDFLARE WORKER ── -->
-    <rect x="220" y="358" width="240" height="68" rx="8" fill="#2a1f04" stroke="#ba7517" stroke-width="1"/>
-    <text x="340" y="383" text-anchor="middle" font-size="13" font-weight="600" fill="#fac775">Cloudflare Worker</text>
-    <text x="340" y="401" text-anchor="middle" font-size="11" fill="#ef9f27">Push proxy · KV flags · feed · D1</text>
-
-    <!-- ── CLOUDFLARE D1 (live — Dev-43, schema updated Dev-47) ── -->
-    <rect x="480" y="358" width="150" height="68" rx="8" fill="#0c1f33" stroke="#3a86c8" stroke-width="1" stroke-dasharray="4 3"/>
-    <text x="555" y="380" text-anchor="middle" font-size="13" font-weight="600" fill="#8fc6f0">Cloudflare D1</text>
-    <text x="555" y="397" text-anchor="middle" font-size="10" fill="#5d9ec9">Gatherings · live · Dev-43+</text>
-    <text x="555" y="411" text-anchor="middle" font-size="10" fill="#5d9ec9">Dev-42 MLP</text>
-
-    <!-- ── EXTERNAL SERVICES ── -->
-    <rect x="40" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1"/>
-    <text x="105" y="531" text-anchor="middle" font-size="13" font-weight="600" fill="#d3d1c7">GitHub</text>
-    <text x="105" y="549" text-anchor="middle" font-size="11" fill="#888780">Pages · source</text>
-    <text x="105" y="563" text-anchor="middle" font-size="11" fill="#888780">bf_deploy.py</text>
-
-    <rect x="200" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1"/>
-    <text x="265" y="531" text-anchor="middle" font-size="13" font-weight="600" fill="#d3d1c7">Jotform</text>
-    <text x="265" y="549" text-anchor="middle" font-size="11" fill="#888780">Members · reg</text>
-    <text x="265" y="563" text-anchor="middle" font-size="11" fill="#888780">Scorecards · CttP</text>
-
-    <rect x="360" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1"/>
-    <text x="425" y="531" text-anchor="middle" font-size="13" font-weight="600" fill="#d3d1c7">OneSignal</text>
-    <text x="425" y="549" text-anchor="middle" font-size="11" fill="#888780">Push notifications</text>
-    <text x="425" y="563" text-anchor="middle" font-size="11" fill="#888780">Subscriber mgmt</text>
-
-    <rect x="510" y="506" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1"/>
-    <text x="575" y="531" text-anchor="middle" font-size="13" font-weight="600" fill="#d3d1c7">Claude AI</text>
-    <text x="575" y="549" text-anchor="middle" font-size="11" fill="#888780">Dev · deploy</text>
-    <text x="575" y="563" text-anchor="middle" font-size="11" fill="#888780">bf_deploy.py</text>
-
-    <!-- ── LOCAL TOOLS ── -->
-    <rect x="40" y="652" width="220" height="68" rx="8" fill="#2a0f08" stroke="#993c1d" stroke-width="1"/>
-    <text x="150" y="677" text-anchor="middle" font-size="13" font-weight="600" fill="#f0997b">GolfScorer v8.17</text>
-    <text x="150" y="695" text-anchor="middle" font-size="11" fill="#d85a30">Laptop · Python server</text>
-    <text x="150" y="709" text-anchor="middle" font-size="11" fill="#d85a30">Results · series standings</text>
-
-    <rect x="290" y="652" width="130" height="68" rx="8" fill="#161614" stroke="#5f5e5a" stroke-width="1"/>
-    <text x="355" y="677" text-anchor="middle" font-size="13" font-weight="600" fill="#d3d1c7">Google Sheets</text>
-    <text x="355" y="695" text-anchor="middle" font-size="11" fill="#888780">Standings</text>
-    <text x="355" y="709" text-anchor="middle" font-size="11" fill="#888780">Flight results</text>
-
-    <rect x="450" y="652" width="190" height="68" rx="8" fill="#2a0f08" stroke="#993c1d" stroke-width="1"/>
-    <text x="545" y="677" text-anchor="middle" font-size="13" font-weight="600" fill="#f0997b">groupings.html</text>
-    <text x="545" y="695" text-anchor="middle" font-size="11" fill="#d85a30">Published to GitHub Pages</text>
-    <text x="545" y="709" text-anchor="middle" font-size="11" fill="#d85a30">iframe in live panel</text>
-
-    <!-- ══ CONNECTORS ══ -->
-    <!-- Commissioner → Portal -->
-    <line x1="150" y1="96" x2="230" y2="155" fill="none" stroke="#1d9e75" stroke-width="1.5" marker-end="url(#arrow)"/>
-    <!-- Players → Portal -->
-    <line x1="530" y1="96" x2="460" y2="155" fill="none" stroke="#1d9e75" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-    <!-- Portal → Worker -->
-    <line x1="340" y1="293" x2="340" y2="358" fill="none" stroke="#ba7517" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-    <!-- Worker KV flags → Portal (dashed) -->
-    <path d="M270 358 L230 330 L210 293" fill="none" stroke="#ba7517" stroke-width="1" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
-
-    <!-- Portal → GitHub -->
-    <path d="M155 293 L155 340 L105 340 L105 506" fill="none" stroke="#5f5e5a" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-    <!-- Portal → Jotform -->
-    <path d="M265 293 L265 330 L265 506" fill="none" stroke="#5f5e5a" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-    <!-- Portal → groupings -->
-    <path d="M545 293 L545 652" fill="none" stroke="#993c1d" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-    <!-- Worker → OneSignal -->
-    <line x1="400" y1="426" x2="425" y2="506" fill="none" stroke="#ba7517" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-    <!-- Worker → D1 (live) -->
-    <line x1="460" y1="392" x2="480" y2="392" fill="none" stroke="#3a86c8" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
-
-    <!-- OneSignal → Players -->
-    <path d="M490 540 L570 540 L570 96" fill="none" stroke="#1d9e75" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-    <!-- Claude → GitHub (deploy, dashed) -->
-    <path d="M575 506 L575 470 L160 470 L160 430 L105 430 L105 574" fill="none" stroke="#5f5e5a" stroke-width="1" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
-
-    <!-- GolfScorer → Jotform (fetch, dashed) -->
-    <path d="M210 686 L265 686 L265 574" fill="none" stroke="#993c1d" stroke-width="1" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
-
-    <!-- GolfScorer → GitHub (publish) -->
-    <path d="M80 652 L80 610 L105 610 L105 574" fill="none" stroke="#993c1d" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-    <!-- GolfScorer → Google Sheets -->
-    <line x1="260" y1="686" x2="290" y2="686" fill="none" stroke="#5f5e5a" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-    <!-- ── LEGEND ── -->
-    <line x1="60" y1="762" x2="100" y2="762" fill="none" stroke="#1d9e75" stroke-width="1.5" marker-end="url(#arrow)"/>
-    <text x="108" y="766" font-size="11" fill="#6b9478" dominant-baseline="central">Live data flow</text>
-
-    <line x1="220" y1="762" x2="260" y2="762" fill="none" stroke="#5f5e5a" stroke-width="1" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
-    <text x="268" y="766" font-size="11" fill="#6b9478" dominant-baseline="central">Deploy / config</text>
-
-    <rect x="390" y="756" width="12" height="12" rx="3" fill="#26215c" stroke="#534ab7" stroke-width="0.5"/>
-    <text x="408" y="763" font-size="11" fill="#6b9478" dominant-baseline="central">Portal</text>
-
-    <rect x="460" y="756" width="12" height="12" rx="3" fill="#2a0f08" stroke="#993c1d" stroke-width="0.5"/>
-    <text x="478" y="763" font-size="11" fill="#6b9478" dominant-baseline="central">Local tools</text>
-
-    <rect x="552" y="756" width="12" height="12" rx="3" fill="#161614" stroke="#5f5e5a" stroke-width="0.5"/>
-    <text x="570" y="763" font-size="11" fill="#6b9478" dominant-baseline="central">Services</text>
-
-    <rect x="40" y="785" width="12" height="12" rx="3" fill="#0c1f33" stroke="#3a86c8" stroke-width="0.5" stroke-dasharray="3 2"/>
-    <text x="58" y="792" font-size="11" fill="#6b9478" dominant-baseline="central">Planned (not yet built)</text>
-
-    <!-- Clickable overlay rects — sit on top, catch all taps -->
-    <rect x="40" y="40" width="140" height="56" fill="transparent" style="cursor:pointer" onclick="showDetail('commissioner')"/>
-    <rect x="500" y="40" width="140" height="56" fill="transparent" style="cursor:pointer" onclick="showDetail('players')"/>
-    <rect x="80" y="155" width="520" height="138" fill="transparent" style="cursor:pointer" onclick="showDetail('portal')"/>
-    <rect x="100" y="207" width="138" height="66" fill="transparent" style="cursor:pointer" onclick="showDetail('live')"/>
-    <rect x="261" y="207" width="138" height="66" fill="transparent" style="cursor:pointer" onclick="showDetail('events')"/>
-    <rect x="422" y="207" width="158" height="66" fill="transparent" style="cursor:pointer" onclick="showDetail('admin')"/>
-    <rect x="220" y="358" width="240" height="68" fill="transparent" style="cursor:pointer" onclick="showDetail('worker')"/>
-    <rect x="480" y="358" width="150" height="68" fill="transparent" style="cursor:pointer" onclick="showDetail('d1')"/>
-    <rect x="40" y="506" width="130" height="68" fill="transparent" style="cursor:pointer" onclick="showDetail('github')"/>
-    <rect x="200" y="506" width="130" height="68" fill="transparent" style="cursor:pointer" onclick="showDetail('jotform')"/>
-    <rect x="360" y="506" width="130" height="68" fill="transparent" style="cursor:pointer" onclick="showDetail('onesignal')"/>
-    <rect x="510" y="506" width="130" height="68" fill="transparent" style="cursor:pointer" onclick="showDetail('claude')"/>
-    <rect x="40" y="652" width="220" height="68" fill="transparent" style="cursor:pointer" onclick="showDetail('golfscorer')"/>
-    <rect x="290" y="652" width="130" height="68" fill="transparent" style="cursor:pointer" onclick="showDetail('sheets')"/>
-    <rect x="450" y="652" width="190" height="68" fill="transparent" style="cursor:pointer" onclick="showDetail('groupings')"/>
-  </svg>
+  <div style="overflow-x:auto;background:#0a1e11;border-radius:10px;padding:16px">
+    <div id="sys-diagram"></div>
+  </div>
 
   
 <div id="detail-panel" style="display:none;margin-top:20px;background:#0f2318;border:1px solid #1d3d28;
@@ -366,92 +204,9 @@
   <div style="font-size:1rem;font-weight:700;color:#9fe1cb;margin-bottom:4px">🗄 D1 Schema — birdiefriends-gatherings</div>
   <div style="font-size:0.75rem;color:#4e8c6a;margin-bottom:20px">Database ID: 26ea8a78-3cb3-4769-8bfe-f0bd21b2c882 · Bound as env.DB · Source: source/specs/BF_Gatherings_Schema.sql</div>
 
-  <svg viewBox="0 0 860 540" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:860px;display:block;margin:0 auto">
-    <defs>
-      <marker id="fk-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M0,0 L10,5 L0,10 z" fill="#4e8c6a"/>
-      </marker>
-    </defs>
-
-    <!-- ── GATHERINGS (centre-left) ── -->
-    <g id="tbl-gatherings">
-      <rect x="20" y="20" width="260" height="330" rx="8" fill="#0f2318" stroke="#2a6644" stroke-width="1.5"/>
-      <rect x="20" y="20" width="260" height="34" rx="8" fill="#1a4a2e"/>
-      <rect x="20" y="42" width="260" height="12" rx="0" fill="#1a4a2e"/>
-      <text x="150" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#9fe1cb">gatherings</text>
-      <!-- rows -->
-      <text x="36" y="74"  font-size="11" fill="#ef9f27">PK  id</text>               <text x="200" y="74"  font-size="10" fill="#6aaa88">INTEGER AUTOINCREMENT</text>
-      <text x="36" y="93"  font-size="11" fill="#c8ddd2">    host_id</text>           <text x="200" y="93"  font-size="10" fill="#6aaa88">TEXT NOT NULL</text>
-      <text x="36" y="112" font-size="11" fill="#c8ddd2">    title</text>             <text x="200" y="112" font-size="10" fill="#6aaa88">TEXT NOT NULL</text>
-      <text x="36" y="131" font-size="11" fill="#c8ddd2">    venue</text>             <text x="200" y="131" font-size="10" fill="#6aaa88">TEXT</text>
-      <text x="36" y="150" font-size="11" fill="#c8ddd2">    event_time</text>        <text x="200" y="150" font-size="10" fill="#6aaa88">TEXT NOT NULL</text>
-      <text x="36" y="169" font-size="11" fill="#c8ddd2">    size</text>              <text x="200" y="169" font-size="10" fill="#6aaa88">INTEGER</text>
-      <text x="36" y="188" font-size="11" fill="#e08060">FK  crew_id</text>           <text x="200" y="188" font-size="10" fill="#6aaa88">→ crews.id</text>
-      <text x="36" y="207" font-size="11" fill="#c8ddd2">    fill_list_enabled</text> <text x="200" y="207" font-size="10" fill="#6aaa88">INTEGER DEFAULT 0</text>
-      <text x="36" y="226" font-size="11" fill="#c8ddd2">    status</text>            <text x="200" y="226" font-size="10" fill="#6aaa88">TEXT DEFAULT 'active'</text>
-      <text x="36" y="245" font-size="11" fill="#c8ddd2">    created_at</text>        <text x="200" y="245" font-size="10" fill="#6aaa88">TEXT DEFAULT now</text>
-      <text x="36" y="264" font-size="11" fill="#c8ddd2">    gathering_type</text>    <text x="200" y="264" font-size="10" fill="#6aaa88">TEXT  ← Entry 2</text>
-      <text x="36" y="283" font-size="11" fill="#c8ddd2">    description</text>       <text x="200" y="283" font-size="10" fill="#6aaa88">TEXT  ← Entry 3</text>
-      <!-- migration badges -->
-      <rect x="26" y="295" width="240" height="1" fill="#1d3d28"/>
-      <text x="36" y="313" font-size="10" fill="#4e8c6a">Entry 1: Dev-43  Entry 2: Dev-45  Entry 3: Dev-47</text>
-    </g>
-
-    <!-- ── CREWS (top-right) ── -->
-    <g id="tbl-crews">
-      <rect x="580" y="20" width="260" height="150" rx="8" fill="#0f2318" stroke="#2a6644" stroke-width="1.5"/>
-      <rect x="580" y="20" width="260" height="34" rx="8" fill="#1a4a2e"/>
-      <rect x="580" y="42" width="260" height="12" rx="0" fill="#1a4a2e"/>
-      <text x="710" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#9fe1cb">crews</text>
-      <text x="596" y="74"  font-size="11" fill="#ef9f27">PK  id</text>        <text x="740" y="74"  font-size="10" fill="#6aaa88">INTEGER AUTOINCREMENT</text>
-      <text x="596" y="93"  font-size="11" fill="#c8ddd2">    host_id</text>   <text x="740" y="93"  font-size="10" fill="#6aaa88">TEXT NOT NULL</text>
-      <text x="596" y="112" font-size="11" fill="#c8ddd2">    name</text>      <text x="740" y="112" font-size="10" fill="#6aaa88">TEXT</text>
-      <text x="596" y="131" font-size="11" fill="#c8ddd2">    created_at</text><text x="740" y="131" font-size="10" fill="#6aaa88">TEXT DEFAULT now</text>
-    </g>
-
-    <!-- ── CREW_MEMBERS (bottom-right) ── -->
-    <g id="tbl-crew-members">
-      <rect x="580" y="210" width="260" height="120" rx="8" fill="#0f2318" stroke="#2a6644" stroke-width="1.5"/>
-      <rect x="580" y="210" width="260" height="34" rx="8" fill="#1a4a2e"/>
-      <rect x="580" y="232" width="260" height="12" rx="0" fill="#1a4a2e"/>
-      <text x="710" y="232" text-anchor="middle" font-size="13" font-weight="700" fill="#9fe1cb">crew_members</text>
-      <text x="596" y="264" font-size="11" fill="#e08060">FK  crew_id</text>   <text x="740" y="264" font-size="10" fill="#6aaa88">→ crews.id  (PK part)</text>
-      <text x="596" y="283" font-size="11" fill="#c8ddd2">PK  player_id</text> <text x="740" y="283" font-size="10" fill="#6aaa88">TEXT NOT NULL</text>
-      <rect x="586" y="295" width="248" height="1" fill="#1d3d28"/>
-      <text x="596" y="313" font-size="10" fill="#4e8c6a">UNIQUE(crew_id, player_id)</text>
-    </g>
-
-    <!-- ── REGISTRATIONS (bottom-left) ── -->
-    <g id="tbl-registrations">
-      <rect x="20" y="400" width="260" height="130" rx="8" fill="#0f2318" stroke="#2a6644" stroke-width="1.5"/>
-      <rect x="20" y="400" width="260" height="34" rx="8" fill="#1a4a2e"/>
-      <rect x="20" y="422" width="260" height="12" rx="0" fill="#1a4a2e"/>
-      <text x="150" y="422" text-anchor="middle" font-size="13" font-weight="700" fill="#9fe1cb">registrations</text>
-      <text x="36" y="454" font-size="11" fill="#ef9f27">PK  id</text>              <text x="200" y="454" font-size="10" fill="#6aaa88">INTEGER AUTOINCREMENT</text>
-      <text x="36" y="473" font-size="11" fill="#e08060">FK  gathering_id</text>     <text x="200" y="473" font-size="10" fill="#6aaa88">→ gatherings.id</text>
-      <text x="36" y="492" font-size="11" fill="#c8ddd2">    player_id</text>        <text x="200" y="492" font-size="10" fill="#6aaa88">TEXT NOT NULL</text>
-      <text x="36" y="511" font-size="11" fill="#c8ddd2">    status</text>           <text x="200" y="511" font-size="10" fill="#6aaa88">yes | no | sub</text>
-    </g>
-
-    <!-- FK: gatherings.crew_id → crews.id -->
-    <line x1="280" y1="188" x2="580" y2="90" stroke="#4e8c6a" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#fk-arrow)"/>
-    <text x="420" y="128" font-size="10" fill="#4e8c6a" text-anchor="middle">crew_id → id</text>
-
-    <!-- FK: crew_members.crew_id → crews.id -->
-    <line x1="580" y1="264" x2="580" y2="170" stroke="#4e8c6a" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#fk-arrow)"/>
-    <text x="555" y="220" font-size="10" fill="#4e8c6a" text-anchor="middle">crew_id → id</text>
-
-    <!-- FK: registrations.gathering_id → gatherings.id -->
-    <line x1="150" y1="400" x2="150" y2="350" stroke="#4e8c6a" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#fk-arrow)"/>
-    <text x="178" y="380" font-size="10" fill="#4e8c6a">gathering_id → id</text>
-
-    <!-- Legend -->
-    <rect x="320" y="430" width="240" height="80" rx="6" fill="#0a1e11" stroke="#1d3d28"/>
-    <text x="440" y="450" text-anchor="middle" font-size="11" font-weight="600" fill="#9fe1cb">Legend</text>
-    <text x="330" y="468" font-size="11" fill="#ef9f27">PK</text><text x="348" y="468" font-size="10" fill="#c8ddd2"> Primary Key</text>
-    <text x="330" y="484" font-size="11" fill="#e08060">FK</text><text x="348" y="484" font-size="10" fill="#c8ddd2"> Foreign Key (enforced)</text>
-    <text x="330" y="500" font-size="10" fill="#4e8c6a">--- </text><text x="349" y="500" font-size="10" fill="#c8ddd2">FK relationship</text>
-  </svg>
+  <div style="overflow-x:auto;background:#0a1e11;border-radius:8px;padding:12px">
+    <div id="erd-diagram"></div>
+  </div>
 
   <div style="margin-top:12px;font-size:0.75rem;color:#4e8c6a;line-height:1.7">
     <strong style="color:#9fe1cb">Migration log</strong> (source/specs/BF_Gatherings_Schema.sql)<br>
@@ -469,21 +224,48 @@
     Entry&nbsp;12 · Dev-55 · 2026-07-05 — CREATE TABLE player_announcement_dismissals, commissioner_checklist_state<br>
     Entry&nbsp;13 · Dev-55 addendum · 2026-07-05 — ALTER TABLE player_meta ADD COLUMN migrated_at, announcements_migrated_at<br>
     Entry&nbsp;14 · Dev-56 · 2026-07-06 — CREATE TABLE registration_intent (AWR flag)<br>
-    Entry&nbsp;15 · Dev-56 · 2026-07-06 — CREATE TABLE inactive_player_interest
+    Entry&nbsp;15 · Dev-56 · 2026-07-06 — CREATE TABLE inactive_player_interest<br>
+    Entry&nbsp;16 · Dev-57 · 2026-07-07 — CREATE TABLE event_groupings (event_name, player_name, group_number, tee_time) — synced from GolfScorer's grpPublish(), feeds photo section auto-classification<br>
+    Entry&nbsp;17 · Dev-60 · 2026-07-10 — CREATE TABLE upload_attempts_log — daily photo-upload attempt cap backstop. ⚠ Not referenced anywhere in current worker.js as of Dev-67 — likely still exists in D1 but unqueried; status not reconfirmed this session<br>
+    Entry&nbsp;18 · Dev-65 · 2026-07-21 — CREATE TABLE scorecards (event_name, player, holes, marks, tee_box, front9, back9, total, captured_at) — deliberately separate from the Jotform SCORECARD_FORM_ID pipeline that still feeds Series quota/points/payouts<br>
+    Entry&nbsp;19 · Dev-66 · 2026-07-21 — ALTER TABLE venues ADD COLUMN pars; ALTER TABLE gatherings ADD COLUMN holes; ALTER TABLE scorecards ADD COLUMN hole_count, hole_half, venue — par-aware fast-capture scorecard entry, 9-hole support<br>
+    Entry&nbsp;20 · Dev-67 · 2026-07-22 — ALTER TABLE venues ADD COLUMN lat, lng; CREATE TABLE geocode_cache (venue_key, lat, lng, source, cached_at); CREATE TABLE event_weather (event_name, venue, event_date, temp_high, temp_low, wind_speed, precip_amount, weather_code, fetched_at); CREATE TABLE event_notes (id, event_name, player, note, created_at) — weather history + sticky notes on My History/event cards
   </div>
 
-  <div style="margin-top:14px;font-size:0.72rem;color:#c98a3a;line-height:1.6;padding:10px 12px;border:1px solid #4a3a1d;border-radius:6px;background:#1e1608">
-    ⚠ <strong>Diagram currency note (updated Dev-56):</strong> the visual ERD above still only draws the original
-    4-table Gatherings core (gatherings/crews/crew_members/registrations, Entries 1–3). Entries 4–15 — venues,
-    gathering_templates, member_preferences, event_photos, player_event_state, player_meta,
-    player_announcement_dismissals, commissioner_checklist_state, registration_intent, and
-    inactive_player_interest — are captured accurately in the migration log and in
-    <code>source/specs/BF_Gatherings_Schema.sql</code> (the authoritative source, itself just brought current this
-    session — it had also silently stopped at Entry 8), but are not yet drawn as boxes in the SVG. That's a real,
-    sizable visual redraw — deliberately still deferred to its own dedicated session rather than rushed here.
+  <div style="margin-top:14px;font-size:0.72rem;color:#7a9e8a;line-height:1.6;padding:10px 12px;border:1px solid #1d3d28;border-radius:6px;background:#0a1e11">
+    ✅ <strong>Dev-67 — diagram redrawn:</strong> both this ERD and the main system diagram above moved from
+    hand-coded SVG to Mermaid (text-based graph definitions) this session, resolving the "ERD only draws the
+    original 4-table core" gap that had persisted since Dev-56. All 20 tables are now represented, grouped into
+    five clusters for readability rather than drawn as 20 individual boxes (Gatherings Core, Personalization &amp;
+    State, Commissioner Flags, Venues &amp; Templates, Memory Capture). Full column-level detail intentionally stays
+    in the migration log below and in <code>source/specs/BF_Gatherings_Schema.sql</code> rather than being
+    duplicated on the diagram — 19 of the 20 tables are actively queried by the current Worker; see Entry 17's flag
+    on <code>upload_attempts_log</code>. Future tables should be a few lines of graph text added to the relevant
+    cluster, not a coordinate-math exercise.
   </div>
 
-  <div class="diag-footer">BirdieFriends · Internal architecture reference · Session Dev-56 · July 2026</div>
+  <div style="margin-top:10px;font-size:0.72rem;color:#7a9e8a;line-height:1.6;padding:10px 12px;border:1px solid #1d3d28;border-radius:6px;background:#0a1e11">
+    🌐 <strong>Dev-67 update — new external dependency:</strong> the Worker now makes outbound server-side calls to
+    <strong>Open-Meteo</strong> (open-meteo.com), a free, no-key weather service — the first third-party API besides
+    OneSignal it calls directly rather than just proxying. Two endpoints: the Archive API
+    (<code>archive-api.open-meteo.com</code>) returns historical daily high/low temp, wind, precipitation, and
+    conditions for a venue's lat/lng + date, fired by <code>POST /weather/capture</code> right after a player's
+    first photo or scorecard for an event; and the Geocoding API (<code>geocoding-api.open-meteo.com</code>) is a
+    best-effort fallback that resolves a venue name to coordinates when Brian hasn't set them manually in Venue
+    Manager, caching the result in <code>geocode_cache</code> so it's a one-time lookup per venue name. Both calls
+    are fire-and-forget from the portal's side and fail silently/self-heal on the next capture attempt — no retry
+    job, no user-facing error path. See the D1 Schema entries above (Entry 20) for the tables involved.
+  </div>
+
+  <div style="margin-top:10px;font-size:0.72rem;color:#7a9e8a;line-height:1.6;padding:10px 12px;border:1px solid #1d3d28;border-radius:6px;background:#0a1e11">
+    ℹ️ <strong>Dev-63 update (unrelated to the D1/ERD notes above/below):</strong> GolfScorer's publish path for
+    results/standings/mygame/groupings changed from a local-launcher relay historically named for Netlify — found
+    to be a stale, disconnected integration, confirmed via Netlify's own dashboard showing no activity in two
+    months — to direct GitHub commits via the Worker's existing <code>/deploy</code> route (see the GolfScorer
+    node). No D1/schema changes that session.
+  </div>
+
+  <div class="diag-footer">BirdieFriends · Internal architecture reference · Last updated Dev-67 (both diagrams redrawn as Mermaid) · July 2026</div>
 </div>
 
 <script>
@@ -539,7 +321,7 @@
 
 
 <script>
-const DETAILS = {"commissioner": ["Commissioner — Brian Hager", "The sole operator of BirdieFriends. Manages all events, player registration, scoring, and system configuration. Has admin access to the portal via a PIN-protected gear icon. Uses Claude AI as a development partner to build and deploy all platform features directly from phone, tablet, or laptop."], "players": ["Players", "BirdieFriends members who access the platform via a Progressive Web App installed on their iPhone or Android. The PWA must be installed from the home screen — not the Safari browser tab — for push notifications to work. Players register for events, view groupings, enter birdie alerts and CttP during rounds, and submit scorecards post-round."], "portal": ["Portal — birdiefriends.com", "The entire player-facing application is a single HTML file (~640KB as of Dev-56, up from ~370KB) hosted on GitHub Pages. It is a mobile-first PWA built with vanilla HTML/JS — no framework, no build step. Fetches all data live from Jotform plus the Cloudflare D1-backed Worker routes. Deployed directly by Claude via the Worker's PIN-gated /deploy route. Current version tracked live in docs/portal_version.txt — check there rather than here, since this reference doc goes stale between visual-diagram passes."], "live": ["Live Panel", "Activates during a BF Series event (tee time to tee time +8h). Contains three sections: Birdie Alert (announces birdies and detects skins), Closest to the Pin (live CttP leaderboard), and Post-Round Scorecard (hole-by-hole score entry). Overseers can proxy entry for other players in their group via a player picker sheet."], "events": ["My Events", "The home screen of the portal. Shows upcoming events as swipeable cards. Players register, unregister, or park events from here. During a live round, the card shows an in-progress state with elapsed time. Cards sunset automatically after the round — Series events +6h, others +5h."], "admin": ["Admin Panel", "Commissioner-only screen, reorganized (Dev-50) into four sections: Communicate (Push/SMS Broadcast, Announcement Feed, Push Subscribers, Engagement, Registration Tracker, Inactive Players), Gatherings (Gatherings Admin, Venue Manager), Event Day (Live Panel Event Control, Scorecard Check), and System (Maintenance Mode, Start Claude Session). The old single \"Dev Controls\" catch-all card was dissolved that session — its contents redistributed into these four."], "worker": ["Cloudflare Worker", "A serverless function running on Cloudflare edge network. Acts as a proxy between the portal and OneSignal, bypassing CORS restrictions. Manages Cloudflare KV feature flags (maintenance mode, live event override) and a KV-backed notification feed. Natively bound to a Cloudflare D1 database (env.DB, live since Dev-43 — see the D1 node) that has grown well past its original Gatherings-only scope. Also hosts the PIN-gated /deploy and /rollback routes Claude uses to push files straight to GitHub, keeping the GH_TOKEN in Cloudflare's secret store rather than in any script Claude runs. Free tier with ~100KB request body limit."], "d1": ["Cloudflare D1 — birdiefriends-gatherings", "A relational SQLite database natively bound to the Worker as env.DB. Live since Dev-43, originally 4 tables for the Gatherings self-service hosting feature (BF_Gatherings_Spec.md). Has since grown well beyond Gatherings into a general-purpose store for anything needing device-independent or commissioner-only state: venues, gathering_templates, member_preferences, event_photos (Dev-51–54); player_event_state, player_meta, player_announcement_dismissals, commissioner_checklist_state (Dev-55, replacing several buggy device-local localStorage keys); registration_intent, inactive_player_interest (Dev-56) — 14 tables total as of this session. Schema migrations tracked in source/specs/BF_Gatherings_Schema.sql (append-only log, brought current this session after silently stalling at Entry 8 for two sessions). See the D1 Schema section below for the full migration log and a currency note on the visual ERD, which still only draws the original 4-table core. Jotform remains authoritative for membership and event/registration records — D1 is for everything Jotform structurally can't represent well (relational Gatherings data, per-player device-independent state, commissioner-only flags)."], "github": ["GitHub", "The repository serves dual purpose: GitHub Pages hosts the live site at birdiefriends.com, and the source/ folder is a versioned library of all managed files. Claude deploys directly to GitHub via the Contents API using a personal access token. No CI/CD pipeline — direct API pushes only."], "jotform": ["Jotform", "The primary data store for BirdieFriends. Four forms: Membership (player directory and push subscription IDs), Event Registration (sign-ups), Series Scorecard (post-round scores), and Closest to the Pin entries. The portal fetches Jotform data live on every load. No backend database — Jotform is the database."], "onesignal": ["OneSignal", "Push notification delivery service. The portal writes each player push ID to Jotform at subscribe time. When sending, the portal looks up push IDs from Jotform and passes them to the Cloudflare Worker, which forwards to OneSignal. OneSignal is purely a delivery pipe — it does not need to know player names."], "claude": ["Claude AI — Development Partner", "Claude (Anthropic) is the development partner for all BirdieFriends features. Brian describes what he needs; Claude writes the code, runs syntax checks, increments versions, and deploys directly to GitHub — all within the chat session. A structured bootstrap system fetches all source files at session start so Claude has full context instantly."], "golfscorer": ["GolfScorer v8.17", "A local scoring tool that runs on a laptop via a Python server. Handles pre-event groupings (drag-and-drop builder, handicap and quota calculation), event kick-off, and post-round scoring (Stableford quota system, Best 4 series formula, flight standings). Publishes results pages directly to GitHub. Never goes to the golf course — laptop stays home."], "sheets": ["Google Sheets", "Receives series standings data after each event via a push from GolfScorer. Contains tabs for Raw Data, overall Standings, and each flight (Green, Combo, Gold). Used as a human-readable backup and for sharing standings outside the portal."], "groupings": ["groupings.html", "A standalone page published by GolfScorer showing tee times and group assignments. Embedded in the portal as a slide-up iframe sheet — players tap the Groupings button in the live panel or event card and the page appears in-place without leaving the portal. Also accessible directly at birdiefriends.com/groupings.html."]};
+const DETAILS = {"commissioner": ["Commissioner \u2014 Brian Hager", "The sole operator of BirdieFriends. Manages all events, player registration, scoring, and system configuration. Has admin access to the portal via a PIN-protected gear icon. Uses Claude AI as a development partner to build and deploy all platform features directly from phone, tablet, or laptop."], "players": ["Players", "BirdieFriends members who access the platform via a Progressive Web App installed on their iPhone or Android. The PWA must be installed from the home screen \u2014 not the Safari browser tab \u2014 for push notifications to work. Players register for events, view groupings, enter birdie alerts and CttP during rounds, and submit scorecards post-round."], "portal": ["Portal \u2014 birdiefriends.com", "The entire player-facing application is a single HTML file (~800KB+ as of Dev-67, up from ~370KB at Dev-56 \u2014 check docs/portal_version.txt for the live figure, this doc goes stale between passes) hosted on GitHub Pages. It is a mobile-first PWA built with vanilla HTML/JS \u2014 no framework, no build step. Fetches all data live from Jotform plus the Cloudflare D1-backed Worker routes. Deployed directly by Claude via the Worker's PIN-gated /deploy route."], "live": ["Live Panel", "Activates during a BF Series event (tee time to tee time +8h). Contains three sections: Birdie Alert (announces birdies and detects skins), Closest to the Pin (live CttP leaderboard), and Post-Round Scorecard (hole-by-hole score entry). Overseers can proxy entry for other players in their group via a player picker sheet."], "events": ["My Events", "The home screen of the portal. Shows upcoming events as swipeable cards. Players register, unregister, or park events from here. During a live round, the card shows an in-progress state with elapsed time. Cards sunset automatically after the round \u2014 Series events +6h, others +5h."], "gatherings": ["Gatherings \u2014 self-service hosting (Dev-42+)", "Any player can host their own round without commissioner involvement: pick a venue, size, date/time, invite a Crew or open it to a Fill List. Built as its own D1-backed system (gatherings/crews/crew_members/registrations, live since Dev-43) parallel to the Jotform-driven BF Series events. Promoted to its own node in this diagram Dev-67 \u2014 it had only ever been a small text label near the D1 box despite being core to the product's framing since the Dev-65 pivot toward \"the app that remembers golf.\" Supports templates for recurring hosts, tee-time sync from GolfScorer, notification opt-outs, and now Memory Capture (see that node)."], "capture": ["Memory Capture \u2014 Photos \u00b7 Scorecards \u00b7 Notes \u00b7 Weather (Dev-54+)", "The \"historic package\" that reframed the product mid-Dev-65: every event/Gathering card and its My History entry can carry photos and video (event_photos, R2-backed), a portal-native scorecard separate from the official Jotform pipeline (scorecards, Dev-65), a running sticky-note thread (event_notes, Dev-67), and auto-captured historical weather for the round (event_weather + geocode_cache, Dev-67, sourced from Open-Meteo). Same event_name/gathering:<id> key convention ties all four together per event. Added as its own node Dev-67 \u2014 previously had no representation in this diagram at all, only in D1 node prose and the migration log."], "admin": ["Admin Panel", "Commissioner-only screen, reorganized (Dev-50) into four sections: Communicate (Push/SMS Broadcast, Announcement Feed, Push Subscribers, Engagement, Registration Tracker, Inactive Players), Gatherings (Gatherings Admin, Venue Manager), Event Day (Live Panel Event Control, Scorecard Check), and System (Maintenance Mode, Start Claude Session)."], "worker": ["Cloudflare Worker", "A serverless function running on Cloudflare edge network. Proxies between the portal and OneSignal, bypassing CORS restrictions. Manages Cloudflare KV feature flags (maintenance mode, live event override) and a KV-backed notification feed. Natively bound to a Cloudflare D1 database (env.DB, live since Dev-43 \u2014 see the D1 node). Also hosts the PIN-gated /deploy and /rollback routes Claude uses to push files straight to GitHub, keeping the GH_TOKEN in Cloudflare's secret store rather than in any script Claude runs. As of Dev-67 also calls Open-Meteo directly (see that node) \u2014 its first outbound call to a third party beyond proxying to OneSignal. Free tier with ~100KB request body limit."], "d1": ["Cloudflare D1 \u2014 birdiefriends-gatherings", "A relational SQLite database natively bound to the Worker as env.DB. Live since Dev-43, originally 4 tables for Gatherings (BF_Gatherings_Spec.md). Has since grown into a general-purpose store for anything Jotform can't represent well \u2014 20 tables total as of Dev-67, grouped in the ERD below into five clusters: Gatherings Core, Personalization & State, Commissioner Flags, Venues & Templates, and Memory Capture. Full column-level detail lives in the migration log below the ERD and in source/specs/BF_Gatherings_Schema.sql (both current as of Dev-67). Jotform remains authoritative for membership and event/registration records."], "github": ["GitHub", "The repository serves dual purpose: GitHub Pages hosts the live site at birdiefriends.com, and the source/ folder is a versioned library of all managed files. Claude deploys directly to GitHub via the Contents API using a personal access token. No CI/CD pipeline \u2014 direct API pushes only."], "jotform": ["Jotform", "The primary data store for BirdieFriends. Four forms: Membership (player directory and push subscription IDs), Event Registration (sign-ups), Series Scorecard (post-round scores), and Closest to the Pin entries. The portal fetches Jotform data live on every load. No backend database \u2014 Jotform is the database."], "onesignal": ["OneSignal", "Push notification delivery service. The portal writes each player push ID to Jotform at subscribe time. When sending, the portal looks up push IDs from Jotform and passes them to the Cloudflare Worker, which forwards to OneSignal. OneSignal is purely a delivery pipe \u2014 it does not need to know player names."], "openmeteo": ["Open-Meteo (Dev-67)", "A free, no-key weather service \u2014 the Worker's first outbound call to a third-party API beyond proxying to OneSignal. Two endpoints in use: the Archive API returns historical daily high/low temp, wind, and precipitation for a venue's lat/lng + date, fired by POST /weather/capture right after a player's first photo or scorecard for an event; the Geocoding API is a best-effort fallback that resolves a venue name to coordinates when Brian hasn't set them manually in Venue Manager, cached in geocode_cache so it's a one-time lookup per venue. Both calls are fire-and-forget and self-heal on the next capture attempt if they fail \u2014 no retry job, no user-facing error path."], "claude": ["Claude AI \u2014 Development Partner", "Claude (Anthropic) is the development partner for all BirdieFriends features. Brian describes what he needs; Claude writes the code, runs syntax checks, increments versions, and deploys directly to GitHub \u2014 all within the chat session. A structured bootstrap system fetches all source files at session start so Claude has full context instantly."], "golfscorer": ["GolfScorer v8.43", "A local scoring tool that runs on a laptop via a Python server. Handles pre-event groupings (drag-and-drop builder, handicap and quota calculation), event kick-off, and post-round scoring (Stableford quota system, Best 4 series formula, flight standings). Publishes results/standings/mygame/groupings pages directly to docs/ on GitHub Pages via the Worker's PIN-gated /deploy route (Dev-63). Also snapshots each event's payout breakdown at save-time (payoutSnapshot, Dev-63). Never goes to the golf course \u2014 laptop stays home."], "sheets": ["Google Sheets", "Receives series standings data after each event via a push from GolfScorer. Contains tabs for Raw Data, overall Standings, and each flight (Green, Combo, Gold). Used as a human-readable backup and for sharing standings outside the portal."], "groupings": ["groupings.html", "A standalone page published by GolfScorer showing tee times and group assignments. Embedded in the portal as a slide-up iframe sheet \u2014 players tap the Groupings button in the live panel or event card and the page appears in-place without leaving the portal. Also accessible directly at birdiefriends.com/groupings.html."]};
 
 function showDetail(key) {
   var d = DETAILS[key];
@@ -559,6 +341,34 @@ function showDetail(key) {
 function hideDetail() {
   document.getElementById('detail-panel').style.display = 'none';
 }
+function mmClick(key) { showDetail(key); }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  // Dev-67 — both diagrams on this page moved from hand-coded SVG (manual
+  // pixel coordinates for every box/line) to Mermaid (text-based graph
+  // definitions). The recurring "ERD only draws the original 4-table core"
+  // drift that persisted from Dev-56 through Dev-66 was a direct symptom of
+  // that format: redrawing coordinates by hand was risky enough to do blind
+  // that every session took the safer path of appending another paragraph
+  // of text instead of touching the SVG. A future capability addition here
+  // should now just be a few lines of graph text, not coordinate math.
+  mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+  // Explicit render() with the source as a JS string, not startOnLoad's DOM
+  // auto-scan of <pre class="mermaid"> — a <br/> inside a node label gets
+  // parsed as a real HTML element by the browser before Mermaid ever sees
+  // the text if the source sits in the DOM as markup, corrupting the graph
+  // source. Passing the source as a JS string sidesteps that entirely.
+  const sysDiagramSrc = "flowchart TB\n    Commissioner[\"\ud83d\udc64 Commissioner<br/>Brian Hager\"]\n    Players[\"\ud83d\udc65 Players<br/>PWA\"]\n    Portal[\"\ud83d\udcf1 Portal<br/>birdiefriends.com\"]\n\n    LivePanel[\"Live Panel\"]\n    MyEvents[\"My Events\"]\n    Gatherings[\"Gatherings<br/>self-service hosting\"]\n    Capture[\"Memory Capture<br/>Photos \u00b7 Scorecards \u00b7 Notes \u00b7 Weather\"]\n    AdminPanel[\"Admin Panel\"]\n\n    Worker[\"\u2601\ufe0f Cloudflare Worker\"]\n    D1[(\"Cloudflare D1\")]\n    GitHub[\"GitHub\"]\n    Jotform[(\"Jotform\")]\n    OneSignal[\"OneSignal\"]\n    OpenMeteo[\"Open-Meteo\"]\n    Claude[\"\ud83e\udd16 Claude AI<br/>Dev Partner\"]\n    GolfScorer[\"GolfScorer\"]\n    Sheets[(\"Google Sheets\")]\n    Groupings[\"groupings.html\"]\n\n    Commissioner --> Portal\n    Players --> Portal\n    Portal --> LivePanel\n    Portal --> MyEvents\n    Portal --> Gatherings\n    Portal --> Capture\n    Portal --> AdminPanel\n\n    Portal <--> Worker\n    Portal <--> Jotform\n    Worker <--> D1\n    Worker <--> OneSignal\n    Worker --> OpenMeteo\n    Worker -->|\"/deploy (PIN)\"| GitHub\n    Claude -->|writes & deploys| GitHub\n    GitHub -->|GitHub Pages| Portal\n\n    GolfScorer -->|\"/deploy\"| GitHub\n    GolfScorer --> Sheets\n    GolfScorer --> Groupings\n    Groupings -.embedded iframe.-> Portal\n\n    classDef userNode fill:#0f2318,stroke:#1d9e75,color:#9fe1cb\n    classDef coreNode fill:#1a4a2e,stroke:#2a6644,color:#fff\n    classDef featureNode fill:#0f2318,stroke:#2a6644,color:#c8ddd2\n    classDef externalNode fill:#0a1e11,stroke:#4e8c6a,color:#6aaa88\n    class Commissioner,Players userNode\n    class Portal,Worker coreNode\n    class LivePanel,MyEvents,Gatherings,Capture,AdminPanel featureNode\n    class D1,GitHub,Jotform,OneSignal,OpenMeteo,Claude,GolfScorer,Sheets,Groupings externalNode\n\n    click Commissioner call mmClick(\"commissioner\")\n    click Players call mmClick(\"players\")\n    click Portal call mmClick(\"portal\")\n    click LivePanel call mmClick(\"live\")\n    click MyEvents call mmClick(\"events\")\n    click Gatherings call mmClick(\"gatherings\")\n    click Capture call mmClick(\"capture\")\n    click AdminPanel call mmClick(\"admin\")\n    click Worker call mmClick(\"worker\")\n    click D1 call mmClick(\"d1\")\n    click GitHub call mmClick(\"github\")\n    click Jotform call mmClick(\"jotform\")\n    click OneSignal call mmClick(\"onesignal\")\n    click OpenMeteo call mmClick(\"openmeteo\")\n    click Claude call mmClick(\"claude\")\n    click GolfScorer call mmClick(\"golfscorer\")\n    click Sheets call mmClick(\"sheets\")\n    click Groupings call mmClick(\"groupings\")\n";
+  const erdDiagramSrc = "flowchart TB\n    subgraph Core[\"\ud83d\uddc2\ufe0f Gatherings Core \u00b7 Dev-43+\"]\n        direction TB\n        gatherings[\"gatherings\"]\n        crews[\"crews\"]\n        crew_members[\"crew_members\"]\n        registrations[\"registrations\"]\n        event_groupings[\"event_groupings \u00b7 Dev-57\"]\n    end\n\n    subgraph Personalization[\"\ud83d\udc64 Personalization & State \u00b7 Dev-55\"]\n        direction TB\n        player_event_state[\"player_event_state\"]\n        player_meta[\"player_meta\"]\n        player_announcement_dismissals[\"player_announcement_dismissals\"]\n        commissioner_checklist_state[\"commissioner_checklist_state\"]\n        member_preferences[\"member_preferences \u00b7 Dev-49\"]\n    end\n\n    subgraph Flags[\"\ud83d\udea9 Commissioner Flags\"]\n        direction TB\n        registration_intent[\"registration_intent \u00b7 Dev-56\"]\n        inactive_player_interest[\"inactive_player_interest \u00b7 Dev-56\"]\n        upload_attempts_log[\"upload_attempts_log \u00b7 Dev-60 \u26a0\ufe0f unreferenced\"]\n    end\n\n    subgraph VenueTemplates[\"\u26f3 Venues & Templates\"]\n        direction TB\n        venues[\"venues \u00b7 Dev-51<br/>+pars, lat, lng\"]\n        gathering_templates[\"gathering_templates \u00b7 Dev-52\"]\n    end\n\n    subgraph Memory[\"\ud83d\udcf8 Memory Capture \u00b7 Dev-54+\"]\n        direction TB\n        event_photos[\"event_photos\"]\n        scorecards[\"scorecards \u00b7 Dev-65\"]\n        event_weather[\"event_weather \u00b7 Dev-67\"]\n        geocode_cache[\"geocode_cache \u00b7 Dev-67\"]\n        event_notes[\"event_notes \u00b7 Dev-67\"]\n    end\n\n    crews --> gatherings\n    crew_members --> crews\n    registrations --> gatherings\n    event_groupings -.syncs from GolfScorer.-> gatherings\n    venues -.venue name.-> event_weather\n    venues -.venue name.-> scorecards\n\n    gatherings ~~~ player_event_state\n    player_event_state ~~~ registration_intent\n    registration_intent ~~~ venues\n    venues ~~~ event_photos\n\n    classDef coreCluster fill:#0f2318,stroke:#2a6644,color:#9fe1cb\n    classDef memCluster fill:#1a2e18,stroke:#4a7c3a,color:#c8e6c9\n    class Core,Personalization,Flags,VenueTemplates coreCluster\n    class Memory memCluster\n";
+  mermaid.render('sysDiagramSvg', sysDiagramSrc).then(({ svg, bindFunctions }) => {
+    document.getElementById('sys-diagram').innerHTML = svg;
+    if (bindFunctions) bindFunctions(document.getElementById('sys-diagram'));
+  });
+  mermaid.render('erdDiagramSvg', erdDiagramSrc).then(({ svg }) => {
+    document.getElementById('erd-diagram').innerHTML = svg;
+  });
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
