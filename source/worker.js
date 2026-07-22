@@ -1833,6 +1833,26 @@ export default {
       return new Response(raw || '{}', { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
     }
 
+    // GET /debug/schema?table=X&pin=7797 — TEMP (Dev-67), remove once the
+    // scorecards D1_ERROR ("no column named ...") is diagnosed. Returns the
+    // table's actual live column list via PRAGMA table_info, so we're
+    // fixing against reality instead of what the migration log claims.
+    if (request.method === 'GET' && url.pathname === '/debug/schema') {
+      if (url.searchParams.get('pin') !== '7797') {
+        return new Response(JSON.stringify({ error: 'PIN required' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const table = url.searchParams.get('table');
+      if (!table || !/^[a-z_]+$/.test(table)) {
+        return new Response(JSON.stringify({ error: 'table param required, letters/underscores only' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const { results } = await env.DB.prepare(`PRAGMA table_info(${table})`).all();
+        return new Response(JSON.stringify({ ok: true, table, columns: results }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // GET /photos?event=X&section=Y&status=Z&pin=W
     // Public callers (no pin) only ever see curation_status='approved', regardless
     // of what status= they pass — the filter is enforced server-side, not trusted
