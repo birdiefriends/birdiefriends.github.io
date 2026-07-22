@@ -733,8 +733,8 @@ export default {
       const isCommissioner = (pin === '7797');
       try {
         const sql = isCommissioner
-          ? `SELECT id, name, active, sort_order, pars, lat, lng, logo_key FROM venues ORDER BY sort_order ASC, name ASC`
-          : `SELECT id, name, pars, logo_key FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`;
+          ? `SELECT id, name, active, sort_order, pars, lat, lng, logo_key, theme_motif FROM venues ORDER BY sort_order ASC, name ASC`
+          : `SELECT id, name, pars, logo_key, theme_motif FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`;
         const rows = await env.DB.prepare(sql).all();
         return new Response(JSON.stringify({ ok: true, venues: rows.results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -833,6 +833,28 @@ export default {
     // at the bottom) once per venue; this is what event_weather capture
     // looks up by venue name to know where to ask for weather.
     // { lat, lng } both null clears; otherwise both required, sane ranges.
+    // PATCH /venues/:id/motif — a single small emoji/symbol scattered faintly
+    // in the background of that venue's My History cards (Dev-67) — theme
+    // differentiation beyond just the logo badge, without the crowding a
+    // full pattern or multiple images would cause. { pin, motif } — motif
+    // capped short since this is meant to be one glyph, not a caption.
+    const venueMotifMatch = url.pathname.match(/^\/venues\/(\d+)\/motif$/);
+    if (request.method === 'PATCH' && venueMotifMatch) {
+      const venueId = venueMotifMatch[1];
+      const body = await request.json();
+      const { pin, motif } = body;
+      if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      const trimmed = (motif || '').trim().slice(0, 8) || null;
+      try {
+        await env.DB.prepare(`UPDATE venues SET theme_motif = ? WHERE id = ?`).bind(trimmed, venueId).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Database error updating venue motif' }), {
+          status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
     const venueCoordsMatch = url.pathname.match(/^\/venues\/(\d+)\/coords$/);
     if (request.method === 'PATCH' && venueCoordsMatch) {
       const venueId = venueCoordsMatch[1];
