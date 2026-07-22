@@ -297,3 +297,136 @@ CREATE TABLE IF NOT EXISTS inactive_player_interest (
   marked_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+
+-- ============================================================
+-- Entry 16 -- 2026-07-07 -- Session Dev-57
+-- Event Groupings -- synced from GolfScorer's grpPublish() alongside
+-- its existing GitHub Pages deploy. Gives the Worker a real per-player
+-- tee time independent of the event's own published start time, used
+-- by classifyPhotoSection() to tell pre_competition/on_course/post_round
+-- photos apart without relying on client-reported guesses alone.
+-- Worker routes: POST /groupings/publish (replace-on-publish, PIN-gated),
+-- GET /groupings (PIN-gated).
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS event_groupings (
+  event_name   TEXT NOT NULL,
+  player_name  TEXT NOT NULL,
+  group_number INTEGER,
+  tee_time     TEXT
+);
+
+-- ============================================================
+-- Entry 17 -- 2026-07-10 -- Session Dev-60
+-- Upload Attempts Log -- a D1-backed daily cap on photo upload attempts,
+-- built as a backstop independent of the manual Photo Upload Pause KV
+-- kill switch (that switch was later found to be dead code -- see
+-- Dev-63 notes -- it only drives its own admin display, nothing
+-- upstream ever checks it). Verified writing correctly under live test
+-- at the time. NOTE (added Dev-67, retroactively): not referenced
+-- anywhere in the current worker.js as of this entry's addition --
+-- status (still in active use vs. quietly orphaned) not reconfirmed
+-- when this catch-up entry was written. Flagged for Brian to check.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS upload_attempts_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_name  TEXT NOT NULL,
+  player_name TEXT,
+  attempted_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- Entry 18 -- 2026-07-21 -- Session Dev-65
+-- Scorecards -- a portal-native "Log My Score" capture path (card +
+-- Live Panel), deliberately separate from the Jotform-backed
+-- SCORECARD_FORM_ID pipeline that still feeds official Series
+-- quota/points/payouts untouched. Same event_name /
+-- 'gathering:<id>' key convention as event_photos. One row per
+-- player per event (upsert on save).
+-- Worker routes: POST/GET/DELETE /scorecards.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS scorecards (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_name  TEXT NOT NULL,
+  player      TEXT NOT NULL,
+  holes       TEXT,
+  marks       TEXT,
+  tee_box     TEXT,
+  front9      INTEGER,
+  back9       INTEGER,
+  total       INTEGER,
+  captured_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- Entry 19 -- 2026-07-21 -- Session Dev-66
+-- Par-aware fast-capture scorecard entry + real 9-hole support.
+-- venues.pars stores the 18-hole par layout per venue (Front 9/Back 9
+-- grids in Venue Manager); scorecard mark entry couples to it directly
+-- when known. gatherings.holes and scorecards.hole_count/hole_half/venue
+-- carry 9-vs-18-hole and which-half state through the whole capture
+-- and history path.
+-- Worker routes: PATCH /venues/:id/pars, pars exposed on GET /venues;
+-- holes on Gatherings create/edit; hole_count/hole_half/venue on
+-- scorecards create + GET /scorecards?venue= filter.
+-- ============================================================
+
+ALTER TABLE venues ADD COLUMN pars TEXT;
+ALTER TABLE gatherings ADD COLUMN holes INTEGER;
+ALTER TABLE scorecards ADD COLUMN hole_count INTEGER;
+ALTER TABLE scorecards ADD COLUMN hole_half TEXT;
+ALTER TABLE scorecards ADD COLUMN venue TEXT;
+
+-- ============================================================
+-- Entry 20 -- 2026-07-22 -- Session Dev-67
+-- Weather History + Sticky Notes -- the "app that remembers golf"
+-- framing continued. venues.lat/lng is a manual, commissioner-entered
+-- coordinate (Venue Manager) -- deliberately not auto-geocoded by
+-- default, since a small local course is often unresolvable by name
+-- through a general geocoding service and a wrong silent guess would
+-- be worse than an honest gap. geocode_cache is the automatic fallback
+-- for any venue without a manual entry: a one-time lookup against
+-- Open-Meteo's free Geocoding API, cached by normalized venue name so
+-- it only ever runs once. event_weather caches one Open-Meteo Archive
+-- API result per event (historical weather for a fixed date never
+-- changes) -- fetched fire-and-forget right after a player's first
+-- photo or scorecard capture for that event. event_notes is a running
+-- comment thread per event, addable by registered Yes/Sub players and
+-- Crew/Host only, readable by anyone who can see the card -- shown on
+-- both the live event card and My History.
+-- Worker routes: PATCH /venues/:id/coords; GET/POST /weather,
+-- POST /weather/capture; GET/POST /notes, DELETE /notes/:id.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS geocode_cache (
+  venue_key  TEXT PRIMARY KEY,
+  lat        REAL NOT NULL,
+  lng        REAL NOT NULL,
+  source     TEXT NOT NULL DEFAULT 'auto',
+  cached_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS event_weather (
+  event_name    TEXT PRIMARY KEY,
+  venue         TEXT NOT NULL,
+  event_date    TEXT NOT NULL,
+  temp_high     REAL,
+  temp_low      REAL,
+  wind_speed    REAL,
+  precip_amount REAL,
+  weather_code  INTEGER,
+  fetched_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS event_notes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_name  TEXT NOT NULL,
+  player      TEXT NOT NULL,
+  note        TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+ALTER TABLE venues ADD COLUMN lat REAL;
+ALTER TABLE venues ADD COLUMN lng REAL;
