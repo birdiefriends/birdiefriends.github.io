@@ -475,3 +475,17 @@ ALTER TABLE venues ADD COLUMN logo_key TEXT;
 -- ============================================================
 
 ALTER TABLE venues ADD COLUMN theme_motif TEXT;
+
+-- ============================================================
+-- Entry 24 -- 2026-07-23 -- Session Dev-68
+-- upload_attempts_log (Dev-60) confirmed dead -- built as a D1-backed
+-- daily rate-limit backstop during a Cloudflare KV usage scare, but
+-- never actually wired to anything (zero references anywhere in
+-- worker.js -- no write on upload, no read, no enforcement). The KV
+-- usage scare it was meant to guard against was already resolved by
+-- the photos_upload_paused kill switch + debug-log filtering that
+-- same Dev-60 session. Dropped rather than wired up for a threat
+-- that no longer applies. Brian ran this in Cloudflare Console.
+-- ============================================================
+
+DROP TABLE IF EXISTS upload_attempts_log;
