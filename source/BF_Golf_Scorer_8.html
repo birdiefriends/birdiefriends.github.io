@@ -3648,6 +3648,26 @@ let _currentEventName = ALL_SERIES_DATA?.events?.slice(-1)[0]?.name || '';
   }
 })();
 
+// Deep-link support (Dev-67) — reads ?event=<name> from the URL and
+// switches to that event on load, same as clicking its pill would. Lets
+// My History (portal) link directly to a specific series' results instead
+// of just birdiefriends.com/results.html, which otherwise only ever shows
+// whichever event was "current" at the last publish. Baked into this
+// generator template (not just patched onto a single published file) so
+// it survives every future publish automatically.
+(function syncEventFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get('event');
+    if (!requested) return;
+    if (!ALL_SERIES_DATA?.events?.some(e => e.name === requested)) return; // unknown event — leave the default as-is
+    loadEvent(requested);
+    document.querySelectorAll('button[onclick*="loadEvent("]').forEach(b => {
+      if (b.getAttribute('onclick').includes("loadEvent('" + requested + "')")) updateEvtPills(b);
+    });
+  } catch(e) { /* fail silently — worst case the page just shows its normal default event */ }
+})();
+
 function loadEvent(selectedName) {
   if (!ALL_SERIES_DATA) return;
   const evt = ALL_SERIES_DATA.events.find(e => e.name === selectedName);
