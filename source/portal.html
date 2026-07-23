@@ -3026,6 +3026,26 @@ body {
   </div>
 </div>
 
+<div class="bf-modal-overlay" id="rules-modal" onclick="closeModalOnOverlay(event,'rules-modal')">
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="bf-modal-title" style="margin-bottom:0">📖 Quick Rules</div>
+      <button onclick="closeModal('rules-modal')" title="Close"
+        style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
+          color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px;line-height:1.5">
+      Straight from the USGA's own player-facing rules pages — not the full rule book. For Out of Bounds and Lost Ball, groups play this two different ways; pick whichever your group actually uses.
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="seg-btn seg-btn-active" id="rules-mode-standard" style="flex:1;font-size:0.78rem;padding:8px" onclick="setRulesMode('standard')">Standard</button>
+      <button class="seg-btn" id="rules-mode-quickplay" style="flex:1;font-size:0.78rem;padding:8px" onclick="setRulesMode('quickplay')">Quick-Play</button>
+    </div>
+    <div id="rules-content" style="max-height:55vh;overflow-y:auto"></div>
+  </div>
+</div>
+
 <div class="bf-modal-overlay" id="notif-guide-modal" onclick="closeModalOnOverlay(event,'notif-guide-modal')">
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
@@ -5323,6 +5343,10 @@ function buildEventCard(evt, isPast) {
       <button class="icon-action-btn" onclick="openCardNoteSheet('${evt.id}')">
         <span class="icon-action-badge secondary">💬</span>
         <span class="icon-action-label">Notes</span>
+      </button>
+      <button class="icon-action-btn" onclick="openRulesModal()">
+        <span class="icon-action-badge secondary">📖</span>
+        <span class="icon-action-label">Rules</span>
       </button>
     </div>
 
@@ -12011,6 +12035,73 @@ function noteColorFor(player) {
   let h = 0;
   for (let i = 0; i < (player || '').length; i++) h = (h * 31 + player.charCodeAt(i)) >>> 0;
   return NOTE_COLORS[h % NOTE_COLORS.length];
+}
+
+// ── Quick Rules Reference (Dev-68) — static content, no backend, no D1.
+// Content paraphrased from the USGA's own player-facing Rules Hub pages
+// (Penalty Areas / Out of Bounds-Lost Ball-Provisional topics), not the full
+// rule book — meant to be readable mid-round on a phone, not exhaustive.
+// Out of Bounds and Lost Ball each have two real, legitimate rulings casual
+// groups use — Standard (Rule 18, stroke-and-distance) and Quick-Play (USGA's
+// own optional Local Rule E-5, built specifically for pace of play) — so
+// those two sections toggle; Penalty Areas doesn't need a toggle since Rule
+// 17 already avoids a walk-back regardless of style.
+let _rulesMode = 'standard';
+
+const RULES_CONTENT = {
+  penalty: {
+    icon: '🌊', title: 'Penalty Areas',
+    subtitle: 'Yellow or red stakes/lines — water, marked hazards',
+    body: `No walk-back required either way. You can always play the ball as it lies with no penalty, or take a 1-stroke penalty and drop:
+      <ul style="margin:6px 0 0 18px;padding:0">
+        <li><b>Yellow:</b> drop anywhere on a line straight back from where the ball crossed in, keeping that point between you and the hole — or replay your previous shot.</li>
+        <li><b>Red:</b> same options as yellow, plus you can drop within two club-lengths of where it crossed in (no closer to the hole), or the equivalent spot on the opposite side of the area.</li>
+      </ul>`
+  },
+  ob: {
+    icon: '🚧', title: 'Out of Bounds',
+    subtitle: 'White stakes or lines',
+    standard: `<b>1-stroke penalty.</b> Walk back and replay from where your previous shot was made.`,
+    quickplay: `<b>2-stroke penalty (USGA Local Rule E-5).</b> No walk back — estimate where the ball went out, then drop within two club-lengths of the nearest fairway edge at or behind that point (never closer to the hole).`
+  },
+  lost: {
+    icon: '🔍', title: 'Lost Ball',
+    subtitle: "Can't be found within 3 minutes of starting to look",
+    standard: `<b>1-stroke penalty.</b> Same as Out of Bounds — walk back and replay from your previous spot. Play a provisional ball off the tee if you think this might happen, so you don't have to walk back twice.`,
+    quickplay: `<b>2-stroke penalty (USGA Local Rule E-5).</b> No walk back — estimate where the ball was lost, then drop within two club-lengths of the nearest fairway edge at or behind that point (never closer to the hole).`
+  }
+};
+
+function openRulesModal() {
+  renderRulesContent();
+  openModal('rules-modal');
+}
+
+function setRulesMode(mode) {
+  _rulesMode = mode;
+  const stdBtn = document.getElementById('rules-mode-standard');
+  const qpBtn  = document.getElementById('rules-mode-quickplay');
+  if (stdBtn) stdBtn.classList.toggle('seg-btn-active', mode === 'standard');
+  if (qpBtn)  qpBtn.classList.toggle('seg-btn-active', mode === 'quickplay');
+  renderRulesContent();
+}
+
+function renderRulesSection(item, bodyOverride) {
+  return `<div style="margin-bottom:14px;padding:12px;border-radius:10px;background:var(--surface)">
+    <div style="font-weight:700;font-size:0.88rem;margin-bottom:2px">${item.icon} ${item.title}</div>
+    <div style="font-size:0.72rem;color:var(--text-hint);margin-bottom:6px">${item.subtitle}</div>
+    <div style="font-size:0.8rem;line-height:1.5">${bodyOverride}</div>
+  </div>`;
+}
+
+function renderRulesContent() {
+  const el = document.getElementById('rules-content');
+  if (!el) return;
+  const mode = _rulesMode;
+  el.innerHTML =
+    renderRulesSection(RULES_CONTENT.penalty, RULES_CONTENT.penalty.body) +
+    renderRulesSection(RULES_CONTENT.ob, RULES_CONTENT.ob[mode]) +
+    renderRulesSection(RULES_CONTENT.lost, RULES_CONTENT.lost[mode]);
 }
 
 function openCardNoteSheet(evtId) {
