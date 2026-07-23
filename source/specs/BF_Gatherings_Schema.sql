@@ -449,3 +449,29 @@ ALTER TABLE venues ADD COLUMN lng REAL;
 -- ============================================================
 
 ALTER TABLE scorecards ADD COLUMN venue TEXT;
+
+-- ============================================================
+-- Entry 22 -- 2026-07-22 -- Session Dev-67
+-- Venue crest/logo upload for My History scrapbook badges. Same R2
+-- pipeline event_photos already uses (env.PHOTOS_BUCKET), one image
+-- per venue under venue-logos/<id>.<ext>.
+-- Worker routes: POST /venues/:id/logo, GET /venues/:id/logo,
+-- POST /venues/:id/logo/clear.
+-- ============================================================
+
+ALTER TABLE venues ADD COLUMN logo_key TEXT;
+
+-- ============================================================
+-- Entry 23 -- 2026-07-22 -- Session Dev-67
+-- Per-venue theme motif: a small emoji (or briefly, custom SVG --
+-- tried and reverted same session, didn't read clearly at small/
+-- faint scale) scattered faintly behind My History content for that
+-- venue -- the list row header, the moment detail view, and the
+-- scorecard, all constrained to areas known to stay sparse regardless
+-- of how much content a given moment has (an earlier attempt at
+-- scattering across the whole card got hidden behind opaque photo
+-- tiles and note chips).
+-- Worker route: PATCH /venues/:id/motif.
+-- ============================================================
+
+ALTER TABLE venues ADD COLUMN theme_motif TEXT;
