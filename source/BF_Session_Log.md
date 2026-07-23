@@ -1783,3 +1783,67 @@ The longest session yet by a wide margin. Started as the proposed "D1 schema log
 **Session Dev-67 fully closed.**
 
 **Chat-rename string:** `Dev-67 - Weather History, Sticky Notes, Architecture Redesign & My History Scrapbook`
+
+---
+
+## Session Dev-68 · 2026-07-23
+
+**Focus:** Weather coordinates for three more venues, a Live Panel photo upload lock, two dead-code kill decisions, a new Rules/Layup card feature pair, a real Gathering Edit gap found by Walli, a Photo Organizer near-miss (removed then correctly restored), and a Live Panel/Card architecture fix — closing out the bootstrap's opening backlog almost entirely.
+
+**Venue weather coordinates set (Worker `PATCH /venues/:id/coords`, no schema change):**
+- Whitetail Golf Club (Bath, PA): 40.7425, -75.4055
+- Moselem Springs Golf Club (Fleetwood, PA): 40.500372, -75.848075
+- Allentown Municipal Golf Course: 40.5955367, -75.5353455
+- Sourced via web search against each course's own listing, verified before writing. Confirmed live via `GET /venues?pin=7797`.
+
+**Live Panel photo upload lock (portal v3.17.107):**
+- Mirrors the card Photos sheet's Dev-67 `setCardPhotoBusy()` lock, which Live Panel never got. New `setLivePhotoBusy()` disables the Photo/Video/Upload buttons and shows a status line while an upload is in flight — closes the gap where a double-tap could fire two concurrent uploads for the same round. Live Panel isn't a modal (no close button to guard, unlike the card sheet), so the lock is scoped to just the button-disable/status-line behavior.
+
+**Two dead-code kill decisions (portal v3.17.108):**
+- **Photo Upload Pause toggle removed entirely** — `PHOTOS_UPLOAD_PAUSED` never actually gated `/photos/upload` anywhere (found Dev-64, never fixed). The Meta Glasses 300-image overrun that originally motivated it (Dev-60) was already resolved by managing the upload folder directly. Rather than wire up a check for a threat that no longer applies, removed the admin card, state var, flag load, `devToggle()` branch, and status-display refresh. `photos_upload_paused` KV key is now orphaned but harmless.
+- **`upload_attempts_log` table dropped** — confirmed via full-file grep to have zero references anywhere in `worker.js` (never written, never read, never enforced). Brian ran `DROP TABLE IF EXISTS upload_attempts_log;` in Cloudflare Console. D1 schema log Entry 24.
+
+**Quick Rules card (portal v3.17.109 → v3.17.117, several iterations):**
+- New 📖 Rules icon on the event card icon-row (alongside Photos/Score/Notes). Two top-level tabs, added after Brian's own follow-up request:
+  - **⛳ USGA Rules** — Penalty Areas, Out of Bounds, Lost Ball, Net Double Bogey. Content sourced from USGA's own player-facing Rules Hub (paraphrased, not quoted), not the full rule book. OB/Lost Ball toggle between **Standard** (Rule 18, stroke-and-distance) and **Quick-Play** (USGA's own optional Local Rule E-5, built for pace of play) — Brian's call to show both rather than pick one, since groups legitimately play it either way. Net Double Bogey section explains the max-hole-score-for-handicap-posting concept (the part that confuses players) with two worked examples at the same Course Handicap (10) — one where a stroke is received, one where it isn't.
+  - **🏌️ BirdieFriends** — house rules 1–6 reworded from the original 2024 BF Championship Format slide (uploaded by Brian) for clarity. Points 7–8 deliberately excluded — those were scorekeeping steps tied to that year's specific championship app, not rules of play. Lie Adjustment rule (#3) went through two real corrections after Brian caught my wording drifting from BF's actual practice: final version is "move up to one scorecard-length to the best lie within whatever type of ground the ball is already on — fairway/green/collar/rough/sand/hazard — never crossing into a different type," with three worked examples (fairway avoiding divots/holes/swales, green toward the fall line, collar to its edge but not onto the green). Rake-and-place allowance added to the Bunker Lies rule (#4) per Brian's request.
+- Pure static content, zero D1/Worker involvement — every edit was a straight portal deploy.
+
+**Layup Calculator (portal v3.17.117):**
+- 📏 Yardage icon on the event card. Two number inputs (distance to pin, desired layup distance), live subtraction, "Hit it X yards." Brian had found conflicting interpretations of DMD legality online — resolved: this isn't a Distance Measuring Device at all under USGA Rule 4.3a (no GPS, no measurement of any kind, purely arithmetic on numbers the player already has), so it's outside the rule's scope entirely rather than needing to comply with it. Same math as writing it on a scorecard by hand.
+
+**Gathering Edit — Crew↔Open mode switch (portal v3.17.118–v3.17.119, worker.js):**
+- Real gap surfaced by Walli: created a Crew-mode Gathering by mistake (wanted Open), discovered Edit had no mode toggle — only Create did. Fixed: Edit form now carries the same "👥 Invite a Crew / 📢 Open to Members" toggle as Create, pre-selected from the Gathering's current mode, reusing the exact same crew-picker state/UI/functions (`_hostMode`, `_hostSelectedCrewId`, `openCrewPicker()`, `renderHostCrewSummary()`, etc.) since only one of the two sheets is ever open at once.
+- Crew→Open: flips `fill_list_enabled` only. Open→Crew: creates a new Crew via `POST /crews` if needed (or reuses an existing saved one), PATCHes `crew_id`. Required extending `PATCH /gatherings/:id`'s allowed-fields list (previously title/venue/event_time/size/gathering_type/description/tee_time_status/holes only) to include `fill_list_enabled` and `crew_id`. Newly-assigned crew gets a push notification, same copy as a fresh invite.
+- **Follow-up bug found by Brian testing:** the Edit path was missing the capacity-vs-crew-size hard block Create already has (`_hostCrewPicked.size + host < size` → block) — a save went through with capacity 4 and only Mike invited. Ported that validation over, matching Create's logic exactly (host attendance read from actual current registration status, since Edit has no "Are you playing?" toggle of its own).
+- **Bonus fix:** while copying the create form's crew-picker button markup, caught that `\U0001F465` isn't valid JS escape syntax — it silently rendered as literal text "U0001F465" instead of the 👥 emoji, in the *live* Create form too (pre-existing, unrelated to today's work). Fixed both occurrences.
+
+**GS Photo Organizer — removed then correctly restored (BF_Golf_Scorer_8.html v8.48 → v8.49 → v8.50):**
+- Brian asked to "clean up" overlap between GS's native Photo Organizer (curation/chapters, feeds results.html at publish time) and My History (Dev-65+, always-current photo reference for one-day Series events). First pass over-removed: deleted both the results.html Photos tab (the actual duplicate) *and* GS's entire native Photo Organizer tab (a real, reusable feasibility test for the eventual GLS-scale flagship-event photo workflow — never a duplicate of anything, just temporarily unused by one-day Series events). Should have asked which piece before touching GS's own tab.
+- Brian caught the overreach immediately ("That will be needed for GLS type events and was a solid start"). Fully recoverable: every GitHub push is a real commit, so the pre-removal version was one `raw.githubusercontent.com/<parent-commit-sha>/...` fetch away (found via the public commits-page HTML, since the unauthenticated API was rate-limited). Photo Organizer restored byte-for-byte from that commit; results.html Photos tab removal was kept (that was the real duplicate). Live Panel's own photo capture was untouched throughout both passes.
+- Net state: GS's Photo Organizer fully intact (event picker, chapters, curation status, bulk approve/reject/delete/move, expand lightbox) for future GLS/WallyCup-scale work. results.html no longer has a Photos tab, `fetchPhotosForEvents()` helper removed, single publish call site updated. `getAnswer()` (also used by GHIN import) correctly preserved through both passes; `parseDateFromJF()` (Photo-Organizer-exclusive) removed then restored alongside it.
+- Both the outer GS script and the nested results.html client-side script (extracted, escaping reversed, interpolation points stubbed) syntax-checked clean before each push.
+
+**Live Panel + Card coexistence (portal v3.17.120):**
+- Previously the live event's own card was filtered out of Home's event list entirely while its Live Panel banner showed (`if (liveEvt && e.id === liveEvt.id) return false`) — meaning Rules/Notes/Yardage (card-only tools) were unreachable for the whole duration of a live round. Removed the exclusion filter — Brian's explicit call that both need to be open simultaneously: Live Panel for live-only tools (Birdie Alert, CttP, the real competition-affecting Post-Round Scorecard), the card for everything else (Photos, Notes, Rules, Yardage, RSVP).
+- **Caveat, per Brian's explicit design:** the card's own 🏌️ Score icon (informal My History scorecard) now hides itself specifically while that event's Live Panel is open (`_livePanelOpen` true), forcing scoring through the Live Panel's real Post-Round Scorecard rather than having two scoring paths open at once. Collapsed Live Panel or no live event → Score icon behaves normally.
+
+**Process note:** two real mistakes this session, both caught by Brian and both fixed same-session — the Edit-form capacity validation gap, and the GS Photo Organizer over-removal. Neither was a case of not knowing better; both were scope-discipline misses (porting a form without checking it against the sibling form's full validation set; touching a whole tool when only its output duplicate was the actual complaint). Worth the reminder for next session: when reusing an existing pattern, diff against the *whole* original, not just the parts that seem relevant in the moment; when asked to "clean up a duplicate," confirm which specific piece is the duplicate before removing anything upstream of it.
+
+**Artifacts:**
+- `docs/portal.html` / `source/portal.html` — v3.17.106 → v3.17.120 (14 deploys)
+- `source/worker.js` — `PATCH /gatherings/:id` allowed-fields list extended (`fill_list_enabled`, `crew_id`)
+- `source/BF_Golf_Scorer_8.html` — v8.48 → v8.49 (results.html Photos tab + GS Photo Organizer both removed) → v8.50 (Photo Organizer restored, results.html removal kept)
+- `source/BF_Operations_Guide.md` — Current Versions table brought current (Portal/GolfScorer/Worker); 7 new/updated Backlog & Known Issues rows for this session's work
+- `source/specs/BF_Gatherings_Schema.sql` — Entry 24 (`upload_attempts_log` drop)
+- D1 (executed by Brian): `venues.lat`/`lng` set for 3 venues (no schema change, data only); `upload_attempts_log` dropped
+
+**Carry-forward into Dev-69:**
+- Live-verification still needed (built and syntax-checked, not yet exercised live): Live Panel + Card coexistence and the Score-icon-hides-when-Live-Panel-open caveat, the Gathering Edit mode switch on a real Open→Crew case with a brand-new ad hoc crew, the Quick Rules card's Standard/Quick-Play toggle and BirdieFriends tab on a real phone
+- Other venues still need weather coordinates: Woodstone, Lord's Valley
+- Venue logo/motif inventory still BSGC/Whitetail/Moselem/Allentown-only (per Dev-67) — Woodstone and Lord's Valley still need logos/motifs if wanted
+- Everything else from Dev-63 through Dev-67 not touched this session carries forward unchanged: icon-action-btn migration beyond what's already converted, `worker.js` size/organization, full `bf_architecture.html` D1/ERD redraw (now further behind — `upload_attempts_log` removal and the `PATCH /gatherings/:id` field additions aren't reflected), stale Worker Endpoints reference table, Commissioner PIN architecture, push notification preference center, push notification recipient domain (all-`bfw=Yes` vs. registered-only), notification feed → Worker KV redesign, player picker rethink, Player Analytics/Insights layer, AI-generated event narratives spec, Season Money/Overall-pot flight system, GHIN Following list confirmation, `launch_golf_scorer.py` GitHub token possibly-unused cleanup.
+
+**Session Dev-68 fully closed.**
+
+**Chat-rename string:** `Dev-68 - Rules & Layup Cards, Gathering Edit Mode Switch, Live Panel + Card Coexistence`
