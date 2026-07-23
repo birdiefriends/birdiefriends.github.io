@@ -12077,9 +12077,12 @@ const RULES_CONTENT = {
       <div style="margin:8px 0">
         <b>Formula:</b> Double Bogey (par + 2) + any handicap strokes you get on that hole.
       </div>
-      Every hole has a "handicap" number printed in its scorecard column (1–18) — that's the stroke index, not your handicap. Your Course Handicap tells you how many of those holes you get an extra stroke on, starting from index 1 and working up. A Course Handicap of 15 means you get 1 stroke on the 15 holes indexed 1 through 15, and none on the other three.
+      Every hole has a "handicap" number printed in its scorecard column (1–18) — that's the stroke index, not your handicap. Your Course Handicap tells you how many of those holes you get an extra stroke on, starting from index 1 and working up. A Course Handicap of 10 means you get 1 stroke on the 10 holes indexed 1 through 10, and none on the other eight.
       <div style="margin:10px 0 0;padding:8px 10px;background:rgba(0,0,0,0.06);border-radius:8px;font-size:0.76rem">
-        <b>Example:</b> Course Handicap 15, playing a par-4 with stroke index 10 → you get a stroke there (10 ≤ 15). Max score = 6 (double bogey) + 1 = <b>7</b>. Take an 8 or a 9 on the hole? Post a 7.
+        <b>Example — stroke received:</b> Course Handicap 10, playing a par-4 with stroke index 8 → you get a stroke there (8 ≤ 10). Max score = 6 (double bogey) + 1 = <b>7</b>. Take an 8 or a 9 on the hole? Post a 7.
+      </div>
+      <div style="margin:8px 0 0;padding:8px 10px;background:rgba(0,0,0,0.06);border-radius:8px;font-size:0.76rem">
+        <b>Example — no stroke:</b> Same Course Handicap 10, but now a par-4 with stroke index 14 → no stroke there (14 &gt; 10). Max score = just 6 (double bogey), no bonus stroke added. Take an 8? Post a 6.
       </div>
       <div style="margin-top:8px;font-size:0.76rem;color:var(--text-hint)">
         Still building your first Handicap Index? The cap is simpler: par + 5, every hole, no stroke-index math needed.
