@@ -1704,3 +1704,82 @@ Started as "add a drag-able shape/number scorecard idea" and ended up rebuilding
 **Session Dev-66 fully closed.**
 
 **Chat-rename string:** `Dev-66 - Par-Aware Scorecard, 9-Hole Support & Modal Consistency`
+
+---
+
+## Dev-67 Summary
+
+The longest session yet by a wide margin. Started as the proposed "D1 schema log & architecture doc catch-up" carried forward from Dev-66, then grew into shipping an entire new feature pair (weather history, sticky notes), a full architecture-doc redesign, a live-fire bug hunt during an actual round at BSGC, a full My History redesign (accordion sheet → true full-screen views), a "scrapbook" visual layer built out in real time against live feedback, and a GolfScorer generator-template fix — with several genuine mistakes made and caught along the way, not just features shipped.
+
+**Weather History (new feature):**
+- `event_weather` + `geocode_cache` tables. Fire-and-forget capture triggered by a player's first photo or scorecard for an event — resolves venue coordinates (manual entry in Venue Manager first, live Open-Meteo geocoding fallback second, cached per venue name), then pulls that date's historical high/low/wind/precipitation from Open-Meteo's free Archive API. Self-heals on the next capture if the archive hasn't caught up yet for a very recent date — no retry job needed.
+- The Worker's first outbound call to a third party beyond proxying to OneSignal.
+
+**Sticky Notes (new feature):**
+- `event_notes` table. A running comment thread per event/Gathering, addable by registered Yes/Sub players or Crew/Host only (stricter than Photos/Score's fully-open model, deliberate call), readable by anyone who can see the card. Shows on both the live card and My History.
+- Edit capability added later same session (`PATCH /notes/:id`) — inline textarea swap, doesn't reload the rest of the thread.
+
+**bf_architecture.html — full redesign:**
+- Both diagrams (system flow + D1 ERD) rebuilt from hand-coded SVG to Mermaid — the recurring "ERD only draws the original 4-table core" drift (stuck since Dev-56) was a direct symptom of hand-coded SVG being too risky to touch blind; Mermaid makes future additions a few lines of graph text instead of coordinate math.
+- **Gatherings** and **Memory Capture** promoted to real, clickable nodes in the system diagram — previously Gatherings was a small text label near the D1 box despite being core to the product's framing since Dev-65's pivot, and Memory Capture had zero visual representation at all.
+- D1 ERD redrawn covering all 20 tables (up from the visually-stuck-at-4), clustered into 5 logical groups (Gatherings Core, Personalization & State, Commissioner Flags, Venues & Templates, Memory Capture) rather than flattened into 20 individual boxes — direct response to "a single logo isn't enough, but don't crowd it" style feedback applied to the doc itself.
+- **Jotform exploded into its actual 5 forms** (Membership, BF Request Event, BF Event Registration, Series Scorecard, Closest to the Pin) with real form IDs — corrected a real inaccuracy in the process (prose had said "four forms," always been five; "BF Request Event" was missing entirely).
+- **Published Pages node added** (results.html/standings.html/mygame.html) — previously only groupings.html had a box despite all four being generated the same way.
+- Real mistake made and caught: first Mermaid pass used `<pre class="mermaid">` DOM auto-scan, and a `<br/>` inside a node label got parsed as real HTML before Mermaid ever saw the text, corrupting the source. Compounded by initially trusting a misleading DOM check over the screenshots that clearly showed the failure. Fixed by switching to explicit `mermaid.render()` with the source as a JS string, verified via node count + a working click test before re-shipping.
+- Second bug found the same way: both diagrams had Mermaid's default `width:100%`, silently shrinking them to fit the container instead of scrolling at readable size — fixed for both, not just the one being actively edited.
+- Discovered mid-session that `bf_architecture.html` has a `docs/` mirror separate from `source/` (same pattern as portal.html) that GitHub Pages actually serves — had only been pushing to `source/` all session; live site had shown stale content (a June 2026 badge) the whole time until caught.
+
+**Live bug hunt — photos not capturing (BSGC, live round):**
+- Debug telemetry (`GET /debug/last-upload`) proved zero upload requests reached the Worker — client-side issue, not server.
+- Root cause via description of symptoms ("slow, bails if you leave the dialog"): iOS suspends network activity when a tab/PWA backgrounds mid-upload. Real fix: client-side image compression (canvas-based, 1600px max dimension, 80% JPEG quality) before upload, cutting typical file size from several MB to a few hundred KB — confirmed via before/after debug telemetry (2.46MB → 590KB on a real capture).
+- Added an upload-in-progress lock on the card Photos sheet (disables capture buttons + guards the close button while a slow upload is still in flight) — Live Panel got the compression fix but not the lock, deliberately scoped out as a separate surface.
+
+**scorecards.venue D1_ERROR (production bug, real gap in the paper trail):**
+- "Save My Score" started throwing D1_ERROR in production. Diagnosed via a new temporary `PRAGMA table_info` debug route (`GET /debug/schema`) rather than trusting the migration log — which is exactly what caught the log itself being wrong: Entry 19 (Dev-66) had documented `scorecards.venue` as added that session; it hadn't been. Fixed live, and the log corrected honestly (Entry 19 annotated, Entry 21 documents the real fix) rather than silently patched over.
+
+**My History — full-screen redesign:**
+- Replaced the 85vh bottom-sheet accordion (dimmed backdrop visibly peeking around the edges) with two true full-viewport views — a list and a separate detail view, connected by back navigation — after an explicit debate-first exchange about the real trade-offs (overlay stacking on new surfaces, back-navigation semantics, more code surface than a reskin).
+- Surfaced a second real bug in the process: `background:var(--bg)` referenced a CSS variable that was never defined anywhere in the app (only `--surface`, `--card`, etc. exist) — silently transparent, letting Home screen content bleed through everywhere except the explicitly-colored header/rows. Same latent bug also existed on the Commissioner PIN input, fixed there too.
+- Sort fixed from "most recently edited" to "most recent event date" — the previous logic could bump a round from months ago above yesterday's if an old note got edited, which read as essentially random once there were enough groups for edit activity to overlap with event recency.
+- `score-detail-modal` z-index bumped (same bug class as an earlier photo-lightbox fix this session — anything opened from inside My History's new high-z-index views needs an explicit z-index of its own, or it renders behind, unreachable, even by its own close button).
+
+**Scrapbook visual layer, built out against live feedback across many rounds:**
+- Seasonal paper tones (background tint by month, independent of venue), polaroid-style photo tiles (seeded per-photo tilt, not random-per-render), a postmark-style weather badge, taped notes (tilt + tape-strip graphic) — all scoped to My History only, not the live capture surfaces, which stay clean utility grids on purpose.
+- Venue logo badge (`venues.logo_key`, R2-backed upload in Venue Manager) and per-venue theme motif (`venues.theme_motif`) — the latter went through a real design dead-end: a hand-drawn custom SVG shamrock (inspired by BSGC's real crest) was built, verified via local Playwright rendering, shipped, and then explicitly reverted after live feedback — didn't read clearly at small/faint scale, plain emoji looked better. Judged not worth further investment rather than continuing to iterate blind.
+- Motif visibility bug found and fixed twice: first version scattered across the whole card body and got hidden behind opaque photo tiles/note chips (same failure class as the very first weather-chip design, back near the start of this session); moved to the collapsed list-row header (guaranteed sparse, fixed height) — then extended to the detail view and scorecard per explicit request, constrained to areas known to stay sparse in each (below the badge row for the detail view, the info strip for the scorecard) rather than repeating the whole-card mistake a third time.
+- Scorecard got a light "ticket stub" pass (dashed perforation edges, monospace numbers) plus fun-but-tasteful emoji badges for birdie/eagle/albatross only (🐦🦅🎯) — bogey-and-worse stay undecorated on purpose. Two follow-up bugs from live testing: badge clipping on the grid's last column (position was overflowing past the container edge), and a color mismatch between the scorecard's own hardcoded cream and the actual seasonal tone of the card it opens from — both fixed, the latter by having the scorecard read the same `seasonPaperTone()` the card already uses instead of a separate fixed color.
+
+**Results.html deep-linking + podium clipping:**
+- Series/Weekend History moments get a trophy-styled clipping linking to that event's official results.html, leading with the actual podium winner — fetched and parsed from results.html's own embedded `ALL_SERIES_DATA` at render time (verified against real data: correctly computed "Rich Potts, +8" for BFSeries#5, matching Brian's own manual note).
+- `?event=<name>` URL param support added to results.html for real deep-linking (previously it only ever showed whichever event GolfScorer had "current" at last publish). Found GolfScorer's actual generator source in the repo (`source/BF_Golf_Scorer_8.html`) and patched the template itself, not just the live output, so the fix survives every future publish rather than being overwritten by the next one.
+- Real near-miss caught mid-edit: the first patch attempt used a nested template literal (backticks) inside code that itself lives within GolfScorer's own giant outer template literal — a raw backtick there would have prematurely closed that outer string and corrupted the entire generator. Caught before shipping, fixed with plain string concatenation, confirmed via a real syntax check rather than just re-reading it.
+
+**Announcement Feed fixes:**
+- Titles were being generated and stored correctly the whole time but never displayed — both the admin feed list and the player-facing card showed only the message body, discarding the title entirely. Fixed in both places (title now the bold heading, body as a secondary line).
+- "0 delivered" was permanently stuck, not delayed — the Worker never captured OneSignal's recipient count into the KV feed entry at send time. Fixed going forward; existing sent messages show "?" rather than a false zero, since that data was never captured for them.
+
+**Process:**
+- New standing rule, saved to memory: at every `.50` portal version increment, pause and self-assess whether recent patches are mostly new capability or mostly fixing bugs the last batch introduced — if the latter, stop and consolidate before continuing.
+- Several other mistakes owned mid-session beyond the ones above: a shell-quoting bug that silently corrupted my own diagnostic test payloads (fixed by moving to pure Python for that class of test); repeatedly forgetting that a GitHub push doesn't touch the *live* Cloudflare Worker until manually pasted in, re-learned the hard way more than once this session.
+
+**Artifacts:**
+- `docs/portal.html` / `source/portal.html` — v3.17.87 through v3.17.106 (~20 deploys)
+- `source/worker.js` — new routes: `/weather`, `/weather/capture`, `/notes` (GET/POST/PATCH/DELETE), `/venues/:id/coords`, `/venues/:id/logo` (+ serve, + clear), `/venues/:id/motif`, `/debug/schema` (temp, left in — same fate as Dev-59's `/debug/last-upload`)
+- `source/bf_architecture.html` / `docs/bf_architecture.html` — full Mermaid redesign, Jotform explosion, Published Pages node, schema log Entries 16–23
+- `source/specs/BF_Gatherings_Schema.sql` — caught up from Entry 15 through Entry 23, including one honest correction (Entry 19)
+- `docs/results.html` — manual `?event=` param patch (superseded by the generator fix below, but still the live file until GolfScorer's next publish)
+- `source/BF_Golf_Scorer_8.html` — `?event=` deep-link support baked into the results.html generator template permanently
+- D1 (all executed by Brian): `event_weather`, `geocode_cache`, `event_notes` (new tables); `venues.lat`/`lng`/`logo_key`/`theme_motif`, `scorecards.venue` (re-added) (new/corrected columns)
+
+**Carry-forward into Dev-68:**
+- **GolfScorer sync pending** — Brian needs to pull the updated `BF_Golf_Scorer_8.html` to his local laptop copy before the next publish, or the `?event=` deep-link fix isn't actually in effect yet.
+- Venue logo/motif inventory is BSGC-only so far — other venues (Whitetail, Moselem Springs, Woodstone, Lord's Valley) still need logos uploaded and motifs set if wanted.
+- Other venues besides BSGC still need weather coordinates set in Venue Manager for weather capture to work there.
+- Live Panel's photo capture didn't get the same upload-in-progress lock the card Photos sheet got this session — deliberately scoped out, still open if wanted.
+- `upload_attempts_log` (Dev-60) flagged twice now as apparently unreferenced in current `worker.js` — still not confirmed dead or investigated further.
+- All standing items from Dev-63 through Dev-66 not touched this session carry forward unchanged: Photo Upload Pause kill switch decision, icon-action-btn migration (partially advanced this session — Photos/Score/Notes converted to a horizontal icon row on the event card — but not audited elsewhere), formal-round flag design, Player Analytics/Insights layer, GHIN Following list confirmation.
+- Live-verification still open: My History full-screen redesign has been exercised live and fixed against real feedback several times over, but a fresh end-to-end pass after tonight's close-out batch of fixes hasn't happened yet.
+
+**Session Dev-67 fully closed.**
+
+**Chat-rename string:** `Dev-67 - Weather History, Sticky Notes, Architecture Redesign & My History Scrapbook`
