@@ -2814,35 +2814,13 @@ body {
     </div>
 
     <div class="bf-card">
-      <div class="bf-card-header" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between" onclick="toggleAdminCard('admin-photos-pause')">
-        <div style="display:flex;align-items:center;gap:6px">
-          <span class="bf-card-title" style="margin:0">📸 Photo Upload Pause</span>
-          <span id="admin-photos-pause-chev" style="font-size:1.1rem;color:var(--text-muted);transition:transform 0.2s;display:inline-block;transform:rotate(0deg)">›</span>
-        </div>
-      </div>
-      <div class="bf-card-body" id="admin-photos-pause-body" style="display:none">
-        <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
-          Emergency stop for <code>/photos/upload</code> — blocks every upload (Live Panel, GS, MacroDroid) instantly with zero KV/D1/R2 cost. Use this if a bulk-import loop is misbehaving. Unrelated to Maintenance Mode — the rest of the app stays live.
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-secondary btn-sm" id="btn-photos-pause-on"
-            onclick="devToggle('photosupload',true)"
-            style="font-size:0.82rem">Pause</button>
-          <button class="btn btn-secondary btn-sm" id="btn-photos-pause-off"
-            onclick="devToggle('photosupload',false)"
-            style="font-size:0.82rem">Resume</button>
-          <span id="photos-pause-status" style="font-size:0.78rem;color:var(--text-hint)"></span>
-        </div>
-      </div>
-    </div>
-
-    <div class="bf-card">
       <div class="bf-card-header" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between" onclick="toggleAdminCard('admin-notif-reset')">
         <div style="display:flex;align-items:center;gap:6px">
           <span class="bf-card-title" style="margin:0">🔔 Notification Prompt Reset</span>
           <span id="admin-notif-reset-chev" style="font-size:1.1rem;color:var(--text-muted);transition:transform 0.2s;display:inline-block;transform:rotate(0deg)">›</span>
         </div>
       </div>
+
       <div class="bf-card-body" id="admin-notif-reset-body" style="display:none">
         <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
           Re-triggers the "Turn on notifications" prompt — useful for testing push setup on a device that already dismissed it.
@@ -3404,7 +3382,6 @@ let LIVE_EVENT_TEST_MODE = false;
 let LIVE_OVERRIDE        = false;  // commissioner manual start
 let LIVE_OVERRIDE_SINCE  = null;   // ISO timestamp when override was set
 let GATHERING_PANEL_LIVE = false;  // Host Management panel visibility — off by default, Dev-45
-let PHOTOS_UPLOAD_PAUSED = false;  // Dev-60 — emergency kill switch for /photos/upload (overrun defense)
 let groupingsMeta        = null;  // {eventName, status, visibility, publishedAt}
 
 async function loadRemoteFlags() {
@@ -3416,7 +3393,6 @@ async function loadRemoteFlags() {
     LIVE_OVERRIDE        = flags.live_override === true;
     LIVE_OVERRIDE_SINCE  = flags.live_override_since || null;
     GATHERING_PANEL_LIVE  = flags.gathering_panel_live === true;
-    PHOTOS_UPLOAD_PAUSED  = flags.photos_upload_paused === true;
   } catch(e) {
     console.warn('[Flags] Could not load remote flags — defaulting to false:', e.message);
   }
@@ -13626,7 +13602,7 @@ function updateEventControlUI() {
 }
 
 async function devToggle(flag, enable) {
-  const key = flag === 'maintenance' ? 'maintenance' : flag === 'livetest' ? 'live_test' : flag === 'photosupload' ? 'photos_upload_paused' : 'gathering_panel_live';
+  const key = flag === 'maintenance' ? 'maintenance' : flag === 'livetest' ? 'live_test' : 'gathering_panel_live';
   try {
     const resp = await fetch(OS_API + 'flags', {
       method: 'POST',
@@ -13639,9 +13615,8 @@ async function devToggle(flag, enable) {
       if (key === 'maintenance')            MAINTENANCE_MODE     = enable;
       if (key === 'live_test')              LIVE_EVENT_TEST_MODE = enable;
       if (key === 'gathering_panel_live')   GATHERING_PANEL_LIVE = enable;
-      if (key === 'photos_upload_paused')   PHOTOS_UPLOAD_PAUSED = enable;
       updateDevControlsUI();
-      const flagLabel = flag === 'maintenance' ? 'Maintenance' : flag === 'livetest' ? 'Live Test' : flag === 'photosupload' ? 'Photo Upload' : 'Host Panel';
+      const flagLabel = flag === 'maintenance' ? 'Maintenance' : flag === 'livetest' ? 'Live Test' : 'Host Panel';
       showToast(enable ? `🔴 ${flagLabel} mode ON` : `✅ ${flagLabel} mode OFF`);
       // Reload after short delay so all state refreshes
       setTimeout(() => location.reload(), 800);
@@ -13658,14 +13633,9 @@ function updateDevControlsUI() {
   const mStatus = document.getElementById('maintenance-status');
   const lStatus = document.getElementById('livetest-status');
   const gStatus = document.getElementById('gathering-panel-status');
-  const pStatus = document.getElementById('photos-pause-status');
   if (mStatus) {
     mStatus.textContent = MAINTENANCE_MODE     ? '🔴 ON' : '⚪ Off';
     mStatus.style.color = MAINTENANCE_MODE     ? '#e05252' : 'var(--text-hint)';
-  }
-  if (pStatus) {
-    pStatus.textContent = PHOTOS_UPLOAD_PAUSED ? '🔴 Paused' : '⚪ Active';
-    pStatus.style.color = PHOTOS_UPLOAD_PAUSED ? '#e05252' : 'var(--text-hint)';
   }
   if (lStatus) {
     lStatus.textContent = LIVE_EVENT_TEST_MODE ? '🟢 ON' : '⚪ Off';
