@@ -452,13 +452,18 @@ export default {
         }
 
         // Build dynamic UPDATE — only set fields present in the request body.
-        const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description', 'tee_time_status', 'holes'];
+        // fill_list_enabled/crew_id added Dev-68 — previously mode (Crew vs
+        // Open) could only be set at creation, with no way to fix a mistake
+        // afterward (real incident: Walli created a Crew-mode Gathering,
+        // discovered there was no path to switch it to Open).
+        const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description', 'tee_time_status', 'holes', 'fill_list_enabled', 'crew_id'];
         const setClauses = [];
         const binds = [];
         for (const field of allowed) {
           if (Object.prototype.hasOwnProperty.call(body, field)) {
+            const val = field === 'fill_list_enabled' ? (body[field] ? 1 : 0) : (body[field] ?? null);
             setClauses.push(`${field} = ?`);
-            binds.push(body[field] ?? null);
+            binds.push(val);
           }
         }
         if (setClauses.length === 0) {
