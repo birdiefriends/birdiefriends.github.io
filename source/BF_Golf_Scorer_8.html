@@ -570,10 +570,9 @@
   <button onclick="showTab('scorecard')"><span class="nav-full">3 · Scorecard</span><span class="nav-short">Scorecard</span></button>
   <button onclick="showTab('ctp')"><span class="nav-full">4 · Closest to Pin</span><span class="nav-short">CTP</span></button>
   <button onclick="showTab('results')"><span class="nav-full">5 · Results</span><span class="nav-short">Results</span></button>
-  <button onclick="showTab('photos')"><span class="nav-full">6 · Photos</span><span class="nav-short">📸 Photos</span></button>
-  <button onclick="showTab('series')"><span class="nav-full">7 · Series</span><span class="nav-short">Series</span></button>
-  <button onclick="showTab('profiles')"><span class="nav-full">8 · Profiles</span><span class="nav-short">Profiles</span></button>
-  <button onclick="showTab('printcard')"><span class="nav-full">9 · Print Card</span><span class="nav-short">Print</span></button>
+  <button onclick="showTab('series')"><span class="nav-full">6 · Series</span><span class="nav-short">Series</span></button>
+  <button onclick="showTab('profiles')"><span class="nav-full">7 · Profiles</span><span class="nav-short">Profiles</span></button>
+  <button onclick="showTab('printcard')"><span class="nav-full">8 · Print Card</span><span class="nav-short">Print</span></button>
 </nav>
 
 <div class="cmd-bar">
@@ -964,39 +963,6 @@
   </div>
   <div id="results-content">
     <div class="empty-state"><p>Complete the scorecard first.</p></div>
-  </div>
-</div>
-
-<!-- ══ TAB 6: PHOTOS ══ -->
-<!-- Native GS Photo Organizer (Dev-58) — moved here rather than the portal's
-     admin panel because all other BF-Series post-round work already happens
-     in GS; keeping curation in a separate web tool meant a context-switch for
-     one more post-round task. Backend is 100% shared with the portal's Dev-57
-     Photo Capture work — same Worker, same D1 table, same PIN — this tab is
-     purely a UI port, no new routes. -->
-<div class="section" id="tab-photos">
-  <div class="card">
-    <div class="card-title">📸 Photo Organizer</div>
-    <div class="row mb1" style="gap:10px;align-items:center;flex-wrap:wrap">
-      <div class="col" style="min-width:220px;flex:1">
-        <select id="photos-event-select" onchange="loadPhotosTab()" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:0.9rem;background:var(--card);color:var(--text)">
-          <option value="">— load events from Jotform —</option>
-        </select>
-      </div>
-      <button class="btn btn-secondary btn-sm" onclick="loadPhotosEventNames()" id="photos-load-events-btn" title="Reload event list from Jotform Registration form">&#x21BA; Load Events</button>
-      <button class="btn btn-secondary btn-sm" onclick="loadPhotosTab()">↻ Refresh Photos</button>
-    </div>
-    <div id="photos-load-status" style="display:none;margin-bottom:10px;font-size:0.85rem"></div>
-    <div id="photos-tab-content"><div class="empty-state"><p>Click "Load Events" to select an event.</p></div></div>
-  </div>
-
-  <!-- Photo expand lightbox (Dev-60) — double-click a thumbnail to view full
-       size. Single shared overlay, populated per-open rather than one per
-       thumbnail, since only one can ever be open at a time. -->
-  <div id="photo-expand-overlay" onclick="if(event.target===this) closePhotoExpand()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;align-items:center;justify-content:center;flex-direction:column;padding:20px;box-sizing:border-box">
-    <button onclick="closePhotoExpand()" title="Close (Esc)" style="position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:2rem;line-height:1;cursor:pointer;padding:4px 10px">&times;</button>
-    <div id="photo-expand-media" style="max-width:92vw;max-height:80vh;display:flex;align-items:center;justify-content:center"></div>
-    <div id="photo-expand-caption" style="color:#eee;font-size:0.85rem;margin-top:14px;text-align:center"></div>
   </div>
 </div>
 
@@ -3016,26 +2982,6 @@ function saveEventToSeriesFromResults() {
   }, 500);
 }
 
-// Fetch approved photos per event at publish time, embedded into results.html
-// rather than live-fetched by the page itself (Brian's call, Dev-63) — a photo
-// approved/rejected after publish won't show until the next Publish. Fail-open
-// per event: a Worker/D1 hiccup here must never block the public page from
-// publishing, mirrors the groupings-sync philosophy (Dev-57).
-async function fetchPhotosForEvents(eventNames) {
-  const photosData = {};
-  const uniqueNames = [...new Set((eventNames || []).filter(Boolean))];
-  await Promise.all(uniqueNames.map(async (name) => {
-    try {
-      const res = await fetch(`https://birdiefriends-push.birdiefriends01.workers.dev/photos?event=${encodeURIComponent(name)}`);
-      const data = await res.json();
-      photosData[name] = (data.photos || []).filter(p => p.curation_status === 'approved');
-    } catch (e) {
-      photosData[name] = [];
-    }
-  }));
-  return photosData;
-}
-
 // Pushes one or more generated static pages straight into docs/ on GitHub Pages
 // via the Worker's existing PIN-gated POST /deploy route — the exact mechanism
 // docs/portal.html already uses. Replaces the old local-launcher "Netlify" relay
@@ -3077,8 +3023,7 @@ async function deployPagesToGitHub(pages, commitMsgPrefix) {
 // historicalEvt: optional saved event object from series data (has .scores, .ctp, .skins,
 //                and playerHistory entries with per-event quota/actual)
 // seriesData: optional full season data (sd) — when provided, results.html embeds all events
-function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData, photosData) {
-  photosData = photosData || {}; // { eventName: [approved photo rows] }, fetched at publish time (Dev-63)
+function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData) {
   const ptsToDiff = { 0:+2, 1:+1, 2:0, 4:-1, 6:-2 };
 
   let eventName, eventDate, scores, skinWinners, ctpData;
@@ -3219,34 +3164,6 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
           <td class="r" style="font-weight:700;color:var(--green)">$${p.total.toFixed(2)}</td>
         </tr>`).join('');
 
-  // ── Photos for this event (Dev-63) — embedded at publish time, grouped by story section ──
-  const PHOTOS_SERVE_BASE = 'https://birdiefriends-push.birdiefriends01.workers.dev';
-  const photosForEvent = photosData[eventName] || [];
-  function buildPhotoGridHtml(section) {
-    const photos = photosForEvent.filter(p => p.section === section);
-    if (!photos.length) return '';
-    return photos.map(p => {
-      const src = PHOTOS_SERVE_BASE + '/photos/serve/' + p.id;
-      const trophy = p.is_trophy_moment ? '<div class="photo-trophy">🏆</div>' : '';
-      const media = p.media_type === 'video'
-        ? '<video src="' + src + '" muted playsinline preload="metadata"></video>'
-        : '<img src="' + src + '" loading="lazy" alt="">';
-      return '<div class="photo-thumb" onclick="openPhotoLightbox(\'' + src + '\',\'' + p.media_type + '\')">' + trophy + media + '</div>';
-    }).join('');
-  }
-  const photoSections = [
-    { key:'pre_competition', label:'🌅 Pre-Competition' },
-    { key:'on_course',       label:'⛳ On the Course' },
-    { key:'post_round',      label:'🏆 Post-Round' }
-  ];
-  const photosTabBodyHtml = !photosForEvent.length
-    ? '<div class="photo-empty">No photos for this event yet.</div>'
-    : photoSections.map(s => {
-        const grid = buildPhotoGridHtml(s.key);
-        if (!grid) return '';
-        return '<div class="photo-section-label">' + s.label + '</div><div class="photo-grid">' + grid + '</div>';
-      }).join('');
-
   // ── Build event selector HTML (computed before template literal to avoid nesting issues) ──
   const evtSelectorHtml = (seriesData && seriesData.events && seriesData.events.length > 1)
     ? '<div style="margin-top:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;'
@@ -3269,7 +3186,6 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
 
   // ── Embed series JSON for client-side event switching ──
   const embeddedSeriesJson = seriesData ? JSON.stringify(seriesData).replace(/<\/script>/gi,'<\\/script>') : 'null';
-  const embeddedPhotosJson = JSON.stringify(photosData).replace(/<\/script>/gi,'<\\/script>');
 
   // ── Build mobile HTML page ──
   return `<!DOCTYPE html>
@@ -3354,19 +3270,6 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
 
   /* Highlights tab (Dev-63 — consolidated Podium/Skins/CTP/Money) */
   .highlights-spacer { height:14px; }
-
-  /* Photos tab (Dev-63) */
-  .photo-section-label { font-size:0.68rem; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); margin:18px 0 8px; }
-  .photo-section-label:first-child { margin-top:0; }
-  .photo-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
-  .photo-thumb { position:relative; aspect-ratio:1; border-radius:8px; overflow:hidden; background:#e8f0ec; cursor:pointer; }
-  .photo-thumb img, .photo-thumb video { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; }
-  .photo-trophy { position:absolute; top:4px; right:4px; font-size:0.9rem; filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
-  .photo-empty { text-align:center; color:var(--muted); font-size:0.85rem; padding:24px 0; }
-  .photo-lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:1000; align-items:center; justify-content:center; padding:24px; }
-  .photo-lightbox.active { display:flex; }
-  .photo-lightbox img, .photo-lightbox video { max-width:100%; max-height:100%; border-radius:8px; }
-  .photo-lightbox-close { position:absolute; top:16px; right:16px; color:#fff; font-size:1.8rem; cursor:pointer; line-height:1; padding:6px 10px; }
 </style>
 </head>
 <body>
@@ -3396,7 +3299,6 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
   <div class="tab" onclick="switchTab('standings',this)">Standings</div>
   <div class="tab" onclick="switchTab('strokes',this)">vs Par</div>
   <div class="tab" onclick="switchTab('birdies',this)">🐦 Birdies</div>
-  <div class="tab" onclick="switchTab('photos',this)">📸 Photos</div>
   <div class="tab" id="groups-tab" onclick="switchTab('groups',this)" style="opacity:0.45" title="No groupings archive for this event">⛳ Groups</div>
 </div>
 
@@ -3504,18 +3406,6 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
   </div>
 </div>
 
-<!-- ── PHOTOS TAB (Dev-63 — approved photos, embedded at publish time) ── -->
-<div class="tab-content" id="tab-photos">
-  <div class="card">
-    <div class="card-label">📸 Event Photos</div>
-    ${photosTabBodyHtml}
-  </div>
-</div>
-<div class="photo-lightbox" id="photo-lightbox" onclick="if(event.target===this)closePhotoLightbox()">
-  <span class="photo-lightbox-close" onclick="closePhotoLightbox()">×</span>
-  <div id="photo-lightbox-media"></div>
-</div>
-
 <!-- ── GROUPS TAB ── -->
 <div class="tab-content" id="tab-groups">
   <div id="groups-iframe-wrap" style="border-radius:12px;overflow:hidden;background:#fff">
@@ -3530,8 +3420,6 @@ function generateResultsPage(historicalEvt, historicalPlayerHistory, seriesData,
 <script>
 // ── Embedded series data for event selector ──
 const ALL_SERIES_DATA = ${embeddedSeriesJson};
-const ALL_PHOTOS_DATA = ${embeddedPhotosJson};
-const PHOTOS_SERVE_BASE_CLIENT = '${PHOTOS_SERVE_BASE}';
 const BSGC_PARS_DATA = [4,4,3,4,5,4,5,3,4, 3,5,4,4,4,3,4,5,3];
 const PTS_TO_DIFF    = { 0:2, 1:1, 2:0, 4:-1, 6:-2 };
 
@@ -3540,56 +3428,6 @@ const GROUPINGS_ARCHIVE = {};
 (ALL_SERIES_DATA.events || []).forEach(evt => {
   if (evt.groupingsFile) GROUPINGS_ARCHIVE[evt.name] = evt.groupingsFile;
 });
-
-// ── Photo lightbox (Dev-63) ──
-function openPhotoLightbox(src, mediaType) {
-  const box = document.getElementById('photo-lightbox');
-  const holder = document.getElementById('photo-lightbox-media');
-  holder.innerHTML = mediaType === 'video'
-    ? '<video src="' + src + '" controls autoplay playsinline></video>'
-    : '<img src="' + src + '" alt="">';
-  box.classList.add('active');
-}
-function closePhotoLightbox() {
-  const box = document.getElementById('photo-lightbox');
-  box.classList.remove('active');
-  document.getElementById('photo-lightbox-media').innerHTML = '';
-}
-
-// Render the Photos tab for a given event from embedded ALL_PHOTOS_DATA (Dev-63)
-function renderPhotosTab(eventName) {
-  const wrap = document.querySelector('#tab-photos .card');
-  if (!wrap) return;
-  const photos = ALL_PHOTOS_DATA[eventName] || [];
-  const sections = [
-    { key:'pre_competition', label:'🌅 Pre-Competition' },
-    { key:'on_course',       label:'⛳ On the Course' },
-    { key:'post_round',      label:'🏆 Post-Round' }
-  ];
-  function gridFor(sectionKey) {
-    const rows = photos.filter(p => p.section === sectionKey);
-    if (!rows.length) return '';
-    return rows.map(p => {
-      const src = PHOTOS_SERVE_BASE_CLIENT + '/photos/serve/' + p.id;
-      const trophy = p.is_trophy_moment ? '<div class="photo-trophy">🏆</div>' : '';
-      const media = p.media_type === 'video'
-        ? '<video src="' + src + '" muted playsinline preload="metadata"></video>'
-        : '<img src="' + src + '" loading="lazy" alt="">';
-      return '<div class="photo-thumb" onclick="openPhotoLightbox(\\'' + src + '\\',\\'' + p.media_type + '\\')">' + trophy + media + '</div>';
-    }).join('');
-  }
-  let bodyHtml = photos.length === 0
-    ? '<div class="photo-empty">No photos for this event yet.</div>'
-    : sections.map(s => {
-        const grid = gridFor(s.key);
-        return grid ? '<div class="photo-section-label">' + s.label + '</div><div class="photo-grid">' + grid + '</div>' : '';
-      }).join('');
-  // Replace everything after the card-label
-  const label = wrap.querySelector('.card-label');
-  wrap.innerHTML = '';
-  wrap.appendChild(label);
-  wrap.insertAdjacentHTML('beforeend', bodyHtml);
-}
 
 function switchTab(id, el) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -3885,9 +3723,6 @@ function loadEvent(selectedName) {
         <td class="r" style="color:var(--muted)">\${p.ctp>0?'$'+p.ctp.toFixed(2):'—'}</td>
         <td class="r" style="font-weight:700;color:var(--green)">$\${p.total.toFixed(2)}</td>
       </tr>\`).join('');
-
-  // ── Photos (Dev-63) ──
-  renderPhotosTab(selectedName);
 
   // Update header title/date + browser tab title — these never had the fix
   // wired up (title had no id at all; date's id didn't exist in the markup
@@ -4429,7 +4264,7 @@ async function publishAllPagesCore() {
     const lastPh       = {};
     Object.entries(sd.playerHistory).forEach(([name, ph]) => { lastPh[name] = ph; });
 
-    const resultsHtml  = generateResultsPage(lastEvt, lastPh, sd, await fetchPhotosForEvents(sd.events.map(e => e.name)));
+    const resultsHtml  = generateResultsPage(lastEvt, lastPh, sd);
     const seriesHtml   = generateSeriesPage(season, sd);
     const myGameHtml   = generateMyGamePage(season, sd);
 
@@ -6544,34 +6379,19 @@ function showTab(id) {
   document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
   document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
   document.getElementById(`tab-${id}`).classList.add("active");
-  const tabs = ["groups", "players", "scorecard", "ctp", "results", "photos", "series", "profiles", "printcard"];
+  const tabs = ["groups", "players", "scorecard", "ctp", "results", "series", "profiles", "printcard"];
   const idx = tabs.indexOf(id);
   if (idx >= 0) document.querySelectorAll("nav button")[idx].classList.add("active");
   if (id === "series")   loadSeriesStandings();
   if (id === "profiles") renderProfilesList();
   if (id === "groups")   grpOnTabOpen();
   if (id === "results")  populateResultsHistorySelect();
-  if (id === "photos")   loadPhotosTab();
   if (id === "ctp") {
     const eventName = document.getElementById('event-name').value.trim();
     if (eventName) setTimeout(() => fetchCTPFromJotform(), 300);
   }
 }
 
-
-// ══════════════════════════════════════════════════════════════════
-// PHOTO ORGANIZER TAB (Dev-58) — reuses the Dev-57 Worker routes wholesale.
-// Same PIN, same D1 table, same grouping logic as the portal's admin panel;
-// this is a UI port so post-round photo curation happens in the same tool
-// as everything else post-round, instead of a separate web app.
-// ══════════════════════════════════════════════════════════════════
-
-const PHOTOS_WORKER_BASE = 'https://birdiefriends-push.birdiefriends01.workers.dev';
-const PHOTOS_PIN = '7797';
-const PHOTOS_SECTION_ORDER = ['pre_competition', 'on_course', 'post_round'];
-const PHOTOS_SECTION_LABEL = { pre_competition: '🌅 Pre-Competition', on_course: '⛳ On the Course', post_round: '🏆 Post-Round' };
-const REQUEST_FORM_ID = '233113019726045'; // Request Event form — has the real Date & Time field
-let _photosEventsLoaded = false;
 
 // Ported verbatim from portal.html (Dev-57/58) — matches Jotform fields by
 // label text rather than a hardcoded QID number, so it doesn't break if
@@ -6605,387 +6425,6 @@ function getAnswer(answers, keys) {
     }
   }
   return '';
-}
-
-function parseDateFromJF(str) {
-  if (!str) return null;
-  function parseTime(timeStr) {
-    if (!timeStr) return [0, 0];
-    const ampm = timeStr.match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)/i);
-    if (ampm) {
-      let h = +ampm[1], min = +ampm[2];
-      const period = ampm[3].toUpperCase();
-      if (period === 'PM' && h !== 12) h += 12;
-      if (period === 'AM' && h === 12) h = 0;
-      return [h, min];
-    }
-    const plain = timeStr.match(/(\d{1,2}):(\d{2})/);
-    if (plain) return [+plain[1], +plain[2]];
-    return [0, 0];
-  }
-  str = str.trim();
-  let m;
-  if ((m = str.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}:\d{2}.*)/))) {
-    const [h, min] = parseTime(m[4]);
-    return new Date(+m[1], +m[2]-1, +m[3], h, min, 0);
-  }
-  if ((m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/))) {
-    return new Date(+m[1], +m[2]-1, +m[3], 7, 0, 0);
-  }
-  if ((m = str.match(/(\d{2})\s(\d{2})\s(\d{4})\s+([\d:]+(?:\s*[AP]M)?)/i))) {
-    const [h, min] = parseTime(m[4]);
-    return new Date(+m[3], +m[1]-1, +m[2], h, min, 0);
-  }
-  if ((m = str.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})\s+([\d:]+(?:\s*[AP]M)?)/i))) {
-    const [h, min] = parseTime(m[4]);
-    return new Date(+m[3], +m[1]-1, +m[2], h, min, 0);
-  }
-  if ((m = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/))) {
-    return new Date(+m[3], +m[1]-1, +m[2], 7, 0, 0);
-  }
-  if ((m = str.match(/\w+,\s+(\w+)\s+(\d{1,2}),?\s+(\d{4})\s+([\d:]+(?:\s*[AP]M)?)/i))) {
-    const months = {january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11};
-    const mo = months[m[1].toLowerCase()];
-    if (mo !== undefined) {
-      const [h, min] = parseTime(m[4]);
-      return new Date(+m[3], mo, +m[2], h, min, 0);
-    }
-  }
-  const d = new Date(str);
-  return isNaN(d) ? null : d;
-}
-
-// Independent event picker, deliberately NOT tied to `event-name` (which only
-// populates via Groups tab → Kick Off Event, a heavyweight pre-round flow).
-// Photo curation is retroactive and event-independent of any live scoring
-// session — you should be able to open GS and curate a past event's photos
-// without spinning up a scoring session for it first.
-//
-// Queries the Request Event form (233113019726045) — not the Registration/RSVP
-// form Groups tab uses — since that's the one with a real Date & Time field.
-// getAnswer()/parseDateFromJF() ported verbatim from the portal's own
-// parseEventSubmissions(), so date parsing behaves identically in both places.
-async function loadPhotosEventNames(preselectName) {
-  const loadBtn = document.getElementById('photos-load-events-btn');
-  const sel      = document.getElementById('photos-event-select');
-  const statusEl = document.getElementById('photos-load-status');
-  if (!sel) return;
-  loadBtn.disabled = true;
-  loadBtn.textContent = '⏳';
-  if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Loading events from Request Event form…'; }
-
-  try {
-    const resp = await fetch(`/api/jotform/submissions/${REQUEST_FORM_ID}`, {
-      headers: { 'Content-Type': 'application/json' }
-    });
-    if (!resp.ok) {
-      let errMsg = `Server error ${resp.status}`;
-      try { const b = await resp.json(); errMsg = b.error || b.message || errMsg; } catch(e) {}
-      throw new Error(errMsg);
-    }
-    const data = await resp.json();
-    if (data.responseCode !== 200) throw new Error(data.message || `Jotform error (${data.responseCode})`);
-
-    const subs = data.content || [];
-    if (!subs.length) throw new Error('No submissions found in Request Event form.');
-
-    const parsed = subs.map(s => {
-      const a = s.answers || {};
-      const name    = getAnswer(a, ['Event Name','eventName']);
-      const dateStr = getAnswer(a, ['Date & Time','dateTime','date']);
-      const dt      = parseDateFromJF(dateStr);
-      return { name, dt };
-    }).filter(e => e.name && e.dt);
-
-    if (!parsed.length) throw new Error('No events with a valid name + date found.');
-
-    // Active window — same 7-days-back-through-upcoming scope as the portal's
-    // Photo Capture event picker (Dev-57), for consistency across both tools.
-    const windowStart = new Date(); windowStart.setDate(windowStart.getDate() - 7); windowStart.setHours(0,0,0,0);
-    const active = parsed.filter(e => e.dt >= windowStart);
-    if (!active.length) throw new Error('No events in the active window (last 7 days through upcoming).');
-
-    // Dedupe by name (a Request Event submission is normally one row per
-    // event, but guard against duplicates), sort soonest-first by real date.
-    const byName = new Map();
-    active.forEach(e => { if (!byName.has(e.name)) byName.set(e.name, e.dt); });
-    const eventNames = [...byName.entries()].sort((a,b) => a[1] - b[1]).map(([n]) => n);
-
-    const savedName = preselectName || document.getElementById('event-name')?.value?.trim() || '';
-    sel.innerHTML = '<option value="">— select event —</option>' +
-      eventNames.map(n =>
-        `<option value="${n.replace(/"/g,'&quot;')}"${n === savedName ? ' selected' : ''}>${n} · ${byName.get(n).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</option>`
-      ).join('');
-
-    _photosEventsLoaded = true;
-    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = `✓ Loaded ${eventNames.length} active event${eventNames.length!==1?'s':''}.`; }
-    if (sel.value) loadPhotosTab();
-
-  } catch(err) {
-    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = '⚠ ' + err.message; }
-  } finally {
-    loadBtn.disabled = false;
-    loadBtn.innerHTML = '&#x21BA; Load Events';
-  }
-}
-
-async function loadPhotosTab() {
-  if (!_photosEventsLoaded) { loadPhotosEventNames(); return; }
-  const eventName = document.getElementById('photos-event-select')?.value?.trim() || '';
-  const bodyEl    = document.getElementById('photos-tab-content');
-  if (!bodyEl) return;
-
-  if (!eventName) {
-    bodyEl.innerHTML = '<div class="empty-state"><p>Select an event above.</p></div>';
-    return;
-  }
-
-  bodyEl.innerHTML = '<div class="empty-state"><p>Loading…</p></div>';
-  try {
-    const params = new URLSearchParams({ pin: PHOTOS_PIN, event: eventName });
-    const res  = await fetch(`${PHOTOS_WORKER_BASE}/photos?${params.toString()}`);
-    const data = await res.json();
-    const photos = data.photos || [];
-    if (!photos.length) {
-      bodyEl.innerHTML = '<div class="empty-state"><p>No photos yet for this event.</p></div>';
-      return;
-    }
-    bodyEl.innerHTML = renderPhotosGrouped(photos);
-  } catch (e) {
-    bodyEl.innerHTML = `<div class="alert alert-danger">Error loading photos: ${e.message}</div>`;
-  }
-}
-
-// ── Bulk selection (Dev-62) — reject-by-exception + real event volume (dozens
-// of photos) made one-at-a-time actions too slow. Selection resets on every
-// reload (loadPhotosTab) rather than trying to survive a data refresh, since
-// a bulk action always triggers a reload immediately after anyway.
-let _photoSelection = new Set();
-
-function togglePhotoSelect(id, checked) {
-  if (checked) _photoSelection.add(id); else _photoSelection.delete(id);
-  updatePhotoBulkBar();
-}
-
-function selectAllPhotosVisible() {
-  document.querySelectorAll('.photo-select-cb').forEach(cb => {
-    cb.checked = true;
-    _photoSelection.add(Number(cb.dataset.photoId));
-  });
-  updatePhotoBulkBar();
-}
-
-function clearPhotoSelection() {
-  _photoSelection.clear();
-  document.querySelectorAll('.photo-select-cb').forEach(cb => { cb.checked = false; });
-  updatePhotoBulkBar();
-}
-
-function updatePhotoBulkBar() {
-  const bar = document.getElementById('photo-bulk-bar');
-  const countEl = document.getElementById('photo-bulk-count');
-  if (!bar || !countEl) return;
-  const n = _photoSelection.size;
-  countEl.textContent = n === 0 ? 'None selected' : `${n} selected`;
-  bar.querySelectorAll('.photo-bulk-action').forEach(btn => { btn.disabled = n === 0; });
-}
-
-async function bulkPatchSelected(fields, confirmMsg) {
-  if (_photoSelection.size === 0) return;
-  if (confirmMsg && !confirm(confirmMsg)) return;
-  const ids = [..._photoSelection];
-  try {
-    const results = await Promise.all(ids.map(id =>
-      fetch(`${PHOTOS_WORKER_BASE}/photos/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: PHOTOS_PIN, ...fields })
-      }).then(r => r.json())
-    ));
-    const failed = results.filter(r => !r.ok).length;
-    _photoSelection.clear();
-    loadPhotosTab();
-    if (failed > 0) alert(`${failed} of ${ids.length} updates failed — check individual photos.`);
-  } catch (e) {
-    alert('Bulk update error: ' + e.message);
-  }
-}
-
-async function bulkDeleteSelected() {
-  if (_photoSelection.size === 0) return;
-  const ids = [..._photoSelection];
-  if (!confirm(`Delete ${ids.length} photo${ids.length !== 1 ? 's' : ''}? This cannot be undone.`)) return;
-  try {
-    const results = await Promise.all(ids.map(id =>
-      fetch(`${PHOTOS_WORKER_BASE}/photos/${id}?pin=${PHOTOS_PIN}`, { method: 'DELETE' }).then(r => r.json())
-    ));
-    const failed = results.filter(r => !r.ok).length;
-    _photoSelection.clear();
-    loadPhotosTab();
-    if (failed > 0) alert(`${failed} of ${ids.length} deletes failed — check individual photos.`);
-  } catch (e) {
-    alert('Bulk delete error: ' + e.message);
-  }
-}
-
-function renderPhotoBulkBar() {
-  const sectionOptions = PHOTOS_SECTION_ORDER.map(s =>
-    `<option value="${s}">${PHOTOS_SECTION_LABEL[s]}</option>`
-  ).join('');
-  return `
-    <div id="photo-bulk-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;margin-bottom:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:0.78rem">
-      <span id="photo-bulk-count" style="font-weight:600;color:var(--text-muted);min-width:90px">None selected</span>
-      <button class="btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" onclick="selectAllPhotosVisible()">Select All</button>
-      <button class="btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" onclick="clearPhotoSelection()">Clear</button>
-      <span style="border-left:1px solid var(--border);height:18px;margin:0 2px"></span>
-      <button class="photo-bulk-action btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" disabled onclick="bulkPatchSelected({curation_status:'approved'})">✓ Approve</button>
-      <button class="photo-bulk-action btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" disabled onclick="bulkPatchSelected({curation_status:'rejected'})">✕ Reject</button>
-      <select id="photo-bulk-move-select" style="font-size:0.72rem;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text)">
-        ${sectionOptions}
-      </select>
-      <button class="photo-bulk-action btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" disabled onclick="bulkPatchSelected({section:document.getElementById('photo-bulk-move-select').value})">Move to Chapter</button>
-      <button class="photo-bulk-action btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px;color:#a32d2d" disabled onclick="bulkDeleteSelected()">🗑️ Delete</button>
-    </div>`;
-}
-
-// Groups by section only (event is already fixed by the Event field above —
-// no cross-event browsing here, unlike the portal's "All Events" admin view).
-// 3-column layout (one per chapter) rather than stacked rows — chosen for
-// scale: a 20-player event averaging 2 photos/player is ~40 photos to curate,
-// and a single vertical stack of stacked groups gets unwieldy fast. Columns
-// keep the whole event's story visible at a glance; each column is internally
-// chronological by real capture time.
-function renderPhotosGrouped(photos) {
-  _photoSelection.clear();
-  const bySection = new Map();
-  photos.forEach(p => {
-    const key = p.section || 'other';
-    if (!bySection.has(key)) bySection.set(key, []);
-    bySection.get(key).push(p);
-  });
-  const ordered = [...PHOTOS_SECTION_ORDER, ...[...bySection.keys()].filter(s => !PHOTOS_SECTION_ORDER.includes(s))];
-
-  const columns = ordered.map(s => {
-    const items = bySection.get(s) || [];
-    return `
-      <div style="flex:1;min-width:220px">
-        <div style="font-size:0.8rem;font-weight:700;color:var(--text);margin-bottom:8px;position:sticky;top:0;background:var(--card);padding:4px 0;z-index:1">
-          ${PHOTOS_SECTION_LABEL[s] || s} (${items.length})
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          ${items.length ? items.map(p => renderPhotoThumb(p)).join('') : '<div style="font-size:0.78rem;color:var(--text-muted);padding:8px 0">—</div>'}
-        </div>
-      </div>`;
-  }).join('');
-
-  return `${renderPhotoBulkBar()}<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">${columns}</div>`;
-}
-
-function fmtCapturedTime(p) {
-  const t = p.captured_at || p.created_at;
-  if (!t) return '';
-  const d = new Date(t.replace(' ', 'T'));
-  if (isNaN(d)) return '';
-  return d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
-
-function renderPhotoThumb(p) {
-  const statusColor = p.curation_status === 'approved' ? '#1a6b30'
-                     : p.curation_status === 'rejected' ? '#a32d2d' : '#7a5a00';
-  const src = `${PHOTOS_WORKER_BASE}/photos/serve/${p.id}?pin=${PHOTOS_PIN}`;
-  const timeLabel = fmtCapturedTime(p);
-  // Double-click opens the full-size lightbox (Dev-60). Caption text passed
-  // through as escaped JS string args rather than re-derived inside
-  // expandPhoto — this function already has everything needed right here.
-  const capturedByEsc = (p.captured_by || 'Unknown').replace(/'/g, "\\'");
-  const dblclick = `expandPhoto('${src}','${p.media_type}','${capturedByEsc}','${timeLabel}')`;
-  const media = p.media_type === 'video'
-    ? `<video src="${src}" controls preload="metadata" ondblclick="${dblclick}" style="width:100%;height:120px;object-fit:cover;display:block;background:#000;cursor:zoom-in"></video>`
-    : `<img src="${src}" ondblclick="${dblclick}" style="width:100%;height:120px;object-fit:cover;display:block;cursor:zoom-in" loading="lazy" title="Double-click to expand">`;
-  const sectionOptions = PHOTOS_SECTION_ORDER.map(s =>
-    `<option value="${s}"${p.section === s ? ' selected' : ''}>${PHOTOS_SECTION_LABEL[s]}</option>`
-  ).join('');
-  return `
-    <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card)">
-      <div style="position:relative">
-        <input type="checkbox" class="photo-select-cb" data-photo-id="${p.id}"
-          onchange="togglePhotoSelect(${p.id},this.checked)" onclick="event.stopPropagation()"
-          style="position:absolute;top:6px;left:6px;width:20px;height:20px;z-index:2;cursor:pointer;accent-color:#085041;box-shadow:0 0 0 2px rgba(255,255,255,0.9);border-radius:3px">
-        ${media}
-      </div>
-      <div style="padding:6px 8px">
-        <div style="font-size:0.68rem;color:var(--text-muted);display:flex;justify-content:space-between">
-          <span>${p.captured_by || 'Unknown'}${p.media_type === 'video' ? ' · 🎥' : ''}</span>
-          <span>${timeLabel}</span>
-        </div>
-        <div style="font-size:0.7rem;font-weight:600;color:${statusColor};margin:2px 0 6px">${p.curation_status}${p.is_trophy_moment ? ' · 🏆' : ''}</div>
-        <select onchange="patchPhoto(${p.id},{section:this.value})" style="width:100%;font-size:0.68rem;padding:3px 4px;margin-bottom:5px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text)" title="Reassign chapter">
-          ${sectionOptions}
-        </select>
-        <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <button class="btn btn-secondary btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchPhoto(${p.id},{curation_status:'approved'})">✓</button>
-          <button class="btn btn-secondary btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchPhoto(${p.id},{curation_status:'rejected'})">✕</button>
-          <button class="btn btn-secondary btn-sm" style="font-size:0.68rem;padding:2px 6px" onclick="patchPhoto(${p.id},{is_trophy_moment:${p.is_trophy_moment ? 'false' : 'true'}})">🏆</button>
-          <button class="btn btn-secondary btn-sm" style="font-size:0.68rem;padding:2px 6px;color:#a32d2d" onclick="deletePhoto(${p.id})">🗑️</button>
-        </div>
-      </div>
-    </div>`;
-}
-
-// Photo expand lightbox (Dev-60). Single overlay reused for every thumbnail —
-// built fresh each open rather than kept in the DOM per-thumbnail, since only
-// one can ever be open. Images get a plain <img>; video gets its own
-// <video controls autoplay> so a double-click-to-expand still lets you play
-// the clip at full size instead of just viewing a static frame.
-function expandPhoto(src, mediaType, capturedBy, timeLabel) {
-  const overlay = document.getElementById('photo-expand-overlay');
-  const mediaEl = document.getElementById('photo-expand-media');
-  const capEl   = document.getElementById('photo-expand-caption');
-  mediaEl.innerHTML = mediaType === 'video'
-    ? `<video src="${src}" controls autoplay style="max-width:92vw;max-height:80vh"></video>`
-    : `<img src="${src}" style="max-width:92vw;max-height:80vh;object-fit:contain">`;
-  capEl.textContent = [capturedBy, timeLabel].filter(Boolean).join(' · ');
-  overlay.style.display = 'flex';
-  document.addEventListener('keydown', _photoExpandEscHandler);
-}
-
-function closePhotoExpand() {
-  const overlay = document.getElementById('photo-expand-overlay');
-  const mediaEl = document.getElementById('photo-expand-media');
-  overlay.style.display = 'none';
-  mediaEl.innerHTML = ''; // stop any playing video immediately on close
-  document.removeEventListener('keydown', _photoExpandEscHandler);
-}
-
-function _photoExpandEscHandler(e) {
-  if (e.key === 'Escape') closePhotoExpand();
-}
-
-async function patchPhoto(id, fields) {
-  try {
-    const res = await fetch(`${PHOTOS_WORKER_BASE}/photos/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin: PHOTOS_PIN, ...fields })
-    });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Update failed');
-    loadPhotosTab();
-  } catch (e) {
-    alert('Error: ' + e.message);
-  }
-}
-
-async function deletePhoto(id) {
-  if (!confirm('Delete this photo? This cannot be undone.')) return;
-  try {
-    const res = await fetch(`${PHOTOS_WORKER_BASE}/photos/${id}?pin=${PHOTOS_PIN}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Delete failed');
-    loadPhotosTab();
-  } catch (e) {
-    alert('Error: ' + e.message);
-  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -8614,7 +8053,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.48 · 2026-07-20';
+const GS_VERSION = 'v8.49 · 2026-07-23';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
