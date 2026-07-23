@@ -12069,6 +12069,21 @@ const RULES_CONTENT = {
     subtitle: "Can't be found within 3 minutes of starting to look",
     standard: `<b>1-stroke penalty.</b> Same as Out of Bounds — walk back and replay from your previous spot. Play a provisional ball off the tee if you think this might happen, so you don't have to walk back twice.`,
     quickplay: `<b>2-stroke penalty (USGA Local Rule E-5).</b> No walk back — estimate where the ball was lost, then drop within two club-lengths of the nearest fairway edge at or behind that point (never closer to the hole).`
+  },
+  netdouble: {
+    icon: '🧮', title: 'Net Double Bogey',
+    subtitle: 'The max score you post per hole for handicap purposes',
+    body: `This is the number that confuses people — it's not about the game you're playing today, it's about what you write down afterward when you post your score to keep your handicap accurate.
+      <div style="margin:8px 0">
+        <b>Formula:</b> Double Bogey (par + 2) + any handicap strokes you get on that hole.
+      </div>
+      Every hole has a "handicap" number printed in its scorecard column (1–18) — that's the stroke index, not your handicap. Your Course Handicap tells you how many of those holes you get an extra stroke on, starting from index 1 and working up. A Course Handicap of 15 means you get 1 stroke on the 15 holes indexed 1 through 15, and none on the other three.
+      <div style="margin:10px 0 0;padding:8px 10px;background:rgba(0,0,0,0.06);border-radius:8px;font-size:0.76rem">
+        <b>Example:</b> Course Handicap 15, playing a par-4 with stroke index 10 → you get a stroke there (10 ≤ 15). Max score = 6 (double bogey) + 1 = <b>7</b>. Take an 8 or a 9 on the hole? Post a 7.
+      </div>
+      <div style="margin-top:8px;font-size:0.76rem;color:var(--text-hint)">
+        Still building your first Handicap Index? The cap is simpler: par + 5, every hole, no stroke-index math needed.
+      </div>`
   }
 };
 
@@ -12101,7 +12116,8 @@ function renderRulesContent() {
   el.innerHTML =
     renderRulesSection(RULES_CONTENT.penalty, RULES_CONTENT.penalty.body) +
     renderRulesSection(RULES_CONTENT.ob, RULES_CONTENT.ob[mode]) +
-    renderRulesSection(RULES_CONTENT.lost, RULES_CONTENT.lost[mode]);
+    renderRulesSection(RULES_CONTENT.lost, RULES_CONTENT.lost[mode]) +
+    renderRulesSection(RULES_CONTENT.netdouble, RULES_CONTENT.netdouble.body);
 }
 
 function openCardNoteSheet(evtId) {
