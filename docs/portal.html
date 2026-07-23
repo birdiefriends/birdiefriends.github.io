@@ -3030,19 +3030,33 @@ body {
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <div class="bf-modal-title" style="margin-bottom:0">📖 Quick Rules</div>
+      <div class="bf-modal-title" style="margin-bottom:0">📖 Rules</div>
       <button onclick="closeModal('rules-modal')" title="Close"
         style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
           color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
     </div>
-    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px;line-height:1.5">
-      Straight from the USGA's own player-facing rules pages — not the full rule book. For Out of Bounds and Lost Ball, groups play this two different ways; pick whichever your group actually uses.
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="seg-btn seg-btn-active" id="rules-tab-usga" style="flex:1;font-size:0.78rem;padding:9px" onclick="setRulesTab('usga')">⛳ USGA Rules</button>
+      <button class="seg-btn" id="rules-tab-bf" style="flex:1;font-size:0.78rem;padding:9px" onclick="setRulesTab('bf')">🏌️ BirdieFriends</button>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:14px">
-      <button class="seg-btn seg-btn-active" id="rules-mode-standard" style="flex:1;font-size:0.78rem;padding:8px" onclick="setRulesMode('standard')">Standard</button>
-      <button class="seg-btn" id="rules-mode-quickplay" style="flex:1;font-size:0.78rem;padding:8px" onclick="setRulesMode('quickplay')">Quick-Play</button>
+
+    <div id="rules-tab-panel-usga">
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px;line-height:1.5">
+        Straight from the USGA's own player-facing rules pages — not the full rule book. For Out of Bounds and Lost Ball, groups play this two different ways; pick whichever your group actually uses.
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="seg-btn seg-btn-active" id="rules-mode-standard" style="flex:1;font-size:0.78rem;padding:8px" onclick="setRulesMode('standard')">Standard</button>
+        <button class="seg-btn" id="rules-mode-quickplay" style="flex:1;font-size:0.78rem;padding:8px" onclick="setRulesMode('quickplay')">Quick-Play</button>
+      </div>
+      <div id="rules-content" style="max-height:50vh;overflow-y:auto"></div>
     </div>
-    <div id="rules-content" style="max-height:55vh;overflow-y:auto"></div>
+
+    <div id="rules-tab-panel-bf" style="display:none">
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px;line-height:1.5">
+        BirdieFriends' own house rules for BF events — on top of standard USGA play, adapted for pace and everyday course conditions.
+      </div>
+      <div id="rules-bf-content" style="max-height:55vh;overflow-y:auto"></div>
+    </div>
   </div>
 </div>
 
@@ -12090,7 +12104,52 @@ const RULES_CONTENT = {
   }
 };
 
+// ── BirdieFriends House Rules (Dev-68) — reworded from the original 2024
+// BF Championship Format slide, points 1-6 only (7-8 were scorekeeping/app
+// steps specific to that event's own scoring app, not rules of play).
+const BF_RULES_CONTENT = [
+  { icon: '⛳', title: 'Tee Box & Quota',
+    body: `Every player is assigned a tee box and a point quota for the round.` },
+  { icon: '📖', title: 'Rules in Play',
+    body: `Standard USGA rules apply, plus any local or daily course rules posted that day.` },
+  { icon: '🌱', title: 'Lie Adjustment',
+    body: `You may move your ball up to one scorecard-length without improving the lie — never improve the turf itself. Near tree roots, move to the nearest safe spot to play from.` },
+  { icon: '🏖️', title: 'Bunker Lies',
+    body: `A rough bunker lie can be moved to the nearest clean, groomed spot in the same bunker. Can't tell if you're in or out of the bunker? Your choice — nearest clean bunker or grass lie.` },
+  { icon: '🕳️', title: 'Putts',
+    body: `Putts longer than a scorecard's length must be putted out — no automatic gimmes past that distance.` },
+  { icon: '⏱️', title: 'Pace of Play',
+    body: `Once bogey or better is no longer possible on a hole, pick up and move on.` }
+];
+
+let _rulesTab = 'usga';
+
+function setRulesTab(tab) {
+  _rulesTab = tab;
+  const usgaBtn  = document.getElementById('rules-tab-usga');
+  const bfBtn    = document.getElementById('rules-tab-bf');
+  const usgaPane = document.getElementById('rules-tab-panel-usga');
+  const bfPane   = document.getElementById('rules-tab-panel-bf');
+  if (usgaBtn)  usgaBtn.classList.toggle('seg-btn-active', tab === 'usga');
+  if (bfBtn)    bfBtn.classList.toggle('seg-btn-active', tab === 'bf');
+  if (usgaPane) usgaPane.style.display = tab === 'usga' ? '' : 'none';
+  if (bfPane)   bfPane.style.display   = tab === 'bf' ? '' : 'none';
+  if (tab === 'bf') renderBFRulesContent();
+}
+
+function renderBFRulesContent() {
+  const el = document.getElementById('rules-bf-content');
+  if (!el) return;
+  el.innerHTML = BF_RULES_CONTENT.map((item, i) =>
+    `<div style="margin-bottom:14px;padding:12px;border-radius:10px;background:var(--surface)">
+      <div style="font-weight:700;font-size:0.88rem;margin-bottom:6px">${item.icon} ${i + 1}. ${item.title}</div>
+      <div style="font-size:0.8rem;line-height:1.5">${item.body}</div>
+    </div>`
+  ).join('');
+}
+
 function openRulesModal() {
+  setRulesTab('usga');
   renderRulesContent();
   openModal('rules-modal');
 }
