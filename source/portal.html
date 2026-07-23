@@ -3060,6 +3060,35 @@ body {
   </div>
 </div>
 
+<div class="bf-modal-overlay" id="yardage-modal" onclick="closeModalOnOverlay(event,'yardage-modal')">
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="bf-modal-title" style="margin-bottom:0">📏 Layup Calculator</div>
+      <button onclick="closeModal('yardage-modal')" title="Close"
+        style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
+          color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
+      Plain subtraction — no slope, wind, or elevation. Enter your distance to the pin and how far you want your layup to leave, and it'll tell you how far to hit it.
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:0.78rem;color:var(--text-hint);display:block;margin-bottom:4px">Distance to pin (yards)</label>
+      <input type="number" inputmode="numeric" id="yardage-total" placeholder="e.g. 150"
+        oninput="updateYardageResult()"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid var(--border);font-size:1rem;font-family:inherit">
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:0.78rem;color:var(--text-hint);display:block;margin-bottom:4px">Distance you want left to the pin</label>
+      <input type="number" inputmode="numeric" id="yardage-layup" placeholder="e.g. 100"
+        oninput="updateYardageResult()"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid var(--border);font-size:1rem;font-family:inherit">
+    </div>
+    <div id="yardage-result" style="text-align:center;padding:14px;border-radius:10px;background:var(--surface);
+      font-size:1.3rem;font-weight:800;color:var(--green-dark)">Enter both distances</div>
+  </div>
+</div>
+
 <div class="bf-modal-overlay" id="notif-guide-modal" onclick="closeModalOnOverlay(event,'notif-guide-modal')">
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
@@ -5361,6 +5390,10 @@ function buildEventCard(evt, isPast) {
       <button class="icon-action-btn" onclick="openRulesModal()">
         <span class="icon-action-badge secondary">📖</span>
         <span class="icon-action-label">Rules</span>
+      </button>
+      <button class="icon-action-btn" onclick="openYardageModal()">
+        <span class="icon-action-badge secondary">📏</span>
+        <span class="icon-action-label">Yardage</span>
       </button>
     </div>
 
@@ -12153,6 +12186,39 @@ function renderBFRulesContent() {
       <div style="font-size:0.8rem;line-height:1.5">${item.body}</div>
     </div>`
   ).join('');
+}
+
+// ── Layup Calculator (Dev-68) — plain subtraction, no distance measurement
+// of its own (no GPS, no slope/wind/elevation) — the player supplies both
+// numbers, so this doesn't fall under DMD rules (Rule 4.3a) at all; it's the
+// same math as writing it on a scorecard by hand, just faster.
+function openYardageModal() {
+  const totalEl = document.getElementById('yardage-total');
+  const layupEl = document.getElementById('yardage-layup');
+  if (totalEl) totalEl.value = '';
+  if (layupEl) layupEl.value = '';
+  updateYardageResult();
+  openModal('yardage-modal');
+}
+
+function updateYardageResult() {
+  const resultEl = document.getElementById('yardage-result');
+  if (!resultEl) return;
+  const total = parseFloat(document.getElementById('yardage-total')?.value);
+  const layup = parseFloat(document.getElementById('yardage-layup')?.value);
+  if (!Number.isFinite(total) || !Number.isFinite(layup)) {
+    resultEl.textContent = 'Enter both distances';
+    resultEl.style.color = 'var(--text-hint)';
+    return;
+  }
+  const diff = total - layup;
+  if (diff <= 0) {
+    resultEl.textContent = "That's past the pin — nothing to lay up";
+    resultEl.style.color = 'var(--text-hint)';
+    return;
+  }
+  resultEl.textContent = `Hit it ${diff} yards`;
+  resultEl.style.color = 'var(--green-dark)';
 }
 
 function openRulesModal() {
