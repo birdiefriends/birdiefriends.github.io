@@ -8034,6 +8034,27 @@ function buildLivePanel(evt) {
 // it always resolves through the 3-chip dialog before the request fires).
 let _livePhotoFile  = null;
 let _livePhotoGuess = null;  // { section, capturedAt } — set once Upload's file is picked
+let _livePhotoUploadBusy = false; // Dev-68 — mirrors the card Photos sheet's
+  // setCardPhotoBusy lock (Dev-67), which Live Panel never got. Live Panel
+  // isn't a modal (no close button to guard), so the only real risk here is
+  // a double-tap firing two concurrent uploads for the same round — disabling
+  // the three capture inputs during an in-flight upload closes that gap.
+
+// Dims/disables the three capture buttons and shows a can't-miss status line
+// while an upload is in flight — same visual language as setCardPhotoBusy.
+function setLivePhotoBusy(busy, statusText) {
+  _livePhotoUploadBusy = busy;
+  const statusEl = document.getElementById('live-photo-status');
+  if (statusEl && statusText !== undefined) {
+    statusEl.textContent = statusText || '';
+    statusEl.style.color = busy ? 'var(--gold, #d4a017)' : '';
+    statusEl.style.fontWeight = busy ? '700' : '';
+  }
+  ['live-photo-camera-input','live-video-camera-input','live-photo-upload-input'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = busy;
+  });
+}
 
 function buildLivePanelPhotoSection() {
   return `
@@ -8072,6 +8093,7 @@ function buildLivePanelPhotoSection() {
 // Takes the triggering input element (Photo vs Video button, Dev-65 split).
 async function livePanelCameraPicked(inputEl) {
   const input = inputEl || document.getElementById('live-photo-camera-input');
+  if (_livePhotoUploadBusy) { showToast('Upload in progress — hang tight', true); input.value = ''; return; }
   const file  = input.files[0];
   if (!file) {
     // Fires both on a deliberate cancel (normal, not an error) and on a
@@ -8110,6 +8132,7 @@ async function livePanelCameraPicked(inputEl) {
 // guessing off upload time.
 async function livePanelUploadPicked() {
   const input = document.getElementById('live-photo-upload-input');
+  if (_livePhotoUploadBusy) { showToast('Upload in progress — hang tight', true); input.value = ''; return; }
   const file  = input.files[0];
   if (!file) {
     const statusEl = document.getElementById('live-photo-status');
@@ -8181,8 +8204,8 @@ async function livePhotoDialogConfirm() {
 // (the Open Camera path); Upload always sends an explicit section already
 // resolved via its dialog.
 async function livePanelUploadCore(file, evt, { sourceLabel, section, capturedAt }) {
+  setLivePhotoBusy(true, sourceLabel === 'camera' ? 'Capturing…' : 'Uploading…'); // Dev-68
   const statusEl = document.getElementById('live-photo-status');
-  if (statusEl) statusEl.textContent = sourceLabel === 'camera' ? 'Capturing…' : 'Uploading…';
   try {
     const scorecardSubmitted = await checkScorecardSubmitted(evt.name, currentPlayer);
     const uploadFile = await compressImageFile(file); // Dev-67 — see its own comment
@@ -8200,11 +8223,11 @@ async function livePanelUploadCore(file, evt, { sourceLabel, section, capturedAt
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Upload failed');
 
-    if (statusEl) statusEl.textContent = '';
+    setLivePhotoBusy(false, '');
     showToast(data.media_type === 'video' ? '✅ Video added!' : '✅ Photo added!');
     captureEventWeather(evt); // Dev-67 — fire-and-forget, no-op if already cached
   } catch(e) {
-    if (statusEl) statusEl.textContent = '';
+    setLivePhotoBusy(false, '');
     showToast('Error: ' + e.message, true);
   }
 }
