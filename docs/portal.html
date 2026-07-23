@@ -4954,10 +4954,15 @@ function renderHome() {
   const dismissed = getDismissedEvents();
   const liveEvt   = getLiveEvent();
 
-  const visible   = upcoming.filter(e => {
-    if (liveEvt && e.id === liveEvt.id) return false;  // live event handled by banner
-    return !dismissed.has(e.id);
-  });
+  // Dev-68: the live event's own card now renders alongside the Live Panel
+  // banner rather than being replaced by it — Live Panel carries the
+  // live-only tools (Birdie Alert, CttP, real Post-Round Scorecard), the
+  // card carries everything else (Photos, Notes, Rules, Yardage, RSVP).
+  // Previously this event was filtered out of the normal list entirely,
+  // which meant those card-only tools were unreachable for the whole
+  // duration of a live round. The card's own Score icon still hides itself
+  // while the Live Panel is open — see buildEventCard's icon-action-row.
+  const visible   = upcoming.filter(e => !dismissed.has(e.id));
 
   // Hidden count = dismissed events only
   const hiddenCount = upcoming.filter(e => dismissed.has(e.id)).length;
@@ -5379,10 +5384,11 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-badge secondary">📷</span>
         <span class="icon-action-label">Photos</span>
       </button>
+      ${(_livePanelOpen && getLiveEvent()?.id === evt.id) ? '' : `
       <button class="icon-action-btn" onclick="openCardScoreSheet('${evt.id}')">
         <span class="icon-action-badge secondary">🏌️</span>
         <span class="icon-action-label">Score</span>
-      </button>
+      </button>`}
       <button class="icon-action-btn" onclick="openCardNoteSheet('${evt.id}')">
         <span class="icon-action-badge secondary">💬</span>
         <span class="icon-action-label">Notes</span>
