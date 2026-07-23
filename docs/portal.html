@@ -13070,6 +13070,20 @@ async function submitEditGathering(gatheringId) {
     showToast('Pick a Crew or select at least one player', true); return;
   }
 
+  // Capacity-vs-crew-size hard block — ported from the create form's check
+  // (Dev-49), which this Edit mode-toggle didn't originally inherit (real
+  // gap: a Gathering was saved with capacity 4 and only one person invited,
+  // caught in testing). Edit has no "Are you playing?" toggle of its own —
+  // host attendance is read from their actual current registration instead.
+  if (_hostMode === 'crew' && size) {
+    const hostRegisteredYes = gatheringRegData.some(r => r.gatheringId === gatheringId && r.player === currentPlayer && r.status === 'Yes');
+    const totalWithHost = _hostCrewPicked.size + (hostRegisteredYes ? 1 : 0);
+    if (totalWithHost < size) {
+      showToast(`Add more players — ${totalWithHost} selected but capacity is ${size}`, true);
+      return;
+    }
+  }
+
   // Capacity soft-warning: if reducing below current Yes count, prompt first
   if (size) {
     const yesCount = gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes').length;
