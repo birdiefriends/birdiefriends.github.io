@@ -12876,7 +12876,36 @@ async function showEditGatheringForm(gatheringId) {
   if (!g) { showToast('Could not find Gathering', true); return; }
   clearHostActionBar();
 
+  // Mode/crew state init (Dev-68) — same globals the create form reads/writes,
+  // safe to reuse since only one of the two sheets is ever open at once.
+  _hostCrewPicked.clear();
+  _hostSelectedCrewId = null;
+  _hostSelectedCrewName = null;
+  _pendingCrewName = null;
+  _hostMode = g.fillListEnabled ? 'open' : 'crew';
+
   const body = document.getElementById('host-sheet-body');
+  body.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:20px 0">Loading…</div>`;
+
+  try {
+    const crewsData = await gatheringsFetchJSON(`${GATHERINGS_API}/crews?host_id=${encodeURIComponent(currentPlayer)}`);
+    _hostSavedCrews = crewsData.ok ? (crewsData.crews || []) : [];
+  } catch(e) {
+    _hostSavedCrews = [];
+  }
+
+  // Pre-load the Gathering's existing crew (if any) into the picker state so
+  // an unchanged Save doesn't silently drop or reassign it. Open-mode
+  // Gatherings typically have no crew_id at all — that's fine, the crew
+  // section just starts empty and Open→Crew requires picking one.
+  if (!g.fillListEnabled && g.crewId) {
+    try {
+      const memData = await gatheringsFetchJSON(`${GATHERINGS_API}/crews/${g.crewId}/members`);
+      _hostCrewPicked = new Set(memData.ok ? (memData.player_ids || []) : []);
+    } catch(e) { /* leave empty — host can re-pick if this fails */ }
+    _hostSelectedCrewId = g.crewId;
+    _hostSelectedCrewName = g.crewName || null;
+  }
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; renderHostPanelList(); }; }
   const closeBtn = document.getElementById('host-sheet-close-btn');
@@ -12958,9 +12987,55 @@ async function showEditGatheringForm(gatheringId) {
         background:#fff;font-size:0.88rem;font-family:inherit;color:var(--text);
         resize:vertical;min-height:72px;line-height:1.5;box-sizing:border-box">${(g.description || '').replace(/</g,'&lt;')}</textarea>
     </div>
+
+    <div class="section-label">👥 Who's Coming</div>
+
+    <!-- Mode selector — same toggle as create (Dev-49), now editable post-create (Dev-68) -->
+    <div class="seg-toggle" style="margin-bottom:16px">
+      <button id="host-mode-crew" type="button" onclick="setHostMode('crew')" class="seg-btn">
+        👥 Invite a Crew<span class="seg-sub">Pick specific people</span>
+      </button>
+      <button id="host-mode-open" type="button" onclick="setHostMode('open')" class="seg-btn">
+        📢 Open to Members<span class="seg-sub">Anyone available can join</span>
+      </button>
+    </div>
+
+    <div id="host-crew-section">
+    ${_hostSavedCrews.length ? `
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Select an existing Crew</div>
+      <div style="margin-bottom:14px">
+        ${_hostSavedCrews.map(c => `<span class="host-crew-chip${_hostSelectedCrewId === c.id ? ' selected' : ''}" id="saved-crew-${c.id}" onclick="selectSavedCrew(${c.id},'${c.name.replace(/'/g,"\\'")}')">\uD83D\uDCCB ${c.name}</span>`).join('')}
+      </div>
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Create a New Crew</div>
+      <button type="button" onclick="openCrewPickerForNew()"
+        style="width:100%;text-align:left;background:rgba(255,255,255,0.5);border:1.5px dashed var(--border-med);
+        border-radius:10px;padding:11px 14px;font-size:0.88rem;font-weight:600;font-family:inherit;
+        cursor:pointer;color:var(--green-dark);display:flex;align-items:center;gap:8px;margin-bottom:14px"
+        onmouseenter="this.style.background='rgba(255,255,255,0.8)'" onmouseleave="this.style.background='rgba(255,255,255,0.5)'">
+        \uD83D\uDCCB + Build a new Crew group
+      </button>
+      <div id="who-coming-individual-label" style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Or Select Individual Players</div>
+    ` : ''}
+    <button type="button" class="host-crew-select-btn" onclick="openCrewPicker()">
+      <span id="host-crew-select-icon">👥</span><span id="host-crew-select-label">Select players…</span>
+    </button>
+    <div id="host-crew-summary" style="margin-top:10px"></div>
+    </div><!-- end host-crew-section -->
+
+    <div id="host-open-section" style="display:none;padding:14px;background:rgba(255,255,255,0.5);
+      border:1.5px dashed var(--border-med);border-radius:10px;margin-bottom:4px">
+      <div style="font-size:0.88rem;font-weight:600;color:var(--green-dark);margin-bottom:4px">📢 Open Gathering</div>
+      <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.5">
+        All members with <strong>Gathering Alerts</strong> turned on will be notified.
+        Anyone can respond Yes, No, or Sub — and they'll show up as your crew.
+      </div>
+    </div>
+
     <button class="host-cta-btn" style="margin-top:16px" id="btn-edit-gathering"
       onclick="submitEditGathering(${gatheringId})">💾 Save Changes</button>
   `;
+  setHostMode(_hostMode);
+  renderHostCrewSummary();
 }
 
 async function submitEditGathering(gatheringId) {
@@ -12990,6 +13065,11 @@ async function submitEditGathering(gatheringId) {
   const offM = String(Math.abs(off)%60).padStart(2,'0');
   const localEventTimeISO = `${dateVal}T${timeVal}:00${offSign}${offH}:${offM}`;
 
+  // Mode validation — mirrors the create form's rule (Dev-68)
+  if (_hostMode === 'crew' && !_hostSelectedCrewId && _hostCrewPicked.size === 0) {
+    showToast('Pick a Crew or select at least one player', true); return;
+  }
+
   // Capacity soft-warning: if reducing below current Yes count, prompt first
   if (size) {
     const yesCount = gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes').length;
@@ -13008,6 +13088,37 @@ async function submitEditGathering(gatheringId) {
       ? 'suggested' : 'confirmed';
     const editHoles9Btn = document.getElementById('host-edit-holes-9');
     const holes = (editHoles9Btn && editHoles9Btn.classList.contains('seg-btn-active')) ? 9 : 18;
+
+    // Resolve mode → fill_list_enabled + crew_id (Dev-68). Crew→Open is a
+    // straightforward flip — no crew changes needed, the old crew_id is left
+    // in place but becomes irrelevant to notifications/visibility once
+    // fill_list_enabled=1. Open→Crew (or reassigning a different crew) may
+    // require creating a brand new crew first, same as the create form.
+    let fillListEnabled = _hostMode === 'open';
+    let crewId = null;
+    let newCrewNotifyNames = [];
+    const modeChangedToCrew = !fillListEnabled;
+
+    if (modeChangedToCrew) {
+      if (_hostSelectedCrewId) {
+        crewId = _hostSelectedCrewId;
+      } else {
+        // Ad hoc selection built fresh — create a new Crew, same pattern as
+        // submitNewGathering's crew-mode branch.
+        const notifyNames = [..._hostCrewPicked].filter(n => n !== currentPlayer);
+        const crewData = await gatheringsFetchJSON(`${GATHERINGS_API}/crews`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ host_id: currentPlayer, name: _pendingCrewName, player_ids: notifyNames })
+        });
+        if (!crewData.ok) throw new Error(crewData.error || 'Crew creation failed');
+        crewId = crewData.id;
+      }
+      // Only notify if the crew actually changed from what this Gathering had before
+      if (crewId !== g.crewId) {
+        newCrewNotifyNames = [..._hostCrewPicked].filter(n => n !== currentPlayer);
+      }
+    }
+
     const patchBody = {
       host_id: currentPlayer,
       title, venue: venue || null,
@@ -13015,9 +13126,11 @@ async function submitEditGathering(gatheringId) {
       gathering_type: gatheringType,
       description,
       tee_time_status: teeTimeStatus,
-      holes
+      holes,
+      fill_list_enabled: fillListEnabled
     };
     if (size) patchBody.size = size;
+    if (modeChangedToCrew) patchBody.crew_id = crewId;
 
     const resp = await gatheringsFetchJSON(`${GATHERINGS_API}/gatherings/${gatheringId}`, {
       method: 'PATCH',
@@ -13027,8 +13140,20 @@ async function submitEditGathering(gatheringId) {
 
     if (!resp.ok) throw new Error(resp.error || 'Edit failed');
 
+    if (newCrewNotifyNames.length) {
+      osSendToPlayers(newCrewNotifyNames, 'New Gathering',
+        `${currentPlayer} invited you to "${title}" — ${formatDate(newEventTime)} at ${formatTime(newEventTime)}.`,
+        'https://birdiefriends.com/portal.html', 'gathering_invite',
+        { gathering_id: gatheringId, invited: newCrewNotifyNames })
+        .catch(e => console.warn('Invite notify failed:', e));
+    }
+
     if (resp.dateChanged) {
       showToast('📅 Date updated — crew notified to re-confirm');
+    } else if (fillListEnabled && !g.fillListEnabled) {
+      showToast('✅ Gathering is now Open to all members');
+    } else if (!fillListEnabled && g.fillListEnabled) {
+      showToast('✅ Gathering switched to Invite a Crew');
     } else {
       showToast('✅ Gathering updated');
     }
@@ -13185,7 +13310,7 @@ async function showNewGatheringForm() {
     ` : ''}
 
     <button type="button" class="host-crew-select-btn" onclick="openCrewPicker()">
-      <span id="host-crew-select-icon">\U0001F465</span><span id="host-crew-select-label">Select players…</span>
+      <span id="host-crew-select-icon">👥</span><span id="host-crew-select-label">Select players…</span>
     </button>
     <div id="host-crew-summary" style="margin-top:10px"></div>
     </div><!-- end host-crew-section -->
