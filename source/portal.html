@@ -2943,7 +2943,10 @@ body {
   </div>
 </div>
 
-<div class="bf-modal-overlay" id="card-score-modal" onclick="closeModalOnOverlay(event,'card-score-modal')">
+<div class="bf-modal-overlay" id="card-score-modal" onclick="closeModalOnOverlay(event,'card-score-modal')" style="z-index:9000">
+  <!-- z-index explicit — same stacking bug class as score-detail-modal/photo-lightbox
+       (Dev-67): now also opened from inside My History's detail view (8950) via the
+       Dev-69 history icon row, not just the live card, so it needs to render above it. -->
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
@@ -2959,7 +2962,8 @@ body {
   </div>
 </div>
 
-<div class="bf-modal-overlay" id="card-photo-modal" onclick="closeCardPhotoModalOverlayGuarded(event)">
+<div class="bf-modal-overlay" id="card-photo-modal" onclick="closeCardPhotoModalOverlayGuarded(event)" style="z-index:9000">
+  <!-- z-index explicit — see card-score-modal's comment above; same fix, same reason. -->
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
@@ -3008,7 +3012,8 @@ body {
   </div>
 </div>
 
-<div class="bf-modal-overlay" id="card-notes-modal" onclick="closeModalOnOverlay(event,'card-notes-modal')">
+<div class="bf-modal-overlay" id="card-notes-modal" onclick="closeModalOnOverlay(event,'card-notes-modal')" style="z-index:9000">
+  <!-- z-index explicit — see card-score-modal's comment above; same fix, same reason. -->
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
@@ -10283,6 +10288,63 @@ function historyResolveEvent(key) {
   return eventData.find(e => e.source !== 'gathering' && e.name === key) || null;
 }
 
+// Dev-69 — resolves a My History group key into an evt-shaped object good
+// enough to hand to the card Photo/Score/Note sheets (openCardPhotoSheet/
+// openCardScoreSheet/openCardNoteSheet), which is the whole point of
+// replicating those icons here: a player should be able to add a photo,
+// log a score, or leave a note for a round from months ago, long after its
+// card — and the eventData/gatheringData row behind it — has aged out of
+// the loaded list. Prefers the real object (richer: location/holes/dt for
+// par-autofill and venue lookups) but falls back to a minimal synthetic one
+// built from the key alone so the sheets still open and still target the
+// right event/Gathering; they degrade gracefully with no venue data,
+// exactly like detailLine/crewLine/resultsClippingLink already do elsewhere
+// in this same detail view when groupEvt comes back null.
+function historyEvtForSheets(key) {
+  const resolved = historyResolveEvent(key);
+  if (resolved) return resolved;
+  if (key.startsWith('gathering:')) {
+    const id = key.slice('gathering:'.length);
+    return { source: 'gathering', gatheringId: id, name: myPhotoGroupLabel(key).replace(/^👥\s*/, '') };
+  }
+  return { name: key };
+}
+
+// Dev-69 — thin wrappers so the History icon row's onclick attributes can
+// just pass the group key (a plain string, safe to embed inline) rather
+// than trying to serialize an evt object into markup.
+function openHistoryPhotoSheet(key) { openCardPhotoSheet(historyEvtForSheets(key)); }
+function openHistoryScoreSheet(key) { openCardScoreSheet(historyEvtForSheets(key)); }
+function openHistoryNoteSheet(key)  { openCardNoteSheet(historyEvtForSheets(key)); }
+
+// Dev-69 — same three icons as the live event card's icon-action-row
+// (Photos/Score/Notes; Rules/Yardage are gameday reference tools with no
+// place in a look-back view), so a player can add a photo, log a score, or
+// leave a note for a round from months ago — this was the whole point
+// raised for building this: it turns out to be natural to want to update
+// these long after the card itself has expired off Home. Opens the exact
+// same modals/state (_cardPhotoEvt/_cardScoreEvt/_cardNoteEvt) the card
+// uses, just seeded from historyEvtForSheets instead of an eventData id
+// lookup — see that function's comment for why.
+function historyIconActionRow(key) {
+  const escKey = key.replace(/'/g, "\\'");
+  return `
+    <div class="icon-action-row" style="justify-content:flex-start;gap:26px;margin:2px 0 12px">
+      <button class="icon-action-btn" onclick="openHistoryPhotoSheet('${escKey}')">
+        <span class="icon-action-badge secondary">📷</span>
+        <span class="icon-action-label">Photos</span>
+      </button>
+      <button class="icon-action-btn" onclick="openHistoryScoreSheet('${escKey}')">
+        <span class="icon-action-badge secondary">🏌️</span>
+        <span class="icon-action-label">Score</span>
+      </button>
+      <button class="icon-action-btn" onclick="openHistoryNoteSheet('${escKey}')">
+        <span class="icon-action-badge secondary">💬</span>
+        <span class="icon-action-label">Notes</span>
+      </button>
+    </div>`;
+}
+
 // Venue / tee time / event type / crew — one line, only the pieces that
 // exist for this event's shape (a regular event has no gatheringType or
 // crewName, a Gathering's .format is just the literal string 'Gathering'
@@ -10493,6 +10555,7 @@ function openHistoryDetail(idx) {
         ${detailLine}
         ${crewLine}
       </div>
+      ${historyIconActionRow(key)}
       ${resultsClippingLink(groupEvt)}
       ${scoreBlock}
       ${photoBlock}
@@ -10850,8 +10913,12 @@ function csPrefillHolesFromPar() {
   }
 }
 
-function openCardScoreSheet(evtId) {
-  const evt = eventData.find(e => e.id === evtId);
+// Dev-69 — accepts either an evtId (legacy live-card usage, looked up in
+// eventData) or a full evt-shaped object directly (My History usage, where
+// the source row may have aged out of eventData and was already resolved/
+// synthesized by historyEvtForSheets before getting here).
+function openCardScoreSheet(evtOrId) {
+  const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => e.id === evtOrId);
   if (!evt) return;
   _cardScoreEvt   = evt;
   _csHoles        = new Array(18).fill(null);
@@ -11662,6 +11729,10 @@ async function submitCardScore() {
     showToast('✅ Score saved!');
     captureEventWeather(evt); // Dev-67 — fire-and-forget, no-op if already cached
     closeModal('card-score-modal');
+    // Dev-69 — the History icon row means this sheet can now be opened from
+    // inside My History too, not just the live card; refresh whichever of
+    // the two is actually open, same pattern the delete paths already use.
+    if (document.getElementById('my-history-detail-view').style.display !== 'none') { refreshHistoryAfterEdit(); } else if (document.getElementById('my-history-list-view').style.display !== 'none') { loadMyHistory(); }
   } catch(e) {
     if (statusEl) statusEl.textContent = '';
     showToast('Error: ' + e.message, true);
@@ -11830,8 +11901,10 @@ function weatherCodeIcon(code) {
   return '🌡️';
 }
 
-function openCardPhotoSheet(evtId) {
-  const evt = eventData.find(e => e.id === evtId);
+// Dev-69 — accepts either an evtId or a full evt object directly; see
+// openCardScoreSheet's comment above for why.
+function openCardPhotoSheet(evtOrId) {
+  const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => e.id === evtOrId);
   if (!evt) return;
   _cardPhotoEvt = evt;
   const titleEl = document.getElementById('card-photo-title');
@@ -12049,6 +12122,9 @@ async function cardPhotoCameraPicked(inputEl) {
     showToast(data.media_type === 'video' ? '✅ Video added!' : '✅ Photo added!');
     captureEventWeather(evt); // Dev-67 — fire-and-forget, no-op if already cached
     loadCardPhotos();
+    // Dev-69 — same reasoning as submitCardScore/submitCardNote: this sheet
+    // can now be opened from inside My History via the new icon row.
+    if (document.getElementById('my-history-detail-view').style.display !== 'none') { refreshHistoryAfterEdit(); } else if (document.getElementById('my-history-list-view').style.display !== 'none') { loadMyHistory(); }
   } catch(e) {
     setCardPhotoBusy(false);
     showToast('Error: ' + e.message, true);
@@ -12261,8 +12337,10 @@ function renderRulesContent() {
     renderRulesSection(RULES_CONTENT.netdouble, RULES_CONTENT.netdouble.body);
 }
 
-function openCardNoteSheet(evtId) {
-  const evt = eventData.find(e => e.id === evtId);
+// Dev-69 — accepts either an evtId or a full evt object directly; see
+// openCardScoreSheet's comment above for why.
+function openCardNoteSheet(evtOrId) {
+  const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => e.id === evtOrId);
   if (!evt) return;
   _cardNoteEvt = evt;
   const titleEl = document.getElementById('card-notes-title');
@@ -12415,6 +12493,9 @@ async function submitCardNote() {
     if (input) input.value = '';
     showToast('📌 Note added!');
     loadCardNotes();
+    // Dev-69 — same reasoning as submitCardScore above: this sheet can now
+    // be opened from inside My History via the new icon row.
+    if (document.getElementById('my-history-detail-view').style.display !== 'none') { refreshHistoryAfterEdit(); } else if (document.getElementById('my-history-list-view').style.display !== 'none') { loadMyHistory(); }
   } catch(e) {
     if (statusEl) statusEl.textContent = '';
     showToast('Error: ' + e.message, true);
