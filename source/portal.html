@@ -10312,24 +10312,30 @@ function historyEvtForSheets(key) {
 
 // Dev-69 — thin wrappers so the History icon row's onclick attributes can
 // just pass the group key (a plain string, safe to embed inline) rather
-// than trying to serialize an evt object into markup.
+// than trying to serialize an evt object into markup. No Notes wrapper —
+// see historyIconActionRow's comment for why that one icon was dropped.
 function openHistoryPhotoSheet(key) { openCardPhotoSheet(historyEvtForSheets(key)); }
 function openHistoryScoreSheet(key) { openCardScoreSheet(historyEvtForSheets(key)); }
-function openHistoryNoteSheet(key)  { openCardNoteSheet(historyEvtForSheets(key)); }
 
-// Dev-69 — same three icons as the live event card's icon-action-row
-// (Photos/Score/Notes; Rules/Yardage are gameday reference tools with no
-// place in a look-back view), so a player can add a photo, log a score, or
-// leave a note for a round from months ago — this was the whole point
-// raised for building this: it turns out to be natural to want to update
-// these long after the card itself has expired off Home. Opens the exact
-// same modals/state (_cardPhotoEvt/_cardScoreEvt/_cardNoteEvt) the card
-// uses, just seeded from historyEvtForSheets instead of an eventData id
-// lookup — see that function's comment for why.
+// Dev-69 — Photos and Score from the live event card's icon-action-row, so
+// a player can add a photo or log a score for a round from months ago —
+// this was the whole point raised for building this: it turns out to be
+// natural to want to update these long after the card itself has expired
+// off Home. Opens the exact same modals/state (_cardPhotoEvt/_cardScoreEvt)
+// the card uses, just seeded from historyEvtForSheets instead of an
+// eventData id lookup — see that function's comment for why.
+//
+// Notes deliberately excluded (Dev-69 correction, same session): My History
+// already has its own full note thread inline (add/edit/delete, via
+// renderHistoryNoteCompose/renderNoteChip below) — a Notes icon here would
+// have opened the card-notes-modal's own separate compose box for the exact
+// same thread, a real duplicate-add-note path rather than a genuinely new
+// capability like Photos/Score are. Unlike those two, Notes had nothing to
+// add.
 function historyIconActionRow(key) {
   const escKey = key.replace(/'/g, "\\'");
   return `
-    <div class="icon-action-row" style="justify-content:flex-start;gap:26px;margin:2px 0 12px">
+    <div class="icon-action-row" style="justify-content:flex-start;gap:26px;margin:12px 0 2px">
       <button class="icon-action-btn" onclick="openHistoryPhotoSheet('${escKey}')">
         <span class="icon-action-badge secondary">📷</span>
         <span class="icon-action-label">Photos</span>
@@ -10337,10 +10343,6 @@ function historyIconActionRow(key) {
       <button class="icon-action-btn" onclick="openHistoryScoreSheet('${escKey}')">
         <span class="icon-action-badge secondary">🏌️</span>
         <span class="icon-action-label">Score</span>
-      </button>
-      <button class="icon-action-btn" onclick="openHistoryNoteSheet('${escKey}')">
-        <span class="icon-action-badge secondary">💬</span>
-        <span class="icon-action-label">Notes</span>
       </button>
     </div>`;
 }
@@ -10555,11 +10557,11 @@ function openHistoryDetail(idx) {
         ${detailLine}
         ${crewLine}
       </div>
-      ${historyIconActionRow(key)}
       ${resultsClippingLink(groupEvt)}
       ${scoreBlock}
       ${photoBlock}
       ${notesBlock}
+      ${historyIconActionRow(key)}
     </div>`;
   document.getElementById('my-history-detail-view').style.display = 'flex';
   loadResultsClippingPodium(groupEvt); // Dev-67 — fire-and-forget, fills in the winner once fetched
@@ -12493,9 +12495,6 @@ async function submitCardNote() {
     if (input) input.value = '';
     showToast('📌 Note added!');
     loadCardNotes();
-    // Dev-69 — same reasoning as submitCardScore above: this sheet can now
-    // be opened from inside My History via the new icon row.
-    if (document.getElementById('my-history-detail-view').style.display !== 'none') { refreshHistoryAfterEdit(); } else if (document.getElementById('my-history-list-view').style.display !== 'none') { loadMyHistory(); }
   } catch(e) {
     if (statusEl) statusEl.textContent = '';
     showToast('Error: ' + e.message, true);
