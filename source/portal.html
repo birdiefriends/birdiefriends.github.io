@@ -9319,7 +9319,14 @@ async function venueInputHandler(inputId, suggestionsId) {
           const { suggestions } = await placesLib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
             input: searchQuery,
             includedPrimaryTypes: ['establishment'],
-            locationBias: { center: { lat: 40.8, lng: -75.5 }, radius: 80000 },
+            // Dev-69 — radius capped at 50000 (meters), Google's hard max for
+            // locationBias circles; the previous 80000 was invalid and
+            // Google rejected the whole request with "Invalid circle
+            // radius" — the diagnostics added this session are what
+            // surfaced this as the real root cause, not the importLibrary
+            // change (that fix was still correct/needed, just not the only
+            // thing wrong).
+            locationBias: { center: { lat: 40.8, lng: -75.5 }, radius: 50000 },
             includedRegionCodes: ['us']
           });
           const golfSuggestions = (suggestions || []).filter(isGolfRelated);
