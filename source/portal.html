@@ -3081,29 +3081,41 @@ body {
 <div class="bf-modal-overlay" id="yardage-modal" onclick="closeModalOnOverlay(event,'yardage-modal')">
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <div class="bf-modal-title" style="margin-bottom:0">📏 Layup Calculator</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="bf-modal-title" style="margin-bottom:0" title="Plain subtraction — no slope, wind, or elevation">📏 Layup Calculator</div>
       <button onclick="closeModal('yardage-modal')" title="Close"
         style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
           color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
     </div>
-    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-      Plain subtraction — no slope, wind, or elevation. Enter your distance to the pin and how far you want your layup to leave, and it'll tell you how far to hit it.
+    <!-- Dev-69 — compressed from a stacked label/input/label/input/result
+         column (four rows tall, plus a description paragraph) down to one
+         row: Pin, Leave, and the result read left-to-right like the
+         subtraction they represent. On-course, the number keypad eats the
+         bottom half of the screen the moment either input is focused — the
+         old layout pushed the result below the fold behind it, forcing a
+         scroll mid-swing-thought. This fits above the keypad every time. -->
+    <div style="display:flex;align-items:flex-end;gap:6px">
+      <div style="flex:1;min-width:0">
+        <label style="font-size:0.66rem;color:var(--text-hint);display:block;margin-bottom:3px;white-space:nowrap">Pin (yds)</label>
+        <input type="number" inputmode="numeric" id="yardage-total" placeholder="150"
+          oninput="updateYardageResult()"
+          style="width:100%;box-sizing:border-box;padding:9px 6px;border-radius:8px;border:1px solid var(--border);font-size:0.95rem;font-family:inherit;text-align:center">
+      </div>
+      <div style="font-size:1.05rem;color:var(--text-hint);padding-bottom:9px;flex-shrink:0">−</div>
+      <div style="flex:1;min-width:0">
+        <label style="font-size:0.66rem;color:var(--text-hint);display:block;margin-bottom:3px;white-space:nowrap">Leave (yds)</label>
+        <input type="number" inputmode="numeric" id="yardage-layup" placeholder="100"
+          oninput="updateYardageResult()"
+          style="width:100%;box-sizing:border-box;padding:9px 6px;border-radius:8px;border:1px solid var(--border);font-size:0.95rem;font-family:inherit;text-align:center">
+      </div>
+      <div style="font-size:1.05rem;color:var(--text-hint);padding-bottom:9px;flex-shrink:0">=</div>
+      <div style="flex:1.15;min-width:0">
+        <label style="font-size:0.66rem;color:var(--text-hint);display:block;margin-bottom:3px;white-space:nowrap">Hit it</label>
+        <div id="yardage-result" style="padding:9px 4px;border-radius:8px;background:var(--surface);
+          font-size:1.05rem;font-weight:800;color:var(--text-hint);text-align:center;white-space:nowrap;
+          overflow:hidden;text-overflow:ellipsis">—</div>
+      </div>
     </div>
-    <div style="margin-bottom:12px">
-      <label style="font-size:0.78rem;color:var(--text-hint);display:block;margin-bottom:4px">Distance to pin (yards)</label>
-      <input type="number" inputmode="numeric" id="yardage-total" placeholder="e.g. 150"
-        oninput="updateYardageResult()"
-        style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid var(--border);font-size:1rem;font-family:inherit">
-    </div>
-    <div style="margin-bottom:16px">
-      <label style="font-size:0.78rem;color:var(--text-hint);display:block;margin-bottom:4px">Distance you want left to the pin</label>
-      <input type="number" inputmode="numeric" id="yardage-layup" placeholder="e.g. 100"
-        oninput="updateYardageResult()"
-        style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid var(--border);font-size:1rem;font-family:inherit">
-    </div>
-    <div id="yardage-result" style="text-align:center;padding:14px;border-radius:10px;background:var(--surface);
-      font-size:1.3rem;font-weight:800;color:var(--green-dark)">Enter both distances</div>
   </div>
 </div>
 
@@ -12360,17 +12372,19 @@ function updateYardageResult() {
   const total = parseFloat(document.getElementById('yardage-total')?.value);
   const layup = parseFloat(document.getElementById('yardage-layup')?.value);
   if (!Number.isFinite(total) || !Number.isFinite(layup)) {
-    resultEl.textContent = 'Enter both distances';
+    resultEl.textContent = '—';
     resultEl.style.color = 'var(--text-hint)';
     return;
   }
   const diff = total - layup;
   if (diff <= 0) {
-    resultEl.textContent = "That's past the pin — nothing to lay up";
+    // Dev-69 — was "That's past the pin — nothing to lay up"; the compact
+    // result cell has room for a couple words now, not a sentence.
+    resultEl.textContent = 'Past pin';
     resultEl.style.color = 'var(--text-hint)';
     return;
   }
-  resultEl.textContent = `Hit it ${diff} yards`;
+  resultEl.textContent = `${diff} yd`;
   resultEl.style.color = 'var(--green-dark)';
 }
 
