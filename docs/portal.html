@@ -9099,6 +9099,9 @@ async function cancelAllTestGatherings() {
 let _hostSavedCrews     = [];        // this host's saved (named) Crews
 let _hostCrewPicked     = new Set(); // ad hoc crew-builder selections (player display names)
 let _hostSelectedCrewId = null;      // set when reusing a saved Crew instead of building ad hoc
+let _hostRegisterAllCrew = false;    // Dev-69 — "Register all crew" toggle on the create form:
+                                      // host already knows everyone's playing, so skip individual
+                                      // RSVP and register the whole picked crew as Yes at creation time
 let _hostSelectedCrewName = null;
 let _hostPlaying        = true;      // "Are you playing?" toggle on the create form — defaults Yes
 let _crewPickerMode     = 'create';  // 'create' | 'invite' — controls Done button behavior
@@ -13344,6 +13347,7 @@ async function showNewGatheringForm() {
   _hostPlaying = true;
   _pendingCrewName = null;
   _hostMode = 'crew';
+  _hostRegisterAllCrew = false;
   _hostTeeTimeStatus = 'confirmed';
   _hostHoles = 18;
   clearHostActionBar();
@@ -13482,6 +13486,23 @@ async function showNewGatheringForm() {
       <span id="host-crew-select-icon">👥</span><span id="host-crew-select-label">Select players…</span>
     </button>
     <div id="host-crew-summary" style="margin-top:10px"></div>
+
+    <!-- Dev-69 — "Register all crew" toggle. Only shown once ≥1 crew member
+         is picked (meaningless with zero); registers the whole picked crew
+         as Yes at creation time instead of leaving it to individual RSVP —
+         the use case being a host who already knows everyone's playing. -->
+    <div id="host-register-all-crew-row" onclick="setHostRegisterAllCrew(!_hostRegisterAllCrew)"
+      style="display:none;margin-top:12px;padding:11px 14px;background:rgba(255,255,255,0.5);
+      border:1.5px solid var(--border-med);border-radius:10px;align-items:flex-start;gap:10px;
+      cursor:pointer">
+      <span id="host-register-all-crew-check" style="font-size:1.1rem;line-height:1.3">☐</span>
+      <div>
+        <div style="font-size:0.86rem;font-weight:700;color:var(--text)">Register all crew as Yes</div>
+        <div style="font-size:0.76rem;color:var(--text-muted);line-height:1.4">
+          Skip individual RSVP — use this when you already know everyone's playing. They'll still get notified, just as confirmed rather than invited.
+        </div>
+      </div>
+    </div>
     </div><!-- end host-crew-section -->
 
     <!-- Open mode explanation — shown when Open to Members is selected -->
@@ -13564,6 +13585,10 @@ function setHostMode(mode) {
   openBtn.classList.toggle('seg-btn-active', mode === 'open');
   if (crewSec) crewSec.style.display = mode === 'crew' ? 'block' : 'none';
   if (openSec) openSec.style.display = mode === 'open' ? 'block' : 'none';
+  // Dev-69 — Open Gatherings have no fixed picked crew to register, so the
+  // toggle doesn't apply there; reset it so switching back to Crew mode
+  // later in the same session doesn't carry over a stale "on" state.
+  if (mode === 'open' && _hostRegisterAllCrew) setHostRegisterAllCrew(false);
 }
 
 
@@ -13598,12 +13623,15 @@ function renderHostCrewSummary() {
   const labelEl    = document.getElementById('host-crew-select-label');
   const iconEl     = document.getElementById('host-crew-select-icon');
   const indivLabel = document.getElementById('who-coming-individual-label');
+  const registerAllRow = document.getElementById('host-register-all-crew-row'); // Dev-69 — only present on the create form; null (no-op) elsewhere
   if (!el) return;
   if (_hostCrewPicked.size === 0) {
     el.innerHTML = '';
     if (labelEl)    labelEl.textContent      = 'Select players…';
     if (iconEl)     iconEl.textContent       = '👥';
     if (indivLabel) indivLabel.style.display = 'block';
+    if (registerAllRow) registerAllRow.style.display = 'none';
+    if (_hostRegisterAllCrew) setHostRegisterAllCrew(false); // nothing left to register, don't leave it silently on
     return;
   }
   const namedCrew = _hostSelectedCrewId ? _hostSelectedCrewName : _pendingCrewName;
@@ -13621,6 +13649,18 @@ function renderHostCrewSummary() {
   el.innerHTML = [..._hostCrewPicked].map(name =>
     `<span class="host-crew-summary-chip">${name}<button type="button" onclick="removeCrewMember('${name.replace(/'/g, "\\\\'")}')">✕</button></span>`
   ).join('');
+  if (registerAllRow) registerAllRow.style.display = 'flex';
+}
+// Dev-69 — the create form's "Register all crew" toggle. Kept as its own
+// setter (rather than inlining the DOM writes at each call site) since it's
+// flipped both by direct tap and programmatically (cleared when the picked
+// crew empties out or the host switches to Open mode).
+function setHostRegisterAllCrew(val) {
+  _hostRegisterAllCrew = val;
+  const check = document.getElementById('host-register-all-crew-check');
+  const row   = document.getElementById('host-register-all-crew-row');
+  if (check) check.textContent = val ? '☑️' : '☐';
+  if (row)   row.style.borderColor = val ? 'var(--green)' : 'var(--border-med)';
 }
 function removeCrewMember(name) {
   _hostCrewPicked.delete(name);
@@ -13965,12 +14005,34 @@ async function submitNewGathering() {
       });
     }
 
+    // Dev-69 — "Register all crew" toggle: host already knows everyone's
+    // playing, so register the whole picked crew as Yes right away instead
+    // of leaving each of them to individually RSVP. Same best-effort
+    // fire-and-forget pattern as the host's own self-registration above —
+    // a failure here shouldn't undo the Gathering, just surface a warning.
+    // Loops one POST per player since /registrations only accepts a single
+    // player_id per call — no bulk endpoint, and adding one for what's at
+    // most a dozen-ish parallel requests isn't worth a Worker change.
+    if (_hostMode === 'crew' && _hostRegisterAllCrew && notifyNames.length) {
+      Promise.all(notifyNames.map(name =>
+        gatheringsFetchJSON(`${GATHERINGS_API}/registrations`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gathering_id: gathData.id, player_id: name, status: 'yes' })
+        })
+      )).catch(e => {
+        console.warn('Register-all-crew failed:', e);
+        showToast('⚠️ Gathering created, but auto-registering some of the crew failed — they can still register individually', true);
+      });
+    }
+
     if (notifyNames.length) {
       const notifType = fillListEnabled ? 'gathering_open_invite' : 'gathering_invite';
       const notifTitle = fillListEnabled ? '📢 Open Gathering' : 'New Gathering';
       const notifBody  = fillListEnabled
         ? `${currentPlayer} is hosting "${title}" — ${formatDate(eventTimeDate)} at ${formatTime(eventTimeDate)}. Open to all members.`
-        : `${currentPlayer} invited you to "${title}" — ${formatDate(eventTimeDate)} at ${formatTime(eventTimeDate)}.`;
+        : (_hostRegisterAllCrew
+            ? `${currentPlayer} added you to "${title}" — ${formatDate(eventTimeDate)} at ${formatTime(eventTimeDate)}. You're registered as playing — no RSVP needed.`
+            : `${currentPlayer} invited you to "${title}" — ${formatDate(eventTimeDate)} at ${formatTime(eventTimeDate)}.`);
       const notifMeta  = fillListEnabled
         ? { gathering_id: gathData.id }
         : { gathering_id: gathData.id, invited: notifyNames };
