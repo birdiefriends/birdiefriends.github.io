@@ -11201,17 +11201,14 @@ function csSetStroke(i, val) {
   if (_csPars && !_csMarkManual[i]) {
     _csMarks[i] = csMarkFromPar(val, _csPars[i]);
   }
-  if (_csPars) {
-    // Real par known for this venue — the mark just auto-generated above
-    // is usually already correct, so speed wins again here; auto-advance
-    // restored for this case, same as the original behavior.
-    _csPicking = (i < 17) ? i + 1 : null;
-  } else {
-    // No par data for this venue — marking is fully manual, so staying on
-    // the hole keeps the up/down mark dots visible right when they're
-    // needed, instead of forcing a step back to adjust them.
-    _csPicking = i;
-  }
+  // Dev-69 — auto-advance reinstated for the no-known-par case too, per
+  // explicit request: entering a score now always moves to the next hole,
+  // known par or not. The previous behavior deliberately stayed on the
+  // hole here so the up/down mark dots (only rendered for the active hole,
+  // see the grid render's isActive gate) were immediately visible for
+  // manual marking — that's still one tap away by tapping the hole number
+  // again, just no longer the default after every stroke entry.
+  _csPicking = (i < 17) ? i + 1 : null;
   renderCardScoreGrid();
 }
 
