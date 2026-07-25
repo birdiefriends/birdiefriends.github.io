@@ -9202,10 +9202,26 @@ function sortVenuesAlpha(venues) {
   });
 }
 
-function placesApiAvailable() {
-  return typeof google !== 'undefined' &&
-    google.maps && google.maps.places &&
-    typeof google.maps.places.AutocompleteSuggestion !== 'undefined';
+// Places library — loaded via importLibrary, not assumed to already be
+// sitting on google.maps.places. This *is* the fix for the "venue finder
+// only shows D1 courses" bug: the old placesApiAvailable() checked
+// `typeof google.maps.places.AutocompleteSuggestion !== 'undefined'`
+// synchronously, but Google's docs are explicit that AutocompleteSuggestion
+// must be obtained by awaiting importLibrary('places') — it's not reliably
+// pre-attached to the namespace just from `libraries=places` in the script
+// URL. When that synchronous check came back false, the whole Google
+// Places branch below silently no-opped (no error, nothing in console),
+// leaving only the "Your Courses" D1 list — precisely the symptom reported.
+// Cached as a single promise so every call site awaits the same in-flight
+// (or already-resolved) import rather than re-requesting it.
+let _placesLibraryPromise = null;
+function loadPlacesLibrary() {
+  if (!_placesLibraryPromise) {
+    _placesLibraryPromise = (typeof google !== 'undefined' && google.maps && typeof google.maps.importLibrary === 'function')
+      ? google.maps.importLibrary('places').catch(e => { console.warn('[Venues] Places library failed to load:', e.message); return null; })
+      : Promise.resolve(null);
+  }
+  return _placesLibraryPromise;
 }
 
 async function venueInputHandler(inputId, suggestionsId) {
@@ -9252,9 +9268,10 @@ async function venueInputHandler(inputId, suggestionsId) {
       });
     }
 
-    // Google Places results
-    // Google Places results — new AutocompleteSuggestion API
-    if (placesApiAvailable()) {
+    // Google Places results — new AutocompleteSuggestion API, loaded via
+    // importLibrary (see loadPlacesLibrary's comment for why this changed).
+    const placesLib = await loadPlacesLibrary();
+    if (placesLib && placesLib.AutocompleteSuggestion) {
       const golfKeywords = ['golf', 'country', 'club', 'links'];
       const isGolfRelated = s => {
         const mainText = s.placePrediction.mainText.toString().toLowerCase();
@@ -9263,7 +9280,7 @@ async function venueInputHandler(inputId, suggestionsId) {
       const needsGolfHint = !golfKeywords.some(k => query.toLowerCase().includes(k));
       const searchQuery = needsGolfHint ? query + ' golf' : query;
       try {
-        const { suggestions } = await google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+        const { suggestions } = await placesLib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
           input: searchQuery,
           includedPrimaryTypes: ['establishment'],
           locationBias: { center: { lat: 40.8, lng: -75.5 }, radius: 80000 },
