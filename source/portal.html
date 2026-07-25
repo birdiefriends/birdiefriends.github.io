@@ -12,6 +12,19 @@
 <title>BirdieFriends</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"></script>
+<script>
+  // Dev-69 — Google Maps auth failures (bad key, missing billing, an API
+  // not enabled in Cloud Console, referrer restriction mismatch) don't
+  // throw a normal catchable JS error from the API calls that use them —
+  // Google reports them by calling this global callback instead, often
+  // with everything else just silently returning empty. Setting a flag
+  // here is the only reliable way for venueInputHandler to tell "the API
+  // legitimately found nothing" apart from "the API never got to run."
+  window.gm_authFailure = function() {
+    window._gmAuthFailure = true;
+    console.error('[Venues] Google Maps auth failure — check API key restrictions, billing, and that "Places API (New)" is enabled in Cloud Console.');
+  };
+</script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAn1TR2p6JbWR2fr5ydhkurygKpYU9HYtw&libraries=places&loading=async" async defer></script>
 
 <style>
@@ -9215,11 +9228,21 @@ function sortVenuesAlpha(venues) {
 // Cached as a single promise so every call site awaits the same in-flight
 // (or already-resolved) import rather than re-requesting it.
 let _placesLibraryPromise = null;
+let _placesDiag = null; // Dev-69 — last known reason the Places branch came up empty, surfaced in the dropdown itself (see venueInputHandler)
 function loadPlacesLibrary() {
   if (!_placesLibraryPromise) {
-    _placesLibraryPromise = (typeof google !== 'undefined' && google.maps && typeof google.maps.importLibrary === 'function')
-      ? google.maps.importLibrary('places').catch(e => { console.warn('[Venues] Places library failed to load:', e.message); return null; })
-      : Promise.resolve(null);
+    if (typeof google === 'undefined' || !google.maps || typeof google.maps.importLibrary !== 'function') {
+      _placesDiag = 'Maps script not loaded (google.maps.importLibrary missing)';
+      _placesLibraryPromise = Promise.resolve(null);
+    } else {
+      _placesLibraryPromise = google.maps.importLibrary('places')
+        .then(lib => { _placesDiag = null; return lib; })
+        .catch(e => {
+          _placesDiag = 'importLibrary error: ' + (e && e.message ? e.message : String(e));
+          console.warn('[Venues] Places library failed to load:', e);
+          return null;
+        });
+    }
   }
   return _placesLibraryPromise;
 }
@@ -9270,40 +9293,62 @@ async function venueInputHandler(inputId, suggestionsId) {
 
     // Google Places results — new AutocompleteSuggestion API, loaded via
     // importLibrary (see loadPlacesLibrary's comment for why this changed).
-    const placesLib = await loadPlacesLibrary();
-    if (placesLib && placesLib.AutocompleteSuggestion) {
-      const golfKeywords = ['golf', 'country', 'club', 'links'];
-      const isGolfRelated = s => {
-        const mainText = s.placePrediction.mainText.toString().toLowerCase();
-        return golfKeywords.some(k => mainText.includes(k));
-      };
-      const needsGolfHint = !golfKeywords.some(k => query.toLowerCase().includes(k));
-      const searchQuery = needsGolfHint ? query + ' golf' : query;
-      try {
-        const { suggestions } = await placesLib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
-          input: searchQuery,
-          includedPrimaryTypes: ['establishment'],
-          locationBias: { center: { lat: 40.8, lng: -75.5 }, radius: 80000 },
-          includedRegionCodes: ['us']
-        });
-        const golfSuggestions = (suggestions || []).filter(isGolfRelated);
-        if (golfSuggestions.length) {
-          html += `<div style="font-size:0.68rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.08em;padding:6px 12px 2px">Search Results</div>`;
-          golfSuggestions.slice(0, 5).forEach(s => {
-            const pred = s.placePrediction;
-            const name = pred.mainText.toString();
-            const sub  = pred.secondaryText ? pred.secondaryText.toString() : '';
-            html += `<div class="venue-suggestion" onclick="selectVenue('${name.replace(/'/g,"\\'")}','${inputId}','${suggestionsId}')"
-              style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)"
-              onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
-              <div style="font-size:0.88rem">${name}</div>
-              <div style="font-size:0.72rem;color:var(--text-muted)">${sub}</div>
-            </div>`;
+    // Dev-69 — every branch below sets a one-line diagnostic and renders it
+    // into the dropdown (small, muted, under "Search Results") rather than
+    // just console.warn-ing and going silent. The first fix here (switching
+    // to importLibrary) turned out not to be the whole story, so rather than
+    // guess again blind, this makes the actual failure visible on-device —
+    // whatever shows up next tells us exactly which of auth/enablement/
+    // filtering is the real cause.
+    let placesDiagLine = '';
+    if (window._gmAuthFailure) {
+      placesDiagLine = 'Google Maps auth failure — check API key restrictions, billing, and that "Places API (New)" is enabled';
+    } else {
+      const placesLib = await loadPlacesLibrary();
+      if (!placesLib || !placesLib.AutocompleteSuggestion) {
+        placesDiagLine = _placesDiag || 'Places library unavailable';
+      } else {
+        const golfKeywords = ['golf', 'country', 'club', 'links'];
+        const isGolfRelated = s => {
+          const mainText = s.placePrediction.mainText.toString().toLowerCase();
+          return golfKeywords.some(k => mainText.includes(k));
+        };
+        const needsGolfHint = !golfKeywords.some(k => query.toLowerCase().includes(k));
+        const searchQuery = needsGolfHint ? query + ' golf' : query;
+        try {
+          const { suggestions } = await placesLib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+            input: searchQuery,
+            includedPrimaryTypes: ['establishment'],
+            locationBias: { center: { lat: 40.8, lng: -75.5 }, radius: 80000 },
+            includedRegionCodes: ['us']
           });
+          const golfSuggestions = (suggestions || []).filter(isGolfRelated);
+          if (golfSuggestions.length) {
+            html += `<div style="font-size:0.68rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.08em;padding:6px 12px 2px">Search Results</div>`;
+            golfSuggestions.slice(0, 5).forEach(s => {
+              const pred = s.placePrediction;
+              const name = pred.mainText.toString();
+              const sub  = pred.secondaryText ? pred.secondaryText.toString() : '';
+              html += `<div class="venue-suggestion" onclick="selectVenue('${name.replace(/'/g,"\\'")}','${inputId}','${suggestionsId}')"
+                style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)"
+                onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
+                <div style="font-size:0.88rem">${name}</div>
+                <div style="font-size:0.72rem;color:var(--text-muted)">${sub}</div>
+              </div>`;
+            });
+          } else if (!suggestions || !suggestions.length) {
+            placesDiagLine = `API returned 0 raw suggestions for "${searchQuery}"`;
+          } else {
+            placesDiagLine = `API returned ${suggestions.length} suggestion(s), 0 matched golf keywords — e.g. "${suggestions[0].placePrediction.mainText.toString()}"`;
+          }
+        } catch(e) {
+          placesDiagLine = 'fetchAutocompleteSuggestions error: ' + (e && e.message ? e.message : String(e));
+          console.warn('[Venues] Places API error:', e);
         }
-      } catch(e) {
-        console.warn('[Venues] Places API error:', e.message);
       }
+    }
+    if (placesDiagLine) {
+      html += `<div style="padding:6px 12px;font-size:0.68rem;color:var(--text-hint)">Search Results: ${placesDiagLine}</div>`;
     }
 
     box.innerHTML = html || '<div style="padding:10px 12px;font-size:0.85rem;color:var(--text-muted)">No results — try a different search or ask the commissioner to add the course.</div>';
