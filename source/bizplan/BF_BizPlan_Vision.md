@@ -1,6 +1,6 @@
 # BirdieFriends — Business Plan Vision & Positioning
 *Foundational document · Load at start of every business plan session*
-*Last updated: Session BP-5 · July 6, 2026 · Thesis 3a added from Dev-65 (July 20, 2026), a direct Dev-session cross-post rather than a formal BZP session
+*Last updated: Session BP-6 · July 28, 2026 · One engine/three distribution models supersedes BP-4's Two Products framing; Thesis 3a added from Dev-65 (July 20, 2026), a direct Dev-session cross-post rather than a formal BZP session
 
 ---
 
@@ -14,16 +14,21 @@ Golf is the wedge. Gathering design is the business. The architecture is built t
 
 ---
 
-## Two Products, Two Business Models — BF-E and BF-C (settled BP-4)
+## One engine, three distribution models — BF-E (Occasion + Daily) and BF-C (revised BP-6, supersedes "Two Products, Two Business Models," BP-4)
 
-Recognized late BP-4, after the Community Remit Share work made the distinction unavoidable: **BF-Experiences (BF-E) and BF-Competitive (BF-C) are not two tiers of one product — they are two different businesses sharing infrastructure**, and conflating their economics is what made the Ambassador-role shift (see Gate Log Gate 2 discussion) feel bigger and more unsettled than it needed to.
+BP-4 first split BF-E and BF-C to resolve a real tension (see Gate Log Gate 2), framing them as two different businesses sharing infrastructure. BP-6 sharpens that: **the line was never self-service vs. hosted — it's the player's own use-case intent.** My History surfaced a mode of BF-E that BP-4 hadn't accounted for, and once it's in view, BF resolves into one product with three distribution shapes, not two products:
 
-- **BF-E:** self-service, scales via exposure. A normal software distribution problem — marketing acceptance and competitive replication risk are the real challenges, not organizing effort. Doesn't need an Ambassador to function. Thesis 4's original "accelerant, not requirement" framing applies to BF-E untouched.
-- **BF-C:** requires an Ambassador to physically glue a community together, locally, one club at a time. Not a marketing problem — an organizing problem. This is where Community Remit Share economics (Thesis 4a) actually belong — they were designed for BF-C specifically, not for BF as an undifferentiated whole.
+- **BF-Experiences (BF-E) — Occasion mode.** *"I'm going on a golf trip and I want to document the experience."* Host-initiated, event-priced, GLS-style. The original BF-E use case, unchanged.
+- **BF-Experiences (BF-E) — Daily mode.** Same underlying product — self-service memorialization, the historic package (Thesis 3a) — reached without any organizing act. My History is the proof point: a golfer records their own play with no Host and often no BF-run event at all. Self-service, app-store-pullable, subscription-shaped.
+- **BF-Competitive (BF-C).** *"I'm heading to a BirdieFriends Event."* The branded-intention case. Organizing competition isn't a self-service action, so it requires an Ambassador to physically glue a community together, locally.
 
-**Two-phase go-to-market follows directly from this split (first real content for Gate 5, see Gate Log):** launch BF-E first — lower barrier, broader market, funds and seeds the harder search for Ambassadors. Critically, **BF-E's self-service usage becomes an Ambassador-candidate discovery mechanism**, not just a revenue/exposure play: who hosts repeatedly, who pulls in the most people, who keeps a group coming back is directly observable in BF-E usage data — the same "natural wrangler" pattern from the Customer Discovery Threads below, surfaced organically instead of guessed at through cold recruiting. BF-C launches second, recruiting from a warm, self-revealed pool rather than pitching strangers cold.
+**Occasion and Daily are the same product surfaced two ways, not two products** — both are BF-E, and both share BF-E's defining trait: no Ambassador is required for either to function (Thesis 4's "accelerant, not requirement" framing applies to both modes untouched). BF-C remains the one distribution model where organizing effort is real, local, and non-substitutable — this is where Community Remit Share economics (Thesis 4a) belong, not BF as an undifferentiated whole.
 
-This also sharpens the Gate 3 moat argument: BF-E's tech is acknowledged as easy to replicate (Thesis 1), so the race isn't "launch before competitors copy the feature set" — it's "use BF-E's easy-to-copy runway to find and seed the hard-to-copy asset (Ambassador-glued BF-C communities) before anyone else gets there."
+**Two-phase go-to-market still follows, refined:** launch BF-E (both modes) first — lower barrier, broader market, funds and seeds the harder search for Ambassadors. BF-E's usage becomes an Ambassador-candidate discovery mechanism — who hosts repeatedly, who plays heavily, who keeps a group coming back is directly observable, the same "natural wrangler" pattern from the Customer Discovery Threads below, surfaced organically instead of guessed at through cold recruiting. BF-C launches second, recruiting from that warm, self-revealed pool.
+
+This still sharpens the Gate 3 moat argument unchanged: BF-E's tech is acknowledged as easy to replicate (Thesis 1), so the race isn't "launch before competitors copy the feature set" — it's "use BF-E's easy-to-copy runway to find and seed the hard-to-copy asset (Ambassador-glued BF-C communities) before anyone else gets there."
+
+**Ambassador comp routing (Gate 2, Ambassador Commission Structure, revised BP-6) falls directly out of this line, and no longer needs separate justification:** relationship-based comp (subscription + BF-E, either mode) follows the player's personally-chosen Ambassador; effort-based comp (BF-C) follows whoever organizes that specific community. The two-mechanic comp model isn't a special case bolted onto the split — it's just paying for whichever kind of value-creation actually happened.
 
 ---
 
