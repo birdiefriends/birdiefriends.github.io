@@ -201,3 +201,38 @@ Founder was "still chewing" on the overall picture at end of session — next se
 **Chat-rename string:** `BZP#5 - BirdieFriends Engine Correction & Investment Inventory`
 
 **Deploy note:** four files pushed this session (Vision, Gate Log, new Investment Inventory, Session Log) — PIN provided by founder for this session's push.
+
+## Session BP-6 · July 28, 2026
+
+**Focus:** Resolve the twice-deferred BF-E/BF-C split pressure-test (carried from BP-4/BP-5); ground Ambassador unit economics in real BSGC data
+
+**Key decisions:**
+- **Core reframe: BF is one engine with three distribution models, not two businesses.** My History surfaced a self-service, non-organized mode of BF-E (Daily) that BP-4's "two businesses sharing infrastructure" framing hadn't accounted for. Resolved as **BF-Experiences (BF-E) — Occasion mode** ("I'm going on a golf trip and want to document it") and **Daily mode** ("My History as a standalone, no-Host-needed capability"), plus **BF-Competitive (BF-C)** ("I'm heading to a BirdieFriends Event"). The separating line is the player's own use-case intent, not self-service vs. hosted. Vision's "Two Products, Two Business Models" section rewritten accordingly — see `BF_BizPlan_Vision.md`.
+- **Ambassador comp model rebuilt around two routing mechanics, one shared 50% pool:** relationship-based (subscription + BF-E, either mode) follows the player's personally-chosen 1:1 Ambassador; effort-based (BF-C) follows the local organizing Ambassador, splitting 60/40 (local/chosen) when the two differ. Resolves the double-dip risk between personal attribution and community-level economics without needing two separate mechanics.
+- **Origination/signup bonus — explicitly dropped, not deleted.** Modeled a flat $20/player bonus (goes underwater on a single well-attended BF-E event), a tiered per-channel structure (~$2.50–$12, technically sound but "engineering speculative signup psychology"), and a 60/40 margin-shift-funded bonus pool (nets only ~$4.48/player at realistic scale — too small to be persuasive). Standing position: flat 50/50 split, full stop.
+- **MyHistory added as a fourth membership tier** ($2/player/month placeholder, auto-triggered by Crew participation in any event capturing photos/scoring/notes) — biggest unvalidated pricing assumption in the current model.
+- **Unit economics rebuilt from real BSGC data, replacing BP-4's assumption-heavy napkin math:** a realistic tiered BF-E event model (mostly small foursome trips, fewer medium/large) plus BSGC's actual 13 competitive-events/year cadence produced a **grounded 100-member model: $4,480 gross, $2,240/year (~$187/month) Ambassador comp** — well under BP-4's $1,000/month target. Modeling the Ambassador's full addressable BSGC contact list (2,000 total, ~1,000 non-casual) under conservative conversion assumptions reaches **~$1,040/month**, driven mostly by volume of low-value casual engagement rather than premium conversions. BP-4's $447–$915/month figures are now flagged superseded pending revalidation.
+- **Member-value modeling found a large spread** (~9x between a "Weak" $12/year member and a "Strong" ~$110/year member) and that **BF-E round volume, not subscription tier, is the dominant driver of individual member value** — a heavy-playing Free-subscription member can outvalue a light-playing paid subscriber.
+- **Population-complexion modeling surfaced a likely ~50% non-paying ("Free") rate** in a real community at today's BSGC mix — reframing the Ambassador's practical lever as conversion/engagement of the existing base as much as new recruitment.
+- **New Cross-Gate Risk logged:** Ambassador economics may be structurally bounded below the $1,000/month target at realistic single-community scale — not a contradiction of the model, but a sharper, data-grounded version of BP-4's own cadence finding.
+- **Two new speculative product ideas surfaced, unscoped:** a second low-friction (~$1/mo) paid tier aimed at the casual/Free-majority population, and a marketable, non-human-distributed "myGatheringsHistory"-style product. Neither claimed as a moat (Thesis 1 applies equally). Logged in Investment Inventory, not yet costed.
+- **Founder explicitly reaffirmed BZP direction is not being questioned** — this session's findings sharpen known economic/scale realities rather than reverse the commercialization exploration itself.
+
+**Artifacts updated:**
+- `BF_BizPlan_Vision.md` → "Two Products, Two Business Models" section replaced with "One engine, three distribution models"; last-updated line bumped
+- `BF_BizPlan_GateLog.md` → Gate 2 Ambassador Commission Structure section rewritten (relationship/effort routing, dropped origination, MyHistory tier); Gate 4 grounded BP-6 napkin math added, BP-4 figures marked superseded-pending-revalidation; new Cross-Gate Risk added (bounded Ambassador economics); last-updated line bumped
+- `BF_Investment_Inventory.md` → new "New Product Candidates (BP-6)" category with three rows (second low-friction tier, myGatheringsHistory analog, MyHistory price validation)
+- `BF_BizPlan_Session_Log.md` (this entry)
+
+**Open / carried forward:**
+- MyHistory subscription price ($2/mo) — still an unvalidated placeholder, single biggest pricing unknown in the current model
+- Ambassador-recruits-Ambassador stress test (z%/w%) — still parked; base has changed again this session, needs fresh modeling whenever picked up
+- Competitive-differentiation risk for a self-service My History-style product against GHIN/18Birdies/etc. — flagged early this session, not revisited
+- Role reassignment mechanics (a player changing their chosen Ambassador; a player-turned-Ambassador inheriting relationships) — same open item as before, now directly load-bearing on the relationship-based comp mechanic
+- Formal competitive landscape research, BF-E marketing/acceptance strategy, Ambassador-candidate discovery mechanism — all still open from prior sessions, untouched this session
+- Two new product candidates (low-friction casual tier, myGatheringsHistory analog) — concept-only, need definition before costing
+- BirdieFriends Engine GTM-readiness gap (BP-5) — still unscoped, still blocking a fully rigorous cost split
+
+**Chat-rename string:** `BZP#6 - One Engine Three Distribution Models & Grounded Ambassador Economics`
+
+**Deploy note:** four files updated this session (Vision, Gate Log, Investment Inventory, Session Log); push to `/deploy` pending founder's PIN and explicit go-ahead.
