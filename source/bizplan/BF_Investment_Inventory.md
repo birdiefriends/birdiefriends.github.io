@@ -51,6 +51,14 @@ Gates 3, 4, and 5 each independently flagged open cost/effort items — competit
 | GHIN official handicap integration | Gates 1, 4, 6 | ~$6,000/year | Economic barrier today; may become viable at scale | Not pursued — BF calculates handicaps internally | Revisit once community count/volume grows |
 | Tee-time reservation API/partnership | Gates 1, 2, 5 | Unscoped (fee-based APIs exist from some course reservation systems) | Future feature, not a launch dependency | Parked — not a current funnel barrier (see Gate Log) | Revisit as a future partnership decision, not urgent |
 
+## New Product Candidates (BP-6)
+
+| Item | Affects | Cost Range | Timescope | Status | Candidate Next Session |
+|---|---|---|---|---|---|
+| Second low-friction paid tier (~$1/mo scale) parallel to Gatherings, aimed at converting the casual/Free-majority population segment | Gates 2, 4, 5 | Unscoped — concept only | Unscoped | Surfaced BP-6 from population-complexion modeling (see Gate 4); no product concept defined yet | BZP — needs concept definition before any costing |
+| Marketable, non-human-distributed "myGatheringsHistory"-style product (BF-E/Daily analog for the Gatherings side of the platform) | Gates 2, 3, 5 | Unscoped — concept only | Unscoped | Surfaced BP-6 alongside My History's self-service reach finding | BZP — pair with BF-E GTM session |
+| MyHistory subscription price validation ($2/mo used as working placeholder throughout BP-6 modeling) | Gates 1, 4 | Low cost (research/survey), effort unscoped | Unscoped | Not validated against willingness-to-pay; single biggest pricing unknown in current model | BZP or informal member feedback pass |
+
 ## Founder Capacity
 
 | Item | Affects | Cost Range | Timescope | Status | Candidate Next Session |
