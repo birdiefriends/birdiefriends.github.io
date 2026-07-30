@@ -1847,3 +1847,64 @@ The longest session yet by a wide margin. Started as the proposed "D1 schema log
 **Session Dev-68 fully closed.**
 
 **Chat-rename string:** `Dev-68 - Rules & Layup Cards, Gathering Edit Mode Switch, Live Panel + Card Coexistence`
+
+---
+
+## Session Dev-69 · 2026-07-30
+
+**Focus:** My History icon row (Photos/Score, iterated down from three to two, moved to the bottom of the card), a real venue-finder bug hunt (two layered causes), a Register All Crew host toggle, score-entry auto-advance reinstated for unknown-par venues, a compact single-row Layup Calculator redesign, and a Worker-side Announcement Feed auto-delete rule for card-tied notification types.
+
+**My History icon row (portal v3.17.121–v3.17.122):**
+- Replicated the event card's Photos/Score/Notes icon row into My History's detail view, so a player can add a photo, log a score, or leave a note for a round long after its card has expired off Home — the whole motivating case, since a card's underlying `eventData`/`gatheringData` row can itself age out of the loaded list. New `historyEvtForSheets()` resolves the real evt object when still cached, or synthesizes a minimal one from the group key alone when it's aged out (no venue/date data in that case, so par-autofill/weather-capture just no-op — same degraded-but-safe pattern already used elsewhere in this view).
+- `openCardPhotoSheet`/`openCardScoreSheet`/`openCardNoteSheet` widened to accept either the legacy `evtId` or a full evt object directly.
+- Real stacking bug caught before it shipped: those three sheet modals had no explicit `z-index` (base 200), so opening them from inside My History's detail view (8950) would have rendered them invisibly behind it. Gave all three `z-index:9000`, same fix Dev-67 already applied to the photo lightbox/score-detail modal for the identical reason.
+- Real refresh gap fixed: `submitCardScore`, `submitCardNote`, and `cardPhotoCameraPicked` never checked whether My History was open behind them — only the delete paths did. Added the same "refresh whichever view is open" call to all three.
+- **Same-session correction, on Brian's follow-up feedback (real device test):** icons moved from just below the venue/crew line to the very bottom of the card (after Notes) — the original placement pushed Notes and photos further down than intended. The Notes icon was also dropped entirely: it opened the card's own separate note-compose modal, which is a real duplicate of the full add/edit/delete note thread My History already has inline — Photos and Score kept, since neither had any inline "add" path before this and are genuinely new capability, not duplicates. `openHistoryNoteSheet` and its now-dead History-refresh guard in `submitCardNote` removed.
+
+**Venue finder — Google Places bug hunt (portal v3.17.123–v3.17.125):**
+- Reported symptom: Gathering panel's venue autocomplete only ever showed D1 "Your Courses" results, never live Google search results for a course not yet in that list.
+- **First fix (real, but not the whole story):** `placesApiAvailable()`'s synchronous `google.maps.places.AutocompleteSuggestion` namespace check is no longer reliable — Google's current docs are explicit that the class must be obtained via `await google.maps.importLibrary('places')`. Replaced with a cached `loadPlacesLibrary()` promise. Also added a global `window.gm_authFailure` handler and on-screen diagnostics (a small "Search Results: <reason>" line in the dropdown itself) since Google auth failures don't surface as normal catchable errors — this instrumentation is what let the real cause get found on the next report instead of guessing a third time blind.
+- **Actual root cause, surfaced by that diagnostic:** `locationBias.radius` was set to 80000 (meters) — Google's Places API (New) hard-caps circle radius at 50000. Every request was being rejected outright with `"Invalid circle radius"`, silently killing the entire Places branch regardless of the importLibrary fix. Corrected to 50000. Confirmed working by Brian.
+- Diagnostics left in place permanently (cheap, invisible when things work, saves a round trip if this class of failure recurs).
+
+**Register All Crew toggle (portal v3.17.126):**
+- New toggle on the Gathering create form's "Who's Coming" section (crew mode only, shown once ≥1 crew member is picked): registers the whole picked crew as Yes at creation time instead of leaving it to individual RSVP, for a host who already knows everyone's playing. Invite notification wording adjusts accordingly ("added you to... you're registered as playing" vs. the usual "invited you to").
+- One `/registrations` POST per crew member (no bulk endpoint exists; not worth a Worker change for what's at most a dozen-ish parallel requests). Toggle resets itself if the picked crew empties out or the host switches to Open mode. Scoped to Create only, per the literal request ("gathering setup") — Edit-form parity not built, flagged as a quick follow-up if wanted.
+
+**Score-entry auto-advance reinstated (portal v3.17.127):**
+- `csSetStroke` (the card scorecard's mark-entry grid) previously auto-advanced to the next hole only when real par was known for the venue; unknown-par venues stayed on the hole so the up/down mark dots (only rendered for the active hole) were immediately visible for manual marking. Per explicit request, unified: entering a score now always advances, known par or not. The mark dots are still reachable — one tap back onto the hole number — just no longer the automatic default after every entry.
+
+**Layup Calculator — compact redesign (portal v3.17.128):**
+- Reported symptom: the calculator's stacked layout (title → paragraph → label → input → label → input → result) pushed the result below the on-course number keypad the moment either input was focused, forcing a scroll to see the answer.
+- Redesigned to one row — **Pin − Leave = Hit it** — read left-to-right like the subtraction it performs. Dropped the explanatory paragraph (the field labels now carry that meaning). Result text shortened to fit a compact cell (`"142 yd"` / `"Past pin"` / `"—"` instead of full sentences). Whole modal is now handle + title/close row + one input row — no scroll possible.
+
+**Announcement Feed auto-delete for card-tied types (portal v3.17.129, worker.js):**
+- New rule: `gathering_invite`, `gathering_open_invite`, `gathering_date_changed`, `gathering_cancelled`, `sub_promotion`, `new_event`, and `event_reminder` now auto-delete from the KV announcement feed once their underlying event's own card would have expired — on top of, not instead of, the existing blanket 48hr safety-net prune. The default/manually-sent `broadcast` type (Brian's own hand-written announcements) is deliberately untouched — no general rule exists for those, confirmed to stay fully manual via Admin per Brian's explicit call.
+- Gathering-tied types resolve expiry via a live D1 lookup of `gatherings.event_time` by the `gathering_id` already present in every one of those notifications' metadata — no client changes needed for any of the four gathering types, and live rather than a send-time snapshot on purpose (a rescheduled Gathering's old invite tracks the new date, not a stale one). The three Series-event types (`new_event`/`sub_promotion`/`event_reminder`) — currently dormant behind `OS_NOTIFY_*` flags, no live impact today — got `event_time` threaded through from `evt.dt` so the rule reaches them the moment they're ever enabled; they have no D1 row for the Worker to look up by ID, unlike Gatherings.
+- `birdie`/`cttp` live-round alerts deliberately left out of the new rule (still on the 48hr blanket only) — they carry no event reference in their metadata today and aren't tied to a card in the same sense as the others. Flagged as an open scoping call if Brian wants them included later.
+- New shared `pruneAnnouncementFeed()` fired non-blocking via `ctx.waitUntil()` — on every `GET /feed` (the real driver, hit on every Home load) and after every push send as a backstop. Required adding `ctx` to the Worker's `fetch(request, env)` signature (now `fetch(request, env, ctx)`).
+- **Process note, owned mid-session:** pushed `source/worker.js` to GitHub without presenting it for the Cloudflare dashboard paste in the same turn — a real miss against the standing Rule 5 (push + present together, every time), and exactly the BL-19 gap risk already documented in this guide. A `GET /feed` smoke-test right after the GitHub push falsely read as confirmation — the endpoint still responded, but that only proves the *old* Cloudflare code was still up, not the new logic. Caught when Brian asked directly; file presented and pasted, confirmed live. No lasting gap, but worth the repeat reminder.
+- **Second process note:** portal_version.txt deploy timestamps this session were stamped starting from 2026-07-23/2026-07-24 (carried forward from the prior session's last real date) rather than checked against the actual current date — this session in fact ran 2026-07-30. Cosmetic only (version *numbers* and content are correct, just the date label drifted), left as-is in already-pushed history rather than forcing bogus extra version bumps to relabel it. Going forward: check the actual date (`date -u` or equivalent) before stamping a deploy, don't assume continuity from the last session's date.
+
+**Live-verification still needed (built and syntax-checked, not yet exercised live except where noted):**
+- My History Photos/Score icons on a real aged-out event (one whose eventData/gatheringData row has actually fallen out of the loaded window, not just an old-but-still-cached one)
+- Register All Crew on a real Gathering creation with a real crew
+- Venue finder confirmed fixed by Brian live — no further verification needed
+- Score-entry auto-advance on a real unknown-par venue round
+- Compact Layup Calculator on a real phone mid-round (the actual motivating complaint — should be checked against the real on-course keyboard, not just reasoned through)
+- Announcement auto-delete rule — inherently slow to verify (needs a real event to actually pass its date with a live invite/notification still in the feed); worth a spot-check in a few days once a Gathering that had an invite sent has passed
+
+**Artifacts:**
+- `docs/portal.html` / `source/portal.html` — v3.17.120 → v3.17.129 (9 deploys)
+- `source/worker.js` — `CARD_TIED_ANNOUNCEMENT_TYPES`, `resolveAnnouncementEventTime()`, `pruneAnnouncementFeed()` (new); `fetch(request, env)` → `fetch(request, env, ctx)`; `GET /feed` and the POST `/` send path both now trigger the shared prune via `ctx.waitUntil()` instead of the old inline 48hr-only block. Manually pasted into Cloudflare by Brian and confirmed live.
+- D1: none this session (announcement feed lives in KV; Register All Crew reused the existing `/registrations` route with no schema change)
+
+**Carry-forward into Dev-70:**
+- Live-verification items above, especially the Layup Calculator (real motivating complaint) and the Announcement auto-delete rule (needs real elapsed time against a real event to confirm)
+- `bf_architecture.html`'s full D1/ERD redraw is now further behind still — this session's Worker changes (new pruning functions, `ctx` signature change) aren't reflected, on top of everything already noted stale from Dev-68 and earlier
+- Worker Endpoints reference table in this guide is still not a full audit — `/feed`'s new auto-prune behavior got a one-line footnote this session, but the table as a whole hasn't been re-verified end-to-end in a long time
+- Everything else from Dev-63 through Dev-68 not touched this session carries forward unchanged: icon-action-btn migration beyond what's already converted, `worker.js` size/organization, Commissioner PIN architecture, push notification preference center, push notification recipient domain (all-`bfw=Yes` vs. registered-only), player picker rethink, Player Analytics/Insights layer, AI-generated event narratives spec, Season Money/Overall-pot flight system, GHIN Following list confirmation, `launch_golf_scorer.py` GitHub token possibly-unused cleanup, Woodstone/Lord's Valley weather coordinates and venue logos/motifs
+
+**Session Dev-69 fully closed.**
+
+**Chat-rename string:** `Dev-69 - My History Icons, Venue Finder Fix, Register All Crew, Announcement Auto-Delete`
