@@ -19,6 +19,70 @@ async function d1RetryRead(fn, retries = 3, delayMs = 300) {
   throw lastErr;
 }
 
+// Announcement feed auto-delete (Dev-69) — types tied to a specific event
+// card should disappear once that card itself expires, same as the card
+// does. Types NOT in this list — the default 'broadcast', used for Brian's
+// own hand-written announcements — are deliberately untouched here: there's
+// no general "when does a manual announcement expire" rule, so those stay
+// until deleted via Admin. The blanket 48hr prune below stays in place
+// unchanged as a safety net (covers card-tied entries with no resolvable
+// event date, and everything else).
+const CARD_TIED_ANNOUNCEMENT_TYPES = new Set([
+  'gathering_invite', 'gathering_open_invite', 'gathering_date_changed',
+  'gathering_cancelled', 'sub_promotion', 'new_event', 'event_reminder'
+]);
+
+// Resolves the "card expiry" instant for one feed entry:
+//   1. meta.event_time, if the sender already knew it (Series/Weekend events
+//      have no D1 row to look up, so the client embeds it directly — see
+//      notifyNewEvent/notifySubPromotion/notifyEventReminder in portal.html).
+//   2. Otherwise, meta.gathering_id → a live D1 lookup. Live rather than a
+//      send-time snapshot on purpose: if a host reschedules, an invite sent
+//      against the old date should track the new one, not silently expire
+//      early against a date that's no longer real.
+// Returns null (never auto-deleted by this rule, falls through to the 48hr
+// safety net only) when neither is resolvable.
+async function resolveAnnouncementEventTime(env, entry, gatheringTimeCache) {
+  if (!entry || !CARD_TIED_ANNOUNCEMENT_TYPES.has(entry.type)) return null;
+  const meta = entry.meta || {};
+  if (meta.event_time != null) {
+    const t = Date.parse(meta.event_time);
+    return Number.isFinite(t) ? t : null;
+  }
+  if (meta.gathering_id != null) {
+    const gid = meta.gathering_id;
+    if (!gatheringTimeCache.has(gid)) {
+      let t = null;
+      try {
+        const row = await env.DB.prepare(`SELECT event_time FROM gatherings WHERE id = ?`).bind(gid).first();
+        if (row && row.event_time) { const parsed = Date.parse(row.event_time); if (Number.isFinite(parsed)) t = parsed; }
+      } catch(e) { /* D1 hiccup — leave t null, falls through to the 48hr safety net */ }
+      gatheringTimeCache.set(gid, t);
+    }
+    return gatheringTimeCache.get(gid);
+  }
+  return null;
+}
+
+// Single prune pass shared by the write path (after every send) and the
+// read path (GET /feed, hit far more often — every Home load — so this is
+// what actually keeps the feed current between sends).
+async function pruneAnnouncementFeed(env, nowMs) {
+  const allKeys = await env.BF_FLAGS.list({ prefix: 'feed::' });
+  const cutoff  = nowMs - 48 * 60 * 60 * 1000;
+  const toDelete = [];
+  const gatheringTimeCache = new Map();
+  for (const k of allKeys.keys) {
+    const ts = parseInt(k.name.replace('feed::', ''), 10);
+    if (Number.isFinite(ts) && ts < cutoff) { toDelete.push(k.name); continue; } // blanket 48hr safety net, unchanged
+    let entry;
+    try { entry = JSON.parse(await env.BF_FLAGS.get(k.name)); } catch(e) { continue; }
+    const eventTime = await resolveAnnouncementEventTime(env, entry, gatheringTimeCache);
+    if (eventTime != null && eventTime < nowMs) toDelete.push(k.name);
+  }
+  if (toDelete.length) await Promise.all(toDelete.map(name => env.BF_FLAGS.delete(name)));
+}
+
 // Auto-classifies a Photo Capture upload into pre_competition / on_course /
 // post_round when the client didn't already resolve one itself (Dev-57 —
 // Live Panel Open Camera path; the Upload path always sends an explicit
@@ -93,7 +157,7 @@ async function classifyPhotoSection(env, { eventName, capturedBy, eventStart, ca
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
 
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
@@ -2789,6 +2853,13 @@ export default {
 
     // GET /feed — read KV announcement feed, newest-first, max 50
     if (request.method === 'GET' && url.pathname === '/feed') {
+      // Dev-69 — fire-and-forget via waitUntil: this is the endpoint hit on
+      // every single Home load (far more often than a new send happens), so
+      // it's the real driver of keeping the feed current, not the write
+      // path below. Non-blocking on purpose — a full KV list + per-entry D1
+      // lookup shouldn't add latency to every page load; the response below
+      // reflects whatever was true a moment ago, and self-corrects next read.
+      ctx.waitUntil(pruneAnnouncementFeed(env, Date.now()));
       const list = await env.BF_FLAGS.list({ prefix: 'feed::' });
       const entries = await Promise.all(
         list.keys.map(async k => {
@@ -2891,17 +2962,12 @@ export default {
       const entry   = { id: data.id, key: kvKey, title, body, sentAt, type, meta, recipients };
       await env.BF_FLAGS.put(kvKey, JSON.stringify(entry));
 
-      // Prune entries older than 48 hours
-      const cutoff  = sentAt - 48 * 60 * 60 * 1000;
-      const allKeys = await env.BF_FLAGS.list({ prefix: 'feed::' });
-      await Promise.all(
-        allKeys.keys
-          .filter(k => {
-            const ts = parseInt(k.name.replace('feed::', ''), 10);
-            return ts < cutoff;
-          })
-          .map(k => env.BF_FLAGS.delete(k.name))
-      );
+      // Dev-69 — was an inline 48hr-only prune; now the shared helper,
+      // which does that AND the new card-expiry rule for the types in
+      // CARD_TIED_ANNOUNCEMENT_TYPES. Non-blocking (waitUntil) — no reason
+      // to make every push send wait on a full feed scan when GET /feed
+      // already does this same pass on every Home load anyway.
+      ctx.waitUntil(pruneAnnouncementFeed(env, sentAt));
     }
 
     return new Response(JSON.stringify({ ...data, feedKey }), {
