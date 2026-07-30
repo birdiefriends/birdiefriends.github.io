@@ -3960,7 +3960,13 @@ async function notifyNewEvent(evt) {
     '⛳ New BirdieFriends Event',
     `${evt.name}${dtStr ? ' · ' + dtStr : ''} — Register now!`,
     'https://birdiefriends.com/portal.html',
-    'new_event'
+    'new_event',
+    // Dev-69 — event_time so the Worker's announcement auto-delete rule can
+    // expire this once the event's card does. Series/Weekend events have no
+    // D1 row for the Worker to look up (unlike Gatherings, keyed by
+    // gathering_id instead), so the client has to hand the date over
+    // directly — evt.dt is already right here.
+    evt.dt ? { event_time: evt.dt.toISOString() } : null
   );
 }
 
@@ -3971,7 +3977,8 @@ async function notifySubPromotion(evt, playerName) {
     '🎉 You\'re in!',
     `A spot opened up for ${evt.name}. You\'re now confirmed — see you there!`,
     'https://birdiefriends.com/portal.html',
-    'sub_promotion'
+    'sub_promotion',
+    evt.dt ? { event_time: evt.dt.toISOString() } : null
   );
 }
 
@@ -3982,7 +3989,8 @@ async function notifyEventReminder(evt) {
     '⛳ Tee time tomorrow!',
     `${evt.name} · ${timeStr} · ${evt.location || 'BSGC'} — see you on the course!`,
     'https://birdiefriends.com/portal.html',
-    'event_reminder'
+    'event_reminder',
+    evt.dt ? { event_time: evt.dt.toISOString() } : null
   );
 }
 
