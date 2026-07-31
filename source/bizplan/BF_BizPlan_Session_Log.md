@@ -236,3 +236,38 @@ Founder was "still chewing" on the overall picture at end of session — next se
 **Chat-rename string:** `BZP#6 - One Engine Three Distribution Models & Grounded Ambassador Economics`
 
 **Deploy note:** four files updated this session (Vision, Gate Log, Investment Inventory, Session Log); push to `/deploy` pending founder's PIN and explicit go-ahead.
+
+---
+
+## Session BP-7 · July 30, 2026
+
+**Focus:** Effort-to-finish estimate across all six gates; close out the long-open formal competitive landscape research item
+
+**Key decisions:**
+- **Ambassador economics (BP-6 finding) formally settled, not revisited.** Founder explicitly accepted the ~$187–$1,040/month grounded range as the standing number — no further pricing/fee adjustment will be made to chase the original $1,000/month target, since the market size at BSGC's scale is judged the real constraint, not the comp structure. Gate 4's "structurally bounded below target" Cross-Gate Risk reframed from open risk to accepted constraint the plan is designed around; Gate 2's flat 50/50 split stays as-is.
+- **Formal competitive landscape research (open since BP-2) completed via a backgrounded research task**, closing Gate 3. Scanned ~12 golf-specific and adjacent products (18Birdies, GHIN, TheGrint, Golf Genius, BlueGolf, Squabbit, GolfApp.com, Golf GameBook, 18Recap, Chronogolf/Lightspeed, generic group-photo apps) across scoring, group/crew management, photo features, and history/narrative capability. Full sourced report saved as `BF_Competitive_Landscape_BP7.md`.
+- **Findings confirm, not overturn, standing theses.** Scoring/scheduling space confirmed saturated (10+ players, several free or VC-backed at scale) — tech-is-not-the-moat (Thesis 1) is now backed by actual research, not just a spot-check. The "private, closed, single recurring community with a season-long memorialized story" niche is confirmed effectively unclaimed — only GolfApp.com and Golf GameBook market history/memory features, and neither matches BF's exact shape (fixed single community, one home course, season-long narrative archive).
+- **GTM implication drawn directly from the research:** memorialization (GSL-style features) works as a low-cost GTM entry point (no Ambassador infrastructure required to demonstrate value) and as an Ambassador-candidate filter — people who actually engage with history/photo/sticky-note features are self-selecting for investment in group continuity, the trait an Ambassador needs. Gives Gate 5's long-open "Ambassador-candidate discovery mechanism" item a concrete first hypothesis (memorialization-feature engagement as the signal to watch) rather than leaving it fully undefined.
+- **Free-competitor pricing question addressed.** Squabbit/GolfApp being free doesn't undercut BF's fee model — Squabbit is a bootstrapped single-developer project stating "free" as a principle at trivial scale; GolfApp's scale/entity is too opaque to read as a proven precedent; 18Birdies/TheGrint/Golf GameBook are freemium (standard SaaS cross-subsidy); Golf Genius/BlueGolf are free to players because the course pays; GHIN is subsidized by USGA/AGA dues. None of these patterns proves a small per-group/per-player fee is unsustainable.
+- **Founder explicit call: no deeper competitive digging planned.** This research is treated as a settled input to fold into ongoing GTM thinking, not an open research thread — Gate 3 closes here; revisit only if a specific competitor signal changes.
+- **Effort-to-finish estimate given (informal, not logged as a gate item):** Gates 1 and 3 closed; Gates 2, 4, 5 mid-flight are the real bottleneck; Gate 6 can't start until they're substantially closed. Realistic estimate at current pace: 4–6 more focused BZP sessions plus one Dev-session scoping audit for the Engine GTM-readiness gap (BP-5), roughly 6–8 weeks at the current cadence.
+
+**Artifacts updated:**
+- `BF_BizPlan_GateLog.md` → Gate 3 closed (was "directionally answered"), BP-7 competitive findings added; Gate 4 Ambassador economics reframed from open risk to accepted constraint; Gate 5 "Ambassador-candidate discovery" open item narrowed to a testable hypothesis; new Cross-Gate Risk logged (competitive research complete, apply not re-research); last-updated line bumped
+- `BF_BizPlan_Vision.md` → Thesis 1 footnoted with BP-7 confirmation and pointer to the research file; last-updated line bumped
+- `BF_Competitive_Landscape_BP7.md` (new) → full sourced competitive landscape report, comparison table, and analysis
+- `BF_BizPlan_Session_Log.md` (this entry)
+
+**Open / carried forward:**
+- MyHistory subscription price ($2/mo) — still an unvalidated placeholder, single biggest pricing unknown in the current model
+- Ambassador-recruits-Ambassador stress test (z%/w%) — still parked, needs fresh modeling whenever picked up
+- BF-E marketing/acceptance strategy — still unscoped; should draw on `BF_Competitive_Landscape_BP7.md` when picked up rather than starting cold
+- Ambassador-candidate discovery mechanism — narrowed to a hypothesis (memorialization-feature engagement) this session, but threshold/definition and approach mechanics still undesigned
+- Role reassignment mechanics (changing chosen Ambassador, Ambassador inheritance) — still open, load-bearing on the comp mechanic
+- Two new product candidates from BP-6 (low-friction casual tier, myGatheringsHistory analog) — still concept-only
+- BirdieFriends Engine GTM-readiness gap (BP-5) — still unscoped, still blocking a fully rigorous Gate 4 cost split; candidate for a dedicated Dev-session scoping audit
+- No formal moat-strength test against a well-funded copycat scenario — flagged, not urgent
+
+**Chat-rename string:** `BZP#7 - Competitive Research Closes Gate 3 & GTM Implications`
+
+**Deploy note:** four files updated this session (Gate Log, Vision, new Competitive Landscape doc, Session Log); push to `/deploy` pending founder's PIN and explicit go-ahead.
