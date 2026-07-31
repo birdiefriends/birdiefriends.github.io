@@ -12,68 +12,39 @@ Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/ma
 
 **Fetch method:** Use `bash_tool` with `curl` for the four library file fetches below (raw GitHub URLs aren't reachable via `web_fetch` without a prior search result).
 
-**Deploy route — full request contract (tested and confirmed working, Dev-56):**
+**Deploy route:** Bizplan doc pushes go through the Worker's `/deploy` route —
+`POST https://birdiefriends-push.birdiefriends01.workers.dev/deploy`, PIN-gated. Brian
+provides the PIN and explicit go-ahead in chat before any push; session start never
+includes a write, only a reachability check (see step 5).
 
-Bizplan doc pushes go through the Worker's `/deploy` route. This is the exact,
-complete contract — nothing else is needed to push a file.
-
-```
-POST https://birdiefriends-push.birdiefriends01.workers.dev/deploy
-Content-Type: application/json
-User-Agent: <any browser-style string — see gotcha below, this is NOT optional>
-
+**Exact request contract (same route the dev track uses — this is the full schema,
+not just a pointer to it):**
+```json
 {
-  "pin": "7797",
-  "path": "source/bizplan/BF_BizPlan_Session_Log.md",
-  "content": "<full file content as a plain string, not base64>",
-  "message": "<git commit message>"
+  "pin": "<PIN Brian provides in chat>",
+  "path": "source/bizplan/<filename>",
+  "content": "<full file content as a string, not a diff>",
+  "message": "<short commit message>"
 }
 ```
+- `path` must start with `source/` or `docs/` — the Worker rejects anything else.
+- `content` is the **entire file**, not a patch — always fetch-and-rewrite, never assume
+  the route can apply a partial edit.
+- No practical size limit on the free tier (tested well past typical bizplan doc size).
+- For payloads too large for a shell arg, write the JSON to a temp file and use
+  `curl --data-binary @file` rather than passing it inline.
+- Response is `{"ok": true, "commitSha": "..."}` on success — a real GitHub commit,
+  inspectable/rollback-able like any other managed file.
 
-- **`path`** must start with `source/` or `docs/` — for bizplan files this is always
-  `source/bizplan/<filename>`.
-- **`content`** is the complete new file content (not a diff/patch) — this always
-  overwrites the whole file.
-- Response on success: `{"ok": true, "commitSha": "<sha>"}`. On failure: an error
-  body with a `message` field — read it, don't just retry blindly.
-
-**⚠ Critical gotcha — Cloudflare WAF blocks the request without a browser User-Agent.**
-Python's `urllib` default User-Agent (and likely other bare HTTP clients) gets a
-`403` with `error code: 1010` from Cloudflare — this is a WAF rule on the Worker
-route itself, not a bug in the route or an auth failure. Always set an explicit
-browser-style `User-Agent` header, e.g.:
+Example:
+```bash
+curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+  --data-binary @/tmp/payload.json
 ```
-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36
-```
-`curl` sets its own default UA that also gets blocked — pass `-A` explicitly there
-too, or use `-H "User-Agent: ..."`.
-
-**Minimal working example (bash_tool, Python via urllib):**
-```python
-import json, urllib.request
-
-payload = json.dumps({
-    "pin": "7797",
-    "path": "source/bizplan/BF_BizPlan_Session_Log.md",
-    "content": open("/home/claude/BF_BizPlan_Session_Log.md").read(),
-    "message": "BP-N session log entry"
-}).encode("utf-8")
-
-req = urllib.request.Request(
-    "https://birdiefriends-push.birdiefriends01.workers.dev/deploy",
-    data=payload,
-    headers={
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    },
-    method="POST",
-)
-with urllib.request.urlopen(req) as r:
-    print(json.loads(r.read()))
-```
-
-Not used during session start — only a reachability check happens then (see step 5).
-Brian provides explicit go-ahead in chat before any actual write.
+The `User-Agent` header isn't optional in practice — a default curl user agent gets
+blocked by a Cloudflare WAF rule on this route. Always send it, exactly as above.
 
 **Run this exact bash block first:**
 
