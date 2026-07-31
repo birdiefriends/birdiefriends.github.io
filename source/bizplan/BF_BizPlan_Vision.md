@@ -42,7 +42,7 @@ Brian is retired and does not need this to succeed financially. He was consideri
 
 ## Core Theses (Settled — Do Not Re-Litigate Without Cause)
 
-1. **The tech is not the moat.** Scoring and event management functionality is replicable by competitors within months. The moat is the distribution model, the accumulated outcome data, the brand equity built into physical artifacts, and the community network itself.
+1. **The tech is not the moat.** Scoring and event management functionality is replicable by competitors within months. The moat is the distribution model, the accumulated outcome data, the brand equity built into physical artifacts, and the community network itself. **Confirmed with formal research, not just spot-check (BP-7):** a ~12-product competitive scan found the scoring/scheduling space saturated (10+ players, several free or VC-backed at scale) and found the "private, closed, single recurring community with a season-long memorialized story" niche effectively unclaimed — only GolfApp.com and Golf GameBook market history/memory features, and neither is built around BF's exact shape. See `BF_Competitive_Landscape_BP7.md` and Gate 3 (now closed).
 
 2. **The product is experience design, not software.** BF's differentiator is the BirdieFriends Engine's recommendation capability — tuning event format to the specific group and occasion — proven informally via GLS's 2-Man scramble design, which kept a mixed-skill, not-all-golf-nuts group consistently engaged and fair. (Corrected BP-5: recommendation logic is a capability of the Engine, not a separate "product" competing with BF-E/BF-C for identity — see Core Vision Statement.)
 
