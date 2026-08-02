@@ -10551,7 +10551,13 @@ function podiumWinnerFor(seriesData, eventName) {
 // loadResultsClippingPodium fills in the winner in place once it resolves —
 // fire-and-forget, same pattern as weather capture elsewhere.
 function resultsClippingLink(evt) {
-  if (!evt || evt.source === 'gathering') return '';
+  // BF Series events only — this was previously "anything that's not a
+  // Gathering," which incorrectly showed the results.html link for BF
+  // Weekend Times too. results.html only ever has real quota/skins/CttP/
+  // payout data for BF Series events; Weekend rounds have no page to link
+  // to. Same formatBadge() classifier already used elsewhere (Registration
+  // Tracker) to identify a genuine BF Series event.
+  if (!evt || evt.source === 'gathering' || formatBadge(evt.format) !== 'BF Series') return '';
   const url = `https://birdiefriends.com/results.html?event=${encodeURIComponent(evt.name)}`;
   return `
     <a href="${url}" target="_blank" rel="noopener" style="display:block;text-decoration:none;margin-bottom:10px">
@@ -10569,7 +10575,7 @@ function resultsClippingLink(evt) {
 }
 
 async function loadResultsClippingPodium(evt) {
-  if (!evt || evt.source === 'gathering') return;
+  if (!evt || evt.source === 'gathering' || formatBadge(evt.format) !== 'BF Series') return;
   const textEl = document.getElementById('results-clip-text');
   if (!textEl) return;
   const seriesData = await fetchSeriesData();
