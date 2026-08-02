@@ -4247,6 +4247,7 @@ async function loadGatherings() {
       crewName: g.crew_name || null,
       fillListEnabled: g.fill_list_enabled === 1 || g.fill_list_enabled === true,
       teeTimeStatus: g.tee_time_status || 'confirmed',
+      autoRepeat: g.auto_repeat === 1 || g.auto_repeat === true,
       capacity: g.size || null,
       holes: (g.holes === 9) ? 9 : 18, // Dev-66 — 9-hole round support (e.g. Chooch's CGA Tuesday league)
       createdAt: g.created_at ? new Date(g.created_at) : null
@@ -9122,6 +9123,8 @@ let _hostSelectedCrewId = null;      // set when reusing a saved Crew instead of
 let _hostRegisterAllCrew = false;    // Dev-69 — "Register all crew" toggle on the create form:
                                       // host already knows everyone's playing, so skip individual
                                       // RSVP and register the whole picked crew as Yes at creation time
+let _hostAutoRepeat = false;         // Dev-70 — "Auto-repeat weekly" toggle, shared by create + edit
+                                      // (only one of the two sheets is ever open at once).
 let _hostSelectedCrewName = null;
 let _hostPlaying        = true;      // "Are you playing?" toggle on the create form — defaults Yes
 let _crewPickerMode     = 'create';  // 'create' | 'invite' — controls Done button behavior
@@ -13066,6 +13069,7 @@ async function showEditGatheringForm(gatheringId) {
   _hostSelectedCrewName = null;
   _pendingCrewName = null;
   _hostMode = g.fillListEnabled ? 'open' : 'crew';
+  _hostAutoRepeat = !!g.autoRepeat;
 
   const body = document.getElementById('host-sheet-body');
   body.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:20px 0">Loading…</div>`;
@@ -13203,6 +13207,24 @@ async function showEditGatheringForm(gatheringId) {
       <span id="host-crew-select-icon">👥</span><span id="host-crew-select-label">Select players…</span>
     </button>
     <div id="host-crew-summary" style="margin-top:10px"></div>
+
+    <!-- Dev-70 — "Auto-repeat weekly." Same row/ids as the create form
+         (only one sheet renders at a time). Pre-checked state set by
+         setHostAutoRepeat(_hostAutoRepeat) at the end of
+         showEditGatheringForm. Unchecking this is the primary way to stop
+         an active chain (the other being Cancel Gathering). -->
+    <div id="host-auto-repeat-row" onclick="setHostAutoRepeat(!_hostAutoRepeat)"
+      style="margin-top:10px;padding:11px 14px;background:rgba(255,255,255,0.5);
+      border:1.5px solid var(--border-med);border-radius:10px;display:flex;align-items:flex-start;gap:10px;
+      cursor:pointer">
+      <span id="host-auto-repeat-check" style="font-size:1.1rem;line-height:1.3">☐</span>
+      <div>
+        <div style="font-size:0.86rem;font-weight:700;color:var(--text)">🔁 Auto-repeat weekly</div>
+        <div style="font-size:0.76rem;color:var(--text-muted);line-height:1.4">
+          Automatically creates next week's Gathering — same time, same crew — once this one's tee time passes. Uncheck here, or cancel the Gathering, to stop.
+        </div>
+      </div>
+    </div>
     </div><!-- end host-crew-section -->
 
     <div id="host-open-section" style="display:none;padding:14px;background:rgba(255,255,255,0.5);
@@ -13217,6 +13239,7 @@ async function showEditGatheringForm(gatheringId) {
     <button class="host-cta-btn" style="margin-top:16px" id="btn-edit-gathering"
       onclick="submitEditGathering(${gatheringId})">💾 Save Changes</button>
   `;
+  setHostAutoRepeat(_hostAutoRepeat);
   setHostMode(_hostMode);
   renderHostCrewSummary();
 }
@@ -13324,7 +13347,11 @@ async function submitEditGathering(gatheringId) {
       description,
       tee_time_status: teeTimeStatus,
       holes,
-      fill_list_enabled: fillListEnabled
+      fill_list_enabled: fillListEnabled,
+      // Dev-70 — always sent explicitly (not conditionally) so unchecking
+      // the box actually writes auto_repeat=0 rather than being silently
+      // omitted from the PATCH. Crew-mode only, same as create.
+      auto_repeat: fillListEnabled ? false : _hostAutoRepeat
     };
     if (size) patchBody.size = size;
     if (modeChangedToCrew) patchBody.crew_id = crewId;
@@ -13373,6 +13400,7 @@ async function showNewGatheringForm() {
   _pendingCrewName = null;
   _hostMode = 'crew';
   _hostRegisterAllCrew = false;
+  _hostAutoRepeat = false;
   _hostTeeTimeStatus = 'confirmed';
   _hostHoles = 18;
   clearHostActionBar();
@@ -13528,6 +13556,23 @@ async function showNewGatheringForm() {
         </div>
       </div>
     </div>
+
+    <!-- Dev-70 — "Auto-repeat weekly." Crew-mode only (see worker.js
+         spawnAutoRepeatGatherings for why). Shared with the edit form —
+         unchecking here is one of the two ways to stop the chain, the
+         other being Cancel Gathering. -->
+    <div id="host-auto-repeat-row" onclick="setHostAutoRepeat(!_hostAutoRepeat)"
+      style="margin-top:10px;padding:11px 14px;background:rgba(255,255,255,0.5);
+      border:1.5px solid var(--border-med);border-radius:10px;display:flex;align-items:flex-start;gap:10px;
+      cursor:pointer">
+      <span id="host-auto-repeat-check" style="font-size:1.1rem;line-height:1.3">☐</span>
+      <div>
+        <div style="font-size:0.86rem;font-weight:700;color:var(--text)">🔁 Auto-repeat weekly</div>
+        <div style="font-size:0.76rem;color:var(--text-muted);line-height:1.4">
+          Automatically creates next week's Gathering — same time, same crew — once this one's tee time passes. Uncheck here, or cancel the Gathering, to stop.
+        </div>
+      </div>
+    </div>
     </div><!-- end host-crew-section -->
 
     <!-- Open mode explanation — shown when Open to Members is selected -->
@@ -13614,6 +13659,9 @@ function setHostMode(mode) {
   // toggle doesn't apply there; reset it so switching back to Crew mode
   // later in the same session doesn't carry over a stale "on" state.
   if (mode === 'open' && _hostRegisterAllCrew) setHostRegisterAllCrew(false);
+  // Dev-70 — Auto-repeat is crew-mode only (Open's notify audience needs the
+  // live Jotform roster, which the Worker can't reach) — same reset logic.
+  if (mode === 'open' && _hostAutoRepeat) setHostAutoRepeat(false);
 }
 
 
@@ -13684,6 +13732,14 @@ function setHostRegisterAllCrew(val) {
   _hostRegisterAllCrew = val;
   const check = document.getElementById('host-register-all-crew-check');
   const row   = document.getElementById('host-register-all-crew-row');
+  if (check) check.textContent = val ? '☑️' : '☐';
+  if (row)   row.style.borderColor = val ? 'var(--green)' : 'var(--border-med)';
+}
+// Dev-70 — shared by both the create and edit forms (see _hostAutoRepeat).
+function setHostAutoRepeat(val) {
+  _hostAutoRepeat = val;
+  const check = document.getElementById('host-auto-repeat-check');
+  const row   = document.getElementById('host-auto-repeat-row');
   if (check) check.textContent = val ? '☑️' : '☐';
   if (row)   row.style.borderColor = val ? 'var(--green)' : 'var(--border-med)';
 }
@@ -14012,7 +14068,8 @@ async function submitNewGathering() {
         host_id: currentPlayer, title, venue: venue || null,
         event_time: eventTime, size, crew_id: crewId, fill_list_enabled: fillListEnabled,
         gathering_type: gatheringType, description,
-        tee_time_status: _hostTeeTimeStatus, holes: _hostHoles
+        tee_time_status: _hostTeeTimeStatus, holes: _hostHoles,
+        auto_repeat: _hostMode === 'crew' && _hostAutoRepeat // Dev-70 — crew-mode only, enforced client-side too
       })
     });
     if (!gathData.ok) throw new Error(gathData.error || 'Gathering creation failed');
