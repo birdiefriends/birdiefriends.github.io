@@ -2034,6 +2034,103 @@ export default {
       }
     }
 
+    // POST /admin/fix-venue-typo?pin=7797 — TEMP, ONE-TIME USE (Dev-70).
+    // Every 'BSCG' venue-name typo (transposed from 'BSGC') has apparently
+    // sat in the live Request Event / Event Registration Jotform tables for
+    // years — this is the bulk correction, run directly from the Worker
+    // since it's the only piece of this stack with unrestricted outbound
+    // access to api.jotform.com. Same submission-edit call shape the portal
+    // already uses elsewhere (POST /submission/:id, submission[qid]=value,
+    // form-encoded) — nothing new invented, just run in bulk from here.
+    // Body: { jotform_api_key, apply?: boolean }. apply defaults to false —
+    // a false/omitted call is a dry run (finds + reports matches, writes
+    // nothing); apply:true actually performs the corrections. Safe to
+    // delete this whole route once Brian confirms the fix landed.
+    if (request.method === 'POST' && url.pathname === '/admin/fix-venue-typo') {
+      if (url.searchParams.get('pin') !== '7797') {
+        return new Response(JSON.stringify({ error: 'PIN required' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      let body;
+      try { body = await request.json(); } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { jotform_api_key, apply } = body;
+      if (!jotform_api_key) {
+        return new Response(JSON.stringify({ error: 'jotform_api_key is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const FORMS = [
+        { id: '233113019726045', name: 'Request Event',      fieldLabel: 'Event Location' },
+        { id: '233103072261037', name: 'Event Registration', fieldLabel: 'Location' },
+      ];
+      const results = [];
+      for (const form of FORMS) {
+        const formResult = { form: form.name, formId: form.id };
+        try {
+          // Resolve the field's real qid dynamically rather than hardcoding
+          // a guess — each form's question layout is its own, and a wrong
+          // hardcoded qid would silently write to the wrong field.
+          const qRes  = await fetch(`https://api.jotform.com/form/${form.id}/questions?apiKey=${jotform_api_key}`);
+          const qJson = await qRes.json();
+          let qid = null;
+          for (const [id, q] of Object.entries(qJson.content || {})) {
+            if ((q.text || '').trim().toLowerCase() === form.fieldLabel.toLowerCase()) { qid = id; break; }
+          }
+          if (!qid) {
+            formResult.error = `Could not find a "${form.fieldLabel}" question on this form`;
+            results.push(formResult);
+            continue;
+          }
+          formResult.qid = qid;
+          // Paginate — Jotform caps a single submissions call at 1000; both
+          // forms are under that today, but this holds if that changes.
+          let allSubs = [], offset = 0;
+          while (true) {
+            const sRes  = await fetch(`https://api.jotform.com/form/${form.id}/submissions?apiKey=${jotform_api_key}&limit=1000&offset=${offset}`);
+            const sJson = await sRes.json();
+            const subs  = sJson.content || [];
+            allSubs = allSubs.concat(subs);
+            if (subs.length < 1000) break;
+            offset += 1000;
+          }
+          formResult.totalSubmissions = allSubs.length;
+          const matches = allSubs.filter(s => {
+            const val = s.answers && s.answers[qid] && s.answers[qid].answer;
+            return typeof val === 'string' && val.trim().toUpperCase() === 'BSCG';
+          });
+          formResult.matched = matches.length;
+          formResult.matchIds = matches.map(m => m.id);
+          if (apply) {
+            let fixed = 0;
+            const errors = [];
+            for (const m of matches) {
+              try {
+                const params = new URLSearchParams();
+                params.set(`submission[${qid}]`, 'BSGC');
+                const editRes  = await fetch(`https://api.jotform.com/submission/${m.id}?apiKey=${jotform_api_key}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: params.toString()
+                });
+                const editJson = await editRes.json();
+                if (editJson.responseCode === 200) fixed++;
+                else errors.push({ id: m.id, error: editJson.message });
+              } catch (e) {
+                errors.push({ id: m.id, error: String(e.message || e) });
+              }
+            }
+            formResult.fixed  = fixed;
+            formResult.errors = errors;
+          } else {
+            formResult.dryRun = true;
+          }
+        } catch (e) {
+          formResult.error = String(e.message || e);
+        }
+        results.push(formResult);
+      }
+      return new Response(JSON.stringify({ ok: true, apply: !!apply, results }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+    }
+
     // GET /photos?event=X&section=Y&status=Z&pin=W
     // Public callers (no pin) only ever see curation_status='approved', regardless
     // of what status= they pass — the filter is enforced server-side, not trusted
