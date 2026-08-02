@@ -122,8 +122,147 @@ function localWallTimeToUTC(y, mo, d, h, mi, s, timeZone) {
   return new Date(guessUTC - offsetMs);
 }
 
+// Friendly "Sun, Jul 14, 7:00 AM"-style label from a stored event_time ISO
+// string, parsed from its own wall-clock digits rather than via Date/
+// toLocaleDateString — Workers run in UTC, so those would silently shift by
+// the Eastern offset (same lesson as the PATCH date-change notifier's inline
+// version of this; factored out here since Auto-Repeat needs the identical
+// formatting from a server-only context with no client to fall back on).
+function formatEventTimeLabel(etStr) {
+  const etParts = (etStr || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!etParts) return new Date(etStr).toUTCString();
+  const [, yr, mo, dy, hr, mn] = etParts;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const days   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dowDt  = new Date(`${yr}-${mo}-${dy}T12:00:00Z`);
+  const dow    = days[dowDt.getUTCDay()];
+  const mon    = months[parseInt(mo,10)-1];
+  const h24    = parseInt(hr,10);
+  const h12    = h24 % 12 || 12;
+  const ampm   = h24 < 12 ? 'AM' : 'PM';
+  const minStr = mn === '00' ? '' : `:${mn}`;
+  return `${dow}, ${mon} ${parseInt(dy,10)}, ${h12}${minStr} ${ampm}`;
+}
+
+// Auto-Repeat Gatherings (Dev-70) — a host can flag a crew-mode Gathering to
+// automatically spawn its own successor exactly one week later, once this
+// one's tee time has passed, chaining forward indefinitely. Checked lazily
+// on every GET /gatherings (same non-blocking ctx.waitUntil() pattern as
+// pruneAnnouncementFeed) — no Cloudflare Cron Trigger needed.
+//
+// Stopping the chain needs no special-case code: cancelling a Gathering sets
+// status != 'active', and unchecking the flag via Edit sets auto_repeat = 0 —
+// both are already covered by this query's WHERE clause, so either one is a
+// real, immediate stop.
+//
+// Crew-mode only (fill_list_enabled = 0 required below) — an Open Gathering's
+// audience is "everyone with Gathering Alerts on," which requires the live
+// Jotform roster; the Worker has no Jotform credentials (see photo/scorecard
+// classification notes elsewhere in this file for the same constraint), so
+// there's no way to compute that audience from here. The portal only ever
+// shows/sets this checkbox in crew mode for the same reason — this is a
+// server-side belt-and-suspenders guard, not the primary enforcement.
+async function spawnAutoRepeatGatherings(env) {
+  try {
+    const { results } = await env.DB.prepare(
+      `SELECT * FROM gatherings
+       WHERE auto_repeat = 1 AND auto_repeat_spawned = 0
+         AND status = 'active' AND fill_list_enabled = 0
+         AND event_time < datetime('now')`
+    ).all();
+    for (const g of results) {
+      // Atomic claim — only the request that actually flips this bit from 0
+      // to 1 proceeds, so two concurrent Home loads right at expiry can't
+      // both create a successor.
+      const claim = await env.DB.prepare(
+        `UPDATE gatherings SET auto_repeat_spawned = 1 WHERE id = ? AND auto_repeat_spawned = 0`
+      ).bind(g.id).run();
+      if (!claim.meta || claim.meta.changes !== 1) continue;
+
+      const sourceDt = new Date(g.event_time);
+      if (isNaN(sourceDt.getTime())) continue;
+
+      // +7 days, then re-derive the correct Eastern offset for that new date
+      // — a naive UTC-ms +7 days can land an hour off if the two Sundays
+      // straddle a DST boundary (same class of fix as the Meta filename
+      // timezone bug, Dev-62).
+      const naiveNext = new Date(sourceDt.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const dtf = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York', hour12: false,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+      const parts = {};
+      dtf.formatToParts(naiveNext).forEach(p => { if (p.type !== 'literal') parts[p.type] = p.value; });
+      const hh = parts.hour === '24' ? '00' : parts.hour;
+      const nextEventTime = localWallTimeToUTC(
+        Number(parts.year), Number(parts.month), Number(parts.day),
+        Number(hh), Number(parts.minute), Number(parts.second), 'America/New_York'
+      ).toISOString();
+
+      const holeCount = (g.holes === 9) ? 9 : 18;
+      let newId;
+      try {
+        const insertResult = await env.DB.prepare(
+          `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, gathering_type, description, tee_time_status, holes, auto_repeat, auto_repeat_spawned)
+           VALUES (?, ?, ?, ?, ?, ?, 0, 'active', ?, ?, ?, ?, 1, 0)`
+        ).bind(g.host_id, g.title, g.venue, nextEventTime, g.size, g.crew_id, g.gathering_type, g.description, g.tee_time_status || 'confirmed', holeCount).run();
+        newId = insertResult.meta.last_row_id;
+      } catch (e) {
+        console.warn('Auto-repeat: failed to create successor for gathering', g.id, e);
+        continue;
+      }
+
+      // Notify the crew — Worker-side send, same shape as the existing
+      // cancel/date-change notifiers, since there's no client tap driving
+      // this one.
+      try {
+        if (g.crew_id) {
+          const { results: members } = await env.DB.prepare(
+            `SELECT player_id FROM crew_members WHERE crew_id = ?`
+          ).bind(g.crew_id).all();
+          const notifyIds = members.map(r => r.player_id).filter(id => id !== g.host_id);
+          if (notifyIds.length) {
+            const dateLabel = formatEventTimeLabel(nextEventTime);
+            const sentAt = Date.now();
+            const kvKey  = `feed::${sentAt}`;
+            const bfMeta = { gathering_id: Number(newId), invited: notifyIds };
+            const notifyPayload = {
+              app_id: env.OS_APP_ID,
+              headings: { en: '🔁 New Gathering' },
+              contents: { en: `"${g.title}" auto-scheduled for ${dateLabel} — same crew as last time.` },
+              filters: notifyIds.flatMap((id, i) => [
+                ...(i > 0 ? [{ operator: 'OR' }] : []),
+                { field: 'tag', key: 'player_name', relation: '=', value: id }
+              ]),
+              url: 'https://birdiefriends.com/portal.html',
+              bf_type: 'gathering_invite',
+              bf_meta: bfMeta
+            };
+            await env.BF_FLAGS.put(kvKey, JSON.stringify({
+              id: `feed-${sentAt}`, key: kvKey,
+              title: notifyPayload.headings.en, body: notifyPayload.contents.en,
+              sentAt, type: 'gathering_invite', meta: bfMeta
+            }));
+            fetch('https://onesignal.com/api/v1/notifications', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
+              body: JSON.stringify(notifyPayload)
+            }).catch(e => console.warn('Auto-repeat invite push failed:', e));
+          }
+        }
+      } catch (notifyErr) {
+        console.warn('Auto-repeat: notify failed (non-blocking):', notifyErr);
+      }
+    }
+  } catch (e) {
+    console.warn('spawnAutoRepeatGatherings error:', e);
+  }
+}
+
 async function classifyPhotoSection(env, { eventName, capturedBy, eventStart, capturedAt, scorecardSubmitted }) {
   if (scorecardSubmitted) return 'post_round';
+
 
   const refTime = capturedAt ? new Date(capturedAt) : new Date();
   if (isNaN(refTime.getTime())) return 'on_course';
@@ -377,16 +516,16 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled, gathering_type, description, tee_time_status, holes } = body;
+      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled, gathering_type, description, tee_time_status, holes, auto_repeat } = body;
       if (!host_id || !title || !event_time) {
         return new Response(JSON.stringify({ error: 'host_id, title, and event_time are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       const holeCount = (holes === 9) ? 9 : 18; // Dev-66 — a Gathering's typical round length, defaults to 18
       try {
         const result = await env.DB.prepare(
-          `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, gathering_type, description, tee_time_status, holes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`
-        ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0, gathering_type || null, description || null, tee_time_status || 'confirmed', holeCount).run();
+          `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, gathering_type, description, tee_time_status, holes, auto_repeat)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`
+        ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0, gathering_type || null, description || null, tee_time_status || 'confirmed', holeCount, auto_repeat ? 1 : 0).run();
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -520,12 +659,12 @@ export default {
         // Open) could only be set at creation, with no way to fix a mistake
         // afterward (real incident: Walli created a Crew-mode Gathering,
         // discovered there was no path to switch it to Open).
-        const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description', 'tee_time_status', 'holes', 'fill_list_enabled', 'crew_id'];
+        const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description', 'tee_time_status', 'holes', 'fill_list_enabled', 'crew_id', 'auto_repeat'];
         const setClauses = [];
         const binds = [];
         for (const field of allowed) {
           if (Object.prototype.hasOwnProperty.call(body, field)) {
-            const val = field === 'fill_list_enabled' ? (body[field] ? 1 : 0) : (body[field] ?? null);
+            const val = (field === 'fill_list_enabled' || field === 'auto_repeat') ? (body[field] ? 1 : 0) : (body[field] ?? null);
             setClauses.push(`${field} = ?`);
             binds.push(val);
           }
@@ -643,6 +782,10 @@ export default {
              WHERE g.status = 'active' AND (g.host_id = ? OR cm.player_id = ?)
              ORDER BY g.event_time ASC`;
         const { results } = await env.DB.prepare(sql).bind(playerId, playerId).all();
+        // Dev-70 — Auto-Repeat Gatherings. Non-blocking, same pattern as
+        // pruneAnnouncementFeed: runs after the response is queued, never
+        // adds latency to a real page load.
+        ctx.waitUntil(spawnAutoRepeatGatherings(env));
         return new Response(JSON.stringify({ ok: true, gatherings: results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
