@@ -168,7 +168,7 @@ async function spawnAutoRepeatGatherings(env) {
       `SELECT * FROM gatherings
        WHERE auto_repeat = 1 AND auto_repeat_spawned = 0
          AND status = 'active' AND fill_list_enabled = 0
-         AND event_time < datetime('now')`
+         AND datetime(event_time) < datetime('now')`
     ).all();
     for (const g of results) {
       // Atomic claim — only the request that actually flips this bit from 0
