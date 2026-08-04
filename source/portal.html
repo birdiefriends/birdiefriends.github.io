@@ -14212,10 +14212,30 @@ async function repeatGathering(gatheringId) {
         fill_list_enabled: g.fillListEnabled,
         gathering_type: g.gatheringType,
         description: g.description,
-        tee_time_status: g.teeTimeStatus
+        tee_time_status: g.teeTimeStatus,
+        // Dev-70 hotfix — Repeat and the automatic engine are two paths to
+        // the same outcome ("make next week's Gathering"); if the source
+        // still had auto_repeat armed, carry it forward onto the new card so
+        // the chain keeps flowing, then clear it from the source below.
+        // Without this, a manual Repeat and a later engine spawn from the
+        // same source can both fire and create a duplicate successor —
+        // exactly what happened with Chooch's 8/4 → 8/11 CGA card.
+        auto_repeat: !!g.autoRepeat && !g.fillListEnabled
       })
     });
     if (!gathData.ok) throw new Error(gathData.error || 'Repeat failed');
+
+    // Deactivate the source's own flag now that its "successor" duty has
+    // been fulfilled manually — prevents the engine from later creating a
+    // second, redundant one from this same past card. Best-effort: a
+    // failure here shouldn't undo the Gathering that was just created, just
+    // leaves the old flag armed (caught on the next Repeat or Edit anyway).
+    if (g.autoRepeat) {
+      gatheringsFetchJSON(`${GATHERINGS_API}/gatherings/${gatheringId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host_id: currentPlayer, auto_repeat: false })
+      }).catch(e => console.warn('Auto-repeat handoff (clearing source) failed:', e));
+    }
 
     if (notifyNames.length) {
       const notifType  = g.fillListEnabled ? 'gathering_open_invite' : 'gathering_invite';
