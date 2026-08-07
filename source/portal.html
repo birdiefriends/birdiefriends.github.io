@@ -6646,7 +6646,13 @@ async function submitGatheringRegistration(evt, choice, submitBtn) {
   const status = choice.toLowerCase();
 
   try {
-    await writeGatheringRegistration(evt.gatheringId, status, evt.rawEventTime || null);
+    const regResult = await writeGatheringRegistration(evt.gatheringId, status, evt.rawEventTime || null);
+    // Dev-70 — the server may have silently downgraded Yes to Sub if the
+    // Gathering was already at capacity; regResult.status is the actual
+    // saved value, not necessarily what was tapped. Everything below keys
+    // off this, not the original `choice`, so local state and the toast
+    // both reflect what actually got saved.
+    if (regResult.downgraded) choice = 'Sub';
 
     // Update local gatheringRegData — upsert (mirrors D1's ON CONFLICT behavior).
     let row = gatheringRegData.find(r => r.gatheringId === evt.gatheringId && r.player === currentPlayer);
@@ -6688,7 +6694,10 @@ async function submitGatheringRegistration(evt, choice, submitBtn) {
       showToast(`Marked as not attending ${evt.name}`);
     } else {
       restoreEvent(evt.id);
-      showToast(choice === 'Yes' ? `✅ Registered for ${evt.name}` : `🔄 Sub registered for ${evt.name}`);
+      showToast(
+        regResult.downgraded ? `🔄 "${evt.name}" is full — you've been added as Sub` :
+        choice === 'Yes' ? `✅ Registered for ${evt.name}` : `🔄 Sub registered for ${evt.name}`
+      );
       // Restore InActive → Active if needed (BL-18 fix). Best-effort, non-blocking.
       restoreActiveIfNeeded().catch(e => console.warn('[Gathering] Active restore error:', e));
     }
@@ -6774,7 +6783,9 @@ async function changeGatheringRegistration(evt, subId, newAnswer, btn) {
   const prevStatus = reg ? reg.status : null;
 
   try {
-    await writeGatheringRegistration(evt.gatheringId, status, evt.rawEventTime || null);
+    const regResult = await writeGatheringRegistration(evt.gatheringId, status, evt.rawEventTime || null);
+    // Dev-70 — same capacity-downgrade handling as submitGatheringRegistration.
+    if (regResult.downgraded) newAnswer = 'Sub';
     if (reg) { reg.status = newAnswer; reg.confirmedFor = evt.rawEventTime || null; }
 
     if (newAnswer === 'No') {
@@ -6797,7 +6808,7 @@ async function changeGatheringRegistration(evt, subId, newAnswer, btn) {
         showToast(`Unregistered from ${evt.name}`);
       }
     } else {
-      showToast(`Updated for ${evt.name}`);
+      showToast(regResult.downgraded ? `🔄 "${evt.name}" is full — you've been added as Sub` : `Updated for ${evt.name}`);
       renderAll();
     }
   } catch(e) {
