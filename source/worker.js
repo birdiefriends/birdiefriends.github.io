@@ -898,6 +898,32 @@ export default {
         return new Response(JSON.stringify({ error: 'gathering_id, player_id, and status (yes/no/sub) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       try {
+        // Dev-70 — Gatherings intentionally don't hard-lock at capacity the
+        // way Series events do (see buildActionButtons' comment client-side —
+        // Yes/Sub/No always stay tappable so a host can handle real-world
+        // overflow manually). But an unenforced size meant "Yes" could run
+        // arbitrarily past it with no signal at all. This is the actual
+        // enforcement: once a Yes would put the gathering over its stated
+        // size, it's silently saved as Sub instead, and the host gets
+        // notified so they know it happened and can act on it.
+        let finalStatus = status;
+        let downgraded  = false;
+        let gInfo = null;
+        if (status === 'yes') {
+          gInfo = await env.DB.prepare(`SELECT size, host_id, title FROM gatherings WHERE id = ?`).bind(gathering_id).first();
+          if (gInfo && gInfo.size) {
+            // Exclude this player's own existing row — re-confirming an
+            // already-held Yes slot shouldn't count against itself.
+            const row = await env.DB.prepare(
+              `SELECT COUNT(*) as cnt FROM registrations WHERE gathering_id = ? AND status = 'yes' AND player_id != ?`
+            ).bind(gathering_id, player_id).first();
+            if (row && row.cnt >= gInfo.size) {
+              finalStatus = 'sub';
+              downgraded  = true;
+            }
+          }
+        }
+
         // confirmed_for stores the event_time the player responded to.
         // Portal uses it to detect stale responses after a date change (Dev-48).
         // host_note is an optional free-text message from crew to host (Dev-49).
@@ -909,8 +935,39 @@ export default {
              registered_at = excluded.registered_at,
              confirmed_for = excluded.confirmed_for,
              host_note = excluded.host_note`
-        ).bind(gathering_id, player_id, status, confirmed_for || null, host_note || null).run();
-        return new Response(JSON.stringify({ ok: true, gathering_id: Number(gathering_id), player_id, status }), {
+        ).bind(gathering_id, player_id, finalStatus, confirmed_for || null, host_note || null).run();
+
+        if (downgraded && gInfo.host_id && gInfo.host_id !== player_id) {
+          ctx.waitUntil((async () => {
+            try {
+              const sentAt = Date.now();
+              const kvKey  = `feed::${sentAt}`;
+              const title  = '🔄 Gathering full';
+              const bodyText = `${player_id} tried to join "${gInfo.title}" — already at capacity, moved to Sub instead.`;
+              const bfMeta = { gathering_id: Number(gathering_id), player_id };
+              await env.BF_FLAGS.put(kvKey, JSON.stringify({
+                id: `feed-${sentAt}`, key: kvKey, title, body: bodyText, sentAt, type: 'gathering_capacity', meta: bfMeta
+              }));
+              await fetch('https://onesignal.com/api/v1/notifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
+                body: JSON.stringify({
+                  app_id: env.OS_APP_ID,
+                  headings: { en: title },
+                  contents: { en: bodyText },
+                  filters: [{ field: 'tag', key: 'player_name', relation: '=', value: gInfo.host_id }],
+                  url: 'https://birdiefriends.com/portal.html',
+                  bf_type: 'gathering_capacity',
+                  bf_meta: bfMeta
+                })
+              });
+            } catch (notifyErr) {
+              console.warn('Capacity downgrade host notify failed:', notifyErr);
+            }
+          })());
+        }
+
+        return new Response(JSON.stringify({ ok: true, gathering_id: Number(gathering_id), player_id, status: finalStatus, downgraded }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       } catch (e) {
