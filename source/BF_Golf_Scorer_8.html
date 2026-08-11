@@ -7299,6 +7299,9 @@ function grpUpdateHcp(id, val) {
   if (!p) return;
   const hcp = val === '' ? null : parseFloat(val);
   p.hcp = hcp;
+  p.hcpOverridden = true; // Dev-70 — commissioner typed this by hand; grpMergePlayers
+                           // must not silently overwrite it back from series history
+                           // on the next Fetch Registrants (e.g. after a GS restart).
   const { tee, isNoHcp } = grpCalcTeeAndQuota(hcp, p.isNoHcp ? p.tee : null);
   if (!p.isNoHcp) {
     p.tee = tee;
@@ -7406,6 +7409,7 @@ function grpTableUpdateHcp(id, val) {
   if (!p) return;
   const hcp = val === '' ? null : parseFloat(val);
   p.hcp = (hcp !== null && !isNaN(hcp)) ? hcp : null;
+  p.hcpOverridden = true; // Dev-70 — see grpUpdateHcp's note; same protection here.
 
   // Blank HCP = NoHCP (genuine no-GHIN player); filled HCP = normal player
   p.isNoHcp = (p.hcp === null);
@@ -8005,8 +8009,14 @@ function grpMergePlayers(registrants, eventName) {
       // checked isNoHcp, so a DiffHCP player's manually-entered HCP (no reliable
       // series-history source — GHIN doesn't track them at all) got silently
       // stomped by stale history data on every "Fetch Registrants" click.
+      // hcpOverridden excluded too (Dev-70) — same failure mode, wider cause:
+      // ANY commissioner hand-edit to HCP (grpUpdateHcp/grpTableUpdateHcp) was
+      // getting silently overwritten back to playerHistory's currentHcp — the
+      // player's handicap as of their LAST scored event, not today's real-time
+      // correction — the moment Fetch Registrants ran again for any reason,
+      // including just recovering state after a GS restart.
       existing.isSub = reg.isSub;
-      if (!existing.isNoHcp && !existing.isDiffHcp) {
+      if (!existing.isNoHcp && !existing.isDiffHcp && !existing.hcpOverridden) {
         const ph2 = season ? seriesData.seasons[season]?.playerHistory?.[existing.name] : null;
         const latestHcp = ph2?.currentHcp ?? existing.hcp;
         if (latestHcp !== null) {
@@ -8508,7 +8518,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.52 · 2026-08-11';
+const GS_VERSION = 'v8.53 · 2026-08-11';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
