@@ -7673,7 +7673,18 @@ function grpRenderPool() {
   grpUpdatePublishStatusBanner();
   const pool = document.getElementById('grp-pool');
   const empty = document.getElementById('grp-pool-empty');
-  const unassigned = grpPlayers.filter(p => !p.groupId);
+  // Always rank-sorted (Brian, Dev-70) — previously only sorted when the
+  // "Sort Pool by Rank" button was tapped, so a fresh Fetch or a player
+  // dropped back into the pool would leave it in fetch/insertion order
+  // until someone remembered to re-sort. Unranked players (no scored
+  // events yet) sort to the end rather than colliding at position 0.
+  const unassigned = grpPlayers
+    .filter(p => !p.groupId)
+    .sort((a, b) => {
+      const ra = grpGetRank(a.name)?.overallRank ?? Infinity;
+      const rb = grpGetRank(b.name)?.overallRank ?? Infinity;
+      return ra - rb;
+    });
   document.getElementById('grp-pool-count').textContent = unassigned.length;
 
   if (!unassigned.length) {
@@ -8497,7 +8508,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.51 · 2026-08-11';
+const GS_VERSION = 'v8.52 · 2026-08-11';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
