@@ -6928,14 +6928,30 @@ function grpBuildRankings() {
       seriesAchieved += rest.reduce((s,e) => s + e.actual, 0) / rest.length;
     }
     const seriesScore = Math.round((seriesAchieved - seriesAssigned) * 100) / 100;
-    playerData[name] = { seriesScore, eventsPlayed: scorableEvts.length, overallRank: null };
+    // eventsPlayed stays the real scorable-event count (unchanged — other
+    // code reads this for on-screen "events played" displays). qualifyingEvts
+    // separately mirrors generateSeriesPage's calcSeriesPerformance() input,
+    // which includes the synthetic retroactive-E1 event for NoHCP players —
+    // without this, a NoHCP player who qualifies on the real Series page
+    // (3 real events + 1 retro E1 = 4) would incorrectly show as provisional
+    // here (3 real events < 4).
+    playerData[name] = { seriesScore, eventsPlayed: scorableEvts.length, qualifyingEvts: calcEvts.length, overallRank: null };
   });
 
-  // Rank all players with 1+ scored events by seriesScore desc (preliminary ranking)
-  const rankList = Object.values(playerData)
-    .filter(p => p.eventsPlayed > 0)
-    .sort((a,b) => b.seriesScore - a.seriesScore);
-  rankList.forEach((p, i) => { p.overallRank = i + 1; });
+  // Rank with the SAME qualification split as generateSeriesPage/results.html:
+  // players with 4+ scored events ("qualifiers") are ranked 1..Q among
+  // themselves by seriesScore desc; players below that (fewer than 4 events)
+  // continue the numbering from Q+1 but are ranked only among each other —
+  // never inserted into the qualified group by score. Previously this sorted
+  // every scored player together regardless of event count, so someone with
+  // a great score on very few events (e.g. 3) could outrank genuine
+  // 4-event qualifiers — exactly the mismatch Brian flagged against the
+  // real Series standings (Dev-70).
+  const scored = Object.values(playerData).filter(p => p.eventsPlayed > 0);
+  const qualifiers    = scored.filter(p => p.qualifyingEvts >= 4).sort((a,b) => b.seriesScore - a.seriesScore);
+  const nonQualifiers = scored.filter(p => p.qualifyingEvts <  4).sort((a,b) => b.seriesScore - a.seriesScore);
+  qualifiers.forEach((p, i)    => { p.overallRank = i + 1; p.qualifies = true; });
+  nonQualifiers.forEach((p, i) => { p.overallRank = qualifiers.length + i + 1; p.qualifies = false; });
 
   return playerData;
 }
@@ -7243,7 +7259,7 @@ function grpMakeCard(p, inGroup) {
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:5px">
           <div style="font-size:0.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}${subBadge}</div>
-          ${(() => { const r=grpGetRank(p.name); return r?.overallRank ? `<span style="font-size:0.68rem;font-weight:700;background:#085041;color:#fff;border-radius:10px;padding:1px 6px">#${r.overallRank}</span>` : ''; })()}
+          ${(() => { const r=grpGetRank(p.name); return r?.overallRank ? `<span style="font-size:0.68rem;font-weight:700;background:${r.qualifies?'#085041':'#999'};color:#fff;border-radius:10px;padding:1px 6px" title="${r.qualifies?'':'Provisional — fewer than 4 events'}">${r.qualifies?'':'('}#${r.overallRank}${r.qualifies?'':')'}</span>` : ''; })()}
         </div>
         <div style="display:flex;align-items:center;gap:5px;margin-top:3px;flex-wrap:wrap">
           <span style="font-size:0.7rem;padding:1px 6px;border-radius:10px;${teeStyle}">${p.tee}</span>
@@ -7360,7 +7376,7 @@ function grpRenderHcpTable() {
 
     const rankInfo = grpGetRank(p.name);
     const rankNum  = rankInfo?.overallRank
-      ? `<span style="font-weight:700;color:#085041">#${rankInfo.overallRank}</span>`
+      ? `<span style="font-weight:700;color:${rankInfo.qualifies?'#085041':'#999'}" title="${rankInfo.qualifies?'':'Provisional — fewer than 4 events'}">${rankInfo.qualifies?'':'('}#${rankInfo.overallRank}${rankInfo.qualifies?'':')'}</span>`
       : `<span style="color:var(--text-muted)">—</span>`;
     const rankEvts = rankInfo?.eventsPlayed > 0
       ? `<span style="font-size:0.82rem;color:var(--text-muted)">${rankInfo.eventsPlayed}</span>`
@@ -8227,7 +8243,7 @@ function grpGenerateGroupingsHTML(eventName, status, groupsData) {
 
       const pRank = grpGetRank(p.name);
       const pRankNum  = pRank?.overallRank
-        ? `<span style="font-weight:700;font-size:1rem;color:#085041">#${pRank.overallRank}</span>`
+        ? `<span style="font-weight:700;font-size:1rem;color:${pRank.qualifies?'#085041':'#999'}" title="${pRank.qualifies?'':'Provisional — fewer than 4 events'}">${pRank.qualifies?'':'('}#${pRank.overallRank}${pRank.qualifies?'':')'}</span>`
         : `<span style="color:#bbb">—</span>`;
       const pRankEvts = pRank?.eventsPlayed > 0
         ? `<span style="font-size:0.9rem;color:#666">${pRank.eventsPlayed}</span>`
