@@ -1152,21 +1152,6 @@ let ctpWinners = { 3: "", 8: "", 10: "", 15: "", 18: "" };
 let cachedPlayers = []; // always up-to-date player list for CTP selectors
 const CTP_HOLES = [3, 8, 10, 15, 18];
 
-// ── CttP Auto-fetch from Jotform ─────────────────────────────────────────────
-async function fetchCTPFromJotform() {
-  const eventName = document.getElementById('event-name').value.trim();
-  const statusEl  = document.getElementById('ctp-fetch-status');
-  const btn       = document.getElementById('ctp-fetch-btn');
-
-  if (!eventName) {
-    statusEl.innerHTML = '<span style="color:#c0392b">⚠ Set Event Name in Players tab first.</span>';
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = '⏳ Fetching…';
-  statusEl.innerHTML = '<span style="color:#666">Fetching CttP submissions…</span>';
-
 // Dev-70 — every call to the local Jotform proxy (/api/jotform/...) used to
 // be a single unretried fetch(). Brian reported the proxy being "more
 // unavailable than available" right when GS launches, requiring repeated
@@ -1193,6 +1178,21 @@ async function fetchJotformProxy(url, opts = {}, maxAttempts = 5) {
   }
   throw lastErr;
 }
+
+// ── CttP Auto-fetch from Jotform ─────────────────────────────────────────────
+async function fetchCTPFromJotform() {
+  const eventName = document.getElementById('event-name').value.trim();
+  const statusEl  = document.getElementById('ctp-fetch-status');
+  const btn       = document.getElementById('ctp-fetch-btn');
+
+  if (!eventName) {
+    statusEl.innerHTML = '<span style="color:#c0392b">⚠ Set Event Name in Players tab first.</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Fetching…';
+  statusEl.innerHTML = '<span style="color:#666">Fetching CttP submissions…</span>';
 
   try {
     const resp = await fetchJotformProxy(`/api/jotform/submissions/${CTP_FORM_ID}`, {
@@ -8546,7 +8546,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.54 · 2026-08-11';
+const GS_VERSION = 'v8.55 · 2026-08-11';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
