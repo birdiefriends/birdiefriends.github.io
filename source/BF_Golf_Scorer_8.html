@@ -1167,10 +1167,38 @@ async function fetchCTPFromJotform() {
   btn.textContent = '⏳ Fetching…';
   statusEl.innerHTML = '<span style="color:#666">Fetching CttP submissions…</span>';
 
+// Dev-70 — every call to the local Jotform proxy (/api/jotform/...) used to
+// be a single unretried fetch(). Brian reported the proxy being "more
+// unavailable than available" right when GS launches, requiring repeated
+// close/reopen cycles — the classic symptom of the browser tab firing its
+// first request before launch_golf_scorer.py has finished binding its port.
+// A raw "Failed to fetch" (a browser-level TypeError, not an HTTP response)
+// is exactly what that race produces. This wraps every proxy call with a
+// few retries and short backoff before giving up, so a transient miss at
+// the very start of a launch resolves itself instead of surfacing an error
+// the user has to manually work around. 4xx responses are NOT retried —
+// those are real problems (bad form ID, etc.) that won't fix themselves.
+async function fetchJotformProxy(url, opts = {}, maxAttempts = 5) {
+  const delaysMs = [0, 300, 700, 1200, 2000];
+  let lastErr;
+  for (let i = 0; i < maxAttempts; i++) {
+    if (delaysMs[i]) await new Promise(r => setTimeout(r, delaysMs[i]));
+    try {
+      const resp = await fetch(url, opts);
+      if (resp.ok || (resp.status >= 400 && resp.status < 500)) return resp;
+      lastErr = new Error(`Server error ${resp.status}`);
+    } catch (e) {
+      lastErr = e; // network-level failure — the proxy-not-ready case this exists for
+    }
+  }
+  throw lastErr;
+}
+
   try {
-    const resp = await fetch(`/api/jotform/submissions/${CTP_FORM_ID}`, {
+    const resp = await fetchJotformProxy(`/api/jotform/submissions/${CTP_FORM_ID}`, {
       headers: { 'Content-Type': 'application/json' }
     });
+
     if (!resp.ok) {
       let errMsg = `Server error ${resp.status}`;
       try { const errBody = await resp.json(); errMsg = errBody.error || errBody.message || errMsg; } catch(e) {}
@@ -2796,7 +2824,7 @@ async function fetchJotformScores() {
 
   try {
     // Call Jotform API via local proxy
-    const resp = await fetch(`/api/jotform/submissions/${JF_FORM_ID}`, {
+    const resp = await fetchJotformProxy(`/api/jotform/submissions/${JF_FORM_ID}`, {
       headers: { 'Content-Type': 'application/json' }
     });
 
@@ -6542,7 +6570,7 @@ async function loadPhotosEventNames(preselectName) {
   if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Loading events from Request Event form…'; }
 
   try {
-    const resp = await fetch(`/api/jotform/submissions/${REQUEST_FORM_ID}`, {
+    const resp = await fetchJotformProxy(`/api/jotform/submissions/${REQUEST_FORM_ID}`, {
       headers: { 'Content-Type': 'application/json' }
     });
     if (!resp.ok) {
@@ -7018,7 +7046,7 @@ async function grpLoadEventNames(preselectName) {
   grpSetStatus('loading', 'Loading event names from Registration form…');
 
   try {
-    const resp = await fetch(`/api/jotform/submissions/${REG_FORM_ID_REG}`, {
+    const resp = await fetchJotformProxy(`/api/jotform/submissions/${REG_FORM_ID_REG}`, {
       headers: { 'Content-Type': 'application/json' }
     });
     if (!resp.ok) {
@@ -7466,7 +7494,7 @@ async function loadGhinNameMap() {
   const statusEl = document.getElementById('grp-ghin-map-status');
   if (statusEl) { statusEl.textContent = 'Loading GHIN Name flags from Jotform…'; statusEl.style.color = 'var(--text-muted)'; }
   try {
-    const resp = await fetch(`/api/jotform/submissions/${MEMBER_FORM_ID}`, {
+    const resp = await fetchJotformProxy(`/api/jotform/submissions/${MEMBER_FORM_ID}`, {
       headers: { 'Accept': 'application/json' }
     });
     const data = await resp.json();
@@ -7913,7 +7941,7 @@ async function grpFetchRegistrants() {
 
   try {
     // Fetch from Registration form via proxy
-    const resp = await fetch(`/api/jotform/submissions/${REG_FORM_ID_REG}`, {
+    const resp = await fetchJotformProxy(`/api/jotform/submissions/${REG_FORM_ID_REG}`, {
       headers: { 'Content-Type': 'application/json' }
     });
     if (!resp.ok) {
@@ -8518,7 +8546,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.53 · 2026-08-11';
+const GS_VERSION = 'v8.54 · 2026-08-11';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
