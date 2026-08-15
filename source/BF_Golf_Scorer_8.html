@@ -7623,6 +7623,14 @@ async function grpApplyGhinPaste() {
 
     if (hcp === undefined) { notFound.push(`${p.name} (no HCP-looking number nearby)`); return; }
     p.hcp = hcp;
+    p.hcpOverridden = true; // Dev-70 hotfix — a GHIN paste is a real, current
+                             // handicap pull, at least as authoritative as a
+                             // manual type-in (arguably more so). This was the
+                             // actual gap: grpUpdateHcp/grpTableUpdateHcp set
+                             // this flag, but this function writes p.hcp
+                             // directly and never did — so the next Fetch
+                             // Registrants silently reverted every GHIN-paste
+                             // update back to stale series history.
     matched++;
   });
 
@@ -8546,7 +8554,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.55 · 2026-08-11';
+const GS_VERSION = 'v8.56 · 2026-08-11';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
