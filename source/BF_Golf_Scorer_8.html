@@ -7326,11 +7326,19 @@ function grpUpdateHcp(id, val) {
   const p = grpPlayers.find(x => x.id === id);
   if (!p) return;
   const hcp = val === '' ? null : parseFloat(val);
+  const wasNoHcp = p.isNoHcp;
   p.hcp = hcp;
   p.hcpOverridden = true; // Dev-70 — commissioner typed this by hand; grpMergePlayers
                            // must not silently overwrite it back from series history
                            // on the next Fetch Registrants (e.g. after a GS restart).
-  const { tee, isNoHcp } = grpCalcTeeAndQuota(hcp, p.isNoHcp ? p.tee : null);
+  const { tee, isNoHcp } = grpCalcTeeAndQuota(hcp, wasNoHcp ? p.tee : null);
+  p.isNoHcp = isNoHcp; // Dev-70 hotfix — this was computed but never actually
+                        // written back to the player record, so blanking HCP
+                        // here left p.isNoHcp stale at its old value. Harmless
+                        // for THIS function's own render (grpMakeCard rebuilds
+                        // the whole card from current state either way), but a
+                        // stale isNoHcp would confuse grpMergePlayers' refresh
+                        // guard on the next Fetch Registrants.
   if (!p.isNoHcp) {
     p.tee = tee;
     p.quota = grpGetEstimatedQuota(p.name, hcp, tee); // adjustment formula — matches "Why this quota?"
@@ -7419,7 +7427,8 @@ function grpRenderHcpTable() {
       <td style="padding:7px 8px;text-align:center">${rankEvts}</td>
       <td style="padding:7px 8px;text-align:center" id="grp-tcell-tee-${p.id}">${teeCell}</td>
       <td style="padding:7px 8px;text-align:center">
-        <input type="number" step="0.1" min="0" max="54"
+        <input type="number" step="0.1" max="54"
+          id="grp-tcell-hcpinput-${p.id}"
           value="${p.hcp !== null && !isNaN(p.hcp) ? p.hcp : ''}"
           placeholder="${p.isNoHcp ? 'NoHCP' : '—'}"
           style="width:80px;font-size:0.88rem;padding:4px 8px;border:1.5px solid var(--border);border-radius:4px;text-align:center"
@@ -7441,6 +7450,8 @@ function grpTableUpdateHcp(id, val) {
 
   // Blank HCP = NoHCP (genuine no-GHIN player); filled HCP = normal player
   p.isNoHcp = (p.hcp === null);
+  const hcpInput = document.getElementById(`grp-tcell-hcpinput-${id}`);
+  if (hcpInput) hcpInput.placeholder = p.isNoHcp ? 'NoHCP' : '—';
 
   if (!p.isNoHcp) {
     // Normal player — tee and quota from HCP
@@ -7452,15 +7463,28 @@ function grpTableUpdateHcp(id, val) {
     p.quota = grpGetEstimatedQuota(p.name, null, p.tee);
   }
 
-  // Update tee badge in table row
+  // Update tee cell in table row — must handle BOTH directions. Previously
+  // this only updated the cell when leaving NoHCP (hcp typed in), so a
+  // player blanked back to NoHCP (e.g. undoing an accidental spinner-click)
+  // was left with whatever plain tee badge was already showing and no way
+  // back to the Green/Combo/Gold dropdown to actually pick a tee (Brian,
+  // Dev-70 — Chauncey Lutte).
   const teeCell = document.getElementById(`grp-tcell-tee-${id}`);
-  if (teeCell && !p.isNoHcp) {
-    const teeStyle = p.tee === 'Green'
-      ? 'background:#d4edda;color:#085041;border:1px solid #a8d5b5'
-      : p.tee === 'Gold'
-        ? 'background:#fff3cd;color:#856404;border:1px solid #ffd97d'
-        : 'background:#ede8fb;color:#3c3489;border:1px solid #c5baf5';
-    teeCell.innerHTML = `<span style="font-size:0.75rem;padding:2px 8px;border-radius:10px;${teeStyle}">${p.tee}</span>`;
+  if (teeCell) {
+    if (p.isNoHcp) {
+      teeCell.innerHTML = `<select style="font-size:0.78rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--card)" onchange="grpTableSetTee('${id}',this.value)">
+           <option value="Green" ${p.tee==='Green'?'selected':''}>Green</option>
+           <option value="Combo" ${p.tee==='Combo'?'selected':''}>Combo</option>
+           <option value="Gold"  ${p.tee==='Gold'?'selected':''}>Gold</option>
+         </select>`;
+    } else {
+      const teeStyle = p.tee === 'Green'
+        ? 'background:#d4edda;color:#085041;border:1px solid #a8d5b5'
+        : p.tee === 'Gold'
+          ? 'background:#fff3cd;color:#856404;border:1px solid #ffd97d'
+          : 'background:#ede8fb;color:#3c3489;border:1px solid #c5baf5';
+      teeCell.innerHTML = `<span style="font-size:0.75rem;padding:2px 8px;border-radius:10px;${teeStyle}">${p.tee}</span>`;
+    }
   }
   // Update quota cell in table row
   const quotaCell = document.getElementById(`grp-tcell-quota-${id}`);
@@ -8554,7 +8578,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.56 · 2026-08-11';
+const GS_VERSION = 'v8.57 · 2026-08-11';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
