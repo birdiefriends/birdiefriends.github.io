@@ -489,3 +489,20 @@ ALTER TABLE venues ADD COLUMN theme_motif TEXT;
 -- ============================================================
 
 DROP TABLE IF EXISTS upload_attempts_log;
+
+-- ============================================================
+-- Entry 25 -- 2026-08-11 -- Session Dev-70
+-- Auto-Repeat Gatherings. A host can flag a crew-mode Gathering to
+-- automatically spawn its own successor one week after its tee time
+-- passes, chaining forward indefinitely until cancelled or unchecked.
+-- auto_repeat: host-set flag (Create/Edit checkbox). auto_repeat_spawned:
+-- engine-only bookkeeping -- claimed atomically by spawnAutoRepeatGatherings()
+-- to prevent two concurrent Home loads at expiry from double-spawning.
+-- Both default 0 so every existing row is unaffected.
+-- Worker: spawnAutoRepeatGatherings(), triggered via ctx.waitUntil() on
+-- every GET /gatherings.
+-- ============================================================
+
+ALTER TABLE gatherings ADD COLUMN auto_repeat INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE gatherings ADD COLUMN auto_repeat_spawned INTEGER NOT NULL DEFAULT 0;
+
