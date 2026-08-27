@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BFE Host Admin Panel — Setup</title>
+<style>
+  :root {
+    --ink: #1c2530; --sub: #5b6b7a; --line: #dfe6ec; --bg: #f6f8fa;
+    --accent: #1c6b4f; --accent-dark: #124d38; --warn: #a15c00; --err: #b3261e;
+    --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--ink); margin: 0; padding: 0 0 80px;
+  }
+  header {
+    background: var(--accent-dark); color: #fff; padding: 22px 28px;
+  }
+  header h1 { margin: 0 0 4px; font-size: 1.4rem; }
+  header p { margin: 0; color: #cfe3da; font-size: 0.9rem; }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px 20px; }
+  section.card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 20px 22px; margin-bottom: 20px;
+  }
+  section.card h2 { margin: 0 0 4px; font-size: 1.05rem; }
+  section.card .hint { color: var(--sub); font-size: 0.85rem; margin: 0 0 16px; }
+  label { display: block; font-size: 0.82rem; color: var(--sub); margin-bottom: 4px; }
+  input[type=text], input[type=number], select {
+    width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px;
+    font-size: 0.92rem; background: #fff;
+  }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .row > div { flex: 1; min-width: 140px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 0.86rem; vertical-align: middle; }
+  th { color: var(--sub); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: .03em; }
+  button {
+    background: var(--accent); color: #fff; border: none; border-radius: 7px;
+    padding: 8px 16px; font-size: 0.88rem; cursor: pointer; font-weight: 600;
+  }
+  button:hover { background: var(--accent-dark); }
+  button:disabled { background: #b7c2ca; cursor: default; }
+  button.secondary { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+  button.secondary:hover { background: #eef6f2; }
+  button.link { background: none; color: var(--accent); padding: 2px 6px; font-weight: 500; }
+  button.danger { background: #fff; color: var(--err); border: 1px solid var(--err); padding: 3px 9px; font-size: 0.8rem; }
+  .btnbar { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+  .radiogroup { display: flex; gap: 18px; margin-bottom: 12px; }
+  .radiogroup label { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: 0.92rem; }
+  .radiogroup input { width: auto; }
+  pre {
+    background: #0f1720; color: #d8e4ec; padding: 14px; border-radius: 8px;
+    overflow-x: auto; font-size: 0.78rem; line-height: 1.5;
+  }
+  .status { font-size: 0.85rem; margin-top: 10px; padding: 8px 10px; border-radius: 6px; display: none; }
+  .status.ok { background: #e6f4ec; color: var(--accent-dark); display: block; }
+  .status.err { background: #fbe9e7; color: var(--err); display: block; }
+  .status.info { background: #eef2f8; color: #2a4a7a; display: block; }
+  .badge { display: inline-block; background: #eef2f5; color: var(--sub); border-radius: 5px; padding: 1px 7px; font-size: 0.72rem; margin-left: 6px; }
+  #outputSection { display: none; }
+  .subtle { color: var(--sub); font-size: 0.82rem; }
+  .tier-row { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 8px; }
+  .tier-row > div { flex: 1; }
+  .roundRow input, .roundRow select { font-size: 0.85rem; padding: 5px 6px; }
+  .roundRow td { padding: 5px 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; background: #eef6f2; color: var(--accent-dark); border-radius: 12px; padding: 2px 9px; font-size: 0.78rem; margin-right: 4px; }
+  .stored-changed { background: #fff8e1 !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>BFE Host Admin Panel — Setup</h1>
+  <p>Registration, roster, venues, tee policy, rounds, and payout for a BF Experiences event — generic across Wally Cup, BFCup, Turkey 2Man, and BlackFriday.</p>
+</header>
+
+<main>
+
+  <!-- ── Event basics ─────────────────────────────────────────────── -->
+  <section class="card">
+    <h2>1. Event basics</h2>
+    <p class="hint">Sets the key this config is saved under on the BFE Worker, and how player HCPs behave through the event.</p>
+    <div class="row">
+      <div>
+        <label for="eventName">Event name (storage key)</label>
+        <input type="text" id="eventName" value="2026 Wally Cup">
+      </div>
+      <div>
+        <label for="hcpMode">HCP mode</label>
+        <select id="hcpMode">
+          <option value="fixed" selected>Fixed — HCP set once before Rd1, unchanged all event (Wally Cup)</option>
+          <option value="variable">Variable — HCP can shift round to round (season-long events)</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Connections ───────────────────────────────────────────────── -->
+  <section class="card">
+    <h2>2. Connections</h2>
+    <p class="hint">Where Setup pulls live data from. The BFPortal URL sources venues (and, later, D1-native Gatherings registration); the BFE Worker URL is where this event's config, tee catalogs, and player profiles are saved.</p>
+    <div class="row">
+      <div><label for="portalUrl">BFPortal Worker base URL</label><input type="text" id="portalUrl" placeholder="https://birdiefriends-push.birdiefriends01.workers.dev"></div>
+      <div><label for="workerUrl">BFE Worker base URL</label><input type="text" id="workerUrl" placeholder="https://bf-experiences.birdiefriends01.workers.dev"></div>
+      <div><label for="hostPin">Host PIN</label><input type="text" id="hostPin" placeholder="PIN"></div>
+    </div>
+    <p class="hint" id="connDefaultsNote" style="margin-top:8px"></p>
+    <div class="btnbar">
+      <button type="button" class="secondary" id="loadVenuesBtn">Load venues from BFPortal</button>
+      <span class="subtle" id="venueLoadStatus">No venues loaded yet.</span>
+    </div>
+  </section>
+
+  <!-- ── Registration / Roster ────────────────────────────────────── -->
+  <section class="card">
+    <h2>3. Registration &amp; roster</h2>
+    <p class="hint">Pulls from the shared BF "Event Registration" Jotform (the same one GS's Pre-Event Setup uses) — load its event names, pick this event, then fetch just its registrants (Register? = Yes/Sub). If this event has its own dedicated form instead, paste that form's ID/URL below and skip the event picker — every submission on a dedicated form belongs to this event. HCP isn't captured at registration — resolve it below in Quick HCP once venues/tee policy are set.</p>
+    <div class="row">
+      <div style="flex:2"><label for="jotformId">Jotform form ID or URL</label><input type="text" id="jotformId" placeholder="e.g. 242882599126166 or the form's URL" value="233103072261037"></div>
+      <div style="align-self:flex-end"><button type="button" class="secondary" id="loadEventNamesBtn">&#x21BA; Load event names</button></div>
+    </div>
+    <div class="row" id="eventNameRow" style="display:none">
+      <div style="flex:2"><label for="eventNameSelect">Event</label><select id="eventNameSelect"><option value="">— select event —</option></select></div>
+      <div style="align-self:flex-end"><button type="button" class="secondary" id="fetchRosterBtn" disabled>Fetch registrants</button></div>
+    </div>
+    <div id="rosterFetchStatus" class="status"></div>
+
+    <table id="rosterTable">
+      <thead><tr><th style="width:40%">Name</th><th style="width:35%">Email</th><th>HCP</th><th></th></tr></thead>
+      <tbody id="rosterBody"></tbody>
+    </table>
+    <div class="btnbar">
+      <button type="button" class="secondary" id="addPlayerBtn">+ Add player manually</button>
+      <span class="subtle" id="rosterCount"></span>
+    </div>
+  </section>
+
+  <!-- ── Rounds ────────────────────────────────────────────────────── -->
+  <section class="card">
+    <h2>4. Rounds</h2>
+    <p class="hint">Fully host-defined — add as many rounds as this event needs, in play order. Each stableford round's quota automatically chains from the most recent earlier stableford round (skipping non-stableford rounds like a 2Man scramble); mark "Rolls into Overall" off for standalone rounds. Venues come from what you loaded above.</p>
+    <table id="roundsTable">
+      <thead><tr>
+        <th style="width:20%">Round name</th><th style="width:14%">Engine</th><th style="width:20%">Venue</th>
+        <th style="width:16%">Wally Ball pts</th><th style="width:12%">Overall?</th><th></th>
+      </tr></thead>
+      <tbody id="roundsBody"></tbody>
+    </table>
+    <div class="btnbar">
+      <button type="button" class="secondary" id="addRoundBtn">+ Add round</button>
+      <button type="button" class="link" id="loadWcDefaultBtn">Load Wally Cup 2026 default schedule (Rd1 → Rd2 → 2Man → Rd3)</button>
+    </div>
+  </section>
+
+  <!-- ── Tee policy ────────────────────────────────────────────────── -->
+  <section class="card">
+    <h2>5. Tee policy</h2>
+    <p class="hint" id="teePolicyContext">Resolved once, from the first stableford round's venue, and carried unchanged for the rest of the event. Add a stableford round above to enable this.</p>
+    <div class="btnbar" style="margin-top:-6px;margin-bottom:12px">
+      <button type="button" class="secondary" id="loadTeeCatalogBtn" disabled>Load this venue's saved tee catalog</button>
+      <label style="display:flex;align-items:center;gap:6px;margin:0;width:auto"><input type="checkbox" id="saveTeeCatalogDefault" style="width:auto" checked> Save as this venue's default when generating</label>
+    </div>
+    <div class="radiogroup">
+      <label><input type="radio" name="teeMode" value="same" checked> Same tee for everyone</label>
+      <label><input type="radio" name="teeMode" value="by_hcp_tier"> By HCP tier</label>
+    </div>
+
+    <div id="teeSameBlock">
+      <div class="row">
+        <div><label for="sameTeeName">Tee name</label><input type="text" id="sameTeeName" placeholder="e.g. White"></div>
+        <div><label for="sameTeeSlope">Slope</label><input type="number" id="sameTeeSlope" placeholder="e.g. 124"></div>
+      </div>
+    </div>
+
+    <div id="teeTierBlock" style="display:none">
+      <div id="tierRows"></div>
+      <div class="btnbar">
+        <button type="button" class="secondary" id="addTierBtn">+ Add tier</button>
+        <button type="button" class="link" id="loadBsgcPresetBtn">Load BSGC default (Green/Combo/Gold)</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Quick HCP ─────────────────────────────────────────────────── -->
+  <section class="card">
+    <h2>6. Quick HCP</h2>
+    <p class="hint">Mirrors GS's Quick HCP Panel: Stored HCP is each player's last-known value from BFE's player-profiles table; New HCP is what this event will use. Load profiles, adjust New HCP per player, and Apply — the roster above updates and each profile's HCP history gets the change.</p>
+    <div class="btnbar" style="margin-top:-6px">
+      <button type="button" class="secondary" id="loadProfilesBtn">Load stored profiles</button>
+      <span class="subtle" id="profilesLoadStatus">Not loaded yet.</span>
+    </div>
+    <div id="quickHcpWrap" style="margin-top:10px"></div>
+    <div class="btnbar">
+      <button type="button" id="applyQuickHcpBtn">Apply Quick HCP</button>
+      <span class="subtle" id="quickHcpStatus"></span>
+    </div>
+  </section>
+
+  <!-- ── Payout ────────────────────────────────────────────────────── -->
+  <section class="card">
+    <h2>7. Payout</h2>
+    <p class="hint">Uses the same proportional formula as the BFSeries payout: podium 20% of pool (weighted split), CTP 15% spread across the round's CTP holes, remainder to skins. The Overall pot is podium-only (no CTP/skins). Wally Ball is a separate winner-take-all pool, split evenly if more than one player never loses the ball.</p>
+    <div class="row">
+      <div><label for="roundCollect">$ per player, per round pot</label><input type="number" id="roundCollect" value="10"></div>
+      <div><label for="cttpHoles">CTP holes per round</label><input type="number" id="cttpHoles" value="2"></div>
+      <div><label for="overallCollect">$ per player, Overall podium</label><input type="number" id="overallCollect" value="20"></div>
+      <div><label for="wbCollect">$ per player, Wally Ball pot</label><input type="number" id="wbCollect" value="10"></div>
+    </div>
+    <div class="row">
+      <div><label for="podiumWeights">Podium split weights (1st,2nd,3rd)</label><input type="text" id="podiumWeights" value="2,1,0.5"></div>
+      <div><label>Total buy-in per player</label><input type="text" id="buyInDisplay" disabled></div>
+    </div>
+  </section>
+
+  <div class="btnbar">
+    <button type="button" id="generateBtn">Generate event config</button>
+  </div>
+
+  <!-- ── Save / Load — always visible, independent of Generate. ──────── -->
+  <section class="card">
+    <h2>8. Save / load on the Worker</h2>
+    <p class="hint">Save persists whatever you last generated below into the Competitive Events tables (<code>bfe_events</code> → <code>bfe_event_rounds</code> → <code>bfe_event_roster</code>), keyed by the event name above — a real parent/child structure, not a single document (and, if checked in Tee policy, updates that venue's saved tee catalog too). Load reassembles it back from those tables.</p>
+    <div class="btnbar">
+      <button type="button" id="saveBtn">Save config</button>
+      <button type="button" class="secondary" id="loadBtn">Load saved config</button>
+    </div>
+    <div id="saveStatus" class="status"></div>
+  </section>
+
+  <!-- ── Output / review ───────────────────────────────────────────── -->
+  <section class="card" id="outputSection">
+    <h2>9. Review</h2>
+    <div id="reviewRoster"></div>
+    <div id="reviewRounds"></div>
+    <div id="reviewPayout"></div>
+    <pre id="rawConfig" style="margin-top:16px"></pre>
+  </section>
+
+</main>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// Connection defaults — flat hardcoded constants, not derived from where
+// this page itself happens to be hosted (a local file, or eventually
+// birdiefriends.com/BFE-Admin.html — neither is the same origin as the
+// BFE Worker API). Only fills in if the field is blank; the value attr
+// keeps whatever you've typed across reloads.
+// ══════════════════════════════════════════════════════════════════════
+const DEFAULT_WORKER_URL = 'https://bf-experiences.birdiefriends01.workers.dev';
+const DEFAULT_PORTAL_URL = 'https://birdiefriends-push.birdiefriends01.workers.dev';
+(function setConnectionDefaults() {
+  const workerInput = document.getElementById('workerUrl');
+  const portalInput = document.getElementById('portalUrl');
+  const note = document.getElementById('connDefaultsNote');
+  if (!workerInput.value) workerInput.value = DEFAULT_WORKER_URL;
+  if (!portalInput.value) portalInput.value = DEFAULT_PORTAL_URL;
+  note.textContent = 'BFE Worker + BFPortal URLs default to their known addresses above — correct them if either has changed.';
+})();
+
+// ══════════════════════════════════════════════════════════════════════
+// Inlined from bf_engine_core.js — browser-safe copy, no require/exports.
+// Logic identical to the Node module (verified via test_engine.js /
+// test_setup_e2e.js); only the module wrapper is stripped.
+// ══════════════════════════════════════════════════════════════════════
+
+const QUOTA_CAP_PCT = 0.25;
+
+function applyQuotaCap(prevQuota, rawQuota) {
+  if (!prevQuota) return { capped: rawQuota, floor: null, ceil: null, wasClamped: false };
+  const floor = prevQuota * (1 - QUOTA_CAP_PCT);
+  const ceil  = prevQuota * (1 + QUOTA_CAP_PCT);
+  const capped = Math.max(floor, Math.min(ceil, rawQuota));
+  return { capped, floor, ceil, wasClamped: Math.abs(capped - rawQuota) > 0.0001 };
+}
+
+function adjustQuota(prevQuota, actualScore, prevHcp, newHcp, slope) {
+  const perfAdj = 0.50 * (actualScore - prevQuota);
+  const hcpAdj  = (prevHcp !== null && prevHcp !== undefined && newHcp !== null && newHcp !== undefined)
+    ? (prevHcp - newHcp) * (slope / 113)
+    : 0;
+  const raw = prevQuota + perfAdj + hcpAdj;
+  const { capped } = applyQuotaCap(prevQuota, raw);
+  return Math.round(capped * 10000) / 10000;
+}
+
+const BSGC_DEFAULT_TEE_POLICY = {
+  mode: 'by_hcp_tier',
+  tiers: [
+    { maxHcp: 10,       tee: { name: 'Green', slope: 132 } },
+    { maxHcp: 18,       tee: { name: 'Combo', slope: 128 } },
+    { maxHcp: Infinity, tee: { name: 'Gold',  slope: 115 } }
+  ]
+};
+
+function resolveTeeAssignment(hcp, teePolicy) {
+  if (teePolicy.mode === 'same') return { ...teePolicy.tee };
+  if (teePolicy.mode === 'by_hcp_tier') {
+    const tier = teePolicy.tiers.find(t => hcp < t.maxHcp) || teePolicy.tiers[teePolicy.tiers.length - 1];
+    return { ...tier.tee };
+  }
+  throw new Error(`Unknown tee policy mode: "${teePolicy.mode}"`);
+}
+
+function computeInitialQuota(hcp, teePolicy) {
+  if (hcp === null || hcp === undefined || isNaN(hcp)) {
+    const tee = teePolicy.mode === 'same' ? { ...teePolicy.tee } : { name: null, slope: null };
+    return { tee, quota: null, isNoHcp: true };
+  }
+  const tee = resolveTeeAssignment(hcp, teePolicy);
+  return { tee, quota: 36 - (hcp * tee.slope / 113), isNoHcp: false };
+}
+
+function computeStablefordQuota(input, params) {
+  const hcpMode = params?.hcpMode || 'variable';
+  const entries = input.players.map(p => {
+    const performance = p.actualPoints - p.quotaIn;
+    const prevHcp = hcpMode === 'fixed' ? p.hcp : (p.prevHcp ?? p.hcp);
+    const newHcp  = p.hcp;
+    const quotaOut = adjustQuota(p.quotaIn, p.actualPoints, prevHcp, newHcp, p.slope);
+    return { name: p.name, basePoints: p.actualPoints, performance, quotaOut };
+  });
+  entries.sort((a, b) => b.performance - a.performance);
+  entries.forEach((e, i) => { e.rank = i + 1; });
+  return { entries };
+}
+
+function computeScramblePair(input, params) {
+  const entries = input.teams.map(t => ({
+    label: t.label, basePoints: t.netTotal ?? t.grossTotal, gross: t.grossTotal, net: t.netTotal
+  }));
+  entries.sort((a, b) => a.basePoints - b.basePoints);
+  entries.forEach((e, i) => { e.rank = i + 1; });
+  return { entries };
+}
+
+const DEFAULT_SCORE_TYPE_POINTS = { albatross: 8, eagle: 5, birdie: 3, par: 1, bogey: 0, double: -1 };
+function computePointsByScoreType(input, params) {
+  const table = params?.pointsTable || DEFAULT_SCORE_TYPE_POINTS;
+  const entries = input.players.map(p => {
+    const basePoints = (p.marks || []).reduce((sum, m) => sum + (table[m] ?? 0), 0);
+    return { name: p.name, basePoints };
+  });
+  entries.sort((a, b) => b.basePoints - a.basePoints);
+  entries.forEach((e, i) => { e.rank = i + 1; });
+  return { entries };
+}
+
+const ENGINES = {
+  stableford_quota: computeStablefordQuota,
+  scramble_pair: computeScramblePair,
+  points_by_score_type: computePointsByScoreType
+};
+
+function applyWallyBall(roundResult, sideData, params) {
+  const points = params?.points ?? 1;
+  roundResult.entries.forEach(e => {
+    const kept = sideData?.[e.name]?.keptWallyBall === true;
+    e.modifiers = e.modifiers || [];
+    const wbPoints = kept ? points : 0;
+    if (kept) e.modifiers.push({ name: 'Wally Ball', points });
+    e.total = e.basePoints + wbPoints;
+  });
+  roundResult.entries.sort((a, b) => b.total - a.total);
+  roundResult.entries.forEach((e, i) => { e.rank = i + 1; });
+  return roundResult;
+}
+
+const INFLUENCERS = { wally_ball: applyWallyBall };
+
+function scoreRound(eventConfig, rawInput, sideData) {
+  const engineFn = ENGINES[eventConfig.engine];
+  if (!engineFn) throw new Error(`Unknown engine id: "${eventConfig.engine}"`);
+  let result = engineFn(rawInput, eventConfig.engineParams);
+  result.entries.forEach(e => { if (e.total === undefined) e.total = e.basePoints; });
+  for (const inf of (eventConfig.influencers || [])) {
+    const infFn = INFLUENCERS[inf.id];
+    if (!infFn) throw new Error(`Unknown influencer id: "${inf.id}"`);
+    result = infFn(result, sideData, inf.params || inf);
+  }
+  return result;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Inlined from bf_setup.js
+// ══════════════════════════════════════════════════════════════════════
+
+function resolveRoster(players, teePolicy) {
+  return players.map(p => {
+    const { tee, quota, isNoHcp } = computeInitialQuota(p.hcp, teePolicy);
+    return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope: tee.slope, initialQuota: quota, isNoHcp };
+  });
+}
+
+// Generic event config assembler — no per-event hardcoded round list.
+// `rounds` is entirely host-authored via the Rounds builder below. Adds
+// `chainsFrom` per stableford round: the most recent EARLIER stableford
+// round's name (skipping non-stableford rounds), or null if it's the first
+// — this is what generalizes "Rd2 depends on Rd1, 2Man doesn't participate,
+// Rd3 depends on Rd2" into data instead of a hardcoded function.
+function buildEventConfig({ eventFamily, isolation, hcpMode, roster, rounds }) {
+  let lastStableford = null;
+  const wiredRounds = rounds.map(r => {
+    const wired = { ...r };
+    if (r.engine === 'stableford_quota') {
+      wired.chainsFrom = lastStableford;
+      lastStableford = r.name;
+    } else {
+      wired.chainsFrom = null; // explicit, not omitted — matches what a reload from /bfe/events always returns
+    }
+    return wired;
+  });
+  return { eventFamily, isolation, hcpMode, roster, rounds: wiredRounds };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Inlined from bf_payout.js
+// ══════════════════════════════════════════════════════════════════════
+
+function roundTo5(n) { return Math.round(n / 5) * 5; }
+
+function splitPodium(amount, weights) {
+  const sum = weights.reduce((s, w) => s + w, 0);
+  const raw = weights.map(w => amount * w / sum);
+  return raw.map(roundTo5);
+}
+
+function recommendPotDistribution(poolTotal, { podiumWeights = [2, 1, 0.5], cttpHoles = 0 } = {}) {
+  if (cttpHoles > 0) {
+    const podiumPool = poolTotal * 0.20;
+    const cttpPool   = poolTotal * 0.15;
+    const podium     = splitPodium(podiumPool, podiumWeights);
+    const cttpPerHole = roundTo5(cttpPool / cttpHoles);
+    const cttpTotal   = cttpPerHole * cttpHoles;
+    const skins       = Math.floor(poolTotal - podium.reduce((a, b) => a + b, 0) - cttpTotal);
+    const leftover    = poolTotal - (podium.reduce((a, b) => a + b, 0) + cttpTotal + skins);
+    return { podium, cttpPerHole, cttpHoles, cttpTotal, skins, leftover };
+  }
+  const podium = splitPodium(poolTotal, podiumWeights);
+  const leftover = poolTotal - podium.reduce((a, b) => a + b, 0);
+  return { podium, leftover };
+}
+
+function recommendPayoutConfig(buyInPerPlayer, playerCount, potPlan) {
+  const pots = [];
+  potPlan.forEach(p => {
+    if (p.kind === 'pool_split') {
+      pots.push({ id: p.id, label: p.label, collectPerPlayer: p.collectPerPlayer,
+                   poolTotal: p.collectPerPlayer * playerCount,
+                   distribution: { type: 'pool_split' } });
+      return;
+    }
+    const rounds = p.appliesToRounds && p.appliesToRounds.length ? p.appliesToRounds : [null];
+    rounds.forEach(roundName => {
+      const poolTotal = p.collectPerPlayer * playerCount;
+      const distribution = recommendPotDistribution(poolTotal, { podiumWeights: p.podiumWeights, cttpHoles: p.cttpHoles || 0 });
+      pots.push({
+        id: roundName ? `${p.id}_${roundName}` : p.id, label: p.label,
+        round: roundName, collectPerPlayer: p.collectPerPlayer, poolTotal, distribution
+      });
+    });
+  });
+  const totalCollected = pots.reduce((s, pot) => s + pot.poolTotal, 0);
+  const expectedTotal  = buyInPerPlayer * playerCount;
+  if (Math.abs(totalCollected - expectedTotal) > 0.01) {
+    throw new Error(`Pot plan doesn't reconcile: pots sum to ${totalCollected}, buy-in implies ${expectedTotal}`);
+  }
+  return { buyInPerPlayer, playerCount, pots };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Jotform — direct client-side fetch, same pattern portal.html already
+// uses in production (JOTFORM_API_KEY + api.jotform.com/form/:id/submissions,
+// called from the browser, no server proxy needed). Mirrors GS's real
+// Pre-Event Setup event-picker (grpLoadEventNames/grpFetchRegistrants):
+// load distinct Event Name values from the form, pick one, fetch only
+// that event's registrants (Register? = Yes/Sub). Matches by QUESTION
+// LABEL TEXT rather than hardcoded QIDs, so it works against any BF
+// Experiences registration form — shared multi-event or dedicated —
+// without per-event field-mapping. A form with no Event Name field at
+// all (rare — every real BF form seen so far has one) is treated as
+// "every submission belongs to this event," same as a dedicated form
+// where all submissions share one Event Name value.
+// ══════════════════════════════════════════════════════════════════════
+
+const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
+const JF_API = 'https://api.jotform.com';
+
+function extractJotformId(input) {
+  const trimmed = (input || '').trim();
+  const match = trimmed.match(/(\d{10,})/); // Jotform form IDs are long numeric strings
+  return match ? match[1] : trimmed;
+}
+
+async function jfFetchSubmissions(formId) {
+  const res = await fetch(`${JF_API}/form/${formId}/submissions?apiKey=${JOTFORM_API_KEY}&limit=1000`);
+  const json = await res.json();
+  if (json.responseCode !== 200) throw new Error('Jotform error: ' + (json.message || res.status));
+  return json.content || [];
+}
+
+// Tries each regex in PRIORITY order across ALL of a submission's fields —
+// e.g. "Player Name" must win over a generic "Name" field even if "Name"
+// happens to iterate first — rather than a single alternation whose match
+// depends on field order.
+function jfGetAnswerByPriority(sub, regexList) {
+  for (const rx of regexList) {
+    let found = null;
+    Object.values(sub.answers || {}).forEach(a => {
+      if (found !== null) return;
+      const label = String(a.text || a.name || '');
+      if (!rx.test(label)) return;
+      const val = a.answer;
+      if (val === undefined || val === null || val === '') return;
+      found = (typeof val === 'object')
+        ? (val.email || [val.first, val.last].filter(Boolean).join(' ') || Object.values(val).filter(Boolean).join(' '))
+        : String(val);
+    });
+    if (found !== null && found !== '') return found;
+  }
+  return null;
+}
+
+// Returns { hasEventField, eventNames } — distinct Event Name values,
+// most-recent-first (year-prefixed names sort correctly), mirroring
+// GS's grpLoadEventNames exactly.
+async function loadJotformEventNames(formIdOrUrl) {
+  const formId = extractJotformId(formIdOrUrl);
+  if (!formId) throw new Error('Enter a Jotform form ID or URL.');
+  const subs = await jfFetchSubmissions(formId);
+  if (!subs.length) throw new Error('No submissions found on that form.');
+  const hasEventField = subs.some(s =>
+    Object.values(s.answers || {}).some(a => /event.*name/i.test(String(a.text || a.name || ''))));
+  if (!hasEventField) return { formId, hasEventField: false, eventNames: [] };
+  const names = [...new Set(
+    subs.map(s => jfGetAnswerByPriority(s, [/event.*name/i])).filter(Boolean).map(s => s.trim())
+  )].sort().reverse();
+  return { formId, hasEventField: true, eventNames: names };
+}
+
+// Fetches just one event's registrants (or every submission, for a form
+// with no Event Name field / when eventName is null), mirroring GS's
+// grpFetchRegistrants filter: Event Name exact match AND Register? is
+// Yes or Sub. A form with no Register?-style field skips that filter
+// rather than excluding everyone.
+async function fetchRegistrantsFromJotform(formId, eventName) {
+  const subs = await jfFetchSubmissions(formId);
+  const filtered = eventName ? subs.filter(sub => {
+    const evt = jfGetAnswerByPriority(sub, [/event.*name/i]);
+    if (evt !== eventName) return false;
+    const rsvp = jfGetAnswerByPriority(sub, [/regist/i]);
+    if (rsvp === null) return true; // no RSVP-style field on this form — don't filter on it
+    return /^(yes|sub)$/i.test(rsvp.trim());
+  }) : subs;
+  const players = [];
+  filtered.forEach(sub => {
+    const name = jfGetAnswerByPriority(sub, [/player.*name/i, /full.*name/i, /^name$/i]);
+    const email = jfGetAnswerByPriority(sub, [/email/i]);
+    if (name && name.trim()) players.push({ name: name.trim(), email: (email || '').trim() });
+  });
+  // De-dupe by name, keep the most recent submission (Jotform returns newest-first by default)
+  const seen = new Set();
+  return players.filter(p => {
+    const key = p.name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// UI wiring
+// ══════════════════════════════════════════════════════════════════════
+
+let assembledConfig = null;   // set by Generate; read by Save
+let venueList = [];           // [{id, name, ...}] loaded from BFPortal /venues
+let profilesByName = {};      // loaded from BFE /bfe/player-profiles
+let roundIdSeq = 0;
+
+// ── Roster rows ──────────────────────────────────────────────────────
+const rosterBody = document.getElementById('rosterBody');
+function addPlayerRow(name = '', email = '', hcp = '') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" class="p-name" value="${name}" placeholder="Player name"></td>
+    <td><input type="text" class="p-email" value="${email}" placeholder="Email"></td>
+    <td><input type="number" class="p-hcp" value="${hcp}" placeholder="HCP" style="width:90px"></td>
+    <td><button type="button" class="danger removeRowBtn">Remove</button></td>`;
+  tr.querySelector('.removeRowBtn').addEventListener('click', () => { tr.remove(); updateRosterCount(); });
+  rosterBody.appendChild(tr);
+  updateRosterCount();
+}
+function updateRosterCount() {
+  document.getElementById('rosterCount').textContent =
+    `${rosterBody.querySelectorAll('tr').length} player row(s)`;
+}
+document.getElementById('addPlayerBtn').addEventListener('click', () => addPlayerRow());
+for (let i = 0; i < 4; i++) addPlayerRow(); // a few starter rows; Fetch or Add as needed
+
+function readRosterInput() {
+  return [...rosterBody.querySelectorAll('tr')].map(tr => {
+    const name = tr.querySelector('.p-name').value.trim();
+    const email = tr.querySelector('.p-email').value.trim();
+    const hcpRaw = tr.querySelector('.p-hcp').value;
+    const hcp = hcpRaw === '' ? null : parseFloat(hcpRaw);
+    return { name, email, hcp };
+  }).filter(p => p.name);
+}
+
+function setRosterStatus(msg, kind) {
+  const el = document.getElementById('rosterFetchStatus');
+  if (!msg) { el.className = 'status'; el.textContent = ''; return; }
+  el.className = 'status ' + (kind || 'info');
+  el.textContent = msg;
+}
+
+let jfActiveFormId = null;    // set by Load event names; Fetch reuses it so the two stay in sync
+let jfHasEventField = false;
+
+document.getElementById('loadEventNamesBtn').addEventListener('click', async () => {
+  const formIdOrUrl = document.getElementById('jotformId').value.trim();
+  const eventRow = document.getElementById('eventNameRow');
+  const sel = document.getElementById('eventNameSelect');
+  const fetchBtn = document.getElementById('fetchRosterBtn');
+  setRosterStatus('Loading event names…', 'info');
+  fetchBtn.disabled = true;
+  try {
+    const { formId, hasEventField, eventNames } = await loadJotformEventNames(formIdOrUrl);
+    jfActiveFormId = formId;
+    jfHasEventField = hasEventField;
+    eventRow.style.display = 'flex';
+    if (!hasEventField) {
+      sel.innerHTML = '<option value="">— no Event Name field on this form — Fetch pulls every submission —</option>';
+      sel.disabled = true;
+      fetchBtn.disabled = false;
+      setRosterStatus('This form has no Event Name field — click Fetch registrants to pull every submission on it.', 'ok');
+      return;
+    }
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">— select event —</option>' +
+      eventNames.map(n => `<option value="${n.replace(/"/g, '&quot;')}">${n}</option>`).join('');
+    setRosterStatus(`Loaded ${eventNames.length} event name(s) — select one, then Fetch registrants.`, 'ok');
+  } catch (e) {
+    eventRow.style.display = 'none';
+    setRosterStatus('Could not load event names: ' + e.message, 'err');
+  }
+});
+
+document.getElementById('eventNameSelect').addEventListener('change', () => {
+  document.getElementById('fetchRosterBtn').disabled = jfHasEventField && !document.getElementById('eventNameSelect').value;
+});
+
+document.getElementById('fetchRosterBtn').addEventListener('click', async () => {
+  if (!jfActiveFormId) { setRosterStatus('Click "Load event names" first.', 'err'); return; }
+  const eventName = jfHasEventField ? document.getElementById('eventNameSelect').value : null;
+  if (jfHasEventField && !eventName) { setRosterStatus('Select an event from the dropdown first.', 'err'); return; }
+  setRosterStatus(`Fetching registrants${eventName ? ` for "${eventName}"` : ''}…`, 'info');
+  try {
+    const fetched = await fetchRegistrantsFromJotform(jfActiveFormId, eventName);
+    if (!fetched.length) { setRosterStatus(`No registrants with a Yes/Sub RSVP found${eventName ? ` for "${eventName}"` : ''}.`, 'err'); return; }
+    // Merge into existing rows: update email if a name already exists, else add a new row.
+    const existingRows = [...rosterBody.querySelectorAll('tr')];
+    const existingByName = {};
+    existingRows.forEach(tr => {
+      const n = tr.querySelector('.p-name').value.trim().toLowerCase();
+      if (n) existingByName[n] = tr;
+    });
+    let added = 0, updated = 0;
+    fetched.forEach(p => {
+      const key = p.name.toLowerCase();
+      if (existingByName[key]) {
+        existingByName[key].querySelector('.p-email').value = p.email;
+        updated++;
+      } else {
+        addPlayerRow(p.name, p.email, '');
+        added++;
+      }
+    });
+    // Remove now-redundant fully-blank rows left over from the starter set
+    [...rosterBody.querySelectorAll('tr')].forEach(tr => {
+      if (!tr.querySelector('.p-name').value.trim() && !tr.querySelector('.p-email').value.trim() && !tr.querySelector('.p-hcp').value.trim()) tr.remove();
+    });
+    updateRosterCount();
+    setRosterStatus(`Pulled ${fetched.length} registrant(s) — ${added} added, ${updated} matched existing rows. HCP still needs to be set below in Quick HCP.`, 'ok');
+  } catch (e) {
+    setRosterStatus('Fetch failed: ' + e.message, 'err');
+  }
+});
+
+// ── Venues (loaded from BFPortal) ───────────────────────────────────
+document.getElementById('loadVenuesBtn').addEventListener('click', async () => {
+  const base = document.getElementById('portalUrl').value.trim().replace(/\/$/, '');
+  const statusEl = document.getElementById('venueLoadStatus');
+  if (!base) { statusEl.textContent = 'Enter the BFPortal Worker URL first.'; return; }
+  statusEl.textContent = 'Loading…';
+  try {
+    const res = await fetch(base + '/venues');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    venueList = data.venues || [];
+    statusEl.textContent = `${venueList.length} venue(s) loaded.`;
+    renderAllRoundVenueSelects();
+  } catch (e) {
+    statusEl.textContent = 'Load failed: ' + e.message;
+  }
+});
+
+function venueOptionsHtml(selectedId) {
+  if (!venueList.length) return `<option value="">— load venues above —</option>`;
+  return venueList.map(v => `<option value="${v.id}" ${String(v.id) === String(selectedId) ? 'selected' : ''}>${v.name}</option>`).join('');
+}
+function renderAllRoundVenueSelects() {
+  document.querySelectorAll('.r-venue').forEach(sel => {
+    const current = sel.value;
+    sel.innerHTML = venueOptionsHtml(current);
+  });
+  refreshTeePolicyContext();
+}
+
+// ── Rounds builder ────────────────────────────────────────────────────
+const roundsBody = document.getElementById('roundsBody');
+const ENGINE_OPTIONS = [
+  { id: 'stableford_quota', label: 'Stableford quota' },
+  { id: 'scramble_pair', label: '2-man scramble' },
+  { id: 'points_by_score_type', label: 'Points by score type' }
+];
+
+function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoints = '', rollsIntoOverall = true) {
+  const id = ++roundIdSeq;
+  const tr = document.createElement('tr');
+  tr.className = 'roundRow';
+  tr.dataset.roundId = id;
+  tr.innerHTML = `
+    <td><input type="text" class="r-name" value="${name}" placeholder="e.g. Rd1"></td>
+    <td><select class="r-engine">${ENGINE_OPTIONS.map(o => `<option value="${o.id}" ${o.id===engine?'selected':''}>${o.label}</option>`).join('')}</select></td>
+    <td><select class="r-venue">${venueOptionsHtml(venueId)}</select></td>
+    <td><input type="number" class="r-wbpoints" value="${wbPoints}" placeholder="e.g. 1" style="width:80px"></td>
+    <td style="text-align:center"><input type="checkbox" class="r-overall" ${rollsIntoOverall ? 'checked' : ''} style="width:auto"></td>
+    <td><button type="button" class="danger removeRoundBtn">Remove</button></td>`;
+  tr.querySelector('.removeRoundBtn').addEventListener('click', () => { tr.remove(); refreshTeePolicyContext(); });
+  tr.querySelector('.r-engine').addEventListener('change', () => {
+    tr.querySelector('.r-wbpoints').disabled = false; // Wally Ball can apply to any engine, host's call
+    refreshTeePolicyContext();
+  });
+  tr.querySelector('.r-venue').addEventListener('change', refreshTeePolicyContext);
+  roundsBody.appendChild(tr);
+  refreshTeePolicyContext();
+}
+document.getElementById('addRoundBtn').addEventListener('click', () => addRoundRow());
+document.getElementById('loadWcDefaultBtn').addEventListener('click', () => {
+  roundsBody.innerHTML = '';
+  addRoundRow('2026 Wally Cup - Rd1', 'stableford_quota', '', '1', true);
+  addRoundRow('2026 Wally Cup - Rd2', 'stableford_quota', '', '1', true);
+  addRoundRow('2026 Wally Cup - 2Man', 'scramble_pair', '', '', false);
+  addRoundRow('2026 Wally Cup - Rd3', 'stableford_quota', '', '2', true);
+});
+addRoundRow('Rd1', 'stableford_quota', '', '1', true); // one starter row
+
+function readRoundsInput() {
+  return [...roundsBody.querySelectorAll('tr')].map(tr => {
+    const name = tr.querySelector('.r-name').value.trim();
+    const engine = tr.querySelector('.r-engine').value;
+    const venueSel = tr.querySelector('.r-venue');
+    const venueId = venueSel.value;
+    const venueName = venueSel.options[venueSel.selectedIndex]?.text || '';
+    const wbPointsRaw = tr.querySelector('.r-wbpoints').value;
+    const rollsIntoOverall = tr.querySelector('.r-overall').checked;
+    const influencers = [];
+    if (wbPointsRaw !== '') influencers.push({ id: 'wally_ball', points: parseFloat(wbPointsRaw) || 0 });
+    return {
+      name, engine, engineParams: engine === 'stableford_quota' ? { hcpMode: document.getElementById('hcpMode').value } : undefined,
+      influencers, venue: venueName, venueId: venueId || null, rollsIntoOverall
+    };
+  }).filter(r => r.name);
+}
+
+// First stableford round drives the whole event's tee policy (resolved once,
+// pre-first-scored-round — see spec). Everything below reacts to whichever
+// round currently holds that position as rounds are added/edited/reordered.
+function firstStablefordRound() {
+  return readRoundsInput().find(r => r.engine === 'stableford_quota');
+}
+function refreshTeePolicyContext() {
+  const first = firstStablefordRound();
+  const ctx = document.getElementById('teePolicyContext');
+  const loadBtn = document.getElementById('loadTeeCatalogBtn');
+  if (!first) {
+    ctx.textContent = 'Resolved once, from the first stableford round’s venue, and carried unchanged for the rest of the event. Add a stableford round above to enable this.';
+    loadBtn.disabled = true;
+    loadBtn.dataset.venueId = '';
+    return;
+  }
+  ctx.innerHTML = `Resolved once, from <strong>${first.name}</strong>'s venue${first.venue ? ` (<strong>${first.venue}</strong>)` : ' (no venue selected yet)'}, and carried unchanged for the rest of the event.`;
+  loadBtn.disabled = !first.venueId;
+  loadBtn.dataset.venueId = first.venueId || '';
+  loadBtn.dataset.venueName = first.venue || '';
+}
+
+// ── Tee policy ────────────────────────────────────────────────────────
+document.querySelectorAll('input[name=teeMode]').forEach(r => {
+  r.addEventListener('change', () => {
+    const mode = document.querySelector('input[name=teeMode]:checked').value;
+    document.getElementById('teeSameBlock').style.display = mode === 'same' ? '' : 'none';
+    document.getElementById('teeTierBlock').style.display = mode === 'by_hcp_tier' ? '' : 'none';
+  });
+});
+const tierRows = document.getElementById('tierRows');
+function addTierRow(maxHcp = '', teeName = '', slope = '') {
+  const div = document.createElement('div');
+  div.className = 'tier-row';
+  div.innerHTML = `
+    <div><label>Applies below HCP</label><input type="number" class="t-maxhcp" value="${maxHcp}" placeholder="e.g. 10 (blank = catch-all)"></div>
+    <div><label>Tee name</label><input type="text" class="t-name" value="${teeName}" placeholder="e.g. Green"></div>
+    <div><label>Slope</label><input type="number" class="t-slope" value="${slope}" placeholder="e.g. 132"></div>
+    <div><button type="button" class="danger removeTierBtn">Remove</button></div>`;
+  div.querySelector('.removeTierBtn').addEventListener('click', () => div.remove());
+  tierRows.appendChild(div);
+}
+document.getElementById('addTierBtn').addEventListener('click', () => addTierRow());
+document.getElementById('loadBsgcPresetBtn').addEventListener('click', () => {
+  tierRows.innerHTML = '';
+  addTierRow(10, 'Green', 132);
+  addTierRow(18, 'Combo', 128);
+  addTierRow('', 'Gold', 115);
+});
+addTierRow();
+
+function readTeePolicy() {
+  const mode = document.querySelector('input[name=teeMode]:checked').value;
+  if (mode === 'same') {
+    return { mode: 'same', tee: {
+      name: document.getElementById('sameTeeName').value.trim() || null,
+      slope: parseFloat(document.getElementById('sameTeeSlope').value) || null
+    }};
+  }
+  const tierDivs = [...tierRows.querySelectorAll('.tier-row')];
+  const tiers = tierDivs.map(div => {
+    const maxHcpRaw = div.querySelector('.t-maxhcp').value;
+    return {
+      maxHcp: maxHcpRaw === '' ? Infinity : parseFloat(maxHcpRaw),
+      tee: { name: div.querySelector('.t-name').value.trim(), slope: parseFloat(div.querySelector('.t-slope').value) || null }
+    };
+  }).sort((a, b) => a.maxHcp - b.maxHcp);
+  return { mode: 'by_hcp_tier', tiers };
+}
+function applyTeePolicyToForm(policy) {
+  if (!policy) return;
+  if (policy.mode === 'same') {
+    document.querySelector('input[name=teeMode][value=same]').checked = true;
+    document.getElementById('teeSameBlock').style.display = '';
+    document.getElementById('teeTierBlock').style.display = 'none';
+    document.getElementById('sameTeeName').value = policy.tee?.name || '';
+    document.getElementById('sameTeeSlope').value = policy.tee?.slope || '';
+  } else if (policy.mode === 'by_hcp_tier') {
+    document.querySelector('input[name=teeMode][value=by_hcp_tier]').checked = true;
+    document.getElementById('teeSameBlock').style.display = 'none';
+    document.getElementById('teeTierBlock').style.display = '';
+    tierRows.innerHTML = '';
+    (policy.tiers || []).forEach(t => addTierRow(t.maxHcp === Infinity || t.maxHcp === null ? '' : t.maxHcp, t.tee?.name || '', t.tee?.slope || ''));
+  }
+}
+
+document.getElementById('loadTeeCatalogBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('loadTeeCatalogBtn');
+  const venueId = btn.dataset.venueId;
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  if (!venueId) return;
+  if (!base) { alert('Enter the BFE Worker base URL first.'); return; }
+  try {
+    const res = await fetch(`${base}/bfe/venue-tee-catalog?venue_id=${encodeURIComponent(venueId)}`);
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || `No saved tee catalog for this venue yet (HTTP ${res.status}).`); return; }
+    applyTeePolicyToForm(data.tee_catalog);
+  } catch (e) {
+    alert('Load failed: ' + e.message);
+  }
+});
+
+// ── Quick HCP ───────────────────────────────────────────────────────
+document.getElementById('loadProfilesBtn').addEventListener('click', async () => {
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const statusEl = document.getElementById('profilesLoadStatus');
+  if (!base) { statusEl.textContent = 'Enter the BFE Worker base URL first.'; return; }
+  statusEl.textContent = 'Loading…';
+  try {
+    const res = await fetch(base + '/bfe/player-profiles');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    profilesByName = {};
+    (data.profiles || []).forEach(p => { profilesByName[p.name.toLowerCase()] = p; });
+    statusEl.textContent = `${data.profiles.length} stored profile(s) loaded.`;
+    renderQuickHcp();
+  } catch (e) {
+    statusEl.textContent = 'Load failed: ' + e.message;
+  }
+});
+
+function renderQuickHcp() {
+  const wrap = document.getElementById('quickHcpWrap');
+  const players = readRosterInput();
+  if (!players.length) { wrap.innerHTML = '<div class="subtle">No roster rows yet — add players above first.</div>'; return; }
+  let teePolicy;
+  try { teePolicy = readTeePolicy(); } catch (e) { teePolicy = { mode: 'same', tee: { name: null, slope: null } }; }
+
+  let html = `<table><thead><tr><th>Player</th><th>Stored HCP</th><th>New HCP</th><th>Tee / Quota preview</th></tr></thead><tbody>`;
+  players.forEach((p, i) => {
+    const profile = profilesByName[p.name.toLowerCase()];
+    const storedHcp = profile ? profile.current_hcp : null;
+    const newHcp = (p.hcp !== null && p.hcp !== undefined) ? p.hcp : storedHcp;
+    const changed = storedHcp !== null && storedHcp !== undefined && newHcp !== storedHcp;
+    let preview = '—';
+    if (newHcp !== null && newHcp !== undefined && !isNaN(newHcp)) {
+      const { tee, quota } = computeInitialQuota(newHcp, teePolicy);
+      preview = `${tee.name || '—'} ${quota !== null ? quota.toFixed(2) : ''}`;
+    }
+    html += `<tr class="${changed ? 'stored-changed' : ''}">
+      <td>${p.name}</td>
+      <td>${storedHcp !== null && storedHcp !== undefined ? storedHcp : '<span class="subtle">no profile yet</span>'}</td>
+      <td><input type="number" step="0.1" class="qhcp-input" data-idx="${i}" data-name="${p.name}" value="${newHcp !== null && newHcp !== undefined ? newHcp : ''}" style="width:90px"></td>
+      <td class="qhcp-preview-${i}">${preview}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.qhcp-input').forEach(input => {
+    input.addEventListener('input', () => {
+      const idx = input.dataset.idx;
+      const val = parseFloat(input.value);
+      let teePolicy2;
+      try { teePolicy2 = readTeePolicy(); } catch (e) { return; }
+      const previewEl = wrap.querySelector('.qhcp-preview-' + idx);
+      if (isNaN(val)) { previewEl.textContent = '—'; return; }
+      const { tee, quota } = computeInitialQuota(val, teePolicy2);
+      previewEl.textContent = `${tee.name || '—'} ${quota !== null ? quota.toFixed(2) : ''}`;
+    });
+  });
+}
+
+document.getElementById('applyQuickHcpBtn').addEventListener('click', async () => {
+  const wrap = document.getElementById('quickHcpWrap');
+  const inputs = [...wrap.querySelectorAll('.qhcp-input')];
+  if (!inputs.length) { document.getElementById('quickHcpStatus').textContent = 'Nothing to apply — load a roster and profiles first.'; return; }
+
+  // Write New HCP values back into the roster table
+  const rows = [...rosterBody.querySelectorAll('tr')];
+  const byName = {};
+  rows.forEach(tr => { byName[tr.querySelector('.p-name').value.trim().toLowerCase()] = tr; });
+  const updates = [];
+  inputs.forEach(input => {
+    const name = input.dataset.name;
+    const val = input.value === '' ? null : parseFloat(input.value);
+    const row = byName[name.toLowerCase()];
+    if (row && val !== null && !isNaN(val)) row.querySelector('.p-hcp').value = val;
+    updates.push({ name, hcp: val });
+  });
+
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const pin = document.getElementById('hostPin').value.trim();
+  const statusEl = document.getElementById('quickHcpStatus');
+  if (!base) { statusEl.textContent = 'Roster updated locally. Enter the BFE Worker URL to also save profiles.'; return; }
+  statusEl.textContent = 'Saving profiles…';
+  try {
+    const res = await fetch(base + '/bfe/player-profiles', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profiles: updates, pin })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    statusEl.textContent = `Applied — roster updated, ${data.updated} profile(s) saved.`;
+  } catch (e) {
+    statusEl.textContent = 'Roster updated locally, but saving profiles failed: ' + e.message;
+  }
+});
+
+// ── Buy-in live total ────────────────────────────────────────────────
+function refreshBuyInDisplay() {
+  const roundCollect  = parseFloat(document.getElementById('roundCollect').value) || 0;
+  const overallCollect = parseFloat(document.getElementById('overallCollect').value) || 0;
+  const wbCollect     = parseFloat(document.getElementById('wbCollect').value) || 0;
+  const roundCount = readRoundsInput().length;
+  const total = roundCollect * roundCount + overallCollect + wbCollect;
+  document.getElementById('buyInDisplay').value = `$${total.toFixed(2)} (${roundCount} round pot${roundCount===1?'':'s'} × $${roundCollect} + $${overallCollect} Overall + $${wbCollect} Wally Ball)`;
+}
+['roundCollect', 'overallCollect', 'wbCollect'].forEach(id =>
+  document.getElementById(id).addEventListener('input', refreshBuyInDisplay));
+refreshBuyInDisplay();
+
+function readVenues() {} // no longer needed as a standalone step — folded into Rounds
+
+// ── Generate ──────────────────────────────────────────────────────────
+document.getElementById('generateBtn').addEventListener('click', async () => {
+  try {
+    const players = readRosterInput();
+    if (!players.length) throw new Error('Add at least one player.');
+    const teePolicy = readTeePolicy();
+    const roundsInput = readRoundsInput();
+    if (!roundsInput.length) throw new Error('Add at least one round.');
+
+    const roster = resolveRoster(players, teePolicy);
+    const eventNameVal = document.getElementById('eventName').value.trim() || '2026 Wally Cup';
+    const eventFamilySlug = eventNameVal.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'bf_event';
+    const config = buildEventConfig({
+      eventFamily: eventFamilySlug, // rough slug for now — a dedicated "event family" field (grouping WC year-over-year, or BFSeries seasons) is future UI, not needed to prove the data structure
+      isolation: 'separate',
+      hcpMode: document.getElementById('hcpMode').value,
+      roster,
+      rounds: roundsInput // venueId kept on each round — Save needs it to populate bfe_event_rounds.venue_id
+    });
+    config.eventName = document.getElementById('eventName').value.trim() || '2026 Wally Cup';
+    config.teePolicy = teePolicy;
+    config.status = 'draft';
+
+    const playerCount = roster.length;
+    const roundCollect   = parseFloat(document.getElementById('roundCollect').value) || 0;
+    const cttpHoles       = parseInt(document.getElementById('cttpHoles').value, 10) || 0;
+    const overallCollect = parseFloat(document.getElementById('overallCollect').value) || 0;
+    const wbCollect       = parseFloat(document.getElementById('wbCollect').value) || 0;
+    const podiumWeights   = document.getElementById('podiumWeights').value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
+    const buyInPerPlayer  = roundCollect * config.rounds.length + overallCollect + wbCollect;
+
+    const potPlan = [
+      { id: 'round', label: 'Round Pot', collectPerPlayer: roundCollect, cttpHoles, podiumWeights,
+        appliesToRounds: config.rounds.map(r => r.name) },
+      { id: 'overall', label: 'Overall Podium', collectPerPlayer: overallCollect, podiumWeights },
+      { id: 'wally_ball', label: 'Wally Ball Pot', collectPerPlayer: wbCollect, kind: 'pool_split' }
+    ];
+    const payout = recommendPayoutConfig(buyInPerPlayer, playerCount, potPlan);
+    config.payout = payout;
+
+    assembledConfig = config;
+    renderReview(config);
+    document.getElementById('outputSection').style.display = 'block';
+
+    // Optionally save this venue's tee catalog as the new default
+    const first = firstStablefordRound();
+    if (document.getElementById('saveTeeCatalogDefault').checked && first && first.venueId) {
+      const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+      const pin = document.getElementById('hostPin').value.trim();
+      if (base) {
+        try {
+          await fetch(base + '/bfe/venue-tee-catalog', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ venue_id: first.venueId, venue_name: first.venue, tee_catalog: teePolicy, pin })
+          });
+        } catch (e) { /* non-fatal — event config generation still succeeded */ }
+      }
+    }
+
+    document.getElementById('outputSection').scrollIntoView({ behavior: 'smooth' });
+    setStatus(null);
+  } catch (e) {
+    alert('Could not generate config: ' + e.message);
+  }
+});
+
+function fmtMoney(n) { return '$' + Number(n).toFixed(2).replace(/\.00$/, ''); }
+
+function renderReview(config) {
+  let rosterHtml = '<h3>Roster &amp; quotas</h3><table><thead><tr><th>Name</th><th>Email</th><th>HCP</th><th>Tee</th><th>Slope</th><th>Initial quota</th></tr></thead><tbody>';
+  config.roster.forEach(p => {
+    rosterHtml += `<tr><td>${p.name}</td><td>${p.email || '—'}</td><td>${p.hcp ?? '—'}</td><td>${p.tee?.name ?? '—'}</td><td>${p.tee?.slope ?? '—'}</td><td>${p.isNoHcp ? 'NoHCP (set before Rd1)' : p.initialQuota.toFixed(2)}</td></tr>`;
+  });
+  rosterHtml += '</tbody></table>';
+  document.getElementById('reviewRoster').innerHTML = rosterHtml;
+
+  let roundsHtml = '<h3>Rounds</h3><table><thead><tr><th>Round</th><th>Engine</th><th>Venue</th><th>Influencers</th><th>Chains from</th><th>Rolls into Overall?</th></tr></thead><tbody>';
+  config.rounds.forEach(r => {
+    const infs = (r.influencers || []).map(i => `${i.id}${i.points ? ` (+${i.points})` : ''}`).join(', ') || '—';
+    roundsHtml += `<tr><td>${r.name}</td><td>${r.engine}</td><td>${r.venue || '—'}</td><td>${infs}</td><td>${r.chainsFrom || (r.engine === 'stableford_quota' ? 'initial quota' : '—')}</td><td>${r.rollsIntoOverall ? 'Yes' : 'No'}</td></tr>`;
+  });
+  roundsHtml += '</tbody></table>';
+  document.getElementById('reviewRounds').innerHTML = roundsHtml;
+
+  let payoutHtml = `<h3>Payout <span class="badge">buy-in: ${fmtMoney(config.payout.buyInPerPlayer)}/player × ${config.payout.playerCount} players</span></h3>`;
+  payoutHtml += '<table><thead><tr><th>Pot</th><th>Pool</th><th>Podium (1st/2nd/3rd)</th><th>CTP</th><th>Skins</th></tr></thead><tbody>';
+  config.payout.pots.forEach(pot => {
+    if (pot.distribution.type === 'pool_split') {
+      payoutHtml += `<tr><td>${pot.label}</td><td>${fmtMoney(pot.poolTotal)}</td><td colspan="3">Winner-take-all / split among players who never lose the ball</td></tr>`;
+      return;
+    }
+    const podium = pot.distribution.podium.map(fmtMoney).join(' / ');
+    const ctp = pot.distribution.cttpHoles ? `${fmtMoney(pot.distribution.cttpPerHole)}/hole × ${pot.distribution.cttpHoles}` : '—';
+    const skins = pot.distribution.skins !== undefined ? fmtMoney(pot.distribution.skins) : '—';
+    payoutHtml += `<tr><td>${pot.label}${pot.round ? ` <span class="subtle">(${pot.round})</span>` : ''}</td><td>${fmtMoney(pot.poolTotal)}</td><td>${podium}</td><td>${ctp}</td><td>${skins}</td></tr>`;
+  });
+  payoutHtml += '</tbody></table>';
+  document.getElementById('reviewPayout').innerHTML = payoutHtml;
+
+  document.getElementById('rawConfig').textContent = JSON.stringify(config, null, 2);
+}
+
+// ── Save / Load event config ─────────────────────────────────────────
+function setStatus(msg, isErr) {
+  const el = document.getElementById('saveStatus');
+  if (!msg) { el.className = 'status'; el.textContent = ''; return; }
+  el.className = 'status ' + (isErr ? 'err' : 'ok');
+  el.textContent = msg;
+}
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  if (!assembledConfig) { setStatus('Generate the config first.', true); return; }
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const pin  = document.getElementById('hostPin').value.trim();
+  if (!base) { setStatus('Enter the BFE Worker base URL.', true); return; }
+  const eventName = document.getElementById('eventName').value.trim();
+  setStatus('Saving…');
+  try {
+    const res = await fetch(base + '/bfe/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: eventName,
+        event_family: assembledConfig.eventFamily,
+        hcp_mode: assembledConfig.hcpMode,
+        status: assembledConfig.status,
+        tee_policy: assembledConfig.teePolicy,
+        payout_plan: assembledConfig.payout,
+        rounds: assembledConfig.rounds,
+        roster: assembledConfig.roster,
+        pin
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    setStatus(`Saved — Event #${data.event_id}, ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
+  } catch (e) {
+    setStatus('Save failed: ' + e.message, true);
+  }
+});
+
+document.getElementById('loadBtn').addEventListener('click', async () => {
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  if (!base) { setStatus('Enter the BFE Worker base URL.', true); return; }
+  const eventName = document.getElementById('eventName').value.trim();
+  setStatus('Loading…');
+  try {
+    const res = await fetch(base + '/bfe/events?event=' + encodeURIComponent(eventName));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    assembledConfig = data.config;
+    renderReview(assembledConfig);
+    document.getElementById('outputSection').style.display = 'block';
+    setStatus(`Loaded (last saved ${data.updated_at}) — ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
+  } catch (e) {
+    setStatus('Load failed: ' + e.message, true);
+  }
+});
+</script>
+
+</body>
+</html>
