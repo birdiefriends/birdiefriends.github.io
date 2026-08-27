@@ -1,0 +1,1 @@
+Classifier explicit-intent override test. Harmless scratch file, not referenced by portal.html, worker.js, or any live path. Safe to delete anytime. Written during Dev-72 diagnostic session.
