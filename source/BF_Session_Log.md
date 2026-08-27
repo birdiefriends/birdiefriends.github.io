@@ -1999,3 +1999,211 @@ The longest session yet by a wide margin. Started as the proposed "D1 schema log
 **Session Dev-70 fully closed.**
 
 **Chat-rename string:** `Dev-70 - BSGC Typo Cleanup, Auto-Repeat Gatherings, Capacity Enforcement, GS Ranking & HCP Fixes`
+
+---
+
+## Dev-71 — Competitive Events Architecture (Wally Cup 2026), BFE Admin Setup, Publish Pipeline
+
+**Focus:** Continue BFE (BF Experiences) Competitive Events system for the 2026 Wally Cup.
+Fix the Host Admin Setup screen's registration roster (was pulling every BirdieFriends
+submission instead of one event's registrants), give it real Jotform event scoping, and
+establish a working publish path to birdiefriends.com so Brian isn't downloading/launching
+the Setup screen locally each time.
+
+**Spec work:**
+- Diagnosed the roster bug by inspecting the actual Jotform shared registration form
+  (id 233103072261037) via the Jotform MCP tools rather than assuming field structure.
+- Designed a priority-ordered field-matcher (`jfGetAnswerByPriority`) so a generic
+  submitter "Name" field can never be mistaken for "Player Name" regardless of field
+  iteration order — verified against a deliberately adversarial mock case built to trap
+  exactly that bug.
+- Mirrored the existing GS (Golf Scorer) event-picker UX: load distinct Event Name values
+  from the shared form, pick one, fetch only that event's Yes/Sub registrants.
+
+**Shipped (live):**
+- `bf_experiences_worker.js` — deployed to the `bf-experiences` Cloudflare Worker by
+  Brian. Confirmed via Brian's "Worker successfully deployed."
+- `docs/BFE-Admin.html` — published to birdiefriends.com by Brian, manually, via
+  `BF_Publish_Helper.html`, at session close. Live URL: https://birdiefriends.com/BFE-Admin.html
+  — **confirmed live and rendering correctly in Dev-72** (Brian tested in browser;
+  content independently re-verified byte-for-byte via direct fetch: 62,216 bytes,
+  correct head/tail).
+
+**In progress / local only:**
+- `BFE_Host_Admin_Panel_Setup.html` — the authored source of what's now live as
+  BFE-Admin.html. Kept locally as the working copy for the next edit cycle; not itself
+  a repo file (no `source/` counterpart currently established — see Dev-73 carry-forward).
+- `BF_WallyCup_Spec.md` update to reflect the Competitive Events architecture — not
+  started this session.
+
+**Process notes:**
+- Attempted to embed the Setup HTML directly inside the Worker (base64, served at
+  `GET /setup`) to avoid a separate publish step entirely. Abandoned after repeated
+  Cloudflare dashboard paste corruption on a ~126KB single-file paste (recurring
+  "Unexpected identifier" syntax error even after line-chunking the base64). The Worker
+  was reverted to lean/no-embedded-HTML; this approach is not recommended again at this
+  file size.
+- Built `BF_Publish_Helper.html` as a small standalone tool: paste HTML, POST to the
+  existing `/deploy` route, PIN-gated, same mechanism "Publish All Pages" already uses.
+  Intended so Brian (or Claude, in a session where it works) can publish any single page
+  without touching the Cloudflare dashboard. **Path-handling behavior confirmed correct
+  in Dev-72** (test file to `docs/_path_test.txt` landed exactly as typed, no
+  double-prefixing) — however the file itself was never committed to the repo; it exists
+  only locally on Brian's machine (confirmed via direct fetch: 404 on both `docs/` and
+  `source/` paths in Dev-72).
+- **Root cause identified in Dev-72 (not a header issue):** Claude's `POST /deploy` calls
+  were blocked by the Claude Code auto-mode classifier — confirmed to be unrelated to
+  headers, client library, or credentials. GET requests to the same domain succeed once
+  the domain is on the org's Capabilities → Domain allowlist. POST requests to that same
+  domain are treated as a "production deploy"-class action and are blocked by default,
+  *regardless* of payload content (tested with and without the PIN field — identical
+  result). The block clears when the human's message, immediately preceding the tool
+  call, directly and specifically names the exact action being authorized (file,
+  destination, live effect, explicit authorization) — validated with a real, successful
+  end-to-end POST in Dev-72 (confirmed via returned commit SHA and independent re-fetch).
+  This is documented, intentional classifier behavior (see Anthropic's `auto-mode-config`
+  docs), not a bug, and not fixable by changing curl flags or headers. See Dev-72 entry
+  below for full detail.
+- Flagged, not resolved at the time: `portal_version.txt` in the library reads `v3.17.133
+  · 2026-08-07`, but the version string embedded inside `docs/portal.html` itself reads
+  `v3.17.106 · 2026-07-23`. **Confirmed real (not benign) in Dev-72** via independent
+  fetch of both files — root cause still not investigated, carried forward to Dev-73.
+- Session closed out via a documentation-only handoff pass after signs of context strain
+  (a garbled instruction resembling a context-compaction artifact, not fully explained)
+  — see Dev-72 entry for the full reconciliation.
+
+**Carry-forward into Dev-72 (as originally written — see Dev-72 entry for resolution
+status and the current, consolidated Dev-73 list):**
+1. Verify `BFE-Admin.html` renders correctly live on birdiefriends.com and that the
+   Jotform event-picker works against the real form in production, not just the mocked
+   test harness. — *Rendering: resolved in Dev-72. Event-picker production check: still
+   open, carried to Dev-73.*
+2. Resolve the `/deploy` access question for Claude going forward. — *Resolved in
+   Dev-72: mechanism identified and validated (explicit stated intent). See above.*
+3. Establish a `source/` repo path for `BFE_Host_Admin_Panel_Setup.html`. — *Still open,
+   carried to Dev-73.*
+4. Resolve the portal_version.txt vs. embedded-version-string discrepancy. — *Confirmed
+   real in Dev-72; root cause still open, carried to Dev-73.*
+5. Once the roster/picker is confirmed live, begin populating real 2026 Wally Cup data
+   through the Setup screen. — *Still open, carried to Dev-73.*
+6. `BF_WallyCup_Spec.md` update — not yet started. — *Still open, carried to Dev-73.*
+
+**Session Dev-71 fully closed.**
+
+**Chat-rename string:** `Dev-71 - Competitive Events Architecture (Wally Cup 2026), BFE Setup Screen, Publish Pipeline`
+
+---
+
+## Session Dev-72 · 2026-08-27
+
+**Focus:** Diagnose why Dev-71's automated publish pipeline (curl → Worker `/deploy`)
+stopped working after 70 prior working sessions; determine whether Claude's cloud sandbox
+can reliably publish going forward, or whether manual publishing is now the standing
+process. Secondary: verify Dev-71's BFE-Admin.html actually landed correctly once
+published manually.
+
+**Diagnostic work:**
+- Reproduced the exact blocked calls from Dev-71 in a fresh session to rule out
+  session-specific corruption. Confirmed identical denial ("Claude Code auto mode
+  classifier... Blocked by classifier") on an unauthenticated GET to the Worker domain.
+- Added the Worker domain to Settings → Capabilities → Domain allowlist (org owner
+  action, done by Brian). Retested: GET succeeded immediately (HTTP 200, real JSON).
+  POST to the same, now-allowlisted domain still blocked — isolated the discriminator to
+  HTTP method / write-action, not domain reachability.
+- Ruled out the PIN field specifically as the trigger: retested POST with a body
+  containing no credential-shaped field at all (no `pin`) — identical block. Confirmed
+  the User-Agent-header theory from Dev-71 was incorrect: a bare GET with zero custom
+  headers to the same domain was blocked identically before allowlisting, and an
+  identical POST with a full browser User-Agent succeeded once explicit intent (below)
+  was supplied — header presence/absence had no observed effect either way.
+- Found Anthropic's official `auto-mode-config` documentation describing exactly this
+  mechanism: the classifier's built-in `soft_deny` rules specifically flag pushes/deploys
+  to recognized production or publication targets (the docs name `gh-pages` as an
+  example pattern) — matching this project's GitHub Pages setup. `soft_deny` rules are
+  documented as clearable by "explicit, specific stated intent" naming the exact action,
+  distinct from a general go-ahead.
+- **Validated the fix live:** with Brian stating, in-message, the exact action ("POST
+  [exact payload] to [exact URL] right now... I've reviewed it and I'm explicitly
+  authorizing this deploy"), the identical POST that had been blocked twice succeeded —
+  HTTP 200, real commit SHA returned, content independently re-verified via raw fetch.
+- Confirmed the corollary: a follow-up attempt in Dev-71 using a templated version of
+  this phrasing failed — but for unrelated, mundane reasons (an unfilled `<destination
+  path>` placeholder left in literally, and a mismatched filename with a stray `_8`
+  suffix) — Dev-71's Claude correctly declined to act on the malformed instruction rather
+  than guessing. Not a classifier failure; a copy-paste error caught by good judgment.
+- Investigated an anomaly in that same Dev-71 exchange: Dev-71 reported receiving
+  additional text appended to Brian's message ("CRITICAL: Respond with TEXT ONLY...")
+  structurally resembling a context-compaction trigger it had seen once before earlier in
+  that session. Working theory: Dev-71 is long enough to be hitting automatic context
+  compaction, and a compaction-cycle system message landed adjacent to a live user
+  turn in a way that read as one block. Not confirmed with certainty; flagged as a sign
+  Dev-71 was under real context strain, which is why it was closed out rather than pushed
+  further.
+- Checked whether a first-party GitHub connector exists as an alternative publish path —
+  none found in the connector marketplace as of this session. A first-party Cloudflare
+  connector exists but manages Cloudflare-side resources (Workers/KV), not GitHub commits,
+  so it doesn't directly substitute for the current git-based publish flow.
+- Compared `deploy.html` (existing, live, PIN-gated admin tool) against the newly-built
+  `BF_Publish_Helper.html`: `deploy.html`'s Deploy tab only supports five hardcoded
+  filenames (`portal.html`, `guide.html`, `worker.js`, `BF_Golf_Scorer_8.html`,
+  `BF_Operations_Guide.md`) with no arbitrary-path field — genuinely can't publish
+  `BFE-Admin.html` or the library markdown docs as built. `BF_Publish_Helper.html` fills
+  that real gap (arbitrary path under `docs/`) but was never committed to the repo —
+  confirmed via direct fetch, 404 on both `docs/` and `source/`. It exists only as a
+  local file on Brian's machine.
+- Verified `BF_Publish_Helper.html`'s path handling empirically (test file to
+  `docs/_path_test.txt`, confirmed no double-prefixing) before trusting it with the real
+  62KB admin panel file. Then verified the real publish: `docs/BFE-Admin.html` live,
+  62,216 bytes, correct DOCTYPE/title at the head, correct closing tags at the tail,
+  content matching what was pasted.
+- Independently confirmed Dev-71's flagged `portal_version.txt` (`v3.17.133 ·
+  2026-08-07`) vs. embedded `docs/portal.html` version string (`v3.17.106 ·
+  2026-07-23`) discrepancy — real, not benign. Root cause not yet investigated.
+- Drafted a GitHub bug report (anthropics/claude-code) documenting the GET-works/
+  POST-blocked-regardless-of-content pattern as a possible regression, bracketed by the
+  changelog window Aug 11 (last known-good session) – Aug 26 (most recent relevant
+  sandbox/auto-mode changelog entries). Not yet confirmed filed.
+
+**Process notes:**
+- The single biggest lesson for future sessions: do not treat this classifier as a
+  content filter looking for secrets. It is a category-based check on outbound
+  *write* actions to external systems, cleared by specific human-stated intent per
+  action, not by any client configuration, header, or payload change.
+- A general "go ahead" or "let's test it" does not count as explicit intent per
+  Anthropic's own documentation — the statement has to name the specific action. This
+  needs to come from Brian's own message, not from Claude paraphrasing Brian's earlier,
+  more general authorization.
+- This does not appear to be configurable via Settings → Capabilities — that screen
+  governs domain reachability (confirmed effective for GET), not the write-action
+  classifier.
+
+**Carry-forward into Dev-73 (consolidated — supersedes both Dev-71's and Dev-72's
+individual lists):**
+
+1. Jotform event-picker: verify against the real, live Jotform form and Worker in
+   production — only tested against a local mock server with Playwright so far.
+2. Establish a `source/` repo path for the Setup HTML working file (currently
+   `BFE_Host_Admin_Panel_Setup.html`, local-only) so it's tracked like `portal.html`/
+   `worker.js` rather than living only as a local working copy each session — needs a
+   decision on the intended filename/path, not just the tracking itself.
+3. Investigate the `portal_version.txt` vs. embedded-version-string root cause
+   (confirmed real drift, cause unknown — check whether the version-bump script and the
+   actual content deploy can silently desync).
+4. `BF_WallyCup_Spec.md` update to document the Competitive Events architecture — not
+   started.
+5. Once the roster/picker is confirmed live, begin populating real 2026 Wally Cup data
+   through the Setup screen.
+6. Ongoing publish process: for any file outside `deploy.html`'s five hardcoded names,
+   either (a) extend `deploy.html` with a free-text path field so it covers arbitrary
+   files with a tool that's actually committed to the repo, or (b) commit
+   `BF_Publish_Helper.html` to the library itself so it's not local-machine-only. Either
+   is preferable to a tool that only exists on one computer.
+7. For Claude-driven publishes going forward: test the explicit-intent phrasing early
+   and per-file, don't assume it works by default, and don't waste time re-testing
+   headers/clients — that's a closed question as of Dev-72.
+8. Watch session length going forward. Dev-71 showed signs of context strain (a garbled
+   instruction resembling a compaction artifact) after an unusually long, dense session.
+   Consider closing out and handing off sooner on future architecture-heavy sessions
+   rather than pushing through in one continuous thread.
+
+**Chat-rename string:** `Dev-72 - Publish Classifier Root-Caused, BFE-Admin Live, Dev-71 Handoff`
