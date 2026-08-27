@@ -45,6 +45,21 @@ ls -lh /home/claude/BF_BizPlan_Vision.md /home/claude/BF_BizPlan_GateLog.md /hom
 session counter authoritative without making any file in the repo a source of
 standing write authorization.
 
+**Classifier note (added Dev-72 — read before attempting the session-close push):**
+Claude's own POST to `/deploy` can be blocked by the cloud sandbox's own auto-mode
+classifier, independent of the PIN, GitHub, or Cloudflare, and independent of Brian's
+chat authorization above — the classifier needs its own signal in addition to Brian's
+go-ahead, not instead of it. Confirmed mechanism (full diagnostic detail in the dev
+track's `BF_Session_Log.md`, Dev-72 entry, and the AUTO-MODE CLASSIFIER RULE in
+`BF_Golf_Scorer_Session_Starter_current.md`): a GET to the Worker domain works once
+that domain is on the org's Capabilities -> Domain allowlist; a POST is treated as a
+write action and is blocked by default regardless of payload content, unless Brian's
+message immediately before the tool call names the exact file, destination, and action
+specifically -- a general "yes, push it" is not enough on its own. If the session-close
+push gets blocked, ask Brian to restate the authorization naming the exact file and
+destination, then retry immediately; do not spend time on header or client-library
+variations, that question is closed as of Dev-72.
+
 **All files are in the library. No uploads needed to start a session.**
 
 ---
