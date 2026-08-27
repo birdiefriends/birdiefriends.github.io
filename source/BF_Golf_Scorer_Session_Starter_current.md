@@ -39,6 +39,16 @@ headers or curl vs Python -- that question is closed as of Dev-72. Just ask the 
 restate the specific authorization per the pattern above. Full diagnostic detail in the
 Dev-72 entry of BF_Session_Log.md.
 
+Additional observation from Dev-72 testing: in one instance, Claude stated the full
+proposal (file, destination, URL, PIN, effect) and Brian's reply consisted only of a
+direct, immediate acknowledgment of that specific proposal. That one instance cleared the
+classifier. This is a single data point, not a confirmed standing behavior -- each
+deploy action still needs its own specific proposal stated in full, and Brian's own
+review and reply are still required every time before anything is sent. Treat the fully
+spelled out phrasing earlier in this rule as the reliable default; this note exists so a
+future session isn't confused if a short reply happens to work, not to encourage relying
+on it.
+
 WORKER RULE:
 Worker changes require worker.js from the library (source/worker.js).
 Claude never reconstructs Worker code without the source file.
