@@ -1,14 +1,36 @@
 <!-- CLAUDE INSTRUCTIONS — READ FIRST
-DEVICE-BRIDGE RULE (added Dev-73 — check this before assuming local-file access):
+DEVICE-BRIDGE RULE (added Dev-73, revised Dev-74 — check this before assuming local-file
+access):
 Claude writing files directly onto Brian's machine (e.g. into the AutoPush folder,
-`C:\Users\16177\Downloads\GolfScorer\AutoPush`) requires THIS session to be linked to
-Brian's computer via the desktop app. That link is a per-session runtime property, not
-anything this repo or bootstrap can turn on — it does NOT carry over automatically from
-one session to the next, even the very next one. Early in any session that expects to
-write local files (pushing a doc/tool update, editing something in AutoPush), check
-whether the `mcp__remote-devices__*` tools are actually present/working (e.g. a
-`get_device_info` call) before assuming they are. If they're not, ask Brian to link this
-computer via the desktop app, or fall back to delivering files in-chat for Brian to save
+`C:\Users\16177\Downloads\GolfScorer\AutoPush`) requires TWO separate, both
+session-scoped things to be true — neither carries over from one session to the next,
+even the very next one:
+  1. THIS session linked to Brian's computer via the desktop app (the device bridge).
+  2. The specific AutoPush folder connected within that link (`connectedFolders` in a
+     `get_device_info` call). Dev-74 confirmed these are independent: the bridge can be
+     live (`get_device_info` succeeds) while `connectedFolders` is still empty.
+
+Early in any session that expects to write local files, call `get_device_info` and check
+both. If the AutoPush path isn't in `connectedFolders`, do NOT call
+`device_request_folder_access` on your own initiative — Dev-74 confirmed the sandbox's
+own auto-mode classifier blocks that exact call when Claude initiates it unprompted, same
+as it blocks an unprompted `/deploy` POST (see AUTO-MODE CLASSIFIER RULE below). It only
+clears when Brian's own message, immediately before the tool call, directly authorizes
+it. That's why the session-start command (below, and on `deploy.html`'s Claude tab)
+bundles the folder-connection authorization into the same paste as the bootstrap fetch —
+one paste does both jobs, no separate back-and-forth needed:
+
+```
+Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md and follow all instructions in it exactly. Also, right now: request access to the folder C:\Users\16177\Downloads\GolfScorer\AutoPush on this computer via device_request_folder_access — I'm explicitly authorizing this folder-connection request for this session.
+```
+
+If Brian pastes the bootstrap command WITHOUT that second sentence (an old copy, or typed
+by hand), treat the folder as not pre-authorized: report the gap plainly in the step 8
+report and give Brian the standalone reconnect phrase to paste —
+`Request access to C:\Users\16177\Downloads\GolfScorer\AutoPush right now — I'm
+explicitly authorizing this folder-connection request for this session.` — rather than
+attempting the call yourself. If the folder request is authorized but still fails, or the
+bridge itself isn't present, fall back to delivering files in-chat for Brian to save
 manually (slower, and has previously caused copy-paste errors — see Dev-73 log entry —
 but it works when the bridge doesn't). Don't discover this gap mid-task the way an
 earlier Dev-73 issue (in-chat file delivery failing) was discovered by surprise.
@@ -113,12 +135,13 @@ is now the sole source of truth for the current Dev-N number. Read it, not this 
 **Worker (bf-experiences — NEW as of Dev-71):** separate Cloudflare Worker, source `bf_experiences_worker.js`, powers the BFE Competitive Events system. Deployed manually by Brian via the Cloudflare dashboard (not via the /deploy route). Confirmed Dev-73: all SQL migrations executed and operational in D1 (8 `bfe_*` tables live — capture + setup/master-data layers only; the results/computation layer, e.g. `bfe_quota_progress`, does not exist yet — see Dev-73 Architecture Notes below). See Dev-71/72/73 Architecture Notes below.
 **Live URL:** https://birdiefriends.com/portal.html
 **BFE Admin Panel (NEW as of Dev-71):** https://birdiefriends.com/BFE-Admin.html — confirmed Dev-73: live, successfully loads venues, event names, and players against the real D1 tables.
-**Local publish tool (NEW as of Dev-73):** `bf_push.bat`/`bf_push.ps1` (v4), Brian's machine
+**Local publish tool (NEW as of Dev-73, updated Dev-74):** `bf_push.bat`/`bf_push.ps1` (v5), Brian's machine
   only, `C:\Users\16177\Downloads\GolfScorer\AutoPush` — PIN-gated, pushes straight to the
   same Worker `/deploy` route, with mandatory post-push byte-verification before deleting
   the local copy. Covers `portal.html`, `portal_version.txt`, `worker.js`, `guide.html`,
   `BF_Golf_Scorer_8.html`, `BF_Operations_Guide.md`, `BF_Experiences.js` (→
-  `source/bf_experiences_worker.js`), `BFE-Admin.html`, and now `BF_Session_Log.md`. This
+  `source/bf_experiences_worker.js`), `BFE-Admin.html`, `BF_Session_Log.md`,
+  `BF_WallyCup_Spec.md`, and now `BF_Session_Bootstrap.md` and `deploy.html` (Dev-74). This
   is the go-to path for any large-file push Claude's own `/deploy` can't get through — see
   the PAYLOAD SIZE CORRECTION note above.
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
