@@ -50,13 +50,34 @@ in the initial command above) — every step below uses `curl`.
 8. Report: session #, portal version, worker version, file sizes — confirm fully loaded
    and ready. **Also state the exact chat-rename string** (e.g. `Dev#42 - <topic>`,
    topic filled in once the session's focus is clear) so the chat title can be pasted
-   directly rather than guessed.
+   directly rather than guessed. **Also state device-bridge/AutoPush status** (added
+   Dev-74 — see the Session Starter's `DEVICE-BRIDGE RULE`): whether the device bridge is
+   reachable (`get_device_info`) and whether the AutoPush folder specifically is in
+   `connectedFolders`. If Brian's session-start paste included the folder-authorization
+   sentence (see the recommended combined command below) and the request still didn't
+   go through, or he pasted the old bootstrap-only command, say so plainly here rather
+   than silently trying `device_request_folder_access` on your own initiative — that call
+   is blocked by the sandbox's own classifier when Claude initiates it unprompted.
 
 **At session close:** append a new entry to `BF_Session_Log.md` (mirroring the existing
 entries' format) and push it via `/deploy` before ending — this is what keeps the
 counter authoritative instead of drifting back into manual numbering.
 
 **All files are in the library. No uploads needed to start a session.**
+
+---
+
+## Recommended session-start command (added Dev-74 — bundles AutoPush authorization)
+
+The single-line command at the top of this file still works, but leaves the AutoPush
+folder unconnected for the session (folder connection doesn't carry over between
+sessions any more than the device link itself does — see the Starter's
+`DEVICE-BRIDGE RULE`). This version does both jobs in one paste; it's the one published
+on `deploy.html`'s Claude tab:
+
+```
+Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md and follow all instructions in it exactly. Also, right now: request access to the folder C:\Users\16177\Downloads\GolfScorer\AutoPush on this computer via device_request_folder_access — I'm explicitly authorizing this folder-connection request for this session.
+```
 
 ---
 
