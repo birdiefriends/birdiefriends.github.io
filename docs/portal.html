@@ -8067,29 +8067,44 @@ function buildLivePanel(evt) {
     </div>` : '';
   const allEntered = enteredCount === 18;
 
-  // Wally Ball \u2014 clean round Y/N + conditional lost-hole/stroke (Dev-74)
+  // Wally Ball \u2014 "Have the Wally Ball?" Y/N + conditional lost-hole/stroke (Dev-74)
   // Only asked for Wally Cup rounds (format-wally / format-scramble), and only if this
   // player hasn't already recorded a loss in an earlier round of this Wally Cup \u2014
   // Wally Ball is a one-time-elimination side game, not a per-round repeat.
+  // Yes = currently holding the Wally Ball (bad \u2014 needs lost-hole/stroke detail).
+  // No  = clean, doesn't have it. (Flipped from "clean round?" phrasing per Brian's
+  // testing feedback \u2014 confirm this Yes/No polarity is what's intended.)
   const isWallyFmt  = ['format-wally','format-scramble'].includes(formatClass(evt.format));
   const wbNeedsAsk  = isWallyFmt && !_wbAlreadyLost;
   const wbYesActive = _wbStatus === 'Yes';
   const wbNoActive  = _wbStatus === 'No';
-  const wbAnswered  = !wbNeedsAsk || wbYesActive || (wbNoActive && _wbHole && _wbStroke);
-  const wbHoleOpts = Array.from({length:18}, (_,i) => i+1)
-    .map(h => '<option value="' + h + '" ' + (_wbHole===h?'selected':'') + '>' + h + '</option>').join('');
-  const wbStrokeOpts = Array.from({length:6}, (_,i) => i+1)
-    .map(s => '<option value="' + s + '" ' + (_wbStroke===s?'selected':'') + '>' + s + '</option>').join('');
-  const wbDetail = wbNoActive ? '' +
-    '<div style="display:flex;gap:8px;margin-top:8px">' +
-      '<div style="flex:1"><div class="sc-section-label" style="margin-bottom:4px">Lost on hole</div>' +
-        '<select onchange="wbSetHole(this.value)" style="width:100%;background:rgba(255,255,255,0.1);' +
-        'border:0.5px solid rgba(255,255,255,0.25);border-radius:8px;padding:8px;color:#fff;font-family:inherit">' +
-        '<option value="">\u2014</option>' + wbHoleOpts + '</select></div>' +
-      '<div style="flex:1"><div class="sc-section-label" style="margin-bottom:4px">Strokes</div>' +
-        '<select onchange="wbSetStroke(this.value)" style="width:100%;background:rgba(255,255,255,0.1);' +
-        'border:0.5px solid rgba(255,255,255,0.25);border-radius:8px;padding:8px;color:#fff;font-family:inherit">' +
-        '<option value="">\u2014</option>' + wbStrokeOpts + '</select></div>' +
+  const wbAnswered  = !wbNeedsAsk || wbNoActive || (wbYesActive && _wbHole && _wbStroke);
+  // Tap-grid pickers (matching the main scorecard's hole grid) instead of native
+  // <select> dropdowns \u2014 those rendered as an ugly, non-typable native mobile
+  // picker overlay per Brian's testing feedback.
+  const wbHoleGrid = () => {
+    let html = '<div class="sc-grid">';
+    for (let h = 1; h <= 18; h++) {
+      const cls = _wbHole === h ? 'sc-active' : '';
+      html += '<div><div class="sc-hole-num">' + h + '</div>' +
+        '<button class="sc-hole-btn ' + cls + '" onclick="wbSetHole(' + h + ')">' + h + '</button></div>';
+    }
+    return html + '</div>';
+  };
+  const wbStrokeGrid = () => {
+    let html = '<div class="sc-grid" style="grid-template-columns:repeat(6,1fr)">';
+    for (let s = 1; s <= 6; s++) {
+      const cls = _wbStroke === s ? 'sc-active' : '';
+      html += '<div><button class="sc-hole-btn ' + cls + '" onclick="wbSetStroke(' + s + ')">' + s + '</button></div>';
+    }
+    return html + '</div>';
+  };
+  const wbDetail = wbYesActive ? '' +
+    '<div style="margin-top:10px">' +
+      '<div class="sc-section-label" style="margin-bottom:4px">Lost on hole</div>' +
+      wbHoleGrid() +
+      '<div class="sc-section-label" style="margin:6px 0 4px">Strokes</div>' +
+      wbStrokeGrid() +
     '</div>' : '';
   const wbSection = !isWallyFmt ? '' : !wbNeedsAsk ? '' +
     '<div style="margin:12px 0;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);' +
@@ -8098,14 +8113,14 @@ function buildLivePanel(evt) {
       '<div style="color:rgba(255,255,255,0.75);font-size:0.85rem">Already recorded a loss in an earlier round \u2014 not asked again.</div>' +
     '</div>' : '' +
     '<div style="margin:12px 0;background:rgba(0,0,0,0.15);border-radius:10px;padding:10px 12px">' +
-      '<div class="sc-section-label" style="margin-bottom:6px">\u{1F3D0} Wally Ball \u2014 clean round?</div>' +
+      '<div class="sc-section-label" style="margin-bottom:6px">\u{1F3D0} Have the Wally Ball?</div>' +
       '<div style="display:flex;gap:8px">' +
         '<button onclick="wbSetStatus(\'Yes\')" style="flex:1;padding:8px;border-radius:8px;font-family:inherit;' +
-          'cursor:pointer;color:#fff;background:' + (wbYesActive?'rgba(29,158,117,0.35)':'rgba(255,255,255,0.08)') +
-          ';border:1px solid ' + (wbYesActive?'rgba(29,158,117,0.6)':'rgba(255,255,255,0.2)') + '">Yes</button>' +
+          'cursor:pointer;color:#fff;background:' + (wbYesActive?'rgba(220,80,80,0.35)':'rgba(255,255,255,0.08)') +
+          ';border:1px solid ' + (wbYesActive?'rgba(220,80,80,0.6)':'rgba(255,255,255,0.2)') + '">Yes</button>' +
         '<button onclick="wbSetStatus(\'No\')" style="flex:1;padding:8px;border-radius:8px;font-family:inherit;' +
-          'cursor:pointer;color:#fff;background:' + (wbNoActive?'rgba(220,80,80,0.35)':'rgba(255,255,255,0.08)') +
-          ';border:1px solid ' + (wbNoActive?'rgba(220,80,80,0.6)':'rgba(255,255,255,0.2)') + '">No</button>' +
+          'cursor:pointer;color:#fff;background:' + (wbNoActive?'rgba(29,158,117,0.35)':'rgba(255,255,255,0.08)') +
+          ';border:1px solid ' + (wbNoActive?'rgba(29,158,117,0.6)':'rgba(255,255,255,0.2)') + '">No</button>' +
       '</div>' +
       wbDetail +
     '</div>';
@@ -9111,7 +9126,7 @@ function scChangePlayer(name) {
 // Wally Ball — clean round Y/N, with conditional lost-hole/stroke entry (Dev-74)
 function wbSetStatus(val) {
   _wbStatus = val;
-  if (val === 'Yes') { _wbHole = null; _wbStroke = null; }
+  if (val === 'No') { _wbHole = null; _wbStroke = null; }  // clean — clear any stale hole/stroke pick
   renderLiveBanner();
 }
 function wbSetHole(v) {
