@@ -49,6 +49,22 @@ spelled out phrasing earlier in this rule as the reliable default; this note exi
 future session isn't confused if a short reply happens to work, not to encourage relying
 on it.
 
+PAYLOAD SIZE CORRECTION (Dev-73 — read this too, do not treat classifier question as
+fully closed by Dev-72 alone): Dev-73 retested the classifier with size isolated as the
+only variable -- a single ~887KB portal.html push and a control ~50-byte push of the
+same content-type -- using maximally explicit, immediate, per-action authorization
+phrased exactly per the pattern above. The small push went through; the large push was
+blocked twice, identically. Brian's own independent retest same session confirmed this:
+large-payload POST is blocked by size regardless of phrasing, small payloads clear with
+explicit intent as already documented above. Practical upshot: do not spend session time
+trying to get Claude's own /deploy to push portal.html, BF_Golf_Scorer_8.html, or any
+other large (~300KB+) file -- route those through `deploy.html` directly, or through
+Brian's local `bf_push.bat`/`bf_push.ps1` tool (in his `AutoPush` folder, not in this
+repo -- see Dev-73 entry in BF_Session_Log.md for what it covers and why it exists).
+Small docs (session starter, ops guide, session log itself) are candidates for either
+path; Dev-73 used the local tool for consistency and its built-in post-push
+byte-verification, not because Claude's own /deploy is known to fail on them.
+
 WORKER RULE:
 Worker changes require worker.js from the library (source/worker.js).
 Claude never reconstructs Worker code without the source file.
@@ -69,20 +85,91 @@ is now the sole source of truth for the current Dev-N number. Read it, not this 
 
 # BirdieFriends Golf Scorer — Session Starter
 **Current session number:** see `BF_Session_Log.md` (this file no longer tracks it)
-**Date:** 2026-08-27 (last updated Dev-72; earlier fields below carried forward unverified except where noted)
-**Portal Version (production):** per `portal_version.txt` (source of truth): v3.17.133 · 2026-08-07.
-  ⚠️ Confirmed discrepancy (Dev-72): the version string embedded inside `docs/portal.html`
-  itself actually reads v3.17.106 · 2026-07-23. Root cause not yet found — see Dev-73
-  carry-forward in `BF_Session_Log.md` before assuming which version is really live.
+**Date:** 2026-08-30 (last updated Dev-73; earlier fields below carried forward unverified except where noted)
+**Portal Version (production):** per `portal_version.txt` (source of truth): v3.17.134 · 2026-08-27.
+  ✅ Dev-72's version-drift discrepancy is RESOLVED as of Dev-73, at the root: the
+  hardcoded fallback version spans inside `portal.html` (`#portal-build-header`,
+  `#portal-build`) were removed entirely — they now start empty and are set only by the
+  live fetch of `portal_version.txt` (falling back to "version unavailable" on fetch
+  failure, never a stale number). There is no longer a second copy of the version string
+  for a future deploy to desync. This was the fourth recurrence of this bug class
+  (Dev-45, Dev-54, Dev-73) — treat it as closed, not just patched.
 **GolfScorer Version:** v8.17 · 2026-06-17g (deployed) — unverified this session, carried forward
 **Worker Version (birdiefriends-push — push/deploy/flags/etc.):** 2026-06-18b + all Gatherings routes through Dev-52 (GET/POST /venues, PATCH /venues/:id, GET/POST/DELETE /gathering-templates) — unverified this session, carried forward
-**Worker (bf-experiences — NEW as of Dev-71):** separate Cloudflare Worker, source `bf_experiences_worker.js`, powers the BFE Competitive Events system. Deployed manually by Brian via the Cloudflare dashboard (not via the /deploy route). See Dev-71/72 Architecture Notes below.
+**Worker (bf-experiences — NEW as of Dev-71):** separate Cloudflare Worker, source `bf_experiences_worker.js`, powers the BFE Competitive Events system. Deployed manually by Brian via the Cloudflare dashboard (not via the /deploy route). Confirmed Dev-73: all SQL migrations executed and operational in D1 (8 `bfe_*` tables live — capture + setup/master-data layers only; the results/computation layer, e.g. `bfe_quota_progress`, does not exist yet — see Dev-73 Architecture Notes below). See Dev-71/72/73 Architecture Notes below.
 **Live URL:** https://birdiefriends.com/portal.html
-**BFE Admin Panel (NEW as of Dev-71):** https://birdiefriends.com/BFE-Admin.html
+**BFE Admin Panel (NEW as of Dev-71):** https://birdiefriends.com/BFE-Admin.html — confirmed Dev-73: live, successfully loads venues, event names, and players against the real D1 tables.
+**Local publish tool (NEW as of Dev-73):** `bf_push.bat`/`bf_push.ps1` (v4), Brian's machine
+  only, `C:\Users\16177\Downloads\GolfScorer\AutoPush` — PIN-gated, pushes straight to the
+  same Worker `/deploy` route, with mandatory post-push byte-verification before deleting
+  the local copy. Covers `portal.html`, `portal_version.txt`, `worker.js`, `guide.html`,
+  `BF_Golf_Scorer_8.html`, `BF_Operations_Guide.md`, `BF_Experiences.js` (→
+  `source/bf_experiences_worker.js`), `BFE-Admin.html`, and now `BF_Session_Log.md`. This
+  is the go-to path for any large-file push Claude's own `/deploy` can't get through — see
+  the PAYLOAD SIZE CORRECTION note above.
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
 **Google Places API Key:** AIzaSyAn1TR2p6JbWR2fr5ydhkurygKpYU9HYtw (restricted to birdiefriends.com)
+**Wally Cup Rd1 tee-off:** confirmed 10am, 9/11/2026. Scoring Engine build is in progress
+  against this hard deadline — see Dev-73 Architecture Notes below and the full Dev-73
+  entry in `BF_Session_Log.md` for the complete phased plan before starting Dev-74 code
+  work.
 
 ---
+
+## Dev-73 Architecture Notes (2026-08-30) — Wally Cup Scoring Engine
+
+**Read this before writing any Dev-74 code for Wally Cup.** Full detail, including the
+GS-derived formulas and the Jotform field table, is in the Dev-73 entry of
+`BF_Session_Log.md` — this is a pointer/summary, not a replacement for it.
+
+- **Status as of Dev-73:** capture layer (`bfe_scorecards` incl. `wb_status`/`wb_hole`/
+  `wb_stroke`, `bfe_cttp_entries`) and setup/master-data layer (`bfe_event_config`,
+  `bfe_venue_tee_catalog`, `bfe_player_profiles`, `bfe_events`/`bfe_event_rounds`/
+  `bfe_event_roster`) are built, live, and confirmed operational. The results/computation
+  layer (`bfe_quota_progress`, `bfe_scramble_pairs`, `bfe_scramble_results`, or whatever
+  Dev-74 decides to actually name/shape them) does not exist at all — no round-results
+  math, payout calc, or cross-round rollup exists anywhere for WC yet. This is the
+  critical remaining work.
+- **Scope decisions locked in this session:** BFSeries scorecard/CttP capture stays on
+  Jotform, not ported to D1, given the time crunch (shouldn't affect BFSeries either way
+  given the separate-Worker architecture). Jotform remains WC's live data collector too —
+  full sunset deferred, not abandoned. The WC Live Panel reuses the existing BFSeries
+  Live Panel (`buildLivePanel()` in `portal.html`) rather than a new standalone build,
+  plus one addition: a Wally Ball status step in the Post-Round Scorecard sheet.
+- **Confirmed headless submission:** `submitScorecard()`/`submitCttp()` in `portal.html`
+  POST directly to Jotform's submission API from client-side JS — they never render or
+  navigate to Jotform's hosted form, so players never see field labels. New fields can be
+  added freely without any player-facing UI constraint.
+- **Wally Ball Jotform fields — added Dev-73, on the existing shared `SCORECARD_FORM_ID`
+  (250963587514163) form:** `wallyBallStatus` (QID 33), `WallyBallLostHole` (QID 34),
+  `wallyBallStroke` (QID 35) — maps 1:1 to the `bfe_scorecards` `wb_status`/`wb_hole`/
+  `wb_stroke` columns already provisioned. **Not yet wired into code** — that's Dev-74's
+  first job (see below).
+- **Dev-74 Phase 1 (hard deadline — 9/11):**
+  1. Add `WB_QID = {status:'33', hole:'34', stroke:'35'}` to `submitScorecard()` and
+     include those params in its POST body.
+  2. Add the Wally Ball input step (Y/N, conditional Hole#/Stroke# when "No") to
+     `buildLivePanel()`'s Post-Round Scorecard section.
+  3. Flip `hasLivePanelSupport()` to `true` for Wally Cup / 2Man formats.
+  4. End-to-end test against the real Jotform form with a disposable test event.
+- **Dev-74/75 Phase 2 (soft deadline, days after 9/11):** design + create the D1
+  results-layer tables; port `adjustQuota`/`applyQuotaCap` (quota formula: `36 - (hcp ×
+  slope / 113)`, slope Green 132/Combo 128/Gold 115; adjustment capped ±25%) and the
+  skins-per-hole-winner loop from `BF_Golf_Scorer_8.html` (skins apply in every WC round
+  including 2Man, feed payout only, not quota/performance); build a "Close Round" action
+  in `BFE-Admin.html` (payout calc, Wally Ball pot resolution, Overall rollup across
+  exactly 3 rounds — note GS's own `calcSeriesPerformance()` is a best-4-of-N model and
+  does **not** fit WC's fixed 3-round Overall, a new calc is needed). **Open/blocking:**
+  the 2Man scramble scoring formula is undefined anywhere in the codebase or spec — needs
+  Brian's direct input before this phase can be sized.
+- **Phase 3 (can start minimal, polish through Rd3):** per-round GLS-style results page
+  generator + a living Overall page (podium held back until Rd3 closes), published via
+  GS's proven `deployPagesToGitHub()`/`POST /deploy` mechanism to `docs/`.
+- **Still open, carried from Dev-71:** `BF_WallyCup_Spec.md` — a structured spec doc for
+  this architecture has never been committed to the repo. The only spec document that
+  exists (`WC_spec.txt`, referenced as "from Dev-71") is local-only on Brian's machine and
+  has not been reconciled against what's actually been decided/built since. Recommend this
+  gets done early in Dev-74 rather than continuing to rely on session-log archaeology.
 
 ## Dev-71 & Dev-72 Architecture Notes (2026-08-27)
 
