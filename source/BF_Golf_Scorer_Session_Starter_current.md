@@ -1,4 +1,18 @@
 <!-- CLAUDE INSTRUCTIONS — READ FIRST
+DEVICE-BRIDGE RULE (added Dev-73 — check this before assuming local-file access):
+Claude writing files directly onto Brian's machine (e.g. into the AutoPush folder,
+`C:\Users\16177\Downloads\GolfScorer\AutoPush`) requires THIS session to be linked to
+Brian's computer via the desktop app. That link is a per-session runtime property, not
+anything this repo or bootstrap can turn on — it does NOT carry over automatically from
+one session to the next, even the very next one. Early in any session that expects to
+write local files (pushing a doc/tool update, editing something in AutoPush), check
+whether the `mcp__remote-devices__*` tools are actually present/working (e.g. a
+`get_device_info` call) before assuming they are. If they're not, ask Brian to link this
+computer via the desktop app, or fall back to delivering files in-chat for Brian to save
+manually (slower, and has previously caused copy-paste errors — see Dev-73 log entry —
+but it works when the bridge doesn't). Don't discover this gap mid-task the way an
+earlier Dev-73 issue (in-chat file delivery failing) was discovered by surprise.
+
 FETCH RULE — NON-NEGOTIABLE:
 Use bash_tool with curl for ALL raw GitHub URL fetches. Do NOT use the web_fetch tool
 for raw.githubusercontent.com URLs — it requires a prior search result and will block.
