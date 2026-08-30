@@ -3461,6 +3461,10 @@ const CTP_FORM_ID       = '251002357493048';
 const SC_QID = { name:'31', event:'30', course:'28',
   holes:[4,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
   front:'24', back:'25', total:'26' };
+// Wally Ball QIDs — added Dev-73 on SCORECARD_FORM_ID, wired Dev-74.
+// status: 'Yes' = clean round (no Wally Ball loss) / 'No' = lost Wally Ball this round.
+// hole/stroke only sent when status === 'No'.
+const WB_QID = { status:'33', hole:'34', stroke:'35' };
 // CttP QIDs
 const CTP_QID = { hole:'3', player:'4', dist:'5', event:'7' };
 // Default CttP holes for BSGC — future: read from event field
@@ -6083,10 +6087,15 @@ function hasLivePanelSupport(evt) {
   if (evt.source === 'gathering') return false;
   const fc = formatClass(evt.format);
   if (fc === 'format-series') return true;
-  // TODO: flip true once GS supports this format
-  if (fc === 'format-wally')    return false;  // targeted Sept 2026
+  // Dev-74: flipped for the 9/11 Wally Cup hard deadline — Rd1 is format-wally,
+  // Rd2 (2-man scramble) is format-scramble. FLAG: this also enables the Live
+  // Panel for ANY non-Wally-Cup event a host creates with a scramble format
+  // (format-scramble isn't Wally-Cup-specific) — flagged to Brian Dev-74 as a
+  // side effect, not yet explicitly confirmed as acceptable. Revisit/narrow
+  // (e.g. gate on event.source or a WC-specific flag) if that's a problem.
+  if (fc === 'format-wally')    return true;   // Dev-74 — was targeted Sept 2026
   if (fc === 'format-cup')      return false;  // targeted Oct/Nov 2026
-  if (fc === 'format-scramble') return false;  // targeted Oct/Nov 2026
+  if (fc === 'format-scramble') return true;   // Dev-74 — was targeted Oct/Nov 2026, needed now for WC Rd2 2-man
   return false;  // format-weekend, blank, ParTee, Practice, etc.
 }
 
@@ -7733,6 +7742,11 @@ function toggleAnnouncements() {
 let _scHoles      = new Array(18).fill(null);  // points per hole, index 0=hole1
 let _scPicking    = null;   // hole index currently open in picker (0-based)
 let _scPlayer     = null;   // player being scored (for overseer post-round entry)
+let _wbStatus     = null;   // 'Yes' | 'No' | null (not yet answered) — Wally Ball, Dev-74
+let _wbHole       = null;   // lost-hole number (1-18), only meaningful when _wbStatus === 'No'
+let _wbStroke     = null;   // stroke penalty count, only meaningful when _wbStatus === 'No'
+let _wbAlreadyLost   = false; // true if this player already recorded a WB loss in an earlier round of this Wally Cup (Dev-74)
+let _wbHistoryPlayer = null;  // which player _wbAlreadyLost currently reflects — guards against a stale async result after a player switch
 let _ctpHole      = null;   // hole number selected for CttP entry
 let _ctpPlayer    = null;   // player selected for CttP entry (overseer proxy)
 let _ctpData      = {};     // { holeNum: { player, dist } } — live leaders
@@ -8052,6 +8066,50 @@ function buildLivePanel(evt) {
       </div>
     </div>` : '';
   const allEntered = enteredCount === 18;
+
+  // Wally Ball \u2014 clean round Y/N + conditional lost-hole/stroke (Dev-74)
+  // Only asked for Wally Cup rounds (format-wally / format-scramble), and only if this
+  // player hasn't already recorded a loss in an earlier round of this Wally Cup \u2014
+  // Wally Ball is a one-time-elimination side game, not a per-round repeat.
+  const isWallyFmt  = ['format-wally','format-scramble'].includes(formatClass(evt.format));
+  const wbNeedsAsk  = isWallyFmt && !_wbAlreadyLost;
+  const wbYesActive = _wbStatus === 'Yes';
+  const wbNoActive  = _wbStatus === 'No';
+  const wbAnswered  = !wbNeedsAsk || wbYesActive || (wbNoActive && _wbHole && _wbStroke);
+  const wbHoleOpts = Array.from({length:18}, (_,i) => i+1)
+    .map(h => '<option value="' + h + '" ' + (_wbHole===h?'selected':'') + '>' + h + '</option>').join('');
+  const wbStrokeOpts = Array.from({length:6}, (_,i) => i+1)
+    .map(s => '<option value="' + s + '" ' + (_wbStroke===s?'selected':'') + '>' + s + '</option>').join('');
+  const wbDetail = wbNoActive ? '' +
+    '<div style="display:flex;gap:8px;margin-top:8px">' +
+      '<div style="flex:1"><div class="sc-section-label" style="margin-bottom:4px">Lost on hole</div>' +
+        '<select onchange="wbSetHole(this.value)" style="width:100%;background:rgba(255,255,255,0.1);' +
+        'border:0.5px solid rgba(255,255,255,0.25);border-radius:8px;padding:8px;color:#fff;font-family:inherit">' +
+        '<option value="">\u2014</option>' + wbHoleOpts + '</select></div>' +
+      '<div style="flex:1"><div class="sc-section-label" style="margin-bottom:4px">Strokes</div>' +
+        '<select onchange="wbSetStroke(this.value)" style="width:100%;background:rgba(255,255,255,0.1);' +
+        'border:0.5px solid rgba(255,255,255,0.25);border-radius:8px;padding:8px;color:#fff;font-family:inherit">' +
+        '<option value="">\u2014</option>' + wbStrokeOpts + '</select></div>' +
+    '</div>' : '';
+  const wbSection = !isWallyFmt ? '' : !wbNeedsAsk ? '' +
+    '<div style="margin:12px 0;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);' +
+      'border-radius:10px;padding:10px 12px">' +
+      '<div class="sc-section-label" style="margin-bottom:2px;color:rgba(255,255,255,0.5)">\u{1F3D0} Wally Ball</div>' +
+      '<div style="color:rgba(255,255,255,0.75);font-size:0.85rem">Already recorded a loss in an earlier round \u2014 not asked again.</div>' +
+    '</div>' : '' +
+    '<div style="margin:12px 0;background:rgba(0,0,0,0.15);border-radius:10px;padding:10px 12px">' +
+      '<div class="sc-section-label" style="margin-bottom:6px">\u{1F3D0} Wally Ball \u2014 clean round?</div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button onclick="wbSetStatus(\'Yes\')" style="flex:1;padding:8px;border-radius:8px;font-family:inherit;' +
+          'cursor:pointer;color:#fff;background:' + (wbYesActive?'rgba(29,158,117,0.35)':'rgba(255,255,255,0.08)') +
+          ';border:1px solid ' + (wbYesActive?'rgba(29,158,117,0.6)':'rgba(255,255,255,0.2)') + '">Yes</button>' +
+        '<button onclick="wbSetStatus(\'No\')" style="flex:1;padding:8px;border-radius:8px;font-family:inherit;' +
+          'cursor:pointer;color:#fff;background:' + (wbNoActive?'rgba(220,80,80,0.35)':'rgba(255,255,255,0.08)') +
+          ';border:1px solid ' + (wbNoActive?'rgba(220,80,80,0.6)':'rgba(255,255,255,0.2)') + '">No</button>' +
+      '</div>' +
+      wbDetail +
+    '</div>';
+
   // Pre-compute confirm vs submit UI to avoid nested template literals
   const scActionHtml = _scSubmitDone
     ? '<div style="background:rgba(29,158,117,0.25);border:1px solid rgba(29,158,117,0.5);' +
@@ -8068,9 +8126,12 @@ function buildLivePanel(evt) {
         'style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.6)">' +
         '\u2713 Done \u2014 All Scorecards In' +
       '</button>'
-    : '<button class="sc-submit-btn" ' + (allEntered && !_scSubmitting ? '' : 'disabled') +
+    : '<button class="sc-submit-btn" ' + (allEntered && wbAnswered && !_scSubmitting ? '' : 'disabled') +
         ' onclick="submitScorecard(\'' + evt.name.replace(/'/g,"\'") + '\')">' +
-        (_scSubmitting ? '\u23f3 Submitting\u2026' : allEntered ? '\u2705 Submit Scorecard' : 'Enter all 18 holes (' + enteredCount + '/18)') +
+        (_scSubmitting ? '\u23f3 Submitting\u2026'
+          : !allEntered ? 'Enter all 18 holes (' + enteredCount + '/18)'
+          : !wbAnswered ? 'Answer Wally Ball above \u2191'
+          : '\u2705 Submit Scorecard') +
       '</button>';
 
   const scSection = _scExpanded
@@ -8099,6 +8160,7 @@ function buildLivePanel(evt) {
         '</div>' +
       '</div>' +
       (picker || '') +
+      wbSection +
       scActionHtml
     : '<button class="sc-submit-btn" onclick="toggleScorecard()" ' +
         'style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.3)">' +
@@ -8368,6 +8430,46 @@ async function checkScorecardSubmitted(eventName, playerName) {
   }
 }
 
+// Has this player already recorded a Wally Ball loss in an EARLIER round of this
+// Wally Cup? Dev-74: WC has no formal cross-round competition ID yet (the
+// results/computation layer isn't built), so this scopes by the same "event name
+// contains wally" substring test formatClass()/formatBadge() already use to
+// recognize Wally Cup rounds — every WC round's Jotform event name is expected to
+// contain "Wally". Revisit if that naming assumption ever changes.
+// Fails open (false) on any error — never blocks the question from being asked;
+// worst case a player is asked again despite an earlier loss, which is a
+// harmless double-question, not a data-integrity problem.
+async function checkWallyBallLost(playerName) {
+  try {
+    const resp = await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}&limit=100&orderby=created_at,DESC`);
+    const data = await resp.json();
+    const subs = data.content || [];
+    const norm = s => (s || '').trim().toLowerCase();
+    const target = norm(playerName);
+    return subs.some(s => {
+      const nameField = norm(s.answers?.[SC_QID.name]?.answer   || '');
+      const evtField  = norm(s.answers?.[SC_QID.event]?.answer  || '');
+      const wbField   = norm(s.answers?.[WB_QID.status]?.answer || '');
+      return nameField === target && evtField.includes('wally') && wbField === 'no';
+    });
+  } catch(e) {
+    console.warn('[WallyBall] checkWallyBallLost error:', e.message);
+    return false;
+  }
+}
+
+// Kicks off the history check for `playerName` and re-renders once it resolves.
+// Guarded by _wbHistoryPlayer so a stale response from a since-abandoned player
+// switch can't overwrite the result for whoever is selected now.
+function refreshWbHistory(playerName) {
+  _wbHistoryPlayer = playerName;
+  checkWallyBallLost(playerName).then(lost => {
+    if (_wbHistoryPlayer !== playerName) return;
+    _wbAlreadyLost = lost;
+    renderLiveBanner();
+  });
+}
+
 // Minimal JPEG EXIF capture-date reader — handles the common Android/JPEG
 // case (DateTimeOriginal / DateTimeDigitized). Deliberately scoped: reliably
 // parsing EXIF out of HEIC (iPhone's native format) in-browser is fragile
@@ -8430,6 +8532,11 @@ function scNextPlayer() {
   _scPlayer     = null;
   _scSubmitting = false;
   _scSubmitDone = false;
+  _wbStatus     = null;
+  _wbHole       = null;
+  _wbStroke     = null;
+  _wbAlreadyLost = false;
+  refreshWbHistory(currentPlayer);  // "next player" defaults to currentPlayer until overseer picks someone else
   renderLiveBanner();
   // Scroll live panel into view
   setTimeout(() => {
@@ -8445,6 +8552,11 @@ function scDoneAllPlayers() {
   _scPlayer     = null;
   _scSubmitting = false;
   _scSubmitDone = false;
+  _wbStatus     = null;
+  _wbHole       = null;
+  _wbStroke     = null;
+  _wbAlreadyLost = false;
+  _wbHistoryPlayer = null;
   _scExpanded   = false;
   _livePanelOpen = false;
   stopCtpRefresh();
@@ -8561,6 +8673,14 @@ async function submitScorecard(evtName) {
     body.append(`submission[${SC_QID.front}]`, String(front));
     body.append(`submission[${SC_QID.back}]`,  String(back));
     body.append(`submission[${SC_QID.total}]`, String(total));
+    // Wally Ball — Dev-74
+    if (_wbStatus) {
+      body.append(`submission[${WB_QID.status}]`, _wbStatus);
+      if (_wbStatus === 'No') {
+        if (_wbHole)   body.append(`submission[${WB_QID.hole}]`,   String(_wbHole));
+        if (_wbStroke) body.append(`submission[${WB_QID.stroke}]`, String(_wbStroke));
+      }
+    }
     await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`,
       { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() });
     _scSubmitDone = true;
@@ -8963,7 +9083,14 @@ async function submitScorecardModal() {
 // Player changed in scorecard selector — reset holes
 function toggleScorecard() {
   _scExpanded = !_scExpanded;
-  if (!_scExpanded) { _scHoles = new Array(18).fill(null); _scPicking = null; }
+  if (!_scExpanded) {
+    _scHoles  = new Array(18).fill(null);
+    _scPicking = null;
+    _wbStatus = null; _wbHole = null; _wbStroke = null;
+    _wbAlreadyLost = false; _wbHistoryPlayer = null;
+  } else {
+    refreshWbHistory(_scPlayer || currentPlayer);
+  }
   renderLiveBanner();
 }
 
@@ -8973,6 +9100,26 @@ function scChangePlayer(name) {
   _scPicking    = null;
   _scSubmitDone = false;
   _scSubmitting = false;
+  _wbStatus     = null;
+  _wbHole       = null;
+  _wbStroke     = null;
+  _wbAlreadyLost = false;
+  refreshWbHistory(name);
+  renderLiveBanner();
+}
+
+// Wally Ball — clean round Y/N, with conditional lost-hole/stroke entry (Dev-74)
+function wbSetStatus(val) {
+  _wbStatus = val;
+  if (val === 'Yes') { _wbHole = null; _wbStroke = null; }
+  renderLiveBanner();
+}
+function wbSetHole(v) {
+  _wbHole = v ? parseInt(v, 10) : null;
+  renderLiveBanner();
+}
+function wbSetStroke(v) {
+  _wbStroke = v ? parseInt(v, 10) : null;
   renderLiveBanner();
 }
 
