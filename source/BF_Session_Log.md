@@ -2406,6 +2406,30 @@ end and architect the remaining Scoring Engine build.
   strain (a compaction occurred). Session deliberately closed out here rather than
   starting Phase 1 code changes, so that work begins fresh in Dev-74 with full context
   budget rather than picking up mid-compaction.
+- **The `AutoPush` device-bridge connection is per-session, not durable.** Confirmed
+  when Brian asked directly whether a future session will "automatically" know how to
+  write into `AutoPush`: it will not. The device bridge (Claude writing files straight
+  into `C:\Users\16177\Downloads\GolfScorer\AutoPush`) only exists because this specific
+  session is linked to Brian's computer via the desktop app. A fresh Dev-74 session
+  starts with no such link and no `mcp__remote-devices__*` tools available until Brian
+  links that session's computer again. Neither this file nor the Session Starter can make
+  that connection automatic — it's a runtime/session property, not a repo setting. Added
+  an explicit check-early note to the Session Starter's instruction block (see its
+  AUTO-MODE CLASSIFIER RULE section) so Dev-74 confirms device-bridge status before
+  assuming it can write there, rather than discovering the gap mid-session the way this
+  session discovered the in-chat-download failure. `bf_push.bat`/`bf_push.ps1` themselves
+  are unaffected either way — they run standalone on Brian's machine and don't depend on
+  Claude's bridge at all; the bridge is only how *Claude* gets new/updated files into that
+  folder for Brian to review before running them.
+
+**Late addendum (end of session):** Brian asked for the Wally Cup spec itself to be
+updated and committed to the repo, not just referenced from this log.
+`BF_WallyCup_Spec.md` was written (reconciling the original `WC_spec.txt` draft against
+everything decided/built this session — the Jotform-stays reversal, the 2Man scramble
+formula gap, the as-built `bfe_*` table list, the venue-tee-catalog divergence) and
+pushed via `bf_push.ps1`. This closes carry-forward item #9 below and the standing
+Dev-71 item of the same name — the WC architecture now has a durable, versioned home in
+the repo instead of living only in Brian's local file and this log's narrative.
 
 **Carry-forward into Dev-74:**
 1. **Phase 1 code (the immediate priority — 9/11 hard deadline):**
@@ -2439,10 +2463,14 @@ end and architect the remaining Scoring Engine build.
 7. Add `BF_Session_Log.md` itself to `bf_push.ps1`'s `$FileMap` so future close-outs don't
    depend on Claude's `/deploy` at all. **Done this session** — see v4 note below.
 8. Confirm whether Claude's in-chat file-delivery issue (noted above) has resolved.
-9. `BF_WallyCup_Spec.md` update to document the Competitive Events architecture in the
-   repo itself — the authoritative spec currently exists only as Brian's local file
-   (`WC_spec.txt`), not committed anywhere under any filename checked.
+9. ~~`BF_WallyCup_Spec.md` update to document the Competitive Events architecture in the
+   repo itself~~ — **Done this session** (see Late addendum above). Committed as
+   `source/BF_WallyCup_Spec.md`; review its §4a divergence note (venue tee catalog) and
+   confirm it against the actual `bf_experiences_worker.js` route logic when convenient.
+10. At the start of Dev-74, confirm the device-bridge/`AutoPush` connection is live
+    before assuming file writes there will work (see process note above) — link the
+    computer first if not.
 
 **Session Dev-73 fully closed.**
 
-**Chat-rename string:** `Dev-73 - Version-Drift Fixed, Local Publish Tool Built, Wally Cup Scoring Engine Architected, WB Jotform Fields Added`
+**Chat-rename string:** `Dev-73 - Wally Cup Scoring Engine Architected & Spec Committed, Local Publish Tool Built, WB Jotform Fields Wired, Version-Drift Fixed`
