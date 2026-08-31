@@ -1907,15 +1907,24 @@ function setCloseRoundStatus(msg, isErr) {
 }
 
 function renderCloseRoundResults(roundName, results, skins, cttpWinners, cttpHoles) {
-  let html = `<h3>${roundName} — results</h3><table><thead><tr><th>#</th><th>Player</th><th>Score</th>` +
-    `<th>Quota in</th><th>+/-</th><th>New quota</th><th>Wally Ball</th><th>Podium $</th><th>Skins $</th><th>CTP $</th></tr></thead><tbody>`;
+  // Dev-74: Rank/Podium $ and the +/- quota column are DELIBERATELY two
+  // different measures (confirmed with Brian) — Rank is gross Score plus the
+  // Wally Ball bonus for whoever kept it, stack-ranked against the whole
+  // field; +/- is that player's own performance against their own quota,
+  // used only for quota chaining and season-long Overall standings. A player
+  // can rank/pay out on Rank while showing a negative +/-, or the reverse —
+  // that's correct, not a bug, but it reads as one at a glance without the
+  // callout below and the column relabeling here.
+  let html = `<h3>${roundName} — results</h3><table><thead><tr><th>Rank<br><span class="subtle" style="font-weight:normal">(Score+WB)</span></th><th>Player</th><th>Score</th>` +
+    `<th>Quota in</th><th>+/-<br><span class="subtle" style="font-weight:normal">(vs. quota)</span></th><th>New quota</th><th>Wally Ball</th><th>Podium $</th><th>Skins $</th><th>CTP $</th></tr></thead><tbody>`;
   results.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).forEach(r => {
-    const wb = r.wbStatus === 'No' ? `Lost (hole ${r.wbHole ?? '?'}, +${r.wbStroke ?? '?'})` : r.wbStatus === 'Yes' ? 'Kept' : '—';
+    const wb = r.wbStatus === 'No' ? `Lost (hole ${r.wbHole ?? '?'}, +${r.wbStroke ?? '?'})` : r.wbStatus === 'Yes' ? 'Kept (+bonus)' : '—';
     html += `<tr><td>${r.rank ?? '—'}</td><td>${r.playerName}</td><td>${fmtNum(r.actualPoints)}</td>` +
       `<td>${fmtNum(r.quotaIn)}</td><td>${fmtDiff(r.performance)}</td><td>${fmtNum(r.quotaOut)}</td>` +
       `<td>${wb}</td><td>${fmtMoney(r.payoutPodium)}</td><td>${fmtMoney(r.payoutSkins)}</td><td>${fmtMoney(r.payoutCttp)}</td></tr>`;
   });
   html += '</tbody></table>';
+  html += '<p class="subtle" style="margin-top:6px">Rank and Podium $ are gross Score plus the Wally Ball bonus (a reward for keeping it) — stack-ranked against the whole field. The +/- column is that player\'s own performance against their own quota, used only to set their next quota and for season-long Overall standings. These are two different, intentional measures — a player can rank/pay out well here while showing a negative +/-, or the other way around. Worth saying out loud when sharing results so nobody reads it as an error.</p>';
   html += skins.length
     ? '<h4 style="margin-top:14px">Skins</h4><div>' + skins.map(s => `<span class="chip">#${s.hole} — ${s.winner} (${s.pts} pts)</span>`).join(' ') + '</div>'
     : '<p class="subtle" style="margin-top:10px">No outright skins this round — every hole was tied.</p>';
