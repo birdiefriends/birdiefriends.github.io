@@ -178,30 +178,12 @@
   <!-- ── Tee policy ────────────────────────────────────────────────── -->
   <section class="card">
     <h2>5. Tee policy</h2>
-    <p class="hint" id="teePolicyContext">Resolved once, from the first stableford round's venue, and carried unchanged for the rest of the event. Add a stableford round above to enable this.</p>
-    <div class="btnbar" style="margin-top:-6px;margin-bottom:12px">
-      <button type="button" class="secondary" id="loadTeeCatalogBtn" disabled>Load this venue's saved tee catalog</button>
-      <label style="display:flex;align-items:center;gap:6px;margin:0;width:auto"><input type="checkbox" id="saveTeeCatalogDefault" style="width:auto" checked> Save as this venue's default when generating</label>
-    </div>
+    <p class="hint">Same tee vs. by-HCP-tier is a one-time, event-wide choice. But different rounds can be at different venues, and different venues have different tee names and slopes — so the actual tee/slope values are captured separately, once per venue, below. A venue's block appears here once a stableford round above has that venue selected.</p>
     <div class="radiogroup">
       <label><input type="radio" name="teeMode" value="same" checked> Same tee for everyone</label>
       <label><input type="radio" name="teeMode" value="by_hcp_tier"> By HCP tier</label>
     </div>
-
-    <div id="teeSameBlock">
-      <div class="row">
-        <div><label for="sameTeeName">Tee name</label><input type="text" id="sameTeeName" placeholder="e.g. White"></div>
-        <div><label for="sameTeeSlope">Slope</label><input type="number" id="sameTeeSlope" placeholder="e.g. 124"></div>
-      </div>
-    </div>
-
-    <div id="teeTierBlock" style="display:none">
-      <div id="tierRows"></div>
-      <div class="btnbar">
-        <button type="button" class="secondary" id="addTierBtn">+ Add tier</button>
-        <button type="button" class="link" id="loadBsgcPresetBtn">Load BSGC default (Green/Combo/Gold)</button>
-      </div>
-    </div>
+    <div id="teeVenueBlocks"><p class="subtle">Add a stableford round above and pick its venue to see a tee policy block for it here.</p></div>
   </section>
 
   <!-- ── Quick HCP ─────────────────────────────────────────────────── -->
@@ -535,6 +517,9 @@ const SC_QID = { name:'31', event:'30', course:'28',
   front:'24', back:'25', total:'26' };
 const WB_QID = { status:'33', hole:'34', stroke:'35' };
 const JF_FILTER = encodeURIComponent(JSON.stringify({"status:ne":["DELETED","ARCHIVED"]}));
+// Same shared Membership form portal.html/GS use for the "GHIN Name" flag
+// (see loadGhinNameMap below).
+const MEMBER_FORM_ID = '233083522910045';
 
 function extractJotformId(input) {
   const trimmed = (input || '').trim();
@@ -700,35 +685,110 @@ function readRosterInput() {
   }).filter(p => p.name);
 }
 
+// Simple normalized-label field lookup — matches GS's own getAnswer(): tries
+// each candidate key against every answer's question label (or Jotform's
+// internal field name as a fallback), case/punctuation-insensitive.
+function bfeGetAnswer(answers, keys) {
+  for (const key of keys) {
+    for (const ans of Object.values(answers || {})) {
+      const label = (ans.text || ans.name || '').toLowerCase().replace(/[^a-z]/g, '');
+      const keyN = key.toLowerCase().replace(/[^a-z]/g, '');
+      if (label === keyN || ans.name === key) {
+        const v = ans.answer;
+        if (!v) continue;
+        if (typeof v === 'object') return [v.first || '', v.last || ''].filter(Boolean).join(' ').trim();
+        return String(v).trim();
+      }
+    }
+  }
+  return '';
+}
+
+// Fetches the shared Membership form and builds { rosterFullName: ghinNameFieldValue }
+// from its hidden "GHIN Name" field — ported from GS's loadGhinNameMap. Always
+// fetches fresh (no caching between Apply clicks), so a Jotform edit made
+// mid-session is always picked up. That one field carries four states:
+//   blank              → normal player, search the pasted GHIN text under their roster name
+//   a different name   → alias — GHIN's formal name differs from the roster name
+//                         (e.g. roster "BJ Kolonia", GHIN "Brian Kolonia") — searched too
+//   "NoHCP"/"N/A"/etc  → genuinely no GHIN account — HCP field left blank (→ NoHCP downstream)
+//   "DiffHCP"          → has a real handicap, just not sourced from GHIN — never searched,
+//                         flagged for manual entry every paste
+async function loadGhinNameMap() {
+  const map = {};
+  try {
+    const subs = await jfFetchSubmissions(MEMBER_FORM_ID, JF_FILTER);
+    subs.forEach(s => {
+      const a = s.answers || {};
+      const first = bfeGetAnswer(a, ['First Name', 'name', 'firstName']);
+      const last = bfeGetAnswer(a, ['Last Name', 'lastname', 'lastName']);
+      const fullName = [first, last].filter(Boolean).join(' ').trim();
+      const ghinName = bfeGetAnswer(a, ['GHIN Name', 'ghinName', 'ghinname']);
+      if (fullName && ghinName) map[fullName] = ghinName;
+    });
+  } catch (e) {
+    console.warn('[GHIN] Membership fetch failed:', e.message); // fails open — falls back to roster-name-only matching
+  }
+  return map;
+}
+
 // ── Paste GHIN list (Dev-74) ─────────────────────────────────────────────
-// Ported from BF_Golf_Scorer_8.html's grpApplyGhinPaste. Searches the WHOLE
-// pasted blob for each roster row's name — not a per-line/per-column parse —
-// because Ctrl+A on GHIN's page grabs nav/footer/everything too, and the
-// exact plain-text layout that produces varies by browser in ways not worth
-// chasing. For each match, grabs the first number in a short window right
-// after the name that looks like a real handicap (-10 to 54, so +1.7 plus-
-// handicaps and 54.0 max both work). No GHIN Name alias lookup here (GS's
-// version also checks a Membership-form field for players whose GHIN name
-// differs from their roster name) — that's GS/Membership-form-specific
-// plumbing not wired into BFE yet; an unmatched name just needs a manual fix.
-function ghinApplyPaste() {
+// Ported from BF_Golf_Scorer_8.html's grpApplyGhinPaste, including the GHIN
+// Name alias/NoHCP/DiffHCP handling via the Membership form (loadGhinNameMap
+// above) — same one-time Jotform entry fixes/flags a player for every future
+// paste, in both GS and here. Searches the WHOLE pasted blob for each name —
+// not a per-line/per-column parse — because Ctrl+A on GHIN's page grabs nav/
+// footer/everything too, and the exact plain-text layout that produces
+// varies by browser in ways not worth chasing. For each match, grabs the
+// first number in a short window right after the name that looks like a
+// real handicap (-10 to 54, so +1.7 plus-handicaps and 54.0 max both work).
+async function ghinApplyPaste() {
   const raw = document.getElementById('ghinPasteInput').value;
   const resultEl = document.getElementById('ghinPasteResult');
   if (!raw || !raw.trim()) { resultEl.textContent = 'Nothing pasted.'; resultEl.style.color = 'var(--err)'; return; }
 
+  resultEl.textContent = 'Checking GHIN Name flags…';
+  resultEl.style.color = 'var(--sub)';
+  const ghinMap = await loadGhinNameMap();
+
+  const NO_HCP = new Set(['nohcp', 'n/a', 'na', 'no ghin', 'none']);
+  const DIFF_HCP = new Set(['diffhcp', 'diff hcp', 'different', 'different hcp']);
   const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
   let matched = 0;
   const notFound = [];
+  const markedNoHcp = [];
+  const diffHcp = [];
 
   rosterBody.querySelectorAll('tr').forEach(tr => {
     const name = tr.querySelector('.p-name').value.trim();
     const hcpInput = tr.querySelector('.p-hcp');
     if (!name) return;
 
-    const idx = raw.search(new RegExp(escapeRegex(name), 'i'));
+    const fieldVal = (ghinMap[name] || '').trim();
+    const fieldKey = fieldVal.toLowerCase();
+
+    if (fieldVal && NO_HCP.has(fieldKey)) {
+      hcpInput.value = ''; // blank HCP = NoHCP downstream (computeInitialQuota already treats it that way)
+      markedNoHcp.push(name);
+      return;
+    }
+    if (fieldVal && DIFF_HCP.has(fieldKey)) {
+      diffHcp.push(name); // never searched/overwritten — real HCP, just not GHIN-sourced
+      return;
+    }
+
+    const searchTerms = [name];
+    if (fieldVal) searchTerms.push(fieldVal); // an actual alias name, not a sentinel
+
+    let idx = -1, matchedTerm = name;
+    for (const term of searchTerms) {
+      const found = raw.search(new RegExp(escapeRegex(term), 'i'));
+      if (found !== -1) { idx = found; matchedTerm = term; break; }
+    }
     if (idx === -1) { notFound.push(name); return; }
 
-    const windowText = raw.slice(idx + name.length, idx + name.length + 300);
+    const windowText = raw.slice(idx + matchedTerm.length, idx + matchedTerm.length + 300);
     const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
     const hcp = numMatches.map(n => parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
     if (hcp === undefined) { notFound.push(`${name} (no HCP-looking number nearby)`); return; }
@@ -738,9 +798,11 @@ function ghinApplyPaste() {
   });
 
   const parts = [`✓ ${matched} matched and updated`];
-  if (notFound.length) parts.push(`${notFound.length} not found: ${notFound.join(', ')}`);
-  resultEl.textContent = parts.join(' — ');
-  resultEl.style.color = notFound.length ? 'var(--warn)' : 'var(--accent-dark)';
+  if (diffHcp.length) parts.push(`🔄 ${diffHcp.length} DiffHCP — verify/update manually: ${diffHcp.join(', ')}`);
+  if (notFound.length) parts.push(`⚠ ${notFound.length} not found — check for typos or a missing GHIN Name/NoHCP flag: ${notFound.join(', ')}`);
+  if (markedNoHcp.length) parts.push(`${markedNoHcp.length} already NoHCP (HCP field cleared)`);
+  resultEl.textContent = parts.join(' · ');
+  resultEl.style.color = notFound.length ? 'var(--err)' : (diffHcp.length ? 'var(--warn)' : 'var(--accent-dark)');
 }
 
 document.getElementById('ghinPasteToggleBtn').addEventListener('click', () => {
@@ -865,7 +927,7 @@ function renderAllRoundVenueSelects() {
     const current = sel.value;
     sel.innerHTML = venueOptionsHtml(current);
   });
-  refreshTeePolicyContext();
+  refreshTeeVenueBlocks();
 }
 
 // ── Rounds builder ────────────────────────────────────────────────────
@@ -888,14 +950,14 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
     <td><input type="number" class="r-wbpoints" value="${wbPoints}" placeholder="e.g. 1" style="width:80px"></td>
     <td style="text-align:center"><input type="checkbox" class="r-overall" ${rollsIntoOverall ? 'checked' : ''} style="width:auto"></td>
     <td><button type="button" class="danger removeRoundBtn">Remove</button></td>`;
-  tr.querySelector('.removeRoundBtn').addEventListener('click', () => { tr.remove(); refreshTeePolicyContext(); });
+  tr.querySelector('.removeRoundBtn').addEventListener('click', () => { tr.remove(); refreshTeeVenueBlocks(); });
   tr.querySelector('.r-engine').addEventListener('change', () => {
     tr.querySelector('.r-wbpoints').disabled = false; // Wally Ball can apply to any engine, host's call
-    refreshTeePolicyContext();
+    refreshTeeVenueBlocks();
   });
-  tr.querySelector('.r-venue').addEventListener('change', refreshTeePolicyContext);
+  tr.querySelector('.r-venue').addEventListener('change', refreshTeeVenueBlocks);
   roundsBody.appendChild(tr);
-  refreshTeePolicyContext();
+  refreshTeeVenueBlocks();
 }
 document.getElementById('addRoundBtn').addEventListener('click', () => addRoundRow());
 document.getElementById('loadWcDefaultBtn').addEventListener('click', () => {
@@ -925,38 +987,32 @@ function readRoundsInput() {
   }).filter(r => r.name);
 }
 
-// First stableford round drives the whole event's tee policy (resolved once,
-// pre-first-scored-round — see spec). Everything below reacts to whichever
-// round currently holds that position as rounds are added/edited/reordered.
+// First stableford round's venue seeds the roster's INITIAL quota (entering
+// that round). Everything else about tee policy is per-venue now — see below.
 function firstStablefordRound() {
   return readRoundsInput().find(r => r.engine === 'stableford_quota');
 }
-function refreshTeePolicyContext() {
-  const first = firstStablefordRound();
-  const ctx = document.getElementById('teePolicyContext');
-  const loadBtn = document.getElementById('loadTeeCatalogBtn');
-  if (!first) {
-    ctx.textContent = 'Resolved once, from the first stableford round’s venue, and carried unchanged for the rest of the event. Add a stableford round above to enable this.';
-    loadBtn.disabled = true;
-    loadBtn.dataset.venueId = '';
-    return;
-  }
-  ctx.innerHTML = `Resolved once, from <strong>${first.name}</strong>'s venue${first.venue ? ` (<strong>${first.venue}</strong>)` : ' (no venue selected yet)'}, and carried unchanged for the rest of the event.`;
-  loadBtn.disabled = !first.venueId;
-  loadBtn.dataset.venueId = first.venueId || '';
-  loadBtn.dataset.venueName = first.venue || '';
-}
 
-// ── Tee policy ────────────────────────────────────────────────────────
+// ── Tee policy — one block per unique venue among stableford rounds (Dev-74) ──
+// Same/by-HCP-tier is a single event-wide radio choice (mirrors the original
+// design intent — Brian confirmed that part is fine as a one-time click).
+// What was wrong was treating tee NAME/SLOPE as a single global value too:
+// different venues have different tee colors and slopes, so those are
+// captured once PER VENUE instead. Blocks are added/removed by diffing
+// against which venues are currently in use — never fully rebuilt — so
+// values a host already typed into an existing block are never lost just
+// because an unrelated round changed.
 document.querySelectorAll('input[name=teeMode]').forEach(r => {
   r.addEventListener('change', () => {
     const mode = document.querySelector('input[name=teeMode]:checked').value;
-    document.getElementById('teeSameBlock').style.display = mode === 'same' ? '' : 'none';
-    document.getElementById('teeTierBlock').style.display = mode === 'by_hcp_tier' ? '' : 'none';
+    document.querySelectorAll('#teeVenueBlocks .tee-venue-block').forEach(block => {
+      block.querySelector('.teeSameSub').style.display = mode === 'same' ? '' : 'none';
+      block.querySelector('.teeTierSub').style.display = mode === 'by_hcp_tier' ? '' : 'none';
+    });
   });
 });
-const tierRows = document.getElementById('tierRows');
-function addTierRow(maxHcp = '', teeName = '', slope = '') {
+
+function addTierRowTo(tierRowsEl, maxHcp = '', teeName = '', slope = '') {
   const div = document.createElement('div');
   div.className = 'tier-row';
   div.innerHTML = `
@@ -965,67 +1021,157 @@ function addTierRow(maxHcp = '', teeName = '', slope = '') {
     <div><label>Slope</label><input type="number" class="t-slope" value="${slope}" placeholder="e.g. 132"></div>
     <div><button type="button" class="danger removeTierBtn">Remove</button></div>`;
   div.querySelector('.removeTierBtn').addEventListener('click', () => div.remove());
-  tierRows.appendChild(div);
+  tierRowsEl.appendChild(div);
 }
-document.getElementById('addTierBtn').addEventListener('click', () => addTierRow());
-document.getElementById('loadBsgcPresetBtn').addEventListener('click', () => {
-  tierRows.innerHTML = '';
-  addTierRow(10, 'Green', 132);
-  addTierRow(18, 'Combo', 128);
-  addTierRow('', 'Gold', 115);
-});
-addTierRow();
 
-function readTeePolicy() {
+function buildTeeVenueBlock(venueId, venueName) {
   const mode = document.querySelector('input[name=teeMode]:checked').value;
-  if (mode === 'same') {
-    return { mode: 'same', tee: {
-      name: document.getElementById('sameTeeName').value.trim() || null,
-      slope: parseFloat(document.getElementById('sameTeeSlope').value) || null
-    }};
-  }
-  const tierDivs = [...tierRows.querySelectorAll('.tier-row')];
-  const tiers = tierDivs.map(div => {
-    const maxHcpRaw = div.querySelector('.t-maxhcp').value;
-    return {
-      maxHcp: maxHcpRaw === '' ? Infinity : parseFloat(maxHcpRaw),
-      tee: { name: div.querySelector('.t-name').value.trim(), slope: parseFloat(div.querySelector('.t-slope').value) || null }
-    };
-  }).sort((a, b) => a.maxHcp - b.maxHcp);
-  return { mode: 'by_hcp_tier', tiers };
+  const block = document.createElement('div');
+  block.className = 'tee-venue-block';
+  block.dataset.venueId = venueId;
+  block.style.cssText = 'border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px';
+  block.innerHTML = `
+    <div class="btnbar" style="margin-top:0;margin-bottom:10px;justify-content:space-between">
+      <div><strong>${venueName || '(venue)'}</strong> <span class="subtle roundsUsingLabel"></span></div>
+      <button type="button" class="secondary loadVenueTeeBtn">Load this venue's saved tee catalog</button>
+    </div>
+    <div class="teeSameSub" style="display:${mode === 'same' ? '' : 'none'}">
+      <div class="row">
+        <div><label>Tee name</label><input type="text" class="sameTeeName" placeholder="e.g. White"></div>
+        <div><label>Slope</label><input type="number" class="sameTeeSlope" placeholder="e.g. 124"></div>
+      </div>
+    </div>
+    <div class="teeTierSub" style="display:${mode === 'by_hcp_tier' ? '' : 'none'}">
+      <div class="tierRows"></div>
+      <div class="btnbar">
+        <button type="button" class="secondary addTierBtn">+ Add tier</button>
+        <button type="button" class="link loadBsgcPresetBtn">Load BSGC default (Green/Combo/Gold)</button>
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;margin:10px 0 0;width:auto"><input type="checkbox" class="saveVenueDefault" style="width:auto" checked> Save as this venue's default when generating</label>`;
+
+  const tierRowsEl = block.querySelector('.tierRows');
+  addTierRowTo(tierRowsEl);
+  block.querySelector('.addTierBtn').addEventListener('click', () => addTierRowTo(tierRowsEl));
+  block.querySelector('.loadBsgcPresetBtn').addEventListener('click', () => {
+    tierRowsEl.innerHTML = '';
+    addTierRowTo(tierRowsEl, 10, 'Green', 132);
+    addTierRowTo(tierRowsEl, 18, 'Combo', 128);
+    addTierRowTo(tierRowsEl, '', 'Gold', 115);
+  });
+  block.querySelector('.loadVenueTeeBtn').addEventListener('click', async () => {
+    const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+    if (!base) { alert('Enter the BFE Worker base URL first.'); return; }
+    try {
+      const res = await fetch(`${base}/bfe/venue-tee-catalog?venue_id=${encodeURIComponent(venueId)}`);
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || `No saved tee catalog for this venue yet (HTTP ${res.status}).`); return; }
+      applyPolicyToVenueBlock(block, data.tee_catalog);
+    } catch (e) {
+      alert('Load failed: ' + e.message);
+    }
+  });
+  return block;
 }
-function applyTeePolicyToForm(policy) {
+
+function applyPolicyToVenueBlock(block, policy) {
   if (!policy) return;
   if (policy.mode === 'same') {
     document.querySelector('input[name=teeMode][value=same]').checked = true;
-    document.getElementById('teeSameBlock').style.display = '';
-    document.getElementById('teeTierBlock').style.display = 'none';
-    document.getElementById('sameTeeName').value = policy.tee?.name || '';
-    document.getElementById('sameTeeSlope').value = policy.tee?.slope || '';
+    document.querySelectorAll('#teeVenueBlocks .tee-venue-block').forEach(b => {
+      b.querySelector('.teeSameSub').style.display = '';
+      b.querySelector('.teeTierSub').style.display = 'none';
+    });
+    block.querySelector('.sameTeeName').value = policy.tee?.name || '';
+    block.querySelector('.sameTeeSlope').value = policy.tee?.slope || '';
   } else if (policy.mode === 'by_hcp_tier') {
     document.querySelector('input[name=teeMode][value=by_hcp_tier]').checked = true;
-    document.getElementById('teeSameBlock').style.display = 'none';
-    document.getElementById('teeTierBlock').style.display = '';
-    tierRows.innerHTML = '';
-    (policy.tiers || []).forEach(t => addTierRow(t.maxHcp === Infinity || t.maxHcp === null ? '' : t.maxHcp, t.tee?.name || '', t.tee?.slope || ''));
+    document.querySelectorAll('#teeVenueBlocks .tee-venue-block').forEach(b => {
+      b.querySelector('.teeSameSub').style.display = 'none';
+      b.querySelector('.teeTierSub').style.display = '';
+    });
+    const tierRowsEl = block.querySelector('.tierRows');
+    tierRowsEl.innerHTML = '';
+    (policy.tiers || []).forEach(t => addTierRowTo(tierRowsEl, t.maxHcp === Infinity || t.maxHcp === null ? '' : t.maxHcp, t.tee?.name || '', t.tee?.slope || ''));
   }
 }
 
-document.getElementById('loadTeeCatalogBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('loadTeeCatalogBtn');
-  const venueId = btn.dataset.venueId;
-  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
-  if (!venueId) return;
-  if (!base) { alert('Enter the BFE Worker base URL first.'); return; }
-  try {
-    const res = await fetch(`${base}/bfe/venue-tee-catalog?venue_id=${encodeURIComponent(venueId)}`);
-    const data = await res.json();
-    if (!res.ok) { alert(data.error || `No saved tee catalog for this venue yet (HTTP ${res.status}).`); return; }
-    applyTeePolicyToForm(data.tee_catalog);
-  } catch (e) {
-    alert('Load failed: ' + e.message);
+// Diffs against which venues stableford rounds currently use — adds blocks
+// for newly-seen venues, removes blocks for venues no longer referenced,
+// and otherwise leaves existing blocks (and whatever's typed into them) alone.
+function refreshTeeVenueBlocks() {
+  const rounds = readRoundsInput().filter(r => r.engine === 'stableford_quota' && r.venueId);
+  const byVenue = {};
+  rounds.forEach(r => {
+    if (!byVenue[r.venueId]) byVenue[r.venueId] = { venueName: r.venue, roundNames: [] };
+    byVenue[r.venueId].roundNames.push(r.name || '(unnamed round)');
+  });
+  const container = document.getElementById('teeVenueBlocks');
+  const neededIds = Object.keys(byVenue);
+
+  if (!neededIds.length) {
+    container.innerHTML = '<p class="subtle">Add a stableford round above and pick its venue to see a tee policy block for it here.</p>';
+    return;
   }
-});
+  if (container.querySelector('p.subtle')) container.innerHTML = '';
+
+  // Remove blocks for venues no longer in use
+  [...container.querySelectorAll('.tee-venue-block')].forEach(block => {
+    if (!neededIds.includes(block.dataset.venueId)) block.remove();
+  });
+  // Add blocks for newly-seen venues; update the "used by" label either way
+  neededIds.forEach(venueId => {
+    let block = container.querySelector(`.tee-venue-block[data-venue-id="${CSS.escape(venueId)}"]`);
+    if (!block) {
+      block = buildTeeVenueBlock(venueId, byVenue[venueId].venueName);
+      container.appendChild(block);
+    }
+    block.querySelector('.roundsUsingLabel').textContent = `— used by: ${byVenue[venueId].roundNames.join(', ')}`;
+  });
+}
+
+// Reads {mode, byVenue: {[venueId]: {tee} or {tiers}}} from whatever venue
+// blocks are currently rendered.
+function readTeePolicyGlobal() {
+  const mode = document.querySelector('input[name=teeMode]:checked').value;
+  const byVenue = {};
+  document.querySelectorAll('#teeVenueBlocks .tee-venue-block').forEach(block => {
+    const venueId = block.dataset.venueId;
+    if (mode === 'same') {
+      byVenue[venueId] = { tee: {
+        name: block.querySelector('.sameTeeName').value.trim() || null,
+        slope: parseFloat(block.querySelector('.sameTeeSlope').value) || null
+      }};
+    } else {
+      const tiers = [...block.querySelectorAll('.tierRows .tier-row')].map(div => {
+        const maxHcpRaw = div.querySelector('.t-maxhcp').value;
+        return {
+          maxHcp: maxHcpRaw === '' ? Infinity : parseFloat(maxHcpRaw),
+          tee: { name: div.querySelector('.t-name').value.trim(), slope: parseFloat(div.querySelector('.t-slope').value) || null }
+        };
+      }).sort((a, b) => a.maxHcp - b.maxHcp);
+      byVenue[venueId] = { tiers };
+    }
+  });
+  return { mode, byVenue };
+}
+function venuePolicyFor(teePolicy, venueId) {
+  return { mode: teePolicy.mode, ...(teePolicy.byVenue[venueId] || {}) };
+}
+// Per-round, per-player tee/slope — needed because a later stableford round
+// can be at a different venue than the one the roster's initialQuota was
+// resolved against. Under fixed HCP mode this doesn't change any Wally Cup
+// number today (adjustQuota's HCP-delta term is always 0 when HCP never
+// changes), but it's needed for a correct record of which tee each round was
+// actually played from, and for variable-HCP events where it does matter.
+function resolveRoundTeeAssignments(roster, venuePolicy) {
+  const byPlayer = {};
+  roster.forEach(p => {
+    if (p.hcp === null || p.hcp === undefined || isNaN(p.hcp)) return; // NoHCP players: no tee to resolve here
+    byPlayer[p.name] = resolveTeeAssignment(p.hcp, venuePolicy);
+  });
+  return byPlayer;
+}
 
 // ── Quick HCP ───────────────────────────────────────────────────────
 document.getElementById('loadProfilesBtn').addEventListener('click', async () => {
@@ -1050,8 +1196,14 @@ function renderQuickHcp() {
   const wrap = document.getElementById('quickHcpWrap');
   const players = readRosterInput();
   if (!players.length) { wrap.innerHTML = '<div class="subtle">No roster rows yet — add players above first.</div>'; return; }
+  // Preview uses the FIRST stableford round's venue — that's whose policy
+  // actually determines the roster's initial quota (same as Generate below).
   let teePolicy;
-  try { teePolicy = readTeePolicy(); } catch (e) { teePolicy = { mode: 'same', tee: { name: null, slope: null } }; }
+  try {
+    const first = firstStablefordRound();
+    const global = readTeePolicyGlobal();
+    teePolicy = first ? venuePolicyFor(global, first.venueId) : { mode: 'same', tee: { name: null, slope: null } };
+  } catch (e) { teePolicy = { mode: 'same', tee: { name: null, slope: null } }; }
 
   let html = `<table><thead><tr><th>Player</th><th>Stored HCP</th><th>New HCP</th><th>Tee / Quota preview</th></tr></thead><tbody>`;
   players.forEach((p, i) => {
@@ -1078,7 +1230,12 @@ function renderQuickHcp() {
       const idx = input.dataset.idx;
       const val = parseFloat(input.value);
       let teePolicy2;
-      try { teePolicy2 = readTeePolicy(); } catch (e) { return; }
+      try {
+        const first = firstStablefordRound();
+        const global = readTeePolicyGlobal();
+        teePolicy2 = first ? venuePolicyFor(global, first.venueId) : null;
+        if (!teePolicy2) return;
+      } catch (e) { return; }
       const previewEl = wrap.querySelector('.qhcp-preview-' + idx);
       if (isNaN(val)) { previewEl.textContent = '—'; return; }
       const { tee, quota } = computeInitialQuota(val, teePolicy2);
@@ -1143,11 +1300,18 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
   try {
     const players = readRosterInput();
     if (!players.length) throw new Error('Add at least one player.');
-    const teePolicy = readTeePolicy();
+    const teePolicy = readTeePolicyGlobal(); // {mode, byVenue: {[venueId]: {...}}} — Dev-74
     const roundsInput = readRoundsInput();
     if (!roundsInput.length) throw new Error('Add at least one round.');
+    const firstRound = roundsInput.find(r => r.engine === 'stableford_quota');
+    if (firstRound && !teePolicy.byVenue[firstRound.venueId]) {
+      throw new Error(`Pick "${firstRound.name}"'s venue and fill in its tee policy block before generating.`);
+    }
 
-    const roster = resolveRoster(players, teePolicy);
+    // Roster's initial quota is resolved against the FIRST stableford round's
+    // venue only — that's what "entering Rd1" means. Later stableford rounds
+    // get their OWN per-player tee/slope resolved below, per their own venue.
+    const roster = resolveRoster(players, firstRound ? venuePolicyFor(teePolicy, firstRound.venueId) : { mode: 'same', tee: {} });
     const eventNameVal = document.getElementById('eventName').value.trim() || '2026 Wally Cup';
     const eventFamilySlug = eventNameVal.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'bf_event';
     const config = buildEventConfig({
@@ -1160,6 +1324,14 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
     config.eventName = document.getElementById('eventName').value.trim() || '2026 Wally Cup';
     config.teePolicy = teePolicy;
     config.status = 'draft';
+
+    // Per-round, per-player tee assignments — each stableford round resolved
+    // against ITS OWN venue's policy, not just the first round's (Dev-74 fix).
+    config.rounds.forEach(r => {
+      if (r.engine !== 'stableford_quota' || !r.venueId || !teePolicy.byVenue[r.venueId]) return;
+      const teeByPlayer = resolveRoundTeeAssignments(roster, venuePolicyFor(teePolicy, r.venueId));
+      r.engineParams = { ...(r.engineParams || {}), teeByPlayer };
+    });
 
     const playerCount = roster.length;
     const roundCollect   = parseFloat(document.getElementById('roundCollect').value) || 0;
@@ -1182,16 +1354,21 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
     renderReview(config);
     document.getElementById('outputSection').style.display = 'block';
 
-    // Optionally save this venue's tee catalog as the new default
-    const first = firstStablefordRound();
-    if (document.getElementById('saveTeeCatalogDefault').checked && first && first.venueId) {
-      const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
-      const pin = document.getElementById('hostPin').value.trim();
-      if (base) {
+    // Optionally save each venue's tee policy as ITS OWN new default — one
+    // venue block at a time, per its own "Save as this venue's default"
+    // checkbox (Dev-74: this used to only ever save the first round's venue).
+    const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+    const pin = document.getElementById('hostPin').value.trim();
+    if (base) {
+      const venueBlocks = [...document.querySelectorAll('#teeVenueBlocks .tee-venue-block')];
+      for (const block of venueBlocks) {
+        const venueId = block.dataset.venueId;
+        if (!block.querySelector('.saveVenueDefault').checked) continue;
+        const venueName = (config.rounds.find(r => r.venueId === venueId) || {}).venue || '';
         try {
           await fetch(base + '/bfe/venue-tee-catalog', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ venue_id: first.venueId, venue_name: first.venue, tee_catalog: teePolicy, pin })
+            body: JSON.stringify({ venue_id: venueId, venue_name: venueName, tee_catalog: { mode: teePolicy.mode, ...teePolicy.byVenue[venueId] }, pin })
           });
         } catch (e) { /* non-fatal — event config generation still succeeded */ }
       }
@@ -1443,10 +1620,17 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     const alreadyLost = {};
     allResults.forEach(r => { if (r.wb_status === 'No') alreadyLost[r.player_name] = true; });
 
+    // Slope for THIS round's HCP-delta term should come from this round's OWN
+    // venue (Dev-74 fix — round.engineParams.teeByPlayer, resolved at Generate
+    // time against that round's venue), not the roster-level slope, which only
+    // reflects the first stableford round's venue. Falls back to roster-level
+    // for a config generated before this fix existed.
+    const roundTeeByPlayer = round.engineParams?.teeByPlayer || {};
     const players = assembledConfig.roster.map(p => {
       const sc = scorecards[p.name];
+      const roundTee = roundTeeByPlayer[p.name];
       return {
-        name: p.name, hcp: p.hcp, slope: p.slope,
+        name: p.name, hcp: p.hcp, slope: roundTee?.slope ?? p.slope,
         quotaIn: quotaInByPlayer[p.name] ?? p.initialQuota,
         actualPoints: sc ? sc.actualPoints : 0,
         sc
