@@ -8678,9 +8678,11 @@ async function submitScorecard(evtName) {
   renderLiveBanner();
   try {
     const body = new URLSearchParams();
+    // Dev-74 fix: real venue instead of hardcoded 'BSGC'
+    const _scEvt = eventData.find(e => e.name === evtName);
     body.append(`submission[${SC_QID.name}]`,  _scPlayer || currentPlayer);
     body.append(`submission[${SC_QID.event}]`, evtName);
-    body.append(`submission[${SC_QID.course}]`,'BSGC');
+    body.append(`submission[${SC_QID.course}]`, (_scEvt && _scEvt.location) || 'BSGC');
     SC_QID.holes.forEach((qid, i) => {
       body.append(`submission[${qid}]`, String(_scHoles[i] ?? 0));
     });
@@ -9071,9 +9073,11 @@ async function submitScorecardModal() {
   renderScorecardModal();
   try {
     const body = new URLSearchParams();
+    // Dev-74 fix: real venue instead of hardcoded 'BSGC'
+    const _scModalEvt = eventData.find(e => e.name === _scModalEvtName);
     body.append(`submission[${SC_QID.name}]`,  _scPlayer || currentPlayer);
     body.append(`submission[${SC_QID.event}]`, _scModalEvtName);
-    body.append(`submission[${SC_QID.course}]`,'BSGC');
+    body.append(`submission[${SC_QID.course}]`, (_scModalEvt && _scModalEvt.location) || 'BSGC');
     SC_QID.holes.forEach((qid, i) => body.append(`submission[${qid}]`, String(_scHoles[i] ?? 0)));
     body.append(`submission[${SC_QID.front}]`, String(front));
     body.append(`submission[${SC_QID.back}]`,  String(back));
