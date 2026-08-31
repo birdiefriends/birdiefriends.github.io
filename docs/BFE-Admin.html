@@ -1244,7 +1244,7 @@ document.getElementById('fetchRosterBtn').addEventListener('click', async () => 
 });
 
 // ── Venues (loaded from BFPortal) ───────────────────────────────────
-document.getElementById('loadVenuesBtn').addEventListener('click', async () => {
+async function loadVenues() {
   const base = document.getElementById('portalUrl').value.trim().replace(/\/$/, '');
   const statusEl = document.getElementById('venueLoadStatus');
   if (!base) { statusEl.textContent = 'Enter the BFPortal Worker URL first.'; return; }
@@ -1259,7 +1259,8 @@ document.getElementById('loadVenuesBtn').addEventListener('click', async () => {
   } catch (e) {
     statusEl.textContent = 'Load failed: ' + e.message;
   }
-});
+}
+document.getElementById('loadVenuesBtn').addEventListener('click', loadVenues);
 
 function venueOptionsHtml(selectedId) {
   if (!venueList.length) return `<option value="">— load venues above —</option>`;
@@ -1726,23 +1727,80 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('loadBtn').addEventListener('click', async () => {
+// Rebuilds sections 1/3/4/5/6's actual EDITABLE inputs from a saved config —
+// not just the read-only Review tables renderReview() already handled. Dev-
+// 74: closing/reopening this page (or just a hard refresh) used to leave you
+// with a config loaded into memory (Close Round worked fine, since that only
+// reads assembledConfig) but every form field blank, as if you had to
+// re-type the whole roster/rounds/tee policy/payout setup from scratch to
+// change or regenerate anything. venues are loaded first if they aren't
+// already, since round rows need venueList populated to pre-select the
+// right venue option.
+async function rehydrateFormFromConfig(config) {
+  document.getElementById('eventName').value = config.eventName || '';
+  document.getElementById('eventDate').value = config.eventDate || '';
+  document.getElementById('hcpMode').value = config.hcpMode || 'fixed';
+
+  if (!venueList.length) await loadVenues();
+
+  rosterBody.innerHTML = '';
+  (config.roster || []).forEach(p => addPlayerRow(p.name || '', p.email || '', p.hcp ?? ''));
+
+  roundsBody.innerHTML = '';
+  (config.rounds || []).forEach(r => {
+    const wbInf = (r.influencers || []).find(i => i.id === 'wally_ball');
+    addRoundRow(r.name || '', r.engine || 'stableford_quota', r.venueId || '', wbInf ? wbInf.points : '', r.rollsIntoOverall !== false);
+  });
+  refreshTeeVenueBlocks(); // explicit settle — a no-op when rounds isn't empty (each addRoundRow already triggers it), but guarantees stale blocks from before this Load don't linger if config.rounds turns out to be empty.
+
+  // Tee policy blocks were just created by the addRoundRow calls above (via
+  // refreshTeeVenueBlocks). teePolicy.mode is global, not per-venue — merge
+  // it into each venue's saved block the same way Generate does when it
+  // writes a venue's own tee catalog (see the "Save as this venue's
+  // default" block below in the Generate handler).
+  const teePolicy = config.teePolicy || {};
+  Object.keys(teePolicy.byVenue || {}).forEach(venueId => {
+    const block = document.querySelector(`#teeVenueBlocks .tee-venue-block[data-venue-id="${CSS.escape(venueId)}"]`);
+    if (block) applyPolicyToVenueBlock(block, { mode: teePolicy.mode, ...teePolicy.byVenue[venueId] });
+  });
+
+  // Payout inputs are recovered from what each saved pot's collectPerPlayer/
+  // cttpHoles actually were — NOT reverse-engineered from the pool totals.
+  // Podium split weights aren't separately persisted (only their computed
+  // dollar split is), so that field keeps whatever's currently typed there.
+  const pots = config.payout?.pots || [];
+  const roundPot   = pots.find(p => p.id && p.id.startsWith('round_'));
+  const overallPot = pots.find(p => p.id === 'overall');
+  const wbPot      = pots.find(p => p.id === 'wally_ball');
+  if (roundPot) {
+    document.getElementById('roundCollect').value = roundPot.collectPerPlayer ?? '';
+    document.getElementById('cttpHoles').value = roundPot.distribution?.cttpHoles || 0;
+  }
+  if (overallPot) document.getElementById('overallCollect').value = overallPot.collectPerPlayer ?? '';
+  if (wbPot) document.getElementById('wbCollect').value = wbPot.collectPerPlayer ?? '';
+}
+
+async function loadEventConfig(eventName) {
   const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
   if (!base) { setStatus('Enter the BFE Worker base URL.', true); return; }
-  const eventName = document.getElementById('eventName').value.trim();
+  if (!eventName) { setStatus('Enter or pick an event name.', true); return; }
   setStatus('Loading…');
   try {
     const res = await fetch(base + '/bfe/events?event=' + encodeURIComponent(eventName));
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     assembledConfig = data.config;
-    document.getElementById('eventDate').value = assembledConfig.eventDate || '';
+    await rehydrateFormFromConfig(assembledConfig);
     renderReview(assembledConfig);
     document.getElementById('outputSection').style.display = 'block';
     setStatus(`Loaded "${eventName}" (last saved ${data.updated_at}) — ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
   } catch (e) {
     setStatus('Load failed: ' + e.message, true);
   }
+}
+
+document.getElementById('loadBtn').addEventListener('click', () => {
+  loadEventConfig(document.getElementById('eventName').value.trim());
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -2010,10 +2068,19 @@ async function loadEventsList() {
     let html = '<table><thead><tr><th>Event</th><th>Event date</th><th>Status</th><th>Rounds</th><th>Roster</th><th>Round results</th><th>Skins</th><th>Updated</th><th></th></tr></thead><tbody>';
     data.events.forEach(e => {
       html += `<tr><td>${e.event_name}</td><td>${e.event_date || '—'}</td><td>${e.status}</td><td>${e.rounds}</td><td>${e.roster}</td><td>${e.results}</td><td>${e.skins}</td><td>${e.updated_at}</td>` +
-        `<td><button type="button" class="danger deleteEventBtn" data-name="${e.event_name.replace(/"/g, '&quot;')}">Delete</button></td></tr>`;
+        `<td style="white-space:nowrap"><button type="button" class="secondary loadEventBtn" data-name="${e.event_name.replace(/"/g, '&quot;')}">Load</button> ` +
+        `<button type="button" class="danger deleteEventBtn" data-name="${e.event_name.replace(/"/g, '&quot;')}">Delete</button></td></tr>`;
     });
     html += '</tbody></table>';
     body.innerHTML = html;
+    // Load — picks this event without retyping its name, and fully
+    // rehydrates sections 1/3/4/5/6 (roster, rounds, tee policy, payout),
+    // not just the read-only Review tables (Dev-74: this is the "select/
+    // load" action Brian asked for after losing all in-memory form state to
+    // an accidental page close/reload).
+    body.querySelectorAll('.loadEventBtn').forEach(btn => {
+      btn.addEventListener('click', () => loadEventConfig(btn.dataset.name));
+    });
     body.querySelectorAll('.deleteEventBtn').forEach(btn => {
       btn.addEventListener('click', () => deleteEventData(btn.dataset.name));
     });
