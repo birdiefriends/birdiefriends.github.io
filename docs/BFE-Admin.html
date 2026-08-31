@@ -186,24 +186,9 @@
     <div id="teeVenueBlocks"><p class="subtle">Add a stableford round above and pick its venue to see a tee policy block for it here.</p></div>
   </section>
 
-  <!-- ── Quick HCP ─────────────────────────────────────────────────── -->
-  <section class="card">
-    <h2>6. Quick HCP</h2>
-    <p class="hint">Mirrors GS's Quick HCP Panel: Stored HCP is each player's last-known value from BFE's player-profiles table; New HCP is what this event will use. Load profiles, adjust New HCP per player, and Apply — the roster above updates and each profile's HCP history gets the change.</p>
-    <div class="btnbar" style="margin-top:-6px">
-      <button type="button" class="secondary" id="loadProfilesBtn">Load stored profiles</button>
-      <span class="subtle" id="profilesLoadStatus">Not loaded yet.</span>
-    </div>
-    <div id="quickHcpWrap" style="margin-top:10px"></div>
-    <div class="btnbar">
-      <button type="button" id="applyQuickHcpBtn">Apply Quick HCP</button>
-      <span class="subtle" id="quickHcpStatus"></span>
-    </div>
-  </section>
-
   <!-- ── Payout ────────────────────────────────────────────────────── -->
   <section class="card">
-    <h2>7. Payout</h2>
+    <h2>6. Payout</h2>
     <p class="hint">Uses the same proportional formula as the BFSeries payout: podium 20% of pool (weighted split), CTP 15% spread across the round's CTP holes, remainder to skins. The Overall pot is podium-only (no CTP/skins). Wally Ball is a separate winner-take-all pool, split evenly if more than one player never loses the ball.</p>
     <div class="row">
       <div><label for="roundCollect">$ per player, per round pot</label><input type="number" id="roundCollect" value="10"></div>
@@ -223,7 +208,7 @@
 
   <!-- ── Save / Load — always visible, independent of Generate. ──────── -->
   <section class="card">
-    <h2>8. Save / load on the Worker</h2>
+    <h2>7. Save / load on the Worker</h2>
     <p class="hint">Save persists whatever you last generated below into the Competitive Events tables (<code>bfe_events</code> → <code>bfe_event_rounds</code> → <code>bfe_event_roster</code>), keyed by the event name above — a real parent/child structure, not a single document (and, if checked in Tee policy, updates that venue's saved tee catalog too). Load reassembles it back from those tables.</p>
     <div class="btnbar">
       <button type="button" id="saveBtn">Save config</button>
@@ -234,7 +219,7 @@
 
   <!-- ── Close a round (Dev-74 — Wally Cup scoring engine) ────────────── -->
   <section class="card">
-    <h2>9. Close a round</h2>
+    <h2>8. Close a round</h2>
     <p class="hint">Pulls that round's scorecards straight from Jotform, runs them through the quota engine above (including any Wally Ball bonus), computes skins, and saves the result — round pot payout included. Only "Stableford quota" rounds are wired up right now; 2-man scramble scoring isn't built yet. CTP payout isn't wired yet either (shows as $0 — nothing resolves actual closest-to-pin winners from Jotform so far). Load or Generate the event above first.</p>
     <div class="row">
       <div style="flex:2"><label for="closeRoundSelect">Round</label><select id="closeRoundSelect"><option value="">— load/generate the event above first —</option></select></div>
@@ -247,7 +232,7 @@
 
   <!-- ── Output / review ───────────────────────────────────────────── -->
   <section class="card" id="outputSection">
-    <h2>10. Review</h2>
+    <h2>9. Review</h2>
     <div id="reviewRoster"></div>
     <div id="reviewRounds"></div>
     <div id="reviewPayout"></div>
@@ -652,7 +637,6 @@ async function fetchRegistrantsFromJotform(formId, eventName) {
 
 let assembledConfig = null;   // set by Generate; read by Save
 let venueList = [];           // [{id, name, ...}] loaded from BFPortal /venues
-let profilesByName = {};      // loaded from BFE /bfe/player-profiles
 let roundIdSeq = 0;
 
 // ── Roster rows ──────────────────────────────────────────────────────
@@ -1172,113 +1156,6 @@ function resolveRoundTeeAssignments(roster, venuePolicy) {
   });
   return byPlayer;
 }
-
-// ── Quick HCP ───────────────────────────────────────────────────────
-document.getElementById('loadProfilesBtn').addEventListener('click', async () => {
-  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
-  const statusEl = document.getElementById('profilesLoadStatus');
-  if (!base) { statusEl.textContent = 'Enter the BFE Worker base URL first.'; return; }
-  statusEl.textContent = 'Loading…';
-  try {
-    const res = await fetch(base + '/bfe/player-profiles');
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    profilesByName = {};
-    (data.profiles || []).forEach(p => { profilesByName[p.name.toLowerCase()] = p; });
-    statusEl.textContent = `${data.profiles.length} stored profile(s) loaded.`;
-    renderQuickHcp();
-  } catch (e) {
-    statusEl.textContent = 'Load failed: ' + e.message;
-  }
-});
-
-function renderQuickHcp() {
-  const wrap = document.getElementById('quickHcpWrap');
-  const players = readRosterInput();
-  if (!players.length) { wrap.innerHTML = '<div class="subtle">No roster rows yet — add players above first.</div>'; return; }
-  // Preview uses the FIRST stableford round's venue — that's whose policy
-  // actually determines the roster's initial quota (same as Generate below).
-  let teePolicy;
-  try {
-    const first = firstStablefordRound();
-    const global = readTeePolicyGlobal();
-    teePolicy = first ? venuePolicyFor(global, first.venueId) : { mode: 'same', tee: { name: null, slope: null } };
-  } catch (e) { teePolicy = { mode: 'same', tee: { name: null, slope: null } }; }
-
-  let html = `<table><thead><tr><th>Player</th><th>Stored HCP</th><th>New HCP</th><th>Tee / Quota preview</th></tr></thead><tbody>`;
-  players.forEach((p, i) => {
-    const profile = profilesByName[p.name.toLowerCase()];
-    const storedHcp = profile ? profile.current_hcp : null;
-    const newHcp = (p.hcp !== null && p.hcp !== undefined) ? p.hcp : storedHcp;
-    const changed = storedHcp !== null && storedHcp !== undefined && newHcp !== storedHcp;
-    let preview = '—';
-    if (newHcp !== null && newHcp !== undefined && !isNaN(newHcp)) {
-      const { tee, quota } = computeInitialQuota(newHcp, teePolicy);
-      preview = `${tee.name || '—'} ${quota !== null ? quota.toFixed(2) : ''}`;
-    }
-    html += `<tr class="${changed ? 'stored-changed' : ''}">
-      <td>${p.name}</td>
-      <td>${storedHcp !== null && storedHcp !== undefined ? storedHcp : '<span class="subtle">no profile yet</span>'}</td>
-      <td><input type="number" step="0.1" class="qhcp-input" data-idx="${i}" data-name="${p.name}" value="${newHcp !== null && newHcp !== undefined ? newHcp : ''}" style="width:90px"></td>
-      <td class="qhcp-preview-${i}">${preview}</td>
-    </tr>`;
-  });
-  html += '</tbody></table>';
-  wrap.innerHTML = html;
-  wrap.querySelectorAll('.qhcp-input').forEach(input => {
-    input.addEventListener('input', () => {
-      const idx = input.dataset.idx;
-      const val = parseFloat(input.value);
-      let teePolicy2;
-      try {
-        const first = firstStablefordRound();
-        const global = readTeePolicyGlobal();
-        teePolicy2 = first ? venuePolicyFor(global, first.venueId) : null;
-        if (!teePolicy2) return;
-      } catch (e) { return; }
-      const previewEl = wrap.querySelector('.qhcp-preview-' + idx);
-      if (isNaN(val)) { previewEl.textContent = '—'; return; }
-      const { tee, quota } = computeInitialQuota(val, teePolicy2);
-      previewEl.textContent = `${tee.name || '—'} ${quota !== null ? quota.toFixed(2) : ''}`;
-    });
-  });
-}
-
-document.getElementById('applyQuickHcpBtn').addEventListener('click', async () => {
-  const wrap = document.getElementById('quickHcpWrap');
-  const inputs = [...wrap.querySelectorAll('.qhcp-input')];
-  if (!inputs.length) { document.getElementById('quickHcpStatus').textContent = 'Nothing to apply — load a roster and profiles first.'; return; }
-
-  // Write New HCP values back into the roster table
-  const rows = [...rosterBody.querySelectorAll('tr')];
-  const byName = {};
-  rows.forEach(tr => { byName[tr.querySelector('.p-name').value.trim().toLowerCase()] = tr; });
-  const updates = [];
-  inputs.forEach(input => {
-    const name = input.dataset.name;
-    const val = input.value === '' ? null : parseFloat(input.value);
-    const row = byName[name.toLowerCase()];
-    if (row && val !== null && !isNaN(val)) row.querySelector('.p-hcp').value = val;
-    updates.push({ name, hcp: val });
-  });
-
-  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
-  const pin = document.getElementById('hostPin').value.trim();
-  const statusEl = document.getElementById('quickHcpStatus');
-  if (!base) { statusEl.textContent = 'Roster updated locally. Enter the BFE Worker URL to also save profiles.'; return; }
-  statusEl.textContent = 'Saving profiles…';
-  try {
-    const res = await fetch(base + '/bfe/player-profiles', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ profiles: updates, pin })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    statusEl.textContent = `Applied — roster updated, ${data.updated} profile(s) saved.`;
-  } catch (e) {
-    statusEl.textContent = 'Roster updated locally, but saving profiles failed: ' + e.message;
-  }
-});
 
 // ── Buy-in live total ────────────────────────────────────────────────
 function refreshBuyInDisplay() {
