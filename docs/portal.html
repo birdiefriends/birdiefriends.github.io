@@ -8429,7 +8429,7 @@ async function livePanelUploadCore(file, evt, { sourceLabel, section, capturedAt
 // can't be fixed at all.
 async function checkScorecardSubmitted(eventName, playerName) {
   try {
-    const resp = await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}&limit=100&orderby=created_at,DESC`);
+    const resp = await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}&limit=100&orderby=created_at,DESC&filter=${JF_FILTER}`);
     const data = await resp.json();
     const subs = data.content || [];
     const norm = s => (s || '').trim().toLowerCase();
@@ -8455,7 +8455,7 @@ async function checkScorecardSubmitted(eventName, playerName) {
 // harmless double-question, not a data-integrity problem.
 async function checkWallyBallLost(playerName) {
   try {
-    const resp = await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}&limit=100&orderby=created_at,DESC`);
+    const resp = await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}&limit=100&orderby=created_at,DESC&filter=${JF_FILTER}`);
     const data = await resp.json();
     const subs = data.content || [];
     const norm = s => (s || '').trim().toLowerCase();
@@ -8482,6 +8482,49 @@ function refreshWbHistory(playerName) {
     _wbAlreadyLost = lost;
     renderLiveBanner();
   });
+}
+
+// Dev-74 admin utility — NOT wired to any button, console-only by design (this is a
+// data-correction tool, not a player-facing feature). Clears a player's "already
+// recorded a loss" Wally Ball flag by editing their matching Jotform submission(s)'
+// WB status back to 'Yes' via the Jotform edit endpoint. Non-destructive — leaves the
+// hole-by-hole scores and everything else on the submission untouched; only the
+// Wally Ball status field changes, so it's safe to run against test data OR a real
+// submission that was mis-entered.
+// Usage (browser console, on the live portal page):
+//   bfResetWallyBall('Brian Hager')                 // clears any "wally"-matching loss
+//   bfResetWallyBall('Brian Hager', 'wally cup rd1') // narrow to a specific round
+async function bfResetWallyBall(playerName, eventSubstr) {
+  eventSubstr = (eventSubstr || 'wally').toLowerCase();
+  const norm = s => (s || '').trim().toLowerCase();
+  const target = norm(playerName);
+  try {
+    const resp = await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}&limit=100&orderby=created_at,DESC&filter=${JF_FILTER}`);
+    const data = await resp.json();
+    const subs = data.content || [];
+    const matches = subs.filter(s => {
+      const nameField = norm(s.answers?.[SC_QID.name]?.answer   || '');
+      const evtField  = norm(s.answers?.[SC_QID.event]?.answer  || '');
+      const wbField   = norm(s.answers?.[WB_QID.status]?.answer || '');
+      return nameField === target && evtField.includes(eventSubstr) && wbField === 'no';
+    });
+    if (!matches.length) {
+      console.log(`[bfResetWallyBall] No matching "lost" submissions found for "${playerName}" / "${eventSubstr}".`);
+      return;
+    }
+    console.log(`[bfResetWallyBall] Clearing Wally Ball status on ${matches.length} submission(s):`, matches.map(m => m.id));
+    for (const m of matches) {
+      const body = new URLSearchParams();
+      body.append(`submission[${WB_QID.status}]`, 'Yes');
+      await fetch(`${JF_API}/submission/${m.id}?apiKey=${JOTFORM_API_KEY}`,
+        { method: 'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() });
+      console.log(`[bfResetWallyBall] Cleared submission ${m.id}`);
+    }
+    if (_scPlayer || currentPlayer) refreshWbHistory(_scPlayer || currentPlayer);
+    console.log('[bfResetWallyBall] Done — the "already lost" state should clear on next render.');
+  } catch(e) {
+    console.warn('[bfResetWallyBall] error:', e.message);
+  }
 }
 
 // Minimal JPEG EXIF capture-date reader — handles the common Android/JPEG
