@@ -94,6 +94,8 @@ https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/
 | Portal HTML | `docs/portal.html` |
 | Worker | `source/worker.js` |
 | Deploy script | `source/bf_deploy.py` |
+| Wally Cup spec | `source/BF_WallyCup_Spec.md` (fetch only if continuing BFE/Wally Cup work) |
+| BFE Admin Panel | `docs/BFE-Admin.html` (added Dev-74 — **not fetched by steps 1–7 above**; fetch this explicitly via curl only if continuing BFE Competitive Events / Wally Cup Admin work, since it's a ~130KB file most sessions don't need) |
 
 ---
 
