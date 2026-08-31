@@ -251,13 +251,21 @@
 // ══════════════════════════════════════════════════════════════════════
 const DEFAULT_WORKER_URL = 'https://bf-experiences.birdiefriends01.workers.dev';
 const DEFAULT_PORTAL_URL = 'https://birdiefriends-push.birdiefriends01.workers.dev';
+const DEFAULT_HOST_PIN = '7797';
+// NOTE (Dev-74): defaulting the PIN here is a testing convenience only — it
+// works because this file currently only ever runs for us. Once Hosts (who
+// should never see/enter the PIN) use a version of this panel, the PIN needs
+// to move server-side (e.g. the Worker stamping it in from a session/host
+// login) rather than living in a client-visible input at all.
 (function setConnectionDefaults() {
   const workerInput = document.getElementById('workerUrl');
   const portalInput = document.getElementById('portalUrl');
+  const pinInput = document.getElementById('hostPin');
   const note = document.getElementById('connDefaultsNote');
   if (!workerInput.value) workerInput.value = DEFAULT_WORKER_URL;
   if (!portalInput.value) portalInput.value = DEFAULT_PORTAL_URL;
-  note.textContent = 'BFE Worker + BFPortal URLs default to their known addresses above — correct them if either has changed.';
+  if (!pinInput.value) pinInput.value = DEFAULT_HOST_PIN;
+  note.textContent = 'BFE Worker + BFPortal URLs and Host PIN default to their known values above — correct them if any have changed.';
 })();
 
 // ══════════════════════════════════════════════════════════════════════
@@ -584,9 +592,39 @@ function jfGetAnswerByPriority(sub, regexList) {
   return null;
 }
 
-// Returns { hasEventField, eventNames } — distinct Event Name values,
-// most-recent-first (year-prefixed names sort correctly), mirroring
-// GS's grpLoadEventNames exactly.
+// Parses a Jotform date-type answer for the first regex-matched field found —
+// handles both Jotform's {month,day,year} date-widget object shape and a
+// plain date string. Returns a Date or null (null = no matching field, or the
+// value didn't parse); callers must fail OPEN on null rather than exclude the
+// event, since not every form/event carries a recognizable date field.
+function jfGetDateAnswer(sub, regexList) {
+  for (const rx of regexList) {
+    for (const a of Object.values(sub.answers || {})) {
+      const label = String(a.text || a.name || '');
+      if (!rx.test(label)) continue;
+      const val = a.answer;
+      if (val === undefined || val === null || val === '') continue;
+      let d = null;
+      if (typeof val === 'object') {
+        const { year: y, month: m, day: dd } = val;
+        if (y && m && dd) d = new Date(`${y}-${String(m).padStart(2, '0')}-${String(dd).padStart(2, '0')}T00:00:00`);
+      } else {
+        const s = String(val).trim();
+        d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + 'T00:00:00' : s);
+      }
+      if (d && !isNaN(d.getTime())) return d;
+    }
+  }
+  return null;
+}
+const EVENT_DATE_FIELD_RX = [/event.*date/i, /start.*date/i, /^date$/i];
+
+// Returns { hasEventField, eventNames, hasDateField } — distinct Event Name
+// values, most-recent-first (year-prefixed names sort correctly), mirroring
+// GS's grpLoadEventNames — plus (Dev-74) a historic-event filter: when the
+// form carries a recognizable Event/Start Date field, events dated before
+// today are dropped from the list so Hosts aren't picking a past event by
+// mistake. Forms with no such field are left unfiltered (fail open).
 async function loadJotformEventNames(formIdOrUrl) {
   const formId = extractJotformId(formIdOrUrl);
   if (!formId) throw new Error('Enter a Jotform form ID or URL.');
@@ -594,11 +632,28 @@ async function loadJotformEventNames(formIdOrUrl) {
   if (!subs.length) throw new Error('No submissions found on that form.');
   const hasEventField = subs.some(s =>
     Object.values(s.answers || {}).some(a => /event.*name/i.test(String(a.text || a.name || ''))));
-  if (!hasEventField) return { formId, hasEventField: false, eventNames: [] };
-  const names = [...new Set(
-    subs.map(s => jfGetAnswerByPriority(s, [/event.*name/i])).filter(Boolean).map(s => s.trim())
-  )].sort().reverse();
-  return { formId, hasEventField: true, eventNames: names };
+  if (!hasEventField) return { formId, hasEventField: false, eventNames: [], hasDateField: false };
+
+  const byName = new Map(); // eventName -> Date|null (first date found for that name)
+  subs.forEach(s => {
+    const name = jfGetAnswerByPriority(s, [/event.*name/i]);
+    if (!name) return;
+    const trimmed = name.trim();
+    if (!byName.has(trimmed)) byName.set(trimmed, null);
+    if (!byName.get(trimmed)) {
+      const d = jfGetDateAnswer(s, EVENT_DATE_FIELD_RX);
+      if (d) byName.set(trimmed, d);
+    }
+  });
+
+  const hasDateField = [...byName.values()].some(Boolean);
+  let names = [...byName.keys()];
+  if (hasDateField) {
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    names = names.filter(n => !byName.get(n) || byName.get(n) >= todayStart);
+  }
+  names = names.sort().reverse();
+  return { formId, hasEventField: true, eventNames: names, hasDateField };
 }
 
 // Fetches just one event's registrants (or every submission, for a form
@@ -822,7 +877,7 @@ document.getElementById('loadEventNamesBtn').addEventListener('click', async () 
   setRosterStatus('Loading event names…', 'info');
   fetchBtn.disabled = true;
   try {
-    const { formId, hasEventField, eventNames } = await loadJotformEventNames(formIdOrUrl);
+    const { formId, hasEventField, eventNames, hasDateField } = await loadJotformEventNames(formIdOrUrl);
     jfActiveFormId = formId;
     jfHasEventField = hasEventField;
     eventRow.style.display = 'flex';
@@ -836,7 +891,10 @@ document.getElementById('loadEventNamesBtn').addEventListener('click', async () 
     sel.disabled = false;
     sel.innerHTML = '<option value="">— select event —</option>' +
       eventNames.map(n => `<option value="${n.replace(/"/g, '&quot;')}">${n}</option>`).join('');
-    setRosterStatus(`Loaded ${eventNames.length} event name(s) — select one, then Fetch registrants.`, 'ok');
+    setRosterStatus(
+      `Loaded ${eventNames.length} event name(s)${hasDateField ? ' (past events hidden)' : ''} — select one, then Fetch registrants.`,
+      'ok'
+    );
   } catch (e) {
     eventRow.style.display = 'none';
     setRosterStatus('Could not load event names: ' + e.message, 'err');
