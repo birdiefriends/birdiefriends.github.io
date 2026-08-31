@@ -92,10 +92,11 @@
   <!-- ── Generate test scorecards (Dev-74 — testing tool) ─────────────── -->
   <section class="card">
     <h2>Generate test scorecards <span class="badge">testing tool</span></h2>
-    <p class="hint">Writes REAL submissions to the Scorecard Jotform form — one per player currently in section 3's roster — so Close Round has something to score without hand-keying 16 scorecards. Values are random/plausible, not meaningful; this is for exercising the Close Round pipeline, not real results. These submissions show up in Jotform's own dashboard exactly like real ones and are NOT touched by Data &amp; Reset above — delete them there yourself once you're done testing a round.</p>
+    <p class="hint">Writes REAL submissions to the Scorecard Jotform form — one per player currently in section 3's roster — so Close Round has something to score without hand-keying 16 scorecards. Per-hole points are drawn from your actual 3-year field distribution (Series Stats thru Event 9: ~22% bogey-or-worse, ~38% bogey, ~35% par, ~5% birdie, eagles ~1-in-1100 holes), shifted per player toward their own computed quota rather than one flat average — so results should experientially read like real Wally golf, not just legal point values. Still random, not a real round. These submissions show up in Jotform's own dashboard exactly like real ones and are NOT touched by Data &amp; Reset above — delete them there yourself once you're done testing a round.</p>
     <div class="row">
       <div style="flex:2"><label for="testScorecardRound">Round</label><select id="testScorecardRound"><option value="">— add a stableford round with a venue in section 4 first —</option></select></div>
       <div style="flex:2"><label for="testScorecardCourse">Course name (as it should appear on the scorecard)</label><input type="text" id="testScorecardCourse" placeholder="auto-fills from the round's venue"></div>
+      <div><label for="testWbLossRate">Wally Ball loss chance, this round (%)</label><input type="number" id="testWbLossRate" value="70" min="0" max="100" style="width:90px"></div>
       <div style="align-self:flex-end"><button type="button" id="generateTestScorecardsBtn" disabled>Generate test scorecards</button></div>
     </div>
     <p class="hint" id="testScorecardNameWarning" style="display:none"></p>
@@ -659,17 +660,66 @@ async function jfFetchRoundScorecards(roundName) {
 // Writes REAL submissions to the Scorecard Jotform form, one per roster
 // player, so Close Round has data to work with without hand-keying a full
 // roster's worth of scorecards. Field mapping mirrors jfFetchRoundScorecards
-// above exactly, just in the write direction. Per-hole points are random
-// draws from the real valid Stableford per-hole scale (confirmed against
-// GS's own VALID_SCORES set — 0/1/2/4/6, there is no 3) — not meant to model
-// any real skill level, just legal values, since this exists to exercise
-// the pipeline (fetch → score → skins → payout → save), not to produce
-// meaningful golf. A player is randomly marked as having lost Wally Ball at
-// a random hole/stroke count some fraction of the time, so that path gets
-// exercised too.
-const TEST_HOLE_POINT_POOL = [0, 1, 1, 2, 2, 2, 4, 6]; // weighted so mid-range points show up more than 0/4/6, still only real values
-async function jfCreateScorecardSubmission(playerName, roundName, courseName, wbLossRate) {
-  const holes = Array.from({ length: 18 }, () => TEST_HOLE_POINT_POOL[Math.floor(Math.random() * TEST_HOLE_POINT_POOL.length)]);
+// above exactly, just in the write direction. A player is randomly marked as
+// having lost Wally Ball at a random hole/stroke count some fraction of the
+// time, so that path gets exercised too.
+//
+// Per-hole points come from Brian's real "Series Stats thru Event 9" field
+// data (2411 recorded holes over 3 years), not an invented weighting: eagle
+// 0.04%, birdie 5.14%, par 35.34%, bogey 37.70%, bogey-or-worse 21.78%. An
+// earlier version used a flat made-up pool that produced far too many
+// birdies/eagles and not enough bogeys — technically valid Stableford values
+// (0/1/2/4/6, confirmed against GS's own VALID_SCORES set) but nothing like
+// real golf, which made test results impossible to sanity-check by feel.
+//
+// Draws are also centered on each player's own quota rather than one flat
+// population average — otherwise a high-handicap (low-quota) player would
+// look like a chronic quota-crusher and a low-handicap (high-quota) player
+// would look chronically bad, every single round, since a fixed ~23pt
+// average round doesn't move to meet either of them. Real Wally Cup
+// experience is closer to "most players land under their own quota or
+// slightly above it" (Brian) — that only happens if the draw is shifted per
+// player, since quota is specifically calibrated per handicap.
+const REAL_HOLE_POINT_DIST = [
+  { points: 0, p: 0.2178 }, // bogey or worse
+  { points: 1, p: 0.3770 }, // bogey
+  { points: 2, p: 0.3534 }, // par
+  { points: 4, p: 0.0514 }, // birdie
+  { points: 6, p: 0.0009 }  // eagle — about 1 in 1100 holes, matches "recorded twice in 3 years"
+];
+const REAL_HOLE_POINT_AVG = REAL_HOLE_POINT_DIST.reduce((s, d) => s + d.points * d.p, 0); // ≈1.29/hole, ≈23.3/round
+
+function drawRealHolePoints() {
+  let r = Math.random();
+  for (const d of REAL_HOLE_POINT_DIST) {
+    if (r < d.p) return d.points;
+    r -= d.p;
+  }
+  return REAL_HOLE_POINT_DIST[REAL_HOLE_POINT_DIST.length - 1].points; // float rounding fallback
+}
+
+// skillFactor in roughly [-1, 1]: how much better/worse than the field
+// average this player's own quota implies. Applied by drawing TWO
+// independent real-distribution outcomes and keeping the better one
+// (skillFactor > 0) or worse one (< 0) with probability |skillFactor| —
+// this shifts the center up/down while still only ever producing outcomes
+// in the real distribution's own shape/rarity, rather than inventing a new
+// one per player.
+function skillFactorForQuota(quota) {
+  if (quota === null || quota === undefined || isNaN(quota)) return 0;
+  const delta = (quota / 18) - REAL_HOLE_POINT_AVG;
+  return Math.max(-1, Math.min(1, delta / 0.6));
+}
+function drawQuotaCenteredHolePoints(skillFactor) {
+  const a = drawRealHolePoints();
+  const b = drawRealHolePoints();
+  if (skillFactor > 0 && Math.random() < skillFactor) return Math.max(a, b);
+  if (skillFactor < 0 && Math.random() < -skillFactor) return Math.min(a, b);
+  return Math.random() < 0.5 ? a : b;
+}
+
+async function jfCreateScorecardSubmission(playerName, roundName, courseName, wbLossRate, skillFactor = 0) {
+  const holes = Array.from({ length: 18 }, () => drawQuotaCenteredHolePoints(skillFactor));
   const front = holes.slice(0, 9).reduce((a, b) => a + b, 0);
   const back = holes.slice(9).reduce((a, b) => a + b, 0);
   const total = front + back;
@@ -750,11 +800,21 @@ document.getElementById('eventName').addEventListener('input', checkTestScorecar
 document.getElementById('generateTestScorecardsBtn').addEventListener('click', async () => {
   const roundName = document.getElementById('testScorecardRound').value;
   const courseName = document.getElementById('testScorecardCourse').value.trim();
+  const wbLossRate = Math.max(0, Math.min(100, parseFloat(document.getElementById('testWbLossRate').value) || 0)) / 100;
   const statusEl = document.getElementById('testScorecardStatus');
   const players = readRosterInput();
   if (!roundName) { statusEl.textContent = 'Pick a round first.'; statusEl.style.color = 'var(--err)'; return; }
   if (!players.length) { statusEl.textContent = 'Add players to the roster in section 3 first.'; statusEl.style.color = 'var(--err)'; return; }
   if (!confirm(`Create ${players.length} REAL test scorecard submissions on Jotform for "${roundName}"? This writes to Jotform, not just D1 — delete them from Jotform's dashboard when you're done testing.`)) return;
+
+  // Quota-center each player's draws against THIS round's own venue tee
+  // policy — approximates their initial quota (not the true carried-forward
+  // quota if this round chains from an earlier one, which isn't known here
+  // without fetching saved results), but is close enough to make test scores
+  // land near a believable number for that player rather than a flat average.
+  const round = readRoundsInput().find(r => r.name === roundName);
+  const teePolicy = readTeePolicyGlobal();
+  const venuePolicy = (round && round.venueId && teePolicy.byVenue[round.venueId]) ? venuePolicyFor(teePolicy, round.venueId) : null;
 
   statusEl.style.color = 'var(--sub)';
   let created = 0;
@@ -762,7 +822,9 @@ document.getElementById('generateTestScorecardsBtn').addEventListener('click', a
   for (const p of players) {
     statusEl.textContent = `Creating ${created + failures.length + 1} of ${players.length}: ${p.name}…`;
     try {
-      await jfCreateScorecardSubmission(p.name, roundName, courseName, 0.25);
+      const quota = venuePolicy ? computeInitialQuota(p.hcp, venuePolicy).quota : null;
+      const skillFactor = skillFactorForQuota(quota);
+      await jfCreateScorecardSubmission(p.name, roundName, courseName, wbLossRate, skillFactor);
       created++;
     } catch (e) {
       failures.push(`${p.name}: ${e.message}`);
@@ -1654,7 +1716,8 @@ function fmtMoney(n) { return '$' + Number(n).toFixed(2).replace(/\.00$/, ''); }
 function renderReview(config) {
   let rosterHtml = '<h3>Roster &amp; quotas</h3><table><thead><tr><th>Name</th><th>Email</th><th>HCP</th><th>Tee</th><th>Slope</th><th>Initial quota</th></tr></thead><tbody>';
   config.roster.forEach(p => {
-    rosterHtml += `<tr><td>${p.name}</td><td>${p.email || '—'}</td><td>${p.hcp ?? '—'}</td><td>${p.tee?.name ?? '—'}</td><td>${p.tee?.slope ?? '—'}</td><td>${p.isNoHcp ? 'NoHCP (set before Rd1)' : p.initialQuota.toFixed(2)}</td></tr>`;
+    const slopeDisplay = typeof p.tee?.slope === 'number' ? p.tee.slope.toFixed(1) : (p.tee?.slope ?? '—');
+    rosterHtml += `<tr><td>${p.name}</td><td>${p.email || '—'}</td><td>${p.hcp ?? '—'}</td><td>${p.tee?.name ?? '—'}</td><td>${slopeDisplay}</td><td>${p.isNoHcp ? 'NoHCP (set before Rd1)' : p.initialQuota.toFixed(2)}</td></tr>`;
   });
   rosterHtml += '</tbody></table>';
   document.getElementById('reviewRoster').innerHTML = rosterHtml;
