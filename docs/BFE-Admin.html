@@ -326,6 +326,24 @@ function computeInitialQuota(hcp, teePolicy) {
   return { tee, quota: 36 - (hcp * tee.slope / 113), isNoHcp: false };
 }
 
+// Dev-74: for a Fixed HCP-mode event (one HCP for the whole event — Wally
+// Cup), the single resulting quota needs to represent an average of every
+// course actually played, not just whichever venue Rd1 happens to be at.
+// Without this, two players with identical HCPs get quotas anchored to
+// Rd1's slope alone even though the event may play three different-slope
+// courses — the quota comparison only makes sense against a blended
+// baseline. Averages per ROUND, not per unique venue, so a venue repeated
+// across rounds (e.g. Rd1 and Rd3 at the same course) counts twice, same as
+// it's actually played twice. Returns null if no venue policy resolved a
+// numeric slope (falls back to the tee-based slope at the call site).
+function averageSlopeAcrossRounds(hcp, venuePolicies) {
+  const slopes = venuePolicies
+    .map(vp => resolveTeeAssignment(hcp, vp).slope)
+    .filter(s => typeof s === 'number' && !isNaN(s));
+  if (!slopes.length) return null;
+  return slopes.reduce((a, b) => a + b, 0) / slopes.length;
+}
+
 function computeStablefordQuota(input, params) {
   const hcpMode = params?.hcpMode || 'variable';
   const entries = input.players.map(p => {
@@ -400,8 +418,23 @@ function scoreRound(eventConfig, rawInput, sideData) {
 // Inlined from bf_setup.js
 // ══════════════════════════════════════════════════════════════════════
 
-function resolveRoster(players, teePolicy) {
+// `opts.hcpMode` + `opts.allVenuePolicies` (every stableford round's venue
+// policy, in round order, duplicates included) trigger the Fixed-mode slope
+// averaging above — Rd1's tee is still shown (the tee color/name a player
+// actually plays off of Rd1), but the quota-math slope is the average across
+// every stableford round when there's more than one. Variable-mode events,
+// or a Fixed event with only one stableford round, are unaffected (the
+// average of one value is that value, so this never changes single-round
+// behavior).
+function resolveRoster(players, teePolicy, opts) {
+  const useAvg = opts?.hcpMode === 'fixed' && (opts.allVenuePolicies || []).length > 1;
   return players.map(p => {
+    if (useAvg && p.hcp !== null && p.hcp !== undefined && !isNaN(p.hcp)) {
+      const tee = resolveTeeAssignment(p.hcp, teePolicy);
+      const avgSlope = averageSlopeAcrossRounds(p.hcp, opts.allVenuePolicies);
+      const slope = avgSlope !== null ? avgSlope : tee.slope;
+      return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope, initialQuota: 36 - (p.hcp * slope / 113), isNoHcp: false };
+    }
     const { tee, quota, isNoHcp } = computeInitialQuota(p.hcp, teePolicy);
     return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope: tee.slope, initialQuota: quota, isNoHcp };
   });
@@ -1262,16 +1295,29 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
       throw new Error(`Pick "${firstRound.name}"'s venue and fill in its tee policy block before generating.`);
     }
 
-    // Roster's initial quota is resolved against the FIRST stableford round's
-    // venue only — that's what "entering Rd1" means. Later stableford rounds
-    // get their OWN per-player tee/slope resolved below, per their own venue.
-    const roster = resolveRoster(players, firstRound ? venuePolicyFor(teePolicy, firstRound.venueId) : { mode: 'same', tee: {} });
+    // Roster's initial quota is resolved against the FIRST stableford
+    // round's venue/tee (for display — which tee a player actually plays
+    // off of Rd1). The SLOPE feeding the quota MATH is different for a
+    // Fixed HCP-mode event with more than one stableford-round venue: it's
+    // averaged across all of them (Dev-74), not just Rd1's — see
+    // resolveRoster/averageSlopeAcrossRounds. Later stableford rounds still
+    // get their OWN per-player tee/slope resolved below, per their own venue
+    // (that's for THAT round's actual/quota comparison, unaffected by this).
+    const hcpModeVal = document.getElementById('hcpMode').value;
+    const stablefordVenuePolicies = roundsInput
+      .filter(r => r.engine === 'stableford_quota' && r.venueId && teePolicy.byVenue[r.venueId])
+      .map(r => venuePolicyFor(teePolicy, r.venueId));
+    const roster = resolveRoster(
+      players,
+      firstRound ? venuePolicyFor(teePolicy, firstRound.venueId) : { mode: 'same', tee: {} },
+      { hcpMode: hcpModeVal, allVenuePolicies: stablefordVenuePolicies }
+    );
     const eventNameVal = document.getElementById('eventName').value.trim() || '2026 Wally Cup';
     const eventFamilySlug = eventNameVal.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'bf_event';
     const config = buildEventConfig({
       eventFamily: eventFamilySlug, // rough slug for now — a dedicated "event family" field (grouping WC year-over-year, or BFSeries seasons) is future UI, not needed to prove the data structure
       isolation: 'separate',
-      hcpMode: document.getElementById('hcpMode').value,
+      hcpMode: hcpModeVal,
       roster,
       rounds: roundsInput // venueId kept on each round — Save needs it to populate bfe_event_rounds.venue_id
     });
