@@ -2118,6 +2118,25 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     });
     const missing = players.filter(p => !p.sc).map(p => p.name);
 
+    // Persist each player's per-hole points for this round (Dev-76 — enables "vs Par" on
+    // the results page: hole points + the venue's real per-hole par, already saved in
+    // Venue Manager, give an exact gross score for every hole except a 0-point one, which
+    // only floors at "double bogey or worse"). Best-effort — a scorecard-save failure must
+    // never block Close Round itself, so failures are swallowed (logged only), not thrown.
+    // Keyed by roundName, NOT the overall Wally Cup event name: that's what the Scorecard
+    // Jotform submission itself calls "Event Name" (see jfFetchRoundScorecards above), and
+    // bfe_scorecards is UNIQUE(event_name, player) — using the round name here keeps Round
+    // 1/2/3 scorecards from colliding/overwriting each other for the same player.
+    await Promise.allSettled(players.filter(p => p.sc).map(p => fetch(base + '/scorecards', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: roundName, player: p.name, holes: p.sc.holes, total: p.sc.actualPoints,
+        venue: round.venue || null,
+        wb_status: p.sc.wbStatus === 'Yes' ? 'kept' : (p.sc.wbStatus === 'No' ? 'lost' : null),
+        wb_hole: p.sc.wbHole, wb_stroke: p.sc.wbStroke,
+      })
+    }).catch(e => console.warn('scorecard persist failed for', p.name, e))));
+
     const engineInput = {
       players: players.map(p => ({ name: p.name, actualPoints: p.actualPoints, quotaIn: p.quotaIn, hcp: p.hcp, prevHcp: p.hcp, slope: p.slope }))
     };
