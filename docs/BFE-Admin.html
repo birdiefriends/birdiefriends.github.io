@@ -1958,20 +1958,50 @@ async function renderWcStandings(base, eventName, config) {
     if (!rollsInto.has(r.round_name)) return;
     overallByPlayer[r.player_name] = (overallByPlayer[r.player_name] || 0) + (r.performance || 0);
   });
+
+  // Dev-74 (Brian): the round-level Wally Ball bonus (kept-it points — e.g.
+  // Rd1=+1/Rd2=+1/Rd3=+2) drives each round's own Rank/Podium (Score+WB) but
+  // is intentionally never merged into "Total +/-" (pure quota performance).
+  // A player who keeps it every round quietly banks several extra points of
+  // ranking advantage that Total +/- alone can't explain — so surface the
+  // running total explicitly here, as its own column, rather than folding it
+  // into performance.
+  const wbPointsByRound = {};
+  config.rounds.forEach(r => {
+    const wbInf = (r.influencers || []).find(i => i.id === 'wally_ball');
+    if (wbInf) wbPointsByRound[r.name] = wbInf.points;
+  });
+  const wbRoundsClosed = Object.keys(wbPointsByRound).filter(n => closedRoundNames.has(n)).length;
+  const wbBonusByPlayer = {};
+  const wbKeptCountByPlayer = {};
+  allResults.forEach(r => {
+    if (!(r.round_name in wbPointsByRound)) return;
+    if (r.wb_status === 'Yes') {
+      wbBonusByPlayer[r.player_name] = (wbBonusByPlayer[r.player_name] || 0) + wbPointsByRound[r.round_name];
+      wbKeptCountByPlayer[r.player_name] = (wbKeptCountByPlayer[r.player_name] || 0) + 1;
+    }
+  });
+
   const overallRows = Object.entries(overallByPlayer)
-    .map(([name, performance]) => ({ name, performance }))
+    .map(([name, performance]) => ({ name, performance, wbBonus: wbBonusByPlayer[name] || 0, wbKept: wbKeptCountByPlayer[name] || 0 }))
     .sort((a, b) => b.performance - a.performance);
   const isComplete = totalRollup > 0 && closedRollup === totalRollup;
   const overallPot = (config.payout?.pots || []).find(p => p.id === 'overall');
 
   let html = `<h3>Overall standings <span class="badge">${closedRollup}/${totalRollup} rounds closed</span></h3>`;
-  html += '<table><thead><tr><th>#</th><th>Player</th><th>Total +/-</th>' + (isComplete && overallPot ? '<th>Podium $</th>' : '') + '</tr></thead><tbody>';
+  html += '<table><thead><tr><th>#</th><th>Player</th><th>Total +/-<br><span class="subtle" style="font-weight:normal">(vs. quota)</span></th>' +
+    `<th>WB bonus<br><span class="subtle" style="font-weight:normal">(kept, ${wbRoundsClosed} closed)</span></th>` +
+    (isComplete && overallPot ? '<th>Podium $</th>' : '') + '</tr></thead><tbody>';
   overallRows.forEach((r, i) => {
     const podiumCell = (isComplete && overallPot)
       ? `<td>${i < overallPot.distribution.podium.length ? fmtMoney(overallPot.distribution.podium[i]) : '—'}</td>` : '';
-    html += `<tr><td>${i + 1}</td><td>${r.name}</td><td>${fmtDiff(r.performance)}</td>${podiumCell}</tr>`;
+    const wbCell = wbRoundsClosed
+      ? `${r.wbBonus > 0 ? '+' + r.wbBonus : '0'} <span class="subtle">(${r.wbKept}/${wbRoundsClosed})</span>`
+      : '—';
+    html += `<tr><td>${i + 1}</td><td>${r.name}</td><td>${fmtDiff(r.performance)}</td><td>${wbCell}</td>${podiumCell}</tr>`;
   });
   html += '</tbody></table>';
+  html += '<p class="subtle" style="margin-top:6px">"Total +/-" is quota performance only and never includes Wally Ball bonus points. "WB bonus" is this player\'s running total of round-level bonus points earned by keeping it (the same points that shape each round\'s own Rank/Podium) — shown here so it doesn\'t read as a discrepancy. It\'s separate from the winner-take-all Wally Ball pot below, which only cares whether a player has ever lost it.</p>';
 
   // Wally Ball pot — winner-take-all among players who've never recorded a
   // loss in any CLOSED round so far.
