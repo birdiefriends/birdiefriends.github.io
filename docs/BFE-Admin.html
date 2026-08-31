@@ -99,6 +99,10 @@
         <input type="text" id="eventName" value="2026 Wally Cup">
       </div>
       <div>
+        <label for="eventDate">Event date (Rd1)</label>
+        <input type="date" id="eventDate">
+      </div>
+      <div>
         <label for="hcpMode">HCP mode</label>
         <select id="hcpMode">
           <option value="fixed" selected>Fixed — HCP set once before Rd1, unchanged all event (Wally Cup)</option>
@@ -106,6 +110,7 @@
         </select>
       </div>
     </div>
+    <p class="hint">For a multi-day event, use Round 1's date here — this is what drives the historic-event filter in section 3's registration-event dropdown, not a full per-round schedule (not yet built).</p>
   </section>
 
   <!-- ── Connections ───────────────────────────────────────────────── -->
@@ -592,39 +597,14 @@ function jfGetAnswerByPriority(sub, regexList) {
   return null;
 }
 
-// Parses a Jotform date-type answer for the first regex-matched field found —
-// handles both Jotform's {month,day,year} date-widget object shape and a
-// plain date string. Returns a Date or null (null = no matching field, or the
-// value didn't parse); callers must fail OPEN on null rather than exclude the
-// event, since not every form/event carries a recognizable date field.
-function jfGetDateAnswer(sub, regexList) {
-  for (const rx of regexList) {
-    for (const a of Object.values(sub.answers || {})) {
-      const label = String(a.text || a.name || '');
-      if (!rx.test(label)) continue;
-      const val = a.answer;
-      if (val === undefined || val === null || val === '') continue;
-      let d = null;
-      if (typeof val === 'object') {
-        const { year: y, month: m, day: dd } = val;
-        if (y && m && dd) d = new Date(`${y}-${String(m).padStart(2, '0')}-${String(dd).padStart(2, '0')}T00:00:00`);
-      } else {
-        const s = String(val).trim();
-        d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + 'T00:00:00' : s);
-      }
-      if (d && !isNaN(d.getTime())) return d;
-    }
-  }
-  return null;
-}
-const EVENT_DATE_FIELD_RX = [/event.*date/i, /start.*date/i, /^date$/i];
-
-// Returns { hasEventField, eventNames, hasDateField } — distinct Event Name
-// values, most-recent-first (year-prefixed names sort correctly), mirroring
-// GS's grpLoadEventNames — plus (Dev-74) a historic-event filter: when the
-// form carries a recognizable Event/Start Date field, events dated before
-// today are dropped from the list so Hosts aren't picking a past event by
-// mistake. Forms with no such field are left unfiltered (fail open).
+// Returns { hasEventField, eventNames } — distinct Event Name values,
+// most-recent-first (year-prefixed names sort correctly), mirroring GS's
+// grpLoadEventNames exactly. Historic-event filtering is NOT done here —
+// this Jotform registration form has no reliable per-event date field (a
+// Dev-74 attempt to guess one via label regex came back empty), so instead
+// the caller filters using event_date from Setup's own bfe_events records
+// (see fetchKnownEventDates below), which is what Section 1's Event Date
+// field now feeds.
 async function loadJotformEventNames(formIdOrUrl) {
   const formId = extractJotformId(formIdOrUrl);
   if (!formId) throw new Error('Enter a Jotform form ID or URL.');
@@ -632,28 +612,33 @@ async function loadJotformEventNames(formIdOrUrl) {
   if (!subs.length) throw new Error('No submissions found on that form.');
   const hasEventField = subs.some(s =>
     Object.values(s.answers || {}).some(a => /event.*name/i.test(String(a.text || a.name || ''))));
-  if (!hasEventField) return { formId, hasEventField: false, eventNames: [], hasDateField: false };
+  if (!hasEventField) return { formId, hasEventField: false, eventNames: [] };
+  const names = [...new Set(
+    subs.map(s => jfGetAnswerByPriority(s, [/event.*name/i])).filter(Boolean).map(s => s.trim())
+  )].sort().reverse();
+  return { formId, hasEventField: true, eventNames: names };
+}
 
-  const byName = new Map(); // eventName -> Date|null (first date found for that name)
-  subs.forEach(s => {
-    const name = jfGetAnswerByPriority(s, [/event.*name/i]);
-    if (!name) return;
-    const trimmed = name.trim();
-    if (!byName.has(trimmed)) byName.set(trimmed, null);
-    if (!byName.get(trimmed)) {
-      const d = jfGetDateAnswer(s, EVENT_DATE_FIELD_RX);
-      if (d) byName.set(trimmed, d);
-    }
-  });
-
-  const hasDateField = [...byName.values()].some(Boolean);
-  let names = [...byName.keys()];
-  if (hasDateField) {
-    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-    names = names.filter(n => !byName.get(n) || byName.get(n) >= todayStart);
+// Fetches { eventName: event_date } for every event ever saved via Setup —
+// event_date is Section 1's Rd1-date field, added (Dev-74) specifically to
+// drive this filter once it turned out Jotform itself has no usable date.
+// Read-only, no PIN, same posture as /bfe/events-list itself. An event name
+// that isn't in this map (never saved yet — including the one you're
+// actively building right now, before its first Save) is always shown:
+// fail open, never hide a Jotform event name just because we don't know
+// its date.
+async function fetchKnownEventDates() {
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const map = {};
+  if (!base) return map;
+  try {
+    const res = await fetch(base + '/bfe/events-list');
+    const data = await res.json();
+    (data.events || []).forEach(e => { if (e.event_date) map[e.event_name] = e.event_date; });
+  } catch (e) {
+    console.warn('[BFE] Could not load known event dates — historic filter skipped:', e.message);
   }
-  names = names.sort().reverse();
-  return { formId, hasEventField: true, eventNames: names, hasDateField };
+  return map;
 }
 
 // Fetches just one event's registrants (or every submission, for a form
@@ -877,7 +862,7 @@ document.getElementById('loadEventNamesBtn').addEventListener('click', async () 
   setRosterStatus('Loading event names…', 'info');
   fetchBtn.disabled = true;
   try {
-    const { formId, hasEventField, eventNames, hasDateField } = await loadJotformEventNames(formIdOrUrl);
+    const { formId, hasEventField, eventNames } = await loadJotformEventNames(formIdOrUrl);
     jfActiveFormId = formId;
     jfHasEventField = hasEventField;
     eventRow.style.display = 'flex';
@@ -888,11 +873,20 @@ document.getElementById('loadEventNamesBtn').addEventListener('click', async () 
       setRosterStatus('This form has no Event Name field — click Fetch registrants to pull every submission on it.', 'ok');
       return;
     }
+    // Historic-event filter (Dev-74): hide any event name whose saved
+    // event_date (Section 1's Rd1-date field, from a prior Save) is before
+    // today. Compared as YYYY-MM-DD strings — both sides are always that
+    // shape (an <input type=date> value, or Jotform's untouched) — so this
+    // sidesteps timezone edge cases a real Date-object comparison would hit.
+    const knownDates = await fetchKnownEventDates();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const visibleNames = eventNames.filter(n => !knownDates[n] || knownDates[n] >= todayStr);
+    const hiddenCount = eventNames.length - visibleNames.length;
     sel.disabled = false;
     sel.innerHTML = '<option value="">— select event —</option>' +
-      eventNames.map(n => `<option value="${n.replace(/"/g, '&quot;')}">${n}</option>`).join('');
+      visibleNames.map(n => `<option value="${n.replace(/"/g, '&quot;')}">${n}</option>`).join('');
     setRosterStatus(
-      `Loaded ${eventNames.length} event name(s)${hasDateField ? ' (past events hidden)' : ''} — select one, then Fetch registrants.`,
+      `Loaded ${visibleNames.length} event name(s)${hiddenCount ? ` (${hiddenCount} past event(s) hidden)` : ''} — select one, then Fetch registrants.`,
       'ok'
     );
   } catch (e) {
@@ -1257,6 +1251,7 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
       rounds: roundsInput // venueId kept on each round — Save needs it to populate bfe_event_rounds.venue_id
     });
     config.eventName = document.getElementById('eventName').value.trim() || '2026 Wally Cup';
+    config.eventDate = document.getElementById('eventDate').value || null; // Rd1's date — drives section 3's historic-event filter
     config.teePolicy = teePolicy;
     config.status = 'draft';
 
@@ -1375,6 +1370,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
       body: JSON.stringify({
         event_name: eventName,
         event_family: assembledConfig.eventFamily,
+        event_date: assembledConfig.eventDate,
         hcp_mode: assembledConfig.hcpMode,
         status: assembledConfig.status,
         tee_policy: assembledConfig.teePolicy,
@@ -1402,6 +1398,7 @@ document.getElementById('loadBtn').addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     assembledConfig = data.config;
+    document.getElementById('eventDate').value = assembledConfig.eventDate || '';
     renderReview(assembledConfig);
     document.getElementById('outputSection').style.display = 'block';
     setStatus(`Loaded "${eventName}" (last saved ${data.updated_at}) — ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
@@ -1640,9 +1637,9 @@ async function loadEventsList() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     if (!data.events.length) { body.innerHTML = '<p class="subtle">No events stored yet.</p>'; return; }
-    let html = '<table><thead><tr><th>Event</th><th>Status</th><th>Rounds</th><th>Roster</th><th>Round results</th><th>Skins</th><th>Updated</th><th></th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Event</th><th>Event date</th><th>Status</th><th>Rounds</th><th>Roster</th><th>Round results</th><th>Skins</th><th>Updated</th><th></th></tr></thead><tbody>';
     data.events.forEach(e => {
-      html += `<tr><td>${e.event_name}</td><td>${e.status}</td><td>${e.rounds}</td><td>${e.roster}</td><td>${e.results}</td><td>${e.skins}</td><td>${e.updated_at}</td>` +
+      html += `<tr><td>${e.event_name}</td><td>${e.event_date || '—'}</td><td>${e.status}</td><td>${e.rounds}</td><td>${e.roster}</td><td>${e.results}</td><td>${e.skins}</td><td>${e.updated_at}</td>` +
         `<td><button type="button" class="danger deleteEventBtn" data-name="${e.event_name.replace(/"/g, '&quot;')}">Delete</button></td></tr>`;
     });
     html += '</tbody></table>';
