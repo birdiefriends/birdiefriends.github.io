@@ -3467,8 +3467,53 @@ const SC_QID = { name:'31', event:'30', course:'28',
 const WB_QID = { status:'33', hole:'34', stroke:'35' };
 // CttP QIDs
 const CTP_QID = { hole:'3', player:'4', dist:'5', event:'7' };
-// Default CttP holes for BSGC — future: read from event field
+// Default CttP holes for BSGC — used when a live event's venue has no BFE
+// per-venue CTP holes on file (every non-BFE weekly BSGC event, or any BFE
+// event whose host hasn't filled in Section 5's CTP holes field yet). See
+// loadVenueCttpHoles/resolvedCttpHoles below (Dev-74) — this is now a
+// fallback, not the only source, so a Wally Cup round at Honesdale/Skytop/
+// Paupack Hills shows THAT course's holes instead of BSGC's.
 const CTP_HOLES_DEFAULT = [3,8,10,15,18];
+// BFE (Wally Cup / Competitive Events) Worker — separate from GATHERINGS_API
+// on purpose (see bf_experiences_worker.js's own header comment: it's a
+// separate deploy artifact specifically so churn there never risks this
+// file). Read-only GET here; portal.html never writes to this Worker.
+const BFE_API = 'https://bf-experiences.birdiefriends01.workers.dev';
+let _venueCttpHolesCache = {};  // venue_id -> array|null, cached per session
+let _resolvedCttpHoles   = null; // CTP holes for whichever event the Live Panel is currently open on
+
+// Resolves the live event's venue to its BFE-recorded CTP holes, if any.
+// Fails open at every step (unknown venue, no cache entry, fetch error,
+// missing/empty cttpHoles) by leaving _resolvedCttpHoles null — callers fall
+// back to CTP_HOLES_DEFAULT, so a normal BSGC weekly event (no BFE venue
+// data at all) behaves exactly as it always has. Only called when the Live
+// Panel is opened, not on every 60s refresh — CTP holes don't change
+// mid-round.
+async function loadVenueCttpHoles(evt) {
+  _resolvedCttpHoles = null;
+  try {
+    if (!evt) return;
+    const venueName = csNormalizedVenueName(evt);
+    if (!venueName) return;
+    await loadVenues();
+    const norm = s => (s || '').trim().toLowerCase();
+    const v = (_venues || []).find(x => norm(x.name) === norm(venueName));
+    if (!v) return;
+    if (Object.prototype.hasOwnProperty.call(_venueCttpHolesCache, v.id)) {
+      _resolvedCttpHoles = _venueCttpHolesCache[v.id];
+      return;
+    }
+    const res = await fetch(`${BFE_API}/bfe/venue-tee-catalog?venue_id=${encodeURIComponent(v.id)}`);
+    if (!res.ok) { _venueCttpHolesCache[v.id] = null; return; } // e.g. 404 — no catalog saved for this venue yet
+    const data = await res.json();
+    const holes = Array.isArray(data?.tee_catalog?.cttpHoles) ? data.tee_catalog.cttpHoles : null;
+    _venueCttpHolesCache[v.id] = (holes && holes.length) ? holes : null;
+    _resolvedCttpHoles = _venueCttpHolesCache[v.id];
+  } catch (e) {
+    console.warn('[CttP] loadVenueCttpHoles error (falling back to BSGC default):', e.message);
+    _resolvedCttpHoles = null;
+  }
+}
 // Live event window: tee time to tee time + N hours
 const LIVE_EVENT_HOURS = 8;
 // FLAGS — loaded from Cloudflare KV via Worker on app start
@@ -7827,6 +7872,7 @@ function toggleLivePanel() {
   _livePanelOpen = !_livePanelOpen;
   if (_livePanelOpen) {
     loadCtpData(getLiveEvent());
+    loadVenueCttpHoles(getLiveEvent()).then(renderLiveBanner); // which holes to show — resolved once per panel-open, not every refresh tick
     loadSkinBoardData();
     startCtpRefresh();
   } else {
@@ -7947,7 +7993,7 @@ function buildLivePanel(evt) {
 
   // ── SECTION 2: CttP ─────────────────────────────────────────────────────
   const ctpPlayerSel = _ctpPlayer || currentPlayer;
-  const ctpHoles = CTP_HOLES_DEFAULT;
+  const ctpHoles = (_resolvedCttpHoles && _resolvedCttpHoles.length) ? _resolvedCttpHoles : CTP_HOLES_DEFAULT;
   const ctpPills = ctpHoles.map(h => {
     const leader = _ctpData[h];
     const alreadyIn = (_ctpHistory[h] || []).some(e => e.player.trim().toLowerCase() === ctpPlayerSel.trim().toLowerCase());
@@ -7977,7 +8023,7 @@ function buildLivePanel(evt) {
       </button>
     </div>` : '';
   // CttP live leaderboard
-  const ctpLeaderboard = CTP_HOLES_DEFAULT.map(h => {
+  const ctpLeaderboard = ctpHoles.map(h => {
     const leader = _ctpData[h];
     const hist   = _ctpHistory[h] || [];
     const isMe   = leader && leader.player.trim().toLowerCase() === ctpPlayerSel.trim().toLowerCase();
