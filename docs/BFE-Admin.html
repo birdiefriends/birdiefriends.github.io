@@ -89,6 +89,18 @@
     <div id="eventsListBody"><p class="subtle">Click Refresh to see what's currently stored.</p></div>
   </section>
 
+  <!-- ── Generate test scorecards (Dev-74 — testing tool) ─────────────── -->
+  <section class="card">
+    <h2>Generate test scorecards <span class="badge">testing tool</span></h2>
+    <p class="hint">Writes REAL submissions to the Scorecard Jotform form — one per player currently in section 3's roster — so Close Round has something to score without hand-keying 16 scorecards. Values are random/plausible, not meaningful; this is for exercising the Close Round pipeline, not real results. These submissions show up in Jotform's own dashboard exactly like real ones and are NOT touched by Data &amp; Reset above — delete them there yourself once you're done testing a round.</p>
+    <div class="row">
+      <div style="flex:2"><label for="testScorecardRound">Round</label><select id="testScorecardRound"><option value="">— add a stableford round with a venue in section 4 first —</option></select></div>
+      <div style="flex:2"><label for="testScorecardCourse">Course name (as it should appear on the scorecard)</label><input type="text" id="testScorecardCourse" placeholder="auto-fills from the round's venue"></div>
+      <div style="align-self:flex-end"><button type="button" id="generateTestScorecardsBtn" disabled>Generate test scorecards</button></div>
+    </div>
+    <p class="status" id="testScorecardStatus"></p>
+  </section>
+
   <!-- ── Event basics ─────────────────────────────────────────────── -->
   <section class="card">
     <h2>1. Event basics</h2>
@@ -598,6 +610,96 @@ async function jfFetchRoundScorecards(roundName) {
   });
   return byPlayer;
 }
+
+// ── Dev-74 TESTING TOOL: generate scorecards ────────────────────────────
+// Writes REAL submissions to the Scorecard Jotform form, one per roster
+// player, so Close Round has data to work with without hand-keying a full
+// roster's worth of scorecards. Field mapping mirrors jfFetchRoundScorecards
+// above exactly, just in the write direction. Per-hole points are random
+// (0-3) — plausible Stableford values, not meant to model any real skill
+// level — since this exists to exercise the pipeline (fetch → score → skins
+// → payout → save), not to produce meaningful golf. A player is randomly
+// marked as having lost Wally Ball at a random hole/stroke count some
+// fraction of the time, so that path gets exercised too.
+async function jfCreateScorecardSubmission(playerName, roundName, courseName, wbLossRate) {
+  const holes = Array.from({ length: 18 }, () => Math.floor(Math.random() * 4)); // 0-3 pts/hole
+  const front = holes.slice(0, 9).reduce((a, b) => a + b, 0);
+  const back = holes.slice(9).reduce((a, b) => a + b, 0);
+  const total = front + back;
+  const lostWb = Math.random() < wbLossRate;
+
+  const params = new URLSearchParams();
+  params.set(`submission[${SC_QID.name}]`, playerName);
+  params.set(`submission[${SC_QID.event}]`, roundName);
+  params.set(`submission[${SC_QID.course}]`, courseName || '');
+  SC_QID.holes.forEach((qid, i) => params.set(`submission[${qid}]`, String(holes[i])));
+  params.set(`submission[${SC_QID.front}]`, String(front));
+  params.set(`submission[${SC_QID.back}]`, String(back));
+  params.set(`submission[${SC_QID.total}]`, String(total));
+  params.set(`submission[${WB_QID.status}]`, lostWb ? 'No' : 'Yes');
+  if (lostWb) {
+    params.set(`submission[${WB_QID.hole}]`, String(1 + Math.floor(Math.random() * 18)));
+    params.set(`submission[${WB_QID.stroke}]`, String(1 + Math.floor(Math.random() * 3)));
+  }
+
+  const res = await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  });
+  const data = await res.json();
+  if (data.responseCode !== 200) throw new Error(data.message || `HTTP ${res.status}`);
+  return data;
+}
+
+function populateTestScorecardRoundSelect() {
+  const sel = document.getElementById('testScorecardRound');
+  const btn = document.getElementById('generateTestScorecardsBtn');
+  if (!sel) return; // guard — this fires from refreshTeeVenueBlocks before the DOM exists on first parse
+  const current = sel.value;
+  const rounds = readRoundsInput().filter(r => r.engine === 'stableford_quota' && r.venueId);
+  if (!rounds.length) {
+    sel.innerHTML = '<option value="">— add a stableford round with a venue in section 4 first —</option>';
+    btn.disabled = true;
+    return;
+  }
+  sel.innerHTML = rounds.map(r =>
+    `<option value="${r.name.replace(/"/g, '&quot;')}" data-venue="${(r.venue || '').replace(/"/g, '&quot;')}" ${r.name === current ? 'selected' : ''}>${r.name}</option>`
+  ).join('');
+  btn.disabled = !sel.value;
+}
+document.getElementById('testScorecardRound').addEventListener('change', () => {
+  const sel = document.getElementById('testScorecardRound');
+  const courseInput = document.getElementById('testScorecardCourse');
+  const opt = sel.selectedOptions[0];
+  if (opt && !courseInput.value) courseInput.value = opt.dataset.venue || '';
+  document.getElementById('generateTestScorecardsBtn').disabled = !sel.value;
+});
+document.getElementById('generateTestScorecardsBtn').addEventListener('click', async () => {
+  const roundName = document.getElementById('testScorecardRound').value;
+  const courseName = document.getElementById('testScorecardCourse').value.trim();
+  const statusEl = document.getElementById('testScorecardStatus');
+  const players = readRosterInput();
+  if (!roundName) { statusEl.textContent = 'Pick a round first.'; statusEl.style.color = 'var(--err)'; return; }
+  if (!players.length) { statusEl.textContent = 'Add players to the roster in section 3 first.'; statusEl.style.color = 'var(--err)'; return; }
+  if (!confirm(`Create ${players.length} REAL test scorecard submissions on Jotform for "${roundName}"? This writes to Jotform, not just D1 — delete them from Jotform's dashboard when you're done testing.`)) return;
+
+  statusEl.style.color = 'var(--sub)';
+  let created = 0;
+  const failures = [];
+  for (const p of players) {
+    statusEl.textContent = `Creating ${created + failures.length + 1} of ${players.length}: ${p.name}…`;
+    try {
+      await jfCreateScorecardSubmission(p.name, roundName, courseName, 0.25);
+      created++;
+    } catch (e) {
+      failures.push(`${p.name}: ${e.message}`);
+    }
+  }
+  statusEl.textContent = `✓ ${created} of ${players.length} scorecard(s) created for "${roundName}".` +
+    (failures.length ? ` ${failures.length} failed — ${failures.join('; ')}` : ' Give Jotform a few seconds to index them, then Close Round should pick them up.');
+  statusEl.style.color = failures.length ? 'var(--err)' : 'var(--accent-dark)';
+});
 
 // Per-hole outright-winner loop — ported from BF_Golf_Scorer_8.html's saved-
 // event skins computation (evtSkins). A hole with a unique max-points player
@@ -1194,6 +1296,7 @@ function applyPolicyToVenueBlock(block, policy) {
 // for newly-seen venues, removes blocks for venues no longer referenced,
 // and otherwise leaves existing blocks (and whatever's typed into them) alone.
 function refreshTeeVenueBlocks() {
+  populateTestScorecardRoundSelect(); // Dev-74 testing tool — piggybacks on the same rounds-changed triggers
   const rounds = readRoundsInput().filter(r => r.engine === 'stableford_quota' && r.venueId);
   const byVenue = {};
   rounds.forEach(r => {
