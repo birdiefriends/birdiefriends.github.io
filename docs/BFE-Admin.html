@@ -449,9 +449,18 @@ function resolveRoster(players, teePolicy, opts) {
   const useAvg = opts?.hcpMode === 'fixed' && (opts.allVenuePolicies || []).length > 1;
   return players.map(p => {
     if (useAvg && p.hcp !== null && p.hcp !== undefined && !isNaN(p.hcp)) {
-      const tee = resolveTeeAssignment(p.hcp, teePolicy);
+      const rawTee = resolveTeeAssignment(p.hcp, teePolicy);
       const avgSlope = averageSlopeAcrossRounds(p.hcp, opts.allVenuePolicies);
-      const slope = avgSlope !== null ? avgSlope : tee.slope;
+      const slope = avgSlope !== null ? avgSlope : rawTee.slope;
+      // Dev-74 bug fix: this used to keep `tee` as Rd1's raw, unaveraged tee
+      // object while `slope` (the sibling field actually driving quota math
+      // below) held the blended value — so Review displayed Rd1's own slope
+      // (e.g. 113) while initialQuota was silently computed off the average
+      // (e.g. 123.33). Caught because Brian checked the two against each
+      // other after a restart. Tee NAME/color is still Rd1's own (that part
+      // is legitimately per-round, not averageable) — only slope is
+      // overwritten so what's shown always matches what's actually used.
+      const tee = { ...rawTee, slope };
       return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope, initialQuota: 36 - (p.hcp * slope / 113), isNoHcp: false };
     }
     const { tee, quota, isNoHcp } = computeInitialQuota(p.hcp, teePolicy);
