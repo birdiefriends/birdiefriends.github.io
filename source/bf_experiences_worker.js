@@ -157,6 +157,49 @@
 //     is_no_hcp INTEGER DEFAULT 0,
 //     UNIQUE(event_id, player_name)
 //   );
+//
+// ── Results layer (Dev-74 — Wally Cup scoring engine) ──────────────────────
+// Keyed by (event_id, round_name), NOT round_id — bfe_event_rounds rows get
+// fully DELETEd/re-INSERTed on every POST /bfe/events save (see above), so
+// a stored round_id would silently orphan itself the moment a host re-saves
+// Setup after a round has already been closed. round_name is what's stable
+// (it's also required to be identical to the Jotform "Event Name" a player's
+// scorecard submission carries, so it doubles as the natural join key).
+//
+//   CREATE TABLE bfe_round_results (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
+//     round_name TEXT NOT NULL,
+//     player_name TEXT NOT NULL,
+//     quota_in REAL,        -- quota entering this round (roster.initial_quota for the
+//                             -- first stableford round, else the chained-from round's quota_out)
+//     actual_points REAL,   -- this round's total points, from Jotform
+//     performance REAL,     -- actual_points - quota_in (pre Wally-Ball-bonus)
+//     quota_out REAL,       -- adjustQuota() output — feeds quota_in for whatever round
+//                             -- chains from this one
+//     wb_status TEXT,       -- 'Yes' | 'No' | NULL (mirrors the portal's WB_QID.status)
+//     wb_hole INTEGER,
+//     wb_stroke INTEGER,
+//     rank INTEGER,         -- final standing for THIS round (post Wally-Ball-bonus,
+//                             -- i.e. what scoreRound()'s influencer chain produced) —
+//                             -- this is what podium payout is paid against, not performance
+//     payout_podium REAL DEFAULT 0,
+//     payout_skins REAL DEFAULT 0,
+//     payout_cttp REAL DEFAULT 0,   -- always 0 for now — CTP payout resolution isn't
+//                                     -- wired yet (no code anywhere matches Jotform CTP
+//                                     -- entries to a round); flagged, not forgotten
+//     closed_at TEXT NOT NULL DEFAULT (datetime('now')),
+//     UNIQUE(event_id, round_name, player_name)
+//   );
+//   CREATE TABLE bfe_round_skins (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
+//     round_name TEXT NOT NULL,
+//     hole INTEGER NOT NULL,
+//     winner TEXT NOT NULL,
+//     pts REAL,
+//     UNIQUE(event_id, round_name, hole)
+//   );
 // ══════════════════════════════════════════════════════════════════════════
 
 
@@ -525,6 +568,31 @@ export default {
     // right" step: proves the Event/Round/Roster shape against real 2026
     // Wally Cup data now, without requiring independent per-section save UI
     // yet (that's a later polish pass once the structure itself is proven).
+    // GET /bfe/events-list — lightweight summary of every event stored (id,
+    // name, status, updated_at, plus row counts for rounds/roster/round-
+    // results/skins). Dev-74, for the Admin panel's Data & Reset tool — built
+    // because there was no way to see what test data had already accumulated
+    // in D1 short of the Cloudflare D1 console itself. Read-only, no PIN,
+    // same posture as the other GET routes.
+    if (request.method === 'GET' && url.pathname === '/bfe/events-list') {
+      try {
+        const { results: events } = await env.DB.prepare(
+          `SELECT id, event_name, event_family, status, updated_at FROM bfe_events ORDER BY updated_at DESC`
+        ).all();
+        const summary = [];
+        for (const e of events) {
+          const rounds  = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_event_rounds WHERE event_id = ?`).bind(e.id).first();
+          const roster  = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_event_roster WHERE event_id = ?`).bind(e.id).first();
+          const results = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_round_results WHERE event_id = ?`).bind(e.id).first();
+          const skins   = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_round_skins WHERE event_id = ?`).bind(e.id).first();
+          summary.push({ ...e, rounds: rounds.n, roster: roster.n, results: results.n, skins: skins.n });
+        }
+        return new Response(JSON.stringify({ ok: true, events: summary }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     if (request.method === 'POST' && url.pathname === '/bfe/events') {
       let body;
       try { body = await request.json(); } catch (e) {
@@ -651,11 +719,89 @@ export default {
         if (eventRow) {
           await env.DB.prepare(`DELETE FROM bfe_event_rounds WHERE event_id = ?`).bind(eventRow.id).run();
           await env.DB.prepare(`DELETE FROM bfe_event_roster WHERE event_id = ?`).bind(eventRow.id).run();
+          await env.DB.prepare(`DELETE FROM bfe_round_results WHERE event_id = ?`).bind(eventRow.id).run();
+          await env.DB.prepare(`DELETE FROM bfe_round_skins WHERE event_id = ?`).bind(eventRow.id).run();
           await env.DB.prepare(`DELETE FROM bfe_events WHERE id = ?`).bind(eventRow.id).run();
         }
         return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Delete error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // ── Round results (Dev-74 — Wally Cup scoring engine) ──────────────────
+    // Computed client-side (BFE-Admin.html's "Close Round" action) from live
+    // Jotform scorecard data — same reason /scorecards above takes finished
+    // rows rather than raw form fields: this Worker has no Jotform credentials
+    // of its own. This route just persists the already-computed result.
+    // POST replaces whatever was previously saved for this (event, round) —
+    // re-closing a round (e.g. after a scoring correction) is meant to be safe.
+    if (request.method === 'POST' && url.pathname === '/bfe/round-results') {
+      let body;
+      try { body = await request.json(); } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { event_name, round_name, results, skins, pin } = body;
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (!event_name || !round_name || !Array.isArray(results)) {
+        return new Response(JSON.stringify({ error: 'event_name, round_name, and results (array) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(event_name).first();
+        if (!eventRow) {
+          return new Response(JSON.stringify({ error: 'Unknown event_name — save the event config first' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const eventId = eventRow.id;
+        await env.DB.prepare(`DELETE FROM bfe_round_results WHERE event_id = ? AND round_name = ?`).bind(eventId, round_name).run();
+        await env.DB.prepare(`DELETE FROM bfe_round_skins WHERE event_id = ? AND round_name = ?`).bind(eventId, round_name).run();
+        for (const r of results) {
+          await env.DB.prepare(
+            `INSERT INTO bfe_round_results (event_id, round_name, player_name, quota_in, actual_points, performance, quota_out, wb_status, wb_hole, wb_stroke, rank, payout_podium, payout_skins, payout_cttp)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(eventId, round_name, r.playerName,
+                 r.quotaIn ?? null, r.actualPoints ?? null, r.performance ?? null, r.quotaOut ?? null,
+                 r.wbStatus ?? null, r.wbHole ?? null, r.wbStroke ?? null, r.rank ?? null,
+                 r.payoutPodium || 0, r.payoutSkins || 0, r.payoutCttp || 0).run();
+        }
+        for (const s of (skins || [])) {
+          await env.DB.prepare(
+            `INSERT INTO bfe_round_skins (event_id, round_name, hole, winner, pts) VALUES (?, ?, ?, ?, ?)`
+          ).bind(eventId, round_name, s.hole, s.winner, s.pts ?? null).run();
+        }
+        return new Response(JSON.stringify({ ok: true, event_id: eventId, round_name, saved: results.length }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error saving round results: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /bfe/round-results?event=<name>[&round=<name>] — all persisted
+    // results for the event (round omitted), or just one round's. Omitted-
+    // round form is what "Close Round" uses to chain quota_out forward into
+    // the next round and to compute the running Wally Ball / Overall standings.
+    if (request.method === 'GET' && url.pathname === '/bfe/round-results') {
+      try {
+        const eventName = url.searchParams.get('event');
+        const roundName = url.searchParams.get('round');
+        if (!eventName) {
+          return new Response(JSON.stringify({ error: 'event query param is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
+        if (!eventRow) {
+          return new Response(JSON.stringify({ ok: true, results: [], skins: [] }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        let results, skins;
+        if (roundName) {
+          results = (await env.DB.prepare(`SELECT * FROM bfe_round_results WHERE event_id = ? AND round_name = ? ORDER BY rank ASC`).bind(eventRow.id, roundName).all()).results;
+          skins   = (await env.DB.prepare(`SELECT * FROM bfe_round_skins WHERE event_id = ? AND round_name = ? ORDER BY hole ASC`).bind(eventRow.id, roundName).all()).results;
+        } else {
+          results = (await env.DB.prepare(`SELECT * FROM bfe_round_results WHERE event_id = ? ORDER BY round_name ASC, rank ASC`).bind(eventRow.id).all()).results;
+          skins   = (await env.DB.prepare(`SELECT * FROM bfe_round_skins WHERE event_id = ? ORDER BY round_name ASC, hole ASC`).bind(eventRow.id).all()).results;
+        }
+        return new Response(JSON.stringify({ ok: true, results, skins }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
