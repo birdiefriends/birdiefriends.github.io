@@ -2474,3 +2474,213 @@ the repo instead of living only in Brian's local file and this log's narrative.
 **Session Dev-73 fully closed.**
 
 **Chat-rename string:** `Dev-73 - Wally Cup Scoring Engine Architected & Spec Committed, Local Publish Tool Built, WB Jotform Fields Wired, Version-Drift Fixed`
+
+---
+
+## Dev-74 · 2026-08-30–31 — Wally Cup Scoring Engine Built & Validated End-to-End (Close Round, Quota, Skins, CTP, Wally Ball), Live Panel Wiring Shipped
+
+**Focus:** Ship Dev-73's Phase 1 (Live Panel Wally Ball wiring, hard deadline 9/11) and
+build out Phase 2 — the entire missing results/computation layer for Wally Cup
+(`BFE-Admin.html`'s "Close Round" action: quota math, podium/skins/CTP payout, Wally Ball
+round bonus + season pot, Overall rollup) — then stress-test it against data realistic
+enough to actually trust, since the original synthetic generator was too far from the
+real field's scoring pattern to sanity-check by eye. Session was compacted three times;
+closing out here deliberately rather than pushing a fourth, per the standing Dev-71
+guidance on watching session length.
+
+**Phase 1 — Live Panel Wally Ball wiring (hard deadline 9/11): ✅ done, confirmed live.**
+- Added `WB_QID = {status:'33', hole:'34', stroke:'35'}` to `portal.html`'s
+  `submitScorecard()`, wired into its POST body (both the Live Panel's own submit path
+  and the "still have it" auto-Yes shortcut).
+- Added the Wally Ball input step (Y/N, conditional Hole#/Stroke# on "No") to
+  `buildLivePanel()`'s Post-Round Scorecard section.
+- Flipped `hasLivePanelSupport()` to `true` for `format-wally` and `format-scramble`.
+  **Flagged, not yet explicitly resolved:** this also enables the Live Panel for *any*
+  non-Wally-Cup event a host creates with a scramble format, since `format-scramble`
+  isn't Wally-Cup-specific — flagged to Brian this session, not yet confirmed acceptable.
+  Low urgency now that the 2Man scramble itself is confirmed standalone (see below), but
+  still open — narrow the gate (e.g. on `event.source` or a WC-specific flag) if it
+  becomes a problem.
+- Verified this is genuinely live, not just locally edited: pulled `docs/portal.html`
+  fresh from GitHub (`raw.githubusercontent.com`, bypasses any cache) and confirmed it's
+  byte-identical to the local copy, `WB_QID` and the `format-wally`/`format-scramble`
+  flips both present. `portal_version.txt` at `v4.0.0 · 2026-08-31`.
+- Also shipped this session (CTP feature, ported over from prior work and delivered
+  early this session): per-venue CTP holes in `BFE-Admin.html`'s Setup, Close Round CTP
+  payout wiring, and a `portal.html` fix removing a hardcoded holes list that predated
+  the per-venue config.
+
+**Phase 2 — Close Round scoring engine (soft deadline, days after 9/11): ✅ built and
+fully validated end-to-end, not just unit-level.** All work this phase was in
+`BFE-Admin.html` (client-side; the underlying `bfe_round_results`/`bfe_round_skins` D1
+tables were already live from earlier this session — no new schema needed for anything
+below, all opaque-JSON-blob keys or pure display/logic fixes):
+
+- **CTP test-generator fix:** the "generate test CTP claims" tool always made the second
+  (later) claim closer than the first, so a Close Round test result couldn't distinguish
+  "most recent submission wins" from "closest submission wins" — both rules always agreed
+  by construction. Fixed by deliberately making the second claim farther, so a test run
+  is now actually conclusive. The underlying tie-break rule itself stays honor-system
+  (no distance safety net) — confirmed, no code change wanted there.
+- **Data & Reset "Load" — full form rehydration:** previously only the read-only Review
+  summary could be reloaded after a page refresh; losing in-memory form state (roster,
+  rounds, tee policy, payout) meant re-entering everything by hand. Added
+  `rehydrateFormFromConfig()` wired to a new Load button per event in the events list,
+  fully restoring the editable form from `/bfe/events?event=...`. Section 7's now-
+  redundant "Load saved config" button was removed at Brian's direction (Section 7 is
+  Save-only now) rather than left as a confusing duplicate.
+- **Slope averaging display bug (real bug, not staleness):** the Roster & quotas Review
+  table showed the Fixed-HCP-mode averaged slope (e.g. 123.3 across three venues)
+  correctly in the underlying quota math, but the separately-returned `tee` object read
+  by the Review renderer still carried Rd1's raw, unaveraged slope (113), so the display
+  never updated even across repeated regenerates. Root-caused and fixed in
+  `resolveRoster()` by overwriting `tee.slope` with the averaged value before returning;
+  verified via a standalone Node reproduction that `tee.slope`/`slope`/`initialQuota` all
+  agree afterward.
+- **Realistic test-data generator overhaul:** Brian supplied real 3-year field stats
+  (2,411 recorded holes) — eagle 0.04–0.09%, birdie ~5.1%, par ~35.3%, bogey ~37.7%,
+  bogey-or-worse ~21.8% — because the original flat-pool generator was skewed enough
+  (too many birdies/eagles) that results couldn't be sanity-checked by eye or matched to
+  how the real field actually plays. Replaced with `REAL_HOLE_POINT_DIST` (weighted draw
+  from the real distribution) plus `skillFactorForQuota()`/`drawQuotaCenteredHolePoints()`
+  (an order-statistic max/min-of-two-real-draws technique that shifts each player's
+  distribution toward their own quota without inventing a new one). Also made the Wally
+  Ball loss rate a tunable input (default 70%, was hardcoded 25%) per Brian's real-world
+  note that most Wally Balls are lost in Rd1 and it's rare for one to survive all three
+  rounds. Verified via a 20,000-round Node simulation before shipping.
+- **Wally Ball round-bonus / season-elimination decoupling fix (real bug, found via a
+  fresh test round):** a player already eliminated from the season-long, winner-take-all
+  Wally Ball pot (having lost it in an earlier round) was silently having their
+  *round-level* keep-it bonus withheld from that round's own Rank/Podium — desyncing the
+  displayed "Kept" status from whether the bonus was actually counted (surfaced via Tom
+  Arnold's Rd2 rank being impossible under the displayed data). Brian confirmed the
+  intended design explicitly: "No player is ever out of the running... rank is always raw
+  score + WB, net additive, after the fact" — the round bonus must be fully independent
+  of season-pool elimination. Fixed by dropping the `alreadyLost` gate entirely;
+  `keptWallyBall` is now purely `!lostThisRound`. The season-long pot's own independent
+  `everLost` tracking (in `renderWcStandings`) was untouched and confirmed still correct.
+- **Round-results table labeling ("zero confusion by players"):** Brian confirmed
+  Podium ranking is *intentionally* based on gross score + Wally Ball bonus, stack-ranked
+  against the whole field — not quota performance — but asked that this be made
+  unmistakable rather than left implicit (a player can rank/pay out well while showing a
+  negative +/-, or vice versa). Added header sub-labels ("Rank (Score+WB)" / "+/- (vs.
+  quota)"), relabeled Wally Ball status to "Kept (+bonus)", and added an explanatory
+  footnote under every Close Round results table spelling out that these are two
+  different, intentional measures. This same requirement carries into the future
+  player-facing results page (see carry-forward).
+- **New this session — cumulative Wally Ball bonus visibility in Overall standings:**
+  Brian flagged that a player who keeps the ball every round quietly banks several extra
+  points of round-level ranking advantage (Rd1/Rd2 = +1 each, Rd3 = +2) that "Total +/-"
+  alone can't explain, since Total +/- is (correctly) pure quota performance and never
+  includes it. Added a "WB bonus" column to `renderWcStandings`'s Overall standings
+  table — computed by cross-referencing each closed round's configured `wally_ball`
+  influencer point value against that player's per-round Kept/Lost status (the saved
+  result rows only store status, not the point value, so the value has to come from the
+  round config) — showing each player's running bonus total and kept-count (e.g. "+3
+  (2/3)"), plus a footnote paired with the Close Round table's own labeling fix.
+
+**Full end-to-end validation — a complete, from-scratch Rd1→Rd2→Rd3 test cycle on the
+realistic generator, fully hand-verified, not just spot-checked:**
+- Rd1, Rd2, and Rd3 were each independently reconstructed by hand against the underlying
+  formulas (every `+/-` = Score − Quota in; every New quota = quotaIn + half that round's
+  performance; Rank(Score+WB) re-sorts correctly on gross score plus that round's bonus;
+  Podium/Skins/CTP dollars all reconcile to the configured pools) — all three rounds
+  clean, no discrepancies.
+- **Chain integrity confirmed two ways:** Rd1's "New quota" matches Rd2's "Quota in"
+  exactly for all 16 players, and Rd2's "New quota" matches Rd3's "Quota in" exactly for
+  all 16 — the full three-round chain is provably intact, not just internally consistent
+  per-round.
+- **The new WB bonus column passed its first real mixed-value test:** reconstructed all
+  16 players' cumulative bonus by hand from each round's own Kept/Lost status crossed
+  with that round's point value (1/1/2) — every single one matched the displayed table,
+  including players who lost it in the middle round and re-picked it up. The season pot's
+  "still in it" list (independent `everLost` tracking) matched the WB-bonus column's
+  "kept every round so far" players exactly, every round — the round-bonus tracking and
+  season-elimination tracking never drifted apart across the whole cycle.
+- One process note from this validation: an attempt to independently cross-check Rd1 by
+  pulling `/bfe/round-results` directly via `WebFetch` returned data from a stale/earlier
+  test cycle under the same event+round name (unrealistic all-positive performance,
+  consistent with the old generator) — a false alarm caused by that fetch, not a real gap
+  in the worker (the worker's own POST route does a clean delete-then-insert per
+  `event_id`+`round_name`, confirmed by reading `bf_experiences_worker.js`; re-pasting
+  the actual Rd1 table from the browser and cross-checking it against Rd2/Rd3 fully
+  reconciled). Worth remembering for Dev-75: **`WebFetch` against `birdiefriends.com`
+  strips `<script>` content during its markdown conversion**, so it's unreliable for
+  confirming a JS-rendered fix actually shipped, and direct `bash`/`curl` to
+  `birdiefriends.com` itself returns nothing (domain not on this sandbox's allowlist —
+  only `raw.githubusercontent.com`/`api.github.com` are). The reliable way to verify a
+  push actually landed is `curl`/`wget` against
+  `raw.githubusercontent.com/.../docs/<file>` with a cache-busting query string, then
+  `diff`/`grep` the raw source directly — used successfully this session to confirm both
+  `docs/BFE-Admin.html` and `docs/portal.html` are byte-identical to the final local
+  copies, including every fix above.
+
+**Scope clarification from Brian, end of session:** the 2Man scramble is **confirmed a
+standalone event with no bearing on the Wally Cup outcome** — it will be tackled
+separately, on its own timeline. This de-prioritizes (does not resolve) the open
+"2Man scramble scoring formula undefined" item carried since Dev-73 — it's no longer
+blocking any Wally Cup Rd1–3 work, only needed before that separate scramble event is
+actually run. The fully-validated Rd1→Rd2→Rd3 chain this session (all `stableford_quota`,
+Honesdale → Skytop → Paupack Hills) is confirmed as the real Wally Cup's individual
+scoring structure.
+
+**Carry-forward into Dev-75:**
+1. **Build the player-facing results page** (Brian's own next priority, explicitly
+   deferred until after this session's retest — now complete): a GLS-style
+   (`garretts-last-swing.html`) per-round + living Overall page, referencing BFSeries'
+   existing Rd-by-Rd and Overall views for structure. Per §4/§8 of `BF_WallyCup_Spec.md`,
+   scope is data/standings only this phase (round leaderboards, quota progression,
+   CTP/Skins winners, Wally Ball tracker) — photos/narrative curation is a later phase.
+   **Must carry forward both labeling fixes from this session, from the start, not as an
+   afterthought:** the Rank(Score+WB) vs. +/-(vs. quota) distinction, and the cumulative
+   WB bonus breakout — both were built into `BFE-Admin.html` specifically because players
+   will find the raw numbers confusing otherwise, and that's just as true on a public
+   results page as it is in the admin tool.
+2. **`docs/BFE-Admin.html` is not in the Bootstrap's auto-fetch table** (see the
+   Bootstrap doc update below, "BFE-Admin.html note", added this session to close this
+   gap) — a session continuing this work needs to explicitly `curl` it fresh from GitHub
+   before editing, since it isn't pulled down by the standard 8-step bootstrap sequence.
+3. **Before real Rd1 (10am 9/11):** the "2026 Wally Cup" event in D1 right now is this
+   session's test data (16 real players' real names/handicaps, but three rounds of
+   generated test scorecards). It needs a clean Data & Reset → Delete before the real
+   event, then fresh Setup with the real roster/tee assignments confirmed — don't let the
+   real Rd1 accidentally chain off test quota_out values.
+4. **2Man scramble scoring formula** — still genuinely undefined anywhere in the
+   codebase or spec, still needs Brian's direct input, but per the scope clarification
+   above this is no longer time-pressured against 9/11. Revisit when that standalone
+   event's own build window arrives.
+5. **`hasLivePanelSupport()`'s `format-scramble` side effect** (enables the Live Panel
+   for any host's scramble-format event, not just Wally Cup's) — still flagged, still not
+   explicitly confirmed acceptable by Brian. Low urgency given item 4, but don't forget
+   it.
+6. Quota's ±25% cap (`QUOTA_CAP_PCT`) was never actually triggered anywhere in this
+   session's test data — the formula is in place and read from `BF_Golf_Scorer_8.html`,
+   but a capped adjustment has not been observed end-to-end in the new engine. Worth a
+   deliberate edge-case test (an extreme over/under-performance) before fully trusting it
+   in a real round.
+7. Confirm the `4a` venue-tee-catalog divergence note from Dev-73 (first-exotic-venue
+   default behavior, freeze-at-setup-completion) against the actual
+   `bfe_venue_tee_catalog` route logic — still not done, carried since Dev-73, not
+   touched this session.
+
+**Process notes:**
+- Session compacted three times — closed out here per the standing Dev-71 guidance on
+  watching session length, rather than pushing into a fourth compaction.
+- The device bridge / AutoPush workflow (DEVICE-BRIDGE RULE, revised Dev-74 at the very
+  start of this session, before the work above) held up cleanly through the rest of the
+  session with zero further friction: `get_device_info` confirmed both the bridge and the
+  `AutoPush` folder connection live throughout, `bf_push.ps1`'s `$FileMap` (v5, already
+  covering `BFE-Admin.html` plus every doc this close-out touches) needed no changes, and
+  every push this session verified byte-identical against GitHub before being trusted.
+  Confirmed with Brian at close: he ran `bf_push.bat` on `BFE-Admin.html` after the final
+  fix this session, and it verified clean. **This part of the workflow does not need
+  further fixing going into Dev-75** — the early-Dev-74 investment in the DEVICE-BRIDGE
+  RULE paid for itself this session.
+- Reiterating the standing lesson (this is the fourth session it's come up in some form):
+  a script reporting success, or a fetch returning content, is not evidence of what's
+  actually live — see the `WebFetch`/stale-data note above. Verify against
+  `raw.githubusercontent.com` directly, not the live custom domain, when it matters.
+
+**Session Dev-74 fully closed.**
+
+**Chat-rename string:** `Dev-74 - Wally Cup Scoring Engine Built & Validated End-to-End (Close Round, Quota, Skins, CTP, Wally Ball), Live Panel Wiring Shipped`
