@@ -100,6 +100,12 @@
     </div>
     <p class="hint" id="testScorecardNameWarning" style="display:none"></p>
     <p class="status" id="testScorecardStatus"></p>
+    <hr style="margin:14px 0;border-color:var(--line)">
+    <p class="hint">Uses the SAME round selected above, plus that round's venue's CTP holes (Section 5 — leave that blank and this has nothing to claim). Writes REAL claims to the CTP Jotform form, TWO per hole in sequence, so the second one becomes the leader — exercising the same "most recent submission wins" rule the live leaderboard and Close Round both use, not just a single uncontested claim.</p>
+    <div class="row">
+      <div style="align-self:flex-end"><button type="button" id="generateTestCttpBtn" disabled>Generate test CTP claims</button></div>
+    </div>
+    <p class="status" id="testCttpStatus"></p>
   </section>
 
   <!-- ── Event basics ─────────────────────────────────────────────── -->
@@ -571,6 +577,44 @@ const MEMBER_FORM_ID = '233083522910045';
 // date field at all. Used solely to build a name->date lookup for the
 // historic-event filter (see fetchRequestEventDates below).
 const REQUEST_EVENT_FORM_ID = '233113019726045';
+// Closest-to-Pin form — same one the Live Panel's CttP feature already
+// writes to/reads from (birdiefriends_portal.html). Field IDENTIFICATION
+// copied verbatim from that file's loadCtpData rather than reinvented: this
+// form's answers are matched by Jotform's internal `.name` (typeA/typeA4/
+// typeA7/number), not by question label text or QID key directly — so this
+// has to match that exact convention to read real data correctly.
+const CTP_FORM_ID = '251002357493048';
+const CTP_QID = { hole: '3', player: '4', dist: '5', event: '7' }; // write-side QIDs, copied from portal.html's submitCttp
+
+// { [hole]: { player, dist } } for one round — the most-recent QUALIFYING
+// submission per hole is the leader, honor-system, matching the SAME rule
+// the live leaderboard uses (confirmed with Brian, Dev-74, rather than
+// silently switching Close Round to a strict min-distance comparison,
+// which would pay someone different than what players saw live). Sorts by
+// created_at explicitly rather than trusting fetch order, since
+// jfFetchSubmissions doesn't request a specific order.
+async function jfFetchCttpLeaders(roundName) {
+  const subs = await jfFetchSubmissions(CTP_FORM_ID, JF_FILTER);
+  const target = roundName.trim().toLowerCase();
+  const parsed = subs.map(s => {
+    const a = s.answers || {};
+    const holeQ   = Object.values(a).find(q => q.name === 'typeA');
+    const playerQ = Object.values(a).find(q => q.name === 'typeA4');
+    const distQ   = Object.values(a).find(q => q.name === 'number');
+    const evtQ    = Object.values(a).find(q => q.name === 'typeA7');
+    const evt = evtQ ? (evtQ.answer || '').trim().toLowerCase() : '';
+    if (evt !== target) return null;
+    const hole = holeQ ? parseInt((holeQ.answer || '').replace('#', ''), 10) : null;
+    const player = playerQ ? (playerQ.answer || '').trim() : '';
+    const dist = distQ ? parseFloat(distQ.answer || '') : null;
+    if (!hole || !player) return null;
+    return { hole, player, dist: (!isNaN(dist) && dist > 0) ? dist : null, createdAt: s.created_at || '' };
+  }).filter(Boolean);
+  parsed.sort((a, b) => b.createdAt.localeCompare(a.createdAt)); // newest first
+  const leaders = {};
+  parsed.forEach(p => { if (!leaders[p.hole]) leaders[p.hole] = { player: p.player, dist: p.dist }; });
+  return leaders;
+}
 
 function extractJotformId(input) {
   const trimmed = (input || '').trim();
@@ -665,6 +709,7 @@ function populateTestScorecardRoundSelect() {
   if (!rounds.length) {
     sel.innerHTML = '<option value="">— add a stableford round with a venue in section 4 first —</option>';
     btn.disabled = true;
+    document.getElementById('generateTestCttpBtn').disabled = true;
     checkTestScorecardRoundName();
     return;
   }
@@ -672,6 +717,7 @@ function populateTestScorecardRoundSelect() {
     `<option value="${r.name.replace(/"/g, '&quot;')}" data-venue="${(r.venue || '').replace(/"/g, '&quot;')}" ${r.name === current ? 'selected' : ''}>${r.name}</option>`
   ).join('');
   btn.disabled = !sel.value;
+  document.getElementById('generateTestCttpBtn').disabled = !sel.value;
   checkTestScorecardRoundName();
 }
 // Whatever string is picked here gets written VERBATIM into Jotform's Event
@@ -698,6 +744,7 @@ document.getElementById('testScorecardRound').addEventListener('change', () => {
   const opt = sel.selectedOptions[0];
   if (opt && !courseInput.value) courseInput.value = opt.dataset.venue || '';
   document.getElementById('generateTestScorecardsBtn').disabled = !sel.value;
+  document.getElementById('generateTestCttpBtn').disabled = !sel.value;
   checkTestScorecardRoundName();
 });
 document.getElementById('eventName').addEventListener('input', checkTestScorecardRoundName);
@@ -724,6 +771,74 @@ document.getElementById('generateTestScorecardsBtn').addEventListener('click', a
   }
   statusEl.textContent = `✓ ${created} of ${players.length} scorecard(s) created for "${roundName}".` +
     (failures.length ? ` ${failures.length} failed — ${failures.join('; ')}` : ' Give Jotform a few seconds to index them, then Close Round should pick them up.');
+  statusEl.style.color = failures.length ? 'var(--err)' : 'var(--accent-dark)';
+});
+
+// Looks up the currently-typed CTP holes for whichever round is selected
+// above, by finding that round's venue block in Section 5. Reads live DOM
+// input, not a saved config — works before "Generate event config" has ever
+// been clicked, same as the scorecard generator.
+function cttpHolesForSelectedTestRound() {
+  const roundName = document.getElementById('testScorecardRound').value;
+  if (!roundName) return [];
+  const round = readRoundsInput().find(r => r.name === roundName);
+  if (!round || !round.venueId) return [];
+  const block = document.querySelector(`#teeVenueBlocks .tee-venue-block[data-venue-id="${CSS.escape(round.venueId)}"]`);
+  if (!block) return [];
+  return parseCttpHolesInput(block.querySelector('.venueCttpHoles').value);
+}
+
+// Mirrors portal.html's submitCttp exactly, including the leading "#" on
+// the hole value — jfFetchCttpLeaders strips it back off on read. Get this
+// wrong and Close Round silently sees zero valid holes, not an error.
+async function jfCreateCttpSubmission(hole, playerName, roundName, dist) {
+  const params = new URLSearchParams();
+  params.set(`submission[${CTP_QID.hole}]`, '#' + hole);
+  params.set(`submission[${CTP_QID.player}]`, playerName);
+  params.set(`submission[${CTP_QID.event}]`, roundName);
+  if (dist !== null && dist !== undefined) params.set(`submission[${CTP_QID.dist}]`, String(dist));
+  const res = await fetch(`${JF_API}/form/${CTP_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  });
+  const data = await res.json();
+  if (data.responseCode !== 200) throw new Error(data.message || `HTTP ${res.status}`);
+  return data;
+}
+
+document.getElementById('generateTestCttpBtn').addEventListener('click', async () => {
+  const roundName = document.getElementById('testScorecardRound').value;
+  const statusEl = document.getElementById('testCttpStatus');
+  const players = readRosterInput();
+  const holes = cttpHolesForSelectedTestRound();
+  if (!roundName) { statusEl.textContent = 'Pick a round first.'; statusEl.style.color = 'var(--err)'; return; }
+  if (!holes.length) { statusEl.textContent = "This round's venue has no CTP holes configured in section 5 — add some there first."; statusEl.style.color = 'var(--err)'; return; }
+  if (players.length < 2) { statusEl.textContent = 'Add at least 2 players to the roster in section 3 first.'; statusEl.style.color = 'var(--err)'; return; }
+  if (!confirm(`Create ${holes.length * 2} REAL test CTP submissions on Jotform for "${roundName}" (2 per hole, on holes ${holes.join(', ')})? This writes to Jotform — delete them from Jotform's dashboard when you're done testing.`)) return;
+
+  statusEl.style.color = 'var(--sub)';
+  let created = 0;
+  const failures = [];
+  for (const hole of holes) {
+    // Two players per hole, in sequence — the SECOND call becomes the leader
+    // under the "most recent wins" rule, so this exercises that logic
+    // instead of just leaving one uncontested claim per hole.
+    const shuffled = [...players].sort(() => Math.random() - 0.5).slice(0, 2);
+    const claimants = shuffled.length === 2 ? shuffled : [shuffled[0], shuffled[0]];
+    const dists = [20 + Math.random() * 30, 3 + Math.random() * 15]; // first claim far, second closer — plausible progression
+    for (let i = 0; i < claimants.length; i++) {
+      statusEl.textContent = `Creating claim ${created + failures.length + 1} of ${holes.length * 2}: hole ${hole} — ${claimants[i].name}…`;
+      try {
+        await jfCreateCttpSubmission(hole, claimants[i].name, roundName, Math.round(dists[i] * 10) / 10);
+        created++;
+      } catch (e) {
+        failures.push(`hole ${hole} (${claimants[i].name}): ${e.message}`);
+      }
+    }
+  }
+  statusEl.textContent = `✓ ${created} of ${holes.length * 2} CTP claim(s) created for "${roundName}".` +
+    (failures.length ? ` ${failures.length} failed — ${failures.join('; ')}` : ' Give Jotform a few seconds to index them, then Close Round should show a leader per hole.');
   statusEl.style.color = failures.length ? 'var(--err)' : 'var(--accent-dark)';
 });
 
@@ -1270,6 +1385,10 @@ function buildTeeVenueBlock(venueId, venueName) {
         <button type="button" class="link loadBsgcPresetBtn">Load BSGC default (Green/Combo/Gold)</button>
       </div>
     </div>
+    <div style="margin-top:10px">
+      <label>CTP holes at this venue (comma-separated, e.g. 3,8,10,15,18)</label>
+      <input type="text" class="venueCttpHoles" placeholder="e.g. 3,8,10,15,18">
+    </div>
     <label style="display:flex;align-items:center;gap:6px;margin:10px 0 0;width:auto"><input type="checkbox" class="saveVenueDefault" style="width:auto" checked> Save as this venue's default when generating</label>`;
 
   const tierRowsEl = block.querySelector('.tierRows');
@@ -1296,8 +1415,16 @@ function buildTeeVenueBlock(venueId, venueName) {
   return block;
 }
 
+// "3, 8, 10, 15, 18" -> [3,8,10,15,18]. Silently drops anything that isn't a
+// hole number 1-18 — a stray comma or typo just gets ignored rather than
+// producing a bogus hole downstream.
+function parseCttpHolesInput(raw) {
+  return (raw || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => n >= 1 && n <= 18);
+}
+
 function applyPolicyToVenueBlock(block, policy) {
   if (!policy) return;
+  if (Array.isArray(policy.cttpHoles)) block.querySelector('.venueCttpHoles').value = policy.cttpHoles.join(', ');
   if (policy.mode === 'same') {
     document.querySelector('input[name=teeMode][value=same]').checked = true;
     document.querySelectorAll('#teeVenueBlocks .tee-venue-block').forEach(b => {
@@ -1353,18 +1480,23 @@ function refreshTeeVenueBlocks() {
   });
 }
 
-// Reads {mode, byVenue: {[venueId]: {tee} or {tiers}}} from whatever venue
-// blocks are currently rendered.
+// Reads {mode, byVenue: {[venueId]: {tee|tiers, cttpHoles}}} from whatever
+// venue blocks are currently rendered. cttpHoles rides along in the SAME
+// per-venue object as tee/slope (Dev-74) — it's the same kind of data (a
+// fixed property of the course, captured once), flows through the same
+// save/load/snapshot pipeline, and gets frozen into the event's own
+// teePolicy at Save time exactly like tee/slope already is.
 function readTeePolicyGlobal() {
   const mode = document.querySelector('input[name=teeMode]:checked').value;
   const byVenue = {};
   document.querySelectorAll('#teeVenueBlocks .tee-venue-block').forEach(block => {
     const venueId = block.dataset.venueId;
+    const cttpHoles = parseCttpHolesInput(block.querySelector('.venueCttpHoles').value);
     if (mode === 'same') {
       byVenue[venueId] = { tee: {
         name: block.querySelector('.sameTeeName').value.trim() || null,
         slope: parseFloat(block.querySelector('.sameTeeSlope').value) || null
-      }};
+      }, cttpHoles };
     } else {
       const tiers = [...block.querySelectorAll('.tierRows .tier-row')].map(div => {
         const maxHcpRaw = div.querySelector('.t-maxhcp').value;
@@ -1373,7 +1505,7 @@ function readTeePolicyGlobal() {
           tee: { name: div.querySelector('.t-name').value.trim(), slope: parseFloat(div.querySelector('.t-slope').value) || null }
         };
       }).sort((a, b) => a.maxHcp - b.maxHcp);
-      byVenue[venueId] = { tiers };
+      byVenue[venueId] = { tiers, cttpHoles };
     }
   });
   return { mode, byVenue };
@@ -1642,19 +1774,26 @@ function setCloseRoundStatus(msg, isErr) {
   el.textContent = msg;
 }
 
-function renderCloseRoundResults(roundName, results, skins) {
+function renderCloseRoundResults(roundName, results, skins, cttpWinners, cttpHoles) {
   let html = `<h3>${roundName} — results</h3><table><thead><tr><th>#</th><th>Player</th><th>Score</th>` +
-    `<th>Quota in</th><th>+/-</th><th>New quota</th><th>Wally Ball</th><th>Podium $</th><th>Skins $</th></tr></thead><tbody>`;
+    `<th>Quota in</th><th>+/-</th><th>New quota</th><th>Wally Ball</th><th>Podium $</th><th>Skins $</th><th>CTP $</th></tr></thead><tbody>`;
   results.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).forEach(r => {
     const wb = r.wbStatus === 'No' ? `Lost (hole ${r.wbHole ?? '?'}, +${r.wbStroke ?? '?'})` : r.wbStatus === 'Yes' ? 'Kept' : '—';
     html += `<tr><td>${r.rank ?? '—'}</td><td>${r.playerName}</td><td>${fmtNum(r.actualPoints)}</td>` +
       `<td>${fmtNum(r.quotaIn)}</td><td>${fmtDiff(r.performance)}</td><td>${fmtNum(r.quotaOut)}</td>` +
-      `<td>${wb}</td><td>${fmtMoney(r.payoutPodium)}</td><td>${fmtMoney(r.payoutSkins)}</td></tr>`;
+      `<td>${wb}</td><td>${fmtMoney(r.payoutPodium)}</td><td>${fmtMoney(r.payoutSkins)}</td><td>${fmtMoney(r.payoutCttp)}</td></tr>`;
   });
   html += '</tbody></table>';
   html += skins.length
     ? '<h4 style="margin-top:14px">Skins</h4><div>' + skins.map(s => `<span class="chip">#${s.hole} — ${s.winner} (${s.pts} pts)</span>`).join(' ') + '</div>'
     : '<p class="subtle" style="margin-top:10px">No outright skins this round — every hole was tied.</p>';
+  if ((cttpHoles || []).length) {
+    html += '<h4 style="margin-top:14px">Closest to Pin</h4><div>' +
+      (cttpWinners && cttpWinners.length
+        ? cttpWinners.map(c => `<span class="chip">#${c.hole} — ${c.player}${c.dist != null ? ` (${c.dist}′)` : ''} — ${fmtMoney(c.payout)}</span>`).join(' ')
+        : '<span class="subtle">No CTP claims found for this round\'s configured holes (' + cttpHoles.join(', ') + ').</span>') +
+      '</div>';
+  }
   document.getElementById('closeRoundResults').innerHTML = html;
 }
 
@@ -1747,6 +1886,28 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     // This round's scorecards, straight from Jotform
     const scorecards = await jfFetchRoundScorecards(roundName);
 
+    // Round pot payout config, needed by both CTP and podium/skins below.
+    const pot = (assembledConfig.payout?.pots || []).find(p => p.round === roundName);
+
+    // CTP holes are per-venue (Section 5), snapshotted into the event's own
+    // teePolicy at Save time. Only holes actually configured for THIS
+    // round's venue count — a stray/test CTP submission for an unconfigured
+    // hole is ignored rather than silently paid.
+    const cttpHoles = assembledConfig.teePolicy?.byVenue?.[round.venueId]?.cttpHoles || [];
+    const cttpLeaders = cttpHoles.length ? await jfFetchCttpLeaders(roundName) : {};
+    const cttpPerHole = pot?.distribution?.cttpPerHole || 0;
+    const cttpPayoutByPlayer = {};
+    const cttpWinners = [];        // for rendering: {hole, player, dist, payout}
+    const cttpUnrecognized = [];   // leader name not on this event's roster — flagged, not paid
+    const rosterNames = new Set(assembledConfig.roster.map(p => p.name));
+    cttpHoles.forEach(hole => {
+      const leader = cttpLeaders[hole];
+      if (!leader) return; // nobody claimed this hole
+      if (!rosterNames.has(leader.player)) { cttpUnrecognized.push({ hole, player: leader.player }); return; }
+      cttpPayoutByPlayer[leader.player] = (cttpPayoutByPlayer[leader.player] || 0) + cttpPerHole;
+      cttpWinners.push({ hole, player: leader.player, dist: leader.dist, payout: cttpPerHole });
+    });
+
     // Has this player already recorded a loss in an EARLIER closed round of
     // this event? Mirrors the portal's one-time-elimination rule.
     const alreadyLost = {};
@@ -1784,8 +1945,7 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     const skinCounts = {};
     skins.forEach(s => { skinCounts[s.winner] = (skinCounts[s.winner] || 0) + 1; });
 
-    // Round pot payout — podium + skins only (CTP not wired yet, stays $0)
-    const pot = (assembledConfig.payout?.pots || []).find(p => p.round === roundName);
+    // Podium + skins payout (pot already resolved above, shared with CTP)
     const perSkin = (pot && skins.length > 0) ? pot.distribution.skins / skins.length : 0;
 
     const results = scored.entries.map(e => {
@@ -1793,6 +1953,7 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
       const idx = (e.rank || 0) - 1;
       const payoutPodium = (pot && idx >= 0 && idx < pot.distribution.podium.length) ? pot.distribution.podium[idx] : 0;
       const payoutSkins = perSkin * (skinCounts[e.name] || 0);
+      const payoutCttp = cttpPayoutByPlayer[e.name] || 0;
       return {
         playerName: e.name,
         quotaIn: quotaInByPlayer[e.name] ?? null,
@@ -1803,7 +1964,7 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
         wbHole:   p?.sc ? p.sc.wbHole   : null,
         wbStroke: p?.sc ? p.sc.wbStroke : null,
         rank: e.rank,
-        payoutPodium, payoutSkins, payoutCttp: 0
+        payoutPodium, payoutSkins, payoutCttp
       };
     });
 
@@ -1814,8 +1975,11 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     const saveData = await saveRes.json();
     if (!saveRes.ok) throw new Error(saveData.error || `HTTP ${saveRes.status}`);
 
-    setCloseRoundStatus(missing.length ? `Saved — no scorecard found for: ${missing.join(', ')} (scored 0 pts).` : 'Saved.', missing.length > 0);
-    renderCloseRoundResults(roundName, results, skins);
+    const notes = [];
+    if (missing.length) notes.push(`no scorecard found for: ${missing.join(', ')} (scored 0 pts)`);
+    if (cttpUnrecognized.length) notes.push(`CTP claim(s) from a name not on this roster, not paid: ${cttpUnrecognized.map(c => `#${c.hole} ${c.player}`).join(', ')}`);
+    setCloseRoundStatus(notes.length ? `Saved — ${notes.join('; ')}.` : 'Saved.', notes.length > 0);
+    renderCloseRoundResults(roundName, results, skins, cttpWinners, cttpHoles);
     await renderWcStandings(base, eventName, assembledConfig).catch(() => {});
   } catch (e) {
     setCloseRoundStatus('Close round failed: ' + e.message, true);
