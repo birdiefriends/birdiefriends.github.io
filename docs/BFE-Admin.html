@@ -232,11 +232,10 @@
 
   <!-- ── Save / Load — always visible, independent of Generate. ──────── -->
   <section class="card">
-    <h2>7. Save / load on the Worker</h2>
-    <p class="hint">Save persists whatever you last generated below into the Competitive Events tables (<code>bfe_events</code> → <code>bfe_event_rounds</code> → <code>bfe_event_roster</code>), keyed by the event name above — a real parent/child structure, not a single document (and, if checked in Tee policy, updates that venue's saved tee catalog too). Load reassembles it back from those tables.</p>
+    <h2>7. Save on the Worker</h2>
+    <p class="hint">Persists whatever you last generated below into the Competitive Events tables (<code>bfe_events</code> → <code>bfe_event_rounds</code> → <code>bfe_event_roster</code>), keyed by the event name above — a real parent/child structure, not a single document (and, if checked in Tee policy, updates that venue's saved tee catalog too). To load an event back, use Load in the Data &amp; reset list at the top of the page — it picks from what's actually stored instead of retyping a name you might get wrong.</p>
     <div class="btnbar">
       <button type="button" id="saveBtn">Save config</button>
-      <button type="button" class="secondary" id="loadBtn">Load saved config</button>
     </div>
     <div id="saveStatus" class="status"></div>
   </section>
@@ -1799,9 +1798,6 @@ async function loadEventConfig(eventName) {
   }
 }
 
-document.getElementById('loadBtn').addEventListener('click', () => {
-  loadEventConfig(document.getElementById('eventName').value.trim());
-});
 
 // ══════════════════════════════════════════════════════════════════════
 // Close a round (Dev-74 — Wally Cup scoring engine)
