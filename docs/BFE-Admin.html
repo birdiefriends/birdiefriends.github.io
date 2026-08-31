@@ -1328,7 +1328,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    setStatus(`Saved — Event #${data.event_id}, ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
+    setStatus(`Saved — "${eventName}", ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
   } catch (e) {
     setStatus('Save failed: ' + e.message, true);
   }
@@ -1346,7 +1346,7 @@ document.getElementById('loadBtn').addEventListener('click', async () => {
     assembledConfig = data.config;
     renderReview(assembledConfig);
     document.getElementById('outputSection').style.display = 'block';
-    setStatus(`Loaded (last saved ${data.updated_at}) — ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
+    setStatus(`Loaded "${eventName}" (last saved ${data.updated_at}) — ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
   } catch (e) {
     setStatus('Load failed: ' + e.message, true);
   }
