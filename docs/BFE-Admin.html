@@ -79,6 +79,16 @@
 
 <main>
 
+  <!-- ── Data & Reset (Dev-74 — testing tool) ─────────────────────────── -->
+  <section class="card">
+    <h2>Data &amp; reset <span class="badge">testing tool</span></h2>
+    <p class="hint">Shows every event currently stored on the BFE Worker (D1), with row counts, so you can see exactly what's there before testing or retesting Setup or Close Round — instead of guessing whether earlier testing left records behind. Delete wipes that event completely: its rounds, roster, and any saved round results/skins. Cannot be undone. This does NOT touch Jotform — a round's scorecard test submissions live there, not here, and aren't affected by anything on this page. It also doesn't touch player profiles or venue tee catalogs, which are meant to persist across events.</p>
+    <div class="btnbar">
+      <button type="button" class="secondary" id="refreshEventsListBtn">Refresh list</button>
+    </div>
+    <div id="eventsListBody"><p class="subtle">Click Refresh to see what's currently stored.</p></div>
+  </section>
+
   <!-- ── Event basics ─────────────────────────────────────────────── -->
   <section class="card">
     <h2>1. Event basics</h2>
@@ -230,9 +240,22 @@
     <div id="saveStatus" class="status"></div>
   </section>
 
+  <!-- ── Close a round (Dev-74 — Wally Cup scoring engine) ────────────── -->
+  <section class="card">
+    <h2>9. Close a round</h2>
+    <p class="hint">Pulls that round's scorecards straight from Jotform, runs them through the quota engine above (including any Wally Ball bonus), computes skins, and saves the result — round pot payout included. Only "Stableford quota" rounds are wired up right now; 2-man scramble scoring isn't built yet. CTP payout isn't wired yet either (shows as $0 — nothing resolves actual closest-to-pin winners from Jotform so far). Load or Generate the event above first.</p>
+    <div class="row">
+      <div style="flex:2"><label for="closeRoundSelect">Round</label><select id="closeRoundSelect"><option value="">— load/generate the event above first —</option></select></div>
+      <div style="align-self:flex-end"><button type="button" id="closeRoundBtn" disabled>Close round</button></div>
+    </div>
+    <div id="closeRoundStatus" class="status"></div>
+    <div id="closeRoundResults"></div>
+    <div id="wcStandings" style="margin-top:18px"></div>
+  </section>
+
   <!-- ── Output / review ───────────────────────────────────────────── -->
   <section class="card" id="outputSection">
-    <h2>9. Review</h2>
+    <h2>10. Review</h2>
     <div id="reviewRoster"></div>
     <div id="reviewRounds"></div>
     <div id="reviewPayout"></div>
@@ -488,17 +511,75 @@ function recommendPayoutConfig(buyInPerPlayer, playerCount, potPlan) {
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
+// Dev-74 — same shared scorecard form portal.html's Live Panel writes to
+// (SCORECARD_FORM_ID/SC_QID/WB_QID must stay in sync with portal.html's
+// copies by hand — there's no shared config file between the two apps).
+// JF_FILTER excludes DELETED/ARCHIVED submissions — without it, a submission
+// removed from Jotform's own dashboard (soft-deleted, not purged) can still
+// come back from this endpoint. Root-caused Dev-74 against the exact same
+// bug in portal.html's Wally Ball "already lost" check — carried over here
+// from the start rather than waiting to hit it again.
+const SCORECARD_FORM_ID = '250963587514163';
+const SC_QID = { name:'31', event:'30', course:'28',
+  holes:[4,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
+  front:'24', back:'25', total:'26' };
+const WB_QID = { status:'33', hole:'34', stroke:'35' };
+const JF_FILTER = encodeURIComponent(JSON.stringify({"status:ne":["DELETED","ARCHIVED"]}));
+
 function extractJotformId(input) {
   const trimmed = (input || '').trim();
   const match = trimmed.match(/(\d{10,})/); // Jotform form IDs are long numeric strings
   return match ? match[1] : trimmed;
 }
 
-async function jfFetchSubmissions(formId) {
-  const res = await fetch(`${JF_API}/form/${formId}/submissions?apiKey=${JOTFORM_API_KEY}&limit=1000`);
+async function jfFetchSubmissions(formId, filter) {
+  const filterQs = filter ? `&filter=${filter}` : '';
+  const res = await fetch(`${JF_API}/form/${formId}/submissions?apiKey=${JOTFORM_API_KEY}&limit=1000${filterQs}`);
   const json = await res.json();
   if (json.responseCode !== 200) throw new Error('Jotform error: ' + (json.message || res.status));
   return json.content || [];
+}
+
+// Fetch + shape this round's scorecards straight from Jotform — mirrors
+// portal.html's submitScorecard()/checkWallyBallLost() field mapping exactly.
+// Returns { byPlayer: {name: {actualPoints, holes[18], wbStatus, wbHole, wbStroke}} }.
+async function jfFetchRoundScorecards(roundName) {
+  const subs = await jfFetchSubmissions(SCORECARD_FORM_ID, JF_FILTER);
+  const norm = s => (s || '').trim().toLowerCase();
+  const target = norm(roundName);
+  const byPlayer = {};
+  subs.forEach(s => {
+    const evtField = norm(s.answers?.[SC_QID.event]?.answer || '');
+    if (evtField !== target) return;
+    const name = (s.answers?.[SC_QID.name]?.answer || '').trim();
+    if (!name) return;
+    const holes = SC_QID.holes.map(qid => Number(s.answers?.[qid]?.answer) || 0);
+    const total = Number(s.answers?.[SC_QID.total]?.answer);
+    byPlayer[name] = {
+      actualPoints: !isNaN(total) ? total : holes.reduce((a, b) => a + b, 0),
+      holes,
+      wbStatus: s.answers?.[WB_QID.status]?.answer || null,
+      wbHole:   s.answers?.[WB_QID.hole]?.answer ? Number(s.answers[WB_QID.hole].answer) : null,
+      wbStroke: s.answers?.[WB_QID.stroke]?.answer ? Number(s.answers[WB_QID.stroke].answer) : null
+    };
+  });
+  return byPlayer;
+}
+
+// Per-hole outright-winner loop — ported from BF_Golf_Scorer_8.html's saved-
+// event skins computation (evtSkins). A hole with a unique max-points player
+// is a skin; ties or an all-zero hole award nothing.
+function computeSkins(byPlayer) {
+  const players = Object.keys(byPlayer);
+  const skins = [];
+  for (let h = 0; h < 18; h++) {
+    const holePts = players.map(name => ({ name, pts: (byPlayer[name].holes || [])[h] || 0 }));
+    const maxPts = Math.max(...holePts.map(x => x.pts));
+    if (maxPts <= 0) continue;
+    const winners = holePts.filter(x => x.pts === maxPts);
+    if (winners.length === 1) skins.push({ hole: h + 1, winner: winners[0].name, pts: maxPts });
+  }
+  return skins;
 }
 
 // Tries each regex in PRIORITY order across ALL of a submission's fields —
@@ -1089,6 +1170,7 @@ function renderReview(config) {
   document.getElementById('reviewPayout').innerHTML = payoutHtml;
 
   document.getElementById('rawConfig').textContent = JSON.stringify(config, null, 2);
+  populateCloseRoundSelect(config);
 }
 
 // ── Save / Load event config ─────────────────────────────────────────
@@ -1147,6 +1229,261 @@ document.getElementById('loadBtn').addEventListener('click', async () => {
     setStatus('Load failed: ' + e.message, true);
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════
+// Close a round (Dev-74 — Wally Cup scoring engine)
+// ══════════════════════════════════════════════════════════════════════
+function fmtDiff(v) {
+  if (v === null || v === undefined) return '—';
+  return (v >= 0 ? '+' : '') + Number(v).toFixed(2);
+}
+function fmtNum(v) { return (v === null || v === undefined) ? '—' : Number(v).toFixed(2); }
+
+function populateCloseRoundSelect(config) {
+  const sel = document.getElementById('closeRoundSelect');
+  const btn = document.getElementById('closeRoundBtn');
+  const supported = (config.rounds || []).filter(r => r.engine === 'stableford_quota');
+  if (!supported.length) {
+    sel.innerHTML = '<option value="">— no Stableford quota rounds in this event —</option>';
+    btn.disabled = true;
+  } else {
+    sel.innerHTML = supported.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}</option>`).join('');
+    btn.disabled = false;
+  }
+  // Best-effort — show whatever standings are already saved, if any. Silent
+  // on failure (e.g. event never saved yet) since Close Round itself will
+  // surface a real error if something's actually wrong.
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const eventName = document.getElementById('eventName').value.trim();
+  if (base && eventName) renderWcStandings(base, eventName, config).catch(() => {});
+}
+
+function setCloseRoundStatus(msg, isErr) {
+  const el = document.getElementById('closeRoundStatus');
+  if (!msg) { el.className = 'status'; el.textContent = ''; return; }
+  el.className = 'status ' + (isErr ? 'err' : 'ok');
+  el.textContent = msg;
+}
+
+function renderCloseRoundResults(roundName, results, skins) {
+  let html = `<h3>${roundName} — results</h3><table><thead><tr><th>#</th><th>Player</th><th>Score</th>` +
+    `<th>Quota in</th><th>+/-</th><th>New quota</th><th>Wally Ball</th><th>Podium $</th><th>Skins $</th></tr></thead><tbody>`;
+  results.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).forEach(r => {
+    const wb = r.wbStatus === 'No' ? `Lost (hole ${r.wbHole ?? '?'}, +${r.wbStroke ?? '?'})` : r.wbStatus === 'Yes' ? 'Kept' : '—';
+    html += `<tr><td>${r.rank ?? '—'}</td><td>${r.playerName}</td><td>${fmtNum(r.actualPoints)}</td>` +
+      `<td>${fmtNum(r.quotaIn)}</td><td>${fmtDiff(r.performance)}</td><td>${fmtNum(r.quotaOut)}</td>` +
+      `<td>${wb}</td><td>${fmtMoney(r.payoutPodium)}</td><td>${fmtMoney(r.payoutSkins)}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  html += skins.length
+    ? '<h4 style="margin-top:14px">Skins</h4><div>' + skins.map(s => `<span class="chip">#${s.hole} — ${s.winner} (${s.pts} pts)</span>`).join(' ') + '</div>'
+    : '<p class="subtle" style="margin-top:10px">No outright skins this round — every hole was tied.</p>';
+  document.getElementById('closeRoundResults').innerHTML = html;
+}
+
+// Overall (rollsIntoOverall rounds, summed performance) + Wally Ball pot —
+// both computed live from whatever's been closed so far, not gated on the
+// whole event being finished. Read-only: does not write anything.
+async function renderWcStandings(base, eventName, config) {
+  const res = await fetch(base + '/bfe/round-results?event=' + encodeURIComponent(eventName));
+  const data = await res.json();
+  if (!res.ok) return;
+  const allResults = data.results || [];
+  if (!allResults.length) { document.getElementById('wcStandings').innerHTML = ''; return; }
+
+  const rollsInto = new Set(config.rounds.filter(r => r.rollsIntoOverall !== false).map(r => r.name));
+  const closedRoundNames = new Set(allResults.map(r => r.round_name));
+  const totalRollup  = [...rollsInto].length;
+  const closedRollup = [...rollsInto].filter(n => closedRoundNames.has(n)).length;
+
+  const overallByPlayer = {};
+  allResults.forEach(r => {
+    if (!rollsInto.has(r.round_name)) return;
+    overallByPlayer[r.player_name] = (overallByPlayer[r.player_name] || 0) + (r.performance || 0);
+  });
+  const overallRows = Object.entries(overallByPlayer)
+    .map(([name, performance]) => ({ name, performance }))
+    .sort((a, b) => b.performance - a.performance);
+  const isComplete = totalRollup > 0 && closedRollup === totalRollup;
+  const overallPot = (config.payout?.pots || []).find(p => p.id === 'overall');
+
+  let html = `<h3>Overall standings <span class="badge">${closedRollup}/${totalRollup} rounds closed</span></h3>`;
+  html += '<table><thead><tr><th>#</th><th>Player</th><th>Total +/-</th>' + (isComplete && overallPot ? '<th>Podium $</th>' : '') + '</tr></thead><tbody>';
+  overallRows.forEach((r, i) => {
+    const podiumCell = (isComplete && overallPot)
+      ? `<td>${i < overallPot.distribution.podium.length ? fmtMoney(overallPot.distribution.podium[i]) : '—'}</td>` : '';
+    html += `<tr><td>${i + 1}</td><td>${r.name}</td><td>${fmtDiff(r.performance)}</td>${podiumCell}</tr>`;
+  });
+  html += '</tbody></table>';
+
+  // Wally Ball pot — winner-take-all among players who've never recorded a
+  // loss in any CLOSED round so far.
+  const everLost  = new Set(allResults.filter(r => r.wb_status === 'No').map(r => r.player_name));
+  const eligible  = config.roster.map(p => p.name).filter(n => !everLost.has(n));
+  const wbPot     = (config.payout?.pots || []).find(p => p.id === 'wally_ball');
+  html += '<h3 style="margin-top:18px">Wally Ball pot</h3>';
+  if (!eligible.length) {
+    html += '<p class="subtle">Everyone on the roster has lost it at least once so far.</p>';
+  } else {
+    const share = wbPot ? wbPot.poolTotal / eligible.length : null;
+    const lede = eligible.length === config.roster.length ? 'Nobody has lost it yet' : `${eligible.length} player(s) still in it`;
+    html += `<p>${lede}${wbPot ? ` — pool ${fmtMoney(wbPot.poolTotal)}, ${fmtMoney(share)} each if it ended now` : ''}: ${eligible.join(', ')}</p>`;
+  }
+
+  document.getElementById('wcStandings').innerHTML = html;
+}
+
+document.getElementById('closeRoundBtn').addEventListener('click', async () => {
+  if (!assembledConfig) { setCloseRoundStatus('Load or generate the event first.', true); return; }
+  const roundName = document.getElementById('closeRoundSelect').value;
+  if (!roundName) { setCloseRoundStatus('Pick a round.', true); return; }
+  const round = assembledConfig.rounds.find(r => r.name === roundName);
+  if (!round) { setCloseRoundStatus('Round not found in the loaded config.', true); return; }
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const pin  = document.getElementById('hostPin').value.trim();
+  const eventName = document.getElementById('eventName').value.trim();
+  if (!base) { setCloseRoundStatus('Enter the BFE Worker base URL.', true); return; }
+
+  const btn = document.getElementById('closeRoundBtn');
+  btn.disabled = true;
+  setCloseRoundStatus('Fetching prior results + this round’s scorecards…');
+  try {
+    // Prior results across the whole event — for quota chaining + WB history
+    const priorRes = await fetch(base + '/bfe/round-results?event=' + encodeURIComponent(eventName));
+    const priorData = await priorRes.json();
+    if (!priorRes.ok) throw new Error(priorData.error || `HTTP ${priorRes.status}`);
+    const allResults = priorData.results || [];
+
+    // Quota entering this round: roster's initial quota if it's the first
+    // stableford round, else the chained-from round's saved quota_out.
+    let quotaInByPlayer = {};
+    if (round.chainsFrom) {
+      const priorRows = allResults.filter(r => r.round_name === round.chainsFrom);
+      if (!priorRows.length) {
+        throw new Error(`This round chains from "${round.chainsFrom}", which hasn't been closed yet — close it first.`);
+      }
+      priorRows.forEach(r => { quotaInByPlayer[r.player_name] = r.quota_out; });
+    } else {
+      assembledConfig.roster.forEach(p => { quotaInByPlayer[p.name] = p.initialQuota; });
+    }
+
+    // This round's scorecards, straight from Jotform
+    const scorecards = await jfFetchRoundScorecards(roundName);
+
+    // Has this player already recorded a loss in an EARLIER closed round of
+    // this event? Mirrors the portal's one-time-elimination rule.
+    const alreadyLost = {};
+    allResults.forEach(r => { if (r.wb_status === 'No') alreadyLost[r.player_name] = true; });
+
+    const players = assembledConfig.roster.map(p => {
+      const sc = scorecards[p.name];
+      return {
+        name: p.name, hcp: p.hcp, slope: p.slope,
+        quotaIn: quotaInByPlayer[p.name] ?? p.initialQuota,
+        actualPoints: sc ? sc.actualPoints : 0,
+        sc
+      };
+    });
+    const missing = players.filter(p => !p.sc).map(p => p.name);
+
+    const engineInput = {
+      players: players.map(p => ({ name: p.name, actualPoints: p.actualPoints, quotaIn: p.quotaIn, hcp: p.hcp, prevHcp: p.hcp, slope: p.slope }))
+    };
+    const sideData = {};
+    players.forEach(p => {
+      const lostThisRound = p.sc && p.sc.wbStatus === 'No';
+      sideData[p.name] = { keptWallyBall: !lostThisRound && !alreadyLost[p.name] };
+    });
+
+    const scored = scoreRound({ engine: round.engine, engineParams: round.engineParams, influencers: round.influencers }, engineInput, sideData);
+    const skins = computeSkins(scorecards);
+    const skinCounts = {};
+    skins.forEach(s => { skinCounts[s.winner] = (skinCounts[s.winner] || 0) + 1; });
+
+    // Round pot payout — podium + skins only (CTP not wired yet, stays $0)
+    const pot = (assembledConfig.payout?.pots || []).find(p => p.round === roundName);
+    const perSkin = (pot && skins.length > 0) ? pot.distribution.skins / skins.length : 0;
+
+    const results = scored.entries.map(e => {
+      const p = players.find(pl => pl.name === e.name);
+      const idx = (e.rank || 0) - 1;
+      const payoutPodium = (pot && idx >= 0 && idx < pot.distribution.podium.length) ? pot.distribution.podium[idx] : 0;
+      const payoutSkins = perSkin * (skinCounts[e.name] || 0);
+      return {
+        playerName: e.name,
+        quotaIn: quotaInByPlayer[e.name] ?? null,
+        actualPoints: e.basePoints,
+        performance: e.performance,
+        quotaOut: e.quotaOut,
+        wbStatus: p?.sc ? p.sc.wbStatus : null,
+        wbHole:   p?.sc ? p.sc.wbHole   : null,
+        wbStroke: p?.sc ? p.sc.wbStroke : null,
+        rank: e.rank,
+        payoutPodium, payoutSkins, payoutCttp: 0
+      };
+    });
+
+    const saveRes = await fetch(base + '/bfe/round-results', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: eventName, round_name: roundName, results, skins, pin })
+    });
+    const saveData = await saveRes.json();
+    if (!saveRes.ok) throw new Error(saveData.error || `HTTP ${saveRes.status}`);
+
+    setCloseRoundStatus(missing.length ? `Saved — no scorecard found for: ${missing.join(', ')} (scored 0 pts).` : 'Saved.', missing.length > 0);
+    renderCloseRoundResults(roundName, results, skins);
+    await renderWcStandings(base, eventName, assembledConfig).catch(() => {});
+  } catch (e) {
+    setCloseRoundStatus('Close round failed: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// Data & Reset (Dev-74 — testing tool)
+// ══════════════════════════════════════════════════════════════════════
+async function loadEventsList() {
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const body = document.getElementById('eventsListBody');
+  if (!base) { body.innerHTML = '<p class="subtle">Enter the BFE Worker base URL above first.</p>'; return; }
+  body.innerHTML = '<p class="subtle">Loading…</p>';
+  try {
+    const res = await fetch(base + '/bfe/events-list');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!data.events.length) { body.innerHTML = '<p class="subtle">No events stored yet.</p>'; return; }
+    let html = '<table><thead><tr><th>Event</th><th>Status</th><th>Rounds</th><th>Roster</th><th>Round results</th><th>Skins</th><th>Updated</th><th></th></tr></thead><tbody>';
+    data.events.forEach(e => {
+      html += `<tr><td>${e.event_name}</td><td>${e.status}</td><td>${e.rounds}</td><td>${e.roster}</td><td>${e.results}</td><td>${e.skins}</td><td>${e.updated_at}</td>` +
+        `<td><button type="button" class="danger deleteEventBtn" data-name="${e.event_name.replace(/"/g, '&quot;')}">Delete</button></td></tr>`;
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+    body.querySelectorAll('.deleteEventBtn').forEach(btn => {
+      btn.addEventListener('click', () => deleteEventData(btn.dataset.name));
+    });
+  } catch (e) {
+    body.innerHTML = `<p class="subtle" style="color:var(--err)">Load failed: ${e.message}</p>`;
+  }
+}
+
+async function deleteEventData(eventName) {
+  if (!confirm(`Delete ALL stored data for "${eventName}" — rounds, roster, and any saved round results/skins?\n\nThis cannot be undone. (Jotform scorecard submissions are separate and are not touched.)`)) return;
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const pin  = document.getElementById('hostPin').value.trim();
+  if (!base) { alert('Enter the BFE Worker base URL above first.'); return; }
+  try {
+    const res = await fetch(base + '/bfe/events/' + encodeURIComponent(eventName) + '?pin=' + encodeURIComponent(pin), { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    loadEventsList();
+  } catch (e) {
+    alert('Delete failed: ' + e.message);
+  }
+}
+
+document.getElementById('refreshEventsListBtn').addEventListener('click', loadEventsList);
 </script>
 
 </body>
