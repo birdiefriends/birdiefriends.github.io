@@ -1,9 +1,11 @@
 # BF Experiences (BFE) / Wally Cup — Competitive Events Architecture Spec
 
-**Status as of Dev-73 (2026-08-30).** This is the first time this spec has been
-committed to the repo — it existed only as a local file (`WC_spec.txt`, from Dev-71)
-until now. Rd1 tees off 10am, 9/11/2026. For the full narrative reasoning behind any
-decision below, see the Dev-71/72/73 entries in `BF_Session_Log.md`; this doc is the
+**Status as of Dev-74 (2026-08-31).** Committed to the repo for the first time in
+Dev-73 — it existed only as a local file (`WC_spec.txt`, from Dev-71) before that. Rd1
+tees off 10am, 9/11/2026; as of Dev-74 the full scoring engine (quota, skins, CTP, Wally
+Ball, Overall) is built and end-to-end validated — only the player-facing results page
+(§8 Phase 3) remains before that deadline. For the full narrative reasoning behind any
+decision below, see the Dev-71/72/73/74 entries in `BF_Session_Log.md`; this doc is the
 standing architecture reference, not a replacement for that history.
 
 **A note on completeness:** the draft Brian supplied this session picked up mid-thought,
@@ -70,19 +72,32 @@ full alternate platform:
   an implementation detail decided after this spec was drafted — not named here
   originally, documented here for the first time as the actual as-built schema.
 - **Engine:** `stableford_quota`, chained Rd1 → Rd2 → Rd3 (portal's "Rd3" is the 3rd/final
-  individual round in the chain — confirmed, no rename needed). 📋 Engine logic itself
-  not yet built — quota math exists in GS (§3) but hasn't been ported into this system.
+  individual round in the chain — confirmed, no rename needed). ✅ **Built and fully
+  validated, Dev-74** — quota math ported from GS (§3), plus `adjustQuota` (half-
+  performance adjustment) and the ±25% `QUOTA_CAP_PCT` cap. Verified end-to-end this
+  session with a complete, hand-checked Rd1→Rd2→Rd3 test cycle on realistic data (see
+  Dev-74 entry in `BF_Session_Log.md`) — chain integrity (each round's New quota exactly
+  matches the next round's Quota in) confirmed across all 16 players, both hops. The
+  ±25% cap itself was never actually triggered by that test data, though — still an
+  untested edge case, not a confirmed-working one.
 - **Influencer:** `wally_ball`, `points: 1` on Rd1, `1` on Rd2, `2` on Rd3 — folds
-  visibly into that round's total, flows into the Overall podium. 📋 Not yet built —
-  depends on the round-results engine above and the Wally Ball capture data (below).
+  visibly into that round's total, flows into the Overall podium. ✅ **Built and
+  validated, Dev-74**, including a fix along the way: the round-level bonus was
+  initially (incorrectly) withheld from a player already eliminated from the season-long
+  Wally Ball pot; confirmed by Brian this is wrong — the round bonus must be fully
+  independent of season-pool elimination — and fixed. Also added this session:
+  `BFE-Admin.html`'s Overall standings now breaks out each player's *cumulative* Wally
+  Ball bonus (across all closed rounds) as its own column, separate from quota-based
+  "Total +/-", since the two numbers can otherwise read as contradictory to a player.
 - **2Man** is its own scoring module — `scramble_pair` engine, no influencers, explicitly
   excluded from Overall (a team result can't fairly redistribute individual credit, so no
   dormant weighting knob either). Building this now doubles as the prototype for Turkey
-  2Man in November. ❓ **Correction, Dev-73 — this spec's original "Open items for Brian:
-  none remaining" claim (below) was wrong on this point.** The actual scramble scoring
-  formula for 2Man has never been defined anywhere in this codebase or in any earlier
-  version of this spec. This blocks sizing/building the 2Man engine and its payout calc
-  (§8 Phase 2) and needs Brian's direct input before that work can start.
+  2Man in November. ❓ **Still open — scramble scoring formula undefined — but
+  de-prioritized, Dev-74.** Brian confirmed end of Dev-74 that the 2Man scramble is a
+  **standalone event with no bearing on the Wally Cup outcome** and will be tackled on
+  its own timeline. This item no longer blocks any Wally Cup Rd1–3 work (the validated
+  chain above is confirmed as the real WC's actual individual-scoring structure) — it's
+  needed only before that separate scramble event is actually run.
 - **Scorecard and CttP capture — ⚠️ revised again, Dev-73, superseding the "isolated to
   the new Worker" plan below.** Original plan (kept verbatim in the next paragraph for
   the record) was to drop Jotform entirely for the new system and write straight to the
@@ -93,7 +108,16 @@ full alternate platform:
   system's data tables, but they get populated by reading Jotform submissions into D1
   (reusing the existing `jfGetAnswerByPriority` field-matching pattern already used for
   the registration roster, §4c) rather than by direct client-side POST from the Live
-  Panel. That read-and-sync step is 📋 not yet built — Dev-74/75 Phase 2 (§8).
+  Panel. ⚠️ **Diverged from this plan, Dev-74 — no sync step was built, and none is
+  needed.** `BFE-Admin.html`'s "Close Round" action reads scorecards directly from the
+  live Jotform API (`SCORECARD_FORM_ID`, same form/QIDs as the Live Panel) at close time,
+  computes results client-side, and writes straight to the new `bfe_round_results`/
+  `bfe_round_skins` tables (§8) — it never reads or writes `bfe_scorecards` at all.
+  `bfe_scorecards` (and its `/bfe/scorecards` route on the new Worker) exists and is used
+  only by `BFE-Admin.html`'s **test**-scorecard generator, as a stand-in data source for
+  local testing — not by the real Close Round flow. If a future session wants an actual
+  synced copy of live Jotform data in `bfe_scorecards` for some other reason, that's still
+  unbuilt; for Close Round's own purposes it turned out not to be needed.
 - Original plan, superseded above, kept for context: *"Scorecard AND CttP capture both
   isolated to the new Worker — revised: originally planned to reuse the main worker's
   existing `/scorecards` table as-is (it's already generic, no technical reason it
@@ -118,9 +142,9 @@ full alternate platform:
   Jotform side of capture (per the revised note above) is also done as of Dev-73: three
   new fields added to the shared `SCORECARD_FORM_ID` form — `wallyBallStatus` (QID 33),
   `WallyBallLostHole` (QID 34), `wallyBallStroke` (QID 35), confirmed headless (players
-  never see Jotform's hosted form or these labels). 🔧 **Not yet wired into
-  `submitScorecard()`/`buildLivePanel()`** — Dev-74 Phase 1, the immediate next work item
-  (§8).
+  never see Jotform's hosted form or these labels). ✅ **Wired into
+  `submitScorecard()`/`buildLivePanel()` and confirmed live, Dev-74** — see the Dev-74
+  entry in `BF_Session_Log.md` for the byte-identical-against-GitHub verification.
 - **Output — data/results now, media later:** the results package follows the Event
   Sites pattern (the Garrett's Last Swing precedent) rather than BFSeries'
   `results.html`/`standings.html`, and publishes per round (each round closes
@@ -130,12 +154,18 @@ full alternate platform:
   only** — round-by-round leaderboards, quota progression, CttP/Skins winners, 2Man
   results (clearly separated), Wally Ball tracker. Photos, chapters, and narrative
   curation (GS's Photo Organizer, kept alive specifically for this) are deliberately
-  deferred to their own later phase, not bundled into this build. 📋 Not started — Dev-74
-  Phase 3 (§8), can start minimal and polish through Rd3.
+  deferred to their own later phase, not bundled into this build. 📋 **Still not
+  started — Dev-75's next priority**, now that Phase 2 (below) is fully built and
+  validated. Whatever gets built here must carry forward the two player-facing clarity
+  fixes from Dev-74's admin-side results tables: the Rank(Score+WB)-vs-+/-(vs.-quota)
+  distinction, and the cumulative Wally Ball bonus breakout — both exist specifically
+  because the raw numbers read as contradictory otherwise, and that's just as true in
+  public as it is in the admin tool.
 - **Skins** — confirmed by Brian, Dev-73: computed independently of quota (per-hole max
   points winner, ties = no skin), applies in **every** WC round including 2Man, and feeds
-  only into payout — not a factor in the quota/performance calc. Not in the original
-  draft of this spec; documented here for the first time. 📋 Not yet ported (§8 Phase 2).
+  only into payout — not a factor in the quota/performance calc. ✅ **Ported and
+  validated, Dev-74** — `computeSkins()` in `BFE-Admin.html`, confirmed against multiple
+  full test rounds including a player winning more than one skin in the same round.
 - **Data isolation:** new, small D1 tables, all prefixed `bfe_` (BF Experiences) rather
   than `wc_` — deliberately, since these are meant to serve BFCup/Turkey 2Man/BlackFriday
   too, not just Wally Cup. Confirmed Dev-73, direct D1 audit — as-built vs. planned:
@@ -145,21 +175,32 @@ full alternate platform:
     anticipated anywhere in the original draft of this spec** (a "Setup/master-data
     layer" designed and built after this document was originally written — see the
     §4a divergence note below for the tee-catalog piece specifically).
-  - 📋 `bfe_quota_progress`, `bfe_scramble_pairs`, `bfe_scramble_results` (or whatever
-    Dev-74 decides to actually name/shape them) — **do not exist**. Confirmed via direct
-    `sqlite_master` listing, Dev-73. This is the entire missing results/computation
-    layer — no round-results math, payout calc, or cross-round rollup exists anywhere for
+  - ✅ `bfe_round_results`, `bfe_round_skins` — **built and live, Dev-74**, superseding
+    the `bfe_quota_progress` name this spec originally guessed at. Holds one row per
+    player per closed round (`quota_in`/`actual_points`/`performance`/`quota_out`/
+    `wb_status`/`wb_hole`/`wb_stroke`/`rank`/payout columns) and one row per skins winner,
+    keyed on `event_id`+`round_name`; the POST route does a full delete-then-insert per
+    key, so re-closing a round is safe. This is the results/computation layer the
+    original spec called for — round-results math, payout calc, and cross-round rollup
+    (quota chaining, Overall standings, the Wally Ball pot) are all built on top of these
+    two tables now, confirmed via a full Rd1→Rd2→Rd3 test cycle (Dev-74 entry,
+    `BF_Session_Log.md`).
+  - 📋 `bfe_scramble_pairs`, `bfe_scramble_results` (or whatever names/shapes the eventual
+    2Man build actually needs) — still **do not exist**. No longer urgent — see the 2Man
+    de-prioritization note above (§4) — but still the entire missing piece for that
+    format when its build window arrives.
     WC yet. This is the critical remaining build (§8).
   Same PIN-gated CRUD pattern as `gathering_templates`/`venues`, living in a **separate
   Cloudflare Worker** (§4b), not worker.js. Never touches `playerHistory`.
 - **Venue tee catalog** (new) — see §4a below.
 - **UI architecture** (new) — see §4c below.
 
-**Open items for Brian (corrected, Dev-73):** the original draft claimed none remained.
-One does: **the 2Man scramble scoring formula**, flagged above — needed before that
-engine or its payout math can be built. Everything else from the original list (CttP's
-Jotform dependency, publish rhythm) was resolved, though the Jotform resolution itself
-has since been reversed by the time-crunch decision above.
+**Open items for Brian (updated Dev-74):** **the 2Man scramble scoring formula**,
+flagged above, is still undefined — but Brian confirmed end of Dev-74 that 2Man is a
+standalone event separate from the Wally Cup outcome, so this no longer blocks anything
+against the 9/11 deadline; revisit when that event's own build window arrives. Everything
+else from the original list (CttP's Jotform dependency, publish rhythm) was resolved back
+in Dev-73.
 
 ---
 
@@ -343,38 +384,53 @@ in. No changes as of Dev-73.
 
 ---
 
-## 8. Current build status & phased plan (added Dev-73)
+## 8. Current build status & phased plan (added Dev-73, updated Dev-74)
 
 This section is the living answer to "what's left" — update it each session rather than
-re-deriving status from scratch. See `BF_Session_Log.md`'s Dev-73 entry for the full
-reasoning behind this plan.
+re-deriving status from scratch. See `BF_Session_Log.md`'s Dev-73/Dev-74 entries for the
+full reasoning behind this plan.
 
 - **Phase 0 — Jotform (✅ done, Dev-73):** 3 new Wally Ball fields added to the shared
   `SCORECARD_FORM_ID` (250963587514163) form: `wallyBallStatus` (QID 33),
   `WallyBallLostHole` (QID 34), `wallyBallStroke` (QID 35).
-- **Phase 1 — Live Panel wiring (hard deadline 9/11):**
-  1. Add `WB_QID = {status:'33', hole:'34', stroke:'35'}` to `submitScorecard()` in
-     `portal.html` and include those params in its POST body.
-  2. Add the Wally Ball input step (Y/N, conditional Hole#/Stroke# when "No") to
+- **Phase 1 — Live Panel wiring (hard deadline 9/11): ✅ done and confirmed live, Dev-74.**
+  1. ✅ `WB_QID = {status:'33', hole:'34', stroke:'35'}` added to `submitScorecard()` in
+     `portal.html`, included in its POST body.
+  2. ✅ Wally Ball input step (Y/N, conditional Hole#/Stroke# when "No") added to
      `buildLivePanel()`'s Post-Round Scorecard section.
-  3. Flip `hasLivePanelSupport()` to `true` for Wally Cup / 2Man formats.
-  4. End-to-end test against the real Jotform form with a disposable test event.
-- **Phase 2 — results/computation layer (soft deadline, days after 9/11):**
-  1. Design and create the D1 results tables (`bfe_quota_progress`,
-     `bfe_scramble_pairs`, `bfe_scramble_results`, or revised names/shapes as needed).
-  2. Port `adjustQuota`/`applyQuotaCap` (§3) and the skins-per-hole-winner loop (§4) from
-     `BF_Golf_Scorer_8.html`.
-  3. Build the Jotform-read bridge into `bfe_scorecards`/`bfe_cttp_entries` (reusing the
-     `jfGetAnswerByPriority` pattern already used for the registration roster).
-  4. Get Brian's definition of the 2Man scramble scoring formula (❓ open, §4) — blocks
-     the rest of this phase for the 2Man format specifically.
-  5. Build the "Close Round" action in `BFE-Admin.html`: payout calc, Wally Ball pot
-     resolution, Overall rollup across exactly 3 rounds. Note: GS's own
-     `calcSeriesPerformance()` is a best-4-of-N model and does **not** fit WC's fixed
-     3-round Overall — confirmed by direct read, Dev-73. A new calc is needed; there is
-     no existing precedent for this in the codebase.
-- **Phase 3 — publishing (can start minimal, polish through Rd3):** per-round GLS-style
-  results page generator, plus a living Overall page (podium held back until Rd3
-  closes), published via GS's proven `deployPagesToGitHub()`/`POST /deploy` mechanism to
-  `docs/`. Matches §4's "data/results now, media later" scope boundary — no photo/
-  narrative curation in this phase.
+  3. ✅ `hasLivePanelSupport()` flipped to `true` for `format-wally`/`format-scramble`
+     (still-open side effect: this also covers any non-WC event using a scramble format —
+     see §4).
+  4. ✅ Verified live: `docs/portal.html` on GitHub confirmed byte-identical to the final
+     local copy, `portal_version.txt` at `v4.0.0 · 2026-08-31`. (End-to-end test against a
+     disposable Jotform test event happened implicitly via the Phase 2 test cycle below,
+     which exercises the same Live-Panel-shaped scorecard data through Close Round.)
+- **Phase 2 — results/computation layer (soft deadline, days after 9/11): ✅ built and
+  fully validated end-to-end, Dev-74.**
+  1. ✅ D1 results tables built as `bfe_round_results`/`bfe_round_skins` (not
+     `bfe_quota_progress` — see §4's Data isolation bullet for the as-built shape).
+  2. ✅ `adjustQuota`/`applyQuotaCap` (§3) and the skins-per-hole-winner loop (§4) ported
+     into `BFE-Admin.html`.
+  3. ⚠️ Turned out not to be needed — see §4's Scorecard/CttP capture divergence note:
+     Close Round reads Jotform live at close time instead of via a synced
+     `bfe_scorecards` copy.
+  4. 2Man scramble scoring formula (❓ open, §4) — **de-prioritized, Dev-74**, no longer
+     blocking this phase; 2Man confirmed a standalone event, tackled separately.
+  5. ✅ "Close Round" action built in `BFE-Admin.html`: payout calc (podium/skins/CTP),
+     Wally Ball round bonus + season pot resolution, Overall rollup across exactly 3
+     rounds — a new calc, as anticipated (GS's `calcSeriesPerformance()` doesn't fit).
+     Validated via a complete, hand-verified Rd1→Rd2→Rd3 test cycle on realistic data —
+     see the Dev-74 entry in `BF_Session_Log.md` for the full verification detail,
+     including two real bugs found and fixed along the way (a slope-averaging display
+     bug, and the Wally-Ball-bonus/season-elimination coupling bug).
+- **Phase 3 — publishing (can start minimal, polish through Rd3): 📋 not started —
+  Dev-75's next priority.** Per-round GLS-style results page generator, plus a living
+  Overall page (podium held back until Rd3 closes), published via GS's proven
+  `deployPagesToGitHub()`/`POST /deploy` mechanism to `docs/`. Matches §4's "data/results
+  now, media later" scope boundary — no photo/narrative curation in this phase. Must
+  carry forward the Dev-74 admin-tool clarity fixes (Rank(Score+WB) vs. +/-(vs.-quota);
+  cumulative Wally Ball bonus breakout) from the start, not bolted on after the fact.
+- **Before real Rd1 (10am 9/11):** the "2026 Wally Cup" event in D1 currently holds
+  Dev-74's test data (real roster, generated test scorecards) — needs a clean Data &
+  Reset → Delete and fresh Setup with the real roster/tee assignments before the real
+  event, so real Rd1 doesn't chain off test quota_out values.
