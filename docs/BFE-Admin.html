@@ -144,7 +144,17 @@
     </table>
     <div class="btnbar">
       <button type="button" class="secondary" id="addPlayerBtn">+ Add player manually</button>
+      <button type="button" class="secondary" id="ghinPasteToggleBtn">📋 Paste GHIN list</button>
       <span class="subtle" id="rosterCount"></span>
+    </div>
+    <div id="ghinPastePanel" style="display:none;margin-top:10px;padding:10px;border:1.5px dashed var(--line);border-radius:8px;background:var(--bg)">
+      <p class="hint" style="margin:0 0 8px">Paste the whole GHIN roster page here (Ctrl+A, Ctrl+C on ghin.com is fine — this searches the whole pasted blob, not specific rows/columns, since the exact plain-text layout varies by browser). Matches each name already entered above and grabs the nearest handicap-looking number after it.</p>
+      <textarea id="ghinPasteInput" rows="6" style="width:100%;font-family:monospace;font-size:0.8rem;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="Paste the whole GHIN page here"></textarea>
+      <div class="btnbar">
+        <button type="button" id="ghinPasteApplyBtn">Apply to matching players</button>
+        <button type="button" class="secondary" id="ghinPasteCancelBtn">Cancel</button>
+        <span id="ghinPasteResult" class="subtle"></span>
+      </div>
     </div>
   </section>
 
@@ -689,6 +699,64 @@ function readRosterInput() {
     return { name, email, hcp };
   }).filter(p => p.name);
 }
+
+// ── Paste GHIN list (Dev-74) ─────────────────────────────────────────────
+// Ported from BF_Golf_Scorer_8.html's grpApplyGhinPaste. Searches the WHOLE
+// pasted blob for each roster row's name — not a per-line/per-column parse —
+// because Ctrl+A on GHIN's page grabs nav/footer/everything too, and the
+// exact plain-text layout that produces varies by browser in ways not worth
+// chasing. For each match, grabs the first number in a short window right
+// after the name that looks like a real handicap (-10 to 54, so +1.7 plus-
+// handicaps and 54.0 max both work). No GHIN Name alias lookup here (GS's
+// version also checks a Membership-form field for players whose GHIN name
+// differs from their roster name) — that's GS/Membership-form-specific
+// plumbing not wired into BFE yet; an unmatched name just needs a manual fix.
+function ghinApplyPaste() {
+  const raw = document.getElementById('ghinPasteInput').value;
+  const resultEl = document.getElementById('ghinPasteResult');
+  if (!raw || !raw.trim()) { resultEl.textContent = 'Nothing pasted.'; resultEl.style.color = 'var(--err)'; return; }
+
+  const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let matched = 0;
+  const notFound = [];
+
+  rosterBody.querySelectorAll('tr').forEach(tr => {
+    const name = tr.querySelector('.p-name').value.trim();
+    const hcpInput = tr.querySelector('.p-hcp');
+    if (!name) return;
+
+    const idx = raw.search(new RegExp(escapeRegex(name), 'i'));
+    if (idx === -1) { notFound.push(name); return; }
+
+    const windowText = raw.slice(idx + name.length, idx + name.length + 300);
+    const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
+    const hcp = numMatches.map(n => parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
+    if (hcp === undefined) { notFound.push(`${name} (no HCP-looking number nearby)`); return; }
+
+    hcpInput.value = hcp;
+    matched++;
+  });
+
+  const parts = [`✓ ${matched} matched and updated`];
+  if (notFound.length) parts.push(`${notFound.length} not found: ${notFound.join(', ')}`);
+  resultEl.textContent = parts.join(' — ');
+  resultEl.style.color = notFound.length ? 'var(--warn)' : 'var(--accent-dark)';
+}
+
+document.getElementById('ghinPasteToggleBtn').addEventListener('click', () => {
+  const panel = document.getElementById('ghinPastePanel');
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  if (opening) {
+    document.getElementById('ghinPasteInput').value = '';
+    document.getElementById('ghinPasteResult').textContent = '';
+    document.getElementById('ghinPasteInput').focus();
+  }
+});
+document.getElementById('ghinPasteCancelBtn').addEventListener('click', () => {
+  document.getElementById('ghinPastePanel').style.display = 'none';
+});
+document.getElementById('ghinPasteApplyBtn').addEventListener('click', ghinApplyPaste);
 
 function setRosterStatus(msg, kind) {
   const el = document.getElementById('rosterFetchStatus');
