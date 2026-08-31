@@ -117,6 +117,15 @@
 //     id INTEGER PRIMARY KEY AUTOINCREMENT,
 //     event_name TEXT NOT NULL UNIQUE,
 //     event_family TEXT,
+//     event_date TEXT,              -- Dev-74: Rd1's date (YYYY-MM-DD) for
+//                                     -- multi-day events like Wally Cup —
+//                                     -- entered once in Setup section 1, not
+//                                     -- derived from Jotform (that form has
+//                                     -- no reliable per-event date field).
+//                                     -- Drives the historic-event filter on
+//                                     -- Setup's registration-event dropdown.
+//                                     -- Added via ALTER TABLE, see migration
+//                                     -- note below the CREATE TABLE block.
 //     hcp_mode TEXT NOT NULL DEFAULT 'fixed',
 //     status TEXT NOT NULL DEFAULT 'draft',
 //     tee_policy TEXT,             -- JSON: the resolved teePolicy used for
@@ -131,6 +140,8 @@
 //     created_at TEXT NOT NULL DEFAULT (datetime('now')),
 //     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 //   );
+//   -- Migration for an existing database (bfe_events predates event_date):
+//   --   ALTER TABLE bfe_events ADD COLUMN event_date TEXT;
 //   CREATE TABLE bfe_event_rounds (
 //     id INTEGER PRIMARY KEY AUTOINCREMENT,
 //     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
@@ -577,7 +588,7 @@ export default {
     if (request.method === 'GET' && url.pathname === '/bfe/events-list') {
       try {
         const { results: events } = await env.DB.prepare(
-          `SELECT id, event_name, event_family, status, updated_at FROM bfe_events ORDER BY updated_at DESC`
+          `SELECT id, event_name, event_family, event_date, status, updated_at FROM bfe_events ORDER BY updated_at DESC`
         ).all();
         const summary = [];
         for (const e of events) {
@@ -598,7 +609,7 @@ export default {
       try { body = await request.json(); } catch (e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { event_name, event_family, hcp_mode, status, tee_policy, payout_plan, rounds, roster, pin } = body;
+      const { event_name, event_family, event_date, hcp_mode, status, tee_policy, payout_plan, rounds, roster, pin } = body;
       if (String(pin) !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -607,12 +618,12 @@ export default {
       }
       try {
         await env.DB.prepare(
-          `INSERT INTO bfe_events (event_name, event_family, hcp_mode, status, tee_policy, payout_plan, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+          `INSERT INTO bfe_events (event_name, event_family, event_date, hcp_mode, status, tee_policy, payout_plan, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
            ON CONFLICT(event_name) DO UPDATE SET
-             event_family = excluded.event_family, hcp_mode = excluded.hcp_mode, status = excluded.status,
+             event_family = excluded.event_family, event_date = excluded.event_date, hcp_mode = excluded.hcp_mode, status = excluded.status,
              tee_policy = excluded.tee_policy, payout_plan = excluded.payout_plan, updated_at = excluded.updated_at`
-        ).bind(event_name, event_family || null, hcp_mode || 'fixed', status || 'draft',
+        ).bind(event_name, event_family || null, event_date || null, hcp_mode || 'fixed', status || 'draft',
                tee_policy ? JSON.stringify(tee_policy) : null, payout_plan ? JSON.stringify(payout_plan) : null).run();
 
         const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(event_name).first();
@@ -695,7 +706,7 @@ export default {
         }));
 
         const config = {
-          eventName: eventRow.event_name, eventFamily: eventRow.event_family, hcpMode: eventRow.hcp_mode,
+          eventName: eventRow.event_name, eventFamily: eventRow.event_family, eventDate: eventRow.event_date, hcpMode: eventRow.hcp_mode,
           status: eventRow.status, teePolicy: eventRow.tee_policy ? JSON.parse(eventRow.tee_policy) : null,
           payout: eventRow.payout_plan ? JSON.parse(eventRow.payout_plan) : null,
           roster, rounds
