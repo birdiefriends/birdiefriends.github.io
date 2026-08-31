@@ -98,6 +98,7 @@
       <div style="flex:2"><label for="testScorecardCourse">Course name (as it should appear on the scorecard)</label><input type="text" id="testScorecardCourse" placeholder="auto-fills from the round's venue"></div>
       <div style="align-self:flex-end"><button type="button" id="generateTestScorecardsBtn" disabled>Generate test scorecards</button></div>
     </div>
+    <p class="hint" id="testScorecardNameWarning" style="display:none"></p>
     <p class="status" id="testScorecardStatus"></p>
   </section>
 
@@ -616,13 +617,16 @@ async function jfFetchRoundScorecards(roundName) {
 // player, so Close Round has data to work with without hand-keying a full
 // roster's worth of scorecards. Field mapping mirrors jfFetchRoundScorecards
 // above exactly, just in the write direction. Per-hole points are random
-// (0-3) — plausible Stableford values, not meant to model any real skill
-// level — since this exists to exercise the pipeline (fetch → score → skins
-// → payout → save), not to produce meaningful golf. A player is randomly
-// marked as having lost Wally Ball at a random hole/stroke count some
-// fraction of the time, so that path gets exercised too.
+// draws from the real valid Stableford per-hole scale (confirmed against
+// GS's own VALID_SCORES set — 0/1/2/4/6, there is no 3) — not meant to model
+// any real skill level, just legal values, since this exists to exercise
+// the pipeline (fetch → score → skins → payout → save), not to produce
+// meaningful golf. A player is randomly marked as having lost Wally Ball at
+// a random hole/stroke count some fraction of the time, so that path gets
+// exercised too.
+const TEST_HOLE_POINT_POOL = [0, 1, 1, 2, 2, 2, 4, 6]; // weighted so mid-range points show up more than 0/4/6, still only real values
 async function jfCreateScorecardSubmission(playerName, roundName, courseName, wbLossRate) {
-  const holes = Array.from({ length: 18 }, () => Math.floor(Math.random() * 4)); // 0-3 pts/hole
+  const holes = Array.from({ length: 18 }, () => TEST_HOLE_POINT_POOL[Math.floor(Math.random() * TEST_HOLE_POINT_POOL.length)]);
   const front = holes.slice(0, 9).reduce((a, b) => a + b, 0);
   const back = holes.slice(9).reduce((a, b) => a + b, 0);
   const total = front + back;
@@ -661,12 +665,32 @@ function populateTestScorecardRoundSelect() {
   if (!rounds.length) {
     sel.innerHTML = '<option value="">— add a stableford round with a venue in section 4 first —</option>';
     btn.disabled = true;
+    checkTestScorecardRoundName();
     return;
   }
   sel.innerHTML = rounds.map(r =>
     `<option value="${r.name.replace(/"/g, '&quot;')}" data-venue="${(r.venue || '').replace(/"/g, '&quot;')}" ${r.name === current ? 'selected' : ''}>${r.name}</option>`
   ).join('');
   btn.disabled = !sel.value;
+  checkTestScorecardRoundName();
+}
+// Whatever string is picked here gets written VERBATIM into Jotform's Event
+// field — Close Round (and the real portal submission flow) match against
+// this exact text. A round named just "Rd1" in section 4, instead of the
+// full "2026 Wally Cup - Rd1" convention, will happily generate scorecards
+// that never match anything real — this warns before that happens rather
+// than after (Dev-74: caught exactly this in testing).
+function checkTestScorecardRoundName() {
+  const sel = document.getElementById('testScorecardRound');
+  const warn = document.getElementById('testScorecardNameWarning');
+  const eventNameVal = document.getElementById('eventName').value.trim();
+  if (!sel.value || !eventNameVal || sel.value.startsWith(eventNameVal)) {
+    warn.style.display = 'none';
+    return;
+  }
+  warn.style.display = 'block';
+  warn.style.color = 'var(--warn)';
+  warn.textContent = `⚠ This round's name ("${sel.value}") doesn't start with the Event name ("${eventNameVal}"). If real scorecards will use the full "${eventNameVal} - ..." convention, rename this round in section 4 first — otherwise these test submissions won't match anything Close Round looks for.`;
 }
 document.getElementById('testScorecardRound').addEventListener('change', () => {
   const sel = document.getElementById('testScorecardRound');
@@ -674,7 +698,9 @@ document.getElementById('testScorecardRound').addEventListener('change', () => {
   const opt = sel.selectedOptions[0];
   if (opt && !courseInput.value) courseInput.value = opt.dataset.venue || '';
   document.getElementById('generateTestScorecardsBtn').disabled = !sel.value;
+  checkTestScorecardRoundName();
 });
+document.getElementById('eventName').addEventListener('input', checkTestScorecardRoundName);
 document.getElementById('generateTestScorecardsBtn').addEventListener('click', async () => {
   const roundName = document.getElementById('testScorecardRound').value;
   const courseName = document.getElementById('testScorecardCourse').value.trim();
