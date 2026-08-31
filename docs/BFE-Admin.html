@@ -244,7 +244,7 @@
   <!-- ── Close a round (Dev-74 — Wally Cup scoring engine) ────────────── -->
   <section class="card">
     <h2>8. Close a round</h2>
-    <p class="hint">Pulls that round's scorecards straight from Jotform, runs them through the quota engine above (including any Wally Ball bonus), computes skins, and saves the result — round pot payout included. Only "Stableford quota" rounds are wired up right now; 2-man scramble scoring isn't built yet. CTP payout isn't wired yet either (shows as $0 — nothing resolves actual closest-to-pin winners from Jotform so far). Load or Generate the event above first.</p>
+    <p class="hint">Pulls that round's scorecards straight from Jotform, runs them through the quota engine above (including any Wally Ball bonus), computes skins and Closest-to-Pin, and saves the result — round pot payout included (podium, skins, and CTP). Only "Stableford quota" rounds are wired up right now; 2-man scramble scoring isn't built yet. CTP pays whoever's the most-recent qualifying claimant on each hole configured for this round's venue in section 5 — same rule the live leaderboard uses. Load or Generate the event above first.</p>
     <div class="row">
       <div style="flex:2"><label for="closeRoundSelect">Round</label><select id="closeRoundSelect"><option value="">— load/generate the event above first —</option></select></div>
       <div style="align-self:flex-end"><button type="button" id="closeRoundBtn" disabled>Close round</button></div>
@@ -815,18 +815,24 @@ document.getElementById('generateTestCttpBtn').addEventListener('click', async (
   if (!roundName) { statusEl.textContent = 'Pick a round first.'; statusEl.style.color = 'var(--err)'; return; }
   if (!holes.length) { statusEl.textContent = "This round's venue has no CTP holes configured in section 5 — add some there first."; statusEl.style.color = 'var(--err)'; return; }
   if (players.length < 2) { statusEl.textContent = 'Add at least 2 players to the roster in section 3 first.'; statusEl.style.color = 'var(--err)'; return; }
-  if (!confirm(`Create ${holes.length * 2} REAL test CTP submissions on Jotform for "${roundName}" (2 per hole, on holes ${holes.join(', ')})? This writes to Jotform — delete them from Jotform's dashboard when you're done testing.`)) return;
+  if (!confirm(`Create ${holes.length * 2} REAL test CTP submissions on Jotform for "${roundName}" (2 per hole, on holes ${holes.join(', ')})? The 2nd claim per hole is later AND farther than the 1st — so Close Round should crown the 2nd (worse-distance) player as the leader, proving the winner logic is timestamp-based, not distance-based. This writes to Jotform — delete them from Jotform's dashboard when you're done testing.`)) return;
 
   statusEl.style.color = 'var(--sub)';
   let created = 0;
   const failures = [];
   for (const hole of holes) {
-    // Two players per hole, in sequence — the SECOND call becomes the leader
-    // under the "most recent wins" rule, so this exercises that logic
-    // instead of just leaving one uncontested claim per hole.
+    // Two players per hole, in sequence — the SECOND call should become the
+    // leader under the "most recent wins" rule. Deliberately made FARTHER
+    // than the first claim (not closer) so a Close Round result actually
+    // proves which rule is running: if the winner shown is this later,
+    // worse-distance claim, that's conclusive evidence it's timestamp-based
+    // (a distance comparison could never produce that). Dev-74: an earlier
+    // version made the second claim closer, which meant "most recent" and
+    // "least distance" always agreed and a real test could never tell them
+    // apart.
     const shuffled = [...players].sort(() => Math.random() - 0.5).slice(0, 2);
     const claimants = shuffled.length === 2 ? shuffled : [shuffled[0], shuffled[0]];
-    const dists = [20 + Math.random() * 30, 3 + Math.random() * 15]; // first claim far, second closer — plausible progression
+    const dists = [3 + Math.random() * 15, 20 + Math.random() * 30]; // first claim close, second (later) intentionally farther
     for (let i = 0; i < claimants.length; i++) {
       statusEl.textContent = `Creating claim ${created + failures.length + 1} of ${holes.length * 2}: hole ${hole} — ${claimants[i].name}…`;
       try {
