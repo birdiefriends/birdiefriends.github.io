@@ -14762,7 +14762,7 @@ async function loadScorecardCheck() {
 
   try {
     const resp = await fetch(
-      `${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}&limit=100&orderby=created_at,DESC`
+      `${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}&limit=100&orderby=created_at,DESC&filter=${JF_FILTER}`
     );
     const data = await resp.json();
     const submissions = data.content || [];
