@@ -10,6 +10,11 @@ even the very next one:
      `get_device_info` call). Dev-74 confirmed these are independent: the bridge can be
      live (`get_device_info` succeeds) while `connectedFolders` is still empty.
 
+**Confirmed working, rest of Dev-74:** once set up at the start of that session, this
+rule needed zero further revision — the bridge and folder connection stayed live for the
+whole rest of the session, every push verified byte-identical, and `bf_push.ps1`'s
+`$FileMap` needed no changes. Treat this rule as settled, not still-in-flux.
+
 Early in any session that expects to write local files, call `get_device_info` and check
 both. If the AutoPush path isn't in `connectedFolders`, do NOT call
 `device_request_folder_access` on your own initiative — Dev-74 confirmed the sandbox's
@@ -121,37 +126,76 @@ is now the sole source of truth for the current Dev-N number. Read it, not this 
 
 # BirdieFriends Golf Scorer — Session Starter
 **Current session number:** see `BF_Session_Log.md` (this file no longer tracks it)
-**Date:** 2026-08-30 (last updated Dev-73; earlier fields below carried forward unverified except where noted)
-**Portal Version (production):** per `portal_version.txt` (source of truth): v3.17.134 · 2026-08-27.
-  ✅ Dev-72's version-drift discrepancy is RESOLVED as of Dev-73, at the root: the
-  hardcoded fallback version spans inside `portal.html` (`#portal-build-header`,
-  `#portal-build`) were removed entirely — they now start empty and are set only by the
-  live fetch of `portal_version.txt` (falling back to "version unavailable" on fetch
-  failure, never a stale number). There is no longer a second copy of the version string
-  for a future deploy to desync. This was the fourth recurrence of this bug class
-  (Dev-45, Dev-54, Dev-73) — treat it as closed, not just patched.
+**Date:** 2026-08-31 (last updated Dev-74; earlier fields below carried forward unverified except where noted)
+**Portal Version (production):** per `portal_version.txt` (source of truth): v4.0.0 · 2026-08-31.
+  ✅ Dev-72's version-drift discrepancy has stayed RESOLVED since Dev-73 — no recurrence
+  Dev-74. Confirmed Dev-74: `docs/portal.html` on GitHub is byte-identical to the final
+  local copy (Phase 1 Wally Ball wiring included) — see Dev-74 Architecture Notes below.
 **GolfScorer Version:** v8.17 · 2026-06-17g (deployed) — unverified this session, carried forward
 **Worker Version (birdiefriends-push — push/deploy/flags/etc.):** 2026-06-18b + all Gatherings routes through Dev-52 (GET/POST /venues, PATCH /venues/:id, GET/POST/DELETE /gathering-templates) — unverified this session, carried forward
-**Worker (bf-experiences — NEW as of Dev-71):** separate Cloudflare Worker, source `bf_experiences_worker.js`, powers the BFE Competitive Events system. Deployed manually by Brian via the Cloudflare dashboard (not via the /deploy route). Confirmed Dev-73: all SQL migrations executed and operational in D1 (8 `bfe_*` tables live — capture + setup/master-data layers only; the results/computation layer, e.g. `bfe_quota_progress`, does not exist yet — see Dev-73 Architecture Notes below). See Dev-71/72/73 Architecture Notes below.
+**Worker (bf-experiences — NEW as of Dev-71):** separate Cloudflare Worker, source `bf_experiences_worker.js`, powers the BFE Competitive Events system. Deployed manually by Brian via the Cloudflare dashboard (not via the /deploy route). Confirmed Dev-74: the results/computation layer is now built and live — `bfe_round_results`/`bfe_round_skins` (2 new tables, not the `bfe_quota_progress` name originally guessed at) — bringing the total to 10 `bfe_*` tables live. See Dev-74 Architecture Notes below.
 **Live URL:** https://birdiefriends.com/portal.html
-**BFE Admin Panel (NEW as of Dev-71):** https://birdiefriends.com/BFE-Admin.html — confirmed Dev-73: live, successfully loads venues, event names, and players against the real D1 tables.
+**BFE Admin Panel (NEW as of Dev-71):** https://birdiefriends.com/BFE-Admin.html — confirmed Dev-74: the full Close Round scoring engine (quota, skins, CTP, Wally Ball round bonus + season pot, Overall rollup) is built and validated end-to-end against a complete 3-round test cycle. `docs/BFE-Admin.html` on GitHub confirmed byte-identical to the final local copy. **Not fetched by the bootstrap's standard 8-step sequence** — if continuing this work, `curl` it fresh from `docs/BFE-Admin.html` before editing (see Dev-74 Architecture Notes below).
 **Local publish tool (NEW as of Dev-73, updated Dev-74):** `bf_push.bat`/`bf_push.ps1` (v5), Brian's machine
   only, `C:\Users\16177\Downloads\GolfScorer\AutoPush` — PIN-gated, pushes straight to the
   same Worker `/deploy` route, with mandatory post-push byte-verification before deleting
   the local copy. Covers `portal.html`, `portal_version.txt`, `worker.js`, `guide.html`,
   `BF_Golf_Scorer_8.html`, `BF_Operations_Guide.md`, `BF_Experiences.js` (→
   `source/bf_experiences_worker.js`), `BFE-Admin.html`, `BF_Session_Log.md`,
-  `BF_WallyCup_Spec.md`, and now `BF_Session_Bootstrap.md` and `deploy.html` (Dev-74). This
-  is the go-to path for any large-file push Claude's own `/deploy` can't get through — see
-  the PAYLOAD SIZE CORRECTION note above.
+  `BF_WallyCup_Spec.md`, `BF_Session_Bootstrap.md`, and `deploy.html`. **Confirmed Dev-74:
+  this FileMap needed no changes all session** — the DEVICE-BRIDGE RULE below and this
+  tool held up with zero workflow friction start to finish; every push this session
+  verified byte-identical against GitHub before being trusted.
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
 **Google Places API Key:** AIzaSyAn1TR2p6JbWR2fr5ydhkurygKpYU9HYtw (restricted to birdiefriends.com)
-**Wally Cup Rd1 tee-off:** confirmed 10am, 9/11/2026. Scoring Engine build is in progress
-  against this hard deadline — see Dev-73 Architecture Notes below and the full Dev-73
-  entry in `BF_Session_Log.md` for the complete phased plan before starting Dev-74 code
-  work.
+**Wally Cup Rd1 tee-off:** confirmed 10am, 9/11/2026. Scoring Engine build is **complete**
+  as of Dev-74 (Phases 0–2 all done and validated) — only Phase 3 (the player-facing
+  results page) remains before the deadline. See Dev-74 Architecture Notes below and the
+  full Dev-74 entry in `BF_Session_Log.md` for the complete verification detail and
+  carry-forward list before starting Dev-75 code work.
 
 ---
+
+## Dev-74 Architecture Notes (2026-08-31) — Wally Cup Scoring Engine Complete
+
+**Read this before writing any Dev-75 code for Wally Cup.** Full detail is in the Dev-74
+entry of `BF_Session_Log.md` — this is a pointer/summary, not a replacement for it. The
+Dev-73 notes right below this section are still accurate background; this section only
+records what changed since.
+
+- **Status as of Dev-74:** Phases 0–2 of the phased plan below are **done and validated
+  end-to-end** — Live Panel Wally Ball wiring, and the entire Close Round scoring engine
+  (quota, skins, CTP, Wally Ball round bonus + season pot, Overall rollup). Verified via
+  a complete, hand-checked Rd1→Rd2→Rd3 test cycle, and confirmed genuinely live by
+  diffing `docs/portal.html` and `docs/BFE-Admin.html` on GitHub byte-for-byte against
+  the final local copies. **Only Phase 3 (the player-facing results page) remains before
+  9/11.**
+- **Two real bugs found and fixed this session**, in case similar symptoms resurface:
+  a Fixed-HCP-mode slope-averaging display bug (math was always right, the Review table's
+  displayed slope wasn't), and a Wally Ball bonus/season-pool coupling bug (a player
+  eliminated from the season pot was wrongly having their *round-level* bonus withheld
+  too — confirmed by Brian these must stay fully independent).
+- **Two player-facing clarity fixes, both required in the future results page too:**
+  Rank/Podium ($) is gross Score + Wally Ball bonus, stack-ranked against the whole
+  field — intentionally *not* the same thing as quota performance (+/-). And a player's
+  *cumulative* Wally Ball bonus across all closed rounds is now broken out as its own
+  column in Overall standings, separate from "Total +/-" (which is pure quota
+  performance and never includes it) — both exist because the raw numbers otherwise read
+  as contradictory to a player comparing round results against the season view.
+- **Scope clarification:** the 2Man scramble is confirmed a standalone event, separate
+  from the Wally Cup outcome — the undefined scramble-scoring-formula item is no longer
+  time-pressured against 9/11 (still needs Brian's input eventually, own build window).
+- **`docs/BFE-Admin.html` is not pulled down by the Bootstrap's standard 8-step
+  sequence** (see the Bootstrap doc's own note, added Dev-74) — `curl` it fresh from
+  GitHub before editing if picking this work back up, rather than assuming a stale local
+  copy or working from memory of its structure.
+- **Before real Rd1:** the live "2026 Wally Cup" event in D1 is currently Dev-74's test
+  data (real roster, generated test scorecards) — needs Data & Reset → Delete and a
+  fresh Setup with the real roster/tee assignments before the real event, so real Rd1
+  doesn't chain off test quota values.
+- **Full carry-forward list (7 items, from the 2Man formula to the ±25% quota cap never
+  having been observed triggered in test data) is in the Dev-74 entry of
+  `BF_Session_Log.md` — read it before starting Dev-75 work,** not just this summary.
 
 ## Dev-73 Architecture Notes (2026-08-30) — Wally Cup Scoring Engine
 
