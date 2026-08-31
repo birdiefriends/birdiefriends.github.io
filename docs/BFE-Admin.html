@@ -370,8 +370,17 @@ function computeStablefordQuota(input, params) {
     const prevHcp = hcpMode === 'fixed' ? p.hcp : (p.prevHcp ?? p.hcp);
     const newHcp  = p.hcp;
     const quotaOut = adjustQuota(p.quotaIn, p.actualPoints, prevHcp, newHcp, p.slope);
-    return { name: p.name, basePoints: p.actualPoints, performance, quotaOut };
+    // quotaIn carried through (not just used above) so an influencer like
+    // applyWallyBall can compute its own quota-relative ranking number below —
+    // Dev-75 (Brian, confirmed): Round Rank/Podium $ must be judged against
+    // quota too, not gross score, or a low-quota player who blows away their
+    // own number can be outranked by a high-quota player who barely beat
+    // theirs. See applyWallyBall's rankPerformance for the actual sort key.
+    return { name: p.name, basePoints: p.actualPoints, quotaIn: p.quotaIn, performance, quotaOut };
   });
+  // Default sort/rank by performance (pre-influencer) — this is what stands
+  // for rounds with no wally_ball (or other rank-altering) influencer wired
+  // up; applyWallyBall below re-sorts and re-assigns rank when it runs.
   entries.sort((a, b) => b.performance - a.performance);
   entries.forEach((e, i) => { e.rank = i + 1; });
   return { entries };
@@ -412,8 +421,20 @@ function applyWallyBall(roundResult, sideData, params) {
     const wbPoints = kept ? points : 0;
     if (kept) e.modifiers.push({ name: 'Wally Ball', points });
     e.total = e.basePoints + wbPoints;
+    // Dev-75 (Brian, confirmed): Round Rank / Podium $ = (Score+WB) - Quota,
+    // NOT gross Score+WB alone. The WB bonus counts toward THIS round's own
+    // placement, same as the raw score does, but only relative to what each
+    // player was expected to shoot — a low-quota player who blows past their
+    // own number by a lot still outranks a high-quota player who barely beat
+    // theirs, exactly as quota golf intends. This is intentionally SEPARATE
+    // from `e.performance` (Score - Quota, no WB) computed in
+    // computeStablefordQuota, which alone feeds quotaOut/next-round quota and
+    // the season-long Overall standings — the WB bonus must never leak into
+    // either of those (confirmed with Brian: a hot streak of keeping the ball
+    // shouldn't permanently deflate someone's handicap-linked quota).
+    e.rankPerformance = e.total - e.quotaIn;
   });
-  roundResult.entries.sort((a, b) => b.total - a.total);
+  roundResult.entries.sort((a, b) => b.rankPerformance - a.rankPerformance);
   roundResult.entries.forEach((e, i) => { e.rank = i + 1; });
   return roundResult;
 }
