@@ -748,12 +748,18 @@ function drawQuotaCenteredHolePoints(skillFactor) {
   return Math.random() < 0.5 ? a : b;
 }
 
-async function jfCreateScorecardSubmission(playerName, roundName, courseName, wbLossRate, skillFactor = 0) {
+async function jfCreateScorecardSubmission(playerName, roundName, courseName, wbLossRate, skillFactor = 0, alreadyOut = false) {
   const holes = Array.from({ length: 18 }, () => drawQuotaCenteredHolePoints(skillFactor));
   const front = holes.slice(0, 9).reduce((a, b) => a + b, 0);
   const back = holes.slice(9).reduce((a, b) => a + b, 0);
   const total = front + back;
-  const lostWb = Math.random() < wbLossRate;
+  // Dev-77: a player who already lost their one Wally Ball in an earlier round
+  // has nothing left to lose or keep THIS round — no fresh coin-flip for them.
+  // Submit a plain, consistent 'No' with no hole/stroke (nothing happened this
+  // round; they were already out coming in), instead of letting wbLossRate
+  // randomly hand them back a 'Yes' the engine would just have to override.
+  const lostWb = alreadyOut ? true : Math.random() < wbLossRate;
+  const lostWbThisRound = lostWb && !alreadyOut;
 
   const params = new URLSearchParams();
   params.set(`submission[${SC_QID.name}]`, playerName);
@@ -764,7 +770,7 @@ async function jfCreateScorecardSubmission(playerName, roundName, courseName, wb
   params.set(`submission[${SC_QID.back}]`, String(back));
   params.set(`submission[${SC_QID.total}]`, String(total));
   params.set(`submission[${WB_QID.status}]`, lostWb ? 'No' : 'Yes');
-  if (lostWb) {
+  if (lostWbThisRound) {
     params.set(`submission[${WB_QID.hole}]`, String(1 + Math.floor(Math.random() * 18)));
     params.set(`submission[${WB_QID.stroke}]`, String(1 + Math.floor(Math.random() * 3)));
   }
@@ -846,6 +852,26 @@ document.getElementById('generateTestScorecardsBtn').addEventListener('click', a
   const teePolicy = readTeePolicyGlobal();
   const venuePolicy = (round && round.venueId && teePolicy.byVenue[round.venueId]) ? venuePolicyFor(teePolicy, round.venueId) : null;
 
+  // Dev-77: same "one Wally Ball for the whole event" rule the Close Round
+  // engine enforces — pull every prior round's saved results for this event
+  // and treat anyone who already shows wb_status = 'No' as permanently out,
+  // so test data never fabricates a fresh coin-flip for an eliminated player.
+  let alreadyOut = new Set();
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const eventNameVal = document.getElementById('eventName').value.trim();
+  if (base && eventNameVal) {
+    try {
+      const priorRes = await fetch(base + '/bfe/round-results?event=' + encodeURIComponent(eventNameVal));
+      const priorData = await priorRes.json();
+      if (priorRes.ok) {
+        alreadyOut = new Set((priorData.results || []).filter(r => r.wb_status === 'No').map(r => r.player_name));
+      }
+    } catch (e) {
+      // Non-fatal — worst case, generation falls back to the random coin-flip
+      // for everyone, same as before this fix, rather than blocking testing.
+    }
+  }
+
   statusEl.style.color = 'var(--sub)';
   let created = 0;
   const failures = [];
@@ -854,13 +880,14 @@ document.getElementById('generateTestScorecardsBtn').addEventListener('click', a
     try {
       const quota = venuePolicy ? computeInitialQuota(p.hcp, venuePolicy).quota : null;
       const skillFactor = skillFactorForQuota(quota);
-      await jfCreateScorecardSubmission(p.name, roundName, courseName, wbLossRate, skillFactor);
+      await jfCreateScorecardSubmission(p.name, roundName, courseName, wbLossRate, skillFactor, alreadyOut.has(p.name));
       created++;
     } catch (e) {
       failures.push(`${p.name}: ${e.message}`);
     }
   }
   statusEl.textContent = `✓ ${created} of ${players.length} scorecard(s) created for "${roundName}".` +
+    (alreadyOut.size ? ` ${alreadyOut.size} already permanently out (from an earlier round) submitted as a plain 'No', no coin-flip.` : '') +
     (failures.length ? ` ${failures.length} failed — ${failures.join('; ')}` : ' Give Jotform a few seconds to index them, then Close Round should pick them up.');
   statusEl.style.color = failures.length ? 'var(--err)' : 'var(--accent-dark)';
 });
