@@ -2140,20 +2140,35 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     const engineInput = {
       players: players.map(p => ({ name: p.name, actualPoints: p.actualPoints, quotaIn: p.quotaIn, hcp: p.hcp, prevHcp: p.hcp, slope: p.slope }))
     };
-    // Dev-74 (Brian, confirmed): the round-level bonus point is earned purely
-    // by keeping it THIS round — "no player is ever out of the running,"
-    // rank is always raw score + WB net additive, after the fact. Whether
-    // this player already lost the season-long pool in an earlier round is
-    // irrelevant here — that's a separate question, handled entirely by
-    // renderWcStandings's own "everLost" tracking for the Wally Ball POT
-    // payout, not by anything in this round's own score/rank. An earlier
-    // version incorrectly withheld the round bonus from anyone already out
-    // of the season pool, which desynced the displayed "Kept" status from
-    // whether the bonus was actually credited (e.g. Tom Arnold, Rd2).
+    // Dev-77 (Brian, corrected — REVERSES Dev-74 below): a player gets exactly ONE Wally
+    // Ball for the entire event. The moment any round shows wb_status = 'No', it's gone for
+    // good — no bonus point, no pot eligibility, ever again, no matter what a later round's
+    // own scorecard claims. (Dev-74's "no player is ever out of the running" rule — kept
+    // verbatim below for the record — was wrong: it let 7 of 16 players who'd already lost
+    // in Rd1 get freshly credited a Rd2 bonus, which is how Rd2 showed 8 players "surviving"
+    // when only 3 legitimately still had the ball.)
+    //
+    // Dev-74 (superseded): "the round-level bonus point is earned purely by keeping it THIS
+    // round — 'no player is ever out of the running,' rank is always raw score + WB net
+    // additive, after the fact. Whether this player already lost the season-long pool in an
+    // earlier round is irrelevant here..."
+    //
+    // alreadyOut is computed from allResults (every prior round already fetched above for
+    // quota chaining) — anyone with wb_status = 'No' in ANY earlier round of this event is
+    // permanently out, full stop. effectiveWbStatus is what actually gets scored AND saved
+    // to this round's own results row (not just the bonus math) — so an already-out player
+    // shows correctly as having lost it, not as freshly "Kept," everywhere downstream
+    // (BFE-Admin's own round table, the results page's per-round pill, the season tracker).
+    const alreadyOut = new Set(allResults.filter(r => r.wb_status === 'No').map(r => r.player_name));
     const sideData = {};
     players.forEach(p => {
+      const outBefore = alreadyOut.has(p.name);
       const lostThisRound = p.sc && p.sc.wbStatus === 'No';
-      sideData[p.name] = { keptWallyBall: !lostThisRound };
+      const effectiveWbStatus = outBefore ? 'No' : (p.sc ? p.sc.wbStatus : null);
+      p.effectiveWbStatus = effectiveWbStatus;
+      p.effectiveWbHole   = outBefore ? null : (p.sc ? p.sc.wbHole   : null);
+      p.effectiveWbStroke = outBefore ? null : (p.sc ? p.sc.wbStroke : null);
+      sideData[p.name] = { keptWallyBall: !outBefore && !lostThisRound };
     });
 
     const scored = scoreRound({ engine: round.engine, engineParams: round.engineParams, influencers: round.influencers }, engineInput, sideData);
@@ -2176,9 +2191,12 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
         actualPoints: e.basePoints,
         performance: e.performance,
         quotaOut: e.quotaOut,
-        wbStatus: p?.sc ? p.sc.wbStatus : null,
-        wbHole:   p?.sc ? p.sc.wbHole   : null,
-        wbStroke: p?.sc ? p.sc.wbStroke : null,
+        // Dev-77: persist the CORRECTED status (already-permanently-out players are
+        // forced to 'No' regardless of what this round's raw scorecard claims), not
+        // the raw p.sc.* value — this is what every downstream consumer reads back.
+        wbStatus: p ? p.effectiveWbStatus : null,
+        wbHole:   p ? p.effectiveWbHole   : null,
+        wbStroke: p ? p.effectiveWbStroke : null,
         rank: e.rank,
         payoutPodium, payoutSkins, payoutCttp
       };
