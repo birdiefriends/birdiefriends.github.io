@@ -864,7 +864,10 @@ document.getElementById('generateTestScorecardsBtn').addEventListener('click', a
       const priorRes = await fetch(base + '/bfe/round-results?event=' + encodeURIComponent(eventNameVal));
       const priorData = await priorRes.json();
       if (priorRes.ok) {
-        alreadyOut = new Set((priorData.results || []).filter(r => r.wb_status === 'No').map(r => r.player_name));
+        // Dev-80: exclude this same round's own prior save (e.g. if test data is being
+        // regenerated for a round that was already closed once) — only an EARLIER round's
+        // loss makes someone permanently out here.
+        alreadyOut = new Set((priorData.results || []).filter(r => r.wb_status === 'No' && r.round_name !== roundName).map(r => r.player_name));
       }
     } catch (e) {
       // Non-fatal — worst case, generation falls back to the random coin-flip
@@ -2181,12 +2184,20 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     // earlier round is irrelevant here..."
     //
     // alreadyOut is computed from allResults (every prior round already fetched above for
-    // quota chaining) — anyone with wb_status = 'No' in ANY earlier round of this event is
+    // quota chaining) — anyone with wb_status = 'No' in ANY EARLIER round of this event is
     // permanently out, full stop. effectiveWbStatus is what actually gets scored AND saved
     // to this round's own results row (not just the bonus math) — so an already-out player
     // shows correctly as having lost it, not as freshly "Kept," everywhere downstream
     // (BFE-Admin's own round table, the results page's per-round pill, the season tracker).
-    const alreadyOut = new Set(allResults.filter(r => r.wb_status === 'No').map(r => r.player_name));
+    //
+    // Dev-80 (Brian): re-closing THIS SAME round (e.g. to pick up the payout-rounding fix
+    // without touching scores) was wiping wb_hole/wb_stroke for everyone who'd lost it —
+    // allResults still had this round's own prior save in it (Close Round fetches results
+    // BEFORE overwriting them), so a player who lost it in Rd1 looked "already out from an
+    // earlier round" on Rd1's own re-close and got their hole/stroke nulled out even though
+    // wb_status still landed on 'No' either way (right status, wrong/missing detail). Must
+    // exclude the round being closed right now from what counts as "earlier."
+    const alreadyOut = new Set(allResults.filter(r => r.wb_status === 'No' && r.round_name !== roundName).map(r => r.player_name));
     const sideData = {};
     players.forEach(p => {
       const outBefore = alreadyOut.has(p.name);
