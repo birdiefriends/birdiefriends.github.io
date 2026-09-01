@@ -102,7 +102,7 @@
     <p class="hint" id="testScorecardNameWarning" style="display:none"></p>
     <p class="status" id="testScorecardStatus"></p>
     <hr style="margin:14px 0;border-color:var(--line)">
-    <p class="hint">Uses the SAME round selected above, plus that round's venue's CTP holes (Section 5 — leave that blank and this has nothing to claim). Writes REAL claims to the CTP Jotform form, TWO per hole in sequence, so the second one becomes the leader — exercising the same "most recent submission wins" rule the live leaderboard and Close Round both use, not just a single uncontested claim.</p>
+    <p class="hint">Uses the SAME round selected above, plus that round's venue's CTP holes (Section 5 — leave that blank and this has nothing to claim). Writes REAL claims to the CTP Jotform form: a realistic 2-4 claim progression per hole (mostly improving, like groups leapfrogging each other through the day), PLUS three deliberate canary claims to prove the specific rules Close Round depends on — one hole gets a later claim that's intentionally FARTHER (proves the winner is timestamp-based, not distance-based), one claim is tagged with a wrong/mismatched round name (proves cross-round bleed can't happen), and one claim lands on a hole this round hasn't configured for CTP (proves it's silently ignored, not silently paid). We don't have real tee-time groupings in this model, so this can't replicate WHO would naturally submit when — it replicates the submission PATTERNS (staggered timing, superseding claims, stray/mismatched data) that actually exercise the matching logic, which is what determines correctness.</p>
     <div class="row">
       <div style="align-self:flex-end"><button type="button" id="generateTestCttpBtn" disabled>Generate test CTP claims</button></div>
     </div>
@@ -928,44 +928,109 @@ async function jfCreateCttpSubmission(hole, playerName, roundName, dist) {
   return data;
 }
 
+function bfeSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 document.getElementById('generateTestCttpBtn').addEventListener('click', async () => {
   const roundName = document.getElementById('testScorecardRound').value;
   const statusEl = document.getElementById('testCttpStatus');
   const players = readRosterInput();
   const holes = cttpHolesForSelectedTestRound();
+  const allRounds = readRoundsInput();
   if (!roundName) { statusEl.textContent = 'Pick a round first.'; statusEl.style.color = 'var(--err)'; return; }
   if (!holes.length) { statusEl.textContent = "This round's venue has no CTP holes configured in section 5 — add some there first."; statusEl.style.color = 'var(--err)'; return; }
-  if (players.length < 2) { statusEl.textContent = 'Add at least 2 players to the roster in section 3 first.'; statusEl.style.color = 'var(--err)'; return; }
-  if (!confirm(`Create ${holes.length * 2} REAL test CTP submissions on Jotform for "${roundName}" (2 per hole, on holes ${holes.join(', ')})? The 2nd claim per hole is later AND farther than the 1st — so Close Round should crown the 2nd (worse-distance) player as the leader, proving the winner logic is timestamp-based, not distance-based. This writes to Jotform — delete them from Jotform's dashboard when you're done testing.`)) return;
+  if (players.length < 3) { statusEl.textContent = 'Add at least 3 players to the roster in section 3 first.'; statusEl.style.color = 'var(--err)'; return; }
+
+  // Dev-81 (Brian): no real tee-time/grouping model exists yet to replicate
+  // WHO would naturally post a claim when — so this doesn't try to. Instead
+  // it manufactures the submission PATTERNS that actually exercise
+  // jfFetchCttpLeaders' rules, since correctness depends on those patterns,
+  // not on who physically stood at the pin:
+  //   1. Per hole: a 2-4 claim progression, mostly improving distances (the
+  //      "honest" IRL shape — you only post if you think you beat the
+  //      leader), each claim awaited in sequence with a short real delay so
+  //      Jotform's created_at values land unambiguously ordered even at
+  //      whatever timestamp precision it actually stores (removes any doubt
+  //      about ties, rather than trusting a tight synchronous loop to
+  //      produce distinguishable timestamps).
+  //   2. One hole (the first) also gets one deliberately-FARTHER final claim
+  //      appended — Dev-74's original point still has to survive: proof the
+  //      winner is timestamp-based, not distance-based. Kept as exactly one
+  //      controlled case (not applied everywhere) so it stays a clean,
+  //      readable proof rather than noise across every hole.
+  //   3. One extra claim tagged with a WRONG round name (last existing round
+  //      that isn't this one, or a corrupted string if this is the only
+  //      round) — proves cross-round bleed can't happen; this is the same
+  //      class of self-referential bug (Dev-80) already found and fixed on
+  //      the Wally Ball path, so it's worth checking the CTP path actually
+  //      is immune, not just assumed to be.
+  //   4. One extra claim on a hole NOT in this round's configured CTP holes
+  //      (skipped only if literally every hole 1-18 is configured) — proves
+  //      it's silently ignored per the "unconfigured hole" rule Close Round
+  //      already implements, not silently paid.
+  const proofHole = holes[0];
+  const otherRound = allRounds.find(r => r.name && r.name !== roundName);
+  const wrongRoundName = otherRound ? otherRound.name : `${roundName} (typo-test, not real)`;
+  const unconfiguredHole = [...Array(18).keys()].map(n => n + 1).find(h => !holes.includes(h)) || null;
+
+  const jobs = [];
+  for (const hole of holes) {
+    const claimCount = 2 + Math.floor(Math.random() * 3); // 2-4 claims
+    const claimants = [...players].sort(() => Math.random() - 0.5).slice(0, claimCount);
+    while (claimants.length < claimCount) claimants.push(players[Math.floor(Math.random() * players.length)]);
+    // Mostly-improving distances, like successive groups each beating the
+    // last claimant — starts generous, tightens toward the pin.
+    let dist = 25 + Math.random() * 20;
+    const dists = claimants.map(() => {
+      dist = Math.max(2, dist - (3 + Math.random() * 8));
+      return Math.round(dist * 10) / 10;
+    });
+    if (hole === proofHole) {
+      // Append the adversarial farther-but-later claim last, so it — not
+      // the closest real shot — should win the hole.
+      claimants.push(players[Math.floor(Math.random() * players.length)]);
+      dists.push(Math.round((dists[dists.length - 1] + 15 + Math.random() * 15) * 10) / 10);
+    }
+    jobs.push({ hole, roundName, entries: claimants.map((p, i) => ({ player: p.name, dist: dists[i] })) });
+  }
+  jobs.push({ hole: proofHole, roundName: wrongRoundName, entries: [{ player: players[0].name, dist: 5 }], canary: 'wrong-round' });
+  if (unconfiguredHole) {
+    jobs.push({ hole: unconfiguredHole, roundName, entries: [{ player: players[0].name, dist: 1 }], canary: 'unconfigured-hole' });
+  }
+
+  const totalClaims = jobs.reduce((n, j) => n + j.entries.length, 0);
+  const confirmMsg = `Create ${totalClaims} REAL test CTP submissions on Jotform for "${roundName}"?\n\n` +
+    `• Holes ${holes.join(', ')}: 2-4 claims each, mostly improving (realistic leapfrog progression)\n` +
+    `• Hole ${proofHole}: PLUS one later claim that's deliberately FARTHER — should still win (proves timestamp, not distance)\n` +
+    `• One claim mistagged as round "${wrongRoundName}" on hole ${proofHole} — should NOT appear in this round's results\n` +
+    (unconfiguredHole ? `• One claim on hole ${unconfiguredHole} (not configured for CTP this round) — should be silently ignored\n` : '') +
+    `\nThis writes to Jotform — delete them from Jotform's dashboard when you're done testing.`;
+  if (!confirm(confirmMsg)) return;
 
   statusEl.style.color = 'var(--sub)';
   let created = 0;
   const failures = [];
-  for (const hole of holes) {
-    // Two players per hole, in sequence — the SECOND call should become the
-    // leader under the "most recent wins" rule. Deliberately made FARTHER
-    // than the first claim (not closer) so a Close Round result actually
-    // proves which rule is running: if the winner shown is this later,
-    // worse-distance claim, that's conclusive evidence it's timestamp-based
-    // (a distance comparison could never produce that). Dev-74: an earlier
-    // version made the second claim closer, which meant "most recent" and
-    // "least distance" always agreed and a real test could never tell them
-    // apart.
-    const shuffled = [...players].sort(() => Math.random() - 0.5).slice(0, 2);
-    const claimants = shuffled.length === 2 ? shuffled : [shuffled[0], shuffled[0]];
-    const dists = [3 + Math.random() * 15, 20 + Math.random() * 30]; // first claim close, second (later) intentionally farther
-    for (let i = 0; i < claimants.length; i++) {
-      statusEl.textContent = `Creating claim ${created + failures.length + 1} of ${holes.length * 2}: hole ${hole} — ${claimants[i].name}…`;
+  let doneSoFar = 0;
+  for (const job of jobs) {
+    for (const entry of job.entries) {
+      doneSoFar++;
+      statusEl.textContent = `Creating claim ${doneSoFar} of ${totalClaims}: hole ${job.hole} — ${entry.player}${job.canary ? ` (canary: ${job.canary})` : ''}…`;
       try {
-        await jfCreateCttpSubmission(hole, claimants[i].name, roundName, Math.round(dists[i] * 10) / 10);
+        await jfCreateCttpSubmission(job.hole, entry.player, job.roundName, entry.dist);
         created++;
       } catch (e) {
-        failures.push(`hole ${hole} (${claimants[i].name}): ${e.message}`);
+        failures.push(`hole ${job.hole} (${entry.player}): ${e.message}`);
       }
+      // Deliberate real gap between claims — guarantees each submission's
+      // created_at is unambiguously later than the one before it, however
+      // coarse Jotform's own timestamp precision turns out to be, so the
+      // "most recent wins" tie-break has no ties to arbitrate.
+      await bfeSleep(900);
     }
   }
-  statusEl.textContent = `✓ ${created} of ${holes.length * 2} CTP claim(s) created for "${roundName}".` +
-    (failures.length ? ` ${failures.length} failed — ${failures.join('; ')}` : ' Give Jotform a few seconds to index them, then Close Round should show a leader per hole.');
+  statusEl.textContent = `✓ ${created} of ${totalClaims} CTP claim(s) created for "${roundName}" ` +
+    `(hole ${proofHole} = farther-later proof, wrong-round canary on hole ${proofHole}` +
+    (unconfiguredHole ? `, unconfigured-hole canary on hole ${unconfiguredHole}` : '') + ').' +
+    (failures.length ? ` ${failures.length} failed — ${failures.join('; ')}` : ' Give Jotform a few seconds to index them, then Close Round should show the expected leader per hole and correctly ignore both canaries.');
   statusEl.style.color = failures.length ? 'var(--err)' : 'var(--accent-dark)';
 });
 
