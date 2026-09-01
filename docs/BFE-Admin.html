@@ -1966,7 +1966,7 @@ function renderCloseRoundResults(roundName, results, skins, cttpWinners, cttpHol
   let html = `<h3>${roundName} — results</h3><table><thead><tr><th>Rank<br><span class="subtle" style="font-weight:normal">(Score+WB)</span></th><th>Player</th><th>Score</th>` +
     `<th>Quota in</th><th>+/-<br><span class="subtle" style="font-weight:normal">(vs. quota)</span></th><th>New quota</th><th>Wally Ball</th><th>Podium $</th><th>Skins $</th><th>CTP $</th></tr></thead><tbody>`;
   results.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).forEach(r => {
-    const wb = r.wbStatus === 'No' ? `Lost (hole ${r.wbHole ?? '?'}, +${r.wbStroke ?? '?'})` : r.wbStatus === 'Yes' ? 'Kept (+bonus)' : '—';
+    const wb = r.wbStatus === 'No' ? `Lost (hole ${r.wbHole ?? '?'}-${r.wbStroke ?? '?'})` : r.wbStatus === 'Yes' ? 'Kept (+bonus)' : '—';
     html += `<tr><td>${r.rank ?? '—'}</td><td>${r.playerName}</td><td>${fmtNum(r.actualPoints)}</td>` +
       `<td>${fmtNum(r.quotaIn)}</td><td>${fmtDiff(r.performance)}</td><td>${fmtNum(r.quotaOut)}</td>` +
       `<td>${wb}</td><td>${fmtMoney(r.payoutPodium)}</td><td>${fmtMoney(r.payoutSkins)}</td><td>${fmtMoney(r.payoutCttp)}</td></tr>`;
@@ -2204,7 +2204,14 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     skins.forEach(s => { skinCounts[s.winner] = (skinCounts[s.winner] || 0) + 1; });
 
     // Podium + skins payout (pot already resolved above, shared with CTP)
-    const perSkin = (pot && skins.length > 0) ? pot.distribution.skins / skins.length : 0;
+    // Dev-79 (Brian): podium (splitPodium/roundTo5) and CttP (roundTo5'd at pot-setup)
+    // were already clean $5 increments, but a straight pool/count split for skins can
+    // land on cents whenever the winner count doesn't divide evenly (e.g. a $105 pool
+    // over 6 winners = $17.50 each is fine, but most winner counts aren't that clean).
+    // Brian doesn't want to deal with cash change on the course — floor each skin
+    // winner's cut to a whole dollar; whatever's left over from the split stays
+    // unallocated (goes to the house) rather than getting paid out as $.xx per player.
+    const perSkin = (pot && skins.length > 0) ? Math.floor(pot.distribution.skins / skins.length) : 0;
 
     const results = scored.entries.map(e => {
       const p = players.find(pl => pl.name === e.name);
