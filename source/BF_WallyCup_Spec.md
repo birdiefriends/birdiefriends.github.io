@@ -1,12 +1,18 @@
 # BF Experiences (BFE) / Wally Cup — Competitive Events Architecture Spec
 
-**Status as of Dev-74 (2026-08-31).** Committed to the repo for the first time in
+**Status as of Dev-75 (2026-09-02).** Committed to the repo for the first time in
 Dev-73 — it existed only as a local file (`WC_spec.txt`, from Dev-71) before that. Rd1
-tees off 10am, 9/11/2026; as of Dev-74 the full scoring engine (quota, skins, CTP, Wally
-Ball, Overall) is built and end-to-end validated — only the player-facing results page
-(§8 Phase 3) remains before that deadline. For the full narrative reasoning behind any
-decision below, see the Dev-71/72/73/74 entries in `BF_Session_Log.md`; this doc is the
-standing architecture reference, not a replacement for that history.
+tees off 10am, 9/11/2026. Dev-74 believed the full scoring engine (quota, skins, CTP,
+Wally Ball, Overall) was built and end-to-end validated; Dev-75 actually dry-ran the real
+event through it and found that claim was premature — podium-tie payouts and unclaimed-
+CTP-hole money were both silently broken, never exercised by Dev-74's synthetic test
+data. Both are fixed now, plus withdraw-a-player support (new), a Save/Generate ordering
+bug fix, and a Close Round roster-vs-scorecard mismatch alert — see §8 for the corrected
+phase status. The scoring engine is genuinely complete as of Dev-75; only the
+player-facing results page (§8 Phase 3) remains before 9/11, untouched so far. For the
+full narrative reasoning behind any decision below, see the Dev-71/72/73/74/75 entries in
+`BF_Session_Log.md`; this doc is the standing architecture reference, not a replacement
+for that history.
 
 **A note on completeness:** the draft Brian supplied this session picked up mid-thought,
 at what reads as the tail of an opening philosophy/principle discussion (§1–2) — that
@@ -155,8 +161,9 @@ full alternate platform:
   results (clearly separated), Wally Ball tracker. Photos, chapters, and narrative
   curation (GS's Photo Organizer, kept alive specifically for this) are deliberately
   deferred to their own later phase, not bundled into this build. 📋 **Still not
-  started — Dev-75's next priority**, now that Phase 2 (below) is fully built and
-  validated. Whatever gets built here must carry forward the two player-facing clarity
+  started — Dev-76's next priority**, now that Phase 2 (below) is genuinely (not just
+  believed) fully built and validated, per Dev-75. Whatever gets built here must carry
+  forward the two player-facing clarity
   fixes from Dev-74's admin-side results tables: the Rank(Score+WB)-vs-+/-(vs.-quota)
   distinction, and the cumulative Wally Ball bonus breakout — both exist specifically
   because the raw numbers read as contradictory otherwise, and that's just as true in
@@ -174,7 +181,12 @@ full alternate platform:
     `bfe_events`, `bfe_event_rounds`, `bfe_event_roster` — live, but **not named or
     anticipated anywhere in the original draft of this spec** (a "Setup/master-data
     layer" designed and built after this document was originally written — see the
-    §4a divergence note below for the tee-catalog piece specifically).
+    §4a divergence note below for the tee-catalog piece specifically). **Dev-75:**
+    `bfe_event_roster` gained `withdrawn INTEGER DEFAULT 0` / `withdrawn_note TEXT` —
+    lets a Host mark a player who can't finish all 3 rounds, excluding them from Overall
+    standings/podium *and* the Wally Ball pot (both season-long roll-ups) without
+    touching their own already-closed round results/payouts. Migration run and
+    `bf_experiences_worker.js` redeployed by Brian, confirmed live.
   - ✅ `bfe_round_results`, `bfe_round_skins` — **built and live, Dev-74**, superseding
     the `bfe_quota_progress` name this spec originally guessed at. Holds one row per
     player per closed round (`quota_in`/`actual_points`/`performance`/`quota_out`/
@@ -183,8 +195,14 @@ full alternate platform:
     key, so re-closing a round is safe. This is the results/computation layer the
     original spec called for — round-results math, payout calc, and cross-round rollup
     (quota chaining, Overall standings, the Wally Ball pot) are all built on top of these
-    two tables now, confirmed via a full Rd1→Rd2→Rd3 test cycle (Dev-74 entry,
-    `BF_Session_Log.md`).
+    two tables now. **Correction, Dev-75:** Dev-74 called this "confirmed via a full
+    Rd1→Rd2→Rd3 test cycle," but that cycle never exercised a podium tie or an unclaimed
+    CTP hole — both were silently broken until Dev-75's actual dry-run found and fixed
+    them (podium-tie splitting ported from `BF_Golf_Scorer_8.html` and applied to both
+    round-level *and* Overall podiums; unclaimed/unrecognized CTP money now rolls into
+    skins at settlement time, computed from actual paid amounts rather than the
+    pre-round pool estimate). Payout calc is now genuinely, not just believed,
+    end-to-end correct.
   - 📋 `bfe_scramble_pairs`, `bfe_scramble_results` (or whatever names/shapes the eventual
     2Man build actually needs) — still **do not exist**. No longer urgent — see the 2Man
     de-prioritization note above (§4) — but still the entire missing piece for that
@@ -384,11 +402,11 @@ in. No changes as of Dev-73.
 
 ---
 
-## 8. Current build status & phased plan (added Dev-73, updated Dev-74)
+## 8. Current build status & phased plan (added Dev-73, updated Dev-74, corrected Dev-75)
 
 This section is the living answer to "what's left" — update it each session rather than
-re-deriving status from scratch. See `BF_Session_Log.md`'s Dev-73/Dev-74 entries for the
-full reasoning behind this plan.
+re-deriving status from scratch. See `BF_Session_Log.md`'s Dev-73/Dev-74/Dev-75 entries
+for the full reasoning behind this plan.
 
 - **Phase 0 — Jotform (✅ done, Dev-73):** 3 new Wally Ball fields added to the shared
   `SCORECARD_FORM_ID` (250963587514163) form: `wallyBallStatus` (QID 33),
@@ -406,9 +424,12 @@ full reasoning behind this plan.
      disposable Jotform test event happened implicitly via the Phase 2 test cycle below,
      which exercises the same Live-Panel-shaped scorecard data through Close Round.)
 - **Phase 2 — results/computation layer (soft deadline, days after 9/11): ✅ built and
-  fully validated end-to-end, Dev-74.**
+  genuinely validated end-to-end, Dev-75** (Dev-74's "fully validated" claim was
+  premature — see the correction below).
   1. ✅ D1 results tables built as `bfe_round_results`/`bfe_round_skins` (not
      `bfe_quota_progress` — see §4's Data isolation bullet for the as-built shape).
+     **Dev-75:** `bfe_event_roster` also gained `withdrawn`/`withdrawn_note` columns —
+     see §4's Data isolation bullet.
   2. ✅ `adjustQuota`/`applyQuotaCap` (§3) and the skins-per-hole-winner loop (§4) ported
      into `BFE-Admin.html`.
   3. ⚠️ Turned out not to be needed — see §4's Scorecard/CttP capture divergence note:
@@ -419,18 +440,34 @@ full reasoning behind this plan.
   5. ✅ "Close Round" action built in `BFE-Admin.html`: payout calc (podium/skins/CTP),
      Wally Ball round bonus + season pot resolution, Overall rollup across exactly 3
      rounds — a new calc, as anticipated (GS's `calcSeriesPerformance()` doesn't fit).
-     Validated via a complete, hand-verified Rd1→Rd2→Rd3 test cycle on realistic data —
-     see the Dev-74 entry in `BF_Session_Log.md` for the full verification detail,
-     including two real bugs found and fixed along the way (a slope-averaging display
-     bug, and the Wally-Ball-bonus/season-elimination coupling bug).
+     Dev-74 validated this via a hand-verified Rd1→Rd2→Rd3 test cycle on realistic data
+     and called it complete. **Correction, Dev-75:** that test data never produced a
+     podium tie or an unclaimed CTP hole, so both were silently broken — podium-tie
+     payouts weren't split (naive positional indexing, both at the round level and in
+     Overall Standings), and an unclaimed/unrecognized-name CTP hole's money simply
+     evaporated instead of rolling into skins. Both ported from `BF_Golf_Scorer_8.html`
+     and fixed, Dev-75. Also shipped Dev-75, closing gaps flagged in earlier "what
+     haven't we tested" reviews: a Scorecard Check admin tool (roster-vs-Jotform
+     coverage, ported from `portal.html`), a Close Round roster-vs-scorecard mismatch
+     alert with one-click withdraw, withdraw-a-player support (excludes a player from
+     Overall/Wally-Ball-pot without touching their own closed-round results), and a
+     Save/Generate ordering bug fix. Full detail and reasoning in the Dev-75 entry,
+     `BF_Session_Log.md`.
 - **Phase 3 — publishing (can start minimal, polish through Rd3): 📋 not started —
-  Dev-75's next priority.** Per-round GLS-style results page generator, plus a living
-  Overall page (podium held back until Rd3 closes), published via GS's proven
-  `deployPagesToGitHub()`/`POST /deploy` mechanism to `docs/`. Matches §4's "data/results
-  now, media later" scope boundary — no photo/narrative curation in this phase. Must
-  carry forward the Dev-74 admin-tool clarity fixes (Rank(Score+WB) vs. +/-(vs.-quota);
-  cumulative Wally Ball bonus breakout) from the start, not bolted on after the fact.
+  still untouched as of Dev-75, now Dev-76's real next priority.** Per-round GLS-style
+  results page generator, plus a living Overall page (podium held back until Rd3
+  closes), published via GS's proven `deployPagesToGitHub()`/`POST /deploy` mechanism to
+  `docs/`. Matches §4's "data/results now, media later" scope boundary — no
+  photo/narrative curation in this phase. Must carry forward the Dev-74 admin-tool
+  clarity fixes (Rank(Score+WB) vs. +/-(vs.-quota); cumulative Wally Ball bonus
+  breakout) from the start, not bolted on after the fact — and, given Phase 2's actual
+  history this session, should be built with an eye toward the same classes of edge
+  case (ties, withdrawn/incomplete players) rather than assumed away a second time. A
+  Claude Design canvas mockup of the final all-3-rounds state exists from this session's
+  dry-run (Wally Ball season-pot tiebreak rule included) — useful reference for this
+  phase, not a substitute for building it.
 - **Before real Rd1 (10am 9/11):** the "2026 Wally Cup" event in D1 currently holds
-  Dev-74's test data (real roster, generated test scorecards) — needs a clean Data &
+  Dev-74/75's test data (real roster, generated test scorecards) — needs a clean Data &
   Reset → Delete and fresh Setup with the real roster/tee assignments before the real
-  event, so real Rd1 doesn't chain off test quota_out values.
+  event, so real Rd1 doesn't chain off test quota_out values. **Not done as of Dev-75** —
+  the dry-run was this session's point, not the cleanup.
