@@ -2924,3 +2924,85 @@ substitute for it.
 **Session Dev-75 fully closed.**
 
 **Chat-rename string:** `Dev-75 - Wally Cup Dry-Run Surfaces Real Payout Gaps (Podium Ties, CTP Rollover), Scorecard Reconciliation Tools, Withdraw-a-Player, Save/Generate Fix`
+
+## Dev-76 · 2026-09-02 — Phase 3 Results Page Built, Tested End-to-End Against Live D1 Data
+
+**Read this before touching the results page or bfe_round_cttp.** Full reasoning in
+this entry; `BF_WallyCup_Spec.md` §8 updated to match.
+
+- **Status as of Dev-76:** Phase 3 (the player-facing results page, open since Dev-73)
+  is built and tested — not just believed working, per the standing lesson from prior
+  sessions. Three files changed:
+  1. **`source/bf_experiences_worker.js`** — new `bfe_round_cttp` table (same
+     delete-then-insert-per-round shape as `bfe_round_skins`), wired into POST/GET/DELETE
+     `/bfe/round-results` and the events cascade delete. Close Round already computed
+     CTP hole-winner detail (hole/player/dist/payout) in memory to pay it out but never
+     persisted it — only the aggregate `payout_cttp` per player survived. This was the
+     one gap in "read back what Close Round already computed" for the results page.
+     **⚠️ Not live yet** — this Worker is deployed manually by Brian via the Cloudflare
+     dashboard, not via `/deploy`. Needs: (1) `CREATE TABLE bfe_round_cttp (...)` run once
+     in the D1 Console (full SQL in the file's own header comment, same pattern as every
+     other `bfe_*` table), (2) paste the updated script into Cloudflare → Save and Deploy.
+  2. **`BFE-Admin.html`** — new §10 "Publish results page." Close Round's own POST body
+     now includes the CTP detail (`cttp: cttpWinners`) so it lands in the new table
+     going forward (won't backfill the 3 already-closed test rounds — fine, they're test
+     data getting wiped before real Rd1 anyway). The publish action itself reads back
+     `/bfe/events` (roster/rounds/payout config), `/bfe/round-results` (results/skins/
+     cttp), the main Worker's `/venues` (pars, for vs-par), and per-round `/scorecards`
+     (hole-by-hole points, also for vs-par) — recomputes nothing scoring-wise, only
+     vs-par and the season-long Wally Ball pot resolution (neither persisted anywhere).
+     Renders a single static page (round-by-round leaderboards, Skins/CTP side-cards,
+     Wally Ball tracker, Overall standings held back until the last `rollsIntoOverall`
+     round closes) in the visual language from `WallyCup_Results_Design_Reference.dc.html`
+     — CSS lifted verbatim, structure/decorate-logic re-derived as real fetch+compute
+     since the reference had zero live-data wiring. Preview button renders into an
+     iframe first; nothing publishes until Generate & publish, which POSTs to the main
+     Worker's existing `/deploy` route (`docs/<path>`, default `wally-cup-results.html`) —
+     same mechanism `portal.html` already uses, no new deploy infrastructure.
+  3. **`portal.html`** — one new read-only "🏆 Results" icon on `format-wally`/
+     `format-scramble` event cards (alongside Photos/Rules/Yardage, per spec §4c),
+     opening the published page in an iframe inside a `bf-modal` — players never leave
+     portal.html. URL is a hardcoded constant (`BFE_RESULTS_PAGE_URL`) since only one BFE
+     event is live at a time this year; flagged in-code for whenever BFCup/Turkey 2Man
+     might overlap. This is a `portal.html` change — falls inside the safe deploy window
+     (§6: now→9/9) but still a shared single-deploy file, so verify byte-identical against
+     GitHub after pushing, same discipline as every other portal change this season.
+- **A real design decision, not a bug, worth flagging for whoever reads the numbers:**
+  the results page's Overall Standings are **Wally-Ball-inclusive** per round and in the
+  sum (same value each round's own Rank/Podium $ already uses) — deliberately different
+  from `BFE-Admin.html`'s own internal "Total +/-" column, which stays pure-quota-only
+  on purpose (that admin-side split exists so a hot WB streak can't be mistaken for
+  quota drift). The design reference itself argues for this explicitly (its own
+  `overallStandingsRaw` comment) and it's the more intuitive number for players, since
+  it matches how each round already ranks. The Quota Out / next-round Quota In number is
+  untouched either way — that's the one number that must never include Wally Ball.
+- **Tested, not just written:** a Node harness (`buildResultsData`) run against the real
+  live D1 data for "2026 Wally Cup" (all 3 test/dry-run rounds, fetched read-only via
+  `GET`, nothing written) reproduces every number in
+  `WallyCup_Results_Design_Reference.dc.html`'s hand-verified ground truth exactly —
+  champion (Nate Stettler, +6.69), full Overall order top-5, the Wally Ball pot's
+  same-round-elimination tiebreak (Lou Strohl wins outright over Jake Knappenberger,
+  hole 10 beats hole 6), vs-par computed fresh from real per-hole point arrays. Then the
+  actual embedded `BFE-Admin.html` code (not a standalone copy) was run headless with the
+  real API's response shapes route-mocked, exercising the full
+  fetch→compute→render→iframe-preview→`/deploy`-POST path end to end — this is the
+  file that ships, not a stand-in.
+- **Not done this session, carried forward:**
+  - The `bfe_round_cttp` table isn't live yet (see manual steps above) — until it is,
+    newly-closed rounds' CTP side-cards on the results page will be empty (payout still
+    correct, just no per-hole detail) until the table exists and a round is (re-)closed.
+  - **Before real Rd1 (10am 9/11):** still unchanged from every prior session's
+    carry-forward — the live "2026 Wally Cup" event in D1 is still Dev-74/75's
+    dry-run test data. Needs Data & Reset → Delete and a fresh Setup with the real
+    roster/tee assignments. Once that happens, the results page starts clean too — no
+    separate reset needed there, it only ever reads whatever's currently in D1.
+  - 2Man scramble (§4/§8, still ❓ open — scoring formula undefined) and the Photos/
+    memories phase (§4/§8, deliberately deferred) are next, per Brian's own ordering
+    this session: results page first (done), then 2Man, then photos. Worth noting for
+    whoever picks up photos: the MAIN worker (`worker.js`) already has a full
+    `event_photos`/R2/`curation_status` pipeline built (`/photos/upload`, PATCH curation,
+    DELETE) — likely built for GS's Photo Organizer — so that phase may be more "wire
+    the existing pipeline into BFE" than "build a pipeline from scratch." Not verified
+    against the BFE event shape this session — flagging as a lead, not a confirmed plan.
+
+**Chat-rename string:** `Dev-76 - Wally Cup Results Page (Phase 3) Built & Tested End-to-End, CTP Winner Persistence Added, portal.html Results Icon`
