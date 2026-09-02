@@ -234,7 +234,7 @@
   <!-- ── Save / Load — always visible, independent of Generate. ──────── -->
   <section class="card">
     <h2>7. Save on the Worker</h2>
-    <p class="hint">Persists whatever you last generated below into the Competitive Events tables (<code>bfe_events</code> → <code>bfe_event_rounds</code> → <code>bfe_event_roster</code>), keyed by the event name above — a real parent/child structure, not a single document (and, if checked in Tee policy, updates that venue's saved tee catalog too). To load an event back, use Load in the Data &amp; reset list at the top of the page — it picks from what's actually stored instead of retyping a name you might get wrong.</p>
+    <p class="hint">Rebuilds the config from whatever's currently in sections 1–6 and persists it into the Competitive Events tables (<code>bfe_events</code> → <code>bfe_event_rounds</code> → <code>bfe_event_roster</code>), keyed by the event name above — a real parent/child structure, not a single document (and, if checked in Tee policy, updates that venue's saved tee catalog too). You don't need to click "Generate event config" first — Save always regenerates from the current form right before it persists, so it can't send stale data. Generate on its own is still there if you just want to preview the Review tables below without saving. To load an event back, use Load in the Data &amp; reset list at the top of the page — it picks from what's actually stored instead of retyping a name you might get wrong.</p>
     <div class="btnbar">
       <button type="button" id="saveBtn">Save config</button>
     </div>
@@ -253,6 +253,7 @@
     <div id="scorecardCheckStatus" class="status"></div>
     <div id="scorecardCheckResults"></div>
     <div id="closeRoundStatus" class="status"></div>
+    <div id="missingPlayerAlert"></div>
     <div id="closeRoundResults"></div>
     <div id="wcStandings" style="margin-top:18px"></div>
   </section>
@@ -1798,98 +1799,116 @@ refreshBuyInDisplay();
 function readVenues() {} // no longer needed as a standalone step — folded into Rounds
 
 // ── Generate ──────────────────────────────────────────────────────────
+// Dev-86 (Brian): "I think I've been Saving and then Generating... should
+// they simply just be one action?" — they were two separate steps sharing
+// one bit of state (assembledConfig), and Save only ever POSTed whatever
+// was CURRENTLY sitting in assembledConfig. Save-before-Generate silently
+// persisted the previous, stale build — not whatever you'd just typed —
+// while the screen looked fine because a later Generate refreshed it in
+// the browser only. Fix: pull the actual "read every input, build the
+// config object" logic out of the Generate button into this one function,
+// and have BOTH Generate and Save call it — Save always rebuilds from
+// whatever's currently in the form immediately before it POSTs, so it can
+// no longer send stale data no matter what order you click things in.
+// Generate stays as its own button purely so you can preview the Review
+// tables (roster/rounds/payout) without committing anything to the Worker.
+async function buildAndAssembleConfig() {
+  const players = readRosterInput();
+  if (!players.length) throw new Error('Add at least one player.');
+  const teePolicy = readTeePolicyGlobal(); // {mode, byVenue: {[venueId]: {...}}} — Dev-74
+  const roundsInput = readRoundsInput();
+  if (!roundsInput.length) throw new Error('Add at least one round.');
+  const firstRound = roundsInput.find(r => r.engine === 'stableford_quota');
+  if (firstRound && !teePolicy.byVenue[firstRound.venueId]) {
+    throw new Error(`Pick "${firstRound.name}"'s venue and fill in its tee policy block before generating.`);
+  }
+
+  // Roster's initial quota is resolved against the FIRST stableford
+  // round's venue/tee (for display — which tee a player actually plays
+  // off of Rd1). The SLOPE feeding the quota MATH is different for a
+  // Fixed HCP-mode event with more than one stableford-round venue: it's
+  // averaged across all of them (Dev-74), not just Rd1's — see
+  // resolveRoster/averageSlopeAcrossRounds. Later stableford rounds still
+  // get their OWN per-player tee/slope resolved below, per their own venue
+  // (that's for THAT round's actual/quota comparison, unaffected by this).
+  const hcpModeVal = document.getElementById('hcpMode').value;
+  const stablefordVenuePolicies = roundsInput
+    .filter(r => r.engine === 'stableford_quota' && r.venueId && teePolicy.byVenue[r.venueId])
+    .map(r => venuePolicyFor(teePolicy, r.venueId));
+  const roster = resolveRoster(
+    players,
+    firstRound ? venuePolicyFor(teePolicy, firstRound.venueId) : { mode: 'same', tee: {} },
+    { hcpMode: hcpModeVal, allVenuePolicies: stablefordVenuePolicies }
+  );
+  const eventNameVal = document.getElementById('eventName').value.trim() || '2026 Wally Cup';
+  const eventFamilySlug = eventNameVal.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'bf_event';
+  const config = buildEventConfig({
+    eventFamily: eventFamilySlug, // rough slug for now — a dedicated "event family" field (grouping WC year-over-year, or BFSeries seasons) is future UI, not needed to prove the data structure
+    isolation: 'separate',
+    hcpMode: hcpModeVal,
+    roster,
+    rounds: roundsInput // venueId kept on each round — Save needs it to populate bfe_event_rounds.venue_id
+  });
+  config.eventName = document.getElementById('eventName').value.trim() || '2026 Wally Cup';
+  config.eventDate = document.getElementById('eventDate').value || null; // Rd1's date — drives section 3's historic-event filter
+  config.teePolicy = teePolicy;
+  config.status = 'draft';
+
+  // Per-round, per-player tee assignments — each stableford round resolved
+  // against ITS OWN venue's policy, not just the first round's (Dev-74 fix).
+  config.rounds.forEach(r => {
+    if (r.engine !== 'stableford_quota' || !r.venueId || !teePolicy.byVenue[r.venueId]) return;
+    const teeByPlayer = resolveRoundTeeAssignments(roster, venuePolicyFor(teePolicy, r.venueId));
+    r.engineParams = { ...(r.engineParams || {}), teeByPlayer };
+  });
+
+  const playerCount = roster.length;
+  const roundCollect   = parseFloat(document.getElementById('roundCollect').value) || 0;
+  const cttpHoles       = parseInt(document.getElementById('cttpHoles').value, 10) || 0;
+  const overallCollect = parseFloat(document.getElementById('overallCollect').value) || 0;
+  const wbCollect       = parseFloat(document.getElementById('wbCollect').value) || 0;
+  const podiumWeights   = document.getElementById('podiumWeights').value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
+  const buyInPerPlayer  = roundCollect * config.rounds.length + overallCollect + wbCollect;
+
+  const potPlan = [
+    { id: 'round', label: 'Round Pot', collectPerPlayer: roundCollect, cttpHoles, podiumWeights,
+      appliesToRounds: config.rounds.map(r => r.name) },
+    { id: 'overall', label: 'Overall Podium', collectPerPlayer: overallCollect, podiumWeights },
+    { id: 'wally_ball', label: 'Wally Ball Pot', collectPerPlayer: wbCollect, kind: 'pool_split' }
+  ];
+  const payout = recommendPayoutConfig(buyInPerPlayer, playerCount, potPlan);
+  config.payout = payout;
+
+  assembledConfig = config;
+  renderReview(config);
+  document.getElementById('outputSection').style.display = 'block';
+
+  // Optionally save each venue's tee policy as ITS OWN new default — one
+  // venue block at a time, per its own "Save as this venue's default"
+  // checkbox (Dev-74: this used to only ever save the first round's venue).
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const pin = document.getElementById('hostPin').value.trim();
+  if (base) {
+    const venueBlocks = [...document.querySelectorAll('#teeVenueBlocks .tee-venue-block')];
+    for (const block of venueBlocks) {
+      const venueId = block.dataset.venueId;
+      if (!block.querySelector('.saveVenueDefault').checked) continue;
+      const venueName = (config.rounds.find(r => r.venueId === venueId) || {}).venue || '';
+      try {
+        await fetch(base + '/bfe/venue-tee-catalog', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ venue_id: venueId, venue_name: venueName, tee_catalog: { mode: teePolicy.mode, ...teePolicy.byVenue[venueId] }, pin })
+        });
+      } catch (e) { /* non-fatal — event config generation still succeeded */ }
+    }
+  }
+
+  return config;
+}
+
 document.getElementById('generateBtn').addEventListener('click', async () => {
   try {
-    const players = readRosterInput();
-    if (!players.length) throw new Error('Add at least one player.');
-    const teePolicy = readTeePolicyGlobal(); // {mode, byVenue: {[venueId]: {...}}} — Dev-74
-    const roundsInput = readRoundsInput();
-    if (!roundsInput.length) throw new Error('Add at least one round.');
-    const firstRound = roundsInput.find(r => r.engine === 'stableford_quota');
-    if (firstRound && !teePolicy.byVenue[firstRound.venueId]) {
-      throw new Error(`Pick "${firstRound.name}"'s venue and fill in its tee policy block before generating.`);
-    }
-
-    // Roster's initial quota is resolved against the FIRST stableford
-    // round's venue/tee (for display — which tee a player actually plays
-    // off of Rd1). The SLOPE feeding the quota MATH is different for a
-    // Fixed HCP-mode event with more than one stableford-round venue: it's
-    // averaged across all of them (Dev-74), not just Rd1's — see
-    // resolveRoster/averageSlopeAcrossRounds. Later stableford rounds still
-    // get their OWN per-player tee/slope resolved below, per their own venue
-    // (that's for THAT round's actual/quota comparison, unaffected by this).
-    const hcpModeVal = document.getElementById('hcpMode').value;
-    const stablefordVenuePolicies = roundsInput
-      .filter(r => r.engine === 'stableford_quota' && r.venueId && teePolicy.byVenue[r.venueId])
-      .map(r => venuePolicyFor(teePolicy, r.venueId));
-    const roster = resolveRoster(
-      players,
-      firstRound ? venuePolicyFor(teePolicy, firstRound.venueId) : { mode: 'same', tee: {} },
-      { hcpMode: hcpModeVal, allVenuePolicies: stablefordVenuePolicies }
-    );
-    const eventNameVal = document.getElementById('eventName').value.trim() || '2026 Wally Cup';
-    const eventFamilySlug = eventNameVal.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'bf_event';
-    const config = buildEventConfig({
-      eventFamily: eventFamilySlug, // rough slug for now — a dedicated "event family" field (grouping WC year-over-year, or BFSeries seasons) is future UI, not needed to prove the data structure
-      isolation: 'separate',
-      hcpMode: hcpModeVal,
-      roster,
-      rounds: roundsInput // venueId kept on each round — Save needs it to populate bfe_event_rounds.venue_id
-    });
-    config.eventName = document.getElementById('eventName').value.trim() || '2026 Wally Cup';
-    config.eventDate = document.getElementById('eventDate').value || null; // Rd1's date — drives section 3's historic-event filter
-    config.teePolicy = teePolicy;
-    config.status = 'draft';
-
-    // Per-round, per-player tee assignments — each stableford round resolved
-    // against ITS OWN venue's policy, not just the first round's (Dev-74 fix).
-    config.rounds.forEach(r => {
-      if (r.engine !== 'stableford_quota' || !r.venueId || !teePolicy.byVenue[r.venueId]) return;
-      const teeByPlayer = resolveRoundTeeAssignments(roster, venuePolicyFor(teePolicy, r.venueId));
-      r.engineParams = { ...(r.engineParams || {}), teeByPlayer };
-    });
-
-    const playerCount = roster.length;
-    const roundCollect   = parseFloat(document.getElementById('roundCollect').value) || 0;
-    const cttpHoles       = parseInt(document.getElementById('cttpHoles').value, 10) || 0;
-    const overallCollect = parseFloat(document.getElementById('overallCollect').value) || 0;
-    const wbCollect       = parseFloat(document.getElementById('wbCollect').value) || 0;
-    const podiumWeights   = document.getElementById('podiumWeights').value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
-    const buyInPerPlayer  = roundCollect * config.rounds.length + overallCollect + wbCollect;
-
-    const potPlan = [
-      { id: 'round', label: 'Round Pot', collectPerPlayer: roundCollect, cttpHoles, podiumWeights,
-        appliesToRounds: config.rounds.map(r => r.name) },
-      { id: 'overall', label: 'Overall Podium', collectPerPlayer: overallCollect, podiumWeights },
-      { id: 'wally_ball', label: 'Wally Ball Pot', collectPerPlayer: wbCollect, kind: 'pool_split' }
-    ];
-    const payout = recommendPayoutConfig(buyInPerPlayer, playerCount, potPlan);
-    config.payout = payout;
-
-    assembledConfig = config;
-    renderReview(config);
-    document.getElementById('outputSection').style.display = 'block';
-
-    // Optionally save each venue's tee policy as ITS OWN new default — one
-    // venue block at a time, per its own "Save as this venue's default"
-    // checkbox (Dev-74: this used to only ever save the first round's venue).
-    const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
-    const pin = document.getElementById('hostPin').value.trim();
-    if (base) {
-      const venueBlocks = [...document.querySelectorAll('#teeVenueBlocks .tee-venue-block')];
-      for (const block of venueBlocks) {
-        const venueId = block.dataset.venueId;
-        if (!block.querySelector('.saveVenueDefault').checked) continue;
-        const venueName = (config.rounds.find(r => r.venueId === venueId) || {}).venue || '';
-        try {
-          await fetch(base + '/bfe/venue-tee-catalog', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ venue_id: venueId, venue_name: venueName, tee_catalog: { mode: teePolicy.mode, ...teePolicy.byVenue[venueId] }, pin })
-          });
-        } catch (e) { /* non-fatal — event config generation still succeeded */ }
-      }
-    }
-
+    await buildAndAssembleConfig();
     document.getElementById('outputSection').scrollIntoView({ behavior: 'smooth' });
     setStatus(null);
   } catch (e) {
@@ -1943,33 +1962,48 @@ function setStatus(msg, isErr) {
   el.textContent = msg;
 }
 
-document.getElementById('saveBtn').addEventListener('click', async () => {
-  if (!assembledConfig) { setStatus('Generate the config first.', true); return; }
+// Dev-86: pulled out of the saveBtn click listener so markPlayerWithdrawn
+// (Dev-87, below) can await a real save too — a raw button.click() doesn't
+// return the promise its own async handler is running, so the mark-
+// withdrawn button couldn't previously tell whether the save it triggered
+// had actually finished, only that it had been kicked off.
+async function saveEventConfig() {
   const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
   const pin  = document.getElementById('hostPin').value.trim();
-  if (!base) { setStatus('Enter the BFE Worker base URL.', true); return; }
+  if (!base) throw new Error('Enter the BFE Worker base URL.');
   const eventName = document.getElementById('eventName').value.trim();
+  setStatus('Building config from the form…');
+  // Dev-86: always rebuild from whatever's currently in the form FIRST —
+  // Save can no longer send a stale assembledConfig from before your last
+  // edit, regardless of whether you clicked Generate first. This also
+  // refreshes the Review tables / Close Round dropdown / Overall Standings
+  // to match, same as clicking Generate would.
+  await buildAndAssembleConfig();
   setStatus('Saving…');
+  const res = await fetch(base + '/bfe/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      event_name: eventName,
+      event_family: assembledConfig.eventFamily,
+      event_date: assembledConfig.eventDate,
+      hcp_mode: assembledConfig.hcpMode,
+      status: assembledConfig.status,
+      tee_policy: assembledConfig.teePolicy,
+      payout_plan: assembledConfig.payout,
+      rounds: assembledConfig.rounds,
+      roster: assembledConfig.roster,
+      pin
+    })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  setStatus(`Saved — "${eventName}", ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
+}
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
   try {
-    const res = await fetch(base + '/bfe/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event_name: eventName,
-        event_family: assembledConfig.eventFamily,
-        event_date: assembledConfig.eventDate,
-        hcp_mode: assembledConfig.hcpMode,
-        status: assembledConfig.status,
-        tee_policy: assembledConfig.teePolicy,
-        payout_plan: assembledConfig.payout,
-        rounds: assembledConfig.rounds,
-        roster: assembledConfig.roster,
-        pin
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    setStatus(`Saved — "${eventName}", ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
+    await saveEventConfig();
   } catch (e) {
     setStatus('Save failed: ' + e.message, true);
   }
@@ -2084,6 +2118,56 @@ function setCloseRoundStatus(msg, isErr) {
   if (!msg) { el.className = 'status'; el.textContent = ''; return; }
   el.className = 'status ' + (isErr ? 'err' : 'ok');
   el.textContent = msg;
+}
+
+// Dev-87 (Brian): one-click resolution for the "no scorecard" alert below —
+// checks the roster's Withdrawn box for this player, fills in a default
+// note if they hadn't already typed one, and saves immediately (reusing
+// Dev-86's saveEventConfig, which rebuilds assembledConfig from the roster
+// — including the checkbox just set — before persisting). Throws on
+// failure so the calling button can report it instead of silently no-op'ing.
+async function markPlayerWithdrawn(name, roundName) {
+  const row = [...rosterBody.querySelectorAll('tr')].find(tr => tr.querySelector('.p-name').value.trim() === name);
+  if (!row) throw new Error(`"${name}" isn't in the roster table right now (renamed or removed?) — check the box by hand in section 3.`);
+  const cb = row.querySelector('.p-withdrawn');
+  const noteInput = row.querySelector('.p-withdrawn-note');
+  cb.checked = true;
+  noteInput.style.display = 'block';
+  if (!noteInput.value.trim()) noteInput.value = `No scorecard for ${roundName}`;
+  await saveEventConfig();
+}
+
+// Dev-87: renders the "roster vs. scorecards don't match" alert into
+// #missingPlayerAlert after a round's saved — same mismatch the confirm()
+// gate in the Close Round handler already asked about before saving, kept
+// visible afterward (not just a one-time dialog) with a real fix one click
+// away instead of a reminder to go do it manually in section 3.
+function renderMissingPlayerAlert(missing, roundName) {
+  const el = document.getElementById('missingPlayerAlert');
+  if (!missing.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="background:#fbe9e7;border:1px solid var(--err);border-radius:8px;padding:10px 12px;margin:8px 0">
+      <p style="margin:0 0 4px;color:var(--err);font-weight:600">⚠️ No scorecard for "${roundName}": ${missing.length} player(s)</p>
+      <p class="subtle" style="margin:0 0 8px">Most likely they didn't finish this round (withdrew) — less likely, a scorecard wasn't submitted or wasn't counted. If it's a withdrawal, one click marks them Withdrawn in the roster (excludes them from Overall standings + the Wally Ball pot going forward) and saves it right away.</p>
+      ${missing.map(name => `
+        <div class="row" style="justify-content:space-between;align-items:center;padding:3px 0">
+          <span>${name}</span>
+          <button type="button" class="secondary mark-withdrawn-btn" data-name="${name.replace(/"/g, '&quot;')}">Mark as withdrawn</button>
+        </div>`).join('')}
+    </div>`;
+  el.querySelectorAll('.mark-withdrawn-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Marking…';
+      try {
+        await markPlayerWithdrawn(btn.dataset.name, roundName);
+        btn.textContent = '✅ Marked & saved';
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Mark as withdrawn';
+        alert('Could not mark withdrawn: ' + e.message);
+      }
+    });
+  });
 }
 
 function renderCloseRoundResults(roundName, results, skins, cttpWinners, cttpHoles) {
@@ -2305,6 +2389,7 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
 
   const btn = document.getElementById('closeRoundBtn');
   btn.disabled = true;
+  document.getElementById('missingPlayerAlert').innerHTML = '';
   setCloseRoundStatus('Fetching prior results + this round’s scorecards…');
   try {
     // Prior results across the whole event — for quota chaining + WB history
@@ -2368,6 +2453,36 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
       };
     });
     const missing = players.filter(p => !p.sc).map(p => p.name);
+    // Same class of mismatch as cttpUnrecognized above, other direction: a
+    // scorecard submitted under a name that isn't on this event's roster at
+    // all (typo on Jotform, or the roster's missing an entry) — never
+    // counted toward anyone, so it's worth flagging here too.
+    const unrecognizedScorecards = Object.keys(scorecards).filter(n => !rosterNames.has(n));
+
+    // Dev-87 (Brian): "add logic in the Close, where it looks at the roster
+    // and the scorecards, if they don't match alert me, if a player is
+    // missing it was likely a withdraw... it's possible a human error...
+    // but that's less likely than a player didn't finish the round." A
+    // blocking confirm rather than just the quiet status-line note this
+    // used to be (see `notes` below, still shown after saving too) — gives
+    // Brian a real chance to go double-check Jotform BEFORE 0-point rows
+    // get written, instead of finding out after the fact.
+    if (missing.length || unrecognizedScorecards.length) {
+      const lines = [`Roster and scorecards don't match for "${roundName}":`, ''];
+      if (missing.length) {
+        lines.push(`On the roster, no scorecard: ${missing.join(', ')}`);
+        lines.push('→ Most likely they didn\'t finish this round (withdrew). Less likely: a scorecard wasn\'t submitted or wasn\'t counted — worth a quick look at Jotform if this is unexpected.');
+        lines.push('');
+      }
+      if (unrecognizedScorecards.length) {
+        lines.push(`Scorecard submitted, not on the roster: ${unrecognizedScorecards.join(', ')}`);
+        lines.push('→ Likely a name typo on Jotform, or a roster entry that\'s missing.');
+        lines.push('');
+      }
+      lines.push('OK to close the round anyway — missing players score 0 for it, and you\'ll get a chance to mark a withdrawal right after. Cancel to go check first, without saving anything.');
+      const proceed = confirm(lines.join('\n'));
+      if (!proceed) { setCloseRoundStatus('Close round cancelled — nothing saved. Check Jotform/roster, then try again.', true); btn.disabled = false; return; }
+    }
 
     // Persist each player's per-hole points for this round (Dev-76 — enables "vs Par" on
     // the results page: hole points + the venue's real per-hole par, already saved in
@@ -2502,8 +2617,10 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
 
     const notes = [];
     if (missing.length) notes.push(`no scorecard found for: ${missing.join(', ')} (scored 0 pts)`);
+    if (unrecognizedScorecards.length) notes.push(`scorecard(s) from a name not on this roster, not scored: ${unrecognizedScorecards.join(', ')}`);
     if (cttpUnrecognized.length) notes.push(`CTP claim(s) from a name not on this roster, not paid: ${cttpUnrecognized.map(c => `#${c.hole} ${c.player}`).join(', ')}`);
     setCloseRoundStatus(notes.length ? `Saved — ${notes.join('; ')}.` : 'Saved.', notes.length > 0);
+    renderMissingPlayerAlert(missing, roundName);
     renderCloseRoundResults(roundName, results, skins, cttpWinners, cttpHoles);
     await renderWcStandings(base, eventName, assembledConfig).catch(() => {});
   } catch (e) {
