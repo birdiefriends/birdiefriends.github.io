@@ -211,6 +211,26 @@
 //     pts REAL,
 //     UNIQUE(event_id, round_name, hole)
 //   );
+//
+// ── Dev-76 addition — CTP hole winners, persisted ──────────────────────────
+// Close Round already computes each round's CTP hole winners in memory
+// (cttpWinners: {hole, player, dist, payout}) to pay them out, but never
+// saved the per-hole detail anywhere — only the aggregate payout_cttp per
+// player landed in bfe_round_results. That's enough to pay people, but not
+// enough for the results page to show "Hole 6 — Mohamed Walli — 43.9′ —
+// $10" the way it shows Skins. Same shape/lifecycle as bfe_round_skins:
+// delete-then-insert per (event_id, round_name) on every POST /bfe/round-
+// results, so re-closing a round is safe here too.
+//   CREATE TABLE bfe_round_cttp (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
+//     round_name TEXT NOT NULL,
+//     hole INTEGER NOT NULL,
+//     winner TEXT NOT NULL,
+//     dist REAL,
+//     payout REAL DEFAULT 0,
+//     UNIQUE(event_id, round_name, hole)
+//   );
 // ══════════════════════════════════════════════════════════════════════════
 
 
@@ -732,6 +752,7 @@ export default {
           await env.DB.prepare(`DELETE FROM bfe_event_roster WHERE event_id = ?`).bind(eventRow.id).run();
           await env.DB.prepare(`DELETE FROM bfe_round_results WHERE event_id = ?`).bind(eventRow.id).run();
           await env.DB.prepare(`DELETE FROM bfe_round_skins WHERE event_id = ?`).bind(eventRow.id).run();
+          await env.DB.prepare(`DELETE FROM bfe_round_cttp WHERE event_id = ?`).bind(eventRow.id).run();
           await env.DB.prepare(`DELETE FROM bfe_events WHERE id = ?`).bind(eventRow.id).run();
         }
         return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -752,7 +773,7 @@ export default {
       try { body = await request.json(); } catch (e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { event_name, round_name, results, skins, pin } = body;
+      const { event_name, round_name, results, skins, cttp, pin } = body;
       if (String(pin) !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -767,6 +788,7 @@ export default {
         const eventId = eventRow.id;
         await env.DB.prepare(`DELETE FROM bfe_round_results WHERE event_id = ? AND round_name = ?`).bind(eventId, round_name).run();
         await env.DB.prepare(`DELETE FROM bfe_round_skins WHERE event_id = ? AND round_name = ?`).bind(eventId, round_name).run();
+        await env.DB.prepare(`DELETE FROM bfe_round_cttp WHERE event_id = ? AND round_name = ?`).bind(eventId, round_name).run();
         for (const r of results) {
           await env.DB.prepare(
             `INSERT INTO bfe_round_results (event_id, round_name, player_name, quota_in, actual_points, performance, quota_out, wb_status, wb_hole, wb_stroke, rank, payout_podium, payout_skins, payout_cttp)
@@ -780,6 +802,11 @@ export default {
           await env.DB.prepare(
             `INSERT INTO bfe_round_skins (event_id, round_name, hole, winner, pts) VALUES (?, ?, ?, ?, ?)`
           ).bind(eventId, round_name, s.hole, s.winner, s.pts ?? null).run();
+        }
+        for (const c of (cttp || [])) {
+          await env.DB.prepare(
+            `INSERT INTO bfe_round_cttp (event_id, round_name, hole, winner, dist, payout) VALUES (?, ?, ?, ?, ?, ?)`
+          ).bind(eventId, round_name, c.hole, c.player, c.dist ?? null, c.payout ?? 0).run();
         }
         return new Response(JSON.stringify({ ok: true, event_id: eventId, round_name, saved: results.length }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
@@ -800,17 +827,19 @@ export default {
         }
         const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
         if (!eventRow) {
-          return new Response(JSON.stringify({ ok: true, results: [], skins: [] }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          return new Response(JSON.stringify({ ok: true, results: [], skins: [], cttp: [] }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        let results, skins;
+        let results, skins, cttp;
         if (roundName) {
           results = (await env.DB.prepare(`SELECT * FROM bfe_round_results WHERE event_id = ? AND round_name = ? ORDER BY rank ASC`).bind(eventRow.id, roundName).all()).results;
           skins   = (await env.DB.prepare(`SELECT * FROM bfe_round_skins WHERE event_id = ? AND round_name = ? ORDER BY hole ASC`).bind(eventRow.id, roundName).all()).results;
+          cttp    = (await env.DB.prepare(`SELECT * FROM bfe_round_cttp WHERE event_id = ? AND round_name = ? ORDER BY hole ASC`).bind(eventRow.id, roundName).all()).results;
         } else {
           results = (await env.DB.prepare(`SELECT * FROM bfe_round_results WHERE event_id = ? ORDER BY round_name ASC, rank ASC`).bind(eventRow.id).all()).results;
           skins   = (await env.DB.prepare(`SELECT * FROM bfe_round_skins WHERE event_id = ? ORDER BY round_name ASC, hole ASC`).bind(eventRow.id).all()).results;
+          cttp    = (await env.DB.prepare(`SELECT * FROM bfe_round_cttp WHERE event_id = ? ORDER BY round_name ASC, hole ASC`).bind(eventRow.id).all()).results;
         }
-        return new Response(JSON.stringify({ ok: true, results, skins }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        return new Response(JSON.stringify({ ok: true, results, skins, cttp }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
