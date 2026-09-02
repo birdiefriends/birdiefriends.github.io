@@ -3006,3 +3006,62 @@ this entry; `BF_WallyCup_Spec.md` §8 updated to match.
     against the BFE event shape this session — flagging as a lead, not a confirmed plan.
 
 **Chat-rename string:** `Dev-76 - Wally Cup Results Page (Phase 3) Built & Tested End-to-End, CTP Winner Persistence Added, portal.html Results Icon`
+
+## Dev-76 addendum — Same day, follow-up fixes from Brian's live-device screenshot
+
+Brian tested the just-shipped Results modal on his own phone and sent a screenshot: the
+in-modal leaderboard table was unreadable (columns truncated, needed horizontal scroll),
+and he asked for the per-event 🏆 icon (which "won't have much longevity") to also be
+reachable from the Portal's own dedicated **Results tab** (bottom nav `nav-results`, the
+`Published Results` list of `results-link-card` entries) rather than living only on the
+Wally Cup event card.
+
+- **Added the persistent Results-tab entry.** A new `results-link-card` ("2026 Wally Cup
+  / Wally Cup Results") in `#screen-results`, wired to the exact same `openResultsModal()`
+  used by the event-card icon — single source of truth (`BFE_RESULTS_PAGE_URL`), no
+  duplicated logic. This is the longevity fix: it survives regardless of which event cards
+  are currently showing.
+- **Root-caused the mobile table problem — two independent bugs, both fixed:**
+  1. `results_generator.js`'s player/standings tables were literal HTML `<table>`s with
+     `min-width:520px` on the leaderboard and no responsive collapse — genuinely too wide
+     for any phone viewport, full stop, independent of where it's shown. Rewrote both the
+     per-round leaderboard rows (`renderPlayerRow`) and the Overall Standings rows (new
+     `renderOverallRow`) as flexbox card rows: rank+name+big colored Round-Perf. badge on
+     top, quota/Wally-Ball-pill/detail/payout as a wrapping meta line underneath (Overall
+     uses per-round chips instead). No `<table>` left in the generator at all. Re-embedded
+     verbatim into `BFE-Admin.html` (same inline/no-imports approach as the original
+     embed). Verified with Playwright at 375px and 440px viewports: zero horizontal
+     overflow at either width, disclosure/detail expansion also confirmed not to overflow.
+     `test_generator.js`'s data assertions all still pass unchanged (this was a
+     markup/CSS-only change, no computation touched).
+  2. Independently, the `#results-modal` in `portal.html` was a small bottom-sheet capped
+     at `max-width:480px` with a `70vh` iframe — appropriate for Rules/Yardage-style quick
+     glances, wrong for a full multi-round results page. Changed it to a genuine
+     full-screen modal on phones (`width/height:100dvh`, `border-radius:0`, slim top bar
+     with title+close, iframe filling the rest) and only widens into a normal centered
+     sheet (`max-width:760px`, `88vh`) at `min-width:700px`. This alone would have made
+     the iframe *narrower* than before (480px cap vs. actual phone viewport is usually
+     wider), so both bugs needed fixing — #1 alone wasn't sufficient while #2 was capping
+     the available width, and #2 alone wasn't sufficient while #1's table couldn't
+     reflow regardless of width given.
+  - **Found and fixed a stacking bug going full-screen exposed:** with the modal covering
+    the whole viewport, `#action-sub-bar` (a pre-existing `position:sticky;z-index:900`
+    element on the underlying portal page) rendered *above* the modal's default
+    `.bf-modal-overlay` z-index of 200, showing through as a stray green bar. This is the
+    same known issue already documented in this file for `score-detail-modal`/
+    `card-score-modal`/`card-photo-modal`/`card-notes-modal` (all explicitly set
+    `z-index:9000` with an inline comment for exactly this reason) — followed the same
+    established convention rather than inventing a new one: `#results-modal` now also
+    carries `style="z-index:9000"` with the matching comment. Confirmed via Playwright
+    `elementFromPoint` before/after (resolved to `#action-sub-bar` before the fix, to the
+    iframe itself after).
+  - Final verification rendered the *actual* generated results HTML inside the *actual*
+    patched `portal.html` modal at a 375×812 viewport (not two separate approximations) —
+    screenshots confirm full-width readable cards, no bleed-through, matching what
+    Brian's own device screenshot showed was broken.
+- **Not re-tested this addendum:** the `test_admin_e2e.js` Playwright suite was re-run
+  against the updated `BFE-Admin.html` and still passes (Preview shows the correct
+  champion, Publish still POSTs successfully) — this exercises the new card-based
+  rendering through the actual admin tool, not just the standalone generator.
+- Same open items as the main Dev-76 entry above (`bfe_round_cttp` not live, D1 test data
+  not yet reset, 2Man/Photos not started) — nothing here changes that list.
