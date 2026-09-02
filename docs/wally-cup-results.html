@@ -1,0 +1,826 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2026 Wally Cup — Results</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap">
+<style>
+*{box-sizing:border-box;}
+body{margin:0;background:#0d1f3d;color:#f5f0e8;font-family:'DM Sans',sans-serif;}
+a{color:#e8392a;} a:hover{color:#f27a68;}
+.page{--navy:#0d1f3d;--navy2:#152c52;--accent:#e8392a;--accent-light:color-mix(in srgb, var(--accent) 65%, white);--accent-dim:color-mix(in srgb, var(--accent) 60%, black);--white:#f5f0e8;--white-dim:rgba(245,240,232,0.62);--white-faint:rgba(245,240,232,0.12);--white-faintest:rgba(245,240,232,0.06);--good:#6fbf7e;--bad:#e0a050;max-width:960px;margin:0 auto;background:var(--navy);}
+.wrap{padding:0 1.5rem;}
+.hero{text-align:center;padding:2.75rem 1.5rem 2rem;border-bottom:1px solid rgba(232,57,42,0.25);background:radial-gradient(ellipse at 50% 0%,rgba(232,57,42,0.10) 0%,transparent 70%);}
+.hero-eyebrow{font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-light);margin-bottom:0.6rem;font-weight:600;}
+.hero-title{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:clamp(2.6rem,9vw,4.2rem);color:var(--white);line-height:1;margin-bottom:0.5rem;text-shadow:0 2px 20px rgba(232,57,42,0.25);}
+.hero-subtitle{font-size:13px;color:var(--white-dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:1.35rem;font-weight:400;}
+.state-pill{display:inline-flex;align-items:center;gap:7px;background:rgba(111,191,126,0.15);border:1px solid rgba(111,191,126,0.45);border-radius:99px;padding:6px 18px;font-size:11px;font-weight:700;color:var(--good);letter-spacing:0.1em;text-transform:uppercase;}
+.state-pill.open{background:rgba(224,160,80,0.15);border-color:rgba(224,160,80,0.45);color:#e0a050;}
+.state-dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px currentColor;opacity:0.9;}
+.rail{display:flex;align-items:stretch;gap:0;padding:1.5rem 1.5rem 0.5rem;max-width:820px;margin:0 auto;}
+.rail-node{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 6px;position:relative;}
+.rail-line{position:absolute;top:15px;left:-50%;width:100%;height:2px;background:var(--white-faint);z-index:0;}
+.rail-node:first-child .rail-line{display:none;}
+.rail-node.done .rail-line{background:rgba(111,191,126,0.4);}
+.rail-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Baloo 2',sans-serif;font-weight:700;font-size:13px;z-index:1;margin-bottom:0.5rem;}
+.rail-node.done .rail-dot{background:rgba(111,191,126,0.18);border:1.5px solid var(--good);color:var(--good);}
+.rail-node.locked .rail-dot{background:var(--white-faintest);border:1.5px solid var(--white-faint);color:var(--white-dim);}
+.rail-round{font-size:12px;font-weight:700;color:var(--white);}
+.rail-venue{font-size:10.5px;color:var(--white-dim);margin-top:1px;}
+.rail-tag{margin-top:5px;font-size:8.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;border-radius:99px;padding:2px 9px;}
+.rail-node.done .rail-tag{background:rgba(111,191,126,0.15);color:var(--good);}
+.rail-node.locked .rail-tag{background:var(--white-faintest);color:var(--white-dim);}
+.section{padding:2.1rem 1.5rem;border-top:1px solid var(--white-faintest);}
+.section-head{display:flex;align-items:flex-start;gap:0.85rem;margin-bottom:1.1rem;}
+.section-num{font-family:'Baloo 2',sans-serif;font-size:1.6rem;font-weight:800;color:var(--accent);line-height:1;}
+.section-title{font-size:16px;font-weight:700;color:var(--white);}
+.section-desc{font-size:12px;color:var(--white-dim);margin-top:2px;}
+.chain-note{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--white-dim);margin:-0.4rem 0 1rem 2.45rem;font-style:italic;}
+.winner-banner{border-radius:14px;padding:1rem 1.2rem;margin-bottom:1rem;background:linear-gradient(135deg,rgba(232,57,42,0.16) 0%,rgba(232,57,42,0.05) 100%);border:1px solid rgba(232,57,42,0.35);}
+.comp-label{font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--accent-light);margin-bottom:5px;font-weight:700;}
+.winner-name{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:1.5rem;color:var(--white);margin-bottom:2px;}
+.winner-stat{font-size:12.5px;color:var(--white-dim);}
+.lb-card{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:16px;overflow:hidden;overflow-x:auto;}
+.lb-table{width:100%;border-collapse:collapse;min-width:520px;}
+.lb-table thead tr{background:rgba(232,57,42,0.09);border-bottom:1px solid rgba(232,57,42,0.22);}
+.lb-table th{font-size:9.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent-light);padding:9px 10px;text-align:right;white-space:nowrap;}
+.lb-table th.left{text-align:left;}
+.lb-table td{padding:9px 10px;text-align:right;border-bottom:1px solid rgba(245,240,232,0.06);font-size:12.5px;white-space:nowrap;}
+.lb-table td.left{text-align:left;white-space:normal;}
+.lb-row.leader-row{background:rgba(232,57,42,0.08);}
+.lb-row:last-child td{border-bottom:none;}
+.lb-row.withdrawn-row{opacity:0.45;}
+.rank-cell{font-family:'Baloo 2',sans-serif;font-weight:700;color:var(--white-dim);width:26px;}
+.leader-row .rank-cell{color:var(--accent-light);}
+.player-name{font-weight:600;font-size:13px;color:var(--white);}
+.vspar-tag{font-size:11px;font-weight:500;color:var(--white-dim);margin-left:4px;}
+.payout-val{color:var(--accent-light);font-weight:700;}
+.quota-val{color:var(--white-dim);font-weight:400;}
+.perf-badge{font-weight:700;font-size:12.5px;padding:2px 0;}
+.perf-badge.good{color:var(--good);}
+.perf-badge.bad{color:var(--bad);}
+.perf-badge.even{color:var(--white-dim);}
+.perf-detail summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:3px;}
+.perf-detail summary::-webkit-details-marker{display:none;}
+.perf-detail summary::after{content:'\24d8';font-size:8.5px;font-weight:400;color:var(--white-dim);opacity:0.6;margin-left:1px;}
+.perf-detail[open] summary::after{opacity:1;color:var(--accent-light);}
+.perf-calc{position:relative;margin-top:5px;background:var(--navy2);border:1px solid rgba(232,57,42,0.35);border-radius:8px;padding:8px 10px;font-size:10.5px;line-height:1.5;color:var(--white-dim);white-space:normal;text-align:left;max-width:260px;margin-left:auto;font-weight:400;}
+.wb-pill{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:0.02em;border-radius:99px;padding:2px 8px;}
+.wb-in{background:rgba(111,191,126,0.14);color:var(--good);}
+.wb-out{background:rgba(224,160,80,0.14);color:var(--bad);}
+.wb-detail{display:block;font-size:9.5px;color:var(--white-dim);margin-top:2px;font-weight:400;}
+.side-strip{display:flex;gap:0.9rem;flex-wrap:wrap;margin-top:1rem;}
+.side-card{flex:1;min-width:220px;background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);border-radius:12px;padding:0.85rem 1rem;}
+.side-label{font-size:9.5px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-light);margin-bottom:0.55rem;}
+.side-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:var(--white);}
+.side-row .hole{color:var(--white-dim);font-weight:400;}
+.side-empty{font-size:11.5px;color:var(--white-dim);opacity:0.7;}
+.locked-card{background:var(--white-faintest);border:1px dashed rgba(245,240,232,0.18);border-radius:16px;padding:2rem 1.5rem;text-align:center;}
+.lock-icon{margin-bottom:0.85rem;opacity:0.55;}
+.locked-title{font-size:14px;font-weight:700;color:var(--white-dim);margin-bottom:4px;}
+.locked-sub{font-size:12px;color:var(--white-dim);opacity:0.75;max-width:360px;margin:0 auto;}
+.wb-section{border-top:1px solid rgba(232,57,42,0.18);}
+.wb-pot-banner{display:flex;justify-content:space-between;align-items:center;gap:1rem;background:linear-gradient(135deg,rgba(232,57,42,0.14) 0%,rgba(232,57,42,0.04) 100%);border:1px solid rgba(232,57,42,0.3);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.1rem;flex-wrap:wrap;}
+.wb-pot-amt{font-family:'Baloo 2',sans-serif;font-size:1.7rem;font-weight:800;color:var(--white);}
+.wb-pot-lbl{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent-light);font-weight:700;}
+.wb-pot-remain{font-size:12.5px;color:var(--white-dim);max-width:520px;}
+.wb-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.6rem;}
+.wb-card{display:flex;justify-content:space-between;align-items:center;gap:0.6rem;background:var(--white-faintest);border:1px solid rgba(245,240,232,0.08);border-radius:12px;padding:0.65rem 0.85rem;}
+.wb-card-name{font-size:12.5px;font-weight:600;color:var(--white);}
+.wb-card-detail{font-size:10px;color:var(--white-dim);margin-top:1px;max-width:220px;}
+.wb-status{font-size:10px;font-weight:700;letter-spacing:0.06em;border-radius:99px;padding:3px 10px;white-space:nowrap;}
+.wb-status-in{background:rgba(111,191,126,0.15);color:var(--good);}
+.wb-status-out{background:rgba(224,160,80,0.13);color:var(--bad);}
+.wb-status-won{background:rgba(232,57,42,0.16);color:var(--accent-light);}
+.wb-bonus{font-size:9.5px;color:var(--white-dim);margin-top:2px;}
+.wb-card-winner{border-color:rgba(232,57,42,0.5);background:rgba(232,57,42,0.07);}
+.twoman-section{background:var(--navy2);border-top:1px solid rgba(245,240,232,0.08);border-bottom:1px solid rgba(245,240,232,0.08);}
+.photo-slot{border:1.5px dashed rgba(245,240,232,0.16);border-radius:16px;padding:2.4rem 1.5rem;text-align:center;background:rgba(245,240,232,0.02);}
+.photo-icon{margin-bottom:0.9rem;opacity:0.4;}
+.photo-slot-title{font-size:14px;font-weight:700;color:var(--white-dim);margin-bottom:4px;}
+.photo-slot-sub{font-size:11.5px;color:var(--white-dim);opacity:0.7;max-width:340px;margin:0 auto;}
+.footer{padding:2.2rem 1.5rem 3rem;text-align:center;}
+.back-btn{display:inline-flex;align-items:center;gap:7px;background:var(--white-faint);border:1px solid rgba(245,240,232,0.18);border-radius:99px;padding:9px 22px;font-size:12.5px;font-weight:600;color:var(--white);text-decoration:none;}
+.footer-meta{font-size:10.5px;color:var(--white-dim);opacity:0.55;margin-top:1.1rem;}
+@media (max-width:520px){.wb-grid{grid-template-columns:1fr;}.rail{padding:1.25rem 0.6rem 0.5rem;}.lb-table th,.lb-table td{padding:8px 6px;font-size:11.5px;}}
+</style>
+</head><body>
+<div class="page" style="--accent:#e8392a">
+  <div class="hero">
+    <div class="hero-eyebrow">BirdieFriends Experiences</div>
+    <div class="hero-title">Wally Cup</div>
+    <div class="hero-subtitle">2026-09-11</div>
+    <div class="state-pill "><span class="state-dot"></span>Final</div>
+  </div>
+  <div class="rail"><div class="rail-node done">
+      <div class="rail-line"></div><div class="rail-dot">1</div>
+      <div class="rail-round">Round 1</div><div class="rail-venue">Honesdale Golf Club</div>
+      <div class="rail-tag">Final</div>
+    </div><div class="rail-node done">
+      <div class="rail-line"></div><div class="rail-dot">2</div>
+      <div class="rail-round">Round 2</div><div class="rail-venue">Skytop Lodge</div>
+      <div class="rail-tag">Final</div>
+    </div><div class="rail-node done">
+      <div class="rail-line"></div><div class="rail-dot">3</div>
+      <div class="rail-round">Round 3</div><div class="rail-venue">Paupack Hills GC</div>
+      <div class="rail-tag">Final</div>
+    </div></div>
+  <div class="wrap">
+    <div class="section">
+    <div class="section-head"><div class="section-num">01</div><div>
+      <div class="section-title">Round 1 · Honesdale Golf Club — Final</div>
+      <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+    </div></div>
+    <div class="chain-note">Round Perf. folds in this round's Wally Ball bonus and carries into Overall Standings; only the Quota number itself never includes it</div>
+    <div class="winner-banner">
+      <div class="comp-label">Round 1 Leader</div>
+      <div class="winner-name">Nate Stettler</div>
+      <div class="winner-stat">+8.68 Round Perf.</div>
+    </div>
+    <div class="lb-card"><table class="lb-table">
+      <thead><tr><th class="left">Player</th><th>Quota Rd1</th><th>Round Perf.</th><th class="left">Wally Ball</th><th>$Earned</th></tr></thead>
+      <tbody><tr class="lb-row leader-row">
+    <td class="left"><span class="rank-cell">1</span> <span class="player-name">Nate Stettler</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">24.32</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+8.68</summary>
+      <div class="perf-calc">+8.68 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 33 · Hole 4-1</span></td>
+    <td class="payout-val">$37</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">2</span> <span class="player-name">Mohamed Walli</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">24.32</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+2.68</summary>
+      <div class="perf-calc">+2.68 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 27 · Hole 10-2</span></td>
+    <td class="payout-val">$20</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">3</span> <span class="player-name">Lou Strohl</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">20.72</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+2.28</summary>
+      <div class="perf-calc">+1.28 quota achievement + 1.00 Wally Ball = +2.28 Round Perf.</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-in">In Play</span><span class="wb-detail">Scored 22 · In Play, +1 bonus pt</span></td>
+    <td class="payout-val">$5</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">4</span> <span class="player-name">Jake Knappenberger</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">22.79</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+2.21</summary>
+      <div class="perf-calc">+1.21 quota achievement + 1.00 Wally Ball = +2.21 Round Perf.</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-in">In Play</span><span class="wb-detail">Scored 24 · In Play, +1 bonus pt</span></td>
+    <td class="payout-val">$17</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">5</span> <span class="player-name">Jeff Rapp</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">23.45</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+1.55</summary>
+      <div class="perf-calc">+1.55 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 25 · Hole 5-2</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">6</span> <span class="player-name">Mark Weaver</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">15.70</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge even">+0.30</summary>
+      <div class="perf-calc">+0.30 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 16 · Hole 2-1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">7</span> <span class="player-name">Bill Steirer</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">29.89</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge even">+0.11</summary>
+      <div class="perf-calc">−0.89 quota achievement + 1.00 Wally Ball = +0.11 Round Perf.</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-in">In Play</span><span class="wb-detail">Scored 29 · In Play, +1 bonus pt</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">8</span> <span class="player-name">Tom Stitt</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">22.14</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge even">−0.14</summary>
+      <div class="perf-calc">−1.14 quota achievement + 1.00 Wally Ball = −0.14 Round Perf.</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-in">In Play</span><span class="wb-detail">Scored 21 · In Play, +1 bonus pt</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">9</span> <span class="player-name">Jordan Knappenberger</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">32.18</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge even">−0.18</summary>
+      <div class="perf-calc">−1.18 quota achievement + 1.00 Wally Ball = −0.18 Round Perf.</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-in">In Play</span><span class="wb-detail">Scored 31 · In Play, +1 bonus pt</span></td>
+    <td class="payout-val">$34</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">10</span> <span class="player-name">Chooch Wernett</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">25.30</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge even">−0.30</summary>
+      <div class="perf-calc">−1.30 quota achievement + 1.00 Wally Ball = −0.30 Round Perf.</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-in">In Play</span><span class="wb-detail">Scored 24 · In Play, +1 bonus pt</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">11</span> <span class="player-name">BJ Kolonia</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">20.61</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−0.61</summary>
+      <div class="perf-calc">−0.61 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 20 · Hole 10-3</span></td>
+    <td class="payout-val">$10</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">12</span> <span class="player-name">Brian Hager</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">29.78</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−0.78</summary>
+      <div class="perf-calc">−0.78 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 29 · Hole 3-1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">13</span> <span class="player-name">Evan Lindermuth</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">26.18</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−1.18</summary>
+      <div class="perf-calc">−1.18 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 25 · Hole 8-1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">14</span> <span class="player-name">Tom Arnold</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">29.34</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−1.34</summary>
+      <div class="perf-calc">−2.34 quota achievement + 1.00 Wally Ball = −1.34 Round Perf.</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-in">In Play</span><span class="wb-detail">Scored 27 · In Play, +1 bonus pt</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">15</span> <span class="player-name">Dave Sherwin</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">30.98</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−1.98</summary>
+      <div class="perf-calc">−1.98 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 29 · Hole 3-3</span></td>
+    <td class="payout-val">$17</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">16</span> <span class="player-name">Scott Justus</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">28.36</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−3.36</summary>
+      <div class="perf-calc">−3.36 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 25 · Hole 7-3</span></td>
+    <td class="payout-val">$17</td>
+  </tr></tbody>
+    </table></div>
+    <div class="side-strip">
+      <div class="side-card">
+      <div class="side-label">🏆 Podium</div>
+      <div class="side-row"><span>Nate Stettler</span><span class="hole">$20</span></div><div class="side-row"><span>Mohamed Walli</span><span class="hole">$10</span></div><div class="side-row"><span>Lou Strohl</span><span class="hole">$5</span></div>
+    </div>
+      <div class="side-card">
+      <div class="side-label">🏌️ Skins</div>
+      <div class="side-row"><span>Jordan Knappenberger</span><span class="hole">Hole 2 — $17</span></div><div class="side-row"><span>Scott Justus</span><span class="hole">Hole 7 — $17</span></div><div class="side-row"><span>Nate Stettler</span><span class="hole">Hole 9 — $17</span></div><div class="side-row"><span>Jordan Knappenberger</span><span class="hole">Hole 13 — $17</span></div><div class="side-row"><span>Dave Sherwin</span><span class="hole">Hole 17 — $17</span></div><div class="side-row"><span>Jake Knappenberger</span><span class="hole">Hole 18 — $17</span></div>
+    </div>
+      <div class="side-card">
+      <div class="side-label">📍 Closest to Pin</div>
+      <div class="side-empty">No CTP claims recorded.</div>
+    </div>
+    </div>
+  </div><div class="section">
+    <div class="section-head"><div class="section-num">02</div><div>
+      <div class="section-title">Round 2 · Skytop Lodge — Final</div>
+      <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+    </div></div>
+    <div class="chain-note">Round Perf. folds in this round's Wally Ball bonus and carries into Overall Standings; only the Quota number itself never includes it</div>
+    <div class="winner-banner">
+      <div class="comp-label">Round 2 Leader</div>
+      <div class="winner-name">Tom Stitt</div>
+      <div class="winner-stat">+6.43 Round Perf.</div>
+    </div>
+    <div class="lb-card"><table class="lb-table">
+      <thead><tr><th class="left">Player</th><th>Quota Rd2</th><th>Round Perf.</th><th class="left">Wally Ball</th><th>$Earned</th></tr></thead>
+      <tbody><tr class="lb-row leader-row">
+    <td class="left"><span class="rank-cell">1</span> <span class="player-name">Tom Stitt</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">21.57</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+6.43</summary>
+      <div class="perf-calc">+6.43 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 28 · Hole 15-3</span></td>
+    <td class="payout-val">$20</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">2</span> <span class="player-name">Tom Arnold</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">28.17</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+4.83</summary>
+      <div class="perf-calc">+4.83 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 33 · Hole 18-2</span></td>
+    <td class="payout-val">$10</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">3</span> <span class="player-name">Chooch Wernett</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">24.65</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+4.35</summary>
+      <div class="perf-calc">+4.35 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 29 · Hole 18-1</span></td>
+    <td class="payout-val">$5</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">4</span> <span class="player-name">Bill Steirer</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">29.44</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+3.56</summary>
+      <div class="perf-calc">+3.56 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 33 · Hole 3-1</span></td>
+    <td class="payout-val">$26</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">5</span> <span class="player-name">Jeff Rapp</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">24.22</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+2.78</summary>
+      <div class="perf-calc">+2.78 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 27 · Already out — lost Rd1</span></td>
+    <td class="payout-val">$10</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">6</span> <span class="player-name">Lou Strohl</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">21.36</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge even">−0.36</summary>
+      <div class="perf-calc">−1.36 quota achievement + 1.00 Wally Ball = −0.36 Round Perf.</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-in">In Play</span><span class="wb-detail">Scored 20 · In Play, +1 bonus pt</span></td>
+    <td class="payout-val">$26</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">7</span> <span class="player-name">Dave Sherwin</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">29.99</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−0.99</summary>
+      <div class="perf-calc">−0.99 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 29 · Already out — lost Rd1</span></td>
+    <td class="payout-val">$26</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">8</span> <span class="player-name">BJ Kolonia</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">20.31</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−1.31</summary>
+      <div class="perf-calc">−1.31 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 19 · Already out — lost Rd1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">9</span> <span class="player-name">Mark Weaver</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">15.85</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−1.85</summary>
+      <div class="perf-calc">−1.85 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 14 · Already out — lost Rd1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">10</span> <span class="player-name">Brian Hager</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">29.39</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−2.39</summary>
+      <div class="perf-calc">−2.39 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 27 · Already out — lost Rd1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">11</span> <span class="player-name">Evan Lindermuth</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">25.59</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−2.59</summary>
+      <div class="perf-calc">−2.59 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 23 · Already out — lost Rd1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">12</span> <span class="player-name">Jordan Knappenberger</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">31.59</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−2.59</summary>
+      <div class="perf-calc">−2.59 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 29 · Hole 8-3</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">13</span> <span class="player-name">Mohamed Walli</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">25.66</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−2.66</summary>
+      <div class="perf-calc">−2.66 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 23 · Already out — lost Rd1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">14</span> <span class="player-name">Scott Justus</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">26.68</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−2.68</summary>
+      <div class="perf-calc">−2.68 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 24 · Already out — lost Rd1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">15</span> <span class="player-name">Jake Knappenberger</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">23.40</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−5.40</summary>
+      <div class="perf-calc">−6.40 quota achievement + 1.00 Wally Ball = −5.40 Round Perf.</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-in">In Play</span><span class="wb-detail">Scored 17 · In Play, +1 bonus pt</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">16</span> <span class="player-name">Nate Stettler</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">28.66</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−6.66</summary>
+      <div class="perf-calc">−6.66 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 22 · Already out — lost Rd1</span></td>
+    <td class="payout-val">$36</td>
+  </tr></tbody>
+    </table></div>
+    <div class="side-strip">
+      <div class="side-card">
+      <div class="side-label">🏆 Podium</div>
+      <div class="side-row"><span>Tom Stitt</span><span class="hole">$20</span></div><div class="side-row"><span>Tom Arnold</span><span class="hole">$10</span></div><div class="side-row"><span>Chooch Wernett</span><span class="hole">$5</span></div>
+    </div>
+      <div class="side-card">
+      <div class="side-label">🏌️ Skins</div>
+      <div class="side-row"><span>Nate Stettler</span><span class="hole">Hole 1 — $26</span></div><div class="side-row"><span>Dave Sherwin</span><span class="hole">Hole 3 — $26</span></div><div class="side-row"><span>Bill Steirer</span><span class="hole">Hole 5 — $26</span></div><div class="side-row"><span>Lou Strohl</span><span class="hole">Hole 15 — $26</span></div>
+    </div>
+      <div class="side-card">
+      <div class="side-label">📍 Closest to Pin</div>
+      <div class="side-empty">No CTP claims recorded.</div>
+    </div>
+    </div>
+  </div><div class="section">
+    <div class="section-head"><div class="section-num">03</div><div>
+      <div class="section-title">Round 3 · Paupack Hills GC — Final</div>
+      <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+    </div></div>
+    <div class="chain-note">Round Perf. folds in this round's Wally Ball bonus and carries into Overall Standings; only the Quota number itself never includes it</div>
+    <div class="winner-banner">
+      <div class="comp-label">Round 3 Leader</div>
+      <div class="winner-name">Brian Hager</div>
+      <div class="winner-stat">+8.81 Round Perf.</div>
+    </div>
+    <div class="lb-card"><table class="lb-table">
+      <thead><tr><th class="left">Player</th><th>Quota Rd3</th><th>Round Perf.</th><th class="left">Wally Ball</th><th>$Earned</th></tr></thead>
+      <tbody><tr class="lb-row leader-row">
+    <td class="left"><span class="rank-cell">1</span> <span class="player-name">Brian Hager</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">28.19</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+8.81</summary>
+      <div class="perf-calc">+8.81 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 37 · Already out — lost Rd1</span></td>
+    <td class="payout-val">$62</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">2</span> <span class="player-name">Jordan Knappenberger</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">30.30</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+8.70</summary>
+      <div class="perf-calc">+8.70 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 39 · Already out — lost Rd2</span></td>
+    <td class="payout-val">$20</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">3</span> <span class="player-name">Evan Lindermuth</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">24.29</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+6.71</summary>
+      <div class="perf-calc">+6.71 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 31 · Already out — lost Rd1</span></td>
+    <td class="payout-val">$26</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">4</span> <span class="player-name">Dave Sherwin</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">29.49</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+5.51</summary>
+      <div class="perf-calc">+5.51 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 35 · Already out — lost Rd1</span></td>
+    <td class="payout-val">$21</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">5</span> <span class="player-name">Nate Stettler</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">25.33</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+4.67</summary>
+      <div class="perf-calc">+4.67 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 30 · Already out — lost Rd1</span></td>
+    <td class="payout-val">$10</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">6</span> <span class="player-name">Mohamed Walli</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">24.33</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+4.67</summary>
+      <div class="perf-calc">+4.67 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 29 · Already out — lost Rd1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">7</span> <span class="player-name">Jake Knappenberger</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">20.20</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge good">+1.80</summary>
+      <div class="perf-calc">+1.80 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 22 · Hole 6-3</span></td>
+    <td class="payout-val">$21</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">8</span> <span class="player-name">Tom Arnold</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">30.59</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge even">+0.41</summary>
+      <div class="perf-calc">+0.41 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 31 · Already out — lost Rd2</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">9</span> <span class="player-name">Scott Justus</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">25.34</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge even">−0.34</summary>
+      <div class="perf-calc">−0.34 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 25 · Already out — lost Rd1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">10</span> <span class="player-name">Mark Weaver</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">14.92</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−0.92</summary>
+      <div class="perf-calc">−0.92 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 14 · Already out — lost Rd1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">11</span> <span class="player-name">Bill Steirer</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">31.22</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−1.22</summary>
+      <div class="perf-calc">−1.22 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 30 · Already out — lost Rd2</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">12</span> <span class="player-name">BJ Kolonia</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">19.65</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−1.65</summary>
+      <div class="perf-calc">−1.65 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 18 · Already out — lost Rd1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">13</span> <span class="player-name">Tom Stitt</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">24.78</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−2.78</summary>
+      <div class="perf-calc">−2.78 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 22 · Already out — lost Rd2</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">14</span> <span class="player-name">Lou Strohl</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">20.68</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−3.68</summary>
+      <div class="perf-calc">−3.68 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 17 · Hole 10-2</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">15</span> <span class="player-name">Jeff Rapp</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">25.61</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−4.61</summary>
+      <div class="perf-calc">−4.61 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 21 · Already out — lost Rd1</span></td>
+    <td class="payout-val">—</td>
+  </tr><tr class="lb-row">
+    <td class="left"><span class="rank-cell">16</span> <span class="player-name">Chooch Wernett</span><span class="vspar-tag"></span></td>
+    <td class="quota-val">26.83</td>
+    <td>
+      <details class="perf-detail"><summary class="perf-badge bad">−5.83</summary>
+      <div class="perf-calc">−5.83 quota achievement — Wally Ball lost this round, no bonus</div></details>
+    </td>
+    <td class="left"><span class="wb-pill wb-out">Lost</span><span class="wb-detail">Scored 21 · Already out — lost Rd2</span></td>
+    <td class="payout-val">—</td>
+  </tr></tbody>
+    </table></div>
+    <div class="side-strip">
+      <div class="side-card">
+      <div class="side-label">🏆 Podium</div>
+      <div class="side-row"><span>Brian Hager</span><span class="hole">$20</span></div><div class="side-row"><span>Jordan Knappenberger</span><span class="hole">$10</span></div><div class="side-row"><span>Evan Lindermuth</span><span class="hole">$5</span></div>
+    </div>
+      <div class="side-card">
+      <div class="side-label">🏌️ Skins</div>
+      <div class="side-row"><span>Brian Hager</span><span class="hole">Hole 2 — $21</span></div><div class="side-row"><span>Brian Hager</span><span class="hole">Hole 3 — $21</span></div><div class="side-row"><span>Jake Knappenberger</span><span class="hole">Hole 10 — $21</span></div><div class="side-row"><span>Evan Lindermuth</span><span class="hole">Hole 13 — $21</span></div><div class="side-row"><span>Dave Sherwin</span><span class="hole">Hole 14 — $21</span></div>
+    </div>
+      <div class="side-card">
+      <div class="side-label">📍 Closest to Pin</div>
+      <div class="side-empty">No CTP claims recorded.</div>
+    </div>
+    </div>
+  </div>
+    <div class="section">
+      <div class="section-head"><div class="section-num">04</div><div>
+        <div class="section-title">Overall Standings — Final</div>
+        <div class="section-desc">All 3 rounds closed · cumulative Round Perf. (quota achievement + that round's Wally Ball bonus) — only the Quota number itself never includes Wally Ball</div>
+      </div></div>
+      <div class="winner-banner">
+        <div class="comp-label">🏆 2026 Wally Cup Champion</div>
+        <div class="winner-name">Nate Stettler</div>
+        <div class="winner-stat">+6.69 Overall · +8.68 / −6.66 / +4.67 by round</div>
+      </div>
+      <div class="lb-card"><table class="lb-table">
+        <thead><tr><th class="left">Player</th><th>Rd1</th><th>Rd2</th><th>Rd3</th><th>Overall</th><th>Podium $</th></tr></thead>
+        <tbody><tr class="lb-row leader-row">
+          <td class="left"><span class="rank-cell">1</span> <span class="player-name">Nate Stettler</span></td>
+          <td class="quota-val">+8.68</td><td class="quota-val">−6.66</td><td class="quota-val">+4.67</td>
+          <td><span class="perf-badge good">+6.69</span></td>
+          <td class="payout-val">$90</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">2</span> <span class="player-name">Jordan Knappenberger</span></td>
+          <td class="quota-val">−0.18</td><td class="quota-val">−2.59</td><td class="quota-val">+8.70</td>
+          <td><span class="perf-badge good">+5.94</span></td>
+          <td class="payout-val">$45</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">3</span> <span class="player-name">Brian Hager</span></td>
+          <td class="quota-val">−0.78</td><td class="quota-val">−2.39</td><td class="quota-val">+8.81</td>
+          <td><span class="perf-badge good">+5.64</span></td>
+          <td class="payout-val">$25</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">4</span> <span class="player-name">Mohamed Walli</span></td>
+          <td class="quota-val">+2.68</td><td class="quota-val">−2.66</td><td class="quota-val">+4.67</td>
+          <td><span class="perf-badge good">+4.69</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">5</span> <span class="player-name">Tom Arnold</span></td>
+          <td class="quota-val">−1.34</td><td class="quota-val">+4.83</td><td class="quota-val">+0.41</td>
+          <td><span class="perf-badge good">+3.90</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">6</span> <span class="player-name">Tom Stitt</span></td>
+          <td class="quota-val">−0.14</td><td class="quota-val">+6.43</td><td class="quota-val">−2.78</td>
+          <td><span class="perf-badge good">+3.51</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">7</span> <span class="player-name">Evan Lindermuth</span></td>
+          <td class="quota-val">−1.18</td><td class="quota-val">−2.59</td><td class="quota-val">+6.71</td>
+          <td><span class="perf-badge good">+2.94</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">8</span> <span class="player-name">Dave Sherwin</span></td>
+          <td class="quota-val">−1.98</td><td class="quota-val">−0.99</td><td class="quota-val">+5.51</td>
+          <td><span class="perf-badge good">+2.54</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">9</span> <span class="player-name">Bill Steirer</span></td>
+          <td class="quota-val">+0.11</td><td class="quota-val">+3.56</td><td class="quota-val">−1.22</td>
+          <td><span class="perf-badge good">+2.45</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">10</span> <span class="player-name">Jeff Rapp</span></td>
+          <td class="quota-val">+1.55</td><td class="quota-val">+2.78</td><td class="quota-val">−4.61</td>
+          <td><span class="perf-badge even">−0.28</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">11</span> <span class="player-name">Jake Knappenberger</span></td>
+          <td class="quota-val">+2.21</td><td class="quota-val">−5.40</td><td class="quota-val">+1.80</td>
+          <td><span class="perf-badge bad">−1.39</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">12</span> <span class="player-name">Lou Strohl</span></td>
+          <td class="quota-val">+2.28</td><td class="quota-val">−0.36</td><td class="quota-val">−3.68</td>
+          <td><span class="perf-badge bad">−1.76</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">13</span> <span class="player-name">Chooch Wernett</span></td>
+          <td class="quota-val">−0.30</td><td class="quota-val">+4.35</td><td class="quota-val">−5.83</td>
+          <td><span class="perf-badge bad">−1.78</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">14</span> <span class="player-name">Mark Weaver</span></td>
+          <td class="quota-val">+0.30</td><td class="quota-val">−1.85</td><td class="quota-val">−0.92</td>
+          <td><span class="perf-badge bad">−2.47</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">15</span> <span class="player-name">BJ Kolonia</span></td>
+          <td class="quota-val">−0.61</td><td class="quota-val">−1.31</td><td class="quota-val">−1.65</td>
+          <td><span class="perf-badge bad">−3.57</span></td>
+          <td class="payout-val">—</td>
+        </tr><tr class="lb-row">
+          <td class="left"><span class="rank-cell">16</span> <span class="player-name">Scott Justus</span></td>
+          <td class="quota-val">−3.36</td><td class="quota-val">−2.68</td><td class="quota-val">−0.34</td>
+          <td><span class="perf-badge bad">−6.38</span></td>
+          <td class="payout-val">—</td>
+        </tr></tbody>
+      </table></div>
+    </div>
+  </div>
+  <div class="section wb-section">
+    <div class="section-head"><div class="section-num">05</div><div>
+      <div class="section-title">Wally Ball</div>
+      <div class="section-desc">Round bonus + season elimination pot — tracked separately from quota, and from each other</div>
+    </div></div>
+    <div class="wb-pot-banner">
+      <div><div class="wb-pot-lbl">Season Pot</div><div class="wb-pot-amt">$80</div></div>
+      <div class="wb-pot-remain">🏆 Lou Strohl wins the $80 pot outright — Both remaining ballholders lost it in Rd3, so the pot goes to whoever held on longest: Lou Strohl lost on Hole 10-2, Jake Knappenberger lost on Hole 6-3.</div>
+    </div>
+    <div class="wb-grid"><div class="wb-card ">
+      <div><div class="wb-card-name">Tom Stitt</div><div class="wb-card-detail">Lost Rd2 — hole 15-3</div><div class="wb-bonus">Cumulative bonus: 1 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">BJ Kolonia</div><div class="wb-card-detail">Lost Rd1 — hole 10-3</div><div class="wb-bonus">Cumulative bonus: 0 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Tom Arnold</div><div class="wb-card-detail">Lost Rd2 — hole 18-2</div><div class="wb-bonus">Cumulative bonus: 1 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Scott Justus</div><div class="wb-card-detail">Lost Rd1 — hole 7-3</div><div class="wb-bonus">Cumulative bonus: 0 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Nate Stettler</div><div class="wb-card-detail">Lost Rd1 — hole 4-1</div><div class="wb-bonus">Cumulative bonus: 0 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Mohamed Walli</div><div class="wb-card-detail">Lost Rd1 — hole 10-2</div><div class="wb-bonus">Cumulative bonus: 0 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Mark Weaver</div><div class="wb-card-detail">Lost Rd1 — hole 2-1</div><div class="wb-bonus">Cumulative bonus: 0 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card wb-card-winner">
+      <div><div class="wb-card-name">Lou Strohl</div><div class="wb-card-detail">Lost Rd3 — hole 10-2 · Both remaining ballholders lost it in Rd3, so the pot goes to whoever held on longest: Lou Strohl lost on Hole 10-2, Jake Knappenberger lost on Hole 6-3.</div><div class="wb-bonus">Cumulative bonus: 2 pts</div></div>
+      <div class="wb-status wb-status-won">WON POT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Jordan Knappenberger</div><div class="wb-card-detail">Lost Rd2 — hole 8-3</div><div class="wb-bonus">Cumulative bonus: 1 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Jeff Rapp</div><div class="wb-card-detail">Lost Rd1 — hole 5-2</div><div class="wb-bonus">Cumulative bonus: 0 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Jake Knappenberger</div><div class="wb-card-detail">Lost Rd3 — hole 6-3</div><div class="wb-bonus">Cumulative bonus: 2 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Evan Lindermuth</div><div class="wb-card-detail">Lost Rd1 — hole 8-1</div><div class="wb-bonus">Cumulative bonus: 0 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Dave Sherwin</div><div class="wb-card-detail">Lost Rd1 — hole 3-3</div><div class="wb-bonus">Cumulative bonus: 0 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Chooch Wernett</div><div class="wb-card-detail">Lost Rd2 — hole 18-1</div><div class="wb-bonus">Cumulative bonus: 1 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Brian Hager</div><div class="wb-card-detail">Lost Rd1 — hole 3-1</div><div class="wb-bonus">Cumulative bonus: 0 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div><div class="wb-card ">
+      <div><div class="wb-card-name">Bill Steirer</div><div class="wb-card-detail">Lost Rd2 — hole 3-1</div><div class="wb-bonus">Cumulative bonus: 1 pts</div></div>
+      <div class="wb-status wb-status-out">OUT</div>
+    </div></div>
+  </div>
+  <div class="section twoman-section"><div class="wrap" style="padding:0;">
+    <div class="section-head"><div class="section-num">06</div><div>
+      <div class="section-title">WC 2Man Scramble</div>
+      <div class="section-desc">Standalone event — does not count toward the 2026 Wally Cup Overall</div>
+    </div></div>
+    <div class="locked-card">
+      <div class="locked-title">Scoring format not yet defined</div>
+      <div class="locked-sub">The 2Man scramble is a standalone build on its own timeline. Results post here once it's scored.</div>
+    </div>
+  </div></div>
+  <div class="wrap"><div class="section">
+    <div class="section-head"><div class="section-num">07</div><div>
+      <div class="section-title">Photo Gallery</div>
+      <div class="section-desc">Media phase — added after data/results ship</div>
+    </div></div>
+    <div class="photo-slot">
+      <div class="photo-slot-title">Gallery coming soon</div>
+      <div class="photo-slot-sub">Event photos will appear here once the Photos phase ships.</div>
+    </div>
+  </div>
+  <div class="footer">
+    <a class="back-btn" href="/portal.html">← Back to Portal</a>
+    <div class="footer-meta">BirdieFriends Experiences · generated 2026-09-02 20:58 UTC</div>
+  </div></div>
+</div>
+</body></html>
