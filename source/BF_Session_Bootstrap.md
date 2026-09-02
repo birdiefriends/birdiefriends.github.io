@@ -122,6 +122,33 @@ This file does NOT track the current session number — that drifted out of sync
 manual chat-title numbering and caused real confusion (a Dev-42 session self-identified
 as "Session 41" by reading the line below instead of the log). `source/BF_Session_Log.md`
 is now the sole source of truth for the current Dev-N number. Read it, not this header.
+
+SESSION COMPACTION / DURABILITY RULE (added Dev-75 — read this to understand why the
+"write it to a file now, not at close-out" habit below matters):
+Long sessions get auto-compacted by the underlying platform once the conversation
+approaches its context limit — the full turn-by-turn history (exact code pasted, tool
+output, wording) gets replaced with a condensed structured summary (requests/intent,
+files touched with key snippets, errors+fixes, pending/current work). This is normal
+platform behavior, not a malfunction, and it already happened at least once during the
+Dev-75 session itself — confirmed by Claude receiving a "continued from a previous
+conversation" summary mid-session.
+
+What this does and doesn't threaten: nothing written to an actual repo file (this
+bootstrap, `BF_Session_Log.md`, `BF_WallyCup_Spec.md`, `BFE-Admin.html`, etc.) is at risk
+— those get re-read fresh regardless of compaction, same as in a brand-new session. What
+IS at risk is anything that only ever existed as chat content, or as state inside a
+separate tool surface Claude was managing on its own without exporting it — a private
+design-canvas mockup was the concrete Dev-75 example (see Dev-75 Architecture Notes
+below). A fresh/later session has no path back to that at all, compacted or not, unless
+it was explicitly exported into a file and committed to the library.
+
+Practical upshot: the moment Claude produces something durable that lives outside this
+repo's own files, export it into an actual file and get it committed the same session —
+don't wait for session close-out to write it up. And treat a session that's visibly
+already been compacted once (or has just been running very long) as a natural point to
+finish the current small task, close out per the usual `BF_Session_Log.md` +
+Architecture-Notes hand-off pattern, and start the next real work in a fresh session
+rather than pushing further into one that's already lost some of its own fine detail.
 -->
 
 # BirdieFriends Golf Scorer — Session Starter
@@ -136,16 +163,23 @@ is now the sole source of truth for the current Dev-N number. Read it, not this 
 **Worker (bf-experiences — NEW as of Dev-71):** separate Cloudflare Worker, source `bf_experiences_worker.js`, powers the BFE Competitive Events system. Deployed manually by Brian via the Cloudflare dashboard (not via the /deploy route). Confirmed Dev-74: the results/computation layer is now built and live — `bfe_round_results`/`bfe_round_skins` (2 new tables, not the `bfe_quota_progress` name originally guessed at) — bringing the total to 10 `bfe_*` tables live. **Dev-75: `bfe_event_roster` gained two columns, `withdrawn`/`withdrawn_note` (withdraw-a-player support) — migration run and Worker redeployed by Brian this session, confirmed live.** See Dev-75 Architecture Notes below.
 **Live URL:** https://birdiefriends.com/portal.html
 **BFE Admin Panel (NEW as of Dev-71):** https://birdiefriends.com/BFE-Admin.html — confirmed Dev-74: the full Close Round scoring engine (quota, skins, CTP, Wally Ball round bonus + season pot, Overall rollup) is built and validated end-to-end against a complete 3-round test cycle. `docs/BFE-Admin.html` on GitHub confirmed byte-identical to the final local copy. **Dev-75: dry-running the real event surfaced and closed two real payout gaps Dev-74's synthetic test never hit (podium ties, unclaimed-CTP-hole rollover) plus shipped withdraw-a-player, a Save/Generate ordering bug fix, and a Close Round roster-vs-scorecard mismatch alert — see Dev-75 Architecture Notes below.** **Not fetched by the bootstrap's standard 8-step sequence** — if continuing this work, `curl` it fresh from `docs/BFE-Admin.html` before editing.
-**Local publish tool (NEW as of Dev-73, updated Dev-74):** `bf_push.bat`/`bf_push.ps1` (v5), Brian's machine
-  only, `C:\Users\16177\Downloads\GolfScorer\AutoPush` — PIN-gated, pushes straight to the
+**Local publish tool (NEW as of Dev-73, updated Dev-74, Dev-75):** `bf_push.bat`/
+  `bf_push.ps1` (v7 as of Dev-75), Brian's machine only,
+  `C:\Users\16177\Downloads\GolfScorer\AutoPush` — PIN-gated, pushes straight to the
   same Worker `/deploy` route, with mandatory post-push byte-verification before deleting
   the local copy. Covers `portal.html`, `portal_version.txt`, `worker.js`, `guide.html`,
   `BF_Golf_Scorer_8.html`, `BF_Operations_Guide.md`, `BF_Experiences.js` (→
   `source/bf_experiences_worker.js`), `BFE-Admin.html`, `BF_Session_Log.md`,
-  `BF_WallyCup_Spec.md`, `BF_Session_Bootstrap.md`, and `deploy.html`. **Confirmed Dev-74:
-  this FileMap needed no changes all session** — the DEVICE-BRIDGE RULE below and this
-  tool held up with zero workflow friction start to finish; every push this session
-  verified byte-identical against GitHub before being trusted.
+  `BF_WallyCup_Spec.md`, `BF_Session_Bootstrap.md`, `deploy.html`, and — **new Dev-75** —
+  `WallyCup_Results_Design_Reference.dc.html` (→ `source/...`) plus a
+  `bf_push_library.ps1` → `source/bf_push.ps1` entry so the tool's own source can be
+  archived to the repo. **That last one is a snapshot filename only, never the live
+  `bf_push.ps1`** — this tool deletes anything it successfully pushes, and can't safely
+  delete itself out from under the process running it; see the v7 comment header in the
+  script for the exact archive procedure. **Confirmed Dev-74: this FileMap needed no
+  changes all session** — the DEVICE-BRIDGE RULE below and this tool held up with zero
+  workflow friction start to finish; every push this session verified byte-identical
+  against GitHub before being trusted.
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
 **Google Places API Key:** AIzaSyAn1TR2p6JbWR2fr5ydhkurygKpYU9HYtw (restricted to birdiefriends.com)
 **Wally Cup Rd1 tee-off:** confirmed 10am, 9/11/2026. Scoring engine is now **genuinely
@@ -203,6 +237,13 @@ entry of `BF_Session_Log.md` — this is a pointer/summary, not a replacement fo
   per-feature counter, not this codebase's actual one-Dev-N-per-session convention. This
   whole session is Dev-75. **The next in-file comment number is Dev-76, matching this
   log — not Dev-89.**
+- **Design-canvas mockup for Phase 3, exported this session:** the visual/CSS reference
+  from the private design canvas Claude was iterating on lives at
+  `source/WallyCup_Results_Design_Reference.dc.html` (once pushed — see the file's own
+  README comment for what it is/isn't; short version: real reusable CSS + a `decorate()`
+  row-formatting function, zero live-data wiring, hand-typed sample arrays only). Dev-76
+  needs to build the actual fetch-from-Worker generator; this file is a design reference,
+  not something to "wire up" as-is.
 - **Full carry-forward list is in the Dev-75 entry of `BF_Session_Log.md` — read it
   before starting Dev-76 work,** not just this summary.
 
