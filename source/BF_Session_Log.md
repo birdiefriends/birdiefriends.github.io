@@ -2684,3 +2684,243 @@ scoring structure.
 **Session Dev-74 fully closed.**
 
 **Chat-rename string:** `Dev-74 - Wally Cup Scoring Engine Built & Validated End-to-End (Close Round, Quota, Skins, CTP, Wally Ball), Live Panel Wiring Shipped`
+
+## Dev-75 · 2026-08-31–09-02 — Dry-Run Testing Surfaced Real Payout Gaps (Podium Ties, CTP Rollover), Scorecard/Roster Reconciliation Tools, Withdraw-a-Player, Save/Generate Bug Fix
+
+**Focus:** Dev-74 closed with the scoring engine "built and fully validated end-to-end,"
+but that validation was against synthetic test data. This session was Brian actually
+dry-running the real 2026 Wally Cup event round-by-round through `BFE-Admin.html` for the
+first time — and dry-running it surfaced several real gaps the synthetic cycle never
+exercised, most importantly that Dev-74's "fully validated" Phase 2 was missing two
+whole pieces of the payout logic (podium ties, unclaimed CTP money) that simply never
+came up in that earlier test data. Net effect: Phase 2 is now *actually* complete, not
+just believed to be; Phase 3 (player-facing results page) remains untouched and is
+Dev-76's real next priority, same as Dev-74 already flagged.
+
+**Diagnostic work (not bugs, but worth recording so the same alarm doesn't get re-raised):**
+- A Jotform screenshot showed a CttP entry on hole #1, which isn't a configured CTP hole
+  for that round — Brian flagged it as a possible problem. Traced the `cttpHoles.forEach`
+  loop in Close Round: it only ever iterates *configured* holes, so an unconfigured-hole
+  submission is structurally incapable of being paid or causing an error. Confirmed as an
+  inert test-generator artifact, not a bug.
+- Round 3 appeared not to have closed after Brian ran the test-data generator. Ruled out
+  the CTP canary as a cause (per above) before asking Brian to check — turned out to be
+  straightforward user error (data generated and Jotform checked, but Close Round itself
+  never actually clicked). Not a bug; confirmed and moved on once Brian re-ran it.
+
+**CTP test-data generator redesign:** the existing generator couldn't distinguish
+"most-recent-submission-wins" from "closest-submission-wins" by construction (every
+second claim was always closer). Rebuilt to better replicate IRL play, given BFE has no
+player-groupings model to derive a natural CttP progression from: per-hole 2–4 claim
+progressions (mostly improving distance, matching how a foursome actually plays a
+par-3), one preserved adversarial "farther-but-later" proof hole (the only way to
+actually prove the honor-system recency rule over a distance rule), a wrong-round-tagged
+canary (proves round-scoping doesn't leak), and an unconfigured-hole canary (proves the
+above diagnostic point empirically, not just by code read), with explicit ~900ms pacing
+between claims for unambiguous timestamp ordering. Verified end-to-end against real Rd3
+data: hole #1 canary correctly paid $0, the farther-but-later proof hole correctly paid
+the *later* (not closer) claimant, the wrong-round canary didn't leak, total CTTP paid
+reconciled exactly to $20 across the two real configured holes.
+
+**Podium payout tie-splitting (ported from GS):** Brian: "The payout logic for ties is
+in the GS code. Add it to BFE-Admin." Fetched `BF_Golf_Scorer_8.html`'s `calcPayouts()`
+fresh from GitHub and ported its tie-grouping algorithm verbatim as
+`computePodiumTiePayouts()`: group consecutive tied-rank players by their actual sort-key
+value (not `rank`, which BFE-Admin computes as a naive sequential index — not tie-aware
+on its own), sum the prize $ for the paid places the group occupies even if it extends
+past the paid places, floor-divide evenly across the whole tied group. Wired into Close
+Round's per-round podium payout. **Second application found later this session** — see
+Overall Standings entry below; this same function had a second real gap.
+
+**CTP-hole-unclaimed-money rollover (also ported from GS):** Brian: "Did the payout
+logic also have the logic to handle a CttP hole that no one won? I think those $ get
+rolled into the Skin pot." Confirmed via the same `calcPayouts()` read: yes, and BFE-
+Admin didn't have it — `recommendPotDistribution()`'s `skins` figure was fixed at
+pot-*setup* time assuming every configured CTP hole gets claimed, so an unclaimed (or
+unrecognized-name) hole's money just evaporated, going to neither the non-existent
+winner nor the skins pool. Ported GS's settlement-time recomputation instead:
+`skinPoolActual = poolTotal − podiumPaidActual − cttpPaidActual`, using *actual* paid
+amounts, not the pre-round estimate. **Bonus find:** this incidentally also fixes a
+dormant NaN bug — `recommendPotDistribution()`'s no-CTP-holes branch never defined
+`distribution.skins` at all, so the old code would've divided by `undefined` for any
+round with skins but zero configured CTP holes. Never triggered in this event (every WC
+round has CTP holes), but fixed as a side effect regardless.
+
+**Scorecard Check admin tool (ported from `portal.html`):** Brian's own point, in
+response to two gaps flagged as untested — "If a player plays the round, the IRL process
+ensures they have a scorecard and it's accurate. But I usually check the BFSeries
+scorecard submissions with the admin utility. We need to either modify or replicate it
+for WC." Ported `loadScorecardCheck()` from `portal.html`, adapted from BFSeries'
+`regData`-registration comparison to WC's roster (section 3) instead. Reuses the
+*existing* `jfFetchRoundScorecards()` — the exact same fetch Close Round itself runs
+internally — so a clean check is a guarantee about what Close Round will actually see,
+not a second, potentially-divergent read path. New button next to the round
+selector/Close Round button: ✅ submitted (with points) / ⚠️ missing / ❓ on Jotform but
+not on the roster. The second gap raised alongside this (a CTP claim from a name that
+doesn't exactly match the roster) was separately closed as **moot, not fixed** — Brian's
+own point: the Live Panel uses a player-*select* dropdown for CttP, not free-text entry,
+so there's no real production path for a mismatched name; confirmed by reading the CTP
+form's own field structure later this session (§ below) — genuinely a fixed dropdown of
+real roster names, not open text.
+
+**Withdraw-a-player (new capability, real schema change):** Brian: "We should determine
+a way to 'drop' a player from the Overall should they not be able to finish all 3 rds...
+last year I just deleted their info" [from a spreadsheet]. Traced the existing
+`renderWcStandings()` and found Overall Standings/the Wally Ball pot were driven purely
+from `bfe_round_results` rows, with **zero roster-membership filtering at all** — even
+fully deleting a player from the roster wouldn't have removed their partial-round data
+from Overall, since that view never checks roster membership in the first place. Asked
+Brian to settle two real judgment calls before building (both money-affecting): should a
+withdrawn player also drop out of the Wally Ball pot even if they never technically lost
+the ball (yes, per Brian — consistent with "didn't finish the event"), and should the
+flag be durable server-side vs. browser-local (Brian chose durable — worth the schema
+change). Shipped:
+- `bfe_event_roster` gets two new columns: `withdrawn INTEGER DEFAULT 0`,
+  `withdrawn_note TEXT` — migration SQL handed to Brian, run by him in the D1 console.
+- `bf_experiences_worker.js` updated (INSERT + SELECT mapping for the roster save/load
+  route) and redeployed by Brian via the Cloudflare dashboard.
+- `BFE-Admin.html`: a "Withdrew?" checkbox + optional note per roster row (section 3);
+  `renderWcStandings()` excludes withdrawn players from both Overall Standings/podium and
+  the Wally Ball pot's eligible list, with a visible "Withdrawn — not eligible for..."
+  note for audit-trail transparency rather than a silent drop. Their own per-round
+  results/payouts for whatever they DID play are completely untouched — this only
+  affects the two season-long roll-ups, exactly matching the "delete from the spreadsheet
+  tracker, not from history" mental model Brian described.
+- **Confirmed all three pieces (SQL, Worker, BFE-Admin) live and deployed by Brian
+  before this session closed.**
+
+**Save/Generate ordering bug (real bug, found from Brian's own workflow description):**
+Brian: "I think I've been Saving and then Generating... should they simply just be one
+action?" Traced it: Save only ever POSTed whatever was *already* sitting in
+`assembledConfig` from the last Generate — Save-before-Generate silently persisted stale
+data (from before the latest edit) to the Worker, while the screen looked fine afterward
+because a later Generate refreshed the browser's own view only. The edit itself never
+reached the database until Save ran again against fresh state. Fixed by pulling the
+"read every input, build the config" logic into its own `buildAndAssembleConfig()`
+function and having Save call it *first*, every time, immediately before POSTing —
+order-independent now. Generate stays as a separate button purely for previewing the
+Review tables without committing anything.
+
+**Close Round roster-vs-scorecard mismatch alert:** Brian: "add logic in the Close,
+where it looks at the roster and the scorecards, if they don't match alert me — if a
+player is missing it was likely a withdraw [less likely a counting mistake]." Added a
+blocking `confirm()` gate before anything saves, in both directions (roster player with
+no scorecard; scorecard under a name not on the roster), framed per Brian's own stated
+priors. Cancelling saves nothing. Proceeding still saves as before (missing = 0 pts), but
+now leaves a persistent red banner listing each missing player with a one-click **Mark as
+withdrawn** button — checks their roster box, fills a default note, and saves
+immediately (reusing the Save fix above), so a withdrawal found mid-round-close doesn't
+require a separate trip to section 3.
+
+**Overall Standings podium tie fix (real gap, found while answering "did we address all
+the gaps"):** Asked to confirm all previously-flagged gaps were closed, re-traced the
+Overall Standings podium $ column and found it was still purely positional
+(`overallPot.distribution.podium[i]`) — the tie-splitting logic built earlier this
+session for round-level podiums (`computePodiumTiePayouts`) had never been wired into
+the season-long Overall podium. Two players tied for a paid Overall place would've had
+one paid in full and the other paid nothing. Fixed by reusing the same function against
+`overallRows` (tie key: `performance`, matching the existing sort). Verified with a
+standalone Node test (two-way tie for 1st/2nd splitting `(40+20)/2=30` each, 3rd
+unaffected, 4th correctly unpaid). Worth stating plainly: this was **found by re-checking
+my own earlier claim, not by Brian catching it** — the first "did we address everything"
+answer was wrong until this re-trace.
+
+**Re-close-with-corrected-data question — investigated, resolved as no-build-needed:**
+Brian asked whether re-closing an earlier round after later rounds are already closed
+"cascades" correctly, and whether GS has this capability. Checked GS directly: it
+doesn't — `deleteSeriesEvent()` is GS's only correction tool, a blunt whole-event delete,
+and `adjustQuota()` carries an explicit comment that "past events are never recalculated
+or rewritten," a deliberate stance, not an oversight. Then actually traced BFE-Admin's
+own mechanics rather than assuming: `POST /bfe/round-results` always deletes-then-inserts
+just that round's rows (confirmed in `bf_experiences_worker.js`), and Close Round always
+re-fetches every prior round's results live, never cached — so the cascade **already
+works today with zero new code**: fix a round, re-close it, then re-close everything
+after it in order, and quota chaining/WB status/Overall Standings all pick up the
+correction automatically. Recommended Brian not build anything here — matches his own
+stated philosophy (submitted scorecard is final, PGA is stricter still), matches GS's own
+long-standing precedent, and the actual escape hatch already exists if it's ever needed.
+
+**DELETED/ARCHIVED Jotform exclusion — live-verified, not just trusted:** Brian
+confirmed this is a real, already-happened scenario (Jotform's UI hides deleted rows,
+the API doesn't; he's manually deleted a real duplicate scorecard before). Ran an actual
+test: created a live CttP submission via the Jotform MCP tools (hole #3, "Chooch
+Wernett," a deliberately absurd 0.01ft distance, submission id
+`6641845571298697055`), asked Brian to delete it via his normal Jotform-UI method, then
+re-fetched it directly by ID — confirmed status flipped `ACTIVE` → `DELETED` and it's
+still retrievable by direct ID even after deletion, exactly matching Brian's description
+of Jotform's soft-delete behavior. Couldn't independently re-run the exact filtered-list
+query BFE-Admin's own code uses (no raw network access to `api.jotform.com` from this
+sandbox, no delete/filter-passthrough exposed by the Jotform MCP tools) — but found
+stronger evidence than a synthetic test could give anyway: `portal.html`'s `loadCtpData()`
+(the real Live Panel function) uses the *exact same* `{"status:ne":["DELETED","ARCHIVED"]}`
+filter, on this exact CTP form, and has been running every real BFSeries event including
+Brian's own dupe-deletion incident with zero reported leakage. Closed as verified.
+
+**Deferred, deliberately, with reasoning recorded:**
+- **Multi-Host "who can fix a duplicate" gap** — today only Brian (Jotform account owner)
+  can delete a bad submission; a future non-Brian Host running BFCup/Turkey 2Man
+  couldn't. Real, but not a Wally Cup 2026 problem (Brian is the only Host this year).
+  The right eventual shape, if it's ever built, is an in-BFE-Admin "ignore this
+  submission" list gated by the existing Host PIN — never handing a future Host Jotform
+  account access. Not built. Revisit once a non-Brian Host is actually running an event.
+
+**Also produced this session (separate track, not the GitHub source library):** the
+Wally Cup results-page design canvas (`wallycup-design/Main.dc.html`, published as a
+Claude Design artifact) was rebuilt through Rd1 → Rd2 → final (all 3 rounds + season
+pot resolved) as the dry-run event progressed, including Brian's clarified Wally Ball
+season-pot tiebreak rule (held-longest-in-the-final-round wins outright when the last
+two ballholders both lose it the same round, no split, neither earns that round's WB
+bonus). This is a mockup/visualization exercise distinct from Phase 3's actual player-
+facing results-page build (§8 below) — informative for that future build, not a
+substitute for it.
+
+**Carry-forward into Dev-76:**
+1. **Phase 3 — the player-facing results page is still Dev-76's real next priority**,
+   exactly as Dev-74 already flagged; nothing in this session touched it. See §8 of
+   `BF_WallyCup_Spec.md` (updated this session) for current scope and the two labeling
+   fixes it must carry forward from the admin tool.
+2. **Multi-Host "who can delete a duplicate submission" gap** (above) — not urgent for
+   Wally Cup 2026, but worth remembering once BFCup/Turkey 2Man gets a non-Brian Host.
+3. **Before real Rd1 (10am 9/11):** unchanged from Dev-74's own carry-forward — the live
+   "2026 Wally Cup" event in D1 is still this dry-run's test data. Needs a clean Data &
+   Reset → Delete and fresh Setup with the real roster/tee assignments before the real
+   event, so real Rd1 doesn't chain off test quota values. **Not done this session** —
+   the dry-run was the point of this session, not the cleanup.
+4. Everything else carried from Dev-74 (2Man scramble formula still undefined but
+   de-prioritized; `hasLivePanelSupport()`'s `format-scramble` side effect; the ±25%
+   quota cap never observed triggered; the `4a` venue-tee-catalog divergence note) is
+   still open, untouched this session — not re-verified, not newly stale either.
+5. `BF_Operations_Guide.md`/`BF_EventSite_Schema.md` were checked this session and found
+   **not** impacted by this session's work (the Ops Guide's Wally Cup section is already
+   stale from well before this session — pre-Dev-73 — and wasn't this session's job to
+   fix; the Event Site Schema describes the future Phase 3 publish layer, untouched
+   since nothing in Phase 3 was built here). Only `BF_Session_Log.md` (this entry),
+   `BF_Session_Bootstrap.md`, and `BF_WallyCup_Spec.md` were updated.
+
+**Process notes:**
+- A naming inconsistency worth flagging for whoever reads `BFE-Admin.html`'s own code
+  comments next: fixes within this session were labeled sequentially in-file as
+  "Dev-81" through "Dev-88" (one per feature/fix), not realizing until asked to close
+  out that this codebase's actual convention is one Dev-N **per session** (Dev-71
+  through Dev-74, each a full sitting), tracked centrally in this log — not a per-fix
+  counter. This whole session is Dev-75 in that scheme, despite what its own code
+  comments say. Not renumbering the existing comments (would touch working code for
+  cosmetic reasons alone) — flagging it here so a future reader isn't confused finding
+  "Dev-88" inside a file whose actual session was Dev-75, and so the next session
+  doesn't perpetuate the drift: **the next in-file comment number is Dev-76, matching
+  this log, not Dev-89.**
+- The device bridge / AutoPush workflow held up cleanly all session, same as Dev-74's
+  closing note predicted — every fix (Dev-84 through the tie-fix above) delivered via
+  `SendUserFile` + `device_commit_files` into the AutoPush folder without incident,
+  after one early miss (forgot the AutoPush push on the very first delivery this
+  session, caught by Brian directly — "why didn't you push bfe-admin into the
+  /autopush folder?" — not a connection issue, confirmed via `get_device_info`, just an
+  oversight; every delivery after that included both steps without being asked again).
+- Reiterating the standing lesson once more (fifth session it's come up in some form):
+  verify against evidence, not against a script reporting success — the Overall
+  Standings tie gap above was found only by actually re-reading the code a second time
+  when asked to confirm it was fixed, not by trusting the earlier claim.
+
+**Session Dev-75 fully closed.**
+
+**Chat-rename string:** `Dev-75 - Wally Cup Dry-Run Surfaces Real Payout Gaps (Podium Ties, CTP Rollover), Scorecard Reconciliation Tools, Withdraw-a-Player, Save/Generate Fix`
