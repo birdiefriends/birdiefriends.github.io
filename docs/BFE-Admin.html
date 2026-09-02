@@ -258,6 +258,19 @@
     <div id="wcStandings" style="margin-top:18px"></div>
   </section>
 
+  <!-- ── Publish results page ─────────────────────────────────────── -->
+  <section class="card" id="publishResultsSection">
+    <h2>10. Publish results page <span class="badge">Phase 3</span></h2>
+    <p class="hint">Builds the player-facing results page (round-by-round leaderboards, Skins/CTP, Wally Ball tracker, and Overall standings once every round rolling into it is closed) straight from what's already saved in bfe_round_results/bfe_round_skins/bfe_round_cttp — nothing here re-runs the scoring engine, it only reads back what Close Round already computed and pushes it to <code>docs/&lt;path&gt;</code> via the main Worker's existing <code>/deploy</code> route (same mechanism portal.html uses). Safe to re-run any time a round changes — it always overwrites the same page. Preview first; nothing is published until you click Generate &amp; publish.</p>
+    <div class="row">
+      <div style="flex:2"><label for="resultsPagePath">Publish path (under docs/)</label><input type="text" id="resultsPagePath" value="wally-cup-results.html"></div>
+      <div style="align-self:flex-end"><button type="button" id="previewResultsBtn">👁️ Preview (no publish)</button></div>
+      <div style="align-self:flex-end"><button type="button" id="publishResultsBtn">🌐 Generate &amp; publish</button></div>
+    </div>
+    <div id="publishResultsStatus" class="status"></div>
+    <div id="publishResultsPreviewWrap" style="margin-top:12px"></div>
+  </section>
+
   <!-- ── Output / review ───────────────────────────────────────────── -->
   <section class="card" id="outputSection">
     <h2>9. Review</h2>
@@ -2618,9 +2631,15 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
       };
     });
 
+    // Dev-76: persist CTP hole-winner detail too (hole/player/dist/payout),
+    // not just each player's aggregate payout_cttp — the results page needs
+    // the per-hole "who/how far/how much" the same way it already gets that
+    // for Skins, and this was the only piece Close Round computed but never
+    // saved anywhere (see bfe_round_cttp in bf_experiences_worker.js).
+    const cttpToSave = cttpWinners.map(c => ({ hole: c.hole, player: c.player, dist: c.dist, payout: c.payout }));
     const saveRes = await fetch(base + '/bfe/round-results', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_name: eventName, round_name: roundName, results, skins, pin })
+      body: JSON.stringify({ event_name: eventName, round_name: roundName, results, skins, cttp: cttpToSave, pin })
     });
     const saveData = await saveRes.json();
     if (!saveRes.ok) throw new Error(saveData.error || `HTTP ${saveRes.status}`);
@@ -2693,6 +2712,688 @@ async function deleteEventData(eventName) {
 }
 
 document.getElementById('refreshEventsListBtn').addEventListener('click', loadEventsList);
+
+// ══════════════════════════════════════════════════════════════════════
+// Inlined from results_generator.js (Dev-76)
+// ══════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════
+// Wally Cup Results Page — generator (Dev-76)
+// Browser-safe, no imports — designed to be pasted into BFE-Admin.html
+// alongside its existing scoring functions. Consumes ALREADY-COMPUTED,
+// ALREADY-PERSISTED numbers from bfe_round_results/bfe_round_skins/
+// bfe_round_cttp (podium/skins/CTP $ are read back, not recomputed) —
+// the only things this file computes fresh are vs-par (from bfe_scorecards
+// hole arrays) and the season-long Wally Ball pot resolution (incl. the
+// same-round-elimination tiebreak), neither of which BFE-Admin persists.
+// ══════════════════════════════════════════════════════════════════════
+
+// Stableford point -> strokes-vs-par, per Brian's fixed scale (double bogey
+// is the hard cap this format plays under — 0 points is always exactly +2,
+// never "or worse"). Table per the WallyCup_Results_Design_Reference.dc.html
+// comment (Dev-75): 0=+2, 1=+1, 2=par, 4=-1, 6=-2, 8=-3.
+const VS_PAR_BY_POINTS = { 0: 2, 1: 1, 2: 0, 4: -1, 6: -2, 8: -3 };
+
+function fmtPayout(n) {
+  if (!n) return '—';
+  return '$' + (Number.isInteger(n) ? n : n.toFixed(2)).toString().replace(/\.00$/, '');
+}
+function signed(n, decimals) {
+  decimals = decimals == null ? 2 : decimals;
+  const v = Number(n);
+  const sign = v < 0 ? '−' : '+';
+  return sign + Math.abs(v).toFixed(decimals);
+}
+function perfClass(n) {
+  const r = Math.round(n);
+  return r === 0 ? 'even' : (r > 0 ? 'good' : 'bad');
+}
+function computeVsPar(holes) {
+  if (!Array.isArray(holes) || holes.length !== 18) return null;
+  let sum = 0;
+  for (const pt of holes) {
+    const v = VS_PAR_BY_POINTS[pt];
+    if (v === undefined) return null; // unrecognized point value — don't guess
+    sum += v;
+  }
+  return sum;
+}
+function sumPars(parsArr) {
+  if (!Array.isArray(parsArr) || !parsArr.length) return null;
+  return parsArr.reduce((a, b) => a + b, 0);
+}
+
+// ── Core: assemble everything the page needs from raw fetched data ──────
+// config:            GET /bfe/events?event=X .config
+// resultsPayload:     GET /bfe/round-results?event=X  → {results, skins, cttp}
+// venuesByName:       {venueName: {pars:[18 ints]}} from main worker GET /venues
+// scorecardsByRound:  {roundName: [{player, holes:[18], total}]} from BFE worker GET /scorecards
+function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound) {
+  const allResults = resultsPayload.results || [];
+  const allSkins = resultsPayload.skins || [];
+  const allCttp = resultsPayload.cttp || [];
+  const withdrawnNames = new Set((config.roster || []).filter(p => p.withdrawn).map(p => p.name));
+  // Only stableford_quota rounds get a leaderboard section here — this
+  // generator reads quota_in/quota_out, which only that engine populates.
+  // 2Man (scramble_pair, once built) isn't in config.rounds at all yet
+  // (spec §4/§8 — de-prioritized, no engine wired up); when it lands it
+  // should get its own render path rather than being forced through this
+  // one, same as its dedicated placeholder section below already assumes.
+  config = { ...config, rounds: (config.rounds || []).filter(r => !r.engine || r.engine === 'stableford_quota') };
+  const rollsInto = config.rounds.filter(r => r.rollsIntoOverall !== false);
+  const closedRoundNames = new Set(allResults.map(r => r.round_name));
+
+  // Track, in round order, the first round each player actually LOST the
+  // ball in (wb_hole present — the real loss event, not a later round's
+  // "already out" echo) — needed for "Already out — lost RdN" detail text.
+  const lossRoundByPlayer = {};
+  config.rounds.forEach(r => {
+    allResults.filter(x => x.round_name === r.name).forEach(x => {
+      if (x.wb_status === 'No' && x.wb_hole != null && !lossRoundByPlayer[x.player_name]) {
+        lossRoundByPlayer[x.player_name] = r.name;
+      }
+    });
+  });
+  const roundLabelByName = {};
+  config.rounds.forEach((r, i) => { roundLabelByName[r.name] = 'Rd' + (i + 1); });
+
+  const roundSections = config.rounds.map((r, idx) => {
+    const closed = closedRoundNames.has(r.name);
+    const results = allResults.filter(x => x.round_name === r.name).slice().sort((a, b) => (a.rank || 99) - (b.rank || 99));
+    const skins = allSkins.filter(x => x.round_name === r.name);
+    const cttp = allCttp.filter(x => x.round_name === r.name);
+    const wbInf = (r.influencers || []).find(i => i.id === 'wally_ball');
+    const wbBonusPts = wbInf ? wbInf.points : 0;
+    const venue = venuesByName[r.venue] || {};
+    const par = sumPars(venue.pars);
+    const scorecards = scorecardsByRound[r.name] || [];
+    const holesByPlayer = {};
+    scorecards.forEach(sc => { holesByPlayer[sc.player] = sc.holes; });
+
+    const totalSkinsPayout = results.reduce((s, x) => s + (x.payout_skins || 0), 0);
+    const perSkin = skins.length ? Math.round(totalSkinsPayout / skins.length) : 0;
+
+    const players = results.map(r0 => {
+      const keptWB = r0.wb_status === 'Yes';
+      const quotaPerf = r0.performance;
+      const roundPerf = quotaPerf + (keptWB ? wbBonusPts : 0);
+      const vsPar = computeVsPar(holesByPlayer[r0.player_name]);
+      const totalPayout = (r0.payout_podium || 0) + (r0.payout_skins || 0) + (r0.payout_cttp || 0);
+      let wbDetail;
+      if (keptWB) {
+        wbDetail = `Scored ${r0.actual_points} · In Play${wbBonusPts ? `, +${wbBonusPts} bonus pt` : ''}`;
+      } else if (r0.wb_hole != null) {
+        wbDetail = `Scored ${r0.actual_points} · Hole ${r0.wb_hole}-${r0.wb_stroke ?? '?'}`;
+      } else {
+        const lostIn = lossRoundByPlayer[r0.player_name];
+        wbDetail = `Scored ${r0.actual_points} · Already out${lostIn ? ` — lost ${roundLabelByName[lostIn]}` : ''}`;
+      }
+      const perfCalc = keptWB
+        ? `${signed(quotaPerf)} quota achievement + ${wbBonusPts.toFixed(2)} Wally Ball = ${signed(roundPerf)} Round Perf.`
+        : `${signed(quotaPerf)} quota achievement — Wally Ball lost this round, no bonus`;
+      return {
+        rank: r0.rank, name: r0.player_name, withdrawn: withdrawnNames.has(r0.player_name),
+        quotaIn: r0.quota_in.toFixed(2), quotaOut: r0.quota_out.toFixed(2),
+        actualPoints: r0.actual_points, quotaPerf, roundPerf,
+        roundPerfDisplay: signed(roundPerf), roundPerfBadgeClass: 'perf-badge ' + perfClass(roundPerf),
+        vsParDisplay: vsPar != null && par != null ? ` (${par + vsPar})` : '',
+        wbLabel: keptWB ? 'In Play' : 'Lost', wbPillClass: 'wb-pill ' + (keptWB ? 'wb-in' : 'wb-out'), wbDetail,
+        payoutCol: fmtPayout(totalPayout), perfCalc,
+        rowClass: r0.rank === 1 ? 'lb-row leader-row' : 'lb-row',
+      };
+    });
+
+    const podium = results.filter(x => x.payout_podium > 0).map(x => ({ name: x.player_name, amt: fmtPayout(x.payout_podium) }));
+    const skinsList = skins.map(s => ({ name: s.winner, hole: `Hole ${s.hole} — ${fmtPayout(perSkin)}` }));
+    const ctpList = cttp.map(c => ({ name: c.winner, detail: `Hole ${c.hole}${c.dist != null ? ` — ${c.dist}′` : ''} — ${fmtPayout(c.payout)}` }));
+
+    return {
+      idx, name: r.name, venue: r.venue, closed,
+      label: 'Round ' + (idx + 1), sectionTitle: `Round ${idx + 1} · ${r.venue}${closed ? ' — Final' : ''}`,
+      quotaInLabel: 'Quota Rd' + (idx + 1),
+      players, leader: players[0] || null,
+      podium, skinsList, ctpList,
+    };
+  });
+
+  // ── Overall standings — Round Perf. (quota achievement + that round's own
+  // kept Wally Ball bonus), summed across rollsInto rounds. Deliberately
+  // WB-INCLUSIVE per-round and in the sum, per the reasoned call recorded in
+  // WallyCup_Results_Design_Reference.dc.html: Wally Ball is a real
+  // competitive category and has to matter for ranking here, same as it
+  // already does for each round's own Rank/Podium $. The ONLY number that
+  // must never include it is Quota Out / next round's Quota In (computed
+  // per-round above, untouched by this section).
+  const totalRollup = rollsInto.length;
+  const closedRollup = rollsInto.filter(r => closedRoundNames.has(r.name)).length;
+  const isComplete = totalRollup > 0 && closedRollup === totalRollup;
+
+  const byPlayerRoundPerf = {}; // name -> {roundName: roundPerf}
+  roundSections.forEach(sec => {
+    if (!rollsInto.some(r => r.name === sec.name)) return;
+    sec.players.forEach(p => {
+      if (withdrawnNames.has(p.name)) return;
+      byPlayerRoundPerf[p.name] = byPlayerRoundPerf[p.name] || {};
+      byPlayerRoundPerf[p.name][sec.name] = p.roundPerf;
+    });
+  });
+  const overallNames = Object.keys(byPlayerRoundPerf);
+  const overallRaw = overallNames.map(name => {
+    const perRound = rollsInto.map(r => byPlayerRoundPerf[name][r.name]);
+    const overall = perRound.reduce((s, v) => s + (v || 0), 0);
+    return { name, perRound, overall };
+  }).sort((a, b) => b.overall - a.overall);
+
+  const overallPot = (config.payout?.pots || []).find(p => p.id === 'overall');
+  let overallTiePayouts = {};
+  if (isComplete && overallPot) {
+    // Tie-aware podium split, ported from BFE-Admin's computePodiumTiePayouts —
+    // tieKey is the WB-inclusive overall (the same value used to rank/sort
+    // above), consistent with every round's own podium tie-key already being
+    // WB-inclusive (rankPerformance).
+    const sorted = overallRaw.map(r => ({ name: r.name, tieKey: r.overall }));
+    const prizes = overallPot.distribution.podium;
+    let placeIdx = 0;
+    while (placeIdx < Math.min(prizes.length, sorted.length)) {
+      const thisKey = sorted[placeIdx].tieKey;
+      const group = [];
+      let scan = placeIdx;
+      while (scan < sorted.length && sorted[scan].tieKey === thisKey) { group.push(sorted[scan].name); scan++; }
+      let prizeSum = 0;
+      for (let k = placeIdx; k < Math.min(scan, prizes.length); k++) prizeSum += prizes[k];
+      const share = Math.floor(prizeSum / group.length);
+      group.forEach(n => { overallTiePayouts[n] = share; });
+      placeIdx = scan;
+    }
+  }
+  const overallStandings = overallRaw.map((o, i) => ({
+    name: o.name, rank: i + 1, rowClass: i === 0 ? 'lb-row leader-row' : 'lb-row',
+    perRound: o.perRound.map(v => v == null ? '—' : signed(v)),
+    overall: signed(o.overall), overallBadgeClass: 'perf-badge ' + perfClass(o.overall),
+    podiumAmt: overallTiePayouts[o.name] ? fmtPayout(overallTiePayouts[o.name]) : null,
+  }));
+  const champion = isComplete ? overallStandings[0] : null;
+
+  // ── Wally Ball season pot ────────────────────────────────────────────
+  const wbPot = (config.payout?.pots || []).find(p => p.id === 'wally_ball');
+  const rosterNames = (config.roster || []).map(p => p.name).filter(n => !withdrawnNames.has(n));
+  let stillIn = rosterNames.slice();
+  let potWinner = null;      // name
+  let potWinnerNote = null;  // display detail
+  let potTiedSplit = null;   // array of names, if it's ever a genuine unresolved split
+
+  config.rounds.forEach(r => {
+    if (!closedRoundNames.has(r.name)) return;
+    if (potWinner || potTiedSplit) return; // already resolved
+    const before = stillIn.slice();
+    const losersThisRound = before.filter(name => {
+      const row = allResults.find(x => x.round_name === r.name && x.player_name === name);
+      return row && row.wb_status === 'No' && row.wb_hole != null;
+    });
+    if (!losersThisRound.length) return;
+    const remaining = before.filter(n => !losersThisRound.includes(n));
+    if (remaining.length >= 1) {
+      stillIn = remaining;
+      if (remaining.length === 1 && closedRoundNames.has(config.rounds[config.rounds.length - 1].name)) {
+        // Only crown once the event can't produce a later challenger — i.e.
+        // once we're processing rounds and one player is the sole survivor
+        // with no rounds left to knock them out either. Simplify: sole
+        // survivor after ANY round, with nobody else left, wins — nothing
+        // downstream can un-eliminate a rival.
+      }
+      if (remaining.length === 1) {
+        potWinner = remaining[0];
+        potWinnerNote = 'Last one holding it — nobody else survived to challenge.';
+      }
+    } else {
+      // Simultaneous elimination — before.length players were tied for the
+      // ball and ALL lost it this same round. Brian's tiebreak: whoever held
+      // it longest (higher hole number; higher stroke breaks a hole tie)
+      // wins outright, no split.
+      if (before.length === 1) {
+        // The sole remaining player lost it themselves with nobody left to
+        // beat — they still win by default (nothing to tiebreak against).
+        potWinner = before[0];
+        potWinnerNote = `Held it longest of anyone left — lost it themselves in ${roundLabelByName[r.name]} with nobody else still in it.`;
+      } else {
+        const detail = losersThisRound.map(name => {
+          const row = allResults.find(x => x.round_name === r.name && x.player_name === name);
+          return { name, hole: row.wb_hole, stroke: row.wb_stroke };
+        }).sort((a, b) => (b.hole - a.hole) || (b.stroke - a.stroke));
+        const top = detail[0];
+        const tiedForTop = detail.filter(d => d.hole === top.hole && d.stroke === top.stroke);
+        if (tiedForTop.length === 1) {
+          potWinner = top.name;
+          potWinnerNote = `Both remaining ballholders lost it in ${roundLabelByName[r.name]}, so the pot goes to whoever held on longest: ` +
+            detail.map(d => `${d.name} lost on Hole ${d.hole}-${d.stroke}`).join(', ') + '.';
+        } else {
+          potTiedSplit = tiedForTop.map(d => d.name);
+          potWinnerNote = `Still tied for "held it longest" in ${roundLabelByName[r.name]} — splits the pot: ` +
+            detail.map(d => `${d.name} lost on Hole ${d.hole}-${d.stroke}`).join(', ') + '.';
+        }
+      }
+      stillIn = [];
+    }
+  });
+
+  const wallyBall = rosterNames.map(name => {
+    const cumBonus = (byPlayerRoundPerf[name] ? Object.keys(byPlayerRoundPerf[name]) : []).reduce((s, rn) => {
+      const row = allResults.find(x => x.round_name === rn && x.player_name === name);
+      if (!row) return s;
+      const r = config.rounds.find(rr => rr.name === rn);
+      const wbInf = (r.influencers || []).find(i => i.id === 'wally_ball');
+      return s + (row.wb_status === 'Yes' && wbInf ? wbInf.points : 0);
+    }, 0);
+    const lossRound = lossRoundByPlayer[name];
+    const lossRow = lossRound ? allResults.find(x => x.round_name === lossRound && x.player_name === name) : null;
+    const isWinner = name === potWinner;
+    const isSplitWinner = potTiedSplit && potTiedSplit.includes(name);
+    const stillActive = !lossRound && stillIn.includes(name);
+    let status, statusClass, detail, cardClass = '';
+    if (isWinner || isSplitWinner) {
+      status = isSplitWinner ? 'SPLITS POT' : 'WON POT';
+      statusClass = 'wb-status-won'; cardClass = 'wb-card-winner';
+      detail = lossRow ? `Lost ${roundLabelByName[lossRound]} — hole ${lossRow.wb_hole}-${lossRow.wb_stroke} · ${potWinnerNote}` : (potWinnerNote || '');
+    } else if (stillActive) {
+      status = 'IN PLAY'; statusClass = 'wb-status-in';
+      detail = 'Still has it — never lost the ball.';
+    } else {
+      status = 'OUT'; statusClass = 'wb-status-out';
+      detail = lossRow ? `Lost ${roundLabelByName[lossRound]} — hole ${lossRow.wb_hole}-${lossRow.wb_stroke}` : 'Out.';
+    }
+    return { name, status, statusPillClass: 'wb-status ' + statusClass, detail, bonus: cumBonus, cardClass };
+  });
+  const wbEligibleNow = stillIn.length; // if unresolved (event not complete), this is "still in it"
+  const wbResolved = !!(potWinner || potTiedSplit);
+
+  return {
+    eventName: config.eventName, eventDate: config.eventDate,
+    rounds: config.rounds.map((r, i) => ({
+      num: String(i + 1), label: 'Round ' + (i + 1), venue: r.venue,
+      tag: closedRoundNames.has(r.name) ? 'Final' : 'Not started',
+      nodeClass: 'rail-node ' + (closedRoundNames.has(r.name) ? 'done' : 'locked'),
+    })),
+    roundSections, overallStandings, champion, isComplete,
+    closedRollup, totalRollup,
+    wallyBall, wbPot: wbPot ? wbPot.poolTotal : null, wbEligibleNow, wbResolved, potWinner, potTiedSplit, potWinnerNote,
+  };
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// CSS lifted verbatim from source/WallyCup_Results_Design_Reference.dc.html's
+// <style> block (Dev-75) — same visual language, just served as a plain
+// static page instead of a Claude Design canvas artboard.
+const RESULTS_PAGE_CSS = `
+*{box-sizing:border-box;}
+body{margin:0;background:#0d1f3d;color:#f5f0e8;font-family:'DM Sans',sans-serif;}
+a{color:#e8392a;} a:hover{color:#f27a68;}
+.page{--navy:#0d1f3d;--navy2:#152c52;--accent:#e8392a;--accent-light:color-mix(in srgb, var(--accent) 65%, white);--accent-dim:color-mix(in srgb, var(--accent) 60%, black);--white:#f5f0e8;--white-dim:rgba(245,240,232,0.62);--white-faint:rgba(245,240,232,0.12);--white-faintest:rgba(245,240,232,0.06);--good:#6fbf7e;--bad:#e0a050;max-width:960px;margin:0 auto;background:var(--navy);}
+.wrap{padding:0 1.5rem;}
+.hero{text-align:center;padding:2.75rem 1.5rem 2rem;border-bottom:1px solid rgba(232,57,42,0.25);background:radial-gradient(ellipse at 50% 0%,rgba(232,57,42,0.10) 0%,transparent 70%);}
+.hero-eyebrow{font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-light);margin-bottom:0.6rem;font-weight:600;}
+.hero-title{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:clamp(2.6rem,9vw,4.2rem);color:var(--white);line-height:1;margin-bottom:0.5rem;text-shadow:0 2px 20px rgba(232,57,42,0.25);}
+.hero-subtitle{font-size:13px;color:var(--white-dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:1.35rem;font-weight:400;}
+.state-pill{display:inline-flex;align-items:center;gap:7px;background:rgba(111,191,126,0.15);border:1px solid rgba(111,191,126,0.45);border-radius:99px;padding:6px 18px;font-size:11px;font-weight:700;color:var(--good);letter-spacing:0.1em;text-transform:uppercase;}
+.state-pill.open{background:rgba(224,160,80,0.15);border-color:rgba(224,160,80,0.45);color:#e0a050;}
+.state-dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px currentColor;opacity:0.9;}
+.rail{display:flex;align-items:stretch;gap:0;padding:1.5rem 1.5rem 0.5rem;max-width:820px;margin:0 auto;}
+.rail-node{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 6px;position:relative;}
+.rail-line{position:absolute;top:15px;left:-50%;width:100%;height:2px;background:var(--white-faint);z-index:0;}
+.rail-node:first-child .rail-line{display:none;}
+.rail-node.done .rail-line{background:rgba(111,191,126,0.4);}
+.rail-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Baloo 2',sans-serif;font-weight:700;font-size:13px;z-index:1;margin-bottom:0.5rem;}
+.rail-node.done .rail-dot{background:rgba(111,191,126,0.18);border:1.5px solid var(--good);color:var(--good);}
+.rail-node.locked .rail-dot{background:var(--white-faintest);border:1.5px solid var(--white-faint);color:var(--white-dim);}
+.rail-round{font-size:12px;font-weight:700;color:var(--white);}
+.rail-venue{font-size:10.5px;color:var(--white-dim);margin-top:1px;}
+.rail-tag{margin-top:5px;font-size:8.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;border-radius:99px;padding:2px 9px;}
+.rail-node.done .rail-tag{background:rgba(111,191,126,0.15);color:var(--good);}
+.rail-node.locked .rail-tag{background:var(--white-faintest);color:var(--white-dim);}
+.section{padding:2.1rem 1.5rem;border-top:1px solid var(--white-faintest);}
+.section-head{display:flex;align-items:flex-start;gap:0.85rem;margin-bottom:1.1rem;}
+.section-num{font-family:'Baloo 2',sans-serif;font-size:1.6rem;font-weight:800;color:var(--accent);line-height:1;}
+.section-title{font-size:16px;font-weight:700;color:var(--white);}
+.section-desc{font-size:12px;color:var(--white-dim);margin-top:2px;}
+.chain-note{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--white-dim);margin:-0.4rem 0 1rem 2.45rem;font-style:italic;}
+.winner-banner{border-radius:14px;padding:1rem 1.2rem;margin-bottom:1rem;background:linear-gradient(135deg,rgba(232,57,42,0.16) 0%,rgba(232,57,42,0.05) 100%);border:1px solid rgba(232,57,42,0.35);}
+.comp-label{font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--accent-light);margin-bottom:5px;font-weight:700;}
+.winner-name{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:1.5rem;color:var(--white);margin-bottom:2px;}
+.winner-stat{font-size:12.5px;color:var(--white-dim);}
+.lb-card{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:16px;overflow:hidden;overflow-x:auto;}
+.lb-table{width:100%;border-collapse:collapse;min-width:520px;}
+.lb-table thead tr{background:rgba(232,57,42,0.09);border-bottom:1px solid rgba(232,57,42,0.22);}
+.lb-table th{font-size:9.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent-light);padding:9px 10px;text-align:right;white-space:nowrap;}
+.lb-table th.left{text-align:left;}
+.lb-table td{padding:9px 10px;text-align:right;border-bottom:1px solid rgba(245,240,232,0.06);font-size:12.5px;white-space:nowrap;}
+.lb-table td.left{text-align:left;white-space:normal;}
+.lb-row.leader-row{background:rgba(232,57,42,0.08);}
+.lb-row:last-child td{border-bottom:none;}
+.lb-row.withdrawn-row{opacity:0.45;}
+.rank-cell{font-family:'Baloo 2',sans-serif;font-weight:700;color:var(--white-dim);width:26px;}
+.leader-row .rank-cell{color:var(--accent-light);}
+.player-name{font-weight:600;font-size:13px;color:var(--white);}
+.vspar-tag{font-size:11px;font-weight:500;color:var(--white-dim);margin-left:4px;}
+.payout-val{color:var(--accent-light);font-weight:700;}
+.quota-val{color:var(--white-dim);font-weight:400;}
+.perf-badge{font-weight:700;font-size:12.5px;padding:2px 0;}
+.perf-badge.good{color:var(--good);}
+.perf-badge.bad{color:var(--bad);}
+.perf-badge.even{color:var(--white-dim);}
+.perf-detail summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:3px;}
+.perf-detail summary::-webkit-details-marker{display:none;}
+.perf-detail summary::after{content:'\\24d8';font-size:8.5px;font-weight:400;color:var(--white-dim);opacity:0.6;margin-left:1px;}
+.perf-detail[open] summary::after{opacity:1;color:var(--accent-light);}
+.perf-calc{position:relative;margin-top:5px;background:var(--navy2);border:1px solid rgba(232,57,42,0.35);border-radius:8px;padding:8px 10px;font-size:10.5px;line-height:1.5;color:var(--white-dim);white-space:normal;text-align:left;max-width:260px;margin-left:auto;font-weight:400;}
+.wb-pill{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:0.02em;border-radius:99px;padding:2px 8px;}
+.wb-in{background:rgba(111,191,126,0.14);color:var(--good);}
+.wb-out{background:rgba(224,160,80,0.14);color:var(--bad);}
+.wb-detail{display:block;font-size:9.5px;color:var(--white-dim);margin-top:2px;font-weight:400;}
+.side-strip{display:flex;gap:0.9rem;flex-wrap:wrap;margin-top:1rem;}
+.side-card{flex:1;min-width:220px;background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);border-radius:12px;padding:0.85rem 1rem;}
+.side-label{font-size:9.5px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-light);margin-bottom:0.55rem;}
+.side-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:var(--white);}
+.side-row .hole{color:var(--white-dim);font-weight:400;}
+.side-empty{font-size:11.5px;color:var(--white-dim);opacity:0.7;}
+.locked-card{background:var(--white-faintest);border:1px dashed rgba(245,240,232,0.18);border-radius:16px;padding:2rem 1.5rem;text-align:center;}
+.lock-icon{margin-bottom:0.85rem;opacity:0.55;}
+.locked-title{font-size:14px;font-weight:700;color:var(--white-dim);margin-bottom:4px;}
+.locked-sub{font-size:12px;color:var(--white-dim);opacity:0.75;max-width:360px;margin:0 auto;}
+.wb-section{border-top:1px solid rgba(232,57,42,0.18);}
+.wb-pot-banner{display:flex;justify-content:space-between;align-items:center;gap:1rem;background:linear-gradient(135deg,rgba(232,57,42,0.14) 0%,rgba(232,57,42,0.04) 100%);border:1px solid rgba(232,57,42,0.3);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.1rem;flex-wrap:wrap;}
+.wb-pot-amt{font-family:'Baloo 2',sans-serif;font-size:1.7rem;font-weight:800;color:var(--white);}
+.wb-pot-lbl{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent-light);font-weight:700;}
+.wb-pot-remain{font-size:12.5px;color:var(--white-dim);max-width:520px;}
+.wb-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.6rem;}
+.wb-card{display:flex;justify-content:space-between;align-items:center;gap:0.6rem;background:var(--white-faintest);border:1px solid rgba(245,240,232,0.08);border-radius:12px;padding:0.65rem 0.85rem;}
+.wb-card-name{font-size:12.5px;font-weight:600;color:var(--white);}
+.wb-card-detail{font-size:10px;color:var(--white-dim);margin-top:1px;max-width:220px;}
+.wb-status{font-size:10px;font-weight:700;letter-spacing:0.06em;border-radius:99px;padding:3px 10px;white-space:nowrap;}
+.wb-status-in{background:rgba(111,191,126,0.15);color:var(--good);}
+.wb-status-out{background:rgba(224,160,80,0.13);color:var(--bad);}
+.wb-status-won{background:rgba(232,57,42,0.16);color:var(--accent-light);}
+.wb-bonus{font-size:9.5px;color:var(--white-dim);margin-top:2px;}
+.wb-card-winner{border-color:rgba(232,57,42,0.5);background:rgba(232,57,42,0.07);}
+.twoman-section{background:var(--navy2);border-top:1px solid rgba(245,240,232,0.08);border-bottom:1px solid rgba(245,240,232,0.08);}
+.photo-slot{border:1.5px dashed rgba(245,240,232,0.16);border-radius:16px;padding:2.4rem 1.5rem;text-align:center;background:rgba(245,240,232,0.02);}
+.photo-icon{margin-bottom:0.9rem;opacity:0.4;}
+.photo-slot-title{font-size:14px;font-weight:700;color:var(--white-dim);margin-bottom:4px;}
+.photo-slot-sub{font-size:11.5px;color:var(--white-dim);opacity:0.7;max-width:340px;margin:0 auto;}
+.footer{padding:2.2rem 1.5rem 3rem;text-align:center;}
+.back-btn{display:inline-flex;align-items:center;gap:7px;background:var(--white-faint);border:1px solid rgba(245,240,232,0.18);border-radius:99px;padding:9px 22px;font-size:12.5px;font-weight:600;color:var(--white);text-decoration:none;}
+.footer-meta{font-size:10.5px;color:var(--white-dim);opacity:0.55;margin-top:1.1rem;}
+@media (max-width:520px){.wb-grid{grid-template-columns:1fr;}.rail{padding:1.25rem 0.6rem 0.5rem;}.lb-table th,.lb-table td{padding:8px 6px;font-size:11.5px;}}
+`;
+
+function renderPlayerRow(p) {
+  return `<tr class="${p.rowClass}${p.withdrawn ? ' withdrawn-row' : ''}">
+    <td class="left"><span class="rank-cell">${p.rank ?? '—'}</span> <span class="player-name">${escapeHtml(p.name)}</span>${p.withdrawn ? ' <span class="vspar-tag">(withdrew)</span>' : ''}<span class="vspar-tag">${p.vsParDisplay}</span></td>
+    <td class="quota-val">${p.quotaIn}</td>
+    <td>
+      <details class="perf-detail"><summary class="${p.roundPerfBadgeClass}">${p.roundPerfDisplay}</summary>
+      <div class="perf-calc">${escapeHtml(p.perfCalc)}</div></details>
+    </td>
+    <td class="left"><span class="${p.wbPillClass}">${p.wbLabel}</span><span class="wb-detail">${escapeHtml(p.wbDetail)}</span></td>
+    <td class="payout-val">${p.payoutCol}</td>
+  </tr>`;
+}
+
+function renderRoundSection(sec, num) {
+  if (!sec.closed) {
+    return `<div class="section">
+      <div class="section-head"><div class="section-num">${num}</div><div>
+        <div class="section-title">Round ${sec.idx + 1} · ${escapeHtml(sec.venue)}</div>
+        <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+      </div></div>
+      <div class="locked-card">
+        <div class="locked-title">Not closed yet</div>
+        <div class="locked-sub">Results post here as soon as this round is closed in BFE-Admin.</div>
+      </div>
+    </div>`;
+  }
+  const sideCard = (label, emoji, items, empty) => `<div class="side-card">
+      <div class="side-label">${emoji} ${label}</div>
+      ${items.length ? items.map(i => `<div class="side-row"><span>${escapeHtml(i.name)}</span><span class="hole">${escapeHtml(i.hole || i.amt || i.detail)}</span></div>`).join('') : `<div class="side-empty">${empty}</div>`}
+    </div>`;
+  return `<div class="section">
+    <div class="section-head"><div class="section-num">${num}</div><div>
+      <div class="section-title">${escapeHtml(sec.sectionTitle)}</div>
+      <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+    </div></div>
+    <div class="chain-note">Round Perf. folds in this round's Wally Ball bonus and carries into Overall Standings; only the Quota number itself never includes it</div>
+    ${sec.leader ? `<div class="winner-banner">
+      <div class="comp-label">${sec.label} Leader</div>
+      <div class="winner-name">${escapeHtml(sec.leader.name)}</div>
+      <div class="winner-stat">${sec.leader.roundPerfDisplay} Round Perf.</div>
+    </div>` : ''}
+    <div class="lb-card"><table class="lb-table">
+      <thead><tr><th class="left">Player</th><th>${escapeHtml(sec.quotaInLabel)}</th><th>Round Perf.</th><th class="left">Wally Ball</th><th>$Earned</th></tr></thead>
+      <tbody>${sec.players.map(renderPlayerRow).join('')}</tbody>
+    </table></div>
+    <div class="side-strip">
+      ${sideCard('Podium', '🏆', sec.podium, 'No podium payout configured.')}
+      ${sideCard('Skins', '🏌️', sec.skinsList, 'No outright skins — every hole was tied.')}
+      ${sideCard('Closest to Pin', '📍', sec.ctpList, 'No CTP claims recorded.')}
+    </div>
+  </div>`;
+}
+
+function renderResultsHtml(data, opts) {
+  opts = opts || {};
+  const accent = opts.accent || '#e8392a';
+  const roundNums = ['01', '02', '03', '04', '05', '06', '07', '08'];
+  const railHtml = data.rounds.map(r => `<div class="${r.nodeClass}">
+      <div class="rail-line"></div><div class="rail-dot">${r.num}</div>
+      <div class="rail-round">${escapeHtml(r.label)}</div><div class="rail-venue">${escapeHtml(r.venue)}</div>
+      <div class="rail-tag">${r.tag}</div>
+    </div>`).join('');
+
+  const roundSectionsHtml = data.roundSections.map((sec, i) => renderRoundSection(sec, roundNums[i])).join('');
+
+  const overallNum = roundNums[data.roundSections.length];
+  let overallHtml;
+  if (data.isComplete) {
+    overallHtml = `<div class="section">
+      <div class="section-head"><div class="section-num">${overallNum}</div><div>
+        <div class="section-title">Overall Standings — Final</div>
+        <div class="section-desc">All ${data.totalRollup} rounds closed · cumulative Round Perf. (quota achievement + that round's Wally Ball bonus) — only the Quota number itself never includes Wally Ball</div>
+      </div></div>
+      <div class="winner-banner">
+        <div class="comp-label">🏆 ${escapeHtml(data.eventName)} Champion</div>
+        <div class="winner-name">${escapeHtml(data.champion.name)}</div>
+        <div class="winner-stat">${data.champion.overall} Overall · ${data.champion.perRound.join(' / ')} by round</div>
+      </div>
+      <div class="lb-card"><table class="lb-table">
+        <thead><tr><th class="left">Player</th>${data.roundSections.map((s, i) => `<th>Rd${i + 1}</th>`).join('')}<th>Overall</th>${data.overallStandings.some(o => o.podiumAmt) ? '<th>Podium $</th>' : ''}</tr></thead>
+        <tbody>${data.overallStandings.map(o => `<tr class="${o.rowClass}">
+          <td class="left"><span class="rank-cell">${o.rank}</span> <span class="player-name">${escapeHtml(o.name)}</span></td>
+          ${o.perRound.map(v => `<td class="quota-val">${v}</td>`).join('')}
+          <td><span class="${o.overallBadgeClass}">${o.overall}</span></td>
+          ${data.overallStandings.some(x => x.podiumAmt) ? `<td class="payout-val">${o.podiumAmt || '—'}</td>` : ''}
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+  } else {
+    overallHtml = `<div class="section">
+      <div class="section-head"><div class="section-num">${overallNum}</div><div>
+        <div class="section-title">Overall Standings</div>
+        <div class="section-desc">${data.closedRollup}/${data.totalRollup} rounds closed so far</div>
+      </div></div>
+      <div class="locked-card">
+        <div class="locked-title">Held back until the final round closes</div>
+        <div class="locked-sub">The season standings and champion reveal here once all ${data.totalRollup} rounds are in.</div>
+      </div>
+    </div>`;
+  }
+
+  const wbNum = roundNums[data.roundSections.length + 1];
+  const wbBannerLine = data.wbResolved
+    ? (data.potTiedSplit
+        ? `🏆 Splits the $${data.wbPot} pot: ${data.potTiedSplit.join(', ')} — ${data.potWinnerNote}`
+        : `🏆 ${escapeHtml(data.potWinner)} wins the $${data.wbPot} pot outright${data.potWinnerNote ? ' — ' + escapeHtml(data.potWinnerNote) : ''}`)
+    : (data.wbEligibleNow
+        ? `${data.wbEligibleNow} player(s) still in it — $${data.wbPot ? (data.wbPot / data.wbEligibleNow).toFixed(2) : '?'} each if it ended now.`
+        : 'Pot still open.');
+  const wbHtml = `<div class="section wb-section">
+    <div class="section-head"><div class="section-num">${wbNum}</div><div>
+      <div class="section-title">Wally Ball</div>
+      <div class="section-desc">Round bonus + season elimination pot — tracked separately from quota, and from each other</div>
+    </div></div>
+    <div class="wb-pot-banner">
+      <div><div class="wb-pot-lbl">Season Pot</div><div class="wb-pot-amt">$${data.wbPot ?? '—'}</div></div>
+      <div class="wb-pot-remain">${wbBannerLine}</div>
+    </div>
+    <div class="wb-grid">${data.wallyBall.map(w => `<div class="wb-card ${w.cardClass}">
+      <div><div class="wb-card-name">${escapeHtml(w.name)}</div><div class="wb-card-detail">${escapeHtml(w.detail)}</div><div class="wb-bonus">Cumulative bonus: ${w.bonus} pts</div></div>
+      <div class="${w.statusPillClass}">${w.status}</div>
+    </div>`).join('')}</div>
+  </div>`;
+
+  const twomanNum = roundNums[data.roundSections.length + 2];
+  const twomanHtml = `<div class="section twoman-section"><div class="wrap" style="padding:0;">
+    <div class="section-head"><div class="section-num">${twomanNum}</div><div>
+      <div class="section-title">WC 2Man Scramble</div>
+      <div class="section-desc">Standalone event — does not count toward the ${escapeHtml(data.eventName)} Overall</div>
+    </div></div>
+    <div class="locked-card">
+      <div class="locked-title">Scoring format not yet defined</div>
+      <div class="locked-sub">The 2Man scramble is a standalone build on its own timeline. Results post here once it's scored.</div>
+    </div>
+  </div></div>`;
+
+  const photoNum = roundNums[data.roundSections.length + 3];
+  const photoHtml = `<div class="wrap"><div class="section">
+    <div class="section-head"><div class="section-num">${photoNum}</div><div>
+      <div class="section-title">Photo Gallery</div>
+      <div class="section-desc">Media phase — added after data/results ship</div>
+    </div></div>
+    <div class="photo-slot">
+      <div class="photo-slot-title">Gallery coming soon</div>
+      <div class="photo-slot-sub">Event photos will appear here once the Photos phase ships.</div>
+    </div>
+  </div>`;
+
+  const footerHtml = `<div class="footer">
+    <a class="back-btn" href="/portal.html">← Back to Portal</a>
+    <div class="footer-meta">BirdieFriends Experiences · generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC</div>
+  </div></div>`;
+
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(data.eventName)} — Results</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap">
+<style>${RESULTS_PAGE_CSS}</style>
+</head><body>
+<div class="page" style="--accent:${accent}">
+  <div class="hero">
+    <div class="hero-eyebrow">BirdieFriends Experiences</div>
+    <div class="hero-title">${escapeHtml(data.eventName.replace(/^\d{4}\s*/, ''))}</div>
+    <div class="hero-subtitle">${data.eventDate || ''}</div>
+    <div class="state-pill ${data.isComplete ? '' : 'open'}"><span class="state-dot"></span>${data.isComplete ? 'Final' : `${data.closedRollup}/${data.totalRollup} rounds closed`}</div>
+  </div>
+  <div class="rail">${railHtml}</div>
+  <div class="wrap">
+    ${roundSectionsHtml}
+    ${overallHtml}
+  </div>
+  ${wbHtml}
+  ${twomanHtml}
+  ${photoHtml}
+  ${footerHtml}
+</div>
+</body></html>`;
+}
+
+
+// ══════════════════════════════════════════════════════════════════════
+// Publish results page (Dev-76 — Phase 3). Reads back what Close Round
+// already computed/saved (bfe_round_results/bfe_round_skins/bfe_round_cttp)
+// plus the event config and venue pars — recomputes nothing scoring-wise,
+// only vs-par (from bfe_scorecards hole arrays) and the season-long Wally
+// Ball pot resolution, neither of which is persisted anywhere else.
+// ══════════════════════════════════════════════════════════════════════
+async function fetchResultsPageData() {
+  const bfeBase = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const portalBase = document.getElementById('portalUrl').value.trim().replace(/\/$/, '');
+  const eventName = document.getElementById('eventName').value.trim();
+  if (!bfeBase || !portalBase || !eventName) throw new Error('Fill in the BFE Worker URL, BFPortal Worker URL, and Event name above first.');
+
+  const configRes = await fetch(bfeBase + '/bfe/events?event=' + encodeURIComponent(eventName));
+  const configData = await configRes.json();
+  if (!configRes.ok || !configData.config) throw new Error(configData.error || 'Could not load this event\'s config — save it in Setup (section 7) first.');
+  const config = configData.config;
+
+  const resultsRes = await fetch(bfeBase + '/bfe/round-results?event=' + encodeURIComponent(eventName));
+  const resultsPayload = await resultsRes.json();
+  if (!resultsRes.ok) throw new Error(resultsPayload.error || 'Could not load round results.');
+
+  const venuesByName = {};
+  try {
+    const venuesRes = await fetch(portalBase + '/venues');
+    const venuesData = await venuesRes.json();
+    (venuesData.venues || []).forEach(v => { venuesByName[v.name] = { pars: v.pars ? JSON.parse(v.pars) : null }; });
+  } catch (e) { console.warn('[BFE] Could not load venue pars — vs-par will be omitted:', e.message); }
+
+  const scorecardsByRound = {};
+  await Promise.all((config.rounds || []).map(async r => {
+    try {
+      const res = await fetch(bfeBase + '/scorecards?event=' + encodeURIComponent(r.name));
+      const arr = await res.json();
+      scorecardsByRound[r.name] = Array.isArray(arr) ? arr : [];
+    } catch (e) { scorecardsByRound[r.name] = []; }
+  }));
+
+  return buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound);
+}
+
+function setPublishResultsStatus(msg, isErr) {
+  const el = document.getElementById('publishResultsStatus');
+  el.className = 'status ' + (isErr ? 'err' : 'ok');
+  el.textContent = msg;
+}
+
+document.getElementById('previewResultsBtn').addEventListener('click', async () => {
+  setPublishResultsStatus('Building preview…');
+  try {
+    const data = await fetchResultsPageData();
+    const html = renderResultsHtml(data);
+    const wrap = document.getElementById('publishResultsPreviewWrap');
+    wrap.innerHTML = '';
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'width:100%;height:900px;border:1px solid var(--line);border-radius:8px;background:#0d1f3d';
+    wrap.appendChild(iframe);
+    iframe.srcdoc = html; // property assignment — no manual escaping needed
+    setPublishResultsStatus(`Preview built — ${data.closedRollup}/${data.totalRollup} rounds closed${data.isComplete ? ', event complete' : ''}. Nothing published yet.`);
+  } catch (e) {
+    setPublishResultsStatus('Preview failed: ' + e.message, true);
+  }
+});
+
+document.getElementById('publishResultsBtn').addEventListener('click', async () => {
+  const portalBase = document.getElementById('portalUrl').value.trim().replace(/\/$/, '');
+  const pin = document.getElementById('hostPin').value.trim();
+  const relPath = document.getElementById('resultsPagePath').value.trim().replace(/^\/+/, '');
+  if (!relPath) { setPublishResultsStatus('Enter a publish path.', true); return; }
+  const btn = document.getElementById('publishResultsBtn');
+  btn.disabled = true;
+  setPublishResultsStatus('Building results page…');
+  try {
+    const data = await fetchResultsPageData();
+    const html = renderResultsHtml(data);
+    setPublishResultsStatus('Publishing to docs/' + relPath + ' …');
+    const res = await fetch(portalBase + '/deploy', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin, path: 'docs/' + relPath, content: html, message: `Wally Cup results — ${data.closedRollup}/${data.totalRollup} rounds` })
+    });
+    const saved = await res.json();
+    if (!res.ok) throw new Error(saved.error || `HTTP ${res.status}`);
+    setPublishResultsStatus(`Published — https://birdiefriends.com/${relPath} (${data.closedRollup}/${data.totalRollup} rounds closed${data.isComplete ? ', event complete' : ''}).`);
+  } catch (e) {
+    setPublishResultsStatus('Publish failed: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
 </script>
 
 </body>
