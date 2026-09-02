@@ -2066,13 +2066,13 @@ body {
   <!-- ── RESULTS SCREEN ── -->
   <div class="bf-screen" id="screen-results">
     <div class="section-label">Published Results</div>
-    <div class="results-link-card" onclick="openResultsModal()" style="cursor:pointer">
+    <a class="results-link-card" href="/wally-cup-results.html">
       <div>
         <div class="rlc-label">2026 Wally Cup</div>
         <div class="rlc-title">Wally Cup Results</div>
       </div>
       <div class="rlc-arrow">↗</div>
-    </div>
+    </a>
     <a class="results-link-card" href="/garretts-last-swing.html">
       <div>
         <div class="rlc-label">Bachelor Weekend · Live</div>
@@ -3084,53 +3084,6 @@ body {
     </div>
   </div>
 </div>
-
-<div class="bf-modal-overlay" id="results-modal" onclick="closeModalOnOverlay(event,'results-modal')" style="z-index:9000">
-  <!-- z-index explicit — see card-score-modal's comment above; same fix, same reason.
-       This modal is also full-screen (see <style> below), so without this it would
-       render behind #action-sub-bar (position:sticky, z-index:900) and any other
-       already-stacked content, not just a same-z-index DOM-order loss. -->
-  <div class="bf-modal">
-    <div class="results-modal-topbar">
-      <div class="bf-modal-title" style="margin-bottom:0">🏆 Results</div>
-      <button onclick="closeModal('results-modal')" title="Close"
-        style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
-          color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
-    </div>
-    <iframe id="results-modal-frame" title="Results"></iframe>
-  </div>
-</div>
-<style>
-/* Results modal is full-page content (multiple rounds, standings, Wally Ball,
-   Photos), not a quick glance like Rules/Yardage — so on phones (where most
-   players open this) it takes the whole screen instead of a small bottom
-   sheet, letting the results page's own responsive layout use full width.
-   Widens into a normal centered sheet only on tablet/desktop. */
-#results-modal .bf-modal {
-  max-width: none; width: 100%;
-  height: 100%; height: 100dvh; max-height: 100dvh;
-  border-radius: 0; padding: 0;
-  display: flex; flex-direction: column;
-}
-#results-modal .bf-modal-handle { display: none; }
-#results-modal .results-modal-topbar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: calc(14px + env(safe-area-inset-top)) 16px 12px;
-  flex-shrink: 0; background: var(--card);
-  border-bottom: 1px solid var(--border-light, rgba(0,0,0,0.08));
-}
-#results-modal-frame {
-  flex: 1; width: 100%; height: auto; border: none; background: #0d1f3d;
-}
-@media (min-width: 700px) {
-  #results-modal .bf-modal {
-    max-width: 760px; width: 100%;
-    height: 88vh; max-height: 88vh;
-    border-radius: 18px;
-  }
-  #results-modal .results-modal-topbar { padding: 16px 20px 12px; }
-}
-</style>
 
 <div class="bf-modal-overlay" id="yardage-modal" onclick="closeModalOnOverlay(event,'yardage-modal')">
   <div class="bf-modal">
@@ -5554,10 +5507,10 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-label">Yardage</span>
       </button>
       ${['format-wally','format-scramble'].includes(formatClass(evt.format)) ? `
-      <button class="icon-action-btn" onclick="openResultsModal()">
+      <a class="icon-action-btn" href="/wally-cup-results.html" style="text-decoration:none">
         <span class="icon-action-badge secondary">🏆</span>
         <span class="icon-action-label">Results</span>
-      </button>` : ''}
+      </a>` : ''}
     </div>
 
     <div id="${whoId}" style="display:none">
@@ -12745,21 +12698,17 @@ function openRulesModal() {
   openModal('rules-modal');
 }
 
-// Dev-76 — read-only Results icon (spec §4c) for BFE-backed events
-// (format-wally / format-scramble). Points at the single static page
-// BFE-Admin.html's "Publish results page" action (Phase 3) pushes to
-// docs/ — players stay in portal.html the whole time (iframe in a
-// bf-modal, same shell as Rules/Yardage), the page itself is just the
-// Worker's already-computed data rendered by that separate generator.
-// One hardcoded URL is fine while there's exactly one BFE event live at a
-// time (2026 Wally Cup); if BFCup/Turkey 2Man overlap with it later this
-// needs to resolve per-event instead — flagging rather than guessing now.
-const BFE_RESULTS_PAGE_URL = 'https://birdiefriends.com/wally-cup-results.html';
-function openResultsModal() {
-  const frame = document.getElementById('results-modal-frame');
-  if (frame && !frame.src) frame.src = BFE_RESULTS_PAGE_URL;
-  openModal('results-modal');
-}
+// Dev-76 — read-only Results link (spec §4c) for BFE-backed events
+// (format-wally / format-scramble): a plain <a href> straight to the static
+// page BFE-Admin.html's "Publish results page" action (Phase 3) pushes to
+// docs/ — same behavior as the GLS and BF Series results-link-card entries
+// above (normal navigation, no modal/iframe). Originally wrapped in an
+// iframe modal to keep players inside portal.html per §4c, but Brian's own
+// established pattern for every other results link here is plain
+// navigation, so this now matches that instead (Dev-76 addendum). One
+// hardcoded path is fine while there's exactly one BFE event live at a time
+// (2026 Wally Cup); if BFCup/Turkey 2Man overlap with it later this needs to
+// resolve per-event instead — flagging rather than guessing now.
 
 function setRulesMode(mode) {
   _rulesMode = mode;
