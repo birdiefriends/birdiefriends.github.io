@@ -2066,6 +2066,13 @@ body {
   <!-- ── RESULTS SCREEN ── -->
   <div class="bf-screen" id="screen-results">
     <div class="section-label">Published Results</div>
+    <div class="results-link-card" onclick="openResultsModal()" style="cursor:pointer">
+      <div>
+        <div class="rlc-label">2026 Wally Cup</div>
+        <div class="rlc-title">Wally Cup Results</div>
+      </div>
+      <div class="rlc-arrow">↗</div>
+    </div>
     <a class="results-link-card" href="/garretts-last-swing.html">
       <div>
         <div class="rlc-label">Bachelor Weekend · Live</div>
@@ -3078,19 +3085,52 @@ body {
   </div>
 </div>
 
-<div class="bf-modal-overlay" id="results-modal" onclick="closeModalOnOverlay(event,'results-modal')">
-  <div class="bf-modal" style="max-width:480px;padding-bottom:6px">
-    <div class="bf-modal-handle"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+<div class="bf-modal-overlay" id="results-modal" onclick="closeModalOnOverlay(event,'results-modal')" style="z-index:9000">
+  <!-- z-index explicit — see card-score-modal's comment above; same fix, same reason.
+       This modal is also full-screen (see <style> below), so without this it would
+       render behind #action-sub-bar (position:sticky, z-index:900) and any other
+       already-stacked content, not just a same-z-index DOM-order loss. -->
+  <div class="bf-modal">
+    <div class="results-modal-topbar">
       <div class="bf-modal-title" style="margin-bottom:0">🏆 Results</div>
       <button onclick="closeModal('results-modal')" title="Close"
         style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
           color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
     </div>
-    <iframe id="results-modal-frame" title="Results"
-      style="width:100%;height:70vh;border:none;border-radius:10px;background:#0d1f3d"></iframe>
+    <iframe id="results-modal-frame" title="Results"></iframe>
   </div>
 </div>
+<style>
+/* Results modal is full-page content (multiple rounds, standings, Wally Ball,
+   Photos), not a quick glance like Rules/Yardage — so on phones (where most
+   players open this) it takes the whole screen instead of a small bottom
+   sheet, letting the results page's own responsive layout use full width.
+   Widens into a normal centered sheet only on tablet/desktop. */
+#results-modal .bf-modal {
+  max-width: none; width: 100%;
+  height: 100%; height: 100dvh; max-height: 100dvh;
+  border-radius: 0; padding: 0;
+  display: flex; flex-direction: column;
+}
+#results-modal .bf-modal-handle { display: none; }
+#results-modal .results-modal-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 12px;
+  flex-shrink: 0; background: var(--card);
+  border-bottom: 1px solid var(--border-light, rgba(0,0,0,0.08));
+}
+#results-modal-frame {
+  flex: 1; width: 100%; height: auto; border: none; background: #0d1f3d;
+}
+@media (min-width: 700px) {
+  #results-modal .bf-modal {
+    max-width: 760px; width: 100%;
+    height: 88vh; max-height: 88vh;
+    border-radius: 18px;
+  }
+  #results-modal .results-modal-topbar { padding: 16px 20px 12px; }
+}
+</style>
 
 <div class="bf-modal-overlay" id="yardage-modal" onclick="closeModalOnOverlay(event,'yardage-modal')">
   <div class="bf-modal">
