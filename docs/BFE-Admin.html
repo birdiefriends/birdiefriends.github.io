@@ -2262,6 +2262,16 @@ async function renderWcStandings(base, eventName, config) {
     .sort((a, b) => b.performance - a.performance);
   const isComplete = totalRollup > 0 && closedRollup === totalRollup;
   const overallPot = (config.payout?.pots || []).find(p => p.id === 'overall');
+  // Dev-88: this was indexing straight into overallPot.distribution.podium[i]
+  // — correct only if nobody ties. Dev-82 already solved exactly this for
+  // each ROUND's own podium (computePodiumTiePayouts, tie-grouping on the
+  // sort key and splitting the paid places' $ evenly across the group) but
+  // was never wired into the season-long Overall podium here — same class
+  // of gap, just never actually hit yet since no event has finished with a
+  // Total +/- tie for a paid place. Reuse it rather than re-deriving it.
+  const overallTiePayouts = (isComplete && overallPot)
+    ? computePodiumTiePayouts(overallRows.map(r => ({ name: r.name, tieKey: r.performance })), overallPot.distribution.podium)
+    : {};
 
   let html = `<h3>Overall standings <span class="badge">${closedRollup}/${totalRollup} rounds closed</span></h3>`;
   html += '<table><thead><tr><th>#</th><th>Player</th><th>Total +/-<br><span class="subtle" style="font-weight:normal">(vs. quota)</span></th>' +
@@ -2269,7 +2279,7 @@ async function renderWcStandings(base, eventName, config) {
     (isComplete && overallPot ? '<th>Podium $</th>' : '') + '</tr></thead><tbody>';
   overallRows.forEach((r, i) => {
     const podiumCell = (isComplete && overallPot)
-      ? `<td>${i < overallPot.distribution.podium.length ? fmtMoney(overallPot.distribution.podium[i]) : '—'}</td>` : '';
+      ? `<td>${overallTiePayouts[r.name] ? fmtMoney(overallTiePayouts[r.name]) : '—'}</td>` : '';
     const wbCell = wbRoundsClosed
       ? `${r.wbBonus > 0 ? '+' + r.wbBonus : '0'} <span class="subtle">(${r.wbKept}/${wbRoundsClosed})</span>`
       : '—';
