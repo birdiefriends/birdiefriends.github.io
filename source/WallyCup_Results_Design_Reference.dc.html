@@ -1,0 +1,959 @@
+<!--
+README FOR WHOEVER PICKS THIS UP NEXT (added Dev-75, 2026-09-02):
+
+This is NOT a standalone page you can open directly — it's the source artboard
+from a Claude Design canvas (`Main.dc.html`), a template format that needs the
+canvas skill's own `support.js` runtime and template wrapper to actually
+render. Opening this file raw in a browser will not work.
+
+What it actually IS, and why it's worth keeping:
+- The CSS design language for the Wally Cup results page (see <style> below) —
+  hero, round rail, leaderboard tables, Wally Ball cards, payout side-strips —
+  iterated on across the whole Dev-75 dry-run session against real event data.
+- A `decorate()` function (search for it below) that takes a round's raw
+  player array and produces display-ready rows: vs-par, quota performance
+  class (good/bad), Wally Ball status pill, payout $.
+- Section HTML structure/ordering that was checked against real Rd1/Rd2/Rd3
+  data via Playwright screenshots throughout Dev-75.
+
+What it is NOT:
+- NOT wired to live data. Every `rd1Raw`/`rd2Raw`/`rd3Raw`/`overallStandingsRaw`
+  array (search for these below) is a HAND-TYPED literal, computed by Claude
+  from real `bfe_round_results` data and pasted in by hand each round during
+  the Dev-75 dry-run. There is zero fetch/network code anywhere in this file.
+  "Wire this up" is not an accurate description of what's left for Phase 3 —
+  a real generator needs to be built that fetches from the bf-experiences
+  Worker (same data BFE-Admin.html already reads via `/bfe/round-results`),
+  reuses BFE-Admin's own scoring/tie-split/vs-par logic rather than
+  re-deriving it, and renders in this visual language before publishing via
+  the existing GS/portal `/deploy` mechanism to `docs/`, per §4/§8 of
+  `BF_WallyCup_Spec.md`.
+- NOT previously committed anywhere durable — this file lived only in the
+  Dev-75 session's own sandbox and as a private Claude Design artifact page
+  before being exported here specifically so Dev-76 could find it. There is
+  no separate GitHub Pages/portal.html tie-in for it yet.
+
+See the Dev-75 entry in `BF_Session_Log.md` for the full narrative, and §8 of
+`BF_WallyCup_Spec.md` (Phase 3) for the actual current scope/plan this file
+should inform, not replace.
+-->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap">
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:#0d1f3d;color:#f5f0e8;font-family:'DM Sans',sans-serif;}
+  a{color:#e8392a;} a:hover{color:#f27a68;}
+  .page{
+    --navy:#0d1f3d;--navy2:#152c52;--accent:#e8392a;
+    --accent-light:color-mix(in srgb, var(--accent) 65%, white);
+    --accent-dim:color-mix(in srgb, var(--accent) 60%, black);
+    --white:#f5f0e8;--white-dim:rgba(245,240,232,0.62);--white-faint:rgba(245,240,232,0.12);
+    --white-faintest:rgba(245,240,232,0.06);--good:#6fbf7e;--bad:#e0a050;
+    max-width:960px;margin:0 auto;background:var(--navy);
+  }
+  .wrap{padding:0 1.5rem;}
+
+  /* HERO */
+  .hero{text-align:center;padding:2.75rem 1.5rem 2rem;border-bottom:1px solid rgba(232,57,42,0.25);
+    background:radial-gradient(ellipse at 50% 0%,rgba(232,57,42,0.10) 0%,transparent 70%);}
+  .hero-logo{width:64px;height:64px;border-radius:50%;object-fit:cover;margin-bottom:0.9rem;
+    box-shadow:0 0 0 1px rgba(245,240,232,0.15), 0 8px 24px rgba(0,0,0,0.35);}
+  .hero-eyebrow{font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-light);
+    margin-bottom:0.6rem;font-weight:600;}
+  .hero-title{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:clamp(2.6rem,9vw,4.2rem);
+    color:var(--white);line-height:1;margin-bottom:0.5rem;text-shadow:0 2px 20px rgba(232,57,42,0.25);}
+  .hero-subtitle{font-size:13px;color:var(--white-dim);letter-spacing:0.1em;text-transform:uppercase;
+    margin-bottom:1.35rem;font-weight:400;}
+  .state-pill{display:inline-flex;align-items:center;gap:7px;background:rgba(224,160,80,0.15);
+    border:1px solid rgba(224,160,80,0.45);border-radius:99px;padding:6px 18px;font-size:11px;
+    font-weight:700;color:#e0a050;letter-spacing:0.1em;text-transform:uppercase;}
+  .state-dot{width:7px;height:7px;border-radius:50%;background:#e0a050;box-shadow:0 0 0 3px rgba(224,160,80,0.25);}
+  .preview-pill{background:rgba(245,240,232,0.1);border-color:rgba(245,240,232,0.28);}
+  .preview-pill .state-dot{background:var(--white-dim);box-shadow:0 0 0 3px rgba(245,240,232,0.12);}
+  .preview-pill{color:var(--white-dim);}
+  .preview-subline{font-size:10.5px;color:var(--white-dim);opacity:0.75;margin-top:0.6rem;max-width:360px;
+    margin-left:auto;margin-right:auto;}
+
+  /* ROUND RAIL */
+  .rail{display:flex;align-items:stretch;gap:0;padding:1.5rem 1.5rem 0.5rem;max-width:820px;margin:0 auto;}
+  .rail-node{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 6px;position:relative;}
+  .rail-line{position:absolute;top:15px;left:-50%;width:100%;height:2px;background:var(--white-faint);z-index:0;}
+  .rail-node:first-child .rail-line{display:none;}
+  .rail-node.done .rail-line{background:rgba(111,191,126,0.4);}
+  .rail-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-family:'Baloo 2',sans-serif;font-weight:700;font-size:13px;z-index:1;margin-bottom:0.5rem;}
+  .rail-node.done .rail-dot{background:rgba(111,191,126,0.18);border:1.5px solid var(--good);color:var(--good);}
+  .rail-node.locked .rail-dot{background:var(--white-faintest);border:1.5px solid var(--white-faint);color:var(--white-dim);}
+  .rail-round{font-size:12px;font-weight:700;color:var(--white);}
+  .rail-venue{font-size:10.5px;color:var(--white-dim);margin-top:1px;}
+  .rail-date{font-size:9.5px;color:var(--white-dim);opacity:0.7;margin-top:1px;}
+  .rail-tag{margin-top:5px;font-size:8.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
+    border-radius:99px;padding:2px 9px;}
+  .rail-node.done .rail-tag{background:rgba(111,191,126,0.15);color:var(--good);}
+  .rail-node.locked .rail-tag{background:var(--white-faintest);color:var(--white-dim);}
+
+  /* SECTION HEADER */
+  .section{padding:2.1rem 1.5rem;border-top:1px solid var(--white-faintest);}
+  .section-head{display:flex;align-items:flex-start;gap:0.85rem;margin-bottom:1.1rem;}
+  .section-num{font-family:'Baloo 2',sans-serif;font-size:1.6rem;font-weight:800;color:var(--accent);line-height:1;}
+  .section-title{font-size:16px;font-weight:700;color:var(--white);}
+  .section-desc{font-size:12px;color:var(--white-dim);margin-top:2px;}
+  .chain-note{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--white-dim);
+    margin:-0.4rem 0 1rem 2.45rem;font-style:italic;}
+
+  /* WINNER BANNER */
+  .winner-banner{border-radius:14px;padding:1rem 1.2rem;margin-bottom:1rem;
+    background:linear-gradient(135deg,rgba(232,57,42,0.16) 0%,rgba(232,57,42,0.05) 100%);
+    border:1px solid rgba(232,57,42,0.35);}
+  .comp-label{font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--accent-light);
+    margin-bottom:5px;font-weight:700;}
+  .winner-name{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:1.5rem;color:var(--white);margin-bottom:2px;}
+  .winner-stat{font-size:12.5px;color:var(--white-dim);}
+
+  /* LEADERBOARD CARD */
+  .lb-card{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:16px;overflow:hidden;}
+  .lb-table{width:100%;border-collapse:collapse;}
+  .lb-table thead tr{background:rgba(232,57,42,0.09);border-bottom:1px solid rgba(232,57,42,0.22);}
+  .lb-table th{font-size:9.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;
+    color:var(--accent-light);padding:9px 10px;text-align:right;white-space:nowrap;}
+  .lb-table th.left{text-align:left;}
+  .lb-table td{padding:9px 10px;text-align:right;border-bottom:1px solid rgba(245,240,232,0.06);
+    font-size:12.5px;white-space:nowrap;}
+  .lb-table td.left{text-align:left;}
+  .lb-row.leader-row{background:rgba(232,57,42,0.08);}
+  .lb-row:last-child td{border-bottom:none;}
+  .rank-cell{font-family:'Baloo 2',sans-serif;font-weight:700;color:var(--white-dim);width:26px;}
+  .leader-row .rank-cell{color:var(--accent-light);}
+  .player-name{font-weight:600;font-size:13px;color:var(--white);}
+  .vspar-tag{font-size:11px;font-weight:500;color:var(--white-dim);margin-left:4px;}
+  .payout-val{color:var(--accent-light);font-weight:700;}
+  .quota-val{color:var(--white-dim);font-weight:400;}
+  .score-val{font-weight:600;color:var(--white);}
+  .perf-badge{font-weight:700;font-size:12.5px;padding:2px 0;}
+  .perf-badge.good{color:var(--good);}
+  .perf-badge.bad{color:var(--bad);}
+  .perf-badge.even{color:var(--white-dim);}
+  .perf-cell{position:relative;}
+  .perf-detail summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:3px;}
+  .perf-detail summary::-webkit-details-marker{display:none;}
+  .perf-detail summary::after{content:'ⓘ';font-size:8.5px;font-weight:400;color:var(--white-dim);opacity:0.6;margin-left:1px;}
+  .perf-detail[open] summary::after{opacity:1;color:var(--accent-light);}
+  .perf-calc{position:absolute;right:0;top:100%;margin-top:5px;z-index:5;background:var(--navy2);
+    border:1px solid rgba(232,57,42,0.35);border-radius:8px;padding:8px 10px;font-size:10.5px;
+    line-height:1.5;color:var(--white-dim);white-space:normal;text-align:left;width:200px;
+    box-shadow:0 10px 24px rgba(0,0,0,0.45);font-weight:400;}
+  .quota-out-val{font-weight:700;color:var(--white);}
+  .wb-pill{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;
+    letter-spacing:0.02em;border-radius:99px;padding:2px 8px;}
+  .wb-in{background:rgba(111,191,126,0.14);color:var(--good);}
+  .wb-out{background:rgba(224,160,80,0.14);color:var(--bad);}
+  .wb-out-dim{background:var(--white-faintest);color:var(--white-dim);}
+  .wb-detail{display:block;font-size:9.5px;color:var(--white-dim);margin-top:2px;font-weight:400;}
+
+  /* SIDE-GAME STRIP */
+  .side-strip{display:flex;gap:0.9rem;flex-wrap:wrap;margin-top:1rem;}
+  .side-card{flex:1;min-width:220px;background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);
+    border-radius:12px;padding:0.85rem 1rem;}
+  .side-label{font-size:9.5px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;
+    color:var(--accent-light);margin-bottom:0.55rem;}
+  .side-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:var(--white);}
+  .side-row .hole{color:var(--white-dim);font-weight:400;}
+
+  /* LOCKED CARD */
+  .locked-card{background:var(--white-faintest);border:1px dashed rgba(245,240,232,0.18);border-radius:16px;
+    padding:2rem 1.5rem;text-align:center;}
+  .lock-icon{margin-bottom:0.85rem;opacity:0.55;}
+  .locked-title{font-size:14px;font-weight:700;color:var(--white-dim);margin-bottom:4px;}
+  .locked-sub{font-size:12px;color:var(--white-dim);opacity:0.75;max-width:360px;margin:0 auto;}
+
+  /* QUOTA PREVIEW (locked-round carry-forward list) */
+  .quota-preview{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);
+    border-radius:12px;padding:0.9rem 1.1rem;margin-top:1rem;}
+  .quota-preview-list{column-count:2;column-gap:1.6rem;margin-top:0.5rem;}
+  .quota-preview-row{display:flex;justify-content:space-between;gap:0.6rem;font-size:12.5px;
+    padding:4px 0;color:var(--white);break-inside:avoid;border-bottom:1px solid rgba(245,240,232,0.05);}
+  .quota-preview-row .q-val{color:var(--white-dim);font-weight:600;white-space:nowrap;}
+
+  /* OVERALL TEASER */
+  .teaser-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.6rem;margin-top:1.1rem;}
+  .teaser-card{display:flex;align-items:center;gap:0.7rem;background:var(--white-faintest);
+    border:1px solid rgba(245,240,232,0.08);border-radius:12px;padding:0.65rem 0.8rem;}
+  .teaser-name{font-size:12px;font-weight:600;color:var(--white);flex:1;}
+  .teaser-spark polyline{fill:none;stroke-width:2;}
+  .spark-good{stroke:var(--good);}
+  .spark-bad{stroke:var(--bad);}
+  .spark-even{stroke:var(--white-dim);}
+
+  /* WALLY BALL */
+  .wb-section{border-top:1px solid rgba(232,57,42,0.18);}
+  .wb-pot-banner{display:flex;justify-content:space-between;align-items:center;gap:1rem;
+    background:linear-gradient(135deg,rgba(232,57,42,0.14) 0%,rgba(232,57,42,0.04) 100%);
+    border:1px solid rgba(232,57,42,0.3);border-radius:14px;padding:1rem 1.2rem;margin-bottom:1.1rem;flex-wrap:wrap;}
+  .wb-pot-amt{font-family:'Baloo 2',sans-serif;font-size:1.7rem;font-weight:800;color:var(--white);}
+  .wb-pot-lbl{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent-light);font-weight:700;}
+  .wb-pot-remain{font-size:12.5px;color:var(--white-dim);}
+  .wb-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.6rem;}
+  .wb-card{display:flex;justify-content:space-between;align-items:center;gap:0.6rem;
+    background:var(--white-faintest);border:1px solid rgba(245,240,232,0.08);border-radius:12px;padding:0.65rem 0.85rem;}
+  .wb-card-name{font-size:12.5px;font-weight:600;color:var(--white);}
+  .wb-card-detail{font-size:10px;color:var(--white-dim);margin-top:1px;}
+  .wb-status{font-size:10px;font-weight:700;letter-spacing:0.06em;border-radius:99px;padding:3px 10px;white-space:nowrap;}
+  .wb-status-in{background:rgba(111,191,126,0.15);color:var(--good);}
+  .wb-status-out{background:rgba(224,160,80,0.13);color:var(--bad);}
+  .wb-status-won{background:rgba(232,57,42,0.16);color:var(--accent-light);}
+  .wb-bonus{font-size:9.5px;color:var(--white-dim);margin-top:2px;}
+  .wb-card-winner{border-color:rgba(232,57,42,0.5);background:rgba(232,57,42,0.07);}
+
+  /* 2MAN SECTION */
+  .twoman-section{background:var(--navy2);border-top:1px solid rgba(245,240,232,0.08);border-bottom:1px solid rgba(245,240,232,0.08);}
+  .standalone-note{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--white-dim);
+    background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:99px;
+    padding:5px 13px;margin-bottom:1.1rem;}
+  .team-table{width:100%;border-collapse:collapse;}
+  .team-table th{font-size:9.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;
+    color:var(--accent-light);padding:9px 10px;text-align:right;}
+  .team-table th.left{text-align:left;}
+  .team-table td{padding:9px 10px;text-align:right;border-bottom:1px solid rgba(245,240,232,0.06);font-size:12.5px;}
+  .team-table td.left{text-align:left;}
+  .team-table tr:last-child td{border-bottom:none;}
+  .team-names{font-weight:600;color:var(--white);}
+
+  /* PHOTO PLACEHOLDER */
+  .photo-slot{border:1.5px dashed rgba(245,240,232,0.16);border-radius:16px;padding:2.4rem 1.5rem;
+    text-align:center;background:rgba(245,240,232,0.02);}
+  .photo-icon{margin-bottom:0.9rem;opacity:0.4;}
+  .photo-slot-title{font-size:14px;font-weight:700;color:var(--white-dim);margin-bottom:4px;}
+  .photo-slot-sub{font-size:11.5px;color:var(--white-dim);opacity:0.7;max-width:340px;margin:0 auto;}
+
+  /* FOOTER */
+  .footer{padding:2.2rem 1.5rem 3rem;text-align:center;}
+  .back-btn{display:inline-flex;align-items:center;gap:7px;background:var(--white-faint);
+    border:1px solid rgba(245,240,232,0.18);border-radius:99px;padding:9px 22px;font-size:12.5px;
+    font-weight:600;color:var(--white);text-decoration:none;}
+  .footer-meta{font-size:10.5px;color:var(--white-dim);opacity:0.55;margin-top:1.1rem;}
+
+  @media (max-width:520px){
+    .teaser-grid,.wb-grid{grid-template-columns:1fr;}
+    .rail{padding:1.25rem 0.6rem 0.5rem;}
+    .lb-table th,.lb-table td{padding:8px 6px;font-size:11.5px;}
+    .quota-preview-list{column-count:1;}
+  }
+</style>
+</helmet>
+
+<div class="page" style="--accent:{{accent}}">
+
+  <!-- HERO -->
+  <div class="hero">
+    <img class="hero-logo" src="wally-logo.png" alt="Wally Cup">
+    <div class="hero-eyebrow">BirdieFriends Experiences</div>
+    <div class="hero-title">Wally Cup</div>
+    <div class="hero-subtitle">2026 Season · Sept 11–13</div>
+    <div class="state-pill preview-pill"><span class="state-dot"></span>Test Data Preview</div>
+    <div class="preview-subline">All 3 rounds closed via BFE-Admin's dry-run cycle · Real Wally Cup tees off Sept 11</div>
+  </div>
+
+  <!-- ROUND RAIL -->
+  <div class="rail">
+    <sc-for list="{{rounds}}" as="r" hint-placeholder-count="3">
+      <div class="{{r.nodeClass}}">
+        <div class="rail-line"></div>
+        <div class="rail-dot">{{r.num}}</div>
+        <div class="rail-round">{{r.label}}</div>
+        <div class="rail-venue">{{r.venue}}</div>
+        <div class="rail-date">{{r.date}}</div>
+        <div class="rail-tag">{{r.tag}}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div class="wrap">
+
+  <!-- SECTION 01 — RD1 -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">01</div>
+      <div>
+        <div class="section-title">Round 1 · Honesdale Golf Club — Final</div>
+        <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+      </div>
+    </div>
+    <div class="chain-note">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v16M12 20l-5-5M12 20l5-5"/></svg>
+      Round Perf. folds in this round's Wally Ball bonus and carries into Overall Standings; only the Quota number itself never includes it
+    </div>
+
+    <div class="winner-banner">
+      <div class="comp-label">Round 1 Leader</div>
+      <div class="winner-name">{{rd1Leader.name}}</div>
+      <div class="winner-stat">{{rd1Leader.roundPerf}} Round Perf. · {{rd1Leader.perfSubtext}}</div>
+    </div>
+
+    <div class="lb-card">
+      <table class="lb-table">
+        <thead>
+          <tr>
+            <th class="left">Player</th>
+            <th>{{quotaInLabel}}</th>
+            <th>Round Perf.</th>
+            <th class="left">Wally Ball</th>
+            <th>$Earned</th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{rd1Players}}" as="p" hint-placeholder-count="16">
+            <tr class="{{p.rowClass}}">
+              <td class="left"><span class="rank-cell">{{p.rank}}</span> <span class="player-name">{{p.name}}</span><span class="vspar-tag">{{p.vsParDisplay}}</span></td>
+              <td class="quota-val">{{p.quotaIn}}</td>
+              <td class="perf-cell">
+                <details class="perf-detail">
+                  <summary class="{{p.roundPerfBadgeClass}}">{{p.roundPerf}}</summary>
+                  <div class="perf-calc">{{p.perfCalc}}</div>
+                </details>
+              </td>
+              <td class="left">
+                <span class="{{p.wbPillClass}}">{{p.wbLabel}}</span>
+                <span class="wb-detail">{{p.wbDetail}}</span>
+              </td>
+              <td class="payout-val">{{p.payoutCol}}</td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="side-strip">
+      <div class="side-card">
+        <div class="side-label">🏆 Podium</div>
+        <sc-for list="{{rd1Podium}}" as="pd" hint-placeholder-count="3">
+          <div class="side-row"><span>{{pd.name}}</span><span class="hole">{{pd.amt}}</span></div>
+        </sc-for>
+      </div>
+      <div class="side-card">
+        <div class="side-label">🏌️ Skins</div>
+        <sc-for list="{{rd1Skins}}" as="s" hint-placeholder-count="4">
+          <div class="side-row"><span>{{s.name}}</span><span class="hole">{{s.hole}}</span></div>
+        </sc-for>
+      </div>
+      <div class="side-card">
+        <div class="side-label">📍 Closest to Pin</div>
+        <sc-for list="{{rd1Ctp}}" as="c" hint-placeholder-count="4">
+          <div class="side-row"><span>{{c.name}}</span><span class="hole">{{c.detail}}</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 02 — RD2 -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">02</div>
+      <div>
+        <div class="section-title">Round 2 · Skytop Lodge — Final</div>
+        <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+      </div>
+    </div>
+    <div class="chain-note">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v16M12 20l-5-5M12 20l5-5"/></svg>
+      Round Perf. folds in this round's Wally Ball bonus and carries into Overall Standings; only the Quota number itself never includes it
+    </div>
+
+    <div class="winner-banner">
+      <div class="comp-label">Round 2 Leader</div>
+      <div class="winner-name">{{rd2Leader.name}}</div>
+      <div class="winner-stat">{{rd2Leader.roundPerf}} Round Perf. · {{rd2Leader.perfSubtext}}</div>
+    </div>
+
+    <div class="lb-card">
+      <table class="lb-table">
+        <thead>
+          <tr>
+            <th class="left">Player</th>
+            <th>{{quotaInLabel2}}</th>
+            <th>Round Perf.</th>
+            <th class="left">Wally Ball</th>
+            <th>$Earned</th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{rd2Players}}" as="p" hint-placeholder-count="16">
+            <tr class="{{p.rowClass}}">
+              <td class="left"><span class="rank-cell">{{p.rank}}</span> <span class="player-name">{{p.name}}</span><span class="vspar-tag">{{p.vsParDisplay}}</span></td>
+              <td class="quota-val">{{p.quotaIn}}</td>
+              <td class="perf-cell">
+                <details class="perf-detail">
+                  <summary class="{{p.roundPerfBadgeClass}}">{{p.roundPerf}}</summary>
+                  <div class="perf-calc">{{p.perfCalc}}</div>
+                </details>
+              </td>
+              <td class="left">
+                <span class="{{p.wbPillClass}}">{{p.wbLabel}}</span>
+                <span class="wb-detail">{{p.wbDetail}}</span>
+              </td>
+              <td class="payout-val">{{p.payoutCol}}</td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="side-strip">
+      <div class="side-card">
+        <div class="side-label">🏆 Podium</div>
+        <sc-for list="{{rd2Podium}}" as="pd" hint-placeholder-count="3">
+          <div class="side-row"><span>{{pd.name}}</span><span class="hole">{{pd.amt}}</span></div>
+        </sc-for>
+      </div>
+      <div class="side-card">
+        <div class="side-label">🏌️ Skins</div>
+        <sc-for list="{{rd2Skins}}" as="s" hint-placeholder-count="4">
+          <div class="side-row"><span>{{s.name}}</span><span class="hole">{{s.hole}}</span></div>
+        </sc-for>
+      </div>
+      <div class="side-card">
+        <div class="side-label">📍 Closest to Pin</div>
+        <sc-for list="{{rd2Ctp}}" as="c" hint-placeholder-count="4">
+          <div class="side-row"><span>{{c.name}}</span><span class="hole">{{c.detail}}</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 03 — RD3 -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">03</div>
+      <div>
+        <div class="section-title">Round 3 · Paupack Hills GC — Final</div>
+        <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+      </div>
+    </div>
+    <div class="chain-note">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v16M12 20l-5-5M12 20l5-5"/></svg>
+      Round Perf. folds in this round's Wally Ball bonus and carries into Overall Standings; only the Quota number itself never includes it
+    </div>
+
+    <div class="winner-banner">
+      <div class="comp-label">Round 3 Leader</div>
+      <div class="winner-name">{{rd3Leader.name}}</div>
+      <div class="winner-stat">{{rd3Leader.roundPerf}} Round Perf. · {{rd3Leader.perfSubtext}}</div>
+    </div>
+
+    <div class="lb-card">
+      <table class="lb-table">
+        <thead>
+          <tr>
+            <th class="left">Player</th>
+            <th>{{quotaInLabel3}}</th>
+            <th>Round Perf.</th>
+            <th class="left">Wally Ball</th>
+            <th>$Earned</th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{rd3Players}}" as="p" hint-placeholder-count="16">
+            <tr class="{{p.rowClass}}">
+              <td class="left"><span class="rank-cell">{{p.rank}}</span> <span class="player-name">{{p.name}}</span><span class="vspar-tag">{{p.vsParDisplay}}</span></td>
+              <td class="quota-val">{{p.quotaIn}}</td>
+              <td class="perf-cell">
+                <details class="perf-detail">
+                  <summary class="{{p.roundPerfBadgeClass}}">{{p.roundPerf}}</summary>
+                  <div class="perf-calc">{{p.perfCalc}}</div>
+                </details>
+              </td>
+              <td class="left">
+                <span class="{{p.wbPillClass}}">{{p.wbLabel}}</span>
+                <span class="wb-detail">{{p.wbDetail}}</span>
+              </td>
+              <td class="payout-val">{{p.payoutCol}}</td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="side-strip">
+      <div class="side-card">
+        <div class="side-label">🏆 Podium</div>
+        <sc-for list="{{rd3Podium}}" as="pd" hint-placeholder-count="3">
+          <div class="side-row"><span>{{pd.name}}</span><span class="hole">{{pd.amt}}</span></div>
+        </sc-for>
+      </div>
+      <div class="side-card">
+        <div class="side-label">🏌️ Skins</div>
+        <sc-for list="{{rd3Skins}}" as="s" hint-placeholder-count="4">
+          <div class="side-row"><span>{{s.name}}</span><span class="hole">{{s.hole}}</span></div>
+        </sc-for>
+      </div>
+      <div class="side-card">
+        <div class="side-label">📍 Closest to Pin</div>
+        <sc-for list="{{rd3Ctp}}" as="c" hint-placeholder-count="4">
+          <div class="side-row"><span>{{c.name}}</span><span class="hole">{{c.detail}}</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERALL STANDINGS -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">04</div>
+      <div>
+        <div class="section-title">Overall Standings — Final</div>
+        <div class="section-desc">All 3 rounds closed · cumulative Round Perf. (quota achievement + that round's Wally Ball bonus) — only the Quota number itself never includes Wally Ball</div>
+      </div>
+    </div>
+
+    <div class="winner-banner">
+      <div class="comp-label">🏆 2026 Wally Cup Champion</div>
+      <div class="winner-name">{{champion.name}}</div>
+      <div class="winner-stat">{{champion.overall}} Overall · {{champion.rd1}} / {{champion.rd2}} / {{champion.rd3}} by round</div>
+    </div>
+
+    <div class="lb-card">
+      <table class="lb-table">
+        <thead>
+          <tr>
+            <th class="left">Player</th>
+            <th>Rd1</th>
+            <th>Rd2</th>
+            <th>Rd3</th>
+            <th>Overall</th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{overallStandings}}" as="o" hint-placeholder-count="16">
+            <tr class="{{o.rowClass}}">
+              <td class="left"><span class="rank-cell">{{o.rank}}</span> <span class="player-name">{{o.name}}</span></td>
+              <td class="quota-val">{{o.rd1}}</td>
+              <td class="quota-val">{{o.rd2}}</td>
+              <td class="quota-val">{{o.rd3}}</td>
+              <td><span class="{{o.overallBadgeClass}}">{{o.overall}}</span></td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+    <div class="chain-note" style="margin:0.9rem 0 0 0;">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4a2 2 0 0 0 2 4M17 6h3a2 2 0 0 1-2 4"/></svg>
+      Final — all three rounds are closed, this Overall podium is the season result
+    </div>
+  </div>
+
+  </div><!-- /wrap -->
+
+  <!-- WALLY BALL -->
+  <div class="section wb-section">
+    <div class="section-head">
+      <div class="section-num">05</div>
+      <div>
+        <div class="section-title">Wally Ball</div>
+        <div class="section-desc">Round bonus (1 / 1 / 2 pts) + season elimination pot — tracked separately from quota, and from each other: a round's Kept/Lost above only affects that round's bonus, not pot status</div>
+      </div>
+    </div>
+    <div class="wb-pot-banner">
+      <div>
+        <div class="wb-pot-lbl">Season Pot</div>
+        <div class="wb-pot-amt">$80</div>
+      </div>
+      <div class="wb-pot-remain">🏆 Lou Strohl wins the $80 outright — both remaining ballholders lost it in Round 3, so the pot goes to whoever held on longest: Lou lost on Hole 10, Jake Knappenberger on Hole 6. Neither earned Round 3's +2pt bonus, since both lost the ball this round.</div>
+    </div>
+    <div class="wb-grid">
+      <sc-for list="{{wallyBall}}" as="w" hint-placeholder-count="16">
+        <div class="wb-card {{w.cardClass}}">
+          <div>
+            <div class="wb-card-name">{{w.name}}</div>
+            <div class="wb-card-detail">{{w.detail}}</div>
+            <div class="wb-bonus">Cumulative bonus: {{w.bonus}} pts</div>
+          </div>
+          <div class="{{w.statusPillClass}}">{{w.status}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- WC 2MAN — STANDALONE -->
+  <div class="section twoman-section">
+    <div class="wrap" style="padding:0;">
+      <div class="section-head">
+        <div class="section-num">06</div>
+        <div>
+          <div class="section-title">WC 2Man Scramble</div>
+          <div class="section-desc">Standalone event — does not count toward the Wally Cup Overall</div>
+        </div>
+      </div>
+      <div class="locked-card">
+        <div class="lock-icon">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f5f0e8" stroke-width="1.6"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        </div>
+        <div class="locked-title">Scoring format not yet defined</div>
+        <div class="locked-sub">The 2Man scramble formula is still open — it's a standalone build on its own timeline, separate from the Rd1–3 chain. Results post here once it's scored.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+  <!-- PHOTO GALLERY PLACEHOLDER -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">07</div>
+      <div>
+        <div class="section-title">Photo Gallery</div>
+        <div class="section-desc">Media phase — added after data/results ship</div>
+      </div>
+    </div>
+    <div class="photo-slot">
+      <div class="photo-icon">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#f5f0e8" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M21 16l-5-4-4 3-3-2-6 5"/></svg>
+      </div>
+      <div class="photo-slot-title">Gallery opens after Round 3</div>
+      <div class="photo-slot-sub">Chapters auto-populate from Rd1 / Rd2 / 2Man / Rd3, plus any Host-added sections — same slot, filled in when Photos ships.</div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <a class="back-btn" href="#">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      Back to Portal
+    </a>
+    <div class="footer-meta">BirdieFriends Experiences · birdiefriends.com/wally-cup.html</div>
+  </div>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#e8392a","options":["#e8392a","#2a6fb0","#2f8f5b","#a3812f"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#e8392a';
+
+    const rounds = [
+      {num:'1',label:'Round 1',venue:'Honesdale Golf Club',date:'Sept 11',tag:'Final',nodeClass:'rail-node done'},
+      {num:'2',label:'Round 2',venue:'Skytop Lodge',date:'Sept 12',tag:'Final',nodeClass:'rail-node done'},
+      {num:'3',label:'Round 3',venue:'Paupack Hills GC',date:'Sept 13',tag:'Final',nodeClass:'rail-node done'},
+    ];
+
+    // Dev-78 reset — Brian found the old test run's Wally Ball survivor counts were wrong
+    // (a data-integrity bug let already-eliminated players get re-credited in later rounds).
+    // Fixed at the BFE-Admin engine level (permanent elimination now enforced + the test-data
+    // generator stopped coin-flipping already-out players), then D1 + Jotform test data were
+    // wiped clean and Rd1 was re-run from scratch. This is that fresh Rd1 close, pulled
+    // straight from D1 (event_id 17) — first round closed under the corrected engine, so both
+    // the Wally Ball status AND the vs-par numbers below are real, not estimated (Close Round
+    // now persists every player's per-hole points, so vs-par is available starting Rd1 too,
+    // not just from Rd2 onward like the previous run). Round Perf. = (Score+WB) - Quota
+    // (drives Rank/Podium $ and Overall Standings); Quota-only = Score - Quota (drives Quota
+    // Out, never includes WB).
+    const rd1Raw = [
+      {rank:1,name:'Nate Stettler',rowClass:'lb-row leader-row',quotaIn:'24.32',roundPerf:'+8.68',roundPerfClass:'good',quotaPerf:'+8.68',quotaOut:'28.66',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 33 · Hole 4-1'},
+      {rank:2,name:'Mohamed Walli',rowClass:'lb-row',quotaIn:'24.32',roundPerf:'+2.68',roundPerfClass:'good',quotaPerf:'+2.68',quotaOut:'25.66',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 27 · Hole 10-2'},
+      {rank:3,name:'Lou Strohl',rowClass:'lb-row',quotaIn:'20.72',roundPerf:'+2.28',roundPerfClass:'good',quotaPerf:'+1.28',quotaOut:'21.36',wbLabel:'In Play',wbClass:'wb-in',wbDetail:'Scored 22 · In Play, +1 bonus pt'},
+      {rank:4,name:'Jake Knappenberger',rowClass:'lb-row',quotaIn:'22.79',roundPerf:'+2.21',roundPerfClass:'good',quotaPerf:'+1.21',quotaOut:'23.40',wbLabel:'In Play',wbClass:'wb-in',wbDetail:'Scored 24 · In Play, +1 bonus pt'},
+      {rank:5,name:'Jeff Rapp',rowClass:'lb-row',quotaIn:'23.45',roundPerf:'+1.55',roundPerfClass:'good',quotaPerf:'+1.55',quotaOut:'24.22',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 25 · Hole 5-2'},
+      {rank:6,name:'Mark Weaver',rowClass:'lb-row',quotaIn:'15.70',roundPerf:'+0.30',roundPerfClass:'even',quotaPerf:'+0.30',quotaOut:'15.85',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 16 · Hole 2-1'},
+      {rank:7,name:'Bill Steirer',rowClass:'lb-row',quotaIn:'29.89',roundPerf:'+0.11',roundPerfClass:'even',quotaPerf:'−0.89',quotaOut:'29.44',wbLabel:'In Play',wbClass:'wb-in',wbDetail:'Scored 29 · In Play, +1 bonus pt'},
+      {rank:8,name:'Tom Stitt',rowClass:'lb-row',quotaIn:'22.14',roundPerf:'−0.14',roundPerfClass:'even',quotaPerf:'−1.14',quotaOut:'21.57',wbLabel:'In Play',wbClass:'wb-in',wbDetail:'Scored 21 · In Play, +1 bonus pt'},
+      {rank:9,name:'Jordan Knappenberger',rowClass:'lb-row',quotaIn:'32.18',roundPerf:'−0.18',roundPerfClass:'even',quotaPerf:'−1.18',quotaOut:'31.59',wbLabel:'In Play',wbClass:'wb-in',wbDetail:'Scored 31 · In Play, +1 bonus pt'},
+      {rank:10,name:'Chooch Wernett',rowClass:'lb-row',quotaIn:'25.30',roundPerf:'−0.30',roundPerfClass:'even',quotaPerf:'−1.30',quotaOut:'24.65',wbLabel:'In Play',wbClass:'wb-in',wbDetail:'Scored 24 · In Play, +1 bonus pt'},
+      {rank:11,name:'BJ Kolonia',rowClass:'lb-row',quotaIn:'20.61',roundPerf:'−0.61',roundPerfClass:'bad',quotaPerf:'−0.61',quotaOut:'20.31',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 20 · Hole 10-3'},
+      {rank:12,name:'Brian Hager',rowClass:'lb-row',quotaIn:'29.78',roundPerf:'−0.78',roundPerfClass:'bad',quotaPerf:'−0.78',quotaOut:'29.39',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 29 · Hole 3-1'},
+      {rank:13,name:'Evan Lindermuth',rowClass:'lb-row',quotaIn:'26.18',roundPerf:'−1.18',roundPerfClass:'bad',quotaPerf:'−1.18',quotaOut:'25.59',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 25 · Hole 8-1'},
+      {rank:14,name:'Tom Arnold',rowClass:'lb-row',quotaIn:'29.34',roundPerf:'−1.34',roundPerfClass:'bad',quotaPerf:'−2.34',quotaOut:'28.17',wbLabel:'In Play',wbClass:'wb-in',wbDetail:'Scored 27 · In Play, +1 bonus pt'},
+      {rank:15,name:'Dave Sherwin',rowClass:'lb-row',quotaIn:'30.98',roundPerf:'−1.98',roundPerfClass:'bad',quotaPerf:'−1.98',quotaOut:'29.99',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 29 · Hole 3-3'},
+      {rank:16,name:'Scott Justus',rowClass:'lb-row',quotaIn:'28.36',roundPerf:'−3.36',roundPerfClass:'bad',quotaPerf:'−3.36',quotaOut:'26.68',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 25 · Hole 7-3'},
+    ];
+
+    // Round number each table shows — drives the "Quota Rd{N}" header label (item 1) so
+    // the same table markup works for whichever round is Final.
+    const quotaLabelFor = (roundNum) => 'Quota Rd' + roundNum;
+    const quotaInLabel = quotaLabelFor(1);
+    const quotaInLabel2 = quotaLabelFor(2);
+    const quotaInLabel3 = quotaLabelFor(3);
+
+    const fmtPayout = (n) => '$' + (Number.isInteger(n) ? n : n.toFixed(2)).toString().replace(/\.00$/, '');
+
+    // Generic per-round decorator — payoutMap/vsParMap are {name: value} lookups specific
+    // to that round's actual results (podium+skins+CttP totals; vs-par per Brian's point
+    // scale: 0=+2 [double bogey is the hard cap, so this is exact, not a floor], 1=+1,
+    // 2=par, 4=-1, 6=-2, 8=-3). `par` is that round's course par (Venue Manager's saved
+    // total) — displayed as the actual gross score (par + vsPar), e.g. "(74)" not "(+4)",
+    // since that's the number golfers actually think in. `wbBonusPts` is this round's
+    // Wally Ball bonus value (1/1/2 for Rd1/Rd2/Rd3) — feeds the Round Perf. breakdown
+    // below so the math (quota achievement + bonus = Round Perf.) is spelled out rather
+    // than left for the reader to reconstruct (Brian: "it's just not easy to mentally do
+    // the math" going from Lou's +1.28 quota to the +2.28 shown).
+    const decorate = (arr, payoutMap, vsParMap, par, wbBonusPts) => arr.map(p => {
+      const amt = payoutMap[p.name];
+      const vsPar = vsParMap[p.name];
+      const keptWB = p.wbLabel === 'In Play';
+      const perfCalc = keptWB
+        ? `${p.quotaPerf} quota achievement + ${wbBonusPts.toFixed(2)} Wally Ball = ${p.roundPerf} Round Perf.`
+        : `${p.quotaPerf} quota achievement — Wally Ball lost this round, no bonus`;
+      return {
+        ...p,
+        roundPerfBadgeClass: 'perf-badge ' + p.roundPerfClass,
+        wbPillClass: 'wb-pill ' + p.wbClass,
+        payoutCol: amt ? fmtPayout(amt) : '—',
+        vsParDisplay: (vsPar != null) ? (' (' + (par + vsPar) + ')') : '',
+        perfCalc,
+        // Kept for the round's Leader banner only — the per-row table copy was cut as clutter.
+        perfSubtext: p.quotaPerf + (keptWB ? ' quota achievement + Wally Ball' : ' quota achievement'),
+      };
+    });
+
+    // Real BFE-Admin Rd1 close (Honesdale), pulled straight from D1 after the scorecard-
+    // persistence fix — Vs Par is real here, computed from actual per-hole points: 0-point
+    // holes are an exact +2 (double bogey is the hard cap this format plays under, confirmed
+    // by Brian — not "or worse," so no floor/caveat needed).
+    const rd1VsParByName = {
+      'Nate Stettler': 6, 'Jordan Knappenberger': 7, 'Bill Steirer': 8, 'Brian Hager': 8,
+      'Dave Sherwin': 9, 'Tom Arnold': 9, 'Mohamed Walli': 10, 'Chooch Wernett': 12,
+      'Evan Lindermuth': 12, 'Jeff Rapp': 12, 'Scott Justus': 12, 'Jake Knappenberger': 13,
+      'Lou Strohl': 15, 'Tom Stitt': 15, 'BJ Kolonia': 16, 'Mark Weaver': 20,
+    };
+    // Skins pool was $105 over 6 winners; podium ($20/$10/$5) and CttP ($10/hole) are
+    // already clean $5-increment amounts, but a straight $105/6 split lands on $17.50 per
+    // winner. Per the payout-rounding fix (Dev-79 — same no-change-on-the-course rule as
+    // BFSeries), each skin winner's cut floors to a whole dollar ($17); the $3 that's left
+    // over from the split ($105 − $17×6) goes unallocated rather than getting paid out in
+    // cents.
+    const rd1PayoutByName = {
+      'Nate Stettler': 37,          // $20 podium + $17 skin (hole 9)
+      'Mohamed Walli': 20,          // $10 podium + $10 CttP (hole 13)
+      'Lou Strohl': 5,              // $5 podium
+      'Jake Knappenberger': 17,     // $17 skin (hole 18)
+      'Jordan Knappenberger': 34,   // $17×2 skins (holes 2, 13)
+      'BJ Kolonia': 10,             // $10 CttP (hole 6)
+      'Dave Sherwin': 17,           // $17 skin (hole 17)
+      'Scott Justus': 17,           // $17 skin (hole 7)
+    };
+    const rd1Players = decorate(rd1Raw, rd1PayoutByName, rd1VsParByName, 70, 1); // Honesdale par 70, Rd1 WB bonus = 1pt
+
+    // Real BFE-Admin Rd2 close (Skytop Lodge), pulled straight from D1. Wally Ball status
+    // here reflects the permanent-elimination fix working across a second real round: the 9
+    // players already out after Rd1 correctly show "Already out" (no fresh hole/stroke — they
+    // didn't lose anything new this round), while the 7 who were still In Play entering Rd2
+    // either lost it for real this round (fresh hole/stroke shown) or are still In Play.
+    // Result: only Lou Strohl and Jake Knappenberger have survived both rounds — down from 7
+    // after Rd1, exactly as expected with no phantom survivors.
+    const rd2Raw = [
+      {rank:1,name:'Tom Stitt',rowClass:'lb-row leader-row',quotaIn:'21.57',roundPerf:'+6.43',roundPerfClass:'good',quotaPerf:'+6.43',quotaOut:'24.78',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 28 · Hole 15-3'},
+      {rank:2,name:'Tom Arnold',rowClass:'lb-row',quotaIn:'28.17',roundPerf:'+4.83',roundPerfClass:'good',quotaPerf:'+4.83',quotaOut:'30.59',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 33 · Hole 18-2'},
+      {rank:3,name:'Chooch Wernett',rowClass:'lb-row',quotaIn:'24.65',roundPerf:'+4.35',roundPerfClass:'good',quotaPerf:'+4.35',quotaOut:'26.83',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 29 · Hole 18-1'},
+      {rank:4,name:'Bill Steirer',rowClass:'lb-row',quotaIn:'29.44',roundPerf:'+3.56',roundPerfClass:'good',quotaPerf:'+3.56',quotaOut:'31.22',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 33 · Hole 3-1'},
+      {rank:5,name:'Jeff Rapp',rowClass:'lb-row',quotaIn:'24.22',roundPerf:'+2.78',roundPerfClass:'good',quotaPerf:'+2.78',quotaOut:'25.61',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 27 · Already out — lost Rd1'},
+      {rank:6,name:'Lou Strohl',rowClass:'lb-row',quotaIn:'21.36',roundPerf:'−0.36',roundPerfClass:'even',quotaPerf:'−1.36',quotaOut:'20.68',wbLabel:'In Play',wbClass:'wb-in',wbDetail:'Scored 20 · In Play, +1 bonus pt'},
+      {rank:7,name:'Dave Sherwin',rowClass:'lb-row',quotaIn:'29.99',roundPerf:'−0.99',roundPerfClass:'bad',quotaPerf:'−0.99',quotaOut:'29.49',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 29 · Already out — lost Rd1'},
+      {rank:8,name:'BJ Kolonia',rowClass:'lb-row',quotaIn:'20.31',roundPerf:'−1.31',roundPerfClass:'bad',quotaPerf:'−1.31',quotaOut:'19.65',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 19 · Already out — lost Rd1'},
+      {rank:9,name:'Mark Weaver',rowClass:'lb-row',quotaIn:'15.85',roundPerf:'−1.85',roundPerfClass:'bad',quotaPerf:'−1.85',quotaOut:'14.92',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 14 · Already out — lost Rd1'},
+      {rank:10,name:'Brian Hager',rowClass:'lb-row',quotaIn:'29.39',roundPerf:'−2.39',roundPerfClass:'bad',quotaPerf:'−2.39',quotaOut:'28.19',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 27 · Already out — lost Rd1'},
+      {rank:11,name:'Evan Lindermuth',rowClass:'lb-row',quotaIn:'25.59',roundPerf:'−2.59',roundPerfClass:'bad',quotaPerf:'−2.59',quotaOut:'24.29',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 23 · Already out — lost Rd1'},
+      {rank:12,name:'Jordan Knappenberger',rowClass:'lb-row',quotaIn:'31.59',roundPerf:'−2.59',roundPerfClass:'bad',quotaPerf:'−2.59',quotaOut:'30.30',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 29 · Hole 8-3'},
+      {rank:13,name:'Mohamed Walli',rowClass:'lb-row',quotaIn:'25.66',roundPerf:'−2.66',roundPerfClass:'bad',quotaPerf:'−2.66',quotaOut:'24.33',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 23 · Already out — lost Rd1'},
+      {rank:14,name:'Scott Justus',rowClass:'lb-row',quotaIn:'26.68',roundPerf:'−2.68',roundPerfClass:'bad',quotaPerf:'−2.68',quotaOut:'25.34',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 24 · Already out — lost Rd1'},
+      {rank:15,name:'Jake Knappenberger',rowClass:'lb-row',quotaIn:'23.40',roundPerf:'−5.40',roundPerfClass:'bad',quotaPerf:'−6.40',quotaOut:'20.20',wbLabel:'In Play',wbClass:'wb-in',wbDetail:'Scored 17 · In Play, +1 bonus pt'},
+      {rank:16,name:'Nate Stettler',rowClass:'lb-row',quotaIn:'28.66',roundPerf:'−6.66',roundPerfClass:'bad',quotaPerf:'−6.66',quotaOut:'25.33',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 22 · Already out — lost Rd1'},
+    ];
+    const rd2VsParByName = {
+      'Bill Steirer': 6, 'Tom Arnold': 6, 'Jordan Knappenberger': 7, 'Chooch Wernett': 8,
+      'Dave Sherwin': 8, 'Tom Stitt': 9, 'Jeff Rapp': 11, 'Brian Hager': 10,
+      'Scott Justus': 13, 'Evan Lindermuth': 13, 'Mohamed Walli': 14, 'Nate Stettler': 15,
+      'BJ Kolonia': 17, 'Lou Strohl': 17, 'Jake Knappenberger': 19, 'Mark Weaver': 22,
+    };
+    // Skins pool over 4 winners floors to $26 each (Dev-79 rounding rule); podium and CttP
+    // are already clean $5/$10 increments.
+    const rd2PayoutByName = {
+      'Tom Stitt': 20,         // $20 podium
+      'Tom Arnold': 10,        // $10 podium
+      'Chooch Wernett': 5,     // $5 podium
+      'Bill Steirer': 26,      // $26 skin (hole 5)
+      'Jeff Rapp': 10,         // $10 CttP (hole 16)
+      'Lou Strohl': 26,        // $26 skin (hole 15)
+      'Dave Sherwin': 26,      // $26 skin (hole 3)
+      'Nate Stettler': 36,     // $26 skin (hole 1) + $10 CttP (hole 6)
+    };
+    const rd2Players = decorate(rd2Raw, rd2PayoutByName, rd2VsParByName, 72, 1); // Skytop Lodge par 72, Rd2 WB bonus = 1pt
+
+    // Real BFE-Admin Rd3 close (Paupack Hills, par 71 — not 72; recount confirmed against
+    // the venue's saved per-hole pars), pulled straight from D1 — this is the FINAL round.
+    // Wally Ball ends here too: both remaining ballholders (Lou Strohl, Jake Knappenberger)
+    // lost it this round, so nobody kept it into a bonus this round — every player's Round
+    // Perf. below equals their raw quota achievement, no +2 anywhere (confirmed against the
+    // engine's own persisted numbers, not assumed).
+    const rd3Raw = [
+      {rank:1,name:'Brian Hager',rowClass:'lb-row leader-row',quotaIn:'28.19',roundPerf:'+8.81',roundPerfClass:'good',quotaPerf:'+8.81',quotaOut:'32.60',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 37 · Already out — lost Rd1'},
+      {rank:2,name:'Jordan Knappenberger',rowClass:'lb-row',quotaIn:'30.30',roundPerf:'+8.70',roundPerfClass:'good',quotaPerf:'+8.70',quotaOut:'34.65',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 39 · Already out — lost Rd2'},
+      {rank:3,name:'Evan Lindermuth',rowClass:'lb-row',quotaIn:'24.29',roundPerf:'+6.71',roundPerfClass:'good',quotaPerf:'+6.71',quotaOut:'27.65',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 31 · Already out — lost Rd1'},
+      {rank:4,name:'Dave Sherwin',rowClass:'lb-row',quotaIn:'29.49',roundPerf:'+5.51',roundPerfClass:'good',quotaPerf:'+5.51',quotaOut:'32.25',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 35 · Already out — lost Rd1'},
+      {rank:5,name:'Nate Stettler',rowClass:'lb-row',quotaIn:'25.33',roundPerf:'+4.67',roundPerfClass:'good',quotaPerf:'+4.67',quotaOut:'27.67',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 30 · Already out — lost Rd1'},
+      {rank:6,name:'Mohamed Walli',rowClass:'lb-row',quotaIn:'24.33',roundPerf:'+4.67',roundPerfClass:'good',quotaPerf:'+4.67',quotaOut:'26.67',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 29 · Already out — lost Rd1'},
+      {rank:7,name:'Jake Knappenberger',rowClass:'lb-row',quotaIn:'20.20',roundPerf:'+1.80',roundPerfClass:'good',quotaPerf:'+1.80',quotaOut:'21.10',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 22 · Hole 6-3'},
+      {rank:8,name:'Tom Arnold',rowClass:'lb-row',quotaIn:'30.59',roundPerf:'+0.41',roundPerfClass:'good',quotaPerf:'+0.41',quotaOut:'30.79',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 31 · Already out — lost Rd2'},
+      {rank:9,name:'Scott Justus',rowClass:'lb-row',quotaIn:'25.34',roundPerf:'−0.34',roundPerfClass:'bad',quotaPerf:'−0.34',quotaOut:'25.17',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 25 · Already out — lost Rd1'},
+      {rank:10,name:'Mark Weaver',rowClass:'lb-row',quotaIn:'14.92',roundPerf:'−0.92',roundPerfClass:'bad',quotaPerf:'−0.92',quotaOut:'14.46',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 14 · Already out — lost Rd1'},
+      {rank:11,name:'Bill Steirer',rowClass:'lb-row',quotaIn:'31.22',roundPerf:'−1.22',roundPerfClass:'bad',quotaPerf:'−1.22',quotaOut:'30.61',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 30 · Already out — lost Rd2'},
+      {rank:12,name:'BJ Kolonia',rowClass:'lb-row',quotaIn:'19.65',roundPerf:'−1.65',roundPerfClass:'bad',quotaPerf:'−1.65',quotaOut:'18.83',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 18 · Already out — lost Rd1'},
+      {rank:13,name:'Tom Stitt',rowClass:'lb-row',quotaIn:'24.78',roundPerf:'−2.78',roundPerfClass:'bad',quotaPerf:'−2.78',quotaOut:'23.39',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 22 · Already out — lost Rd2'},
+      {rank:14,name:'Lou Strohl',rowClass:'lb-row',quotaIn:'20.68',roundPerf:'−3.68',roundPerfClass:'bad',quotaPerf:'−3.68',quotaOut:'18.84',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 17 · Hole 10-2'},
+      {rank:15,name:'Jeff Rapp',rowClass:'lb-row',quotaIn:'25.61',roundPerf:'−4.61',roundPerfClass:'bad',quotaPerf:'−4.61',quotaOut:'23.31',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 21 · Already out — lost Rd1'},
+      {rank:16,name:'Chooch Wernett',rowClass:'lb-row',quotaIn:'26.83',roundPerf:'−5.83',roundPerfClass:'bad',quotaPerf:'−5.83',quotaOut:'23.91',wbLabel:'Lost',wbClass:'wb-out',wbDetail:'Scored 21 · Already out — lost Rd2'},
+    ];
+    const rd3VsParByName = {
+      'Jordan Knappenberger': 0, 'Brian Hager': 3, 'Dave Sherwin': 4, 'Evan Lindermuth': 8,
+      'Bill Steirer': 8, 'Tom Arnold': 8, 'Mohamed Walli': 9, 'Nate Stettler': 9,
+      'Scott Justus': 11, 'Tom Stitt': 14, 'Jake Knappenberger': 15, 'Jeff Rapp': 15,
+      'Chooch Wernett': 15, 'BJ Kolonia': 18, 'Lou Strohl': 19, 'Mark Weaver': 22,
+    };
+    // Skins pool over 5 winning holes floors to $21 each; podium and CttP are already
+    // clean $5/$10 increments. Brian Hager won 2 skin holes ($42), the rest 1 each.
+    const rd3PayoutByName = {
+      'Brian Hager': 62,            // $20 podium + $42 (2 skins: holes 2, 3)
+      'Jordan Knappenberger': 20,   // $10 podium + $10 CttP (hole 5 — the deliberate farther-later canary hole)
+      'Evan Lindermuth': 26,        // $5 podium + $21 skin (hole 13)
+      'Dave Sherwin': 21,           // $21 skin (hole 14)
+      'Nate Stettler': 10,          // $10 CttP (hole 16)
+      'Jake Knappenberger': 21,     // $21 skin (hole 10)
+    };
+    const rd3Players = decorate(rd3Raw, rd3PayoutByName, rd3VsParByName, 71, 2); // Paupack Hills par 71, Rd3 WB bonus = 2pts (nobody kept it)
+
+    const rd1Podium = [
+      {name:'Nate Stettler', amt:'$20'},
+      {name:'Mohamed Walli', amt:'$10'},
+      {name:'Lou Strohl', amt:'$5'},
+    ];
+    const rd2Podium = [
+      {name:'Tom Stitt', amt:'$20'},
+      {name:'Tom Arnold', amt:'$10'},
+      {name:'Chooch Wernett', amt:'$5'},
+    ];
+    const rd3Podium = [
+      {name:'Brian Hager', amt:'$20'},
+      {name:'Jordan Knappenberger', amt:'$10'},
+      {name:'Evan Lindermuth', amt:'$5'},
+    ];
+
+    // FINAL Overall Standings — sum of each round's ROUND PERF. (quota achievement + that
+    // round's own Wally Ball bonus, when kept). Wally Ball is a real competitive category and
+    // has to matter for ranking — the only place it's deliberately excluded is the Quota
+    // number itself (Quota Out / next round's Quota In), which stays pure quota-vs-score so it
+    // never inflates someone's future starting point. All three rounds are closed now — this
+    // is the season result, not a running total.
+    const overallStandingsRaw = [
+      {name:'Nate Stettler',rd1:'+8.68',rd2:'−6.66',rd3:'+4.67',overall:'+6.69',overallClass:'good'},
+      {name:'Jordan Knappenberger',rd1:'−0.18',rd2:'−2.59',rd3:'+8.70',overall:'+5.94',overallClass:'good'},
+      {name:'Brian Hager',rd1:'−0.78',rd2:'−2.39',rd3:'+8.81',overall:'+5.64',overallClass:'good'},
+      {name:'Mohamed Walli',rd1:'+2.68',rd2:'−2.66',rd3:'+4.67',overall:'+4.69',overallClass:'good'},
+      {name:'Tom Arnold',rd1:'−1.34',rd2:'+4.83',rd3:'+0.41',overall:'+3.90',overallClass:'good'},
+      {name:'Tom Stitt',rd1:'−0.14',rd2:'+6.43',rd3:'−2.78',overall:'+3.51',overallClass:'good'},
+      {name:'Evan Lindermuth',rd1:'−1.18',rd2:'−2.59',rd3:'+6.71',overall:'+2.94',overallClass:'good'},
+      {name:'Dave Sherwin',rd1:'−1.98',rd2:'−0.99',rd3:'+5.51',overall:'+2.54',overallClass:'good'},
+      {name:'Bill Steirer',rd1:'+0.11',rd2:'+3.56',rd3:'−1.22',overall:'+2.45',overallClass:'good'},
+      {name:'Jeff Rapp',rd1:'+1.55',rd2:'+2.78',rd3:'−4.61',overall:'−0.28',overallClass:'bad'},
+      {name:'Jake Knappenberger',rd1:'+2.21',rd2:'−5.40',rd3:'+1.80',overall:'−1.39',overallClass:'bad'},
+      {name:'Lou Strohl',rd1:'+2.28',rd2:'−0.36',rd3:'−3.68',overall:'−1.76',overallClass:'bad'},
+      {name:'Chooch Wernett',rd1:'−0.30',rd2:'+4.35',rd3:'−5.83',overall:'−1.78',overallClass:'bad'},
+      {name:'Mark Weaver',rd1:'+0.30',rd2:'−1.85',rd3:'−0.92',overall:'−2.47',overallClass:'bad'},
+      {name:'BJ Kolonia',rd1:'−0.61',rd2:'−1.31',rd3:'−1.65',overall:'−3.57',overallClass:'bad'},
+      {name:'Scott Justus',rd1:'−3.36',rd2:'−2.68',rd3:'−0.34',overall:'−6.38',overallClass:'bad'},
+    ];
+    const overallStandings = overallStandingsRaw.map((o, i) => ({
+      ...o,
+      rank: i + 1,
+      rowClass: i === 0 ? 'lb-row leader-row' : 'lb-row',
+      overallBadgeClass: 'perf-badge ' + o.overallClass,
+    }));
+    const champion = overallStandings[0];
+
+    // FINAL Wally Ball state. Bonus accumulates +1/+1/+2 (Rd1/Rd2/Rd3) only for rounds
+    // actually kept — nobody kept it into Rd3, so every player's bonus tally is now locked
+    // in at whatever they'd banked through Rd1/Rd2. Both remaining ballholders (Lou Strohl,
+    // Jake Knappenberger) lost it in Rd3 itself — per Brian, the season pot's tiebreak for
+    // "lost it in the same final round" is whoever held on longest, i.e. the higher hole
+    // number: Lou (hole 10) beats Jake (hole 6), so Lou wins the full $80, not a split.
+    const wallyBallRaw = [
+      {name:'Lou Strohl',status:'WON POT',statusClass:'wb-status-won',detail:'Lost Rd3 — hole 10-2 · Wins the $80 season pot (held it longest)',bonus:2,cardClass:'wb-card-winner'},
+      {name:'Jake Knappenberger',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd3 — hole 6-3',bonus:2,cardClass:''},
+      {name:'Bill Steirer',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd2 — hole 3-1',bonus:1,cardClass:''},
+      {name:'Tom Stitt',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd2 — hole 15-3',bonus:1,cardClass:''},
+      {name:'Jordan Knappenberger',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd2 — hole 8-3',bonus:1,cardClass:''},
+      {name:'Chooch Wernett',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd2 — hole 18-1',bonus:1,cardClass:''},
+      {name:'Tom Arnold',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd2 — hole 18-2',bonus:1,cardClass:''},
+      {name:'Nate Stettler',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd1 — hole 4-1',bonus:0,cardClass:''},
+      {name:'Mohamed Walli',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd1 — hole 10-2',bonus:0,cardClass:''},
+      {name:'Jeff Rapp',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd1 — hole 5-2',bonus:0,cardClass:''},
+      {name:'Mark Weaver',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd1 — hole 2-1',bonus:0,cardClass:''},
+      {name:'BJ Kolonia',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd1 — hole 10-3',bonus:0,cardClass:''},
+      {name:'Brian Hager',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd1 — hole 3-1',bonus:0,cardClass:''},
+      {name:'Evan Lindermuth',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd1 — hole 8-1',bonus:0,cardClass:''},
+      {name:'Dave Sherwin',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd1 — hole 3-3',bonus:0,cardClass:''},
+      {name:'Scott Justus',status:'OUT',statusClass:'wb-status-out',detail:'Lost Rd1 — hole 7-3',bonus:0,cardClass:''},
+    ];
+    const wallyBall = wallyBallRaw.map(w => ({...w, statusPillClass:'wb-status '+w.statusClass}));
+
+    const rd1Skins = [
+      {name:'Jordan Knappenberger', hole:'Hole 2 — $17'},
+      {name:'Scott Justus', hole:'Hole 7 — $17'},
+      {name:'Nate Stettler', hole:'Hole 9 — $17'},
+      {name:'Jordan Knappenberger', hole:'Hole 13 — $17'},
+      {name:'Dave Sherwin', hole:'Hole 17 — $17'},
+      {name:'Jake Knappenberger', hole:'Hole 18 — $17'},
+    ];
+    const rd1Ctp = [
+      {name:'BJ Kolonia', detail:'Hole 6 — 37.4′ — $10'},
+      {name:'Mohamed Walli', detail:'Hole 13 — 43.9′ — $10'},
+    ];
+    const rd2Skins = [
+      {name:'Nate Stettler', hole:'Hole 1 — $26'},
+      {name:'Dave Sherwin', hole:'Hole 3 — $26'},
+      {name:'Bill Steirer', hole:'Hole 5 — $26'},
+      {name:'Lou Strohl', hole:'Hole 15 — $26'},
+    ];
+    const rd2Ctp = [
+      {name:'Nate Stettler', detail:'Hole 6 — 41′ — $10'},
+      {name:'Jeff Rapp', detail:'Hole 16 — 20.7′ — $10'},
+    ];
+    const rd3Skins = [
+      {name:'Brian Hager', hole:'Hole 2 — $21'},
+      {name:'Brian Hager', hole:'Hole 3 — $21'},
+      {name:'Jake Knappenberger', hole:'Hole 10 — $21'},
+      {name:'Evan Lindermuth', hole:'Hole 13 — $21'},
+      {name:'Dave Sherwin', hole:'Hole 14 — $21'},
+    ];
+    // Hole 5's CttP winner (Jordan, 28.9′) is the deliberate Dev-81 farther-but-later canary,
+    // now proven on real closed data: the later claim won despite being farther than an
+    // earlier, closer one on the same hole — confirms the leader rule is timestamp-based.
+    const rd3Ctp = [
+      {name:'Jordan Knappenberger', detail:'Hole 5 — 28.9′ — $10'},
+      {name:'Nate Stettler', detail:'Hole 16 — 2′ — $10'},
+    ];
+
+    return {
+      accent, rounds,
+      quotaInLabel, quotaInLabel2, quotaInLabel3,
+      rd1Players,
+      rd1Leader: rd1Players[0],
+      rd2Players,
+      rd2Leader: rd2Players[0],
+      rd3Players,
+      rd3Leader: rd3Players[0],
+      champion,
+      overallStandings, wallyBall,
+      rd1Podium, rd1Skins, rd1Ctp,
+      rd2Podium, rd2Skins, rd2Ctp,
+      rd3Podium, rd3Skins, rd3Ctp,
+    };
+  }
+}
+</script>
+</body>
+</html>
