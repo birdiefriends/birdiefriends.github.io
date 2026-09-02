@@ -164,7 +164,7 @@
     <div id="rosterFetchStatus" class="status"></div>
 
     <table id="rosterTable">
-      <thead><tr><th style="width:40%">Name</th><th style="width:35%">Email</th><th>HCP</th><th></th></tr></thead>
+      <thead><tr><th style="width:32%">Name</th><th style="width:26%">Email</th><th>HCP</th><th style="width:22%">Withdrew?</th><th></th></tr></thead>
       <tbody id="rosterBody"></tbody>
     </table>
     <div class="btnbar">
@@ -247,8 +247,11 @@
     <p class="hint">Pulls that round's scorecards straight from Jotform, runs them through the quota engine above (including any Wally Ball bonus), computes skins and Closest-to-Pin, and saves the result — round pot payout included (podium, skins, and CTP). Only "Stableford quota" rounds are wired up right now; 2-man scramble scoring isn't built yet. CTP pays whoever's the most-recent qualifying claimant on each hole configured for this round's venue in section 5 — same rule the live leaderboard uses. Load or Generate the event above first.</p>
     <div class="row">
       <div style="flex:2"><label for="closeRoundSelect">Round</label><select id="closeRoundSelect"><option value="">— load/generate the event above first —</option></select></div>
+      <div style="align-self:flex-end"><button type="button" id="checkScorecardsBtn" disabled>📋 Check scorecards</button></div>
       <div style="align-self:flex-end"><button type="button" id="closeRoundBtn" disabled>Close round</button></div>
     </div>
+    <div id="scorecardCheckStatus" class="status"></div>
+    <div id="scorecardCheckResults"></div>
     <div id="closeRoundStatus" class="status"></div>
     <div id="closeRoundResults"></div>
     <div id="wcStandings" style="margin-top:18px"></div>
@@ -482,10 +485,10 @@ function resolveRoster(players, teePolicy, opts) {
       // is legitimately per-round, not averageable) — only slope is
       // overwritten so what's shown always matches what's actually used.
       const tee = { ...rawTee, slope };
-      return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope, initialQuota: 36 - (p.hcp * slope / 113), isNoHcp: false };
+      return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope, initialQuota: 36 - (p.hcp * slope / 113), isNoHcp: false, withdrawn: !!p.withdrawn, withdrawnNote: p.withdrawnNote || null };
     }
     const { tee, quota, isNoHcp } = computeInitialQuota(p.hcp, teePolicy);
-    return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope: tee.slope, initialQuota: quota, isNoHcp };
+    return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope: tee.slope, initialQuota: quota, isNoHcp, withdrawn: !!p.withdrawn, withdrawnNote: p.withdrawnNote || null };
   });
 }
 
@@ -1221,14 +1224,25 @@ let roundIdSeq = 0;
 
 // ── Roster rows ──────────────────────────────────────────────────────
 const rosterBody = document.getElementById('rosterBody');
-function addPlayerRow(name = '', email = '', hcp = '') {
+function addPlayerRow(name = '', email = '', hcp = '', withdrawn = false, withdrawnNote = '') {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><input type="text" class="p-name" value="${name}" placeholder="Player name"></td>
     <td><input type="text" class="p-email" value="${email}" placeholder="Email"></td>
     <td><input type="number" class="p-hcp" value="${hcp}" placeholder="HCP" style="width:90px"></td>
+    <td>
+      <label style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+        <input type="checkbox" class="p-withdrawn" style="width:auto" ${withdrawn ? 'checked' : ''}>
+        <span class="subtle">Withdrew</span>
+      </label>
+      <input type="text" class="p-withdrawn-note" value="${withdrawnNote || ''}" placeholder="why/when (optional)"
+        style="width:100%;margin-top:3px;font-size:0.8rem;display:${withdrawn ? 'block' : 'none'}">
+    </td>
     <td><button type="button" class="danger removeRowBtn">Remove</button></td>`;
   tr.querySelector('.removeRowBtn').addEventListener('click', () => { tr.remove(); updateRosterCount(); });
+  const cb = tr.querySelector('.p-withdrawn');
+  const noteInput = tr.querySelector('.p-withdrawn-note');
+  cb.addEventListener('change', () => { noteInput.style.display = cb.checked ? 'block' : 'none'; });
   rosterBody.appendChild(tr);
   updateRosterCount();
 }
@@ -1245,7 +1259,9 @@ function readRosterInput() {
     const email = tr.querySelector('.p-email').value.trim();
     const hcpRaw = tr.querySelector('.p-hcp').value;
     const hcp = hcpRaw === '' ? null : parseFloat(hcpRaw);
-    return { name, email, hcp };
+    const withdrawn = tr.querySelector('.p-withdrawn').checked;
+    const withdrawnNote = tr.querySelector('.p-withdrawn-note').value.trim();
+    return { name, email, hcp, withdrawn, withdrawnNote: withdrawnNote || null };
   }).filter(p => p.name);
 }
 
@@ -1976,7 +1992,7 @@ async function rehydrateFormFromConfig(config) {
   if (!venueList.length) await loadVenues();
 
   rosterBody.innerHTML = '';
-  (config.roster || []).forEach(p => addPlayerRow(p.name || '', p.email || '', p.hcp ?? ''));
+  (config.roster || []).forEach(p => addPlayerRow(p.name || '', p.email || '', p.hcp ?? '', !!p.withdrawn, p.withdrawnNote || ''));
 
   roundsBody.innerHTML = '';
   (config.rounds || []).forEach(r => {
@@ -2044,13 +2060,16 @@ function fmtNum(v) { return (v === null || v === undefined) ? '—' : Number(v).
 function populateCloseRoundSelect(config) {
   const sel = document.getElementById('closeRoundSelect');
   const btn = document.getElementById('closeRoundBtn');
+  const checkBtn = document.getElementById('checkScorecardsBtn');
   const supported = (config.rounds || []).filter(r => r.engine === 'stableford_quota');
   if (!supported.length) {
     sel.innerHTML = '<option value="">— no Stableford quota rounds in this event —</option>';
     btn.disabled = true;
+    if (checkBtn) checkBtn.disabled = true;
   } else {
     sel.innerHTML = supported.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}</option>`).join('');
     btn.disabled = false;
+    if (checkBtn) checkBtn.disabled = false;
   }
   // Best-effort — show whatever standings are already saved, if any. Silent
   // on failure (e.g. event never saved yet) since Close Round itself will
@@ -2114,9 +2133,20 @@ async function renderWcStandings(base, eventName, config) {
   const totalRollup  = [...rollsInto].length;
   const closedRollup = [...rollsInto].filter(n => closedRoundNames.has(n)).length;
 
+  // Dev-85 (Brian): "drop a player from the Overall should they not be able
+  // to finish all 3 rds" — last year's spreadsheet equivalent was just
+  // deleting their row. A withdrawn player's per-round results/payouts for
+  // whatever they DID play stay exactly as closed (that money's already
+  // settled) — this only pulls them out of the two season-long roll-ups
+  // (Overall standings/podium below, and the Wally Ball pot further down,
+  // per Brian: "also exclude from WB pot" even if they never lost the ball).
+  const withdrawnPlayers = (config.roster || []).filter(p => p.withdrawn);
+  const withdrawnNames = new Set(withdrawnPlayers.map(p => p.name));
+
   const overallByPlayer = {};
   allResults.forEach(r => {
     if (!rollsInto.has(r.round_name)) return;
+    if (withdrawnNames.has(r.player_name)) return;
     overallByPlayer[r.player_name] = (overallByPlayer[r.player_name] || 0) + (r.performance || 0);
   });
 
@@ -2164,22 +2194,103 @@ async function renderWcStandings(base, eventName, config) {
   html += '</tbody></table>';
   html += '<p class="subtle" style="margin-top:6px">"Total +/-" is quota performance only and never includes Wally Ball bonus points. "WB bonus" is this player\'s running total of round-level bonus points earned by keeping it (the same points that shape each round\'s own Rank/Podium) — shown here so it doesn\'t read as a discrepancy. It\'s separate from the winner-take-all Wally Ball pot below, which only cares whether a player has ever lost it.</p>';
 
+  if (withdrawnPlayers.length) {
+    html += '<p class="subtle" style="margin-top:6px">Withdrawn — not eligible for Overall or the Wally Ball pot: ' +
+      withdrawnPlayers.map(p => `${p.name}${p.withdrawnNote ? ` (${p.withdrawnNote})` : ''}`).join(', ') +
+      '. Their own round results and payouts for whatever they played are untouched — this only excludes them from these two season-long roll-ups. Uncheck "Withdrew" in the roster (section 3) and re-save to bring them back in.</p>';
+  }
+
   // Wally Ball pot — winner-take-all among players who've never recorded a
-  // loss in any CLOSED round so far.
+  // loss in any CLOSED round so far, minus anyone marked withdrawn (Dev-85 —
+  // Brian: a withdrawn player drops out of this pot too, even if they never
+  // technically lost the ball, since they can't finish the event either way).
   const everLost  = new Set(allResults.filter(r => r.wb_status === 'No').map(r => r.player_name));
-  const eligible  = config.roster.map(p => p.name).filter(n => !everLost.has(n));
+  const eligible  = config.roster.map(p => p.name).filter(n => !everLost.has(n) && !withdrawnNames.has(n));
   const wbPot     = (config.payout?.pots || []).find(p => p.id === 'wally_ball');
   html += '<h3 style="margin-top:18px">Wally Ball pot</h3>';
   if (!eligible.length) {
-    html += '<p class="subtle">Everyone on the roster has lost it at least once so far.</p>';
+    html += '<p class="subtle">Nobody left in it — everyone remaining has either lost it or withdrawn.</p>';
   } else {
     const share = wbPot ? wbPot.poolTotal / eligible.length : null;
-    const lede = eligible.length === config.roster.length ? 'Nobody has lost it yet' : `${eligible.length} player(s) still in it`;
+    const stillIn = config.roster.filter(p => !withdrawnNames.has(p.name)).length;
+    const lede = eligible.length === stillIn ? 'Nobody has lost it yet' : `${eligible.length} player(s) still in it`;
     html += `<p>${lede}${wbPot ? ` — pool ${fmtMoney(wbPot.poolTotal)}, ${fmtMoney(share)} each if it ended now` : ''}: ${eligible.join(', ')}</p>`;
   }
 
   document.getElementById('wcStandings').innerHTML = html;
 }
+
+// Dev-84 (Brian): "I usually check the BFSeries scorecard submissions with
+// the admin utility" — ported from portal.html's Scorecard Check admin card
+// (loadScorecardCheck), which does the exact same registered-vs-submitted
+// comparison for BFSeries events. Adapted here to Wally Cup's shape: BFSeries
+// compares against `regData` (event registrations); Wally Cup has no separate
+// registration step, so it compares against the roster in section 3 instead
+// (same list Close Round itself scores). Reuses jfFetchRoundScorecards — the
+// SAME fetch Close Round runs internally — so "checked and it's clean" here
+// means Close Round will see the identical data, not a second, possibly-
+// divergent read. This is a pre-flight coverage check only (did everyone on
+// the roster submit something), not a data-quality check — Brian's point
+// that an in-person round produces an accurate scorecard stands; the actual
+// gap this closes is purely "did the round proceed without someone's
+// scorecard reaching Jotform at all" (phone died, forgot, signal — a real
+// possibility Close Round's own `missing` handling has never been forced to
+// prove out, since every round so far had full roster coverage).
+document.getElementById('checkScorecardsBtn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('scorecardCheckStatus');
+  const resultsEl = document.getElementById('scorecardCheckResults');
+  const roundName = document.getElementById('closeRoundSelect').value;
+  if (!roundName) { statusEl.className = 'status err'; statusEl.textContent = 'Pick a round first.'; resultsEl.innerHTML = ''; return; }
+  const roster = readRosterInput();
+  if (!roster.length) { statusEl.className = 'status err'; statusEl.textContent = 'Add players to the roster in section 3 first.'; resultsEl.innerHTML = ''; return; }
+
+  statusEl.className = 'status ok';
+  statusEl.textContent = `Checking scorecards for "${roundName}"…`;
+  resultsEl.innerHTML = '';
+  try {
+    const byPlayer = await jfFetchRoundScorecards(roundName);
+    const submittedNames = Object.keys(byPlayer);
+    const norm = s => (s || '').trim().toLowerCase();
+    const submitted = roster.filter(p => submittedNames.some(s => norm(s) === norm(p.name)));
+    const missing = roster.filter(p => !submittedNames.some(s => norm(s) === norm(p.name)));
+    // A submission on Jotform whose name doesn't match ANY roster player —
+    // same class of gap as CTP's cttpUnrecognized, surfaced here too so it
+    // doesn't just silently fail to count toward anyone's coverage.
+    const unrecognized = submittedNames.filter(s => !roster.some(p => norm(p.name) === norm(s)));
+
+    statusEl.className = 'status ' + (missing.length ? 'err' : 'ok');
+    statusEl.textContent = `${submitted.length}/${roster.length} submitted for "${roundName}"` +
+      (missing.length ? ` — ${missing.length} missing` : ' — ✅ full roster in') +
+      (unrecognized.length ? ` · ${unrecognized.length} unrecognized name(s) on Jotform` : '');
+
+    let html = '';
+    if (submitted.length) {
+      html += submitted.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => {
+        const sc = byPlayer[submittedNames.find(s => norm(s) === norm(p.name))];
+        return `<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)">
+          <span>✅ ${p.name}</span><span class="badge">${sc.actualPoints} pts</span></div>`;
+      }).join('');
+    }
+    if (missing.length) {
+      html += `<div class="subtle" style="margin-top:10px;font-weight:600;color:var(--warn)">Missing</div>`;
+      html += missing.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p =>
+        `<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)">
+          <span style="color:var(--warn)">⚠️ ${p.name}</span><span class="subtle">not submitted</span></div>`
+      ).join('');
+    }
+    if (unrecognized.length) {
+      html += `<div class="subtle" style="margin-top:10px;font-weight:600;color:var(--err)">On Jotform, not on the roster</div>`;
+      html += unrecognized.map(name =>
+        `<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)">
+          <span style="color:var(--err)">❓ ${name}</span><span class="subtle">won't count toward anyone — fix the roster or the Jotform entry</span></div>`
+      ).join('');
+    }
+    resultsEl.innerHTML = html;
+  } catch (e) {
+    statusEl.className = 'status err';
+    statusEl.textContent = 'Check failed: ' + e.message;
+  }
+});
 
 document.getElementById('closeRoundBtn').addEventListener('click', async () => {
   if (!assembledConfig) { setCloseRoundStatus('Load or generate the event first.', true); return; }
