@@ -1,18 +1,20 @@
 # BF Experiences (BFE) / Wally Cup — Competitive Events Architecture Spec
 
-**Status as of Dev-75 (2026-09-02).** Committed to the repo for the first time in
+**Status as of Dev-76 (2026-09-02).** Committed to the repo for the first time in
 Dev-73 — it existed only as a local file (`WC_spec.txt`, from Dev-71) before that. Rd1
 tees off 10am, 9/11/2026. Dev-74 believed the full scoring engine (quota, skins, CTP,
 Wally Ball, Overall) was built and end-to-end validated; Dev-75 actually dry-ran the real
 event through it and found that claim was premature — podium-tie payouts and unclaimed-
 CTP-hole money were both silently broken, never exercised by Dev-74's synthetic test
-data. Both are fixed now, plus withdraw-a-player support (new), a Save/Generate ordering
-bug fix, and a Close Round roster-vs-scorecard mismatch alert — see §8 for the corrected
-phase status. The scoring engine is genuinely complete as of Dev-75; only the
-player-facing results page (§8 Phase 3) remains before 9/11, untouched so far. For the
-full narrative reasoning behind any decision below, see the Dev-71/72/73/74/75 entries in
-`BF_Session_Log.md`; this doc is the standing architecture reference, not a replacement
-for that history.
+data. Both are fixed, plus withdraw-a-player support, a Save/Generate ordering bug fix,
+and a Close Round roster-vs-scorecard mismatch alert. **Dev-76 built and tested §8 Phase
+3** — the player-facing results page — end to end against the real (test/dry-run) D1
+data, plus a small addition (CTP hole-winner persistence, `bfe_round_cttp`) the phase
+needed that Phase 2 hadn't captured. See §8 for the corrected phase status. Next up per
+Brian's own ordering: 2Man scramble (§4/§8, still ❓ open), then the Photos/memories
+phase. For the full narrative reasoning behind any decision below, see the
+Dev-71 through Dev-76 entries in `BF_Session_Log.md`; this doc is the standing
+architecture reference, not a replacement for that history.
 
 **A note on completeness:** the draft Brian supplied this session picked up mid-thought,
 at what reads as the tail of an opening philosophy/principle discussion (§1–2) — that
@@ -453,26 +455,36 @@ for the full reasoning behind this plan.
      Overall/Wally-Ball-pot without touching their own closed-round results), and a
      Save/Generate ordering bug fix. Full detail and reasoning in the Dev-75 entry,
      `BF_Session_Log.md`.
-- **Phase 3 — publishing (can start minimal, polish through Rd3): 📋 not started —
-  still untouched as of Dev-75, now Dev-76's real next priority.** Per-round GLS-style
-  results page generator, plus a living Overall page (podium held back until Rd3
-  closes), published via GS's proven `deployPagesToGitHub()`/`POST /deploy` mechanism to
-  `docs/`. Matches §4's "data/results now, media later" scope boundary — no
-  photo/narrative curation in this phase. Must carry forward the Dev-74 admin-tool
-  clarity fixes (Rank(Score+WB) vs. +/-(vs.-quota); cumulative Wally Ball bonus
-  breakout) from the start, not bolted on after the fact — and, given Phase 2's actual
-  history this session, should be built with an eye toward the same classes of edge
-  case (ties, withdrawn/incomplete players) rather than assumed away a second time.
-  A design mockup of the final all-3-rounds state (Wally Ball season-pot tiebreak rule
-  included) has been exported to `source/WallyCup_Results_Design_Reference.dc.html` —
-  read its own header comment before using it. It's real, iterated-on CSS/structure and
-  a `decorate()` row-formatting function; it has **zero live-data wiring** (every round's
-  numbers are hand-typed sample arrays from this session's dry-run, not fetched from
-  anywhere) — useful as visual/logic reference, not a starting point to "wire up." The
-  actual generator still needs to be built: fetch from the bf-experiences Worker (same
-  `/bfe/round-results` data `BFE-Admin.html` already reads), reuse `BFE-Admin.html`'s own
-  scoring/tie-split/vs-par logic rather than re-deriving it, render in this file's visual
-  language, publish via the existing `/deploy` mechanism.
+- **Phase 3 — publishing: ✅ built and tested end-to-end, Dev-76.** One living static
+  page (not per-round separate pages — the design reference's own single-page,
+  numbered-section structure turned out to be the right shape: a round rail, one
+  section per round, Overall held back until every `rollsIntoOverall` round closes,
+  then Wally Ball / 2Man-placeholder / Photos-placeholder sections), generated inside
+  `BFE-Admin.html` (new §10, "Publish results page") and pushed via the existing main-
+  Worker `POST /deploy` mechanism to `docs/wally-cup-results.html` — matches this
+  bullet's original plan, just as one page rather than several. Reads back
+  already-computed, already-persisted numbers from `/bfe/events` (roster/rounds/
+  payout) and `/bfe/round-results` (results/skins/cttp) rather than re-deriving
+  scoring/tie-split logic — the only things actually computed fresh are vs-par (from
+  `/scorecards` hole arrays + the main Worker's `/venues` pars) and the season-long
+  Wally Ball pot resolution (including the same-round-elimination "held it longest"
+  tiebreak), neither of which Phase 2 persists anywhere. Carries forward the Dev-74
+  clarity fixes from the start (Rank/Podium $ is Score+WB vs. quota; the results page's
+  Overall Standings are deliberately WB-inclusive too — see the Dev-76 entry in
+  `BF_Session_Log.md` for why that's a considered choice, not a mismatch with
+  `BFE-Admin.html`'s own quota-only "Total +/-"). **Needed one small Phase 2 addition**:
+  `bfe_round_cttp` (CTP hole-winner detail — hole/player/dist/payout), since Close
+  Round computed it in memory but never persisted it, only the per-player payout total.
+  Not live yet — needs a manual D1 `CREATE TABLE` + a Cloudflare redeploy of
+  `bf_experiences_worker.js` (see that file's own header comment). Also added: a
+  read-only "🏆 Results" icon on `format-wally`/`format-scramble` event cards in
+  `portal.html`, opening the published page in an iframe modal — players never leave
+  portal.html, per this section's own player-facing-results intent (§4c).
+  `source/WallyCup_Results_Design_Reference.dc.html` (Dev-75) supplied the visual
+  language (CSS lifted verbatim) and confirmed-correct ground-truth numbers, which the
+  real generator's output was checked against exactly (champion, Overall order, the
+  Wally Ball tiebreak) before shipping — it was never itself wired up, per its own
+  header note.
 - **Before real Rd1 (10am 9/11):** the "2026 Wally Cup" event in D1 currently holds
   Dev-74/75's test data (real roster, generated test scorecards) — needs a clean Data &
   Reset → Delete and fresh Setup with the real roster/tee assignments before the real
