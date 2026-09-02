@@ -1050,6 +1050,51 @@ function computeSkins(byPlayer) {
   return skins;
 }
 
+// Dev-82 (Brian): podium payout for tied places — ported verbatim from
+// BF_Golf_Scorer_8.html's calcPayouts() tie-grouping loop (the same rule
+// used live for BFSeries), which BFE-Admin never had at all: until now a
+// tie for Round Rank silently fell through to whichever order the sort's
+// tiebreak happened to land on, paying one tied player the full higher
+// place and the other the full lower place — never actually caught because
+// no test round's data has produced an exact tie yet.
+//
+// `sortedEntries` must already be sorted best-to-worst by the SAME value
+// passed as `tieKey` (rankPerformance when Wally Ball is wired up, else
+// plain performance — whatever the engine itself sorted/ranked by, so a
+// "tie" here means the exact same players the engine already considers
+// tied for rank). `podiumPrizes` is the ordered prize array (e.g. [20,10,5]
+// from pot.distribution.podium).
+//
+// Algorithm (unchanged from GS): walk the sorted list place by place: at
+// each place, collect every consecutive entry with the SAME tieKey value
+// into one tied group (a group can run past the paid places — e.g. a 4-way
+// tie starting at 2nd still shares in the money even though only 2nd/3rd
+// are normally paid, exactly like GS). Sum the prize dollars for just the
+// PAID places that group occupies, floor-divide evenly across the whole
+// tied group ("floor per tie rule spec" — same no-cents rounding as every
+// other payout in this engine), and move on to the next untied place.
+// Returns a {name: dollars} map; a name absent from it earned $0 podium.
+function computePodiumTiePayouts(sortedEntries, podiumPrizes) {
+  const payoutByName = {};
+  const paidPlaces = podiumPrizes.length;
+  let placeIdx = 0;
+  while (placeIdx < Math.min(paidPlaces, sortedEntries.length)) {
+    const thisKey = sortedEntries[placeIdx].tieKey;
+    const tiedGroup = [];
+    let scan = placeIdx;
+    while (scan < sortedEntries.length && sortedEntries[scan].tieKey === thisKey) {
+      tiedGroup.push(sortedEntries[scan].name);
+      scan++;
+    }
+    let prizeSum = 0;
+    for (let k = placeIdx; k < Math.min(scan, paidPlaces); k++) prizeSum += podiumPrizes[k];
+    const share = Math.floor(prizeSum / tiedGroup.length);
+    tiedGroup.forEach(name => { payoutByName[name] = share; });
+    placeIdx = scan;
+  }
+  return payoutByName;
+}
+
 // Tries each regex in PRIORITY order across ALL of a submission's fields —
 // e.g. "Player Name" must win over a generic "Name" field even if "Name"
 // happens to iterate first — rather than a single alternation whose match
@@ -2279,7 +2324,33 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     const skinCounts = {};
     skins.forEach(s => { skinCounts[s.winner] = (skinCounts[s.winner] || 0) + 1; });
 
-    // Podium + skins payout (pot already resolved above, shared with CTP)
+    // Podium + skins + CTP payout (pot already resolved above)
+    //
+    // Dev-82: podium $ is tie-aware now — scored.entries is already sorted in
+    // rank order by the engine (rankPerformance when Wally Ball ran, else
+    // plain performance; see scoreRound/applyWallyBall above), so that's the
+    // exact value two players tying for a place actually tied ON.
+    const podiumTiePayouts = pot
+      ? computePodiumTiePayouts(
+          scored.entries.map(e => ({ name: e.name, tieKey: e.rankPerformance ?? e.performance })),
+          pot.distribution.podium
+        )
+      : {};
+
+    // Dev-83 (Brian): an unclaimed CTP hole's $ was just evaporating — cttpHoles.forEach
+    // above only pays a hole that actually has a leader, but pot.distribution.skins was
+    // fixed at pot-SETUP time assuming every configured CTP hole gets claimed (cttpTotal =
+    // cttpPerHole × cttpHoles, always the full amount). So a hole nobody claims (or whose
+    // only claim is from a name not on the roster — cttpUnrecognized, "flagged, not paid")
+    // meant that hole's money went to neither the winner-that-wasn't NOR the skins pool —
+    // it just vanished from the payout entirely. Ported from BF_Golf_Scorer_8.html's
+    // calcPayouts(), which recomputes the skin pool at SETTLEMENT time from what actually
+    // got paid, not the pre-round estimate: skinPool = poolTotal − podiumPaid − ctpPaid
+    // (ACTUAL, not the max). Unclaimed/unrecognized CTP dollars fall out of that
+    // subtraction automatically and land in the skins split, same as GS.
+    const podiumPaidActual = Object.values(podiumTiePayouts).reduce((s, v) => s + v, 0);
+    const cttpPaidActual = Object.values(cttpPayoutByPlayer).reduce((s, v) => s + v, 0);
+    const skinPoolActual = pot ? Math.max(0, pot.poolTotal - podiumPaidActual - cttpPaidActual) : 0;
     // Dev-79 (Brian): podium (splitPodium/roundTo5) and CttP (roundTo5'd at pot-setup)
     // were already clean $5 increments, but a straight pool/count split for skins can
     // land on cents whenever the winner count doesn't divide evenly (e.g. a $105 pool
@@ -2287,12 +2358,11 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     // Brian doesn't want to deal with cash change on the course — floor each skin
     // winner's cut to a whole dollar; whatever's left over from the split stays
     // unallocated (goes to the house) rather than getting paid out as $.xx per player.
-    const perSkin = (pot && skins.length > 0) ? Math.floor(pot.distribution.skins / skins.length) : 0;
+    const perSkin = (skins.length > 0) ? Math.floor(skinPoolActual / skins.length) : 0;
 
     const results = scored.entries.map(e => {
       const p = players.find(pl => pl.name === e.name);
-      const idx = (e.rank || 0) - 1;
-      const payoutPodium = (pot && idx >= 0 && idx < pot.distribution.podium.length) ? pot.distribution.podium[idx] : 0;
+      const payoutPodium = podiumTiePayouts[e.name] || 0;
       const payoutSkins = perSkin * (skinCounts[e.name] || 0);
       const payoutCttp = cttpPayoutByPlayer[e.name] || 0;
       return {
