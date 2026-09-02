@@ -462,10 +462,17 @@ for the full reasoning behind this plan.
   clarity fixes (Rank(Score+WB) vs. +/-(vs.-quota); cumulative Wally Ball bonus
   breakout) from the start, not bolted on after the fact — and, given Phase 2's actual
   history this session, should be built with an eye toward the same classes of edge
-  case (ties, withdrawn/incomplete players) rather than assumed away a second time. A
-  Claude Design canvas mockup of the final all-3-rounds state exists from this session's
-  dry-run (Wally Ball season-pot tiebreak rule included) — useful reference for this
-  phase, not a substitute for building it.
+  case (ties, withdrawn/incomplete players) rather than assumed away a second time.
+  A design mockup of the final all-3-rounds state (Wally Ball season-pot tiebreak rule
+  included) has been exported to `source/WallyCup_Results_Design_Reference.dc.html` —
+  read its own header comment before using it. It's real, iterated-on CSS/structure and
+  a `decorate()` row-formatting function; it has **zero live-data wiring** (every round's
+  numbers are hand-typed sample arrays from this session's dry-run, not fetched from
+  anywhere) — useful as visual/logic reference, not a starting point to "wire up." The
+  actual generator still needs to be built: fetch from the bf-experiences Worker (same
+  `/bfe/round-results` data `BFE-Admin.html` already reads), reuse `BFE-Admin.html`'s own
+  scoring/tie-split/vs-par logic rather than re-deriving it, render in this file's visual
+  language, publish via the existing `/deploy` mechanism.
 - **Before real Rd1 (10am 9/11):** the "2026 Wally Cup" event in D1 currently holds
   Dev-74/75's test data (real roster, generated test scorecards) — needs a clean Data &
   Reset → Delete and fresh Setup with the real roster/tee assignments before the real
