@@ -153,16 +153,16 @@ rather than pushing further into one that's already lost some of its own fine de
 
 # BirdieFriends Golf Scorer — Session Starter
 **Current session number:** see `BF_Session_Log.md` (this file no longer tracks it)
-**Date:** 2026-09-02 (last updated Dev-75; earlier fields below carried forward unverified except where noted)
+**Date:** 2026-09-02 (last updated Dev-76; earlier fields below carried forward unverified except where noted)
 **Portal Version (production):** per `portal_version.txt` (source of truth): v4.0.0 · 2026-08-31.
   ✅ Dev-72's version-drift discrepancy has stayed RESOLVED since Dev-73 — no recurrence
   Dev-74. Confirmed Dev-74: `docs/portal.html` on GitHub is byte-identical to the final
   local copy (Phase 1 Wally Ball wiring included) — see Dev-74 Architecture Notes below.
 **GolfScorer Version:** v8.17 · 2026-06-17g (deployed) — unverified this session, carried forward
 **Worker Version (birdiefriends-push — push/deploy/flags/etc.):** 2026-06-18b + all Gatherings routes through Dev-52 (GET/POST /venues, PATCH /venues/:id, GET/POST/DELETE /gathering-templates) — unverified this session, carried forward
-**Worker (bf-experiences — NEW as of Dev-71):** separate Cloudflare Worker, source `bf_experiences_worker.js`, powers the BFE Competitive Events system. Deployed manually by Brian via the Cloudflare dashboard (not via the /deploy route). Confirmed Dev-74: the results/computation layer is now built and live — `bfe_round_results`/`bfe_round_skins` (2 new tables, not the `bfe_quota_progress` name originally guessed at) — bringing the total to 10 `bfe_*` tables live. **Dev-75: `bfe_event_roster` gained two columns, `withdrawn`/`withdrawn_note` (withdraw-a-player support) — migration run and Worker redeployed by Brian this session, confirmed live.** See Dev-75 Architecture Notes below.
+**Worker (bf-experiences — NEW as of Dev-71):** separate Cloudflare Worker, source `bf_experiences_worker.js`, powers the BFE Competitive Events system. Deployed manually by Brian via the Cloudflare dashboard (not via the /deploy route). Confirmed Dev-74: the results/computation layer is now built and live — `bfe_round_results`/`bfe_round_skins` (2 new tables, not the `bfe_quota_progress` name originally guessed at) — bringing the total to 10 `bfe_*` tables live. Dev-75: `bfe_event_roster` gained two columns, `withdrawn`/`withdrawn_note` (withdraw-a-player support) — migration run and Worker redeployed by Brian, confirmed live. **Dev-76: a new `bfe_round_cttp` table (CTP hole-winner detail — hole/player/dist/payout) added to the source, wired into POST/GET/DELETE `/bfe/round-results` — needed by the new results page. NOT live yet: needs a manual `CREATE TABLE` in the D1 Console (SQL in the file's own header comment) plus a Cloudflare paste-and-deploy of the updated script, same two-step process as every prior `bf-experiences` change.** See Dev-76 Architecture Notes below.
 **Live URL:** https://birdiefriends.com/portal.html
-**BFE Admin Panel (NEW as of Dev-71):** https://birdiefriends.com/BFE-Admin.html — confirmed Dev-74: the full Close Round scoring engine (quota, skins, CTP, Wally Ball round bonus + season pot, Overall rollup) is built and validated end-to-end against a complete 3-round test cycle. `docs/BFE-Admin.html` on GitHub confirmed byte-identical to the final local copy. **Dev-75: dry-running the real event surfaced and closed two real payout gaps Dev-74's synthetic test never hit (podium ties, unclaimed-CTP-hole rollover) plus shipped withdraw-a-player, a Save/Generate ordering bug fix, and a Close Round roster-vs-scorecard mismatch alert — see Dev-75 Architecture Notes below.** **Not fetched by the bootstrap's standard 8-step sequence** — if continuing this work, `curl` it fresh from `docs/BFE-Admin.html` before editing.
+**BFE Admin Panel (NEW as of Dev-71):** https://birdiefriends.com/BFE-Admin.html — confirmed Dev-74: the full Close Round scoring engine (quota, skins, CTP, Wally Ball round bonus + season pot, Overall rollup) is built and validated end-to-end against a complete 3-round test cycle. Dev-75: dry-running the real event surfaced and closed two real payout gaps Dev-74's synthetic test never hit (podium ties, unclaimed-CTP-hole rollover) plus shipped withdraw-a-player, a Save/Generate ordering bug fix, and a Close Round roster-vs-scorecard mismatch alert. **Dev-76: new §10 "Publish results page" — builds and pushes the player-facing Phase 3 results page (see below).** **Not fetched by the bootstrap's standard 8-step sequence** — if continuing this work, `curl` it fresh from `docs/BFE-Admin.html` before editing.
 **Local publish tool (NEW as of Dev-73, updated Dev-74, Dev-75):** `bf_push.bat`/
   `bf_push.ps1` (v7 as of Dev-75), Brian's machine only,
   `C:\Users\16177\Downloads\GolfScorer\AutoPush` — PIN-gated, pushes straight to the
@@ -185,12 +185,63 @@ rather than pushing further into one that's already lost some of its own fine de
 **Wally Cup Rd1 tee-off:** confirmed 10am, 9/11/2026. Scoring engine is now **genuinely
   complete**, not just believed complete — Dev-75's dry-run found and closed two real
   payout gaps (podium ties, CTP rollover) that Dev-74's synthetic test cycle never
-  exercised. **Phase 3 (the player-facing results page) is the only piece left before
-  the deadline, and is untouched — Dev-76's real next priority.** Before real Rd1: the
+  exercised. **Phase 3 (the player-facing results page) is now built and tested
+  end-to-end against live production data — Dev-76.** Per Brian's own explicit
+  three-part ordering, the next priorities are (2) the 2-Man scramble scoring format and
+  (3) photo capture / "memories" display — both still open. Before real Rd1: the
   live "2026 Wally Cup" event in D1 is still Dev-74/75's test data — needs a clean Data &
-  Reset → Delete and fresh Setup with the real roster/tee assignments first. See Dev-75
-  Architecture Notes below and the full Dev-75 entry in `BF_Session_Log.md` for complete
-  detail and the full carry-forward list before starting Dev-76 work.
+  Reset → Delete and fresh Setup with the real roster/tee assignments first. Also
+  outstanding: the new `bfe_round_cttp` D1 table is not yet live (needs a manual
+  `CREATE TABLE` in the D1 Console) and the patched `bf_experiences_worker.js` has not
+  yet been pasted/deployed in the Cloudflare dashboard for the `bf-experiences` Worker —
+  both are manual steps only Brian can perform. See Dev-76 and Dev-75 Architecture Notes
+  below and the full Dev-76/Dev-75 entries in `BF_Session_Log.md` for complete detail and
+  the full carry-forward list before starting the 2-Man scramble work.
+
+---
+
+## Dev-76 Architecture Notes (2026-09-02) — Phase 3 Results Page Built, Tested End-to-End
+
+**Read this before writing any 2-Man scramble code.** Full detail is in the Dev-76 entry
+of `BF_Session_Log.md` — this is a pointer/summary, not a replacement for it.
+
+- **What shipped:** the Phase 3 player-facing results page generator — a pure function
+  (`buildResultsData` + `renderResultsHtml`, authored standalone in `results_generator.js`
+  then embedded verbatim into `BFE-Admin.html`) that reads back already-persisted D1 data
+  (round results, skins, the new CTTP table, scorecards, venue pars) and renders a single
+  static HTML page covering all rounds plus Overall Standings, rather than recomputing any
+  scoring or payout logic itself. Published via the existing `/deploy` route (same PIN-gated
+  GitHub-contents mechanism as everything else) to `docs/wally-cup-results.html`. A new "10.
+  Publish results page" card in `BFE-Admin.html` has Preview (iframe, no publish) and
+  Generate & Publish buttons. `portal.html` got a new 🏆 Results icon (shown only for
+  wally/scramble-format events) that opens the published page in an iframe modal, so
+  players never leave the portal — this reconciles §4c ("stay in portal") with §8's
+  static-page plan.
+- **New gap found and closed:** CTP hole-winner detail (hole/winner/distance) was computed
+  transiently by Close Round but never persisted — only the aggregate `payout_cttp` per
+  player survived. Added `bfe_round_cttp` (mirrors `bfe_round_skins`'s exact lifecycle:
+  delete-then-insert per round, `UNIQUE(event_id, round_name, hole)`). **Not live yet** —
+  needs a manual D1 `CREATE TABLE` and a manual Cloudflare dashboard redeploy of
+  `bf_experiences_worker.js` (I never do this deploy myself — Brian pastes it).
+- **Deliberate design choice, not a bug:** the results page's Overall Standings are
+  Wally-Ball-inclusive (sums each round's `roundPerf = quotaPerf + wbBonusIfKept`), which
+  differs on purpose from `BFE-Admin.html`'s own internal "Total +/-" column (WB-exclusive
+  by design). This follows the design reference's own embedded reasoning for the
+  player-facing page specifically; Quota Out / next-round Quota In is untouched either way.
+- **Verification method:** fetched real live production data (read-only GETs, no writes)
+  for the actual "2026 Wally Cup" event (id 17) via WebFetch, cross-checked computed values
+  against `WallyCup_Results_Design_Reference.dc.html`'s own hand-verified numbers (champion
+  Nate Stettler +6.69, Wally Ball pot winner Lou Strohl via the "held it longest" tiebreak),
+  then ran a full Playwright end-to-end test against the actual embedded `BFE-Admin.html`
+  file (route-mocked network, not a copy of the code) exercising Preview and Publish both.
+- **Not done / carry-forward:** `bfe_round_cttp` not live (see above); `portal_version.txt`
+  was not bumped for the new portal.html; the D1 test/dry-run data for "2026 Wally Cup"
+  still needs Delete + fresh Setup before real Rd1 (carried over from Dev-75, unchanged);
+  2-Man scramble scoring format is still ❓ open — Brian said its formula needs his own
+  input; Photos/"memories" not started, but the main `worker.js` already has a substantial
+  `event_photos`/R2 upload/`curation_status` pipeline (`/photos/upload`, PATCH curation,
+  DELETE) that looked like a plausible head start — not yet verified against BFE's data
+  shape.
 
 ---
 
