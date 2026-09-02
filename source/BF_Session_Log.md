@@ -3065,3 +3065,35 @@ Wally Cup event card.
   rendering through the actual admin tool, not just the standalone generator.
 - Same open items as the main Dev-76 entry above (`bfe_round_cttp` not live, D1 test data
   not yet reset, 2Man/Photos not started) — nothing here changes that list.
+
+## Dev-76 addendum 2 — Results link matched to existing GLS/BFSeries link behavior
+
+Brian tested again: clicking the Wally Cup Results link opened it in a modal/iframe,
+unlike the GLS and BF Series entries in the same Results-tab list, which are plain
+`<a href="...">` links that navigate normally (no `target`, no modal, same tab). He
+wanted this link to behave the same way as those.
+
+- Converted both Wally Cup Results entry points in `portal.html` from the iframe-modal
+  approach to plain anchors, matching the exact convention already used by every other
+  `results-link-card` (`/garretts-last-swing.html`, `/results.html`, `/standings.html`,
+  etc.) — no `onclick`, no `target`, just `href="/wally-cup-results.html"`:
+  - The persistent Results-tab entry (`#screen-results`).
+  - The 🏆 icon button on wally/scramble-format event cards — changed from a `<button
+    onclick="openResultsModal()">` to an `<a href="/wally-cup-results.html">` styled
+    identically to its sibling icon-action-btns.
+- Removed the now-dead code this obsoletes: the `#results-modal` overlay markup, its
+  scoped full-screen `<style>` block (including the `z-index:9000` stacking fix from the
+  prior addendum — no longer needed since there's no modal to stack), the
+  `BFE_RESULTS_PAGE_URL` constant, and the `openResultsModal()` function. Verified via
+  Playwright: `openResultsModal` is undefined, `#results-modal` no longer exists in the
+  DOM, and the link elements are plain `<a>` tags with the correct `href` and no
+  `onclick`.
+- Net effect: this reverses the §4c-driven "keep players inside portal.html" synthesis
+  from earlier in Dev-76 in favor of Brian's own established, simpler pattern (a normal
+  link that navigates away, like every other results page). Worth remembering for the
+  2Man and Photos phases: default to plain navigation links for any future
+  "view a published page" affordance rather than reaching for a modal, unless Brian says
+  otherwise.
+- All the mobile-responsive card-layout work in `results_generator.js`/`BFE-Admin.html`
+  from the prior addendum is unaffected — the published page itself didn't change, only
+  how players get to it from the portal.
