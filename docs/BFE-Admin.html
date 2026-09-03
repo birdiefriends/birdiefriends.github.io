@@ -265,6 +265,14 @@
         </select>
       </div>
     </div>
+    <div class="row" style="align-items:flex-end">
+      <div style="flex:2"><label for="pinPlayerSelect">Pin a player to a group first (optional — e.g. an honorary group)</label>
+        <select id="pinPlayerSelect"><option value="">— pick a player —</option></select>
+      </div>
+      <div><label for="pinGroupInput">Group #</label><input type="number" id="pinGroupInput" value="1" min="1" style="width:80px"></div>
+      <div><button type="button" class="secondary" id="addPinBtn">Pin</button></div>
+    </div>
+    <div id="pinnedChips" style="margin:2px 0 12px"></div>
     <div class="btnbar">
       <button type="button" id="generateGroupsBtn">Generate groups</button>
       <button type="button" class="secondary" id="loadGroupsBtn">Load saved</button>
@@ -2737,6 +2745,7 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
 // ══════════════════════════════════════════════════════════════════════
 let currentGroups = [];       // array of arrays of player names — in-editor draft
 let currentGroupsRound = '';  // which round currentGroups is for, so a stale Save can't fire
+let currentPins = [];         // [{name, groupIndex}] — honorary/fixed seats applied before any strategy runs
 
 function activeRosterNames(config) {
   return (config.roster || []).filter(p => !p.withdrawn).map(p => p.name);
@@ -2750,26 +2759,27 @@ function shuffleInPlace(arr) {
   return arr;
 }
 
-// Consecutive slices, sized as evenly as possible (e.g. 15 names / size 4
-// -> 4,4,4,3; shortfall lands in the LAST group(s), not spread as a lonely
-// 1-2 person group). Deliberately consecutive, not round-robin: for the
-// flighted strategies (quota/standings) the array arrives pre-sorted by
-// skill/standing, and consecutive slicing is what keeps each flight's
-// skill level intact — round-robin would interleave every group back to a
-// skill-mixed set, defeating the point. For social/random the array
-// arrives pre-shuffled, where consecutive vs round-robin makes no
-// difference, so one function correctly serves all four strategies.
+// Target size per group, as even as possible (e.g. 15 names / size 4 ->
+// [4,4,4,3]; shortfall lands in the LAST group(s), not spread as a lonely
+// 1-2 person group).
+function computeGroupSizes(n, size) {
+  const numGroups = Math.max(1, Math.round(n / size));
+  const base = Math.floor(n / numGroups);
+  const extra = n - base * numGroups; // first `extra` groups get one more player
+  return Array.from({ length: numGroups }, (_, g) => base + (g < extra ? 1 : 0));
+}
+// Consecutive slices at those sizes. Deliberately consecutive, not
+// round-robin: for the flighted strategies (quota/standings) the array
+// arrives pre-sorted by skill/standing, and consecutive slicing is what
+// keeps each flight's skill level intact — round-robin would interleave
+// every group back to a skill-mixed set, defeating the point. For
+// social/random the array arrives pre-shuffled, where consecutive vs
+// round-robin makes no difference, so one function serves all four.
 function chunkEven(arr, size) {
-  const numGroups = Math.max(1, Math.round(arr.length / size));
-  const base = Math.floor(arr.length / numGroups);
-  const extra = arr.length - base * numGroups; // first `extra` groups get one more player
+  const sizes = computeGroupSizes(arr.length, size);
   const groups = [];
   let i = 0;
-  for (let g = 0; g < numGroups; g++) {
-    const n = base + (g < extra ? 1 : 0);
-    groups.push(arr.slice(i, i + n));
-    i += n;
-  }
+  sizes.forEach(n => { groups.push(arr.slice(i, i + n)); i += n; });
   return groups;
 }
 
@@ -2780,26 +2790,81 @@ function groupsToPairSet(groups) {
   return s;
 }
 
+// Dev-77 addendum — pinning: seeds each pinned {name, groupIndex} into its
+// group BEFORE any strategy runs, then hands back what's left to place
+// (remaining names + each group's remaining slot count) so every strategy
+// below fills in around the pins instead of overriding them. groupIndex is
+// 0-based. Silently drops a pin whose name isn't in `allNames` (e.g. a
+// withdrawn player) or whose groupIndex is out of range — validated with a
+// clear error before this runs, in the Generate handler, so a silent drop
+// here should never actually happen in practice.
+function applyPins(allNames, groupSize, pins) {
+  const sizes = computeGroupSizes(allNames.length, groupSize);
+  const groups = sizes.map(() => []);
+  const pinnedNames = new Set();
+  (pins || []).forEach(p => {
+    if (p.groupIndex < 0 || p.groupIndex >= groups.length) return;
+    if (!allNames.includes(p.name) || pinnedNames.has(p.name)) return;
+    if (groups[p.groupIndex].length >= sizes[p.groupIndex]) return; // group already full — validated earlier, defensive here
+    groups[p.groupIndex].push(p.name);
+    pinnedNames.add(p.name);
+  });
+  const remaining = allNames.filter(n => !pinnedNames.has(n));
+  const remainingSlots = groups.map((g, i) => sizes[i] - g.length);
+  return { groups, remaining, remainingSlots, sizes };
+}
+
 // Random-search minimization against a history of already-formed pairs.
 // General-purpose (any roster/group size), not hardcoded to 16 players —
 // small counts like Wally Cup's typically find a zero-repeat schedule well
 // under the trial budget; a harder roster/group-size combo just returns
-// whatever minimized repeats the search found.
-function generateSocialGroups(names, groupSize, historyPairSet) {
+// whatever minimized repeats the search found. Pins (if any) are seeded
+// first and held fixed; the search only shuffles who fills the remaining
+// seats, but still scores every pair in the FINAL group (pinned-to-pinned
+// included) so the reported repeat count is honest about pins that happen
+// to already have history together.
+function generateSocialGroups(names, groupSize, historyPairSet, pins) {
+  const { groups: base, remaining, remainingSlots } = applyPins(names, groupSize, pins);
   let best = null, bestScore = Infinity;
   for (let trial = 0; trial < 4000 && bestScore > 0; trial++) {
-    const groups = chunkEven(shuffleInPlace(names.slice()), groupSize);
+    const shuffled = shuffleInPlace(remaining.slice());
+    const candidate = base.map(g => g.slice());
+    let idx = 0;
+    for (let gi = 0; gi < candidate.length; gi++) {
+      for (let k = 0; k < remainingSlots[gi]; k++) { candidate[gi].push(shuffled[idx]); idx++; }
+    }
     let score = 0;
-    groups.forEach(g => { for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) { if (historyPairSet.has(pairKey(g[i], g[j]))) score++; } });
-    if (score < bestScore) { bestScore = score; best = groups; }
+    candidate.forEach(g => { for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) { if (historyPairSet.has(pairKey(g[i], g[j]))) score++; } });
+    if (score < bestScore) { bestScore = score; best = candidate; }
   }
   return { groups: best, repeatPairs: bestScore };
 }
 
-function generateFlightedGroups(names, groupSize, valueByName, ascending) {
-  const sorted = names.slice().sort((a, b) => (valueByName.get(a) ?? 0) - (valueByName.get(b) ?? 0));
+// Flights the UNPINNED players by value and drops them into each group's
+// remaining slots in flight order — pinned groups just get fewer flighted
+// seats to fill. (Pinning necessarily overrides pure flighting for those
+// players; that's the point of pinning.)
+function generateFlightedGroups(names, groupSize, valueByName, ascending, pins) {
+  const { groups: base, remaining, remainingSlots } = applyPins(names, groupSize, pins);
+  const sorted = remaining.slice().sort((a, b) => (valueByName.get(a) ?? 0) - (valueByName.get(b) ?? 0));
   if (!ascending) sorted.reverse();
-  return chunkEven(sorted, groupSize);
+  const candidate = base.map(g => g.slice());
+  let idx = 0;
+  for (let gi = 0; gi < candidate.length; gi++) {
+    for (let k = 0; k < remainingSlots[gi]; k++) { candidate[gi].push(sorted[idx]); idx++; }
+  }
+  return candidate;
+}
+
+function generateRandomGroups(names, groupSize, pins) {
+  const { groups: base, remaining, remainingSlots } = applyPins(names, groupSize, pins);
+  const shuffled = shuffleInPlace(remaining.slice());
+  const candidate = base.map(g => g.slice());
+  let idx = 0;
+  for (let gi = 0; gi < candidate.length; gi++) {
+    for (let k = 0; k < remainingSlots[gi]; k++) { candidate[gi].push(shuffled[idx]); idx++; }
+  }
+  return candidate;
 }
 
 // Every OTHER round's already-saved groups, flattened into a set of pairs
@@ -2870,7 +2935,43 @@ function populateGroupingsRoundSelect(config) {
   sel.innerHTML = supported.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}</option>`).join('');
   if (supported.some(r => r.name === prev)) sel.value = prev;
   updateStandingsOptionAvailability();
+  populatePinPlayerSelect(config);
 }
+
+// ── Pinning (Dev-77 addendum) — fix specific players into a specific group
+// (e.g. an honorary/defending-champions group) before any strategy runs.
+// Pins are per-round, editor-only state — never persisted themselves; only
+// their effect (the resulting group placement) gets saved.
+function populatePinPlayerSelect(config) {
+  const sel = document.getElementById('pinPlayerSelect');
+  const names = activeRosterNames(config);
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— pick a player —</option>' + names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  if (names.includes(prev)) sel.value = prev;
+}
+
+function renderPinnedChips() {
+  const el = document.getElementById('pinnedChips');
+  if (!currentPins.length) { el.innerHTML = ''; return; }
+  el.innerHTML = currentPins.map((p, i) =>
+    `<span class="chip">${escapeHtml(p.name)} → Group ${p.groupIndex + 1} <button type="button" class="removePinBtn" data-i="${i}" style="border:none;background:none;color:inherit;cursor:pointer;font-weight:700;padding:0 0 0 4px">×</button></span>`
+  ).join(' ');
+  el.querySelectorAll('.removePinBtn').forEach(btn => {
+    btn.addEventListener('click', () => { currentPins.splice(Number(btn.dataset.i), 1); renderPinnedChips(); });
+  });
+}
+
+document.getElementById('addPinBtn').addEventListener('click', () => {
+  const playerSel = document.getElementById('pinPlayerSelect');
+  const name = playerSel.value;
+  const groupNum = parseInt(document.getElementById('pinGroupInput').value, 10);
+  if (!name) { setGroupingsStatus('Pick a player to pin first.', true); return; }
+  if (!groupNum || groupNum < 1) { setGroupingsStatus('Group # must be 1 or higher.', true); return; }
+  currentPins = currentPins.filter(p => p.name !== name); // re-pinning replaces any earlier pin for this player
+  currentPins.push({ name, groupIndex: groupNum - 1 });
+  renderPinnedChips();
+  setGroupingsStatus(`Pinned ${name} to Group ${groupNum} — click Generate to apply.`);
+});
 
 async function updateStandingsOptionAvailability() {
   const roundName = document.getElementById('groupRoundSelect').value;
@@ -2892,7 +2993,12 @@ async function updateStandingsOptionAvailability() {
     if (!anyPriorClosed && strategySel.value === 'standings') strategySel.value = 'social';
   } catch (e) { standingsOpt.disabled = true; }
 }
-document.getElementById('groupRoundSelect').addEventListener('change', () => { updateStandingsOptionAvailability(); loadSavedGroups(false); });
+document.getElementById('groupRoundSelect').addEventListener('change', () => {
+  updateStandingsOptionAvailability();
+  currentPins = []; // pins are per-round — switching rounds starts a fresh pin list
+  renderPinnedChips();
+  loadSavedGroups(false);
+});
 
 function renderGroupsEditor(groups) {
   currentGroups = groups.map(g => g.slice());
@@ -2939,30 +3045,47 @@ document.getElementById('generateGroupsBtn').addEventListener('click', async () 
   const strategy = document.getElementById('groupStrategySelect').value;
   const names = activeRosterNames(assembledConfig);
   if (names.length < 2) { setGroupingsStatus('Need at least 2 active (non-withdrawn) players.', true); return; }
+
+  // Validate pins against THIS generate's actual roster/group-size before
+  // handing them to a strategy — a pin left over from a withdrawn player,
+  // or a group-size change that no longer fits the pinned count, should be
+  // a clear error here rather than a silently-dropped pin or an overfull
+  // group discovered only by counting the result.
+  const sizes = computeGroupSizes(names.length, groupSize);
+  const validPins = currentPins.filter(p => names.includes(p.name));
+  const droppedPins = currentPins.filter(p => !names.includes(p.name));
+  const outOfRange = validPins.find(p => p.groupIndex >= sizes.length);
+  if (outOfRange) { setGroupingsStatus(`Pin error — Group ${outOfRange.groupIndex + 1} doesn't exist at this player count/group size (only ${sizes.length} group(s)). Remove or fix that pin.`, true); return; }
+  const pinCountByGroup = {};
+  validPins.forEach(p => { pinCountByGroup[p.groupIndex] = (pinCountByGroup[p.groupIndex] || 0) + 1; });
+  const overfull = Object.keys(pinCountByGroup).find(gi => pinCountByGroup[gi] > sizes[gi]);
+  if (overfull !== undefined) { setGroupingsStatus(`Pin error — Group ${Number(overfull) + 1} only holds ${sizes[overfull]}, but ${pinCountByGroup[overfull]} player(s) are pinned there.`, true); return; }
+
   const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
   const eventName = document.getElementById('eventName').value.trim();
+  const pinNote = droppedPins.length ? ` (${droppedPins.length} pin(s) dropped — not active players: ${droppedPins.map(p => p.name).join(', ')})` : '';
   setGroupingsStatus('Generating…');
   try {
     let groups;
     if (strategy === 'social') {
       const history = base && eventName ? await fetchGroupingHistory(base, eventName, roundName) : new Set();
-      const result = generateSocialGroups(names, groupSize, history);
+      const result = generateSocialGroups(names, groupSize, history, validPins);
       groups = result.groups;
-      setGroupingsStatus(result.repeatPairs === 0
+      setGroupingsStatus((result.repeatPairs === 0
         ? 'Generated — every pairing in this round is new (no repeats from other saved rounds).'
-        : `Generated — best found has ${result.repeatPairs} repeat pairing(s) from other saved rounds (roster/group size may not allow zero).`);
+        : `Generated — best found has ${result.repeatPairs} repeat pairing(s) from other saved rounds (roster/group size may not allow zero — pinned players carry in whatever history they already have with each other too).`) + pinNote);
     } else if (strategy === 'quota') {
       const hcpByName = new Map(assembledConfig.roster.map(p => [p.name, p.hcp ?? 0]));
-      groups = generateFlightedGroups(names, groupSize, hcpByName, true);
-      setGroupingsStatus('Generated — flighted by entered handicap (Group 1 = lowest handicap).');
+      groups = generateFlightedGroups(names, groupSize, hcpByName, true, validPins);
+      setGroupingsStatus('Generated — flighted by entered handicap (Group 1 = lowest handicap; pinned players override their group\'s flight).' + pinNote);
     } else if (strategy === 'standings') {
       const perfByRound = await fetchClosedRoundsPerf(base, eventName, assembledConfig);
       const value = standingsValueByName(names, assembledConfig, roundName, perfByRound);
-      groups = generateFlightedGroups(names, groupSize, value, false);
-      setGroupingsStatus('Generated — flighted by current Overall standing through the prior closed round(s) (Group 1 = current leaders).');
+      groups = generateFlightedGroups(names, groupSize, value, false, validPins);
+      setGroupingsStatus('Generated — flighted by current Overall standing through the prior closed round(s) (Group 1 = current leaders; pinned players override their group\'s flight).' + pinNote);
     } else {
-      groups = chunkEven(shuffleInPlace(names.slice()), groupSize);
-      setGroupingsStatus('Generated — fully random.');
+      groups = generateRandomGroups(names, groupSize, validPins);
+      setGroupingsStatus('Generated — fully random.' + pinNote);
     }
     currentGroupsRound = roundName;
     renderGroupsEditor(groups);
