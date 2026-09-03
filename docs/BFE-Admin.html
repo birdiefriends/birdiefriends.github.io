@@ -2838,14 +2838,20 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       const roundPerf = quotaPerf + (keptWB ? wbBonusPts : 0);
       const vsPar = computeVsPar(holesByPlayer[r0.player_name]);
       const totalPayout = (r0.payout_podium || 0) + (r0.payout_skins || 0) + (r0.payout_cttp || 0);
-      let wbDetail;
+      // Dev-89 (Brian): split what used to be one crammed "Scored X · ..." string
+      // into two grid cells — the score stays with Quota (row 1, what got you
+      // here), and the hole/bonus/already-out detail moves down next to the
+      // Wally Ball pill (row 2, what happened to the ball) — same information,
+      // laid out so the two questions ("how'd I score" / "what's my WB status")
+      // each get their own cell instead of one run-on line.
+      let wbHoleDetail;
       if (keptWB) {
-        wbDetail = `Scored ${r0.actual_points} · In Play${wbBonusPts ? `, +${wbBonusPts} bonus pt` : ''}`;
+        wbHoleDetail = wbBonusPts ? `+${wbBonusPts} bonus pt` : 'In Play';
       } else if (r0.wb_hole != null) {
-        wbDetail = `Scored ${r0.actual_points} · Hole ${r0.wb_hole}-${r0.wb_stroke ?? '?'}`;
+        wbHoleDetail = `Hole ${r0.wb_hole}-${r0.wb_stroke ?? '?'}`;
       } else {
         const lostIn = lossRoundByPlayer[r0.player_name];
-        wbDetail = `Scored ${r0.actual_points} · Already out${lostIn ? ` — lost ${roundLabelByName[lostIn]}` : ''}`;
+        wbHoleDetail = lostIn ? `Already out — lost ${roundLabelByName[lostIn]}` : 'Already out';
       }
       const perfCalc = keptWB
         ? `${signed(quotaPerf)} quota achievement + ${wbBonusPts.toFixed(2)} Wally Ball = ${signed(roundPerf)} Round Perf.`
@@ -2855,8 +2861,8 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
         quotaIn: r0.quota_in.toFixed(2), quotaOut: r0.quota_out.toFixed(2),
         actualPoints: r0.actual_points, quotaPerf, roundPerf,
         roundPerfDisplay: signed(roundPerf), roundPerfBadgeClass: 'perf-badge ' + perfClass(roundPerf),
-        vsParDisplay: vsPar != null && par != null ? ` (${par + vsPar})` : '',
-        wbLabel: keptWB ? 'In Play' : 'Lost', wbPillClass: 'wb-pill ' + (keptWB ? 'wb-in' : 'wb-out'), wbDetail,
+        vsParDisplay: vsPar != null && par != null ? `(${par + vsPar})` : '',
+        wbLabel: keptWB ? 'In Play' : 'Lost', wbPillClass: 'wb-pill ' + (keptWB ? 'wb-in' : 'wb-out'), wbHoleDetail,
         payoutCol: fmtPayout(totalPayout), perfCalc,
         rowClass: r0.rank === 1 ? 'lb-row leader-row' : 'lb-row',
       };
@@ -3083,7 +3089,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .winner-stat{font-size:12.5px;color:var(--white-dim);}
 .lb-card{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:16px;overflow:hidden;}
 .lb-list{display:flex;flex-direction:column;}
-.lb-row,.ov-row{padding:15px 16px;border-bottom:1px solid rgba(245,240,232,0.06);}
+.lb-row,.ov-row{position:relative;padding:15px 16px;border-bottom:1px solid rgba(245,240,232,0.06);}
 .lb-row:last-child,.ov-row:last-child{border-bottom:none;}
 .lb-row.leader-row,.ov-row.leader-row{background:rgba(232,57,42,0.08);}
 .lb-row.withdrawn-row{opacity:0.45;}
@@ -3093,29 +3099,44 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .leader-row .rank-cell{color:var(--accent-light);}
 .player-name{font-weight:600;font-size:16px;color:var(--white);}
 .vspar-tag{font-size:12.5px;font-weight:500;color:var(--white-dim);}
-.lb-row-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;font-size:13px;}
 .lb-meta{color:var(--white-dim);}
-.payout-val{color:var(--accent-light);font-weight:700;font-size:14px;flex-shrink:0;}
 .quota-val{color:var(--white-dim);font-weight:400;}
 .perf-badge{font-weight:700;font-size:16.5px;padding:2px 0;flex-shrink:0;}
 .perf-badge.good{color:var(--good);}
 .perf-badge.bad{color:var(--bad);}
 .perf-badge.even{color:var(--white-dim);}
-.perf-detail{margin-left:auto;flex-shrink:0;}
-.perf-detail[open]{flex-basis:100%;margin-left:0;}
-.perf-detail summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:3px;justify-content:flex-end;}
+.perf-detail summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:3px;}
 .perf-detail summary::-webkit-details-marker{display:none;}
 .perf-detail summary::after{content:'\\24d8';font-size:10px;font-weight:400;color:var(--white-dim);opacity:0.6;margin-left:1px;}
 .perf-detail[open] summary::after{opacity:1;color:var(--accent-light);}
-.perf-calc{position:relative;margin-top:8px;background:var(--navy2);border:1px solid rgba(232,57,42,0.35);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.6;color:var(--white-dim);white-space:normal;text-align:left;font-weight:400;width:100%;}
+/* Popover, not a grid cell: the calc box floats over whatever's below this
+   row rather than trying to fit inside the (narrow, auto-width) perf column
+   — it only needs to be legible for the moment it's open, and this way
+   opening it never reflows the quota/WB/payout cells around it. */
+.perf-calc{position:absolute;top:100%;left:16px;right:16px;margin-top:-2px;z-index:20;background:var(--navy2);border:1px solid rgba(232,57,42,0.35);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.6;color:var(--white-dim);white-space:normal;text-align:left;font-weight:400;box-shadow:0 10px 28px rgba(0,0,0,0.4);}
 .ov-rounds{display:flex;flex-wrap:wrap;gap:7px 14px;margin-top:9px;font-size:13px;color:var(--white-dim);}
 .ov-rounds b{color:var(--white);font-weight:600;}
 .ov-chip-pay{color:var(--accent-light);font-weight:700;margin-left:auto;}
-.lb-row-wb{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:9px;}
 .wb-pill{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;letter-spacing:0.02em;border-radius:99px;padding:3px 10px;flex-shrink:0;}
 .wb-in{background:rgba(111,191,126,0.14);color:var(--good);}
 .wb-out{background:rgba(224,160,80,0.14);color:var(--bad);}
 .wb-detail{font-size:12.5px;font-weight:400;}
+/* Dev-89 (Brian): a real grid, so the numbers line up down the whole list
+   instead of drifting left/right per row the way a wrapping flex line does.
+   Name gets its own full-width line first — real names (e.g. "Jordan
+   Knappenberger") don't survive being squeezed into a fixed grid column
+   without wrapping mid-name — then a 2×2 grid below it: top row is "how did
+   this round go" (quota+score, round perf.), bottom row is "what's the
+   Wally Ball status" (pill + hole/bonus/out detail, this round's $), with
+   the two right-hand values (perf., $) sharing a column so they align. */
+.lb-name-line{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;}
+.lb-grid{display:grid;grid-template-columns:1fr auto;column-gap:14px;row-gap:8px;align-items:center;margin-top:9px;}
+.lb-cell{min-width:0;}
+.lb-cell-label{display:block;font-size:9.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--white-dim);opacity:0.65;margin-bottom:2px;}
+.lb-cell-quota{font-size:13.5px;color:var(--white);font-weight:600;}
+.lb-cell-perf{text-align:right;white-space:nowrap;}
+.lb-cell-wb{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:13px;color:var(--white-dim);}
+.lb-cell-pay{text-align:right;color:var(--accent-light);font-weight:700;font-size:14px;white-space:nowrap;}
 .side-strip{display:flex;gap:0.9rem;flex-wrap:wrap;margin-top:1rem;}
 .side-card{flex:1;min-width:220px;background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);border-radius:12px;padding:0.85rem 1rem;}
 .side-label{font-size:9.5px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-light);margin-bottom:0.55rem;}
@@ -3154,17 +3175,19 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 
 function renderPlayerRow(p, quotaLabel) {
   return `<div class="${p.rowClass}${p.withdrawn ? ' withdrawn-row' : ''}">
-    <div class="lb-row-top">
-      <div class="lb-name-wrap"><span class="rank-cell">${p.rank ?? '—'}</span><span class="player-name">${escapeHtml(p.name)}</span>${p.withdrawn ? ' <span class="vspar-tag">(withdrew)</span>' : ''}<span class="vspar-tag">${p.vsParDisplay}</span></div>
-      <details class="perf-detail"><summary class="${p.roundPerfBadgeClass}">${p.roundPerfDisplay}</summary>
-      <div class="perf-calc">${escapeHtml(p.perfCalc)}</div></details>
+    <div class="lb-name-line">
+      <span class="rank-cell">${p.rank ?? '—'}</span><span class="player-name">${escapeHtml(p.name)}</span>${p.withdrawn ? '<span class="vspar-tag">(withdrew)</span>' : ''}${p.vsParDisplay ? `<span class="vspar-tag">${escapeHtml(p.vsParDisplay)}</span>` : ''}
     </div>
-    <div class="lb-row-bottom">
-      <span class="lb-meta quota-val">${escapeHtml(quotaLabel)} ${p.quotaIn}</span>
-      <span class="payout-val">${p.payoutCol}</span>
-    </div>
-    <div class="lb-row-wb">
-      <span class="${p.wbPillClass}">${p.wbLabel}</span><span class="lb-meta wb-detail">${escapeHtml(p.wbDetail)}</span>
+    <div class="lb-grid">
+      <div class="lb-cell lb-cell-quota">
+        <span class="lb-cell-label">${escapeHtml(quotaLabel)}</span>${p.quotaIn} <span class="lb-meta">· Scored ${p.actualPoints}</span>
+      </div>
+      <div class="lb-cell lb-cell-perf">
+        <details class="perf-detail"><summary class="${p.roundPerfBadgeClass}">${p.roundPerfDisplay}</summary>
+        <div class="perf-calc">${escapeHtml(p.perfCalc)}</div></details>
+      </div>
+      <div class="lb-cell lb-cell-wb"><span class="${p.wbPillClass}">${p.wbLabel}</span><span>${escapeHtml(p.wbHoleDetail)}</span></div>
+      <div class="lb-cell lb-cell-pay">${p.payoutCol}</div>
     </div>
   </div>`;
 }
@@ -3374,8 +3397,11 @@ async function fetchResultsPageData() {
   await Promise.all((config.rounds || []).map(async r => {
     try {
       const res = await fetch(bfeBase + '/scorecards?event=' + encodeURIComponent(r.name));
-      const arr = await res.json();
-      scorecardsByRound[r.name] = Array.isArray(arr) ? arr : [];
+      const body = await res.json();
+      // Dev-89: GET /scorecards returns {ok, scorecards:[...]}, not a bare array —
+      // Array.isArray(body) was always false here, so scorecardsByRound was always
+      // empty and vs-par never had hole data to compute from. Read the right key.
+      scorecardsByRound[r.name] = Array.isArray(body.scorecards) ? body.scorecards : [];
     } catch (e) { scorecardsByRound[r.name] = []; }
   }));
 
