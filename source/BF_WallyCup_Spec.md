@@ -1,20 +1,27 @@
 # BF Experiences (BFE) / Wally Cup — Competitive Events Architecture Spec
 
-**Status as of Dev-76 (2026-09-02).** Committed to the repo for the first time in
+**Status as of Dev-76 (2026-09-03, closed).** Committed to the repo for the first time in
 Dev-73 — it existed only as a local file (`WC_spec.txt`, from Dev-71) before that. Rd1
 tees off 10am, 9/11/2026. Dev-74 believed the full scoring engine (quota, skins, CTP,
 Wally Ball, Overall) was built and end-to-end validated; Dev-75 actually dry-ran the real
 event through it and found that claim was premature — podium-tie payouts and unclaimed-
 CTP-hole money were both silently broken, never exercised by Dev-74's synthetic test
 data. Both are fixed, plus withdraw-a-player support, a Save/Generate ordering bug fix,
-and a Close Round roster-vs-scorecard mismatch alert. **Dev-76 built and tested §8 Phase
-3** — the player-facing results page — end to end against the real (test/dry-run) D1
-data, plus a small addition (CTP hole-winner persistence, `bfe_round_cttp`) the phase
-needed that Phase 2 hadn't captured. See §8 for the corrected phase status. Next up per
-Brian's own ordering: 2Man scramble (§4/§8, still ❓ open), then the Photos/memories
-phase. For the full narrative reasoning behind any decision below, see the
-Dev-71 through Dev-76 entries in `BF_Session_Log.md`; this doc is the standing
-architecture reference, not a replacement for that history.
+and a Close Round roster-vs-scorecard mismatch alert. **Dev-76 built §8 Phase 3** — the
+player-facing results page — end to end against the real (test/dry-run) D1 data, added
+CTP hole-winner persistence (`bfe_round_cttp`), then across four addenda: fixed the
+mobile table layout, matched the portal.html results entry point to the site's existing
+plain-link convention (superseding the modal it originally shipped with), confirmed CTP
+live against real re-closed data, and — after Brian caught it days later — root-caused
+and fixed a Wally Ball season-history regression that a later re-close had silently
+introduced, fixed a vs-par plumbing bug (never actually worked since first built),
+and shipped a 3-iteration mobile-readability redesign of the leaderboard rows plus a
+longest-held-first Wally Ball section sort. **Phase 3 is now genuinely complete** — see
+§8 for the corrected phase status. Next up per Brian's own ordering: 2Man scramble
+(§4/§8, still ❓ open), then the Photos/memories phase. For the full narrative reasoning
+behind any decision below, see the Dev-71 through Dev-76 entries (including all four
+Dev-76 addenda) in `BF_Session_Log.md`; this doc is the standing architecture reference,
+not a replacement for that history.
 
 **A note on completeness:** the draft Brian supplied this session picked up mid-thought,
 at what reads as the tail of an opening philosophy/principle discussion (§1–2) — that
@@ -404,11 +411,12 @@ in. No changes as of Dev-73.
 
 ---
 
-## 8. Current build status & phased plan (added Dev-73, updated Dev-74, corrected Dev-75)
+## 8. Current build status & phased plan (added Dev-73, updated Dev-74, corrected Dev-75,
+updated through Dev-76 addendum 4)
 
 This section is the living answer to "what's left" — update it each session rather than
-re-deriving status from scratch. See `BF_Session_Log.md`'s Dev-73/Dev-74/Dev-75 entries
-for the full reasoning behind this plan.
+re-deriving status from scratch. See `BF_Session_Log.md`'s Dev-73 through Dev-76 (all
+addenda) entries for the full reasoning behind this plan.
 
 - **Phase 0 — Jotform (✅ done, Dev-73):** 3 new Wally Ball fields added to the shared
   `SCORECARD_FORM_ID` (250963587514163) form: `wallyBallStatus` (QID 33),
@@ -455,7 +463,8 @@ for the full reasoning behind this plan.
      Overall/Wally-Ball-pot without touching their own closed-round results), and a
      Save/Generate ordering bug fix. Full detail and reasoning in the Dev-75 entry,
      `BF_Session_Log.md`.
-- **Phase 3 — publishing: ✅ built and tested end-to-end, Dev-76.** One living static
+- **Phase 3 — publishing: ✅ built, tested, and hardened end-to-end — genuinely complete,
+  Dev-76 + addenda 1-4.** One living static
   page (not per-round separate pages — the design reference's own single-page,
   numbered-section structure turned out to be the right shape: a round rail, one
   section per round, Overall held back until every `rollsIntoOverall` round closes,
@@ -475,18 +484,46 @@ for the full reasoning behind this plan.
   `BFE-Admin.html`'s own quota-only "Total +/-"). **Needed one small Phase 2 addition**:
   `bfe_round_cttp` (CTP hole-winner detail — hole/player/dist/payout), since Close
   Round computed it in memory but never persisted it, only the per-player payout total.
-  Not live yet — needs a manual D1 `CREATE TABLE` + a Cloudflare redeploy of
-  `bf_experiences_worker.js` (see that file's own header comment). Also added: a
-  read-only "🏆 Results" icon on `format-wally`/`format-scramble` event cards in
-  `portal.html`, opening the published page in an iframe modal — players never leave
-  portal.html, per this section's own player-facing-results intent (§4c).
+  **✅ Live and confirmed correct (Dev-76 addendum 3).** The table and Worker deploy were
+  both fine from the start; the earlier "CTP not showing" report traced to Rd1-3 having
+  originally closed before this feature existed, so no historical rows had ever been
+  written for them. Re-closing them (safe/idempotent — delete-then-insert per
+  event+round, same lifecycle as `bfe_round_skins`) backfilled the table correctly;
+  Brian confirmed CTP data displays correctly after republishing.
+  Also added: a read-only "🏆 Results" entry point for `format-wally`/`format-scramble`
+  events in `portal.html` — the persistent Results-tab card plus a per-event-card icon,
+  both plain `<a href="/wally-cup-results.html">` links (no modal, no iframe), matching
+  the exact convention every other `results-link-card` already uses (**Dev-76 addendum
+  2** — supersedes the iframe-modal approach the feature originally shipped with in the
+  main Dev-76 entry; default to plain navigation links for any future "view a published
+  page" affordance, including 2Man/Photos, unless Brian says otherwise).
   `source/WallyCup_Results_Design_Reference.dc.html` (Dev-75) supplied the visual
   language (CSS lifted verbatim) and confirmed-correct ground-truth numbers, which the
   real generator's output was checked against exactly (champion, Overall order, the
   Wally Ball tiebreak) before shipping — it was never itself wired up, per its own
   header note.
+- **Dev-76 addendum 4 (2026-09-03) — a real regression, found and fixed, not just
+  polish:** re-closing Rd1→Rd2→Rd3 to backfill CTP (addendum 3) silently broke the
+  Wally Ball season pot — the `alreadyOut` check in both the Close Round handler and the
+  test-scorecard generator excluded only "any other round with this name," not rounds
+  chronologically *after* the one being closed, so a Rd1 re-close performed after Rd2/Rd3
+  already had results read those later losses backward as "already out before Rd1 even
+  started." Fixed to use each round's real index in `assembledConfig.rounds`/
+  `roundsList`; Brian re-closed Rd1→Rd2→Rd3 against the fix and confirmed the season
+  tracker (Lou Strohl's pot win via tiebreak, everyone else's correct loss hole) came
+  back correctly. Same addendum also fixed a separate, longer-standing bug — vs-par had
+  silently never worked since first built, because `fetchResultsPageData()` checked
+  `Array.isArray()` on the whole `GET /scorecards` response object (`{ok, scorecards:
+  [...]}`) instead of its `.scorecards` field, so `scorecardsByRound` was unconditionally
+  empty; `computeVsPar` itself was correct the whole time — and shipped a 3-iteration
+  mobile-readability redesign of the per-round leaderboard rows (name on its own line,
+  a real 2×2 grid below it for quota/perf/WB/payout, the perf-calc popover made
+  absolutely-positioned so it no longer reflows the grid) plus a longest-held-first sort
+  for the Wally Ball section. Full root-cause writeups and code detail: the Dev-76
+  addendum 4 entry in `BF_Session_Log.md`.
 - **Before real Rd1 (10am 9/11):** the "2026 Wally Cup" event in D1 currently holds
   Dev-74/75's test data (real roster, generated test scorecards) — needs a clean Data &
   Reset → Delete and fresh Setup with the real roster/tee assignments before the real
-  event, so real Rd1 doesn't chain off test quota_out values. **Not done as of Dev-75** —
-  the dry-run was this session's point, not the cleanup.
+  event, so real Rd1 doesn't chain off test quota_out values. **Still not done** — every
+  session through Dev-76 addendum 4 has used this test data for verification rather than
+  doing the cleanup; it remains the one prerequisite before the real event.
