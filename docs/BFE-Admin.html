@@ -2576,26 +2576,52 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
       return { groupIndex: gi, players: t.players, label: t.label, displayName: teamDisplayName(t.players, t.label) };
     });
 
-    // Dev-78 (team quota) — average each team's two partners' own CURRENT
-    // individual quotas into one team quota, read from `round.chainsFrom`
-    // (the most recent stableford round to close before this one — see
-    // buildEventConfig) same as an individual round reads quota_out to chain
-    // forward, except nothing here ever feeds back into that chain. Falls
-    // back to roster initialQuota if no stableford round has closed yet
-    // (mirrors the individual-round path exactly). A player missing a quota
-    // (e.g. No-HCP) just drops out of their team's average rather than
-    // failing the whole team — noted, not silently hidden, in the close
-    // notes below.
+    // Dev-78 (team quota) — Brian's spec: "each player's RD1-3 quotas
+    // averaged" into a team number. That's the quota each partner carried
+    // INTO every stableford round played so far this trip (Rd1, Rd2, ...),
+    // not just their latest one — smooths out one hot/cold round instead of
+    // weighting the most recent round alone. Walk the stableford chain
+    // backward from `round.chainsFrom` (Rd2) via buildEventConfig's
+    // chainsFrom pointers to find every earlier stableford round (Rd1, and
+    // so on for events with more rounds before the team round). For a
+    // 2-round-prior chain (Rd1, Rd2) that yields 3 "entering" snapshots per
+    // player — quota_in(Rd1), quota_in(Rd2), and quota_out(Rd2) i.e. the
+    // quota they'd enter Rd3 with — matching Brian's "RD1-3" phrasing
+    // exactly. Each player's own values are averaged first, then the two
+    // partners' averages are averaged into the team quota. Falls back to
+    // roster initialQuota if no stableford round has closed yet (mirrors
+    // the individual-round path). A player missing a value at any step
+    // (e.g. No-HCP) just drops that value rather than failing the team —
+    // noted, not silently hidden, in the close notes below.
     let quotaByPlayer = {};
     if (round.chainsFrom) {
       const priorRes = await fetch(base + '/bfe/round-results?event=' + encodeURIComponent(eventName));
       const priorData = await priorRes.json();
       if (!priorRes.ok) throw new Error(priorData.error || `HTTP ${priorRes.status}`);
-      const priorRows = (priorData.results || []).filter(r => r.round_name === round.chainsFrom);
+      const allPriorResults = priorData.results || [];
+      // Walk the stableford chain backward to collect every round name
+      // feeding this team quota, earliest first: [Rd1, Rd2, ...].
+      const chainRoundNames = [];
+      let cursor = round.chainsFrom;
+      while (cursor) {
+        chainRoundNames.unshift(cursor);
+        const cursorRound = (assembledConfig.rounds || []).find(r => r.name === cursor);
+        cursor = cursorRound ? cursorRound.chainsFrom : null;
+      }
       // Same hard-stop as the individual round path — a team quota built off
       // an unclosed prior round is worse than useless for real payouts.
-      if (!priorRows.length) throw new Error(`This round's team quota reads from "${round.chainsFrom}", which hasn't been closed yet — close it first.`);
-      priorRows.forEach(r => { quotaByPlayer[r.player_name] = r.quota_out; });
+      const lastRows = allPriorResults.filter(r => r.round_name === round.chainsFrom);
+      if (!lastRows.length) throw new Error(`This round's team quota reads from "${round.chainsFrom}", which hasn't been closed yet — close it first.`);
+      assembledConfig.roster.forEach(p => {
+        const vals = [];
+        chainRoundNames.forEach(rn => {
+          const row = allPriorResults.find(r => r.round_name === rn && r.player_name === p.name);
+          if (row && row.quota_in != null && !isNaN(row.quota_in)) vals.push(row.quota_in);
+        });
+        const lastRow = allPriorResults.find(r => r.round_name === round.chainsFrom && r.player_name === p.name);
+        if (lastRow && lastRow.quota_out != null && !isNaN(lastRow.quota_out)) vals.push(lastRow.quota_out);
+        quotaByPlayer[p.name] = vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : null;
+      });
     } else {
       assembledConfig.roster.forEach(p => { quotaByPlayer[p.name] = p.initialQuota; });
     }
