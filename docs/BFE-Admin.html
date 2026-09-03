@@ -2814,7 +2814,8 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
     });
   });
   const roundLabelByName = {};
-  config.rounds.forEach((r, i) => { roundLabelByName[r.name] = 'Rd' + (i + 1); });
+  const roundIndexByName = {};
+  config.rounds.forEach((r, i) => { roundLabelByName[r.name] = 'Rd' + (i + 1); roundIndexByName[r.name] = i; });
 
   const roundSections = config.rounds.map((r, idx) => {
     const closed = closedRoundNames.has(r.name);
@@ -3026,8 +3027,22 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       status = 'OUT'; statusClass = 'wb-status-out';
       detail = lossRow ? `Lost ${roundLabelByName[lossRound]} — hole ${lossRow.wb_hole}-${lossRow.wb_stroke}` : 'Out.';
     }
-    return { name, status, statusPillClass: 'wb-status ' + statusClass, detail, bonus: cumBonus, cardClass };
-  });
+    // Dev-90 (Brian): show this section ordered by how long each player held
+    // the ball — winner(s) first, then anyone still in it (pre-Final), then
+    // everyone out, longest-survived to first-eliminated. "Survived longest"
+    // is the same key used for the tiebreak above: later round beats earlier
+    // round, and within the round the later hole (then stroke) beats the
+    // earlier one — a player who lost on Hole 10 outlasted one who lost on
+    // Hole 2 even in the same round.
+    const tier = (isWinner || isSplitWinner) ? 0 : (stillActive ? 1 : 2);
+    return {
+      name, status, statusPillClass: 'wb-status ' + statusClass, detail, bonus: cumBonus, cardClass,
+      _tier: tier,
+      _roundIdx: lossRound ? roundIndexByName[lossRound] : -1,
+      _hole: lossRow ? lossRow.wb_hole : -1,
+      _stroke: lossRow ? lossRow.wb_stroke : -1,
+    };
+  }).sort((a, b) => (a._tier - b._tier) || (b._roundIdx - a._roundIdx) || (b._hole - a._hole) || (b._stroke - a._stroke));
   const wbEligibleNow = stillIn.length; // if unresolved (event not complete), this is "still in it"
   const wbResolved = !!(potWinner || potTiedSplit);
 
@@ -3227,7 +3242,6 @@ function renderRoundSection(sec, num) {
       <div class="section-title">${escapeHtml(sec.sectionTitle)}</div>
       <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
     </div></div>
-    <div class="chain-note">Round Perf. folds in this round's Wally Ball bonus and carries into Overall Standings; only the Quota number itself never includes it</div>
     ${sec.leader ? `<div class="winner-banner">
       <div class="comp-label">${sec.label} Leader</div>
       <div class="winner-name">${escapeHtml(sec.leader.name)}</div>
