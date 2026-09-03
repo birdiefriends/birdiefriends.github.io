@@ -231,6 +231,25 @@
 //     payout REAL DEFAULT 0,
 //     UNIQUE(event_id, round_name, hole)
 //   );
+//
+// ── Dev-77 addition — playing groups (foursomes), per round ────────────────
+// A separate table on purpose, not a column on bfe_event_rounds: Setup's
+// Save (POST /bfe/events) does a full delete-then-reinsert of every round on
+// EVERY save, so anything stored there would get silently wiped by the next
+// unrelated Setup edit. Groups are generated/edited later, independently, in
+// BFE-Admin's own Groupings section — same delete-then-insert-per-round
+// lifecycle as skins/cttp above, just keyed by round_name instead of hole.
+// One row per player (not one JSON blob per round) so a single player's
+// group is a plain WHERE, matching every other per-player table here.
+//   CREATE TABLE bfe_round_groups (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
+//     round_name TEXT NOT NULL,
+//     group_index INTEGER NOT NULL,   -- 0-based, display as Group N = index+1
+//     player_name TEXT NOT NULL,
+//     strategy TEXT,                   -- 'social' | 'quota' | 'standings' | 'random' — what Generate used
+//     UNIQUE(event_id, round_name, player_name)
+//   );
 // ══════════════════════════════════════════════════════════════════════════
 
 
@@ -844,6 +863,75 @@ export default {
           cttp    = (await env.DB.prepare(`SELECT * FROM bfe_round_cttp WHERE event_id = ? ORDER BY round_name ASC, hole ASC`).bind(eventRow.id).all()).results;
         }
         return new Response(JSON.stringify({ ok: true, results, skins, cttp }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // ── Round Groupings (Dev-77) ──────────────────────────────────────────
+    // POST /bfe/round-groups — full-replace for ONE round, same
+    // delete-then-insert lifecycle as round-results/skins/cttp: safe to
+    // regenerate or hand-edit and re-save as many times as a Host wants
+    // before the round tees off. PIN-gated — this decides who plays with
+    // whom, same admin-only bar as event-config/round-results.
+    if (request.method === 'POST' && url.pathname === '/bfe/round-groups') {
+      let body;
+      try { body = await request.json(); } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { event_name, round_name, groups, strategy, pin } = body;
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (!event_name || !round_name || !Array.isArray(groups)) {
+        return new Response(JSON.stringify({ error: 'event_name, round_name, and groups (array of arrays) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(event_name).first();
+        if (!eventRow) {
+          return new Response(JSON.stringify({ error: 'Unknown event_name — save the event config first' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const eventId = eventRow.id;
+        await env.DB.prepare(`DELETE FROM bfe_round_groups WHERE event_id = ? AND round_name = ?`).bind(eventId, round_name).run();
+        let placed = 0;
+        for (let gi = 0; gi < groups.length; gi++) {
+          for (const playerName of (groups[gi] || [])) {
+            if (!playerName) continue;
+            await env.DB.prepare(
+              `INSERT INTO bfe_round_groups (event_id, round_name, group_index, player_name, strategy) VALUES (?, ?, ?, ?, ?)`
+            ).bind(eventId, round_name, gi, playerName, strategy || null).run();
+            placed++;
+          }
+        }
+        return new Response(JSON.stringify({ ok: true, event_id: eventId, round_name, groups: groups.length, placed }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error saving groups: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /bfe/round-groups?event=<name>[&round=<name>] — flat rows if
+    // &round is given the caller already knows which round it's asking
+    // about; omitted returns every round's rows for the event so the
+    // Portal (and BFE-Admin's own reload) can group them client-side by
+    // round_name in one fetch instead of one request per round.
+    if (request.method === 'GET' && url.pathname === '/bfe/round-groups') {
+      try {
+        const eventName = url.searchParams.get('event');
+        const roundName = url.searchParams.get('round');
+        if (!eventName) {
+          return new Response(JSON.stringify({ error: 'event query param is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
+        if (!eventRow) {
+          return new Response(JSON.stringify({ ok: true, rows: [] }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        let rows;
+        if (roundName) {
+          rows = (await env.DB.prepare(`SELECT * FROM bfe_round_groups WHERE event_id = ? AND round_name = ? ORDER BY group_index ASC, player_name ASC`).bind(eventRow.id, roundName).all()).results;
+        } else {
+          rows = (await env.DB.prepare(`SELECT * FROM bfe_round_groups WHERE event_id = ? ORDER BY round_name ASC, group_index ASC, player_name ASC`).bind(eventRow.id).all()).results;
+        }
+        return new Response(JSON.stringify({ ok: true, rows }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
