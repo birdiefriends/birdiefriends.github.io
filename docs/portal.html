@@ -12957,19 +12957,42 @@ function openCardGroupSheet(evtOrId) {
   loadCardGroups();
 }
 
+// A multi-round BFE event (Wally Cup) exists in the Portal as one separate
+// event/gathering card PER ROUND — each round gets its own format, tee time,
+// etc. — named "<umbrella name> - Rd<N>" (e.g. "2026 Wally Cup - Rd1"), while
+// BFE-Admin's own event_name is just the umbrella ("2026 Wally Cup"); the
+// round split lives inside that one bfe_events row (bfe_event_rounds), not
+// as separate rows. So evt.name off a round's card is NOT the BFE
+// event_name to query — strip the "- RdN"/"- Round N" suffix to get the
+// umbrella name first, and only fall back to the raw evt.name for events
+// that don't have that split (a single-card scramble, say).
+function bfeEventNameCandidates(name) {
+  const raw = (name || '').trim();
+  const stripped = raw.replace(/\s*[-–—]\s*(Rd|Round)\.?\s*\d+\s*$/i, '').trim();
+  const out = [];
+  if (stripped && stripped !== raw) out.push(stripped);
+  if (raw) out.push(raw);
+  return out;
+}
+
 async function loadCardGroups() {
   const evt = _cardGroupEvt;
   const listEl = document.getElementById('card-group-list');
   if (!evt || !listEl) return;
   try {
-    const [configRes, groupsRes] = await Promise.all([
-      fetch(`${BFE_API}/bfe/events?event=${encodeURIComponent(evt.name)}`),
-      fetch(`${BFE_API}/bfe/round-groups?event=${encodeURIComponent(evt.name)}`)
-    ]);
-    const configData = configRes.ok ? await configRes.json() : null;
-    const groupsData = groupsRes.ok ? await groupsRes.json() : null;
+    let configData = null, rows = [];
+    for (const name of bfeEventNameCandidates(evt.name)) {
+      const [configRes, groupsRes] = await Promise.all([
+        fetch(`${BFE_API}/bfe/events?event=${encodeURIComponent(name)}`),
+        fetch(`${BFE_API}/bfe/round-groups?event=${encodeURIComponent(name)}`)
+      ]);
+      const cd = configRes.ok ? await configRes.json() : null;
+      const gd = groupsRes.ok ? await groupsRes.json() : null;
+      if (cd && cd.config && !configData) configData = cd; // keep first valid config for round order/venue even if this candidate has no groups yet
+      const r = (gd && Array.isArray(gd.rows)) ? gd.rows : [];
+      if (r.length) { configData = cd; rows = r; break; } // a candidate with actual groups wins outright
+    }
     const rounds = (configData && configData.config && Array.isArray(configData.config.rounds)) ? configData.config.rounds : [];
-    const rows = (groupsData && Array.isArray(groupsData.rows)) ? groupsData.rows : [];
     if (!rows.length) {
       listEl.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted)">Groups haven\'t been posted yet — check back closer to the event.</div>';
       return;
