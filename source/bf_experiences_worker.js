@@ -629,7 +629,7 @@ export default {
       try { body = await request.json(); } catch (e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { event_name, event_family, event_date, hcp_mode, status, tee_policy, payout_plan, rounds, roster, pin } = body;
+      const { event_name, event_family, event_date, event_end_date, hcp_mode, status, tee_policy, payout_plan, rounds, roster, pin } = body;
       if (String(pin) !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -637,13 +637,17 @@ export default {
         return new Response(JSON.stringify({ error: 'event_name and rounds (array) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       try {
+        // Dev-77: event_end_date is optional and additive — a NULL/undefined
+        // value here just means "single-day event," same as before this
+        // column existed. Requires the bfe_events.event_end_date column
+        // (migration below) to already exist — see Dev-77 note.
         await env.DB.prepare(
-          `INSERT INTO bfe_events (event_name, event_family, event_date, hcp_mode, status, tee_policy, payout_plan, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `INSERT INTO bfe_events (event_name, event_family, event_date, event_end_date, hcp_mode, status, tee_policy, payout_plan, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
            ON CONFLICT(event_name) DO UPDATE SET
-             event_family = excluded.event_family, event_date = excluded.event_date, hcp_mode = excluded.hcp_mode, status = excluded.status,
+             event_family = excluded.event_family, event_date = excluded.event_date, event_end_date = excluded.event_end_date, hcp_mode = excluded.hcp_mode, status = excluded.status,
              tee_policy = excluded.tee_policy, payout_plan = excluded.payout_plan, updated_at = excluded.updated_at`
-        ).bind(event_name, event_family || null, event_date || null, hcp_mode || 'fixed', status || 'draft',
+        ).bind(event_name, event_family || null, event_date || null, event_end_date || null, hcp_mode || 'fixed', status || 'draft',
                tee_policy ? JSON.stringify(tee_policy) : null, payout_plan ? JSON.stringify(payout_plan) : null).run();
 
         const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(event_name).first();
@@ -726,7 +730,7 @@ export default {
         }));
 
         const config = {
-          eventName: eventRow.event_name, eventFamily: eventRow.event_family, eventDate: eventRow.event_date, hcpMode: eventRow.hcp_mode,
+          eventName: eventRow.event_name, eventFamily: eventRow.event_family, eventDate: eventRow.event_date, eventEndDate: eventRow.event_end_date, hcpMode: eventRow.hcp_mode,
           status: eventRow.status, teePolicy: eventRow.tee_policy ? JSON.parse(eventRow.tee_policy) : null,
           payout: eventRow.payout_plan ? JSON.parse(eventRow.payout_plan) : null,
           roster, rounds
