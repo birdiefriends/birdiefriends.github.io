@@ -1838,6 +1838,14 @@ async function buildAndAssembleConfig() {
   const teePolicy = readTeePolicyGlobal(); // {mode, byVenue: {[venueId]: {...}}} — Dev-74
   const roundsInput = readRoundsInput();
   if (!roundsInput.length) throw new Error('Add at least one round.');
+  // Dev-77: bfe_event_rounds has a UNIQUE(event_id, name) constraint — Save
+  // used to let a duplicate round name reach the Worker and come back as a
+  // raw D1_ERROR/SQLITE_CONSTRAINT message. Catch it here instead, before
+  // any network round-trip, for both Generate and Save.
+  const roundNameCounts = {};
+  roundsInput.forEach(r => { roundNameCounts[r.name] = (roundNameCounts[r.name] || 0) + 1; });
+  const dupeRoundName = Object.keys(roundNameCounts).find(n => roundNameCounts[n] > 1);
+  if (dupeRoundName) throw new Error(`Two rounds are both named "${dupeRoundName}" — round names must be unique.`);
   const firstRound = roundsInput.find(r => r.engine === 'stableford_quota');
   if (firstRound && !teePolicy.byVenue[firstRound.venueId]) {
     throw new Error(`Pick "${firstRound.name}"'s venue and fill in its tee policy block before generating.`);
