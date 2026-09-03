@@ -12993,13 +12993,8 @@ async function loadCardGroups() {
       if (r.length) { configData = cd; rows = r; break; } // a candidate with actual groups wins outright
     }
     const rounds = (configData && configData.config && Array.isArray(configData.config.rounds)) ? configData.config.rounds : [];
-    if (!rows.length) {
-      listEl.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted)">Groups haven\'t been posted yet — check back closer to the event.</div>';
-      return;
-    }
-    // Flat rows -> {round_name: [[player,...], ...]} — same shape/transform
-    // BFE-Admin's buildResultsData uses for the published results page, so
-    // this always matches what that page shows.
+    // Flat rows -> {round_name: [player,...][]} — same shape/transform
+    // BFE-Admin's buildResultsData uses for the published results page.
     const byRound = {};
     rows.forEach(row => {
       const byIdx = (byRound[row.round_name] = byRound[row.round_name] || {});
@@ -13008,41 +13003,74 @@ async function loadCardGroups() {
     Object.keys(byRound).forEach(rn => {
       byRound[rn] = Object.keys(byRound[rn]).sort((a, b) => a - b).map(k => byRound[rn][k]);
     });
-    // Round order from the event config (its own sort_order, matches Setup)
-    // when the fetch succeeded; falls back to whatever order the flat rows
-    // implied (already ASC by round_name from the Worker) otherwise.
-    const roundNames = rounds.length ? rounds.map(r => r.name) : Object.keys(byRound);
+    // This card is ONE round's card — show only that round's groups, never
+    // another round's, even if that other round is all that's been
+    // generated so far in BFE-Admin (Dev-78 fix: was showing every round
+    // that had groups, so the Rd2 card was displaying Rd1's foursomes).
+    const targetRoundName = resolveTargetRoundName(evt.name, rounds, Object.keys(byRound));
+    const groups = targetRoundName ? byRound[targetRoundName] : null;
+    if (!groups || !groups.length) {
+      listEl.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted)">Groups haven\'t been posted yet for this round — check back closer to tee time.</div>';
+      return;
+    }
+    const targetRound = rounds.find(r => r.name === targetRoundName);
     const norm = s => (s || '').trim().toLowerCase();
     const me = norm(currentPlayer);
-    const blocks = roundNames
-      .filter(rn => byRound[rn])
-      .map(rn => renderGroupRoundBlock(rn, (rounds.find(r => r.name === rn) || {}).venue, byRound[rn], me));
-    listEl.innerHTML = blocks.join('') || '<div style="font-size:0.8rem;color:var(--text-muted)">Groups haven\'t been posted yet — check back closer to the event.</div>';
+    listEl.innerHTML = renderGroupRoundBlock(targetRound && targetRound.venue, groups, me);
   } catch(e) {
     listEl.innerHTML = '';
     showToast('Error loading groups: ' + e.message, true);
   }
 }
 
-function renderGroupRoundBlock(roundName, venue, groups, meNormalized) {
+// Picks which single round's groups this card should show. Preference
+// order: 1) a round whose round_name matches the card's own title exactly
+// — the observed BFE-Admin convention, where round_name IS the full card
+// title (e.g. "2026 Wally Cup - Rd1"); checked first against whichever
+// round_names actually have groups saved, then against Setup's round list
+// (so a round with nothing posted yet still resolves to itself, rather than
+// silently falling through to some other round). 2) a round whose name
+// contains the same "RdN"/"Round N" token as the card title, for events
+// where the round was named more tersely than the full card title.
+// 3) positional — the Nth round in Setup's own order, same N as parsed
+// from the card title. Returns null only when nothing at all lines up
+// (an unfamiliar naming scheme), which the caller treats as "not posted."
+function resolveTargetRoundName(evtName, rounds, groupedRoundNames) {
+  const norm = s => (s || '').trim().toLowerCase();
+  const exactGrouped = groupedRoundNames.find(k => norm(k) === norm(evtName));
+  if (exactGrouped) return exactGrouped;
+  const exactRound = rounds.find(r => norm(r.name) === norm(evtName));
+  if (exactRound) return exactRound.name;
+  const m = (evtName || '').match(/(?:Rd|Round)\.?\s*(\d+)\s*$/i);
+  if (!m) {
+    if (rounds.length === 1) return rounds[0].name;
+    if (groupedRoundNames.length === 1) return groupedRoundNames[0];
+    return null;
+  }
+  const n = parseInt(m[1], 10);
+  const token = new RegExp('(?:^|[\\s-])(?:Rd|Round)\\.?\\s*' + n + '\\b', 'i');
+  const byTokenGrouped = groupedRoundNames.find(k => token.test(k));
+  if (byTokenGrouped) return byTokenGrouped;
+  const byTokenRound = rounds.find(r => token.test(r.name || ''));
+  if (byTokenRound) return byTokenRound.name;
+  return rounds[n - 1] ? rounds[n - 1].name : null;
+}
+
+function renderGroupRoundBlock(venue, groups, meNormalized) {
   const norm = s => (s || '').trim().toLowerCase();
   return `
-    <div style="margin-bottom:14px">
-      <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.02em;margin-bottom:6px">
-        ${roundName}${venue ? ` · ${venue}` : ''}
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        ${groups.map((g, i) => {
-          const hasMe = !!meNormalized && g.some(n => norm(n) === meNormalized);
-          return `<div style="border:1.5px solid ${hasMe ? 'var(--green)' : 'var(--border)'};border-radius:8px;padding:8px 10px;
-            background:${hasMe ? 'rgba(29,158,117,0.08)' : 'var(--card)'}">
-            <div style="font-size:0.72rem;font-weight:700;color:${hasMe ? 'var(--green)' : 'var(--text-muted)'};margin-bottom:3px">
-              Group ${i + 1}${hasMe ? ' — YOU' : ''}
-            </div>
-            <div style="font-size:0.85rem;color:var(--text)">${g.join(', ')}</div>
-          </div>`;
-        }).join('')}
-      </div>
+    ${venue ? `<div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.02em;margin-bottom:6px">${venue}</div>` : ''}
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${groups.map((g, i) => {
+        const hasMe = !!meNormalized && g.some(n => norm(n) === meNormalized);
+        return `<div style="border:1.5px solid ${hasMe ? 'var(--green)' : 'var(--border)'};border-radius:8px;padding:8px 10px;
+          background:${hasMe ? 'rgba(29,158,117,0.08)' : 'var(--card)'}">
+          <div style="font-size:0.72rem;font-weight:700;color:${hasMe ? 'var(--green)' : 'var(--text-muted)'};margin-bottom:3px">
+            Group ${i + 1}${hasMe ? ' — YOU' : ''}
+          </div>
+          <div style="font-size:0.85rem;color:var(--text)">${g.join(', ')}</div>
+        </div>`;
+      }).join('')}
     </div>`;
 }
 
