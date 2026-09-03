@@ -886,7 +886,7 @@ document.getElementById('generateTestScorecardsBtn').addEventListener('click', a
         // regenerated for a round that was already closed once) — only an EARLIER round's
         // loss makes someone permanently out here.
         //
-        // Dev-88: "earlier" means earlier in roundsList's own order (index-based), not just
+        // Dev-76: "earlier" means earlier in roundsList's own order (index-based), not just
         // "any other round with this name" — see the matching Close Round fix for why a
         // later round's loss must never count against an earlier one.
         const roundIdx88 = roundsList.findIndex(r => r.name === roundName);
@@ -2564,7 +2564,7 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     // wb_status still landed on 'No' either way (right status, wrong/missing detail). Must
     // exclude the round being closed right now from what counts as "earlier."
     //
-    // Dev-88 (bug found while diagnosing Brian's Rd1/Rd2/Rd3 backfill re-close): excluding
+    // Dev-76 (bug found while diagnosing Brian's Rd1/Rd2/Rd3 backfill re-close): excluding
     // only THIS round wasn't enough — "r.round_name !== roundName" treats every OTHER round
     // as "earlier," including rounds that haven't happened yet chronologically. Re-closing
     // Rd1 AFTER Rd2/Rd3 already had their own (correct) results meant Rd2/Rd3 losses got
@@ -2839,7 +2839,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       const roundPerf = quotaPerf + (keptWB ? wbBonusPts : 0);
       const vsPar = computeVsPar(holesByPlayer[r0.player_name]);
       const totalPayout = (r0.payout_podium || 0) + (r0.payout_skins || 0) + (r0.payout_cttp || 0);
-      // Dev-89 (Brian): split what used to be one crammed "Scored X · ..." string
+      // Dev-76 (Brian): split what used to be one crammed "Scored X · ..." string
       // into two grid cells — the score stays with Quota (row 1, what got you
       // here), and the hole/bonus/already-out detail moves down next to the
       // Wally Ball pill (row 2, what happened to the ball) — same information,
@@ -3027,7 +3027,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       status = 'OUT'; statusClass = 'wb-status-out';
       detail = lossRow ? `Lost ${roundLabelByName[lossRound]} — hole ${lossRow.wb_hole}-${lossRow.wb_stroke}` : 'Out.';
     }
-    // Dev-90 (Brian): show this section ordered by how long each player held
+    // Dev-76 (Brian): show this section ordered by how long each player held
     // the ball — winner(s) first, then anyone still in it (pre-Final), then
     // everyone out, longest-survived to first-eliminated. "Survived longest"
     // is the same key used for the tiebreak above: later round beats earlier
@@ -3136,7 +3136,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .wb-in{background:rgba(111,191,126,0.14);color:var(--good);}
 .wb-out{background:rgba(224,160,80,0.14);color:var(--bad);}
 .wb-detail{font-size:12.5px;font-weight:400;}
-/* Dev-89 (Brian): a real grid, so the numbers line up down the whole list
+/* Dev-76 (Brian): a real grid, so the numbers line up down the whole list
    instead of drifting left/right per row the way a wrapping flex line does.
    Name gets its own full-width line first — real names (e.g. "Jordan
    Knappenberger") don't survive being squeezed into a fixed grid column
@@ -3412,7 +3412,7 @@ async function fetchResultsPageData() {
     try {
       const res = await fetch(bfeBase + '/scorecards?event=' + encodeURIComponent(r.name));
       const body = await res.json();
-      // Dev-89: GET /scorecards returns {ok, scorecards:[...]}, not a bare array —
+      // Dev-76: GET /scorecards returns {ok, scorecards:[...]}, not a bare array —
       // Array.isArray(body) was always false here, so scorecardsByRound was always
       // empty and vs-par never had hole data to compute from. Read the right key.
       scorecardsByRound[r.name] = Array.isArray(body.scorecards) ? body.scorecards : [];
