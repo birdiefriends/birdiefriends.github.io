@@ -12980,7 +12980,7 @@ async function loadCardGroups() {
   const listEl = document.getElementById('card-group-list');
   if (!evt || !listEl) return;
   try {
-    let configData = null, rows = [];
+    let configData = null, rows = [], winningName = null;
     for (const name of bfeEventNameCandidates(evt.name)) {
       const [configRes, groupsRes] = await Promise.all([
         fetch(`${BFE_API}/bfe/events?event=${encodeURIComponent(name)}`),
@@ -12990,15 +12990,36 @@ async function loadCardGroups() {
       const gd = groupsRes.ok ? await groupsRes.json() : null;
       if (cd && cd.config && !configData) configData = cd; // keep first valid config for round order/venue even if this candidate has no groups yet
       const r = (gd && Array.isArray(gd.rows)) ? gd.rows : [];
-      if (r.length) { configData = cd; rows = r; break; } // a candidate with actual groups wins outright
+      if (r.length) { configData = cd; rows = r; winningName = name; break; } // a candidate with actual groups wins outright
     }
     const rounds = (configData && configData.config && Array.isArray(configData.config.rounds)) ? configData.config.rounds : [];
-    // Flat rows -> {round_name: [player,...][]} — same shape/transform
-    // BFE-Admin's buildResultsData uses for the published results page.
+    const roster = (configData && configData.config && Array.isArray(configData.config.roster)) ? configData.config.roster : [];
+
+    // Dev-79 (Brian): show each player's/team's quota right on the
+    // groupings card instead of only in the closed-round results report —
+    // "a consistent way to understand what's expected of a player for each
+    // rd." Needs every closed round's quota_in/quota_out, one extra fetch
+    // for whichever event-name candidate above actually had groups saved.
+    // Non-fatal if this fails — groupings still render, just without quotas.
+    let allResults = [];
+    if (winningName) {
+      try {
+        const resultsRes = await fetch(`${BFE_API}/bfe/round-results?event=${encodeURIComponent(winningName)}`);
+        const rd = resultsRes.ok ? await resultsRes.json() : null;
+        allResults = (rd && Array.isArray(rd.results)) ? rd.results : [];
+      } catch (e) { /* quotas just won't show */ }
+    }
+
+    // Flat rows -> {round_name: [{players:[...], label}, ...]} — same
+    // group_index shape BFE-Admin's buildResultsData uses, plus each
+    // group's team_label (Dev-78 2Man nicknames) carried through instead of
+    // dropped, so the 2Man case below can show it.
     const byRound = {};
     rows.forEach(row => {
       const byIdx = (byRound[row.round_name] = byRound[row.round_name] || {});
-      (byIdx[row.group_index] = byIdx[row.group_index] || []).push(row.player_name);
+      const g = (byIdx[row.group_index] = byIdx[row.group_index] || { players: [], label: null });
+      g.players.push(row.player_name);
+      if (row.team_label) g.label = row.team_label;
     });
     Object.keys(byRound).forEach(rn => {
       byRound[rn] = Object.keys(byRound[rn]).sort((a, b) => a - b).map(k => byRound[rn][k]);
@@ -13016,7 +13037,8 @@ async function loadCardGroups() {
     const targetRound = rounds.find(r => r.name === targetRoundName);
     const norm = s => (s || '').trim().toLowerCase();
     const me = norm(currentPlayer);
-    listEl.innerHTML = renderGroupRoundBlock(targetRound && targetRound.venue, groups, me);
+    const quotaInfo = buildQuotaInfo(targetRound, rounds, roster, allResults);
+    listEl.innerHTML = renderGroupRoundBlock(targetRound && targetRound.venue, groups, me, quotaInfo);
   } catch(e) {
     listEl.innerHTML = '';
     showToast('Error loading groups: ' + e.message, true);
@@ -13056,19 +13078,90 @@ function resolveTargetRoundName(evtName, rounds, groupedRoundNames) {
   return rounds[n - 1] ? rounds[n - 1].name : null;
 }
 
-function renderGroupRoundBlock(venue, groups, meNormalized) {
+// Dev-79 (Brian): quota "expected of a player" for the target round's
+// groupings card, instead of only showing up later in the closed-round
+// results report. Individual (stableford) rounds show each player's own
+// quotaIn for THAT round — the same single number that round's own results
+// section will use once it closes (quota_out of the round it chains from,
+// or the roster's starting quota for the very first round; no averaging —
+// a single round's quota is always just one snapshot). 2Man teams instead
+// show the smoothed Dev-78 team quota (each partner's own quota averaged
+// across every stableford round played so far, then the two partners
+// averaged together) via chainQuotaAverage below, since a team's quota
+// deliberately isn't a single-round snapshot the way an individual's is.
+function buildQuotaInfo(round, rounds, roster, allResults) {
+  if (!round) return null;
+  const byPlayer = {};
+  if (round.engine === 'scramble_pair') {
+    roster.forEach(p => { byPlayer[p.name] = chainQuotaAverage(p.name, round.chainsFrom, rounds, allResults, p.initialQuota); });
+    return { mode: 'team', byPlayer };
+  }
+  roster.forEach(p => {
+    if (!round.chainsFrom) { byPlayer[p.name] = numOrNull(p.initialQuota); return; }
+    const row = allResults.find(r => r.round_name === round.chainsFrom && r.player_name === p.name);
+    byPlayer[p.name] = (row && row.quota_out != null && !isNaN(row.quota_out)) ? Number(row.quota_out) : numOrNull(p.initialQuota);
+  });
+  return { mode: 'individual', byPlayer };
+}
+
+function numOrNull(v) { return (v === null || v === undefined || isNaN(v)) ? null : Number(v); }
+
+// Mirrors BFE-Admin's Dev-78 team-quota chain walk exactly: every
+// stableford round from the first up through `chainsFromName`, averaging
+// each round's quota_in plus the final round's quota_out (the quota
+// entering the round right after) into one smoothed number for this
+// player. Falls back to `fallbackInitial` (roster starting quota) if
+// nothing in the chain has this player's data yet.
+function chainQuotaAverage(playerName, chainsFromName, rounds, allResults, fallbackInitial) {
+  if (!chainsFromName) return numOrNull(fallbackInitial);
+  const chainRoundNames = [];
+  let cursor = chainsFromName;
+  while (cursor) {
+    chainRoundNames.unshift(cursor);
+    const cursorRound = rounds.find(r => r.name === cursor);
+    cursor = cursorRound ? cursorRound.chainsFrom : null;
+  }
+  const vals = [];
+  chainRoundNames.forEach(rn => {
+    const row = allResults.find(r => r.round_name === rn && r.player_name === playerName);
+    if (row && row.quota_in != null && !isNaN(row.quota_in)) vals.push(Number(row.quota_in));
+  });
+  const lastRow = allResults.find(r => r.round_name === chainsFromName && r.player_name === playerName);
+  if (lastRow && lastRow.quota_out != null && !isNaN(lastRow.quota_out)) vals.push(Number(lastRow.quota_out));
+  return vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : numOrNull(fallbackInitial);
+}
+
+function renderGroupRoundBlock(venue, groups, meNormalized, quotaInfo) {
   const norm = s => (s || '').trim().toLowerCase();
+  const fmtQ = v => (v == null) ? '—' : (Math.round(v * 10) / 10).toString();
   return `
     ${venue ? `<div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.02em;margin-bottom:6px">${venue}</div>` : ''}
     <div style="display:flex;flex-direction:column;gap:6px">
       ${groups.map((g, i) => {
-        const hasMe = !!meNormalized && g.some(n => norm(n) === meNormalized);
+        const hasMe = !!meNormalized && g.players.some(n => norm(n) === meNormalized);
+        let bodyHtml;
+        if (quotaInfo && quotaInfo.mode === 'team') {
+          // One line per team — nickname (or real names, if none set yet)
+          // plus the smoothed team quota, "Nickname/Quota" per Brian's
+          // spec. Real names stay visible underneath whenever a nickname
+          // IS set — it's a display label layered on top, never a
+          // replacement for who's actually on the team.
+          const teamLabel = (g.label && g.label.trim()) ? g.label.trim() : g.players.join(' & ');
+          const vals = g.players.map(n => quotaInfo.byPlayer[n]).filter(v => v != null);
+          const teamQuota = vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : null;
+          bodyHtml = `<div style="font-size:0.85rem;color:var(--text)">${teamLabel}/${fmtQ(teamQuota)}</div>` +
+            ((g.label && g.label.trim()) ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${g.players.join(' & ')}</div>` : '');
+        } else if (quotaInfo && quotaInfo.mode === 'individual') {
+          bodyHtml = `<div style="font-size:0.85rem;color:var(--text)">${g.players.map(n => `${n}, ${fmtQ(quotaInfo.byPlayer[n])}`).join('; ')}</div>`;
+        } else {
+          bodyHtml = `<div style="font-size:0.85rem;color:var(--text)">${g.players.join(', ')}</div>`;
+        }
         return `<div style="border:1.5px solid ${hasMe ? 'var(--green)' : 'var(--border)'};border-radius:8px;padding:8px 10px;
           background:${hasMe ? 'rgba(29,158,117,0.08)' : 'var(--card)'}">
           <div style="font-size:0.72rem;font-weight:700;color:${hasMe ? 'var(--green)' : 'var(--text-muted)'};margin-bottom:3px">
             Group ${i + 1}${hasMe ? ' — YOU' : ''}
           </div>
-          <div style="font-size:0.85rem;color:var(--text)">${g.join(', ')}</div>
+          ${bodyHtml}
         </div>`;
       }).join('')}
     </div>`;
