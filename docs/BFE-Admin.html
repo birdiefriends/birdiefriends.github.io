@@ -2321,13 +2321,18 @@ function populateCloseRoundSelect(config) {
   const sel = document.getElementById('closeRoundSelect');
   const btn = document.getElementById('closeRoundBtn');
   const checkBtn = document.getElementById('checkScorecardsBtn');
-  const supported = (config.rounds || []).filter(r => r.engine === 'stableford_quota');
+  // Dev-79 fix: this only ever listed stableford_quota rounds, so the
+  // closeTeamRound path built for 2Man (and its own branch in the
+  // closeRoundBtn handler below) was wired up but unreachable — a 2Man
+  // round could never actually be SELECTED here to close. scramble_pair
+  // rounds now show up too.
+  const supported = (config.rounds || []).filter(r => r.engine === 'stableford_quota' || r.engine === 'scramble_pair');
   if (!supported.length) {
-    sel.innerHTML = '<option value="">— no Stableford quota rounds in this event —</option>';
+    sel.innerHTML = '<option value="">— no closeable rounds in this event —</option>';
     btn.disabled = true;
     if (checkBtn) checkBtn.disabled = true;
   } else {
-    sel.innerHTML = supported.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}</option>`).join('');
+    sel.innerHTML = supported.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}${r.engine === 'scramble_pair' ? ' (2Man)' : ''}</option>`).join('');
     btn.disabled = false;
     if (checkBtn) checkBtn.disabled = false;
   }
@@ -2561,6 +2566,75 @@ document.getElementById('checkScorecardsBtn').addEventListener('click', async ()
   const resultsEl = document.getElementById('scorecardCheckResults');
   const roundName = document.getElementById('closeRoundSelect').value;
   if (!roundName) { statusEl.className = 'status err'; statusEl.textContent = 'Pick a round first.'; resultsEl.innerHTML = ''; return; }
+
+  // Dev-79: 2Man scorecards are submitted under TEAM display names (nickname
+  // or "PlayerA & PlayerB"), never individual roster names — checking
+  // against the roster like every other round would misreport every real
+  // submission as "unrecognized" and every team as "missing." Check against
+  // the saved draft from section 11 instead.
+  const roundForCheck = readRoundsInput().find(r => r.name === roundName);
+  if (roundForCheck && roundForCheck.engine === 'scramble_pair') {
+    statusEl.className = 'status ok';
+    statusEl.textContent = `Checking scorecards for "${roundName}"…`;
+    resultsEl.innerHTML = '';
+    try {
+      const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+      const eventName = document.getElementById('eventName').value.trim();
+      if (!base || !eventName) throw new Error('Enter the Worker URL and Event name above first.');
+      const groupsRes = await fetch(base + '/bfe/round-groups?event=' + encodeURIComponent(eventName) + '&round=' + encodeURIComponent(roundName));
+      const groupsData = await groupsRes.json();
+      if (!groupsRes.ok) throw new Error(groupsData.error || `HTTP ${groupsRes.status}`);
+      const byIdx = {};
+      (groupsData.rows || []).forEach(r => {
+        byIdx[r.group_index] = byIdx[r.group_index] || { players: [], label: r.team_label || null };
+        byIdx[r.group_index].players.push(r.player_name);
+      });
+      const teamRows = Object.keys(byIdx).map(Number).sort((a, b) => a - b)
+        .map(gi => byIdx[gi]).map(t => ({ ...t, displayName: teamDisplayName(t.players, t.label) }));
+      if (!teamRows.length) throw new Error('No teams saved for this round yet — build the draft in section 11 (Player groupings) first.');
+
+      const byPlayer = await jfFetchRoundScorecards(roundName);
+      const submittedNames = Object.keys(byPlayer);
+      const norm = s => (s || '').trim().toLowerCase();
+      const submitted = teamRows.filter(t => submittedNames.some(s => norm(s) === norm(t.displayName)));
+      const missing = teamRows.filter(t => !submittedNames.some(s => norm(s) === norm(t.displayName)));
+      const unrecognized = submittedNames.filter(s => !teamRows.some(t => norm(t.displayName) === norm(s)));
+
+      statusEl.className = 'status ' + (missing.length ? 'err' : 'ok');
+      statusEl.textContent = `${submitted.length}/${teamRows.length} teams submitted for "${roundName}"` +
+        (missing.length ? ` — ${missing.length} missing` : ' — ✅ all teams in') +
+        (unrecognized.length ? ` · ${unrecognized.length} unrecognized name(s) on Jotform` : '');
+
+      let html = '';
+      if (submitted.length) {
+        html += submitted.slice().sort((a, b) => a.displayName.localeCompare(b.displayName)).map(t => {
+          const sc = byPlayer[submittedNames.find(s => norm(s) === norm(t.displayName))];
+          return `<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)">
+            <span>✅ ${escapeHtml(t.displayName)}</span><span class="badge">${sc.actualPoints} pts</span></div>`;
+        }).join('');
+      }
+      if (missing.length) {
+        html += `<div class="subtle" style="margin-top:10px;font-weight:600;color:var(--warn)">Missing</div>`;
+        html += missing.slice().sort((a, b) => a.displayName.localeCompare(b.displayName)).map(t =>
+          `<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)">
+            <span style="color:var(--warn)">⚠️ ${escapeHtml(t.displayName)}</span><span class="subtle">not submitted</span></div>`
+        ).join('');
+      }
+      if (unrecognized.length) {
+        html += `<div class="subtle" style="margin-top:10px;font-weight:600;color:var(--err)">On Jotform, not a saved team</div>`;
+        html += unrecognized.map(name =>
+          `<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)">
+            <span style="color:var(--err)">❓ ${escapeHtml(name)}</span><span class="subtle">won't count toward anyone — check it matches a team's exact display name</span></div>`
+        ).join('');
+      }
+      resultsEl.innerHTML = html;
+    } catch (e) {
+      statusEl.className = 'status err';
+      statusEl.textContent = 'Check failed: ' + e.message;
+    }
+    return;
+  }
+
   const roster = readRosterInput();
   if (!roster.length) { statusEl.className = 'status err'; statusEl.textContent = 'Add players to the roster in section 3 first.'; resultsEl.innerHTML = ''; return; }
 
