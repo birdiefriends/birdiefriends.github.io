@@ -1,13 +1,13 @@
 # BF Experiences (BFE) / Wally Cup — Competitive Events Architecture Spec
 
-**Status as of Dev-76 (2026-09-03, closed).** Committed to the repo for the first time in
+**Status as of Dev-77 (2026-09-03, closed).** Committed to the repo for the first time in
 Dev-73 — it existed only as a local file (`WC_spec.txt`, from Dev-71) before that. Rd1
 tees off 10am, 9/11/2026. Dev-74 believed the full scoring engine (quota, skins, CTP,
 Wally Ball, Overall) was built and end-to-end validated; Dev-75 actually dry-ran the real
 event through it and found that claim was premature — podium-tie payouts and unclaimed-
 CTP-hole money were both silently broken, never exercised by Dev-74's synthetic test
 data. Both are fixed, plus withdraw-a-player support, a Save/Generate ordering bug fix,
-and a Close Round roster-vs-scorecard mismatch alert. **Dev-76 built §8 Phase 3** — the
+and a Close Round roster-vs-scorecard mismatch alert. Dev-76 built §8 Phase 3 — the
 player-facing results page — end to end against the real (test/dry-run) D1 data, added
 CTP hole-winner persistence (`bfe_round_cttp`), then across four addenda: fixed the
 mobile table layout, matched the portal.html results entry point to the site's existing
@@ -16,10 +16,17 @@ live against real re-closed data, and — after Brian caught it days later — r
 and fixed a Wally Ball season-history regression that a later re-close had silently
 introduced, fixed a vs-par plumbing bug (never actually worked since first built),
 and shipped a 3-iteration mobile-readability redesign of the leaderboard rows plus a
-longest-held-first Wally Ball section sort. **Phase 3 is now genuinely complete** — see
+longest-held-first Wally Ball section sort. Phase 3 was declared genuinely complete —
+then, **Dev-77, hardened further by Brian's own live test**: a results-page date-range
+header, clickable round-rail jump-links, and a real Overall-Standings rendering
+regression (was gated blank until every round closed; fixed to show rolling standings as
+soon as ≥1 round is closed). **Dev-77 also built the Player Groupings + Pinning feature**
+(§8, new) — strategy-based foursome assignment (by quota/standings/social/random) plus an
+optional pinning step to seat fixed players ahead of whichever strategy fills the rest —
+and a Portal-facing "👥 Group" event-card icon so players can see their own foursome. See
 §8 for the corrected phase status. Next up per Brian's own ordering: 2Man scramble
 (§4/§8, still ❓ open), then the Photos/memories phase. For the full narrative reasoning
-behind any decision below, see the Dev-71 through Dev-76 entries (including all four
+behind any decision below, see the Dev-71 through Dev-77 entries (including all four
 Dev-76 addenda) in `BF_Session_Log.md`; this doc is the standing architecture reference,
 not a replacement for that history.
 
@@ -412,7 +419,7 @@ in. No changes as of Dev-73.
 ---
 
 ## 8. Current build status & phased plan (added Dev-73, updated Dev-74, corrected Dev-75,
-updated through Dev-76 addendum 4)
+updated through Dev-77)
 
 This section is the living answer to "what's left" — update it each session rather than
 re-deriving status from scratch. See `BF_Session_Log.md`'s Dev-73 through Dev-76 (all
@@ -521,9 +528,42 @@ addenda) entries for the full reasoning behind this plan.
   absolutely-positioned so it no longer reflows the grid) plus a longest-held-first sort
   for the Wally Ball section. Full root-cause writeups and code detail: the Dev-76
   addendum 4 entry in `BF_Session_Log.md`.
-- **Before real Rd1 (10am 9/11):** the "2026 Wally Cup" event in D1 currently holds
-  Dev-74/75's test data (real roster, generated test scorecards) — needs a clean Data &
+- **Results page fixes (Dev-77, from Brian's own live test against a real event, not new
+  build):** ✅ an event date-range header (new `bfe_events.event_end_date` column,
+  `formatEventDateRange()`); ✅ the Rd1/Rd2/Rd3/Overall step-graph rail made clickable
+  (`<a href="#round-N">`/`#overall` jump-links, matching section `id`s, plus a 4th
+  "Overall" rail node with its own in-progress visual state); ✅ a genuine regression
+  fixed — Overall Standings was gated blank behind full `isComplete` instead of just the
+  champion reveal, even though the rolling-standings math was already correct for partial
+  data the whole time. Now shows as soon as ≥1 round is closed.
+- **Player Groupings + Pinning (added Dev-77): ✅ built and live.** New BFE-Admin §11
+  "Player groupings" — foursome assignment via a strategy picker (by quota, by standings,
+  by social, random), built general-purpose per Brian's own framing rather than a
+  Wally-Cup-only one-off, in response to his ask to prioritize social mixing over the
+  skill-based flighting used in past years. New `bfe_round_groups` table (event_id,
+  round_name, group_index, player_name, strategy) — deliberately separate from
+  `bfe_event_rounds`, since Setup Save fully replaces rounds/roster on every save and
+  would silently wipe a groups column. Two new Worker routes: `POST`/`GET
+  /bfe/round-groups` (full-replace per round / flat rows across all rounds in one fetch).
+  Social strategy hand-verifies a zero-repeat schedule for the real 16/4-group/3-round
+  case and falls back to a random-search pair-history minimizer generally; flighted
+  strategies (quota/standings) chunk a pre-sorted roster into consecutive slices, not
+  round-robin (would interleave skill levels across every group). **Pinning:** an
+  optional fixed-seat step (`applyPins()`) ahead of whichever strategy fills the rest —
+  used to seat three historic WC champions (Tom Arnold, Bill Steirer, Mohamed Walli) as
+  an honorary Rd1 Group 1. Also fixed the same session: a `DELETE /bfe/events/:name`
+  cascade bug (missing `bfe_round_groups`) that broke deleting any event with saved
+  groups. **Portal-facing:** the event card's "🏆 Results" icon (Dev-76 addendum 2,
+  judged redundant with the Results tab's own link) was replaced with a "👥 Group" icon
+  opening a sheet that reads `bfe_round_groups` live and highlights the current player's
+  own foursome, correctly scoped to that card's own round (not the umbrella event's, and
+  not another round's — see the Dev-77 entry in `BF_Session_Log.md` for the two
+  event-name/round-scoping bugs found and fixed here via Brian's own live testing).
+- **Before real Rd1 (10am 9/11):** the "2026 Wally Cup" event in D1 held Dev-74/75's test
+  data (real roster, generated test scorecards) through Dev-76 — needed a clean Data &
   Reset → Delete and fresh Setup with the real roster/tee assignments before the real
-  event, so real Rd1 doesn't chain off test quota_out values. **Still not done** — every
-  session through Dev-76 addendum 4 has used this test data for verification rather than
-  doing the cleanup; it remains the one prerequisite before the real event.
+  event, so real Rd1 doesn't chain off test quota_out values. **Likely done as of Dev-77**
+  — a live Rd1 groupings screenshot this session showed the real roster in the
+  honorary-pin arrangement, which couldn't be old test data since pinning didn't exist
+  before this session — but not explicitly confirmed in words by Brian. **Verify before
+  relying on it for real Rd1.**
