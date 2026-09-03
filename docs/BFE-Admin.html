@@ -313,7 +313,7 @@
   <!-- ── Close a round (Dev-74 — Wally Cup scoring engine) ────────────── -->
   <section class="card">
     <h2>8. Close a round</h2>
-    <p class="hint">Pulls that round's scorecards straight from Jotform, computes skins and Closest-to-Pin, and saves the result — round pot payout included (podium, skins, and CTP). "Stableford quota" rounds also run the quota engine (including any Wally Ball bonus) and feed Overall Standings. "2-man scramble" rounds close against the teams saved in section 11 (Player groupings → Draft) instead of the individual roster — same points-per-hole scoring, no quota, one scorecard per team — and never feed Overall Standings, no matter what this round's "Rolls into Overall" box in section 4 says. CTP always pays the individual who's the most-recent qualifying claimant on each hole configured for this round's venue in section 5 — same rule the live leaderboard uses, even in a team round. Load or Generate the event above first.</p>
+    <p class="hint">Pulls that round's scorecards straight from Jotform, computes skins and Closest-to-Pin, and saves the result — round pot payout included (podium, skins, and CTP). "Stableford quota" rounds also run the individual quota engine (including any Wally Ball bonus) and feed Overall Standings. "2-man scramble" rounds close against the teams saved in section 11 (Player groupings → Draft) instead of the individual roster — one scorecard per team, ranked by that team's score against a TEAM quota (the two partners' own current individual quotas averaged — read from the most recent closed stableford round, must be closed first) — and never feed Overall Standings, no matter what this round's "Rolls into Overall" box in section 4 says. CTP always pays the individual who's the most-recent qualifying claimant on each hole configured for this round's venue in section 5 — same rule the live leaderboard uses, even in a team round. Load or Generate the event above first.</p>
     <div class="row">
       <div style="flex:2"><label for="closeRoundSelect">Round</label><select id="closeRoundSelect"><option value="">— load/generate the event above first —</option></select></div>
       <div style="align-self:flex-end"><button type="button" id="checkScorecardsBtn" disabled>📋 Check scorecards</button></div>
@@ -475,24 +475,35 @@ function computeStablefordQuota(input, params) {
 // Dev-78 (2Man scramble) — previously scored by ascending net/gross STROKE
 // total (lower wins), and was never actually fed `input.teams` by Close
 // Round — see the "Only 'Stableford quota' rounds are wired up right now"
-// hint that used to sit on section 8, this was dead/stub code. Per Brian
-// (this session): 2Man keeps the exact same per-hole POINTS scoring already
-// used for the individual stableford rounds — higher wins, same as
-// computePointsByScoreType/computeStablefordQuota's basePoints — just one
-// scorecard per TEAM instead of per player, and no quota/handicap target at
-// all (no adjustQuota, no quotaIn/quotaOut). `t.actualPoints` is the team's
-// scorecard total, read the identical way `p.actualPoints` is for every
-// other round (see the Close Round team-round branch that builds this).
+// hint that used to sit on section 8, this was dead/stub code.
+//
+// Per Brian (same session, later revision): 2Man keeps the exact same
+// per-hole POINTS scoring already used for the individual stableford rounds
+// — `t.actualPoints` is the team's scorecard total, read the identical way
+// `p.actualPoints` is for every other round. What changed from the FIRST cut
+// of this engine is `t.quotaIn` — walking through a test draft, Brian raised
+// that raw points alone lets a lucky low-vs-low pairing outscore a stronger
+// pairing just by both partners having an easy day, the same imbalance
+// individual quota golf exists to correct. `t.quotaIn` is a TEAM quota (the
+// two partners' own current individual quotas averaged — see the Close
+// Round team-round branch that builds this from bfe_round_results.quota_out
+// via the round's chainsFrom), so a team is ranked/paid on how far past
+// their OWN combined expectation they played, same principle as every
+// stableford round, just without any quotaOut — nothing rolls forward from
+// a team quota, it's computed fresh each time from real individual quotas.
 function computeScramblePair(input, params) {
-  const entries = input.teams.map(t => ({
-    // `performance` duplicates basePoints (no quota to subtract) purely so
-    // this engine's entries match every other engine's output shape —
-    // Close Round's podium-tie logic reads `e.rankPerformance ?? e.performance`
-    // generically across engines, and no influencer (Wally Ball or otherwise)
-    // ever runs for 2Man, so rankPerformance never gets set here.
-    name: t.label, basePoints: t.actualPoints, performance: t.actualPoints, players: t.players || null
-  }));
-  entries.sort((a, b) => b.basePoints - a.basePoints);
+  const entries = input.teams.map(t => {
+    const hasQuota = t.quotaIn !== null && t.quotaIn !== undefined;
+    const performance = hasQuota ? (t.actualPoints - t.quotaIn) : t.actualPoints;
+    return {
+      // Close Round's podium-tie logic reads `e.rankPerformance ?? e.performance`
+      // generically across engines; no influencer (Wally Ball or otherwise)
+      // ever runs for 2Man, so rankPerformance never gets set here.
+      name: t.label, basePoints: t.actualPoints, quotaIn: hasQuota ? t.quotaIn : null,
+      performance, players: t.players || null
+    };
+  });
+  entries.sort((a, b) => b.performance - a.performance);
   entries.forEach((e, i) => { e.rank = i + 1; });
   return { entries };
 }
@@ -597,6 +608,13 @@ function resolveRoster(players, teePolicy, opts) {
 // round's name (skipping non-stableford rounds), or null if it's the first
 // — this is what generalizes "Rd2 depends on Rd1, 2Man doesn't participate,
 // Rd3 depends on Rd2" into data instead of a hardcoded function.
+//
+// Dev-78 (team quota): a scramble_pair round ALSO gets chainsFrom set to the
+// same most-recent-earlier-stableford round — but read-only. It does NOT
+// become `lastStableford` itself, so it never enters the real quota chain a
+// later stableford round depends on. Close Round's team path reads that
+// round's quota_out per player purely to average two partners into a team
+// quota for THIS round's own scoring — nothing rolls forward from it.
 function buildEventConfig({ eventFamily, isolation, hcpMode, roster, rounds }) {
   let lastStableford = null;
   const wiredRounds = rounds.map(r => {
@@ -604,6 +622,8 @@ function buildEventConfig({ eventFamily, isolation, hcpMode, roster, rounds }) {
     if (r.engine === 'stableford_quota') {
       wired.chainsFrom = lastStableford;
       lastStableford = r.name;
+    } else if (r.engine === 'scramble_pair') {
+      wired.chainsFrom = lastStableford; // read-only context, doesn't advance the chain
     } else {
       wired.chainsFrom = null; // explicit, not omitted — matches what a reload from /bfe/events always returns
     }
@@ -2556,6 +2576,36 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
       return { groupIndex: gi, players: t.players, label: t.label, displayName: teamDisplayName(t.players, t.label) };
     });
 
+    // Dev-78 (team quota) — average each team's two partners' own CURRENT
+    // individual quotas into one team quota, read from `round.chainsFrom`
+    // (the most recent stableford round to close before this one — see
+    // buildEventConfig) same as an individual round reads quota_out to chain
+    // forward, except nothing here ever feeds back into that chain. Falls
+    // back to roster initialQuota if no stableford round has closed yet
+    // (mirrors the individual-round path exactly). A player missing a quota
+    // (e.g. No-HCP) just drops out of their team's average rather than
+    // failing the whole team — noted, not silently hidden, in the close
+    // notes below.
+    let quotaByPlayer = {};
+    if (round.chainsFrom) {
+      const priorRes = await fetch(base + '/bfe/round-results?event=' + encodeURIComponent(eventName));
+      const priorData = await priorRes.json();
+      if (!priorRes.ok) throw new Error(priorData.error || `HTTP ${priorRes.status}`);
+      const priorRows = (priorData.results || []).filter(r => r.round_name === round.chainsFrom);
+      // Same hard-stop as the individual round path — a team quota built off
+      // an unclosed prior round is worse than useless for real payouts.
+      if (!priorRows.length) throw new Error(`This round's team quota reads from "${round.chainsFrom}", which hasn't been closed yet — close it first.`);
+      priorRows.forEach(r => { quotaByPlayer[r.player_name] = r.quota_out; });
+    } else {
+      assembledConfig.roster.forEach(p => { quotaByPlayer[p.name] = p.initialQuota; });
+    }
+    const teamsMissingQuota = [];
+    teams.forEach(t => {
+      const vals = t.players.map(p => quotaByPlayer[p]).filter(v => v !== null && v !== undefined && !isNaN(v));
+      t.teamQuota = vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : null;
+      if (vals.length < t.players.length) teamsMissingQuota.push(t.displayName);
+    });
+
     const scorecards = await jfFetchRoundScorecards(roundName);
     const pot = (assembledConfig.payout?.pots || []).find(p => p.round === roundName);
 
@@ -2602,7 +2652,7 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
       body: JSON.stringify({ event_name: roundName, player: t.displayName, holes: t.sc.holes, total: t.sc.actualPoints, venue: round.venue || null })
     }).catch(e => console.warn('team scorecard persist failed for', t.displayName, e))));
 
-    const engineInput = { teams: teams.map(t => ({ label: t.displayName, actualPoints: t.sc ? t.sc.actualPoints : 0, players: t.players })) };
+    const engineInput = { teams: teams.map(t => ({ label: t.displayName, actualPoints: t.sc ? t.sc.actualPoints : 0, quotaIn: t.teamQuota, players: t.players })) };
     // No influencers — Wally Ball never applies to 2Man regardless of what a
     // stray Wally Ball points value in Setup might say for this round.
     const scored = scoreRound({ engine: round.engine, engineParams: round.engineParams, influencers: [] }, engineInput, {});
@@ -2629,7 +2679,7 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
       const teamCttp = team ? team.players.reduce((s, p) => s + (cttpPayoutByPlayer[p] || 0), 0) : 0;
       return {
         playerName: e.name, actualPoints: e.basePoints,
-        quotaIn: null, performance: null, quotaOut: null,
+        quotaIn: e.quotaIn, performance: e.performance, quotaOut: null,
         wbStatus: null, wbHole: null, wbStroke: null,
         rank: e.rank,
         payoutPodium: podiumTiePayouts[e.name] || 0,
@@ -2650,6 +2700,7 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
     if (missing.length) notes.push(`no scorecard found for: ${missing.join(', ')} (scored 0 pts)`);
     if (unrecognizedScorecards.length) notes.push(`scorecard(s) under an unmatched name, not scored: ${unrecognizedScorecards.join(', ')}`);
     if (cttpUnrecognized.length) notes.push(`CTP claim(s) from a name not on this roster, not paid: ${cttpUnrecognized.map(c => `#${c.hole} ${c.player}`).join(', ')}`);
+    if (teamsMissingQuota.length) notes.push(`team quota missing a partner's quota (No-HCP?), used only what was available: ${teamsMissingQuota.join(', ')}`);
     setCloseRoundStatus(notes.length ? `Saved — ${notes.join('; ')}.` : 'Saved.', notes.length > 0);
     renderTeamCloseRoundResults(roundName, results, skins, cttpWinners, cttpHoles, teams);
     // Deliberately no renderWcStandings() call — 2Man never rolls into
@@ -2664,13 +2715,17 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
 
 function renderTeamCloseRoundResults(roundName, results, skins, cttpWinners, cttpHoles, teams) {
   const teamByName = new Map(teams.map(t => [t.displayName, t]));
-  let html = `<h3>${roundName} — results</h3><table><thead><tr><th>Rank</th><th>Team</th><th>Players</th><th>Score</th><th>Podium $</th><th>Skins $</th><th>CTP $</th></tr></thead><tbody>`;
+  let html = `<h3>${roundName} — results</h3><table><thead><tr><th>Rank</th><th>Team</th><th>Players</th><th>Score</th>` +
+    `<th>Team quota<br><span class="subtle" style="font-weight:normal">(partners' avg)</span></th><th>+/-<br><span class="subtle" style="font-weight:normal">(vs. team quota)</span></th>` +
+    `<th>Podium $</th><th>Skins $</th><th>CTP $</th></tr></thead><tbody>`;
   results.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).forEach(r => {
     const t = teamByName.get(r.playerName);
     html += `<tr><td>${r.rank ?? '—'}</td><td>${escapeHtml(r.playerName)}</td><td class="subtle">${t ? t.players.map(escapeHtml).join(' & ') : ''}</td>` +
-      `<td>${fmtNum(r.actualPoints)}</td><td>${fmtMoney(r.payoutPodium)}</td><td>${fmtMoney(r.payoutSkins)}</td><td>${fmtMoney(r.payoutCttp)}</td></tr>`;
+      `<td>${fmtNum(r.actualPoints)}</td><td>${r.quotaIn != null ? fmtNum(r.quotaIn) : '—'}</td><td>${r.performance != null ? fmtDiff(r.performance) : '—'}</td>` +
+      `<td>${fmtMoney(r.payoutPodium)}</td><td>${fmtMoney(r.payoutSkins)}</td><td>${fmtMoney(r.payoutCttp)}</td></tr>`;
   });
   html += '</tbody></table>';
+  html += '<p class="subtle" style="margin-top:6px">Team quota is that team\'s two partners\' own current individual quotas averaged together — read from whichever stableford round most recently closed before this one. Nothing here feeds back into either partner\'s own individual quota.</p>';
   html += skins.length
     ? '<h4 style="margin-top:14px">Skins</h4><div>' + skins.map(s => `<span class="chip">#${s.hole} — ${escapeHtml(s.winner)} (${s.pts} pts)</span>`).join(' ') + '</div>'
     : '<p class="subtle" style="margin-top:10px">No outright skins this round — every hole was tied.</p>';
@@ -4074,6 +4129,10 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       return {
         rank: r.rank, name: r.player_name, players: membersByDisplayName[r.player_name] || [],
         actualPoints: r.actual_points,
+        // Dev-78 (team quota): quota_in/performance are now real for a
+        // scramble_pair round too (the two partners' own quotas averaged) —
+        // '—' only for an older/edge-case row saved before this existed.
+        quotaIn: r.quota_in, performanceDisplay: r.performance != null ? signed(r.performance) : null,
         vsParDisplay: vsPar != null && twomanPar != null ? `(${twomanPar + vsPar})` : '',
         payoutCol: fmtPayout(totalPayout),
         rowClass: r.rank === 1 ? 'lb-row leader-row' : 'lb-row',
@@ -4362,17 +4421,21 @@ function renderRoundSection(sec, num) {
   </div>`;
 }
 
-// Dev-78 — team row: same visual language as renderPlayerRow, but no
-// quota/perf/WB columns (2Man has neither) — just rank, team (with its two
-// real players underneath), score, and payout.
+// Dev-78 — team row: same visual language as renderPlayerRow, but no WB
+// column (2Man has none) — rank, team (with its two real players and their
+// team quota underneath), performance vs. that quota, and payout.
 function renderTeamRow(t) {
   return `<div class="${t.rowClass}">
     <div class="lb-name-line">
       <span class="rank-cell">${t.rank ?? '—'}</span><span class="player-name">${escapeHtml(t.name)}</span>${t.vsParDisplay ? `<span class="vspar-tag">${escapeHtml(t.vsParDisplay)}</span>` : ''}
     </div>
     <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota"><span class="lb-meta">${t.players.map(escapeHtml).join(' & ')}</span></div>
-      <div class="lb-cell lb-cell-perf">${t.actualPoints} pts</div>
+      <div class="lb-cell lb-cell-quota">
+        <span class="lb-cell-label">Team quota</span>${t.quotaIn != null ? Number(t.quotaIn).toFixed(2) : '—'} <span class="lb-meta">· Scored ${t.actualPoints} · ${t.players.map(escapeHtml).join(' & ')}</span>
+      </div>
+      <div class="lb-cell lb-cell-perf">
+        <span class="${t.performanceDisplay != null ? 'perf-badge ' + perfClass(t.actualPoints - (t.quotaIn || 0)) : ''}">${t.performanceDisplay ?? '—'}</span>
+      </div>
       <div class="lb-cell lb-cell-pay">${t.payoutCol}</div>
     </div>
   </div>`;
@@ -4404,7 +4467,7 @@ function renderTwomanSection(tm, num, eventName) {
     ${tm.leader ? `<div class="winner-banner">
       <div class="comp-label">2Man Champions</div>
       <div class="winner-name">${escapeHtml(tm.leader.name)}</div>
-      <div class="winner-stat">${tm.leader.actualPoints} pts</div>
+      <div class="winner-stat">${tm.leader.actualPoints} pts${tm.leader.performanceDisplay != null ? ` · ${tm.leader.performanceDisplay} vs. team quota` : ''}</div>
     </div>` : ''}
     <div class="lb-card"><div class="lb-list">${tm.teams.map(renderTeamRow).join('')}</div></div>
     <div class="side-strip">
