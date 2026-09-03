@@ -3124,3 +3124,142 @@ Confirmed by Brian directly: CTP data now shows correctly.
   not yet provided), then (3) photo capture / "memories" display (main `worker.js`'s
   existing `event_photos`/R2/`curation_status` pipeline is a plausible head start, not
   yet verified against BFE's data shape).
+
+## Dev-76 addendum 4 · 2026-09-03 — Wally Ball Season-History Regression Root-Caused & Fixed, Results Page Readability Redesign, vs-Par Bug Fixed
+
+Same chat as the rest of Dev-76 — confirmed against the sidebar, which still shows this
+conversation named "Dev-76" — so this is addendum 4, not a new session. (See the process
+note at the end: I briefly got this wrong mid-entry, calling it "Dev-89" before Brian
+caught the mismatch against the actual chat name.)
+
+Corrects a regression that slipped through addendum 3's "nothing outstanding" close: the
+very re-close (Rd1→Rd2→Rd3, to backfill CTP) that addendum verified fixed CTP also
+silently broke the Wally Ball season pot — not discovered until Brian opened the results
+page days later and saw all 16 players still "In Play." Exactly the standing lesson
+again: a claim of "done" is only as good as the next real test.
+
+- **Root cause, found by code inspection + one concrete piece of evidence (Rd1's own
+  fresh Close Round table showing every one of 16 players as "Lost (hole ?-?)," which a
+  first-round re-close should be structurally incapable of if `alreadyOut` only looked
+  backward):** the `alreadyOut` check (Close Round handler, and separately in the
+  test-scorecard generator) excluded only *this exact round* — `r.round_name !==
+  roundName` — not rounds that come *after* it chronologically. Fine as long as rounds
+  close in order the first time; wrong the moment a round gets **re-closed out of
+  order relative to rounds that already have results**. Re-closing Rd1 *after* Rd2/Rd3
+  already had their own correct results meant Rd1's re-close read Rd2/Rd3's real losses
+  back as "already out before Rd1 even started" — backwards — forcing `wb_status='No'`
+  with hole/stroke nulled (the exact "(hole ?-?)" signature) for anyone who ever lost it
+  in *any* round. Re-closing Rd2 next inherited Rd1's now-corrupted data, then Rd3
+  inherited both — a full cascade from one ordering bug.
+  - **Fix:** "earlier" is now based on each round's actual position in
+    `assembledConfig.rounds` / `roundsList` (real chronological order), not "any other
+    round exists with this name." Fixed in both places it existed (Close Round handler,
+    test-scorecard generator).
+  - **Remediation:** re-closing Rd1 → Rd2 → Rd3 in that order against the fixed code
+    self-heals — each round now only looks backward at genuinely earlier rounds, so
+    Rd1 recomputes clean from Jotform, Rd2 then sees only the now-clean Rd1, Rd3 sees
+    both. Brian ran this after the fix shipped and confirmed the season tracker (Lou
+    Strohl winning the pot via tiebreak, everyone else's correct loss hole) came back
+    correctly.
+- **vs-par silently never worked, since Dev-76 built it — plumbing bug, not a data or
+  display bug.** `BFE-Admin.html`'s `fetchResultsPageData()` calls the BFE Worker's
+  `GET /scorecards`, which returns `{ok, scorecards:[...]}` — the code was doing
+  `Array.isArray(arr) ? arr : []` on the *whole response object*, which is never an
+  array, so `scorecardsByRound` was unconditionally empty for every round and vs-par
+  had no hole data to compute from, no matter what was actually saved. `computeVsPar`
+  itself was correct the whole time (confirmed against the standalone `results_generator.js`
+  harness, which builds its fixture data directly and never went through this bug).
+  Fixed to read `body.scorecards`.
+- **Results page mobile readability redesign, per Brian's direct feedback ("looks great
+  but hard to read," small fonts, no whitespace) — three iterations, verified with
+  Playwright at 375px/440px viewports each time, not just visually approved once:**
+  1. First pass: bumped font sizes (player name 13.5→16px, round-perf 14.5→16.5px,
+     meta text ~11→12.5-13px), more row padding/line spacing, split the one crammed
+     "quota · WB status · hole · payout" line into three clearer lines.
+  2. Brian asked for a literal 3-column grid (Name | Quota/Score | Perf, then WBStatus
+     | Hole | Payout). Built it, and it broke on real names — "Jordan Knappenberger"
+     doesn't survive a ~155px fixed column at readable size, wrapping mid-name.
+  3. **Final design:** name gets its own full-width line (rank, name, vs-par — real
+     names don't fit a fixed grid column), then a real 2×2 CSS grid below it: top row
+     is quota+score / round perf., bottom row is WB status+detail / this round's
+     payout — right-hand values share a column so they align straight down the whole
+     list. The "ⓘ" perf-calc popover (previously a flex child that grew the row) is now
+     `position:absolute`, floating over the row below rather than reflowing the grid
+     when opened.
+  - Removed the "Round Perf. folds in this round's Wally Ball bonus..." explainer line
+    from every round section per Brian's request (`.chain-note` — CSS rule left in
+    place, unused; not worth touching working markup elsewhere for a dead class).
+  - Section 5 (Wally Ball) now sorted by how long each player held the ball — pot
+    winner(s) first, then anyone still in it (pre-Final), then everyone out ordered by
+    the round they lost in (later round beats earlier round) and, within the same
+    round, by which hole they lost on (later hole beats earlier hole) — same key
+    already used for the pot's own tiebreak math, now applied to the section's display
+    order too.
+  - All changes made in parallel to `results_generator.js` (the standalone generator/
+    test harness) and `BFE-Admin.html`'s inlined copy of the same code — verified
+    byte-identical after each edit rather than assumed in sync.
+
+**Process note — what `Dev-N` actually identifies, cleared up after Brian caught a
+mismatch:** `Dev-N` identifies one continuous **chat** in the Claude desktop app — visible
+directly in its sidebar name — not a calendar day and not a topic boundary. A chat only
+gets a new number when Brian actually starts a new chat; everything that happens inside
+one chat, however many days it spans or however many distinct fixes it contains, is that
+same `Dev-N`, logged as a main entry plus addenda (exactly this file's existing pattern —
+Dev-73 through Dev-75 each already spanned multiple days). I initially got this wrong
+mid-entry: seeing a new calendar day plus a substantial chunk of unrelated-feeling work
+(the WB regression, the redesign), I assumed that was grounds for a new session identity
+and drafted this as "Dev-89," including relabeling today's in-file comments to match.
+Brian caught the mismatch against the sidebar (still showing this chat as "Dev-76") and
+asked where the disconnect was. Corrected: this is addendum 4, and today's in-file
+comments now read `Dev-76` (not `Dev-89`), consistent across `BFE-Admin.html` and
+`results_generator.js`.
+- This is separate from — and doesn't fix — the **other**, pre-existing numbering issue
+  still visible in the file: per-fix comments already drifted past Dev-76 up through
+  Dev-88 during this same chat's earlier work (Dev-75's closing note had already flagged
+  an earlier round of this same drift and asked for it to stop at Dev-76; it didn't).
+  Not renumbering that old drift now, same reasoning as Dev-75's own note — cosmetic,
+  touches working code for no functional reason. Just: the identifying number for
+  *this chat's* new work is `Dev-76`, full stop, matching the sidebar — not a fix-counter,
+  and not a fresh session number invented because the work felt like a lot or the date
+  changed.
+- No chat-rename string below — addenda don't get one (the chat is already named
+  correctly); only a genuinely new chat's first close-out needs one.
+
+**Next per Brian's own three-part ordering, unchanged:** (2) 2-Man scramble scoring
+format (still ❓ open — needs Brian's own input on the formula), then (3) photo capture
+/ "memories" display.
+
+## Dev-76 — CLOSED, 2026-09-03
+
+Brian asked to close out this chat and prep a clean starter for the next one, after
+raising (accurately) that this chat had already auto-compacted more than once and he
+didn't want to keep taxing it or risk quality degrading by piling more work into it.
+This entry is the final close-out for the whole chat — main entry plus all four
+addenda — not a fifth addendum.
+
+- `BF_WallyCup_Spec.md` (header + §8 Phase 3) and `BF_Session_Bootstrap.md` (status
+  header + the Dev-76 Architecture Notes section) both updated to fold in all four
+  addenda: CTP persistence confirmed live, portal.html link behavior matched to
+  existing convention, the Wally Ball season-history regression found and fixed, the
+  vs-par plumbing bug found and fixed, and the mobile-readability redesign. Neither
+  document had been updated past the original 9/2 build until now — closing a
+  documentation gap that had been accumulating since addendum 1.
+- Nothing new shipped in this close-out entry itself — this is documentation-only, no
+  code changed in `BFE-Admin.html`, `results_generator.js`, `portal.html`, or the Worker
+  since addendum 4.
+- **Chat-rename string (final — covers the whole chat, main entry + all 4 addenda):**
+  `Dev-76 - Wally Cup Results Page: Built, Tested, CTP Persistence Live, WB Regression &
+  vsPar Bugs Fixed, Mobile Redesign`
+- **Carry-forward into Dev-77, unchanged:** Before real Rd1 (10am 9/11) — the live
+  "2026 Wally Cup" event in D1 is still Dev-74/75's test data, needs Data & Reset →
+  Delete and fresh Setup with the real roster/tee assignments. Then, per Brian's own
+  ordering: (2) 2-Man scramble scoring format (❓ open, needs Brian's input on the
+  formula), (3) photo capture / "memories" display (main `worker.js`'s existing
+  `event_photos`/R2/`curation_status` pipeline is a plausible head start, not yet
+  verified against BFE's data shape).
+- **Next session starts fresh, per the bootstrap's own SESSION COMPACTION / DURABILITY
+  RULE (added Dev-75):** a new chat should be opened for the 2-Man scramble work,
+  reading `BF_Session_Bootstrap.md` fresh (fetched via the standard bootstrap command),
+  which now carries an accurate, self-sufficient Dev-76 Architecture Notes summary —
+  no need to re-read this whole session log's Dev-76 detail line by line to get up to
+  speed, though it's there if a specific decision's reasoning needs double-checking.
