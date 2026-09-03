@@ -247,9 +247,16 @@
 //     round_name TEXT NOT NULL,
 //     group_index INTEGER NOT NULL,   -- 0-based, display as Group N = index+1
 //     player_name TEXT NOT NULL,
-//     strategy TEXT,                   -- 'social' | 'quota' | 'standings' | 'random' — what Generate used
+//     strategy TEXT,                   -- 'social' | 'quota' | 'standings' | 'random' | 'draft' — what Generate/Draft used
+//     team_label TEXT,                 -- Dev-78 (2Man). Optional nickname for this group_index's
+//                                       -- TEAM (e.g. "The Peg-Leg Turkeys") — same value written on
+//                                       -- both player rows of that group_index. NULL for ordinary
+//                                       -- 4-some strategies; only meaningful when strategy='draft'.
+//                                       -- Per-event only, no cross-event history/reuse (Brian's call).
 //     UNIQUE(event_id, round_name, player_name)
 //   );
+//   -- Migration for an existing database (bfe_round_groups predates team_label):
+//   --   ALTER TABLE bfe_round_groups ADD COLUMN team_label TEXT;
 // ══════════════════════════════════════════════════════════════════════════
 
 
@@ -892,13 +899,17 @@ export default {
       try { body = await request.json(); } catch (e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { event_name, round_name, groups, strategy, pin } = body;
+      const { event_name, round_name, groups, strategy, labels, pin } = body;
       if (String(pin) !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       if (!event_name || !round_name || !Array.isArray(groups)) {
         return new Response(JSON.stringify({ error: 'event_name, round_name, and groups (array of arrays) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
+      // Dev-78 (2Man draft): optional `labels` array, same length/order as
+      // `groups` — labels[gi] is that group_index's team nickname, written
+      // onto every player row in that group. Absent/short/blank entries are
+      // just null, same as every ordinary (non-draft) Save.
       try {
         const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(event_name).first();
         if (!eventRow) {
@@ -908,11 +919,12 @@ export default {
         await env.DB.prepare(`DELETE FROM bfe_round_groups WHERE event_id = ? AND round_name = ?`).bind(eventId, round_name).run();
         let placed = 0;
         for (let gi = 0; gi < groups.length; gi++) {
+          const label = (Array.isArray(labels) && labels[gi]) ? String(labels[gi]).trim() || null : null;
           for (const playerName of (groups[gi] || [])) {
             if (!playerName) continue;
             await env.DB.prepare(
-              `INSERT INTO bfe_round_groups (event_id, round_name, group_index, player_name, strategy) VALUES (?, ?, ?, ?, ?)`
-            ).bind(eventId, round_name, gi, playerName, strategy || null).run();
+              `INSERT INTO bfe_round_groups (event_id, round_name, group_index, player_name, strategy, team_label) VALUES (?, ?, ?, ?, ?, ?)`
+            ).bind(eventId, round_name, gi, playerName, strategy || null, label).run();
             placed++;
           }
         }
