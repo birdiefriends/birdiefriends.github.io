@@ -74,14 +74,21 @@ nickname is purely a display label layered on top (e.g., shown as "The Peg-Leg T
 **Engine:** same per-hole points scoring already used for stableford rounds. Capture and
 points math are unchanged from stableford — what's new is what a team is *ranked against*.
 
-**Team quota.** Each team's target is the average of its two partners' current individual
-quotas: `teamQuota = (partnerA.quota_out + partnerB.quota_out) / 2`, read from whichever
-stableford round most recently closed before 2Man (Rd2, via the same `chainsFrom`
-mechanism that already threads quota from round to round for Overall). This reuses data
-that already exists — no new handicap math, just an average of two numbers BFE-Admin
-already has on hand. 2Man itself does **not** feed the real quota chain (Rd3's `chainsFrom`
-still points to Rd2, not to 2Man) — 2Man's chainsFrom is read-only, for this team-quota
-lookup alone.
+**Team quota.** Per Brian's spec — "each player's RD1-3 quotas averaged" — each partner's
+own quota is smoothed across every stableford round played so far this trip, not just
+their latest one, then the two partners' numbers are averaged together. Concretely, for
+each player: collect the quota they carried *into* every stableford round in the chain
+leading up to 2Man (`quota_in` for Rd1, `quota_in` for Rd2, ...), plus the quota they'd
+carry into the round immediately after (`quota_out` of the most recent closed round —
+i.e. the quota entering Rd3). With Rd1 and Rd2 both closed by the time 2Man plays, that's
+3 values per player ("RD1-3"), averaged into that player's own number; the two partners'
+numbers are then averaged into the team quota. This smooths out one hot or cold round
+rather than weighting the most recent round alone. All of it is read via the same
+`chainsFrom` mechanism that already threads quota from round to round for Overall — no
+new handicap math, just averaging numbers BFE-Admin already has on hand for every closed
+stableford round in the chain. 2Man itself does **not** feed the real quota chain (Rd3's
+`chainsFrom` still points to Rd2, not to 2Man) — 2Man's chainsFrom is read-only, walked
+backward purely to find which rounds' quotas to average.
 
 Teams and the individual podium/standings are ranked by **performance**
 (`actualPoints - teamQuota`), not raw points, so a team that beats its combined target
@@ -141,10 +148,18 @@ page needed — it's one more section on the existing results page.
 
 ## 6. Open items carried forward
 
-- **Team quota** (§3) — built, not just parked: teams rank by performance vs. the average
-  of both partners' Rd2 quotas rather than raw points. Tested via jsdom against
-  BFE-Admin's real `computeScramblePair`/`closeTeamRound` code (quota averaging, fallback
-  to raw points when a partner has no quota, and the chainsFrom-not-closed hard stop).
+- **Team quota** (§3) — built, not just parked: teams rank by performance vs. each
+  partner's own quota averaged across every stableford round played so far (Rd1 + Rd2's
+  quota_in, plus Rd2's quota_out), then the two partners' numbers averaged together —
+  not just a snapshot of the latest round. Tested against the real close-round logic
+  (multi-round chain walking, a single-prior-round edge case, No-HCP fallback dropping
+  just that player's missing value, and the chainsFrom-not-closed hard stop).
+- **Results-publish gap Brian found:** a round's incoming ("pre-round") quota can't
+  appear in that round's own results section, because the report only ever renders
+  *closed* rounds' saved results — there's nothing to show for a round that hasn't
+  played yet. Not a bug to fix in the report; Brian's call is that a live/pending number
+  like that belongs on a future "event card" concept instead, separate from the
+  post-close report. Parked — not scoped or built.
 - **Overall-checkbox guardrail for multi-host use** (§4) — parked until hosting is opened
   beyond Brian.
 - **Capture-side team identification** — portal.html's Jotform Live Panel doesn't have a
