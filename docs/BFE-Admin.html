@@ -3163,9 +3163,9 @@ async function loadEventsList() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     if (!data.events.length) { body.innerHTML = '<p class="subtle">No events stored yet.</p>'; return; }
-    let html = '<table><thead><tr><th>Event</th><th>Event date</th><th>Status</th><th>Rounds</th><th>Roster</th><th>Round results</th><th>Skins</th><th>Updated</th><th></th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Event</th><th>Event date</th><th>Status</th><th>Rounds</th><th>Roster</th><th>Round results</th><th>Skins</th><th>Groups</th><th>Updated</th><th></th></tr></thead><tbody>';
     data.events.forEach(e => {
-      html += `<tr><td>${e.event_name}</td><td>${e.event_date || '—'}</td><td>${e.status}</td><td>${e.rounds}</td><td>${e.roster}</td><td>${e.results}</td><td>${e.skins}</td><td>${e.updated_at}</td>` +
+      html += `<tr><td>${e.event_name}</td><td>${e.event_date || '—'}</td><td>${e.status}</td><td>${e.rounds}</td><td>${e.roster}</td><td>${e.results}</td><td>${e.skins}</td><td>${e.groups ?? 0}</td><td>${e.updated_at}</td>` +
         `<td style="white-space:nowrap"><button type="button" class="secondary loadEventBtn" data-name="${e.event_name.replace(/"/g, '&quot;')}">Load</button> ` +
         `<button type="button" class="danger deleteEventBtn" data-name="${e.event_name.replace(/"/g, '&quot;')}">Delete</button></td></tr>`;
     });
