@@ -3097,3 +3097,30 @@ wanted this link to behave the same way as those.
 - All the mobile-responsive card-layout work in `results_generator.js`/`BFE-Admin.html`
   from the prior addendum is unaffected — the published page itself didn't change, only
   how players get to it from the portal.
+
+## Dev-76 addendum 3 — CTP gap closed and confirmed live, Phase 3 genuinely done
+
+Brian re-closed Rd1/Rd2/Rd3 in BFE-Admin (now running against the live `bf-experiences`
+Worker with the Dev-76 `bfe_round_cttp` support) and re-published the results page.
+Confirmed by Brian directly: CTP data now shows correctly.
+
+- Root cause of the earlier "CTP not showing" report, confirmed via live data at each
+  step rather than assumed: the D1 table existed and the Worker was correctly deployed
+  and Active — the `cttp` array was simply empty because Rd1–3 had originally closed
+  (9/1) before this feature existed, so no historical rows were ever written for them.
+  Re-closing (safe/idempotent by design — delete-then-insert per event+round, same
+  lifecycle as `bfe_round_skins`) backfilled `bfe_round_cttp` correctly.
+- Also reconfirmed directly against live data during this investigation (not assumed):
+  `payout_cttp` dollar amounts were intact and correct throughout, unaffected by the
+  missing detail table the whole time — money was never at risk, only the per-hole
+  winner/distance side-card display.
+- **Phase 3 (results page) is now genuinely complete end-to-end**: built, unit-tested
+  against real data, Playwright-tested through the actual embedded BFE-Admin.html,
+  mobile-layout-fixed after live device feedback, link-behavior-fixed to match existing
+  portal conventions after live device feedback, and now the CTP gap is closed and
+  confirmed live by Brian himself republishing. Nothing outstanding on this phase.
+- **Next per Brian's own three-part ordering from earlier this session:** (2) 2-Man
+  scramble scoring format (still ❓ open — Brian said the formula needs his own input,
+  not yet provided), then (3) photo capture / "memories" display (main `worker.js`'s
+  existing `event_photos`/R2/`curation_status` pipeline is a plausible head start, not
+  yet verified against BFE's data shape).
