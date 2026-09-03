@@ -96,9 +96,9 @@
   <!-- ── Generate test scorecards (Dev-74 — testing tool) ─────────────── -->
   <section class="card">
     <h2>Generate test scorecards <span class="badge">testing tool</span></h2>
-    <p class="hint">Writes REAL submissions to the Scorecard Jotform form — one per player currently in section 3's roster — so Close Round has something to score without hand-keying 16 scorecards. Per-hole points are drawn from your actual 3-year field distribution (Series Stats thru Event 9: ~22% bogey-or-worse, ~38% bogey, ~35% par, ~5% birdie, eagles ~1-in-1100 holes), shifted per player toward their own computed quota rather than one flat average — so results should experientially read like real Wally golf, not just legal point values. Still random, not a real round. These submissions show up in Jotform's own dashboard exactly like real ones and are NOT touched by Data &amp; Reset above — delete them there yourself once you're done testing a round.</p>
+    <p class="hint">Writes REAL submissions to the Scorecard Jotform form — one per player currently in section 3's roster — so Close Round has something to score without hand-keying 16 scorecards. Per-hole points are drawn from your actual 3-year field distribution (Series Stats thru Event 9: ~22% bogey-or-worse, ~38% bogey, ~35% par, ~5% birdie, eagles ~1-in-1100 holes), shifted per player toward their own computed quota rather than one flat average — so results should experientially read like real Wally golf, not just legal point values. Still random, not a real round. Pick a 2Man round instead and this generates one scorecard per TEAM (from the saved draft in section 11), skill-centered on the team's average quota — same distribution, same idea, just one submission per pair instead of per player. These submissions show up in Jotform's own dashboard exactly like real ones and are NOT touched by Data &amp; Reset above — delete them there yourself once you're done testing a round.</p>
     <div class="row">
-      <div style="flex:2"><label for="testScorecardRound">Round</label><select id="testScorecardRound"><option value="">— add a stableford round with a venue in section 4 first —</option></select></div>
+      <div style="flex:2"><label for="testScorecardRound">Round</label><select id="testScorecardRound"><option value="">— add a round with a venue in section 4 first —</option></select></div>
       <div style="flex:2"><label for="testScorecardCourse">Course name (as it should appear on the scorecard)</label><input type="text" id="testScorecardCourse" placeholder="auto-fills from the round's venue"></div>
       <div><label for="testWbLossRate">Wally Ball loss chance, this round (%)</label><input type="number" id="testWbLossRate" value="70" min="0" max="100" style="width:90px"></div>
       <div style="align-self:flex-end"><button type="button" id="generateTestScorecardsBtn" disabled>Generate test scorecards</button></div>
@@ -912,16 +912,19 @@ function populateTestScorecardRoundSelect() {
   const btn = document.getElementById('generateTestScorecardsBtn');
   if (!sel) return; // guard — this fires from refreshTeeVenueBlocks before the DOM exists on first parse
   const current = sel.value;
-  const rounds = readRoundsInput().filter(r => r.engine === 'stableford_quota' && r.venueId);
+  // Dev-79: scramble_pair (2Man) rounds now show up here too — the click
+  // handler below branches on engine to generate one scorecard per TEAM
+  // instead of per player for those.
+  const rounds = readRoundsInput().filter(r => (r.engine === 'stableford_quota' || r.engine === 'scramble_pair') && r.venueId);
   if (!rounds.length) {
-    sel.innerHTML = '<option value="">— add a stableford round with a venue in section 4 first —</option>';
+    sel.innerHTML = '<option value="">— add a round with a venue in section 4 first —</option>';
     btn.disabled = true;
     document.getElementById('generateTestCttpBtn').disabled = true;
     checkTestScorecardRoundName();
     return;
   }
   sel.innerHTML = rounds.map(r =>
-    `<option value="${r.name.replace(/"/g, '&quot;')}" data-venue="${(r.venue || '').replace(/"/g, '&quot;')}" ${r.name === current ? 'selected' : ''}>${r.name}</option>`
+    `<option value="${r.name.replace(/"/g, '&quot;')}" data-venue="${(r.venue || '').replace(/"/g, '&quot;')}" ${r.name === current ? 'selected' : ''}>${r.name}${r.engine === 'scramble_pair' ? ' (2Man — per team)' : ''}</option>`
   ).join('');
   btn.disabled = !sel.value;
   document.getElementById('generateTestCttpBtn').disabled = !sel.value;
@@ -960,20 +963,88 @@ document.getElementById('generateTestScorecardsBtn').addEventListener('click', a
   const courseName = document.getElementById('testScorecardCourse').value.trim();
   const wbLossRate = Math.max(0, Math.min(100, parseFloat(document.getElementById('testWbLossRate').value) || 0)) / 100;
   const statusEl = document.getElementById('testScorecardStatus');
-  const players = readRosterInput();
   if (!roundName) { statusEl.textContent = 'Pick a round first.'; statusEl.style.color = 'var(--err)'; return; }
-  if (!players.length) { statusEl.textContent = 'Add players to the roster in section 3 first.'; statusEl.style.color = 'var(--err)'; return; }
-  if (!confirm(`Create ${players.length} REAL test scorecard submissions on Jotform for "${roundName}"? This writes to Jotform, not just D1 — delete them from Jotform's dashboard when you're done testing.`)) return;
 
-  // Quota-center each player's draws against THIS round's own venue tee
-  // policy — approximates their initial quota (not the true carried-forward
-  // quota if this round chains from an earlier one, which isn't known here
-  // without fetching saved results), but is close enough to make test scores
-  // land near a believable number for that player rather than a flat average.
+  // Quota-center draws against THIS round's own venue tee policy —
+  // approximates initial quota (not the true carried-forward quota if this
+  // round chains from an earlier one, which isn't known here without
+  // fetching saved results), but is close enough to make test scores land
+  // near a believable number rather than a flat average. Same simplification
+  // for both paths below.
   const roundsList = readRoundsInput();
   const round = roundsList.find(r => r.name === roundName);
   const teePolicy = readTeePolicyGlobal();
   const venuePolicy = (round && round.venueId && teePolicy.byVenue[round.venueId]) ? venuePolicyFor(teePolicy, round.venueId) : null;
+
+  // Dev-79 (Brian): 2Man test scorecards — ONE submission per TEAM, not per
+  // player, same as a real submission (§3 of the spec: a scramble has one
+  // score per hole for the team, so only one partner submits per team,
+  // under the team's display name). Reads the saved draft from section 11
+  // rather than the roster, since that's what actually determines who's on
+  // which team; can't run until a draft's been built and saved for this
+  // round. Team "skill" for the quota-centered draw is the average of both
+  // partners' own venue-based initial quota — the same accepted
+  // approximation as the individual path above, just averaged per team.
+  // Wally Ball doesn't apply to 2Man (never rolls into Overall/Wally Ball),
+  // so every team submission reuses the existing "already permanently out"
+  // path (a plain 'No', no coin-flip, no hole/stroke) purely to skip that
+  // randomness — nothing downstream ever reads a team's WB fields.
+  if (round && round.engine === 'scramble_pair') {
+    const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+    const eventNameVal = document.getElementById('eventName').value.trim();
+    if (!base || !eventNameVal) { statusEl.textContent = 'Enter the Worker URL and Event name above first.'; statusEl.style.color = 'var(--err)'; return; }
+    statusEl.style.color = 'var(--sub)';
+    statusEl.textContent = 'Loading saved teams…';
+    let teams;
+    try {
+      const groupsRes = await fetch(base + '/bfe/round-groups?event=' + encodeURIComponent(eventNameVal) + '&round=' + encodeURIComponent(roundName));
+      const groupsData = await groupsRes.json();
+      if (!groupsRes.ok) throw new Error(groupsData.error || `HTTP ${groupsRes.status}`);
+      const byIdx = {};
+      (groupsData.rows || []).forEach(r => {
+        byIdx[r.group_index] = byIdx[r.group_index] || { players: [], label: r.team_label || null };
+        byIdx[r.group_index].players.push(r.player_name);
+      });
+      teams = Object.keys(byIdx).map(Number).sort((a, b) => a - b).map(gi => byIdx[gi]);
+    } catch (e) {
+      statusEl.textContent = 'Could not load saved teams: ' + e.message;
+      statusEl.style.color = 'var(--err)';
+      return;
+    }
+    if (!teams.length) { statusEl.textContent = 'No teams saved for this round yet — build the draft in section 11 (Player groupings) first.'; statusEl.style.color = 'var(--err)'; return; }
+    if (!confirm(`Create ${teams.length} REAL test scorecard submissions on Jotform for "${roundName}" — one per TEAM (not per player)? This writes to Jotform, not just D1 — delete them from Jotform's dashboard when you're done testing.`)) return;
+
+    const rosterByName = {};
+    readRosterInput().forEach(p => { rosterByName[p.name] = p; });
+
+    statusEl.style.color = 'var(--sub)';
+    let created = 0;
+    const failures = [];
+    for (const t of teams) {
+      const displayName = teamDisplayName(t.players, t.label);
+      statusEl.textContent = `Creating ${created + failures.length + 1} of ${teams.length}: ${displayName}…`;
+      try {
+        const quotas = t.players.map(name => {
+          const p = rosterByName[name];
+          return (p && venuePolicy) ? computeInitialQuota(p.hcp, venuePolicy).quota : null;
+        }).filter(v => v !== null && v !== undefined && !isNaN(v));
+        const teamQuota = quotas.length ? quotas.reduce((s, v) => s + v, 0) / quotas.length : null;
+        const skillFactor = skillFactorForQuota(teamQuota);
+        await jfCreateScorecardSubmission(displayName, roundName, courseName, 0, skillFactor, true);
+        created++;
+      } catch (e) {
+        failures.push(`${displayName}: ${e.message}`);
+      }
+    }
+    statusEl.textContent = `✓ ${created} of ${teams.length} team scorecard(s) created for "${roundName}".` +
+      (failures.length ? ` ${failures.length} failed — ${failures.join('; ')}` : ' Give Jotform a few seconds to index them, then Close Round should pick them up.');
+    statusEl.style.color = failures.length ? 'var(--err)' : 'var(--accent-dark)';
+    return;
+  }
+
+  const players = readRosterInput();
+  if (!players.length) { statusEl.textContent = 'Add players to the roster in section 3 first.'; statusEl.style.color = 'var(--err)'; return; }
+  if (!confirm(`Create ${players.length} REAL test scorecard submissions on Jotform for "${roundName}"? This writes to Jotform, not just D1 — delete them from Jotform's dashboard when you're done testing.`)) return;
 
   // Dev-77: same "one Wally Ball for the whole event" rule the Close Round
   // engine enforces — pull every prior round's saved results for this event
