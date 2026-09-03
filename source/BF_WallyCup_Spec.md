@@ -1,11 +1,11 @@
 # BF_WallyCup_Spec.md — 2026 Wally Cup Architecture Spec
 
-**Status:** Living spec, first committed version. Covers the event structure already
-live (Rd1/Rd2/Rd3, Wally Ball, Overall Standings, results page) plus the 2-Man Scramble
-round designed in this session (Dev-78 planning, not yet built). Read this before
-touching Groupings, the results page, Close Round, or the Overall Standings rollup —
-it's the reference `BF_Session_Bootstrap.md` and `BF_Session_Log.md` have both been
-missing.
+**Status:** Living spec, second revision. Covers the event structure already live
+(Rd1/Rd2/Rd3, Wally Ball, Overall Standings, results page) plus the 2-Man Scramble round
+(Dev-78) — draft board, team scoring with team quota, results section, and the Overall
+guardrail fix are all built and delivered. Read this before touching Groupings, the
+results page, Close Round, or the Overall Standings rollup — it's the reference
+`BF_Session_Bootstrap.md` and `BF_Session_Log.md` have both been missing.
 
 ---
 
@@ -41,11 +41,10 @@ is left in the pool is the partner.
 This is intentional: a pure ranking-based pairing algorithm systematically produces
 mismatched, no-fun pairs (a strong player carrying a weak one is exhausting for both), and
 years of trying to solve that with a formula haven't worked. The draft's human
-decision-making is the actual design goal, not a placeholder for a smarter algorithm.
-(A **combined-quota handicapping idea** — generating a team target from both partners'
-quota performance and HCP data to make pairs more competitive regardless of who's picked —
-is a real idea worth exploring later, but is explicitly parked as a Phase 2 experiment,
-not required for 2026.)
+decision-making is the actual design goal, not a placeholder for a smarter algorithm. A
+lucky low-vs-low pairing can still land on a team by chance — the **team quota** described
+in §3 exists to keep that pairing from unfairly out-ranking a stronger team on raw points
+alone, without touching the draft mechanic itself.
 
 **Tool requirement:** a lightweight, mobile-friendly "draft board" — run live at the pub
 between rounds. Shows the 8 captains in pick order, lets the host tap the on-the-clock
@@ -72,10 +71,29 @@ nickname is purely a display label layered on top (e.g., shown as "The Peg-Leg T
 
 ## 3. Scoring
 
-**Engine:** same per-hole points scoring already used for stableford rounds — **not**
-quota-based. There is no individual or team handicap/quota target for 2Man; raw
-points-per-hole scoring only. (See the parked combined-quota idea in §2 if this changes
-later.)
+**Engine:** same per-hole points scoring already used for stableford rounds. Capture and
+points math are unchanged from stableford — what's new is what a team is *ranked against*.
+
+**Team quota.** Each team's target is the average of its two partners' current individual
+quotas: `teamQuota = (partnerA.quota_out + partnerB.quota_out) / 2`, read from whichever
+stableford round most recently closed before 2Man (Rd2, via the same `chainsFrom`
+mechanism that already threads quota from round to round for Overall). This reuses data
+that already exists — no new handicap math, just an average of two numbers BFE-Admin
+already has on hand. 2Man itself does **not** feed the real quota chain (Rd3's `chainsFrom`
+still points to Rd2, not to 2Man) — 2Man's chainsFrom is read-only, for this team-quota
+lookup alone.
+
+Teams and the individual podium/standings are ranked by **performance**
+(`actualPoints - teamQuota`), not raw points, so a team that beats its combined target
+outranks a team that scored more points but underperformed a higher target. This is the
+fix for the "two weak players get luckily paired and it's not really competitive" case
+Brian flagged when reviewing test data — the team quota keeps that pairing from
+out-ranking a stronger team just because low-vs-low produces a lower target too, since
+both teams are judged against how they did relative to their own combined ability, not
+against each other's raw score. If either partner has no quota on record (e.g. a "No-HCP"
+player), the team falls back to ranking by raw `actualPoints` for that team only. Close
+Round hard-stops with an error if Rd2 (the chainsFrom round) hasn't closed yet, since
+there's no quota to average until it has.
 
 **Capture:** the Jotform capture form/fields don't change. What changes is usage — a
 scramble has one score per hole for the team, so only one partner submits per team.
@@ -123,10 +141,21 @@ page needed — it's one more section on the existing results page.
 
 ## 6. Open items carried forward
 
-- **Combined-quota handicapping for 2Man** (§2) — parked idea, needs real design/debate
-  time before it's worth building. Not required for 2026.
+- **Team quota** (§3) — built, not just parked: teams rank by performance vs. the average
+  of both partners' Rd2 quotas rather than raw points. Tested via jsdom against
+  BFE-Admin's real `computeScramblePair`/`closeTeamRound` code (quota averaging, fallback
+  to raw points when a partner has no quota, and the chainsFrom-not-closed hard stop).
 - **Overall-checkbox guardrail for multi-host use** (§4) — parked until hosting is opened
   beyond Brian.
+- **Capture-side team identification** — portal.html's Jotform Live Panel doesn't have a
+  built affordance yet for a submitter to pick "which team am I" from the saved draft
+  data; for now the submitter types the team's display name by convention, matching
+  whatever the draft board shows. Worth a real UI pass before this is opened to other
+  hosts, not required for the 2026 Wally Cup.
+- **Results-page section ordering** — the 2Man section currently renders after Wally Ball
+  in scroll order; only the nav rail's `#twoman` link jumps to the right spot. A full
+  section-reorder was judged riskier than valuable this close to the event and was
+  deferred.
 - Build order and sizing for the draft-board tool, the capture-form team association, and
   the results-page 2Man section have not yet been scoped — this spec is the design
   reference, not a build plan.
