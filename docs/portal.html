@@ -12968,7 +12968,20 @@ function openCardGroupSheet(evtOrId) {
 // that don't have that split (a single-card scramble, say).
 function bfeEventNameCandidates(name) {
   const raw = (name || '').trim();
-  const stripped = raw.replace(/\s*[-–—]\s*(Rd|Round)\.?\s*\d+\s*$/i, '').trim();
+  // Dev-79 fix: this used to only strip a trailing "- RdN"/"- Round N"
+  // suffix, so it worked for "2026 Wally Cup - Rd1" but silently did
+  // nothing for "2026 Wally Cup - 2Man" — no stripped candidate was ever
+  // tried, so that card's round-groups fetch used its own full title as
+  // the EVENT name instead of the umbrella "2026 Wally Cup". That's never
+  // a real bfe_events.event_name, so the query always came back with zero
+  // rows no matter what BFE-Admin actually had saved (the bug Brian hit:
+  // groups saved correctly server-side, card still said "not posted yet").
+  // Now strips whatever comes after the LAST " - "/" – "/" — " separator,
+  // regardless of what the round-specific suffix looks like, since BFE
+  // round names are "<umbrella> - <anything>" (Rd1, Rd2, 2Man, Rd3, ...),
+  // not just "<umbrella> - RdN".
+  const m = raw.match(/^(.*?)\s*[-–—]\s*[^-–—]+$/);
+  const stripped = m ? m[1].trim() : '';
   const out = [];
   if (stripped && stripped !== raw) out.push(stripped);
   if (raw) out.push(raw);
