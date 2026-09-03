@@ -68,6 +68,10 @@
   .roundRow td { padding: 5px 6px; }
   .chip { display: inline-flex; align-items: center; gap: 4px; background: #eef6f2; color: var(--accent-dark); border-radius: 12px; padding: 2px 9px; font-size: 0.78rem; margin-right: 4px; }
   .stored-changed { background: #fff8e1 !important; }
+  .group-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: #fafbfc; }
+  .group-card-title { font-size: 0.8rem; font-weight: 700; color: var(--accent-dark); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 6px; }
+  .group-player-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 0.88rem; }
+  .group-player-row select { width: auto; padding: 3px 6px; font-size: 0.8rem; }
 </style>
 </head>
 <body>
@@ -243,6 +247,33 @@
       <button type="button" id="saveBtn">Save config</button>
     </div>
     <div id="saveStatus" class="status"></div>
+  </section>
+
+  <!-- ── Player groupings (Dev-77) ─────────────────────────────────────── -->
+  <section class="card" id="groupingsSection">
+    <h2>11. Player groupings</h2>
+    <p class="hint">Assigns players to foursomes for one round. <strong>Social</strong> actively avoids repeating a pairing from any other round you've already saved groups for (whatever's saved for other rounds becomes its "already played together" history — generate/save rounds in any order, it just reads what's there). <strong>By quota</strong> flights by each player's entered handicap (Group 1 = lowest handicap). <strong>By standings</strong> flights by current Overall standing through whatever rounds are already closed — only selectable once a prior round in this event has results saved. <strong>Random</strong> is a plain shuffle. Generate first — it doesn't save anything by itself — then use each player's "Move to…" picker to hand-adjust before you Save.</p>
+    <div class="row">
+      <div style="flex:2"><label for="groupRoundSelect">Round</label><select id="groupRoundSelect"><option value="">— load/generate the event above first —</option></select></div>
+      <div><label for="groupSizeInput">Players per group</label><input type="number" id="groupSizeInput" value="4" min="2" max="8"></div>
+      <div style="flex:2"><label for="groupStrategySelect">Strategy</label>
+        <select id="groupStrategySelect">
+          <option value="social" selected>Social — mix up who's played with whom</option>
+          <option value="quota">By quota — flight by handicap</option>
+          <option value="standings">By standings — flight by current Overall</option>
+          <option value="random">Random</option>
+        </select>
+      </div>
+    </div>
+    <div class="btnbar">
+      <button type="button" id="generateGroupsBtn">Generate groups</button>
+      <button type="button" class="secondary" id="loadGroupsBtn">Load saved</button>
+    </div>
+    <div id="groupingsStatus" class="status"></div>
+    <div id="groupingsEditor"></div>
+    <div class="btnbar" style="margin-top:4px">
+      <button type="button" id="saveGroupsBtn" disabled>Save groups</button>
+    </div>
   </section>
 
   <!-- ── Close a round (Dev-74 — Wally Cup scoring engine) ────────────── -->
@@ -1985,6 +2016,7 @@ function renderReview(config) {
 
   document.getElementById('rawConfig').textContent = JSON.stringify(config, null, 2);
   populateCloseRoundSelect(config);
+  populateGroupingsRoundSelect(config);
 }
 
 // ── Save / Load event config ─────────────────────────────────────────
@@ -2695,6 +2727,307 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
+// Player Groupings (Dev-77) — foursome assignment per round.
+// Four strategies: social (minimize repeat pairings against whatever's
+// already saved for OTHER rounds), quota/standings (flight by handicap or
+// current standing), random. Generate builds an in-memory editable draft
+// (currentGroups); nothing persists until Save Groups. A separate table
+// (bfe_round_groups) on purpose — see the Worker's own comment on it —
+// so this never collides with Setup's full-replace Save on section 7.
+// ══════════════════════════════════════════════════════════════════════
+let currentGroups = [];       // array of arrays of player names — in-editor draft
+let currentGroupsRound = '';  // which round currentGroups is for, so a stale Save can't fire
+
+function activeRosterNames(config) {
+  return (config.roster || []).filter(p => !p.withdrawn).map(p => p.name);
+}
+
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Consecutive slices, sized as evenly as possible (e.g. 15 names / size 4
+// -> 4,4,4,3; shortfall lands in the LAST group(s), not spread as a lonely
+// 1-2 person group). Deliberately consecutive, not round-robin: for the
+// flighted strategies (quota/standings) the array arrives pre-sorted by
+// skill/standing, and consecutive slicing is what keeps each flight's
+// skill level intact — round-robin would interleave every group back to a
+// skill-mixed set, defeating the point. For social/random the array
+// arrives pre-shuffled, where consecutive vs round-robin makes no
+// difference, so one function correctly serves all four strategies.
+function chunkEven(arr, size) {
+  const numGroups = Math.max(1, Math.round(arr.length / size));
+  const base = Math.floor(arr.length / numGroups);
+  const extra = arr.length - base * numGroups; // first `extra` groups get one more player
+  const groups = [];
+  let i = 0;
+  for (let g = 0; g < numGroups; g++) {
+    const n = base + (g < extra ? 1 : 0);
+    groups.push(arr.slice(i, i + n));
+    i += n;
+  }
+  return groups;
+}
+
+function pairKey(a, b) { return a < b ? a + '␟' + b : b + '␟' + a; }
+function groupsToPairSet(groups) {
+  const s = new Set();
+  groups.forEach(g => { for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) s.add(pairKey(g[i], g[j])); });
+  return s;
+}
+
+// Random-search minimization against a history of already-formed pairs.
+// General-purpose (any roster/group size), not hardcoded to 16 players —
+// small counts like Wally Cup's typically find a zero-repeat schedule well
+// under the trial budget; a harder roster/group-size combo just returns
+// whatever minimized repeats the search found.
+function generateSocialGroups(names, groupSize, historyPairSet) {
+  let best = null, bestScore = Infinity;
+  for (let trial = 0; trial < 4000 && bestScore > 0; trial++) {
+    const groups = chunkEven(shuffleInPlace(names.slice()), groupSize);
+    let score = 0;
+    groups.forEach(g => { for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) { if (historyPairSet.has(pairKey(g[i], g[j]))) score++; } });
+    if (score < bestScore) { bestScore = score; best = groups; }
+  }
+  return { groups: best, repeatPairs: bestScore };
+}
+
+function generateFlightedGroups(names, groupSize, valueByName, ascending) {
+  const sorted = names.slice().sort((a, b) => (valueByName.get(a) ?? 0) - (valueByName.get(b) ?? 0));
+  if (!ascending) sorted.reverse();
+  return chunkEven(sorted, groupSize);
+}
+
+// Every OTHER round's already-saved groups, flattened into a set of pairs
+// — what Social mixing tries not to repeat. Best-effort: an unsaved event
+// or a fetch error just means an empty history (fresh start), not a hard
+// failure — Generate should still work for a brand-new event's Rd1.
+async function fetchGroupingHistory(base, eventName, excludeRoundName) {
+  try {
+    const res = await fetch(base + '/bfe/round-groups?event=' + encodeURIComponent(eventName));
+    const data = await res.json();
+    if (!res.ok) return new Set();
+    const byRound = {};
+    (data.rows || []).forEach(r => {
+      if (r.round_name === excludeRoundName) return;
+      byRound[r.round_name] = byRound[r.round_name] || {};
+      byRound[r.round_name][r.group_index] = byRound[r.round_name][r.group_index] || [];
+      byRound[r.round_name][r.group_index].push(r.player_name);
+    });
+    const pairs = new Set();
+    Object.values(byRound).forEach(groupsByIdx => {
+      groupsToPairSet(Object.values(groupsByIdx)).forEach(k => pairs.add(k));
+    });
+    return pairs;
+  } catch (e) { return new Set(); }
+}
+
+// {roundName: {playerName: roundPerf}} for every round with saved results —
+// roundPerf computed the same WB-inclusive way the results page sums for
+// Overall (quota performance + that round's kept Wally Ball bonus), so "by
+// standings" flights against the same number a player would see published.
+async function fetchClosedRoundsPerf(base, eventName, config) {
+  const perf = {};
+  try {
+    const res = await fetch(base + '/bfe/round-results?event=' + encodeURIComponent(eventName));
+    const data = await res.json();
+    if (!res.ok) return perf;
+    const wbPtsByRound = {};
+    (config.rounds || []).forEach(r => {
+      const wbInf = (r.influencers || []).find(i => i.id === 'wally_ball');
+      wbPtsByRound[r.name] = wbInf ? wbInf.points : 0;
+    });
+    (data.results || []).forEach(row => {
+      const wbBonus = row.wb_status === 'Yes' ? (wbPtsByRound[row.round_name] || 0) : 0;
+      perf[row.round_name] = perf[row.round_name] || {};
+      perf[row.round_name][row.player_name] = (row.performance || 0) + wbBonus;
+    });
+  } catch (e) { /* leave perf empty — standingsValueByName falls back to 0s below */ }
+  return perf;
+}
+
+function standingsValueByName(names, config, roundName, perfByRound) {
+  const idx = (config.rounds || []).findIndex(r => r.name === roundName);
+  const value = new Map(names.map(n => [n, 0]));
+  (config.rounds || []).forEach((r, i) => {
+    if (i >= idx) return; // only rounds strictly before this one feed "current standing"
+    const roundPerf = perfByRound[r.name];
+    if (!roundPerf) return;
+    names.forEach(n => { if (roundPerf[n] != null) value.set(n, value.get(n) + roundPerf[n]); });
+  });
+  return value;
+}
+
+function populateGroupingsRoundSelect(config) {
+  const sel = document.getElementById('groupRoundSelect');
+  const supported = (config.rounds || []).filter(r => r.engine === 'stableford_quota');
+  if (!supported.length) { sel.innerHTML = '<option value="">— no rounds yet —</option>'; return; }
+  const prev = sel.value;
+  sel.innerHTML = supported.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}</option>`).join('');
+  if (supported.some(r => r.name === prev)) sel.value = prev;
+  updateStandingsOptionAvailability();
+}
+
+async function updateStandingsOptionAvailability() {
+  const roundName = document.getElementById('groupRoundSelect').value;
+  const strategySel = document.getElementById('groupStrategySelect');
+  const standingsOpt = strategySel.querySelector('option[value="standings"]');
+  if (!roundName || !assembledConfig) { standingsOpt.disabled = true; return; }
+  const idx = assembledConfig.rounds.findIndex(r => r.name === roundName);
+  const priorRounds = assembledConfig.rounds.slice(0, idx).filter(r => r.engine === 'stableford_quota');
+  if (!priorRounds.length) { standingsOpt.disabled = true; if (strategySel.value === 'standings') strategySel.value = 'social'; return; }
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const eventName = document.getElementById('eventName').value.trim();
+  if (!base || !eventName) { standingsOpt.disabled = true; return; }
+  try {
+    const res = await fetch(base + '/bfe/round-results?event=' + encodeURIComponent(eventName));
+    const data = await res.json();
+    const closedNames = new Set((data.results || []).map(r => r.round_name));
+    const anyPriorClosed = priorRounds.some(r => closedNames.has(r.name));
+    standingsOpt.disabled = !anyPriorClosed;
+    if (!anyPriorClosed && strategySel.value === 'standings') strategySel.value = 'social';
+  } catch (e) { standingsOpt.disabled = true; }
+}
+document.getElementById('groupRoundSelect').addEventListener('change', () => { updateStandingsOptionAvailability(); loadSavedGroups(false); });
+
+function renderGroupsEditor(groups) {
+  currentGroups = groups.map(g => g.slice());
+  const wrap = document.getElementById('groupingsEditor');
+  wrap.innerHTML = currentGroups.map((g, gi) => `
+    <div class="group-card" data-gi="${gi}">
+      <div class="group-card-title">Group ${gi + 1} <span class="subtle" style="text-transform:none;font-weight:400">(${g.length})</span></div>
+      ${g.map(name => `<div class="group-player-row" data-name="${escapeHtml(name)}">
+          <span>${escapeHtml(name)}</span>
+          <select class="movePlayerSel">
+            <option value="">Move to…</option>
+            ${currentGroups.map((_, ogi) => ogi === gi ? '' : `<option value="${ogi}">Group ${ogi + 1}</option>`).join('')}
+          </select>
+        </div>`).join('') || '<div class="subtle">Empty</div>'}
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.movePlayerSel').forEach(sel => {
+    sel.addEventListener('change', () => {
+      if (sel.value === '') return;
+      const row = sel.closest('.group-player-row');
+      const fromGi = Number(row.closest('[data-gi]').dataset.gi);
+      const toGi = Number(sel.value);
+      const name = row.dataset.name;
+      currentGroups[fromGi] = currentGroups[fromGi].filter(n => n !== name);
+      currentGroups[toGi] = [...currentGroups[toGi], name];
+      renderGroupsEditor(currentGroups);
+    });
+  });
+  document.getElementById('saveGroupsBtn').disabled = false;
+}
+
+function setGroupingsStatus(msg, isErr) {
+  const el = document.getElementById('groupingsStatus');
+  if (!msg) { el.className = 'status'; el.textContent = ''; return; }
+  el.className = 'status ' + (isErr ? 'err' : 'ok');
+  el.textContent = msg;
+}
+
+document.getElementById('generateGroupsBtn').addEventListener('click', async () => {
+  if (!assembledConfig) { setGroupingsStatus('Load or Generate the event above first.', true); return; }
+  const roundName = document.getElementById('groupRoundSelect').value;
+  if (!roundName) { setGroupingsStatus('Pick a round first.', true); return; }
+  const groupSize = parseInt(document.getElementById('groupSizeInput').value, 10) || 4;
+  const strategy = document.getElementById('groupStrategySelect').value;
+  const names = activeRosterNames(assembledConfig);
+  if (names.length < 2) { setGroupingsStatus('Need at least 2 active (non-withdrawn) players.', true); return; }
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const eventName = document.getElementById('eventName').value.trim();
+  setGroupingsStatus('Generating…');
+  try {
+    let groups;
+    if (strategy === 'social') {
+      const history = base && eventName ? await fetchGroupingHistory(base, eventName, roundName) : new Set();
+      const result = generateSocialGroups(names, groupSize, history);
+      groups = result.groups;
+      setGroupingsStatus(result.repeatPairs === 0
+        ? 'Generated — every pairing in this round is new (no repeats from other saved rounds).'
+        : `Generated — best found has ${result.repeatPairs} repeat pairing(s) from other saved rounds (roster/group size may not allow zero).`);
+    } else if (strategy === 'quota') {
+      const hcpByName = new Map(assembledConfig.roster.map(p => [p.name, p.hcp ?? 0]));
+      groups = generateFlightedGroups(names, groupSize, hcpByName, true);
+      setGroupingsStatus('Generated — flighted by entered handicap (Group 1 = lowest handicap).');
+    } else if (strategy === 'standings') {
+      const perfByRound = await fetchClosedRoundsPerf(base, eventName, assembledConfig);
+      const value = standingsValueByName(names, assembledConfig, roundName, perfByRound);
+      groups = generateFlightedGroups(names, groupSize, value, false);
+      setGroupingsStatus('Generated — flighted by current Overall standing through the prior closed round(s) (Group 1 = current leaders).');
+    } else {
+      groups = chunkEven(shuffleInPlace(names.slice()), groupSize);
+      setGroupingsStatus('Generated — fully random.');
+    }
+    currentGroupsRound = roundName;
+    renderGroupsEditor(groups);
+  } catch (e) {
+    setGroupingsStatus('Generate failed: ' + e.message, true);
+  }
+});
+
+async function loadSavedGroups(announce) {
+  const roundName = document.getElementById('groupRoundSelect').value;
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const eventName = document.getElementById('eventName').value.trim();
+  if (!roundName || !base || !eventName) { if (announce) setGroupingsStatus('Pick a round (and make sure the event is saved) first.', true); return; }
+  setGroupingsStatus('Loading saved groups…');
+  try {
+    const res = await fetch(base + '/bfe/round-groups?event=' + encodeURIComponent(eventName) + '&round=' + encodeURIComponent(roundName));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!data.rows.length) {
+      document.getElementById('groupingsEditor').innerHTML = '';
+      document.getElementById('saveGroupsBtn').disabled = true;
+      setGroupingsStatus('No groups saved yet for this round.');
+      return;
+    }
+    const byIdx = {};
+    data.rows.forEach(r => { (byIdx[r.group_index] = byIdx[r.group_index] || []).push(r.player_name); });
+    const groups = Object.keys(byIdx).sort((a, b) => a - b).map(k => byIdx[k]);
+    currentGroupsRound = roundName;
+    renderGroupsEditor(groups);
+    setGroupingsStatus(`Loaded saved groups (strategy: ${data.rows[0].strategy || 'unknown'}).`);
+  } catch (e) {
+    setGroupingsStatus('Load failed: ' + e.message, true);
+  }
+}
+document.getElementById('loadGroupsBtn').addEventListener('click', () => loadSavedGroups(true));
+
+document.getElementById('saveGroupsBtn').addEventListener('click', async () => {
+  const roundName = document.getElementById('groupRoundSelect').value;
+  if (!roundName || roundName !== currentGroupsRound) { setGroupingsStatus('Generate or Load groups for this round first.', true); return; }
+  if (currentGroups.some(g => !g.length) && !confirm('One or more groups is empty — save anyway?')) return;
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const pin = document.getElementById('hostPin').value.trim();
+  const eventName = document.getElementById('eventName').value.trim();
+  if (!base) { setGroupingsStatus('Enter the BFE Worker base URL above first.', true); return; }
+  setGroupingsStatus('Saving…');
+  try {
+    const res = await fetch(base + '/bfe/round-groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: eventName, round_name: roundName,
+        groups: currentGroups.filter(g => g.length),
+        strategy: document.getElementById('groupStrategySelect').value,
+        pin,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    setGroupingsStatus(`Saved — ${data.groups} group(s), ${data.placed} player(s), for "${roundName}".`);
+  } catch (e) {
+    setGroupingsStatus('Save failed: ' + e.message, true);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
 // Data & Reset (Dev-74 — testing tool)
 // ══════════════════════════════════════════════════════════════════════
 async function loadEventsList() {
@@ -2802,11 +3135,24 @@ function sumPars(parsArr) {
 // resultsPayload:     GET /bfe/round-results?event=X  → {results, skins, cttp}
 // venuesByName:       {venueName: {pars:[18 ints]}} from main worker GET /venues
 // scorecardsByRound:  {roundName: [{player, holes:[18], total}]} from BFE worker GET /scorecards
-function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound) {
+function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows) {
   const allResults = resultsPayload.results || [];
   const allSkins = resultsPayload.skins || [];
   const allCttp = resultsPayload.cttp || [];
   const withdrawnNames = new Set((config.roster || []).filter(p => p.withdrawn).map(p => p.name));
+  // Dev-77: bfe_round_groups rows -> {roundName: [[player,...], ...]}, so
+  // the results page can show playing groups for a round BEFORE it's
+  // closed (foursomes are set well ahead of tee-off, results aren't).
+  // `groupRows` is optional — an older caller that doesn't pass it just
+  // gets no groups shown anywhere, same as before this existed.
+  const groupsByRound = {};
+  (groupRows || []).forEach(row => {
+    const byIdx = (groupsByRound[row.round_name] = groupsByRound[row.round_name] || {});
+    (byIdx[row.group_index] = byIdx[row.group_index] || []).push(row.player_name);
+  });
+  Object.keys(groupsByRound).forEach(rn => {
+    groupsByRound[rn] = Object.keys(groupsByRound[rn]).sort((a, b) => a - b).map(k => groupsByRound[rn][k]);
+  });
   // Only stableford_quota rounds get a leaderboard section here — this
   // generator reads quota_in/quota_out, which only that engine populates.
   // 2Man (scramble_pair, once built) isn't in config.rounds at all yet
@@ -2894,6 +3240,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       quotaInLabel: 'Quota Rd' + (idx + 1),
       players, leader: players[0] || null,
       podium, skinsList, ctpList,
+      groups: groupsByRound[r.name] || null,
     };
   });
 
@@ -3268,17 +3615,39 @@ function renderOverallRow(o, roundLabels, showPodium) {
   </div>`;
 }
 
+// Dev-77: playing groups, shown whenever BFE-Admin's Groupings section has
+// saved any for this round — before the round is closed (the point: players
+// see who they're playing with ahead of tee-off) and still shown after, as
+// a plain reference. Renders nothing at all if sec.groups is null/empty, so
+// this is a no-op for any round/event that hasn't used Groupings yet.
+function renderGroupsBlock(groups) {
+  if (!groups || !groups.length) return '';
+  // Reuses the existing .side-strip/.side-card/.side-row classes (already
+  // styled for the Podium/Skins/CTP row above) rather than adding new CSS —
+  // same card language, one row per player instead of one row per fact.
+  return `<div style="margin-top:1.2rem">
+    <div class="side-label">👥 Playing Groups</div>
+    <div class="side-strip">${groups.map((g, i) => `<div class="side-card">
+        <div class="side-label">Group ${i + 1}</div>
+        ${g.map(n => `<div class="side-row"><span>${escapeHtml(n)}</span></div>`).join('')}
+      </div>`).join('')}</div>
+  </div>`;
+}
+
 function renderRoundSection(sec, num) {
+  const groupsHtml = renderGroupsBlock(sec.groups);
   if (!sec.closed) {
+    const hasGroups = sec.groups && sec.groups.length;
     return `<div class="section" id="round-${sec.idx}">
       <div class="section-head"><div class="section-num">${num}</div><div>
         <div class="section-title">Round ${sec.idx + 1} · ${escapeHtml(sec.venue)}</div>
         <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
       </div></div>
       <div class="locked-card">
-        <div class="locked-title">Not closed yet</div>
-        <div class="locked-sub">Results post here as soon as this round is closed in BFE-Admin.</div>
+        <div class="locked-title">${hasGroups ? 'Groups are set — results post once this round closes' : 'Not closed yet'}</div>
+        <div class="locked-sub">${hasGroups ? 'Full leaderboard, skins, and CTP results post here as soon as this round is closed in BFE-Admin.' : 'Results post here as soon as this round is closed in BFE-Admin.'}</div>
       </div>
+      ${groupsHtml}
     </div>`;
   }
   const sideCard = (label, emoji, items, empty) => `<div class="side-card">
@@ -3301,6 +3670,7 @@ function renderRoundSection(sec, num) {
       ${sideCard('Skins', '🏌️', sec.skinsList, 'No outright skins — every hole was tied.')}
       ${sideCard('Closest to Pin', '📍', sec.ctpList, 'No CTP claims recorded.')}
     </div>
+    ${groupsHtml}
   </div>`;
 }
 
@@ -3487,7 +3857,17 @@ async function fetchResultsPageData() {
     } catch (e) { scorecardsByRound[r.name] = []; }
   }));
 
-  return buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound);
+  // Dev-77: playing groups, if any are saved — best-effort, same posture as
+  // venue pars above (a fetch failure here shouldn't block the whole page,
+  // it just means no groups show for any round).
+  let groupRows = [];
+  try {
+    const groupsRes = await fetch(bfeBase + '/bfe/round-groups?event=' + encodeURIComponent(eventName));
+    const groupsData = await groupsRes.json();
+    groupRows = Array.isArray(groupsData.rows) ? groupsData.rows : [];
+  } catch (e) { console.warn('[BFE] Could not load playing groups:', e.message); }
+
+  return buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows);
 }
 
 function setPublishResultsStatus(msg, isErr) {
