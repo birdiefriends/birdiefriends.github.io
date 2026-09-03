@@ -15,19 +15,23 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .state-pill.open{background:rgba(224,160,80,0.15);border-color:rgba(224,160,80,0.45);color:#e0a050;}
 .state-dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px currentColor;opacity:0.9;}
 .rail{display:flex;align-items:stretch;gap:0;padding:1.5rem 1.5rem 0.5rem;max-width:820px;margin:0 auto;}
-.rail-node{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 6px;position:relative;}
+.rail-node{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 6px;position:relative;text-decoration:none;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+.rail-node:hover .rail-dot{filter:brightness(1.15);}
 .rail-line{position:absolute;top:15px;left:-50%;width:100%;height:2px;background:var(--white-faint);z-index:0;}
 .rail-node:first-child .rail-line{display:none;}
 .rail-node.done .rail-line{background:rgba(111,191,126,0.4);}
+.rail-node.progress .rail-line{background:rgba(224,160,80,0.4);}
 .rail-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Baloo 2',sans-serif;font-weight:700;font-size:13px;z-index:1;margin-bottom:0.5rem;}
 .rail-node.done .rail-dot{background:rgba(111,191,126,0.18);border:1.5px solid var(--good);color:var(--good);}
+.rail-node.progress .rail-dot{background:rgba(224,160,80,0.18);border:1.5px solid var(--bad);color:var(--bad);}
 .rail-node.locked .rail-dot{background:var(--white-faintest);border:1.5px solid var(--white-faint);color:var(--white-dim);}
 .rail-round{font-size:12px;font-weight:700;color:var(--white);}
 .rail-venue{font-size:10.5px;color:var(--white-dim);margin-top:1px;}
 .rail-tag{margin-top:5px;font-size:8.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;border-radius:99px;padding:2px 9px;}
 .rail-node.done .rail-tag{background:rgba(111,191,126,0.15);color:var(--good);}
+.rail-node.progress .rail-tag{background:rgba(224,160,80,0.15);color:var(--bad);}
 .rail-node.locked .rail-tag{background:var(--white-faintest);color:var(--white-dim);}
-.section{padding:2.1rem 1.5rem;border-top:1px solid var(--white-faintest);}
+.section{padding:2.1rem 1.5rem;border-top:1px solid var(--white-faintest);scroll-margin-top:0.75rem;}
 .section-head{display:flex;align-items:flex-start;gap:0.85rem;margin-bottom:1.1rem;}
 .section-num{font-family:'Baloo 2',sans-serif;font-size:1.6rem;font-weight:800;color:var(--accent);line-height:1;}
 .section-title{font-size:16px;font-weight:700;color:var(--white);}
@@ -127,24 +131,28 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
   <div class="hero">
     <div class="hero-eyebrow">BirdieFriends Experiences</div>
     <div class="hero-title">Wally Cup</div>
-    <div class="hero-subtitle">2026-09-11</div>
+    <div class="hero-subtitle">Sep 11, 2026</div>
     <div class="state-pill open"><span class="state-dot"></span>1/3 rounds closed</div>
   </div>
-  <div class="rail"><div class="rail-node done">
+  <div class="rail"><a class="rail-node done" href="#round-0">
       <div class="rail-line"></div><div class="rail-dot">1</div>
       <div class="rail-round">Round 1</div><div class="rail-venue">Honesdale Golf Club</div>
       <div class="rail-tag">Final</div>
-    </div><div class="rail-node locked">
+    </a><a class="rail-node locked" href="#round-1">
       <div class="rail-line"></div><div class="rail-dot">2</div>
       <div class="rail-round">Round 2</div><div class="rail-venue">Skytop Lodge</div>
       <div class="rail-tag">Not started</div>
-    </div><div class="rail-node locked">
+    </a><a class="rail-node locked" href="#round-2">
       <div class="rail-line"></div><div class="rail-dot">3</div>
       <div class="rail-round">Round 3</div><div class="rail-venue">Paupack Hills GC</div>
       <div class="rail-tag">Not started</div>
-    </div></div>
+    </a><a class="rail-node progress" href="#overall">
+      <div class="rail-line"></div><div class="rail-dot">4</div>
+      <div class="rail-round">Overall</div><div class="rail-venue">&nbsp;</div>
+      <div class="rail-tag">In progress</div>
+    </a></div>
   <div class="wrap">
-    <div class="section">
+    <div class="section" id="round-0">
     <div class="section-head"><div class="section-num">01</div><div>
       <div class="section-title">Round 1 · Honesdale Golf Club — Final</div>
       <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
@@ -409,7 +417,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
       <div class="side-row"><span>Dave Sherwin</span><span class="hole">Hole 6 — 27.9′ — $10</span></div><div class="side-row"><span>Nate Stettler</span><span class="hole">Hole 13 — 6.7′ — $10</span></div>
     </div>
     </div>
-  </div><div class="section">
+  </div><div class="section" id="round-1">
       <div class="section-head"><div class="section-num">02</div><div>
         <div class="section-title">Round 2 · Skytop Lodge</div>
         <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
@@ -418,7 +426,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
         <div class="locked-title">Not closed yet</div>
         <div class="locked-sub">Results post here as soon as this round is closed in BFE-Admin.</div>
       </div>
-    </div><div class="section">
+    </div><div class="section" id="round-2">
       <div class="section-head"><div class="section-num">03</div><div>
         <div class="section-title">Round 3 · Paupack Hills GC</div>
         <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
@@ -428,15 +436,157 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
         <div class="locked-sub">Results post here as soon as this round is closed in BFE-Admin.</div>
       </div>
     </div>
-    <div class="section">
+    <div class="section" id="overall">
       <div class="section-head"><div class="section-num">04</div><div>
         <div class="section-title">Overall Standings</div>
-        <div class="section-desc">1/3 rounds closed so far</div>
+        <div class="section-desc">1/3 rounds closed so far · standings update as each round closes, champion reveals once all rounds are in</div>
       </div></div>
-      <div class="locked-card">
-        <div class="locked-title">Held back until the final round closes</div>
-        <div class="locked-sub">The season standings and champion reveal here once all 3 rounds are in.</div>
-      </div>
+      
+      <div class="lb-card"><div class="lb-list"><div class="ov-row lb-row leader-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">1</span><span class="player-name">Bill Steirer</span></div>
+      <span class="perf-badge good">+7.03</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+7.03</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">2</span><span class="player-name">Nate Stettler</span></div>
+      <span class="perf-badge good">+5.52</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+5.52</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">3</span><span class="player-name">Chooch Wernett</span></div>
+      <span class="perf-badge good">+4.55</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+4.55</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">4</span><span class="player-name">Lou Strohl</span></div>
+      <span class="perf-badge good">+4.07</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+4.07</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">5</span><span class="player-name">Mark Weaver</span></div>
+      <span class="perf-badge good">+4.03</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+4.03</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">6</span><span class="player-name">Rich Potts</span></div>
+      <span class="perf-badge good">+3.92</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+3.92</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">7</span><span class="player-name">Tom Arnold</span></div>
+      <span class="perf-badge good">+3.57</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+3.57</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">8</span><span class="player-name">Jeff Rapp</span></div>
+      <span class="perf-badge good">+3.38</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+3.38</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">9</span><span class="player-name">Scott Justus</span></div>
+      <span class="perf-badge good">+3.21</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+3.21</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">10</span><span class="player-name">Tom Stitt</span></div>
+      <span class="perf-badge good">+1.67</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+1.67</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">11</span><span class="player-name">Brian Hager</span></div>
+      <span class="perf-badge good">+1.14</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+1.14</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">12</span><span class="player-name">Jake Knappenberger</span></div>
+      <span class="perf-badge good">+1.03</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+1.03</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">13</span><span class="player-name">Evan Lindermuth</span></div>
+      <span class="perf-badge good">+0.69</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>+0.69</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">14</span><span class="player-name">Dave Sherwin</span></div>
+      <span class="perf-badge even">−0.05</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>−0.05</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">15</span><span class="player-name">Jordan Knappenberger</span></div>
+      <span class="perf-badge bad">−6.23</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>−6.23</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div><div class="ov-row lb-row">
+    <div class="lb-row-top">
+      <div class="lb-name-wrap"><span class="rank-cell">16</span><span class="player-name">Mohamed Walli</span></div>
+      <span class="perf-badge bad">−7.48</span>
+    </div>
+    <div class="ov-rounds">
+      <span>Rd1 <b>−7.48</b></span><span>Rd2 <b>—</b></span><span>Rd3 <b>—</b></span>
+      
+    </div>
+  </div></div></div>
     </div>
   </div>
   <div class="section wb-section">
@@ -520,7 +670,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
   </div>
   <div class="footer">
     <a class="back-btn" href="/portal.html">← Back to Portal</a>
-    <div class="footer-meta">BirdieFriends Experiences · generated 2026-09-03 11:24 UTC</div>
+    <div class="footer-meta">BirdieFriends Experiences · generated 2026-09-03 11:44 UTC</div>
   </div></div>
 </div>
 </body></html>
