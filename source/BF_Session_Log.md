@@ -3263,3 +3263,132 @@ addenda — not a fifth addendum.
   which now carries an accurate, self-sufficient Dev-76 Architecture Notes summary —
   no need to re-read this whole session log's Dev-76 detail line by line to get up to
   speed, though it's there if a specific decision's reasoning needs double-checking.
+
+## Dev-77 — CLOSED, 2026-09-03
+
+Brian ran a live test Wally Cup event against the Phase 3 results page and reported three
+fixes needed, then asked for a Groupings feature (foursome assignment, pivoting this year
+toward social mixing over the historical skill-based approach), then pinning to seat three
+historic WC champions together as an honorary Rd1 group, then a Portal-facing way for
+players to see their own group. Closing this chat now — already auto-compacted once,
+same reasoning as Dev-76's own close-out — before starting the 2-Man scramble work fresh.
+
+- **Results page fixes (three, from Brian's live test):**
+  1. ✅ Event date range in the header — `bfe_events` gained an `event_end_date` column
+     (Worker POST/GET `/bfe/events`, Setup's new date field, rehydrate-on-load), rendered
+     via a new `formatEventDateRange()` helper (e.g. "Sep 11–13, 2026").
+  2. ✅ Rd1/Rd2/Rd3/Overall step-graph rail made clickable — rewritten from static markup
+     to `<a href="#round-N">`/`#overall` jump links, with matching section `id`s added and
+     a 4th "Overall" rail node (amber "in progress" visual state) added alongside the
+     existing three round nodes.
+  3. ✅ **Genuine regression, not a new gap** — Overall Standings was blank/"held back"
+     until all 3 rounds closed, which Brian correctly flagged as having worked before. Root
+     cause: a rendering gate (`if (data.isComplete)`) around the *entire* Overall section,
+     not just the champion reveal — the underlying rolling-standings math was already
+     correct for partial data the whole time. Fixed to gate only the champion banner/podium
+     $ on full completion; the rolling Overall table now shows as soon as ≥1 round is closed.
+- **Player Groupings + Pinning (new, Dev-77) — BFE-Admin new §11 "Player groupings":**
+  Brian wanted 2026's 16-player/3-round Wally Cup foursomes to prioritize social mixing
+  over the historical skill-based (quota/standings) approach he'd used in past years, with
+  everyone playing with as many different people as possible across the 3 rounds. Built as
+  a general strategy picker, not a one-off: by quota, by standings, by social (new,
+  default), or random.
+  - New `bfe_round_groups` table (event_id, round_name, group_index, player_name,
+    strategy) — deliberately **separate** from `bfe_event_rounds`, because Setup Save does
+    a full delete-and-reinsert of every round/roster row on every save; a groups column on
+    that table would've been silently wiped on the next unrelated Setup edit. Same
+    delete-then-insert-per-round lifecycle as `bfe_round_results`/`_skins`/`_cttp`, so
+    re-generating a round's groups any number of times stays safe.
+  - Two new PIN-gated Worker routes: `POST /bfe/round-groups` (full-replace for one round)
+    and `GET /bfe/round-groups?event=&round=` (flat rows — all rounds in one fetch when
+    `round` is omitted, so Portal and BFE-Admin's own reload don't need one request per
+    round).
+  - Social strategy: for the real 16-player/4-group/3-round case, hand-verified a
+    provably-zero-repeat 4×4 grid (rows/columns/diagonals) schedule; the general-purpose
+    path (any roster/group size) is a random-search minimizer against an accumulated
+    cross-round pair-history set, so no pair repeats before everyone's had a fair shot at
+    playing with everyone else, where the numbers allow it.
+  - Quota/standings ("flighted") strategies chunk a pre-sorted roster into **consecutive**
+    slices — caught and fixed before shipping: the first draft used round-robin
+    distribution, which interleaves skill levels across every group on a pre-sorted array
+    and would have defeated the entire point of flighting.
+  - **Pinning:** an optional "pin a player to a group" step, seeded first via
+    `applyPins()` before whichever strategy fills the remaining seats — general-purpose,
+    not Wally-Cup-specific. Used to seat three historic WC champions — Tom Arnold, Bill
+    Steirer, and Mohamed Walli (spelling varies "Mohammed" in some sources — flagged, not
+    resolved) — together as an honorary Rd1 Group 1, with Social filling every other seat
+    around that fixed constraint. Confirmed with Brian: Jordan/Jake Knappenberger (likely
+    related players) get **no** special pairing treatment — the same as any other two
+    players, by his own explicit call.
+  - Data & Reset panel: added a "Groups" row-count column so a stored event's grouping
+    state is visible at a glance, same as its rounds/roster/results/skins counts.
+- **Delete-config bug (FK constraint) — fixed:** `DELETE /bfe/events/:event_name`'s manual
+  cascade (D1/SQLite doesn't auto-cascade FKs) never got `bfe_round_groups` added when that
+  table shipped this same session, so deleting any event that had ever had groups saved
+  failed with `SQLITE_CONSTRAINT_FOREIGNKEY`. Fixed; Brian confirmed the repair worked.
+- **Portal.html — "👥 Group" event-card icon (new, Dev-77), two follow-on fixes from
+  Brian's own live testing:** Brian judged the existing "🏆 Results" icon on Wally
+  Cup/scramble event cards redundant with the Results tab's own link, and asked for it
+  replaced with something that surfaces a player's own group directly from the card, since
+  that's the natural place to look for it mid-event. Built a new sheet
+  (`openCardGroupSheet`/`loadCardGroups`, same evtOrId-flexible pattern as the existing
+  Photos/Score/Notes sheets) that reads `bfe_round_groups` live and highlights the
+  logged-in player's own group in green.
+  1. **Event-name mismatch:** a Wally Cup round exists in the Portal as its own separate
+     event/gathering card per round (e.g. "2026 Wally Cup - Rd1"), each with its own
+     format/tee-time, while BFE-Admin's own `event_name` is just the umbrella ("2026 Wally
+     Cup") — the round split lives inside that one `bfe_events` row, not as separate rows.
+     The sheet was querying BFE for the literal card title, which doesn't exist as an event
+     name there, so it always came back empty ("groups haven't been posted"). Fixed with
+     `bfeEventNameCandidates()` — strips a trailing "- RdN"/"- Round N" suffix to try the
+     umbrella name first, falling back to the raw card name for events without that split.
+  2. **Wrong round shown:** once event-name resolution worked, the sheet was showing
+     *every* round that had groups generated, not just the round belonging to the card it
+     was opened from — so the Rd2 card was displaying Rd1's foursomes (the only round
+     generated so far). Fixed with `resolveTargetRoundName()`, which matches the card to
+     its own round only (exact `round_name` match preferred, then a shared Rd-N/Round-N
+     token, then positional fallback by Setup's own round order) — a round with nothing
+     generated yet now correctly shows "not posted yet for this round" instead of
+     borrowing another round's data.
+- **`portal_version.txt` version-drift bug (re-found — same family as the Dev-45/54/73
+  recurrence already tracked in this file):** several `portal.html` pushes through
+  AutoPush this session never touched `portal_version.txt` — under the AutoPush-tool
+  workflow, nothing bumps it automatically (the old auto-bump-on-`/deploy` Python script
+  from the pre-AutoPush era doesn't run in this flow at all), so the live version display
+  sat stuck at `v4.0.0 · 2026-08-31` through several real deploys. Bumped to
+  `v4.0.1 · 2026-09-03` and pushed. **Going forward: `portal_version.txt` gets bumped and
+  dropped into AutoPush alongside every `portal.html` change, not just at session close.**
+- **`bf_push.ps1` "not cleaning out files" report — investigated, no bug found in the
+  tool itself:** `portal_version.txt`'s `docs/` destination genuinely hit CDN lag inside
+  the tool's own ~41s verify window (the same known v6 caveat already documented in the
+  script's own header comment) — resolved on its own once Fastly's cache rolled over,
+  confirmed by a direct raw-GitHub re-fetch a couple minutes later. Working as designed:
+  the tool only deletes a local file once *every* destination verifies, and correctly kept
+  it rather than risk deleting something not fully confirmed live; a plain re-run now
+  succeeds. `bf_experiences_worker.js` sitting in the folder since that morning is
+  unrelated — a leftover from an earlier-session filename mistake (should have been
+  `BF_Experiences.js`) that isn't a `$FileMap` key at all, so the tool never even looks for
+  it to push or delete. Needs manual deletion by Brian — no delete capability on his
+  device from this session's bridge.
+- **Chat-rename string (covers the whole chat, one continuous session):**
+  `Dev-77 - Player Groupings & Historic-Winner Pinning Built, Results Page Fixes, Portal
+  Group Icon, Delete/Version Bugs Fixed`
+- **Carry-forward into Dev-78:** Per Brian's own three-part ordering, next up is (2) the
+  2-Man scramble scoring format — still ❓ open, needs Brian's own input on the formula
+  before it can be sized or built, then (3) photo capture / "memories" display (not
+  started; main `worker.js`'s existing `event_photos`/R2/`curation_status` pipeline is a
+  plausible head start, not yet verified against BFE's data shape). **On the long-standing
+  "2026 Wally Cup" D1 test-data cleanup** (carried as outstanding since Dev-75): this
+  session's live Rd1 groupings screenshot showed the real roster in the honorary-pin
+  arrangement exactly as requested — which couldn't be leftover Dev-74/75 test data, since
+  pinning didn't exist until this session — so a fresh real Setup + real groups very likely
+  already happened during Dev-77. **Not explicitly confirmed in words though — verify with
+  Brian at the start of Dev-78 rather than assuming either way before real Rd1 (10am
+  9/11).** Also carried forward: `bf_experiences_worker.js` orphan file in AutoPush, safe
+  for Brian to delete whenever convenient, not urgent.
+- **Next session starts fresh, same reasoning as Dev-76's close-out:** a new chat should
+  be opened for the 2-Man scramble work, reading `BF_Session_Bootstrap.md` fresh (fetched
+  via the standard bootstrap command), which now carries an accurate, self-sufficient
+  Dev-77 Architecture Notes summary — no need to re-read this whole entry line by line to
+  get up to speed, though it's there if a specific decision's reasoning needs
+  double-checking.
