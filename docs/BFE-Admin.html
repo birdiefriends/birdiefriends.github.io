@@ -252,42 +252,68 @@
   <!-- ── Player groupings (Dev-77) ─────────────────────────────────────── -->
   <section class="card" id="groupingsSection">
     <h2>11. Player groupings</h2>
-    <p class="hint">Assigns players to foursomes for one round. <strong>Social</strong> actively avoids repeating a pairing from any other round you've already saved groups for (whatever's saved for other rounds becomes its "already played together" history — generate/save rounds in any order, it just reads what's there). <strong>By quota</strong> flights by each player's entered handicap (Group 1 = lowest handicap). <strong>By standings</strong> flights by current Overall standing through whatever rounds are already closed — only selectable once a prior round in this event has results saved. <strong>Random</strong> is a plain shuffle. Generate first — it doesn't save anything by itself — then use each player's "Move to…" picker to hand-adjust before you Save.</p>
     <div class="row">
       <div style="flex:2"><label for="groupRoundSelect">Round</label><select id="groupRoundSelect"><option value="">— load/generate the event above first —</option></select></div>
-      <div><label for="groupSizeInput">Players per group</label><input type="number" id="groupSizeInput" value="4" min="2" max="8"></div>
-      <div style="flex:2"><label for="groupStrategySelect">Strategy</label>
-        <select id="groupStrategySelect">
-          <option value="social" selected>Social — mix up who's played with whom</option>
-          <option value="quota">By quota — flight by handicap</option>
-          <option value="standings">By standings — flight by current Overall</option>
-          <option value="random">Random</option>
-        </select>
+    </div>
+
+    <div id="foursomeGroupingControls">
+      <p class="hint">Assigns players to foursomes for one round. <strong>Social</strong> actively avoids repeating a pairing from any other round you've already saved groups for (whatever's saved for other rounds becomes its "already played together" history — generate/save rounds in any order, it just reads what's there). <strong>By quota</strong> flights by each player's entered handicap (Group 1 = lowest handicap). <strong>By standings</strong> flights by current Overall standing through whatever rounds are already closed — only selectable once a prior round in this event has results saved. <strong>Random</strong> is a plain shuffle. Generate first — it doesn't save anything by itself — then use each player's "Move to…" picker to hand-adjust before you Save.</p>
+      <div class="row">
+        <div><label for="groupSizeInput">Players per group</label><input type="number" id="groupSizeInput" value="4" min="2" max="8"></div>
+        <div style="flex:2"><label for="groupStrategySelect">Strategy</label>
+          <select id="groupStrategySelect">
+            <option value="social" selected>Social — mix up who's played with whom</option>
+            <option value="quota">By quota — flight by handicap</option>
+            <option value="standings">By standings — flight by current Overall</option>
+            <option value="random">Random</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="align-items:flex-end">
+        <div style="flex:2"><label for="pinPlayerSelect">Pin a player to a group first (optional — e.g. an honorary group)</label>
+          <select id="pinPlayerSelect"><option value="">— pick a player —</option></select>
+        </div>
+        <div><label for="pinGroupInput">Group #</label><input type="number" id="pinGroupInput" value="1" min="1" style="width:80px"></div>
+        <div><button type="button" class="secondary" id="addPinBtn">Pin</button></div>
+      </div>
+      <div id="pinnedChips" style="margin:2px 0 12px"></div>
+      <div class="btnbar">
+        <button type="button" id="generateGroupsBtn">Generate groups</button>
+        <button type="button" class="secondary" id="loadGroupsBtn">Load saved</button>
+      </div>
+      <div id="groupingsStatus" class="status"></div>
+      <div id="groupingsEditor"></div>
+      <div class="btnbar" style="margin-top:4px">
+        <button type="button" id="saveGroupsBtn" disabled>Save groups</button>
       </div>
     </div>
-    <div class="row" style="align-items:flex-end">
-      <div style="flex:2"><label for="pinPlayerSelect">Pin a player to a group first (optional — e.g. an honorary group)</label>
-        <select id="pinPlayerSelect"><option value="">— pick a player —</option></select>
+
+    <!-- Dev-78 — 2Man draft board. Shown instead of the foursome controls
+         above when the selected round's engine is scramble_pair. Ranks by
+         current standing (worst first), lets the bottom-8 "captains" draft a
+         partner from the top-8 pool one pick at a time (mirrors how Brian
+         actually runs it live — a person decides, not a formula), then
+         derives foursomes as consecutive team pairs (0&1, 2&3, 4&5, 6&7) for
+         display only — nothing new to store for that part. -->
+    <div id="draftBoardControls" hidden>
+      <p class="hint">After the ranking round closes, the bottom 8 players ("captains") each draft one partner from the top 8, worst rank first — <strong>16th picks first</strong>, down through 9th, and whoever's left in the pool when it's 9th's turn is their partner. Fully manual, on purpose — run it live (at the pub, on the course, wherever) and tap picks in as they happen. Use Swap afterward if two teams get traded around informally; nicknames are optional and just for this event, no history kept.</p>
+      <div class="row">
+        <div style="flex:2"><label for="draftRankBasisSelect">Rank players as of</label><select id="draftRankBasisSelect"></select></div>
+        <div><button type="button" class="secondary" id="startDraftBtn">Start draft</button></div>
+        <div><button type="button" class="secondary" id="loadDraftBtn">Load saved</button></div>
       </div>
-      <div><label for="pinGroupInput">Group #</label><input type="number" id="pinGroupInput" value="1" min="1" style="width:80px"></div>
-      <div><button type="button" class="secondary" id="addPinBtn">Pin</button></div>
-    </div>
-    <div id="pinnedChips" style="margin:2px 0 12px"></div>
-    <div class="btnbar">
-      <button type="button" id="generateGroupsBtn">Generate groups</button>
-      <button type="button" class="secondary" id="loadGroupsBtn">Load saved</button>
-    </div>
-    <div id="groupingsStatus" class="status"></div>
-    <div id="groupingsEditor"></div>
-    <div class="btnbar" style="margin-top:4px">
-      <button type="button" id="saveGroupsBtn" disabled>Save groups</button>
+      <div id="draftStatus" class="status"></div>
+      <div id="draftBoard"></div>
+      <div class="btnbar" style="margin-top:4px">
+        <button type="button" id="saveDraftBtn" disabled>Save teams</button>
+      </div>
     </div>
   </section>
 
   <!-- ── Close a round (Dev-74 — Wally Cup scoring engine) ────────────── -->
   <section class="card">
     <h2>8. Close a round</h2>
-    <p class="hint">Pulls that round's scorecards straight from Jotform, runs them through the quota engine above (including any Wally Ball bonus), computes skins and Closest-to-Pin, and saves the result — round pot payout included (podium, skins, and CTP). Only "Stableford quota" rounds are wired up right now; 2-man scramble scoring isn't built yet. CTP pays whoever's the most-recent qualifying claimant on each hole configured for this round's venue in section 5 — same rule the live leaderboard uses. Load or Generate the event above first.</p>
+    <p class="hint">Pulls that round's scorecards straight from Jotform, computes skins and Closest-to-Pin, and saves the result — round pot payout included (podium, skins, and CTP). "Stableford quota" rounds also run the quota engine (including any Wally Ball bonus) and feed Overall Standings. "2-man scramble" rounds close against the teams saved in section 11 (Player groupings → Draft) instead of the individual roster — same points-per-hole scoring, no quota, one scorecard per team — and never feed Overall Standings, no matter what this round's "Rolls into Overall" box in section 4 says. CTP always pays the individual who's the most-recent qualifying claimant on each hole configured for this round's venue in section 5 — same rule the live leaderboard uses, even in a team round. Load or Generate the event above first.</p>
     <div class="row">
       <div style="flex:2"><label for="closeRoundSelect">Round</label><select id="closeRoundSelect"><option value="">— load/generate the event above first —</option></select></div>
       <div style="align-self:flex-end"><button type="button" id="checkScorecardsBtn" disabled>📋 Check scorecards</button></div>
@@ -446,11 +472,27 @@ function computeStablefordQuota(input, params) {
   return { entries };
 }
 
+// Dev-78 (2Man scramble) — previously scored by ascending net/gross STROKE
+// total (lower wins), and was never actually fed `input.teams` by Close
+// Round — see the "Only 'Stableford quota' rounds are wired up right now"
+// hint that used to sit on section 8, this was dead/stub code. Per Brian
+// (this session): 2Man keeps the exact same per-hole POINTS scoring already
+// used for the individual stableford rounds — higher wins, same as
+// computePointsByScoreType/computeStablefordQuota's basePoints — just one
+// scorecard per TEAM instead of per player, and no quota/handicap target at
+// all (no adjustQuota, no quotaIn/quotaOut). `t.actualPoints` is the team's
+// scorecard total, read the identical way `p.actualPoints` is for every
+// other round (see the Close Round team-round branch that builds this).
 function computeScramblePair(input, params) {
   const entries = input.teams.map(t => ({
-    label: t.label, basePoints: t.netTotal ?? t.grossTotal, gross: t.grossTotal, net: t.netTotal
+    // `performance` duplicates basePoints (no quota to subtract) purely so
+    // this engine's entries match every other engine's output shape —
+    // Close Round's podium-tie logic reads `e.rankPerformance ?? e.performance`
+    // generically across engines, and no influencer (Wally Ball or otherwise)
+    // ever runs for 2Man, so rankPerformance never gets set here.
+    name: t.label, basePoints: t.actualPoints, performance: t.actualPoints, players: t.players || null
   }));
-  entries.sort((a, b) => a.basePoints - b.basePoints);
+  entries.sort((a, b) => b.basePoints - a.basePoints);
   entries.forEach((e, i) => { e.rank = i + 1; });
   return { entries };
 }
@@ -2052,6 +2094,24 @@ async function saveEventConfig() {
   // refreshes the Review tables / Close Round dropdown / Overall Standings
   // to match, same as clicking Generate would.
   await buildAndAssembleConfig();
+
+  // Dev-78 guardrail — "Rolls into Overall" defaults to checked and is easy
+  // to miss (this bit Brian himself with the 2Man round in testing). A
+  // non-stableford_quota round almost never actually belongs in the season
+  // quota chain/Wally Ball — confirm before saving rather than silently
+  // letting a 2Man scramble (or any future non-standard format) feed Overall
+  // Standings unnoticed.
+  const suspectRounds = assembledConfig.rounds.filter(r => r.engine !== 'stableford_quota' && r.rollsIntoOverall !== false);
+  if (suspectRounds.length) {
+    const names = suspectRounds.map(r => `"${r.name}"`).join(', ');
+    const proceed = confirm(
+      `${names} — engine is not "Stableford quota", but "Rolls into Overall" is checked in section 4.\n\n` +
+      `This will feed that round's result into the season-long Overall Standings and Wally Ball pot, which is almost never what you want for a standalone format like a 2Man scramble.\n\n` +
+      `OK to save anyway (rolls into Overall) — Cancel to go back and uncheck it in section 4 first.`
+    );
+    if (!proceed) { setStatus('Save cancelled — go uncheck "Rolls into Overall" for the round(s) above in section 4.', true); return; }
+  }
+
   setStatus('Saving…');
   const res = await fetch(base + '/bfe/events', {
     method: 'POST',
@@ -2461,6 +2521,169 @@ document.getElementById('checkScorecardsBtn').addEventListener('click', async ()
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════
+// Close a TEAM round (Dev-78 — 2Man scramble). Split out from the quota
+// Close Round handler below rather than branching deep inside it: the unit
+// here is the TEAM (from bfe_round_groups, strategy='draft' — see the Draft
+// board in section 11), not bfe_event_roster, and there's no quota chain
+// and no Wally Ball to thread through. CTP stays individual (a specific tee
+// shot, not a team act) and is still validated against the real roster;
+// podium/skins/scorecards are all team-keyed. Never called for a
+// stableford_quota round — see the branch in the closeRoundBtn handler.
+// ══════════════════════════════════════════════════════════════════════
+function teamDisplayName(players, label) {
+  return (label && label.trim()) ? label.trim() : players.join(' & ');
+}
+
+async function closeTeamRound(round, base, pin, eventName, btn) {
+  const roundName = round.name;
+  setCloseRoundStatus('Fetching saved teams + this round’s scorecards…');
+  try {
+    const groupsRes = await fetch(base + '/bfe/round-groups?event=' + encodeURIComponent(eventName) + '&round=' + encodeURIComponent(roundName));
+    const groupsData = await groupsRes.json();
+    if (!groupsRes.ok) throw new Error(groupsData.error || `HTTP ${groupsRes.status}`);
+    const byIdx = {};
+    (groupsData.rows || []).forEach(r => {
+      byIdx[r.group_index] = byIdx[r.group_index] || { players: [], label: r.team_label || null };
+      byIdx[r.group_index].players.push(r.player_name);
+    });
+    const teamIdxs = Object.keys(byIdx).map(Number).sort((a, b) => a - b);
+    if (!teamIdxs.length) {
+      throw new Error(`No teams saved for "${roundName}" yet — build the draft in section 11 (Player groupings) first.`);
+    }
+    const teams = teamIdxs.map(gi => {
+      const t = byIdx[gi];
+      return { groupIndex: gi, players: t.players, label: t.label, displayName: teamDisplayName(t.players, t.label) };
+    });
+
+    const scorecards = await jfFetchRoundScorecards(roundName);
+    const pot = (assembledConfig.payout?.pots || []).find(p => p.round === roundName);
+
+    // CTP is still an individual claim (one player's tee shot), validated
+    // against the real roster — same rule as every other round — even
+    // though scoring/podium/skins for this round are team-level.
+    const cttpHoles = assembledConfig.teePolicy?.byVenue?.[round.venueId]?.cttpHoles || [];
+    const cttpLeaders = cttpHoles.length ? await jfFetchCttpLeaders(roundName) : {};
+    const cttpPerHole = pot?.distribution?.cttpPerHole || 0;
+    const cttpPayoutByPlayer = {};
+    const cttpWinners = [];
+    const cttpUnrecognized = [];
+    const rosterNames = new Set(assembledConfig.roster.map(p => p.name));
+    cttpHoles.forEach(hole => {
+      const leader = cttpLeaders[hole];
+      if (!leader) return;
+      if (!rosterNames.has(leader.player)) { cttpUnrecognized.push({ hole, player: leader.player }); return; }
+      cttpPayoutByPlayer[leader.player] = (cttpPayoutByPlayer[leader.player] || 0) + cttpPerHole;
+      cttpWinners.push({ hole, player: leader.player, dist: leader.dist, payout: cttpPerHole });
+    });
+
+    teams.forEach(t => { t.sc = scorecards[t.displayName]; });
+    const missing = teams.filter(t => !t.sc).map(t => t.displayName);
+    const knownTeamNames = new Set(teams.map(t => t.displayName));
+    const unrecognizedScorecards = Object.keys(scorecards).filter(n => !knownTeamNames.has(n));
+
+    if (missing.length || unrecognizedScorecards.length) {
+      const lines = [`Teams and scorecards don't match for "${roundName}":`, ''];
+      if (missing.length) lines.push(`No scorecard found for: ${missing.join(', ')}`, '');
+      if (unrecognizedScorecards.length) {
+        lines.push(`Scorecard submitted under a name that doesn't match any saved team: ${unrecognizedScorecards.join(', ')}`);
+        lines.push('→ Check it was submitted under the team\'s exact display name (nickname if one was set, otherwise "PlayerA & PlayerB").', '');
+      }
+      lines.push('OK to close anyway — a team with no scorecard scores 0. Cancel to go check first, nothing is saved yet.');
+      const proceed = confirm(lines.join('\n'));
+      if (!proceed) { setCloseRoundStatus('Close round cancelled — nothing saved. Check Jotform/teams, then try again.', true); btn.disabled = false; return; }
+    }
+
+    // Persist team scorecards too (same as individual rounds) — feeds vs-par
+    // on the results page. Keyed by roundName + the team's display name,
+    // same UNIQUE(event_name, player) shape bfe_scorecards already has.
+    await Promise.allSettled(teams.filter(t => t.sc).map(t => fetch(base + '/scorecards', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: roundName, player: t.displayName, holes: t.sc.holes, total: t.sc.actualPoints, venue: round.venue || null })
+    }).catch(e => console.warn('team scorecard persist failed for', t.displayName, e))));
+
+    const engineInput = { teams: teams.map(t => ({ label: t.displayName, actualPoints: t.sc ? t.sc.actualPoints : 0, players: t.players })) };
+    // No influencers — Wally Ball never applies to 2Man regardless of what a
+    // stray Wally Ball points value in Setup might say for this round.
+    const scored = scoreRound({ engine: round.engine, engineParams: round.engineParams, influencers: [] }, engineInput, {});
+
+    const skins = computeSkins(scorecards);
+    const skinCounts = {};
+    skins.forEach(s => { skinCounts[s.winner] = (skinCounts[s.winner] || 0) + 1; });
+    const podiumTiePayouts = pot
+      ? computePodiumTiePayouts(scored.entries.map(e => ({ name: e.name, tieKey: e.performance })), pot.distribution.podium)
+      : {};
+    const podiumPaidActual = Object.values(podiumTiePayouts).reduce((s, v) => s + v, 0);
+    const cttpPaidActual = Object.values(cttpPayoutByPlayer).reduce((s, v) => s + v, 0);
+    const skinPoolActual = pot ? Math.max(0, pot.poolTotal - podiumPaidActual - cttpPaidActual) : 0;
+    // Same floor-to-the-dollar-per-skin rule as the quota round path (Dev-79) —
+    // per SKIN (a team can win more than one hole), not per distinct winner.
+    const perSkin = (skins.length > 0) ? Math.floor(skinPoolActual / skins.length) : 0;
+
+    const results = scored.entries.map(e => {
+      const team = teams.find(t => t.displayName === e.name);
+      // A team's CTP $ is the sum of whichever of its two players claimed a
+      // hole this round — the per-hole detail (who, how far) still lives
+      // per-INDIVIDUAL in bfe_round_cttp via `cttpToSave` below; this is just
+      // the team's total take for the round-summary row.
+      const teamCttp = team ? team.players.reduce((s, p) => s + (cttpPayoutByPlayer[p] || 0), 0) : 0;
+      return {
+        playerName: e.name, actualPoints: e.basePoints,
+        quotaIn: null, performance: null, quotaOut: null,
+        wbStatus: null, wbHole: null, wbStroke: null,
+        rank: e.rank,
+        payoutPodium: podiumTiePayouts[e.name] || 0,
+        payoutSkins: perSkin * (skinCounts[e.name] || 0),
+        payoutCttp: teamCttp
+      };
+    });
+
+    const cttpToSave = cttpWinners.map(c => ({ hole: c.hole, player: c.player, dist: c.dist, payout: c.payout }));
+    const saveRes = await fetch(base + '/bfe/round-results', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: eventName, round_name: roundName, results, skins, cttp: cttpToSave, pin })
+    });
+    const saveData = await saveRes.json();
+    if (!saveRes.ok) throw new Error(saveData.error || `HTTP ${saveRes.status}`);
+
+    const notes = [];
+    if (missing.length) notes.push(`no scorecard found for: ${missing.join(', ')} (scored 0 pts)`);
+    if (unrecognizedScorecards.length) notes.push(`scorecard(s) under an unmatched name, not scored: ${unrecognizedScorecards.join(', ')}`);
+    if (cttpUnrecognized.length) notes.push(`CTP claim(s) from a name not on this roster, not paid: ${cttpUnrecognized.map(c => `#${c.hole} ${c.player}`).join(', ')}`);
+    setCloseRoundStatus(notes.length ? `Saved — ${notes.join('; ')}.` : 'Saved.', notes.length > 0);
+    renderTeamCloseRoundResults(roundName, results, skins, cttpWinners, cttpHoles, teams);
+    // Deliberately no renderWcStandings() call — 2Man never rolls into
+    // Overall (rollsIntoOverall should be false for this round; see the
+    // Setup guardrail in section 4), so nothing here belongs in that table.
+  } catch (e) {
+    setCloseRoundStatus('Close round failed: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderTeamCloseRoundResults(roundName, results, skins, cttpWinners, cttpHoles, teams) {
+  const teamByName = new Map(teams.map(t => [t.displayName, t]));
+  let html = `<h3>${roundName} — results</h3><table><thead><tr><th>Rank</th><th>Team</th><th>Players</th><th>Score</th><th>Podium $</th><th>Skins $</th><th>CTP $</th></tr></thead><tbody>`;
+  results.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).forEach(r => {
+    const t = teamByName.get(r.playerName);
+    html += `<tr><td>${r.rank ?? '—'}</td><td>${escapeHtml(r.playerName)}</td><td class="subtle">${t ? t.players.map(escapeHtml).join(' & ') : ''}</td>` +
+      `<td>${fmtNum(r.actualPoints)}</td><td>${fmtMoney(r.payoutPodium)}</td><td>${fmtMoney(r.payoutSkins)}</td><td>${fmtMoney(r.payoutCttp)}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  html += skins.length
+    ? '<h4 style="margin-top:14px">Skins</h4><div>' + skins.map(s => `<span class="chip">#${s.hole} — ${escapeHtml(s.winner)} (${s.pts} pts)</span>`).join(' ') + '</div>'
+    : '<p class="subtle" style="margin-top:10px">No outright skins this round — every hole was tied.</p>';
+  if ((cttpHoles || []).length) {
+    html += '<h4 style="margin-top:14px">Closest to Pin <span class="subtle" style="font-weight:normal">(individual, not team)</span></h4><div>' +
+      (cttpWinners && cttpWinners.length
+        ? cttpWinners.map(c => `<span class="chip">#${c.hole} — ${escapeHtml(c.player)}${c.dist != null ? ` (${c.dist}′)` : ''} — ${fmtMoney(c.payout)}</span>`).join(' ')
+        : '<span class="subtle">No CTP claims found for this round\'s configured holes (' + cttpHoles.join(', ') + ').</span>') +
+      '</div>';
+  }
+  document.getElementById('closeRoundResults').innerHTML = html;
+}
+
 document.getElementById('closeRoundBtn').addEventListener('click', async () => {
   if (!assembledConfig) { setCloseRoundStatus('Load or generate the event first.', true); return; }
   const roundName = document.getElementById('closeRoundSelect').value;
@@ -2475,6 +2698,14 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
   const btn = document.getElementById('closeRoundBtn');
   btn.disabled = true;
   document.getElementById('missingPlayerAlert').innerHTML = '';
+
+  // Dev-78 — team (2Man scramble) rounds get their own, much simpler close
+  // path: no quota chain, no Wally Ball, no per-player roster iteration.
+  if (round.engine !== 'stableford_quota') {
+    await closeTeamRound(round, base, pin, eventName, btn);
+    return;
+  }
+
   setCloseRoundStatus('Fetching prior results + this round’s scorecards…');
   try {
     // Prior results across the whole event — for quota chaining + WB history
@@ -2929,13 +3160,43 @@ function standingsValueByName(names, config, roundName, perfByRound) {
 
 function populateGroupingsRoundSelect(config) {
   const sel = document.getElementById('groupRoundSelect');
-  const supported = (config.rounds || []).filter(r => r.engine === 'stableford_quota');
+  // Dev-78: scramble_pair (2Man) rounds now show up here too, alongside the
+  // ordinary stableford_quota foursome rounds — which panel actually
+  // displays for the selected round is decided by toggleGroupingsMode below.
+  const supported = (config.rounds || []).filter(r => r.engine === 'stableford_quota' || r.engine === 'scramble_pair');
   if (!supported.length) { sel.innerHTML = '<option value="">— no rounds yet —</option>'; return; }
   const prev = sel.value;
-  sel.innerHTML = supported.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}</option>`).join('');
+  sel.innerHTML = supported.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}${r.engine === 'scramble_pair' ? ' (2Man draft)' : ''}</option>`).join('');
   if (supported.some(r => r.name === prev)) sel.value = prev;
+  toggleGroupingsMode(config);
   updateStandingsOptionAvailability();
   populatePinPlayerSelect(config);
+}
+
+// Dev-78 — decides which of the two panels (ordinary foursome controls vs.
+// the 2Man draft board) is visible for the currently-selected round, and
+// keeps draftRankBasisSelect (which prior stableford round to rank players
+// as of) in sync.
+function toggleGroupingsMode(config) {
+  const roundName = document.getElementById('groupRoundSelect').value;
+  const round = (config.rounds || []).find(r => r.name === roundName);
+  const isDraft = !!round && round.engine === 'scramble_pair';
+  document.getElementById('foursomeGroupingControls').hidden = isDraft;
+  document.getElementById('draftBoardControls').hidden = !isDraft;
+  if (!isDraft) return;
+  const idx = config.rounds.findIndex(r => r.name === roundName);
+  const priorStableford = config.rounds.slice(0, idx).filter(r => r.engine === 'stableford_quota');
+  const basisSel = document.getElementById('draftRankBasisSelect');
+  const prev = basisSel.value;
+  if (!priorStableford.length) {
+    basisSel.innerHTML = '<option value="">— no rounds to rank from yet —</option>';
+  } else {
+    basisSel.innerHTML = priorStableford.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}</option>`).join('');
+    // Default to the LAST prior stableford round — "rank after Rd2" is the
+    // normal case, but the picker lets Brian override if the trip's order
+    // ever differs from Rd1→Rd2→2Man→Rd3.
+    basisSel.value = priorStableford.some(r => r.name === prev) ? prev : priorStableford[priorStableford.length - 1].name;
+  }
 }
 
 // ── Pinning (Dev-77 addendum) — fix specific players into a specific group
@@ -2994,10 +3255,13 @@ async function updateStandingsOptionAvailability() {
   } catch (e) { standingsOpt.disabled = true; }
 }
 document.getElementById('groupRoundSelect').addEventListener('change', () => {
+  toggleGroupingsMode(assembledConfig || { rounds: [] });
   updateStandingsOptionAvailability();
   currentPins = []; // pins are per-round — switching rounds starts a fresh pin list
   renderPinnedChips();
   loadSavedGroups(false);
+  resetDraftUi();
+  loadSavedDraft(false);
 });
 
 function renderGroupsEditor(groups) {
@@ -3151,6 +3415,249 @@ document.getElementById('saveGroupsBtn').addEventListener('click', async () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
+// 2Man draft board (Dev-78) — see BF_WallyCup_Spec.md §2. Bottom 8 players
+// ("captains") draft one partner each from the top 8, worst-ranked first,
+// entirely by human choice (tap the on-the-clock captain, tap who they
+// pick) — no algorithm tries to build "fair" teams. Saves into
+// bfe_round_groups (same table Player Groupings above uses) with
+// strategy='draft', group_index = draft-pick order, and an optional
+// per-team nickname in the new team_label column. Foursomes for play are
+// just consecutive team pairs in that same order (0&1, 2&3, 4&5, 6&7) —
+// derived for display, nothing extra to store.
+// ══════════════════════════════════════════════════════════════════════
+let draftTeams = [];        // [{captain, partner, label}], in pick order — null partner = not yet picked
+let draftPool = [];         // remaining undrafted top-8 names
+let draftRoundName = '';    // which round draftTeams is for, so a stale Save can't fire
+
+function setDraftStatus(msg, isErr) {
+  const el = document.getElementById('draftStatus');
+  if (!msg) { el.className = 'status'; el.textContent = ''; return; }
+  el.className = 'status ' + (isErr ? 'err' : 'ok');
+  el.textContent = msg;
+}
+
+function resetDraftUi() {
+  draftTeams = []; draftPool = []; draftRoundName = '';
+  document.getElementById('draftBoard').innerHTML = '';
+  document.getElementById('saveDraftBtn').disabled = true;
+  setDraftStatus('');
+}
+
+// Cumulative rolling performance through and including `throughRoundName`
+// (not "strictly before," unlike standingsValueByName above, which is built
+// for flighting the round it's assigned to — here we explicitly want
+// "standings AFTER Rd2" when throughRoundName is Rd2 itself).
+function cumulativePerfThroughRound(names, config, throughRoundName, perfByRound) {
+  const idx = config.rounds.findIndex(r => r.name === throughRoundName);
+  const value = new Map(names.map(n => [n, 0]));
+  config.rounds.forEach((r, i) => {
+    if (i > idx) return;
+    const roundPerf = perfByRound[r.name];
+    if (!roundPerf) return;
+    names.forEach(n => { if (roundPerf[n] != null) value.set(n, value.get(n) + roundPerf[n]); });
+  });
+  return value;
+}
+
+document.getElementById('startDraftBtn').addEventListener('click', async () => {
+  if (!assembledConfig) { setDraftStatus('Load or Generate the event above first.', true); return; }
+  const roundName = document.getElementById('groupRoundSelect').value;
+  const basisRound = document.getElementById('draftRankBasisSelect').value;
+  if (!roundName) { setDraftStatus('Pick the 2Man round first.', true); return; }
+  if (!basisRound) { setDraftStatus('No prior round to rank players from yet — close at least one stableford round first.', true); return; }
+  const names = activeRosterNames(assembledConfig);
+  if (names.length !== 16) {
+    setDraftStatus(`Heads up — ${names.length} active players, not the usual 16. The draft still works (bottom half drafts from the top half), just double-check the split looks right.`);
+  }
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const eventName = document.getElementById('eventName').value.trim();
+  setDraftStatus('Ranking players…');
+  try {
+    const perfByRound = await fetchClosedRoundsPerf(base, eventName, assembledConfig);
+    const value = cumulativePerfThroughRound(names, assembledConfig, basisRound, perfByRound);
+    // Worst first — this IS the draft/pick order (16th picks first).
+    const ranked = names.slice().sort((a, b) => value.get(a) - value.get(b));
+    const half = Math.floor(ranked.length / 2);
+    const captainsOrder = ranked.slice(0, half);       // worst half, in worst-first order
+    draftPool = ranked.slice(half).reverse();           // best half — shown best-first, just a display nicety
+    draftTeams = captainsOrder.map(c => ({ captain: c, partner: null, label: '' }));
+    draftRoundName = roundName;
+    setDraftStatus(`Ranked as of "${basisRound}". ${captainsOrder[0]} is on the clock.`);
+    renderDraftBoard();
+  } catch (e) {
+    setDraftStatus('Ranking failed: ' + e.message, true);
+  }
+});
+
+function renderDraftBoard() {
+  const wrap = document.getElementById('draftBoard');
+  const pickIdx = draftTeams.findIndex(t => !t.partner);
+  let html = '<div class="row" style="flex-wrap:wrap;gap:16px">';
+
+  html += '<div style="flex:1;min-width:260px"><div class="group-card-title">Draft order</div>';
+  draftTeams.forEach((t, i) => {
+    const isOnClock = i === pickIdx;
+    const done = !!t.partner;
+    html += `<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);${isOnClock ? 'font-weight:700' : ''}">` +
+      `<span>${isOnClock ? '👉 ' : ''}${escapeHtml(t.captain)}</span>` +
+      `<span class="${done ? '' : 'subtle'}">${done ? '→ ' + escapeHtml(t.partner) : (isOnClock ? 'on the clock' : 'waiting')}</span></div>`;
+  });
+  html += '</div>';
+
+  html += '<div style="flex:1;min-width:220px"><div class="group-card-title">Remaining pool</div>';
+  if (pickIdx === -1) {
+    html += '<div class="subtle">Draft complete.</div>';
+  } else if (draftPool.length === 1) {
+    html += `<div class="subtle">Only ${escapeHtml(draftPool[0])} left — click below to lock in the last pick.</div>` +
+      `<button type="button" class="draftPickBtn" data-name="${escapeHtml(draftPool[0])}" style="margin-top:6px">${escapeHtml(draftPool[0])}</button>`;
+  } else {
+    html += draftPool.map(n => `<button type="button" class="draftPickBtn secondary" data-name="${escapeHtml(n)}" style="margin:0 6px 6px 0">${escapeHtml(n)}</button>`).join('');
+  }
+  html += '</div></div>';
+
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.draftPickBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = draftTeams.findIndex(t => !t.partner);
+      if (idx === -1) return;
+      const name = btn.dataset.name;
+      draftTeams[idx].partner = name;
+      draftPool = draftPool.filter(n => n !== name);
+      const next = draftTeams.find(t => !t.partner);
+      setDraftStatus(next ? `${draftTeams[idx].captain} → ${name}. ${next.captain} is on the clock.` : 'Draft complete — add nicknames if you want them, or Save as-is.');
+      renderDraftBoard();
+      if (!next) renderDraftResultEditor();
+    });
+  });
+
+  if (pickIdx === -1) renderDraftResultEditor();
+}
+
+// Shown once every captain has picked — nickname per team, plus a simple
+// "Swap with…" per player for informal in-person trades (Brian: no formal
+// process needed, just a lightweight edit). Foursomes are shown read-only,
+// derived from draft order, not separately editable/storable.
+function renderDraftResultEditor() {
+  const wrap = document.getElementById('draftBoard');
+  const allPlayers = [];
+  draftTeams.forEach((t, ti) => { allPlayers.push({ name: t.captain, ti }, { name: t.partner, ti }); });
+
+  let html = '<div class="group-card-title" style="margin-top:16px">Teams</div>';
+  draftTeams.forEach((t, ti) => {
+    html += `<div class="group-card" data-ti="${ti}">
+      <div class="row" style="align-items:center;gap:8px">
+        <div class="group-card-title" style="flex:none">Team ${ti + 1}</div>
+        <input type="text" class="teamLabelInput" data-ti="${ti}" placeholder="Nickname (optional)" value="${escapeHtml(t.label || '')}" style="flex:1;min-width:140px">
+      </div>`;
+    [t.captain, t.partner].forEach(name => {
+      html += `<div class="group-player-row" data-name="${escapeHtml(name)}">
+        <span>${escapeHtml(name)}</span>
+        <select class="swapPlayerSel" data-ti="${ti}" data-name="${escapeHtml(name)}">
+          <option value="">Swap with…</option>
+          ${allPlayers.filter(p => p.name !== name).map(p => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)} (Team ${p.ti + 1})</option>`).join('')}
+        </select>
+      </div>`;
+    });
+    html += '</div>';
+  });
+
+  html += '<div class="group-card-title" style="margin-top:16px">Foursomes for play <span class="subtle" style="text-transform:none;font-weight:400">(2 teams each, by draft order — not separately editable)</span></div>';
+  for (let i = 0; i < draftTeams.length; i += 2) {
+    const a = draftTeams[i], b = draftTeams[i + 1];
+    html += `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span>Group ${i / 2 + 1}: ` +
+      `${teamLabelOrNames(a)}${b ? ' &nbsp;+&nbsp; ' + teamLabelOrNames(b) : ''}</span></div>`;
+  }
+
+  wrap.insertAdjacentHTML('beforeend', html);
+
+  wrap.querySelectorAll('.teamLabelInput').forEach(inp => {
+    inp.addEventListener('input', () => { draftTeams[Number(inp.dataset.ti)].label = inp.value; });
+  });
+  wrap.querySelectorAll('.swapPlayerSel').forEach(sel => {
+    sel.addEventListener('change', () => {
+      if (!sel.value) return;
+      swapDraftPlayers(Number(sel.dataset.ti), sel.dataset.name, sel.value);
+    });
+  });
+
+  document.getElementById('saveDraftBtn').disabled = false;
+}
+
+function teamLabelOrNames(t) {
+  return escapeHtml(t.label && t.label.trim() ? t.label.trim() : `${t.captain} & ${t.partner}`);
+}
+
+function swapDraftPlayers(fromTi, fromName, toName) {
+  const toTi = draftTeams.findIndex(t => t.captain === toName || t.partner === toName);
+  if (toTi === -1 || toTi === fromTi) return;
+  const fromTeam = draftTeams[fromTi], toTeam = draftTeams[toTi];
+  const fromSlot = fromTeam.captain === fromName ? 'captain' : 'partner';
+  const toSlot = toTeam.captain === toName ? 'captain' : 'partner';
+  fromTeam[fromSlot] = toName;
+  toTeam[toSlot] = fromName;
+  setDraftStatus(`Swapped ${fromName} ↔ ${toName}.`);
+  document.getElementById('draftBoard').innerHTML = '';
+  renderDraftBoard();
+}
+
+async function loadSavedDraft(announce) {
+  const roundName = document.getElementById('groupRoundSelect').value;
+  const round = assembledConfig && assembledConfig.rounds.find(r => r.name === roundName);
+  if (!round || round.engine !== 'scramble_pair') return;
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const eventName = document.getElementById('eventName').value.trim();
+  if (!roundName || !base || !eventName) { if (announce) setDraftStatus('Pick a round (and make sure the event is saved) first.', true); return; }
+  setDraftStatus('Loading saved teams…');
+  try {
+    const res = await fetch(base + '/bfe/round-groups?event=' + encodeURIComponent(eventName) + '&round=' + encodeURIComponent(roundName));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const draftRows = (data.rows || []).filter(r => r.strategy === 'draft');
+    if (!draftRows.length) { setDraftStatus(announce ? 'No saved teams yet for this round — Start draft above.' : ''); return; }
+    const byIdx = {};
+    draftRows.forEach(r => { (byIdx[r.group_index] = byIdx[r.group_index] || { players: [], label: r.team_label || '' }).players.push(r.player_name); byIdx[r.group_index].label = r.team_label || ''; });
+    draftTeams = Object.keys(byIdx).sort((a, b) => a - b).map(k => ({ captain: byIdx[k].players[0], partner: byIdx[k].players[1], label: byIdx[k].label }));
+    draftPool = [];
+    draftRoundName = roundName;
+    document.getElementById('draftBoard').innerHTML = '';
+    renderDraftResultEditor();
+    setDraftStatus('Loaded saved teams.');
+  } catch (e) {
+    setDraftStatus('Load failed: ' + e.message, true);
+  }
+}
+document.getElementById('loadDraftBtn').addEventListener('click', () => loadSavedDraft(true));
+
+document.getElementById('saveDraftBtn').addEventListener('click', async () => {
+  const roundName = document.getElementById('groupRoundSelect').value;
+  if (!roundName || roundName !== draftRoundName) { setDraftStatus('Start or Load the draft for this round first.', true); return; }
+  if (draftTeams.some(t => !t.partner)) { setDraftStatus('Draft isn\'t complete yet — every captain needs a partner before saving.', true); return; }
+  const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const pin = document.getElementById('hostPin').value.trim();
+  const eventName = document.getElementById('eventName').value.trim();
+  if (!base) { setDraftStatus('Enter the BFE Worker base URL above first.', true); return; }
+  setDraftStatus('Saving…');
+  try {
+    const res = await fetch(base + '/bfe/round-groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: eventName, round_name: roundName,
+        groups: draftTeams.map(t => [t.captain, t.partner]),
+        labels: draftTeams.map(t => t.label || null),
+        strategy: 'draft',
+        pin,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    setDraftStatus(`Saved — ${data.groups} team(s) for "${roundName}". Ready for Close round.`);
+  } catch (e) {
+    setDraftStatus('Save failed: ' + e.message, true);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
 // Data & Reset (Dev-74 — testing tool)
 // ══════════════════════════════════════════════════════════════════════
 async function loadEventsList() {
@@ -3262,6 +3769,9 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
   const allResults = resultsPayload.results || [];
   const allSkins = resultsPayload.skins || [];
   const allCttp = resultsPayload.cttp || [];
+  // Dev-78: captured BEFORE the stableford-only filter below drops it —
+  // this is the one place the 2Man round's own data gets built.
+  const originalRounds = config.rounds || [];
   const withdrawnNames = new Set((config.roster || []).filter(p => p.withdrawn).map(p => p.name));
   // Dev-77: bfe_round_groups rows -> {roundName: [[player,...], ...]}, so
   // the results page can show playing groups for a round BEFORE it's
@@ -3278,10 +3788,8 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
   });
   // Only stableford_quota rounds get a leaderboard section here — this
   // generator reads quota_in/quota_out, which only that engine populates.
-  // 2Man (scramble_pair, once built) isn't in config.rounds at all yet
-  // (spec §4/§8 — de-prioritized, no engine wired up); when it lands it
-  // should get its own render path rather than being forced through this
-  // one, same as its dedicated placeholder section below already assumes.
+  // 2Man (scramble_pair, Dev-78) is built below, its own render path, from
+  // `originalRounds` captured above — never forced through this one.
   config = { ...config, rounds: (config.rounds || []).filter(r => !r.engine || r.engine === 'stableford_quota') };
   const rollsInto = config.rounds.filter(r => r.rollsIntoOverall !== false);
   const closedRoundNames = new Set(allResults.map(r => r.round_name));
@@ -3531,6 +4039,62 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
   const wbEligibleNow = stillIn.length; // if unresolved (event not complete), this is "still in it"
   const wbResolved = !!(potWinner || potTiedSplit);
 
+  // ── 2Man scramble (Dev-78) — own render path, per BF_WallyCup_Spec.md §5.
+  // Team-level, no quota/WB, never rolls into Overall — reads bfe_round_
+  // results/skins/cttp rows for this round the same way as any other round
+  // (Close Round writes them with player_name = the team's display name),
+  // plus bfe_round_groups (strategy='draft') to recover each team's two
+  // real player names for display.
+  let twoman = null;
+  const twomanRound = originalRounds.find(r => r.engine === 'scramble_pair');
+  if (twomanRound) {
+    const twomanResults = allResults.filter(x => x.round_name === twomanRound.name).slice().sort((a, b) => (a.rank || 99) - (b.rank || 99));
+    const twomanSkins = allSkins.filter(x => x.round_name === twomanRound.name);
+    const twomanCttp = allCttp.filter(x => x.round_name === twomanRound.name);
+    const membersByIdx = {};
+    (groupRows || []).filter(r => r.round_name === twomanRound.name).forEach(r => {
+      membersByIdx[r.group_index] = membersByIdx[r.group_index] || { players: [], label: r.team_label || null };
+      membersByIdx[r.group_index].players.push(r.player_name);
+    });
+    const membersByDisplayName = {};
+    Object.values(membersByIdx).forEach(t => { membersByDisplayName[teamDisplayName(t.players, t.label)] = t.players; });
+
+    const twomanScorecards = scorecardsByRound[twomanRound.name] || [];
+    const holesByTeam = {};
+    twomanScorecards.forEach(sc => { holesByTeam[sc.player] = sc.holes; });
+    const twomanVenue = venuesByName[twomanRound.venue] || {};
+    const twomanPar = sumPars(twomanVenue.pars);
+
+    const totalTwomanSkinsPayout = twomanResults.reduce((s, x) => s + (x.payout_skins || 0), 0);
+    const perTwomanSkin = twomanSkins.length ? Math.round(totalTwomanSkinsPayout / twomanSkins.length) : 0;
+
+    const teams = twomanResults.map(r => {
+      const vsPar = computeVsPar(holesByTeam[r.player_name]);
+      const totalPayout = (r.payout_podium || 0) + (r.payout_skins || 0) + (r.payout_cttp || 0);
+      return {
+        rank: r.rank, name: r.player_name, players: membersByDisplayName[r.player_name] || [],
+        actualPoints: r.actual_points,
+        vsParDisplay: vsPar != null && twomanPar != null ? `(${twomanPar + vsPar})` : '',
+        payoutCol: fmtPayout(totalPayout),
+        rowClass: r.rank === 1 ? 'lb-row leader-row' : 'lb-row',
+      };
+    });
+    twoman = {
+      name: twomanRound.name, venue: twomanRound.venue,
+      closed: closedRoundNames.has(twomanRound.name),
+      hasTeams: Object.keys(membersByIdx).length > 0,
+      teams, leader: teams[0] || null,
+      podium: twomanResults.filter(x => x.payout_podium > 0).map(x => ({ name: x.player_name, amt: fmtPayout(x.payout_podium) })),
+      skinsList: twomanSkins.map(s => ({ name: s.winner, hole: `Hole ${s.hole} — ${fmtPayout(perTwomanSkin)}` })),
+      ctpList: twomanCttp.map(c => ({ name: c.winner, detail: `Hole ${c.hole}${c.dist != null ? ` — ${c.dist}′` : ''} — ${fmtPayout(c.payout)}` })),
+      // How many of the stableford (Overall-tracked) rail nodes come before
+      // this round chronologically — renderResultsHtml splices a 2Man rail
+      // node in at this position, so the rail reads Rd1–Rd2–2Man–Rd3 (or
+      // wherever it actually sits) instead of always trailing at the end.
+      insertAfter: originalRounds.filter((r, i) => i < originalRounds.indexOf(twomanRound) && (!r.engine || r.engine === 'stableford_quota')).length,
+    };
+  }
+
   return {
     eventName: config.eventName, eventDate: config.eventDate, eventEndDate: config.eventEndDate,
     rounds: config.rounds.map((r, i) => ({
@@ -3542,6 +4106,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
     roundSections, overallStandings, champion, isComplete,
     closedRollup, totalRollup,
     wallyBall, wbPot: wbPot ? wbPot.poolTotal : null, wbEligibleNow, wbResolved, potWinner, potTiedSplit, potWinnerNote,
+    twoman,
   };
 }
 
@@ -3797,6 +4362,59 @@ function renderRoundSection(sec, num) {
   </div>`;
 }
 
+// Dev-78 — team row: same visual language as renderPlayerRow, but no
+// quota/perf/WB columns (2Man has neither) — just rank, team (with its two
+// real players underneath), score, and payout.
+function renderTeamRow(t) {
+  return `<div class="${t.rowClass}">
+    <div class="lb-name-line">
+      <span class="rank-cell">${t.rank ?? '—'}</span><span class="player-name">${escapeHtml(t.name)}</span>${t.vsParDisplay ? `<span class="vspar-tag">${escapeHtml(t.vsParDisplay)}</span>` : ''}
+    </div>
+    <div class="lb-grid">
+      <div class="lb-cell lb-cell-quota"><span class="lb-meta">${t.players.map(escapeHtml).join(' & ')}</span></div>
+      <div class="lb-cell lb-cell-perf">${t.actualPoints} pts</div>
+      <div class="lb-cell lb-cell-pay">${t.payoutCol}</div>
+    </div>
+  </div>`;
+}
+
+function renderTwomanSection(tm, num, eventName) {
+  if (!tm) return ''; // no scramble_pair round configured for this event at all
+  if (!tm.closed) {
+    return `<div class="section twoman-section" id="twoman"><div class="wrap" style="padding:0;">
+      <div class="section-head"><div class="section-num">${num}</div><div>
+        <div class="section-title">2Man Scramble${tm.venue ? ' · ' + escapeHtml(tm.venue) : ''}</div>
+        <div class="section-desc">Standalone event — does not count toward the ${escapeHtml(eventName)} Overall</div>
+      </div></div>
+      <div class="locked-card">
+        <div class="locked-title">${tm.hasTeams ? 'Teams are drafted — results post once this round closes' : 'Not closed yet'}</div>
+        <div class="locked-sub">${tm.hasTeams ? 'Full team leaderboard, skins, and CTP results post here as soon as this round is closed in BFE-Admin.' : 'The draft happens after the ranking round closes — see Player groupings in BFE-Admin.'}</div>
+      </div>
+    </div></div>`;
+  }
+  const sideCard = (label, emoji, items, empty) => `<div class="side-card">
+      <div class="side-label">${emoji} ${label}</div>
+      ${items.length ? items.map(i => `<div class="side-row"><span>${escapeHtml(i.name)}</span><span class="hole">${escapeHtml(i.hole || i.amt || i.detail)}</span></div>`).join('') : `<div class="side-empty">${empty}</div>`}
+    </div>`;
+  return `<div class="section twoman-section" id="twoman"><div class="wrap" style="padding:0;">
+    <div class="section-head"><div class="section-num">${num}</div><div>
+      <div class="section-title">2Man Scramble · ${escapeHtml(tm.venue)} — Final</div>
+      <div class="section-desc">Standalone event — does not count toward the ${escapeHtml(eventName)} Overall</div>
+    </div></div>
+    ${tm.leader ? `<div class="winner-banner">
+      <div class="comp-label">2Man Champions</div>
+      <div class="winner-name">${escapeHtml(tm.leader.name)}</div>
+      <div class="winner-stat">${tm.leader.actualPoints} pts</div>
+    </div>` : ''}
+    <div class="lb-card"><div class="lb-list">${tm.teams.map(renderTeamRow).join('')}</div></div>
+    <div class="side-strip">
+      ${sideCard('Podium', '🏆', tm.podium, 'No podium payout configured.')}
+      ${sideCard('Skins', '🏌️', tm.skinsList, 'No outright skins — every hole was tied.')}
+      ${sideCard('Closest to Pin', '📍', tm.ctpList, 'No CTP claims recorded — individual, not team.')}
+    </div>
+  </div></div>`;
+}
+
 function renderResultsHtml(data, opts) {
   opts = opts || {};
   const accent = opts.accent || '#e8392a';
@@ -3804,11 +4422,23 @@ function renderResultsHtml(data, opts) {
   // Dev-77: rail nodes are now real links (jump to that round's section, or
   // to Overall Standings) instead of static — and the rail gets an explicit
   // Overall step of its own, matching the section that already exists below.
-  const railNodesHtml = data.rounds.map(r => `<a class="${r.nodeClass}" href="${r.href}">
+  const railNodeArr = data.rounds.map(r => `<a class="${r.nodeClass}" href="${r.href}">
       <div class="rail-line"></div><div class="rail-dot">${r.num}</div>
       <div class="rail-round">${escapeHtml(r.label)}</div><div class="rail-venue">${escapeHtml(r.venue)}</div>
       <div class="rail-tag">${r.tag}</div>
-    </a>`).join('');
+    </a>`);
+  // Dev-78: splice the 2Man rail node in at its actual chronological spot
+  // (data.twoman.insertAfter — how many stableford rounds precede it) so the
+  // rail reads Rd1–Rd2–2Man–Rd3, not 2Man always trailing at the end.
+  if (data.twoman) {
+    const tmNode = `<a class="rail-node ${data.twoman.closed ? 'done' : 'locked'}" href="#twoman">
+        <div class="rail-line"></div><div class="rail-dot">·</div>
+        <div class="rail-round">2Man</div><div class="rail-venue">${escapeHtml(data.twoman.venue || '')}</div>
+        <div class="rail-tag">${data.twoman.closed ? 'Final' : 'Not started'}</div>
+      </a>`;
+    railNodeArr.splice(data.twoman.insertAfter, 0, tmNode);
+  }
+  const railNodesHtml = railNodeArr.join('');
   const overallRailNode = `<a class="rail-node ${data.isComplete ? 'done' : (data.closedRollup > 0 ? 'progress' : 'locked')}" href="#overall">
       <div class="rail-line"></div><div class="rail-dot">${data.rounds.length + 1}</div>
       <div class="rail-round">Overall</div><div class="rail-venue">&nbsp;</div>
@@ -3885,16 +4515,7 @@ function renderResultsHtml(data, opts) {
   </div>`;
 
   const twomanNum = roundNums[data.roundSections.length + 2];
-  const twomanHtml = `<div class="section twoman-section"><div class="wrap" style="padding:0;">
-    <div class="section-head"><div class="section-num">${twomanNum}</div><div>
-      <div class="section-title">WC 2Man Scramble</div>
-      <div class="section-desc">Standalone event — does not count toward the ${escapeHtml(data.eventName)} Overall</div>
-    </div></div>
-    <div class="locked-card">
-      <div class="locked-title">Scoring format not yet defined</div>
-      <div class="locked-sub">The 2Man scramble is a standalone build on its own timeline. Results post here once it's scored.</div>
-    </div>
-  </div></div>`;
+  const twomanHtml = renderTwomanSection(data.twoman, twomanNum, data.eventName);
 
   const photoNum = roundNums[data.roundSections.length + 3];
   const photoHtml = `<div class="wrap"><div class="section">
