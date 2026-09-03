@@ -635,7 +635,8 @@ export default {
           const roster  = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_event_roster WHERE event_id = ?`).bind(e.id).first();
           const results = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_round_results WHERE event_id = ?`).bind(e.id).first();
           const skins   = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_round_skins WHERE event_id = ?`).bind(e.id).first();
-          summary.push({ ...e, rounds: rounds.n, roster: roster.n, results: results.n, skins: skins.n });
+          const groups  = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_round_groups WHERE event_id = ?`).bind(e.id).first();
+          summary.push({ ...e, rounds: rounds.n, roster: roster.n, results: results.n, skins: skins.n, groups: groups.n });
         }
         return new Response(JSON.stringify({ ok: true, events: summary }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
@@ -762,6 +763,17 @@ export default {
 
     // DELETE /bfe/events/:event_name — PIN-gated, cascades rounds/roster
     // manually (D1/SQLite here doesn't auto-cascade FKs).
+    //
+    // Dev-77 fix: bfe_round_groups was added this session with its own
+    // event_id FK to bfe_events, but never added here — so deleting an
+    // event that had ANY saved groups (even for a round whose
+    // bfe_event_rounds row had since been cleared by a later Setup Save;
+    // groups don't get cleaned up by that, only by this route or a fresh
+    // Save/regenerate) failed with SQLITE_CONSTRAINT_FOREIGNKEY, D1
+    // refusing to delete a bfe_events row still referenced by a child
+    // table this route didn't know about. Every FK-referencing child table
+    // must be deleted here before the parent bfe_events row — this is the
+    // list to extend the next time a new one is added.
     if (request.method === 'DELETE' && url.pathname.startsWith('/bfe/events/')) {
       try {
         const eventName = decodeURIComponent(url.pathname.split('/bfe/events/')[1]);
@@ -776,6 +788,7 @@ export default {
           await env.DB.prepare(`DELETE FROM bfe_round_results WHERE event_id = ?`).bind(eventRow.id).run();
           await env.DB.prepare(`DELETE FROM bfe_round_skins WHERE event_id = ?`).bind(eventRow.id).run();
           await env.DB.prepare(`DELETE FROM bfe_round_cttp WHERE event_id = ?`).bind(eventRow.id).run();
+          await env.DB.prepare(`DELETE FROM bfe_round_groups WHERE event_id = ?`).bind(eventRow.id).run();
           await env.DB.prepare(`DELETE FROM bfe_events WHERE id = ?`).bind(eventRow.id).run();
         }
         return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
