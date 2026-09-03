@@ -3051,6 +3051,23 @@ body {
   </div>
 </div>
 
+<div class="bf-modal-overlay" id="card-group-modal" onclick="closeModalOnOverlay(event,'card-group-modal')" style="z-index:9000">
+  <!-- z-index explicit — see card-score-modal's comment above; same fix, same reason. -->
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="bf-modal-title" style="margin-bottom:0" id="card-group-title">👥 Your Group</div>
+      <button onclick="closeModal('card-group-modal')" title="Close"
+        style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
+          color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px;line-height:1.5">
+      Who you're playing with, round by round.
+    </div>
+    <div id="card-group-list" style="max-height:55vh;overflow-y:auto"></div>
+  </div>
+</div>
+
 <div class="bf-modal-overlay" id="rules-modal" onclick="closeModalOnOverlay(event,'rules-modal')">
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
@@ -5507,10 +5524,10 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-label">Yardage</span>
       </button>
       ${['format-wally','format-scramble'].includes(formatClass(evt.format)) ? `
-      <a class="icon-action-btn" href="/wally-cup-results.html" style="text-decoration:none">
-        <span class="icon-action-badge secondary">🏆</span>
-        <span class="icon-action-label">Results</span>
-      </a>` : ''}
+      <button class="icon-action-btn" onclick="openCardGroupSheet('${evt.id}')">
+        <span class="icon-action-badge secondary">👥</span>
+        <span class="icon-action-label">Group</span>
+      </button>` : ''}
     </div>
 
     <div id="${whoId}" style="display:none">
@@ -12918,6 +12935,92 @@ async function deleteCardNote(noteId) {
   } catch(e) {
     showToast('Error: ' + e.message, true);
   }
+}
+
+// ── Playing Groups (Dev-78) — shows a player which foursome they're in for
+// a BFE competitive event (Wally Cup, scrambles), read from the BFE Worker's
+// bfe_round_groups table (BFE-Admin's Groupings section, Dev-77). Replaces
+// the old bare "Results" icon, which was redundant with the Results tab's
+// own results-link-card. Read-only — portal.html never writes to this
+// Worker (see BFE_API's own comment above). Same evtOrId-flexible signature
+// as the other card sheets (openCardScoreSheet/openCardPhotoSheet/etc).
+let _cardGroupEvt = null;
+
+function openCardGroupSheet(evtOrId) {
+  const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => e.id === evtOrId);
+  if (!evt) return;
+  _cardGroupEvt = evt;
+  const titleEl = document.getElementById('card-group-title');
+  if (titleEl) titleEl.textContent = `👥 ${evt.name}`;
+  document.getElementById('card-group-list').innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted)">Loading…</div>';
+  openModal('card-group-modal');
+  loadCardGroups();
+}
+
+async function loadCardGroups() {
+  const evt = _cardGroupEvt;
+  const listEl = document.getElementById('card-group-list');
+  if (!evt || !listEl) return;
+  try {
+    const [configRes, groupsRes] = await Promise.all([
+      fetch(`${BFE_API}/bfe/events?event=${encodeURIComponent(evt.name)}`),
+      fetch(`${BFE_API}/bfe/round-groups?event=${encodeURIComponent(evt.name)}`)
+    ]);
+    const configData = configRes.ok ? await configRes.json() : null;
+    const groupsData = groupsRes.ok ? await groupsRes.json() : null;
+    const rounds = (configData && configData.config && Array.isArray(configData.config.rounds)) ? configData.config.rounds : [];
+    const rows = (groupsData && Array.isArray(groupsData.rows)) ? groupsData.rows : [];
+    if (!rows.length) {
+      listEl.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted)">Groups haven\'t been posted yet — check back closer to the event.</div>';
+      return;
+    }
+    // Flat rows -> {round_name: [[player,...], ...]} — same shape/transform
+    // BFE-Admin's buildResultsData uses for the published results page, so
+    // this always matches what that page shows.
+    const byRound = {};
+    rows.forEach(row => {
+      const byIdx = (byRound[row.round_name] = byRound[row.round_name] || {});
+      (byIdx[row.group_index] = byIdx[row.group_index] || []).push(row.player_name);
+    });
+    Object.keys(byRound).forEach(rn => {
+      byRound[rn] = Object.keys(byRound[rn]).sort((a, b) => a - b).map(k => byRound[rn][k]);
+    });
+    // Round order from the event config (its own sort_order, matches Setup)
+    // when the fetch succeeded; falls back to whatever order the flat rows
+    // implied (already ASC by round_name from the Worker) otherwise.
+    const roundNames = rounds.length ? rounds.map(r => r.name) : Object.keys(byRound);
+    const norm = s => (s || '').trim().toLowerCase();
+    const me = norm(currentPlayer);
+    const blocks = roundNames
+      .filter(rn => byRound[rn])
+      .map(rn => renderGroupRoundBlock(rn, (rounds.find(r => r.name === rn) || {}).venue, byRound[rn], me));
+    listEl.innerHTML = blocks.join('') || '<div style="font-size:0.8rem;color:var(--text-muted)">Groups haven\'t been posted yet — check back closer to the event.</div>';
+  } catch(e) {
+    listEl.innerHTML = '';
+    showToast('Error loading groups: ' + e.message, true);
+  }
+}
+
+function renderGroupRoundBlock(roundName, venue, groups, meNormalized) {
+  const norm = s => (s || '').trim().toLowerCase();
+  return `
+    <div style="margin-bottom:14px">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.02em;margin-bottom:6px">
+        ${roundName}${venue ? ` · ${venue}` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${groups.map((g, i) => {
+          const hasMe = !!meNormalized && g.some(n => norm(n) === meNormalized);
+          return `<div style="border:1.5px solid ${hasMe ? 'var(--green)' : 'var(--border)'};border-radius:8px;padding:8px 10px;
+            background:${hasMe ? 'rgba(29,158,117,0.08)' : 'var(--card)'}">
+            <div style="font-size:0.72rem;font-weight:700;color:${hasMe ? 'var(--green)' : 'var(--text-muted)'};margin-bottom:3px">
+              Group ${i + 1}${hasMe ? ' — YOU' : ''}
+            </div>
+            <div style="font-size:0.85rem;color:var(--text)">${g.join(', ')}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
 }
 
 // ── List view: host's active Gatherings + New Gathering entry ─────────────
