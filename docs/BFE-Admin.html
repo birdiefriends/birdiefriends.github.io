@@ -3606,8 +3606,13 @@ function renderDraftBoard() {
       draftPool = draftPool.filter(n => n !== name);
       const next = draftTeams.find(t => !t.partner);
       setDraftStatus(next ? `${draftTeams[idx].captain} → ${name}. ${next.captain} is on the clock.` : 'Draft complete — add nicknames if you want them, or Save as-is.');
+      // Dev-79 fix: renderDraftBoard() already re-checks pickIdx against the
+      // just-updated draftTeams and calls renderDraftResultEditor() itself
+      // once the draft is complete (below) — an extra explicit call here on
+      // the final pick appended a second, redundant copy of the Teams +
+      // Foursomes block with nothing clearing the wrap in between (the bug
+      // Brian's screenshot caught: the whole Teams section rendered twice).
       renderDraftBoard();
-      if (!next) renderDraftResultEditor();
     });
   });
 
