@@ -865,7 +865,8 @@ document.getElementById('generateTestScorecardsBtn').addEventListener('click', a
   // quota if this round chains from an earlier one, which isn't known here
   // without fetching saved results), but is close enough to make test scores
   // land near a believable number for that player rather than a flat average.
-  const round = readRoundsInput().find(r => r.name === roundName);
+  const roundsList = readRoundsInput();
+  const round = roundsList.find(r => r.name === roundName);
   const teePolicy = readTeePolicyGlobal();
   const venuePolicy = (round && round.venueId && teePolicy.byVenue[round.venueId]) ? venuePolicyFor(teePolicy, round.venueId) : null;
 
@@ -884,7 +885,13 @@ document.getElementById('generateTestScorecardsBtn').addEventListener('click', a
         // Dev-80: exclude this same round's own prior save (e.g. if test data is being
         // regenerated for a round that was already closed once) — only an EARLIER round's
         // loss makes someone permanently out here.
-        alreadyOut = new Set((priorData.results || []).filter(r => r.wb_status === 'No' && r.round_name !== roundName).map(r => r.player_name));
+        //
+        // Dev-88: "earlier" means earlier in roundsList's own order (index-based), not just
+        // "any other round with this name" — see the matching Close Round fix for why a
+        // later round's loss must never count against an earlier one.
+        const roundIdx88 = roundsList.findIndex(r => r.name === roundName);
+        const earlierRoundNames88 = new Set(roundsList.slice(0, roundIdx88).map(r => r.name));
+        alreadyOut = new Set((priorData.results || []).filter(r => r.wb_status === 'No' && earlierRoundNames88.has(r.round_name)).map(r => r.player_name));
       }
     } catch (e) {
       // Non-fatal — worst case, generation falls back to the random coin-flip
@@ -2556,7 +2563,20 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
     // earlier round" on Rd1's own re-close and got their hole/stroke nulled out even though
     // wb_status still landed on 'No' either way (right status, wrong/missing detail). Must
     // exclude the round being closed right now from what counts as "earlier."
-    const alreadyOut = new Set(allResults.filter(r => r.wb_status === 'No' && r.round_name !== roundName).map(r => r.player_name));
+    //
+    // Dev-88 (bug found while diagnosing Brian's Rd1/Rd2/Rd3 backfill re-close): excluding
+    // only THIS round wasn't enough — "r.round_name !== roundName" treats every OTHER round
+    // as "earlier," including rounds that haven't happened yet chronologically. Re-closing
+    // Rd1 AFTER Rd2/Rd3 already had their own (correct) results meant Rd2/Rd3 losses got
+    // read back as "already out before Rd1 even started," which is backwards — it forced
+    // wb_status='No' with hole/stroke nulled for anyone who ever lost it in ANY round,
+    // regardless of order, which is how a Rd1 re-close ended up showing all 16 players as
+    // "Lost (hole ?-?)". "Earlier" now means earlier in assembledConfig.rounds' own order
+    // (index-based, matching how the results page and everything else displays round
+    // sequence), not just "some other round exists with this name."
+    const roundIdx = assembledConfig.rounds.findIndex(r => r.name === roundName);
+    const earlierRoundNames = new Set(assembledConfig.rounds.slice(0, roundIdx).map(r => r.name));
+    const alreadyOut = new Set(allResults.filter(r => r.wb_status === 'No' && earlierRoundNames.has(r.round_name)).map(r => r.player_name));
     const sideData = {};
     players.forEach(p => {
       const outBefore = alreadyOut.has(p.name);
