@@ -162,11 +162,20 @@ page needed — it's one more section on the existing results page.
   post-close report. Parked — not scoped or built.
 - **Overall-checkbox guardrail for multi-host use** (§4) — parked until hosting is opened
   beyond Brian.
-- **Capture-side team identification** — portal.html's Jotform Live Panel doesn't have a
-  built affordance yet for a submitter to pick "which team am I" from the saved draft
-  data; for now the submitter types the team's display name by convention, matching
-  whatever the draft board shows. Worth a real UI pass before this is opened to other
-  hosts, not required for the 2026 Wally Cup.
+- **Capture-side team identification** — built and delivered. The Live Panel (Birdie
+  Alert, CttP, and Post-Round Scorecard) now fetches the 2Man round's saved draft teams
+  the same way the groupings card does, and swaps its player picker for a team picker
+  whenever the live round's engine is `scramble_pair` — same "Nickname (Real A & Real
+  B)" convention as the groupings display, so a submitter taps their team rather than
+  typing a name by hand. The picker never falls back to the tapping player's own name
+  for a team round (unlike the individual-round picker, which defaults to "whoever's
+  logged in") — nothing is pre-selected, so a submission can't accidentally go out under
+  the wrong identity. Also fixed as part of this: the Wally Ball "do you still have it"
+  question was being asked on 2Man scorecard submissions (format-scramble was in the
+  same eligibility list as format-wally) even though 2Man is explicitly excluded from
+  Wally Ball per §1 — it's now gated on the round's actual engine instead of the coarser
+  format-class string, so it's skipped for 2Man specifically without affecting any real
+  Wally-Cup individual round.
 - **Results-page section ordering** — the 2Man section currently renders after Wally Ball
   in scroll order; only the nav rail's `#twoman` link jumps to the right spot. A full
   section-reorder was judged riskier than valuable this close to the event and was
