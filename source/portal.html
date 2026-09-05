@@ -8053,12 +8053,15 @@ function setLiveTestEventOverride(name) {
   renderLiveBanner();
 }
 
-// Populates the Event Day panel's round selector with every Live-Panel-
-// eligible event (soonest first) plus a "Next upcoming (default)" option.
+// Populates the Event Day panel's round selector with every upcoming
+// Live-Panel-eligible event (soonest first) plus a "Next upcoming (default)"
+// option. Past rounds drop off the list on their own once their tee time
+// passes — a round already played isn't something to dry-run.
 function populateLiveTestEventSelect() {
   const sel = document.getElementById('livetest-event-select');
   if (!sel) return;
-  const eligible = eventData.filter(e => e.dt && hasLivePanelSupport(e)).sort((a,b) => a.dt - b.dt);
+  const now = new Date();
+  const eligible = eventData.filter(e => e.dt && e.dt >= now && hasLivePanelSupport(e)).sort((a,b) => a.dt - b.dt);
   const current = LIVE_TEST_EVENT_OVERRIDE;
   sel.innerHTML = '<option value="">— Next upcoming (default) —</option>' +
     eligible.map(e => `<option value="${e.name.replace(/"/g,'&quot;')}" ${e.name === current ? 'selected' : ''}>` +
