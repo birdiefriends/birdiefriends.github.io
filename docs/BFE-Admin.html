@@ -1851,18 +1851,33 @@ function buildTeeVenueBlock(venueId, venueName) {
     addTierRowTo(tierRowsEl, 18, 'Combo', 128);
     addTierRowTo(tierRowsEl, '', 'Gold', 115);
   });
-  block.querySelector('.loadVenueTeeBtn').addEventListener('click', async () => {
+  // Shared by the manual button (loud — Brian explicitly asked, so a "nothing
+  // saved yet" or network error should say so) and the auto-load below
+  // (silent — a brand-new venue with nothing on file yet is the normal case,
+  // not something to alert() about on every event-setup screen).
+  const loadCatalogInto = async (showErrors) => {
     const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
-    if (!base) { alert('Enter the BFE Worker base URL first.'); return; }
+    if (!base) { if (showErrors) alert('Enter the BFE Worker base URL first.'); return; }
     try {
       const res = await fetch(`${base}/bfe/venue-tee-catalog?venue_id=${encodeURIComponent(venueId)}`);
       const data = await res.json();
-      if (!res.ok) { alert(data.error || `No saved tee catalog for this venue yet (HTTP ${res.status}).`); return; }
+      if (!res.ok) { if (showErrors) alert(data.error || `No saved tee catalog for this venue yet (HTTP ${res.status}).`); return; }
       applyPolicyToVenueBlock(block, data.tee_catalog);
     } catch (e) {
-      alert('Load failed: ' + e.message);
+      if (showErrors) alert('Load failed: ' + e.message);
     }
-  });
+  };
+  block.querySelector('.loadVenueTeeBtn').addEventListener('click', () => loadCatalogInto(true));
+  // Dev-83: auto-load once when this venue's block is first built, instead of
+  // requiring the manual Load click. A block used to start blank, and "Save
+  // as this venue's default when generating" defaults to checked — so
+  // Generate/Save would silently push that blank tee/CTP-holes data back out,
+  // clobbering whatever was already saved for this venue (from an earlier
+  // round here, or from Venue Manager's own CTP Holes editor). Auto-loading
+  // means the block always reflects what's actually on file before anyone
+  // touches Generate. Fails silently (no alert) — a venue with nothing saved
+  // yet is the normal, expected case here, not an error.
+  loadCatalogInto(false);
   return block;
 }
 
