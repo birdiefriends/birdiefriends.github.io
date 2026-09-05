@@ -8080,10 +8080,18 @@ function buildLivePanel(evt) {
   // are posted (see loadLiveRoundTeams), so the Wally-Ball gate below is
   // right from the moment the round exists, not just once it's drafted.
   const isTeamRound = !!(_liveRoundTeams && _liveRoundTeams.evtName === evt.name && _liveRoundTeams.isTeam);
+  // Individual registrant list — CttP always uses this, even in a team round
+  // (Dev-82 fix): BFE-Admin's Close Round pays CTP to the individual
+  // claimant, never the team, on every round including 2Man (see its own
+  // "8. Close a round" hint text) — a claim submitted under a team name
+  // fails BFE-Admin's roster match and goes unpaid. Scorecard/Birdie Alert
+  // are the ones that actually need the team picker.
+  const evtIndividualPlayers = regData.filter(r => r.eventName === evt.name && r.status !== 'No').map(r => r.player).sort();
   const evtPlayers = isTeamRound
     ? _liveRoundTeams.teams
-    : regData.filter(r => r.eventName === evt.name && r.status !== 'No').map(r => r.player).sort();
+    : evtIndividualPlayers;
   window._liveEvtPlayers = evtPlayers;  // accessible from inline onclick attrs
+  window._liveEvtIndividualPlayers = evtIndividualPlayers;  // CttP picker — always individuals
   window._liveIsTeamRound = isTeamRound;
   window._liveTeamSubLabels = isTeamRound ? _liveRoundTeams.subLabels : {};
 
@@ -8178,8 +8186,10 @@ function buildLivePanel(evt) {
     })()}`;
 
   // ── SECTION 2: CttP ─────────────────────────────────────────────────────
-  // Team rounds never default to currentPlayer (not a valid team) — Dev-80.
-  const ctpPlayerSel = isTeamRound ? (_ctpPlayer || '') : (_ctpPlayer || currentPlayer);
+  // Always an individual pick, even in a 2Man/team round (Dev-82) — see the
+  // note on evtIndividualPlayers above. Defaults to currentPlayer exactly
+  // like a non-team round always has.
+  const ctpPlayerSel = _ctpPlayer || currentPlayer;
   const ctpHoles = (_resolvedCttpHoles && _resolvedCttpHoles.length) ? _resolvedCttpHoles : CTP_HOLES_DEFAULT;
   const ctpPills = ctpHoles.map(h => {
     const leader = _ctpData[h];
@@ -8206,7 +8216,7 @@ function buildLivePanel(evt) {
         onbeforeinput="if(event.data!=null && (!/^[0-9.]+$/.test(event.data) || (event.data.includes('.') && this.value.includes('.')))) event.preventDefault()">
       <button class="sc-submit-btn" ${(_ctpSubmitting || !ctpPlayerSel)?'disabled':''}
         onclick="submitCttp('${evt.name.replace(/'/g,"\'")}')">
-        ${_ctpSubmitting ? '⏳ Submitting…' : !ctpPlayerSel ? 'Select your team above ↑' : 'Closest on #' + _ctpHole}
+        ${_ctpSubmitting ? '⏳ Submitting…' : !ctpPlayerSel ? 'Select a player above ↑' : 'Closest on #' + _ctpHole}
       </button>
     </div>` : '';
   // CttP live leaderboard
@@ -8247,11 +8257,11 @@ function buildLivePanel(evt) {
 
   const ctpPlayerEsc = ctpPlayerSel.replace(/'/g, "\\'");
   const ctpSection = `
-    <button onclick="openPlayerSheet(window._liveEvtPlayers,'${ctpPlayerEsc}',function(n){_ctpPlayer=n;renderLiveBanner()},window._liveTeamSubLabels)"
+    <button onclick="openPlayerSheet(window._liveEvtIndividualPlayers,'${ctpPlayerEsc}',function(n){_ctpPlayer=n;renderLiveBanner()})"
       style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);
         border-radius:8px;padding:9px 14px;color:#fff;font-size:0.85rem;font-family:inherit;
         text-align:left;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:8px">
-      <span>${isTeamRound ? '🤝' : '👤'}</span><span style="flex:1">${ctpPlayerSel || (isTeamRound ? 'Select your team' : '')}</span>
+      <span>👤</span><span style="flex:1">${ctpPlayerSel || ''}</span>
       <span style="color:rgba(255,255,255,0.4);font-size:0.75rem">Change ›</span>
     </button>
     <div class="cttp-holes-row">${ctpPills}</div>
@@ -8997,7 +9007,10 @@ async function submitScorecard(evtName) {
 
 // Submit CttP entry to Jotform + push notification
 async function submitCttp(evtName) {
-  const ctpPlayer = window._liveIsTeamRound ? _ctpPlayer : (_ctpPlayer || currentPlayer);
+  // CttP is always an individual claimant, even in a 2Man/team round (Dev-82)
+  // — matches buildLivePanel's ctpPlayerSel and BFE-Admin's Close Round,
+  // which only ever recognizes an individual roster name for CTP payout.
+  const ctpPlayer = _ctpPlayer || currentPlayer;
   if (_ctpSubmitting || !_ctpHole || !ctpPlayer) return;
   const alreadyEntered = (_ctpHistory[_ctpHole] || []).some(e => e.player.trim().toLowerCase() === ctpPlayer.trim().toLowerCase());
   if (alreadyEntered) {
