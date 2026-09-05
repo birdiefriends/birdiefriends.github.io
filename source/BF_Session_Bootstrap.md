@@ -1,966 +1,158 @@
-<!-- CLAUDE INSTRUCTIONS — READ FIRST
-DEVICE-BRIDGE RULE (added Dev-73, revised Dev-74 — check this before assuming local-file
-access):
-Claude writing files directly onto Brian's machine (e.g. into the AutoPush folder,
-`C:\Users\16177\Downloads\GolfScorer\AutoPush`) requires TWO separate, both
-session-scoped things to be true — neither carries over from one session to the next,
-even the very next one:
-  1. THIS session linked to Brian's computer via the desktop app (the device bridge).
-  2. The specific AutoPush folder connected within that link (`connectedFolders` in a
-     `get_device_info` call). Dev-74 confirmed these are independent: the bridge can be
-     live (`get_device_info` succeeds) while `connectedFolders` is still empty.
+# BF_Session_Bootstrap.md — Start Here for a New BirdieFriends Session
 
-**Confirmed working, rest of Dev-74:** once set up at the start of that session, this
-rule needed zero further revision — the bridge and folder connection stayed live for the
-whole rest of the session, every push verified byte-identical, and `bf_push.ps1`'s
-`$FileMap` needed no changes. Treat this rule as settled, not still-in-flux.
-
-Early in any session that expects to write local files, call `get_device_info` and check
-both. If the AutoPush path isn't in `connectedFolders`, do NOT call
-`device_request_folder_access` on your own initiative — Dev-74 confirmed the sandbox's
-own auto-mode classifier blocks that exact call when Claude initiates it unprompted, same
-as it blocks an unprompted `/deploy` POST (see AUTO-MODE CLASSIFIER RULE below). It only
-clears when Brian's own message, immediately before the tool call, directly authorizes
-it. That's why the session-start command (below, and on `deploy.html`'s Claude tab)
-bundles the folder-connection authorization into the same paste as the bootstrap fetch —
-one paste does both jobs, no separate back-and-forth needed:
-
-```
-Fetch https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/BF_Session_Bootstrap.md and follow all instructions in it exactly. Also, right now: request access to the folder C:\Users\16177\Downloads\GolfScorer\AutoPush on this computer via device_request_folder_access — I'm explicitly authorizing this folder-connection request for this session.
-```
-
-If Brian pastes the bootstrap command WITHOUT that second sentence (an old copy, or typed
-by hand), treat the folder as not pre-authorized: report the gap plainly in the step 8
-report and give Brian the standalone reconnect phrase to paste —
-`Request access to C:\Users\16177\Downloads\GolfScorer\AutoPush right now — I'm
-explicitly authorizing this folder-connection request for this session.` — rather than
-attempting the call yourself. If the folder request is authorized but still fails, or the
-bridge itself isn't present, fall back to delivering files in-chat for Brian to save
-manually (slower, and has previously caused copy-paste errors — see Dev-73 log entry —
-but it works when the bridge doesn't). Don't discover this gap mid-task the way an
-earlier Dev-73 issue (in-chat file delivery failing) was discovered by surprise.
-
-FETCH RULE — NON-NEGOTIABLE:
-Use bash_tool with curl for ALL raw GitHub URL fetches. Do NOT use the web_fetch tool
-for raw.githubusercontent.com URLs — it requires a prior search result and will block.
-The bootstrap handles this automatically via its curl bash block.
-
-DEPLOY RULE:
-Claude does NOT import bf_deploy.py and call its TOKEN-authenticated functions
-(deploy(), deploy_file(), rollback()). The file contains an embedded GitHub token;
-Claude does not hold or use API tokens directly to take actions, regardless of how
-thoroughly the user authorizes it. bf_deploy.py may be fetched and read for reference
-logic (e.g. the GS version-bump regex) but must never be executed against the live token.
-
-All deploys — including portal.html, GolfScorer, worker.js source, ops guide, session
-starter, and all bizplan docs — use the Worker's POST /deploy route instead:
-  curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
-    -H "Content-Type: application/json" \
-    -H "User-Agent: Mozilla/5.0 ..." \
-    --data-binary @/tmp/payload.json
-For large files (portal ~420KB, GolfScorer ~370KB) write the JSON payload to a temp
-file via python3 and use --data-binary @file — do NOT pass content inline to -d.
-No file size limitation in practice — Cloudflare free tier allows 100MB. Tested to 445KB.
-
-AUTO-MODE CLASSIFIER RULE (added Dev-72 — read before attempting any /deploy POST):
-Claude's own POST /deploy calls can be blocked by the cloud sandbox's own auto-mode
-classifier — this is separate from GitHub/Cloudflare/PIN auth and happens before the
-request leaves the sandbox. Confirmed NOT caused by headers, client library (curl vs
-Python), or the PIN field — tested each in isolation. Confirmed mechanism: GET requests
-work once the target domain is on Settings -> Capabilities -> Domain allowlist. POST
-requests to that same domain are treated as a "production deploy"-class action and are
-blocked by default regardless of payload content. The block clears when the human's
-message, IMMEDIATELY before the tool call, directly and specifically names the exact
-file, destination path, live effect, and explicit authorization -- a general "go ahead"
-or "let's publish this" does NOT count and will still be blocked. Example of a message
-that works: "POST <exact file> to <exact destination> via <exact URL> right now, using
-PIN 7797. This will go live on birdiefriends.com. I've reviewed it and I'm explicitly
-authorizing this deploy." If a session gets blocked, do not spend time re-testing
-headers or curl vs Python -- that question is closed as of Dev-72. Just ask the human to
-restate the specific authorization per the pattern above. Full diagnostic detail in the
-Dev-72 entry of BF_Session_Log.md.
-
-Additional observation from Dev-72 testing: in one instance, Claude stated the full
-proposal (file, destination, URL, PIN, effect) and Brian's reply consisted only of a
-direct, immediate acknowledgment of that specific proposal. That one instance cleared the
-classifier. This is a single data point, not a confirmed standing behavior -- each
-deploy action still needs its own specific proposal stated in full, and Brian's own
-review and reply are still required every time before anything is sent. Treat the fully
-spelled out phrasing earlier in this rule as the reliable default; this note exists so a
-future session isn't confused if a short reply happens to work, not to encourage relying
-on it.
-
-PAYLOAD SIZE CORRECTION (Dev-73 — read this too, do not treat classifier question as
-fully closed by Dev-72 alone): Dev-73 retested the classifier with size isolated as the
-only variable -- a single ~887KB portal.html push and a control ~50-byte push of the
-same content-type -- using maximally explicit, immediate, per-action authorization
-phrased exactly per the pattern above. The small push went through; the large push was
-blocked twice, identically. Brian's own independent retest same session confirmed this:
-large-payload POST is blocked by size regardless of phrasing, small payloads clear with
-explicit intent as already documented above. Practical upshot: do not spend session time
-trying to get Claude's own /deploy to push portal.html, BF_Golf_Scorer_8.html, or any
-other large (~300KB+) file -- route those through `deploy.html` directly, or through
-Brian's local `bf_push.bat`/`bf_push.ps1` tool (in his `AutoPush` folder, not in this
-repo -- see Dev-73 entry in BF_Session_Log.md for what it covers and why it exists).
-Small docs (session starter, ops guide, session log itself) are candidates for either
-path; Dev-73 used the local tool for consistency and its built-in post-push
-byte-verification, not because Claude's own /deploy is known to fail on them.
-
-WORKER RULE:
-Worker changes require worker.js from the library (source/worker.js).
-Claude never reconstructs Worker code without the source file.
-Worker code changes require TWO steps: (1) push source/worker.js via /deploy,
-(2) user pastes into Cloudflare dashboard → Save and Deploy.
-
-BIZPLAN RULE:
-Business plan docs live at source/bizplan/ — separate from the dev source/ library.
-Bizplan sessions use their own bootstrap: source/bizplan/BF_BizPlan_Bootstrap.md
-(built in BZP#2). It loads the 4 BP docs via curl, mirroring this dev bootstrap's pattern.
-
-SESSION NUMBER RULE:
-This file does NOT track the current session number — that drifted out of sync with
-manual chat-title numbering and caused real confusion (a Dev-42 session self-identified
-as "Session 41" by reading the line below instead of the log). `source/BF_Session_Log.md`
-is now the sole source of truth for the current Dev-N number. Read it, not this header.
-
-SESSION COMPACTION / DURABILITY RULE (added Dev-75 — read this to understand why the
-"write it to a file now, not at close-out" habit below matters):
-Long sessions get auto-compacted by the underlying platform once the conversation
-approaches its context limit — the full turn-by-turn history (exact code pasted, tool
-output, wording) gets replaced with a condensed structured summary (requests/intent,
-files touched with key snippets, errors+fixes, pending/current work). This is normal
-platform behavior, not a malfunction, and it already happened at least once during the
-Dev-75 session itself — confirmed by Claude receiving a "continued from a previous
-conversation" summary mid-session.
-
-What this does and doesn't threaten: nothing written to an actual repo file (this
-bootstrap, `BF_Session_Log.md`, `BF_WallyCup_Spec.md`, `BFE-Admin.html`, etc.) is at risk
-— those get re-read fresh regardless of compaction, same as in a brand-new session. What
-IS at risk is anything that only ever existed as chat content, or as state inside a
-separate tool surface Claude was managing on its own without exporting it — a private
-design-canvas mockup was the concrete Dev-75 example (see Dev-75 Architecture Notes
-below). A fresh/later session has no path back to that at all, compacted or not, unless
-it was explicitly exported into a file and committed to the library.
-
-Practical upshot: the moment Claude produces something durable that lives outside this
-repo's own files, export it into an actual file and get it committed the same session —
-don't wait for session close-out to write it up. And treat a session that's visibly
-already been compacted once (or has just been running very long) as a natural point to
-finish the current small task, close out per the usual `BF_Session_Log.md` +
-Architecture-Notes hand-off pattern, and start the next real work in a fresh session
-rather than pushing further into one that's already lost some of its own fine detail.
--->
-
-# BirdieFriends Golf Scorer — Session Starter
-**Current session number:** see `BF_Session_Log.md` (this file no longer tracks it)
-**Date:** 2026-09-03 (last updated Dev-77 close-out, chat now closed; earlier fields below carried forward unverified except where noted)
-**Portal Version (production):** per `portal_version.txt` (source of truth): v4.0.1 · 2026-09-03.
-  ✅ Dev-72's version-drift discrepancy has stayed RESOLVED since Dev-73 — no recurrence
-  Dev-74. **Dev-77: a related-but-new drift bug found and fixed** — several `portal.html`
-  pushes through AutoPush went out without a matching `portal_version.txt` bump (nothing
-  in the AutoPush-tool workflow does this automatically), so the live version display sat
-  stuck at `v4.0.0 · 2026-08-31` through real deploys. Bumped to `v4.0.1`; going forward,
-  bump and drop `portal_version.txt` into AutoPush alongside every `portal.html` change,
-  not just at session close. See Dev-77 Architecture Notes below.
-**GolfScorer Version:** v8.17 · 2026-06-17g (deployed) — unverified this session, carried forward
-**Worker Version (birdiefriends-push — push/deploy/flags/etc.):** 2026-06-18b + all Gatherings routes through Dev-52 (GET/POST /venues, PATCH /venues/:id, GET/POST/DELETE /gathering-templates) — unverified this session, carried forward
-**Worker (bf-experiences — NEW as of Dev-71):** separate Cloudflare Worker, source `bf_experiences_worker.js`, powers the BFE Competitive Events system. Deployed manually by Brian via the Cloudflare dashboard (not via the /deploy route). Confirmed Dev-74: the results/computation layer is now built and live — `bfe_round_results`/`bfe_round_skins` (2 new tables, not the `bfe_quota_progress` name originally guessed at) — bringing the total to 10 `bfe_*` tables live. Dev-75: `bfe_event_roster` gained two columns, `withdrawn`/`withdrawn_note` (withdraw-a-player support) — migration run and Worker redeployed by Brian, confirmed live. Dev-76: a new `bfe_round_cttp` table (CTP hole-winner detail — hole/player/dist/payout) added to the source, wired into POST/GET/DELETE `/bfe/round-results` — needed by the new results page. ✅ Live and confirmed correct (Dev-76 addendum 3). **Dev-77: two more changes, both live —** (1) `bfe_events` gained an `event_end_date` column (POST/GET `/bfe/events`), feeding the results page header's date range; (2) new `bfe_round_groups` table (event_id, round_name, group_index, player_name, strategy) plus `POST`/`GET /bfe/round-groups` routes, powering the new Player Groupings feature — deliberately a separate table from `bfe_event_rounds` since Setup Save fully replaces rounds/roster on every save. **Also Dev-77: fixed a delete-cascade bug** — `DELETE /bfe/events/:event_name` was missing `bfe_round_groups` from its manual FK cascade, breaking delete on any event that had ever had groups saved; fixed and confirmed by Brian. Bringing the total to 12 `bfe_*` tables live. See Dev-77 Architecture Notes below.
-**Live URL:** https://birdiefriends.com/portal.html
-**BFE Admin Panel (NEW as of Dev-71):** https://birdiefriends.com/BFE-Admin.html — confirmed Dev-74: the full Close Round scoring engine (quota, skins, CTP, Wally Ball round bonus + season pot, Overall rollup) is built and validated end-to-end against a complete 3-round test cycle. Dev-75: dry-running the real event surfaced and closed two real payout gaps Dev-74's synthetic test never hit (podium ties, unclaimed-CTP-hole rollover) plus shipped withdraw-a-player, a Save/Generate ordering bug fix, and a Close Round roster-vs-scorecard mismatch alert. Dev-76: new §10 "Publish results page" — builds and pushes the player-facing Phase 3 results page, hardened across four same-chat addenda; Phase 3 declared genuinely complete. **Dev-77: two categories of change.** (a) Three results-page fixes from Brian's own live test — an event date-range header, clickable Rd1/Rd2/Rd3/Overall rail jump-links, and a genuine regression fix (Overall Standings was gated blank until every round closed; now shows rolling standings as soon as ≥1 round is closed, champion reveal still gated on full completion). (b) New §11 "Player groupings" — strategy-based foursome assignment (by quota/standings/social/random) plus an optional pinning step to seat fixed players (e.g. honorary historic-champion seats) before the chosen strategy fills the rest. See Dev-77 Architecture Notes below. **Not fetched by the bootstrap's standard 8-step sequence** — if continuing this work, `curl` it fresh from `docs/BFE-Admin.html` before editing.
-**Local publish tool (NEW as of Dev-73, updated Dev-74, Dev-75):** `bf_push.bat`/
-  `bf_push.ps1` (v7 as of Dev-75), Brian's machine only,
-  `C:\Users\16177\Downloads\GolfScorer\AutoPush` — PIN-gated, pushes straight to the
-  same Worker `/deploy` route, with mandatory post-push byte-verification before deleting
-  the local copy. Covers `portal.html`, `portal_version.txt`, `worker.js`, `guide.html`,
-  `BF_Golf_Scorer_8.html`, `BF_Operations_Guide.md`, `BF_Experiences.js` (→
-  `source/bf_experiences_worker.js`), `BFE-Admin.html`, `BF_Session_Log.md`,
-  `BF_WallyCup_Spec.md`, `BF_Session_Bootstrap.md`, `deploy.html`, and — **new Dev-75** —
-  `WallyCup_Results_Design_Reference.dc.html` (→ `source/...`) plus a
-  `bf_push_library.ps1` → `source/bf_push.ps1` entry so the tool's own source can be
-  archived to the repo. **That last one is a snapshot filename only, never the live
-  `bf_push.ps1`** — this tool deletes anything it successfully pushes, and can't safely
-  delete itself out from under the process running it; see the v7 comment header in the
-  script for the exact archive procedure. **Dev-77: Brian reported the tool "not cleaning
-  out pushed files" — investigated, no bug in the tool.** `portal_version.txt` hit the
-  known v6 CDN-lag caveat (already documented in the script's own header) and resolved
-  itself on a re-run; a stray `bf_experiences_worker.js` sitting in the folder is an
-  unrelated leftover from an earlier-session filename mistake, not a `$FileMap` key at
-  all, so the tool never sees it — needs manual deletion by Brian, not a script change.
-  **FileMap needed no changes this session either** — confirmed correct as-is.
-**Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
-**Google Places API Key:** AIzaSyAn1TR2p6JbWR2fr5ydhkurygKpYU9HYtw (restricted to birdiefriends.com)
-**Wally Cup Rd1 tee-off:** confirmed 10am, 9/11/2026. Scoring engine and Phase 3 results
-  page are both genuinely complete (Dev-74/75/76) and now, Dev-77, hardened further by
-  Brian's own live test (date range, rail jump-links, and a real Overall-Standings
-  rendering regression, all fixed). **New this session:** Player Groupings + pinning
-  (BFE-Admin §11) and a Portal-facing "👥 Group" event-card icon so players can see their
-  own foursome, both built end-to-end and live. Per Brian's own explicit three-part
-  ordering, the next priorities are (2) the 2-Man scramble scoring format — still ❓ open,
-  needs Brian's own input on the formula before it can be sized or built — and (3) photo
-  capture / "memories" display — not started; the main `worker.js` already has a
-  substantial `event_photos`/R2 upload/`curation_status` pipeline (`/photos/upload`, PATCH
-  curation, DELETE) that looks like a plausible head start, not yet verified against BFE's
-  data shape. **On the "2026 Wally Cup" D1 test-data cleanup** (outstanding since Dev-75):
-  Dev-77 observed the real roster in the honorary-pin arrangement live on the Rd1
-  groupings screen — which couldn't be old test data, since pinning didn't exist before
-  this session — so a fresh real Setup + real groups very likely already happened.
-  **Not explicitly confirmed in words — verify with Brian before relying on it for real
-  Rd1.** See the Dev-77 Architecture Notes below and the full Dev-77, Dev-76 (all four
-  addenda), and Dev-75 entries in `BF_Session_Log.md` for complete detail before starting
-  the 2-Man scramble work.
+**Status:** current as of Dev-78 close, 2026-09-05. Read this file first in any new
+BirdieFriends chat before touching code — it's meant to be self-sufficient enough that you
+never need to re-read `BF_Session_Log.md` line by line to get oriented (that log is the
+detailed history; this doc is the map). `BF_WallyCup_Spec.md` is the living design
+reference for the Wally Cup event specifically — read it too before touching Groupings,
+the results page, Close Round, or Overall Standings.
 
 ---
 
-## Dev-77 Architecture Notes (2026-09-03) — Results Page Fixes, Player Groupings +
-## Pinning Built, Portal Group Icon, Delete/Version Bugs Fixed — CLOSED, chat renamed
-
-**Read this before touching Groupings, the results-page rail/Overall section, or the
-Portal event-card icons again.** Full detail is in the Dev-77 entry in
-`BF_Session_Log.md` — this is a pointer/summary, not a replacement for it.
-
-- **Results page — three fixes from Brian's own live test, not new build:** an event
-  date-range header (`event_end_date` column, `formatEventDateRange()`), clickable rail
-  jump-links (`<a href="#round-N">`/`#overall`, matching new section `id`s), and a real
-  regression — Overall Standings was gated blank behind `isComplete` instead of just the
-  champion reveal, even though the underlying rolling-standings math was already correct
-  for partial data. Fixed to gate only the champion banner/podium $ on full completion.
-- **Player Groupings + Pinning — new, BFE-Admin §11.** Brian's ask: prioritize social
-  mixing for 2026's 16-player/3-round Wally Cup (everyone plays with as many different
-  people as possible) rather than the skill-based flighting used in past years, but built
-  as a general strategy picker (quota/standings/social/random) rather than a one-off.
-  - `bfe_round_groups` is a **separate table**, not a column on `bfe_event_rounds` —
-    Setup Save fully deletes and reinserts every round/roster row on every save, which
-    would silently wipe a groups column on the next unrelated edit. Same delete-then-
-    insert-per-round lifecycle as `bfe_round_results`/`_skins`/`_cttp`.
-  - Social strategy: hand-verified a zero-repeat 4×4 grid (rows/columns/diagonals)
-    schedule for the real 16/4/3 case; general path is a random-search minimizer against
-    an accumulated cross-round pair-history set. Flighted strategies (quota/standings)
-    chunk a **pre-sorted roster into consecutive slices** — round-robin was the first
-    draft and was caught before shipping, since it interleaves skill levels across every
-    group on a sorted array and would have defeated flighting entirely.
-  - **Pinning:** `applyPins()` seeds fixed seats first, before whichever strategy fills
-    the rest — used to seat three historic WC champions (Tom Arnold, Bill Steirer,
-    Mohamed Walli — "Mohammed" spelling seen elsewhere, unresolved) together as an
-    honorary Rd1 Group 1. General-purpose, usable with any strategy, not Wally-Cup-only.
-    Confirmed with Brian: Jordan/Jake Knappenberger get no special pairing treatment.
-- **Delete-cascade bug, fixed:** `bfe_round_groups` shipped this session with its own FK
-  to `bfe_events` but was never added to `DELETE /bfe/events/:event_name`'s manual
-  cascade (D1/SQLite doesn't auto-cascade) — broke delete on any event with saved groups.
-  Fixed; confirmed by Brian. **Extend this same list the next time a new `bfe_*` child
-  table is added** — it's the one recurring failure mode in this Worker.
-- **Portal.html — "👥 Group" event-card icon**, replacing the "🏆 Results" icon Brian
-  judged redundant with the Results tab's own link. Two follow-on fixes, both found by
-  Brian's own live testing rather than caught up front — worth internalizing for any
-  future Portal-facing BFE feature:
-  1. A Wally Cup round is a **separate Portal event card per round** (e.g. "2026 Wally
-     Cup - Rd1"), while BFE-Admin's `event_name` is the umbrella ("2026 Wally Cup") with
-     rounds inside one row. Querying BFE with the card's own title returns nothing.
-     `bfeEventNameCandidates()` strips a trailing "- RdN"/"- Round N" suffix to try the
-     umbrella name first, falling back to the raw card name for events without that split.
-  2. Even once the right event resolved, the sheet was showing **every** round with
-     groups generated, not just the card's own round (Rd2's card showed Rd1's foursomes).
-     `resolveTargetRoundName()` matches a card to its own round only — exact `round_name`
-     match, then a shared Rd-N/Round-N token, then positional fallback — so an
-     ungenerated round now correctly says "not posted yet for this round."
-  **Takeaway for any future per-round Portal feature (2Man, Photos):** a Portal event
-  card's own name is never a safe BFE `event_name` to query directly for a multi-round
-  event — always resolve the umbrella name and scope to the specific round explicitly,
-  don't assume "all rounds" is the right default even though it renders without error.
-- **`portal_version.txt` drift, re-found and fixed** — same family as the Dev-45/54/73
-  recurrence already tracked in this file, new root cause: the AutoPush-tool workflow has
-  nobody bumping this file automatically (the old pre-AutoPush auto-bump `/deploy` script
-  doesn't run under this flow at all), so several real `portal.html` pushes this session
-  left the live version display stuck at `v4.0.0 · 2026-08-31`. Bumped to `v4.0.1`.
-  **Practical rule for every future session: bump and push `portal_version.txt` together
-  with every `portal.html` change, not as an afterthought.**
-- **`bf_push.ps1` "not cleaning out files" report — investigated, tool is fine.**
-  `portal_version.txt` hit the tool's own documented v6 CDN-lag caveat (kept the local
-  copy because not *every* destination verified within the ~41s window — correct,
-  intentional behavior, not a bug) and resolved itself once Fastly's cache rolled over on
-  its own 300s TTL; a re-run after that succeeds cleanly. `bf_experiences_worker.js`
-  sitting in the folder is a leftover from an earlier-session filename mistake (should
-  have been `BF_Experiences.js`) — not a `$FileMap` key, so invisible to the tool; needs
-  manual deletion by Brian, no delete capability on his device from this session's bridge.
-- **Chat-rename string (final — covers the whole chat, one continuous session):**
-  `Dev-77 - Player Groupings & Historic-Winner Pinning Built, Results Page Fixes, Portal
-  Group Icon, Delete/Version Bugs Fixed`
-- **Carry-forward into Dev-78, per Brian's own three-part ordering:** (2) the 2-Man
-  scramble scoring format (❓ open, needs Brian's own input on the formula), (3) photo
-  capture / "memories" display (not started; `worker.js`'s existing `event_photos`/R2/
-  `curation_status` pipeline is a plausible head start, not yet verified against BFE's
-  data shape). **On the "2026 Wally Cup" D1 test-data cleanup:** likely already done this
-  session (real roster observed live in the honorary-pin arrangement, which couldn't be
-  old test data) but not explicitly confirmed in words — verify with Brian before real
-  Rd1. Also carried forward: the orphan `bf_experiences_worker.js` file in AutoPush, safe
-  for Brian to delete whenever convenient.
-- **Next session starts fresh, per the bootstrap's own SESSION COMPACTION / DURABILITY
-  RULE (added Dev-75):** a new chat should be opened for the 2-Man scramble work, reading
-  `BF_Session_Bootstrap.md` fresh (fetched via the standard bootstrap command) rather than
-  continuing here — this chat had already auto-compacted once, same reasoning Dev-76's own
-  close-out used.
-
----
-
-## Dev-76 Architecture Notes (2026-09-02 through 2026-09-03, 4 addenda) — Phase 3 Results
-## Page Built, Tested End-to-End, and Hardened by Real Feedback — CLOSED, chat renamed
-
-**Read this before writing any 2-Man scramble code.** Full detail is in the Dev-76 entry
-and its four addenda in `BF_Session_Log.md` — this is a pointer/summary, not a
-replacement for it. This was all one continuous chat (sidebar name never changed from
-"Dev-76" the whole time) spanning two calendar days — see the process note at the end of
-addendum 4 in the session log if the Dev-N-vs-calendar-day distinction matters for
-whoever reads this next.
-
-- **What shipped (main entry, 9/2):** the Phase 3 player-facing results page generator —
-  a pure function (`buildResultsData` + `renderResultsHtml`, authored standalone in
-  `results_generator.js` then embedded verbatim into `BFE-Admin.html`) that reads back
-  already-persisted D1 data (round results, skins, the new CTTP table, scorecards, venue
-  pars) and renders a single static HTML page covering all rounds plus Overall Standings,
-  rather than recomputing any scoring or payout logic itself. Published via the existing
-  `/deploy` route (same PIN-gated GitHub-contents mechanism as everything else) to
-  `docs/wally-cup-results.html`. A new "10. Publish results page" card in
-  `BFE-Admin.html` has Preview (iframe, no publish) and Generate & Publish buttons.
-- **New gap found and closed:** CTP hole-winner detail (hole/winner/distance) was computed
-  transiently by Close Round but never persisted — only the aggregate `payout_cttp` per
-  player survived. Added `bfe_round_cttp` (mirrors `bfe_round_skins`'s exact lifecycle:
-  delete-then-insert per round, `UNIQUE(event_id, round_name, hole)`). **✅ Confirmed live,
-  addendum 3** — see below.
-- **Deliberate design choice, not a bug:** the results page's Overall Standings are
-  Wally-Ball-inclusive (sums each round's `roundPerf = quotaPerf + wbBonusIfKept`), which
-  differs on purpose from `BFE-Admin.html`'s own internal "Total +/-" column (WB-exclusive
-  by design). This follows the design reference's own embedded reasoning for the
-  player-facing page specifically; Quota Out / next-round Quota In is untouched either way.
-- **Verification method (main entry):** fetched real live production data (read-only
-  GETs, no writes) for the actual "2026 Wally Cup" event (id 17) via WebFetch,
-  cross-checked computed values against `WallyCup_Results_Design_Reference.dc.html`'s own
-  hand-verified numbers (champion Nate Stettler +6.69, Wally Ball pot winner Lou Strohl
-  via the "held it longest" tiebreak), then ran a full Playwright end-to-end test against
-  the actual embedded `BFE-Admin.html` file (route-mocked network, not a copy of the
-  code) exercising Preview and Publish both.
-- **Addendum 1 (9/2, same day) — mobile layout fixed after Brian's own device
-  screenshot:** the in-modal leaderboard was unreadable on his phone. Two independent
-  bugs, both fixed: (a) `results_generator.js`'s player/standings tables were literal
-  HTML `<table>`s with a fixed `min-width:520px` and no responsive collapse — rewritten
-  as flexbox card rows (`renderPlayerRow`/`renderOverallRow`), no `<table>` left at all,
-  verified zero horizontal overflow at 375px/440px via Playwright; (b) `portal.html`'s
-  `#results-modal` was capped at `max-width:480px` — changed to a genuine full-screen
-  modal on phones. Also added a persistent "🏆 Results" entry in the Portal's own
-  Results tab (`#screen-results`), not just the per-event card icon, for longevity. (This
-  iframe-modal approach was itself superseded by addendum 2, below.)
-- **Addendum 2 (9/2, same day) — link behavior matched to existing convention:** Brian
-  wanted the Wally Cup Results entry to behave like every other `results-link-card`
-  (plain `<a href="...">`, no modal/iframe, same tab) rather than the special-cased modal
-  addendum 1 had just built. Converted both entry points (Results-tab card, event-card
-  icon) to plain anchors linking to `/wally-cup-results.html`; removed the now-dead
-  `#results-modal` markup, its z-index-9000 stacking fix, `BFE_RESULTS_PAGE_URL`, and
-  `openResultsModal()`. **Takeaway for 2Man/Photos:** default to plain navigation links
-  for any future "view a published page" affordance, not a modal, unless Brian says
-  otherwise.
-- **Addendum 3 (9/3) — CTP gap closed and confirmed live, Phase 3 declared done (this
-  turned out to be premature — see addendum 4):** Brian re-closed Rd1/Rd2/Rd3 against the
-  live `bf-experiences` Worker with `bfe_round_cttp` support and re-published. Root cause
-  of the earlier "CTP not showing" report: the table and Worker deploy were fine the
-  whole time — Rd1-3 had originally closed (9/1) before this feature existed, so no
-  historical rows had ever been written; re-closing (safe/idempotent by design)
-  backfilled them correctly. `payout_cttp` dollar totals were confirmed intact and
-  correct throughout — money was never at risk, only the per-hole detail display.
-- **Addendum 4 (9/3) — a real regression, found and fixed, not just polish. Read this
-  one carefully before touching Close Round or the WB logic again:** the very re-close
-  that addendum 3 used to backfill CTP also silently broke the Wally Ball season pot —
-  not discovered until Brian opened the results page days later and saw all 16 players
-  still "In Play." **Root cause:** the `alreadyOut` check (Close Round handler, and
-  separately the test-scorecard generator) excluded only "any other round with this
-  exact name," not rounds chronologically *after* the one being closed — fine only if
-  rounds close in order the first time. Re-closing Rd1 after Rd2/Rd3 already had results
-  made Rd1's re-close read those later losses backward as "already out before Rd1
-  started," forcing everyone's `wb_status` to "No" — a cascade that corrupted Rd2 and
-  Rd3 in turn as each inherited the prior round's now-bad data. **Fixed** in both places
-  to key off each round's real index in `assembledConfig.rounds`/`roundsList` instead of
-  name-matching; Brian re-closed Rd1→Rd2→Rd3 against the fix and confirmed the season
-  tracker came back correct. **Also fixed the same addendum:** vs-par had silently never
-  worked since Dev-76 first built it — `fetchResultsPageData()` was checking
-  `Array.isArray()` on the *whole* `GET /scorecards` response object (`{ok,
-  scorecards:[...]}`) instead of its `.scorecards` field, so `scorecardsByRound` was
-  unconditionally empty; `computeVsPar` itself was correct the whole time. **Also
-  shipped:** a 3-iteration mobile-readability redesign of the leaderboard rows (final
-  shape: name gets its own full-width line — real names don't survive a fixed grid
-  column — then a real 2×2 CSS grid below for quota/score, round-perf, WB status/detail,
-  and this round's payout, with the perf-calc popover made `position:absolute` so it no
-  longer reflows the grid when opened) and a longest-held-first sort for the Wally Ball
-  section (pot winner(s) first, then still-active, then eliminated ordered by
-  later-round-then-later-hole beats earlier). **The lesson worth carrying into 2Man/
-  Photos work:** a "done" claim (addendum 3's own "Phase 3 genuinely complete") is only
-  as good as the next real test — re-verify anything that touches Close Round's
-  ordering assumptions after any change near it, even a seemingly unrelated one.
-- **Not done / carry-forward (unchanged going into Dev-77):** `portal_version.txt` was
-  not bumped for the portal.html changes across these addenda; the D1 test/dry-run data
-  for "2026 Wally Cup" still needs Delete + fresh Setup before real Rd1 (carried over
-  from Dev-75, unchanged, still not done as of addendum 4); 2-Man scramble scoring
-  format is still ❓ open — Brian said its formula needs his own input; Photos/"memories"
-  not started, but the main `worker.js` already has a substantial `event_photos`/R2
-  upload/`curation_status` pipeline (`/photos/upload`, PATCH curation, DELETE) that looks
-  like a plausible head start — not yet verified against BFE's data shape.
-- **Chat-rename string (final, covers the whole Dev-76 chat — main entry + all 4
-  addenda):** `Dev-76 - Wally Cup Results Page: Built, Tested, CTP Persistence Live, WB
-  Regression & vsPar Bugs Fixed, Mobile Redesign`
-
----
-
-## Dev-75 Architecture Notes (2026-09-02) — Dry-Run Testing, Payout Gaps Closed, Withdraw-a-Player
-
-**Read this before writing any Dev-76 code for Wally Cup.** Full detail is in the Dev-75
-entry of `BF_Session_Log.md` — this is a pointer/summary, not a replacement for it.
-
-- **Status as of Dev-75:** Phase 2 (the Close Round scoring/payout engine) is now
-  actually complete — Dev-74 called it "fully validated end-to-end," but that validation
-  never exercised a podium tie or an unclaimed CTP hole, so both were silently broken.
-  Both fixed this session by porting the missing logic from `BF_Golf_Scorer_8.html`
-  (podium tie-splitting; CTP-unclaimed-money-rolls-into-skins, computed from actual paid
-  amounts at settlement, not the pre-round estimate). The Overall Standings podium — a
-  second, separate place the same tie-splitting needed to apply — was also missed
-  initially and fixed once found on a re-check. **Phase 3 (the player-facing results
-  page) remains completely untouched — still the real next priority for Dev-76.**
-- **New this session:** withdraw-a-player (roster checkbox + note, excludes a player from
-  Overall standings/podium *and* the Wally Ball pot without touching their own already-
-  closed round results — needed a `bfe_event_roster` schema change, run and redeployed by
-  Brian this session); a Scorecard Check admin tool (ported from `portal.html`, roster-
-  vs-Jotform-submissions coverage check, reuses Close Round's own fetch); a Close Round
-  roster-vs-scorecard mismatch alert (blocking confirm + a one-click "mark withdrawn"
-  fix, framed per Brian's own priors: missing scorecard is more likely a withdrawal than
-  a counting mistake); a Save/Generate ordering bug fix (Save now always rebuilds from
-  the current form before persisting, so it can no longer silently save stale data
-  regardless of click order).
-- **Two things investigated and deliberately NOT built, with reasoning recorded rather
-  than just skipped:** re-closing an earlier round after later ones are already closed
-  (traced the actual mechanics — it already works with zero new code, since Close Round
-  always re-fetches live and always replaces just one round's rows; not worth building
-  a reminder UI for something GS itself has never supported either); a way for a future
-  non-Brian Host to fix a bad Jotform submission without Brian's own account access (real
-  gap, but not a Wally Cup 2026 problem — right shape identified for whenever it's
-  actually needed: an in-BFE-Admin "ignore this submission" list gated by the existing
-  Host PIN, never Jotform account access).
-- **DELETED/ARCHIVED Jotform exclusion — live-verified this session, not just trusted.**
-  See Dev-75 log entry for the test (a real created-then-deleted CttP submission,
-  confirmed status flip via direct ID fetch) and the stronger corroborating evidence
-  (portal.html's live `loadCtpData()` uses the identical filter on the identical form,
-  already proven across every real BFSeries event).
-- **A naming note for whoever reads `BFE-Admin.html`'s code comments next:** this
-  session's individual fixes got labeled in-file as "Dev-81" through "Dev-88" — a
-  per-feature counter, not this codebase's actual one-Dev-N-per-session convention. This
-  whole session is Dev-75. **The next in-file comment number is Dev-76, matching this
-  log — not Dev-89.**
-- **Design-canvas mockup for Phase 3, exported this session:** the visual/CSS reference
-  from the private design canvas Claude was iterating on lives at
-  `source/WallyCup_Results_Design_Reference.dc.html` (once pushed — see the file's own
-  README comment for what it is/isn't; short version: real reusable CSS + a `decorate()`
-  row-formatting function, zero live-data wiring, hand-typed sample arrays only). Dev-76
-  needs to build the actual fetch-from-Worker generator; this file is a design reference,
-  not something to "wire up" as-is.
-- **Full carry-forward list is in the Dev-75 entry of `BF_Session_Log.md` — read it
-  before starting Dev-76 work,** not just this summary.
-
-## Dev-74 Architecture Notes (2026-08-31) — Wally Cup Scoring Engine Complete
-
-Full detail is in the Dev-74 entry of `BF_Session_Log.md` — this is a pointer/summary,
-not a replacement for it. The Dev-73 notes right below this section are still accurate
-background; this section only
-records what changed since.
-
-- **Status as of Dev-74:** Phases 0–2 of the phased plan below are **done and validated
-  end-to-end** — Live Panel Wally Ball wiring, and the entire Close Round scoring engine
-  (quota, skins, CTP, Wally Ball round bonus + season pot, Overall rollup). Verified via
-  a complete, hand-checked Rd1→Rd2→Rd3 test cycle, and confirmed genuinely live by
-  diffing `docs/portal.html` and `docs/BFE-Admin.html` on GitHub byte-for-byte against
-  the final local copies. **Only Phase 3 (the player-facing results page) remains before
-  9/11.**
-- **Two real bugs found and fixed this session**, in case similar symptoms resurface:
-  a Fixed-HCP-mode slope-averaging display bug (math was always right, the Review table's
-  displayed slope wasn't), and a Wally Ball bonus/season-pool coupling bug (a player
-  eliminated from the season pot was wrongly having their *round-level* bonus withheld
-  too — confirmed by Brian these must stay fully independent).
-- **Two player-facing clarity fixes, both required in the future results page too:**
-  Rank/Podium ($) is gross Score + Wally Ball bonus, stack-ranked against the whole
-  field — intentionally *not* the same thing as quota performance (+/-). And a player's
-  *cumulative* Wally Ball bonus across all closed rounds is now broken out as its own
-  column in Overall standings, separate from "Total +/-" (which is pure quota
-  performance and never includes it) — both exist because the raw numbers otherwise read
-  as contradictory to a player comparing round results against the season view.
-- **Scope clarification:** the 2Man scramble is confirmed a standalone event, separate
-  from the Wally Cup outcome — the undefined scramble-scoring-formula item is no longer
-  time-pressured against 9/11 (still needs Brian's input eventually, own build window).
-- **`docs/BFE-Admin.html` is not pulled down by the Bootstrap's standard 8-step
-  sequence** (see the Bootstrap doc's own note, added Dev-74) — `curl` it fresh from
-  GitHub before editing if picking this work back up, rather than assuming a stale local
-  copy or working from memory of its structure.
-- **Before real Rd1:** the live "2026 Wally Cup" event in D1 is currently Dev-74's test
-  data (real roster, generated test scorecards) — needs Data & Reset → Delete and a
-  fresh Setup with the real roster/tee assignments before the real event, so real Rd1
-  doesn't chain off test quota values.
-- **Full carry-forward list (7 items, from the 2Man formula to the ±25% quota cap never
-  having been observed triggered in test data) is in the Dev-74 entry of
-  `BF_Session_Log.md` — read it before starting Dev-75 work,** not just this summary.
-
-## Dev-73 Architecture Notes (2026-08-30) — Wally Cup Scoring Engine
-
-**Read this before writing any Dev-74 code for Wally Cup.** Full detail, including the
-GS-derived formulas and the Jotform field table, is in the Dev-73 entry of
-`BF_Session_Log.md` — this is a pointer/summary, not a replacement for it.
-
-- **Status as of Dev-73:** capture layer (`bfe_scorecards` incl. `wb_status`/`wb_hole`/
-  `wb_stroke`, `bfe_cttp_entries`) and setup/master-data layer (`bfe_event_config`,
-  `bfe_venue_tee_catalog`, `bfe_player_profiles`, `bfe_events`/`bfe_event_rounds`/
-  `bfe_event_roster`) are built, live, and confirmed operational. The results/computation
-  layer (`bfe_quota_progress`, `bfe_scramble_pairs`, `bfe_scramble_results`, or whatever
-  Dev-74 decides to actually name/shape them) does not exist at all — no round-results
-  math, payout calc, or cross-round rollup exists anywhere for WC yet. This is the
-  critical remaining work.
-- **Scope decisions locked in this session:** BFSeries scorecard/CttP capture stays on
-  Jotform, not ported to D1, given the time crunch (shouldn't affect BFSeries either way
-  given the separate-Worker architecture). Jotform remains WC's live data collector too —
-  full sunset deferred, not abandoned. The WC Live Panel reuses the existing BFSeries
-  Live Panel (`buildLivePanel()` in `portal.html`) rather than a new standalone build,
-  plus one addition: a Wally Ball status step in the Post-Round Scorecard sheet.
-- **Confirmed headless submission:** `submitScorecard()`/`submitCttp()` in `portal.html`
-  POST directly to Jotform's submission API from client-side JS — they never render or
-  navigate to Jotform's hosted form, so players never see field labels. New fields can be
-  added freely without any player-facing UI constraint.
-- **Wally Ball Jotform fields — added Dev-73, on the existing shared `SCORECARD_FORM_ID`
-  (250963587514163) form:** `wallyBallStatus` (QID 33), `WallyBallLostHole` (QID 34),
-  `wallyBallStroke` (QID 35) — maps 1:1 to the `bfe_scorecards` `wb_status`/`wb_hole`/
-  `wb_stroke` columns already provisioned. **Not yet wired into code** — that's Dev-74's
-  first job (see below).
-- **Dev-74 Phase 1 (hard deadline — 9/11):**
-  1. Add `WB_QID = {status:'33', hole:'34', stroke:'35'}` to `submitScorecard()` and
-     include those params in its POST body.
-  2. Add the Wally Ball input step (Y/N, conditional Hole#/Stroke# when "No") to
-     `buildLivePanel()`'s Post-Round Scorecard section.
-  3. Flip `hasLivePanelSupport()` to `true` for Wally Cup / 2Man formats.
-  4. End-to-end test against the real Jotform form with a disposable test event.
-- **Dev-74/75 Phase 2 (soft deadline, days after 9/11):** design + create the D1
-  results-layer tables; port `adjustQuota`/`applyQuotaCap` (quota formula: `36 - (hcp ×
-  slope / 113)`, slope Green 132/Combo 128/Gold 115; adjustment capped ±25%) and the
-  skins-per-hole-winner loop from `BF_Golf_Scorer_8.html` (skins apply in every WC round
-  including 2Man, feed payout only, not quota/performance); build a "Close Round" action
-  in `BFE-Admin.html` (payout calc, Wally Ball pot resolution, Overall rollup across
-  exactly 3 rounds — note GS's own `calcSeriesPerformance()` is a best-4-of-N model and
-  does **not** fit WC's fixed 3-round Overall, a new calc is needed). **Open/blocking:**
-  the 2Man scramble scoring formula is undefined anywhere in the codebase or spec — needs
-  Brian's direct input before this phase can be sized.
-- **Phase 3 (can start minimal, polish through Rd3):** per-round GLS-style results page
-  generator + a living Overall page (podium held back until Rd3 closes), published via
-  GS's proven `deployPagesToGitHub()`/`POST /deploy` mechanism to `docs/`.
-- **Still open, carried from Dev-71:** `BF_WallyCup_Spec.md` — a structured spec doc for
-  this architecture has never been committed to the repo. The only spec document that
-  exists (`WC_spec.txt`, referenced as "from Dev-71") is local-only on Brian's machine and
-  has not been reconciled against what's actually been decided/built since. Recommend this
-  gets done early in Dev-74 rather than continuing to rely on session-log archaeology.
-
-## Dev-71 & Dev-72 Architecture Notes (2026-08-27)
-
-### BFE (BF Experiences) Competitive Events system — new architecture (Dev-71)
-- New, separate system from the core Golf Scorer / Gatherings app: built for the 2026
-  Wally Cup competitive events.
-- Runs on its own Cloudflare Worker (`bf-experiences`, source `bf_experiences_worker.js`)
-  — distinct from the long-standing `birdiefriends-push` Worker. Do not conflate the two;
-  they have separate deploy paths and separate source files.
-- Admin surface: `docs/BFE-Admin.html`, live at https://birdiefriends.com/BFE-Admin.html.
-  Authored source is `BFE_Host_Admin_Panel_Setup.html`, currently local-only with no
-  `source/` counterpart in the library (open Dev-73 carry-forward item).
-- Registration roster pulled from the shared Jotform Event Registration form (id
-  233103072261037) via Jotform MCP tools, scoped to one event using a priority-ordered
-  field-matcher (`jfGetAnswerByPriority`) so a generic "Name" field can't be mistaken for
-  "Player Name" — mirrors the existing GS event-picker UX (load distinct Event Name
-  values, pick one, fetch only that event's Yes/Sub registrants).
-- Jotform event-picker has only been tested against a local Playwright mock server, not
-  the real production form/Worker — verify before relying on it for the actual Wally Cup.
-
-### Publish mechanism findings (Dev-72 — read this before any /deploy attempt)
-- See the new AUTO-MODE CLASSIFIER RULE at the top of this file's instruction block for
-  the full mechanism. Short version: GET works once the domain is allowlisted in
-  Settings -> Capabilities; POST needs the human to state the exact action, specifically,
-  immediately before the call. Not a header/client/PIN issue — that was a dead end.
-- `deploy.html` (existing, live, PIN-gated) only supports five hardcoded filenames
-  (`portal.html`, `guide.html`, `worker.js`, `BF_Golf_Scorer_8.html`,
-  `BF_Operations_Guide.md`) with no arbitrary-path field. It cannot publish
-  `BFE-Admin.html` or most library docs as currently built. Either extend it with a
-  free-text path field, or commit `BF_Publish_Helper.html` (built Dev-71, path-handling
-  verified correct Dev-72, but never committed to the repo — currently local-only on
-  Brian's machine) to the library so it's not single-machine-dependent.
-
-## Dev-52 Architecture Notes (2026-06-27)
-
-### Gathering Templates (§20 — fully shipped)
-- `_hostTemplates` cache, loaded on every Host panel open via `loadHostTemplates()`
-- `📋 From Template` CTA button — same dark green pill style as New Gathering, shown when host has ≥1 template
-- Template picker: `host-gathering-card` style cards, green meta chips, ⛳ Use Template + Delete action strip
-- `applyTemplate()` — pre-fills create form; date/time always blank; crew snapshot resolved against current memberData; silently drops departed members
-- `promptSaveAsTemplate()` — fires after every successful create; also on ☆ Template button on existing host cards
-- Worker routes: `POST /gathering-templates`, `GET /gathering-templates?host_id=X`, `DELETE /gathering-templates/:id?host_id=X`
-- D1 table: `gathering_templates` (id, host_id, name, title, venue, capacity, gathering_type, description, crew_snapshot, created_at)
-
-### Text Formatting (enforced on all Gathering creates/edits)
-- `toTitleCase()` — title, format/type, template name; skips articles/prepositions mid-string
-- `toSentenceCase()` — description only
-- Applied in `submitNewGathering`, `submitEditGathering`, `saveTemplate`
-- Venue field never transformed (host knows the correct name)
-
-### Venue Manager (Commissioner Admin → Gatherings Admin)
-- Collapsible 📍 Venue Manager sub-section — auto-loads on first expand
-- `GET /venues?pin=7797` returns all venues including inactive (commissioner); no pin = active only
-- `POST /venues` (PIN) — add venue, sort_order 90 by default (before Other at 99)
-- `PATCH /venues/:id` (PIN) — toggle active status
-- `adminAddVenue()` auto-title-cases name, clears `_venues` autocomplete cache on change
-- 📋 All Active Gatherings also collapsible, max-height 420px with scroll
-
-### Announcement Feed (type-aware styling)
-`buildAnnouncementsHTML()` uses `typeConfig(bf_type)` for per-type icon + accent color:
-- 🦅 birdie (gold) · 🎯 cttp (green) · ⛳ gathering_invite (blue) · 📢 gathering_open_invite (blue)
-- 📅 gathering_date_changed (amber) · ❌ gathering_cancelled (red) · 🎉 sub_promotion (green)
-- 🗓️ new_event (green) · ⏰ event_reminder (green) · 📣 broadcast (neutral)
-Timestamp includes time of day. Entries render as rounded pill cards.
-
-### D1 Schema — current entries
-| Entry | Session | Description |
-|-------|---------|-------------|
-| 1–3 | Dev-42/43 | gatherings, crews, crew_members, registrations |
-| 4 | Dev-49 | member_preferences |
-| 5 | Dev-49 | gatherings.tee_time_status |
-| 6 | Dev-49 | registrations.host_note (schema kept, UI removed) |
-| 7 | Dev-51/52 | venues table (6 rows seeded) |
-| 8 | Dev-52 | gathering_templates |
-
-### Venue Autocomplete
-Venue field in create + edit Gathering forms is now a smart autocomplete:
-- On focus: shows full D1 `venues` table ("Your Courses") immediately
-- On type: narrows D1 matches + fires Google Places `AutocompleteSuggestion` API
-- Smart golf hint: appends " golf" only if query lacks golf/country/club/links
-- Filter: main text only, keywords golf/country/club/links
-- Free-form fallback: host can always type a name directly
-- `GET /venues` Worker route — D1 `venues` table, `sort_order ASC, name ASC`
-- **D1 migration (Entry 7) still needed** — `venues` table not yet created. SQL in Dev-51 log entry.
-
-### Push ID Audit
-- Manual: 🔍 Audit button in Push Subscribers card — cross-references Jotform pushIds vs OneSignal live subscriptions. Stale = 🗑️ Clear button writes empty QID 23 to Jotform.
-- Auto: `osCommissionerAudit()` runs 5s after portal load (commissioner only), once per day via `bf_push_audit_YYYY-MM-DD` localStorage key. Silently clears stale tokens, toast if anything cleared.
-
-### Admin section visibility fix
-`selectPlayer()` now explicitly re-evaluates `commissioner-admin-section` visibility on every player switch — not just on `showScreen('admin')`.
-
-### Gatherings Admin improvements
-- 💬 Text Host link per host section header (sms: using cell from memberData)
-- Capacity fill "X/Y" when size is set
-- Inline registration expand (replaces alert()) — Yes/Sub/No groups with names
-
----
-
-## Dev-49 Architecture Notes (2026-06-24) — CORRECTIONS
-
-### Host:Yes in Jotform — TAG not GATE
-`Host: Yes` (Jotform Membership, QID for host field) is a **collector/tag**, NOT an
-access gate. It records who has hosted a Gathering — for future analytics, targeted
-communications, and host reputation. It does NOT gate access to the Gather UI.
-
-**The actual gate is `gathering_panel_live` KV flag** (commissioner-controlled, whole
-community on/off). Once that flag is true, ANY member can host. `Host:Yes` is written
-as a side-effect of hosting, not a prerequisite.
-
-Previous references to Host:Yes as a gate were incorrect. Walli receiving Host:Yes
-after creating a Gathering is the intended behavior.
-
-### Gatherings — D1 schema as of Dev-49
-- `gatherings`: + `tee_time_status TEXT NOT NULL DEFAULT 'confirmed'` (Entry 5)
-- `registrations`: + `host_note TEXT` (Entry 6 — schema kept, UI removed)
-- `member_preferences`: `player_id PK, prefs TEXT DEFAULT '{}', updated_at TEXT` (Entry 4)
-- All previous entries (1–3) unchanged
-
-### Gatherings — notification architecture as of Dev-49
-- `gathering_alerts` (Jotform QID 26, field `gatheringalerts`): member opt-out for open
-  broadcast notifications. Default Yes (blank = Yes in parser). Toggle in ⚙️ Settings.
-- `gatheringFilters` in `member_preferences` D1: declarative rule array for Tier-2
-  filtering. Exclusion paradigm (nin operator). Empty = show all.
-- `gathering_panel_live` KV flag: still false (not yet launched as of Dev-49 close).
-
-### Gatherings — registration routing (fixed Dev-49)
-- Unregister button and Schedule tab "Can't Make It": now correctly route through
-  `submitRegistration('No')` → D1. Were incorrectly calling `changeRegistration`
-  (Jotform path) with synthetic D1 IDs.
-- `regData` sync: after registration, portal now updates both `gatheringRegData` AND
-  `regData` (load-time snapshot) so `renderAll()` sees the change immediately.
-
-
-
-## Session 40 Accomplishments — Deploy Infrastructure + Secrets Cleanup (2026-06-18)
-
-### Deploy infrastructure — all limitations eliminated
-- **The 100KB limit was never real.** Cloudflare free tier allows 100MB. Portal (420KB)
-  and GolfScorer (369KB) both deploy cleanly via POST /deploy. No file size problem exists
-  at any scale relevant to this system.
-- **`/deploy` route was missing from source/worker.js.** Added, pushed to library,
-  deployed to Cloudflare.
-- **`/deploy` expanded to accept `docs/` paths.** Portal live file is at docs/portal.html
-  (GitHub Pages). Now accepts source/ or docs/ — both confirmed working. Worker 2026-06-18b.
-- **Large-file deploy pattern established.** Write JSON payload to temp file via python3,
-  use --data-binary @file. Standard pattern for portal and GolfScorer deploys.
-- **bf_deploy.py role clarified.** Rule against executing TOKEN-authenticated functions
-  is credential hygiene, not a capability limitation. Worker /deploy covers everything.
-
-### Secrets cleanup — launch_golf_scorer.py
-- **GITHUB_TOKEN** removed from auto-pull (public repo, no auth needed). Token retained
-  only for Publish All Pages writes — legitimate, laptop-only, never in GitHub. Old classic
-  token rotated by user; new token in place.
-- **ANTHROPIC_API_KEY** removed entirely. OCR feature retired — digital scorecard is
-  the settled solution. Key revoked by user.
-- **deploy_portal.py** deleted from laptop — never needed, portal deploys via Worker.
-- Launcher tested: ✅ unauthenticated GitHub pull working, ✅ new token valid,
-  ✅ GolfScorer v8.17 · 2026-06-17g confirmed pulled.
-
-### Deploy procedures — current state
-
-**Portal (docs/portal.html + source/portal.html + source/portal_version.txt + docs/portal_version.txt):**
-
-⚠️ **All FOUR files, every time — not three.** `docs/portal_version.txt` is the file the
-*live app actually fetches* (relative path `portal_version.txt` resolves against `docs/`,
-where portal.html is served from). `source/portal_version.txt` is only a tracking copy for
-the next session's version-bump read. Missing the `docs/` copy was the exact bug that hit
-Dev-45, Dev-54, **and Dev-55** — three separate occurrences of the same gap, the last one
-caused directly by an outdated 3-file version of this exact script. Closed out for good here.
-
-```python
-# python3 in bash_tool — write four payload files, then push all four
-import json, re, datetime, subprocess
-
-with open('/home/claude/birdiefriends_portal.html') as f:
-    portal = f.read()
-
-# Always fetch portal_version.txt fresh from GitHub — never read local file.
-# Local copy goes stale after the first deploy in a session, causing duplicate version numbers.
-ver_txt = subprocess.check_output([
-    'curl', '-s',
-    f'https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/portal_version.txt?cb={int(datetime.datetime.now().timestamp()*1000)}'
-]).decode()
-
-match = re.search(r'v3\.(\d+)\.(\d+)', ver_txt)
-minor, patch = int(match.group(1)), int(match.group(2))
-today = datetime.date.today().isoformat()
-new_patch = patch + 1
-new_patch_str = str(new_patch).zfill(2) if new_patch < 100 else str(new_patch)  # keep v3.17.04 not v3.17.4
-new_ver = f'v3.{minor}.{new_patch_str} · {today}'
-new_ver_txt = f'{new_ver}\nDeployed: {today} {datetime.datetime.now().strftime("%H:%M")}\n'
-portal = re.sub(r'v3\.\d+\.\d+ · \d{4}-\d{2}-\d{2}', new_ver, portal)
-
-for path, content in [
-    ('docs/portal.html',          portal),
-    ('source/portal.html',        portal),
-    ('source/portal_version.txt', new_ver_txt),
-    ('docs/portal_version.txt',   new_ver_txt),   # ← the file the live app actually reads. Never skip this one.
-]:
-    safe = path.replace('/','_')
-    with open(f'/tmp/deploy_{safe}.json', 'w') as f:
-        json.dump({'pin':'7797','path':path,'content':content,
-                   'message':f'Portal {new_ver}'}, f)
-print(f'Payloads ready: {new_ver}')
-```
-```bash
-for f in /tmp/deploy_docs_portal.html.json \
-          /tmp/deploy_source_portal.html.json \
-          /tmp/deploy_source_portal_version.txt.json \
-          /tmp/deploy_docs_portal_version.txt.json; do
-  curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
-    -H "Content-Type: application/json" \
-    -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
-    --data-binary @$f --max-time 60
-  echo ""
-done
-```
-
-**GolfScorer (source/BF_Golf_Scorer_8.html):**
-Bump the version suffix (a→b→…) manually in the file content before pushing.
-```bash
-python3 -c "
-import json
-with open('/home/claude/BF_Golf_Scorer_8.html') as f:
-    content = f.read()
-payload = {'pin':'7797','path':'source/BF_Golf_Scorer_8.html',
-           'content':content,'message':'GolfScorer v8.17·DATE — description'}
-with open('/tmp/gs_payload.json','w') as f:
-    json.dump(payload, f)
-print(len(content), 'bytes')
-"
-curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
-  -H "Content-Type: application/json" \
-  -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
-  --data-binary @/tmp/gs_payload.json --max-time 60
-```
-
-**Worker (source/worker.js) — always two steps:**
-```bash
-python3 -c "
-import json
-with open('/home/claude/worker.js') as f:
-    content = f.read()
-payload = {'pin':'7797','path':'source/worker.js',
-           'content':content,'message':'Worker DATE — description'}
-with open('/tmp/worker_payload.json','w') as f:
-    json.dump(payload, f)
-"
-curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
-  -H "Content-Type: application/json" \
-  -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
-  --data-binary @/tmp/worker_payload.json --max-time 30
-# Then: Cloudflare → Workers → birdiefriends-push → Edit code → paste → Save and Deploy
-```
-
-**Single-file library docs (ops guide, session starter, bizplan docs):**
-```bash
-python3 -c "
-import json
-with open('/home/claude/<filename>') as f:
-    content = f.read()
-payload = {'pin':'7797','path':'source/<filename>',
-           'content':content,'message':'Session 4X — description'}
-with open('/tmp/payload.json','w') as f:
-    json.dump(payload, f)
-"
-curl -s -X POST "https://birdiefriends-push.birdiefriends01.workers.dev/deploy" \
-  -H "Content-Type: application/json" \
-  -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
-  --data-binary @/tmp/payload.json --max-time 30
-```
-
----
-
-## Session BP-1 / Chat#39 Accomplishments — 2026-06-18
-
-### Business Plan — Library bootstrapped (source/bizplan/)
-- Created `source/bizplan/` subfolder as permanent home for business plan docs
-- Deployed all 4 BP-1 output documents: BF_BizPlan_Vision.md, BF_BizPlan_GateLog.md,
-  BF_BizPlan_Session_Log.md, BF_Capability_Inventory.md
-- BF_BizPlan_Bootstrap.md not yet built — first task for next dedicated bizplan session
-
-### deploy.html — Three fixes shipped
-1. Stale WORKER_URL corrected to birdiefriends-push.birdiefriends01.workers.dev
-2. Literal \n sequences in Claude tab fixed
-3. Business Plan section added to Library tab
-
-### Worker — /history and /rollback added, source synced
-- /history and /rollback endpoints added and deployed
-- /deploy route was documented as present but was missing from source — fixed Session 40
-
----
-
-## Session 38 Accomplishments — Credential Handling + Worker /deploy Route (2026-06-18)
-
-### Credential handling rule established
-Claude had been executing bf_deploy.py's TOKEN-authenticated functions across many
-sessions. A bizplan session caught the inconsistency by correctly declining to use
-the embedded token. The rule was clarified: Claude does not hold or use embedded API
-tokens to take actions, regardless of user authorization. The Worker /deploy route
-(PIN-gated, token in Cloudflare secret) is the correct replacement.
-
-### Worker /deploy route added
-- PIN-gated POST /deploy route added to worker.js
-- GH_TOKEN stored as Cloudflare secret — token never passes through chat
-- path restricted to source/ at the time (expanded to include docs/ in Session 40)
-
----
-
-## Session 37 Accomplishments — Groupings History Fix + Safety/Workflow (2026-06-17/18)
-
-*(Full details in Ops Guide §12 Session History)*
-
-- Groupings archive rebuilt (root cause: grpPublish had no connection to series data)
-- Two further bugs in generateResultsPage() — onclick non-existent function + duplicate panel
-- New Event safety guard — hard-blocks on unsaved scored round, requires DISCARD
-- View Saved Event (Tab 5) — read-only selector for any saved event
-- End of Event — one tracked action for Save → Sheets → Publish
-- Launcher hardened — loud port-conflict failure, visible server window
-- My Game → My Series naming pass
-
----
-
-## Reference
-
-### Versions
-| Component | Version | Status |
-|-----------|---------|--------|
-| Portal | v3.16.14 · 2026-06-22 | Production ✅ |
-| GolfScorer | v8.17 · 2026-06-17g | Deployed ✅ |
-| Worker | 2026-06-18b | Deployed ✅ — /deploy accepts source/ and docs/ |
-| deploy.html | 2026-06-18 | Live ✅ — all tabs functional |
-| bf_deploy.py | 2026-06-18 | Library reference only — not executed by Claude |
-| bf_architecture.html | 2026-06-12 | Library ✅ — PIN 913317 |
-| launch_golf_scorer.py | 2026-06-18 | Current ✅ — OCR removed, token rotated, auto-pull unauthenticated |
-| Launch_Golf_Scorer.bat | 2026-06-17 | Current ✅ |
-| guide.html | 2026-06-17 | Live ✅ |
-
-### Worker Endpoints
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/` | None | Send push notification |
-| GET | `/flags` | None | Read all KV flags |
-| POST | `/flags` | PIN 7797 | Write flag to KV |
-| GET | `/subscriptions` | None | Fetch OneSignal subscribers |
-| GET | `/notifications` | None | Fetch notification history |
-| DELETE | `/subscription/:id` | None | Delete one push subscription |
-| DELETE | `/notifications/clear` | PIN 7797 | Cancel scheduled notifications |
-| GET | `/history?file=X&n=20` | None | Last N commits for a managed file |
-| POST | `/deploy` | PIN 7797 | Push file to GitHub — source/ or docs/ paths, no size limit |
-| POST | `/rollback` | PIN 7797 | Restore file to a prior commit SHA |
-| GET | `/feed` | None | Worker KV announcement feed |
-| DELETE | `/feed` | PIN 7797 | Clear KV feed entries |
-
-### KV Flags
-| Key | Type | Purpose |
-|-----|------|---------|
-| maintenance | bool | Portal offline for all |
-| live_test | bool | Force live banner (dev only) |
-| live_override | bool | Commissioner manual event start |
-| live_override_since | ISO string | Timestamp of manual start |
-| feed::{timestamp} | JSON | KV feed entries (title, body, sentAt, type) |
-
-### Jotform Form IDs
-| Form | ID |
-|------|-----|
-| Event Registration | 233103072261037 |
-| Event Request | 233113019726045 |
-| Membership | 233083522910045 |
-| Series Scorecard | 250963587514163 |
-| Closest to the Pin | 251002357493048 |
-
-### Known Issues Carried Forward
-- **GS atomicity** (`grpPublish Final` → write `results.html` directly) — flagged Session 36, still untouched
-- standings.html Groups tab is dead (broken onclick, zero supporting JS/content panel)
-- guide.html doesn't document the portal-native My Game bottom-nav button
-- OneSignal delete of delivered messages — not possible via API; KV Feed is the fix
-- GS state persistence not implemented — re-fetch from Jotform required after restart
-- TEST_PREVIEW_MODE must be False on event day
-- BL-17: Two Series events same day → only first gets live banner
-- Active/Inactive auto-reset: Jeremy Burkett + Tony Hager
-- Push delivery sporadic on course — device-side (Focus Mode / Safari vs PWA icon)
-- Retire "Load from Profiles" / Quick HCP panel — stale parallel HCP source, pending confirmation
-
----
-
-## Push Notification Reliability (Dev-49 post-launch)
-
-### Self-healing pushId architecture
-`osIdentityRefresh()` runs 3.5s after every portal load. Compares current
-`OneSignal.User.PushSubscription.id` against Jotform `member.pushId` (QID 23).
-Mismatch → silently writes new ID to Jotform. Jotform is source of truth —
-localStorage is cache only.
-
-### Resolution path for stale tokens
-1. **Auto** — player opens portal → heals on next load
-2. **Manual** — Admin → Push Subscribers → 📲 Test button per player
-3. **Self-service** — ⚙️ Gear → 🔄 Sync or Reset & start over
-4. **Dev-50** — proactive batch audit tool (not yet built)
-
-### Notification settings location
-Moved from ⓘ About to ⚙️ Gear (My Preferences section) in v3.16.58.
-Element IDs unchanged: `about-notif-status`, `about-notif-btn`, `about-ios-nudge`,
-`notif-sync-btn`, `notif-sync-status`. `updateAboutNotifUI()` called on both
-`showScreen('about')` and `showScreen('admin')`.
-
-### gathering_panel_live
-KV flag flipped to true — Gatherings is LIVE as of 2026-06-24.
-Announcement sent. Community notified.
+## 1. What this project is
+
+BirdieFriends (birdiefriends.com) is a golf league management platform. Brian is the sole
+developer and commissioner, builds it entirely through Claude sessions, and also plays in
+it as a real competitive golfer ("Brian Hager" is his player identity — a separate,
+inactive member "Brian McCabe" also exists in old data, don't confuse them). There are two
+apps and two Cloudflare Workers:
+
+- **`portal.html`** — the player-facing app. Events/Gatherings home screen, registration,
+  the Live Panel (in-round scorecard/CTP/Birdie Alert/photo capture during play), results
+  pages, admin/commissioner controls behind a gear icon. This is the file most session work
+  touches. Currently v4.0.8 (see `portal_version.txt` — **bump this with every
+  `portal.html` change and deliver it alongside**, format `vX.Y.Z · YYYY-MM-DD` /
+  `Deployed: YYYY-MM-DD HH:MM`; nothing bumps it automatically).
+- **`BFE-Admin.html`** — commissioner-only admin tool for BFE ("BirdieFriends
+  Experiences") competitive events — currently just the 2026 Wally Cup. Roster/quota setup,
+  round definitions, tee/venue policy (incl. CTP holes), payout config, Player Groupings
+  (draft/flighted/social/pinned), and Close Round (pulls scorecards from Jotform, computes
+  skins/CTP/podium, runs the quota engine, persists results). PIN-gated (`7797`) for
+  anything that writes.
+- **`BF_Experiences.js`** — the `bf-experiences` Worker (`BFE_API =
+  https://bf-experiences.birdiefriends01.workers.dev`). D1-backed: `bfe_events` (event
+  config: roster, rounds, teePolicy, payout), `bfe_venue_tee_catalog` (per-venue tee/CTP
+  info, shared by BFE-Admin's Tee Policy AND portal.html's Venue Manager), `bfe_round_groups`
+  (Player Groupings), `bfe_round_results`/`_skins`/`_cttp` (Close Round output). Routes under
+  `/bfe/*`.
+- **Main `worker.js`** — the `birdiefriends-push` Worker (`GATHERINGS_API =
+  https://birdiefriends-push.birdiefriends01.workers.dev`). Everything else: Gatherings,
+  push notifications (OneSignal, via `osSendAll`/`osSendToPlayers`), photo/video capture
+  (`event_photos` D1 table + R2 storage + `curation_status`), member preferences, the
+  Membership roster. Not present in this cloud workspace's file list this session — treat
+  as "known to exist, fetch/ask for it if a task needs to read or change it."
+- **Jotform** is the actual data-entry backend for a lot of real-world input: the "Request
+  Event" form (`REQUEST_FORM_ID`) is the sole source of every event/round card on the
+  Portal home (including Wally Cup rounds — BFE-Admin's own round config is independent of
+  this and doesn't drive the Portal home cards); a Scorecard form and a CTP form back Live
+  Panel submissions and Close Round's data pull. `JOTFORM_API_KEY` is hardcoded client-side
+  — a known, deliberately-deferred security backlog item (see §5).
+
+**Deployment — I never do this myself.** Brian runs his own local `bf_push.bat`/
+`bf_push.ps1` against a folder called AutoPush, then does his own Cloudflare
+paste-and-deploy step for Worker changes. My job is to prepare and verify files, then
+deliver them: `SendUserFile` first, then (when linked to Brian's computer)
+`mcp__remote-devices__device_commit_files` into
+`C:\Users\16177\Downloads\GolfScorer\AutoPush`. I do not run deploy commands or push to
+Cloudflare/GitHub myself.
+
+## 2. Where the 2026 Wally Cup stands
+
+Full design is in `BF_WallyCup_Spec.md` — read it before touching any of this. Summary:
+one BFE event (`"2026 Wally Cup"`), four rounds in sequence `Rd1 → Rd2 → 2Man → Rd3 →
+Overall`. Rd1/Rd2/Rd3 are `stableford_quota` (quota threads round-to-round via
+`chainsFrom`, ranked by performance-vs-quota plus that round's Wally Ball bonus for
+whoever still has the ball). 2Man is `scramble_pair` — 8 drafted teams, one scorecard per
+team, ranked by performance vs. a team quota (each partner's own quota averaged across
+every stableford round played so far, then the two partners averaged together); it never
+rolls into Overall or Wally Ball, and its own `chainsFrom` (→ Rd2) is read-only, walked
+backward purely to source that averaging. CTP holes are per-venue, shared between
+BFE-Admin's Tee Policy and portal.html's own Venue Manager editor (built Dev-78) via the
+same `bfe_venue_tee_catalog` store — CTP always pays the *individual* claimant on a
+configured hole, never a team, even in 2Man.
+
+**Dev-78 built and live-validated:** 2Man Live Panel capture (team picker for
+Scorecard/Birdie Alert, individual picker for CTP — see the spec's §6 for the bug that
+briefly had CTP on the team picker too, now fixed), a device-local Live Test Mode round
+selector (pick any upcoming round to dry-run, not just the next one), the Venue CTP-holes
+editor, and a fix for Rd1 CTP falling back to Blue Shamrock's default holes (a Jotform-
+vs-canonical venue-name spelling mismatch — "Honesdale GC" vs. "Honesdale Golf Club" — now
+handled by a shared `findVenueByName()` abbreviation-tolerant lookup). Brian then ran a
+real end-to-end dry run of all four rounds through the Live Panel and independently
+verified every computed number (quota/WB-bonus ranking, team-quota averaging, skins,
+CTP, payout totals) against the live D1 data — everything matched the shipped formulas.
+
+**⚠️ Outstanding before real Rd1 (10am 9/11), not a Dev-79 task — flag to Brian early:**
+the live `"2026 Wally Cup"` D1 event is still that dry run's 4-player mock roster/results
+(Brian's words: "using 4 players to minimize data entry"), not the real 16-player field.
+It needs a Data & Reset → Delete in BFE-Admin, then a fresh real Setup + real
+Draft/Groupings, before game day. This has been carried forward since Dev-75/77 and still
+isn't done — don't assume it happened without confirming with Brian.
+
+## 3. Dev-79 focus (per Brian, set at Dev-78's close)
+
+1. **Photo capture / "memories" display** for BFE events. Main `worker.js`'s existing
+   `event_photos`/R2/`curation_status` pipeline (built for Gatherings) is a plausible head
+   start, but hasn't been verified against BFE's data shape (events keyed by `event_name`
+   in `bfe_events`, not a Gathering's `gathering_id`) — check that before assuming it
+   plugs in directly.
+2. **Modify the results pages** — Brian hasn't specified the scope yet. Ask at the start of
+   Dev-79 rather than guessing; don't assume it's related to #1 just because they were
+   mentioned in the same breath.
+
+## 4. Standing operating rules (apply every session)
+
+- **Never deploy.** Prepare files, verify them (jsdom/vm test against the actual extracted
+  function source before delivery — this codebase is large enough that "looks right" isn't
+  enough), deliver via `SendUserFile` + `device_commit_files` into AutoPush. Brian pushes.
+- **Any file meant for `bf_push.bat` (i.e. it's a key in `bf_push_library.ps1`'s
+  `$FileMap`) needs an explicit `device_commit_files` call to the exact AutoPush root path
+  — `SendUserFile` alone is not enough.** Found Dev-78 close-out: the linked desktop app
+  auto-saves chat-delivered files into a `Claude outputs` subfolder inside whichever
+  folder is connected (AutoPush here), but `bf_push.ps1` only ever looks in its own folder
+  (`$ScriptDir`, no subfolder recursion) — files that only went through `SendUserFile`
+  silently didn't get found by the push tool. Always finish with `device_commit_files`
+  targeting `C:\Users\16177\Downloads\GolfScorer\AutoPush\<filename>` directly for
+  anything Brian will push, the same way `portal.html`/`portal_version.txt` already were
+  this session — don't rely on the auto-save subfolder for those.
+- **Bump `portal_version.txt` with every `portal.html` change**, not just at session close
+  — this drifted stale for multiple real deploys in the past (Dev-76) before that rule was
+  adopted.
+- **Verify against real production data before declaring a bug fixed**, not just a
+  synthetic test — the Rd1 CTP bug (Dev-78) and several earlier ones were only correctly
+  root-caused by pulling live Worker/Jotform data via the built-in browser tool, not by
+  guessing from the code alone.
+- **Keep `BF_Session_Log.md` and this bootstrap doc updated as work happens**, not only in
+  a big close-out pass at the end — a long session can auto-compact more than once, and
+  reconstructing "what actually got built earlier this session" from scratch (as this
+  close-out entry had to do for the pre-Dev-78-visible-window scramble-engine work) is
+  worse than logging incrementally. If a session does end up closing out a large
+  undocumented backlog in one pass, say so plainly in the log entry rather than presenting
+  it as freshly built.
+- **This doc and the Wally Cup spec are living documents** — when a session's work changes
+  something they describe, update them as part of that work, not as an afterthought.
+
+## 5. Known backlog (not urgent, parked)
+
+- **Small-group payout rounding** (`BF_WallyCup_Spec.md` §6) — round-pot podium split can
+  zero out 2nd/3rd place under ~9 players at the current $10/player rate. Fine for Brian's
+  own groups; a gap if BFE ever opens to other hosts.
+- **Overall-checkbox guardrail for multi-host use** (spec §4) — "Rolls into Overall"
+  defaults to checked and is easy to miss for a non-standard round engine. Parked until
+  hosting opens beyond Brian.
+- **Results-page section ordering** — 2Man's results section renders after Wally Ball in
+  scroll order; only the nav rail's jump link goes to the right spot. Deferred as
+  lower-value than risk, this close to the event.
+- **Commissioner PIN architecture / `JOTFORM_API_KEY`-in-client-source** — same shape of
+  gap, logged historically in `BF_Operations_Guide.md` §10 (that file isn't in this cloud
+  workspace's file list — ask Brian for it if this becomes a priority). Not urgent.
+- **Push notification preference center, player-picker rethink, GS `results.html`
+  photo-collage insertion, D1 schema log drift** — long-standing, not touched in several
+  sessions; still open per `BF_Session_Log.md`'s own carry-forward trail.
+
+## 6. If something here turns out stale
+
+This file is only as good as the last session that updated it. If you find something in
+here that contradicts what the actual code does, trust the code, fix this doc, and note
+the correction in the next `BF_Session_Log.md` entry — don't silently work around a stale
+bootstrap doc without fixing it for the next session too.
