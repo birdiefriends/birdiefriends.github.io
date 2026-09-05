@@ -1,11 +1,21 @@
 # BF_WallyCup_Spec.md — 2026 Wally Cup Architecture Spec
 
-**Status:** Living spec, second revision. Covers the event structure already live
+**Status:** Living spec, third revision. Covers the event structure already live
 (Rd1/Rd2/Rd3, Wally Ball, Overall Standings, results page) plus the 2-Man Scramble round
 (Dev-78) — draft board, team scoring with team quota, results section, and the Overall
-guardrail fix are all built and delivered. Read this before touching Groupings, the
-results page, Close Round, or the Overall Standings rollup — it's the reference
-`BF_Session_Bootstrap.md` and `BF_Session_Log.md` have both been missing.
+guardrail fix are all built and delivered. Live Panel capture support for 2Man (team
+picker for Scorecard/Birdie Alert, individual picker for CttP), the Live Test Mode round
+selector, the BF-Series-compatible Venue CTP-holes editor, and the Wally Cup Rd1
+venue-name-mismatch fix are also built and delivered (Dev-78). **Brian ran a full manual
+end-to-end dry run of Rd1 → Rd2 → 2Man → Rd3 through the Live Panel (a 4-player mock
+roster, "to minimize data entry") and verified the computed results independently against
+the shipped formulas — no discrepancies found. The process and every calculation are
+considered ready for real Rd1, 10am 9/11 — but the live "2026 Wally Cup" D1 event is still
+this dry run's 4-player mock data and needs a Data & Reset → Delete plus a fresh real
+Setup + real Draft/Groupings before game day (carried since Dev-75/77, still not done).**
+Read this before touching Groupings,
+the results page, Close Round, or the Overall Standings rollup — it's the reference.
+`BF_Session_Bootstrap.md` and `BF_Session_Log.md` are both kept current as of Dev-78.
 
 ---
 
@@ -162,20 +172,74 @@ page needed — it's one more section on the existing results page.
   post-close report. Parked — not scoped or built.
 - **Overall-checkbox guardrail for multi-host use** (§4) — parked until hosting is opened
   beyond Brian.
-- **Capture-side team identification** — built and delivered. The Live Panel (Birdie
-  Alert, CttP, and Post-Round Scorecard) now fetches the 2Man round's saved draft teams
-  the same way the groupings card does, and swaps its player picker for a team picker
-  whenever the live round's engine is `scramble_pair` — same "Nickname (Real A & Real
-  B)" convention as the groupings display, so a submitter taps their team rather than
-  typing a name by hand. The picker never falls back to the tapping player's own name
-  for a team round (unlike the individual-round picker, which defaults to "whoever's
-  logged in") — nothing is pre-selected, so a submission can't accidentally go out under
-  the wrong identity. Also fixed as part of this: the Wally Ball "do you still have it"
-  question was being asked on 2Man scorecard submissions (format-scramble was in the
-  same eligibility list as format-wally) even though 2Man is explicitly excluded from
-  Wally Ball per §1 — it's now gated on the round's actual engine instead of the coarser
-  format-class string, so it's skipped for 2Man specifically without affecting any real
-  Wally-Cup individual round.
+- **Small-group payout rounding — flagged during live 2Man testing (2026-09-05), parked
+  until hosting is opened beyond Brian.** BFE-Admin's round-pot podium split (20% of the
+  round pool, weights 2/1/0.5, each share rounded to the nearest $5 via `roundTo5`) can
+  silently zero out 2nd and/or 3rd place in a small field — e.g. a 4-player round at
+  $10/player/round pays podium as $5/$0/$0, not a broken 3-place split. Working as designed
+  today (Brian's own groups are large enough that this never bites), but a real gap if BFE
+  is opened to other hosts running smaller competitions: at the current $10/player rate and
+  default weights, a round needs **9 players** before all three podium spots pay out
+  nonzero. Not scoped or built — needs a design pass (adjustable rounding granularity, a
+  minimum-pool guardrail, or a UI that gracefully collapses to fewer paid places for a small
+  field) before general host availability.
+- **Capture-side team identification** — built and delivered. The Live Panel fetches the
+  2Man round's saved draft teams the same way the groupings card does, and **Post-Round
+  Scorecard and Birdie Alert** swap their player picker for a team picker whenever the
+  live round's engine is `scramble_pair` — same "Nickname (Real A & Real B)" convention as
+  the groupings display, so a submitter taps their team rather than typing a name by hand.
+  The picker never falls back to the tapping player's own name for a team round (unlike
+  the individual-round picker, which defaults to "whoever's logged in") — nothing is
+  pre-selected, so a submission can't accidentally go out under the wrong identity. Also
+  fixed as part of this: the Wally Ball "do you still have it" question was being asked on
+  2Man scorecard submissions (format-scramble was in the same eligibility list as
+  format-wally) even though 2Man is explicitly excluded from Wally Ball per §1 — it's now
+  gated on the round's actual engine instead of the coarser format-class string, so it's
+  skipped for 2Man specifically without affecting any real Wally-Cup individual round.
+  **CttP is the one exception, and stays individual even in a team round** — found and
+  fixed during live 2Man testing (2026-09-05): CttP entry was initially swapped to the
+  team picker along with the other two sections, but BFE-Admin's Close Round has always
+  paid CTP to the *individual* claimant on the configured hole, never the team (see §5/§3
+  — "computed the same way as a normal round" was never meant to make CTP team-scoped, and
+  Close Round's own roster check only ever recognizes individual names). A team-picker CTP
+  claim submitted a team name Close Round couldn't match against the roster, so it silently
+  went unpaid ("CTP claim(s) from a name not on this roster, not paid"). Fixed by reverting
+  just the CttP section back to the individual roster picker, defaulting to whoever's
+  logged in exactly like a non-team round — confirmed against Brian's own live 2Man test
+  data that a CttP claim now correctly resolves to a real name and gets paid.
+- **Live Test Mode round selector (Dev-78)** — Live Panel's commissioner Test Mode
+  previously only ever showed the next upcoming event; a device-local (not synced to the
+  shared flags KV) event selector was added so Brian can pick any specific upcoming round
+  — e.g. jump straight to "2026 Wally Cup - 2Man" — to dry-run the whole WC entry flow
+  round by round without waiting for real tee times. Past events drop off the list
+  automatically.
+- **Venue CTP-holes editor for BF Series (Dev-78)** — BF Series' CttP entry was
+  hard-coded to Blue Shamrock's par-3 holes, since BF Series has no BFE-Admin round setup
+  to configure CTP holes through. Fixed with a Venue Manager CTP-holes editor (read-modify
+  -write against the same shared `bfe_venue_tee_catalog` store BFE-Admin's own Tee Policy
+  writes to) so any venue's CTP holes can be set once, from either app, and the Live Panel
+  picks them up automatically by venue regardless of which app scheduled the round. BFE-
+  Admin's own venue tee-block also picked up a latent bug fix alongside this: every block
+  started blank until a host manually clicked "Load saved catalog," and the "save as
+  default" checkbox defaulted to checked — a Save without that manual click could silently
+  overwrite a venue's saved CTP holes with an empty array. Fixed by auto-loading each
+  block's saved catalog the moment it's built.
+- **Wally Cup Rd1 CTP fallback bug — root-caused and fixed (2026-09-05):** Rd1 was showing
+  Blue Shamrock's default CTP holes instead of Honesdale's configured `[6,13]`. Root cause
+  confirmed against live production data: the Jotform "Request Event" submission for Rd1
+  has `eventLocation = "Honesdale GC"`, while the canonical venue name is "Honesdale Golf
+  Club" — an exact-match venue lookup silently failed and fell through to the BSGC default.
+  Fixed at the code level (works regardless of whether the Jotform submission itself ever
+  gets corrected): a shared `findVenueByName()` helper now tries an exact match first, then
+  a narrow GC/Golf-Club and CC/Country-Club abbreviation-normalized fallback, rewired into
+  every venue-lookup call site (logo, motif, pars, CTP holes) — verified it doesn't
+  false-positive-match two genuinely different courses.
+- **Live Panel notification safety, verified (2026-09-05):** confirmed by tracing every
+  `osSendAll`/`osSendToPlayers` call site reachable from the Live Panel that CttP and
+  Birdie Alert — the only two real notification triggers in it — already correctly send
+  test-only pushes (to the submitting player, `[TEST]`-prefixed) rather than broadcasting
+  to all BirdieFriends while Test Mode is on. Scorecard submission and photo/video capture
+  send no notification at all. No fix was needed here.
 - **Results-page section ordering** — the 2Man section currently renders after Wally Ball
   in scroll order; only the nav rail's `#twoman` link jumps to the right spot. A full
   section-reorder was judged riskier than valuable this close to the event and was
