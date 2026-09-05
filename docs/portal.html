@@ -3534,8 +3534,7 @@ async function loadVenueCttpHoles(evt) {
     const venueName = csNormalizedVenueName(evt);
     if (!venueName) return;
     await loadVenues();
-    const norm = s => (s || '').trim().toLowerCase();
-    const v = (_venues || []).find(x => norm(x.name) === norm(venueName));
+    const v = findVenueByName(venueName);
     if (!v) return;
     if (Object.prototype.hasOwnProperty.call(_venueCttpHolesCache, v.id)) {
       _resolvedCttpHoles = _venueCttpHolesCache[v.id];
@@ -9701,14 +9700,44 @@ async function loadVenues() {
   return _venues;
 }
 
+// Collapses the "Golf Club"/"GC" and "Country Club"/"CC" spelling someone
+// might freehand-type into an event's Location field vs. the venue's actual
+// name in Venue Manager. Dev-84: "Honesdale GC" (typed on the "2026 Wally
+// Cup - Rd1" event request) vs. "Honesdale Golf Club" (the real venue name)
+// was an exact-match miss, so every venue-by-name lookup for that round
+// silently came back empty — CTP holes fell back to the BSGC default, and
+// scorecard auto-marks fell back to fully manual. Deliberately narrow (only
+// merges these two specific abbreviations, not a general fuzzy match) so
+// two different real courses that happen to share a short name don't get
+// conflated with each other.
+function venueAbbrevKey(s) {
+  return (s || '').trim().toLowerCase()
+    .replace(/\bgolf\s*club\b/g, 'gc')
+    .replace(/\bcountry\s*club\b/g, 'cc')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// Single lookup used everywhere a venue needs to be found by freeform name
+// (an event's Location field) against the canonical Venue Manager list.
+// Exact match (case/whitespace-insensitive) wins first; the abbreviation-
+// normalized form above is a fallback only, never the primary comparison.
+function findVenueByName(name) {
+  if (!name || !_venues) return null;
+  const norm = s => (s || '').trim().toLowerCase();
+  const target = norm(name);
+  const exact = _venues.find(x => norm(x.name) === target);
+  if (exact) return exact;
+  const abbrevTarget = venueAbbrevKey(name);
+  return _venues.find(x => venueAbbrevKey(x.name) === abbrevTarget) || null;
+}
+
 // Looks up a venue's stored par array (Venue Manager's "Vs Par" table) by
-// name, case-insensitive. Returns null if the venue isn't found, hasn't had
-// pars entered, or the stored JSON is malformed — any of which just means
-// the scorecard falls back to fully manual marking for that venue.
+// name. Returns null if the venue isn't found, hasn't had pars entered, or
+// the stored JSON is malformed — any of which just means the scorecard
+// falls back to fully manual marking for that venue.
 function getVenueParsByName(name) {
-  if (!_venues || !name) return null;
-  const norm = name.trim().toLowerCase();
-  const v = _venues.find(x => (x.name || '').trim().toLowerCase() === norm);
+  const v = findVenueByName(name);
   if (!v || !v.pars) return null;
   try {
     const arr = JSON.parse(v.pars);
@@ -11552,17 +11581,13 @@ function csNormalizedVenueName(evt) {
 // showing a broken image.
 function venueLogoUrlForEvent(evt) {
   const name = csNormalizedVenueName(evt);
-  if (!name || !_venues) return null;
-  const norm = s => (s || '').trim().toLowerCase();
-  const v = _venues.find(x => norm(x.name) === norm(name));
+  const v = findVenueByName(name);
   return (v && v.logo_key) ? `${GATHERINGS_API}/venues/${v.id}/logo` : null;
 }
 
 function venueMotifForEvent(evt) {
   const name = csNormalizedVenueName(evt);
-  if (!name || !_venues) return null;
-  const norm = s => (s || '').trim().toLowerCase();
-  const v = _venues.find(x => norm(x.name) === norm(name));
+  const v = findVenueByName(name);
   return (v && v.theme_motif) ? v.theme_motif : null;
 }
 
