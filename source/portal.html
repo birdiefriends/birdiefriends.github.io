@@ -7846,6 +7846,74 @@ let _scSubmitDone    = false;  // true after successful submit — shows confirm
 let _ctpSubmitting   = false;
 let _birdieSubmitting = false;
 
+// 2Man (scramble_pair) Live Panel support — Dev-80. A team round has ONE
+// scorer per team, not per player, so Birdie Alert/CttP/Scorecard all need
+// to pick "which team" from that round's saved draft groupings instead of
+// the individual roster. _liveRoundTeams is fetched fresh each time the
+// Live Panel opens (see toggleLivePanel) and cached only for the evtName
+// it was fetched for — deliberately NOT persisted across panel opens, since
+// groupings can change right up to tee time. isTeam stays derivable even
+// before any groups are posted for the round (resolveTargetRoundName falls
+// back to Setup's own round list), so the Wally-Ball-exclusion gate below
+// is correct from the moment a scramble_pair round is created, not just
+// once its teams are drafted.
+let _liveRoundTeams = null; // { evtName, isTeam, teams:[name,...], subLabels:{name:'A & B'} }
+
+// Canonical team display name — mirrors BFE-Admin's teamDisplayName() so a
+// submission made here matches exactly what BFE-Admin's Close Round /
+// Check Scorecards expect to find (both key purely off this string).
+function teamDisplayName(players, label) {
+  return (label && label.trim()) ? label.trim() : players.join(' & ');
+}
+
+async function loadLiveRoundTeams(evt) {
+  if (!evt) { _liveRoundTeams = null; return; }
+  try {
+    let configData = null, rows = [];
+    for (const name of bfeEventNameCandidates(evt.name)) {
+      const [configRes, groupsRes] = await Promise.all([
+        fetch(`${BFE_API}/bfe/events?event=${encodeURIComponent(name)}`),
+        fetch(`${BFE_API}/bfe/round-groups?event=${encodeURIComponent(name)}`)
+      ]);
+      const cd = configRes.ok ? await configRes.json() : null;
+      const gd = groupsRes.ok ? await groupsRes.json() : null;
+      if (cd && cd.config && !configData) configData = cd;
+      const r = (gd && Array.isArray(gd.rows)) ? gd.rows : [];
+      if (r.length) { configData = cd; rows = r; break; }
+    }
+    const rounds = (configData && configData.config && Array.isArray(configData.config.rounds)) ? configData.config.rounds : [];
+    const byRound = {};
+    rows.forEach(row => {
+      const byIdx = (byRound[row.round_name] = byRound[row.round_name] || {});
+      const g = (byIdx[row.group_index] = byIdx[row.group_index] || { players: [], label: null });
+      g.players.push(row.player_name);
+      if (row.team_label) g.label = row.team_label;
+    });
+    Object.keys(byRound).forEach(rn => {
+      byRound[rn] = Object.keys(byRound[rn]).sort((a, b) => a - b).map(k => byRound[rn][k]);
+    });
+    const targetRoundName = resolveTargetRoundName(evt.name, rounds, Object.keys(byRound));
+    const targetRound = rounds.find(r => r.name === targetRoundName);
+    if (targetRound && targetRound.engine === 'scramble_pair') {
+      const groups = (targetRoundName && byRound[targetRoundName]) || [];
+      const teams = [];
+      const subLabels = {};
+      groups.forEach(g => {
+        const nm = teamDisplayName(g.players, g.label);
+        teams.push(nm);
+        if (g.label && g.label.trim()) subLabels[nm] = g.players.join(' & ');
+      });
+      _liveRoundTeams = { evtName: evt.name, isTeam: true, teams: teams.sort((a,b)=>a.localeCompare(b)), subLabels };
+    } else {
+      _liveRoundTeams = { evtName: evt.name, isTeam: false, teams: [], subLabels: {} };
+    }
+  } catch(e) {
+    console.warn('[LiveTeams] loadLiveRoundTeams error:', e.message);
+    _liveRoundTeams = { evtName: evt.name, isTeam: false, teams: [], subLabels: {} };
+  }
+  renderLiveBanner();
+}
+
 // Detect the live event for the current player
 // Returns event object or null
 function getLiveEvent() {
@@ -7903,6 +7971,7 @@ function toggleLivePanel() {
     loadCtpData(getLiveEvent());
     loadVenueCttpHoles(getLiveEvent()).then(renderLiveBanner); // which holes to show — resolved once per panel-open, not every refresh tick
     loadSkinBoardData();
+    loadLiveRoundTeams(getLiveEvent()); // resolved once per panel-open (Dev-80) — decides team vs individual pickers below
     startCtpRefresh();
   } else {
     stopCtpRefresh();
@@ -7926,18 +7995,26 @@ function stopCtpRefresh() {
 
 // Build the expanded scorecard + CttP panel
 function buildLivePanel(evt) {
-  // Get registered players for this event for dropdowns
-  const evtPlayers = regData
-    .filter(r => r.eventName === evt.name && r.status !== 'No')
-    .map(r => r.player).sort();
+  // 2Man (scramble_pair) rounds pick from that round's saved teams instead
+  // of the individual roster — Dev-80. isTeam is set even before any teams
+  // are posted (see loadLiveRoundTeams), so the Wally-Ball gate below is
+  // right from the moment the round exists, not just once it's drafted.
+  const isTeamRound = !!(_liveRoundTeams && _liveRoundTeams.evtName === evt.name && _liveRoundTeams.isTeam);
+  const evtPlayers = isTeamRound
+    ? _liveRoundTeams.teams
+    : regData.filter(r => r.eventName === evt.name && r.status !== 'No').map(r => r.player).sort();
   window._liveEvtPlayers = evtPlayers;  // accessible from inline onclick attrs
+  window._liveIsTeamRound = isTeamRound;
+  window._liveTeamSubLabels = isTeamRound ? _liveRoundTeams.subLabels : {};
 
   // ── SECTION 1: Birdie Alert ──────────────────────────────────────────────
-  const birdiePlayerSel = _birdiePlayer || currentPlayer;
+  // Team rounds never default to currentPlayer (not a valid team) — the
+  // submitter must explicitly tap "Select your team" (Dev-80).
+  const birdiePlayerSel = isTeamRound ? (_birdiePlayer || '') : (_birdiePlayer || currentPlayer);
   // Birdie hole grid — tap to select, tap again to deselect
   // Shows holes the current birdie-alert player already announced this session
   const birdieHoleGrid = () => {
-    const alertPlayer = (_birdiePlayer || currentPlayer).trim().toLowerCase();
+    const alertPlayer = birdiePlayerSel.trim().toLowerCase();
     // Persistent (shared via /feed), not per-device: did this player record a
     // sub-par score on this hole — leader, buster, or 3rd+ (skin already gone)?
     const playerHasEntry = (h) => {
@@ -7967,11 +8044,11 @@ function buildLivePanel(evt) {
   };
 
   const birdieSection = `
-    <button onclick="openPlayerSheet(window._liveEvtPlayers,'${birdiePlayerSel.replace(/'/g,"\'")}',function(n){_birdiePlayer=n;renderLiveBanner()})"
+    <button onclick="openPlayerSheet(window._liveEvtPlayers,'${birdiePlayerSel.replace(/'/g,"\'")}',function(n){_birdiePlayer=n;renderLiveBanner()},window._liveTeamSubLabels)"
       style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);
         border-radius:8px;padding:9px 14px;color:#fff;font-size:0.85rem;font-family:inherit;
         text-align:left;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:8px">
-      <span>👤</span><span style="flex:1">${birdiePlayerSel}</span>
+      <span>${isTeamRound ? '🤝' : '👤'}</span><span style="flex:1">${birdiePlayerSel || (isTeamRound ? 'Select your team' : '')}</span>
       <span style="color:rgba(255,255,255,0.4);font-size:0.75rem">Change ›</span>
     </button>
     <div class="sc-section-label" style="margin-bottom:6px">Score</div>
@@ -7993,9 +8070,9 @@ function buildLivePanel(evt) {
     <div class="sc-section-label" style="margin-bottom:6px">Which hole?</div>
     ${birdieHoleGrid()}
     <button class="sc-submit-btn" style="background:#c9892a"
-      ${_birdieHole&&!_birdieSubmitting?'':'disabled'}
+      ${_birdieHole&&birdiePlayerSel&&!_birdieSubmitting?'':'disabled'}
       onclick="submitBirdieAlert('${evt.name.replace(/'/g,"\'")}')">
-      ${_birdieSubmitting ? '⏳ Sending…' : _birdieHole ? BIRDIE_SCORE_ICON[_birdieScoreType] + ' Announce ' + _birdieScoreType + ' on #' + _birdieHole : BF_LOGO_ICON_HTML + ' Select a hole above'}
+      ${_birdieSubmitting ? '⏳ Sending…' : !birdiePlayerSel ? 'Select your team above ↑' : _birdieHole ? BIRDIE_SCORE_ICON[_birdieScoreType] + ' Announce ' + _birdieScoreType + ' on #' + _birdieHole : BF_LOGO_ICON_HTML + ' Select a hole above'}
     </button>
     ${(() => {
       const holes = Object.keys(_skinBoard).map(Number).sort((a,b)=>a-b);
@@ -8021,7 +8098,8 @@ function buildLivePanel(evt) {
     })()}`;
 
   // ── SECTION 2: CttP ─────────────────────────────────────────────────────
-  const ctpPlayerSel = _ctpPlayer || currentPlayer;
+  // Team rounds never default to currentPlayer (not a valid team) — Dev-80.
+  const ctpPlayerSel = isTeamRound ? (_ctpPlayer || '') : (_ctpPlayer || currentPlayer);
   const ctpHoles = (_resolvedCttpHoles && _resolvedCttpHoles.length) ? _resolvedCttpHoles : CTP_HOLES_DEFAULT;
   const ctpPills = ctpHoles.map(h => {
     const leader = _ctpData[h];
@@ -8046,9 +8124,9 @@ function buildLivePanel(evt) {
       <input class="cttp-dist-input" type="text" id="cttp-dist-input"
         placeholder="e.g. 4.5 (feet)" inputmode="decimal"
         onbeforeinput="if(event.data!=null && (!/^[0-9.]+$/.test(event.data) || (event.data.includes('.') && this.value.includes('.')))) event.preventDefault()">
-      <button class="sc-submit-btn" ${_ctpSubmitting?'disabled':''}
+      <button class="sc-submit-btn" ${(_ctpSubmitting || !ctpPlayerSel)?'disabled':''}
         onclick="submitCttp('${evt.name.replace(/'/g,"\'")}')">
-        ${_ctpSubmitting ? '⏳ Submitting…' : 'Closest on #' + _ctpHole}
+        ${_ctpSubmitting ? '⏳ Submitting…' : !ctpPlayerSel ? 'Select your team above ↑' : 'Closest on #' + _ctpHole}
       </button>
     </div>` : '';
   // CttP live leaderboard
@@ -8089,11 +8167,11 @@ function buildLivePanel(evt) {
 
   const ctpPlayerEsc = ctpPlayerSel.replace(/'/g, "\\'");
   const ctpSection = `
-    <button onclick="openPlayerSheet(window._liveEvtPlayers,'${ctpPlayerEsc}',function(n){_ctpPlayer=n;renderLiveBanner()})"
+    <button onclick="openPlayerSheet(window._liveEvtPlayers,'${ctpPlayerEsc}',function(n){_ctpPlayer=n;renderLiveBanner()},window._liveTeamSubLabels)"
       style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);
         border-radius:8px;padding:9px 14px;color:#fff;font-size:0.85rem;font-family:inherit;
         text-align:left;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:8px">
-      <span>👤</span><span style="flex:1">${ctpPlayerSel}</span>
+      <span>${isTeamRound ? '🤝' : '👤'}</span><span style="flex:1">${ctpPlayerSel || (isTeamRound ? 'Select your team' : '')}</span>
       <span style="color:rgba(255,255,255,0.4);font-size:0.75rem">Change ›</span>
     </button>
     <div class="cttp-holes-row">${ctpPills}</div>
@@ -8107,7 +8185,8 @@ function buildLivePanel(evt) {
     </div>`;
 
   // ── SECTION 3: Post-round Scorecard ─────────────────────────────────────
-  const scPlayerSel = _scPlayer || currentPlayer;
+  // Team rounds never default to currentPlayer (not a valid team) — Dev-80.
+  const scPlayerSel = isTeamRound ? (_scPlayer || '') : (_scPlayer || currentPlayer);
   const scPlayerOpts = evtPlayers.map(p =>
     `<option value="${p}" ${p === scPlayerSel ? 'selected' : ''}>${p}</option>`
   ).join('');
@@ -8148,7 +8227,12 @@ function buildLivePanel(evt) {
   // Wally Ball is a one-time-elimination side game, not a per-round repeat.
   // Yes = still has it \u2014 nothing to record. No = lost it this round \u2014 "where did you
   // lose it?" (hole/stroke detail). Confirmed wording/polarity direct from Brian.
-  const isWallyFmt  = ['format-wally','format-scramble'].includes(formatClass(evt.format));
+  // 2Man is deliberately excluded from Wally Ball per spec (a standalone
+  // team competition, not part of the season-long side game) — gate on the
+  // actual round engine (isTeamRound) rather than the coarser format-class
+  // substring test, so this stays correct even if a future non-team
+  // scramble format reuses "scramble" in its name (Dev-80).
+  const isWallyFmt  = !isTeamRound && ['format-wally','format-scramble'].includes(formatClass(evt.format));
   const wbNeedsAsk  = isWallyFmt && !_wbAlreadyLost;
   const wbYesActive = _wbStatus === 'Yes';
   const wbNoActive  = _wbStatus === 'No';
@@ -8205,32 +8289,33 @@ function buildLivePanel(evt) {
         'border-radius:10px;padding:14px;text-align:center;margin-bottom:8px">' +
         '<div style="font-size:1.1rem;margin-bottom:4px">\u2705</div>' +
         '<div style="color:#fff;font-weight:700;font-size:0.9rem;margin-bottom:2px">Scorecard submitted!</div>' +
-        '<div style="color:rgba(255,255,255,0.65);font-size:0.8rem">Total: ' + total + ' pts \u00b7 ' + (_scPlayer || currentPlayer) + '</div>' +
+        '<div style="color:rgba(255,255,255,0.65);font-size:0.8rem">Total: ' + total + ' pts \u00b7 ' + scPlayerSel + '</div>' +
       '</div>' +
       '<button class="sc-submit-btn" onclick="scNextPlayer()" ' +
         'style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3)">' +
-        '\u{1F464} Enter Next Player&#39;s Scorecard' +
+        (isTeamRound ? '\u{1F91D} Enter Next Team&#39;s Scorecard' : '\u{1F464} Enter Next Player&#39;s Scorecard') +
       '</button>' +
       '<button class="sc-submit-btn" onclick="scDoneAllPlayers()" ' +
         'style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.6)">' +
         '\u2713 Done \u2014 All Scorecards In' +
       '</button>'
-    : '<button class="sc-submit-btn" ' + (allEntered && wbAnswered && !_scSubmitting ? '' : 'disabled') +
+    : '<button class="sc-submit-btn" ' + (allEntered && wbAnswered && scPlayerSel && !_scSubmitting ? '' : 'disabled') +
         ' onclick="submitScorecard(\'' + evt.name.replace(/'/g,"\'") + '\')">' +
         (_scSubmitting ? '\u23f3 Submitting\u2026'
           : !allEntered ? 'Enter all 18 holes (' + enteredCount + '/18)'
           : !wbAnswered ? 'Answer Wally Ball above \u2191'
+          : !scPlayerSel ? 'Select your team above \u2191'
           : '\u2705 Submit Scorecard') +
       '</button>';
 
   const scSection = _scExpanded
     ? '' +
-      '<button onclick="openPlayerSheet(window._liveEvtPlayers,\'' + scPlayerSel.replace(/'/g,"\'") + '\',function(n){scChangePlayer(n)})" ' +
+      '<button onclick="openPlayerSheet(window._liveEvtPlayers,\'' + scPlayerSel.replace(/'/g,"\'") + '\',function(n){scChangePlayer(n)},window._liveTeamSubLabels)" ' +
         'style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);' +
         'border-radius:8px;padding:10px 14px;color:#fff;font-size:0.88rem;font-family:inherit;' +
         'text-align:left;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:8px">' +
-        '<span>\u{1F464}</span>' +
-        '<span style="flex:1">' + scPlayerSel + '</span>' +
+        '<span>' + (isTeamRound ? '\u{1F91D}' : '\u{1F464}') + '</span>' +
+        '<span style="flex:1">' + (scPlayerSel || (isTeamRound ? 'Select your team' : '')) + '</span>' +
         '<span style="color:rgba(255,255,255,0.4);font-size:0.75rem">Change \u203a</span>' +
       '</button>' +
       holeGrid(0,9) +
@@ -8789,6 +8874,8 @@ async function loadSkinBoardData() {
 // Submit scorecard to Jotform
 async function submitScorecard(evtName) {
   if (_scSubmitting) return;
+  const scName = window._liveIsTeamRound ? _scPlayer : (_scPlayer || currentPlayer);
+  if (!scName) return; // button is disabled in this state, but guard anyway (Dev-80)
   const front = _scHoles.slice(0,9).reduce((s,v) => s+(v||0),0);
   const back  = _scHoles.slice(9,18).reduce((s,v) => s+(v||0),0);
   const total = front + back;
@@ -8798,7 +8885,7 @@ async function submitScorecard(evtName) {
     const body = new URLSearchParams();
     // Dev-74 fix: real venue instead of hardcoded 'BSGC'
     const _scEvt = eventData.find(e => e.name === evtName);
-    body.append(`submission[${SC_QID.name}]`,  _scPlayer || currentPlayer);
+    body.append(`submission[${SC_QID.name}]`,  scName);
     body.append(`submission[${SC_QID.event}]`, evtName);
     body.append(`submission[${SC_QID.course}]`, (_scEvt && _scEvt.location) || 'BSGC');
     SC_QID.holes.forEach((qid, i) => {
@@ -8830,7 +8917,7 @@ async function submitScorecard(evtName) {
 
 // Submit CttP entry to Jotform + push notification
 async function submitCttp(evtName) {
-  const ctpPlayer = _ctpPlayer || currentPlayer;
+  const ctpPlayer = window._liveIsTeamRound ? _ctpPlayer : (_ctpPlayer || currentPlayer);
   if (_ctpSubmitting || !_ctpHole || !ctpPlayer) return;
   const alreadyEntered = (_ctpHistory[_ctpHole] || []).some(e => e.player.trim().toLowerCase() === ctpPlayer.trim().toLowerCase());
   if (alreadyEntered) {
@@ -8902,7 +8989,7 @@ async function submitCttp(evtName) {
 // Birdie Alert — announce a sub-par score, detect skin opportunity, send push
 async function submitBirdieAlert(evtName) {
   if (_birdieSubmitting) return;
-  const player    = _birdiePlayer || currentPlayer;
+  const player    = window._liveIsTeamRound ? _birdiePlayer : (_birdiePlayer || currentPlayer);
   const hole      = _birdieHole;
   const scoreType = _birdieScoreType || 'Birdie';
   if (!player || !hole) return;
@@ -8991,11 +9078,17 @@ async function submitBirdieAlert(evtName) {
 let _sheetPlayers  = [];   // full sorted player list
 let _sheetCallback = null; // fn(playerName) called on selection
 let _sheetSelected = null; // currently selected player name
+let _sheetSubLabels = null; // { name: 'Real Name A & Real Name B' } — 2Man team nicknames (Dev-80)
 
-function openPlayerSheet(players, selectedPlayer, callback) {
+// `subLabels` is optional — { teamDisplayName: 'Real A & Real B' } — shown
+// as a second line under a team's nickname so a submitter can confirm
+// they're picking the right team, not just a name they typed. Undefined/
+// null for the ordinary individual-roster picker.
+function openPlayerSheet(players, selectedPlayer, callback, subLabels) {
   _sheetPlayers  = [...players].sort((a,b) => a.localeCompare(b));
   _sheetCallback = callback;
   _sheetSelected = selectedPlayer;
+  _sheetSubLabels = subLabels || null;
   document.getElementById('player-sheet-search').value = '';
   document.getElementById('player-sheet-overlay').style.display = 'flex';
   document.body.style.overflow = 'hidden';
@@ -9048,10 +9141,14 @@ function renderPlayerSheetList(players) {
     letters[letter].forEach(p => {
       const sel = p === _sheetSelected;
       const initials = p.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+      const subLabel = _sheetSubLabels && _sheetSubLabels[p];
       listHTML += `<div class="player-sheet-item${sel?' selected':''}"
         onclick="selectSheetPlayer('${p.replace(/'/g,"\'")}')">
         <div class="player-sheet-avatar">${initials}</div>
-        <div class="player-sheet-item-name">${p}</div>
+        <div style="flex:1;min-width:0">
+          <div class="player-sheet-item-name">${p}</div>
+          ${subLabel ? `<div style="font-size:0.72rem;color:rgba(255,255,255,0.45);margin-top:1px">${subLabel}</div>` : ''}
+        </div>
       </div>`;
     });
     azHTML += `<div class="player-sheet-az-letter"
@@ -9224,7 +9321,7 @@ function toggleScorecard() {
     _scPicking = null;
     _wbStatus = null; _wbHole = null; _wbStroke = null;
     _wbAlreadyLost = false; _wbHistoryPlayer = null;
-  } else {
+  } else if (!window._liveIsTeamRound) {
     refreshWbHistory(_scPlayer || currentPlayer);
   }
   renderLiveBanner();
@@ -9240,7 +9337,7 @@ function scChangePlayer(name) {
   _wbHole       = null;
   _wbStroke     = null;
   _wbAlreadyLost = false;
-  refreshWbHistory(name);
+  if (!window._liveIsTeamRound) refreshWbHistory(name); // 2Man is excluded from Wally Ball (Dev-80)
   renderLiveBanner();
 }
 
