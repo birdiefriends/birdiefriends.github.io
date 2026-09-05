@@ -3502,12 +3502,15 @@ const SC_QID = { name:'31', event:'30', course:'28',
 const WB_QID = { status:'33', hole:'34', stroke:'35' };
 // CttP QIDs
 const CTP_QID = { hole:'3', player:'4', dist:'5', event:'7' };
-// Default CttP holes for BSGC — used when a live event's venue has no BFE
-// per-venue CTP holes on file (every non-BFE weekly BSGC event, or any BFE
-// event whose host hasn't filled in Section 5's CTP holes field yet). See
-// loadVenueCttpHoles/resolvedCttpHoles below (Dev-74) — this is now a
-// fallback, not the only source, so a Wally Cup round at Honesdale/Skytop/
-// Paupack Hills shows THAT course's holes instead of BSGC's.
+// Default CttP holes for BSGC — the true last resort when a live event's
+// venue has no CTP holes on file anywhere. See loadVenueCttpHoles/
+// _resolvedCttpHoles below (Dev-74) — this is now a fallback, not the only
+// source, so a Wally Cup round at Honesdale/Skytop/Paupack Hills shows THAT
+// course's holes instead of BSGC's. Per-venue holes can be set either from
+// a BFE-Admin round's venue block, or — for BF Series, which never touches
+// BFE-Admin — straight from Venue Manager's own CTP Holes editor (Dev-82);
+// both write the same bfe_venue_tee_catalog row, so either path works for
+// either kind of event.
 const CTP_HOLES_DEFAULT = [3,8,10,15,18];
 // BFE (Wally Cup / Competitive Events) Worker — separate from GATHERINGS_API
 // on purpose (see bf_experiences_worker.js's own header comment: it's a
@@ -9679,6 +9682,12 @@ let _venueDebounce      = null;      // debounce timer for Places API calls
 let _adminVenueParsOpen = {};        // venue id -> bool, which par editors are expanded in Venue Manager
 let _adminVenueCoordsOpen = {};      // venue id -> bool, which weather-location editors are expanded (Dev-67)
 let _adminVenueLogoOpen = {};        // venue id -> bool, which logo upload editors are expanded (Dev-67)
+let _adminVenueCttpOpen = {};        // venue id -> bool, which CTP-holes editors are expanded (Dev-82)
+// venue id -> { cttpHoles, raw } | null (fetched-and-empty) | undefined (not fetched yet).
+// Lazily populated from BFE_API — this data lives in bf-experiences' own
+// bfe_venue_tee_catalog table (shared venue_id space with GATHERINGS_API's
+// venues, but a different Worker/DB), not on the venue object itself.
+let _adminVenueCttpCache = {};
 
 async function loadVenues() {
   if (_venues) return _venues;
@@ -10132,6 +10141,10 @@ async function loadAdminVenues() {
             onclick="adminToggleVenueLogoPanel(${v.id})">
             🖼️ Logo${v.logo_key ? ' ✓' : ''} ${_adminVenueLogoOpen[v.id] ? '▾' : '▸'}
           </button>
+          <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px"
+            onclick="adminToggleVenueCttpPanel(${v.id})">
+            🎯 CTP Holes${(_adminVenueCttpCache[v.id] && _adminVenueCttpCache[v.id].cttpHoles && _adminVenueCttpCache[v.id].cttpHoles.length) ? ' ✓' : ''} ${_adminVenueCttpOpen[v.id] ? '▾' : '▸'}
+          </button>
           <span style="display:flex;align-items:center;gap:4px">
             <input type="text" id="admin-motif-${v.id}" placeholder="🍀 or paste a custom SVG icon" maxlength="2000" value="${v.theme_motif || ''}"
               style="width:44px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);font-size:0.85rem;text-align:center;box-sizing:border-box">
@@ -10141,6 +10154,7 @@ async function loadAdminVenues() {
         ${_adminVenueParsOpen[v.id] ? venueParsEditorHtml(v) : ''}
         ${_adminVenueCoordsOpen[v.id] ? venueCoordsEditorHtml(v) : ''}
         ${_adminVenueLogoOpen[v.id] ? venueLogoEditorHtml(v) : ''}
+        ${_adminVenueCttpOpen[v.id] ? venueCttpHolesEditorHtml(v) : ''}
       </div>`).join('');
   } catch(e) {
     listEl.innerHTML = `<div style="color:#c0392b;font-size:0.82rem">Error: ${e.message}</div>`;
@@ -10440,6 +10454,123 @@ async function adminClearVenueLogo(id, name) {
     if (!data.ok) throw new Error(data.error || 'Clear failed');
     showToast(`✅ Logo removed for "${name}"`);
     _venues = null;
+    loadAdminVenues();
+  } catch(e) {
+    showToast('Error: ' + e.message, true);
+  }
+}
+
+// ── CTP (Closest to the Pin) holes per venue (Dev-82) ──────────────────────
+// The Live Panel's CttP section reads whatever holes are on file for the
+// live round's venue via BFE_API's /bfe/venue-tee-catalog (loadVenueCttpHoles,
+// falling back to CTP_HOLES_DEFAULT — BSGC's real holes — only when nothing
+// at all is on file). That store already works course-by-course for any
+// Wally-Cup-style round set up in BFE-Admin; the gap was BF Series, which
+// never touches BFE-Admin and so had no way to put a row there for its own
+// venues, and silently rode the BSGC fallback everywhere. This panel writes
+// straight to that same store from Venue Manager, no BFE-Admin round needed,
+// so a Series round at any course gets that course's actual CTP holes.
+//
+// venue_id is shared between GATHERINGS_API's venues table and BFE_API's
+// tee-catalog rows, but the tee-catalog itself belongs entirely to BFE_API
+// and a POST there replaces the WHOLE tee_catalog object — so every save
+// here GETs the current one first and only touches the cttpHoles key,
+// preserving any tee/tiers policy a BFE-Admin round may have set for this
+// venue (and likewise, BFE-Admin's own venue-block editor prefills from a
+// GET before it saves, so it round-trips holes set from here too).
+async function adminFetchVenueCttp(id) {
+  try {
+    const res = await fetch(`${BFE_API}/bfe/venue-tee-catalog?venue_id=${encodeURIComponent(id)}`);
+    if (!res.ok) { _adminVenueCttpCache[id] = { cttpHoles: [], raw: {} }; return; }
+    const data = await res.json();
+    const raw = (data && data.tee_catalog && typeof data.tee_catalog === 'object') ? data.tee_catalog : {};
+    const holes = Array.isArray(raw.cttpHoles) ? raw.cttpHoles : [];
+    _adminVenueCttpCache[id] = { cttpHoles: holes, raw };
+  } catch(e) {
+    _adminVenueCttpCache[id] = { cttpHoles: [], raw: {} };
+  }
+}
+
+async function adminToggleVenueCttpPanel(id) {
+  _adminVenueCttpOpen[id] = !_adminVenueCttpOpen[id];
+  if (_adminVenueCttpOpen[id] && !_adminVenueCttpCache[id]) {
+    await adminFetchVenueCttp(id);
+  }
+  loadAdminVenues();
+}
+
+function venueCttpHolesEditorHtml(v) {
+  const entry = _adminVenueCttpCache[v.id] || { cttpHoles: [], raw: {} };
+  const holesStr = entry.cttpHoles.join(', ');
+  return `
+    <div style="background:var(--surface);border-radius:10px;padding:10px;margin-top:6px">
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
+        Which holes are Closest-to-the-Pin for this course — comma-separated hole numbers (e.g. 3, 8, 10, 15, 18).
+        The Live Panel's CttP section uses this for ANY round played here, BF Series included — no BFE-Admin setup required.
+      </div>
+      <input type="text" id="admin-cttp-holes-${v.id}" placeholder="e.g. 3, 8, 10, 15, 18" value="${holesStr}"
+        style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);font-size:0.85rem;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" style="flex:1;font-size:0.76rem;min-width:100px" onclick="adminSaveVenueCttpHoles(${v.id})">Save CTP Holes</button>
+        ${entry.cttpHoles.length ? `<button class="btn btn-secondary-danger btn-sm" style="font-size:0.76rem" onclick="adminClearVenueCttpHoles(${v.id},'${v.name.replace(/'/g,"\\'")}')">Clear</button>` : ''}
+      </div>
+    </div>`;
+}
+
+async function adminSaveVenueCttpHoles(id) {
+  const input = document.getElementById(`admin-cttp-holes-${id}`);
+  const raw = (input?.value || '').trim();
+  let holes = [];
+  if (raw) {
+    const parts = raw.split(/[,\s]+/).filter(Boolean);
+    for (const p of parts) {
+      const n = parseInt(p, 10);
+      if (isNaN(n) || n < 1 || n > 18) {
+        showToast(`"${p}" isn't a valid hole number (1–18)`, true);
+        return;
+      }
+      holes.push(n);
+    }
+    holes = [...new Set(holes)].sort((a,b) => a - b);
+  }
+  const v = (_venues || []).find(x => x.id === id) || (await loadVenues()).find(x => x.id === id);
+  try {
+    // Re-fetch fresh right before saving (not just reusing the cached open-time
+    // value) so a tee/tiers policy someone saved in BFE-Admin in the meantime
+    // isn't clobbered by a stale copy.
+    await adminFetchVenueCttp(id);
+    const merged = { ..._adminVenueCttpCache[id].raw, cttpHoles: holes };
+    const res = await fetch(`${BFE_API}/bfe/venue-tee-catalog`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ venue_id: id, venue_name: v ? v.name : null, tee_catalog: merged, pin: '7797' })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    showToast(holes.length ? `✅ CTP holes saved: ${holes.join(', ')}` : '✅ CTP holes saved');
+    _adminVenueCttpCache[id] = { cttpHoles: holes, raw: merged };
+    loadAdminVenues();
+  } catch(e) {
+    showToast('Error: ' + e.message, true);
+  }
+}
+
+async function adminClearVenueCttpHoles(id, name) {
+  if (!confirm(`Clear CTP holes for "${name}"? The Live Panel will fall back to the BSGC default (3, 8, 10, 15, 18) for rounds here until it's re-entered.`)) return;
+  try {
+    await adminFetchVenueCttp(id);
+    const merged = { ..._adminVenueCttpCache[id].raw };
+    delete merged.cttpHoles;
+    const v = (_venues || []).find(x => x.id === id);
+    const res = await fetch(`${BFE_API}/bfe/venue-tee-catalog`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ venue_id: id, venue_name: v ? v.name : name, tee_catalog: merged, pin: '7797' })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Clear failed');
+    showToast(`✅ CTP holes cleared for "${name}"`);
+    _adminVenueCttpCache[id] = { cttpHoles: [], raw: merged };
     loadAdminVenues();
   } catch(e) {
     showToast('Error: ' + e.message, true);
