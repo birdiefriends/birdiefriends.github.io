@@ -2702,7 +2702,7 @@ body {
           <div style="border-top:1px solid var(--border);padding-top:14px">
             <div style="font-size:0.83rem;font-weight:600;color:var(--text);margin-bottom:6px">Live Scorecard Test Mode</div>
             <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
-              Forces the live banner to appear on the next upcoming Series event regardless of tee time. <strong>Do not leave on in production.</strong>
+              Forces the live banner to appear regardless of tee time — the next upcoming eligible event by default, or a specific round via the picker below. <strong>Do not leave on in production.</strong>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
               <button class="btn btn-secondary btn-sm" id="btn-livetest-on"
@@ -2712,6 +2712,17 @@ body {
                 onclick="devToggle('livetest',false)"
                 style="font-size:0.82rem">Disable</button>
               <span id="livetest-status" style="font-size:0.78rem;color:var(--text-hint)"></span>
+            </div>
+            <div style="margin-top:10px">
+              <div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:5px">
+                Which round is "live" — walk each round of a multi-round trip one at a time
+                (e.g. Rd1 → Rd2 → 2Man → Rd3) instead of only ever the next upcoming one.
+                Device-only, doesn't affect other testers.
+              </div>
+              <select id="livetest-event-select" onchange="setLiveTestEventOverride(this.value)"
+                style="width:100%;background:var(--card);border:1px solid var(--border);
+                  border-radius:8px;padding:8px 10px;color:var(--text);font-size:0.82rem;font-family:inherit">
+              </select>
             </div>
           </div>
 
@@ -3549,6 +3560,17 @@ let LIVE_OVERRIDE        = false;  // commissioner manual start
 let LIVE_OVERRIDE_SINCE  = null;   // ISO timestamp when override was set
 let GATHERING_PANEL_LIVE = false;  // Host Management panel visibility — off by default, Dev-45
 let groupingsMeta        = null;  // {eventName, status, visibility, publishedAt}
+
+// Dev-81 — which event getLiveEvent() should treat as "live" while Live Test
+// Mode / manual override is on, instead of always the next upcoming eligible
+// event. Multi-round trips (Wally Cup Rd1/Rd2/2Man/Rd3) need to be walked
+// through one round at a time before the real event, so a single "next
+// upcoming" pick isn't enough for a full dry run. Device-local (localStorage,
+// not the shared Worker flags KV) — this is a commissioner's own testing
+// convenience, not something that should force a round choice onto every
+// other device that happens to have test mode on.
+const LIVE_TEST_EVENT_KEY = 'bf_live_test_event';
+let LIVE_TEST_EVENT_OVERRIDE = localStorage.getItem(LIVE_TEST_EVENT_KEY) || null;
 
 async function loadRemoteFlags() {
   try {
@@ -7918,8 +7940,16 @@ async function loadLiveRoundTeams(evt) {
 // Returns event object or null
 function getLiveEvent() {
   const now = new Date();
-  // Override or test mode: next upcoming Live-Panel-eligible event goes live immediately
+  // Override or test mode: next upcoming Live-Panel-eligible event goes live
+  // immediately, UNLESS a specific round has been picked via the Event Day
+  // panel's round selector (Dev-81) — falls through to the default "next
+  // upcoming" pick if the stored name no longer matches anything eligible
+  // (event renamed/removed since it was picked).
   if (LIVE_OVERRIDE || LIVE_EVENT_TEST_MODE) {
+    if (LIVE_TEST_EVENT_OVERRIDE) {
+      const picked = eventData.find(e => e.name === LIVE_TEST_EVENT_OVERRIDE && hasLivePanelSupport(e));
+      if (picked) return picked;
+    }
     return eventData.find(e => e.dt && hasLivePanelSupport(e)
       && e.dt >= now - LIVE_EVENT_HOURS * 3600000) || null;
   }
@@ -7991,6 +8021,51 @@ function startCtpRefresh() {
 
 function stopCtpRefresh() {
   if (_ctpRefreshTimer) { clearInterval(_ctpRefreshTimer); _ctpRefreshTimer = null; }
+}
+
+// Event Day panel's round selector (Dev-81) — see LIVE_TEST_EVENT_OVERRIDE
+// above. '' (the select's "Next upcoming" option) clears the override back
+// to default behavior. Resets every in-progress Live Panel entry (selected
+// player/team, holes entered, Wally Ball answer, CttP/Birdie picks) so a
+// half-filled-in round doesn't bleed into whichever round is picked next —
+// the whole point of this control is clean back-to-back dry runs of each
+// round in a multi-round trip.
+function setLiveTestEventOverride(name) {
+  LIVE_TEST_EVENT_OVERRIDE = name || null;
+  if (LIVE_TEST_EVENT_OVERRIDE) localStorage.setItem(LIVE_TEST_EVENT_KEY, LIVE_TEST_EVENT_OVERRIDE);
+  else localStorage.removeItem(LIVE_TEST_EVENT_KEY);
+
+  _scPlayer = null; _scHoles = new Array(18).fill(null); _scPicking = null;
+  _scExpanded = false; _scSubmitDone = false; _scSubmitting = false;
+  _wbStatus = null; _wbHole = null; _wbStroke = null; _wbAlreadyLost = false; _wbHistoryPlayer = null;
+  _ctpPlayer = null; _ctpHole = null; _ctpSubmitting = false;
+  _birdiePlayer = null; _birdieHole = null; _birdieScoreType = 'Birdie'; _birdieSubmitting = false;
+  _liveRoundTeams = null;
+
+  const evt = getLiveEvent();
+  showToast(evt ? `🧪 Live Panel testing: ${evt.name}` : '🧪 No eligible event found for that pick');
+  if (_livePanelOpen && evt) {
+    loadCtpData(evt);
+    loadVenueCttpHoles(evt).then(renderLiveBanner);
+    loadSkinBoardData();
+    loadLiveRoundTeams(evt);
+  }
+  renderLiveBanner();
+}
+
+// Populates the Event Day panel's round selector with every Live-Panel-
+// eligible event (soonest first) plus a "Next upcoming (default)" option.
+function populateLiveTestEventSelect() {
+  const sel = document.getElementById('livetest-event-select');
+  if (!sel) return;
+  const eligible = eventData.filter(e => e.dt && hasLivePanelSupport(e)).sort((a,b) => a.dt - b.dt);
+  const current = LIVE_TEST_EVENT_OVERRIDE;
+  sel.innerHTML = '<option value="">— Next upcoming (default) —</option>' +
+    eligible.map(e => `<option value="${e.name.replace(/"/g,'&quot;')}" ${e.name === current ? 'selected' : ''}>` +
+      `${e.name} — ${e.dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</option>`).join('');
+  // If the stored override no longer matches anything eligible, fall back
+  // to showing "Next upcoming" selected rather than a blank/mismatched menu.
+  if (current && !eligible.some(e => e.name === current)) sel.value = '';
 }
 
 // Build the expanded scorecard + CttP panel
@@ -14996,6 +15071,16 @@ function updateDevControlsUI() {
   if (lStatus) {
     lStatus.textContent = LIVE_EVENT_TEST_MODE ? '🟢 ON' : '⚪ Off';
     lStatus.style.color = LIVE_EVENT_TEST_MODE ? 'var(--green)' : 'var(--text-hint)';
+  }
+  // Round selector only does anything while test mode or manual override is
+  // active — greyed out otherwise rather than hidden, so it's clear the
+  // control exists but needs one of those two flags on first (Dev-81).
+  const evtSel = document.getElementById('livetest-event-select');
+  if (evtSel) {
+    populateLiveTestEventSelect();
+    const active = LIVE_EVENT_TEST_MODE || LIVE_OVERRIDE;
+    evtSel.disabled = !active;
+    evtSel.style.opacity = active ? '1' : '0.5';
   }
   if (gStatus) {
     gStatus.textContent = GATHERING_PANEL_LIVE ? '🟢 ON' : '⚪ Off';
