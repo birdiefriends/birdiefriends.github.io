@@ -3392,3 +3392,100 @@ same reasoning as Dev-76's own close-out — before starting the 2-Man scramble 
   Dev-77 Architecture Notes summary — no need to re-read this whole entry line by line to
   get up to speed, though it's there if a specific decision's reasoning needs
   double-checking.
+
+## Dev-78 — CLOSED, 2026-09-05
+
+The 2-Man scramble scoring format carried forward from Dev-77 — Close Round's team-quota
+engine, the results page's team section, and the Overall-exclusion guardrail described in
+`BF_WallyCup_Spec.md` §2–5, plus several Close Round hardening passes along the way
+(tie-aware podium payouts, recovering an unclaimed CTP hole's money into the skins pool
+instead of letting it vanish, and a blocking roster/scorecard-mismatch confirmation before
+a round saves 0-point rows) — all built and delivered earlier in this same long session,
+before the detail was logged here turn-by-turn. This entry backfills that gap (the spec
+itself is the fuller record) and covers everything from the 2Man Live Panel work onward in
+full detail, closing out the whole session before starting Dev-79 fresh.
+
+- **2Man Live Panel capture support:** Birdie Alert, CttP, and Post-Round Scorecard all
+  gained team-round awareness (`loadLiveRoundTeams`/`window._liveIsTeamRound`, matching
+  BFE-Admin's own saved draft teams). Scorecard and Birdie Alert swap to a team picker for
+  a `scramble_pair` round (nothing pre-selected, unlike the individual-round picker's
+  logged-in-player default); the Wally Ball question is now gated on the round's actual
+  engine rather than its coarser format-class string, so it no longer wrongly asks on 2Man
+  submissions.
+- **Live Test Mode round selector:** a device-local event picker (not synced to the shared
+  flags KV) added to the commissioner's Live Panel Test Mode controls, so any specific
+  upcoming round can be dry-run end-to-end instead of only ever the next one on the
+  calendar. Filtered to upcoming events only.
+- **Venue CTP-holes editor (BF Series gap closed):** BF Series' CttP was hard-coded to
+  Blue Shamrock's holes with no config surface of its own. Added a Venue Manager CTP-holes
+  editor that reads/writes the same shared `bfe_venue_tee_catalog` store BFE-Admin's Tee
+  Policy already uses, so either app can set a venue's CTP holes once and both pick them up.
+  Found and fixed a related latent bug while answering Brian's own question about it:
+  BFE-Admin's venue tee blocks started blank until manually loaded, with "save as default"
+  defaulting to checked — a Save without that manual click could silently clobber a venue's
+  saved CTP holes with an empty array. Fixed by auto-loading each block's saved catalog the
+  moment it's built (the manual "Load" button stays, now for explicit re-checks only).
+- **Wally Cup Rd1 CTP bug — root-caused against live production data, not guessed:** Rd1
+  was paying out Blue Shamrock's default CTP holes instead of Honesdale's `[6,13]`. Cause:
+  the Jotform Rd1 submission's location is "Honesdale GC," the canonical venue name is
+  "Honesdale Golf Club" — an exact-match venue lookup silently missed and fell through to
+  the default. Fixed with a shared `findVenueByName()` (exact match first, then a narrow
+  GC/CC abbreviation-normalized fallback), rewired into every venue-lookup call site
+  (logo, motif, pars, CTP holes) — verified against real venue data that it resolves the
+  Rd1 case correctly without ever false-matching two different real courses.
+- **Live Panel notification safety — investigated, no bug found:** traced every
+  `osSendAll`/`osSendToPlayers` call site reachable from the Live Panel to confirm Test
+  Mode never broadcasts to all BirdieFriends. CttP and Birdie Alert (the only two real
+  triggers) were already correctly test-only-gated; Scorecard and photo/video capture send
+  no notification at all.
+- **CttP capture bug — found and fixed during Brian's own live 2Man dry run:** the team-
+  picker swap above was applied to CttP too, but Close Round has always paid CTP to the
+  individual claimant, never the team (confirmed against BFE-Admin's own documented Close
+  Round behavior). A team-picker CTP claim couldn't match Close Round's individual roster
+  check and silently went unpaid. Fixed by reverting just CttP to the individual picker,
+  defaulting to the logged-in player exactly like a non-team round; confirmed live against
+  Brian's re-closed 2Man round that CTP now resolves to a real name and pays out correctly.
+- **Small-group payout rounding — flagged, not built:** Brian noticed a 4-player 2Man round
+  pot pays podium as $5/$0/$0 rather than a broken split. Confirmed working as designed
+  (20%-of-pool podium split, weights 2/1/0.5, rounded to the nearest $5 zeroes out 2nd/3rd
+  in a small field) and logged in `BF_WallyCup_Spec.md` §6 as a host-readiness backlog item
+  — a round needs 9 players at the current $10/player rate before all three podium spots
+  pay out nonzero. Not an issue for Brian's own groups; relevant only if BFE opens to other
+  hosts running smaller competitions.
+- **End-to-end live validation:** Brian manually ran the full WC entry flow — Rd1 → Rd2 →
+  2Man → Rd3 — through the Live Panel using the new Test Mode round selector, entering real
+  scorecards, CTP claims, and Wally Ball answers for all four rounds. Independently
+  recomputed every round's quota/WB-bonus ranking, the 2Man team-quota averaging, skins
+  math (pool minus actual podium/CTP paid, floor-divided per hole with the remainder
+  unallocated), CTP hole-to-venue matching, and total payout reconciliation directly against
+  the live D1 data pulled from the Worker — all of it matched the shipped formulas exactly,
+  including confirming the CttP fix above against Brian's own real test data. **The
+  process and every calculation are considered ready for real Rd1, 10am 9/11 — but the
+  live "2026 Wally Cup" D1 event itself is still this dry run's 4-player mock roster and
+  its Rd1/Rd2/2Man/Rd3 results/groups (Brian's own words: "using 4 players to minimize
+  data entry"), not the real 16-player field. Needs a Data & Reset → Delete and a fresh
+  real Setup + real Draft/Groupings before game day — same outstanding item carried since
+  Dev-75/77, still not done as of this close.**
+- **Chat-rename string (covers the whole chat, one continuous session):**
+  `Dev-78 - 2-Man Scramble Live Panel Support Built & Live-Tested End-to-End, Test Mode
+  Round Selector, Venue CTP Editor, Wally Cup Rd1 Bug Root-Caused & Fixed, WC Ready for
+  Game Day`
+- **Carry-forward into Dev-79:** per Brian's own direction, Dev-79 tackles (1) photo
+  capture / "memories" display — main `worker.js`'s existing `event_photos`/R2/
+  `curation_status` pipeline is a plausible head start, not yet verified against BFE's data
+  shape — and (2) modifying the results pages (scope not yet defined by Brian; get his
+  specifics at the start of Dev-79 rather than assuming). **Before real Rd1 (10am 9/11),
+  independent of Dev-79's own focus:** the live "2026 Wally Cup" D1 event needs a Data &
+  Reset → Delete and a fresh real Setup + real Draft/Groupings — it's still this session's
+  4-player dry-run mock data, not the real 16-player field (see the validation note
+  above). This has been carried since Dev-75/77 and still isn't done; worth confirming
+  with Brian explicitly at the start of Dev-79 rather than assuming it'll happen on its
+  own before game day. Nothing else outstanding from Dev-78's own work — 2Man Live Panel
+  support, the Test Mode selector, the Venue CTP editor, the Rd1 bug, the
+  notification-safety check, and the CttP capture bug are all fixed, verified, and
+  confirmed against a real live end-to-end dry run.
+- **Next session starts fresh:** a new chat should be opened for the memories/results-page
+  work, reading `BF_Session_Bootstrap.md` fresh (fetched via the standard bootstrap
+  command), which now carries an accurate, self-sufficient Dev-78 Architecture Notes
+  summary — no need to re-read this whole entry line by line to get up to speed, though
+  it's there if a specific decision's reasoning needs double-checking.
