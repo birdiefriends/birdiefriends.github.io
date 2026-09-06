@@ -1832,12 +1832,26 @@ async function loadRoundNameOptions() {
     console.warn('[BFE] Skipped Gatherings load — need BFPortal URL + Host PIN filled in above first.');
   }
 
+  // Historic filter — same threshold Section 3's own event picker already
+  // uses (fetchRequestEventDates' whole original purpose, per its own
+  // comment). Missed this the first pass: every name here always has a
+  // resolved date by construction (unlike Section 3's case, where a name
+  // with no matching date fails open and stays visible), so the filter is
+  // just "today or later," no fail-open branch needed. Without this, the
+  // datalist dumps every Request Event/Gathering ever created — Brian hit
+  // this directly: "Rd1" surfaced both the real upcoming Wally Cup round
+  // AND a years-old one-off ("Garrett's Last Swing - Rd1") with no way to
+  // tell them apart at a glance.
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const allNames = Object.keys(roundNameDates);
+  const names = allNames.filter(n => roundNameDates[n] >= todayStart).sort((a, b) => roundNameDates[a] - roundNameDates[b]);
+  const hiddenCount = allNames.length - names.length;
+
   const dl = document.getElementById('roundNameOptions');
-  const names = Object.keys(roundNameDates).sort((a, b) => roundNameDates[b] - roundNameDates[a]);
   dl.innerHTML = names.map(n => `<option value="${n.replace(/"/g, '&quot;')}">`).join('');
   statusEl.textContent = names.length
-    ? `${names.length} name(s) loaded — pick one in a Round name field above, or re-check an already-typed one.`
-    : 'Nothing found on either source — round names can still be typed, tee time just stays unresolved.';
+    ? `${names.length} upcoming name(s) loaded${hiddenCount ? ` (${hiddenCount} past event(s) hidden)` : ''} — pick one in a Round name field above, or re-check an already-typed one.`
+    : `Nothing upcoming found on either source${hiddenCount ? ` (${hiddenCount} past event(s) hidden)` : ''} — round names can still be typed, tee time just stays unresolved.`;
 
   // Re-resolve every row already on the page — covers both "typed a name
   // before this ran" and "Load happened, now re-run to catch a Jotform/
