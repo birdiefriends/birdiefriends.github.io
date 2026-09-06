@@ -194,7 +194,12 @@
   <!-- ── Rounds ────────────────────────────────────────────────────── -->
   <section class="card">
     <h2>4. Rounds</h2>
-    <p class="hint">Fully host-defined — add as many rounds as this event needs, in play order. Each stableford round's quota automatically chains from the most recent earlier stableford round (skipping non-stableford rounds like a 2Man scramble); mark "Rolls into Overall" off for standalone rounds. Venues come from what you loaded above.</p>
+    <p class="hint">Fully host-defined — add as many rounds as this event needs, in play order. Each stableford round's quota automatically chains from the most recent earlier stableford round (skipping non-stableford rounds like a 2Man scramble); mark "Rolls into Overall" off for standalone rounds. Venues come from what you loaded above. Round names can still be typed fresh, but <strong>Load round names</strong> below pulls real names (and their real dates) from both Jotform Request Event submissions and D1-native Gatherings — pick one from the list a name field offers rather than retyping it, and its tee time is captured automatically (Dev-83 — needed so photo/video timelines can tell "on course" from "before/after" without a host-built schedule).</p>
+    <div class="btnbar" style="margin-bottom:10px">
+      <button type="button" class="secondary" id="loadRoundNamesBtn">&#x21BA; Load round names (Jotform + Gatherings)</button>
+      <span class="subtle" id="roundNameLoadStatus">Not loaded yet — round names can be typed, but won't have a resolved tee time until this runs.</span>
+    </div>
+    <datalist id="roundNameOptions"></datalist>
     <table id="roundsTable">
       <thead><tr>
         <th style="width:20%">Round name</th><th style="width:14%">Engine</th><th style="width:20%">Venue</th>
@@ -1726,13 +1731,40 @@ const ENGINE_OPTIONS = [
   { id: 'points_by_score_type', label: 'Points by score type' }
 ];
 
-function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoints = '', rollsIntoOverall = true) {
+// Dev-83 — { name: Date }, merged from Jotform Request Event submissions
+// AND GATHERINGS_API's D1-native Gatherings (see loadRoundNameOptions
+// below). Not every round-worthy event is Jotform-driven — a host-created
+// Gathering has no Jotform submission at all, per BF_Gatherings_Spec.md —
+// so this has to check both sources, not just one, or a Gathering-based
+// round could never resolve a tee time here.
+let roundNameDates = {};
+
+// Resolves a typed/picked round name against roundNameDates and stamps the
+// result onto the row's own dataset (not re-looked-up at Save time) so a
+// name that ages out of both sources between typing and Save doesn't
+// silently lose the tee time the host already saw resolved on screen.
+function updateRoundRowTeeTime(tr) {
+  const name = tr.querySelector('.r-name').value.trim();
+  const hint = tr.querySelector('.r-teetime-hint');
+  const d = roundNameDates[name];
+  if (d instanceof Date && !isNaN(d.getTime())) {
+    tr.dataset.teeTime = d.toISOString();
+    if (hint) hint.textContent = '🕐 ' + d.toLocaleString('en-US', {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+  } else {
+    delete tr.dataset.teeTime;
+    if (hint) hint.textContent = name ? '⚠️ no match — tee time unresolved' : '';
+  }
+}
+
+function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoints = '', rollsIntoOverall = true, teeTime = '') {
   const id = ++roundIdSeq;
   const tr = document.createElement('tr');
   tr.className = 'roundRow';
   tr.dataset.roundId = id;
+  if (teeTime) tr.dataset.teeTime = teeTime;
   tr.innerHTML = `
-    <td><input type="text" class="r-name" value="${name}" placeholder="e.g. Rd1"></td>
+    <td><input type="text" class="r-name" value="${name}" placeholder="e.g. Rd1" list="roundNameOptions">
+      <div class="r-teetime-hint subtle" style="font-size:0.72rem;margin-top:2px"></div></td>
     <td><select class="r-engine">${ENGINE_OPTIONS.map(o => `<option value="${o.id}" ${o.id===engine?'selected':''}>${o.label}</option>`).join('')}</select></td>
     <td><select class="r-venue">${venueOptionsHtml(venueId)}</select></td>
     <td><input type="number" class="r-wbpoints" value="${wbPoints}" placeholder="e.g. 1" style="width:80px"></td>
@@ -1744,7 +1776,9 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
     refreshTeeVenueBlocks();
   });
   tr.querySelector('.r-venue').addEventListener('change', refreshTeeVenueBlocks);
+  tr.querySelector('.r-name').addEventListener('change', () => updateRoundRowTeeTime(tr));
   roundsBody.appendChild(tr);
+  updateRoundRowTeeTime(tr); // reflects a passed-in teeTime (Load) immediately, or picks up a name already resolvable in roundNameDates
   refreshTeeVenueBlocks();
 }
 document.getElementById('addRoundBtn').addEventListener('click', () => addRoundRow());
@@ -1756,6 +1790,61 @@ document.getElementById('loadWcDefaultBtn').addEventListener('click', () => {
   addRoundRow('2026 Wally Cup - Rd3', 'stableford_quota', '', '2', true);
 });
 addRoundRow('Rd1', 'stableford_quota', '', '1', true); // one starter row
+
+// Dev-83 — pulls real round/event names + real dates from both sources a
+// round can legitimately come from: Jotform's Request Event form (Series/
+// Weekend events, incl. every existing Wally Cup round) and GATHERINGS_
+// API's own D1 gatherings table (self-service Gatherings, which have no
+// Jotform submission at all). Merges into one list rather than picking
+// one source, per Brian's 9/6 correction — a Jotform-only picker would
+// never be able to resolve a Gathering-based round. Neither fetch is new:
+// fetchRequestEventDates() already existed (previously used only for
+// Section 3's historic-event filter); GET /gatherings/all already existed
+// on GATHERINGS_API for the commissioner Gatherings admin view. This is
+// the first thing in this file to actually use both together.
+async function loadRoundNameOptions() {
+  const statusEl = document.getElementById('roundNameLoadStatus');
+  statusEl.textContent = 'Loading from Jotform + Gatherings…';
+  roundNameDates = {};
+
+  try {
+    Object.assign(roundNameDates, await fetchRequestEventDates());
+  } catch (e) {
+    console.warn('[BFE] Request Event date load failed:', e.message);
+  }
+
+  const portalBase = document.getElementById('portalUrl').value.trim().replace(/\/$/, '');
+  const pin = document.getElementById('hostPin').value.trim();
+  if (portalBase && pin) {
+    try {
+      const res = await fetch(`${portalBase}/gatherings/all?pin=${encodeURIComponent(pin)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      (data.gatherings || []).forEach(g => {
+        if (!g.title || !g.event_time || roundNameDates[g.title]) return; // Jotform's own match (if any) wins on a name collision
+        const d = new Date(String(g.event_time).replace(' ', 'T'));
+        if (!isNaN(d.getTime())) roundNameDates[g.title] = d;
+      });
+    } catch (e) {
+      console.warn('[BFE] Gatherings load failed:', e.message);
+    }
+  } else {
+    console.warn('[BFE] Skipped Gatherings load — need BFPortal URL + Host PIN filled in above first.');
+  }
+
+  const dl = document.getElementById('roundNameOptions');
+  const names = Object.keys(roundNameDates).sort((a, b) => roundNameDates[b] - roundNameDates[a]);
+  dl.innerHTML = names.map(n => `<option value="${n.replace(/"/g, '&quot;')}">`).join('');
+  statusEl.textContent = names.length
+    ? `${names.length} name(s) loaded — pick one in a Round name field above, or re-check an already-typed one.`
+    : 'Nothing found on either source — round names can still be typed, tee time just stays unresolved.';
+
+  // Re-resolve every row already on the page — covers both "typed a name
+  // before this ran" and "Load happened, now re-run to catch a Jotform/
+  // Gathering edit made since."
+  [...roundsBody.querySelectorAll('tr')].forEach(updateRoundRowTeeTime);
+}
+document.getElementById('loadRoundNamesBtn').addEventListener('click', loadRoundNameOptions);
 
 function readRoundsInput() {
   return [...roundsBody.querySelectorAll('tr')].map(tr => {
@@ -1770,7 +1859,8 @@ function readRoundsInput() {
     if (wbPointsRaw !== '') influencers.push({ id: 'wally_ball', points: parseFloat(wbPointsRaw) || 0 });
     return {
       name, engine, engineParams: engine === 'stableford_quota' ? { hcpMode: document.getElementById('hcpMode').value } : undefined,
-      influencers, venue: venueName, venueId: venueId || null, rollsIntoOverall
+      influencers, venue: venueName, venueId: venueId || null, rollsIntoOverall,
+      teeTime: tr.dataset.teeTime || null   // Dev-83 — resolved by updateRoundRowTeeTime, not re-looked-up here
     };
   }).filter(r => r.name);
 }
@@ -2272,7 +2362,7 @@ async function rehydrateFormFromConfig(config) {
   roundsBody.innerHTML = '';
   (config.rounds || []).forEach(r => {
     const wbInf = (r.influencers || []).find(i => i.id === 'wally_ball');
-    addRoundRow(r.name || '', r.engine || 'stableford_quota', r.venueId || '', wbInf ? wbInf.points : '', r.rollsIntoOverall !== false);
+    addRoundRow(r.name || '', r.engine || 'stableford_quota', r.venueId || '', wbInf ? wbInf.points : '', r.rollsIntoOverall !== false, r.teeTime || '');
   });
   refreshTeeVenueBlocks(); // explicit settle — a no-op when rounds isn't empty (each addRoundRow already triggers it), but guarantees stale blocks from before this Load don't linger if config.rounds turns out to be empty.
 
