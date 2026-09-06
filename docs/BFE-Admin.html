@@ -194,7 +194,7 @@
   <!-- ── Rounds ────────────────────────────────────────────────────── -->
   <section class="card">
     <h2>4. Rounds</h2>
-    <p class="hint">Fully host-defined — add as many rounds as this event needs, in play order. Each stableford round's quota automatically chains from the most recent earlier stableford round (skipping non-stableford rounds like a 2Man scramble); mark "Rolls into Overall" off for standalone rounds. Venues come from what you loaded above. Round names can still be typed fresh, but <strong>Load round names</strong> below pulls real names (and their real dates) from both Jotform Request Event submissions and D1-native Gatherings — pick one from the list a name field offers rather than retyping it, and its tee time is captured automatically (Dev-83 — needed so photo/video timelines can tell "on course" from "before/after" without a host-built schedule).</p>
+    <p class="hint">Fully host-defined — add as many rounds as this event needs, in play order. Each stableford round's quota automatically chains from the most recent earlier stableford round (skipping non-stableford rounds like a 2Man scramble); mark "Rolls into Overall" off for standalone rounds. Round names can still be typed fresh, but <strong>Load round names</strong> below pulls real names, dates, and venues from both Jotform Request Event submissions and D1-native Gatherings — pick one from the list a name field offers rather than retyping it, and its tee time is captured automatically (Dev-83 — needed so photo/video timelines can tell "on course" from "before/after" without a host-built schedule). Venue auto-fills too where it can (Dev-84) — reliably for a Gathering (its venue already comes from the real Venue Manager list), best-effort for Jotform (its Location field is freeform text, matched the same way portal.html already matches "Honesdale GC" to "Honesdale Golf Club") — but it only fills a blank Venue dropdown, never overrides one you've already set, so load venues above first if you want this to work.</p>
     <div class="btnbar" style="margin-bottom:10px">
       <button type="button" class="secondary" id="loadRoundNamesBtn">&#x21BA; Load round names (Jotform + Gatherings)</button>
       <span class="subtle" id="roundNameLoadStatus">Not loaded yet — round names can be typed, but won't have a resolved tee time until this runs.</span>
@@ -1386,6 +1386,36 @@ async function fetchRequestEventDates() {
   return map;
 }
 
+// Dev-84 — twin of fetchRequestEventDates() above, for Setup §4's round-
+// name picker (loadRoundNameOptions), which needs the venue alongside the
+// date. Kept as its own fetch/function rather than extending
+// fetchRequestEventDates() itself: that function is Section 3's historic-
+// event filter, already working, already relied on — safer to duplicate
+// one Jotform call than change what it returns. "Event Location" is
+// Request Event's own field name (see REQUEST_EVENT_FORM_ID's comment
+// above); it's raw freeform text with no tie to Venue Manager at all,
+// unlike a Gathering's venue (see loadRoundNameOptions) — findVenueByName()
+// is what has to bridge that gap for this source, not this fetch.
+async function fetchRequestEventInfo() {
+  const map = {}; // name -> { date, location }
+  try {
+    const subs = await jfFetchSubmissions(REQUEST_EVENT_FORM_ID, JF_FILTER);
+    subs.forEach(s => {
+      const name = jfGetAnswerByPriority(s, [/event.*name/i]);
+      if (!name) return;
+      const trimmed = name.trim();
+      if (map[trimmed]) return;
+      const dateAns = Object.values(s.answers || {}).find(a => /date/i.test(String(a.text || a.name || '')));
+      const d = dateAns ? jfParseDateFieldAnswer(dateAns.answer) : null;
+      const location = jfGetAnswerByPriority(s, [/location/i]);
+      map[trimmed] = { date: d, location: location ? location.trim() : null };
+    });
+  } catch (e) {
+    console.warn('[BFE] Could not load Request Event info (date + venue):', e.message);
+  }
+  return map;
+}
+
 // Fetches just one event's registrants (or every submission, for a form
 // with no Event Name field / when eventName is null), mirroring GS's
 // grpFetchRegistrants filter: Event Name exact match AND Register? is
@@ -1705,6 +1735,7 @@ async function loadVenues() {
     venueList = data.venues || [];
     statusEl.textContent = `${venueList.length} venue(s) loaded.`;
     renderAllRoundVenueSelects();
+    [...roundsBody.querySelectorAll('tr')].forEach(updateRoundRowVenue); // Dev-84 — resolves any round whose name was picked before venues loaded
   } catch (e) {
     statusEl.textContent = 'Load failed: ' + e.message;
   }
@@ -1739,6 +1770,17 @@ const ENGINE_OPTIONS = [
 // round could never resolve a tee time here.
 let roundNameDates = {};
 
+// Dev-84 — { name: rawVenueString }, parallel to roundNameDates above.
+// Brian's 9/6 distinction: Jotform's Request Event "Event Location" is
+// pure freeform text with no connection to Venue Manager at all, while a
+// Gathering's stored venue — also just a text column in the schema — is
+// reliable because the host who created that Gathering picked it from the
+// real Venue Manager list in the Portal's own creation UI. So this is
+// still just raw text either way; findVenueByName() below is what tells
+// the two apart in practice (a Gathering's string should usually hit the
+// exact-match branch; Jotform's needs the abbreviation fallback).
+let roundNameVenues = {};
+
 // Resolves a typed/picked round name against roundNameDates and stamps the
 // result onto the row's own dataset (not re-looked-up at Save time) so a
 // name that ages out of both sources between typing and Save doesn't
@@ -1756,17 +1798,78 @@ function updateRoundRowTeeTime(tr) {
   }
 }
 
+// Dev-84 — ports portal.html's venueAbbrevKey()/findVenueByName() verbatim
+// rather than reinventing them: same exact-match-first, GC/Golf-Club and
+// CC/Country-Club abbreviation-normalized fallback already proven there
+// (this is the identical fix behind the real Rd1 CTP bug — Jotform's
+// "Honesdale GC" vs Venue Manager's canonical "Honesdale Golf Club").
+// Matches against this file's own venueList (Section 2's "Load venues
+// from BFPortal"), not portal.html's _venues — different file, same
+// {id, name, ...} shape.
+function venueAbbrevKey(s) {
+  return (s || '').trim().toLowerCase()
+    .replace(/\bgolf\s*club\b/g, 'gc')
+    .replace(/\bcountry\s*club\b/g, 'cc')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+function findVenueByName(name) {
+  if (!name || !venueList.length) return null;
+  const norm = s => (s || '').trim().toLowerCase();
+  const target = norm(name);
+  const exact = venueList.find(v => norm(v.name) === target);
+  if (exact) return exact;
+  const abbrevTarget = venueAbbrevKey(name);
+  return venueList.find(v => venueAbbrevKey(v.name) === abbrevTarget) || null;
+}
+
+// Auto-selects a row's venue dropdown from roundNameVenues, but ONLY when
+// the row hasn't been "touched" — a real user pick (the <select>'s own
+// change event) or a Loaded saved config's real venueId (see addRoundRow).
+// NOT the same as checking venueSel.value directly: a native <select> with
+// no option marked "selected" silently reports its first option's value
+// even on a row nobody has looked at yet, so that check alone would have
+// refused to auto-fill almost every fresh row (caught in testing, not
+// theoretical). Fails open at every other stage too (no venues loaded yet,
+// no venue string for this name, no match found) by leaving the dropdown
+// alone and saying so in the hint, rather than guessing.
+function updateRoundRowVenue(tr) {
+  const name = tr.querySelector('.r-name').value.trim();
+  const venueSel = tr.querySelector('.r-venue');
+  const hint = tr.querySelector('.r-venue-hint');
+  if (tr.dataset.venueTouched) { if (hint) hint.textContent = ''; return; } // a real pick — don't touch it
+  const rawVenue = roundNameVenues[name];
+  if (!rawVenue) { if (hint) hint.textContent = ''; return; }
+  if (!venueList.length) { if (hint) hint.textContent = `📍 "${rawVenue}" — load venues above to auto-match`; return; }
+  const match = findVenueByName(rawVenue);
+  if (match) {
+    venueSel.value = String(match.id);
+    refreshTeeVenueBlocks();
+    if (hint) hint.textContent = `📍 matched "${rawVenue}" → ${match.name}`;
+  } else if (hint) {
+    hint.textContent = `⚠️ venue "${rawVenue}" not matched — pick manually`;
+  }
+}
+
 function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoints = '', rollsIntoOverall = true, teeTime = '') {
   const id = ++roundIdSeq;
   const tr = document.createElement('tr');
   tr.className = 'roundRow';
   tr.dataset.roundId = id;
   if (teeTime) tr.dataset.teeTime = teeTime;
+  // Dev-84 — a real venueId (e.g. from a Loaded saved config) counts as a
+  // deliberate, already-decided venue; a fresh/blank row does not, even
+  // though the <select> below will still report SOME value once venues are
+  // loaded (a native <select> with no option marked "selected" silently
+  // defaults to its first option — it is never actually blank). This flag,
+  // not venueSel.value, is what updateRoundRowVenue trusts.
+  if (venueId) tr.dataset.venueTouched = '1';
   tr.innerHTML = `
     <td><input type="text" class="r-name" value="${name}" placeholder="e.g. Rd1" list="roundNameOptions">
       <div class="r-teetime-hint subtle" style="font-size:0.72rem;margin-top:2px"></div></td>
     <td><select class="r-engine">${ENGINE_OPTIONS.map(o => `<option value="${o.id}" ${o.id===engine?'selected':''}>${o.label}</option>`).join('')}</select></td>
-    <td><select class="r-venue">${venueOptionsHtml(venueId)}</select></td>
+    <td><select class="r-venue">${venueOptionsHtml(venueId)}</select>
+      <div class="r-venue-hint subtle" style="font-size:0.72rem;margin-top:2px"></div></td>
     <td><input type="number" class="r-wbpoints" value="${wbPoints}" placeholder="e.g. 1" style="width:80px"></td>
     <td style="text-align:center"><input type="checkbox" class="r-overall" ${rollsIntoOverall ? 'checked' : ''} style="width:auto"></td>
     <td><button type="button" class="danger removeRoundBtn">Remove</button></td>`;
@@ -1775,10 +1878,15 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
     tr.querySelector('.r-wbpoints').disabled = false; // Wally Ball can apply to any engine, host's call
     refreshTeeVenueBlocks();
   });
-  tr.querySelector('.r-venue').addEventListener('change', refreshTeeVenueBlocks);
-  tr.querySelector('.r-name').addEventListener('change', () => updateRoundRowTeeTime(tr));
+  tr.querySelector('.r-venue').addEventListener('change', () => {
+    tr.dataset.venueTouched = '1'; // Dev-84 — a real user interaction, unlike the <select>'s own silent default-to-first-option
+    tr.querySelector('.r-venue-hint').textContent = ''; // a manual pick supersedes whatever the auto-match hint said
+    refreshTeeVenueBlocks();
+  });
+  tr.querySelector('.r-name').addEventListener('change', () => { updateRoundRowTeeTime(tr); updateRoundRowVenue(tr); });
   roundsBody.appendChild(tr);
   updateRoundRowTeeTime(tr); // reflects a passed-in teeTime (Load) immediately, or picks up a name already resolvable in roundNameDates
+  updateRoundRowVenue(tr);   // Dev-84 — same idea, for venue
   refreshTeeVenueBlocks();
 }
 document.getElementById('addRoundBtn').addEventListener('click', () => addRoundRow());
@@ -1806,11 +1914,16 @@ async function loadRoundNameOptions() {
   const statusEl = document.getElementById('roundNameLoadStatus');
   statusEl.textContent = 'Loading from Jotform + Gatherings…';
   roundNameDates = {};
+  roundNameVenues = {};
 
   try {
-    Object.assign(roundNameDates, await fetchRequestEventDates());
+    const info = await fetchRequestEventInfo();
+    Object.entries(info).forEach(([name, { date, location }]) => {
+      if (date) roundNameDates[name] = date;
+      if (location) roundNameVenues[name] = location;
+    });
   } catch (e) {
-    console.warn('[BFE] Request Event date load failed:', e.message);
+    console.warn('[BFE] Request Event info load failed:', e.message);
   }
 
   const portalBase = document.getElementById('portalUrl').value.trim().replace(/\/$/, '');
@@ -1821,9 +1934,10 @@ async function loadRoundNameOptions() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       (data.gatherings || []).forEach(g => {
-        if (!g.title || !g.event_time || roundNameDates[g.title]) return; // Jotform's own match (if any) wins on a name collision
+        if (!g.title || !g.event_time || roundNameDates[g.title]) return; // Jotform's own match (if any) wins on a name collision — both date and venue
         const d = new Date(String(g.event_time).replace(' ', 'T'));
         if (!isNaN(d.getTime())) roundNameDates[g.title] = d;
+        if (g.venue) roundNameVenues[g.title] = g.venue; // Dev-84 — a Gathering's venue, unlike Jotform's, comes from the real Venue Manager list
       });
     } catch (e) {
       console.warn('[BFE] Gatherings load failed:', e.message);
@@ -1856,7 +1970,7 @@ async function loadRoundNameOptions() {
   // Re-resolve every row already on the page — covers both "typed a name
   // before this ran" and "Load happened, now re-run to catch a Jotform/
   // Gathering edit made since."
-  [...roundsBody.querySelectorAll('tr')].forEach(updateRoundRowTeeTime);
+  [...roundsBody.querySelectorAll('tr')].forEach(tr => { updateRoundRowTeeTime(tr); updateRoundRowVenue(tr); });
 }
 document.getElementById('loadRoundNamesBtn').addEventListener('click', loadRoundNameOptions);
 
