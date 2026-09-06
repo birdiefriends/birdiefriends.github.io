@@ -1346,12 +1346,39 @@ async function loadJotformEventNames(formIdOrUrl) {
 // field IDs: month_4/day_4/year_4), or a plain date string as a fallback —
 // into a Date. Returns null on anything that doesn't parse; callers must
 // fail OPEN on null (never treat "couldn't parse" as "therefore historic").
+//
+// Dev-85: the object branch used to hardcode T00:00:00 unconditionally, so
+// a "Date & Time" field's actual time-of-day was silently discarded (this
+// is what surfaced as every Setup §4 tee time showing 12:00 AM). Jotform's
+// combined Date/Time widget (control_datetime) carries the time as extra
+// hour/min keys riding in the SAME answer object as year/month/day, plus a
+// 12-hour ampm flag when the field isn't in 24-hour mode — that shape is
+// documented Jotform behavior, but hasn't been confirmed yet against a real
+// Request Event submission from this sandbox (outbound calls to Jotform's
+// API are blocked here). This only adds an hour/min branch on top of the
+// existing one: a field with no hour/min in its answer (a plain date-only
+// widget) parses exactly as before, so there's no regression risk either
+// way — but Brian should check that a freshly-loaded round's tee time
+// actually matches its real tee time now, not just that it moved off
+// midnight.
 function jfParseDateFieldAnswer(val) {
   if (val === undefined || val === null || val === '') return null;
   let d = null;
   if (typeof val === 'object') {
-    const { year: y, month: m, day: dd } = val;
-    if (y && m && dd) d = new Date(`${y}-${String(m).padStart(2, '0')}-${String(dd).padStart(2, '0')}T00:00:00`);
+    const { year: y, month: m, day: dd, hour: h, min: mi, ampm } = val;
+    if (y && m && dd) {
+      let hh = 0, minute = 0;
+      if (h !== undefined && h !== null && String(h).trim() !== '') {
+        hh = parseInt(h, 10) || 0;
+        if (ampm) {
+          const isPm = /pm/i.test(ampm);
+          if (isPm && hh < 12) hh += 12;
+          if (!isPm && hh === 12) hh = 0; // 12 AM -> 00:xx
+        }
+      }
+      if (mi !== undefined && mi !== null && String(mi).trim() !== '') minute = parseInt(mi, 10) || 0;
+      d = new Date(`${y}-${String(m).padStart(2, '0')}-${String(dd).padStart(2, '0')}T${String(hh).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`);
+    }
   } else {
     const s = String(val).trim();
     d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + 'T00:00:00' : s);
@@ -1642,7 +1669,9 @@ function setRosterStatus(msg, kind) {
 let jfActiveFormId = null;    // set by Load event names; Fetch reuses it so the two stay in sync
 let jfHasEventField = false;
 
-document.getElementById('loadEventNamesBtn').addEventListener('click', async () => {
+// Dev-85: pulled out of the click listener so page-load auto-bootstrap
+// (bottom of this script) can call the exact same thing a manual click did.
+async function loadEventNames() {
   const formIdOrUrl = document.getElementById('jotformId').value.trim();
   const eventRow = document.getElementById('eventNameRow');
   const sel = document.getElementById('eventNameSelect');
@@ -1679,7 +1708,8 @@ document.getElementById('loadEventNamesBtn').addEventListener('click', async () 
     eventRow.style.display = 'none';
     setRosterStatus('Could not load event names: ' + e.message, 'err');
   }
-});
+}
+document.getElementById('loadEventNamesBtn').addEventListener('click', loadEventNames);
 
 document.getElementById('eventNameSelect').addEventListener('change', () => {
   document.getElementById('fetchRosterBtn').disabled = jfHasEventField && !document.getElementById('eventNameSelect').value;
@@ -5134,6 +5164,33 @@ document.getElementById('publishResultsBtn').addEventListener('click', async () 
     btn.disabled = false;
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════
+// Dev-85: auto-run every "Load" step once on page open, instead of making
+// the host click Load venues / Load event names / Load round names /
+// Refresh events list before Setup is actually usable. (Tee Policy's own
+// "Load this venue's saved tee catalog" already auto-fires per block —
+// see loadCatalogInto(false) inside buildTeeVenueBlock, Dev-83 — so it
+// isn't repeated here.)
+//
+// Each of the four already degrades gracefully on its own when a field is
+// blank or a fetch fails (status text, not an alert), which is what makes
+// firing them unconditionally on load safe: worst case on a brand-new
+// event with default URLs is a harmless "0 loaded"/"nothing found" status
+// line, never a thrown error or a wiped field. They're started together,
+// not chained — loadVenues() and loadRoundNameOptions() each already
+// re-resolve every round row's venue once THEY finish (Dev-84), so it
+// doesn't matter which of the two settles first.
+//
+// This sits as the very last thing the script does specifically so every
+// function/element it calls has already been declared/parsed above it —
+// no reference-before-declaration risk from hoisting order.
+(function autoLoadAllConnections() {
+  loadVenues();
+  loadEventNames();
+  loadRoundNameOptions();
+  loadEventsList();
+})();
 </script>
 
 </body>
