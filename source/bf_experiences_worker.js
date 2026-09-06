@@ -142,6 +142,8 @@
 //   );
 //   -- Migration for an existing database (bfe_events predates event_date):
 //   --   ALTER TABLE bfe_events ADD COLUMN event_date TEXT;
+//   -- Migration for an existing database (bfe_event_rounds predates tee_time, Dev-83):
+//   --   ALTER TABLE bfe_event_rounds ADD COLUMN tee_time TEXT;
 //   CREATE TABLE bfe_event_rounds (
 //     id INTEGER PRIMARY KEY AUTOINCREMENT,
 //     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
@@ -154,6 +156,15 @@
 //     venue_name TEXT,             -- denormalized, display only
 //     rolls_into_overall INTEGER NOT NULL DEFAULT 1,
 //     chains_from_round_id INTEGER REFERENCES bfe_event_rounds(id),
+//     tee_time TEXT,                -- Dev-83: ISO datetime, resolved in Setup
+//                                    -- §4 from whichever Jotform Request Event
+//                                    -- submission or GATHERINGS_API Gathering
+//                                    -- this round's name matched (see Setup's
+//                                    -- loadRoundNameOptions()) — not typed by
+//                                    -- hand. Nothing else in this file computes
+//                                    -- it; a round picked from neither source
+//                                    -- (a name typed fresh, not yet on either
+//                                    -- system) simply saves NULL here.
 //     UNIQUE(event_id, name)
 //   );
 //   CREATE TABLE bfe_event_roster (
@@ -689,11 +700,11 @@ export default {
         for (let i = 0; i < rounds.length; i++) {
           const r = rounds[i];
           const result = await env.DB.prepare(
-            `INSERT INTO bfe_event_rounds (event_id, sort_order, name, engine, engine_params, influencers, venue_id, venue_name, rolls_into_overall, chains_from_round_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`
+            `INSERT INTO bfe_event_rounds (event_id, sort_order, name, engine, engine_params, influencers, venue_id, venue_name, rolls_into_overall, chains_from_round_id, tee_time)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`
           ).bind(eventId, i, r.name, r.engine, r.engineParams ? JSON.stringify(r.engineParams) : null,
                  r.influencers ? JSON.stringify(r.influencers) : null, r.venueId || null, r.venue || null,
-                 r.rollsIntoOverall === false ? 0 : 1).run();
+                 r.rollsIntoOverall === false ? 0 : 1, r.teeTime || null).run();
           nameToId[r.name] = result.meta.last_row_id;
         }
         // Pass 2: now that every round in this batch has a real id, resolve
@@ -748,7 +759,8 @@ export default {
           influencers: r.influencers ? JSON.parse(r.influencers) : [],
           venue: r.venue_name, venueId: r.venue_id,
           rollsIntoOverall: !!r.rolls_into_overall,
-          chainsFrom: r.chains_from_round_id ? (idToName[r.chains_from_round_id] || null) : null
+          chainsFrom: r.chains_from_round_id ? (idToName[r.chains_from_round_id] || null) : null,
+          teeTime: r.tee_time || null   // Dev-83
         }));
         const roster = rosterRows.map(p => ({
           name: p.player_name, email: p.email, hcp: p.hcp_at_event,
