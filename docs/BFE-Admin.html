@@ -131,8 +131,13 @@
         <input type="date" id="eventEndDate">
       </div>
       <div>
-        <label for="memoriesGraceHours">WCRP memories grace window, hours (Dev-80)</label>
-        <input type="number" id="memoriesGraceHours" min="0" step="1" placeholder="24 (default)">
+        <label for="memoriesCaptureOpen" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="memoriesCaptureOpen" style="width:auto;margin:0">
+          WCRP Memories capture open to players
+        </label>
+        <div style="font-size:0.72rem;color:#888;margin-top:2px">
+          Plain on/off — flip on once the trip's underway, off when it's done. No date/timer logic.
+        </div>
       </div>
       <div>
         <label for="hcpMode">HCP mode</label>
@@ -2323,10 +2328,10 @@ async function buildAndAssembleConfig() {
   config.eventName = document.getElementById('eventName').value.trim() || '2026 Wally Cup';
   config.eventDate = document.getElementById('eventDate').value || null; // Rd1's date — drives section 3's historic-event filter
   config.eventEndDate = document.getElementById('eventEndDate').value || null; // Dev-77: optional, results-page header date range only
-  // Dev-80: WCRP memories capture eligibility window (spec §9) — blank means
-  // "not set," the Worker falls back to 24h rather than treating it as 0.
-  const graceHoursVal = document.getElementById('memoriesGraceHours').value;
-  config.memoriesGraceHours = graceHoursVal === '' ? null : Number(graceHoursVal);
+  // Dev-80 (revised same day): plain host on/off switch, replacing an
+  // earlier date-range/grace-window idea — see BF_Experiences.js's own
+  // migration note for why.
+  config.memoriesCaptureOpen = document.getElementById('memoriesCaptureOpen').checked;
   config.teePolicy = teePolicy;
   config.status = 'draft';
 
@@ -2483,7 +2488,7 @@ async function saveEventConfig() {
       event_family: assembledConfig.eventFamily,
       event_date: assembledConfig.eventDate,
       event_end_date: assembledConfig.eventEndDate,
-      memories_grace_hours: assembledConfig.memoriesGraceHours,
+      memories_capture_open: assembledConfig.memoriesCaptureOpen,
       hcp_mode: assembledConfig.hcpMode,
       status: assembledConfig.status,
       tee_policy: assembledConfig.teePolicy,
@@ -2519,7 +2524,7 @@ async function rehydrateFormFromConfig(config) {
   document.getElementById('eventName').value = config.eventName || '';
   document.getElementById('eventDate').value = config.eventDate || '';
   document.getElementById('eventEndDate').value = config.eventEndDate || '';
-  document.getElementById('memoriesGraceHours').value = (config.memoriesGraceHours === null || config.memoriesGraceHours === undefined) ? '' : config.memoriesGraceHours;
+  document.getElementById('memoriesCaptureOpen').checked = !!config.memoriesCaptureOpen;
   document.getElementById('hcpMode').value = config.hcpMode || 'fixed';
 
   if (!venueList.length) await loadVenues();
