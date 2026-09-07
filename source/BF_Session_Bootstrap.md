@@ -1,6 +1,6 @@
 # BF_Session_Bootstrap.md — Start Here for a New BirdieFriends Session
 
-**Status:** current as of Dev-78 close, 2026-09-05. Read this file first in any new
+**Status:** current as of Dev-79 close, 2026-09-07. Read this file first in any new
 BirdieFriends chat before touching code — it's meant to be self-sufficient enough that you
 never need to re-read `BF_Session_Log.md` line by line to get oriented (that log is the
 detailed history; this doc is the map). `BF_WallyCup_Spec.md` is the living design
@@ -82,23 +82,57 @@ real end-to-end dry run of all four rounds through the Live Panel and independen
 verified every computed number (quota/WB-bonus ranking, team-quota averaging, skins,
 CTP, payout totals) against the live D1 data — everything matched the shipped formulas.
 
-**⚠️ Outstanding before real Rd1 (10am 9/11), not a Dev-79 task — flag to Brian early:**
+**⚠️ Outstanding before real Rd1 (10am 9/11), not a Dev-80 task — flag to Brian early, again:**
 the live `"2026 Wally Cup"` D1 event is still that dry run's 4-player mock roster/results
 (Brian's words: "using 4 players to minimize data entry"), not the real 16-player field.
 It needs a Data & Reset → Delete in BFE-Admin, then a fresh real Setup + real
-Draft/Groupings, before game day. This has been carried forward since Dev-75/77 and still
-isn't done — don't assume it happened without confirming with Brian.
+Draft/Groupings, before game day. This has been carried forward since Dev-75/77/78 and
+still isn't done — don't assume it happened without confirming with Brian.
 
-## 3. Dev-79 focus (per Brian, set at Dev-78's close)
+**Dev-79 rationalized memories capture and built the first slice.** Decision: EventCard
+Memories stays as-is for ordinary single-round events; BFE productions (Wally Cup, GLS)
+get their own persistent capture widget (16 WC players, whole event date range, publishes
+only to the WCRP) instead, with EventCard's photo/note icons disabled on BFE-backed round
+cards so a capture can't land outside the WCRP by accident. Live Panel stays the on-course
+tool. Full design in `BF_WCRP_Memories_Spec.md` (new this session, alongside
+`BF_BFE_Memories_Plan.md` for the *why*) — its §8 is the build order, its status line says
+what's shipped. What actually got built and confirmed live in Dev-79 (§8 step 1 only):
+`tee_time` on `bfe_event_rounds`; Setup §4's round-name field now pickable from both
+Jotform Request Event submissions AND D1-native Gatherings (with historic events filtered
+out of the suggestion list, same convention as §3's own event dropdown); best-effort venue
+auto-fill from whichever source matched (exact for a Gathering, `findVenueByName()`-fuzzy
+for Jotform's freeform Location text); all four of Setup's manual "Load" buttons now
+auto-fire on page open instead of needing a click each; and a Jotform Date & Time parsing
+fix so a round's tee time reflects its real submitted time instead of always showing
+midnight (not yet confirmed against a live Jotform submission — worth a glance after the
+next real Setup Load). See the Dev-79 log entry for a process note on an in-file
+Dev-number labeling mistake this session made and didn't fix (cosmetic-only, not worth
+touching working code) — bottom line, **the next in-file comment number is Dev-80,
+matching this log.**
 
-1. **Photo capture / "memories" display** for BFE events. Main `worker.js`'s existing
-   `event_photos`/R2/`curation_status` pipeline (built for Gatherings) is a plausible head
-   start, but hasn't been verified against BFE's data shape (events keyed by `event_name`
-   in `bfe_events`, not a Gathering's `gathering_id`) — check that before assuming it
-   plugs in directly.
-2. **Modify the results pages** — Brian hasn't specified the scope yet. Ask at the start of
-   Dev-79 rather than guessing; don't assume it's related to #1 just because they were
-   mentioned in the same breath.
+## 3. Dev-80 focus — the rest of the memories build (per `BF_WCRP_Memories_Spec.md` §8)
+
+Real build, comparable in scope to a full prior single-session sitting (e.g. Dev-74's
+scoring engine) — read the spec in full before starting, not just this summary:
+
+1. The precise BFE-backed flag on Portal `eventData` (spec §5) — small, but both the
+   EventCard change and the Live Panel repoint below depend on it existing and being right.
+2. `BFE_API`'s new memory tables/routes (spec §2): `bfe_event_memories` /
+   `bfe_event_memory_notes`, upload/list/curate routes.
+3. Live Panel repoint (spec §6) — build alongside the widget (next), not after, so there's
+   never a window where on-course capture writes to the old `GATHERINGS_API` bucket while
+   the widget writes to the new one.
+4. The persistent WCRP capture widget itself (spec §3) — notes + photos, 16 WC players,
+   whole event date range, publishes only to the WCRP.
+5. EventCard icon disabling on BFE-backed cards (spec §5) — last, once §1–4 are confirmed
+   working end to end, since it's the one visible behavior change to existing cards.
+6. Commissioner curation view (spec §2's PATCH route) and Results-page photo-gallery wiring
+   (spec §7) — can trail slightly, since real memories need to exist before either has
+   anything to show.
+
+No 9/11 deadline pressure on any of this per Brian's own steer (see spec, top) —
+sequencing above is for build-order sanity, not a rush. Given the scope, this is expected
+to be its own session rather than a quick add-on.
 
 ## 4. Standing operating rules (apply every session)
 
