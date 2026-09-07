@@ -13489,8 +13489,19 @@ async function refreshBFEBackedIndex() {
         nextSummaries.set(e.event_name, summary);
         config.rounds.forEach(r => {
           const entry = { ...summary, bfeRoundId: r.id || null, roundName: r.name };
-          nextIndex.set(`${e.event_name} - ${r.name}`, entry);
-          if (config.rounds.length === 1) nextIndex.set(e.event_name, entry);
+          // Dev-80 bug fix (caught by Brian live-testing the Practice Rd): a
+          // BFE round's `name` in Section 4 is ALREADY the full real event
+          // title (e.g. "2026 Wally Cup - Rd1"), matched byte-for-byte
+          // against real Jotform/Gathering event names — same string Close
+          // Round's own round-select and its "doesn't start with the Event
+          // name" warning both depend on. Gluing e.event_name onto it again
+          // (the original `${e.event_name} - ${r.name}` here) double-
+          // prefixed every key ("...Cup - 2026 Wally Cup - Rd1") so NO round
+          // ever matched a real card, for any event, ever — not a Practice-
+          // Rd-specific issue. Index by r.name directly; it already covers
+          // both the multi-round case and a bare single-round umbrella name,
+          // so the old `rounds.length === 1` fallback is redundant now.
+          nextIndex.set(r.name, entry);
         });
       } catch (err) { /* one bad event shouldn't blank the whole index */ }
     }));
