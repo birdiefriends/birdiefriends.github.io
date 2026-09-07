@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2026 Wally Cup — Trip Info</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --navy:#0d1f3d; --navy2:#152c52; --accent:#e8392a;
+  --accent-light:color-mix(in srgb, var(--accent) 65%, white);
+  --white:#f5f0e8; --white-dim:rgba(245,240,232,0.62);
+  --white-faint:rgba(245,240,232,0.12); --white-faintest:rgba(245,240,232,0.06);
+  --gold:#F5C842;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--navy);color:var(--white);font-family:'DM Sans',sans-serif;}
+.page{max-width:640px;margin:0 auto;}
+.hero{text-align:center;padding:2.6rem 1.5rem 2rem;border-bottom:1px solid rgba(232,57,42,0.25);background:radial-gradient(ellipse at 50% 0%,rgba(232,57,42,0.10) 0%,transparent 70%);}
+.hero-eyebrow{font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-light);margin-bottom:0.6rem;font-weight:600;}
+.hero-title{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:clamp(2.2rem,9vw,3.4rem);color:var(--white);line-height:1;margin-bottom:0.5rem;text-shadow:0 2px 20px rgba(232,57,42,0.25);}
+.hero-subtitle{font-size:13px;color:var(--white-dim);letter-spacing:0.1em;text-transform:uppercase;font-weight:400;}
+.wrap{padding:0 1.5rem;}
+.section{padding:1.8rem 0;border-top:1px solid var(--white-faintest);}
+.section:first-child{border-top:none;}
+.section-head{display:flex;align-items:center;gap:10px;margin-bottom:1rem;}
+.section-icon{font-size:1.3rem;line-height:1;}
+.section-title{font-family:'Baloo 2',sans-serif;font-size:1.15rem;font-weight:700;color:var(--white);}
+.card{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:14px;padding:1.1rem 1.25rem;}
+.addr-line{font-size:1.05rem;font-weight:600;color:var(--white);margin-bottom:0.6rem;}
+.maps-link{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--accent-light);text-decoration:none;background:rgba(232,57,42,0.12);padding:7px 14px;border-radius:99px;}
+.maps-link:hover{text-decoration:underline;}
+.bring-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.bring-item{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);border-radius:10px;padding:10px 12px;font-size:13.5px;display:flex;align-items:center;gap:8px;}
+.food-day{margin-bottom:0.9rem;}
+.food-day:last-child{margin-bottom:0;}
+.food-day-label{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent-light);font-weight:700;margin-bottom:3px;}
+.food-day-detail{font-size:14px;color:var(--white);line-height:1.5;}
+.food-note{margin-top:1rem;padding-top:1rem;border-top:1px dashed var(--white-faint);font-size:12.5px;color:var(--white-dim);line-height:1.6;}
+.pot-banner{background:linear-gradient(135deg,rgba(232,57,42,0.16) 0%,rgba(232,57,42,0.05) 100%);border:1px solid rgba(232,57,42,0.35);border-radius:14px;padding:1.1rem 1.25rem;margin-bottom:0.9rem;}
+.pot-amt{font-family:'Baloo 2',sans-serif;font-size:1.9rem;font-weight:800;color:var(--white);}
+.pot-sub{font-size:12.5px;color:var(--white-dim);margin-top:2px;}
+.pot-breakdown{display:flex;flex-wrap:wrap;gap:8px;margin-top:0.85rem;}
+.pot-chip{background:rgba(245,240,232,0.1);border-radius:99px;padding:5px 12px;font-size:11.5px;font-weight:600;color:var(--white-dim);}
+.econ-note{font-size:13px;color:var(--white-dim);line-height:1.6;}
+.econ-note strong{color:var(--white);}
+.footer{padding:2rem 1.5rem 2.6rem;text-align:center;}
+.footer-meta{font-size:10.5px;color:var(--white-dim);opacity:0.55;}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <div class="hero-eyebrow">BirdieFriends Experiences</div>
+    <div class="hero-title">2026 Wally Cup</div>
+    <div class="hero-subtitle">Trip Info &amp; Logistics</div>
+  </div>
+
+  <div class="wrap">
+
+    <div class="section">
+      <div class="section-head"><span class="section-icon">📍</span><div class="section-title">Where We're Staying</div></div>
+      <div class="card">
+        <div class="addr-line">102 Shore Rd, Tafton, PA</div>
+        <a class="maps-link" href="https://maps.google.com/?q=102+Shore+Rd,+Tafton,+PA" target="_blank" rel="noopener">🧭 Get Directions</a>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><span class="section-icon">🎒</span><div class="section-title">What to Bring — For Yourself &amp; to Share</div></div>
+      <div class="bring-grid">
+        <div class="bring-item">🛁 Personal bath towel</div>
+        <div class="bring-item">🛏️ Personal pillow</div>
+        <div class="bring-item">🍾 BYOBooze</div>
+        <div class="bring-item">🍿 Snacks</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><span class="section-icon">🍽️</span><div class="section-title">Planned Food</div></div>
+      <div class="card">
+        <div class="food-day">
+          <div class="food-day-label">Thursday</div>
+          <div class="food-day-detail">On your own, or hot dogs, etc. at 102 Shore</div>
+        </div>
+        <div class="food-day">
+          <div class="food-day-label">Friday Night</div>
+          <div class="food-day-detail">Ringside (pizza, etc.)</div>
+        </div>
+        <div class="food-day">
+          <div class="food-day-label">Saturday</div>
+          <div class="food-day-detail">Lunch @ Skytop · Dinner @ 102 Shore — Chef Nate's smoked pork BBQ</div>
+        </div>
+        <div class="food-day">
+          <div class="food-day-label">Sunday</div>
+          <div class="food-day-detail">Lunch post-round @ 102 Shore (TBD)</div>
+        </div>
+        <div class="food-note">
+          <strong style="color:var(--white)">Unplanned meals — breakfast:</strong> bring your own, order at the 507 Country Store, or grab something at a golf course. Keurig &amp; Nespresso coffee makers available at the house.
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><span class="section-icon">💰</span><div class="section-title">Economics</div></div>
+      <div class="pot-banner">
+        <div class="pot-amt">$60 / player</div>
+        <div class="pot-sub">Cash — small bills appreciated</div>
+        <div class="pot-breakdown">
+          <span class="pot-chip">$10 × Rd1–4</span>
+          <span class="pot-chip">$10 Overall</span>
+          <span class="pot-chip">$10 Wally Ball / WB Pot</span>
+        </div>
+      </div>
+      <div class="econ-note">
+        <strong>BBQ:</strong> Nate's making smoked pork BBQ for Saturday's dinner — we'll chip in to cover the food &amp; supplies.<br><br>
+        <strong>Golf:</strong> each player is responsible for their own golf rounds.
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <div class="footer-meta">BirdieFriends Experiences · 2026 Wally Cup</div>
+  </div>
+
+</div>
+</body>
+</html>
