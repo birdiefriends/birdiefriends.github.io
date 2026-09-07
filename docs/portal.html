@@ -8745,7 +8745,12 @@ async function livePanelUploadCore(file, evt, { sourceLabel, section, capturedAt
     if (bfeInfo) {
       const form = new FormData();
       form.append('event_id', bfeInfo.bfeEventId);
-      if (bfeInfo.bfeRoundId) form.append('round_id', bfeInfo.bfeRoundId);
+      // Dev-80 same-day fix: round NAME, not round id — bfe_event_rounds rows
+      // get deleted/recreated on every BFE-Admin Setup Save, so an id here
+      // would either silently orphan or (with the FK the table originally
+      // had) hard-fail the whole Save the moment any memory referenced a
+      // round. round_name matches the fix in bf_experiences_worker.js.
+      if (bfeInfo.roundName) form.append('round_name', bfeInfo.roundName);
       form.append('captured_by', currentPlayer || '');
       if (capturedAt) form.append('captured_at', capturedAt);
       form.append('file', uploadFile);
