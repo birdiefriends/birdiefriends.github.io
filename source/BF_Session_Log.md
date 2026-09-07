@@ -3684,3 +3684,32 @@ ALTER TABLE bfe_events ADD COLUMN memories_capture_open INTEGER NOT NULL DEFAULT
 ```
 
 `portal_version.txt` bumped to `v4.1.0` → `v4.1.1` (patch — same-day correction, not new surface).
+
+**Dev-80 update, same day — round-name UX clarified (no code change) + "No engine" round option:**
+Brian's confusion in Section 4 Rounds ("I can only select Rd1") was the single hardcoded
+starter row (`addRoundRow('Rd1', ...)` on load, one row only) plus the "Load Wally Cup 2026
+default schedule" button silently wiping and rebuilding exactly 4 hardcoded rounds (no
+Practice) — not a restrictive picker. `<input class="r-name" list="roundNameOptions">` is
+already free-type text with a `<datalist>` autocomplete assist pulled from real Jotform/
+Gatherings events; confirmed to Brian in-conversation, no fix needed. Flagged that the Wc
+default-schedule button is a destructive shortcut he shouldn't use once he's added Practice
+by hand, and that a round only gets a real player-facing card once a matching Portal event/
+Gathering exists titled to the `<umbrella> - <round name>` convention.
+
+Separately: `ENGINE_OPTIONS` gets a 4th entry, `{ id: 'none', label: 'No engine (practice /
+fun round — not scored)' }`, for the WC Practice Rd (9/10) use case Brian's adding to the
+package. Traced `ENGINES`/`scoreRound` (line ~537/571) first to confirm safety: `scoreRound`
+throws on an unrecognized engine id, but every place that could reach it — Close Round's
+round dropdown (`closeRoundSelect`, both build sites), the Overall/quota-chain filter, and
+`buildEventConfig`'s `chainsFrom` wiring — already filter to `engine === 'stableford_quota'
+|| engine === 'scramble_pair'` (or just `=== 'stableford_quota'` for the quota chain itself),
+so any third-plus engine id (this already includes the existing `points_by_score_type`) is
+categorically excluded from ever reaching `scoreRound()`. No changes needed to `ENGINES`,
+`scoreRound`, `buildEventConfig`, or either Close Round dropdown — 'none' just rides the same
+exclusion `points_by_score_type` already proved out. One added convenience: picking 'none' in
+a round row now auto-unchecks "Rolls into Overall" for that row (a no-engine round has no
+result to feed the chain by definition), ahead of the existing Dev-78 save-time confirm()
+guardrail that would otherwise nag about it. `node --check` clean on `BFE-Admin.html`'s
+inlined scripts.
+
+No `portal_version.txt` bump — `BFE-Admin.html` only, no separate version file for it.
