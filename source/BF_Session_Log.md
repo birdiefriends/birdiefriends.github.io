@@ -3771,3 +3771,21 @@ The one existing test row's `round_name` comes back NULL after this migration (i
 `portal_version.txt` bumped `v4.1.2` → `v4.1.3`. `node --check` clean on both `BF_Experiences.js`'s and `portal.html`'s inlined scripts.
 
 **After running the migration, Brian still needs to**: re-check "WCRP Memories capture open to players" (it's currently unchecked server-side) and Save again — this time it should succeed since the FK is gone.
+
+**Dev-80 update, same day — migration+deploy confirmed working; two more fixes shipped:**
+Migration ran clean, Worker redeployed, `GET /bfe/memories?event_id=36` reads back both existing rows fine with `round_name` (null — pre-dates the round_name fix, expected). Brian confirmed "success!"
+
+Two follow-ups from there, both shipped:
+1. **Trip Memories banner now suppressed whenever a round is actually live for the player** — Brian confirmed this was the intent all along (he doesn't want both `home-live-banner` and `home-wcrp-banner` competing for taps mid-round, since Live Panel's own capture button already round-tags correctly and Trip Memories always uploads with no round in mind). `renderWCRPBanner()` now checks `getLiveEvent()` + `isRegisteredFor()` — same condition `renderLiveBanner()` already uses — and clears itself if true. `renderLiveBanner()` now calls `renderWCRPBanner()` on every exit path (including its own early "nothing live" return) rather than requiring every one of its ~30 call sites to separately remember to also refresh the WCRP banner.
+2. **Notes added to Live Panel** — gap Brian caught: the old per-card Notes icon is hidden for BFE-backed cards (same as Photos), so a BFE round had *no* way to leave a text note at all until now. `buildLivePanelPhotoSection(evt)` (now takes `evt`) adds a 4th "💬 Note" button next to Photo/Video/Upload, BFE-backed rounds only — toggles a small inline textarea (`submitLiveNote()`), posts to `POST /bfe/memories/notes` with `round_name` set to the live round's name, same pattern as `livePanelUploadCore`. Section header reads "Photos & Notes" for a BFE round, plain "Photos" otherwise (non-BFE rounds still use the old card-level Notes icon, untouched).
+
+`portal_version.txt` bumped `v4.1.3` → `v4.1.4`. `node --check` clean.
+
+**Also flagged, not yet actioned**: 2 test/mistake photos sitting in the live `bfe_event_memories` table (ids 1 and 2, both `captured_by "Brian Hager"`, `round_name null`) — Brian wants these deleted before real content starts. Gave him a direct D1 console DELETE rather than building an admin UI for it (no curation UI exists yet, Step 7). Not yet confirmed run.
+
+**Next up, explicitly requested — build starting now**: Brian wants the Publish Results page's existing "Photo Gallery" placeholder (`docs/BFE-Admin.html` ~line 5055, currently a static "coming soon" `.photo-slot` with zero data behind it) replaced with a real scrapbook fed by `bfe_event_memories`/`bfe_event_memory_notes`, auto-grouped into chapters purely from timestamps already on hand — no manual tagging, no chip-picker:
+  - Before Rd1's tee time → "Before the Cup"
+  - Between a round's `tee_time` (already in `config.rounds[].teeTime`) and `MAX(captured_at)` across that round's own scorecards (`scorecardsByRound`, already fetched in `fetchResultsPageData()` for vs-par) → "On Course Rd<N>"
+  - Gaps between rounds, and everything after the last round's last scorecard → their own segments
+  Plus: jump-links from each round's `section-head` (existing anchor `id="round-${idx}"`) down to that round's photo chapter.
+  **Deadline**: needs to work for the very first "Publish results page" run, which Brian expects to be right after Rd1 closes on 9/11 — not deferred to after the whole event like Step 7's curation view originally was. Confirmed acceptable to reuse existing page styling as-is, no new visual design needed, just wiring the chapter concept into the existing render.
