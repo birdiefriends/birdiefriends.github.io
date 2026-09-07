@@ -4292,7 +4292,7 @@ function sumPars(parsArr) {
 // resultsPayload:     GET /bfe/round-results?event=X  → {results, skins, cttp}
 // venuesByName:       {venueName: {pars:[18 ints]}} from main worker GET /venues
 // scorecardsByRound:  {roundName: [{player, holes:[18], total}]} from BFE worker GET /scorecards
-function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows) {
+function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows, memories, notes, bfeBase) {
   const allResults = resultsPayload.results || [];
   const allSkins = resultsPayload.skins || [];
   const allCttp = resultsPayload.cttp || [];
@@ -4626,6 +4626,12 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
     };
   }
 
+  // Dev-80 §8 Step 7 — Trip Memories chapters, built from ALL rounds
+  // (originalRounds, captured before the stableford-only filter above) so a
+  // non-stableford round like Practice still gets its own "On Course" window,
+  // not just the rounds that get a scoring section.
+  const memoryChapterData = buildMemoryChapters(config.eventName, originalRounds, memories || [], notes || [], scorecardsByRound);
+
   return {
     eventName: config.eventName, eventDate: config.eventDate, eventEndDate: config.eventEndDate,
     rounds: config.rounds.map((r, i) => ({
@@ -4638,11 +4644,165 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
     closedRollup, totalRollup,
     wallyBall, wbPot: wbPot ? wbPot.poolTotal : null, wbEligibleNow, wbResolved, potWinner, potTiedSplit, potWinnerNote,
     twoman,
+    bfeBase, memoryChapters: memoryChapterData.chapters, memoryChapterAnchors: memoryChapterData.anchorByRound,
   };
 }
 
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Trip Memories chapters (Dev-80, WCRP Memories §8 Step 7 — landing directly
+// in the results page per Brian's call, rather than a standalone curation
+// view: "I'd like to be ready by the rd1 publish... insert the chapter
+// concept to accept the content." Fully automatic, no manual admin, per
+// Brian's spec: "We know the 1st tee time of each round... and we know the
+// time each player's round is over by their scorecard entry. Between those
+// is On Course Rdx... timeline groupings of photos without any manual
+// admin." A round's tee_time (Setup §4, Dev-83) opens its "On Course"
+// window; the LAST bfe_scorecards.captured_at for that round closes it
+// (falling back to a flat 6-hour window for a round with no scorecards yet
+// — e.g. Practice, or one nobody's played through this worker). Everything
+// before the first tee time and between/after each round's window becomes
+// a "Before"/"After <round>" chapter. A memory/note that already carries a
+// round_name (Live Panel repoint always sets one) goes straight into that
+// round's chapter — no time math needed; only untagged captures (the WCRP
+// widget never sets round_name — pub, house, transport, etc.) get bucketed
+// by timestamp. Chapters with nothing in them are dropped before render.
+// ══════════════════════════════════════════════════════════════════════
+function slugifyRoundName(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'round';
+}
+function shortRoundLabel(fullName, eventName) {
+  let s = String(fullName || '');
+  if (eventName && s.indexOf(eventName) === 0) s = s.slice(eventName.length);
+  s = s.replace(/^[\s\-–—:]+/, '').trim();
+  return s || fullName || 'Round';
+}
+function buildMemoryChapters(eventName, originalRounds, memories, notes, scorecardsByRound) {
+  const shortEvent = String(eventName || '').replace(/^\d{4}\s*/, '') || 'the trip';
+
+  const windows = (originalRounds || [])
+    .filter(r => r.teeTime)
+    .map(r => {
+      const start = new Date(r.teeTime);
+      const cardTimes = (scorecardsByRound[r.name] || [])
+        .map(sc => sc.captured_at ? new Date(String(sc.captured_at).replace(' ', 'T')) : null)
+        .filter(d => d && !isNaN(d));
+      const fallbackEnd = new Date(start.getTime() + 6 * 3600 * 1000);
+      const latestCard = cardTimes.length ? new Date(Math.max.apply(null, cardTimes.map(d => d.getTime()))) : null;
+      const end = (latestCard && latestCard > start) ? latestCard : fallbackEnd;
+      return { name: r.name, venue: r.venue, label: shortRoundLabel(r.name, eventName), start, end };
+    })
+    .filter(w => !isNaN(w.start))
+    .sort((a, b) => a.start - b.start);
+
+  const chapters = [];
+  if (windows.length) {
+    chapters.push({ key: 'before', title: `Before ${shortEvent}`, start: -Infinity, end: windows[0].start, roundName: null, photos: [], notes: [] });
+  } else {
+    chapters.push({ key: 'all', title: `${shortEvent} Memories`, start: -Infinity, end: Infinity, roundName: null, photos: [], notes: [] });
+  }
+  windows.forEach((w, i) => {
+    chapters.push({
+      key: 'round-' + slugifyRoundName(w.name),
+      title: `On Course — ${w.label}${w.venue ? ' · ' + w.venue : ''}`,
+      start: w.start, end: w.end, roundName: w.name, photos: [], notes: [],
+    });
+    const nextStart = windows[i + 1] ? windows[i + 1].start : Infinity;
+    const afterEnd = nextStart > w.end ? nextStart : Infinity;
+    chapters.push({ key: 'after-' + slugifyRoundName(w.name), title: `After ${w.label}`, start: w.end, end: afterEnd, roundName: null, photos: [], notes: [] });
+  });
+  chapters.forEach(c => { c.anchorId = 'chapter-' + c.key; });
+
+  const chapterByRoundName = {};
+  chapters.forEach(c => { if (c.roundName) chapterByRoundName[c.roundName] = c; });
+
+  function chapterForTime(t) {
+    if (isNaN(t)) return chapters[0];
+    for (const c of chapters) { if (t >= c.start && t < c.end) return c; }
+    return chapters[chapters.length - 1];
+  }
+
+  (memories || []).forEach(m => {
+    const target = (m.round_name && chapterByRoundName[m.round_name])
+      ? chapterByRoundName[m.round_name]
+      : chapterForTime(new Date(String(m.captured_at || '').replace(' ', 'T')));
+    target.photos.push(m);
+  });
+  (notes || []).forEach(n => {
+    const target = (n.round_name && chapterByRoundName[n.round_name])
+      ? chapterByRoundName[n.round_name]
+      : chapterForTime(new Date(String(n.created_at || '').replace(' ', 'T')));
+    target.notes.push(n);
+  });
+
+  chapters.forEach(c => {
+    c.photos.sort((a, b) => String(a.captured_at).localeCompare(String(b.captured_at)));
+    c.notes.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  });
+
+  const populated = chapters.filter(c => c.photos.length || c.notes.length);
+  const anchorByRound = {};
+  populated.forEach(c => { if (c.roundName) anchorByRound[c.roundName] = c.anchorId; });
+  return { chapters: populated, anchorByRound };
+}
+
+function renderMemoryTile(bfeBase, m) {
+  const src = `${bfeBase}/bfe/memories/serve/${m.id}`;
+  const isVideo = m.media_type === 'video';
+  const media = isVideo
+    ? `<video src="${src}" controls preload="metadata" class="memory-media"></video>`
+    : `<img src="${src}" class="memory-media" loading="lazy">`;
+  const tagLine = (m.tagged_players && m.tagged_players.length) ? `👤 ${m.tagged_players.map(escapeHtml).join(', ')}` : '';
+  return `<div class="memory-tile">
+    ${media}
+    <div class="memory-tile-meta">
+      <div class="memory-tile-by">${escapeHtml(m.captured_by || 'Unknown')}${isVideo ? ' · 🎥' : ''}</div>
+      ${m.caption ? `<div class="memory-tile-caption">${escapeHtml(m.caption)}</div>` : ''}
+      ${tagLine ? `<div class="memory-tile-tags">${tagLine}</div>` : ''}
+    </div>
+  </div>`;
+}
+function renderMemoryNote(n) {
+  return `<div class="memory-note">
+    <div class="memory-note-text">${escapeHtml(n.note)}</div>
+    <div class="memory-note-by">— ${escapeHtml(n.player)}</div>
+  </div>`;
+}
+function renderMemoryChapterBlock(ch, bfeBase) {
+  const countBits = [];
+  if (ch.photos.length) countBits.push(`${ch.photos.length} photo${ch.photos.length === 1 ? '' : 's'}`);
+  if (ch.notes.length) countBits.push(`${ch.notes.length} note${ch.notes.length === 1 ? '' : 's'}`);
+  return `<div class="chapter-block" id="${ch.anchorId}">
+    <div class="chapter-head"><div class="chapter-title">${escapeHtml(ch.title)}</div><div class="chapter-sub">${countBits.join(' · ')}</div></div>
+    ${ch.photos.length ? `<div class="memory-grid">${ch.photos.map(m => renderMemoryTile(bfeBase, m)).join('')}</div>` : ''}
+    ${ch.notes.length ? `<div class="memory-notes">${ch.notes.map(renderMemoryNote).join('')}</div>` : ''}
+  </div>`;
+}
+function renderMemoriesSection(chapters, bfeBase, num) {
+  if (!chapters || !chapters.length) {
+    return `<div class="wrap"><div class="section">
+      <div class="section-head"><div class="section-num">${num}</div><div>
+        <div class="section-title">Trip Memories</div>
+        <div class="section-desc">Photos &amp; notes captured during the trip</div>
+      </div></div>
+      <div class="photo-slot">
+        <div class="photo-slot-title">No memories yet</div>
+        <div class="photo-slot-sub">Photos and notes captured on-course and around the trip will show up here as they come in.</div>
+      </div>
+    </div></div>`;
+  }
+  const totalPhotos = chapters.reduce((s, c) => s + c.photos.length, 0);
+  const totalNotes = chapters.reduce((s, c) => s + c.notes.length, 0);
+  return `<div class="wrap"><div class="section">
+    <div class="section-head"><div class="section-num">${num}</div><div>
+      <div class="section-title">Trip Memories</div>
+      <div class="section-desc">${totalPhotos} photo${totalPhotos === 1 ? '' : 's'} · ${totalNotes} note${totalNotes === 1 ? '' : 's'} — grouped automatically by when they happened</div>
+    </div></div>
+    ${chapters.map(ch => renderMemoryChapterBlock(ch, bfeBase)).join('')}
+  </div></div>`;
 }
 
 // Dev-77: results-page header date range. Parses "YYYY-MM-DD" fields by hand
@@ -4796,6 +4956,28 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .photo-icon{margin-bottom:0.9rem;opacity:0.4;}
 .photo-slot-title{font-size:14px;font-weight:700;color:var(--white-dim);margin-bottom:4px;}
 .photo-slot-sub{font-size:11.5px;color:var(--white-dim);opacity:0.7;max-width:340px;margin:0 auto;}
+/* Dev-80 §8 Step 7 — Trip Memories scrapbook (chapters replace the old
+   "coming soon" photo-slot placeholder). Same card language as everything
+   else on this page — no new visual system, per Brian's "doesn't need to be
+   super-polished, use the styling that exists" call. */
+.chapter-block{margin-bottom:1.6rem;}
+.chapter-block:last-child{margin-bottom:0;}
+.chapter-head{margin-bottom:0.7rem;}
+.chapter-title{font-size:13.5px;font-weight:700;color:var(--white);}
+.chapter-sub{font-size:11px;color:var(--white-dim);margin-top:2px;}
+.memory-grid{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
+.memory-tile{width:150px;border:1px solid rgba(245,240,232,0.12);border-radius:10px;overflow:hidden;background:var(--white-faintest);}
+.memory-media{width:100%;height:110px;object-fit:cover;display:block;background:#000;}
+.memory-tile-meta{padding:6px 8px;}
+.memory-tile-by{font-size:10.5px;color:var(--white-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.memory-tile-caption{font-size:10.5px;color:var(--white);margin-top:2px;word-break:break-word;}
+.memory-tile-tags{font-size:10px;color:var(--white-dim);opacity:0.75;margin-top:2px;}
+.memory-notes{display:flex;flex-direction:column;gap:8px;}
+.memory-note{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);border-radius:10px;padding:10px 12px;}
+.memory-note-text{font-size:12.5px;color:var(--white);line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+.memory-note-by{font-size:10.5px;color:var(--white-dim);margin-top:5px;font-weight:600;}
+.section-photolink{display:inline-block;margin-top:6px;font-size:11.5px;font-weight:600;color:var(--accent-light);text-decoration:none;}
+.section-photolink:hover{text-decoration:underline;}
 .footer{padding:2.2rem 1.5rem 3rem;text-align:center;}
 .back-btn{display:inline-flex;align-items:center;gap:7px;background:var(--white-faint);border:1px solid rgba(245,240,232,0.18);border-radius:99px;padding:9px 22px;font-size:12.5px;font-weight:600;color:var(--white);text-decoration:none;}
 .footer-meta{font-size:10.5px;color:var(--white-dim);opacity:0.55;margin-top:1.1rem;}
@@ -4853,14 +5035,20 @@ function renderGroupsBlock(groups) {
   </div>`;
 }
 
-function renderRoundSection(sec, num) {
+function renderRoundSection(sec, num, memoryChapterAnchors) {
   const groupsHtml = renderGroupsBlock(sec.groups);
+  // Dev-80 §8 Step 7: jump-link down to this round's "On Course" memories
+  // chapter, if it actually has anything in it yet — no link at all rather
+  // than one that lands on an anchor that doesn't exist on the page.
+  const memAnchor = memoryChapterAnchors && memoryChapterAnchors[sec.name];
+  const memLink = memAnchor ? `<a class="section-photolink" href="#${memAnchor}">📸 See photos &amp; notes</a>` : '';
   if (!sec.closed) {
     const hasGroups = sec.groups && sec.groups.length;
     return `<div class="section" id="round-${sec.idx}">
       <div class="section-head"><div class="section-num">${num}</div><div>
         <div class="section-title">Round ${sec.idx + 1} · ${escapeHtml(sec.venue)}</div>
         <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+        ${memLink}
       </div></div>
       <div class="locked-card">
         <div class="locked-title">${hasGroups ? 'Groups are set — results post once this round closes' : 'Not closed yet'}</div>
@@ -4877,6 +5065,7 @@ function renderRoundSection(sec, num) {
     <div class="section-head"><div class="section-num">${num}</div><div>
       <div class="section-title">${escapeHtml(sec.sectionTitle)}</div>
       <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+      ${memLink}
     </div></div>
     ${sec.leader ? `<div class="winner-banner">
       <div class="comp-label">${sec.label} Leader</div>
@@ -4913,13 +5102,16 @@ function renderTeamRow(t) {
   </div>`;
 }
 
-function renderTwomanSection(tm, num, eventName) {
+function renderTwomanSection(tm, num, eventName, memoryChapterAnchors) {
   if (!tm) return ''; // no scramble_pair round configured for this event at all
+  const memAnchor = memoryChapterAnchors && memoryChapterAnchors[tm.name];
+  const memLink = memAnchor ? `<a class="section-photolink" href="#${memAnchor}">📸 See photos &amp; notes</a>` : '';
   if (!tm.closed) {
     return `<div class="section twoman-section" id="twoman"><div class="wrap" style="padding:0;">
       <div class="section-head"><div class="section-num">${num}</div><div>
         <div class="section-title">2Man Scramble${tm.venue ? ' · ' + escapeHtml(tm.venue) : ''}</div>
         <div class="section-desc">Standalone event — does not count toward the ${escapeHtml(eventName)} Overall</div>
+        ${memLink}
       </div></div>
       <div class="locked-card">
         <div class="locked-title">${tm.hasTeams ? 'Teams are drafted — results post once this round closes' : 'Not closed yet'}</div>
@@ -4935,6 +5127,7 @@ function renderTwomanSection(tm, num, eventName) {
     <div class="section-head"><div class="section-num">${num}</div><div>
       <div class="section-title">2Man Scramble · ${escapeHtml(tm.venue)} — Final</div>
       <div class="section-desc">Standalone event — does not count toward the ${escapeHtml(eventName)} Overall</div>
+      ${memLink}
     </div></div>
     ${tm.leader ? `<div class="winner-banner">
       <div class="comp-label">2Man Champions</div>
@@ -4981,7 +5174,7 @@ function renderResultsHtml(data, opts) {
     </a>`;
   const railHtml = railNodesHtml + overallRailNode;
 
-  const roundSectionsHtml = data.roundSections.map((sec, i) => renderRoundSection(sec, roundNums[i])).join('');
+  const roundSectionsHtml = data.roundSections.map((sec, i) => renderRoundSection(sec, roundNums[i], data.memoryChapterAnchors)).join('');
 
   const overallNum = roundNums[data.roundSections.length];
   let overallHtml;
@@ -5050,19 +5243,10 @@ function renderResultsHtml(data, opts) {
   </div>`;
 
   const twomanNum = roundNums[data.roundSections.length + 2];
-  const twomanHtml = renderTwomanSection(data.twoman, twomanNum, data.eventName);
+  const twomanHtml = renderTwomanSection(data.twoman, twomanNum, data.eventName, data.memoryChapterAnchors);
 
   const photoNum = roundNums[data.roundSections.length + 3];
-  const photoHtml = `<div class="wrap"><div class="section">
-    <div class="section-head"><div class="section-num">${photoNum}</div><div>
-      <div class="section-title">Photo Gallery</div>
-      <div class="section-desc">Media phase — added after data/results ship</div>
-    </div></div>
-    <div class="photo-slot">
-      <div class="photo-slot-title">Gallery coming soon</div>
-      <div class="photo-slot-sub">Event photos will appear here once the Photos phase ships.</div>
-    </div>
-  </div>`;
+  const photoHtml = renderMemoriesSection(data.memoryChapters, data.bfeBase, photoNum);
 
   const footerHtml = `<div class="footer">
     <a class="back-btn" href="/portal.html">← Back to Portal</a>
@@ -5146,7 +5330,26 @@ async function fetchResultsPageData() {
     groupRows = Array.isArray(groupsData.rows) ? groupsData.rows : [];
   } catch (e) { console.warn('[BFE] Could not load playing groups:', e.message); }
 
-  return buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows);
+  // Dev-80 §8 Step 7: Trip Memories (photos/video + notes) for the scrapbook
+  // section — public/approved view, same as the WCRP widget itself, no PIN.
+  // Best-effort like venues/groups above: a fetch failure here shouldn't
+  // block the whole results page, it just means the Trip Memories section
+  // renders as its own empty state.
+  let memories = [];
+  try {
+    const memRes = await fetch(bfeBase + '/bfe/memories?event=' + encodeURIComponent(eventName));
+    const memData = await memRes.json();
+    memories = Array.isArray(memData.memories) ? memData.memories : [];
+  } catch (e) { console.warn('[BFE] Could not load Trip Memories photos:', e.message); }
+
+  let notes = [];
+  try {
+    const notesRes = await fetch(bfeBase + '/bfe/memories/notes?event=' + encodeURIComponent(eventName));
+    const notesData = await notesRes.json();
+    notes = Array.isArray(notesData.notes) ? notesData.notes : [];
+  } catch (e) { console.warn('[BFE] Could not load Trip Memories notes:', e.message); }
+
+  return buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows, memories, notes, bfeBase);
 }
 
 function setPublishResultsStatus(msg, isErr) {
