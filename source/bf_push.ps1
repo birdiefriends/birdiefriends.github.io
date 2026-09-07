@@ -71,6 +71,18 @@ stray copy from that mistake -- or a repeat of it -- disappears on its own
 the next time the correct file is confirmed in the library, instead of
 piling up.
 
+v9 (Dev-79 close-out): added BF_BFE_Memories_Plan.md and
+BF_WCRP_Memories_Spec.md to $FileMap. These are the memories-capture
+investigation/decision doc and its build spec (companion docs, same idea as
+BF_WallyCup_Spec.md) -- Claude had been dropping them into an AutoPush\Claude
+outputs\ subfolder instead, which this tool never looks inside (no subfolder
+recursion, same gap $FileMap's own v8 note already described for a
+different file), so they never actually reached the library despite
+looking delivered. Standing rule going forward: any new doc Claude produces
+that's meant to live in the repo (a spec, a plan, anything durable -- not a
+one-off scratch file) gets added to $FileMap in the same turn it's first
+delivered, not left to sit in the outputs subfolder.
+
 Run this by double-clicking bf_push.bat in the same folder. Drop any of the
 recognized files below into this same folder and it will push them to
 GitHub via the PIN-gated Worker /deploy route, verify each one landed
@@ -102,6 +114,10 @@ $FileMap = [ordered]@{
     # script under this exact filename to push it to the repo library.
     "bf_push_library.ps1"    = @("source/bf_push.ps1")
     "WallyCup_Results_Design_Reference.dc.html" = @("source/WallyCup_Results_Design_Reference.dc.html")
+    # Dev-79: memories-capture companion docs (investigation/decision doc +
+    # build spec) -- same treatment as BF_WallyCup_Spec.md above.
+    "BF_BFE_Memories_Plan.md" = @("source/BF_BFE_Memories_Plan.md")
+    "BF_WCRP_Memories_Spec.md" = @("source/BF_WCRP_Memories_Spec.md")
 }
 
 # Dev-78 follow-up (v8): local filenames known to be stray leftovers of a
@@ -140,7 +156,7 @@ foreach ($name in $FileMap.Keys) {
     if (Test-Path (Join-Path $ScriptDir $name)) { $Found += $name }
 }
 
-Write-Host "BirdieFriends publish tool (v8)" -ForegroundColor Cyan
+Write-Host "BirdieFriends publish tool (v9)" -ForegroundColor Cyan
 Write-Host "Folder: $ScriptDir"
 Write-Host ""
 
