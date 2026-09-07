@@ -2043,6 +2043,11 @@ body {
   <!-- ── HOME SCREEN ── -->
   <div class="bf-screen active" id="screen-home">
     <div id="home-live-banner"></div>
+    <!-- Dev-80 (§8 step 5): persistent WCRP memories widget entry point — a
+         separate banner from home-live-banner on purpose, since it's scoped
+         to the whole BFE event date range (± grace window), not just while a
+         round is actually live (see buildWCRPBanner's own comment). -->
+    <div id="home-wcrp-banner"></div>
     <div id="home-host-entry"></div>
     <div id="home-hero"></div>
     <div id="home-announcements"></div>
@@ -3076,6 +3081,69 @@ body {
       Who you're playing with, round by round.
     </div>
     <div id="card-group-list" style="max-height:55vh;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- Dev-80 (§8 step 5) — WCRP Memories widget sheet. Separate from
+     card-photo-modal/card-notes-modal on purpose (spec's own EventCard-vs-
+     WCRP distinction, Dev-79): this one isn't tied to any single card, opens
+     off the persistent Home banner (buildWCRPBanner), and publishes only to
+     bfe_event_memories/bfe_event_memory_notes via BFE_API — never the shared
+     event_photos/notes tables the card sheets above use. -->
+<div class="bf-modal-overlay" id="wcrp-memories-modal" onclick="closeWCRPModalOverlayGuarded(event)" style="z-index:9000">
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="bf-modal-title" style="margin-bottom:0" id="wcrp-memories-title">🏆 Trip Memories</div>
+      <button id="wcrp-memories-close-btn" onclick="closeWCRPModalGuarded()" title="Close"
+        style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
+          color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px;line-height:1.5">
+      Anything outside a round itself — the pub, the house, the ride over. Published only to this trip's keepsake, for the whole group to look back on.
+    </div>
+    <input id="wcrp-photo-camera-input" type="file" accept="image/*" capture="environment"
+      style="display:none" onchange="wcrpCameraPicked(this)">
+    <input id="wcrp-video-camera-input" type="file" accept="video/*" capture="environment"
+      style="display:none" onchange="wcrpCameraPicked(this)">
+    <input id="wcrp-upload-input" type="file" accept="image/*,video/*"
+      style="display:none" onchange="wcrpUploadPicked()">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button onclick="document.getElementById('wcrp-photo-camera-input').click()"
+        style="flex:1;padding:12px;background:var(--green);border:none;border-radius:var(--radius-sm);
+          color:#fff;font-size:0.92rem;font-weight:700;cursor:pointer;font-family:inherit">
+        📷 Photo
+      </button>
+      <button onclick="document.getElementById('wcrp-video-camera-input').click()"
+        style="flex:1;padding:12px;background:var(--green);border:none;border-radius:var(--radius-sm);
+          color:#fff;font-size:0.92rem;font-weight:700;cursor:pointer;font-family:inherit">
+        🎥 Video
+      </button>
+    </div>
+    <button onclick="document.getElementById('wcrp-upload-input').click()"
+      style="width:100%;padding:11px;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+        color:var(--text);font-size:0.88rem;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px">
+      ⬆️ Upload from Gallery
+    </button>
+    <!-- Tagging picker + caption, shown once a file is picked (wcrpShowTagPicker) — Brian's
+         call (Dev-80): full picker in this pass, not deferred to a fast-follow. -->
+    <div id="wcrp-tag-picker" style="display:none;background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+      <input id="wcrp-caption-input" type="text" maxlength="120" placeholder="Caption (optional)"
+        style="width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);
+          font-size:0.85rem;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px">Who's in it? (optional)</div>
+      <div id="wcrp-tag-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="wcrpConfirmUpload()">⬆️ Upload</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="wcrpCancelUpload()">Cancel</button>
+      </div>
+    </div>
+    <div id="wcrp-photo-status" style="font-size:0.75rem;color:var(--text-hint);text-align:center;margin-bottom:8px;min-height:16px"></div>
+    <div id="wcrp-photo-list" style="display:flex;flex-wrap:wrap;gap:10px;max-height:34vh;overflow-y:auto;margin-bottom:14px"></div>
+
+    <div style="border-top:1px solid var(--border);margin:4px 0 10px"></div>
+    <div id="wcrp-note-compose" style="margin-bottom:10px"></div>
+    <div id="wcrp-notes-list" style="display:flex;flex-direction:column;gap:8px;max-height:30vh;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -4477,6 +4545,12 @@ async function loadAllData() {
     dataLoaded = true;
     renderAll();
     buildPlayerPickerGrid();  // refresh picker now roster is live
+    // Dev-80 — fire-and-forget: BFE-backed index isn't needed for the first
+    // paint (icon gating/widget banner just stay in their "not BFE-backed"
+    // default state until this resolves), and it re-renders on its own once
+    // it lands rather than making every player wait on an extra round trip
+    // to BFE_API before Home shows anything.
+    refreshBFEBackedIndex();
     // Silent subscription health check + identity refresh (invisible to players)
     setTimeout(osHealthCheck, 2000);
     // Write capacity=4 back to Jotform for any events that hit the 48hr lock
@@ -4875,6 +4949,7 @@ function renderAll() {
   renderAllEvents();
   updateAdminNav();
   updateNewEventsBtn();
+  renderWCRPBanner(); // Dev-80 — no-op until refreshBFEBackedIndex() has resolved at least once
 }
 
 // ── Capacity engine ──────────────────────────────────────────────────────
@@ -5526,19 +5601,26 @@ function buildEventCard(evt, isPast) {
       <span style="pointer-events:none;margin-left:auto;font-size:0.82rem;color:rgba(255,255,255,0.5)">Players ›</span>
     </button>
     <div class="icon-action-row" style="justify-content:flex-start;gap:26px;margin:10px 4px 2px">
+      ${!isBFEBackedCard(evt) ? `
       <button class="icon-action-btn" onclick="openCardPhotoSheet('${evt.id}')">
         <span class="icon-action-badge secondary">📷</span>
         <span class="icon-action-label">Photos</span>
-      </button>
+      </button>` : ''}
       ${(_livePanelOpen && getLiveEvent()?.id === evt.id) ? '' : `
       <button class="icon-action-btn" onclick="openCardScoreSheet('${evt.id}')">
         <span class="icon-action-badge secondary">🏌️</span>
         <span class="icon-action-label">Score</span>
       </button>`}
+      <!-- Dev-80 (spec §5 / Step 6): a BFE-backed round card omits Photos/Notes
+           entirely — that capture belongs to the WCRP widget/Live Panel now,
+           not this card's own event_photos/notes thread (spec's whole reason
+           for the split: a player capturing mid-round shouldn't be able to
+           create a memory that lives outside the WCRP by accident). -->
+      ${!isBFEBackedCard(evt) ? `
       <button class="icon-action-btn" onclick="openCardNoteSheet('${evt.id}')">
         <span class="icon-action-badge secondary">💬</span>
         <span class="icon-action-label">Notes</span>
-      </button>
+      </button>` : ''}
       <button class="icon-action-btn" onclick="openRulesModal()">
         <span class="icon-action-badge secondary">📖</span>
         <span class="icon-action-label">Rules</span>
@@ -8642,13 +8724,39 @@ async function livePhotoDialogConfirm() {
 // a new precedent (Dev-57). Server auto-classifies when section is omitted
 // (the Open Camera path); Upload always sends an explicit section already
 // resolved via its dialog.
+//
+// Dev-80 (spec §6, Step 4 — Live Panel repoint): a BFE-backed live round
+// posts here instead of the Gatherings pipeline — with a known round_id,
+// straight into the WCRP's own bfe_event_memories, so there's never a window
+// where an on-course capture lands in the old bucket and has to be
+// backfilled later (the exact wrinkle BF_BFE_Memories_Plan.md §6 flagged as
+// the reason to build the widget and this repoint together). Everything
+// else — a non-BFE-backed live event (ordinary Series/Weekend/Gathering) —
+// is untouched, still goes to GATHERINGS_API/photos/upload exactly as before.
 async function livePanelUploadCore(file, evt, { sourceLabel, section, capturedAt }) {
   setLivePhotoBusy(true, sourceLabel === 'camera' ? 'Capturing…' : 'Uploading…'); // Dev-68
   const statusEl = document.getElementById('live-photo-status');
+  const bfeInfo = isBFEBackedCard(evt) ? _bfeBackedIndex.get(evt.name) : null;
   try {
-    const scorecardSubmitted = await checkScorecardSubmitted(evt.name, currentPlayer);
     const uploadFile = await compressImageFile(file); // Dev-67 — see its own comment
     if (statusEl && uploadFile !== file) statusEl.textContent = '📤 Uploading — please keep this open…';
+
+    if (bfeInfo) {
+      const form = new FormData();
+      form.append('event_id', bfeInfo.bfeEventId);
+      if (bfeInfo.bfeRoundId) form.append('round_id', bfeInfo.bfeRoundId);
+      form.append('captured_by', currentPlayer || '');
+      if (capturedAt) form.append('captured_at', capturedAt);
+      form.append('file', uploadFile);
+      const res = await fetch(`${BFE_API}/bfe/memories/upload`, { method: 'POST', body: form });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Upload failed');
+      setLivePhotoBusy(false, '');
+      showToast(data.media_type === 'video' ? '✅ Video added!' : '✅ Photo added!');
+      return;
+    }
+
+    const scorecardSubmitted = await checkScorecardSubmitted(evt.name, currentPlayer);
     const form = new FormData();
     form.append('event_name', evt.name);
     form.append('event_start', evt.dt.toISOString());
@@ -13330,6 +13438,387 @@ function bfeEventNameCandidates(name) {
   if (stripped && stripped !== raw) out.push(stripped);
   if (raw) out.push(raw);
   return out;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// WCRP Memories (Dev-80) — this pass builds §8 steps 3+4+5 of
+// BF_WCRP_Memories_Spec.md together (= "Pass 2" of BF_BFE_Memories_Plan.md
+// §6): BFE_API's memory routes (BF_Experiences.js), the Live Panel repoint,
+// and the widget itself. Step 6 (EventCard icon disabling) rides the same
+// BFE-backed index this section builds, since it needs the identical
+// answer. Step 2's BFE-backed flag was scoped as "cache bfeEventId/
+// bfeRoundId on card object" in the spec — done here as one shared index
+// instead, since a given card's own evt object gets rebuilt on every
+// loadAllData() refresh and isn't a stable place to cache onto.
+// ══════════════════════════════════════════════════════════════════════════
+
+// Card name -> BFE-backed info. Keyed exactly like bfeEventNameCandidates
+// reasons about round-card names, just built forward here (umbrella event
+// name + round name) rather than stripped backward from a card's own name:
+//   "<umbrella> - <round name>"  — the normal Wally-Cup-style split, OR
+//   "<umbrella>"                 — a single-round BFE event (one card, no split)
+// Value: { bfeEventId, bfeRoundId, roundName, umbrellaName, eventDate,
+//   eventEndDate, graceHours, roster: Set<lowercased player name> }
+let _bfeBackedIndex = new Map();
+// umbrellaName -> same-shaped summary (one row per BFE EVENT, not per round)
+// — what the widget banner scans to find "is there a live-ish BFE trip this
+// player is on right now," since the banner isn't round-specific.
+let _bfeEventSummaries = new Map();
+
+async function refreshBFEBackedIndex() {
+  try {
+    const listRes = await fetch(`${BFE_API}/bfe/events-list`);
+    const listData = listRes.ok ? await listRes.json() : null;
+    const events = (listData && Array.isArray(listData.events)) ? listData.events : [];
+    const nextIndex = new Map();
+    const nextSummaries = new Map();
+    await Promise.all(events.map(async (e) => {
+      try {
+        const cfgRes = await fetch(`${BFE_API}/bfe/events?event=${encodeURIComponent(e.event_name)}`);
+        if (!cfgRes.ok) return;
+        const cfgData = await cfgRes.json();
+        const config = cfgData && cfgData.config;
+        if (!config || !Array.isArray(config.rounds)) return;
+        const roster = new Set((config.roster || []).map(p => (p.name || '').trim().toLowerCase()).filter(Boolean));
+        const graceHoursRaw = (config.memoriesGraceHours === null || config.memoriesGraceHours === undefined)
+          ? NaN : Number(config.memoriesGraceHours);
+        const graceHours = isNaN(graceHoursRaw) ? 24 : graceHoursRaw; // spec §9 draft default (±1 day)
+        const summary = {
+          bfeEventId: e.id, umbrellaName: e.event_name,
+          eventDate: config.eventDate, eventEndDate: config.eventEndDate,
+          graceHours, roster
+        };
+        nextSummaries.set(e.event_name, summary);
+        config.rounds.forEach(r => {
+          const entry = { ...summary, bfeRoundId: r.id || null, roundName: r.name };
+          nextIndex.set(`${e.event_name} - ${r.name}`, entry);
+          if (config.rounds.length === 1) nextIndex.set(e.event_name, entry);
+        });
+      } catch (err) { /* one bad event shouldn't blank the whole index */ }
+    }));
+    _bfeBackedIndex = nextIndex;
+    _bfeEventSummaries = nextSummaries;
+    // Whatever already rendered (cards, banner) did so without this data —
+    // cheap to just re-render now that it's here.
+    if (typeof dataLoaded !== 'undefined' && dataLoaded) renderAll();
+  } catch (e) {
+    console.warn('[BFE] backed-index load failed:', e.message);
+  }
+}
+
+// Is this Portal card a BFE-backed round? (spec §5 / Step 6 — EventCard icon
+// disabling reads this directly.)
+function isBFEBackedCard(evt) {
+  return evt && _bfeBackedIndex.has(evt.name);
+}
+
+// Which BFE event (if any) should the WCRP widget banner offer to
+// currentPlayer right now? Roster-gated (spec: "visible to eligible players
+// only") and date-range-gated (event_date..event_end_date±graceHours, spec §9
+// — commissioner-configurable per event, Dev-80's own call). Returns the
+// summary object or null.
+function findWCRPEligibleEvent() {
+  if (!currentPlayer) return null;
+  const me = currentPlayer.trim().toLowerCase();
+  const now = new Date();
+  for (const summary of _bfeEventSummaries.values()) {
+    if (!summary.roster.has(me)) continue;
+    if (!summary.eventDate) continue;
+    const start = new Date(summary.eventDate + 'T00:00:00');
+    const end = new Date((summary.eventEndDate || summary.eventDate) + 'T23:59:59');
+    if (isNaN(start) || isNaN(end)) continue;
+    const graceMs = summary.graceHours * 3600000;
+    if (now >= (start - graceMs) && now <= (end.getTime() + graceMs)) return summary;
+  }
+  return null;
+}
+
+let _wcrpEvt = null; // the summary object the open sheet is currently scoped to
+
+function renderWCRPBanner() {
+  const el = document.getElementById('home-wcrp-banner');
+  if (!el) return;
+  const evt = findWCRPEligibleEvent();
+  if (!evt) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="live-banner" style="cursor:pointer" onclick="openWCRPModal()">
+    <div class="live-banner-header">
+      <div class="live-dot" style="background:var(--gold,#d4a017)"></div>
+      <div style="flex:1">
+        <div class="live-banner-title">🏆 ${evt.umbrellaName} — Trip Memories</div>
+        <div class="live-banner-sub">Tap to add a photo, video, or note for the whole trip</div>
+      </div>
+      <div class="live-banner-chev">›</div>
+    </div>
+  </div>`;
+}
+
+function openWCRPModal() {
+  const evt = findWCRPEligibleEvent();
+  if (!evt) { showToast('No active trip right now', true); return; }
+  _wcrpEvt = evt;
+  const titleEl = document.getElementById('wcrp-memories-title');
+  if (titleEl) titleEl.textContent = `🏆 ${evt.umbrellaName}`;
+  const statusEl = document.getElementById('wcrp-photo-status');
+  if (statusEl) statusEl.textContent = '';
+  document.getElementById('wcrp-photo-list').innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted)">Loading…</div>';
+  document.getElementById('wcrp-notes-list').innerHTML = '';
+  document.getElementById('wcrp-note-compose').innerHTML = renderWCRPNoteCompose();
+  openModal('wcrp-memories-modal');
+  loadWCRPPhotos();
+  loadWCRPNotes();
+}
+
+let _wcrpUploadBusy = false;
+function setWCRPBusy(busy, statusText) {
+  _wcrpUploadBusy = busy;
+  const statusEl = document.getElementById('wcrp-photo-status');
+  if (statusEl && statusText !== undefined) {
+    statusEl.textContent = statusText || '';
+    statusEl.style.color = busy ? 'var(--gold, #d4a017)' : '';
+    statusEl.style.fontWeight = busy ? '700' : '';
+  }
+  const closeBtn = document.getElementById('wcrp-memories-close-btn');
+  if (closeBtn) closeBtn.style.opacity = busy ? '0.35' : '1';
+  ['wcrp-photo-camera-input','wcrp-video-camera-input','wcrp-upload-input'].forEach(id => {
+    const e = document.getElementById(id);
+    if (e) e.disabled = busy;
+  });
+}
+function closeWCRPModalGuarded() {
+  if (_wcrpUploadBusy) { showToast('Upload in progress — hang tight', true); return; }
+  closeModal('wcrp-memories-modal');
+}
+function closeWCRPModalOverlayGuarded(e) {
+  if (e.target !== document.getElementById('wcrp-memories-modal')) return;
+  closeWCRPModalGuarded();
+}
+
+// Both capture paths land here with a file, then always go through the tag
+// picker (Dev-80: full tagging picker built now, not deferred) rather than
+// livePanelCameraPicked's immediate-upload — this sheet isn't a live-round
+// tool under time pressure, a beat to add a caption/tags is fine.
+let _wcrpPendingFile = null;
+async function wcrpCameraPicked(inputEl) {
+  const input = inputEl;
+  const file = input.files[0];
+  if (!file) { input.value = ''; return; }
+  if (!(await wcrpValidateFile(file))) { input.value = ''; return; }
+  _wcrpPendingFile = file;
+  wcrpShowTagPicker();
+  input.value = '';
+}
+async function wcrpUploadPicked() {
+  const input = document.getElementById('wcrp-upload-input');
+  const file = input.files[0];
+  if (!file) { input.value = ''; return; }
+  if (!(await wcrpValidateFile(file))) { input.value = ''; return; }
+  _wcrpPendingFile = file;
+  wcrpShowTagPicker();
+  input.value = '';
+}
+async function wcrpValidateFile(file) {
+  if (file.size > PHOTO_MAX_BYTES) {
+    showToast(`Too large (${(file.size/1024/1024).toFixed(1)}MB) — 25MB max`, true);
+    return false;
+  }
+  if (file.type.startsWith('video/')) {
+    const duration = await readVideoDuration(file);
+    if (duration && duration > VIDEO_MAX_SECONDS) {
+      showToast(`Clip is ${Math.round(duration)}s — keep it under ${VIDEO_MAX_SECONDS}s, please retake`, true);
+      return false;
+    }
+  }
+  return true;
+}
+
+function wcrpShowTagPicker() {
+  const evt = _wcrpEvt;
+  const picker = document.getElementById('wcrp-tag-picker');
+  const chips = document.getElementById('wcrp-tag-chips');
+  if (!picker || !chips || !evt) return;
+  const names = Array.from(evt.roster).sort();
+  chips.innerHTML = names.map(n => `
+    <label style="display:flex;align-items:center;gap:5px;font-size:0.76rem;background:var(--card);
+      border:1px solid var(--border);border-radius:14px;padding:5px 10px;cursor:pointer">
+      <input type="checkbox" class="wcrp-tag-cb" value="${n.replace(/"/g,'&quot;')}" style="margin:0">
+      ${n.replace(/\b\w/g, c => c.toUpperCase())}
+    </label>`).join('');
+  document.getElementById('wcrp-caption-input').value = '';
+  picker.style.display = 'block';
+}
+function wcrpCancelUpload() {
+  _wcrpPendingFile = null;
+  const picker = document.getElementById('wcrp-tag-picker');
+  if (picker) picker.style.display = 'none';
+}
+
+async function wcrpConfirmUpload() {
+  const file = _wcrpPendingFile;
+  const evt = _wcrpEvt;
+  if (!file || !evt) return;
+  const caption = (document.getElementById('wcrp-caption-input')?.value || '').trim();
+  const tagged = Array.from(document.querySelectorAll('.wcrp-tag-cb:checked')).map(cb => cb.value);
+  const picker = document.getElementById('wcrp-tag-picker');
+  if (picker) picker.style.display = 'none';
+  _wcrpPendingFile = null;
+
+  setWCRPBusy(true, 'Preparing…');
+  try {
+    const uploadFile = await compressImageFile(file); // no-op for video
+    setWCRPBusy(true, '📤 Uploading — please keep this open…');
+    const form = new FormData();
+    form.append('event_id', evt.bfeEventId);
+    form.append('captured_by', currentPlayer || '');
+    if (caption) form.append('caption', caption);
+    if (tagged.length) form.append('tagged_players', JSON.stringify(tagged));
+    form.append('file', uploadFile);
+    // No round_id — the widget deliberately has no round in mind (spec:
+    // "everywhere else — pub, house, transport"); round placement for these
+    // resolves later at render time (§8 step 7, not built in this pass).
+    const res = await fetch(`${BFE_API}/bfe/memories/upload`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Upload failed');
+    setWCRPBusy(false, '');
+    showToast(data.media_type === 'video' ? '✅ Video added!' : '✅ Photo added!');
+    loadWCRPPhotos();
+  } catch (e) {
+    setWCRPBusy(false, '');
+    showToast('Error: ' + e.message, true);
+  }
+}
+
+async function loadWCRPPhotos() {
+  const listEl = document.getElementById('wcrp-photo-list');
+  if (!_wcrpEvt || !listEl) return;
+  try {
+    const res = await fetch(`${BFE_API}/bfe/memories?event_id=${_wcrpEvt.bfeEventId}`);
+    const data = await res.json();
+    const memories = (data.memories || []).slice().reverse(); // most recent first
+    if (!memories.length) {
+      listEl.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted)">No trip photos yet — be the first!</div>';
+      return;
+    }
+    listEl.innerHTML = memories.map(m => renderWCRPPhotoThumb(m)).join('');
+  } catch (e) {
+    listEl.innerHTML = '';
+    showToast('Error loading photos: ' + e.message, true);
+  }
+}
+
+function renderWCRPPhotoThumb(m) {
+  const src = `${BFE_API}/bfe/memories/serve/${m.id}`;
+  const isVideo = m.media_type === 'video';
+  const norm = s => (s || '').trim().toLowerCase();
+  const canDelete = isCommissioner() || (currentPlayer && norm(currentPlayer) === norm(m.captured_by));
+  const media = isVideo
+    ? `<video src="${src}" controls preload="metadata" style="width:100%;height:90px;object-fit:cover;display:block;background:#000"></video>`
+    : `<img src="${src}" style="width:100%;height:90px;object-fit:cover;display:block" loading="lazy">`;
+  const tagLine = (m.tagged_players && m.tagged_players.length) ? `👤 ${m.tagged_players.join(', ')}` : '';
+  return `
+    <div style="width:130px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card)">
+      ${media}
+      <div style="padding:6px 8px;display:flex;justify-content:space-between;align-items:flex-start;gap:4px">
+        <div style="min-width:0">
+          <div style="font-size:0.68rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.captured_by || 'Unknown'}${isVideo ? ' · 🎥' : ''}</div>
+          ${m.caption ? `<div style="font-size:0.68rem;color:var(--text);margin-top:1px;word-break:break-word">${m.caption}</div>` : ''}
+          ${tagLine ? `<div style="font-size:0.64rem;color:var(--text-hint);margin-top:1px">${tagLine}</div>` : ''}
+        </div>
+        ${canDelete ? `<button onclick="deleteWCRPMemory(${m.id})" title="Delete"
+          style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:0.85rem;padding:2px">🗑</button>` : ''}
+      </div>
+    </div>`;
+}
+
+async function deleteWCRPMemory(id) {
+  if (!confirm('Delete this photo? This can\'t be undone.')) return;
+  try {
+    const params = new URLSearchParams();
+    if (isCommissioner()) params.set('pin', COMMISSIONER_PIN);
+    else params.set('requested_by', currentPlayer || '');
+    const res = await fetch(`${BFE_API}/bfe/memories/${id}?${params.toString()}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Delete failed');
+    showToast('🗑 Deleted');
+    loadWCRPPhotos();
+  } catch (e) {
+    showToast('Error: ' + e.message, true);
+  }
+}
+
+function isWCRPEligible() {
+  if (!_wcrpEvt || !currentPlayer) return false;
+  return _wcrpEvt.roster.has(currentPlayer.trim().toLowerCase());
+}
+
+function renderWCRPNoteCompose() {
+  if (!isWCRPEligible()) {
+    return `<div style="font-size:0.76rem;color:var(--text-hint);background:var(--surface);
+      border-radius:8px;padding:9px 11px">Only this trip's roster can add a note.</div>`;
+  }
+  // Spec §9 decision (Dev-80): 500-char cap for WCRP notes, vs. the 200 the
+  // ordinary EventCard notes thread uses — keepsake-style trip notes want a
+  // bit more room.
+  return `
+    <textarea id="wcrp-note-input" maxlength="500" rows="2" placeholder="Leave a note for the trip… (500 char max)"
+      style="width:100%;padding:9px 11px;border-radius:8px;border:1.5px solid var(--border);
+        font-size:0.85rem;font-family:inherit;resize:none;box-sizing:border-box;margin-bottom:6px"></textarea>
+    <button class="btn btn-secondary btn-sm" style="width:100%" onclick="submitWCRPNote()">📌 Add Note</button>`;
+}
+
+async function loadWCRPNotes() {
+  const listEl = document.getElementById('wcrp-notes-list');
+  if (!_wcrpEvt || !listEl) return;
+  try {
+    const res = await fetch(`${BFE_API}/bfe/memories/notes?event_id=${_wcrpEvt.bfeEventId}`);
+    const data = await res.json();
+    const notes = data.notes || [];
+    if (!notes.length) {
+      listEl.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted)">No notes yet — be the first!</div>';
+      return;
+    }
+    listEl.innerHTML = notes.slice().reverse().map(n => renderWCRPNoteChip(n)).join('');
+  } catch (e) {
+    listEl.innerHTML = '';
+    showToast('Error loading notes: ' + e.message, true);
+  }
+}
+
+function renderWCRPNoteChip(n) {
+  const timeLabel = (() => {
+    const t = n.created_at;
+    if (!t) return '';
+    const d = new Date(String(t).replace(' ', 'T'));
+    return isNaN(d) ? '' : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  })();
+  const tilt = seededTilt(n.id) * 0.6;
+  return `
+    <div style="background:${noteColorFor(n.player)};border-radius:4px;padding:12px 12px 10px;
+      box-shadow:0 2px 5px rgba(0,0,0,0.16);position:relative;transform:rotate(${tilt}deg);margin:6px 4px">
+      <div style="position:absolute;top:-6px;left:50%;transform:translateX(-50%) rotate(-3deg);
+        width:44px;height:16px;background:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.7)"></div>
+      <div style="font-size:0.85rem;color:#3a3a3a;line-height:1.45;white-space:pre-wrap;word-break:break-word">${n.note}</div>
+      <div style="font-size:0.68rem;color:#5a5a5a;margin-top:6px;font-weight:600">— ${n.player}${timeLabel ? ` · ${timeLabel}` : ''}</div>
+    </div>`;
+}
+
+async function submitWCRPNote() {
+  const input = document.getElementById('wcrp-note-input');
+  const note = (input?.value || '').trim();
+  if (!note) { showToast('Note can\'t be empty', true); return; }
+  if (!_wcrpEvt || !currentPlayer) return;
+  try {
+    const res = await fetch(`${BFE_API}/bfe/memories/notes`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: _wcrpEvt.bfeEventId, player: currentPlayer, note })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    if (input) input.value = '';
+    showToast('📌 Note added');
+    loadWCRPNotes();
+  } catch (e) {
+    showToast('Error: ' + e.message, true);
+  }
 }
 
 async function loadCardGroups() {
