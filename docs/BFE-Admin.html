@@ -1798,7 +1798,18 @@ const roundsBody = document.getElementById('roundsBody');
 const ENGINE_OPTIONS = [
   { id: 'stableford_quota', label: 'Stableford quota' },
   { id: 'scramble_pair', label: '2-man scramble' },
-  { id: 'points_by_score_type', label: 'Points by score type' }
+  { id: 'points_by_score_type', label: 'Points by score type' },
+  // Dev-80 — Practice Rd / any pure-fun round with no competitive scoring
+  // at all. Deliberately just another id NOT in ENGINES / not 'stableford_
+  // quota' / not 'scramble_pair' — every place in this file that dispatches
+  // or filters by engine already treats "anything other than those two" as
+  // non-scoring (Close Round's dropdown, the Overall/quota-chain filter,
+  // buildEventConfig's chainsFrom wiring, the "Rolls into Overall" save
+  // guardrail below). scoreRound() is simply never called for a 'none'
+  // round because it never appears in the Close Round dropdown, so its
+  // "Unknown engine id" throw is unreachable here — no changes needed to
+  // ENGINES or scoreRound itself.
+  { id: 'none', label: 'No engine (practice / fun round — not scored)' }
 ];
 
 // Dev-83 — { name: Date }, merged from Jotform Request Event submissions
@@ -1913,8 +1924,15 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
     <td style="text-align:center"><input type="checkbox" class="r-overall" ${rollsIntoOverall ? 'checked' : ''} style="width:auto"></td>
     <td><button type="button" class="danger removeRoundBtn">Remove</button></td>`;
   tr.querySelector('.removeRoundBtn').addEventListener('click', () => { tr.remove(); refreshTeeVenueBlocks(); });
-  tr.querySelector('.r-engine').addEventListener('change', () => {
+  tr.querySelector('.r-engine').addEventListener('change', (ev) => {
     tr.querySelector('.r-wbpoints').disabled = false; // Wally Ball can apply to any engine, host's call
+    // Dev-80 — switching TO 'none' auto-unchecks "Rolls into Overall": a
+    // no-engine round has no result to feed the chain by definition, unlike
+    // scramble_pair/points_by_score_type which still produce a real result
+    // the host might (rarely) want counted. Saves the extra confirm() below
+    // from firing on the common Practice-Rd case; switching AWAY from
+    // 'none' leaves the checkbox alone (host's prior choice, if any).
+    if (ev.target.value === 'none') tr.querySelector('.r-overall').checked = false;
     refreshTeeVenueBlocks();
   });
   tr.querySelector('.r-venue').addEventListener('change', () => {
