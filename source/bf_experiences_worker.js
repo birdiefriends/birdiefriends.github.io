@@ -268,6 +268,70 @@
 //   );
 //   -- Migration for an existing database (bfe_round_groups predates team_label):
 //   --   ALTER TABLE bfe_round_groups ADD COLUMN team_label TEXT;
+//
+// ── WCRP Memories (Dev-80, Pass 2 of BF_BFE_Memories_Plan.md §6 — build order
+// is BF_WCRP_Memories_Spec.md §8) ───────────────────────────────────────────
+// Dev-79 (§8 step 1) already shipped tee_time + the Setup §4 round picker.
+// This adds the actual capture surface: two new tables plus a per-event
+// grace-window column, all owned by this Worker (same "never write to a
+// table the main worker owns" isolation as everything else here) and R2
+// keyed under its own `bfe/<event_id>/...` prefix in the SAME PHOTOS_BUCKET
+// the main worker already binds (spec §"Ownership": "published only to the
+// WCRP" is enforced by storage namespace, not convention) — requires the
+// PHOTOS_BUCKET R2 binding to also be added to THIS Worker in the Cloudflare
+// dashboard (it doesn't have one yet; every other table here is D1-only).
+//
+//   ALTER TABLE bfe_events ADD COLUMN memories_grace_hours INTEGER;
+//   -- Commissioner-set eligibility window (spec §9) around [event_date,
+//   -- event_end_date||event_date] for pre/post-trip capture — Brian's call
+//   -- (Dev-80) was per-event configurable rather than a hardcoded default,
+//   -- since a one-day scramble and a 4-day Wally Cup want different windows.
+//   -- NULL means "not set yet" — routes below fall back to 24 (the spec
+//   -- draft's proposed ±1 day) rather than 0, so an event saved before this
+//   -- column existed doesn't suddenly reject all pre/post-trip captures.
+//
+//   CREATE TABLE bfe_event_memories (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
+//     round_id INTEGER REFERENCES bfe_event_rounds(id),
+//                            -- NULL = not yet placed in a round's timeline.
+//                            -- Live Panel repoint (spec §6, portal.html) sends
+//                            -- this explicitly since it already knows which
+//                            -- live round the capture belongs to; the WCRP
+//                            -- widget (no round in mind — pub, house,
+//                            -- transport) always uploads NULL here. Spec's
+//                            -- render-time [tee_time, MAX(scorecard
+//                            -- captured_at)] auto-classification is Step 7
+//                            -- (Results-page wiring) work, deliberately not
+//                            -- built in this pass — round_id stored here is
+//                            -- authoritative as-is until that lands.
+//     media_type TEXT NOT NULL,      -- 'photo' | 'video'
+//     r2_key TEXT NOT NULL,          -- bfe/<event_id>/<uuid>.<ext> — own
+//                                     -- namespace, never the shared event_photos
+//                                     -- bucket path the main worker uses
+//     captured_by TEXT NOT NULL,
+//     caption TEXT,
+//     tagged_players TEXT,           -- JSON array of player names (spec §9 —
+//                                     -- Brian's call, Dev-80: full picker in
+//                                     -- this pass, not deferred)
+//     section_label TEXT,            -- host-set chapter override (curation view,
+//                                     -- Step 7 — column exists now, unused until then)
+//     is_trophy_moment INTEGER DEFAULT 0,
+//     curation_status TEXT NOT NULL DEFAULT 'approved',
+//                            -- reject-by-exception, same posture Dev-62 already
+//                            -- set for event_photos — live immediately, PATCH
+//                            -- below is how a host walks one back
+//     captured_at TEXT NOT NULL,
+//     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+//   );
+//   CREATE TABLE bfe_event_memory_notes (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
+//     round_id INTEGER REFERENCES bfe_event_rounds(id),   -- same NULL convention as above
+//     player TEXT NOT NULL,
+//     note TEXT NOT NULL,
+//     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+//   );
 // ══════════════════════════════════════════════════════════════════════════
 
 
@@ -667,7 +731,7 @@ export default {
       try { body = await request.json(); } catch (e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { event_name, event_family, event_date, event_end_date, hcp_mode, status, tee_policy, payout_plan, rounds, roster, pin } = body;
+      const { event_name, event_family, event_date, event_end_date, memories_grace_hours, hcp_mode, status, tee_policy, payout_plan, rounds, roster, pin } = body;
       if (String(pin) !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -679,13 +743,19 @@ export default {
         // value here just means "single-day event," same as before this
         // column existed. Requires the bfe_events.event_end_date column
         // (migration below) to already exist — see Dev-77 note.
+        // Dev-80: memories_grace_hours same treatment — optional, NULL until
+        // a host sets it, see the column's own migration note above.
+        const graceHours = (memories_grace_hours === undefined || memories_grace_hours === null || memories_grace_hours === '')
+          ? null : Number(memories_grace_hours);
         await env.DB.prepare(
-          `INSERT INTO bfe_events (event_name, event_family, event_date, event_end_date, hcp_mode, status, tee_policy, payout_plan, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `INSERT INTO bfe_events (event_name, event_family, event_date, event_end_date, memories_grace_hours, hcp_mode, status, tee_policy, payout_plan, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
            ON CONFLICT(event_name) DO UPDATE SET
-             event_family = excluded.event_family, event_date = excluded.event_date, event_end_date = excluded.event_end_date, hcp_mode = excluded.hcp_mode, status = excluded.status,
+             event_family = excluded.event_family, event_date = excluded.event_date, event_end_date = excluded.event_end_date,
+             memories_grace_hours = excluded.memories_grace_hours, hcp_mode = excluded.hcp_mode, status = excluded.status,
              tee_policy = excluded.tee_policy, payout_plan = excluded.payout_plan, updated_at = excluded.updated_at`
-        ).bind(event_name, event_family || null, event_date || null, event_end_date || null, hcp_mode || 'fixed', status || 'draft',
+        ).bind(event_name, event_family || null, event_date || null, event_end_date || null, (graceHours === null || isNaN(graceHours)) ? null : graceHours,
+               hcp_mode || 'fixed', status || 'draft',
                tee_policy ? JSON.stringify(tee_policy) : null, payout_plan ? JSON.stringify(payout_plan) : null).run();
 
         const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(event_name).first();
@@ -754,6 +824,12 @@ export default {
         roundRows.forEach(r => { idToName[r.id] = r.name; });
 
         const rounds = roundRows.map(r => ({
+          id: r.id,   // Dev-80: read-only convenience for callers that need the
+                      // real row id for THIS load (e.g. Live Panel repoint
+                      // resolving round_id for a memories upload) — never
+                      // meant to be cached/reused across a Setup re-save, see
+                      // this route's own comment above on why round_id isn't
+                      // the join key anywhere else in this file.
           name: r.name, engine: r.engine,
           engineParams: r.engine_params ? JSON.parse(r.engine_params) : undefined,
           influencers: r.influencers ? JSON.parse(r.influencers) : [],
@@ -769,7 +845,9 @@ export default {
         }));
 
         const config = {
-          eventName: eventRow.event_name, eventFamily: eventRow.event_family, eventDate: eventRow.event_date, eventEndDate: eventRow.event_end_date, hcpMode: eventRow.hcp_mode,
+          eventName: eventRow.event_name, eventFamily: eventRow.event_family, eventDate: eventRow.event_date, eventEndDate: eventRow.event_end_date,
+          memoriesGraceHours: (eventRow.memories_grace_hours === null || eventRow.memories_grace_hours === undefined) ? null : eventRow.memories_grace_hours,
+          hcpMode: eventRow.hcp_mode,
           status: eventRow.status, teePolicy: eventRow.tee_policy ? JSON.parse(eventRow.tee_policy) : null,
           payout: eventRow.payout_plan ? JSON.parse(eventRow.payout_plan) : null,
           roster, rounds
@@ -969,6 +1047,287 @@ export default {
           rows = (await env.DB.prepare(`SELECT * FROM bfe_round_groups WHERE event_id = ? ORDER BY round_name ASC, group_index ASC, player_name ASC`).bind(eventRow.id).all()).results;
         }
         return new Response(JSON.stringify({ ok: true, rows }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // ── WCRP Memories (Dev-80) ──────────────────────────────────────────
+    // POST /bfe/memories/upload — multipart/form-data, mirrors the main
+    // worker's POST /photos/upload pipeline (compress-on-client, 25MB
+    // server-side cap regardless of client checks, media_type inferred from
+    // file.type/extension — never trusted verbatim), simplified: no EXIF-
+    // filename dedup/window-skip logic (that's a bulk-import concern this
+    // capture surface doesn't have) and no server-side section
+    // classification (spec's render-time round placement is Step 7, not
+    // built here — round_id is stored exactly as sent, NULL if omitted).
+    // No PIN — same trust-based model as every other player-facing capture
+    // in this app (Scorecard/CttP/photos): event_id + captured_by identify
+    // the request, not a shared admin secret.
+    // Body fields: event_id (or event_name), round_id?, captured_by, caption?,
+    // tagged_players? (JSON array string), captured_at?, file.
+    const MEMORIES_MAX_BYTES = 25 * 1024 * 1024;
+    if (request.method === 'POST' && url.pathname === '/bfe/memories/upload') {
+      try {
+        const reqContentType = (request.headers.get('content-type') || '').toLowerCase();
+        if (!reqContentType.includes('multipart/form-data')) {
+          return new Response(JSON.stringify({ error: 'Expected multipart/form-data' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        let form;
+        try { form = await request.formData(); } catch (e) {
+          return new Response(JSON.stringify({ error: 'Invalid form data' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const eventIdRaw   = form.get('event_id');
+        const eventName    = form.get('event_name');
+        const roundIdRaw   = form.get('round_id');
+        const capturedBy   = form.get('captured_by');
+        const caption      = form.get('caption') || null;
+        const taggedRaw    = form.get('tagged_players');
+        const capturedAt   = form.get('captured_at');
+        let file = form.get('file');
+        if (!file || typeof file === 'string') {
+          for (const [, v] of form.entries()) {
+            if (v && typeof v !== 'string') { file = v; break; }
+          }
+        }
+        if (!capturedBy) {
+          return new Response(JSON.stringify({ error: 'Missing captured_by' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (!file || typeof file === 'string') {
+          return new Response(JSON.stringify({ error: 'Missing file' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (!env.PHOTOS_BUCKET) {
+          return new Response(JSON.stringify({ error: 'PHOTOS_BUCKET binding not configured on this Worker yet' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+
+        // event_id can arrive directly (Live Panel already resolved it via
+        // the BFE-backed index) or by event_name (widget upload, resolved
+        // here) — either is accepted, event_id preferred when both are sent.
+        let eventId = eventIdRaw ? Number(eventIdRaw) : null;
+        if (!eventId && eventName) {
+          const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
+          if (!eventRow) {
+            return new Response(JSON.stringify({ error: 'Unknown event' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+          eventId = eventRow.id;
+        }
+        if (!eventId) {
+          return new Response(JSON.stringify({ error: 'event_id or event_name is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const roundId = (roundIdRaw !== null && roundIdRaw !== undefined && roundIdRaw !== '') ? Number(roundIdRaw) : null;
+
+        const fileBytes = await file.arrayBuffer();
+        const fileSize   = file.size;
+        const fileName   = file.name || '';
+        if (fileSize > MEMORIES_MAX_BYTES) {
+          return new Response(JSON.stringify({ error: `File too large (${(fileSize/1024/1024).toFixed(1)}MB) — 25MB max. For video, keep clips short.` }), { status: 413, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+
+        const extFromName = (fileName && fileName.includes('.')) ? fileName.split('.').pop().toLowerCase() : '';
+        const VIDEO_EXTS = ['mp4', 'mov', 'm4v', 'webm'];
+        const looksLikeVideo = (file.type || '').startsWith('video/') || VIDEO_EXTS.includes(extFromName);
+        const mediaType = looksLikeVideo ? 'video' : 'image';
+        const ext = extFromName || (mediaType === 'video' ? 'mp4' : 'jpg');
+        const isSpecificType = /^(image|video)\//.test(file.type || '');
+        const storedContentType = isSpecificType ? file.type : (mediaType === 'video' ? 'video/mp4' : 'image/jpeg');
+        // Own namespace under the shared bucket (spec's "Ownership" principle
+        // — never the main worker's photos/<slug>/<section>/... prefix).
+        const key = `bfe/${eventId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+        await env.PHOTOS_BUCKET.put(key, fileBytes, { httpMetadata: { contentType: storedContentType } });
+
+        let taggedPlayers = null;
+        if (taggedRaw) {
+          try {
+            const parsed = JSON.parse(taggedRaw);
+            if (Array.isArray(parsed) && parsed.length) taggedPlayers = JSON.stringify(parsed.filter(Boolean));
+          } catch (e) { /* malformed tagging list — store nothing rather than fail the whole upload */ }
+        }
+        const capturedAtFinal = capturedAt || new Date().toISOString();
+
+        const result = await env.DB.prepare(
+          `INSERT INTO bfe_event_memories (event_id, round_id, media_type, r2_key, captured_by, caption, tagged_players, curation_status, captured_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?)`
+        ).bind(eventId, roundId, mediaType, key, capturedBy, caption, taggedPlayers, capturedAtFinal).run();
+
+        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id, r2_key: key, media_type: mediaType, event_id: eventId, round_id: roundId }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Upload error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /bfe/memories?event=<name>[&event_id=<id>][&round_id=<id>][&pin=]
+    // Public callers (no pin) only ever see curation_status='approved',
+    // enforced server-side same as GET /photos. Commissioner (pin) sees
+    // everything so the curation view (Step 7, not built yet) has something
+    // to work with later without this route needing to change.
+    if (request.method === 'GET' && url.pathname === '/bfe/memories') {
+      try {
+        const eventName = url.searchParams.get('event');
+        const eventIdQ  = url.searchParams.get('event_id');
+        const roundIdQ  = url.searchParams.get('round_id');
+        const pin       = url.searchParams.get('pin');
+        const isAdmin    = String(pin) === '7797';
+
+        let eventId = eventIdQ ? Number(eventIdQ) : null;
+        if (!eventId && eventName) {
+          const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
+          eventId = eventRow ? eventRow.id : null;
+        }
+        if (!eventId) {
+          return new Response(JSON.stringify({ ok: true, memories: [] }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        let sql = `SELECT id, event_id, round_id, media_type, captured_by, caption, tagged_players, section_label, is_trophy_moment, curation_status, captured_at, created_at FROM bfe_event_memories WHERE event_id = ?`;
+        const binds = [eventId];
+        if (roundIdQ) { sql += ` AND round_id = ?`; binds.push(Number(roundIdQ)); }
+        if (!isAdmin) { sql += ` AND curation_status = 'approved'`; }
+        sql += ` ORDER BY captured_at ASC`;
+        const { results } = await env.DB.prepare(sql).bind(...binds).all();
+        const memories = results.map(r => ({ ...r, tagged_players: r.tagged_players ? JSON.parse(r.tagged_players) : [] }));
+        return new Response(JSON.stringify({ ok: true, memories }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /bfe/memories/serve/:id — streams the R2 bytes. Public, no PIN,
+    // same posture as GET /photos/serve/:id — nothing sensitive lives in an
+    // approved capture that isn't already visible via the list route.
+    if (request.method === 'GET' && url.pathname.startsWith('/bfe/memories/serve/')) {
+      try {
+        const memId = url.pathname.split('/bfe/memories/serve/')[1];
+        const row = await env.DB.prepare(`SELECT r2_key, curation_status FROM bfe_event_memories WHERE id = ?`).bind(memId).first();
+        if (!row || !env.PHOTOS_BUCKET) {
+          return new Response('Not found', { status: 404, headers: corsHeaders });
+        }
+        const obj = await env.PHOTOS_BUCKET.get(row.r2_key);
+        if (!obj) return new Response('Not found', { status: 404, headers: corsHeaders });
+        const headers = new Headers(corsHeaders);
+        obj.writeHttpMetadata(headers);
+        headers.set('etag', obj.httpEtag);
+        headers.set('cache-control', 'public, max-age=31536000, immutable');
+        return new Response(obj.body, { headers });
+      } catch (e) {
+        return new Response('Error: ' + String(e.message || e), { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // PATCH /bfe/memories/:id — commissioner curation (Step 7 will build the
+    // UI that calls this; the route itself is built now so upload/list/serve/
+    // delete/PATCH ship as one complete surface). PIN-gated — same admin bar
+    // as every other host-only write in this file. Accepts any subset of
+    // curation_status ('approved'|'rejected'), is_trophy_moment, round_id
+    // (reassign — corrects a mis-timed auto/manual placement), section_label.
+    if (request.method === 'PATCH' && url.pathname.startsWith('/bfe/memories/')) {
+      let body;
+      try { body = await request.json(); } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const memId = url.pathname.split('/bfe/memories/')[1];
+      if (String(body.pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const fields = [];
+      const binds = [];
+      if (body.curation_status !== undefined && ['approved', 'rejected'].includes(body.curation_status)) {
+        fields.push('curation_status = ?'); binds.push(body.curation_status);
+      }
+      if (body.is_trophy_moment !== undefined) { fields.push('is_trophy_moment = ?'); binds.push(body.is_trophy_moment ? 1 : 0); }
+      if (body.round_id !== undefined) { fields.push('round_id = ?'); binds.push(body.round_id === null ? null : Number(body.round_id)); }
+      if (body.section_label !== undefined) { fields.push('section_label = ?'); binds.push(body.section_label || null); }
+      if (!fields.length) {
+        return new Response(JSON.stringify({ error: 'No recognized fields to update' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        binds.push(memId);
+        await env.DB.prepare(`UPDATE bfe_event_memories SET ${fields.join(', ')} WHERE id = ?`).bind(...binds).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // DELETE /bfe/memories/:id — same two-path auth as DELETE /photos/:id:
+    // ?pin=7797 (any), or ?requested_by=<name> matching the row's own
+    // captured_by (verified server-side, never trusted from the client).
+    // Permanent — R2 object + D1 row both go, no trash/undo, same posture as
+    // /photos.
+    if (request.method === 'DELETE' && url.pathname.startsWith('/bfe/memories/')) {
+      try {
+        const memId       = url.pathname.split('/bfe/memories/')[1];
+        const pin         = url.searchParams.get('pin');
+        const requestedBy = url.searchParams.get('requested_by');
+        const isAdmin     = String(pin) === '7797';
+        const row = await env.DB.prepare(`SELECT r2_key, captured_by FROM bfe_event_memories WHERE id = ?`).bind(memId).first();
+        if (!row) {
+          return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const norm = s => (s || '').trim().toLowerCase();
+        const isOwner = requestedBy && norm(requestedBy) === norm(row.captured_by);
+        if (!isAdmin && !isOwner) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (env.PHOTOS_BUCKET) { await env.PHOTOS_BUCKET.delete(row.r2_key); }
+        await env.DB.prepare(`DELETE FROM bfe_event_memories WHERE id = ?`).bind(memId).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Delete error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /bfe/memories/notes — same trust model as upload (no PIN, player
+    // + event identify the row). Body: event_id|event_name, round_id?,
+    // player, note (character cap enforced client-side per spec §9's 500
+    // decision — server just stores whatever arrives, same posture as the
+    // main worker's own /notes route).
+    if (request.method === 'POST' && url.pathname === '/bfe/memories/notes') {
+      let body;
+      try { body = await request.json(); } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { event_id, event_name, round_id, player, note } = body;
+      if (!player || !note) {
+        return new Response(JSON.stringify({ error: 'player and note are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        let eventId = event_id ? Number(event_id) : null;
+        if (!eventId && event_name) {
+          const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(event_name).first();
+          eventId = eventRow ? eventRow.id : null;
+        }
+        if (!eventId) {
+          return new Response(JSON.stringify({ error: 'Unknown event' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const result = await env.DB.prepare(
+          `INSERT INTO bfe_event_memory_notes (event_id, round_id, player, note) VALUES (?, ?, ?, ?)`
+        ).bind(eventId, round_id ? Number(round_id) : null, player, note).run();
+        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error saving note: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /bfe/memories/notes?event=<name>[&event_id=]  — open read, same as
+    // GET /bfe/memories (notes carry no curation gate — spec has no
+    // reject-by-exception concept for notes, only for photos/video).
+    if (request.method === 'GET' && url.pathname === '/bfe/memories/notes') {
+      try {
+        const eventName = url.searchParams.get('event');
+        const eventIdQ  = url.searchParams.get('event_id');
+        let eventId = eventIdQ ? Number(eventIdQ) : null;
+        if (!eventId && eventName) {
+          const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
+          eventId = eventRow ? eventRow.id : null;
+        }
+        if (!eventId) {
+          return new Response(JSON.stringify({ ok: true, notes: [] }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const { results } = await env.DB.prepare(
+          `SELECT * FROM bfe_event_memory_notes WHERE event_id = ? ORDER BY created_at ASC`
+        ).bind(eventId).all();
+        return new Response(JSON.stringify({ ok: true, notes: results }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
