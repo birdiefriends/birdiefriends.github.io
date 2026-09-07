@@ -2049,6 +2049,12 @@ body {
          not on any round actually being live (see renderWCRPBanner's own
          comment / findWCRPEligibleEvent). -->
     <div id="home-wcrp-banner"></div>
+    <!-- Dev-80 same day: standalone Trip Info widget — separate from
+         home-wcrp-banner on purpose (Brian: "I don't want to turn on the
+         Trip memories yet. If we add a widget all 16 will see it when
+         opening the APP") — roster-gated only, never gated on
+         memories_capture_open. See findTripInfoEligibleEvent(). -->
+    <div id="home-trip-info-banner"></div>
     <div id="home-host-entry"></div>
     <div id="home-hero"></div>
     <div id="home-announcements"></div>
@@ -4951,6 +4957,7 @@ function renderAll() {
   updateAdminNav();
   updateNewEventsBtn();
   renderWCRPBanner(); // Dev-80 — no-op until refreshBFEBackedIndex() has resolved at least once
+  renderTripInfoBanner(); // Dev-80 same day — separate widget, see its own comment
 }
 
 // ── Capacity engine ──────────────────────────────────────────────────────
@@ -13552,6 +13559,7 @@ async function refreshBFEBackedIndex() {
         const summary = {
           bfeEventId: e.id, umbrellaName: e.event_name,
           captureOpen: !!config.memoriesCaptureOpen, // Dev-80 (revised) — plain host toggle, no date math
+          tripInfoUrl: config.tripInfoUrl || null,   // Dev-80 same day — separate widget, see findTripInfoEligibleEvent()
           roster
         };
         nextSummaries.set(e.event_name, summary);
@@ -13607,6 +13615,49 @@ function findWCRPEligibleEvent() {
     return summary;
   }
   return null;
+}
+
+// Dev-80 same day — the Trip Info widget's own eligibility check, separate
+// from findWCRPEligibleEvent() above: roster-gated the same way, but
+// deliberately NOT gated on captureOpen (Brian doesn't want to flip Memories
+// capture on yet, but wants all 16 players seeing trip logistics — address,
+// packing list, food schedule — right away) AND requires the event to
+// actually have a tripInfoUrl configured (BFE-Admin section 1), so this is a
+// no-op for any BFE event that hasn't set one.
+function findTripInfoEligibleEvent() {
+  if (!currentPlayer) return null;
+  const me = currentPlayer.trim().toLowerCase();
+  for (const summary of _bfeEventSummaries.values()) {
+    if (!summary.tripInfoUrl) continue;
+    if (!summary.roster.has(me)) continue;
+    return summary;
+  }
+  return null;
+}
+
+// Kept out of the onclick markup itself (rather than interpolating the URL
+// directly into an inline handler string) so a stray apostrophe in an
+// admin-entered URL can't break the generated HTML.
+let _tripInfoUrl = null;
+function openTripInfoPage() {
+  if (_tripInfoUrl) window.open(_tripInfoUrl, '_blank');
+}
+function renderTripInfoBanner() {
+  const el = document.getElementById('home-trip-info-banner');
+  if (!el) return;
+  const evt = findTripInfoEligibleEvent();
+  if (!evt) { el.innerHTML = ''; _tripInfoUrl = null; return; }
+  _tripInfoUrl = evt.tripInfoUrl;
+  el.innerHTML = `<div class="live-banner" style="cursor:pointer" onclick="openTripInfoPage()">
+    <div class="live-banner-header">
+      <div class="live-dot" style="background:var(--gold)"></div>
+      <div style="flex:1">
+        <div class="live-banner-title">🏡 ${evt.umbrellaName} — Trip Info</div>
+        <div class="live-banner-sub">Address, what to bring, food schedule, and the pot — tap for details</div>
+      </div>
+      <div class="live-banner-chev">›</div>
+    </div>
+  </div>`;
 }
 
 let _wcrpEvt = null; // the summary object the open sheet is currently scoped to
