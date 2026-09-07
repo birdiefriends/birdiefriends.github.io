@@ -3713,3 +3713,10 @@ guardrail that would otherwise nag about it. `node --check` clean on `BFE-Admin.
 inlined scripts.
 
 No `portal_version.txt` bump — `BFE-Admin.html` only, no separate version file for it.
+
+**Dev-80 update, same day — critical bug fix: BFE-backed card matching was broken for EVERY round, not just Practice:**
+Brian caught this live: he named the Practice round in Section 4 exactly as it appears in the real Jotform-sourced event list ("2026 Wally Cup -Practice Rd", picked via "Load round names" — confirmed this field is always the FULL real event title, matched byte-for-byte against Jotform/Gatherings, same string Close Round's own round-select and its "doesn't start with the Event name" warning already depend on — not a short label like "Rd1"), took a test photo from the real Portal card, and got the OLD per-card photo sheet (`openCardPhotoSheet`) instead of the new pipeline. Root cause: `refreshBFEBackedIndex()` in `portal.html` built its match keys as `` `${e.event_name} - ${r.name}` `` — since `r.name` is already the full title, this double-prefixed every key ("...Wally Cup - 2026 Wally Cup - Rd1") so **no round ever matched any real card, for any event** — not a Practice-specific gap. This means every "successful" capture test earlier this session (the very first Rd1 photo, the Data & Reset roundtrip) was silently going through the OLD `event_photos`/`GATHERINGS_API` path the whole time; nothing had actually exercised the new BFE pipeline yet. Fixed: index by `r.name` directly, dropped the now-redundant `rounds.length === 1` bare-umbrella-name fallback (a bare single-round title is just `r.name` with no round suffix, already covered).
+
+`portal_version.txt` bumped `v4.1.1` → `v4.1.2`. `node --check` clean.
+
+**Still needs a real re-test** — pick the Practice card (or any round) from Portal, take a photo, and check `SELECT * FROM bfe_event_memories;` in D1. This is the first attempt that has a real chance of actually hitting the new table.
