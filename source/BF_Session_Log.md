@@ -3590,3 +3590,74 @@ stretching this session across all seven remaining steps.
 **Session Dev-79 fully closed.**
 
 **Chat-rename string:** `Dev-79 - Memories Capture Rationalized & Spec'd (EventCard vs WCRP Widget), Setup §4 Round-Picker/Venue-Match/Tee-Time Built & Auto-Connected, Jotform Date&Time Parse Bug Fixed`
+
+## Dev-80 · 2026-09-07 — WCRP Memories Pass 2 Built (§8 steps 3+4+5+6), Not Yet Deployed/Tested Live
+
+Picked up the carry-forward from Dev-79's close: the rest of `BF_WCRP_Memories_Spec.md`'s
+§8 build order. Per `BF_BFE_Memories_Plan.md` §6's own "Pass 1/Pass 2" framing (superseded
+for ordering by the Spec, but still the term Brian used to scope this session): Pass 2 is
+the memory tables/routes on BFE_API, the widget, and the Live Panel repoint, built together
+so there's never a window writing to the old bucket. Step 6 (EventCard icon disabling) rode
+along since it needed the identical BFE-backed answer as the repoint/widget eligibility
+checks — cheap to do now rather than a separate pass.
+
+**Three open decisions resolved before building (asked directly rather than guessed):**
+grace window is commissioner-configurable per event (not a hardcoded ±1 day — added
+`memories_grace_hours` on `bfe_events`, wired into BFE-Admin's Setup section 1, defaults to
+24h server-side when unset so a pre-Dev-80 event doesn't reject every pre/post-trip
+capture); notes cap is 500 chars (vs EventCard's 200); player-tagging picker is built now,
+not deferred to a fast-follow.
+
+**Built, not yet pushed or tested against live D1/Jotform (this sandbox can't reach
+Cloudflare or Jotform directly — everything below is reviewed against the codebase's own
+conventions and Node-syntax-checked, not run):**
+
+- `BF_Experiences.js`: `bfe_event_memories` + `bfe_event_memory_notes` tables (schema
+  comment block only — Brian still runs the actual `CREATE TABLE`/`ALTER TABLE` in the D1
+  console, same as every other migration in this file), plus seven routes: `POST
+  /bfe/memories/upload` (multipart, mirrors the main worker's `/photos/upload` pipeline but
+  simplified — no EXIF/dedup/window-skip logic, no server-side section classification;
+  round_id stored exactly as sent, NULL from the widget), `GET /bfe/memories`, `GET
+  /bfe/memories/serve/:id`, `PATCH /bfe/memories/:id` (curation — built now for Step 7 to
+  use later, no UI calls it yet), `DELETE /bfe/memories/:id`, `POST`/`GET
+  /bfe/memories/notes`. Needs the `PHOTOS_BUCKET` R2 binding added to THIS Worker in the
+  Cloudflare dashboard (it only had a D1 binding before) — own namespace under the bucket
+  (`bfe/<event_id>/...`), never the main worker's `photos/<slug>/<section>/...` prefix
+  (spec's "published only to the WCRP" ownership principle). Also added `id` to each round
+  in `GET /bfe/events`' response (read-only convenience — Live Panel needs a real round_id
+  for the repoint below; this route was previously name-only by design, see its own
+  comment — returning the id doesn't reintroduce the orphaning risk that comment warns
+  about, only STORING it long-term across a Setup re-save would).
+- `BFE-Admin.html`: `memoriesGraceHours` input next to Event end date, wired through
+  `buildEventConfig`/save payload/`rehydrateFormFromConfig`.
+- `portal.html`: `refreshBFEBackedIndex()` (fire-and-forget after `loadAllData()`, re-runs
+  `renderAll()` once it resolves) builds a card-name → BFE info map off
+  `BFE_API`'s `/bfe/events-list` + `/bfe/events`, same round-name-suffix convention
+  `bfeEventNameCandidates` already uses, just built forward instead of stripped backward.
+  `livePanelUploadCore` branches on it — a BFE-backed live round posts straight to
+  `POST /bfe/memories/upload` with a resolved `round_id`; everything else is untouched,
+  still `GATHERINGS_API/photos/upload`. `buildEventCard`'s icon-action-row omits Photos and
+  Notes entirely for a BFE-backed card. New `home-wcrp-banner` (persistent, not tied to a
+  live round — gated on trip-roster membership + `[event_date, event_end_date] ±
+  memories_grace_hours`) opens a new `wcrp-memories-modal` sheet: Photo/Video/Upload capture
+  (reuses `compressImageFile`/`readVideoDuration`/`PHOTO_MAX_BYTES` from the existing Live
+  Panel/card-photo pipelines) with a caption + full player-tagging checkbox picker before
+  each upload confirms, plus a 500-char notes thread underneath.
+
+**Not done this session — explicitly deferred, not forgotten:**
+- Step 7 (commissioner curation view + Results-page wiring) — spec's render-time
+  `[tee_time, MAX(scorecard captured_at)]` round auto-classification lives here, not in
+  this pass; `round_id` on a widget-sourced memory stays NULL until Step 7 resolves it.
+- The actual D1 migration (`ALTER TABLE`/`CREATE TABLE`) and the `PHOTOS_BUCKET` binding —
+  Brian runs both, same as every prior migration; nothing above works live until then.
+- No real end-to-end test against production data — this sandbox has no path to Cloudflare/
+  D1/Jotform, so verification is code-review-level only (Node `--check` syntax pass on both
+  HTML files' inline scripts, cross-referenced against the existing `/photos` and
+  card-photo-sheet/card-notes-sheet patterns this was built to match). Per the bootstrap
+  doc's own standing rule, this needs a real pass against live data before being called done.
+
+`portal_version.txt` bumped to `v4.1.0 · 2026-09-07` (minor bump — new capture surface, not
+a patch). Files staged for `bf_push.ps1` under their `$FileMap` names: `portal.html`,
+`portal_version.txt`, `BF_Experiences.js`, `BFE-Admin.html`.
+
+**Session Dev-80 in progress — not closed.**
