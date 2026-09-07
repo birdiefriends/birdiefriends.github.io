@@ -32,6 +32,15 @@ body{margin:0;background:var(--navy);color:var(--white);font-family:'DM Sans',sa
 .maps-link:hover{text-decoration:underline;}
 .bring-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .bring-item{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);border-radius:10px;padding:10px 12px;font-size:13.5px;display:flex;align-items:center;gap:8px;}
+.round-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--white-faintest);}
+.round-row:first-child{padding-top:0;}
+.round-row:last-child{border-bottom:none;padding-bottom:0;}
+.round-day{font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent-light);font-weight:700;width:60px;flex-shrink:0;}
+.round-info{flex:1;min-width:0;}
+.round-name{font-size:14px;font-weight:600;color:var(--white);}
+.round-venue{font-size:12px;color:var(--white-dim);margin-top:1px;}
+.round-time{font-family:'Baloo 2',sans-serif;font-size:13px;font-weight:700;color:var(--white);white-space:nowrap;flex-shrink:0;}
+.round-note{margin-top:1rem;padding-top:1rem;border-top:1px dashed var(--white-faint);font-size:12.5px;color:var(--white-dim);line-height:1.6;}
 .food-day{margin-bottom:0.9rem;}
 .food-day:last-child{margin-bottom:0;}
 .food-day-label{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent-light);font-weight:700;margin-bottom:3px;}
@@ -64,6 +73,55 @@ body{margin:0;background:var(--navy);color:var(--white);font-family:'DM Sans',sa
       <div class="card">
         <div class="addr-line">102 Shore Rd, Tafton, PA</div>
         <a class="maps-link" href="https://maps.google.com/?q=102+Shore+Rd,+Tafton,+PA" target="_blank" rel="noopener">🧭 Get Directions</a>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><span class="section-icon">⛳</span><div class="section-title">Golf Schedule</div></div>
+      <div class="card">
+        <div class="round-row">
+          <div class="round-day">Thu</div>
+          <div class="round-info">
+            <div class="round-name">Practice Round</div>
+            <div class="round-venue">Paupack Hills Golf Club</div>
+          </div>
+          <div class="round-time">1:00 PM</div>
+        </div>
+        <div class="round-row">
+          <div class="round-day">Fri</div>
+          <div class="round-info">
+            <div class="round-name">Round 1</div>
+            <div class="round-venue">Honesdale Golf Club</div>
+          </div>
+          <div class="round-time">10:00 AM</div>
+        </div>
+        <div class="round-row">
+          <div class="round-day">Sat</div>
+          <div class="round-info">
+            <div class="round-name">Round 2</div>
+            <div class="round-venue">Skytop Lodge</div>
+          </div>
+          <div class="round-time">8:00 AM</div>
+        </div>
+        <div class="round-row">
+          <div class="round-day">Sat</div>
+          <div class="round-info">
+            <div class="round-name">2Man Scramble</div>
+            <div class="round-venue">Skytop Lodge</div>
+          </div>
+          <div class="round-time">2:30 PM</div>
+        </div>
+        <div class="round-row">
+          <div class="round-day">Sun</div>
+          <div class="round-info">
+            <div class="round-name">Round 3</div>
+            <div class="round-venue">Paupack Hills Golf Club</div>
+          </div>
+          <div class="round-time">9:30 AM</div>
+        </div>
+        <div class="round-note">
+          Times above are each round's tee-off window — check the Portal's Groupings for your exact tee time and group.
+        </div>
       </div>
     </div>
 
