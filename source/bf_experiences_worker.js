@@ -282,13 +282,18 @@
 // dashboard (it doesn't have one yet; every other table here is D1-only).
 //
 //   ALTER TABLE bfe_events ADD COLUMN memories_grace_hours INTEGER;
-//   -- Commissioner-set eligibility window (spec §9) around [event_date,
-//   -- event_end_date||event_date] for pre/post-trip capture — Brian's call
-//   -- (Dev-80) was per-event configurable rather than a hardcoded default,
-//   -- since a one-day scramble and a 4-day Wally Cup want different windows.
-//   -- NULL means "not set yet" — routes below fall back to 24 (the spec
-//   -- draft's proposed ±1 day) rather than 0, so an event saved before this
-//   -- column existed doesn't suddenly reject all pre/post-trip captures.
+//   -- Superseded same-day (Dev-80, live-tested against the real WC event):
+//   -- a computed date-range-±-hours eligibility window sounded fine on paper
+//   -- but Brian's real-world call was "timers have caused us issues" — this
+//   -- column stays in the schema (harmless, unread) but nothing gates on it
+//   -- anymore. See memories_capture_open below, the actual live gate now.
+//   ALTER TABLE bfe_events ADD COLUMN memories_capture_open INTEGER NOT NULL DEFAULT 0;
+//   -- Plain host on/off switch — a commissioner flips this in BFE-Admin when
+//   -- the trip's actual capture window should be open, and back off after.
+//   -- No date math anywhere: WCRP widget eligibility (portal.html) is just
+//   -- "is this player on the roster AND is this true," full stop. Defaults
+//   -- to 0/closed so a freshly-saved event doesn't silently start accepting
+//   -- captures before the host means it to.
 //
 //   CREATE TABLE bfe_event_memories (
 //     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -731,7 +736,7 @@ export default {
       try { body = await request.json(); } catch (e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { event_name, event_family, event_date, event_end_date, memories_grace_hours, hcp_mode, status, tee_policy, payout_plan, rounds, roster, pin } = body;
+      const { event_name, event_family, event_date, event_end_date, memories_capture_open, hcp_mode, status, tee_policy, payout_plan, rounds, roster, pin } = body;
       if (String(pin) !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -743,18 +748,18 @@ export default {
         // value here just means "single-day event," same as before this
         // column existed. Requires the bfe_events.event_end_date column
         // (migration below) to already exist — see Dev-77 note.
-        // Dev-80: memories_grace_hours same treatment — optional, NULL until
-        // a host sets it, see the column's own migration note above.
-        const graceHours = (memories_grace_hours === undefined || memories_grace_hours === null || memories_grace_hours === '')
-          ? null : Number(memories_grace_hours);
+        // Dev-80 (revised same day): memories_capture_open is the plain on/off
+        // switch that replaced the grace-window timer idea — see this
+        // column's own migration note above for why.
+        const captureOpen = memories_capture_open ? 1 : 0;
         await env.DB.prepare(
-          `INSERT INTO bfe_events (event_name, event_family, event_date, event_end_date, memories_grace_hours, hcp_mode, status, tee_policy, payout_plan, updated_at)
+          `INSERT INTO bfe_events (event_name, event_family, event_date, event_end_date, memories_capture_open, hcp_mode, status, tee_policy, payout_plan, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
            ON CONFLICT(event_name) DO UPDATE SET
              event_family = excluded.event_family, event_date = excluded.event_date, event_end_date = excluded.event_end_date,
-             memories_grace_hours = excluded.memories_grace_hours, hcp_mode = excluded.hcp_mode, status = excluded.status,
+             memories_capture_open = excluded.memories_capture_open, hcp_mode = excluded.hcp_mode, status = excluded.status,
              tee_policy = excluded.tee_policy, payout_plan = excluded.payout_plan, updated_at = excluded.updated_at`
-        ).bind(event_name, event_family || null, event_date || null, event_end_date || null, (graceHours === null || isNaN(graceHours)) ? null : graceHours,
+        ).bind(event_name, event_family || null, event_date || null, event_end_date || null, captureOpen,
                hcp_mode || 'fixed', status || 'draft',
                tee_policy ? JSON.stringify(tee_policy) : null, payout_plan ? JSON.stringify(payout_plan) : null).run();
 
@@ -846,7 +851,7 @@ export default {
 
         const config = {
           eventName: eventRow.event_name, eventFamily: eventRow.event_family, eventDate: eventRow.event_date, eventEndDate: eventRow.event_end_date,
-          memoriesGraceHours: (eventRow.memories_grace_hours === null || eventRow.memories_grace_hours === undefined) ? null : eventRow.memories_grace_hours,
+          memoriesCaptureOpen: !!eventRow.memories_capture_open,
           hcpMode: eventRow.hcp_mode,
           status: eventRow.status, teePolicy: eventRow.tee_policy ? JSON.parse(eventRow.tee_policy) : null,
           payout: eventRow.payout_plan ? JSON.parse(eventRow.payout_plan) : null,
