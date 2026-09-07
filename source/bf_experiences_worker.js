@@ -298,8 +298,22 @@
 //   CREATE TABLE bfe_event_memories (
 //     id INTEGER PRIMARY KEY AUTOINCREMENT,
 //     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
-//     round_id INTEGER REFERENCES bfe_event_rounds(id),
-//                            -- NULL = not yet placed in a round's timeline.
+//     round_name TEXT,       -- NULL = not yet placed in a round's timeline.
+//                            -- Dev-80 same-day fix (Brian's real Save blew up
+//                            -- on this the moment a memory referenced a round):
+//                            -- this was originally `round_id INTEGER REFERENCES
+//                            -- bfe_event_rounds(id)`, but bfe_event_rounds rows
+//                            -- get fully DELETEd/re-INSERTed on every Setup Save
+//                            -- (see the "Results layer" note above) — the exact
+//                            -- same instability bfe_round_results/bfe_round_
+//                            -- skins/etc. already solved by keying on round_NAME
+//                            -- instead. A hard FK on round_id didn't just risk
+//                            -- silently orphaning like those tables warned
+//                            -- about — with real FK enforcement on, it hard-
+//                            -- failed the ENTIRE Setup Save with SQLITE_
+//                            -- CONSTRAINT_FOREIGNKEY the instant any round had
+//                            -- a memory attached to it. round_name is what's
+//                            -- stable, same reasoning as the results layer.
 //                            -- Live Panel repoint (spec §6, portal.html) sends
 //                            -- this explicitly since it already knows which
 //                            -- live round the capture belongs to; the WCRP
@@ -308,7 +322,7 @@
 //                            -- render-time [tee_time, MAX(scorecard
 //                            -- captured_at)] auto-classification is Step 7
 //                            -- (Results-page wiring) work, deliberately not
-//                            -- built in this pass — round_id stored here is
+//                            -- built in this pass — round_name stored here is
 //                            -- authoritative as-is until that lands.
 //     media_type TEXT NOT NULL,      -- 'photo' | 'video'
 //     r2_key TEXT NOT NULL,          -- bfe/<event_id>/<uuid>.<ext> — own
@@ -332,11 +346,49 @@
 //   CREATE TABLE bfe_event_memory_notes (
 //     id INTEGER PRIMARY KEY AUTOINCREMENT,
 //     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
-//     round_id INTEGER REFERENCES bfe_event_rounds(id),   -- same NULL convention as above
+//     round_name TEXT,   -- same round_id -> round_name fix as above, same NULL convention
 //     player TEXT NOT NULL,
 //     note TEXT NOT NULL,
 //     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 //   );
+//
+//   -- One-time migration for a Worker that already ran the ORIGINAL
+//   -- round_id-based CREATE TABLE statements above (SQLite can't ALTER a
+//   -- column's type/constraints or drop a FK in place, so this rebuilds both
+//   -- tables — safe to run even with existing rows, including the one real
+//   -- test photo from live-testing this pass):
+//   CREATE TABLE bfe_event_memories_new (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
+//     round_name TEXT,
+//     media_type TEXT NOT NULL,
+//     r2_key TEXT NOT NULL,
+//     captured_by TEXT NOT NULL,
+//     caption TEXT,
+//     tagged_players TEXT,
+//     section_label TEXT,
+//     is_trophy_moment INTEGER DEFAULT 0,
+//     curation_status TEXT NOT NULL DEFAULT 'approved',
+//     captured_at TEXT NOT NULL,
+//     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+//   );
+//   INSERT INTO bfe_event_memories_new (id, event_id, round_name, media_type, r2_key, captured_by, caption, tagged_players, section_label, is_trophy_moment, curation_status, captured_at, created_at)
+//     SELECT id, event_id, NULL, media_type, r2_key, captured_by, caption, tagged_players, section_label, is_trophy_moment, curation_status, captured_at, created_at FROM bfe_event_memories;
+//   DROP TABLE bfe_event_memories;
+//   ALTER TABLE bfe_event_memories_new RENAME TO bfe_event_memories;
+//
+//   CREATE TABLE bfe_event_memory_notes_new (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     event_id INTEGER NOT NULL REFERENCES bfe_events(id),
+//     round_name TEXT,
+//     player TEXT NOT NULL,
+//     note TEXT NOT NULL,
+//     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+//   );
+//   INSERT INTO bfe_event_memory_notes_new (id, event_id, round_name, player, note, created_at)
+//     SELECT id, event_id, NULL, player, note, created_at FROM bfe_event_memory_notes;
+//   DROP TABLE bfe_event_memory_notes;
+//   ALTER TABLE bfe_event_memory_notes_new RENAME TO bfe_event_memory_notes;
 // ══════════════════════════════════════════════════════════════════════════
 
 
@@ -830,11 +882,14 @@ export default {
 
         const rounds = roundRows.map(r => ({
           id: r.id,   // Dev-80: read-only convenience for callers that need the
-                      // real row id for THIS load (e.g. Live Panel repoint
-                      // resolving round_id for a memories upload) — never
-                      // meant to be cached/reused across a Setup re-save, see
-                      // this route's own comment above on why round_id isn't
-                      // the join key anywhere else in this file.
+                      // real row id for THIS load — never meant to be cached/
+                      // reused across a Setup re-save (see this route's own
+                      // comment above on why round IDs aren't the join key
+                      // anywhere else in this file). The memories/notes
+                      // upload paths use round NAME instead (r.name below),
+                      // same fix as bfe_round_results/bfe_round_skins — this
+                      // id field is kept only in case a future caller needs
+                      // it, not currently used by WCRP Memories.
           name: r.name, engine: r.engine,
           engineParams: r.engine_params ? JSON.parse(r.engine_params) : undefined,
           influencers: r.influencers ? JSON.parse(r.influencers) : [],
@@ -1069,7 +1124,7 @@ export default {
     // No PIN — same trust-based model as every other player-facing capture
     // in this app (Scorecard/CttP/photos): event_id + captured_by identify
     // the request, not a shared admin secret.
-    // Body fields: event_id (or event_name), round_id?, captured_by, caption?,
+    // Body fields: event_id (or event_name), round_name?, captured_by, caption?,
     // tagged_players? (JSON array string), captured_at?, file.
     const MEMORIES_MAX_BYTES = 25 * 1024 * 1024;
     if (request.method === 'POST' && url.pathname === '/bfe/memories/upload') {
@@ -1084,7 +1139,7 @@ export default {
         }
         const eventIdRaw   = form.get('event_id');
         const eventName    = form.get('event_name');
-        const roundIdRaw   = form.get('round_id');
+        const roundNameRaw = form.get('round_name'); // Dev-80 fix — was round_id, see schema comment above
         const capturedBy   = form.get('captured_by');
         const caption      = form.get('caption') || null;
         const taggedRaw    = form.get('tagged_players');
@@ -1119,7 +1174,7 @@ export default {
         if (!eventId) {
           return new Response(JSON.stringify({ error: 'event_id or event_name is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        const roundId = (roundIdRaw !== null && roundIdRaw !== undefined && roundIdRaw !== '') ? Number(roundIdRaw) : null;
+        const roundName = (roundNameRaw !== null && roundNameRaw !== undefined && roundNameRaw !== '') ? String(roundNameRaw) : null;
 
         const fileBytes = await file.arrayBuffer();
         const fileSize   = file.size;
@@ -1151,11 +1206,11 @@ export default {
         const capturedAtFinal = capturedAt || new Date().toISOString();
 
         const result = await env.DB.prepare(
-          `INSERT INTO bfe_event_memories (event_id, round_id, media_type, r2_key, captured_by, caption, tagged_players, curation_status, captured_at)
+          `INSERT INTO bfe_event_memories (event_id, round_name, media_type, r2_key, captured_by, caption, tagged_players, curation_status, captured_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?)`
-        ).bind(eventId, roundId, mediaType, key, capturedBy, caption, taggedPlayers, capturedAtFinal).run();
+        ).bind(eventId, roundName, mediaType, key, capturedBy, caption, taggedPlayers, capturedAtFinal).run();
 
-        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id, r2_key: key, media_type: mediaType, event_id: eventId, round_id: roundId }), {
+        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id, r2_key: key, media_type: mediaType, event_id: eventId, round_name: roundName }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       } catch (e) {
@@ -1163,17 +1218,17 @@ export default {
       }
     }
 
-    // GET /bfe/memories?event=<name>[&event_id=<id>][&round_id=<id>][&pin=]
+    // GET /bfe/memories?event=<name>[&event_id=<id>][&round_name=<name>][&pin=]
     // Public callers (no pin) only ever see curation_status='approved',
     // enforced server-side same as GET /photos. Commissioner (pin) sees
     // everything so the curation view (Step 7, not built yet) has something
     // to work with later without this route needing to change.
     if (request.method === 'GET' && url.pathname === '/bfe/memories') {
       try {
-        const eventName = url.searchParams.get('event');
-        const eventIdQ  = url.searchParams.get('event_id');
-        const roundIdQ  = url.searchParams.get('round_id');
-        const pin       = url.searchParams.get('pin');
+        const eventName  = url.searchParams.get('event');
+        const eventIdQ   = url.searchParams.get('event_id');
+        const roundNameQ = url.searchParams.get('round_name'); // Dev-80 fix — was round_id
+        const pin        = url.searchParams.get('pin');
         const isAdmin    = String(pin) === '7797';
 
         let eventId = eventIdQ ? Number(eventIdQ) : null;
@@ -1184,9 +1239,9 @@ export default {
         if (!eventId) {
           return new Response(JSON.stringify({ ok: true, memories: [] }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        let sql = `SELECT id, event_id, round_id, media_type, captured_by, caption, tagged_players, section_label, is_trophy_moment, curation_status, captured_at, created_at FROM bfe_event_memories WHERE event_id = ?`;
+        let sql = `SELECT id, event_id, round_name, media_type, captured_by, caption, tagged_players, section_label, is_trophy_moment, curation_status, captured_at, created_at FROM bfe_event_memories WHERE event_id = ?`;
         const binds = [eventId];
-        if (roundIdQ) { sql += ` AND round_id = ?`; binds.push(Number(roundIdQ)); }
+        if (roundNameQ) { sql += ` AND round_name = ?`; binds.push(roundNameQ); }
         if (!isAdmin) { sql += ` AND curation_status = 'approved'`; }
         sql += ` ORDER BY captured_at ASC`;
         const { results } = await env.DB.prepare(sql).bind(...binds).all();
@@ -1223,7 +1278,7 @@ export default {
     // UI that calls this; the route itself is built now so upload/list/serve/
     // delete/PATCH ship as one complete surface). PIN-gated — same admin bar
     // as every other host-only write in this file. Accepts any subset of
-    // curation_status ('approved'|'rejected'), is_trophy_moment, round_id
+    // curation_status ('approved'|'rejected'), is_trophy_moment, round_name
     // (reassign — corrects a mis-timed auto/manual placement), section_label.
     if (request.method === 'PATCH' && url.pathname.startsWith('/bfe/memories/')) {
       let body;
@@ -1240,7 +1295,7 @@ export default {
         fields.push('curation_status = ?'); binds.push(body.curation_status);
       }
       if (body.is_trophy_moment !== undefined) { fields.push('is_trophy_moment = ?'); binds.push(body.is_trophy_moment ? 1 : 0); }
-      if (body.round_id !== undefined) { fields.push('round_id = ?'); binds.push(body.round_id === null ? null : Number(body.round_id)); }
+      if (body.round_name !== undefined) { fields.push('round_name = ?'); binds.push(body.round_name === null ? null : String(body.round_name)); }
       if (body.section_label !== undefined) { fields.push('section_label = ?'); binds.push(body.section_label || null); }
       if (!fields.length) {
         return new Response(JSON.stringify({ error: 'No recognized fields to update' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -1283,7 +1338,7 @@ export default {
     }
 
     // POST /bfe/memories/notes — same trust model as upload (no PIN, player
-    // + event identify the row). Body: event_id|event_name, round_id?,
+    // + event identify the row). Body: event_id|event_name, round_name?,
     // player, note (character cap enforced client-side per spec §9's 500
     // decision — server just stores whatever arrives, same posture as the
     // main worker's own /notes route).
@@ -1292,7 +1347,7 @@ export default {
       try { body = await request.json(); } catch (e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { event_id, event_name, round_id, player, note } = body;
+      const { event_id, event_name, round_name, player, note } = body; // Dev-80 fix — was round_id
       if (!player || !note) {
         return new Response(JSON.stringify({ error: 'player and note are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -1306,8 +1361,8 @@ export default {
           return new Response(JSON.stringify({ error: 'Unknown event' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         const result = await env.DB.prepare(
-          `INSERT INTO bfe_event_memory_notes (event_id, round_id, player, note) VALUES (?, ?, ?, ?)`
-        ).bind(eventId, round_id ? Number(round_id) : null, player, note).run();
+          `INSERT INTO bfe_event_memory_notes (event_id, round_name, player, note) VALUES (?, ?, ?, ?)`
+        ).bind(eventId, round_name || null, player, note).run();
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error saving note: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
