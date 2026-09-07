@@ -288,6 +288,14 @@
 //   -- column stays in the schema (harmless, unread) but nothing gates on it
 //   -- anymore. See memories_capture_open below, the actual live gate now.
 //   ALTER TABLE bfe_events ADD COLUMN memories_capture_open INTEGER NOT NULL DEFAULT 0;
+//   -- Dev-80 same day, second widget: a standalone "Trip Info" page link
+//   -- (address, packing list, food schedule, economics — logistics content,
+//   -- not photos/notes) shown on Home to this event's roster, deliberately
+//   -- NOT gated by memories_capture_open — Brian wants players able to see
+//   -- trip logistics well before he's ready to open Memories capture. NULL/
+//   -- blank = no widget shown for this event at all (portal.html's
+//   -- findTripInfoEligibleEvent() skips any summary with no tripInfoUrl).
+//   ALTER TABLE bfe_events ADD COLUMN trip_info_url TEXT;
 //   -- Plain host on/off switch — a commissioner flips this in BFE-Admin when
 //   -- the trip's actual capture window should be open, and back off after.
 //   -- No date math anywhere: WCRP widget eligibility (portal.html) is just
@@ -788,7 +796,7 @@ export default {
       try { body = await request.json(); } catch (e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { event_name, event_family, event_date, event_end_date, memories_capture_open, hcp_mode, status, tee_policy, payout_plan, rounds, roster, pin } = body;
+      const { event_name, event_family, event_date, event_end_date, memories_capture_open, trip_info_url, hcp_mode, status, tee_policy, payout_plan, rounds, roster, pin } = body;
       if (String(pin) !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -805,13 +813,13 @@ export default {
         // column's own migration note above for why.
         const captureOpen = memories_capture_open ? 1 : 0;
         await env.DB.prepare(
-          `INSERT INTO bfe_events (event_name, event_family, event_date, event_end_date, memories_capture_open, hcp_mode, status, tee_policy, payout_plan, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `INSERT INTO bfe_events (event_name, event_family, event_date, event_end_date, memories_capture_open, trip_info_url, hcp_mode, status, tee_policy, payout_plan, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
            ON CONFLICT(event_name) DO UPDATE SET
              event_family = excluded.event_family, event_date = excluded.event_date, event_end_date = excluded.event_end_date,
-             memories_capture_open = excluded.memories_capture_open, hcp_mode = excluded.hcp_mode, status = excluded.status,
+             memories_capture_open = excluded.memories_capture_open, trip_info_url = excluded.trip_info_url, hcp_mode = excluded.hcp_mode, status = excluded.status,
              tee_policy = excluded.tee_policy, payout_plan = excluded.payout_plan, updated_at = excluded.updated_at`
-        ).bind(event_name, event_family || null, event_date || null, event_end_date || null, captureOpen,
+        ).bind(event_name, event_family || null, event_date || null, event_end_date || null, captureOpen, trip_info_url || null,
                hcp_mode || 'fixed', status || 'draft',
                tee_policy ? JSON.stringify(tee_policy) : null, payout_plan ? JSON.stringify(payout_plan) : null).run();
 
@@ -907,6 +915,7 @@ export default {
         const config = {
           eventName: eventRow.event_name, eventFamily: eventRow.event_family, eventDate: eventRow.event_date, eventEndDate: eventRow.event_end_date,
           memoriesCaptureOpen: !!eventRow.memories_capture_open,
+          tripInfoUrl: eventRow.trip_info_url || null,
           hcpMode: eventRow.hcp_mode,
           status: eventRow.status, teePolicy: eventRow.tee_policy ? JSON.parse(eventRow.tee_policy) : null,
           payout: eventRow.payout_plan ? JSON.parse(eventRow.payout_plan) : null,
