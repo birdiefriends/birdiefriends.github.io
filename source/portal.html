@@ -8059,6 +8059,14 @@ function isRegisteredFor(evtName) {
 // Render the live banner into #home-live-banner
 function renderLiveBanner() {
   const el = document.getElementById('home-live-banner');
+  // Dev-80 same-day — keep the two Home banners in sync from one call site
+  // rather than hunting every renderLiveBanner() caller (there are ~30):
+  // whether a round is "live for me" can only change here, and
+  // renderWCRPBanner() is a cheap idempotent DOM write, so recomputing it
+  // alongside — on EVERY exit path, including the early "nothing live"
+  // return below — is harmless even on calls that are just refreshing Live
+  // Panel's own innards.
+  renderWCRPBanner();
   if (!el) return;
   const evt = getLiveEvent();
   if (!evt || !currentPlayer || !isRegisteredFor(evt.name)) {
@@ -8527,11 +8535,17 @@ function buildLivePanel(evt) {
       </button>`
     : '';
 
+  // Dev-80 same-day (Brian) — Notes needs a Live Panel entry point too: the
+  // old per-card Notes icon (openCardNoteSheet) is hidden for BFE-backed
+  // cards same as Photos, so without this a BFE round had NO way to leave a
+  // text note at all, on-course or off. isBFEBackedCard check happens once
+  // here and threads through to the button label + compose box below.
+  const isBfeRound = isBFEBackedCard(evt);
   return `<div class="live-panel">
     ${groupingsLink}
     <div class="live-section">
-      <div class="live-section-header"><span class="lsh-icon">📸</span>Photos</div>
-      <div class="live-section-body">${buildLivePanelPhotoSection()}</div>
+      <div class="live-section-header"><span class="lsh-icon">📸</span>${isBfeRound ? 'Photos &amp; Notes' : 'Photos'}</div>
+      <div class="live-section-body">${buildLivePanelPhotoSection(evt)}</div>
     </div>
     <div class="live-section">
       <div class="live-section-header"><span class="lsh-icon">🦅</span>Birdie Alert</div>
@@ -8578,7 +8592,25 @@ function setLivePhotoBusy(busy, statusText) {
   });
 }
 
-function buildLivePanelPhotoSection() {
+function buildLivePanelPhotoSection(evt) {
+  // Dev-80 same-day — Note button + inline compose, BFE-backed rounds only
+  // (a non-BFE round already has the old per-card Notes icon available on
+  // the card itself, outside Live Panel — this isn't trying to replace
+  // that). Text goes straight to POST /bfe/memories/notes tagged with this
+  // round's name, same round_name convention the photo/video path uses.
+  const bfeInfo = isBFEBackedCard(evt) ? _bfeBackedIndex.get(evt.name) : null;
+  const noteBtn = bfeInfo ? `
+      <button class="icon-action-btn" onclick="toggleLiveNoteCompose()">
+        <span class="icon-action-badge secondary">💬</span>
+        <span class="icon-action-label">Note</span>
+      </button>` : '';
+  const noteCompose = bfeInfo ? `
+    <div id="live-note-compose" style="display:none;margin-top:10px">
+      <textarea id="live-note-input" maxlength="500" rows="2" placeholder="Leave a note for this round… (500 char max)"
+        style="width:100%;padding:9px 11px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.2);
+          background:rgba(255,255,255,0.06);color:#fff;font-size:0.85rem;font-family:inherit;resize:none;box-sizing:border-box;margin-bottom:6px"></textarea>
+      <button class="btn btn-secondary btn-sm" style="width:100%" onclick="submitLiveNote()">📌 Add Note</button>
+    </div>` : '';
   return `
     <!-- Split from one combined image/*,video/* input into two single-type
          inputs (Dev-65) — Android's Chrome increasingly ignores
@@ -8604,9 +8636,40 @@ function buildLivePanelPhotoSection() {
         <span class="icon-action-badge secondary">⬆️</span>
         <span class="icon-action-label">Upload</span>
       </button>
+      ${noteBtn}
     </div>
     <div id="live-photo-status" style="font-size:0.75rem;color:rgba(255,255,255,0.6);margin-top:8px;text-align:center"></div>
-    <div id="live-photo-dialog" style="display:none"></div>`;
+    <div id="live-photo-dialog" style="display:none"></div>
+    ${noteCompose}`;
+}
+
+function toggleLiveNoteCompose() {
+  const el = document.getElementById('live-note-compose');
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function submitLiveNote() {
+  const input = document.getElementById('live-note-input');
+  const note = (input?.value || '').trim();
+  if (!note) { showToast('Note can\'t be empty', true); return; }
+  const evt = getLiveEvent();
+  const bfeInfo = evt && isBFEBackedCard(evt) ? _bfeBackedIndex.get(evt.name) : null;
+  if (!bfeInfo || !currentPlayer) return;
+  try {
+    const res = await fetch(`${BFE_API}/bfe/memories/notes`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: bfeInfo.bfeEventId, round_name: bfeInfo.roundName || null, player: currentPlayer, note })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    if (input) input.value = '';
+    showToast('📌 Note added');
+    const composeEl = document.getElementById('live-note-compose');
+    if (composeEl) composeEl.style.display = 'none';
+  } catch (e) {
+    showToast('Error adding note: ' + e.message, true);
+  }
 }
 
 // Open Camera — shutter and upload happen in the same instant, so there's no
@@ -13551,6 +13614,16 @@ let _wcrpEvt = null; // the summary object the open sheet is currently scoped to
 function renderWCRPBanner() {
   const el = document.getElementById('home-wcrp-banner');
   if (!el) return;
+  // Dev-80 same-day (Brian, confirmed) — suppress Trip Memories whenever a
+  // round is actually live for this player. Live Panel's own repointed
+  // camera/upload button is the on-course capture surface then, and it
+  // correctly tags the photo to that round; Trip Memories always uploads
+  // with no round in mind, so showing both risks a mid-round tap landing an
+  // untagged photo when it should've been round-attributed. Same "is a
+  // round live for me right now" check renderLiveBanner() itself uses, so
+  // the two banners never show for the same reason at the same time.
+  const liveEvt = getLiveEvent();
+  if (liveEvt && currentPlayer && isRegisteredFor(liveEvt.name)) { el.innerHTML = ''; return; }
   const evt = findWCRPEligibleEvent();
   if (!evt) { el.innerHTML = ''; return; }
   el.innerHTML = `<div class="live-banner" style="cursor:pointer" onclick="openWCRPModal()">
