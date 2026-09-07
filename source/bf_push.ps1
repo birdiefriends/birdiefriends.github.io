@@ -90,6 +90,19 @@ linked from a new Home widget in portal.html, plus text-able directly to the
 gets a $FileMap entry the same turn it's first delivered, so it doesn't sit
 here unrecognized.
 
+Standing rule going forward (Brian, same day): whenever Claude changes THIS
+script, it now writes the update directly to this live bf_push.ps1 file in
+the AutoPush folder -- no more asking Brian to hand-copy a
+bf_push_library.ps1 snapshot over the live file himself ("that should
+always be the case rather than me risk a manual edit mistake"). The
+bf_push_library.ps1 entry in $FileMap below is unaffected and still serves
+its original purpose -- archiving a copy of this script into source/
+bf_push.ps1 in the repo via the normal push+verify path, which this file
+can't safely do for itself (v7 note above). The two are just no longer the
+same delivery step: the live file gets updated directly; the archived copy
+still goes out through a normal push whenever bf_push_library.ps1 next sits
+in this folder.
+
 Run this by double-clicking bf_push.bat in the same folder. Drop any of the
 recognized files below into this same folder and it will push them to
 GitHub via the PIN-gated Worker /deploy route, verify each one landed
