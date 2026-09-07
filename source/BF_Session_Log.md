@@ -3489,3 +3489,104 @@ full detail, closing out the whole session before starting Dev-79 fresh.
   command), which now carries an accurate, self-sufficient Dev-78 Architecture Notes
   summary — no need to re-read this whole entry line by line to get up to speed, though
   it's there if a specific decision's reasoning needs double-checking.
+
+## Dev-79 — CLOSED, 2026-09-07 — Memories Capture Rationalized & Scoped, Setup §4 Round-Picker/Venue/Tee-Time Built
+
+Picked up exactly where Dev-78 left off (§3's stated Dev-79 focus): photo/video/notes
+capture for BFE events, plus results-page changes. Turned into two parts — a rationalization
++ planning pass, and a first slice of the actual build.
+
+**Rationalization (produced `BF_BFE_Memories_Plan.md` and `BF_WCRP_Memories_Spec.md`):**
+Brian drew the real distinction — EventCard Memories (photos/notes on an ordinary Portal
+card) is the right tool for a single round with no scoring engine; BFE productions (Wally
+Cup, GLS-scale multi-round/multi-day events) need a compilation approach instead, because
+BFE-Admin's own §4 already defines the parent structure EventCard Memories has no concept
+of. Decision: disable EventCard's photo/note icons on BFE-backed round cards entirely (so a
+player capturing during a WC round can't accidentally create a memory that lives outside
+the WCRP), and add a new persistent widget — available to the 16 WC players for the whole
+event date range, not just during a round — that captures notes/photos and publishes only
+to the WCRP. Live Panel stays the on-course capture tool (best for quick captures mid-round);
+the widget covers everywhere else (pub, house, transport). Timeline placement resolved to
+two data points that already exist or nearly do: a round's tee time and the moment its last
+scorecard is submitted, giving four clear on-course windows plus a "pre/post-trip" catch-all
+for anything outside them — chaptering by non-golf events was discussed and explicitly
+deferred as not critical now. Full data model, routes, widget, EventCard, Live Panel-repoint,
+and results-page wiring are spec'd in `BF_WCRP_Memories_Spec.md` §1–7, with §8 its suggested
+build order and §9 its remaining open calls (grace window default, notes character cap,
+player-tagging v1 scope).
+
+**Built this session — §8 step 1, the schema/round-picker slice, all shipped and confirmed
+live by Brian:**
+- `tee_time TEXT` added to `bfe_event_rounds` (SQL migration executed by Brian; `BF_Experiences.js`'s
+  `POST`/`GET /bfe/events` read/write it).
+- Setup §4's round-name field is no longer hand-typed: a combined picker pulls real names
+  from BOTH the Jotform "Request Event" form AND D1-native Gatherings (a host-created
+  Gathering has no Jotform submission at all — missed on the first pass, caught by Brian:
+  "we have to think about when a Host creates a Gathering, that isn't Jotform driven, but
+  D1"), each carrying its own date; picking one resolves that round's `tee_time`
+  automatically. The suggestion list applies the same historic-event `>= todayStart` filter
+  Section 3 already used for its own event dropdown (missing on the first pass too — Brian's
+  screenshot showed a 2019 one-off event alongside "2026 Wally Cup - Rd1" in the same list);
+  an explicitly-typed old name still resolves as a fail-safe, only the suggestion list hides it.
+- Venue auto-fill: a Gathering's venue comes straight from the real Venue Manager list and
+  matches reliably; a Jotform submission's Location is freeform text, so it's matched with
+  the same exact-then-abbreviation-normalized `findVenueByName()` `portal.html` already uses
+  for "Honesdale GC" → "Honesdale Golf Club" (Dev-78). Never overrides a venue the host
+  already picked — a `dataset.venueTouched` flag (set only by a real `change` event or a
+  loaded config's real venueId, never by the auto-fill's own programmatic `.value =`) is what
+  makes "already set" detection reliable, since a bare `<select>` with nothing explicitly
+  selected silently reports its first option's value regardless.
+- Setup's four manual "Load" buttons (Load venues, Load event names, Load round names,
+  Refresh events list) now all fire automatically the moment the page opens, using whatever
+  worker/portal URLs and PIN are already defaulted in — no more clicking through each one
+  per Brian's own ask ("the manual clicking doesn't seem necessary in the workflow"). Tee
+  Policy's own per-venue "Load saved catalog" was checked first and confirmed already
+  auto-firing per an existing Dev-83(-labeled, see process note below) fix — nothing to
+  change there.
+- Jotform Date & Time parsing bug found and fixed: `jfParseDateFieldAnswer()`'s object-shape
+  branch was hardcoding `T00:00:00` unconditionally, discarding whatever hour/minute the
+  Request Event form's actual Date & Time widget submitted — this is what surfaced in
+  Brian's screenshot as every round's tee time showing "12:00 AM." Fixed to read Jotform's
+  combined-widget `hour`/`min`/`ampm` keys when present (verified against synthetic 24h,
+  12h-AM/PM, and midnight/noon edge cases); a plain date-only answer with no such keys still
+  parses to midnight exactly as before. **Not yet confirmed against a real Jotform
+  submission** — this sandbox can't reach Jotform's API directly, so the one thing worth a
+  quick look after the next real Setup Load is that a round's displayed tee time actually
+  matches what was submitted for it.
+
+**Process note — Dev-number drift, same issue as Dev-75's own close-out flagged:** this
+session's in-file code comments were labeled sequentially per-fix as "Dev-83"/"Dev-84"/
+"Dev-85" instead of one number for the whole session — the same mistake Dev-75's close-out
+already documented and named the convention for (one Dev-N **per session**, tracked
+centrally in this log, not a per-fix counter). Worth noting this drift compounds: those
+labels also collide with genuinely earlier, unrelated fixes already sitting in this codebase
+under real "Dev-83 (Brian)"/"Dev-84 (Brian)"/"Dev-85 (Brian)" comments (unclaimed-CTP-money
+recovery, a BFSeries scorecard-check convenience, dropping a player from Overall) — which
+are themselves artifacts of Dev-75's own documented over-numbering, not real separate
+sessions either. Not renumbering any of it (cosmetic-only touch to already-verified working
+code, same call Dev-75 made); flagging here instead. **This session is Dev-79 in this log's
+own numbering** (continuing straight from Dev-78's close) **— the next session's in-file
+comment number is Dev-80, matching this log, not Dev-86.**
+
+**Not done this session, carried forward yet again:** the live "2026 Wally Cup" D1 event
+still needs a Data & Reset → Delete and a fresh real 16-player Setup + Draft/Groupings
+before real Rd1 (10am 9/11) — unchanged since Dev-75/77/78, still not confirmed done. Not
+this session's focus and not touched here either; worth confirming with Brian directly
+rather than assuming again.
+
+**Carry-forward into Dev-80:** the rest of `BF_WCRP_Memories_Spec.md`'s §8 build order —
+the precise BFE-backed flag on Portal `eventData` (§5), `BFE_API`'s new memory tables/routes
+(§2), the Live Panel repoint (§6, build alongside the widget so there's never a window
+writing to the old bucket), the widget itself (§3), EventCard icon disabling (§5, last —
+easiest to verify once the rest works end to end), and the commissioner curation view +
+Results-page wiring (§7, trails since real memories need to exist before either has
+anything to show). No 9/11 deadline pressure on any of this per Brian's own steer in the
+spec — sequencing is for build-order sanity, not a rush. Given this is comparable in scope
+to a full prior single-session build (e.g. Dev-74's scoring engine), and this chat has
+already needed one context compaction, recommended to start Dev-80 fresh per the standing
+"read the bootstrap doc, don't assume the old chat's context" convention, rather than
+stretching this session across all seven remaining steps.
+
+**Session Dev-79 fully closed.**
+
+**Chat-rename string:** `Dev-79 - Memories Capture Rationalized & Spec'd (EventCard vs WCRP Widget), Setup §4 Round-Picker/Venue-Match/Tee-Time Built & Auto-Connected, Jotform Date&Time Parse Bug Fixed`
