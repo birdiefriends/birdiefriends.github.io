@@ -2044,9 +2044,10 @@ body {
   <div class="bf-screen active" id="screen-home">
     <div id="home-live-banner"></div>
     <!-- Dev-80 (§8 step 5): persistent WCRP memories widget entry point — a
-         separate banner from home-live-banner on purpose, since it's scoped
-         to the whole BFE event date range (± grace window), not just while a
-         round is actually live (see buildWCRPBanner's own comment). -->
+         separate banner from home-live-banner on purpose, since it's gated on
+         the commissioner's own capture on/off switch (memories_capture_open),
+         not on any round actually being live (see renderWCRPBanner's own
+         comment / findWCRPEligibleEvent). -->
     <div id="home-wcrp-banner"></div>
     <div id="home-host-entry"></div>
     <div id="home-hero"></div>
@@ -13457,12 +13458,12 @@ function bfeEventNameCandidates(name) {
 // name + round name) rather than stripped backward from a card's own name:
 //   "<umbrella> - <round name>"  — the normal Wally-Cup-style split, OR
 //   "<umbrella>"                 — a single-round BFE event (one card, no split)
-// Value: { bfeEventId, bfeRoundId, roundName, umbrellaName, eventDate,
-//   eventEndDate, graceHours, roster: Set<lowercased player name> }
+// Value: { bfeEventId, bfeRoundId, roundName, umbrellaName, captureOpen,
+//   roster: Set<lowercased player name> }
 let _bfeBackedIndex = new Map();
 // umbrellaName -> same-shaped summary (one row per BFE EVENT, not per round)
-// — what the widget banner scans to find "is there a live-ish BFE trip this
-// player is on right now," since the banner isn't round-specific.
+// — what the widget banner scans to find "is there a BFE trip open for
+// captures right now," since the banner isn't round-specific.
 let _bfeEventSummaries = new Map();
 
 async function refreshBFEBackedIndex() {
@@ -13480,13 +13481,10 @@ async function refreshBFEBackedIndex() {
         const config = cfgData && cfgData.config;
         if (!config || !Array.isArray(config.rounds)) return;
         const roster = new Set((config.roster || []).map(p => (p.name || '').trim().toLowerCase()).filter(Boolean));
-        const graceHoursRaw = (config.memoriesGraceHours === null || config.memoriesGraceHours === undefined)
-          ? NaN : Number(config.memoriesGraceHours);
-        const graceHours = isNaN(graceHoursRaw) ? 24 : graceHoursRaw; // spec §9 draft default (±1 day)
         const summary = {
           bfeEventId: e.id, umbrellaName: e.event_name,
-          eventDate: config.eventDate, eventEndDate: config.eventEndDate,
-          graceHours, roster
+          captureOpen: !!config.memoriesCaptureOpen, // Dev-80 (revised) — plain host toggle, no date math
+          roster
         };
         nextSummaries.set(e.event_name, summary);
         config.rounds.forEach(r => {
@@ -13507,28 +13505,27 @@ async function refreshBFEBackedIndex() {
 }
 
 // Is this Portal card a BFE-backed round? (spec §5 / Step 6 — EventCard icon
-// disabling reads this directly.)
+// disabling reads this directly.) Deliberately NOT gated on captureOpen —
+// icon-hiding and the Live Panel repoint are about "does this round belong
+// to a BFE production," not "is memories capture open right now."
 function isBFEBackedCard(evt) {
   return evt && _bfeBackedIndex.has(evt.name);
 }
 
 // Which BFE event (if any) should the WCRP widget banner offer to
 // currentPlayer right now? Roster-gated (spec: "visible to eligible players
-// only") and date-range-gated (event_date..event_end_date±graceHours, spec §9
-// — commissioner-configurable per event, Dev-80's own call). Returns the
-// summary object or null.
+// only") and gated on the commissioner's own on/off switch — Dev-80 dropped
+// the original date-range/grace-window idea same-day, live-tested: "timers
+// have caused us issues" was Brian's call, a plain host toggle is the actual
+// live gate (memories_capture_open, set in BFE-Admin). Returns the summary
+// object or null.
 function findWCRPEligibleEvent() {
   if (!currentPlayer) return null;
   const me = currentPlayer.trim().toLowerCase();
-  const now = new Date();
   for (const summary of _bfeEventSummaries.values()) {
+    if (!summary.captureOpen) continue;
     if (!summary.roster.has(me)) continue;
-    if (!summary.eventDate) continue;
-    const start = new Date(summary.eventDate + 'T00:00:00');
-    const end = new Date((summary.eventEndDate || summary.eventDate) + 'T23:59:59');
-    if (isNaN(start) || isNaN(end)) continue;
-    const graceMs = summary.graceHours * 3600000;
-    if (now >= (start - graceMs) && now <= (end.getTime() + graceMs)) return summary;
+    return summary;
   }
   return null;
 }
