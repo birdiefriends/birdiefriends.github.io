@@ -3720,3 +3720,54 @@ Brian caught this live: he named the Practice round in Section 4 exactly as it a
 `portal_version.txt` bumped `v4.1.1` → `v4.1.2`. `node --check` clean.
 
 **Still needs a real re-test** — pick the Practice card (or any round) from Portal, take a photo, and check `SELECT * FROM bfe_event_memories;` in D1. This is the first attempt that has a real chance of actually hitting the new table.
+
+**Dev-80 update, same day — a real capture confirmed, then a Save-blocking bug found and fixed:** Brian's Rd1 Live Panel test (post round-name fix) landed a real row: `event_id 36, round_id 111, captured_by "Brian Hager", curation_status approved` — proof the repoint genuinely works. Separately, the Trip Memories banner wasn't showing; tracing it led to a bigger find: clicking **Load** on "2026 Wally Cup" in Data & Reset showed `memories_capture_open` coming back **unchecked**, despite Brian having checked+saved it earlier — an intervening resave (fixing round names) had silently reverted it, since Save always sends the form's current checkbox state, not a merge. He re-checked and hit Save, and got:
+
+```
+Save failed: Database error saving event: D1_ERROR: FOREIGN KEY constraint failed: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_FOREIGNKEY)
+```
+
+Root cause: `bfe_event_memories.round_id` (and `bfe_event_memory_notes.round_id`) were declared `INTEGER REFERENCES bfe_event_rounds(id)` — a hard FK onto exactly the table that gets fully DELETEd/re-INSERTed on every Setup Save (see this file's own "Results layer" note on `bfe_round_results`/`bfe_round_skins`, which solved this identical instability years ago by keying on `round_name` instead of `round_id`). The moment Brian's real test photo referenced round id 111, Setup Save's `DELETE FROM bfe_event_rounds` for that row became a live FK violation — not a silent-orphan risk like the comment above originally warned about, an outright Save-blocking crash. This wasn't Practice-specific or a one-off; it would have hit on the very next Setup Save after ANY memory was captured against ANY round, for the rest of the trip.
+
+Fixed properly rather than just dropping the constraint: switched both tables to `round_name TEXT` (nullable, no FK), matching the established results-layer pattern exactly. Updated every route that touched `round_id` — `POST /bfe/memories/upload`, `GET /bfe/memories`, `PATCH /bfe/memories/:id`, `POST /bfe/memories/notes` — to use `round_name` instead, and `portal.html`'s `livePanelUploadCore` to send `bfeInfo.roundName` instead of `bfeInfo.bfeRoundId` (the WCRP widget's own upload was already round-agnostic — untouched). Migration SQL for Brian to run (rebuilds both tables in place, preserves existing rows including the one real test photo — SQLite can't ALTER a column's FK away, so this is a table-rebuild, not an ALTER):
+
+```sql
+CREATE TABLE bfe_event_memories_new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES bfe_events(id),
+  round_name TEXT,
+  media_type TEXT NOT NULL,
+  r2_key TEXT NOT NULL,
+  captured_by TEXT NOT NULL,
+  caption TEXT,
+  tagged_players TEXT,
+  section_label TEXT,
+  is_trophy_moment INTEGER DEFAULT 0,
+  curation_status TEXT NOT NULL DEFAULT 'approved',
+  captured_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT INTO bfe_event_memories_new (id, event_id, round_name, media_type, r2_key, captured_by, caption, tagged_players, section_label, is_trophy_moment, curation_status, captured_at, created_at)
+  SELECT id, event_id, NULL, media_type, r2_key, captured_by, caption, tagged_players, section_label, is_trophy_moment, curation_status, captured_at, created_at FROM bfe_event_memories;
+DROP TABLE bfe_event_memories;
+ALTER TABLE bfe_event_memories_new RENAME TO bfe_event_memories;
+
+CREATE TABLE bfe_event_memory_notes_new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES bfe_events(id),
+  round_name TEXT,
+  player TEXT NOT NULL,
+  note TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT INTO bfe_event_memory_notes_new (id, event_id, round_name, player, note, created_at)
+  SELECT id, event_id, NULL, player, note, created_at FROM bfe_event_memory_notes;
+DROP TABLE bfe_event_memory_notes;
+ALTER TABLE bfe_event_memory_notes_new RENAME TO bfe_event_memory_notes;
+```
+
+The one existing test row's `round_name` comes back NULL after this migration (its old round_id isn't translated) — harmless, it's a test row, but worth knowing before Brian goes looking for it by round.
+
+`portal_version.txt` bumped `v4.1.2` → `v4.1.3`. `node --check` clean on both `BF_Experiences.js`'s and `portal.html`'s inlined scripts.
+
+**After running the migration, Brian still needs to**: re-check "WCRP Memories capture open to players" (it's currently unchecked server-side) and Save again — this time it should succeed since the FK is gone.
