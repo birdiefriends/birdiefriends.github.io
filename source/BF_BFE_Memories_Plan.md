@@ -1,0 +1,82 @@
+# BFE Memories / Asset Capture — Investigation & Plan (Draft)
+
+**Status:** Investigation and decisions closed out (§5) as of Dev-79, 2026-09-07. Superseded for build scope/order by `BF_WCRP_Memories_Spec.md`, whose §8 is the current build order — this doc's own Pass 1/Pass 2 split in §6 predates that and shouldn't be followed literally (see the Spec doc's own status line for what's actually shipped vs. still open).
+
+**Prepared from:** `portal.html`, `worker.js`, `bf_experiences_worker.js`, `BF_WallyCup_Spec.md`, `WallyCup_Results_Design_Reference.dc.html`, `BF_Session_Log.md` (Dev-54 through Dev-82).
+
+---
+
+## 1. What exists today
+
+Photos, video, sticky notes, and weather all live in the same simple shape: one D1 row per item, keyed by an `event_name` string. `event_photos`, `event_notes`, `event_weather`, and `scorecards` all key off that same string — there is no umbrella/trip concept anywhere in the schema. That single design choice is the root of the question you're raising.
+
+**Two independent capture entry points write into that same bucket:**
+
+- **Live Panel** (`livePanelCameraPicked` / `livePanelUploadPicked`, Dev-57) — only exists while `getLiveEvent()` says a round is live (tee time through `LIVE_EVENT_HOURS` after). Open Camera is zero-tap and lets the server's `classifyPhotoSection()` guess the chapter (pre-comp/on-course/post-round) from EXIF vs. tee time; manual Upload shows a chip dialog (🌅/⛳/🏆) so a player can correct the guess or pick when there's no EXIF.
+- **EventCard's 📷 Photos sheet** (`openCardPhotoSheet` → `cardPhotoCameraPicked`, Dev-6x) — reachable any time the round's card exists (on Home, or via "My History" once the card ages off, Dev-65/69). No chip dialog at all — always trusts the server's auto-classify. This is almost certainly what you mean by "EventCard memories."
+
+Both write to `event_photos` with `event_name = evt.name`. For a BFE round, `evt.name` is the round card's own title — `"2026 Wally Cup - Rd1"`, `"...- Rd2"`, `"...- 2Man"`, `"...- Rd3"` — **not** the umbrella name BFE-Admin uses (`"2026 Wally Cup"`). Each round card is its own island: its own photos, its own notes, its own weather row. Nothing today unions them.
+
+The only place that reassembles round names back into the umbrella is `bfeEventNameCandidates()` (Dev-79), built for reading round-groups off BFE-Admin — it strips whatever follows the last " - " separator. That's the one piece of logic that already knows how to walk from a round card back to its trip.
+
+**The "chapter" concept is still alive, just narrower than the original pilot.** Dev-54's original chapter build (GS Photo Organizer, 3-column layout, manual chapter-reassign dropdown) was designed as an admin/curation tool for a single day's photos, tied to `pre_competition` / `on_course` / `post_round`. That tool still exists and still works for curation. What you dropped, it sounds like, was an earlier capture-time flow that made the *player* choose a chapter up front — that got replaced by EXIF/tee-time auto-classify with an optional correction chip (Live Panel's Upload path), which is why the two current capture surfaces feel inconsistent: one offers the correction chip, the other doesn't.
+
+**The Results page already anticipates the fix you're describing.** `WallyCup_Results_Design_Reference.dc.html` §07 (Photo Gallery, still a placeholder) says: *"Chapters auto-populate from Rd1 / Rd2 / 2Man / Rd3, plus any Host-added sections."* That's exactly the umbrella-aggregation-plus-extra-buckets shape this plan is about — you'd already sketched the destination, just hadn't connected the capture side to it yet.
+
+**What's missing entirely:** any capture surface for a moment that isn't inside a round's live window *and* isn't hung off an existing round card — arrival night, the hotel, the banquet after 2Man closes but before Rd3's card exists, the drive home. There's no "trip" card independent of a round to open a Photos sheet against, and Live Panel is explicitly single-round-and-time-windowed by `getLiveEvent()`.
+
+## 2. The actual tension to rationalize
+
+Three separate problems are bundled into what reads as one:
+
+1. **Duplication** — Live Panel and the EventCard sheet are two different UIs writing the same data with inconsistent classification behavior (one offers a correction chip, one doesn't).
+2. **Fragmentation** — a multi-day BFE event's memories are scattered across N per-round buckets with no umbrella row, so anything that wants "the whole trip" (like the Results page's Photo Gallery) has to know every round name and union them itself.
+3. **No home for non-round moments** — nothing lets a photo, video, or note attach to the *trip* rather than to a specific round's tee time.
+
+Disabling EventCard memories outright would solve #1 but make #3 worse (you'd lose the one capture path that isn't time-windowed). Fixing only the aggregation (#2) solves the Results-page problem without touching capture at all, but leaves #1 and #3 exactly as they are.
+
+## 3. Options
+
+**Option A — Aggregate only, capture unchanged.** Build a read-only query (mirroring `bfeEventNameCandidates()`) that, given an umbrella name, unions `event_photos`/`event_notes` across every known round name plus the umbrella name itself, sorted by `captured_at`. Feeds the Results page's Photo Gallery immediately using data that already exists from Rd1/Rd2/2Man/Rd3 testing. Doesn't touch Live Panel or the EventCard sheet, so it doesn't resolve the duplication or the "no home for non-round moments" gap — it just stops those two problems from blocking the Results page.
+
+**Option B — Disable EventCard memories for BFE rounds, expand Live Panel instead.** Hide the 📷 Photos sheet on BFE-backed round cards specifically (leave it alone for ordinary Gatherings/Series, where a card genuinely is the whole event and this works fine), and widen Live Panel's window from "this round's tee time ± N hours" to "anywhere inside the umbrella event's overall date range." This needs the umbrella's start/end date, which `bfe_events`/`bfe_event_rounds` doesn't currently store as a single range — it would need to be derived (min/max of the umbrella's round dates) or added explicitly. Cleaner long-term (one capture surface, one classification UX) but is real scope: a new "is the trip currently active" gate, and losing the "add a photo to a round after the fact" behavior Dev-69 built the EventCard sheet specifically to preserve (My History's whole reason for existing).
+
+**Option C — Keep both, add one new umbrella-level surface (recommended starting point).** Leave round-card photo capture exactly as-is — it's genuinely correct UX for "a photo from Rd1," time-gated or not. Add one new capture entry point scoped to the umbrella event itself (not to any single round), available for the whole date range, for the "everything else" bucket — pre-trip, between rounds, banquet, departure. Build the Results-page timeline as the same aggregation from Option A. This is the smallest change that actually closes gap #3, reuses gap #2's aggregation work for the Results page, and only partially addresses #1 (the new umbrella surface and the round-card surface would still be two different code paths, but they'd have clearly different jobs instead of overlapping).
+
+My instinct is C as the starting point, with a decision on A vs. B's stricter unification deferred until there's real multi-day trip data to look at — see §5.
+
+## 4. Open questions before this gets scoped
+
+- Which chapter experience actually felt awkward — the GS Photo Organizer's manual reassignment, or the original pre-auto-classify capture flow (forcing a section choice before Dev-6x shipped EXIF guessing)? That decides whether the new umbrella surface needs any chapter/section picker at all, or can just rely on chronological order the way My History already does successfully.
+- Where should a new umbrella-level capture entry point live — a dedicated tile on Home for the trip's duration, something reachable from inside each round card, or an entry point on the Results page itself (players may well check that page mid-trip)?
+- Do `bfe_events` / `bfe_event_rounds` need an explicit overall date range, or is min/max of the round dates good enough to gate "is the trip currently active"?
+- Is this pass scoped to photos/video only, or should notes and weather get the same umbrella-level treatment (a running "trip notes" thread separate from any one round)?
+- Does the Results-page aggregation need to work off BFE-Admin's own round list (so it still works once a round card has aged off `eventData`/Home), rather than assuming the live portal's event list always has all four rounds present?
+
+## 5. Decisions from discussion (9/5)
+
+Brian's read, which resolves most of §4's open questions:
+
+**EventCard Memories stays exactly as it is — for what it's actually for.** It's a genuinely good tool for a standalone round that has no need for the scoring engine. The dividing line isn't "BFE vs. Gathering," it's scale/structure: a single self-contained card is the whole event, so a card-scoped photo/notes sheet is the right shape. Whether a single-round event someday also gets the scoring engine is a separate, later question — it doesn't change this plan, because whatever flag ends up marking "this round belongs to a BFE parent" is the same flag both decisions would hang off of.
+
+**BFE-Admin already has the parent/child structure this needs — nothing new to design there.** `BFE-Admin.html` Setup §4 ("Rounds") is exactly where a host builds the ordered list of child rounds under one parent event. On the data side that's `bfe_events` (parent — and it already carries a real `event_date`/`event_end_date` range, added Dev-77, not just a single date) owning many `bfe_event_rounds` (children) and one `bfe_event_roster` (the 16 players, stored once per `event_id`, not per round). That roster table is already the correct source of truth for "who are the 16 WC players" — no new roster concept needed. The gap isn't in BFE-Admin's model; it's that the Portal re-flattens that parent/child structure back into independent sibling cards ("2026 Wally Cup - Rd1", "...- Rd2", etc.), which is what re-fragments memories per round in the first place.
+
+**Decision: disable the EventCard 📷 Photos/Notes icons on BFE-backed round cards specifically**, so a player mid-WC-round can't create a card-scoped memory that ends up outside the WCRP. Gathering/Series cards keep the icons exactly as today. One real prerequisite this surfaces: there is currently no clean, explicit "is this evt BFE-backed" flag on a portal card. `hasLivePanelSupport()` approximates it today off `formatClass(evt.format)` (format-wally/format-scramble/format-series), and its own comment already flags that `format-scramble` also matches any non-WC scramble a host creates — a known imprecise proxy. Gating the new disable-icons behavior on that same loose signal would risk hiding Photos/Notes on a card that was never actually BFE-backed. This plan needs a precise signal (e.g., a real BFE-linked flag threaded onto the card from wherever `eventData` is assembled, or a resolved check against `bfe_events` via `bfeEventNameCandidates()`) before the disable can ship safely.
+
+**Wrinkle worth flagging directly: disabling EventCard alone doesn't fully deliver "published only to the WCRP."** Live Panel's on-course capture (`livePanelUploadCore`) currently posts to the exact same place EventCard does — `GATHERINGS_API`'s `event_photos`/`event_notes`, keyed by the round card's own name. So today, a photo taken through Live Panel during Rd1 is just as "outside the WCRP" as one taken through the EventCard sheet — Live Panel isn't currently exempt from the problem, it just happens to be the surface Brian wants to keep using. For everything to genuinely land only in the WCRP, Live Panel's capture needs to be repointed too (when the live round is BFE-backed) to whatever new WCRP-only store gets built — not just left as-is while EventCard gets turned off. Recommending this as part of the plan rather than deciding it unilaterally, since it's a real scope addition: it means touching `livePanelUploadCore`'s destination, not just hiding two icons.
+
+**New persistent "WCRP Memories" widget — the piece that covers the pub/house/transport gap.** Available to anyone in that event's `bfe_event_roster`, for the whole `event_date`–`event_end_date` span (not gated to any single round's tee-time window). Functionally it's the same capture pattern already proven out in the EventCard sheet (camera / video / upload-from-gallery, plus the sticky-notes thread) — no new UX invention needed, just a new destination and a broader eligibility/date gate than any existing surface uses.
+
+**Storage: new tables on the BFE side, not a repurposed corner of the existing photo pool.** `bf_experiences_worker.js`/`BFE_API` currently has zero photo/asset routes or tables of its own — Competitive Events and the photo system have always been two entirely separate backends (separate Worker, separate D1). That separation is actually the cleanest way to guarantee "only in the WCRP": new tables owned by BFE_API (something like `bfe_event_memories` for photo/video + a notes table, both keyed by `event_id` and optionally `round_id`) mean there's no shared table with the general photo pool at all — nothing to accidentally leak into "My History" or a Gathering's card. The actual files can still land in the existing `birdiefriends-photos` R2 bucket (just a distinct key prefix); no need to stand up a second bucket for this.
+
+**Timeline metadata — extend the existing auto-classify instinct rather than add a picker.** The single-round `classifyPhotoSection()` already proved that guessing from timestamp beats asking the player to choose (that's the "awkward" original chapter flow Brian moved away from). The same instinct should extend to the whole event: `bfe_event_rounds` gives the ordered list of rounds, but — checked directly — it stores no start time or date of its own, only `sort_order`/`name`/`venue`. Each round's actual date/time only exists on the Portal side, on that round's own card (`evt.dt`, sourced from that round's Jotform "Request Event" submission). So auto-bucketing an off-course memory as "before Rd1" / "between Rd2 and 2Man" / "after Rd3" needs a join the system doesn't currently have anywhere: BFE's round list crossed against the Portal's per-round card dates. That's a real, small build item, not a given — worth calling out now rather than discovering it mid-build.
+
+## 6. Suggested next step
+
+Given the above, this is bigger than the aggregation-only move the original §5 suggested — it's a small new capture pipeline (BFE-side tables + routes, a widget UI, a real BFE-backed flag, and a decision on repointing Live Panel). With real Rd1 six days out (9/11), I'd break it into two passes rather than trying to land all of it before game day:
+
+**Pass 1, before Rd1 if time allows (otherwise right after):** the precise "is this evt BFE-backed" flag, since both the icon-disabling and everything else in this plan depend on it existing and being right. Low-risk, small, and useful even on its own.
+
+**Pass 2:** the WCRP memories tables/routes on `BFE_API`, the widget, and the Live Panel repoint — done together since, per the wrinkle above, doing the widget without repointing Live Panel leaves the WCRP's photo timeline permanently missing every on-course shot. This is real new surface area, and it's reasonable to build and test it against Rd1's real captures rather than rushing it in beforehand — a mid-trip ship (live for Rd2/2Man/Rd3, backfilling Rd1 from whatever landed in the old bucket) is a perfectly fine fallback if Pass 2 doesn't make it before 9/11.
+
+Open items before Pass 2 gets scoped: whether Live Panel repointing is a go (flagged above, not yet decided), where the widget lives in the nav (a persistent entry point seems necessary given it has to work with no round card feeling "current," but that's a UI call worth confirming), and one table vs. split tables for photos/video vs. notes (either is fine — just needs picking).
