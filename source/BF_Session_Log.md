@@ -3661,3 +3661,26 @@ a patch). Files staged for `bf_push.ps1` under their `$FileMap` names: `portal.h
 `portal_version.txt`, `BF_Experiences.js`, `BFE-Admin.html`.
 
 **Session Dev-80 in progress — not closed.**
+
+**Dev-80 update, same day — grace-window eligibility replaced with a host on/off switch:**
+Live-tested the repoint against the real Wally Cup event this session — surfaced along the
+way that the event itself had been deleted (Brian's own pending "Data & Reset → Delete, then
+fresh real Setup" from Dev-79's carry-forward, timing just overlapped with this test) and
+that the date-range-±-grace-hours widget eligibility idea wasn't going to work for Brian in
+practice: "timers have caused us issues... I'd rather a host on/off switch." Replaced it —
+`memories_grace_hours` stays in the schema (harmless, unread) but nothing gates on it anymore.
+New `memories_capture_open` INTEGER NOT NULL DEFAULT 0 column, a plain checkbox in BFE-Admin's
+Setup section 1, is now the only gate on the WCRP widget banner (`findWCRPEligibleEvent`:
+roster membership + this flag, no date math at all). `isBFEBackedCard`/the Live Panel repoint
+are unaffected — those were never gated on the grace window, only on a round belonging to a
+BFE production at all. Also: Brian's rebuilding the real Setup with a "WC Practice Rd" (9/10,
+not part of Overall, no competition component) as the first round in the package specifically
+so its memories get captured too — no code changes needed for that, it's just another round
+row like any other as far as this system's concerned.
+
+New migration for the fresh column:
+```sql
+ALTER TABLE bfe_events ADD COLUMN memories_capture_open INTEGER NOT NULL DEFAULT 0;
+```
+
+`portal_version.txt` bumped to `v4.1.0` → `v4.1.1` (patch — same-day correction, not new surface).
