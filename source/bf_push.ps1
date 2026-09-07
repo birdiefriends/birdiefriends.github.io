@@ -83,6 +83,13 @@ that's meant to live in the repo (a spec, a plan, anything durable -- not a
 one-off scratch file) gets added to $FileMap in the same turn it's first
 delivered, not left to sit in the outputs subfolder.
 
+v10 (Dev-80): added 2026-wally-cup-trip-info.html to $FileMap -- the new
+standalone "Trip Info" page (address, packing list, food schedule, pot)
+linked from a new Home widget in portal.html, plus text-able directly to the
+16 WC players. Same standing rule as the v9 note above: a new docs/ page
+gets a $FileMap entry the same turn it's first delivered, so it doesn't sit
+here unrecognized.
+
 Run this by double-clicking bf_push.bat in the same folder. Drop any of the
 recognized files below into this same folder and it will push them to
 GitHub via the PIN-gated Worker /deploy route, verify each one landed
@@ -118,6 +125,9 @@ $FileMap = [ordered]@{
     # build spec) -- same treatment as BF_WallyCup_Spec.md above.
     "BF_BFE_Memories_Plan.md" = @("source/BF_BFE_Memories_Plan.md")
     "BF_WCRP_Memories_Spec.md" = @("source/BF_WCRP_Memories_Spec.md")
+    # Dev-80 (v10): standalone Trip Info page for the 2026 Wally Cup --
+    # docs/ only (no source/ mirror needed, it's not app code).
+    "2026-wally-cup-trip-info.html" = @("docs/2026-wally-cup-trip-info.html")
 }
 
 # Dev-78 follow-up (v8): local filenames known to be stray leftovers of a
@@ -156,7 +166,7 @@ foreach ($name in $FileMap.Keys) {
     if (Test-Path (Join-Path $ScriptDir $name)) { $Found += $name }
 }
 
-Write-Host "BirdieFriends publish tool (v9)" -ForegroundColor Cyan
+Write-Host "BirdieFriends publish tool (v10)" -ForegroundColor Cyan
 Write-Host "Folder: $ScriptDir"
 Write-Host ""
 
