@@ -140,6 +140,13 @@
         </div>
       </div>
       <div>
+        <label for="tripInfoUrl">Trip Info page URL (optional)</label>
+        <input type="text" id="tripInfoUrl" placeholder="https://birdiefriends.com/2026-wally-cup-trip-info.html">
+        <div style="font-size:0.72rem;color:#888;margin-top:2px">
+          Dev-80: when set, a standalone "🏡 Trip Info" widget shows on Home for this event's roster — separate from, and NOT gated by, the Memories capture toggle above (Brian: "I don't want to turn on the Trip memories yet... if we add a widget all 16 will see it"). Leave blank to show no widget at all.
+        </div>
+      </div>
+      <div>
         <label for="hcpMode">HCP mode</label>
         <select id="hcpMode">
           <option value="fixed" selected>Fixed — HCP set once before Rd1, unchanged all event (Wally Cup)</option>
@@ -2350,6 +2357,9 @@ async function buildAndAssembleConfig() {
   // earlier date-range/grace-window idea — see BF_Experiences.js's own
   // migration note for why.
   config.memoriesCaptureOpen = document.getElementById('memoriesCaptureOpen').checked;
+  // Dev-80: separate widget, deliberately independent of the toggle above —
+  // see the field's own hint text.
+  config.tripInfoUrl = document.getElementById('tripInfoUrl').value.trim() || null;
   config.teePolicy = teePolicy;
   config.status = 'draft';
 
@@ -2507,6 +2517,7 @@ async function saveEventConfig() {
       event_date: assembledConfig.eventDate,
       event_end_date: assembledConfig.eventEndDate,
       memories_capture_open: assembledConfig.memoriesCaptureOpen,
+      trip_info_url: assembledConfig.tripInfoUrl,
       hcp_mode: assembledConfig.hcpMode,
       status: assembledConfig.status,
       tee_policy: assembledConfig.teePolicy,
@@ -2543,6 +2554,7 @@ async function rehydrateFormFromConfig(config) {
   document.getElementById('eventDate').value = config.eventDate || '';
   document.getElementById('eventEndDate').value = config.eventEndDate || '';
   document.getElementById('memoriesCaptureOpen').checked = !!config.memoriesCaptureOpen;
+  document.getElementById('tripInfoUrl').value = config.tripInfoUrl || '';
   document.getElementById('hcpMode').value = config.hcpMode || 'fixed';
 
   if (!venueList.length) await loadVenues();
