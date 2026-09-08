@@ -1,6 +1,6 @@
 # BFE Memories / Asset Capture — Investigation & Plan (Draft)
 
-**Status:** Investigation and decisions closed out (§5) as of Dev-79, 2026-09-07. Superseded for build scope/order by `BF_WCRP_Memories_Spec.md`, whose §8 is the current build order — this doc's own Pass 1/Pass 2 split in §6 predates that and shouldn't be followed literally (see the Spec doc's own status line for what's actually shipped vs. still open).
+**Status:** Investigation and decisions closed out (§5) as of Dev-79, 2026-09-07. Superseded for build scope/order by `BF_WCRP_Memories_Spec.md`, whose §8 is the current build order — this doc's own Pass 1/Pass 2 split in §6 predates that and shouldn't be followed literally (see the Spec doc's own status line for what's actually shipped vs. still open). **Update, Dev-80 close:** the build this doc's §5 decisions fed into is now fully shipped — see `BF_WCRP_Memories_Spec.md`'s status line and its "What actually shipped (Dev-80)" addendum for the concrete result, including a few real deviations from the original design (`round_id` became `round_name`, the grace-window idea was dropped for a plain toggle, and the Results-page chapter build landed in `BFE-Admin.html` rather than the widget itself). This doc's own "why" reasoning in §1–§5 is unaffected and still the reference for how those decisions were reached.
 
 **Prepared from:** `portal.html`, `worker.js`, `bf_experiences_worker.js`, `BF_WallyCup_Spec.md`, `WallyCup_Results_Design_Reference.dc.html`, `BF_Session_Log.md` (Dev-54 through Dev-82).
 
