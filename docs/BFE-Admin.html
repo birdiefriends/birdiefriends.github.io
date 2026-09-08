@@ -72,9 +72,47 @@
   .group-card-title { font-size: 0.8rem; font-weight: 700; color: var(--accent-dark); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 6px; }
   .group-player-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 0.88rem; }
   .group-player-row select { width: auto; padding: 3px 6px; font-size: 0.8rem; }
+  /* Dev-93 — Gameday Mode (?gameday=1). Pure visibility/sizing CSS — every
+     button/select/status element below is the SAME element normal Setup
+     uses, same ids, same JS wiring; nothing here is a second copy of any
+     logic. Hides sections 1-7/11+ so a phone on a tee box sees only Close
+     Round / Review / Publish, and grows the touch targets on those three. */
+  body.gameday-mode header,
+  body.gameday-mode section.card:not(.gameday-section) { display: none !important; }
+  body.gameday-mode #gamedayBanner { display: block; }
+  #gamedayBanner {
+    background: var(--accent-dark); color: #fff; padding: 14px 20px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  #gamedayBannerTitle { font-size: 1.05rem; font-weight: 700; }
+  #gamedayBannerStatus { font-size: 0.82rem; color: #cfe3da; margin-top: 2px; }
+  #gamedayBanner a { color: #cfe3da; font-size: 0.78rem; display: inline-block; margin-top: 6px; }
+  body.gameday-mode main { padding: 14px 12px 100px; }
+  body.gameday-mode section.card { padding: 16px; margin-bottom: 14px; }
+  body.gameday-mode .gameday-section button {
+    padding: 14px 18px; font-size: 1rem; min-height: 48px;
+  }
+  body.gameday-mode .gameday-section select,
+  body.gameday-mode .gameday-section input[type=text] {
+    padding: 12px 10px; font-size: 1rem;
+  }
+  body.gameday-mode #rawConfig { display: none; }
+  body.gameday-mode .row { flex-direction: column; }
+  body.gameday-mode .row > div { min-width: 0; }
 </style>
 </head>
 <body>
+<!-- Dev-93 — Gameday Mode: loaded as BFE-Admin.html?gameday=1 (linked from
+     the Portal's Gear → Event Day Controls on phone). Same file, same
+     functions — nothing here is a second copy of Close Round / Publish
+     Results logic, just a CSS view that hides sections 1-7/11+ and
+     auto-loads the pre-filled default event, so gameday is 3 sections and
+     zero typing instead of scrolling a 15-section desktop form on a phone. -->
+<div id="gamedayBanner" style="display:none">
+  <div id="gamedayBannerTitle">⛳ Gameday Mode</div>
+  <div id="gamedayBannerStatus">Loading event…</div>
+  <a href="BFE-Admin.html">← Full Admin (desktop)</a>
+</div>
 <header>
   <h1>BFE Host Admin Panel — Setup</h1>
   <p>Registration, roster, venues, tee policy, rounds, and payout for a BF Experiences event — generic across Wally Cup, BFCup, Turkey 2Man, and BlackFriday.</p>
@@ -315,7 +353,7 @@
     </div>
   </section>
   <!-- ── Close a round (Dev-74 — Wally Cup scoring engine) ────────────── -->
-  <section class="card">
+  <section class="card gameday-section" id="closeRoundSection">
     <h2>8. Close a round</h2>
     <p class="hint">Pulls that round's scorecards straight from Jotform, computes skins and Closest-to-Pin, and saves the result — round pot payout included (podium, skins, and CTP). "Stableford quota" rounds also run the individual quota engine (including any Wally Ball bonus) and feed Overall Standings. "2-man scramble" rounds close against the teams saved in section 11 (Player groupings → Draft) instead of the individual roster — one scorecard per team, ranked by that team's score against a TEAM quota (the two partners' own current individual quotas averaged — read from the most recent closed stableford round, must be closed first) — and never feed Overall Standings, no matter what this round's "Rolls into Overall" box in section 4 says. CTP always pays the individual who's the most-recent qualifying claimant on each hole configured for this round's venue in section 5 — same rule the live leaderboard uses, even in a team round. Load or Generate the event above first.</p>
     <div class="row">
@@ -331,7 +369,7 @@
     <div id="wcStandings" style="margin-top:18px"></div>
   </section>
   <!-- ── Publish results page ─────────────────────────────────────── -->
-  <section class="card" id="publishResultsSection">
+  <section class="card gameday-section" id="publishResultsSection">
     <h2>10. Publish results page <span class="badge">Phase 3</span></h2>
     <p class="hint">Builds the player-facing results page (round-by-round leaderboards, Skins/CTP, Wally Ball tracker, and Overall standings once every round rolling into it is closed) straight from what's already saved in bfe_round_results/bfe_round_skins/bfe_round_cttp — nothing here re-runs the scoring engine, it only reads back what Close Round already computed and pushes it to <code>docs/&lt;path&gt;</code> via the main Worker's existing <code>/deploy</code> route (same mechanism portal.html uses). Safe to re-run any time a round changes — it always overwrites the same page. Preview first; nothing is published until you click Generate &amp; publish.</p>
     <div class="row">
@@ -343,7 +381,7 @@
     <div id="publishResultsPreviewWrap" style="margin-top:12px"></div>
   </section>
   <!-- ── Output / review ───────────────────────────────────────────── -->
-  <section class="card" id="outputSection">
+  <section class="card gameday-section" id="outputSection">
     <h2>9. Review</h2>
     <div id="reviewRoster"></div>
     <div id="reviewRounds"></div>
@@ -4536,6 +4574,32 @@ document.getElementById('publishResultsBtn').addEventListener('click', async () 
   loadEventNames();
   loadRoundNameOptions();
   loadEventsList();
+})();
+// ══════════════════════════════════════════════════════════════════════
+// Dev-93 — Gameday Mode init (BFE-Admin.html?gameday=1, linked from the
+// Portal's Gear → Event Day Controls). Runs after every function above is
+// defined, and after the connection-defaults IIFE has already pre-filled
+// workerUrl/portalUrl/hostPin/eventName — so this needs zero typing on a
+// phone: tap the link, the default event loads itself. Calls the exact
+// same loadEventConfig() Setup's own Load button calls — nothing here is a
+// second copy of any load/close/publish logic, only which sections show.
+// ══════════════════════════════════════════════════════════════════════
+(function initGamedayMode() {
+  if (new URLSearchParams(window.location.search).get('gameday') !== '1') return;
+  document.body.classList.add('gameday-mode');
+  const statusEl = document.getElementById('gamedayBannerStatus');
+  const eventName = document.getElementById('eventName').value.trim();
+  if (!eventName) {
+    if (statusEl) statusEl.textContent = 'No default event name set — open Full Admin to pick one.';
+    return;
+  }
+  if (statusEl) statusEl.textContent = `Loading "${eventName}"…`;
+  loadEventConfig(eventName).then(() => {
+    if (!statusEl) return;
+    statusEl.textContent = assembledConfig
+      ? `"${eventName}" loaded — ${assembledConfig.rounds.length} round(s). Close Round below, Publish once it's saved.`
+      : `Couldn't load "${eventName}" — check the status below Review, or open Full Admin.`;
+  });
 })();
 </script>
 </body>
