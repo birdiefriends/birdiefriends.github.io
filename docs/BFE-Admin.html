@@ -3628,15 +3628,27 @@ function escapeHtml(s) {
 // timestamp delimiter" Brian asked for: rounds closed in sequence (Practice
 // → Rd1 → Rd2 → 2Man → Rd3, exactly the order his test plan follows) chain
 // together correctly with zero dependence on which calendar day it is. The
-// one accepted tradeoff, scoped to pre-event testing only: without a real
-// elapsed tee_time to anchor to, there's no independent "did the round
-// start yet" signal, so the "Before <event>" chapter and the "After <round>"
-// gap between two not-yet-elapsed rounds can't be distinguished from the
-// following round's "On Course" chapter — content just accumulates into
-// whichever round closes next. The instant a round's real tee_time has
-// actually elapsed, this function reverts to anchoring that round's window
-// start to its real tee_time exactly as before, so the live event keeps its
-// full "Before"/"On Course"/"After" precision untouched.
+// instant a round's real tee_time has actually elapsed, this function
+// reverts to anchoring that round's window start to its real tee_time
+// exactly as before, so the live event keeps its full "Before"/"On
+// Course"/"After" precision untouched.
+//
+// Dev-91 (per-round start signal, same day as Dev-90): pure chaining off
+// the previous round's close alone assumed captures happen naturally spaced
+// out in schedule order — true for the real event, not for a manual QA
+// pass. Brian's first live rehearsal bunched several widget test captures
+// close together in real time, and with only "previous round's close" to
+// go on, every one of them fell into whichever round's window happened to
+// be first in the chain (its start being the only -Infinity-rooted window),
+// regardless of which round the content was meant to represent. Fix: each
+// round now also gets its OWN start boundary — the earliest round_name-
+// tagged Live Panel memory/note or scorecard for that round, i.e. direct
+// evidence the round was actually underway — clamped to never precede the
+// previous round's own close. Brian's test flow always produces this
+// evidence per round ("Turn on Live Panel for WC-<round>, capture content"
+// before closing it), so it now restores the "Before"/"On Course"/"After"
+// separation even during a same-day, out-of-real-time-order rehearsal, not
+// only once real tee_times start elapsing.
 // ══════════════════════════════════════════════════════════════════════
 function slugifyRoundName(name) {
   return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'round';
@@ -3677,10 +3689,41 @@ function buildMemoryChapters(eventName, originalRounds, memories, notes, scoreca
   // played or test-closed) gets no chapter — nothing can legitimately be
   // captured for it yet, so there's nothing to place.
   const windows = allWindows.filter(w => w.closedAt || w.teeElapsed);
+  // Dev-91: pure chaining off the PREVIOUS round's close (Dev-90) assumed
+  // captures happen naturally spaced out, in schedule order, relative to
+  // each close. Manual QA doesn't work that way — Brian's widget test items
+  // for "before Practice"/"during Practice"/"during Rd1" all landed inside
+  // one "On Course Rd1" chapter because they were captured in a tight
+  // cluster with no real gap between the closes, so the chain alone
+  // couldn't tell them apart. Fix: give each round its OWN start boundary
+  // whenever there's direct evidence it was actually underway — the
+  // earliest round_name-tagged Live Panel memory/note, or that round's own
+  // earliest scorecard — instead of only inheriting the previous round's
+  // close. Brian's test flow ("Turn on Live Panel for WC-Practice, capture
+  // content" before closing it) produces exactly this evidence for every
+  // round he tests, so a widget item captured before that round's Live
+  // Panel content began correctly falls into the PRIOR chapter (or
+  // "Before") instead of being swept forward. Still clamped to never start
+  // earlier than the previous round's own close, so it can't reach backward
+  // and steal content that rightfully belongs to an earlier round.
+  function roundStartSignal(name) {
+    const times = [];
+    (memories || []).forEach(m => { if (m.round_name === name) { const t = parseSqliteUtc(m.captured_at); if (t) times.push(t.getTime()); } });
+    (notes || []).forEach(n => { if (n.round_name === name) { const t = parseSqliteUtc(n.created_at); if (t) times.push(t.getTime()); } });
+    (scorecardsByRound[name] || []).forEach(sc => { const t = parseSqliteUtc(sc.captured_at); if (t) times.push(t.getTime()); });
+    return times.length ? Math.min.apply(null, times) : null;
+  }
   let prevRealEnd = null;   // end of the most recent window anchored to a real, elapsed tee_time
   let chainedStart = null;  // running start across consecutive not-yet-elapsed (rehearsal) rounds
   windows.forEach(w => {
-    const start = w.teeElapsed ? w.teeTime : (chainedStart || prevRealEnd || -Infinity);
+    let start;
+    if (w.teeElapsed) {
+      start = w.teeTime;
+    } else {
+      const priorEnd = chainedStart ? chainedStart.getTime() : (prevRealEnd ? prevRealEnd.getTime() : -Infinity);
+      const rss = roundStartSignal(w.name);
+      start = rss != null ? new Date(Math.max(rss, priorEnd)) : priorEnd;
+    }
     let end;
     if (w.closedAt) {
       end = w.closedAt;
@@ -3698,12 +3741,16 @@ function buildMemoryChapters(eventName, originalRounds, memories, notes, scoreca
   });
   const chapters = [];
   if (windows.length) {
-    if (windows[0].teeElapsed) {
+    // Dev-91: a "Before <event>" chapter is warranted whenever round 1's
+    // own window has a finite start — either its real tee_time has elapsed,
+    // or (rehearsal) it has its own roundStartSignal (Live Panel content
+    // for that round) marking where its window actually begins. Only when
+    // NEITHER exists is round 1's start still the unresolved -Infinity, and
+    // there's genuinely nothing to separate "before" from "on course" yet.
+    const w0StartMs = windows[0].start instanceof Date ? windows[0].start.getTime() : windows[0].start;
+    if (w0StartMs > -Infinity) {
       chapters.push({ key: 'before', title: `Before ${shortEvent}`, start: -Infinity, end: windows[0].start, roundName: null, photos: [], notes: [] });
     }
-    // else: rehearsal mode for round 1 — no real "did the trip start yet"
-    // signal exists, so there's no separate "Before" bucket; its window
-    // already starts at -Infinity and absorbs anything captured earlier.
   } else {
     chapters.push({ key: 'all', title: `${shortEvent} Memories`, start: -Infinity, end: Infinity, roundName: null, photos: [], notes: [] });
   }
