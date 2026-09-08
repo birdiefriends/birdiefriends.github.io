@@ -3546,7 +3546,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       insertAfter: originalRounds.filter((r, i) => i < originalRounds.indexOf(twomanRound) && (!r.engine || r.engine === 'stableford_quota')).length,
     };
   }
-  const memoryChapterData = buildMemoryChapters(config.eventName, originalRounds, memories || [], notes || [], scorecardsByRound);
+  const memoryChapterData = buildMemoryChapters(config.eventName, originalRounds, memories || [], notes || [], scorecardsByRound, allResults);
   return {
     eventName: config.eventName, eventDate: config.eventDate, eventEndDate: config.eventEndDate,
     rounds: config.rounds.map((r, i) => ({
@@ -3603,6 +3603,40 @@ function escapeHtml(s) {
 // in the wrong chapter near a round's boundary. Fixed by routing every
 // timestamp parse in this function through parseSqliteUtc, which stamps the
 // missing 'Z' rather than leaving it to whatever zone the browser is in.
+//
+// Dev-90 (order-based placement, ahead of the real Wally Cup event — Brian's
+// "redundant concept"/Widget-ID idea, revived): widget-sourced (round_name =
+// NULL) content had exactly one placement signal — compare captured_at to
+// each round's real, community-visible tee_time — which is unusable for an
+// end-to-end test run before the real dates arrive (every test capture's
+// captured_at is "now", always earlier than a future real tee_time, so
+// everything would collapse into "Before <event>"). Brian can't move the
+// real dates (wired into the app, visible to the community) or stand up a
+// mock event (it would show up in the app too), so there was no safe way to
+// rehearse widget placement pre-event. Fix: `bfe_round_results.closed_at`
+// (stamped fresh by the Worker's delete-then-insert on every Close Round —
+// see POST /bfe/round-results) is a clock-independent, order-based signal —
+// it marks the moment a round was actually closed, whether that's mid-
+// tournament in September or same-day during a rehearsal today. This
+// function now anchors each round's window END to its own closed_at
+// whenever the round has been closed (a strict precision upgrade over the
+// old "latest scorecard, else tee_time+6h" fallback even in production,
+// since closing only ever happens after a round is genuinely done), and
+// falls back to closed_at for the window START too — chaining straight off
+// the previous round's close — for any round whose real tee_time hasn't
+// actually happened yet by wall-clock time. That's the "flow as the
+// timestamp delimiter" Brian asked for: rounds closed in sequence (Practice
+// → Rd1 → Rd2 → 2Man → Rd3, exactly the order his test plan follows) chain
+// together correctly with zero dependence on which calendar day it is. The
+// one accepted tradeoff, scoped to pre-event testing only: without a real
+// elapsed tee_time to anchor to, there's no independent "did the round
+// start yet" signal, so the "Before <event>" chapter and the "After <round>"
+// gap between two not-yet-elapsed rounds can't be distinguished from the
+// following round's "On Course" chapter — content just accumulates into
+// whichever round closes next. The instant a round's real tee_time has
+// actually elapsed, this function reverts to anchoring that round's window
+// start to its real tee_time exactly as before, so the live event keeps its
+// full "Before"/"On Course"/"After" precision untouched.
 // ══════════════════════════════════════════════════════════════════════
 function slugifyRoundName(name) {
   return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'round';
@@ -3613,25 +3647,63 @@ function shortRoundLabel(fullName, eventName) {
   s = s.replace(/^[\s\-–—:]+/, '').trim();
   return s || fullName || 'Round';
 }
-function buildMemoryChapters(eventName, originalRounds, memories, notes, scorecardsByRound) {
+function buildMemoryChapters(eventName, originalRounds, memories, notes, scorecardsByRound, allResults) {
   const shortEvent = String(eventName || '').replace(/^\d{4}\s*/, '') || 'the trip';
-  const windows = (originalRounds || [])
+  const now = Date.now();
+  // Dev-90: closed_at per round, straight off whatever Close Round most
+  // recently persisted (delete-then-insert means every row for a round
+  // shares essentially the same closed_at — max() here is just defensive).
+  const closedAtByRound = {};
+  (allResults || []).forEach(r => {
+    const t = parseSqliteUtc(r.closed_at);
+    if (t && (!closedAtByRound[r.round_name] || t > closedAtByRound[r.round_name])) {
+      closedAtByRound[r.round_name] = t;
+    }
+  });
+  const allWindows = (originalRounds || [])
     .filter(r => r.teeTime)
     .map(r => {
-      const start = new Date(r.teeTime);
-      const cardTimes = (scorecardsByRound[r.name] || [])
+      const teeTime = new Date(r.teeTime);
+      return {
+        name: r.name, venue: r.venue, label: shortRoundLabel(r.name, eventName),
+        teeTime, teeElapsed: !isNaN(teeTime) && teeTime.getTime() <= now,
+        closedAt: closedAtByRound[r.name] || null,
+      };
+    })
+    .filter(w => !isNaN(w.teeTime))
+    .sort((a, b) => a.teeTime - b.teeTime);
+  // Only a round that's either closed or whose real tee_time has actually
+  // elapsed has a determinable window; a round with neither yet (hasn't been
+  // played or test-closed) gets no chapter — nothing can legitimately be
+  // captured for it yet, so there's nothing to place.
+  const windows = allWindows.filter(w => w.closedAt || w.teeElapsed);
+  let prevRealEnd = null;   // end of the most recent window anchored to a real, elapsed tee_time
+  let chainedStart = null;  // running start across consecutive not-yet-elapsed (rehearsal) rounds
+  windows.forEach(w => {
+    const start = w.teeElapsed ? w.teeTime : (chainedStart || prevRealEnd || -Infinity);
+    let end;
+    if (w.closedAt) {
+      end = w.closedAt;
+    } else {
+      const cardTimes = (scorecardsByRound[w.name] || [])
         .map(sc => parseSqliteUtc(sc.captured_at))
         .filter(d => d && !isNaN(d));
-      const fallbackEnd = new Date(start.getTime() + 6 * 3600 * 1000);
       const latestCard = cardTimes.length ? new Date(Math.max.apply(null, cardTimes.map(d => d.getTime()))) : null;
-      const end = (latestCard && latestCard > start) ? latestCard : fallbackEnd;
-      return { name: r.name, venue: r.venue, label: shortRoundLabel(r.name, eventName), start, end };
-    })
-    .filter(w => !isNaN(w.start))
-    .sort((a, b) => a.start - b.start);
+      const fallbackEnd = new Date(w.teeTime.getTime() + 6 * 3600 * 1000);
+      end = (latestCard && latestCard > start) ? latestCard : fallbackEnd;
+    }
+    w.start = start; w.end = end;
+    if (w.teeElapsed) { prevRealEnd = end; chainedStart = null; }
+    else { chainedStart = end; }
+  });
   const chapters = [];
   if (windows.length) {
-    chapters.push({ key: 'before', title: `Before ${shortEvent}`, start: -Infinity, end: windows[0].start, roundName: null, photos: [], notes: [] });
+    if (windows[0].teeElapsed) {
+      chapters.push({ key: 'before', title: `Before ${shortEvent}`, start: -Infinity, end: windows[0].start, roundName: null, photos: [], notes: [] });
+    }
+    // else: rehearsal mode for round 1 — no real "did the trip start yet"
+    // signal exists, so there's no separate "Before" bucket; its window
+    // already starts at -Infinity and absorbs anything captured earlier.
   } else {
     chapters.push({ key: 'all', title: `${shortEvent} Memories`, start: -Infinity, end: Infinity, roundName: null, photos: [], notes: [] });
   }
@@ -3641,9 +3713,17 @@ function buildMemoryChapters(eventName, originalRounds, memories, notes, scoreca
       title: `On Course — ${w.label}${w.venue ? ' · ' + w.venue : ''}`,
       start: w.start, end: w.end, roundName: w.name, photos: [], notes: [],
     });
-    const nextStart = windows[i + 1] ? windows[i + 1].start : Infinity;
-    const afterEnd = nextStart > w.end ? nextStart : Infinity;
-    chapters.push({ key: 'after-' + slugifyRoundName(w.name), title: `After ${w.label}`, start: w.end, end: afterEnd, roundName: null, photos: [], notes: [] });
+    const next = windows[i + 1];
+    // A genuine "After <round>" gap only exists when the next round's own
+    // start is later than this round's end — i.e. real, elapsed tee_time
+    // left daylight between them. In rehearsal mode the next round's start
+    // is chained directly off this round's end (no gap to speak of), so
+    // skip the "After" chapter rather than emit a zero-width one.
+    if (next && next.start > w.end) {
+      chapters.push({ key: 'after-' + slugifyRoundName(w.name), title: `After ${w.label}`, start: w.end, end: next.start, roundName: null, photos: [], notes: [] });
+    } else if (!next) {
+      chapters.push({ key: 'after-' + slugifyRoundName(w.name), title: `After ${w.label}`, start: w.end, end: Infinity, roundName: null, photos: [], notes: [] });
+    }
   });
   chapters.forEach(c => { c.anchorId = 'chapter-' + c.key; });
   const chapterByRoundName = {};
