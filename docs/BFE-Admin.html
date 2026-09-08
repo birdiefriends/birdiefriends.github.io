@@ -3494,6 +3494,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
         wbLabel: keptWB ? 'In Play' : 'Lost', wbPillClass: 'wb-pill ' + (keptWB ? 'wb-in' : 'wb-out'), wbHoleDetail,
         payoutCol: fmtPayout(totalPayout), perfCalc,
         rowClass: r0.rank === 1 ? 'lb-row leader-row' : 'lb-row',
+        holes: holesByPlayer[r0.player_name] || null, // Dev-95 — per-hole drill-down
       };
     });
     const podium = results.filter(x => x.payout_podium > 0).map(x => ({ name: x.player_name, amt: fmtPayout(x.payout_podium) }));
@@ -3506,6 +3507,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       players, leader: players[0] || null,
       podium, skinsList, ctpList,
       groups: groupsByRound[r.name] || null,
+      pars: venue.pars || null, // Dev-95 — per-hole drill-down (hole-by-hole par)
     };
   });
   const totalRollup = rollsInto.length;
@@ -3663,6 +3665,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
         vsParDisplay: vsPar != null && twomanPar != null ? `(${twomanPar + vsPar})` : '',
         payoutCol: fmtPayout(totalPayout),
         rowClass: r.rank === 1 ? 'lb-row leader-row' : 'lb-row',
+        holes: holesByTeam[r.player_name] || null, // Dev-95 — per-hole drill-down
       };
     });
     twoman = {
@@ -3674,6 +3677,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       skinsList: twomanSkins.map(s => ({ name: s.winner, hole: `Hole ${s.hole} — ${fmtPayout(perTwomanSkin)}` })),
       ctpList: twomanCttp.map(c => ({ name: c.winner, detail: `Hole ${c.hole}${c.dist != null ? ` — ${c.dist}′` : ''} — ${fmtPayout(c.payout)}` })),
       insertAfter: originalRounds.filter((r, i) => i < originalRounds.indexOf(twomanRound) && r.engine === 'stableford_quota').length,
+      pars: twomanVenue.pars || null, // Dev-95 — per-hole drill-down
     };
   }
   // Scorecard Engine (Dev-92) — Practice / fun rounds. Rendered as its own
@@ -3696,12 +3700,14 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
         name: r0.player_name, withdrawn: withdrawnNames.has(r0.player_name),
         actualPoints: r0.actual_points,
         vsParDisplay: vsPar != null && par != null ? `(${par + vsPar})` : '',
+        holes: holesByPlayer[r0.player_name] || null, // Dev-95 — per-hole drill-down
       };
     }).sort((a, b) => a.name.localeCompare(b.name));
     return {
       idx, name: r.name, venue: r.venue,
       closed: closedRoundNames.has(r.name),
       players,
+      pars: venue.pars || null, // Dev-95 — per-hole drill-down
     };
   });
   const memoryChapterData = buildMemoryChapters(config.eventName, originalRounds, memories || [], notes || [], scorecardsByRound, allResults);
@@ -4037,6 +4043,12 @@ function formatEventDateRange(startIso, endIso) {
 // CSS lifted verbatim from source/WallyCup_Results_Design_Reference.dc.html's
 // <style> block (Dev-75) — same visual language, just served as a plain
 // static page instead of a Claude Design canvas artboard.
+// Dev-94 — "I ❤️ Wally" sticker logo (Brian's upload), sprinkled across
+// the results page: hero header, every winner/champion banner, and the
+// footer. Small JPG on a light (non-transparent) background, embedded as a
+// data URI so the generated static page stays self-contained — no separate
+// asset upload/hosting needed alongside the /deploy route.
+const WC_LOGO_DATA_URI = 'data:image/jpeg;base64,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';
 const RESULTS_PAGE_CSS = `
 *{box-sizing:border-box;}
 body{margin:0;background:#0d1f3d;color:#f5f0e8;font-family:'DM Sans',sans-serif;}
@@ -4077,6 +4089,9 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .comp-label{font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--accent-light);margin-bottom:5px;font-weight:700;}
 .winner-name{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:1.5rem;color:var(--white);margin-bottom:2px;}
 .winner-stat{font-size:12.5px;color:var(--white-dim);}
+.hero-logo{width:64px;height:64px;border-radius:16px;display:block;margin:0 auto 0.9rem;box-shadow:0 6px 22px rgba(0,0,0,0.4);}
+.banner-logo{width:26px;height:26px;border-radius:7px;vertical-align:middle;margin-right:7px;box-shadow:0 2px 8px rgba(0,0,0,0.35);position:relative;top:-1px;}
+.footer-logo{width:34px;height:34px;border-radius:9px;display:block;margin:0 auto 0.9rem;opacity:0.92;}
 .lb-card{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:16px;overflow:hidden;}
 .lb-list{display:flex;flex-direction:column;}
 .lb-row,.ov-row{position:relative;padding:15px 16px;border-bottom:1px solid rgba(245,240,232,0.06);}
@@ -4115,6 +4130,21 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .lb-cell-perf{text-align:right;white-space:nowrap;}
 .lb-cell-wb{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:13px;color:var(--white-dim);}
 .lb-cell-pay{text-align:right;color:var(--accent-light);font-weight:700;font-size:14px;white-space:nowrap;}
+.score-detail{margin-top:10px;grid-column:1/-1;}
+.score-detail summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:var(--accent-light);}
+.score-detail summary::-webkit-details-marker{display:none;}
+.score-detail summary::before{content:'▸';font-size:9px;transition:transform 0.15s;display:inline-block;}
+.score-detail[open] summary::before{transform:rotate(90deg);}
+.hole-grid{margin-top:10px;display:flex;flex-direction:column;gap:6px;}
+.hole-grid-nine{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;}
+.hole-cell{background:var(--navy2);border:1px solid rgba(245,240,232,0.08);border-radius:7px;padding:5px 2px;text-align:center;}
+.hole-cell.hole-good{border-color:rgba(111,191,126,0.45);background:rgba(111,191,126,0.08);}
+.hole-cell.hole-bad{border-color:rgba(224,160,80,0.45);background:rgba(224,160,80,0.08);}
+.hole-num{font-size:9px;color:var(--white-dim);opacity:0.7;font-weight:700;}
+.hole-par{font-weight:400;opacity:0.8;}
+.hole-score{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:15px;color:var(--white);margin:1px 0;line-height:1.2;}
+.hole-pts{font-size:8.5px;color:var(--white-dim);opacity:0.65;}
+@media (max-width:520px){.hole-cell{padding:4px 1px;}.hole-score{font-size:12.5px;}.hole-num,.hole-pts{font-size:7.5px;}}
 .side-strip{display:flex;gap:0.9rem;flex-wrap:wrap;margin-top:1rem;}
 .side-card{flex:1;min-width:220px;background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);border-radius:12px;padding:0.85rem 1rem;}
 .side-label{font-size:9.5px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-light);margin-bottom:0.55rem;}
@@ -4168,7 +4198,38 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .footer-meta{font-size:10.5px;color:var(--white-dim);opacity:0.55;margin-top:1.1rem;}
 @media (max-width:520px){.wb-grid{grid-template-columns:1fr;}.rail{padding:1.25rem 0.4rem 0.5rem;}.wrap{padding:0 1rem;}.section{padding:1.6rem 1rem;}.lb-row,.ov-row{padding:14px 14px;}}
 `;
-function renderPlayerRow(p, quotaLabel) {
+// Dev-95 — per-hole drill-down for the rank list. Native <details>, no JS in
+// the published page (matches perf-detail's own pattern) — click the summary
+// to reveal all 18 holes. Each hole shows the SAME "par + vsPar" figure
+// already shown for the round TOTAL next to a player's name (vsParDisplay
+// above, confirmed with Brian) — same VS_PAR_BY_POINTS mapping, just applied
+// hole-by-hole using that venue's real per-hole par (Venue Manager's
+// venue.pars) instead of summed once for the whole round.
+function renderHoleGrid(holes, pars) {
+  if (!Array.isArray(holes) || holes.length !== 18) return '';
+  const parsOk = Array.isArray(pars) && pars.length === 18;
+  const cells = holes.map((pt, i) => {
+    const vsPar = VS_PAR_BY_POINTS[pt];
+    const holePar = parsOk ? pars[i] : null;
+    const score = (vsPar !== undefined && holePar != null) ? holePar + vsPar : null;
+    const cls = vsPar === undefined ? '' : (vsPar < 0 ? 'hole-good' : (vsPar > 0 ? 'hole-bad' : ''));
+    return `<div class="hole-cell ${cls}">
+      <div class="hole-num">${i + 1}${holePar != null ? `<div class="hole-par">Par ${holePar}</div>` : ''}</div>
+      <div class="hole-score">${score != null ? score : '—'}</div>
+      <div class="hole-pts">${pt != null && pt !== undefined ? pt : '—'} pt${pt === 1 ? '' : 's'}</div>
+    </div>`;
+  });
+  return `<div class="hole-grid">
+    <div class="hole-grid-nine">${cells.slice(0, 9).join('')}</div>
+    <div class="hole-grid-nine">${cells.slice(9, 18).join('')}</div>
+  </div>`;
+}
+function renderScoreDetail(holes, pars) {
+  const grid = renderHoleGrid(holes, pars);
+  if (!grid) return '';
+  return `<details class="score-detail"><summary>18-hole scorecard</summary>${grid}</details>`;
+}
+function renderPlayerRow(p, quotaLabel, pars) {
   return `<div class="${p.rowClass}${p.withdrawn ? ' withdrawn-row' : ''}">
     <div class="lb-name-line">
       <span class="rank-cell">${p.rank ?? '—'}</span><span class="player-name">${escapeHtml(p.name)}</span>${p.withdrawn ? '<span class="vspar-tag">(withdrew)</span>' : ''}${p.vsParDisplay ? `<span class="vspar-tag">${escapeHtml(p.vsParDisplay)}</span>` : ''}
@@ -4184,6 +4245,7 @@ function renderPlayerRow(p, quotaLabel) {
       <div class="lb-cell lb-cell-wb"><span class="${p.wbPillClass}">${p.wbLabel}</span><span>${escapeHtml(p.wbHoleDetail)}</span></div>
       <div class="lb-cell lb-cell-pay">${p.payoutCol}</div>
     </div>
+    ${renderScoreDetail(p.holes, pars)}
   </div>`;
 }
 function renderOverallRow(o, roundLabels, showPodium) {
@@ -4238,20 +4300,20 @@ function renderRoundSection(sec, num, memoryChapterAnchors) {
       ${memLink}
     </div></div>
     ${sec.leader ? `<div class="winner-banner">
-      <div class="comp-label">${sec.label} Leader</div>
+      <div class="comp-label"><img class="banner-logo" src="${WC_LOGO_DATA_URI}" alt="">${sec.label} Leader</div>
       <div class="winner-name">${escapeHtml(sec.leader.name)}</div>
       <div class="winner-stat">${sec.leader.roundPerfDisplay} Round Perf.</div>
     </div>` : ''}
-    <div class="lb-card"><div class="lb-list">${sec.players.map(p => renderPlayerRow(p, sec.quotaInLabel)).join('')}</div></div>
     <div class="side-strip">
       ${sideCard('Podium', '🏆', sec.podium, 'No podium payout configured.')}
       ${sideCard('Skins', '🏌️', sec.skinsList, 'No outright skins — every hole was tied.')}
       ${sideCard('Closest to Pin', '📍', sec.ctpList, 'No CTP claims recorded.')}
     </div>
+    <div class="lb-card"><div class="lb-list">${sec.players.map(p => renderPlayerRow(p, sec.quotaInLabel, sec.pars)).join('')}</div></div>
     ${groupsHtml}
   </div>`;
 }
-function renderTeamRow(t) {
+function renderTeamRow(t, pars) {
   return `<div class="${t.rowClass}">
     <div class="lb-name-line">
       <span class="rank-cell">${t.rank ?? '—'}</span><span class="player-name">${escapeHtml(t.name)}</span>${t.vsParDisplay ? `<span class="vspar-tag">${escapeHtml(t.vsParDisplay)}</span>` : ''}
@@ -4265,6 +4327,7 @@ function renderTeamRow(t) {
       </div>
       <div class="lb-cell lb-cell-pay">${t.payoutCol}</div>
     </div>
+    ${renderScoreDetail(t.holes, pars)}
   </div>`;
 }
 function renderTwomanSection(tm, num, eventName, memoryChapterAnchors) {
@@ -4295,19 +4358,19 @@ function renderTwomanSection(tm, num, eventName, memoryChapterAnchors) {
       ${memLink}
     </div></div>
     ${tm.leader ? `<div class="winner-banner">
-      <div class="comp-label">2Man Champions</div>
+      <div class="comp-label"><img class="banner-logo" src="${WC_LOGO_DATA_URI}" alt="">2Man Champions</div>
       <div class="winner-name">${escapeHtml(tm.leader.name)}</div>
       <div class="winner-stat">${tm.leader.actualPoints} pts${tm.leader.performanceDisplay != null ? ` · ${tm.leader.performanceDisplay} vs. team quota` : ''}</div>
     </div>` : ''}
-    <div class="lb-card"><div class="lb-list">${tm.teams.map(renderTeamRow).join('')}</div></div>
     <div class="side-strip">
       ${sideCard('Podium', '🏆', tm.podium, 'No podium payout configured.')}
       ${sideCard('Skins', '🏌️', tm.skinsList, 'No outright skins — every hole was tied.')}
       ${sideCard('Closest to Pin', '📍', tm.ctpList, 'No CTP claims recorded — individual, not team.')}
     </div>
+    <div class="lb-card"><div class="lb-list">${tm.teams.map(t => renderTeamRow(t, tm.pars)).join('')}</div></div>
   </div></div>`;
 }
-function renderScorecardOnlyRow(p) {
+function renderScorecardOnlyRow(p, pars) {
   return `<div class="lb-row">
     <div class="lb-name-line">
       <span class="player-name">${escapeHtml(p.name)}${p.withdrawn ? ' <span class="subtle">(withdrew)</span>' : ''}</span>${p.vsParDisplay ? `<span class="vspar-tag">${escapeHtml(p.vsParDisplay)}</span>` : ''}
@@ -4315,6 +4378,7 @@ function renderScorecardOnlyRow(p) {
     <div class="lb-grid">
       <div class="lb-cell lb-cell-quota">${p.actualPoints != null ? p.actualPoints : '—'} pts</div>
     </div>
+    ${renderScoreDetail(p.holes, pars)}
   </div>`;
 }
 // Scorecard Engine (Dev-92) results section — Practice / fun rounds. No
@@ -4346,7 +4410,7 @@ function renderScorecardOnlySection(sec, num, memoryChapterAnchors) {
       <div class="section-desc">Practice round · scorecards only — no standings or payouts</div>
       ${memLink}
     </div></div>
-    <div class="lb-card"><div class="lb-list">${sec.players.length ? sec.players.map(renderScorecardOnlyRow).join('') : '<div class="side-empty">No scorecards submitted.</div>'}</div></div>
+    <div class="lb-card"><div class="lb-list">${sec.players.length ? sec.players.map(p => renderScorecardOnlyRow(p, sec.pars)).join('') : '<div class="side-empty">No scorecards submitted.</div>'}</div></div>
   </div></div>`;
 }
 function renderResultsHtml(data, opts) {
@@ -4409,7 +4473,7 @@ function renderResultsHtml(data, opts) {
           : `${data.closedRollup}/${data.totalRollup} rounds closed so far · standings update as each round closes, champion reveals once all rounds are in`}</div>
       </div></div>
       ${data.isComplete ? `<div class="winner-banner">
-        <div class="comp-label">🏆 ${escapeHtml(data.eventName)} Champion</div>
+        <div class="comp-label"><img class="banner-logo" src="${WC_LOGO_DATA_URI}" alt="">🏆 ${escapeHtml(data.eventName)} Champion</div>
         <div class="winner-name">${escapeHtml(data.champion.name)}</div>
         <div class="winner-stat">${data.champion.overall} Overall · ${data.champion.perRound.join(' / ')} by round</div>
       </div>` : ''}
@@ -4446,6 +4510,7 @@ function renderResultsHtml(data, opts) {
   const photoNum = roundNums[data.roundSections.length + 3 + (data.scorecardOnly || []).length];
   const photoHtml = renderMemoriesSection(data.memoryChapters, data.bfeBase, photoNum);
   const footerHtml = `<div class="footer">
+    <img class="footer-logo" src="${WC_LOGO_DATA_URI}" alt="">
     <a class="back-btn" href="/portal.html">← Back to Portal</a>
     <div class="footer-meta">BirdieFriends Experiences · generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC</div>
   </div></div>`;
@@ -4456,6 +4521,7 @@ function renderResultsHtml(data, opts) {
 </head><body>
 <div class="page" style="--accent:${accent}">
   <div class="hero">
+    <img class="hero-logo" src="${WC_LOGO_DATA_URI}" alt="">
     <div class="hero-eyebrow">BirdieFriends Experiences</div>
     <div class="hero-title">${escapeHtml(data.eventName.replace(/^\d{4}\s*/, ''))}</div>
     <div class="hero-subtitle">${formatEventDateRange(data.eventDate, data.eventEndDate)}</div>
