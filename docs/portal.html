@@ -8428,6 +8428,7 @@ async function livePanelUploadCore(file, evt, { sourceLabel, section, capturedAt
       if (!data.ok) throw new Error(data.error || 'Upload failed');
       setLivePhotoBusy(false, '');
       showToast(data.media_type === 'video' ? '✅ Video added!' : '✅ Photo added!');
+      captureEventWeather(evt, evt.name); // Dev-96 — round.name key, see captureEventWeather's own comment
       return;
     }
     const scorecardSubmitted = await checkScorecardSubmitted(evt.name, currentPlayer);
@@ -8765,6 +8766,11 @@ async function submitScorecard(evtName) {
     _scSubmitting = false;
     renderLiveBanner();
     showToast('✅ Scorecard submitted! Total: ' + total + ' pts');
+    // Dev-96 — weather capture for BFE rounds too (previously only fired for
+    // GATHERINGS_API-backed scorecards/photos, see captureEventWeather).
+    // Also covers a round where nobody uploads a photo but everyone submits
+    // a card.
+    if (_scEvt) captureEventWeather(_scEvt, evtName);
   } catch(e) {
     showToast('❌ Submit failed — try again', true);
     _scSubmitting = false;
@@ -12157,7 +12163,15 @@ function weatherPostmarkBadge(w) {
 // or an Open-Meteo archive lag are both normal, self-healing states (the
 // next capture for the same event just tries again), not failures worth
 // interrupting the player's actual action for.
-function captureEventWeather(evt) {
+// Dev-96 — `eventNameKey` override: every existing caller keeps getting
+// evtPhotoKey(evt) (gathering:<id> when gathering-sourced) exactly as
+// before. BFE rounds need the plain round NAME instead — BFE-Admin.html's
+// results page has no idea what a gatheringId is, it only ever knows
+// round.name (the same string _bfeBackedIndex already keys BFE rounds by,
+// byte-for-byte — see refreshBFEBackedIndex's own Dev-80 comment), so a
+// BFE caller passes evt.name explicitly rather than getting evtPhotoKey's
+// gathering-id branching.
+function captureEventWeather(evt, eventNameKey) {
   try {
     const venue = csNormalizedVenueName(evt);
     if (!venue || !(evt.dt instanceof Date) || isNaN(evt.dt)) return;
@@ -12169,7 +12183,7 @@ function captureEventWeather(evt) {
     fetch(`${GATHERINGS_API}/weather/capture`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_name: evtPhotoKey(evt), venue, event_date: `${y}-${m}-${d}` })
+      body: JSON.stringify({ event_name: eventNameKey || evtPhotoKey(evt), venue, event_date: `${y}-${m}-${d}` })
     }).catch(() => {}); // fire-and-forget — see comment above
   } catch(e) { /* never let a weather-capture attempt block the real action */ }
 }
