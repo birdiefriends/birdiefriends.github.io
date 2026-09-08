@@ -3832,3 +3832,68 @@ Built as its own independent feature, deliberately never touching `memories_capt
 **Dev-80 update, same day — added the 5-round golf schedule to Trip Info**: pulled the real round data straight from the live event config (`GET /bfe/events?event=2026 Wally Cup`) rather than guessing — Practice Rd (Paupack Hills GC), Rd1 (Honesdale Golf Club), Rd2 (Skytop Lodge), 2Man (Skytop Lodge), Rd3 (Paupack Hills GC), tee times converted from the stored UTC `teeTime` to Eastern (Sep 2026 is within DST, so UTC−4) and matched against the day-of-week each date actually falls on (Thu/Fri/Sat/Sat/Sun — lines up with the existing food schedule's day labels). New "⛳ Golf Schedule" section added to `docs/2026-wally-cup-trip-info.html` between the address and packing-list sections, same card language as the rest of the page (new `.round-row/.round-day/.round-name/.round-venue/.round-time` CSS, no framework change). Re-rendered via the same headless-browser screenshot check as the first build before shipping.
 
 Note for later, not urgent: the live config's `2026 Wally Cup - 2Man` round reads `engine: "stableford_quota"`, not `scramble_pair` — worth Brian double-checking in BFE-Admin section 4 before Close Round, since the codebase's 2Man render path (`renderTwomanSection`, results page) specifically looks for `engine === 'scramble_pair'` to find that round; as configured today it would likely be treated as a plain stableford round instead of getting its own 2Man section. Out of scope for the Trip Info work just now, flagging so it doesn't get missed before Saturday.
+
+---
+
+## Dev-80 close-out — "WCRP Memories Pass 2 — capture pipeline, results-page scrapbook, Trip Info widget" (2026-09-08)
+
+Session name/label for this body of work: **Dev-80 — WCRP Memories Pass 2**. Covers, in
+order: the full WCRP memories build (BFE-backed flag, `bfe_event_memories`/
+`bfe_event_memory_notes` tables + routes, Live Panel repoint, the persistent capture
+widget gated on a new `memories_capture_open` toggle, EventCard icon disabling, a
+commissioner Live Panel Notes capability, and the results-page memories scrapbook built
+directly into `BFE-Admin.html`'s Publish Results feature — chapters auto-grouped by round
+timing with jump-links, replacing the old static Photo Gallery placeholder); resolving a
+false-alarm D1-delete report and a real cross-system bug (mistake photos persisting in
+Portal's "My History" because it reads the old, separate `event_photos` table, not the
+new `bfe_event_memories` one); a brand-new standalone Trip Info feature (branded page +
+independent Home widget + `trip_info_url` column, deliberately not gated on the existing
+Trip Memories toggle, per Brian's explicit call); a real golf-schedule addition to that
+page pulled from live production data; catching and confirming the fix for a live
+2Man-engine misconfiguration (`stableford_quota` instead of `scramble_pair`) found as a
+byproduct of that data pull; a footer "return to portal" link added to the Trip Info
+page; a standing-rule change to `bf_push.ps1`'s own delivery convention (direct-to-live-
+file commits going forward, per Brian's explicit instruction); and a live confirmation
+that the "2026 Wally Cup" D1 event now carries the real 16-player roster and real 5-round
+schedule, resolving the 4-player-mock-data warning that had been carried forward since
+Dev-75/77/78.
+
+**Doc updates made as part of this close-out** (all delivered/committed alongside this
+entry): `BF_Session_Bootstrap.md` — §1 file-status bump (portal v4.1.5, BFE-Admin config
+schema additions), §2 rewritten (real roster/schedule confirmed live, mock-data warning
+resolved, 2Man-engine catch documented, full Dev-80 build summary), §3 replaced entirely
+(was "Dev-80 focus" forward-looking plan, now a "Dev-81 focus — end-to-end testing"
+section), §4 amended (`bf_push.ps1` direct-commit rule, the WebFetch by-name-route
+cache-busting quirk), §5 backlog cross-references added. `BF_WCRP_Memories_Spec.md` —
+status line rewritten, a full "What actually shipped (Dev-80) — deviations from this
+draft" section appended (round_id→round_name schema fix, grace-window→toggle eligibility
+change, chapters-in-Results-page-not-widget redirect, Live Panel Notes and Trip Info as
+unplanned additions), §9 open calls marked resolved inline. `BF_BFE_Memories_Plan.md` —
+status line updated to point at the Spec doc's addendum for the concrete shipped result.
+`BF_WallyCup_Spec.md` — status line bumped to fourth revision/Dev-80, both stale
+`Rd1 → Rd2 → 2Man → Rd3 → Overall` round-sequence mentions corrected to include Practice
+Rd, the 4-player-mock-roster warning replaced with the real-roster confirmation, a note
+on the 2Man-engine catch added to §5, a brief cross-reference to the memories scrapbook
+added (detail deferred to the Memories-specific docs, since this spec's scope is
+scoring/architecture). Checked and found NOT impacted by this session's work (no edits
+made): `BF_BizPlan_Bootstrap.md`, `BF_EventSite_Schema.md`, `BF_NextSession_Garrett.md`,
+`BF_Operations_Guide.md` (grepped for memories/trip-info/2Man/Practice-Rd keywords, no
+matches); `BF_Golf_Scorer_Session_Starter_current.md` reviewed and judged to be a
+distinct, older meta-bootstrapping doc (device-bridge/curl-fetch/deploy conventions for a
+different session-start workflow) with nothing feature-specific to correct.
+
+**Resource-usage note that led to this close-out:** analyzed this session's own transcript
+(weighted by cache-write/cache-read/output cost, deduplicated by request id to avoid
+double-counting) ahead of this task — session had already auto-compacted once today
+(~386K→~13K tokens) and had climbed back to roughly ~338K tokens and still rising, with
+today's substantive work fully shipped and nothing left mid-flight. Recommended wrapping
+here and starting Dev-81 fresh for the end-to-end testing pass rather than continuing in
+an increasingly large context — Brian's next message was this close-out request itself,
+read as agreement.
+
+**Dev-81 starts from `BF_Session_Bootstrap.md` §3** — an end-to-end verification pass
+across Live Panel capture (all 5 rounds, especially 2Man's team picker and the
+engine-fix confirmation), the WCRP memories widget, the results-page scrapbook, the Trip
+Info widget, the new Live Panel Notes capability, and a deliberate re-check of every
+round's Setup config — using the real 16-player roster and real 5-round schedule, ahead
+of the Practice Rd (Thu 9/10) and real Rd1 (10am ET, Fri 9/11).
