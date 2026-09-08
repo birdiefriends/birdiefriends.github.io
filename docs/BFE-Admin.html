@@ -3395,6 +3395,30 @@ function sumPars(parsArr) {
   if (!Array.isArray(parsArr) || !parsArr.length) return null;
   return parsArr.reduce((a, b) => a + b, 0);
 }
+// Dev-96 — same weather chip "My History" already shows for non-BFE
+// gatherings (portal.html's weatherPostmarkBadge/weatherCodeIcon, Dev-67),
+// ported verbatim rather than shared — this is a separate static file, no
+// module system between the two. Same WMO code buckets, same postmark
+// look, restyled slightly (a chip in a section-head reads better inline
+// than a rotated circle floating over a card corner) but the icon/temp
+// logic is unchanged so a round's weather always matches what a player's
+// own history page would show for the same day/venue.
+function weatherCodeIcon(code) {
+  if (code == null) return '🌡️';
+  if (code === 0) return '☀️';
+  if (code <= 2) return '🌤️';
+  if (code === 3) return '☁️';
+  if (code === 45 || code === 48) return '🌫️';
+  if (code >= 51 && code <= 67) return '🌧️';
+  if (code >= 71 && code <= 77) return '🌨️';
+  if (code >= 80 && code <= 82) return '🌦️';
+  if (code >= 95) return '⛈️';
+  return '🌡️';
+}
+function renderWeatherChip(w) {
+  if (!w || w.temp_high == null || w.temp_low == null) return '';
+  return `<div class="weather-chip">${weatherCodeIcon(w.weather_code)} ${Math.round(w.temp_high)}°/${Math.round(w.temp_low)}°</div>`;
+}
 // Dev-89 (timezone fix — see the header comment above buildMemoryChapters
 // below for the full story): SQLite's own datetime('now') — used for
 // bfe_scorecards.captured_at and bfe_event_memory_notes.created_at, always
@@ -3417,7 +3441,8 @@ function parseSqliteUtc(raw) {
 // resultsPayload:     GET /bfe/round-results?event=X  → {results, skins, cttp}
 // venuesByName:       {venueName: {pars:[18 ints]}} from main worker GET /venues
 // scorecardsByRound:  {roundName: [{player, holes:[18], total}]} from BFE worker GET /scorecards
-function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows, memories, notes, bfeBase) {
+function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows, memories, notes, bfeBase, weatherByName) {
+  weatherByName = weatherByName || {};
   const allResults = resultsPayload.results || [];
   const allSkins = resultsPayload.skins || [];
   const allCttp = resultsPayload.cttp || [];
@@ -3508,6 +3533,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       podium, skinsList, ctpList,
       groups: groupsByRound[r.name] || null,
       pars: venue.pars || null, // Dev-95 — per-hole drill-down (hole-by-hole par)
+      weather: weatherByName[r.name] || null, // Dev-96
     };
   });
   const totalRollup = rollsInto.length;
@@ -3678,6 +3704,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       ctpList: twomanCttp.map(c => ({ name: c.winner, detail: `Hole ${c.hole}${c.dist != null ? ` — ${c.dist}′` : ''} — ${fmtPayout(c.payout)}` })),
       insertAfter: originalRounds.filter((r, i) => i < originalRounds.indexOf(twomanRound) && r.engine === 'stableford_quota').length,
       pars: twomanVenue.pars || null, // Dev-95 — per-hole drill-down
+      weather: weatherByName[twomanRound.name] || null, // Dev-96
     };
   }
   // Scorecard Engine (Dev-92) — Practice / fun rounds. Rendered as its own
@@ -3708,6 +3735,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       closed: closedRoundNames.has(r.name),
       players,
       pars: venue.pars || null, // Dev-95 — per-hole drill-down
+      weather: weatherByName[r.name] || null, // Dev-96
     };
   });
   const memoryChapterData = buildMemoryChapters(config.eventName, originalRounds, memories || [], notes || [], scorecardsByRound, allResults);
@@ -3972,8 +4000,11 @@ function renderMemoryTile(bfeBase, m) {
     ? `<video src="${src}" controls preload="metadata" class="memory-media"></video>`
     : `<img src="${src}" class="memory-media" loading="lazy">`;
   const tagLine = (m.tagged_players && m.tagged_players.length) ? `👤 ${m.tagged_players.map(escapeHtml).join(', ')}` : '';
-  return `<div class="memory-tile">
-    ${media}
+  // Dev-96 — full-size + Share, click the tile itself (data-src drives the
+  // shared lightbox — see renderLightbox()). Caption doubles as the share
+  // title when there is one, for a nicer share-sheet preview.
+  return `<div class="memory-tile" data-src="${escapeHtml(src)}" data-video="${isVideo ? '1' : '0'}" data-caption="${escapeHtml(m.caption || '')}">
+    <div class="memory-tile-media-wrap">${media}<div class="memory-tile-expand">⤢</div></div>
     <div class="memory-tile-meta">
       <div class="memory-tile-by">${escapeHtml(m.captured_by || 'Unknown')}${isVideo ? ' · 🎥' : ''}</div>
       ${m.caption ? `<div class="memory-tile-caption">${escapeHtml(m.caption)}</div>` : ''}
@@ -3996,6 +4027,73 @@ function renderMemoryChapterBlock(ch, bfeBase) {
     ${ch.photos.length ? `<div class="memory-grid">${ch.photos.map(m => renderMemoryTile(bfeBase, m)).join('')}</div>` : ''}
     ${ch.notes.length ? `<div class="memory-notes">${ch.notes.map(renderMemoryNote).join('')}</div>` : ''}
   </div>`;
+}
+// Dev-96 — full-size viewer + Share for Trip Memories. One shared overlay
+// for the whole page (not one per tile) — every .memory-tile[data-src]
+// wires into it via a delegated click listener. The only script this
+// otherwise-static generated page ships; Web Share has no non-JS
+// equivalent, and a copy-link fallback covers browsers without it (mainly
+// desktop). `<\/script>` below is deliberate — a literal `</script>` in
+// this source would close BFE-Admin.html's OWN <script> tag early when
+// ITS browser parses ITS html; the backslash only matters to the raw HTML
+// tokenizer, the JS engine hands back a normal `</script>` in the string.
+function renderLightbox() {
+  return `<div id="memory-lightbox" class="lightbox" hidden>
+    <button type="button" class="lightbox-close" aria-label="Close">✕</button>
+    <div class="lightbox-media"></div>
+    <div class="lightbox-actions">
+      <a class="lightbox-btn lightbox-fullsize" target="_blank" rel="noopener">⤢ Full size</a>
+      <button type="button" class="lightbox-btn lightbox-share">↗ Share</button>
+    </div>
+    <div class="lightbox-copied" hidden>Link copied!</div>
+  </div>
+  <script>
+  (function(){
+    var lb = document.getElementById('memory-lightbox');
+    if (!lb) return;
+    var mediaWrap = lb.querySelector('.lightbox-media');
+    var fullsizeLink = lb.querySelector('.lightbox-fullsize');
+    var shareBtn = lb.querySelector('.lightbox-share');
+    var copiedNote = lb.querySelector('.lightbox-copied');
+    var closeBtn = lb.querySelector('.lightbox-close');
+    var currentSrc = '';
+    function openLightbox(src, isVideo, caption) {
+      currentSrc = src;
+      mediaWrap.innerHTML = isVideo
+        ? '<video src="' + src + '" controls autoplay playsinline></video>'
+        : '<img src="' + src + '" alt="">';
+      fullsizeLink.href = src;
+      lb.hidden = false;
+      document.body.style.overflow = 'hidden';
+      copiedNote.hidden = true;
+    }
+    function closeLightbox() {
+      lb.hidden = true;
+      mediaWrap.innerHTML = '';
+      document.body.style.overflow = '';
+    }
+    document.querySelectorAll('.memory-tile[data-src]').forEach(function(tile) {
+      tile.addEventListener('click', function() {
+        openLightbox(tile.getAttribute('data-src'), tile.getAttribute('data-video') === '1', tile.getAttribute('data-caption') || '');
+      });
+    });
+    closeBtn.addEventListener('click', closeLightbox);
+    lb.addEventListener('click', function(e) { if (e.target === lb) closeLightbox(); });
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !lb.hidden) closeLightbox(); });
+    shareBtn.addEventListener('click', function() {
+      if (navigator.share) {
+        navigator.share({ url: currentSrc, title: 'BirdieFriends memory' }).catch(function(){});
+      } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(currentSrc).then(function() {
+          copiedNote.hidden = false;
+          setTimeout(function(){ copiedNote.hidden = true; }, 2000);
+        }).catch(function(){});
+      } else {
+        window.prompt('Copy this link:', currentSrc);
+      }
+    });
+  })();
+  <\/script>`;
 }
 function renderMemoriesSection(chapters, bfeBase, num) {
   if (!chapters || !chapters.length) {
@@ -4181,18 +4279,31 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .chapter-title{font-size:13.5px;font-weight:700;color:var(--white);}
 .chapter-sub{font-size:11px;color:var(--white-dim);margin-top:2px;}
 .memory-grid{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
-.memory-tile{width:150px;border:1px solid rgba(245,240,232,0.12);border-radius:10px;overflow:hidden;background:var(--white-faintest);}
+.memory-tile{width:150px;border:1px solid rgba(245,240,232,0.12);border-radius:10px;overflow:hidden;background:var(--white-faintest);cursor:pointer;}
+.memory-tile-media-wrap{position:relative;}
 .memory-media{width:100%;height:110px;object-fit:cover;display:block;background:#000;}
+.memory-tile-expand{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:6px;background:rgba(13,31,61,0.65);color:var(--white);display:flex;align-items:center;justify-content:center;font-size:12px;opacity:0;transition:opacity 0.15s;pointer-events:none;}
+.memory-tile:hover .memory-tile-expand,.memory-tile:active .memory-tile-expand{opacity:0.9;}
 .memory-tile-meta{padding:6px 8px;}
 .memory-tile-by{font-size:10.5px;color:var(--white-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .memory-tile-caption{font-size:10.5px;color:var(--white);margin-top:2px;word-break:break-word;}
 .memory-tile-tags{font-size:10px;color:var(--white-dim);opacity:0.75;margin-top:2px;}
+.lightbox{position:fixed;inset:0;background:rgba(8,16,32,0.92);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.2rem;}
+.lightbox[hidden]{display:none;}
+.lightbox-media{max-width:100%;max-height:70vh;display:flex;align-items:center;justify-content:center;}
+.lightbox-media img,.lightbox-media video{max-width:100%;max-height:70vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+.lightbox-close{position:absolute;top:1.2rem;right:1.2rem;width:38px;height:38px;border-radius:50%;border:1px solid rgba(245,240,232,0.25);background:rgba(245,240,232,0.08);color:var(--white);font-size:16px;cursor:pointer;}
+.lightbox-actions{display:flex;gap:10px;margin-top:1.1rem;}
+.lightbox-btn{display:inline-flex;align-items:center;gap:6px;background:var(--white-faint);border:1px solid rgba(245,240,232,0.18);border-radius:99px;padding:9px 18px;font-size:12.5px;font-weight:600;color:var(--white);text-decoration:none;cursor:pointer;font-family:inherit;}
+.lightbox-btn:hover{background:rgba(245,240,232,0.16);}
+.lightbox-copied{margin-top:0.6rem;font-size:11.5px;color:var(--good);font-weight:600;}
 .memory-notes{display:flex;flex-direction:column;gap:8px;}
 .memory-note{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);border-radius:10px;padding:10px 12px;}
 .memory-note-text{font-size:12.5px;color:var(--white);line-height:1.5;white-space:pre-wrap;word-break:break-word;}
 .memory-note-by{font-size:10.5px;color:var(--white-dim);margin-top:5px;font-weight:600;}
 .section-photolink{display:inline-block;margin-top:6px;font-size:11.5px;font-weight:600;color:var(--accent-light);text-decoration:none;}
 .section-photolink:hover{text-decoration:underline;}
+.weather-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--white-dim);background:var(--white-faint);border:1px solid rgba(245,240,232,0.14);border-radius:99px;padding:3px 10px;margin-top:6px;}
 .footer{padding:2.2rem 1.5rem 3rem;text-align:center;}
 .back-btn{display:inline-flex;align-items:center;gap:7px;background:var(--white-faint);border:1px solid rgba(245,240,232,0.18);border-radius:99px;padding:9px 22px;font-size:12.5px;font-weight:600;color:var(--white);text-decoration:none;}
 .footer-meta{font-size:10.5px;color:var(--white-dim);opacity:0.55;margin-top:1.1rem;}
@@ -4280,6 +4391,7 @@ function renderRoundSection(sec, num, memoryChapterAnchors) {
       <div class="section-head"><div class="section-num">${num}</div><div>
         <div class="section-title">Round ${sec.idx + 1} · ${escapeHtml(sec.venue)}</div>
         <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+        ${renderWeatherChip(sec.weather)}
         ${memLink}
       </div></div>
       <div class="locked-card">
@@ -4297,6 +4409,7 @@ function renderRoundSection(sec, num, memoryChapterAnchors) {
     <div class="section-head"><div class="section-num">${num}</div><div>
       <div class="section-title">${escapeHtml(sec.sectionTitle)}</div>
       <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
+      ${renderWeatherChip(sec.weather)}
       ${memLink}
     </div></div>
     ${sec.leader ? `<div class="winner-banner">
@@ -4339,6 +4452,7 @@ function renderTwomanSection(tm, num, eventName, memoryChapterAnchors) {
       <div class="section-head"><div class="section-num">${num}</div><div>
         <div class="section-title">2Man Scramble${tm.venue ? ' · ' + escapeHtml(tm.venue) : ''}</div>
         <div class="section-desc">Standalone event — does not count toward the ${escapeHtml(eventName)} Overall</div>
+        ${renderWeatherChip(tm.weather)}
         ${memLink}
       </div></div>
       <div class="locked-card">
@@ -4355,6 +4469,7 @@ function renderTwomanSection(tm, num, eventName, memoryChapterAnchors) {
     <div class="section-head"><div class="section-num">${num}</div><div>
       <div class="section-title">2Man Scramble · ${escapeHtml(tm.venue)} — Final</div>
       <div class="section-desc">Standalone event — does not count toward the ${escapeHtml(eventName)} Overall</div>
+      ${renderWeatherChip(tm.weather)}
       ${memLink}
     </div></div>
     ${tm.leader ? `<div class="winner-banner">
@@ -4396,6 +4511,7 @@ function renderScorecardOnlySection(sec, num, memoryChapterAnchors) {
       <div class="section-head"><div class="section-num">${num}</div><div>
         <div class="section-title">${escapeHtml(sec.name)}${sec.venue ? ' · ' + escapeHtml(sec.venue) : ''}</div>
         <div class="section-desc">Practice round · scorecards only — no standings or payouts</div>
+        ${renderWeatherChip(sec.weather)}
         ${memLink}
       </div></div>
       <div class="locked-card">
@@ -4408,6 +4524,7 @@ function renderScorecardOnlySection(sec, num, memoryChapterAnchors) {
     <div class="section-head"><div class="section-num">${num}</div><div>
       <div class="section-title">${escapeHtml(sec.name)}${sec.venue ? ' · ' + escapeHtml(sec.venue) : ''} — Final</div>
       <div class="section-desc">Practice round · scorecards only — no standings or payouts</div>
+      ${renderWeatherChip(sec.weather)}
       ${memLink}
     </div></div>
     <div class="lb-card"><div class="lb-list">${sec.players.length ? sec.players.map(p => renderScorecardOnlyRow(p, sec.pars)).join('') : '<div class="side-empty">No scorecards submitted.</div>'}</div></div>
@@ -4536,6 +4653,7 @@ function renderResultsHtml(data, opts) {
   ${twomanHtml}
   ${practiceHtml}
   ${photoHtml}
+  ${renderLightbox()}
   ${footerHtml}
 </div>
 </body></html>`;
@@ -4584,7 +4702,19 @@ async function fetchResultsPageData() {
     const notesData = await notesRes.json();
     notes = Array.isArray(notesData.notes) ? notesData.notes : [];
   } catch (e) { console.warn('[BFE] Could not load Trip Memories notes:', e.message); }
-  return buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows, memories, notes, bfeBase);
+  // Dev-96 — same weather history "My History" already shows, keyed by
+  // round.name (see captureEventWeather's own comment in portal.html for
+  // why a BFE round captures under its plain name rather than evtPhotoKey's
+  // gathering:<id> form) — a round with no capture yet (nobody's opened the
+  // Live Panel there) just gets no chip, same as any other missing-data case
+  // on this page.
+  const weatherByName = {};
+  try {
+    const weatherRes = await fetch(portalBase + '/weather');
+    const weatherData = await weatherRes.json();
+    (weatherData.weather || []).forEach(w => { weatherByName[w.event_name] = w; });
+  } catch (e) { console.warn('[BFE] Could not load weather history:', e.message); }
+  return buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows, memories, notes, bfeBase, weatherByName);
 }
 function setPublishResultsStatus(msg, isErr) {
   const el = document.getElementById('publishResultsStatus');
