@@ -840,7 +840,7 @@ function populateTestScorecardRoundSelect() {
   const btn = document.getElementById('generateTestScorecardsBtn');
   if (!sel) return;
   const current = sel.value;
-  const rounds = readRoundsInput().filter(r => (r.engine === 'stableford_quota' || r.engine === 'scramble_pair') && r.venueId);
+  const rounds = readRoundsInput().filter(r => (r.engine === 'stableford_quota' || r.engine === 'scramble_pair' || r.engine === 'scorecard_only') && r.venueId);
   if (!rounds.length) {
     sel.innerHTML = '<option value="">— add a round with a venue in section 4 first —</option>';
     btn.disabled = true;
@@ -1467,7 +1467,7 @@ const ENGINE_OPTIONS = [
   { id: 'stableford_quota', label: 'Stableford quota' },
   { id: 'scramble_pair', label: '2-man scramble' },
   { id: 'points_by_score_type', label: 'Points by score type' },
-  { id: 'none', label: 'No engine (practice / fun round — not scored)' }
+  { id: 'scorecard_only', label: 'Scorecard only (practice / fun round — no competitive calc)' }
 ];
 let roundNameDates = {};
 let roundNameVenues = {};
@@ -1535,7 +1535,7 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
   tr.querySelector('.removeRoundBtn').addEventListener('click', () => { tr.remove(); refreshTeeVenueBlocks(); });
   tr.querySelector('.r-engine').addEventListener('change', (ev) => {
     tr.querySelector('.r-wbpoints').disabled = false;
-    if (ev.target.value === 'none') tr.querySelector('.r-overall').checked = false;
+    if (ev.target.value === 'scorecard_only') tr.querySelector('.r-overall').checked = false;
     refreshTeeVenueBlocks();
   });
   tr.querySelector('.r-venue').addEventListener('change', () => {
@@ -2036,13 +2036,13 @@ function populateCloseRoundSelect(config) {
   const sel = document.getElementById('closeRoundSelect');
   const btn = document.getElementById('closeRoundBtn');
   const checkBtn = document.getElementById('checkScorecardsBtn');
-  const supported = (config.rounds || []).filter(r => r.engine === 'stableford_quota' || r.engine === 'scramble_pair');
+  const supported = (config.rounds || []).filter(r => r.engine === 'stableford_quota' || r.engine === 'scramble_pair' || r.engine === 'scorecard_only');
   if (!supported.length) {
     sel.innerHTML = '<option value="">— no closeable rounds in this event —</option>';
     btn.disabled = true;
     if (checkBtn) checkBtn.disabled = true;
   } else {
-    sel.innerHTML = supported.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}${r.engine === 'scramble_pair' ? ' (2Man)' : ''}</option>`).join('');
+    sel.innerHTML = supported.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}${r.engine === 'scramble_pair' ? ' (2Man)' : ''}${r.engine === 'scorecard_only' ? ' (Practice — scorecards only)' : ''}</option>`).join('');
     btn.disabled = false;
     if (checkBtn) checkBtn.disabled = false;
   }
@@ -2301,6 +2301,80 @@ document.getElementById('checkScorecardsBtn').addEventListener('click', async ()
 function teamDisplayName(players, label) {
   return (label && label.trim()) ? label.trim() : players.join(' & ');
 }
+// Scorecard Engine (Dev-92) — Close Round for a `scorecard_only` round
+// (Practice / fun round). Deliberately the simplest of the three Close
+// Round paths: fetch this round's Jotform scorecards, persist them raw to
+// /scorecards exactly like every other round does, then post one
+// /bfe/round-results row per player with nothing but player_name +
+// actual_points filled in (quota/performance/rank/payouts all stay null/0
+// — the Worker defaults them). No scoreRound() call, no skins, no CTP —
+// "collects & publishes the scorecards and content, no competitive calc,"
+// per Brian's spec. The null-heavy row still gets a real closed_at
+// (Worker stamps it fresh on every POST), which is all buildResultsData /
+// the memory-chapter timeline / "is this round closed" checks elsewhere
+// actually need from it.
+async function closeScorecardOnlyRound(round, base, pin, eventName, btn) {
+  const roundName = round.name;
+  setCloseRoundStatus('Fetching this round’s scorecards…');
+  try {
+    const scorecards = await jfFetchRoundScorecards(roundName);
+    const rosterNames = new Set(assembledConfig.roster.map(p => p.name));
+    const players = assembledConfig.roster.map(p => ({ name: p.name, sc: scorecards[p.name] }));
+    const missing = players.filter(p => !p.sc).map(p => p.name);
+    const unrecognizedScorecards = Object.keys(scorecards).filter(n => !rosterNames.has(n));
+    if (missing.length || unrecognizedScorecards.length) {
+      const lines = [`Roster and scorecards don't match for "${roundName}":`, ''];
+      if (missing.length) {
+        lines.push(`On the roster, no scorecard: ${missing.join(', ')}`);
+        lines.push('→ Fine for a practice round — not everyone always submits one. They\'ll just show no scorecard on the results page.');
+        lines.push('');
+      }
+      if (unrecognizedScorecards.length) {
+        lines.push(`Scorecard submitted, not on the roster: ${unrecognizedScorecards.join(', ')}`);
+        lines.push('→ Likely a name typo on Jotform, or a roster entry that\'s missing.');
+        lines.push('');
+      }
+      lines.push('OK to close anyway — this just publishes whatever scorecards exist, no scoring math involved. Cancel to go check first, nothing is saved yet.');
+      const proceed = confirm(lines.join('\n'));
+      if (!proceed) { setCloseRoundStatus('Close round cancelled — nothing saved. Check Jotform/roster, then try again.', true); btn.disabled = false; return; }
+    }
+    await Promise.allSettled(players.filter(p => p.sc).map(p => fetch(base + '/scorecards', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: roundName, player: p.name, holes: p.sc.holes, total: p.sc.actualPoints,
+        venue: round.venue || null,
+      })
+    }).catch(e => console.warn('scorecard persist failed for', p.name, e))));
+    const results = players.map(p => ({
+      playerName: p.name,
+      actualPoints: p.sc ? p.sc.actualPoints : null,
+    }));
+    const saveRes = await fetch(base + '/bfe/round-results', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: eventName, round_name: roundName, results, skins: [], cttp: [], pin })
+    });
+    const saveData = await saveRes.json();
+    if (!saveRes.ok) throw new Error(saveData.error || `HTTP ${saveRes.status}`);
+    const notes = [];
+    if (missing.length) notes.push(`no scorecard found for: ${missing.join(', ')}`);
+    if (unrecognizedScorecards.length) notes.push(`scorecard(s) from a name not on this roster, not saved: ${unrecognizedScorecards.join(', ')}`);
+    setCloseRoundStatus(notes.length ? `Saved — ${notes.join('; ')}.` : 'Saved.', notes.length > 0);
+    renderScorecardOnlyCloseResults(roundName, results);
+  } catch (e) {
+    setCloseRoundStatus('Close round failed: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+function renderScorecardOnlyCloseResults(roundName, results) {
+  let html = `<h3>${escapeHtml(roundName)} — scorecards</h3><table><thead><tr><th>Player</th><th>Score</th></tr></thead><tbody>`;
+  results.slice().sort((a, b) => a.playerName.localeCompare(b.playerName)).forEach(r => {
+    html += `<tr><td>${escapeHtml(r.playerName)}</td><td>${r.actualPoints != null ? fmtNum(r.actualPoints) : '— no scorecard —'}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  html += '<p class="subtle" style="margin-top:6px">Scorecard-only round — no quota, rank, or payouts computed. Published to the results page as its own section, doesn\'t roll into Overall or Wally Ball.</p>';
+  document.getElementById('closeRoundResults').innerHTML = html;
+}
 async function closeTeamRound(round, base, pin, eventName, btn) {
   const roundName = round.name;
   setCloseRoundStatus('Fetching saved teams + this round’s scorecards…');
@@ -2473,8 +2547,18 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
   const btn = document.getElementById('closeRoundBtn');
   btn.disabled = true;
   document.getElementById('missingPlayerAlert').innerHTML = '';
-  if (round.engine !== 'stableford_quota') {
+  if (round.engine === 'scramble_pair') {
     await closeTeamRound(round, base, pin, eventName, btn);
+    return;
+  }
+  // Scorecard Engine (Dev-92) — Practice / fun rounds. Same Close Round
+  // button, same "collect scorecards, publish them" flow as every other
+  // round, but deliberately skips scoreRound()/skins/CTP entirely: no
+  // competitive calc, per Brian's spec. Must be checked BEFORE falling
+  // through to the stableford_quota path below (that path assumes it's
+  // scoring an engine === 'stableford_quota' round).
+  if (round.engine === 'scorecard_only') {
+    await closeScorecardOnlyRound(round, base, pin, eventName, btn);
     return;
   }
   setCloseRoundStatus('Fetching prior results + this round’s scorecards…');
@@ -2754,7 +2838,7 @@ function standingsValueByName(names, config, roundName, perfByRound) {
 }
 function populateGroupingsRoundSelect(config) {
   const sel = document.getElementById('groupRoundSelect');
-  const supported = (config.rounds || []).filter(r => r.engine === 'stableford_quota' || r.engine === 'scramble_pair');
+  const supported = (config.rounds || []).filter(r => r.engine === 'stableford_quota' || r.engine === 'scramble_pair' || r.engine === 'scorecard_only');
   if (!supported.length) { sel.innerHTML = '<option value="">— no rounds yet —</option>'; return; }
   const prev = sel.value;
   sel.innerHTML = supported.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}${r.engine === 'scramble_pair' ? ' (2Man draft)' : ''}</option>`).join('');
@@ -3309,7 +3393,15 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
   Object.keys(groupsByRound).forEach(rn => {
     groupsByRound[rn] = Object.keys(groupsByRound[rn]).sort((a, b) => a - b).map(k => groupsByRound[rn][k]);
   });
-  config = { ...config, rounds: (config.rounds || []).filter(r => !r.engine || r.engine === 'stableford_quota') };
+  // Dev-92 fix: was `!r.engine || r.engine === 'stableford_quota'` — the
+  // `!r.engine` fallback existed for the old blank/'none'-engine practice
+  // round, but silently swept ANY round with a missing engine field into
+  // the ranked Stableford results pipeline (quota math, Overall Standings,
+  // Wally Ball) below. Every round now carries an explicit engine id
+  // (stableford_quota / scramble_pair / points_by_score_type /
+  // scorecard_only), so there's no legitimate blank-engine case left to
+  // fall back for — drop the fallback and match stableford_quota only.
+  config = { ...config, rounds: (config.rounds || []).filter(r => r.engine === 'stableford_quota') };
   const rollsInto = config.rounds.filter(r => r.rollsIntoOverall !== false);
   const closedRoundNames = new Set(allResults.map(r => r.round_name));
   const lossRoundByPlayer = {};
@@ -3543,9 +3635,37 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       podium: twomanResults.filter(x => x.payout_podium > 0).map(x => ({ name: x.player_name, amt: fmtPayout(x.payout_podium) })),
       skinsList: twomanSkins.map(s => ({ name: s.winner, hole: `Hole ${s.hole} — ${fmtPayout(perTwomanSkin)}` })),
       ctpList: twomanCttp.map(c => ({ name: c.winner, detail: `Hole ${c.hole}${c.dist != null ? ` — ${c.dist}′` : ''} — ${fmtPayout(c.payout)}` })),
-      insertAfter: originalRounds.filter((r, i) => i < originalRounds.indexOf(twomanRound) && (!r.engine || r.engine === 'stableford_quota')).length,
+      insertAfter: originalRounds.filter((r, i) => i < originalRounds.indexOf(twomanRound) && r.engine === 'stableford_quota').length,
     };
   }
+  // Scorecard Engine (Dev-92) — Practice / fun rounds. Rendered as its own
+  // fixed appendix section, always AFTER every scored section (Stableford
+  // rounds, Overall, Wally Ball, 2Man) and before Trip Memories — per
+  // Brian, confirmed: "fixed position after the scored rounds," not
+  // interleaved into the schedule-order rail the way 2Man is (no
+  // insertAfter math here on purpose). Raw per-player scores only — no
+  // quota/rank/payout fields exist on these rows to show.
+  const scorecardOnlyRounds = originalRounds.filter(r => r.engine === 'scorecard_only').map((r, idx) => {
+    const results = allResults.filter(x => x.round_name === r.name);
+    const venue = venuesByName[r.venue] || {};
+    const par = sumPars(venue.pars);
+    const scorecards = scorecardsByRound[r.name] || [];
+    const holesByPlayer = {};
+    scorecards.forEach(sc => { holesByPlayer[sc.player] = sc.holes; });
+    const players = results.map(r0 => {
+      const vsPar = computeVsPar(holesByPlayer[r0.player_name]);
+      return {
+        name: r0.player_name, withdrawn: withdrawnNames.has(r0.player_name),
+        actualPoints: r0.actual_points,
+        vsParDisplay: vsPar != null && par != null ? `(${par + vsPar})` : '',
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+    return {
+      idx, name: r.name, venue: r.venue,
+      closed: closedRoundNames.has(r.name),
+      players,
+    };
+  });
   const memoryChapterData = buildMemoryChapters(config.eventName, originalRounds, memories || [], notes || [], scorecardsByRound, allResults);
   return {
     eventName: config.eventName, eventDate: config.eventDate, eventEndDate: config.eventEndDate,
@@ -3558,7 +3678,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
     roundSections, overallStandings, champion, isComplete,
     closedRollup, totalRollup,
     wallyBall, wbPot: wbPot ? wbPot.poolTotal : null, wbEligibleNow, wbResolved, potWinner, potTiedSplit, potWinnerNote,
-    twoman,
+    twoman, scorecardOnly: scorecardOnlyRounds,
     bfeBase, memoryChapters: memoryChapterData.chapters, memoryChapterAnchors: memoryChapterData.anchorByRound,
   };
 }
@@ -4149,10 +4269,52 @@ function renderTwomanSection(tm, num, eventName, memoryChapterAnchors) {
     </div>
   </div></div>`;
 }
+function renderScorecardOnlyRow(p) {
+  return `<div class="lb-row">
+    <div class="lb-name-line">
+      <span class="player-name">${escapeHtml(p.name)}${p.withdrawn ? ' <span class="subtle">(withdrew)</span>' : ''}</span>${p.vsParDisplay ? `<span class="vspar-tag">${escapeHtml(p.vsParDisplay)}</span>` : ''}
+    </div>
+    <div class="lb-grid">
+      <div class="lb-cell lb-cell-quota">${p.actualPoints != null ? p.actualPoints : '—'} pts</div>
+    </div>
+  </div>`;
+}
+// Scorecard Engine (Dev-92) results section — Practice / fun rounds. No
+// quota/rank/payout data exists for these rounds (Close Round never
+// computes it), so this is deliberately just a plain scorecard list, not
+// a leaderboard: reuses the same lb-card/lb-row shell as the other
+// sections for visual consistency, but with a single "Score" column.
+function renderScorecardOnlySection(sec, num, memoryChapterAnchors) {
+  if (!sec) return '';
+  const memAnchor = memoryChapterAnchors && memoryChapterAnchors[sec.name];
+  const memLink = memAnchor ? `<a class="section-photolink" href="#${memAnchor}">📸 See photos &amp; notes</a>` : '';
+  const anchorId = 'practice-' + sec.idx;
+  if (!sec.closed) {
+    return `<div class="section twoman-section" id="${anchorId}"><div class="wrap" style="padding:0;">
+      <div class="section-head"><div class="section-num">${num}</div><div>
+        <div class="section-title">${escapeHtml(sec.name)}${sec.venue ? ' · ' + escapeHtml(sec.venue) : ''}</div>
+        <div class="section-desc">Practice round · scorecards only — no standings or payouts</div>
+        ${memLink}
+      </div></div>
+      <div class="locked-card">
+        <div class="locked-title">Not closed yet</div>
+        <div class="locked-sub">Scorecards post here once this round is closed in BFE-Admin.</div>
+      </div>
+    </div></div>`;
+  }
+  return `<div class="section twoman-section" id="${anchorId}"><div class="wrap" style="padding:0;">
+    <div class="section-head"><div class="section-num">${num}</div><div>
+      <div class="section-title">${escapeHtml(sec.name)}${sec.venue ? ' · ' + escapeHtml(sec.venue) : ''} — Final</div>
+      <div class="section-desc">Practice round · scorecards only — no standings or payouts</div>
+      ${memLink}
+    </div></div>
+    <div class="lb-card"><div class="lb-list">${sec.players.length ? sec.players.map(renderScorecardOnlyRow).join('') : '<div class="side-empty">No scorecards submitted.</div>'}</div></div>
+  </div></div>`;
+}
 function renderResultsHtml(data, opts) {
   opts = opts || {};
   const accent = opts.accent || '#e8392a';
-  const roundNums = ['01', '02', '03', '04', '05', '06', '07', '08'];
+  const roundNums = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'];
   const railNodeArr = data.rounds.map(r => `<a class="${r.nodeClass}" href="${r.href}">
       <div class="rail-line"></div><div class="rail-dot">${r.num}</div>
       <div class="rail-round">${escapeHtml(r.label)}</div><div class="rail-venue">${escapeHtml(r.venue)}</div>
@@ -4166,6 +4328,17 @@ function renderResultsHtml(data, opts) {
       </a>`;
     railNodeArr.splice(data.twoman.insertAfter, 0, tmNode);
   }
+  // Scorecard Engine (Dev-92) rail nodes — pushed onto the END of the rail
+  // (after the 2Man splice, right before the Overall node), not spliced
+  // into schedule position like 2Man is — matches the fixed "after the
+  // scored rounds" placement of the content section itself, below.
+  (data.scorecardOnly || []).forEach(sec => {
+    railNodeArr.push(`<a class="rail-node ${sec.closed ? 'done' : 'locked'}" href="#practice-${sec.idx}">
+        <div class="rail-line"></div><div class="rail-dot">·</div>
+        <div class="rail-round">Practice</div><div class="rail-venue">${escapeHtml(sec.venue || '')}</div>
+        <div class="rail-tag">${sec.closed ? 'Final' : 'Not started'}</div>
+      </a>`);
+  });
   const railNodesHtml = railNodeArr.join('');
   const overallRailNode = `<a class="rail-node ${data.isComplete ? 'done' : (data.closedRollup > 0 ? 'progress' : 'locked')}" href="#overall">
       <div class="rail-line"></div><div class="rail-dot">${data.rounds.length + 1}</div>
@@ -4229,7 +4402,10 @@ function renderResultsHtml(data, opts) {
   </div>`;
   const twomanNum = roundNums[data.roundSections.length + 2];
   const twomanHtml = renderTwomanSection(data.twoman, twomanNum, data.eventName, data.memoryChapterAnchors);
-  const photoNum = roundNums[data.roundSections.length + 3];
+  const practiceHtml = (data.scorecardOnly || []).map((sec, i) =>
+    renderScorecardOnlySection(sec, roundNums[data.roundSections.length + 3 + i], data.memoryChapterAnchors)
+  ).join('');
+  const photoNum = roundNums[data.roundSections.length + 3 + (data.scorecardOnly || []).length];
   const photoHtml = renderMemoriesSection(data.memoryChapters, data.bfeBase, photoNum);
   const footerHtml = `<div class="footer">
     <a class="back-btn" href="/portal.html">← Back to Portal</a>
@@ -4254,6 +4430,7 @@ function renderResultsHtml(data, opts) {
   </div>
   ${wbHtml}
   ${twomanHtml}
+  ${practiceHtml}
   ${photoHtml}
   ${footerHtml}
 </div>
