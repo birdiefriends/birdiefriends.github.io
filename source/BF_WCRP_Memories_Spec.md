@@ -1,6 +1,21 @@
 # BF_WCRP_Memories_Spec.md — WCRP Memories Capture: Build Spec (Draft v1)
 
-**Status:** §8 step 1 (schema/round-picker piece, §4a) built and shipped in Dev-79 (2026-09-07) — `tee_time` on `bfe_event_rounds`, Section 4's combined Jotform + Gatherings round-name picker with historic filtering, best-effort venue auto-match, a Jotform Date & Time parsing fix (was silently discarding time-of-day), and Setup's four manual "Load" buttons now auto-firing on page open instead of requiring a click each. Steps 2–7 (the BFE-backed flag, BFE_API memory routes, Live Panel repoint, the widget itself, EventCard icon disabling, curation view + Results wiring) are still design-only, carried to Dev-80. Companion to `BF_BFE_Memories_Plan.md` (the investigation/decision doc) — that doc covers the *why*, this one covers the *how*. Read `BF_WallyCup_Spec.md` first if you haven't already; this plugs into the same event structure.
+**Status:** All 7 build-order steps below (§8) are now shipped as of Dev-80 (2026-09-07).
+Step 1 (schema/round-picker piece, §4a) shipped in Dev-79; steps 2–7 (the BFE-backed
+flag, BFE_API memory routes, Live Panel repoint, the widget, EventCard icon disabling,
+curation view + Results wiring) shipped in Dev-80. **What actually shipped deviates from
+this draft in several real ways** — `round_id` became `round_name` (no FK), the grace-
+window eligibility idea was dropped for a plain on/off toggle, the "Results page" chapter
+build landed directly in `BFE-Admin.html` rather than the WCRP widget's own timeline, and
+a Live Panel Notes feature and a separate Trip Info page were added that this draft never
+scoped. **Read the "What actually shipped (Dev-80) — deviations from this draft" section
+at the bottom before treating any paragraph below as current** — the body of this spec is
+kept as the original design-intent record, not rewritten in place, so the reasoning is
+still there but the concrete details it describes (schema, route params, eligibility
+mechanism) are historical unless the addendum says otherwise. Companion to
+`BF_BFE_Memories_Plan.md` (the investigation/decision doc) — that doc covers the *why*,
+this one covers the *how*. Read `BF_WallyCup_Spec.md` first if you haven't already; this
+plugs into the same event structure.
 
 **Framing, per Brian (9/5):** two separate memory systems, on purpose. EventCard Memories is organic/frequent/low-stakes — right for a single round. BFE events are productions — players travel further, stay longer, the whole thing is meant to be a keepsake. The build below treats WCRP Memories as its own system tailored to that, not a bolted-on variant of the EventCard flow.
 
@@ -114,6 +129,82 @@ Nothing here is time-pressured against 9/11 per Brian's steer — sequencing abo
 
 ## 9. Open calls before coding starts
 
-- Grace window default (§3) — proposed ±1 day, adjustable per event in Setup.
-- Whether the widget's notes thread keeps the same 200-character cap as `event_notes`, or gets more room given the "keepsake" framing.
-- Player-tagging (§3's nice-to-have) — in scope for v1 or a fast-follow.
+- Grace window default (§3) — proposed ±1 day, adjustable per event in Setup. **Resolved
+  differently — see addendum:** not built; a plain toggle instead.
+- Whether the widget's notes thread keeps the same 200-character cap as `event_notes`, or gets more room given the "keepsake" framing. **Resolved — see addendum:** 500 chars for WCRP widget notes; Live Panel Notes' own cap wasn't confirmed against this spec and should be checked in Dev-81 if it matters.
+- Player-tagging (§3's nice-to-have) — in scope for v1 or a fast-follow. **Resolved — see addendum:** in scope, shipped in the Dev-80 pass, not deferred.
+
+---
+
+## What actually shipped (Dev-80) — deviations from this draft
+
+This section documents where the real Dev-80 build diverged from the design above. The
+sections above are kept as the original design-intent record (the reasoning in them is
+still valid background), but treat every concrete detail below as the one that's
+actually live.
+
+**`round_id` → `round_name` (schema, §1/§2/§4/§6/§7).** The draft schema above uses
+`round_id INTEGER REFERENCES bfe_event_rounds(id)` on both `bfe_event_memories` and
+`bfe_event_memory_notes`. The shipped schema uses `round_name TEXT` instead, with no
+foreign key, on both tables. This was a real bug fix, not a stylistic choice: an early
+build using the FK crashed on insert whenever a memory or note was captured for a round
+whose `bfe_event_rounds` row didn't yet exist in exactly the shape the FK expected (a
+timing/ordering issue between round creation and capture). Storing the round's name as
+plain text sidesteps the FK entirely and matches how the rest of the BFE capture path
+already identifies a round (by name, not numeric id) everywhere else in the Live Panel
+and Results-page code. Every route in §2 that mentions `round_id` as a param now takes
+`round_name` instead; the same substitution applies to §4's `round_id`
+cache/override description and §7's "grouped by `round_id`" line — grouping is by
+`round_name` in the shipped Results-page build.
+
+**Eligibility: no grace window — a plain toggle instead (§3).** The draft's "today falls
+within `event_date`–`event_end_date`, ±1 day grace" mechanism was not built. Per Brian's
+explicit real-world call this session ("timers have caused us issues"), eligibility is
+instead a plain on/off flag, `memories_capture_open`, set by the commissioner in
+BFE-Admin's Setup and toggled by hand for the duration of a trip — no date math, no
+grace-window edge cases, no risk of a round starting late or running long and silently
+falling outside a computed window. Simpler and more reliable for a once-a-year event a
+single host runs by hand.
+
+**Chapters built into the Results page directly, not the WCRP widget's own timeline
+(§4, §7).** §4's timeline auto-placement logic (tee time → last scorecard as a round's
+on-course window, anything outside those windows bucketed as "Fun") is conceptually
+exactly what shipped — but per Brian's same-day redirect ("What I think would be a great
+start is to design the assembled content directly into the results publish asset"), it
+was built as `buildMemoryChapters()` inside `BFE-Admin.html`'s own `renderResultsHtml()`/
+`buildResultsData()` pipeline (the commissioner's "Publish results page" feature),
+**not** as part of the player-facing WCRP widget described in §3/§7. The widget itself
+(next paragraph) is a capture surface, not a viewer — players add photos/notes through
+it, but the auto-chaptered scrapbook view lives on the published results page, replacing
+that page's old static "Photo Gallery" placeholder (the one §7 refers to as
+`WallyCup_Results_Design_Reference.dc.html` §07). Chapters render with jump-links from
+each round's own results section, plus a Practice-Rd/pre-trip and post-trip bucket for
+anything outside every round's on-course window — matching §4's "Fun" bucket concept but
+surfaced on the results page rather than in the widget.
+
+**The widget (§3) shipped largely as designed** — a persistent Home banner, roster- and
+`memories_capture_open`-gated, opening a capture sheet (photo/video/upload, plus a notes
+thread) that posts to the BFE_API routes in §2. Player-tagging (§3's "nice-to-have") shipped
+in this same pass, not deferred — a name picker from the fixed 16-player roster, not a
+fast-follow.
+
+**EventCard icon disabling (§5) and Live Panel repoint (§6) shipped as designed** — no
+material deviation from the draft's description found during this review.
+
+**Two capabilities beyond this spec's original scope, added during the Dev-80 pass:**
+
+- **Live Panel Notes.** A notes-compose capability was added to the commissioner Live
+  Panel itself (separate from the player-facing widget's own notes thread in §3) — a real
+  gap Brian caught mid-build, not originally scoped anywhere in this spec. Its own
+  character limit (if any) wasn't cross-checked against §9's 500-char widget figure during
+  this documentation pass — worth confirming in Dev-81 if the two are meant to match.
+- **Trip Info page — a separate, standalone feature, not part of WCRP Memories at all.**
+  A branded, self-contained page (`docs/2026-wally-cup-trip-info.html`, live at
+  `https://birdiefriends.com/2026-wally-cup-trip-info.html`) with the trip's address,
+  packing list, food schedule, golf schedule, and pot economics, linked from its own
+  brand-new Home widget (`renderTripInfoBanner()` in `portal.html`) gated only on roster
+  membership plus a new independent `bfe_events.trip_info_url` column — deliberately
+  **not** wired to `memories_capture_open` or any part of this spec's schema/routes, per
+  Brian's explicit instruction ("I don't want to turn on the Trip memories yet. If we add
+  a widget all 16 will see it when opening the APP"). Mentioned here only for
+  cross-reference; it isn't a WCRP Memories capability and has no entry in §1–§8 above.
