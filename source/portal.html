@@ -2579,8 +2579,11 @@ body {
           <div>
             <div style="font-size:0.83rem;font-weight:600;color:var(--text);margin-bottom:6px">⛳ Live Panel Event Control</div>
             <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px;line-height:1.5">
-              Start the live event banner immediately for all players — use 60 min before tee time.
-              Close manually when the round is complete, or it auto-closes 8 hours after tee time.
+              A round's Live Panel now opens itself automatically — 15 min before tee time — and closes
+              itself once every expected scorecard is in (checked every 90 sec), or 8 hrs after tee time
+              as a fallback if a scorecard never lands. <strong>Start Live Now</strong> forces it open early
+              (for more than 15 min out). <strong>Close Event</strong> stops whatever's live right now,
+              however it went live — the auto window or a forced start — good for wrapping a round early.
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <button class="btn btn-register" id="btn-event-start"
@@ -2590,6 +2593,23 @@ body {
                 onclick="eventControl('close')"
                 style="font-size:0.85rem;padding:8px 16px;opacity:0.4" disabled>⏹️ Close Event</button>
               <span id="event-control-status" style="font-size:0.82rem;color:var(--text-hint);font-weight:600">⚪ Not live</span>
+            </div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:14px">
+            <div style="font-size:0.83rem;font-weight:600;color:var(--text);margin-bottom:6px">🏆 Trip Memories Capture</div>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
+              The commissioner on/off switch for WCRP Trip Memories (photos/videos/notes) — same
+              <code>memoriesCaptureOpen</code> field BFE-Admin's Setup screen sets, just reachable from
+              your phone. Affects the whole trip (all rounds), not one round at a time.
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button class="btn btn-register btn-sm" id="btn-wcrp-start"
+                onclick="wcrpMemoriesControl(true)"
+                style="font-size:0.82rem">▶️ Start Memories</button>
+              <button class="btn btn-secondary btn-sm" id="btn-wcrp-stop"
+                onclick="wcrpMemoriesControl(false)"
+                style="font-size:0.82rem">⏹️ Stop Memories</button>
+              <span id="wcrp-memories-control-status" style="font-size:0.78rem;color:var(--text-hint);font-weight:600">Checking…</span>
             </div>
           </div>
           <div style="border-top:1px solid var(--border);padding-top:14px">
@@ -3453,8 +3473,13 @@ async function loadVenueCttpHoles(evt) {
     _resolvedCttpHoles = null;
   }
 }
-// Live event window: tee time to tee time + N hours
+// Live event window: opens LIVE_PRESTART_MINUTES before tee time, closes at
+// the earlier of (a) LIVE_EVENT_HOURS after tee time — the outer safety cap,
+// unchanged, in case scorecards never fully arrive (a withdrawal, a stuck
+// submission) — or (b) every expected scorecard for the round being in, per
+// isRoundScorecardComplete() below (Dev-93, Gear → Event Day Controls).
 const LIVE_EVENT_HOURS = 8;
+const LIVE_PRESTART_MINUTES = 15;
 // FLAGS — loaded from Cloudflare KV via Worker on app start
 // Toggled remotely via Admin panel — affects all devices instantly
 const MAINTENANCE_MSG = "BirdieFriends is undergoing a quick update — check back in a few minutes! ⛳";
@@ -3462,6 +3487,13 @@ let MAINTENANCE_MODE     = false;
 let LIVE_EVENT_TEST_MODE = false;
 let LIVE_OVERRIDE        = false;  // commissioner manual start
 let LIVE_OVERRIDE_SINCE  = null;   // ISO timestamp when override was set
+// Dev-93 — commissioner manual STOP, by round name (not a bare boolean): a
+// stop only ever suppresses the one round it was issued for, so closing Rd1
+// early doesn't also blank out Rd2/2Man/Rd3 later that trip. Wins over
+// BOTH the auto tee-time window and LIVE_OVERRIDE — "Close Event" now
+// genuinely stops whatever's live right now, not just an override it forced
+// on. Cleared automatically whenever "Start Live Now" is pressed.
+let LIVE_STOPPED_ROUND   = null;
 let GATHERING_PANEL_LIVE = false;  // Host Management panel visibility — off by default, Dev-45
 let groupingsMeta        = null;  // {eventName, status, visibility, publishedAt}
 // Dev-81 — which event getLiveEvent() should treat as "live" while Live Test
@@ -3482,6 +3514,7 @@ async function loadRemoteFlags() {
     LIVE_EVENT_TEST_MODE = flags.live_test     === true;
     LIVE_OVERRIDE        = flags.live_override === true;
     LIVE_OVERRIDE_SINCE  = flags.live_override_since || null;
+    LIVE_STOPPED_ROUND   = flags.live_stopped_round || null;
     GATHERING_PANEL_LIVE  = flags.gathering_panel_live === true;
   } catch(e) {
     console.warn('[Flags] Could not load remote flags — defaulting to false:', e.message);
@@ -4126,6 +4159,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   updatePlayerPill();
   buildPlayerPickerGrid();
   loadAllData();
+  startLiveCompletionPoll();  // Dev-93 — scorecard-completion auto-close, see getLiveEvent()
   wireCommishSmsLink();
   initBroadcastCounter();
   // OneSignal SDK loads async — wait for it then init
@@ -4674,6 +4708,8 @@ function renderAll() {
   updateNewEventsBtn();
   renderWCRPBanner(); // Dev-80 — no-op until refreshBFEBackedIndex() has resolved at least once
   renderTripInfoBanner(); // Dev-80 same day — separate widget, see its own comment
+  updateEventControlUI(); // Dev-93 — keeps Gear → Event Day Controls' LIVE/Not live status current
+  updateWCRPMemoriesControlUI(); // Dev-93 — same, for the Trip Memories Capture on/off status
 }
 // ── Capacity engine ──────────────────────────────────────────────────────
 // Returns a status object describing the capacity situation for an event.
@@ -6659,6 +6695,7 @@ function showScreen(name, btn) {
     if (adminSection) adminSection.style.display = isCommissioner() ? 'block' : 'none';
     if (isCommissioner()) {
       updateDevControlsUI();
+      updateWCRPMemoriesControlUI(); // Dev-93
       const lbl = document.getElementById('reset-current-player-label');
       if (lbl) lbl.textContent = currentPlayer || 'No player selected';
     }
@@ -7513,15 +7550,100 @@ function getLiveEvent() {
       const picked = eventData.find(e => e.name === LIVE_TEST_EVENT_OVERRIDE && hasLivePanelSupport(e));
       if (picked) return picked;
     }
-    return eventData.find(e => e.dt && hasLivePanelSupport(e)
+    const picked = eventData.find(e => e.dt && hasLivePanelSupport(e)
       && e.dt >= now - LIVE_EVENT_HOURS * 3600000) || null;
+    // Dev-93 — manual stop wins even over a forced-on override, EXCEPT while
+    // Live Test Mode itself is on: that's an explicit dry-run tool, and a
+    // leftover production stop from a real round shouldn't quietly gate it.
+    if (picked && !LIVE_EVENT_TEST_MODE && picked.name === LIVE_STOPPED_ROUND) return null;
+    return picked;
   }
   return eventData.find(e => {
     if (!e.dt) return false;
     if (!hasLivePanelSupport(e)) return false;
+    if (e.name === LIVE_STOPPED_ROUND) return false;  // Dev-93 manual stop
     const msSinceTee = now - e.dt;
-    return msSinceTee >= 0 && msSinceTee <= LIVE_EVENT_HOURS * 3600000;
+    if (msSinceTee < -LIVE_PRESTART_MINUTES * 60000) return false;  // opens 15 min before tee time
+    if (msSinceTee > LIVE_EVENT_HOURS * 3600000) return false;      // fixed outer safety cap
+    if (isRoundScorecardComplete(e.name)) return false;             // Dev-93 auto-close: all scorecards in
+    return true;
   }) || null;
+}
+// Dev-93 — Scorecard Engine auto-close: is every expected scorecard for this
+// round already in? getLiveEvent() must stay synchronous (it's read from
+// ~30 render call sites), so it only ever reads this cache — never fetches
+// inline. The cache is kept warm by refreshLiveCompletionCheck() below, on a
+// timer that runs regardless of whether anyone has the Live Panel open.
+// Defaults to "not complete" for a round never checked (cache miss) or one
+// whose last check errored — fails toward STAYING live (falls back to the
+// fixed LIVE_EVENT_HOURS cap) rather than a data hiccup silently hiding a
+// round that's still genuinely in progress.
+let _liveCompletionCache = {}; // { [roundName]: true|false }
+function isRoundScorecardComplete(roundName) {
+  return _liveCompletionCache[roundName] === true;
+}
+// Which round the tee-time window ALONE (ignoring the completion gate and
+// the manual stop) would currently call live — the completion poller uses
+// this so it always agrees with getLiveEvent() about which round is in play.
+function _candidateLiveRoundByWindow() {
+  const now = new Date();
+  return eventData.find(e => {
+    if (!e.dt) return false;
+    if (!hasLivePanelSupport(e)) return false;
+    const msSinceTee = now - e.dt;
+    return msSinceTee >= -LIVE_PRESTART_MINUTES * 60000 && msSinceTee <= LIVE_EVENT_HOURS * 3600000;
+  }) || null;
+}
+let _liveCompletionTimer = null;
+// Fetches this round's scorecards + who's actually expected to submit one
+// (saved team pairings if it's a team round, else active registrants), and
+// caches whether every expected name/team has a scorecard in. Runs on a
+// timer (started at app init, see DOMContentLoaded) independent of whether
+// the Live Panel is open on this device — the point is the banner
+// disappears for EVERYONE once the round wraps, not just for whoever's
+// looking right when the last card lands.
+async function refreshLiveCompletionCheck() {
+  const evt = _candidateLiveRoundByWindow();
+  if (!evt) return;  // nothing in its window right now — nothing to check
+  try {
+    const [scRes, groupsRes] = await Promise.all([
+      fetch(`${BFE_API}/scorecards?event=${encodeURIComponent(evt.name)}`),
+      fetch(`${BFE_API}/bfe/round-groups?event=${encodeURIComponent(evt.name)}&round=${encodeURIComponent(evt.name)}`).catch(() => null)
+    ]);
+    const scData = scRes.ok ? await scRes.json() : null;
+    const submitted = new Set((scData && Array.isArray(scData.scorecards) ? scData.scorecards : []).map(s => (s.player || '').trim().toLowerCase()));
+    const groupsData = groupsRes && groupsRes.ok ? await groupsRes.json() : null;
+    const groupRows = (groupsData && Array.isArray(groupsData.rows)) ? groupsData.rows : [];
+    let expected;
+    if (groupRows.length) {
+      // Team round (2Man) — expected submitters are team display names, one
+      // scorecard per pair, same convention Close Round itself expects.
+      const byIdx = {};
+      groupRows.forEach(r => {
+        byIdx[r.group_index] = byIdx[r.group_index] || { players: [], label: r.team_label || null };
+        byIdx[r.group_index].players.push(r.player_name);
+      });
+      expected = Object.values(byIdx).map(t => teamDisplayName(t.players, t.label).trim().toLowerCase());
+    } else {
+      expected = regData.filter(r => r.eventName === evt.name && r.status !== 'No').map(r => r.player.trim().toLowerCase());
+    }
+    const complete = expected.length > 0 && expected.every(name => submitted.has(name));
+    const wasComplete = _liveCompletionCache[evt.name] === true;
+    _liveCompletionCache[evt.name] = complete;
+    if (complete && !wasComplete) {
+      renderAll();  // flips the banner off for everyone within one poll tick
+    }
+  } catch (e) {
+    console.warn('[LiveComplete] check failed for', evt.name, '—', e.message);
+    // Leave the cache as-is (defaults to not-complete until the first
+    // successful check) — round stays live via the fixed-hours fallback
+    // rather than vanishing from a data hiccup.
+  }
+}
+function startLiveCompletionPoll() {
+  if (_liveCompletionTimer) return;
+  refreshLiveCompletionCheck();
+  _liveCompletionTimer = setInterval(refreshLiveCompletionCheck, 90000);
 }
 // Is the current player registered for this event?
 function isRegisteredFor(evtName) {
@@ -14746,35 +14868,72 @@ async function repeatGathering(gatheringId) {
   }
 }
 // ── Dev toggle helpers (commissioner admin panel) ───────────────────────────
+// Small helper — one flags-KV write. Dev-93 (was inlined in eventControl
+// alone; 'close' now needs to write two keys in one action, so factored out).
+async function postFlag(key, value, extra) {
+  const payload = { pin: COMMISSIONER_PIN, key, value, ...(extra || {}) };
+  const resp = await fetch(OS_API + 'flags', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await resp.json();
+  if (!data.ok) throw new Error(data.error || 'unknown');
+  return data;
+}
+// Dev-93 — 'start' still just forces the next eligible round on (unchanged
+// behavior, still useful for starting well before the new 15-min auto-open
+// window, or for a round that isn't eligible yet for some other reason) —
+// but now also clears any leftover manual stop, so a previous "Close Event"
+// can't block a fresh start. 'close' is the bigger change: it now stops
+// WHATEVER round getLiveEvent() says is actually live right now — however
+// it got that way, auto tee-time window or a forced-on override — instead
+// of only ever undoing the override flag (which used to do nothing at all
+// if a round had gone live on its own via the tee-time window).
 async function eventControl(action) {
-  const enable = action === 'start';
-  const payload = { pin: COMMISSIONER_PIN, key: 'live_override', value: enable };
-  if (enable) payload.since = new Date().toISOString();
   try {
-    const resp = await fetch(OS_API + 'flags', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await resp.json();
-    if (data.ok) {
-      LIVE_OVERRIDE = enable;
-      LIVE_OVERRIDE_SINCE = enable ? new Date().toISOString() : null;
+    if (action === 'start') {
+      await Promise.all([
+        postFlag('live_override', true, { since: new Date().toISOString() }),
+        postFlag('live_stopped_round', null),
+      ]);
+      LIVE_OVERRIDE = true;
+      LIVE_OVERRIDE_SINCE = new Date().toISOString();
+      LIVE_STOPPED_ROUND = null;
       updateEventControlUI();
-      showToast(enable ? '⛳ Live event started — banner active for all players' : '⏹️ Live event closed');
+      showToast('⛳ Live event started — banner active for all players');
       setTimeout(() => location.reload(), 800);
-    } else { showToast('❌ Event control failed — ' + (data.error || 'unknown'), true); }
-  } catch(e) { showToast('❌ Could not reach server', true); }
+      return;
+    }
+    const liveEvt = getLiveEvent();
+    if (!liveEvt) { showToast('Nothing is live right now.', true); return; }
+    await Promise.all([
+      postFlag('live_stopped_round', liveEvt.name),
+      postFlag('live_override', false),
+    ]);
+    LIVE_STOPPED_ROUND = liveEvt.name;
+    LIVE_OVERRIDE = false;
+    LIVE_OVERRIDE_SINCE = null;
+    updateEventControlUI();
+    showToast(`⏹️ ${liveEvt.name} closed`);
+    setTimeout(() => location.reload(), 800);
+  } catch (e) { showToast('❌ Event control failed — ' + e.message, true); }
 }
 function updateEventControlUI() {
   const statusEl = document.getElementById('event-control-status');
   const startBtn = document.getElementById('btn-event-start');
   const closeBtn = document.getElementById('btn-event-close');
   if (!statusEl) return;
-  if (LIVE_OVERRIDE) {
-    const since = LIVE_OVERRIDE_SINCE
+  // Dev-93 — reflects the REAL live state (getLiveEvent(), same check the
+  // banner itself uses), not just the override flag — a round can now be
+  // live purely from the auto tee-time window, with the override never
+  // touched at all.
+  const liveEvt = getLiveEvent();
+  if (liveEvt) {
+    const how = LIVE_OVERRIDE ? ' (forced on)' : '';
+    const since = LIVE_OVERRIDE && LIVE_OVERRIDE_SINCE
       ? ' — started ' + new Date(LIVE_OVERRIDE_SINCE).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
       : '';
-    statusEl.textContent = '🟢 LIVE' + since;
+    statusEl.textContent = `🟢 LIVE — ${liveEvt.name}${how}${since}`;
     statusEl.style.color = 'var(--green)';
     if (startBtn) { startBtn.disabled = true; startBtn.style.opacity = '0.4'; }
     if (closeBtn) { closeBtn.disabled = false; closeBtn.style.opacity = '1'; }
@@ -14784,6 +14943,57 @@ function updateEventControlUI() {
     if (startBtn) { startBtn.disabled = false; startBtn.style.opacity = '1'; }
     if (closeBtn) { closeBtn.disabled = true; closeBtn.style.opacity = '0.4'; }
   }
+}
+// Dev-93 — Gear → Event Day Controls → Trip Memories Capture. Flips the
+// same memoriesCaptureOpen field BFE-Admin's Setup screen writes, from the
+// phone. POST /bfe/events is a full replace (rounds/roster get deleted and
+// re-inserted), so this GETs the current config first and re-POSTs it
+// whole with only memories_capture_open changed — the same load-then-save
+// round-trip BFE-Admin itself does, never a partial/hand-built payload.
+// Assumes one active BFE production at a time, same as findWCRPEligibleEvent()
+// and the widget banner already do.
+async function wcrpMemoriesControl(enable) {
+  const summaries = Array.from(_bfeEventSummaries.values());
+  if (!summaries.length) {
+    showToast('No active BFE event found — save one in BFE-Admin Setup first.', true);
+    return;
+  }
+  const target = summaries[0];
+  try {
+    const cfgRes = await fetch(`${BFE_API}/bfe/events?event=${encodeURIComponent(target.umbrellaName)}`);
+    const cfgData = await cfgRes.json();
+    if (!cfgRes.ok || !cfgData.config) throw new Error(cfgData.error || 'Could not load event config');
+    const config = cfgData.config;
+    const res = await fetch(`${BFE_API}/bfe/events`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: config.eventName, event_family: config.eventFamily, event_date: config.eventDate, event_end_date: config.eventEndDate,
+        memories_capture_open: enable, trip_info_url: config.tripInfoUrl, hcp_mode: config.hcpMode, status: config.status,
+        tee_policy: config.teePolicy, payout_plan: config.payout, rounds: config.rounds, roster: config.roster,
+        pin: COMMISSIONER_PIN
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(enable ? '🏆 Trip Memories capture started' : '⏹️ Trip Memories capture stopped');
+    await refreshBFEBackedIndex();  // refreshes _bfeEventSummaries — also re-renders (see its own tail)
+    updateWCRPMemoriesControlUI();
+  } catch (e) {
+    showToast('❌ Could not update Trip Memories capture — ' + e.message, true);
+  }
+}
+function updateWCRPMemoriesControlUI() {
+  const statusEl = document.getElementById('wcrp-memories-control-status');
+  if (!statusEl) return;
+  const summaries = Array.from(_bfeEventSummaries.values());
+  if (!summaries.length) {
+    statusEl.textContent = 'No active BFE event found';
+    statusEl.style.color = 'var(--text-hint)';
+    return;
+  }
+  const target = summaries[0];
+  statusEl.textContent = (target.captureOpen ? '🟢 ON — ' : '⚪ Off — ') + target.umbrellaName;
+  statusEl.style.color = target.captureOpen ? 'var(--green)' : 'var(--text-hint)';
 }
 async function devToggle(flag, enable) {
   const key = flag === 'maintenance' ? 'maintenance' : flag === 'livetest' ? 'live_test' : 'gathering_panel_live';
