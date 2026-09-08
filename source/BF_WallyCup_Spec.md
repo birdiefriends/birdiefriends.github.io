@@ -1,21 +1,23 @@
 # BF_WallyCup_Spec.md — 2026 Wally Cup Architecture Spec
 
-**Status:** Living spec, third revision. Covers the event structure already live
-(Rd1/Rd2/Rd3, Wally Ball, Overall Standings, results page) plus the 2-Man Scramble round
-(Dev-78) — draft board, team scoring with team quota, results section, and the Overall
-guardrail fix are all built and delivered. Live Panel capture support for 2Man (team
-picker for Scorecard/Birdie Alert, individual picker for CttP), the Live Test Mode round
-selector, the BF-Series-compatible Venue CTP-holes editor, and the Wally Cup Rd1
-venue-name-mismatch fix are also built and delivered (Dev-78). **Brian ran a full manual
-end-to-end dry run of Rd1 → Rd2 → 2Man → Rd3 through the Live Panel (a 4-player mock
-roster, "to minimize data entry") and verified the computed results independently against
-the shipped formulas — no discrepancies found. The process and every calculation are
-considered ready for real Rd1, 10am 9/11 — but the live "2026 Wally Cup" D1 event is still
-this dry run's 4-player mock data and needs a Data & Reset → Delete plus a fresh real
-Setup + real Draft/Groupings before game day (carried since Dev-75/77, still not done).**
-Read this before touching Groupings,
+**Status:** Living spec, fourth revision. Covers the event structure already live
+(Practice Rd/Rd1/Rd2/Rd3, Wally Ball, Overall Standings, results page) plus the 2-Man
+Scramble round (Dev-78) — draft board, team scoring with team quota, results section, and
+the Overall guardrail fix are all built and delivered. Live Panel capture support for
+2Man (team picker for Scorecard/Birdie Alert, individual picker for CttP), the Live Test
+Mode round selector, the BF-Series-compatible Venue CTP-holes editor, and the Wally Cup
+Rd1 venue-name-mismatch fix are also built and delivered (Dev-78). **Brian ran a full
+manual end-to-end dry run of Rd1 → Rd2 → 2Man → Rd3 through the Live Panel (a 4-player
+mock roster, "to minimize data entry") and verified the computed results independently
+against the shipped formulas — no discrepancies found. As of Dev-80 the live "2026 Wally
+Cup" D1 event has been confirmed carrying the real 16-player roster (Rich Potts, Tom
+Stitt, Tom Arnold, Scott Justus, Nate Stettler, Mohamed Walli, Mark Weaver, Lou Strohl,
+Jordan Knappenberger, Jeff Rapp, Jake Knappenberger, Evan Lindermuth, Dave Sherwin, Chooch
+Wernett, Brian Hager, Bill Steirer) and the real 5-round schedule below, not the old
+dry-run mock data — the long-carried "still has mock data" warning from Dev-75/77/78 is
+resolved.** Read this before touching Groupings,
 the results page, Close Round, or the Overall Standings rollup — it's the reference.
-`BF_Session_Bootstrap.md` and `BF_Session_Log.md` are both kept current as of Dev-78.
+`BF_Session_Bootstrap.md` and `BF_Session_Log.md` are both kept current as of Dev-80.
 
 ---
 
@@ -24,7 +26,16 @@ the results page, Close Round, or the Overall Standings rollup — it's the refe
 The 2026 Wally Cup is one BFE event (`event_name: "2026 Wally Cup"`) with rounds played
 across a single trip:
 
-`Rd1 → Rd2 → 2Man → Rd3 → Overall`
+`Practice Rd → Rd1 → Rd2 → 2Man → Rd3 → Overall`
+
+**Added Dev-80:** the Practice Rd (Thu 9/10, Paupack Hills, `engine: none`) is a genuine
+scheduled round in the live event data, not just an informal warm-up — it doesn't score
+or roll into Overall (no engine, so Close Round/results generation has nothing to do with
+it), but it's listed on the standalone Trip Info page's golf schedule alongside the four
+scored rounds (see the Trip Info section added to `BF_WCRP_Memories_Spec.md`'s "what
+actually shipped" addendum). Whether it also needs its own nav-rail entry on the results
+page hasn't been checked — worth confirming during Dev-81's end-to-end pass rather than
+assumed either way here.
 
 Rd1, Rd2, and Rd3 are standard individual stableford-quota rounds and roll into Overall
 Standings (Wally-Ball-inclusive `roundPerf`, per the Dev-76 design decision). **2Man does
@@ -155,6 +166,20 @@ the nav rail matching the full event scope:
 2Man's results section follows the same generator pattern as the other rounds (team
 standings instead of individual, same CTP/skins detail treatment). No separate standalone
 page needed — it's one more section on the existing results page.
+
+**Added Dev-80:** the results page also got a photos/notes "memories" scrapbook this
+pass — chapters auto-grouped by round timing, built directly into `BFE-Admin.html`'s
+Publish Results feature (replacing the old static Photo Gallery placeholder). Full detail
+lives in `BF_WCRP_Memories_Spec.md`'s "what actually shipped" addendum, not duplicated
+here since this spec's scope is scoring/architecture, not the memories feature.
+
+**Caught during this same round of live-data checking (Dev-80):** the live "2026 Wally
+Cup - 2Man" round's `engine` field was found misconfigured as `stableford_quota` instead
+of `scramble_pair` — would have broken 2Man's own results-section detection (§ above,
+"team standings instead of individual" depends on `engine === 'scramble_pair'` being set
+correctly at Setup time). Brian caught and fixed it in Setup once flagged. Worth a glance
+at Setup's round-engine dropdown for every round during Dev-81's end-to-end pass, since
+nothing in the app currently guards against this specific misconfiguration.
 
 ## 6. Open items carried forward
 
