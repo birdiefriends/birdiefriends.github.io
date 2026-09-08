@@ -7501,6 +7501,26 @@ let _liveRoundTeams = null; // { evtName, isTeam, teams:[name,...], subLabels:{n
 function teamDisplayName(players, label) {
   return (label && label.trim()) ? label.trim() : players.join(' & ');
 }
+// Dev-93 — used by refreshLiveCompletionCheck() below. round-groups is keyed
+// by the BFE UMBRELLA event name ("2026 Wally Cup"), not any one round's own
+// name ("2026 Wally Cup - Practice Rd") — same Dev-79 bug loadLiveRoundTeams()
+// already works around via bfeEventNameCandidates(), reused here rather than
+// re-solving it a second way. _bfeBackedIndex indexes rounds by their exact
+// r.name (see its own Dev-80 comment), so an exact round_name match is safe —
+// no fuzzy Rd-number resolution needed here the way loadLiveRoundTeams needs
+// it for portal cards whose title might not byte-match yet.
+async function fetchRoundGroupRows(roundName) {
+  for (const name of bfeEventNameCandidates(roundName)) {
+    try {
+      const res = await fetch(`${BFE_API}/bfe/round-groups?event=${encodeURIComponent(name)}`);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const rows = ((data && Array.isArray(data.rows)) ? data.rows : []).filter(r => r.round_name === roundName);
+      if (rows.length) return rows;
+    } catch (e) { /* try next candidate */ }
+  }
+  return [];
+}
 async function loadLiveRoundTeams(evt) {
   if (!evt) { _liveRoundTeams = null; return; }
   try {
@@ -7618,14 +7638,17 @@ async function refreshLiveCompletionCheck() {
   const evt = _candidateLiveRoundByWindow();
   if (!evt) return;  // nothing in its window right now — nothing to check
   try {
-    const [scRes, groupsRes] = await Promise.all([
+    const [scRes, groupRows] = await Promise.all([
       fetch(`${BFE_API}/scorecards?event=${encodeURIComponent(evt.name)}`),
-      fetch(`${BFE_API}/bfe/round-groups?event=${encodeURIComponent(evt.name)}&round=${encodeURIComponent(evt.name)}`).catch(() => null)
+      // bfeEventNameCandidates(), not evt.name for both params — round-groups
+      // is keyed by the BFE UMBRELLA event name ("2026 Wally Cup"), not the
+      // round's own name ("2026 Wally Cup - Practice Rd"); passing the round
+      // name as `event` is exactly the Dev-79 bug (always zero rows). Mirrors
+      // loadLiveRoundTeams()'s own candidate-name resolution above.
+      fetchRoundGroupRows(evt.name).catch(() => [])
     ]);
     const scData = scRes.ok ? await scRes.json() : null;
     const submitted = new Set((scData && Array.isArray(scData.scorecards) ? scData.scorecards : []).map(s => (s.player || '').trim().toLowerCase()));
-    const groupsData = groupsRes && groupsRes.ok ? await groupsRes.json() : null;
-    const groupRows = (groupsData && Array.isArray(groupsData.rows)) ? groupsData.rows : [];
     let expected;
     if (groupRows.length) {
       // Team round (2Man) — expected submitters are team display names, one
@@ -7637,7 +7660,14 @@ async function refreshLiveCompletionCheck() {
       });
       expected = Object.values(byIdx).map(t => teamDisplayName(t.players, t.label).trim().toLowerCase());
     } else {
-      expected = regData.filter(r => r.eventName === evt.name && r.status !== 'No').map(r => r.player.trim().toLowerCase());
+      // This round's OWN event card registrants only (Yes/Sub) — e.g. the 7
+      // who RSVP'd to Practice Rd, never the full BFE roster (16 registered
+      // for the whole Wally Cup trip in BFE-Admin Setup §3). Gathering-aware
+      // match (gatheringId, not just title) — same fix as Dev-58's
+      // regMatchesEvt, since a plain title match can miscount if two
+      // gatherings ever share a name.
+      const regMatchesEvt = r => (evt.source === 'gathering') ? r.gatheringId === evt.gatheringId : r.eventName === evt.name;
+      expected = regData.filter(r => regMatchesEvt(r) && r.status !== 'No').map(r => r.player.trim().toLowerCase());
     }
     const complete = expected.length > 0 && expected.every(name => submitted.has(name));
     const wasComplete = _liveCompletionCache[evt.name] === true;
