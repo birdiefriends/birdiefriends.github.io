@@ -4033,10 +4033,12 @@ function renderMemoryChapterBlock(ch, bfeBase) {
 // wires into it via a delegated click listener. The only script this
 // otherwise-static generated page ships; Web Share has no non-JS
 // equivalent, and a copy-link fallback covers browsers without it (mainly
-// desktop). `<\/script>` below is deliberate — a literal `</script>` in
-// this source would close BFE-Admin.html's OWN <script> tag early when
-// ITS browser parses ITS html; the backslash only matters to the raw HTML
-// tokenizer, the JS engine hands back a normal `</script>` in the string.
+// desktop). `<\/script>` below is deliberate — an UNESCAPED closing script
+// tag in this source (even inside a JS string or a // comment — the raw
+// HTML tokenizer does not know about JS syntax) would close BFE-Admin.html's
+// OWN outer <script> tag early when ITS browser parses ITS html; the
+// backslash only matters to the raw HTML tokenizer, the JS engine hands
+// back a normal closing tag in the string at runtime.
 function renderLightbox() {
   return `<div id="memory-lightbox" class="lightbox" hidden>
     <button type="button" class="lightbox-close" aria-label="Close">✕</button>
