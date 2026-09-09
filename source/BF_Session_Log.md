@@ -3405,3 +3405,169 @@ delivered and pushed to AutoPush this session.
 
 **Session Dev-81 fully closed.**
 **Chat-rename string:** `Dev-81 - Live Panel Event-Card Scoping, Withdrawal/Overall/WB Confirmed, Results Polish, Generate & Publish Fix`
+
+---
+## Dev-82 · 2026-09-09 — Library-Access Workflow Fixed, Real Live-Event Data Incident, Trip Info Root-Caused
+
+**Focus:** Opened against Brian's own real-time use of the live 2026 Wally Cup event the
+night before Practice Rd (Thu 9/10) — not the planned end-to-end verification pass
+carried forward from Dev-81 (still not run; see carry-forward). Work was almost entirely
+reactive: an "Everyone" tag-picker convenience request, a real memories-timeline
+bucketing bug found from a live scrapbook screenshot, a real production incident
+(test-data cleanup accidentally wiped the entire live `bfe_events` row, not just test
+rows), and a several-hour live debugging chase to root-cause the resulting Trip Info
+outage. Also — per Brian's explicit Dev-81 carry-forward instruction — solved this
+session's library-access workflow gap for good.
+
+**"Everyone" tag chip:** Added a meta-checkbox to the WCRP/photo tag picker in
+`portal.html` that auto-selects every roster name; excluded from the submitted
+`tagged_players` values itself (not a class `wcrp-tag-cb`), two-way synced with the
+individual player chips. Verified via jsdom.
+
+**Memories-timeline bucketing bug — root-caused against real live data, not synthetic:**
+- Brian's report, from a real scrapbook screenshot: "the timeline seems to have bucketed
+  all of the off-course pre/post content into one bucket rather than flowing &
+  interspersed along the timeline."
+- Root cause in `BFE-Admin.html`'s `buildMemoryChapters()`: the Practice Rd (first round,
+  `scorecard_only`, zero round-tagged evidence in the real test data at the time) had no
+  round to chain its rehearsal-mode window from, so its `start` collapsed to `-Infinity`,
+  turning it into an unbounded sink that swallowed every off-course photo/note into one
+  bucket regardless of real timing.
+- Brian pushed back hard on testing this synthetically: "we can't easily test the
+  timeline concept of an event that spans days of time... I don't care about the test
+  example, and we don't have time to do it again. We know the WC flow... So, do you
+  trust it'll sequence that way?" — asking directly whether the real Thu–Sun sequential
+  live-play flow (memories on Thursday, each round's Live Panel opening near its real tee
+  time, closing back to memories between rounds) would actually intersperse correctly.
+- Verified with `Date.now()` monkey-patched against the extracted real function source,
+  using the real live config's actual tee times and realistic same-day sequential
+  closes, simulated from two different "now" points (Sunday night post-trip, Saturday
+  night mid-trip). Confirmed: for every real round, `teeElapsed` is true by the time
+  it's closed (closing only happens hours after real tee-off), so the fragile
+  rehearsal-chaining branch that caused this bug is **never exercised at all** during
+  actual live sequential play — every round anchors independently to its own real
+  `tee_time`. Fixed the one real gap anyway (a round with no round-tagged evidence AND no
+  prior round to chain from now gets a zero-width window instead of `-Infinity`, so its
+  own content still shows via direct lookup and untagged content flows to wherever its
+  real timestamp actually places it) — confirmed answer to Brian's direct question: yes,
+  trust it, and the deeper evidence-anchored rewrite originally considered is not needed
+  for this event.
+
+**Production incident — test-data cleanup wiped the live event, not just test rows:**
+- Brian: "Ok, let's delete the test data. I'll kill jotform and BFE-A, you help me kill
+  the test content." Two real gaps surfaced immediately: `bfe_event_memory_notes` had no
+  DELETE route at all (added), and the whole-event delete's manual FK-cascade list
+  (D1/SQLite doesn't auto-cascade) had gone stale since Dev-77 and had never been
+  extended to cover `bfe_event_memories`/`bfe_event_memory_notes`, throwing
+  `D1_ERROR: FOREIGN KEY constraint failed` on any event carrying memories/notes. Fixed
+  both, including R2 object cleanup alongside the D1 rows.
+- After Brian confirmed all test content genuinely gone (his own browser console showed
+  every memory DELETE returning 404 — already gone — and BFE-Admin's Data & Reset panel
+  showing "No events stored yet"), the real incident surfaced: `2026-wally-cup-trip-info.html`
+  was no longer pinned in the Portal for players. Brian: "it's still gone and cache
+  refreshing isn't fixing it on any of my devices. They players need this for the travel
+  logistics." Investigation found the entire live `"2026 Wally Cup"` `bfe_events` row —
+  roster, all 5 rounds with tee times, payout plan, tee policy, AND `trip_info_url`
+  together — had been deleted along with the test rows, not just the test content itself.
+  Setup had to be fully rebuilt in BFE-Admin, twice (Brian's first rebuild, then a second
+  to pre-add Rd1/2/3 groupings), before the real root cause of the Trip Info symptom was
+  found.
+- **A genuine methodological trap this session, worth flagging explicitly:** `WebFetch`
+  reads of `bf-experiences.birdiefriends01.workers.dev` were actively misleading during
+  this chase — `/bfe/events-list` and `GET /bfe/events?event=<name>` returned
+  contradictory results moments apart with fresh cache-busting params, and a later check
+  returned the exact same stale `updated_at` across real backend changes. This burned real
+  time chasing a wrong "D1 read-replica lag" theory (still shipped as Dev-106-equivalent —
+  see below, harmless and probably still worth having) before Brian's own direct browser
+  console output revealed the true, much simpler cause. **Lesson, and now a fix — see
+  §"Library-access + live-worker-query workflow" below: don't trust a single `WebFetch`
+  read of this worker for anything time-sensitive; the `Claude_Browser` bridge tools
+  (navigate directly to the GET URL, then `get_page_text`) return exact, fresh,
+  unsummarized JSON and should be used instead going forward.**
+- **Actual root cause, finally found via Brian's own browser console output:** the
+  rebuilt event's `tripInfoUrl` was simply `null` — not a bug, a blank optional-looking
+  form field. `BFE-Admin.html`'s Trip Info URL input had no real default (a placeholder
+  that visually looks like a filled-in answer, but isn't), so a from-scratch Setup
+  rebuild after a full delete silently saved it blank unless Brian remembered to retype
+  it. Brian: "oh man, that's on me and also a design mistake, never should have made that
+  a human input." Fixed: the field now ships with the real URL baked in as an actual
+  `value`, the same pattern `eventName` already used — loading a previously-saved event
+  still shows whatever's genuinely saved (blank included, so "leave blank to show no
+  widget" still works honestly for a future non-Wally-Cup event).
+- Also shipped, defensively, while investigating: `GET /bfe/events-list`, `GET
+  /bfe/events`, and `POST /bfe/events` all now pin their D1 reads/writes to the primary
+  replica (`env.DB.withSession('first-primary')`, with a safe fallback to plain `env.DB`
+  if unsupported) — real-world value now uncertain given the `WebFetch`-unreliability
+  finding above may have been the actual explanation for what this was chasing, but it's
+  a correct hardening regardless and was verified fail-safe both ways.
+
+**Two things confirmed working-as-designed, not bugs — don't re-investigate if they
+resurface:**
+- `chainsFrom` (`buildEventConfig` in `BFE-Admin.html`) correctly skips non-stableford
+  rounds: 2Man reads Rd2's quota read-only for its own team-quota averaging without
+  joining the real chain; Rd3 correctly chains from Rd2, not 2Man.
+- A round's `quota_out` is computed fresh at Close Round time (pulling `quotaIn` live
+  from the chained prior round's results, not from anything set at Setup time) —
+  entirely independent of `bfe_round_groups`. Brian had pre-set Rd1/2/3 groupings ahead
+  of the event and worried this might interfere with quota auto-adjustment; confirmed it
+  does not, the two systems don't touch.
+- Also clarified for Brian: the live BFE-backed playing-groups display is the small 👥
+  "Group" icon on each round's own event card (format-wally/format-scramble only) — a
+  different, newer mechanism than the older static `groupings-meta.json`-driven
+  "Groupings & Tee Times" sheet, and easy to miss visually against the big BFSeries UI
+  Brian's used to.
+
+**Library-access + live-worker-query workflow — the Dev-81 carry-forward item, now
+actually solved:**
+- Dev-81's own close-out flagged this as the priority to solve early in Dev-82: no
+  working path existed to read the library docs (`BF_Session_Log.md`, this bootstrap,
+  the specs) directly, forcing Brian to hand-paste full doc content mid-session — his own
+  words then: "this session's inability to access the library is frustrating and
+  impacting our workflow... I will make mistake if we have to work this way."
+- Root cause of the old problem: `WebFetch` answers through a small summarizing model
+  rather than returning raw content, which is unsafe for byte-exact doc content (and, per
+  above, is independently unreliable against the BFE worker specifically) — and there
+  was no other tested path.
+- **Fix, confirmed working this session:** this cloud workspace's own `Bash`/`curl` CAN
+  reach `raw.githubusercontent.com` directly (confirmed: exact byte counts, e.g.
+  `BF_Session_Log.md` fetched clean at 442,123 bytes) even though it's blocked (proxy
+  403) against `*.workers.dev` — so **all `source/*.md` library docs should be fetched at
+  the start of every session via a plain `curl` to
+  `https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/<file>`,
+  not `WebFetch`.** For live BFE worker data specifically (where `curl` is blocked and
+  `WebFetch` is unreliable), the `Claude_Browser` bridge tools work reliably instead:
+  `Claude_Browser__navigate` straight to the GET URL, then `Claude_Browser__get_page_text`
+  returns the exact raw JSON, no summarization, confirmed fresh (`updated_at` matched
+  real-time). **Dev-83 should open by fetching this bootstrap + `BF_WallyCup_Spec.md` +
+  `BF_WCRP_Memories_Spec.md` via `curl` this way, not by asking Brian to paste anything.**
+
+**A numbering mistake made and corrected within this same session, worth logging so it
+isn't repeated:** individual fixes above were briefly labeled as inline code comments
+"Dev-102" through "Dev-107" mid-session, invented without checking against real session
+history. Brian caught it: "yeah, we are making the problem worse, there are no Dev
+sessions greater than the upcoming 83." Corrected in the delivered files' own comments
+is out of scope for tonight (low priority, event starting), but nothing referring to
+this session's work should use those numbers going forward — this is Dev-82, full stop.
+
+**Artifacts:** `portal.html` (Everyone tag chip, v4.1.6 — unchanged from Dev-81's
+version number; no further bump needed this session), `BFE-Admin.html` (timeline
+bucketing fix, Trip Info URL default), `BF_Experiences.js` (notes DELETE route,
+whole-event cascade fix, D1 primary-session pinning) — all delivered and pushed to
+AutoPush this session. `BF_Session_Bootstrap.md` (this update).
+
+**Carry-forward into Dev-83:**
+- **The end-to-end verification pass still has not happened** — carried forward from
+  Dev-81, and now more urgent than ever: Practice Rd is Thursday 9/10, Rd1 is Friday
+  9/11. See `BF_Session_Bootstrap.md` §3 for the full checklist (Live Panel capture
+  across all 5 rounds, the WCRP memories widget, the results-page scrapbook, the Trip
+  Info widget — **re-confirm this one specifically live, its outage was only fixed
+  tonight and not yet independently re-verified end-to-end**, Live Panel Notes, and a
+  final Setup config re-check).
+- Dev-83 is framed as **live commissioner support during the actual event**, not a
+  planned build session — expect it to be reactive, similar to tonight.
+- Re-verify once more, live, before Thursday: the Trip Info banner actually shows for a
+  real rostered player after Setup's rebuild + fix. Not independently confirmed
+  end-to-end as of this entry.
+
+**Session Dev-82 fully closed.**
+**Chat-rename string:** `Dev-82 - Everyone Tag Chip, Memories Timeline Bug, Live Event Data Incident + Trip Info Root Cause, Library-Access Workflow Fixed`
