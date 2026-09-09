@@ -3738,6 +3738,63 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       weather: weatherByName[r.name] || null, // Dev-96
     };
   });
+  // ── Payout Summary (Dev-97) ─────────────────────────────────────────
+  // Every dollar owed, summed once across the whole event rather than
+  // paid out round by round — Brian holds it until the trip wraps.
+  // Individual pots reuse bfe_round_results exactly as Close Round saved
+  // them; Overall and Wally Ball reuse the same tie/split figures already
+  // computed above (overallTiePayouts, potWinner/potTiedSplit) rather than
+  // a second copy of that math. 2Man is listed by TEAM only, never split
+  // between partners — the app has no record of how two teammates want to
+  // divide a shared payout, so that's deliberately left to them.
+  const individualRoundNames = originalRounds.filter(r => r.engine === 'stableford_quota').map(r => r.name);
+  const wbPayoutByPlayer = {};
+  if (wbPot && potWinner) {
+    wbPayoutByPlayer[potWinner] = wbPot.poolTotal;
+  } else if (wbPot && potTiedSplit && potTiedSplit.length) {
+    const share = Math.floor(wbPot.poolTotal / potTiedSplit.length);
+    potTiedSplit.forEach(n => { wbPayoutByPlayer[n] = share; });
+  }
+  const payoutPlayers = (config.roster || []).map(p => {
+    const roundAmt = individualRoundNames.reduce((s, rn) => {
+      const row = allResults.find(x => x.round_name === rn && x.player_name === p.name);
+      return s + (row ? (row.payout_podium || 0) + (row.payout_skins || 0) + (row.payout_cttp || 0) : 0);
+    }, 0);
+    const overallAmt = overallTiePayouts[p.name] || 0;
+    const wbAmt = wbPayoutByPlayer[p.name] || 0;
+    return {
+      name: p.name, withdrawn: withdrawnNames.has(p.name),
+      roundAmt, overallAmt, wbAmt, total: roundAmt + overallAmt + wbAmt,
+    };
+  }).sort((a, b) => b.total - a.total);
+  const twomanRoundForPayout = originalRounds.find(r => r.engine === 'scramble_pair');
+  const payoutTwoman = (twoman && twomanRoundForPayout) ? allResults
+    .filter(x => x.round_name === twomanRoundForPayout.name)
+    .map(x => ({
+      name: x.player_name,
+      players: (twoman.teams.find(t => t.name === x.player_name) || {}).players || [],
+      amt: (x.payout_podium || 0) + (x.payout_skins || 0) + (x.payout_cttp || 0),
+    }))
+    .sort((a, b) => b.amt - a.amt) : [];
+  // Practice Rd's own round-pot line item (Setup allocates one to every
+  // round including scorecard-only ones) is never actually paid out —
+  // closeScorecardOnlyRound computes no podium/skins/CTP by design (see
+  // that function's own header comment). So the number this section
+  // reconciles against is the payout config's total MINUS that unpaid
+  // pot, not the full per-player buy-in total.
+  const practiceRoundNamesForPayout = new Set(originalRounds.filter(r => r.engine === 'scorecard_only').map(r => r.name));
+  const payableExpectedTotal = (config.payout?.pots || [])
+    .filter(pot => !(pot.round && practiceRoundNamesForPayout.has(pot.round)))
+    .reduce((s, pot) => s + (pot.poolTotal || 0), 0);
+  const practicePotTotal = (config.payout?.pots || [])
+    .filter(pot => pot.round && practiceRoundNamesForPayout.has(pot.round))
+    .reduce((s, pot) => s + (pot.poolTotal || 0), 0);
+  const totalPaidOut = payoutPlayers.reduce((s, p) => s + p.total, 0) + payoutTwoman.reduce((s, t) => s + t.amt, 0);
+  const payoutSummary = {
+    players: payoutPlayers, twoman: payoutTwoman,
+    totalPaidOut, payableExpectedTotal, practicePotTotal,
+    reconciles: Math.abs(totalPaidOut - payableExpectedTotal) < 0.01,
+  };
   const memoryChapterData = buildMemoryChapters(config.eventName, originalRounds, memories || [], notes || [], scorecardsByRound, allResults);
   return {
     eventName: config.eventName, eventDate: config.eventDate, eventEndDate: config.eventEndDate,
@@ -3750,7 +3807,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
     roundSections, overallStandings, champion, isComplete,
     closedRollup, totalRollup,
     wallyBall, wbPot: wbPot ? wbPot.poolTotal : null, wbEligibleNow, wbResolved, potWinner, potTiedSplit, potWinnerNote,
-    twoman, scorecardOnly: scorecardOnlyRounds,
+    twoman, scorecardOnly: scorecardOnlyRounds, payoutSummary,
     bfeBase, memoryChapters: memoryChapterData.chapters, memoryChapterAnchors: memoryChapterData.anchorByRound,
   };
 }
@@ -4261,6 +4318,11 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .wb-pot-lbl{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent-light);font-weight:700;}
 .wb-pot-remain{font-size:12.5px;color:var(--white-dim);max-width:520px;}
 .wb-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.6rem;}
+.payout-dim{color:var(--white-dim);font-weight:400;}
+.payout-subhead{font-size:12px;font-weight:700;letter-spacing:0.04em;color:var(--white);margin:1.3rem 0 0.6rem;}
+.recon-banner{border-radius:14px;padding:0.9rem 1.1rem;margin-top:1.1rem;font-size:13px;line-height:1.5;border:1px solid;}
+.recon-ok{background:rgba(111,191,126,0.1);border-color:rgba(111,191,126,0.35);color:var(--good);}
+.recon-warn{background:rgba(224,160,80,0.12);border-color:rgba(224,160,80,0.4);color:var(--bad);}
 .wb-card{display:flex;justify-content:space-between;align-items:center;gap:0.6rem;background:var(--white-faintest);border:1px solid rgba(245,240,232,0.08);border-radius:12px;padding:0.65rem 0.85rem;}
 .wb-card-name{font-size:12.5px;font-weight:600;color:var(--white);}
 .wb-card-detail{font-size:10px;color:var(--white-dim);margin-top:1px;max-width:220px;}
@@ -4532,6 +4594,43 @@ function renderScorecardOnlySection(sec, num, memoryChapterAnchors) {
     <div class="lb-card"><div class="lb-list">${sec.players.length ? sec.players.map(p => renderScorecardOnlyRow(p, sec.pars)).join('') : '<div class="side-empty">No scorecards submitted.</div>'}</div></div>
   </div></div>`;
 }
+function renderPayoutSection(ps, num) {
+  if (!ps) return '';
+  const rows = ps.players.map(p => `<div class="lb-row ${p.withdrawn ? 'withdrawn-row' : ''}">
+      <div class="lb-row-top">
+        <div class="lb-name-wrap"><span class="player-name">${escapeHtml(p.name)}</span>${p.withdrawn ? ' <span class="payout-dim">(withdrawn)</span>' : ''}</div>
+        <span class="lb-cell-pay" style="font-size:16px">${fmtPayout(p.total)}</span>
+      </div>
+      <div class="ov-rounds">
+        <span>Rounds <b>${fmtPayout(p.roundAmt)}</b></span>
+        <span>Overall <b>${p.overallAmt ? fmtPayout(p.overallAmt) : '—'}</b></span>
+        <span>Wally Ball <b>${p.wbAmt ? fmtPayout(p.wbAmt) : '—'}</b></span>
+      </div>
+    </div>`).join('');
+  const twomanRows = ps.twoman.map(t => `<div class="lb-row">
+      <div class="lb-row-top">
+        <div class="lb-name-wrap"><span class="player-name">${escapeHtml(t.name)}</span></div>
+        <span class="lb-cell-pay" style="font-size:16px">${fmtPayout(t.amt)}</span>
+      </div>
+      <div class="ov-rounds"><span class="payout-dim">${t.players.map(escapeHtml).join(' & ') || 'team'} — split between partners as they agree</span></div>
+    </div>`).join('');
+  const diff = Math.abs(ps.totalPaidOut - ps.payableExpectedTotal);
+  return `<div class="wrap"><div class="section" id="payout">
+    <div class="section-head"><div class="section-num">${num}</div><div>
+      <div class="section-title">Payout Summary</div>
+      <div class="section-desc">Every dollar owed, summed across rounds, Overall, and Wally Ball — held until the trip wraps</div>
+    </div></div>
+    <div class="lb-card"><div class="lb-list">${rows}</div></div>
+    ${ps.twoman.length ? `<div class="payout-subhead">2Man — by team <span class="payout-dim">(not split between partners)</span></div>
+    <div class="lb-card" style="margin-top:0.6rem"><div class="lb-list">${twomanRows}</div></div>` : ''}
+    <div class="recon-banner ${ps.reconciles ? 'recon-ok' : 'recon-warn'}">
+      <div>${ps.reconciles
+        ? `✓ Reconciled — ${fmtPayout(ps.totalPaidOut)} accounted for, matching the ${fmtPayout(ps.payableExpectedTotal)} payable pool (round pots + Overall + Wally Ball).`
+        : `⚠ Off by ${fmtPayout(diff)} — ${fmtPayout(ps.totalPaidOut)} accounted for vs. ${fmtPayout(ps.payableExpectedTotal)} expected. Check for an unclosed round, an unresolved Wally Ball pot, or a withdrawn player's leftover share.`}</div>
+      <div class="payout-dim" style="margin-top:5px">Practice Rd's own ${fmtPayout(ps.practicePotTotal)} round-pot line item is configured in Setup but never paid out — a scorecard-only round computes no podium/skins/CTP by design, so it's excluded from the total above on purpose.</div>
+    </div>
+  </div></div>`;
+}
 function renderResultsHtml(data, opts) {
   opts = opts || {};
   const accent = opts.accent || '#e8392a';
@@ -4626,7 +4725,9 @@ function renderResultsHtml(data, opts) {
   const practiceHtml = (data.scorecardOnly || []).map((sec, i) =>
     renderScorecardOnlySection(sec, roundNums[data.roundSections.length + 3 + i], data.memoryChapterAnchors)
   ).join('');
-  const photoNum = roundNums[data.roundSections.length + 3 + (data.scorecardOnly || []).length];
+  const payoutNum = roundNums[data.roundSections.length + 3 + (data.scorecardOnly || []).length];
+  const payoutHtml = renderPayoutSection(data.payoutSummary, payoutNum);
+  const photoNum = roundNums[data.roundSections.length + 4 + (data.scorecardOnly || []).length];
   const photoHtml = renderMemoriesSection(data.memoryChapters, data.bfeBase, photoNum);
   const footerHtml = `<div class="footer">
     <img class="footer-logo" src="${WC_LOGO_DATA_URI}" alt="">
@@ -4654,6 +4755,7 @@ function renderResultsHtml(data, opts) {
   ${wbHtml}
   ${twomanHtml}
   ${practiceHtml}
+  ${payoutHtml}
   ${photoHtml}
   ${renderLightbox()}
   ${footerHtml}
