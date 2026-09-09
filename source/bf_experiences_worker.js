@@ -940,6 +940,17 @@ export default {
     // table this route didn't know about. Every FK-referencing child table
     // must be deleted here before the parent bfe_events row — this is the
     // list to extend the next time a new one is added.
+    //
+    // Dev-105 fix: same failure mode, same root cause — bfe_event_memories
+    // and bfe_event_memory_notes (Trip Memories / WCRP, added well after
+    // Dev-77) were never added here either, so deleting a test event with
+    // any captured photos/videos/notes on it (real 2026 Wally Cup rehearsal
+    // data, this pass) hit the exact SQLITE_CONSTRAINT_FOREIGNKEY error
+    // again. Memories additionally own an R2 object apiece (r2_key) — those
+    // don't get cleaned up by a D1 DELETE at all, so this reads every
+    // r2_key for the event FIRST and deletes each from R2 before touching
+    // any D1 row, same "R2 object + D1 row both go" posture as the
+    // single-memory DELETE route above.
     if (request.method === 'DELETE' && url.pathname.startsWith('/bfe/events/')) {
       try {
         const eventName = decodeURIComponent(url.pathname.split('/bfe/events/')[1]);
@@ -949,6 +960,14 @@ export default {
         }
         const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
         if (eventRow) {
+          if (env.PHOTOS_BUCKET) {
+            const { results: memRows } = await env.DB.prepare(`SELECT r2_key FROM bfe_event_memories WHERE event_id = ?`).bind(eventRow.id).all();
+            for (const m of (memRows || [])) {
+              if (m.r2_key) { await env.PHOTOS_BUCKET.delete(m.r2_key); }
+            }
+          }
+          await env.DB.prepare(`DELETE FROM bfe_event_memories WHERE event_id = ?`).bind(eventRow.id).run();
+          await env.DB.prepare(`DELETE FROM bfe_event_memory_notes WHERE event_id = ?`).bind(eventRow.id).run();
           await env.DB.prepare(`DELETE FROM bfe_event_rounds WHERE event_id = ?`).bind(eventRow.id).run();
           await env.DB.prepare(`DELETE FROM bfe_event_roster WHERE event_id = ?`).bind(eventRow.id).run();
           await env.DB.prepare(`DELETE FROM bfe_round_results WHERE event_id = ?`).bind(eventRow.id).run();
@@ -1315,6 +1334,38 @@ export default {
         return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // DELETE /bfe/memories/notes/:id — Dev-104: notes had a POST + GET all
+    // along but no way to remove one — surfaced doing pre-event test-data
+    // cleanup (real 2026 Wally Cup rehearsal notes needed deleting and there
+    // was nowhere to send that request). Same two-path auth as DELETE
+    // /bfe/memories/:id: ?pin=7797 (any), or ?requested_by=<name> matching
+    // the row's own `player` (verified server-side). No R2 object to clean
+    // up — notes are D1-only. Checked BEFORE the broader
+    // /bfe/memories/:id DELETE below since that one matches on
+    // startsWith('/bfe/memories/') and would otherwise swallow this path
+    // first and 404 on an id of "notes/5".
+    if (request.method === 'DELETE' && url.pathname.startsWith('/bfe/memories/notes/')) {
+      try {
+        const noteId      = url.pathname.split('/bfe/memories/notes/')[1];
+        const pin         = url.searchParams.get('pin');
+        const requestedBy = url.searchParams.get('requested_by');
+        const isAdmin     = String(pin) === '7797';
+        const row = await env.DB.prepare(`SELECT player FROM bfe_event_memory_notes WHERE id = ?`).bind(noteId).first();
+        if (!row) {
+          return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const norm = s => (s || '').trim().toLowerCase();
+        const isOwner = requestedBy && norm(requestedBy) === norm(row.player);
+        if (!isAdmin && !isOwner) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        await env.DB.prepare(`DELETE FROM bfe_event_memory_notes WHERE id = ?`).bind(noteId).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Delete error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
