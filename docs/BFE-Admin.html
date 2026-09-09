@@ -4424,7 +4424,15 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .hole-par{font-weight:400;opacity:0.8;}
 .hole-score{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:15px;color:var(--white);margin:1px 0;line-height:1.2;}
 .hole-pts{font-size:8.5px;color:var(--white-dim);opacity:0.65;}
-@media (max-width:520px){.hole-cell{padding:4px 1px;}.hole-score{font-size:12.5px;}.hole-num,.hole-pts{font-size:7.5px;}}
+/* Classic scorecard notation (Dev-100) — circle a birdie/eagle, square a
+   bogey/double, using border + outline (offset, so it draws as a genuine
+   second concentric ring/frame with no extra markup) for the "double" tier. */
+.hole-score.mark-birdie,.hole-score.mark-eagle,.hole-score.mark-bogey,.hole-score.mark-double{display:flex;align-items:center;justify-content:center;width:20px;height:20px;margin:1px auto 0;box-sizing:border-box;}
+.hole-score.mark-birdie{border-radius:50%;border:1.5px solid var(--good);}
+.hole-score.mark-eagle{border-radius:50%;border:1.5px solid var(--good);outline:1.5px solid var(--good);outline-offset:2px;}
+.hole-score.mark-bogey{border-radius:3px;border:1.5px solid var(--bad);}
+.hole-score.mark-double{border-radius:3px;border:1.5px solid var(--bad);outline:1.5px solid var(--bad);outline-offset:2px;}
+@media (max-width:520px){.hole-cell{padding:4px 1px;}.hole-score{font-size:12.5px;}.hole-num,.hole-pts{font-size:7.5px;}.hole-score.mark-birdie,.hole-score.mark-eagle,.hole-score.mark-bogey,.hole-score.mark-double{width:17px;height:17px;}}
 .side-strip{display:flex;gap:0.9rem;flex-wrap:wrap;margin-top:1rem;}
 .side-card{flex:1;min-width:220px;background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);border-radius:12px;padding:0.85rem 1rem;}
 .side-label{font-size:9.5px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-light);margin-bottom:0.55rem;}
@@ -4527,9 +4535,21 @@ function renderHoleGrid(holes, pars) {
     const holePar = parsOk ? pars[i] : null;
     const score = (vsPar !== undefined && holePar != null) ? holePar + vsPar : null;
     const cls = vsPar === undefined ? '' : (vsPar < 0 ? 'hole-good' : (vsPar > 0 ? 'hole-bad' : ''));
+    // Classic scorecard notation (Dev-100): circle a birdie, double-circle
+    // an eagle or better; square a bogey, double-square a double bogey or
+    // worse. VS_PAR_BY_POINTS only ever yields -3/-2/-1/0/1/2 (0pts already
+    // lumps everything double-bogey-or-worse into a single +2 bucket), so
+    // "double" below covers that whole tail, same as real scorecards do.
+    let markCls = '';
+    if (vsPar !== undefined) {
+      if (vsPar <= -2) markCls = 'mark-eagle';
+      else if (vsPar === -1) markCls = 'mark-birdie';
+      else if (vsPar === 1) markCls = 'mark-bogey';
+      else if (vsPar >= 2) markCls = 'mark-double';
+    }
     return `<div class="hole-cell ${cls}">
       <div class="hole-num">${i + 1}${holePar != null ? `<div class="hole-par">Par ${holePar}</div>` : ''}</div>
-      <div class="hole-score">${score != null ? score : '—'}</div>
+      <div class="hole-score ${markCls}">${score != null ? score : '—'}</div>
       <div class="hole-pts">${pt != null && pt !== undefined ? pt : '—'} pt${pt === 1 ? '' : 's'}</div>
     </div>`;
   });
