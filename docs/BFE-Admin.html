@@ -4106,6 +4106,40 @@ function buildMemoryChapters(eventName, originalRounds, memories, notes, scoreca
   populated.forEach(c => { if (c.roundName) anchorByRound[c.roundName] = c.anchorId; });
   return { chapters: populated, anchorByRound };
 }
+// Trip Memories — scrapbook formatting (Dev-101), ported from portal.html's
+// My History (seededTilt / seasonPaperTone / NOTE_COLORS+noteColorFor are
+// byte-for-byte the same helpers, same idea, same reasons — keeping this
+// section visually consistent with the keepsake view players already know
+// from the portal, rather than the plain dark-theme grid the rest of this
+// page uses). Deterministic-by-id tilt so a given photo/note always leans
+// the same way instead of jittering on re-render; a chapter's paper tone
+// shifts with the calendar the same way My History's does.
+function seededTilt(id) {
+  const seed = (Number(id) * 2654435761) % 2147483647;
+  return ((seed % 1201) / 100) - 6;
+}
+function seasonPaperTone(dt) {
+  if (!(dt instanceof Date) || isNaN(dt)) return { bg: '#F4EFE3', border: '#DDD3B8' };
+  const m = dt.getMonth();
+  if (m === 11 || m <= 1) return { bg: '#E9F0F3', border: '#C4D6DD' }; // winter
+  if (m >= 2 && m <= 4)   return { bg: '#EFF4E3', border: '#CEDFAF' }; // spring
+  if (m >= 5 && m <= 7)   return { bg: '#FCE9A8', border: '#E8B23A' }; // summer
+  return { bg: '#F7E7D4', border: '#E2BE8E' };                         // fall
+}
+const NOTE_COLORS = ['#FFF3B0', '#FFD9C0', '#C9F2D8', '#C9E4FF', '#F0D9FF', '#FFE0EC'];
+function noteColorFor(player) {
+  let h = 0;
+  for (let i = 0; i < (player || '').length; i++) h = (h * 31 + player.charCodeAt(i)) >>> 0;
+  return NOTE_COLORS[h % NOTE_COLORS.length];
+}
+// A chapter's representative date for seasonPaperTone — start/end are Dates
+// except for the open-ended "Before"/"After" chapters, where one side is
+// ±Infinity; fall back to whichever side is finite, then to now.
+function chapterRepresentativeDate(ch) {
+  if (ch.start instanceof Date && !isNaN(ch.start)) return ch.start;
+  if (ch.end instanceof Date && !isNaN(ch.end)) return ch.end;
+  return new Date();
+}
 function renderMemoryTile(bfeBase, m) {
   const src = `${bfeBase}/bfe/memories/serve/${m.id}`;
   const isVideo = m.media_type === 'video';
@@ -4115,8 +4149,13 @@ function renderMemoryTile(bfeBase, m) {
   const tagLine = (m.tagged_players && m.tagged_players.length) ? `👤 ${m.tagged_players.map(escapeHtml).join(', ')}` : '';
   // Dev-96 — full-size + Share, click the tile itself (data-src drives the
   // shared lightbox — see renderLightbox()). Caption doubles as the share
-  // title when there is one, for a nicer share-sheet preview.
-  return `<div class="memory-tile" data-src="${escapeHtml(src)}" data-video="${isVideo ? '1' : '0'}" data-caption="${escapeHtml(m.caption || '')}">
+  // title when there is one, for a nicer share-sheet preview. Dev-101 —
+  // polaroid treatment (white paper border, seeded per-photo tilt, soft
+  // shadow), same visual language as portal.html's My History scrapbook —
+  // .memory-tile itself is untouched as a selector so the lightbox wiring
+  // in renderLightbox() keeps working with zero changes.
+  const tilt = seededTilt(m.id);
+  return `<div class="memory-tile" data-src="${escapeHtml(src)}" data-video="${isVideo ? '1' : '0'}" data-caption="${escapeHtml(m.caption || '')}" style="transform:rotate(${tilt}deg)">
     <div class="memory-tile-media-wrap">${media}<div class="memory-tile-expand">⤢</div></div>
     <div class="memory-tile-meta">
       <div class="memory-tile-by">${escapeHtml(m.captured_by || 'Unknown')}${isVideo ? ' · 🎥' : ''}</div>
@@ -4125,17 +4164,29 @@ function renderMemoryTile(bfeBase, m) {
     </div>
   </div>`;
 }
+// Dev-101 — washi-tape sticky note, same idea as portal.html's
+// renderNoteChip: a pastel color seeded from the player's name (so the same
+// person's notes are always the same color across a chapter), a gentler
+// tilt than photos get (text needs to stay easy to read), and a small
+// semi-transparent tape strip across the top corner.
 function renderMemoryNote(n) {
-  return `<div class="memory-note">
+  const tilt = seededTilt((n.id || 0)) * 0.6;
+  return `<div class="memory-note" style="background:${noteColorFor(n.player)};transform:rotate(${tilt}deg)">
+    <div class="memory-note-tape"></div>
     <div class="memory-note-text">${escapeHtml(n.note)}</div>
     <div class="memory-note-by">— ${escapeHtml(n.player)}</div>
   </div>`;
 }
+// Dev-101 — each chapter is now a paper-toned scrapbook card (seasonal tint,
+// same as portal.html's My History) instead of a plain dark block, so the
+// polaroid photos and washi-tape notes inside it sit on the paper they're
+// styled to look like they're stuck to.
 function renderMemoryChapterBlock(ch, bfeBase) {
   const countBits = [];
   if (ch.photos.length) countBits.push(`${ch.photos.length} photo${ch.photos.length === 1 ? '' : 's'}`);
   if (ch.notes.length) countBits.push(`${ch.notes.length} note${ch.notes.length === 1 ? '' : 's'}`);
-  return `<div class="chapter-block" id="${ch.anchorId}">
+  const tone = seasonPaperTone(chapterRepresentativeDate(ch));
+  return `<div class="chapter-block" id="${ch.anchorId}" style="background:${tone.bg};border-color:${tone.border}">
     <div class="chapter-head"><div class="chapter-title">${escapeHtml(ch.title)}</div><div class="chapter-sub">${countBits.join(' · ')}</div></div>
     ${ch.photos.length ? `<div class="memory-grid">${ch.photos.map(m => renderMemoryTile(bfeBase, m)).join('')}</div>` : ''}
     ${ch.notes.length ? `<div class="memory-notes">${ch.notes.map(renderMemoryNote).join('')}</div>` : ''}
@@ -4468,21 +4519,27 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .photo-icon{margin-bottom:0.9rem;opacity:0.4;}
 .photo-slot-title{font-size:14px;font-weight:700;color:var(--white-dim);margin-bottom:4px;}
 .photo-slot-sub{font-size:11.5px;color:var(--white-dim);opacity:0.7;max-width:340px;margin:0 auto;}
-.chapter-block{margin-bottom:1.6rem;}
+/* Trip Memories — scrapbook formatting (Dev-101), matching portal.html's
+   My History keepsake view. Deliberately its own light/cream palette rather
+   than this page's navy theme — that contrast is what makes it read as a
+   scrapbook page tucked into the results, the same way it does in the
+   portal. tone.bg/tone.border come in as an inline style per chapter
+   (seasonal, see seasonPaperTone) — these rules are the fixed parts. */
+.chapter-block{margin-bottom:1.6rem;border:1px solid;border-radius:14px;padding:1.1rem 1rem 1.3rem;position:relative;}
 .chapter-block:last-child{margin-bottom:0;}
 .chapter-head{margin-bottom:0.7rem;}
-.chapter-title{font-size:13.5px;font-weight:700;color:var(--white);}
-.chapter-sub{font-size:11px;color:var(--white-dim);margin-top:2px;}
-.memory-grid{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
-.memory-tile{width:150px;border:1px solid rgba(245,240,232,0.12);border-radius:10px;overflow:hidden;background:var(--white-faintest);cursor:pointer;}
+.chapter-title{font-family:'DM Serif Display',serif;font-size:16px;font-weight:400;color:#2a2a2a;}
+.chapter-sub{font-size:11px;color:#6a6a5a;margin-top:2px;}
+.memory-grid{display:flex;flex-wrap:wrap;gap:2px;margin-bottom:10px;}
+.memory-tile{width:150px;background:#fdfcf8;padding:6px 6px 4px;border-radius:2px;box-shadow:0 2px 5px rgba(0,0,0,0.22);cursor:pointer;margin:6px 4px;}
 .memory-tile-media-wrap{position:relative;}
-.memory-media{width:100%;height:110px;object-fit:cover;display:block;background:#000;}
-.memory-tile-expand{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:6px;background:rgba(13,31,61,0.65);color:var(--white);display:flex;align-items:center;justify-content:center;font-size:12px;opacity:0;transition:opacity 0.15s;pointer-events:none;}
+.memory-media{width:100%;height:110px;object-fit:cover;display:block;background:#000;border-radius:1px;}
+.memory-tile-expand{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:6px;background:rgba(13,31,61,0.65);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;opacity:0;transition:opacity 0.15s;pointer-events:none;}
 .memory-tile:hover .memory-tile-expand,.memory-tile:active .memory-tile-expand{opacity:0.9;}
-.memory-tile-meta{padding:6px 8px;}
-.memory-tile-by{font-size:10.5px;color:var(--white-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.memory-tile-caption{font-size:10.5px;color:var(--white);margin-top:2px;word-break:break-word;}
-.memory-tile-tags{font-size:10px;color:var(--white-dim);opacity:0.75;margin-top:2px;}
+.memory-tile-meta{padding:6px 2px 4px;}
+.memory-tile-by{font-size:10.5px;color:#5a5648;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.memory-tile-caption{font-size:10.5px;color:#3a3a3a;margin-top:2px;word-break:break-word;}
+.memory-tile-tags{font-size:10px;color:#8a8574;margin-top:2px;}
 .lightbox{position:fixed;inset:0;background:rgba(8,16,32,0.92);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.2rem;}
 .lightbox[hidden]{display:none;}
 .lightbox-media{max-width:100%;max-height:70vh;display:flex;align-items:center;justify-content:center;}
@@ -4492,10 +4549,11 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .lightbox-btn{display:inline-flex;align-items:center;gap:6px;background:var(--white-faint);border:1px solid rgba(245,240,232,0.18);border-radius:99px;padding:9px 18px;font-size:12.5px;font-weight:600;color:var(--white);text-decoration:none;cursor:pointer;font-family:inherit;}
 .lightbox-btn:hover{background:rgba(245,240,232,0.16);}
 .lightbox-copied{margin-top:0.6rem;font-size:11.5px;color:var(--good);font-weight:600;}
-.memory-notes{display:flex;flex-direction:column;gap:8px;}
-.memory-note{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);border-radius:10px;padding:10px 12px;}
-.memory-note-text{font-size:12.5px;color:var(--white);line-height:1.5;white-space:pre-wrap;word-break:break-word;}
-.memory-note-by{font-size:10.5px;color:var(--white-dim);margin-top:5px;font-weight:600;}
+.memory-notes{display:flex;flex-direction:column;gap:6px;}
+.memory-note{border-radius:4px;padding:12px 12px 10px;box-shadow:0 2px 5px rgba(0,0,0,0.16);position:relative;margin:6px 4px;}
+.memory-note-tape{position:absolute;top:-6px;left:50%;transform:translateX(-50%) rotate(-3deg);width:44px;height:16px;background:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.7);}
+.memory-note-text{font-size:12.5px;color:#3a3a3a;line-height:1.45;white-space:pre-wrap;word-break:break-word;}
+.memory-note-by{font-size:10.5px;color:#5a5a5a;margin-top:6px;font-weight:600;}
 .section-photolink{display:inline-block;margin-top:6px;font-size:11.5px;font-weight:600;color:var(--accent-light);text-decoration:none;}
 .section-photolink:hover{text-decoration:underline;}
 .weather-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--white-dim);background:var(--white-faint);border:1px solid rgba(245,240,232,0.14);border-radius:99px;padding:3px 10px;margin-top:6px;}
@@ -4897,7 +4955,7 @@ function renderResultsHtml(data, opts) {
   </div></div>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(data.eventName)} — Results</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap">
 <style>${RESULTS_PAGE_CSS}</style>
 </head><body>
 <div class="page" style="--accent:${accent}">
