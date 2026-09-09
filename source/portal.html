@@ -13091,14 +13091,39 @@ function wcrpShowTagPicker() {
   const chips = document.getElementById('wcrp-tag-chips');
   if (!picker || !chips || !evt) return;
   const names = Array.from(evt.roster).sort();
-  chips.innerHTML = names.map(n => `
+  // "Everyone" (Dev-102) is a meta-control, not a real tag — checking it
+  // just checks every individual player chip below, so the upload still
+  // submits everyone's actual name (tagged_players stays a real roster
+  // list, same as if someone tapped all the chips by hand); it never
+  // submits the literal word "Everyone". Deliberately its own class
+  // (not wcrp-tag-cb) so wcrpConfirmUpload's :checked query — and any
+  // future one — never has to know this chip exists.
+  const everyoneChip = `
+    <label style="display:flex;align-items:center;gap:5px;font-size:0.76rem;background:var(--green-light);
+      border:1px solid var(--green);border-radius:14px;padding:5px 10px;cursor:pointer;font-weight:700">
+      <input type="checkbox" id="wcrp-tag-all-cb" style="margin:0" onchange="wcrpToggleTagAll(this.checked)">
+      Everyone
+    </label>`;
+  chips.innerHTML = everyoneChip + names.map(n => `
     <label style="display:flex;align-items:center;gap:5px;font-size:0.76rem;background:var(--card);
       border:1px solid var(--border);border-radius:14px;padding:5px 10px;cursor:pointer">
-      <input type="checkbox" class="wcrp-tag-cb" value="${n.replace(/"/g,'&quot;')}" style="margin:0">
+      <input type="checkbox" class="wcrp-tag-cb" value="${n.replace(/"/g,'&quot;')}" style="margin:0" onchange="wcrpSyncTagAll()">
       ${n.replace(/\b\w/g, c => c.toUpperCase())}
     </label>`).join('');
   document.getElementById('wcrp-caption-input').value = '';
   picker.style.display = 'block';
+}
+// "Everyone" checked → check every player chip; unchecked → clear them all.
+function wcrpToggleTagAll(checked) {
+  document.querySelectorAll('.wcrp-tag-cb').forEach(cb => { cb.checked = checked; });
+}
+// Keeps "Everyone" in sync the other direction too — checked once every
+// player chip happens to be checked by hand, unchecked the moment any one
+// of them isn't, so it never lies about the actual selection.
+function wcrpSyncTagAll() {
+  const all = Array.from(document.querySelectorAll('.wcrp-tag-cb'));
+  const allCb = document.getElementById('wcrp-tag-all-cb');
+  if (allCb) allCb.checked = all.length > 0 && all.every(cb => cb.checked);
 }
 function wcrpCancelUpload() {
   _wcrpPendingFile = null;
