@@ -1,25 +1,25 @@
 # BF_Session_Bootstrap.md — Start Here for a New BirdieFriends Session
-
-**Status:** current as of Dev-80 close, 2026-09-08. Dev-80 ("WCRP Memories Pass 2 —
+**Status:** current as of Dev-81 close, 2026-09-08. Dev-80 ("WCRP Memories Pass 2 —
 capture pipeline + results-page scrapbook + Trip Info widget") is fully shipped and
-live — see §2 and §3 below. Read this file first in any new BirdieFriends chat before
-touching code — it's meant to be self-sufficient enough that you never need to re-read
-`BF_Session_Log.md` line by line to get oriented (that log is the detailed history; this
-doc is the map). `BF_WallyCup_Spec.md` is the living design reference for the Wally Cup
-event specifically — read it too before touching Groupings, the results page, Close
-Round, or Overall Standings. `BF_WCRP_Memories_Spec.md`'s "What actually shipped
-(Dev-80)" addendum is the reference for the memories/Trip-Info work specifically.
-
+live. Dev-81 (this close-out) fixed a Live Panel scoping bug, confirmed withdrawal/
+Overall/Wally Ball behavior against spec with no code change needed, shipped five
+results-page polish items, and root-caused/fixed a "Generate & publish isn't working"
+report (a stray unescaped `</script>` inside a code comment was truncating
+BFE-Admin.html's own script block) — see §2 and §3 below. Read this file first in any
+new BirdieFriends chat before touching code — it's meant to be self-sufficient enough
+that you never need to re-read `BF_Session_Log.md` line by line to get oriented (that
+log is the detailed history; this doc is the map). `BF_WallyCup_Spec.md` is the living
+design reference for the Wally Cup event specifically — read it too before touching
+Groupings, the results page, Close Round, or Overall Standings. `BF_WCRP_Memories_Spec.md`'s
+"What actually shipped (Dev-80)" addendum is the reference for the memories/Trip-Info
+work specifically.
 ---
-
 ## 1. What this project is
-
 BirdieFriends (birdiefriends.com) is a golf league management platform. Brian is the sole
 developer and commissioner, builds it entirely through Claude sessions, and also plays in
 it as a real competitive golfer ("Brian Hager" is his player identity — a separate,
 inactive member "Brian McCabe" also exists in old data, don't confuse them). There are two
 apps and two Cloudflare Workers:
-
 - **`portal.html`** — the player-facing app. Events/Gatherings home screen, registration,
   the Live Panel (in-round scorecard/CTP/Birdie Alert/photo capture during play), results
   pages, admin/commissioner controls behind a gear icon. This is the file most session work
@@ -57,7 +57,6 @@ apps and two Cloudflare Workers:
   this and doesn't drive the Portal home cards); a Scorecard form and a CTP form back Live
   Panel submissions and Close Round's data pull. `JOTFORM_API_KEY` is hardcoded client-side
   — a known, deliberately-deferred security backlog item (see §5).
-
 **Deployment — I never do this myself.** Brian runs his own local `bf_push.bat`/
 `bf_push.ps1` against a folder called AutoPush, then does his own Cloudflare
 paste-and-deploy step for Worker changes. My job is to prepare and verify files, then
@@ -67,9 +66,7 @@ deliver them: `SendUserFile` first, then (when linked to Brian's computer)
 Cloudflare/GitHub myself. **Since Dev-80, one exception:** changes to `bf_push.ps1` itself
 get committed DIRECTLY to the live file at that AutoPush path (not just delivered as the
 `bf_push_library.ps1` archival snapshot) — see §4 for the full rule.
-
 ## 2. Where the 2026 Wally Cup stands
-
 Full design is in `BF_WallyCup_Spec.md` — read it before touching any of this. Summary:
 one BFE event (`"2026 Wally Cup"`), five rounds in sequence `Practice Rd → Rd1 → Rd2 →
 2Man → Rd3 → Overall`. The Practice Rd (`engine: none`) doesn't score or roll into
@@ -83,7 +80,6 @@ backward purely to source that averaging. CTP holes are per-venue, shared betwee
 BFE-Admin's Tee Policy and portal.html's own Venue Manager editor (built Dev-78) via the
 same `bfe_venue_tee_catalog` store — CTP always pays the *individual* claimant on a
 configured hole, never a team, even in 2Man.
-
 **Real 16-player roster and real 5-round schedule confirmed live (Dev-80) — the old
 mock-data warning is resolved.** Every prior bootstrap revision since Dev-75 carried a
 warning that the live `"2026 Wally Cup"` D1 event still held a 4-player dry-run mock
@@ -95,16 +91,31 @@ Knappenberger, Evan Lindermuth, Dave Sherwin, Chooch Wernett, Brian Hager, Bill 
 and the real 5-round schedule: Practice Rd (Thu 9/10, Paupack Hills, 1:00 PM ET), Rd1
 (Fri 9/11, Honesdale GC, 10:00 AM ET), Rd2 (Sat 9/12, Skytop Lodge, 8:00 AM ET), 2Man
 (Sat 9/12, Skytop Lodge, 2:30 PM ET), Rd3 (Sun 9/13, Paupack Hills, 9:30 AM ET). **Do not
-assume this needs re-confirming going into Dev-81 unless something looks off** — this was
-checked directly against live data this session, not inferred.
-
-**Caught and fixed live this session:** the 2Man round's `engine` field was briefly
+assume this needs re-confirming going into Dev-82 unless something looks off** — this was
+checked directly against live data in Dev-80, not inferred.
+**Caught and fixed live in Dev-80:** the 2Man round's `engine` field was briefly
 misconfigured as `stableford_quota` instead of `scramble_pair` (would have broken its
 dedicated team-results section). Brian fixed it in Setup once flagged; re-verified live
 afterward. See `BF_WallyCup_Spec.md` §5 for detail — worth a quick glance at every
-round's engine dropdown during Dev-81's end-to-end pass, since nothing in the app guards
+round's engine dropdown during Dev-82's end-to-end pass, since nothing in the app guards
 against this specific mistake today.
-
+**Dev-81 (this close-out) — fix-work, not the planned testing pass.** Brian flagged, mid-
+session, that the Live Panel's scorecard-completion check was comparing a round's field
+against the *full* BFE-A roster rather than that round's own event-card registrants —
+real risk for the Practice Rd, which only has 7 of the 16 players. Fixed (same
+umbrella-vs-round-name resolution pattern as Dev-79/Dev-80's other BFE lookups, plus
+gathering-aware registrant matching). Separately, Brian confirmed the existing
+withdrawal/Overall/Wally Ball behavior already matches his stated spec exactly (a
+completed round keeps its own ranking/payout after a later withdrawal; only Overall
+status and Wally Ball are affected) — no code change needed there. Then shipped five
+results-page polish items (Wally Cup logo, section reorder, a per-hole scorecard
+drill-down, a photo lightbox with full-size/Share, per-round weather chips) and found
+and fixed a real "Generate & publish does nothing" bug: an explanatory code comment
+contained a literal, unescaped `</script>` that the browser's HTML parser read as the
+real closing tag, silently truncating BFE-Admin.html's script block and dropping every
+function/listener defined after it. Full detail in `BF_Session_Log.md`'s Dev-81 entry.
+**Net effect: the full end-to-end verification pass this bootstrap has been flagging
+since Dev-80 still has not happened.** See §3.
 **Dev-78 built and live-validated:** 2Man Live Panel capture (team picker for
 Scorecard/Birdie Alert, individual picker for CTP — see the spec's §6 for the bug that
 briefly had CTP on the team picker too, now fixed), a device-local Live Test Mode round
@@ -115,15 +126,12 @@ handled by a shared `findVenueByName()` abbreviation-tolerant lookup). Brian the
 real end-to-end dry run of all four scored rounds through the Live Panel and independently
 verified every computed number (quota/WB-bonus ranking, team-quota averaging, skins,
 CTP, payout totals) against the live D1 data — everything matched the shipped formulas.
-
 **Dev-79 rationalized memories capture and built the first slice (schema/round-picker
 piece).** Decision: EventCard Memories stays as-is for ordinary single-round events; BFE
 productions (Wally Cup, GLS) get their own persistent capture widget instead. Full detail
 in `BF_WCRP_Memories_Spec.md`.
-
 **Dev-80 finished the memories build end to end, plus a standalone Trip Info feature —
-this is this session's main body of work.** In build order:
-
+this is the largest single body of work behind this bootstrap.** In build order:
 1. The BFE-backed flag on Portal `eventData`, `BFE_API`'s `bfe_event_memories`/
    `bfe_event_memory_notes` tables and routes, the Live Panel repoint to the new upload
    route, the persistent WCRP capture widget on Home (photo/video/notes, roster-gated,
@@ -163,50 +171,64 @@ this is this session's main body of work.** In build order:
 6. **A standing tooling rule change:** Brian asked that changes to `bf_push.ps1` itself be
    committed directly to the live file going forward, not delivered only as the
    `bf_push_library.ps1` archival snapshot for manual copy-over — see §4.
-
 Full detail on all of the above (including the deviations from the original design draft)
 is in `BF_WCRP_Memories_Spec.md`'s "What actually shipped (Dev-80)" addendum — read that
 before touching any memories/Trip-Info code, not just this summary.
-
-## 3. Dev-81 focus — end-to-end testing, ahead of real Rd1 (10am ET, 9/11)
-
-Dev-80 closed out the full memories build and the Trip Info feature; nothing is mid-flight
-from this session. Dev-81's job is verification, not new building — walk the real flows a
-real trip day will exercise, using the real 16-player roster and real 5-round schedule
-confirmed live in §2, with enough runway before Thursday's Practice Rd (9/10) and Friday's
-real Rd1 (10am ET, 9/11) to fix anything found. Suggested pass, roughly in trip order:
-
+## 3. Dev-82 focus — the end-to-end testing pass, now urgent (Practice Rd is 9/10)
+**This is the item that has been flagged since Dev-80 and did not get done in Dev-81 —
+Dev-81 turned into fix-work instead (a real Live Panel scoping bug, a results-page
+polish batch, and a "Generate & publish" outage). Treat this as the actual, time-critical
+priority for Dev-82, not a nice-to-have.** With the Practice Rd Thursday 9/10 and real
+Rd1 Friday 9/11 (10am ET) both imminent, walk the real flows a real trip day will
+exercise, using the real 16-player roster and real 5-round schedule confirmed live in
+§2. Suggested pass, roughly in trip order:
 1. **Live Panel capture, all 5 rounds** — scorecard submission, CTP, Birdie Alert, and
    photo/video capture for a normal stableford round; the 2Man team-picker path
-   specifically (confirm the engine fix from this session holds); the Practice Rd (no
-   engine — confirm nothing in the capture path assumes every round is scored).
+   specifically (confirm the engine fix from Dev-80 holds); the Practice Rd (no-engine —
+   confirm nothing in the capture path assumes every round is scored, and confirm the
+   Dev-81 event-card-scoped completion check reads correctly against the Practice Rd's
+   real partial field).
 2. **The WCRP memories widget** — toggle `memories_capture_open` on, confirm the Home
    banner appears only for real rostered players, capture a real photo/note, confirm it
    lands in `bfe_event_memories` (not the old `event_photos` table — see §2 item 4 for why
    that distinction matters), confirm EventCard's Photos/Notes icons are correctly
    disabled on BFE-backed round cards.
-3. **The results-page scrapbook** — Close a round, Publish Results, confirm chapters
-   auto-group correctly against real tee times and real scorecard timestamps, confirm
-   jump-links land in the right place, confirm the pre-trip/post-trip "Fun" bucket
-   behaves as expected for anything captured outside a round's window.
+3. **The results-page scrapbook AND this session's polish batch** — Close a round,
+   Publish Results, confirm chapters auto-group correctly against real tee times and real
+   scorecard timestamps, confirm jump-links land in the right place, confirm the
+   pre-trip/post-trip "Fun" bucket behaves as expected for anything captured outside a
+   round's window. Also confirm, for the first time on a real device: the logo renders
+   correctly across hero/banners/footer, the winner→podium/skins/CTP→rank-list section
+   order reads well, the per-hole scorecard drill-down opens/closes correctly and its
+   numbers look right for a real scorecard, the photo lightbox's full-size/Share actions
+   work on a real phone, and weather chips show up once a round has a captured photo/
+   scorecard to trigger the capture.
 4. **The Trip Info widget** — confirm the Home banner appears for all 16 rostered players
    (and only them), confirm the link opens the live page correctly on both desktop and a
    real phone, spot-check the golf schedule against the live round data one more time.
-5. **Live Panel Notes** — exercise the new commissioner note-compose capability; while
+5. **Live Panel Notes** — exercise the commissioner note-compose capability; while
    there, check its character limit against the WCRP widget's 500-char cap (`BF_WCRP_
   Memories_Spec.md` §9 flags this as unconfirmed).
 6. **A final pass over every round's Setup config** — engine, tee policy, CTP holes,
-   `chainsFrom`, `rollsIntoOverall` — given the live 2Man-engine mistake found this
-   session, worth a deliberate look rather than assuming Setup is correct because it
-   looked correct once.
-
-Nothing here is expected to be a large build — this is a verification pass. If something
-real breaks, fix it in place and log it the same way Dev-80's own live-data catches were
-logged (see the Dev-80 entries in `BF_Session_Log.md` for the pattern: what was found, how
-it was verified against live data, what Brian confirmed).
-
+   `chainsFrom`, `rollsIntoOverall` — given the live 2Man-engine mistake found in Dev-80,
+   worth a deliberate look rather than assuming Setup is correct because it looked
+   correct once. Also worth a quick confirm that Practice Rd is actually using the
+   no-engine option added Dev-80 rather than a stale blank/`none` value from before that
+   option existed.
+7. **The library-access workflow itself.** This close-out (Dev-81) had no working path to
+   read or write `BF_Session_Log.md`/this bootstrap/the other library docs directly from
+   Claude's side — they aren't on Brian's linked computer (only the AutoPush drop folder
+   and `.py`-adjacent files are), and no library-browsing tool was available. Brian had to
+   paste the actual current doc content by hand mid-close-out and flagged that as
+   error-prone. Worth deciding early in Dev-82 whether there's a better mechanism (a
+   Claude Project knowledge connection, committing these docs somewhere the device bridge
+   can reach directly, or something else) before this becomes routine friction every
+   close-out.
+Nothing in items 1–6 is expected to be a large build — this is a verification pass. If
+something real breaks, fix it in place and log it the same way Dev-80's own live-data
+catches were logged (see the Dev-80 entries in `BF_Session_Log.md` for the pattern: what
+was found, how it was verified against live data, what Brian confirmed).
 ## 4. Standing operating rules (apply every session)
-
 - **Never deploy.** Prepare files, verify them (jsdom/vm test against the actual extracted
   function source before delivery — this codebase is large enough that "looks right" isn't
   enough), deliver via `SendUserFile` + `device_commit_files` into AutoPush. Brian pushes.
@@ -247,22 +269,30 @@ it was verified against live data, what Brian confirmed).
 - **This doc, `BF_WallyCup_Spec.md`, and `BF_WCRP_Memories_Spec.md` are living
   documents** — when a session's work changes something they describe, update them as
   part of that work, not as an afterthought.
-
+- **A literal `</script>` anywhere inside `BFE-Admin.html`'s (or any similarly-structured
+  file's) own `<script>` block closes the real tag to the browser's HTML parser — this
+  includes inside a `//`/`/* */` comment, not just a JS string.** Found in Dev-81: an
+  explanatory comment describing the Trip Memories lightbox's deliberate `<\/script>`
+  escaping technique itself contained the literal, unescaped text twice, silently
+  truncating the whole script block and killing the Generate & Publish button with no
+  visible error. Escape it (`<\/script>`) everywhere it appears, comments included, and
+  when a button "does nothing at all" with no error, check for exactly this before
+  assuming a runtime bug.
+- **When this session's library-access path is broken (see §3 item 7), a close-out pass
+  needs Brian to paste current `BF_Session_Log.md`/bootstrap content up front** rather
+  than assuming it's fetchable — don't rebuild a close-out entry from memory/summary
+  alone when the real doc content is available to work from directly.
 ## 5. Known backlog (not urgent, parked)
-
 - **Small-group payout rounding** (`BF_WallyCup_Spec.md` §6) — round-pot podium split can
   zero out 2nd/3rd place under ~9 players at the current $10/player rate. Fine for Brian's
   own groups; a gap if BFE ever opens to other hosts.
 - **Overall-checkbox guardrail for multi-host use** (spec §4) — "Rolls into Overall"
   defaults to checked and is easy to miss for a non-standard round engine. Parked until
-  hosting opens beyond Brian. (Related, but distinct and already fixed live this session:
+  hosting opens beyond Brian. (Related, but distinct and already fixed live in Dev-80:
   the 2Man-round *engine* misconfiguration described in §2 above — that was the engine
   dropdown itself being wrong, not the Overall checkbox.)
-- **Results-page section ordering** — 2Man's results section renders after Wally Ball in
-  scroll order; only the nav rail's jump link goes to the right spot. Deferred as
-  lower-value than risk, this close to the event. Confirmed unchanged by Dev-80's own
-  results-page work (the memories scrapbook was added after this section, doesn't touch
-  its ordering).
+- **Results-page section ordering** — resolved in Dev-81 (see §2/§3): winner → podium/
+  skins/CTP → rank list is now the shipped order for every closed round section.
 - **Commissioner PIN architecture / `JOTFORM_API_KEY`-in-client-source** — same shape of
   gap, logged historically in `BF_Operations_Guide.md` §10 (that file isn't in this cloud
   workspace's file list — ask Brian for it if this becomes a priority). Not urgent.
@@ -270,11 +300,11 @@ it was verified against live data, what Brian confirmed).
   photo-collage insertion, D1 schema log drift** — long-standing, not touched in several
   sessions; still open per `BF_Session_Log.md`'s own carry-forward trail.
 - **Live Panel Notes' character limit vs. the WCRP widget's 500-char cap** — added Dev-80,
-  not cross-checked against each other yet; worth confirming in Dev-81 if it matters (see
+  not cross-checked against each other yet; worth confirming in Dev-82 if it matters (see
   §3 item 5).
-
+- **`live_stopped_round` flags-Worker key** — flagged in an earlier session as unverified
+  against the real flags Worker; still not independently confirmed.
 ## 6. If something here turns out stale
-
 This file is only as good as the last session that updated it. If you find something in
 here that contradicts what the actual code does, trust the code, fix this doc, and note
 the correction in the next `BF_Session_Log.md` entry — don't silently work around a stale
