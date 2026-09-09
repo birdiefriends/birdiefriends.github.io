@@ -3734,8 +3734,17 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
   // interleaved into the schedule-order rail the way 2Man is (no
   // insertAfter math here on purpose). Raw per-player scores only — no
   // quota/rank/payout fields exist on these rows to show.
+  // closeScorecardOnlyRound posts a bfe_round_results row for every name on
+  // the event's full roster, not just who actually turned up for THIS round
+  // — BFE has no per-round attendance/registration concept yet (an event
+  // roster commits to the whole event; there's no "pinch hitter" model for
+  // someone who only plays a subset of rounds, e.g. Practice Rd being
+  // optional). That's a real gap worth fixing properly post-Wally Cup. For
+  // now, just filter the display to players who actually have a score —
+  // actual_points is null for anyone closeScorecardOnlyRound didn't find a
+  // scorecard for, which is exactly "didn't play this one."
   const scorecardOnlyRounds = originalRounds.filter(r => r.engine === 'scorecard_only').map((r, idx) => {
-    const results = allResults.filter(x => x.round_name === r.name);
+    const results = allResults.filter(x => x.round_name === r.name && x.actual_points != null);
     const venue = venuesByName[r.venue] || {};
     const par = sumPars(venue.pars);
     const scorecards = scorecardsByRound[r.name] || [];
