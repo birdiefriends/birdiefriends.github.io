@@ -166,7 +166,23 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .footer{padding:2.2rem 1.5rem 3rem;text-align:center;}
 .back-btn{display:inline-flex;align-items:center;gap:7px;background:var(--white-faint);border:1px solid rgba(245,240,232,0.18);border-radius:99px;padding:9px 22px;font-size:12.5px;font-weight:600;color:var(--white);text-decoration:none;}
 .footer-meta{font-size:10.5px;color:var(--white-dim);opacity:0.55;margin-top:1.1rem;}
-@media (max-width:520px){.wb-grid{grid-template-columns:1fr;}.rail{padding:1.25rem 0.4rem 0.5rem;}.wrap{padding:0 1rem;}.section{padding:1.6rem 1rem;}.lb-row,.ov-row{padding:14px 14px;}}
+/* View toggle + Tabs (Dev-99) — additive, hedged alternative to the
+   default full-scroll layout. Scroll mode (default, no JS-added class on
+   body) is 100% untouched: .tabs stays empty/hidden, [data-tabsection]
+   blocks render normally in document order exactly as they always have.
+   Only body.tabs-mode changes anything, and it's one click to leave. */
+.view-toggle{display:flex;justify-content:center;gap:6px;padding:0.9rem 1.5rem 0;max-width:820px;margin:0 auto;}
+.view-toggle-btn{background:var(--white-faint);border:1px solid rgba(245,240,232,0.16);color:var(--white-dim);font-family:inherit;font-size:11.5px;font-weight:600;letter-spacing:0.02em;padding:6px 14px;border-radius:99px;cursor:pointer;}
+.view-toggle-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.tabs{display:none;flex-wrap:nowrap;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:1rem 1.5rem 0.6rem;max-width:820px;margin:0 auto;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab{flex:0 0 auto;padding:8px 14px;font-size:12px;font-weight:700;color:var(--white-dim);background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:99px;cursor:pointer;white-space:nowrap;-webkit-tap-highlight-color:transparent;}
+.tab.active{color:#fff;background:var(--accent-dim);border-color:var(--accent);}
+body.tabs-mode .tabs{display:flex;}
+body.tabs-mode .rail{display:none;}
+body.tabs-mode [data-tabsection]{display:none;}
+body.tabs-mode [data-tabsection].tab-active{display:block;}
+@media (max-width:520px){.wb-grid{grid-template-columns:1fr;}.rail{padding:1.25rem 0.4rem 0.5rem;}.wrap{padding:0 1rem;}.section{padding:1.6rem 1rem;}.lb-row,.ov-row{padding:14px 14px;}.view-toggle,.tabs{padding-left:0.6rem;padding-right:0.6rem;}}
 </style>
 </head><body>
 <div class="page" style="--accent:#e8392a">
@@ -177,6 +193,11 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
     <div class="hero-subtitle">Sep 10–13, 2026</div>
     <div class="state-pill "><span class="state-dot"></span>Final</div>
   </div>
+  <div class="view-toggle">
+    <div class="view-toggle-btn active" data-mode="scroll">📜 Full Page</div>
+    <div class="view-toggle-btn" data-mode="tabs">🗂️ Tabs</div>
+  </div>
+  <div class="tabs" id="resultsTabs"></div>
   <div class="rail"><a class="rail-node done" href="#round-0">
       <div class="rail-line"></div><div class="rail-dot">1</div>
       <div class="rail-round">Round 1</div><div class="rail-venue">Honesdale Golf Club</div>
@@ -203,7 +224,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
       <div class="rail-tag">Final</div>
     </a></div>
   <div class="wrap">
-    <div class="section" id="round-0">
+    <div class="section" id="round-0" data-tabsection="round-0" data-tablabel="Rd1">
     <div class="section-head"><div class="section-num">01</div><div>
       <div class="section-title">Round 1 · Honesdale Golf Club — Final</div>
       <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
@@ -1702,7 +1723,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
         <div class="side-row"><span>Brian Hager</span></div><div class="side-row"><span>Jake Knappenberger</span></div><div class="side-row"><span>Lou Strohl</span></div><div class="side-row"><span>Nate Stettler</span></div>
       </div></div>
   </div>
-  </div><div class="section" id="round-1">
+  </div><div class="section" id="round-1" data-tabsection="round-1" data-tablabel="Rd2">
     <div class="section-head"><div class="section-num">02</div><div>
       <div class="section-title">Round 2 · Skytop Lodge — Final</div>
       <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
@@ -3201,7 +3222,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
         <div class="side-row"><span>Chooch Wernett</span></div><div class="side-row"><span>Jake Knappenberger</span></div><div class="side-row"><span>Jordan Knappenberger</span></div><div class="side-row"><span>Mohamed Walli</span></div>
       </div></div>
   </div>
-  </div><div class="section" id="round-2">
+  </div><div class="section" id="round-2" data-tabsection="round-2" data-tablabel="Rd3">
     <div class="section-head"><div class="section-num">03</div><div>
       <div class="section-title">Round 3 · Paupack Hills GC — Final</div>
       <div class="section-desc">Stableford quota · Rank reflects (Score + Wally Ball) vs. quota</div>
@@ -4701,7 +4722,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
       </div></div>
   </div>
   </div>
-    <div class="section" id="overall">
+    <div class="section" id="overall" data-tabsection="overall" data-tablabel="Overall">
       <div class="section-head"><div class="section-num">04</div><div>
         <div class="section-title">Overall Standings — Final</div>
         <div class="section-desc">All 3 rounds closed · cumulative Round Perf. (quota achievement + that round's Wally Ball bonus) — only the Quota number itself never includes Wally Ball</div>
@@ -4858,7 +4879,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
   </div></div></div>
     </div>
   </div>
-  <div class="section wb-section">
+  <div class="section wb-section" id="wallyball" data-tabsection="wallyball" data-tablabel="Wally Ball">
     <div class="section-head"><div class="section-num">05</div><div>
       <div class="section-title">Wally Ball</div>
       <div class="section-desc">Round bonus + season elimination pot — tracked separately from quota, and from each other</div>
@@ -4917,7 +4938,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
       <div class="wb-status wb-status-out">OUT</div>
     </div></div>
   </div>
-  <div class="section twoman-section" id="twoman"><div class="wrap" style="padding:0;">
+  <div class="section twoman-section" id="twoman" data-tabsection="twoman" data-tablabel="2Man"><div class="wrap" style="padding:0;">
     <div class="section-head"><div class="section-num">06</div><div>
       <div class="section-title">2Man Scramble · Skytop Lodge — Final</div>
       <div class="section-desc">Standalone event — does not count toward the 2026 Wally Cup Overall</div>
@@ -5657,144 +5678,16 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
   </div></details>
   </div></div></div>
   </div></div>
-  <div class="section twoman-section" id="practice-0"><div class="wrap" style="padding:0;">
+  <div class="section twoman-section" id="practice-0" data-tabsection="practice-0" data-tablabel="Practice"><div class="wrap" style="padding:0;">
     <div class="section-head"><div class="section-num">07</div><div>
       <div class="section-title">2026 Wally Cup - Practice Rd · Paupack Hills GC — Final</div>
       <div class="section-desc">Practice round · scorecards only — no standings or payouts</div>
       
       <a class="section-photolink" href="#chapter-round-2026-wally-cup-practice-rd">📸 See photos &amp; notes</a>
     </div></div>
-    <div class="lb-card"><div class="lb-list"><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Bill Steirer</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Brian Hager</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Chooch Wernett</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Dave Sherwin</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Evan Lindermuth</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Jake Knappenberger</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Jeff Rapp</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Jordan Knappenberger</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Lou Strohl</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Mark Weaver</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Mohamed Walli</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Nate Stettler</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Rich Potts</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Scott Justus</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Tom Arnold</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div><div class="lb-row">
-    <div class="lb-name-line">
-      <span class="player-name">Tom Stitt</span>
-    </div>
-    <div class="lb-grid">
-      <div class="lb-cell lb-cell-quota">— pts</div>
-    </div>
-    
-  </div></div></div>
+    <div class="lb-card"><div class="lb-list"><div class="side-empty">No scorecards submitted.</div></div></div>
   </div></div>
-  <div class="wrap"><div class="section" id="payout">
+  <div class="wrap" data-tabsection="payout" data-tablabel="Payout"><div class="section" id="payout">
     <div class="section-head"><div class="section-num">08</div><div>
       <div class="section-title">Payout Summary</div>
       <div class="section-desc">Every dollar owed, summed across rounds, Overall, and Wally Ball — held until the trip wraps</div>
@@ -6014,7 +5907,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
       <div>✓ Reconciled — $870 accounted for to players, matching the $880 payable pool (round pots + Overall + Wally Ball). $10 of that pool wasn't claimed by any single player — skins and tied-prize splits don't always divide evenly, so a dollar or two sits unclaimed here and there.</div>
     </div>
   </div></div>
-  <div class="wrap"><div class="section">
+  <div class="wrap" id="memories" data-tabsection="memories" data-tablabel="Trip Memories"><div class="section">
     <div class="section-head"><div class="section-num">09</div><div>
       <div class="section-title">Trip Memories</div>
       <div class="section-desc">10 photos · 5 notes — grouped automatically by when they happened</div>
@@ -6182,10 +6075,63 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
     });
   })();
   </script>
+  <script>
+  (function(){
+    var STORE_KEY = 'bfeResultsViewMode';
+    var body = document.body;
+    var tabsBar = document.getElementById('resultsTabs');
+    var toggleBtns = Array.prototype.slice.call(document.querySelectorAll('.view-toggle-btn'));
+    var sections = Array.prototype.slice.call(document.querySelectorAll('[data-tabsection]'));
+    sections.forEach(function(sec, i) {
+      var key = sec.getAttribute('data-tabsection');
+      var label = sec.getAttribute('data-tablabel') || key;
+      var btn = document.createElement('div');
+      btn.className = 'tab' + (i === 0 ? ' active' : '');
+      btn.textContent = label;
+      btn.setAttribute('data-tabkey', key);
+      btn.addEventListener('click', function(){ activateTab(key); });
+      tabsBar.appendChild(btn);
+    });
+    function activateTab(key) {
+      sections.forEach(function(sec){ sec.classList.toggle('tab-active', sec.getAttribute('data-tabsection') === key); });
+      Array.prototype.slice.call(tabsBar.querySelectorAll('.tab')).forEach(function(btn){
+        btn.classList.toggle('active', btn.getAttribute('data-tabkey') === key);
+      });
+    }
+    if (sections.length) activateTab(sections[0].getAttribute('data-tabsection'));
+    function setMode(mode) {
+      body.classList.toggle('tabs-mode', mode === 'tabs');
+      toggleBtns.forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-mode') === mode); });
+      try { localStorage.setItem(STORE_KEY, mode); } catch(e){}
+    }
+    toggleBtns.forEach(function(b){ b.addEventListener('click', function(){ setMode(b.getAttribute('data-mode')); }); });
+    var saved = null;
+    try { saved = localStorage.getItem(STORE_KEY); } catch(e){}
+    setMode(saved === 'tabs' ? 'tabs' : 'scroll');
+    document.addEventListener('click', function(e) {
+      if (!body.classList.contains('tabs-mode')) return;
+      var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a) return;
+      var id = a.getAttribute('href').slice(1);
+      var target = id && document.getElementById(id);
+      if (!target) return;
+      var boundary = target.closest('[data-tabsection]');
+      if (!boundary) return;
+      e.preventDefault();
+      activateTab(boundary.getAttribute('data-tabsection'));
+      requestAnimationFrame(function(){ if (target.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    });
+    if (location.hash) {
+      var initTarget = document.getElementById(location.hash.slice(1));
+      var initBoundary = initTarget && initTarget.closest('[data-tabsection]');
+      if (initBoundary) activateTab(initBoundary.getAttribute('data-tabsection'));
+    }
+  })();
+  </script>
   <div class="footer">
     <img class="footer-logo" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxASEhESEA8QEBAQEA8NDxYQEA8QEA8QFRUXFhURExUYHiggGRooHRYTITEhJSsrOjouFx8/ODMsNygtLisBCgoKDg0OGxAQGTclHyUyLSs4Ly8vLS0rLTgtLS0tLy8tLy0tLS0vLTItLS0tLy0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAOEA4QMBEQACEQEDEQH/xAAcAAEAAQUBAQAAAAAAAAAAAAAABwECAwUGBAj/xABDEAACAgEBBAcDBgwFBQAAAAAAAQIDEQQFBhIhEyIxQVFhcQeRoRQyUoHB0SMkQlNicnOCkpOxsxU0Y2TCFlSDo7L/xAAbAQEAAwEBAQEAAAAAAAAAAAAAAQQFAwYCB//EADMRAQACAQIDBgMGBwEAAAAAAAABAgMEERIhMQUTQVFhcSIjkQYVM4GhwRQyQlKx0fDh/9oADAMBAAIRAxEAPwCaiUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUyAyBUABTIFQAAAAAAAAAAAAAAAAAAAAAAAAAA5XevfCGl/BwirL2s4ziNafY5v7F8CnqNXGLlHOWz2Z2PfWfHadqefjPt/tH+t3v11jz8olBdyrSgl7uZm31eWfF6vD2Lo8cbcG/vzWaXe3X1vK1M5eVmJp+9EV1eWPF95extFkjbu9vbk7HYvtDrlCXymPR2QjxLgTcbfKKfzZevLzL+LX1mPj5S87q/s5lpeO4neJ8+se/nDndr796u1vo5KiHcoYc8ecn3+mCrk1t7Ty5NjS/Z/TYo+ZHFPr0+jULeDWZz8qvz+0l/Q4/xGT+5ofdukmNu6j6N5sXf7UVtLUfh6+xvCjavNNcn6P3lnFrr1n4ucMvWfZ3BkjfD8M/ok7Zm0K7642VSUoTWYtfFNdzXejUpet43q8ZnwZMGSceSNph6z7cQAAAAAAAAAAAAAAAAAAAAADFfPCIlMRvOyANXqrLZzslzlZJ2Sbfe+ePsPN3tNpmZfquHFTFjjHXpHJhlxeR8OsbKLi8mOSeQs+XxByOt5E7nJTreK9w3TyVUX4km8eTv/AGU6qalqKm24YruivCWXGWPVcPuNHs+086vJfajFXbHliOfOP3SYarx4AAAAAAAAAAAAAAAAAANLvVtKdFMp144lKEVlZXN8/hks6TDGXLFbdFTW5rYcU3r1cTLfDWv8uC/cizX+7cHr9WJ96amfL6Lf+rdb+dj/AC4fcT93YPL9T7z1Hn+jq909o230ynbLjascFyisJRi8cvVmRrsNMWSK1jwbGgz3zY+K0+KNd59mPT6iyvHVbdlXg65PKx6c19R5TUY+7yTD9X7M1canTVv49J94/wC3agrtAIDBKVAKEpVQEmezDZbhXO6Sw75RjD9nDPP6237ka+gx7Vm0+LxP2k1UZM1cNf6evvP/AI700XmgAAAAAAAAAAAAAAAAAAYdRRGS6yTXbiSTXxG8xziUTET1RhvXCK1VqjFRS4OUUks8Kb5HotDMzgiZeZ7QrEZ5iDdOpS1VaklJJWSw1lZUHj44I19prgnb0T2dWJzxv6pFikuxJeiwecmZnq9Ls0u9ewo6urCwrq8yqk/Hvg34PC+BW1ODva+rU7K7RnR5d5/lnrH7+8ImvplCUozi4zi3GSlycWu5mFasxO0v0KmSt6xas7xPixny+1GAaJTuoEt1utsGWrt4eaphiV0lywu6Cf0n95Z02CctvRmdqdo10eLf+qekfv7QmjR6eMIxjGKjGMVGKXJRilhJG9WsRG0Pzu97XtNrTvM82c+nwAAAAAAAAAAAAAAAAAACy3sZAireaWdVf+ul7opfYek0XLBV5fXTvqLf94PTuXH8aXlXY/hj7Tj2lPyPzh27Mj5/5S788+9CoBzu9W7UdUuOGIaiKwn2RsX0J/YyrqdNGWN46trsrta2kngvzpP6esf6RjqaJQlKE4uE4vElJYaZi2rNZ2mOb3WPJXJWL0neJYWj4dFMBLY7C2NbqrFXWsJYdk2urXHxfn4I7YcNsttoU9drsekx8d/yjxlMewtkV6euNdccRjz5/OnLvnLzN7FirjrtD881eqyanJOTJPOf09IbQ7KwAAAAAAAAAAAAAAAAAAAGO2SxjvIkRNtuWdRe/wDVsXuePsPTaaNsNfaHldVO+a8+rY7kr8Z/8Vn9YlbtL8H84/da7M/G/Kf2d4YDfUCVGBpt4t36tVHn1LYrqTS5r9GS74lfPp65Y9fNp9ndp5NHblzrPWP9eqL9qbOt083XbHhkua74zX0ovvRiZMdsc7Wh7vS6rFqaceOd4/WPd7N3tgW6ueI9WqLxZY1yj5Lxl5HTBp7ZZ9PNX7Q7SxaOnPnaekf94Jb2LserT1qFceGK5/pTf0pPvZuYsVcddoh4LVarJqck5Mk7z/j2bQ7KwAAAAAAAAAAAAAAAAAWykBjlaBb04HHb7zt461W7McEnLg48PL78ehqdnRThtNtuviyO0pycVYpv08N3J/JbPzc/4JfcaveU84+rJ7q/9s/RWOmtTyoWJrsajNNejR8zkpPKZj9ExjyRO8RP0l3u66n8mhx8XFmzPHni+e8ZzzMDW8PfTw9OX+HodDFu5ji68+vu2uSouKgEskDx7S2bVfHgurU45ys5Ti/GLXNHPJjrkja0LGn1WXT348VtpezZ9NdcVGMVCMViEYrEUj7pWtY2hyyZL5LTe87zL2dPHz9x03h8L4TT7BuhcSAAAAAAAAAAAAAUAxybAxStYFvS5AtkvQjcW8Hmhulc34shCmfMgWt+fxABLBZq64/Osri/0pxX9WTwz5I3hfXbGSzGUZLxjJSXwImJhLSb6aXUW6Zx0vF0qnCa4LFXLhWeLrNr3HXT2rW/xdHPLW01+HqiCO0b+/UXP1ut+81uCvkz4tbzSVRTqNTseEK5SlfOuKi3ZwyfBd9Nv6Mcdpm2mtNRvPRdiLWxcuqLLrNRGUoyuuUoSlCSds21JPDXb4o04rSY3iI+ihM2jxS97NNe1oa5W2OXDZdXmyXPHFlLL9TL1MbZZ2hf0874+bq/8Xo/OQ/jh95x5+Tty8x7WpxxdJDhzw544cOe3Gc9o39Dks/xvT/nqv5tf3jn5G8eb3U2qSyhE7jISAAAAAAAAACjQGKytAYOEiRCe+NN1es1HSJx47LLq+tlOqUnwSWH4L4Gvp+GccbM3NvF53e/2c6OyzWVzTThRxTszLDxKE4xaXfzaPjV2rXHt5vrTxM338mp3s2s9TqrrFLMOLo6sPl0ceUWvXnL946YMfBSIfGW/FeZb72e3Tsq1+lg8zt08rKU3jr4dcuf71fuOGrrFbVu66eZmLVcY6pcXBzclLgwnxdbOMLHbzLXLbdX577Ou3m0Grp0ugo4blKNepd0anOUcyt4oqfBybw/6lTDfHa9rT6LOSt4rWIaeO5Wv4HZ8lajhzacq1Y1254G8/V2nX+Kx77buf8AD3232afR3zqkp1TlXNYalBuL+Hb6Ha1YtG1oc6zMTvCct39c9RpqbZY4rK0545LjWYywvDKZiZa8F5q1KW4qxKEZ6drtXa2bMW3Zs1S/uGvxDT+XTL/3TMjU/iy0MH4cIl2/DGq1S/3N/wDcka2Kfgr7QzskfHPu6rYey7NXsmympRc4at2RUnhPEYtpefWZVy5Ix54tPksUpN8M1jzcFKrHJxw1yeVhp+Be3VNna7O2LK3Y9zjZU0tRLWNNtcCqhwzhLlylhZXqilfJw6iN49FquPfDO3u4/Z+zZX2QqqinOyShHPJc+9vwXNv0Ll7xWN5Va04p2h9F7DrlGqMZtOUa6oya7HJRw2vrRiRO8y1/BsSQAAAAAAAAAWuQFkpIDBMCOvazo/8AL3L9OiX/ANR/5l3Q261U9XXpLitkbVnp3c6+27T2abOccPHjrrzWORdyY4vtv4TurUvNd9mXZexJXU6m5ZUdNXGfZ86TlzX1RUn7j5vlitor5ppj3rM+Tz7J2nZppuyppSddlXPuU44z6p4fqiclIvG0lLTSd4bj2ebL6bVwbWYaddPLw4lygv4sP91nDV5OGm3m66em9vZ0m/W+VtFr0+mahKKi7bGlKSclxKMU+XY088+0rabTRavFZ3zZ5rPDV4NzdRtLUW9LLUWT09cmruOzlLMH1VHv7mfWojFSNojm+cM5LTvvycJCPJcu5F9UjomfcOP4jpvNWf3ZmLqZ+bLTwR8uEU2zyuHvU5Pm37jUjzUpSjuFn5DT+td/dmZmqn5sruCPlwjHemrGs1S/17PjLJp4J+XVRzR8cu39lX+XvX+44vfXBfYUdd/PHss6T+Wfdz3tH2J0N/TwWK9Q25Y7I3dsl9fzvXiLGjy8VeGesOOpx8NuKPFzmm2pbXTfRGX4LUODsXPKcHnq+vJPyRZtjra0WnrDhF5is1jxdh7KdkcVlmokvmfgK/15LMn9UWv4yprcnKKQs6Wn9SXoRSWF3FJbXEgAAAAAAAAAslEDz2RYGJ5A0G/eid2itUVmdfBdFJZeYy62PPhcjrp78OWN3LPXipOyI1s+78zb/Ln9xq95TzZ/BbyS5unsRVaJU2RxK+M53rHPNixwv0jwr6jIz5uLLxR4NHFj4abSie3ZGpjKUXRc3GTg8VWNNp4bXLs5GrGWkxvuod3bySb7PNkujTOc4uNl8uOSksSUFygmn2flP94y9Vk477R0hewU4a8/Fze/27d71E9RVXK2u1QcuBOUq5xiovMVzw1FPPm+wsabPXg4Z6w5Z8VuLih59yY66u6EYV3KidkflCdeK3D5rk3Jcmk2+TzyROonHau8zzRhi8TtHRrtobuaiqXA6bW4vh4o1ynCxJ8pqS5c13HSmeto33fNsVonbZ0GyaNoV6HUqEdRCSnR8mSjNTSc/wALwRxlLDyytktinLEz+btSMkY5c9Hd7V/9tqM/spljv8f90OXdX8nTbqaPX1R1UHHUVxelvdKcZJRvwuFwT/KKmoyYrTWYmOqxhrkjeNvBzd27evlKUpabUSlJuUpShJtt9rbZajUYojaJV5w5J5zDc7nbJ11Gpr4qr66W5dKuca31JcLkux88HHUZcV6TtPN0w48lbRvHJ2G9ekqs0t0bpxrhw8UZyeFCxc4P38sLxZTwWtW8TVYy1i1JiULV1OTUYpuUmopLtbfYkbkztzZcRunbdDZK09FdfLMI5m132y5yfxfuRjXv3l5s06V4KxDoAkAAAAAAAAAAAFHEDDOkDH0LImA4GRwpU6Jk7QbnRMjhNzoWTEbG6nQsiaxJuOljghO6qqfmfM44OKTomO7qnjlXo2R3NTvJOjkO5onvLKOtjuaneWYZJ57O0i2OIjeCLTMo53v3d11+pslCuVlPU6LN1ajHqRT4Yyl1eafcXNNnx0pET1Vs2K9rTt0enc3c+dU1fqYpWQf4KGYy4X2dJJrKz4L6xn1PHHDRGLBwzxWSTpVhYOERs7yzEoAAAAAAAAAAAAAAAAAAAAAAAAAAAAYra8geSemlnt+CPjgr5PrilfVpeeWfUREdEbvZFEoVAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUAqAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9k=" alt="">
     <a class="back-btn" href="/portal.html">← Back to Portal</a>
-    <div class="footer-meta">BirdieFriends Experiences · generated 2026-09-09 02:29 UTC</div>
+    <div class="footer-meta">BirdieFriends Experiences · generated 2026-09-09 11:08 UTC</div>
   </div></div>
 </div>
 </body></html>
