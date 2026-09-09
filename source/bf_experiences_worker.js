@@ -773,16 +773,29 @@ export default {
     // same posture as the other GET routes.
     if (request.method === 'GET' && url.pathname === '/bfe/events-list') {
       try {
-        const { results: events } = await env.DB.prepare(
+        // Dev-106 — Setup save (POST /bfe/events) writes go straight to D1's
+        // primary, but a plain env.DB.prepare() read here can be routed to
+        // ANY read replica, including one that hasn't caught up yet. Caught
+        // live: right after Brian rebuilt Setup, this route returned zero
+        // events while GET /bfe/events?event=<name> (same table, same
+        // moment) returned the full row — classic read-replica lag, not a
+        // real empty table. withSession('first-primary') pins every read in
+        // this request to the primary, same guarantee a write gets, so a
+        // fresh save is never invisible to the next events-list poll. Event
+        // rosters/rounds/results here are tiny and read rarely (Setup save,
+        // Data & Reset panel, Portal's Trip Info index) — the small latency
+        // cost of always hitting primary is a non-issue for this workload.
+        const db = (typeof env.DB.withSession === 'function') ? env.DB.withSession('first-primary') : env.DB;
+        const { results: events } = await db.prepare(
           `SELECT id, event_name, event_family, event_date, status, updated_at FROM bfe_events ORDER BY updated_at DESC`
         ).all();
         const summary = [];
         for (const e of events) {
-          const rounds  = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_event_rounds WHERE event_id = ?`).bind(e.id).first();
-          const roster  = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_event_roster WHERE event_id = ?`).bind(e.id).first();
-          const results = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_round_results WHERE event_id = ?`).bind(e.id).first();
-          const skins   = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_round_skins WHERE event_id = ?`).bind(e.id).first();
-          const groups  = await env.DB.prepare(`SELECT COUNT(*) AS n FROM bfe_round_groups WHERE event_id = ?`).bind(e.id).first();
+          const rounds  = await db.prepare(`SELECT COUNT(*) AS n FROM bfe_event_rounds WHERE event_id = ?`).bind(e.id).first();
+          const roster  = await db.prepare(`SELECT COUNT(*) AS n FROM bfe_event_roster WHERE event_id = ?`).bind(e.id).first();
+          const results = await db.prepare(`SELECT COUNT(*) AS n FROM bfe_round_results WHERE event_id = ?`).bind(e.id).first();
+          const skins   = await db.prepare(`SELECT COUNT(*) AS n FROM bfe_round_skins WHERE event_id = ?`).bind(e.id).first();
+          const groups  = await db.prepare(`SELECT COUNT(*) AS n FROM bfe_round_groups WHERE event_id = ?`).bind(e.id).first();
           summary.push({ ...e, rounds: rounds.n, roster: roster.n, results: results.n, skins: skins.n, groups: groups.n });
         }
         return new Response(JSON.stringify({ ok: true, events: summary }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -812,7 +825,12 @@ export default {
         // switch that replaced the grace-window timer idea — see this
         // column's own migration note above for why.
         const captureOpen = memories_capture_open ? 1 : 0;
-        await env.DB.prepare(
+        // Dev-106 — same session used start-to-finish through this route so
+        // the id read back a few lines below (and everything chained off
+        // it) is guaranteed to see the INSERT/UPDATE that just ran, not a
+        // replica that hasn't caught up yet.
+        const db = (typeof env.DB.withSession === 'function') ? env.DB.withSession('first-primary') : env.DB;
+        await db.prepare(
           `INSERT INTO bfe_events (event_name, event_family, event_date, event_end_date, memories_capture_open, trip_info_url, hcp_mode, status, tee_policy, payout_plan, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
            ON CONFLICT(event_name) DO UPDATE SET
@@ -823,18 +841,18 @@ export default {
                hcp_mode || 'fixed', status || 'draft',
                tee_policy ? JSON.stringify(tee_policy) : null, payout_plan ? JSON.stringify(payout_plan) : null).run();
 
-        const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(event_name).first();
+        const eventRow = await db.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(event_name).first();
         const eventId = eventRow.id;
 
-        await env.DB.prepare(`DELETE FROM bfe_event_rounds WHERE event_id = ?`).bind(eventId).run();
-        await env.DB.prepare(`DELETE FROM bfe_event_roster WHERE event_id = ?`).bind(eventId).run();
+        await db.prepare(`DELETE FROM bfe_event_rounds WHERE event_id = ?`).bind(eventId).run();
+        await db.prepare(`DELETE FROM bfe_event_roster WHERE event_id = ?`).bind(eventId).run();
 
         // Pass 1: insert rounds without chains_from_round_id (don't know the
         // ids yet), remembering each round's name -> new id as we go.
         const nameToId = {};
         for (let i = 0; i < rounds.length; i++) {
           const r = rounds[i];
-          const result = await env.DB.prepare(
+          const result = await db.prepare(
             `INSERT INTO bfe_event_rounds (event_id, sort_order, name, engine, engine_params, influencers, venue_id, venue_name, rolls_into_overall, chains_from_round_id, tee_time)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`
           ).bind(eventId, i, r.name, r.engine, r.engineParams ? JSON.stringify(r.engineParams) : null,
@@ -847,14 +865,14 @@ export default {
         // uses) into the actual self-referencing chains_from_round_id.
         for (const r of rounds) {
           if (r.chainsFrom && nameToId[r.chainsFrom]) {
-            await env.DB.prepare(`UPDATE bfe_event_rounds SET chains_from_round_id = ? WHERE id = ?`)
+            await db.prepare(`UPDATE bfe_event_rounds SET chains_from_round_id = ? WHERE id = ?`)
               .bind(nameToId[r.chainsFrom], nameToId[r.name]).run();
           }
         }
 
         for (const p of (roster || [])) {
           if (!p.name) continue;
-          await env.DB.prepare(
+          await db.prepare(
             `INSERT INTO bfe_event_roster (event_id, player_name, email, hcp_at_event, tee_name, slope, initial_quota, is_no_hcp)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
           ).bind(eventId, p.name, p.email || null, (p.hcp === undefined || p.hcp === null) ? null : Number(p.hcp),
@@ -878,12 +896,15 @@ export default {
         if (!eventName) {
           return new Response(JSON.stringify({ error: 'event query param is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        const eventRow = await env.DB.prepare(`SELECT * FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
+        // Dev-106 — same read-replica-lag fix as /bfe/events-list above;
+        // pin this route to primary too so it can never disagree with it.
+        const db = (typeof env.DB.withSession === 'function') ? env.DB.withSession('first-primary') : env.DB;
+        const eventRow = await db.prepare(`SELECT * FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
         if (!eventRow) {
           return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        const { results: roundRows } = await env.DB.prepare(`SELECT * FROM bfe_event_rounds WHERE event_id = ? ORDER BY sort_order ASC`).bind(eventRow.id).all();
-        const { results: rosterRows } = await env.DB.prepare(`SELECT * FROM bfe_event_roster WHERE event_id = ? ORDER BY id ASC`).bind(eventRow.id).all();
+        const { results: roundRows } = await db.prepare(`SELECT * FROM bfe_event_rounds WHERE event_id = ? ORDER BY sort_order ASC`).bind(eventRow.id).all();
+        const { results: rosterRows } = await db.prepare(`SELECT * FROM bfe_event_roster WHERE event_id = ? ORDER BY id ASC`).bind(eventRow.id).all();
 
         const idToName = {};
         roundRows.forEach(r => { idToName[r.id] = r.name; });
