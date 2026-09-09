@@ -174,10 +174,23 @@
       </div>
       <div>
         <label for="tripInfoUrl">Trip Info page URL (optional)</label>
-        <input type="text" id="tripInfoUrl" placeholder="https://birdiefriends.com/2026-wally-cup-trip-info.html">
+        <input type="text" id="tripInfoUrl" placeholder="https://birdiefriends.com/2026-wally-cup-trip-info.html" value="https://birdiefriends.com/2026-wally-cup-trip-info.html">
         <div style="font-size:0.72rem;color:#888;margin-top:2px">
           Dev-80: when set, a standalone "🏡 Trip Info" widget shows on Home for this event's roster — separate from, and NOT gated by, the Memories capture toggle above (Brian: "I don't want to turn on the Trip memories yet... if we add a widget all 16 will see it"). Leave blank to show no widget at all.
         </div>
+        <!-- Dev-107: this used to sit at a bare placeholder with no real
+             value, same footgun a placeholder always is — reads like a
+             filled-in answer, is actually nothing, and vanishes silently
+             the moment the form starts fresh (a Setup rebuild after a
+             Data & Reset, exactly what caused the trip page to disappear
+             from the Portal on 9/9). Same fix already applied to eventName
+             above: bake the real 2026 Wally Cup URL in as an actual
+             `value`, not a hint. Loading a previously-saved event (line
+             ~2026, `tripInfoUrl.value = config.tripInfoUrl || ''`) still
+             overwrites this with whatever's really saved, blank included —
+             this default only covers the fresh/rebuilt-from-scratch case,
+             so "leave blank to show no widget" (see note below) still
+             works for a future event that deliberately wants none. -->
       </div>
       <div>
         <label for="hcpMode">HCP mode</label>
