@@ -4018,16 +4018,45 @@ function buildMemoryChapters(eventName, originalRounds, memories, notes, scoreca
     (scorecardsByRound[name] || []).forEach(sc => { const t = parseSqliteUtc(sc.captured_at); if (t) times.push(t.getTime()); });
     return times.length ? Math.min.apply(null, times) : null;
   }
+  // Dev-103 (real 2026 Wally Cup rehearsal data caught this): a round with
+  // NO evidence of its own (no roundStartSignal — no round-tagged Live Panel
+  // memory/note, no scorecard) AND nothing to chain from (it's first in the
+  // sequence, so prevRealEnd/chainedStart are both still null) used to fall
+  // all the way back to priorEnd's -Infinity sentinel as its start. That
+  // makes the round's window an unbounded sink: it silently claims EVERY
+  // untagged photo/note ever captured before its close, no matter how far
+  // back or how clearly unrelated — exactly what happened with the real
+  // Practice Rd rehearsal (Sept 8-9): Practice Rd is scorecard_only (no
+  // bfe_scorecards rows) and nothing was explicitly round_name-tagged to it,
+  // so its start collapsed to -Infinity and its window (up to its own
+  // closedAt) swallowed a whole batch of unrelated WCRP test notes/photos —
+  // including ones plainly about OTHER rounds ("Wally Cup Rd1", "Rd2 Skytop
+  // Lodge") — that should have flowed elsewhere along the timeline instead
+  // of piling into one "On Course — Practice Rd" bucket. Fix: when a round
+  // has neither its own evidence nor a real priorEnd to inherit, give it a
+  // zero-width window (start = its own end) rather than an infinite one.
+  // Its OWN round-tagged content still lands correctly regardless (that
+  // goes straight through chapterByRoundName, bypassing this window
+  // entirely) — only its ability to sweep up unrelated untagged content by
+  // raw timestamp is what's being removed. Untagged content that used to
+  // fall here now flows to "Before <event>" (or wherever its own timestamp
+  // genuinely places it) instead of being misattributed to this round.
   let prevRealEnd = null;   // end of the most recent window anchored to a real, elapsed tee_time
   let chainedStart = null;  // running start across consecutive not-yet-elapsed (rehearsal) rounds
   windows.forEach(w => {
     let start;
+    let noEvidenceNoAnchor = false;
     if (w.teeElapsed) {
       start = w.teeTime;
     } else {
       const priorEnd = chainedStart ? chainedStart.getTime() : (prevRealEnd ? prevRealEnd.getTime() : -Infinity);
       const rss = roundStartSignal(w.name);
-      start = rss != null ? new Date(Math.max(rss, priorEnd)) : priorEnd;
+      if (rss == null && priorEnd === -Infinity) {
+        noEvidenceNoAnchor = true;
+        start = priorEnd; // placeholder; replaced with w.end once it's computed below
+      } else {
+        start = rss != null ? new Date(Math.max(rss, priorEnd)) : priorEnd;
+      }
     }
     let end;
     if (w.closedAt) {
@@ -4040,6 +4069,7 @@ function buildMemoryChapters(eventName, originalRounds, memories, notes, scoreca
       const fallbackEnd = new Date(w.teeTime.getTime() + 6 * 3600 * 1000);
       end = (latestCard && latestCard > start) ? latestCard : fallbackEnd;
     }
+    if (noEvidenceNoAnchor) start = end;
     w.start = start; w.end = end;
     if (w.teeElapsed) { prevRealEnd = end; chainedStart = null; }
     else { chainedStart = end; }
