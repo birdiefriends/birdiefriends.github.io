@@ -1,18 +1,25 @@
 # BF_Session_Bootstrap.md — Start Here for a New BirdieFriends Session
-**Status:** current as of Dev-81 close, 2026-09-08. Dev-80 ("WCRP Memories Pass 2 —
-capture pipeline + results-page scrapbook + Trip Info widget") is fully shipped and
-live. Dev-81 (this close-out) fixed a Live Panel scoping bug, confirmed withdrawal/
-Overall/Wally Ball behavior against spec with no code change needed, shipped five
-results-page polish items, and root-caused/fixed a "Generate & publish isn't working"
-report (a stray unescaped `</script>` inside a code comment was truncating
-BFE-Admin.html's own script block) — see §2 and §3 below. Read this file first in any
-new BirdieFriends chat before touching code — it's meant to be self-sufficient enough
-that you never need to re-read `BF_Session_Log.md` line by line to get oriented (that
-log is the detailed history; this doc is the map). `BF_WallyCup_Spec.md` is the living
-design reference for the Wally Cup event specifically — read it too before touching
-Groupings, the results page, Close Round, or Overall Standings. `BF_WCRP_Memories_Spec.md`'s
-"What actually shipped (Dev-80)" addendum is the reference for the memories/Trip-Info
-work specifically.
+**Status:** current as of Dev-82 close, 2026-09-09 — the night before Practice Rd
+(Thu 9/10). Dev-82 was almost entirely reactive real-live-event work, not the planned
+end-to-end verification pass (still not run — see §3, now the actual Dev-83 priority).
+Shipped: an "Everyone" tag-picker chip, a real memories-timeline bucketing bug fixed
+and verified against real live data, and — the big one — a production incident where a
+test-data cleanup accidentally deleted the ENTIRE live `bfe_events` row (roster, rounds,
+payout, `trip_info_url`, not just test rows), requiring a full Setup rebuild and a
+several-hour chase that root-caused the resulting Trip Info outage to a blank form field
+with no real default (fixed). **Also fixed: the library-access workflow problem
+flagged at the end of Dev-81 — see §4, this is no longer a blocker.** Read this file
+first in any new BirdieFriends chat before touching code — it's meant to be
+self-sufficient enough that you never need to re-read `BF_Session_Log.md` line by line
+to get oriented (that log is the detailed history; this doc is the map). Fetch it and
+the two spec docs below via `curl` at session start — see §4, don't ask Brian to paste
+them. `BF_WallyCup_Spec.md` is the living design reference for the Wally Cup event
+specifically — read it too before touching Groupings, the results page, Close Round, or
+Overall Standings. `BF_WCRP_Memories_Spec.md`'s "What actually shipped (Dev-80)"
+addendum is the reference for the memories/Trip-Info work specifically. **There is no
+real session numbering beyond this one (Dev-83) — don't invent or reuse "Dev-NNN"
+labels for individual fixes; that happened briefly in Dev-82 and was a mistake, corrected
+same-session.**
 ---
 ## 1. What this project is
 BirdieFriends (birdiefriends.com) is a golf league management platform. Brian is the sole
@@ -23,7 +30,7 @@ apps and two Cloudflare Workers:
 - **`portal.html`** — the player-facing app. Events/Gatherings home screen, registration,
   the Live Panel (in-round scorecard/CTP/Birdie Alert/photo capture during play), results
   pages, admin/commissioner controls behind a gear icon. This is the file most session work
-  touches. Currently v4.1.5 (see `portal_version.txt` — **bump this with every
+  touches. Currently v4.1.6 (see `portal_version.txt` — **bump this with every
   `portal.html` change and deliver it alongside**, format `vX.Y.Z · YYYY-MM-DD` /
   `Deployed: YYYY-MM-DD HH:MM`; nothing bumps it automatically).
 - **`BFE-Admin.html`** — commissioner-only admin tool for BFE ("BirdieFriends
@@ -90,15 +97,19 @@ Stettler, Mohamed Walli, Mark Weaver, Lou Strohl, Jordan Knappenberger, Jeff Rap
 Knappenberger, Evan Lindermuth, Dave Sherwin, Chooch Wernett, Brian Hager, Bill Steirer)
 and the real 5-round schedule: Practice Rd (Thu 9/10, Paupack Hills, 1:00 PM ET), Rd1
 (Fri 9/11, Honesdale GC, 10:00 AM ET), Rd2 (Sat 9/12, Skytop Lodge, 8:00 AM ET), 2Man
-(Sat 9/12, Skytop Lodge, 2:30 PM ET), Rd3 (Sun 9/13, Paupack Hills, 9:30 AM ET). **Do not
-assume this needs re-confirming going into Dev-82 unless something looks off** — this was
-checked directly against live data in Dev-80, not inferred.
+(Sat 9/12, Skytop Lodge, 2:30 PM ET), Rd3 (Sun 9/13, Paupack Hills, 9:30 AM ET). This was
+checked directly against live data in Dev-80, not inferred. **Update (Dev-82): the live
+`bfe_events` row holding all of this was accidentally deleted in full during a test-data
+cleanup and had to be rebuilt from scratch in Setup — the values above are the same real
+roster/schedule Brian re-entered, not new data, but this is no longer "confirmed once and
+stable since Dev-80," it's "rebuilt fresh in Dev-82." Worth a quick sanity glance early in
+Dev-83 rather than assuming it's untouched.**
 **Caught and fixed live in Dev-80:** the 2Man round's `engine` field was briefly
 misconfigured as `stableford_quota` instead of `scramble_pair` (would have broken its
 dedicated team-results section). Brian fixed it in Setup once flagged; re-verified live
 afterward. See `BF_WallyCup_Spec.md` §5 for detail — worth a quick glance at every
-round's engine dropdown during Dev-82's end-to-end pass, since nothing in the app guards
-against this specific mistake today.
+round's engine dropdown during Dev-83 (see §3 item 6), since nothing in the app guards
+against this specific mistake today, and Setup was just rebuilt from scratch in Dev-82.
 **Dev-81 (this close-out) — fix-work, not the planned testing pass.** Brian flagged, mid-
 session, that the Live Panel's scorecard-completion check was comparing a round's field
 against the *full* BFE-A roster rather than that round's own event-card registrants —
@@ -116,6 +127,30 @@ real closing tag, silently truncating BFE-Admin.html's script block and dropping
 function/listener defined after it. Full detail in `BF_Session_Log.md`'s Dev-81 entry.
 **Net effect: the full end-to-end verification pass this bootstrap has been flagging
 since Dev-80 still has not happened.** See §3.
+**Dev-82 — an "Everyone" tag chip, a real memories-timeline bug, and a real production
+incident.** Added an "Everyone" meta-checkbox to the WCRP/photo tag picker (auto-selects
+the full roster). Root-caused a real bucketing bug from a live scrapbook screenshot — the
+Practice Rd's rehearsal-mode window was collapsing to `-Infinity` with nothing to chain
+from, swallowing all off-course photos/notes into one bucket instead of interspersing
+them Before/After each round; verified with `Date.now()` monkey-patched against the real
+extracted function and the real config's real tee times that the actual Thu–Sun
+sequential live-play flow never exercises the fragile rehearsal-chaining path at all
+(every round's tee time is already past by the time it's closed) — fixed the one real
+gap anyway. **Then the real incident:** a "delete the test data" cleanup pass (missing
+DELETE route for memory notes, and a stale FK-cascade list on whole-event delete, both
+fixed) accidentally wiped the entire live `"2026 Wally Cup"` `bfe_events` row — roster,
+rounds, payout, `trip_info_url`, all of it, not just test rows. Setup had to be rebuilt
+from scratch in BFE-Admin (twice — Brian's second pass pre-added Rd1/2/3 groupings).
+Root cause of the resulting Trip Info outage: the URL field had no real default and
+silently saved blank on the from-scratch rebuild — not a code bug, a design gap. Fixed:
+the field now ships with the real URL baked in as an actual `value`, same pattern
+`eventName` already used. **Not yet independently re-verified end-to-end that the Trip
+Info banner shows live for a real player after this fix — do this early in Dev-83.**
+Also confirmed as working-as-designed (not bugs): `chainsFrom` correctly skips
+non-stableford rounds for 2Man/Rd3, and a round's `quota_out` is computed fresh at Close
+Round time independent of `bfe_round_groups` (pre-setting groupings ahead of time, which
+Brian did for Rd1/2/3, has zero effect on quota progression). Full detail, including the
+`WebFetch`-reliability trap this chase ran into, in `BF_Session_Log.md`'s Dev-82 entry.
 **Dev-78 built and live-validated:** 2Man Live Panel capture (team picker for
 Scorecard/Birdie Alert, individual picker for CTP — see the spec's §6 for the bug that
 briefly had CTP on the team picker too, now fixed), a device-local Live Test Mode round
@@ -174,14 +209,18 @@ this is the largest single body of work behind this bootstrap.** In build order:
 Full detail on all of the above (including the deviations from the original design draft)
 is in `BF_WCRP_Memories_Spec.md`'s "What actually shipped (Dev-80)" addendum — read that
 before touching any memories/Trip-Info code, not just this summary.
-## 3. Dev-82 focus — the end-to-end testing pass, now urgent (Practice Rd is 9/10)
-**This is the item that has been flagged since Dev-80 and did not get done in Dev-81 —
-Dev-81 turned into fix-work instead (a real Live Panel scoping bug, a results-page
-polish batch, and a "Generate & publish" outage). Treat this as the actual, time-critical
-priority for Dev-82, not a nice-to-have.** With the Practice Rd Thursday 9/10 and real
-Rd1 Friday 9/11 (10am ET) both imminent, walk the real flows a real trip day will
-exercise, using the real 16-player roster and real 5-round schedule confirmed live in
-§2. Suggested pass, roughly in trip order:
+## 3. Dev-83 focus — live commissioner support, Practice Rd starts 9/10
+**Dev-83 is not a planned build session — it's live support during the actual event.**
+The end-to-end verification pass flagged since Dev-80 still has not happened (Dev-81
+turned into fix-work; Dev-82 turned into a live production incident) — squeeze in
+whatever of the checklist below fits before/between real rounds, but expect this session
+to be reactive: opening/closing rounds, live scorecard issues, Trip Memories capture
+problems, payout/results questions, last-minute roster changes. Using the real 16-player
+roster and real 5-round schedule confirmed live in §2:
+0. **First thing, before anything else:** confirm the Trip Info banner actually shows
+   for a real rostered player in the live Portal — this was fixed in Dev-82 but not
+   independently re-verified end-to-end. Don't just re-check via `WebFetch`; see §4 for
+   the reliable way to check live worker data now.
 1. **Live Panel capture, all 5 rounds** — scorecard submission, CTP, Birdie Alert, and
    photo/video capture for a normal stableford round; the 2Man team-picker path
    specifically (confirm the engine fix from Dev-80 holds); the Practice Rd (no-engine —
@@ -210,24 +249,16 @@ exercise, using the real 16-player roster and real 5-round schedule confirmed li
    there, check its character limit against the WCRP widget's 500-char cap (`BF_WCRP_
   Memories_Spec.md` §9 flags this as unconfirmed).
 6. **A final pass over every round's Setup config** — engine, tee policy, CTP holes,
-   `chainsFrom`, `rollsIntoOverall` — given the live 2Man-engine mistake found in Dev-80,
-   worth a deliberate look rather than assuming Setup is correct because it looked
-   correct once. Also worth a quick confirm that Practice Rd is actually using the
-   no-engine option added Dev-80 rather than a stale blank/`none` value from before that
-   option existed.
-7. **The library-access workflow itself.** This close-out (Dev-81) had no working path to
-   read or write `BF_Session_Log.md`/this bootstrap/the other library docs directly from
-   Claude's side — they aren't on Brian's linked computer (only the AutoPush drop folder
-   and `.py`-adjacent files are), and no library-browsing tool was available. Brian had to
-   paste the actual current doc content by hand mid-close-out and flagged that as
-   error-prone. Worth deciding early in Dev-82 whether there's a better mechanism (a
-   Claude Project knowledge connection, committing these docs somewhere the device bridge
-   can reach directly, or something else) before this becomes routine friction every
-   close-out.
-Nothing in items 1–6 is expected to be a large build — this is a verification pass. If
-something real breaks, fix it in place and log it the same way Dev-80's own live-data
-catches were logged (see the Dev-80 entries in `BF_Session_Log.md` for the pattern: what
-was found, how it was verified against live data, what Brian confirmed).
+   `chainsFrom`, `rollsIntoOverall` — given the live 2Man-engine mistake found in Dev-80
+   (and the whole-event rebuild in Dev-82), worth a deliberate look rather than assuming
+   Setup is correct because it looked correct once. Also worth a quick confirm that
+   Practice Rd is actually using the no-engine option added Dev-80 rather than a stale
+   blank/`none` value from before that option existed.
+Nothing in items 0–6 is expected to be a large build — this is mostly a verification
+pass layered under live support. If something real breaks, fix it in place and log it
+the same way Dev-80/Dev-82's own live-data catches were logged (see those entries in
+`BF_Session_Log.md` for the pattern: what was found, how it was verified against live
+data, what Brian confirmed).
 ## 4. Standing operating rules (apply every session)
 - **Never deploy.** Prepare files, verify them (jsdom/vm test against the actual extracted
   function source before delivery — this codebase is large enough that "looks right" isn't
@@ -254,13 +285,34 @@ was found, how it was verified against live data, what Brian confirmed).
   — this drifted stale for multiple real deploys in the past (Dev-76) before that rule was
   adopted.
 - **Verify against real production data before declaring a bug fixed**, not just a
-  synthetic test — the Rd1 CTP bug (Dev-78) and the 2Man-engine bug (Dev-80) were only
-  correctly root-caused/confirmed by pulling live Worker/Jotform data, not by guessing
-  from the code alone. **One known tool quirk (Dev-80):** the by-name event-config route
-  (`GET /bfe/events?event=<name>`) intermittently returns stale/empty results specifically
-  through the `WebFetch` tool, even when the underlying data is correct — always append a
-  fresh cache-busting query param and be prepared to re-fetch once before trusting an
-  unexpected-looking result from that route.
+  synthetic test — the Rd1 CTP bug (Dev-78), the 2Man-engine bug (Dev-80), and the
+  memories-timeline bug (Dev-82) were only correctly root-caused/confirmed by pulling
+  live Worker/Jotform data, not by guessing from the code alone.
+- **Library-doc access, solved (Dev-82):** fetch `BF_Session_Log.md`/this bootstrap/the
+  spec docs at session start via plain `Bash`/`curl` —
+  `curl -sS "https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/<filename>"` —
+  confirmed reliable and byte-exact (this cloud workspace's proxy allows
+  `raw.githubusercontent.com` for GET). Don't use `WebFetch` for these; it answers
+  through a small summarizing model, not raw content, which risks silently truncating or
+  paraphrasing what should be an exact append target. Don't ask Brian to paste doc
+  content by hand anymore (Dev-81's workaround) — this is no longer necessary.
+- **Live BFE worker data, `WebFetch` is unreliable, use the browser bridge instead
+  (Dev-82):** `curl`/`Bash` CANNOT reach `*.workers.dev` (proxy blocks it, confirmed
+  403) — but `WebFetch` against `bf-experiences.birdiefriends01.workers.dev` has shown
+  genuinely contradictory/stale results (different routes disagreeing moments apart,
+  identical stale `updated_at` across real backend changes), and burned real debugging
+  time in Dev-82 chasing a wrong theory before it was caught. **When linked to Brian's
+  computer, use `Claude_Browser__navigate` straight to the GET URL (e.g.
+  `.../bfe/events-list?_=<cachebust>`), then `Claude_Browser__get_page_text`** — this
+  returns the exact, fresh, unsummarized JSON (confirmed against real live data in
+  Dev-82). Prefer this over `WebFetch` for anything time-sensitive on this worker; if
+  the browser bridge isn't available, treat a single `WebFetch` read of this worker with
+  suspicion and ask Brian to confirm directly rather than asserting from it.
+- **No real session numbering exists beyond the current session.** Don't invent
+  sequential "Dev-NNN" labels for individual fixes within a session (this happened
+  briefly in Dev-82's own code comments and was a mistake, caught and corrected
+  same-session) — a session is one Dev-# for its whole duration; individual changes get
+  described by what they touch, not their own number.
 - **Keep `BF_Session_Log.md` and this bootstrap doc updated as work happens**, not only in
   a big close-out pass at the end — a long session can auto-compact more than once, and
   reconstructing "what actually got built earlier this session" from scratch is worse than
@@ -278,10 +330,6 @@ was found, how it was verified against live data, what Brian confirmed).
   visible error. Escape it (`<\/script>`) everywhere it appears, comments included, and
   when a button "does nothing at all" with no error, check for exactly this before
   assuming a runtime bug.
-- **When this session's library-access path is broken (see §3 item 7), a close-out pass
-  needs Brian to paste current `BF_Session_Log.md`/bootstrap content up front** rather
-  than assuming it's fetchable — don't rebuild a close-out entry from memory/summary
-  alone when the real doc content is available to work from directly.
 ## 5. Known backlog (not urgent, parked)
 - **Small-group payout rounding** (`BF_WallyCup_Spec.md` §6) — round-pot podium split can
   zero out 2nd/3rd place under ~9 players at the current $10/player rate. Fine for Brian's
@@ -300,7 +348,7 @@ was found, how it was verified against live data, what Brian confirmed).
   photo-collage insertion, D1 schema log drift** — long-standing, not touched in several
   sessions; still open per `BF_Session_Log.md`'s own carry-forward trail.
 - **Live Panel Notes' character limit vs. the WCRP widget's 500-char cap** — added Dev-80,
-  not cross-checked against each other yet; worth confirming in Dev-82 if it matters (see
+  not cross-checked against each other yet; worth confirming in Dev-83 if it matters (see
   §3 item 5).
 - **`live_stopped_round` flags-Worker key** — flagged in an earlier session as unverified
   against the real flags Worker; still not independently confirmed.
