@@ -4323,6 +4323,15 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .recon-banner{border-radius:14px;padding:0.9rem 1.1rem;margin-top:1.1rem;font-size:13px;line-height:1.5;border:1px solid;}
 .recon-ok{background:rgba(111,191,126,0.1);border-color:rgba(111,191,126,0.35);color:var(--good);}
 .recon-warn{background:rgba(224,160,80,0.12);border-color:rgba(224,160,80,0.4);color:var(--bad);}
+.field-overview-section{border-top:none;padding-top:0.8rem;}
+.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.6rem;}
+.field-card{display:flex;align-items:center;gap:10px;background:var(--white-faintest);border:1px solid rgba(245,240,232,0.1);border-radius:14px;padding:10px 12px;text-decoration:none;-webkit-tap-highlight-color:transparent;}
+.field-card:hover{border-color:rgba(232,57,42,0.35);}
+.field-avatar{flex-shrink:0;width:34px;height:34px;border-radius:50%;background:rgba(232,57,42,0.16);border:1px solid rgba(232,57,42,0.4);color:var(--accent-light);font-family:'Baloo 2',sans-serif;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;}
+.field-card-body{min-width:0;flex:1;}
+.field-card-name{font-weight:600;font-size:13px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.field-card-row{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--white-dim);margin-top:2px;}
+.field-card-lbl{opacity:0.7;flex-shrink:0;}
 .wb-card{display:flex;justify-content:space-between;align-items:center;gap:0.6rem;background:var(--white-faintest);border:1px solid rgba(245,240,232,0.08);border-radius:12px;padding:0.65rem 0.85rem;}
 .wb-card-name{font-size:12.5px;font-weight:600;color:var(--white);}
 .wb-card-detail{font-size:10px;color:var(--white-dim);margin-top:1px;max-width:220px;}
@@ -4371,7 +4380,7 @@ a{color:#e8392a;} a:hover{color:#f27a68;}
 .footer{padding:2.2rem 1.5rem 3rem;text-align:center;}
 .back-btn{display:inline-flex;align-items:center;gap:7px;background:var(--white-faint);border:1px solid rgba(245,240,232,0.18);border-radius:99px;padding:9px 22px;font-size:12.5px;font-weight:600;color:var(--white);text-decoration:none;}
 .footer-meta{font-size:10.5px;color:var(--white-dim);opacity:0.55;margin-top:1.1rem;}
-@media (max-width:520px){.wb-grid{grid-template-columns:1fr;}.rail{padding:1.25rem 0.4rem 0.5rem;}.wrap{padding:0 1rem;}.section{padding:1.6rem 1rem;}.lb-row,.ov-row{padding:14px 14px;}}
+@media (max-width:520px){.wb-grid{grid-template-columns:1fr;}.field-grid{grid-template-columns:1fr;}.rail{padding:1.25rem 0.4rem 0.5rem;}.wrap{padding:0 1rem;}.section{padding:1.6rem 1rem;}.lb-row,.ov-row{padding:14px 14px;}}
 `;
 // Dev-95 — per-hole drill-down for the rank list. Native <details>, no JS in
 // the published page (matches perf-detail's own pattern) — click the summary
@@ -4424,7 +4433,10 @@ function renderPlayerRow(p, quotaLabel, pars) {
   </div>`;
 }
 function renderOverallRow(o, roundLabels, showPodium) {
-  return `<div class="ov-row ${o.rowClass}">
+  // id lets the Field Overview grid (renderFieldOverviewSection) link
+  // straight to a player's Overall row instead of just the top of the
+  // section — same slug function used there.
+  return `<div class="ov-row ${o.rowClass}" id="player-${slugifyRoundName(o.name)}">
     <div class="lb-row-top">
       <div class="lb-name-wrap"><span class="rank-cell">${o.rank}</span><span class="player-name">${escapeHtml(o.name)}</span></div>
       <span class="${o.overallBadgeClass}">${o.overall}</span>
@@ -4434,6 +4446,51 @@ function renderOverallRow(o, roundLabels, showPodium) {
       ${showPodium ? `<span class="ov-chip-pay">🏆 ${o.podiumAmt || '—'}</span>` : ''}
     </div>
   </div>`;
+}
+// ── Field Overview (Dev-98) — "light version" nav grid, per Brian: a fast
+// front door onto all 16 players, not a restructure of the round-by-round
+// story below it. Pure navigation — every stat shown here is already
+// computed elsewhere (overallStandings, wallyBall, payoutSummary); this
+// just merges those three by player name and links each card down to that
+// player's Overall row (id="player-<slug>", added above). Degrades
+// gracefully before any round closes: Overall/Payout show "—", and a link
+// to a not-yet-rendered #player-<slug> anchor is a harmless no-op, not an
+// error. Deliberately skips the GLS-style eagle/birdie/par/bogey breakdown
+// and any live scoring-history redesign — parked for after the trip.
+function renderFieldOverviewSection(data) {
+  const roster = (data.payoutSummary && data.payoutSummary.players) || [];
+  if (!roster.length) return '';
+  const overallByName = {};
+  (data.overallStandings || []).forEach(o => { overallByName[o.name] = o; });
+  const wbByName = {};
+  (data.wallyBall || []).forEach(w => { wbByName[w.name] = w; });
+  const names = roster.map(p => p.name).slice().sort((a, b) => a.localeCompare(b));
+  const cards = names.map(name => {
+    const ov = overallByName[name];
+    const wb = wbByName[name];
+    const po = roster.find(p => p.name === name);
+    const initials = name.split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+    const overallBit = ov
+      ? `<span class="${ov.overallBadgeClass}">${ov.overall}</span> <span class="payout-dim">#${ov.rank}</span>`
+      : '<span class="payout-dim">—</span>';
+    const wbBit = wb ? `<span class="${wb.statusPillClass}" style="padding:1px 8px;font-size:10px">${wb.status}</span>` : '<span class="payout-dim">—</span>';
+    const payBit = po && po.total ? fmtPayout(po.total) : '—';
+    return `<a class="field-card" href="#player-${slugifyRoundName(name)}">
+      <div class="field-avatar">${escapeHtml(initials)}</div>
+      <div class="field-card-body">
+        <div class="field-card-name">${escapeHtml(name)}${po && po.withdrawn ? ' <span class="payout-dim">(w/d)</span>' : ''}</div>
+        <div class="field-card-row"><span class="field-card-lbl">Overall</span>${overallBit}</div>
+        <div class="field-card-row"><span class="field-card-lbl">WB</span>${wbBit}</div>
+        <div class="field-card-row"><span class="field-card-lbl">Owed</span><span class="lb-cell-pay" style="font-size:12.5px">${payBit}</span></div>
+      </div>
+    </a>`;
+  }).join('');
+  return `<div class="wrap"><div class="section field-overview-section">
+    <div class="section-head"><div><div class="section-title">The Field</div>
+      <div class="section-desc">All 16 players — tap anyone to jump to their Overall Standings detail</div>
+    </div></div>
+    <div class="field-grid">${cards}</div>
+  </div></div>`;
 }
 function renderGroupsBlock(groups) {
   if (!groups || !groups.length) return '';
@@ -4748,6 +4805,7 @@ function renderResultsHtml(data, opts) {
     <div class="state-pill ${data.isComplete ? '' : 'open'}"><span class="state-dot"></span>${data.isComplete ? 'Final' : `${data.closedRollup}/${data.totalRollup} rounds closed`}</div>
   </div>
   <div class="rail">${railHtml}</div>
+  ${renderFieldOverviewSection(data)}
   <div class="wrap">
     ${roundSectionsHtml}
     ${overallHtml}
