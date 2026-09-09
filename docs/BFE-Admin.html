@@ -1827,7 +1827,7 @@ function refreshBuyInDisplay() {
   const roundCollect  = parseFloat(document.getElementById('roundCollect').value) || 0;
   const overallCollect = parseFloat(document.getElementById('overallCollect').value) || 0;
   const wbCollect     = parseFloat(document.getElementById('wbCollect').value) || 0;
-  const roundCount = readRoundsInput().length;
+  const roundCount = readRoundsInput().filter(r => r.engine !== 'scorecard_only').length;
   const total = roundCollect * roundCount + overallCollect + wbCollect;
   document.getElementById('buyInDisplay').value = `$${total.toFixed(2)} (${roundCount} round pot${roundCount===1?'':'s'} × $${roundCollect} + $${overallCollect} Overall + $${wbCollect} Wally Ball)`;
 }
@@ -1885,10 +1885,16 @@ async function buildAndAssembleConfig() {
   const overallCollect = parseFloat(document.getElementById('overallCollect').value) || 0;
   const wbCollect       = parseFloat(document.getElementById('wbCollect').value) || 0;
   const podiumWeights   = document.getElementById('podiumWeights').value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
-  const buyInPerPlayer  = roundCollect * config.rounds.length + overallCollect + wbCollect;
+  // Practice Rd (scorecard_only) is non-competitive by definition — it
+  // computes no podium/skins/CTP (closeScorecardOnlyRound), so it should
+  // never have been assigned a round pot or counted toward buy-in to
+  // begin with. Excluded here at the source rather than papered over
+  // downstream on the results page.
+  const payoutEligibleRounds = config.rounds.filter(r => r.engine !== 'scorecard_only');
+  const buyInPerPlayer  = roundCollect * payoutEligibleRounds.length + overallCollect + wbCollect;
   const potPlan = [
     { id: 'round', label: 'Round Pot', collectPerPlayer: roundCollect, cttpHoles, podiumWeights,
-      appliesToRounds: config.rounds.map(r => r.name) },
+      appliesToRounds: payoutEligibleRounds.map(r => r.name) },
     { id: 'overall', label: 'Overall Podium', collectPerPlayer: overallCollect, podiumWeights },
     { id: 'wally_ball', label: 'Wally Ball Pot', collectPerPlayer: wbCollect, kind: 'pool_split' }
   ];
@@ -3790,12 +3796,14 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
       amt: (x.payout_podium || 0) + (x.payout_skins || 0) + (x.payout_cttp || 0),
     }))
     .sort((a, b) => b.amt - a.amt) : [];
-  // Practice Rd's own round-pot line item (Setup allocates one to every
-  // round including scorecard-only ones) is never actually paid out —
-  // closeScorecardOnlyRound computes no podium/skins/CTP by design (see
-  // that function's own header comment). So the number this section
-  // reconciles against is the payout config's total MINUS that unpaid
-  // pot, not the full per-player buy-in total.
+  // Practice Rd is non-competitive by definition — closeScorecardOnlyRound
+  // computes no podium/skins/CTP by design (see that function's own header
+  // comment) — so it was never meant to carry a $ pot at all. Setup no
+  // longer assigns one to scorecard-only rounds (Dev-98), but events
+  // generated before that fix — this one included — still have the old
+  // Practice-round pot baked into their saved config. Guarded out here so
+  // the reconciliation isn't thrown off by a pot that should never have
+  // existed, for events both old and new.
   const practiceRoundNamesForPayout = new Set(originalRounds.filter(r => r.engine === 'scorecard_only').map(r => r.name));
   const payableExpectedTotal = (config.payout?.pots || [])
     .filter(pot => !(pot.round && practiceRoundNamesForPayout.has(pot.round)))
@@ -4669,7 +4677,7 @@ function renderPayoutSection(ps, num) {
       <div>${ps.reconciles
         ? `✓ Reconciled — ${fmtPayout(ps.totalPaidOut)} accounted for to players, matching the ${fmtPayout(ps.payableExpectedTotal)} payable pool (round pots + Overall + Wally Ball).${leftoverNote}`
         : `⚠ Off by ${fmtPayout(diff)} — ${fmtPayout(ps.totalPaidOut)} accounted for vs. ${fmtPayout(ps.payableExpectedTotal)} expected (after ${fmtPayout(ps.houseLeftover || 0)} of known skins-rounding leftover). Check for an unclosed round, an unresolved Wally Ball pot, or a withdrawn player's leftover share.`}</div>
-      <div class="payout-dim" style="margin-top:5px">Practice Rd's own ${fmtPayout(ps.practicePotTotal)} round-pot line item is configured in Setup but never paid out — a scorecard-only round computes no podium/skins/CTP by design, so it's excluded from the total above on purpose.</div>
+      ${ps.practicePotTotal ? `<div class="payout-dim" style="margin-top:5px">Practice Rd's own ${fmtPayout(ps.practicePotTotal)} round-pot line item shouldn't exist — Practice Rd is non-competitive by definition and was never meant to collect or pay out a pot. It's left over from before Setup excluded scorecard-only rounds from the payout plan, and it's excluded from the total above.</div>` : ''}
     </div>
   </div></div>`;
 }
