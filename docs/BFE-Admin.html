@@ -4677,7 +4677,6 @@ function renderPayoutSection(ps, num) {
       <div>${ps.reconciles
         ? `✓ Reconciled — ${fmtPayout(ps.totalPaidOut)} accounted for to players, matching the ${fmtPayout(ps.payableExpectedTotal)} payable pool (round pots + Overall + Wally Ball).${leftoverNote}`
         : `⚠ Off by ${fmtPayout(diff)} — ${fmtPayout(ps.totalPaidOut)} accounted for vs. ${fmtPayout(ps.payableExpectedTotal)} expected (after ${fmtPayout(ps.houseLeftover || 0)} of known skins-rounding leftover). Check for an unclosed round, an unresolved Wally Ball pot, or a withdrawn player's leftover share.`}</div>
-      ${ps.practicePotTotal ? `<div class="payout-dim" style="margin-top:5px">Practice Rd's own ${fmtPayout(ps.practicePotTotal)} round-pot line item shouldn't exist — Practice Rd is non-competitive by definition and was never meant to collect or pay out a pot. It's left over from before Setup excluded scorecard-only rounds from the payout plan, and it's excluded from the total above.</div>` : ''}
     </div>
   </div></div>`;
 }
