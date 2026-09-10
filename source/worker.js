@@ -2977,6 +2977,70 @@ export default {
       });
     }
 
+    // POST /deploy-raw — same as /deploy, but for callers that can't safely
+    // hand-build a JSON string around arbitrary file content (Dev-84: mobile
+    // publish via Macrodroid). File content is the raw POST body instead of
+    // a JSON "content" field -- no client-side escaping of quotes/backslashes/
+    // newlines required, which is exactly the bug class /deploy's caller
+    // (bf_push.ps1) needed several revisions to get right (see that script's
+    // v2/v3 changelog notes). pin/path/message move to headers since the body
+    // is now the raw file. Same GH_REPO/GH_BRANCH/ghHeaders, same validation,
+    // same GitHub contents-API PUT, same response shape as /deploy.
+    // Headers: X-BF-Pin, X-BF-Path (must start with source/ or docs/), X-BF-Message (optional)
+    // Body: raw file content, e.g. Content-Type: text/plain; charset=utf-8
+    // Response: { ok, commitSha }   VERSION: 2026-09-10a
+    if (request.method === 'POST' && url.pathname === '/deploy-raw') {
+      const pin     = request.headers.get('X-BF-Pin');
+      const ghPath  = request.headers.get('X-BF-Path');
+      const message = request.headers.get('X-BF-Message');
+
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (!ghPath || (!ghPath.startsWith('source/') && !ghPath.startsWith('docs/'))) {
+        return new Response(JSON.stringify({ error: 'X-BF-Path must start with source/ or docs/' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+
+      const content = await request.text();
+      if (!content) {
+        return new Response(JSON.stringify({ error: 'Missing body content' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+
+      const contentsUrl = `https://api.github.com/repos/${GH_REPO}/contents/${ghPath}`;
+      const encoded = btoa(unescape(encodeURIComponent(content)));
+
+      let currentSha;
+      const currentResp = await fetch(`${contentsUrl}?ref=${GH_BRANCH}`, { headers: ghHeaders });
+      if (currentResp.ok) {
+        const currentData = await currentResp.json();
+        currentSha = currentData.sha;
+      } else if (currentResp.status !== 404) {
+        const errText = await currentResp.text();
+        return new Response(JSON.stringify({ error: 'GitHub error fetching current SHA', status: currentResp.status, detail: errText }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      // 404 = new file, currentSha stays undefined -- omit sha from PUT body
+
+      const putBody = {
+        message: message || `Deploy ${ghPath} (mobile)`,
+        content: encoded,
+        branch:  GH_BRANCH,
+      };
+      if (currentSha) putBody.sha = currentSha;
+
+      const putResp = await fetch(contentsUrl, {
+        method: 'PUT',
+        headers: { ...ghHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify(putBody),
+      });
+      const putData = await putResp.json();
+      if (putResp.status !== 200 && putResp.status !== 201) {
+        return new Response(JSON.stringify({ error: 'GitHub commit failed', status: putResp.status, detail: putData }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      return new Response(JSON.stringify({ ok: true, commitSha: putData.commit.sha }), {
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
     // GET /subscriptions — fetch all push subscribers
     if (request.method === 'GET' && url.pathname === '/subscriptions') {
       const pin = url.searchParams.get('pin');
