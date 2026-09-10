@@ -488,7 +488,7 @@ export default {
       if (pin !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const allowed = ['maintenance', 'live_test', 'live_override', 'gathering_panel_live'];
+      const allowed = ['maintenance', 'live_test', 'live_override', 'gathering_panel_live', 'live_stopped_round'];
       if (!allowed.includes(key)) {
         return new Response(JSON.stringify({ error: 'Unknown flag key' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
