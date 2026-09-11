@@ -83,6 +83,7 @@
      whenever ?gameday=1 loaded the page) rather than gameday-mode (which
      the toggle button below flips on/off) — otherwise switching to Full
      Admin view hides the only control that could switch back. */
+  #gamedayBanner { display: none; }
   body.gameday-available #gamedayBanner { display: block; }
   #gamedayBanner {
     background: var(--accent-dark); color: #fff; padding: 14px 20px;
@@ -112,7 +113,7 @@
      Results logic, just a CSS view that hides sections 1-7/11+ and
      auto-loads the pre-filled default event, so gameday is 3 sections and
      zero typing instead of scrolling a 15-section desktop form on a phone. -->
-<div id="gamedayBanner" style="display:none">
+<div id="gamedayBanner">
   <div id="gamedayBannerTitle">⛳ Gameday Mode</div>
   <div id="gamedayBannerStatus">Loading event…</div>
   <!-- Dev-95 (Brian, event day) — was a plain link to BFE-Admin.html, which
