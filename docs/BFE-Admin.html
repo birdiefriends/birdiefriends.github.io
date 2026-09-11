@@ -4130,7 +4130,21 @@ function buildMemoryChapters(eventName, originalRounds, memories, notes, scoreca
     if (next && next.start > w.end) {
       chapters.push({ key: 'after-' + slugifyRoundName(w.name), title: `After ${w.label}`, start: w.end, end: next.start, roundName: null, photos: [], notes: [] });
     } else if (!next) {
-      chapters.push({ key: 'after-' + slugifyRoundName(w.name), title: `After ${w.label}`, start: w.end, end: Infinity, roundName: null, photos: [], notes: [] });
+      // Dev-104 (Brian, Rd1 morning) — an open-ended "After <round>" gap
+      // keeps that title forever, even once it's run past midnight into a
+      // fresh event day for the round that's actually coming up next. Once
+      // we're on a different calendar day than this round's own end AND
+      // there's already a scheduled round after it (originalRounds carries
+      // every round on the itinerary, not just ones with a determinable
+      // window yet — that next round may not have its own window until its
+      // tee_time elapses), relabel the gap "Before <next round>" instead.
+      const upcoming = (originalRounds || [])
+        .map(r => ({ name: r.name, teeTime: r.teeTime ? new Date(r.teeTime) : null }))
+        .filter(r => r.teeTime && !isNaN(r.teeTime) && r.teeTime > w.end)
+        .sort((a, b) => a.teeTime - b.teeTime)[0];
+      const crossedDay = upcoming && new Date(w.end).toDateString() !== new Date(now).toDateString();
+      const title = (upcoming && crossedDay) ? `Before ${shortRoundLabel(upcoming.name, eventName)}` : `After ${w.label}`;
+      chapters.push({ key: 'after-' + slugifyRoundName(w.name), title, start: w.end, end: Infinity, roundName: null, photos: [], notes: [] });
     }
   });
   chapters.forEach(c => { c.anchorId = 'chapter-' + c.key; });
