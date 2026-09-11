@@ -466,7 +466,7 @@ export default {
 
     // GET /flags — read all flags from KV (public, no auth)
     if (request.method === 'GET' && url.pathname === '/flags') {
-      const keys = ['maintenance', 'live_test', 'live_override', 'live_override_since', 'gathering_panel_live'];
+      const keys = ['maintenance', 'live_test', 'live_override', 'live_override_since', 'gathering_panel_live', 'live_stopped_round'];
       const entries = await Promise.all(keys.map(async k => [k, await env.BF_FLAGS.get(k)]));
       const flags = {};
       entries.forEach(([k, v]) => {
