@@ -79,7 +79,11 @@
      Round / Review / Publish, and grows the touch targets on those three. */
   body.gameday-mode header,
   body.gameday-mode section.card:not(.gameday-section) { display: none !important; }
-  body.gameday-mode #gamedayBanner { display: block; }
+  /* Dev-95 — banner visibility now keys off gameday-available (set once,
+     whenever ?gameday=1 loaded the page) rather than gameday-mode (which
+     the toggle button below flips on/off) — otherwise switching to Full
+     Admin view hides the only control that could switch back. */
+  body.gameday-available #gamedayBanner { display: block; }
   #gamedayBanner {
     background: var(--accent-dark); color: #fff; padding: 14px 20px;
     position: sticky; top: 0; z-index: 10;
@@ -111,7 +115,15 @@
 <div id="gamedayBanner" style="display:none">
   <div id="gamedayBannerTitle">⛳ Gameday Mode</div>
   <div id="gamedayBannerStatus">Loading event…</div>
-  <a href="BFE-Admin.html">← Full Admin (desktop)</a>
+  <!-- Dev-95 (Brian, event day) — was a plain link to BFE-Admin.html, which
+       navigated away and threw out whatever loadEventConfig() had already
+       loaded. Now an in-place toggle: same page, same loaded state, just
+       flips which sections are visible. -->
+  <button type="button" id="gamedayToggleBtn" onclick="toggleGamedayView()"
+    style="background:none;border:1px solid #cfe3da;color:#cfe3da;border-radius:6px;
+           padding:4px 10px;font-size:0.78rem;margin-top:6px;cursor:pointer">
+    Show Full Admin
+  </button>
 </div>
 <header>
   <h1>BFE Host Admin Panel — Setup</h1>
@@ -5152,8 +5164,20 @@ document.getElementById('publishResultsBtn').addEventListener('click', async () 
 // same loadEventConfig() Setup's own Load button calls — nothing here is a
 // second copy of any load/close/publish logic, only which sections show.
 // ══════════════════════════════════════════════════════════════════════
+// Dev-95 (Brian, event day) — in-place toggle between Gameday's compact
+// 3-section view and the full admin form, no navigation. gameday-available
+// is set once here and never removed (keeps the banner/toggle button itself
+// visible in both states); gameday-mode is what the CSS above actually
+// keys section-hiding off of, and is what this function flips.
+function toggleGamedayView() {
+  const isGameday = document.body.classList.toggle('gameday-mode');
+  const btn = document.getElementById('gamedayToggleBtn');
+  if (btn) btn.textContent = isGameday ? 'Show Full Admin' : 'Show Close Round view';
+}
+
 (function initGamedayMode() {
   if (new URLSearchParams(window.location.search).get('gameday') !== '1') return;
+  document.body.classList.add('gameday-available');
   document.body.classList.add('gameday-mode');
   const statusEl = document.getElementById('gamedayBannerStatus');
   const eventName = document.getElementById('eventName').value.trim();
