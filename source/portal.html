@@ -1984,6 +1984,10 @@ body {
          opening the APP") — roster-gated only, never gated on
          memories_capture_open. See findTripInfoEligibleEvent(). -->
     <div id="home-trip-info-banner"></div>
+    <!-- Dev-86: 2Man draft calculator widget entry point — gated on
+         DRAFT_CALC_ROUND (set in BFE-Admin's Draft board), roster-checked
+         via _bfeBackedIndex the same way home-trip-info-banner is. -->
+    <div id="home-draftcalc-banner"></div>
     <div id="home-host-entry"></div>
     <div id="home-hero"></div>
     <div id="home-announcements"></div>
@@ -3507,6 +3511,13 @@ let LIVE_OVERRIDE_SINCE  = null;   // ISO timestamp when override was set
 // on. Cleared automatically whenever "Start Live Now" is pressed.
 let LIVE_STOPPED_ROUND   = null;
 let GATHERING_PANEL_LIVE = false;  // Host Management panel visibility — off by default, Dev-45
+// Dev-86 — round_name of the 2Man round the draft calculator widget should
+// show for right now, or null when off. Commissioner-toggled from BFE-
+// Admin's Draft board (a plain KV flag, same mechanism as live_override/
+// live_stopped_round) — deliberately NOT tied to the Live Panel/tee-time
+// window, since the live draft usually happens well before the 2Man round's
+// own tee time.
+let DRAFT_CALC_ROUND = null;
 let groupingsMeta        = null;  // {eventName, status, visibility, publishedAt}
 // Dev-81 — which event getLiveEvent() should treat as "live" while Live Test
 // Mode / manual override is on, instead of always the next upcoming eligible
@@ -3528,6 +3539,7 @@ async function loadRemoteFlags() {
     LIVE_OVERRIDE_SINCE  = flags.live_override_since || null;
     LIVE_STOPPED_ROUND   = flags.live_stopped_round || null;
     GATHERING_PANEL_LIVE  = flags.gathering_panel_live === true;
+    DRAFT_CALC_ROUND      = flags.draft_calc_round || null;
   } catch(e) {
     console.warn('[Flags] Could not load remote flags — defaulting to false:', e.message);
   }
@@ -4912,6 +4924,8 @@ function renderHome() {
   });
   // ── Live event banner ─────────────────────────────────────────────────────
   renderLiveBanner();
+  // ── 2Man draft calculator entry point (Dev-86) ────────────────────────────
+  renderDraftCalcBanner();
   // ── Host Management entry point (Dev-45) ──────────────────────────────────
   renderHostEntryPoint();
   // ── Announcements + install nudge + swipe tip ─────────────────────────────
@@ -12997,6 +13011,144 @@ function findTripInfoEligibleEvent() {
     return summary;
   }
   return null;
+}
+// ══════════════════════════════════════════════════════════════════════
+// 2Man draft calculator (Dev-86) — a captain on the clock can check "what's
+// our team quota" for a candidate partner instead of trusting the math
+// verbally. Gated on DRAFT_CALC_ROUND (BFE-Admin's Draft board toggle,
+// /flags key draft_calc_round) AND roster membership for that round, mirrors
+// findTripInfoEligibleEvent()'s pattern but keyed by ROUND (draft is
+// round-specific), not by the umbrella event.
+// ══════════════════════════════════════════════════════════════════════
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+function findDraftCalcEligibleRound() {
+  if (!DRAFT_CALC_ROUND || !currentPlayer) return null;
+  const entry = _bfeBackedIndex.get(DRAFT_CALC_ROUND);
+  if (!entry) return null;
+  const me = currentPlayer.trim().toLowerCase();
+  if (!entry.roster.has(me)) return null;
+  return entry;
+}
+let _draftCalcOpen = false;
+let _draftCalcEntry = null;      // the _bfeBackedIndex entry currently shown
+let _draftCalcQuotas = null;     // { name -> number|null }, loaded on open
+let _draftCalcRoster = [];       // [name, ...] excluding currentPlayer
+let _draftCalcLoading = false;
+let _draftCalcPartner = '';
+// Mirrors BFE-Admin's Close Round quota-averaging EXACTLY (same chain walk,
+// same quota_in/quota_out averaging) so what a player sees here always
+// matches what Close Round will actually compute — see that file's Close
+// Round handler for the canonical version; keep the two in sync.
+async function loadDraftCalcQuotas(entry) {
+  _draftCalcLoading = true;
+  renderDraftCalcPanel();
+  try {
+    const [cfgRes, resRes] = await Promise.all([
+      fetch(`${BFE_API}/bfe/events?event=${encodeURIComponent(entry.umbrellaName)}`),
+      fetch(`${BFE_API}/bfe/round-results?event=${encodeURIComponent(entry.umbrellaName)}`)
+    ]);
+    const cfgData = cfgRes.ok ? await cfgRes.json() : null;
+    const config = cfgData && cfgData.config;
+    const resData = resRes.ok ? await resRes.json() : null;
+    const allResults = (resData && resData.results) || [];
+    const round = config && (config.rounds || []).find(r => r.name === entry.roundName);
+    const roster = (config && config.roster) || [];
+    const quotas = {};
+    if (round && round.chainsFrom) {
+      const chainRoundNames = [];
+      let cursor = round.chainsFrom;
+      while (cursor) {
+        chainRoundNames.unshift(cursor);
+        const cursorRound = (config.rounds || []).find(r => r.name === cursor);
+        cursor = cursorRound ? cursorRound.chainsFrom : null;
+      }
+      roster.forEach(p => {
+        const vals = [];
+        chainRoundNames.forEach(rn => {
+          const row = allResults.find(r => r.round_name === rn && r.player_name === p.name);
+          if (row && row.quota_in != null && !isNaN(row.quota_in)) vals.push(row.quota_in);
+        });
+        const lastRow = allResults.find(r => r.round_name === round.chainsFrom && r.player_name === p.name);
+        if (lastRow && lastRow.quota_out != null && !isNaN(lastRow.quota_out)) vals.push(lastRow.quota_out);
+        quotas[p.name] = vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : null;
+      });
+    } else {
+      roster.forEach(p => { quotas[p.name] = (p.initialQuota != null && !isNaN(p.initialQuota)) ? p.initialQuota : null; });
+    }
+    _draftCalcQuotas = quotas;
+    _draftCalcRoster = roster.map(p => p.name).filter(n => n && n.trim().toLowerCase() !== currentPlayer.trim().toLowerCase()).sort((a, b) => a.localeCompare(b));
+  } catch (e) {
+    console.warn('[DraftCalc] load error:', e.message);
+    _draftCalcQuotas = null;
+    _draftCalcRoster = [];
+  }
+  _draftCalcLoading = false;
+  renderDraftCalcPanel();
+}
+function toggleDraftCalc() {
+  _draftCalcOpen = !_draftCalcOpen;
+  if (_draftCalcOpen && _draftCalcEntry) loadDraftCalcQuotas(_draftCalcEntry);
+  renderDraftCalcPanel();
+}
+function setDraftCalcPartner(name) {
+  _draftCalcPartner = name;
+  renderDraftCalcPanel();
+}
+function fmtQuota(v) {
+  return (v == null || isNaN(v)) ? '—' : (Math.round(v * 10) / 10).toFixed(1);
+}
+function renderDraftCalcPanel() {
+  const panelEl = document.getElementById('draftcalc-panel');
+  if (!panelEl) return;
+  if (!_draftCalcOpen) { panelEl.innerHTML = ''; panelEl.hidden = true; return; }
+  panelEl.hidden = false;
+  if (_draftCalcLoading || !_draftCalcQuotas) {
+    panelEl.innerHTML = `<div style="padding:10px 2px;font-size:0.82rem;color:var(--text-muted)">Loading quotas…</div>`;
+    return;
+  }
+  const myQuota = _draftCalcQuotas[currentPlayer];
+  const partnerQuota = _draftCalcPartner ? _draftCalcQuotas[_draftCalcPartner] : null;
+  const hasTeam = _draftCalcPartner && myQuota != null && partnerQuota != null;
+  const teamQuota = hasTeam ? (myQuota + partnerQuota) / 2 : null;
+  panelEl.innerHTML = `
+    <div style="padding:10px 2px 4px;font-size:0.82rem">
+      <div style="margin-bottom:8px">Your quota: <strong>${fmtQuota(myQuota)}</strong>${myQuota == null ? ' <span style="color:var(--text-hint)">(no result yet for this round)</span>' : ''}</div>
+      <label for="draftcalc-partner-sel" style="display:block;margin-bottom:4px;color:var(--text-muted)">Potential partner</label>
+      <select id="draftcalc-partner-sel" onchange="setDraftCalcPartner(this.value)" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;font-size:0.85rem">
+        <option value="">— pick a player —</option>
+        ${_draftCalcRoster.map(n => `<option value="${escapeHtml(n)}" ${n === _draftCalcPartner ? 'selected' : ''}>${escapeHtml(n)}${_draftCalcQuotas[n] == null ? ' (no result yet)' : ''}</option>`).join('')}
+      </select>
+      ${_draftCalcPartner ? `<div style="margin-top:10px;padding:10px;background:var(--bg-subtle,rgba(0,0,0,0.04));border-radius:8px">
+        <div>Their quota: <strong>${fmtQuota(partnerQuota)}</strong></div>
+        <div style="margin-top:4px;font-size:0.95rem">Team quota if paired: <strong>${teamQuota != null ? fmtQuota(teamQuota) : 'not enough data yet'}</strong></div>
+      </div>` : ''}
+      <div style="margin-top:8px;font-size:0.72rem;color:var(--text-hint)">Based on Rd1 standings. Who's actually still available to draft may have changed — check with your commissioner.</div>
+    </div>`;
+}
+function renderDraftCalcBanner() {
+  const el = document.getElementById('home-draftcalc-banner');
+  if (!el) return;
+  const entry = findDraftCalcEligibleRound();
+  if (!entry) { el.innerHTML = ''; _draftCalcEntry = null; _draftCalcOpen = false; return; }
+  // A new/different round than what's currently loaded resets any open panel
+  // state rather than showing stale numbers under a new round's banner.
+  if (!_draftCalcEntry || _draftCalcEntry.roundName !== entry.roundName) {
+    _draftCalcEntry = entry; _draftCalcOpen = false; _draftCalcQuotas = null; _draftCalcPartner = '';
+  }
+  el.innerHTML = `<div class="live-banner">
+    <div class="live-banner-header" style="cursor:pointer" onclick="toggleDraftCalc()">
+      <div class="live-dot" style="background:var(--gold)"></div>
+      <div style="flex:1">
+        <div class="live-banner-title">🤝 2Man Draft Calculator</div>
+        <div class="live-banner-sub">Check your team quota with a potential partner — tap to ${_draftCalcOpen ? 'close' : 'open'}</div>
+      </div>
+      <div class="live-banner-chev">${_draftCalcOpen ? '⌄' : '›'}</div>
+    </div>
+    <div id="draftcalc-panel" ${_draftCalcOpen ? '' : 'hidden'}></div>
+  </div>`;
+  if (_draftCalcOpen) renderDraftCalcPanel();
 }
 // Kept out of the onclick markup itself (rather than interpolating the URL
 // directly into an inline handler string) so a stray apostrophe in an
