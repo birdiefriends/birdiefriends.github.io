@@ -1,2 +1,2 @@
-v4.1.8 · 2026-09-12
-Deployed: 2026-09-12 (Draft Calc: contrast fix, top-8 only, quota math fix)
+v4.1.9 · 2026-09-12
+Deployed: 2026-09-12 (Draft Calc: pooled team-quota math confirmed/fixed)
