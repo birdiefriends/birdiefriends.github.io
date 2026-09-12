@@ -1,2 +1,2 @@
-v4.1.6 · 2026-09-09
-Deployed: 2026-09-09 (pending push)
+v4.1.7 · 2026-09-12
+Deployed: 2026-09-12 (2Man Draft Calculator — full partner list)
