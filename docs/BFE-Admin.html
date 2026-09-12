@@ -2477,6 +2477,7 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
       return { groupIndex: gi, players: t.players, label: t.label, displayName: teamDisplayName(t.players, t.label) };
     });
     let quotaByPlayer = {};
+    let quotaValsByPlayer = {}; // p.name -> [each closed quota round's own quota_out], oldest first
     if (round.chainsFrom) {
       const priorRes = await fetch(base + '/bfe/round-results?event=' + encodeURIComponent(eventName));
       const priorData = await priorRes.json();
@@ -2492,32 +2493,46 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
       const lastRows = allPriorResults.filter(r => r.round_name === round.chainsFrom);
       if (!lastRows.length) throw new Error(`This round's team quota reads from "${round.chainsFrom}", which hasn't been closed yet — close it first.`);
       // Dev-84 (Brian, live during the 2Man draft — same fix mirrored in
-      // portal.html's Draft Calculator, keep the two in sync): team quota is
-      // the average of each already-closed quota round's own quota_out --
-      // Rd1 + Rd2 today, Rd1 + Rd2 + Rd3 for a future event whose draft
-      // happens after all three are closed. Previously this also pulled in
-      // each round's quota_in -- including Rd1's quota_in, which is just the
-      // pre-season initial quota, not a round result -- which quietly
-      // dragged the average toward a stale number (this is what actually
-      // sets team quotaIn for scoring/payout, not just a preview display).
-      // chainRoundNames already ends with round.chainsFrom itself, so no
-      // separate last-round lookup is needed.
+      // portal.html's Draft Calculator, keep the two in sync): an
+      // individual's own quota is the average of each already-closed quota
+      // round's own quota_out -- Rd1 + Rd2 today, Rd1 + Rd2 + Rd3 for a
+      // future event whose draft happens after all three are closed.
+      // Previously this also pulled in each round's quota_in -- including
+      // Rd1's quota_in, which is just the pre-season initial quota, not a
+      // round result -- which quietly dragged the average toward a stale
+      // number. chainRoundNames already ends with round.chainsFrom itself,
+      // so no separate last-round lookup is needed.
       assembledConfig.roster.forEach(p => {
         const vals = [];
         chainRoundNames.forEach(rn => {
           const row = allPriorResults.find(r => r.round_name === rn && r.player_name === p.name);
           if (row && row.quota_out != null && !isNaN(row.quota_out)) vals.push(row.quota_out);
         });
+        quotaValsByPlayer[p.name] = vals;
         quotaByPlayer[p.name] = vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : null;
       });
     } else {
-      assembledConfig.roster.forEach(p => { quotaByPlayer[p.name] = p.initialQuota; });
+      assembledConfig.roster.forEach(p => {
+        const hasInitial = p.initialQuota !== null && p.initialQuota !== undefined && !isNaN(p.initialQuota);
+        quotaValsByPlayer[p.name] = hasInitial ? [p.initialQuota] : [];
+        quotaByPlayer[p.name] = hasInitial ? p.initialQuota : null;
+      });
     }
+    // Dev-85 (Brian, confirmed): team quota is a literal pooled average of
+    // every player's individual round quota_out values -- 2 rounds each = 4
+    // values pooled today, 3 rounds each = 6 pooled once a draft happens
+    // after Rd3 -- not an average of the players' own already-averaged
+    // per-player quotas, which only matches when every player on the team
+    // has the same number of closed rounds (not guaranteed -- a late add or
+    // a player who missed a round would have fewer). This is what actually
+    // sets team quotaIn for scoring/payout, not just a preview display.
     const teamsMissingQuota = [];
     teams.forEach(t => {
-      const vals = t.players.map(p => quotaByPlayer[p]).filter(v => v !== null && v !== undefined && !isNaN(v));
-      t.teamQuota = vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : null;
-      if (vals.length < t.players.length) teamsMissingQuota.push(t.displayName);
+      const missingPlayers = t.players.filter(p => !(quotaValsByPlayer[p] && quotaValsByPlayer[p].length));
+      const pooled = [];
+      t.players.forEach(p => { (quotaValsByPlayer[p] || []).forEach(v => pooled.push(v)); });
+      t.teamQuota = pooled.length ? (pooled.reduce((s, v) => s + v, 0) / pooled.length) : null;
+      if (missingPlayers.length) teamsMissingQuota.push(t.displayName);
     });
     const scorecards = await jfFetchRoundScorecards(roundName);
     const pot = (assembledConfig.payout?.pots || []).find(p => p.round === roundName);
