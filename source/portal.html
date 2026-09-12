@@ -7473,6 +7473,14 @@ const BF_LOGO_ICON_HTML = '<span style="display:inline-block;width:1em;height:1e
   'background-image:var(--bf-logo);background-size:contain;background-repeat:no-repeat;' +
   'background-position:center;vertical-align:-0.15em"></span>';
 const BIRDIE_SCORE_ICON = { Birdie: BF_LOGO_ICON_HTML, Eagle: '🦅', Albatross: '🦄' };
+// Dev-86 (real Rd1 miss: 2 birdies correctly canceled each other, then a
+// later Eagle on the same hole was wrongly marked "No Skin available"
+// instead of winning it outright) — every skin-status computation below
+// used to just COUNT sub-par entries on a hole (1st = leader, 2nd+ = busted,
+// forever), never comparing what score they actually made. A rank map lets
+// a better score take the lead outright (no bust) even after a worse tie,
+// and lets a worse score arrive without disturbing an existing lead/bust.
+const SKIN_SCORE_RANK = { Birdie: 1, Eagle: 2, Albatross: 3 };
 let _birdieHole      = null;   // hole selected in birdie alert
 let _birdiePlayer    = null;   // player selected in birdie alert
 let _birdieScoreType = 'Birdie'; // 'Birdie' | 'Eagle' | 'Albatross'
@@ -8700,8 +8708,11 @@ async function loadCtpData(evt) {
   }
 }
 // Load shared Skin Status board from Worker /feed — built from structured bf_meta
-// on birdie-type entries. First sub-par on a hole = leader; second = busts it
-// (board shows "Busted by {player}"); 3rd+ entries on a busted hole are alerts only.
+// on birdie-type entries. The BEST scoreType on a hole leads; a hole is only
+// "busted" when 2+ players are tied at that best scoreType. A worse score
+// arriving later never disturbs an existing lead or bust, and a better score
+// arriving later always takes sole possession, even overturning a prior bust
+// (Dev-86 — see SKIN_SCORE_RANK note above).
 async function loadSkinBoardData() {
   try {
     const feedResp = await fetch(OS_API + 'feed');
@@ -8709,18 +8720,27 @@ async function loadSkinBoardData() {
     const entries = (feedData.feed || [])
       .filter(e => e.type === 'birdie' && e.meta && e.meta.hole)
       .sort((a, b) => a.sentAt - b.sentAt); // oldest first
-    const board = {};
+    const byHole = {};
     const allPlayers = {};
     entries.forEach(e => {
       const h = e.meta.hole;
       (allPlayers[h] = allPlayers[h] || []).push(e.meta.player);
-      if (!board[h]) {
-        board[h] = { state: 'leader', player: e.meta.player, scoreType: e.meta.scoreType };
-      } else if (board[h].state === 'leader') {
-        board[h] = { state: 'busted', player: board[h].player, scoreType: board[h].scoreType,
-                      buster: e.meta.player, busterScoreType: e.meta.scoreType };
+      (byHole[h] = byHole[h] || []).push({
+        player: e.meta.player, scoreType: e.meta.scoreType,
+        rank: SKIN_SCORE_RANK[e.meta.scoreType] || 1,
+      });
+    });
+    const board = {};
+    Object.keys(byHole).forEach(h => {
+      const list = byHole[h];
+      const bestRank = Math.max(...list.map(x => x.rank));
+      const leaders  = list.filter(x => x.rank === bestRank); // oldest-first among ties
+      if (leaders.length === 1) {
+        board[h] = { state: 'leader', player: leaders[0].player, scoreType: leaders[0].scoreType };
+      } else {
+        board[h] = { state: 'busted', player: leaders[0].player, scoreType: leaders[0].scoreType,
+                      buster: leaders[1].player, busterScoreType: leaders[1].scoreType };
       }
-      // else: hole already busted — further entries don't change the board
     });
     _skinBoard = board;
     _skinAllPlayers = allPlayers;
@@ -8869,30 +8889,50 @@ async function submitBirdieAlert(evtName) {
   // _skinHoles alone is per-device/per-page-load and can't see birdies
   // entered by other overseers on other devices.
   let priorBirdies = [];
+  let feedOk = true;
   try {
     const feedResp = await fetch(OS_API + 'feed');
     const feedData = await feedResp.json();
     const entries  = feedData.feed || [];
     priorBirdies = entries.filter(e => e.type === 'birdie' && e.meta && e.meta.hole === hole);
   } catch(e) {
+    feedOk = false;
     console.warn('[Birdie] Feed fetch failed, falling back to local skin state:', e.message);
   }
-  // Sort oldest-first so we can find the original skin leader
+  // Sort oldest-first, then find the BEST prior score on this hole — not just
+  // how many prior entries there were (Dev-86: this used to bust a hole
+  // permanently on the 2nd entry no matter what it scored, so a later Eagle
+  // beating two tied Birdies still showed "No Skin available" instead of
+  // winning it outright).
   priorBirdies.sort((a, b) => a.sentAt - b.sentAt);
-  const busted = priorBirdies.length >= 2; // 2+ prior sub-par scores on this hole — already busted
+  const myRank = SKIN_SCORE_RANK[scoreType] || 1;
+  let priorBest = null; // { scoreType, rank } of the best prior score on this hole, if any
+  priorBirdies.forEach(e => {
+    const r = SKIN_SCORE_RANK[e.meta.scoreType] || 1;
+    if (!priorBest || r > priorBest.rank) priorBest = { scoreType: e.meta.scoreType, rank: r };
+  });
   // Header is always "icon #hole — player" (the player who just scored).
-  // Body is one of three status lines — board carries the "Busted by X (was Y)" detail.
+  // Body is one of four status lines — board carries the "Busted by X (was Y)" detail.
   let msg;
   let heading = `${alertEmoji} #${hole} — ${player}`;
-  if (busted || _skinHoles[hole] === 'BUSTED') {
-    msg = `No Skin available`;
-    _skinHoles[hole] = 'BUSTED';
-  } else if (priorBirdies.length > 0 || _skinHoles[hole]) {
+  if (!feedOk) {
+    // Feed unreachable — fall back to this device's own last-known state
+    // rather than guess at a real comparison.
+    if (_skinHoles[hole] === 'BUSTED') { msg = `No Skin available`; }
+    else if (_skinHoles[hole]) { msg = `Skin Busted!`; _skinHoles[hole] = 'BUSTED'; }
+    else { msg = `Skin Frontrunner`; _skinHoles[hole] = player; }
+  } else if (!priorBest || myRank > priorBest.rank) {
+    // No prior score, or this one beats the best prior score outright —
+    // sole possession, even if the prior state was already "busted".
+    msg = `Skin Frontrunner`;
+    _skinHoles[hole] = player;
+  } else if (myRank === priorBest.rank) {
+    // Ties the best prior score — cancels the skin.
     msg = `Skin Busted!`;
     _skinHoles[hole] = 'BUSTED';
   } else {
-    msg = `Skin Frontrunner`;
-    _skinHoles[hole] = player;
+    // Worse than the best prior score — doesn't change the skin outcome.
+    msg = `Trails the ${priorBest.scoreType} on this hole — no skin change`;
   }
   const bfMeta = { hole, player, scoreType };
   const prevSkinState = _skinHoles[hole]; // for Undo
