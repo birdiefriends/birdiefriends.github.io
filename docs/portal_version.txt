@@ -1,2 +1,2 @@
-v4.1.7 · 2026-09-12
-Deployed: 2026-09-12 (2Man Draft Calculator — full partner list)
+v4.1.8 · 2026-09-12
+Deployed: 2026-09-12 (Draft Calc: contrast fix, top-8 only, quota math fix)
