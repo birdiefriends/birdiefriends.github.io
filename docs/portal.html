@@ -13036,6 +13036,7 @@ let _draftCalcEntry = null;      // the _bfeBackedIndex entry currently shown
 let _draftCalcQuotas = null;     // { name -> number|null }, loaded on open
 let _draftCalcRoster = [];       // [name, ...] excluding currentPlayer
 let _draftCalcLoading = false;
+let _draftCalcTieAtCutoff = false; // true when the 8th/9th-ranked players are tied on performance
 // Mirrors BFE-Admin's Close Round quota-averaging EXACTLY (same chain walk,
 // same quota_in/quota_out averaging) so what a player sees here always
 // matches what Close Round will actually compute — see that file's Close
@@ -13063,25 +13064,56 @@ async function loadDraftCalcQuotas(entry) {
         const cursorRound = (config.rounds || []).find(r => r.name === cursor);
         cursor = cursorRound ? cursorRound.chainsFrom : null;
       }
+      // Dev-84 (Brian, live during the 2Man draft): team quota is the
+      // average of each already-closed quota round's own quota_out --
+      // Rd1 + Rd2 today, Rd1 + Rd2 + Rd3 for a future event whose draft
+      // happens after all three are closed. Previously this also pulled in
+      // each round's quota_in -- including Rd1's quota_in, which is just
+      // the pre-season initial quota, not a round result -- which quietly
+      // dragged the average toward a stale number (showed 29.9 instead of
+      // the correct 26.9). chainRoundNames already ends with round.chainsFrom
+      // itself, so no separate last-round lookup is needed.
       roster.forEach(p => {
         const vals = [];
         chainRoundNames.forEach(rn => {
           const row = allResults.find(r => r.round_name === rn && r.player_name === p.name);
-          if (row && row.quota_in != null && !isNaN(row.quota_in)) vals.push(row.quota_in);
+          if (row && row.quota_out != null && !isNaN(row.quota_out)) vals.push(row.quota_out);
         });
-        const lastRow = allResults.find(r => r.round_name === round.chainsFrom && r.player_name === p.name);
-        if (lastRow && lastRow.quota_out != null && !isNaN(lastRow.quota_out)) vals.push(lastRow.quota_out);
         quotas[p.name] = vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : null;
       });
     } else {
       roster.forEach(p => { quotas[p.name] = (p.initialQuota != null && !isNaN(p.initialQuota)) ? p.initialQuota : null; });
     }
     _draftCalcQuotas = quotas;
-    _draftCalcRoster = roster.map(p => p.name).filter(n => n && n.trim().toLowerCase() !== currentPlayer.trim().toLowerCase()).sort((a, b) => a.localeCompare(b));
+
+    // A captain can only draft from the top 8 of the event's live Overall
+    // standings -- same ranking BFE-Admin's "Overall standings" panel shows
+    // (summed round `performance`, i.e. actual points vs. quota, across
+    // whichever rounds roll into Overall), not raw quota. Players with no
+    // counted-round result yet aren't ranked at all, so they can't appear
+    // in the top 8 by default (a 0 there would be indistinguishable from a
+    // real "scored exactly at quota" 0).
+    const rollsInto = new Set((config.rounds || []).filter(r => r.rollsIntoOverall !== false).map(r => r.name));
+    const perfByPlayer = {};
+    const hasResult = new Set();
+    allResults.forEach(r => {
+      if (!rollsInto.has(r.round_name)) return;
+      if (r.performance == null || isNaN(r.performance)) return;
+      perfByPlayer[r.player_name] = (perfByPlayer[r.player_name] || 0) + r.performance;
+      hasResult.add(r.player_name);
+    });
+    const ranked = roster.map(p => p.name).filter(n => hasResult.has(n))
+      .sort((a, b) => perfByPlayer[b] - perfByPlayer[a]);
+    _draftCalcTieAtCutoff = ranked.length > 8 && perfByPlayer[ranked[7]] === perfByPlayer[ranked[8]];
+    const top8 = new Set(ranked.slice(0, 8));
+    _draftCalcRoster = roster.map(p => p.name)
+      .filter(n => n && n.trim().toLowerCase() !== currentPlayer.trim().toLowerCase() && top8.has(n))
+      .sort((a, b) => a.localeCompare(b));
   } catch (e) {
     console.warn('[DraftCalc] load error:', e.message);
     _draftCalcQuotas = null;
     _draftCalcRoster = [];
+    _draftCalcTieAtCutoff = false;
   }
   _draftCalcLoading = false;
   renderDraftCalcPanel();
@@ -13100,7 +13132,7 @@ function renderDraftCalcPanel() {
   if (!_draftCalcOpen) { panelEl.innerHTML = ''; panelEl.hidden = true; return; }
   panelEl.hidden = false;
   if (_draftCalcLoading || !_draftCalcQuotas) {
-    panelEl.innerHTML = `<div style="padding:10px 2px;font-size:0.82rem;color:var(--text-muted)">Loading quotas…</div>`;
+    panelEl.innerHTML = `<div style="padding:10px 2px;font-size:0.82rem;color:rgba(255,255,255,0.65)">Loading quotas…</div>`;
     return;
   }
   const myQuota = _draftCalcQuotas[currentPlayer];
@@ -13131,10 +13163,13 @@ function renderDraftCalcPanel() {
     const s = fmtQuota(Math.abs(d));
     return d > 0 ? `+${s}` : (d < 0 ? `−${s}` : s);
   };
+  const emptyMsg = _draftCalcRoster.length
+    ? 'No other roster players found.'
+    : 'No one’s in the top 8 of Overall standings yet — check back once results are posted.';
   panelEl.innerHTML = `
-    <div style="padding:10px 2px 4px;font-size:0.82rem">
-      <div style="margin-bottom:10px">Your quota: <strong>${fmtQuota(myQuota)}</strong>${myQuota == null ? ' <span style="color:var(--text-hint)">(no result yet for this round)</span>' : ''}</div>
-      <div style="display:flex;padding:0 10px 6px;font-size:0.68rem;color:var(--text-hint);text-transform:uppercase;letter-spacing:.03em">
+    <div style="padding:10px 2px 4px;font-size:0.82rem;color:#fff">
+      <div style="margin-bottom:10px">Your quota: <strong>${fmtQuota(myQuota)}</strong>${myQuota == null ? ' <span style="color:rgba(255,255,255,0.6)">(no result yet for this round)</span>' : ''}</div>
+      <div style="display:flex;padding:0 10px 6px;font-size:0.68rem;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:.03em">
         <div style="flex:1.5">Partner</div>
         <div style="flex:0.85;text-align:right">Theirs</div>
         <div style="flex:0.85;text-align:right">Diff</div>
@@ -13143,15 +13178,15 @@ function renderDraftCalcPanel() {
       <div style="display:flex;flex-direction:column;gap:4px;max-height:360px;overflow-y:auto">
         ${rows.length ? rows.map((r, i) => {
           const best = i === 0 && r.teamQuota != null;
-          return `<div style="display:flex;align-items:center;padding:8px 10px;border-radius:8px;background:${best ? 'var(--gold,#d4a017)26' : 'var(--bg-subtle,rgba(0,0,0,0.04))'}">
+          return `<div style="display:flex;align-items:center;padding:8px 10px;border-radius:8px;background:${best ? 'rgba(255,214,102,0.28)' : 'rgba(255,255,255,0.09)'}">
             <div style="flex:1.5;font-weight:${best ? '700' : '400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:4px">${escapeHtml(r.name)}${best ? ' 🥇' : ''}</div>
             <div style="flex:0.85;text-align:right">${fmtQuota(r.q)}</div>
-            <div style="flex:0.85;text-align:right;color:var(--text-muted)">${fmtDiff(r.diff)}</div>
+            <div style="flex:0.85;text-align:right;color:rgba(255,255,255,0.7)">${fmtDiff(r.diff)}</div>
             <div style="flex:0.95;text-align:right;font-weight:600">${r.teamQuota != null ? fmtQuota(r.teamQuota) : '—'}</div>
           </div>`;
-        }).join('') : `<div style="padding:8px 10px;color:var(--text-hint)">No other roster players found.</div>`}
+        }).join('') : `<div style="padding:8px 10px;color:rgba(255,255,255,0.6)">${emptyMsg}</div>`}
       </div>
-      <div style="margin-top:10px;font-size:0.72rem;color:var(--text-hint)">Sorted by best team quota first. Based on Rd1 standings — who's actually still available to draft may have changed, check with your commissioner.</div>
+      <div style="margin-top:10px;font-size:0.72rem;color:rgba(255,255,255,0.55)">Top 8 of Overall standings only — sorted by best team quota first.${_draftCalcTieAtCutoff ? ' There’s a tie at the 8th spot — check with your commissioner on who’s actually in.' : ''} Who's actually still available to draft may have changed — check with your commissioner.</div>
     </div>`;
 }
 function renderDraftCalcBanner() {
@@ -13169,7 +13204,7 @@ function renderDraftCalcBanner() {
       <div class="live-dot" style="background:var(--gold)"></div>
       <div style="flex:1">
         <div class="live-banner-title">🤝 2Man Draft Calculator</div>
-        <div class="live-banner-sub">Compare your team quota with every potential partner — tap to ${_draftCalcOpen ? 'close' : 'open'}</div>
+        <div class="live-banner-sub">Compare your team quota with the top 8 — tap to ${_draftCalcOpen ? 'close' : 'open'}</div>
       </div>
       <div class="live-banner-chev">${_draftCalcOpen ? '⌄' : '›'}</div>
     </div>
@@ -13633,12 +13668,17 @@ function buildQuotaInfo(round, rounds, roster, allResults) {
   return { mode: 'individual', byPlayer };
 }
 function numOrNull(v) { return (v === null || v === undefined || isNaN(v)) ? null : Number(v); }
-// Mirrors BFE-Admin's Dev-78 team-quota chain walk exactly: every
-// stableford round from the first up through `chainsFromName`, averaging
-// each round's quota_in plus the final round's quota_out (the quota
-// entering the round right after) into one smoothed number for this
-// player. Falls back to `fallbackInitial` (roster starting quota) if
-// nothing in the chain has this player's data yet.
+// Mirrors BFE-Admin's Dev-78 team-quota chain walk (and Dev-84's fix,
+// carried here too): every stableford round from the first up through
+// `chainsFromName`, averaging each round's own quota_out into one smoothed
+// number for this player -- Rd1 + Rd2 today, Rd1 + Rd2 + Rd3 for a future
+// event whose draft happens after all three are closed. Falls back to
+// `fallbackInitial` (roster starting quota) if nothing in the chain has
+// this player's data yet. Dev-84: previously also pulled in each round's
+// quota_in -- including the first round's quota_in, which is just the
+// pre-season initial quota, not a round result -- which quietly dragged the
+// average toward a stale number; chainRoundNames already ends with
+// chainsFromName itself, so no separate last-round lookup is needed.
 function chainQuotaAverage(playerName, chainsFromName, rounds, allResults, fallbackInitial) {
   if (!chainsFromName) return numOrNull(fallbackInitial);
   const chainRoundNames = [];
@@ -13651,10 +13691,8 @@ function chainQuotaAverage(playerName, chainsFromName, rounds, allResults, fallb
   const vals = [];
   chainRoundNames.forEach(rn => {
     const row = allResults.find(r => r.round_name === rn && r.player_name === playerName);
-    if (row && row.quota_in != null && !isNaN(row.quota_in)) vals.push(Number(row.quota_in));
+    if (row && row.quota_out != null && !isNaN(row.quota_out)) vals.push(Number(row.quota_out));
   });
-  const lastRow = allResults.find(r => r.round_name === chainsFromName && r.player_name === playerName);
-  if (lastRow && lastRow.quota_out != null && !isNaN(lastRow.quota_out)) vals.push(Number(lastRow.quota_out));
   return vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : numOrNull(fallbackInitial);
 }
 function renderGroupRoundBlock(venue, groups, meNormalized, quotaInfo) {
