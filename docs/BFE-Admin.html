@@ -4152,9 +4152,30 @@ function buildMemoryChapters(eventName, originalRounds, memories, notes, scoreca
   // raw timestamp is what's being removed. Untagged content that used to
   // fall here now flows to "Before <event>" (or wherever its own timestamp
   // genuinely places it) instead of being misattributed to this round.
+  // Dev-106 (Brian, live — forgot to Close Round for Rd1, only stopped Live
+  // Panel via the Portal's Gear control, which is a display-only flags-Worker
+  // toggle that never touches bfe_round_results.closed_at): a round that's
+  // never formally Closed fell back to a flat teeTime+6h window end, which is
+  // usually far more generous than how long the round actually takes to
+  // play — post-round Trip Memories content captured in the hours right
+  // after finishing (well within that 6h window) was landing in "On Course"
+  // instead of "After <round>". Fix: same evidence-based idea as
+  // roundStartSignal, mirrored for the END of the window — the LATEST
+  // round-tagged Live Panel memory/note or scorecard for this round is real
+  // proof of when it was actually still active, and a much tighter bound
+  // than a flat guess. Falls back to the old flat +6h only when a round has
+  // no such evidence at all (e.g. nobody captured anything through Live
+  // Panel for it).
+  function roundEndSignal(name) {
+    const times = [];
+    (memories || []).forEach(m => { if (m.round_name === name) { const t = parseSqliteUtc(m.captured_at); if (t) times.push(t.getTime()); } });
+    (notes || []).forEach(n => { if (n.round_name === name) { const t = parseSqliteUtc(n.created_at); if (t) times.push(t.getTime()); } });
+    (scorecardsByRound[name] || []).forEach(sc => { const t = parseSqliteUtc(sc.captured_at); if (t) times.push(t.getTime()); });
+    return times.length ? Math.max.apply(null, times) : null;
+  }
   let prevRealEnd = null;   // end of the most recent window anchored to a real, elapsed tee_time
   let chainedStart = null;  // running start across consecutive not-yet-elapsed (rehearsal) rounds
-  windows.forEach(w => {
+  windows.forEach((w, i) => {
     let start;
     let noEvidenceNoAnchor = false;
     if (w.teeElapsed) {
@@ -4173,12 +4194,17 @@ function buildMemoryChapters(eventName, originalRounds, memories, notes, scoreca
     if (w.closedAt) {
       end = w.closedAt;
     } else {
-      const cardTimes = (scorecardsByRound[w.name] || [])
-        .map(sc => parseSqliteUtc(sc.captured_at))
-        .filter(d => d && !isNaN(d));
-      const latestCard = cardTimes.length ? new Date(Math.max.apply(null, cardTimes.map(d => d.getTime()))) : null;
+      const res = roundEndSignal(w.name);
+      const latestEvidence = res != null ? new Date(res) : null;
       const fallbackEnd = new Date(w.teeTime.getTime() + 6 * 3600 * 1000);
-      end = (latestCard && latestCard > start) ? latestCard : fallbackEnd;
+      end = (latestEvidence && latestEvidence > start) ? latestEvidence : fallbackEnd;
+      // Never let an unclosed round's guessed end run past the next round's
+      // own real tee time -- once the next round has actually teed off,
+      // this one is unambiguously over, Close Round or not. Guarantees a
+      // fresh "On Course" chapter the moment the next round starts, with
+      // zero dependence on anyone remembering to close the previous one.
+      const nextW = windows[i + 1];
+      if (nextW && nextW.teeElapsed && nextW.teeTime < end) end = nextW.teeTime;
     }
     if (noEvidenceNoAnchor) start = end;
     w.start = start; w.end = end;
