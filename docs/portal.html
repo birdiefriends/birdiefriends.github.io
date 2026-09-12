@@ -13034,6 +13034,7 @@ function findDraftCalcEligibleRound() {
 let _draftCalcOpen = false;
 let _draftCalcEntry = null;      // the _bfeBackedIndex entry currently shown
 let _draftCalcQuotas = null;     // { name -> number|null }, loaded on open
+let _draftCalcQuotaVals = {};    // { name -> [raw quota_out values] }, for pooled team-quota math
 let _draftCalcRoster = [];       // [name, ...] excluding currentPlayer
 let _draftCalcLoading = false;
 let _draftCalcTieAtCutoff = false; // true when the 8th/9th-ranked players are tied on performance
@@ -13056,6 +13057,7 @@ async function loadDraftCalcQuotas(entry) {
     const round = config && (config.rounds || []).find(r => r.name === entry.roundName);
     const roster = (config && config.roster) || [];
     const quotas = {};
+    const quotaVals = {}; // name -> [each closed quota round's own quota_out], oldest first
     if (round && round.chainsFrom) {
       const chainRoundNames = [];
       let cursor = round.chainsFrom;
@@ -13064,27 +13066,34 @@ async function loadDraftCalcQuotas(entry) {
         const cursorRound = (config.rounds || []).find(r => r.name === cursor);
         cursor = cursorRound ? cursorRound.chainsFrom : null;
       }
-      // Dev-84 (Brian, live during the 2Man draft): team quota is the
-      // average of each already-closed quota round's own quota_out --
-      // Rd1 + Rd2 today, Rd1 + Rd2 + Rd3 for a future event whose draft
-      // happens after all three are closed. Previously this also pulled in
-      // each round's quota_in -- including Rd1's quota_in, which is just
-      // the pre-season initial quota, not a round result -- which quietly
-      // dragged the average toward a stale number (showed 29.9 instead of
-      // the correct 26.9). chainRoundNames already ends with round.chainsFrom
-      // itself, so no separate last-round lookup is needed.
+      // Dev-84 (Brian, live during the 2Man draft): an individual's own
+      // quota is the average of each already-closed quota round's own
+      // quota_out -- Rd1 + Rd2 today, Rd1 + Rd2 + Rd3 for a future event
+      // whose draft happens after all three are closed. Previously this
+      // also pulled in each round's quota_in -- including Rd1's quota_in,
+      // which is just the pre-season initial quota, not a round result --
+      // which quietly dragged the average toward a stale number (showed
+      // 29.9 instead of the correct 26.9). chainRoundNames already ends
+      // with round.chainsFrom itself, so no separate last-round lookup is
+      // needed.
       roster.forEach(p => {
         const vals = [];
         chainRoundNames.forEach(rn => {
           const row = allResults.find(r => r.round_name === rn && r.player_name === p.name);
           if (row && row.quota_out != null && !isNaN(row.quota_out)) vals.push(row.quota_out);
         });
+        quotaVals[p.name] = vals;
         quotas[p.name] = vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : null;
       });
     } else {
-      roster.forEach(p => { quotas[p.name] = (p.initialQuota != null && !isNaN(p.initialQuota)) ? p.initialQuota : null; });
+      roster.forEach(p => {
+        const hasInitial = p.initialQuota != null && !isNaN(p.initialQuota);
+        quotaVals[p.name] = hasInitial ? [p.initialQuota] : [];
+        quotas[p.name] = hasInitial ? p.initialQuota : null;
+      });
     }
     _draftCalcQuotas = quotas;
+    _draftCalcQuotaVals = quotaVals;
 
     // A captain can only draft from the top 8 of the event's live Overall
     // standings -- same ranking BFE-Admin's "Overall standings" panel shows
@@ -13112,6 +13121,7 @@ async function loadDraftCalcQuotas(entry) {
   } catch (e) {
     console.warn('[DraftCalc] load error:', e.message);
     _draftCalcQuotas = null;
+    _draftCalcQuotaVals = {};
     _draftCalcRoster = [];
     _draftCalcTieAtCutoff = false;
   }
@@ -13136,17 +13146,24 @@ function renderDraftCalcPanel() {
     return;
   }
   const myQuota = _draftCalcQuotas[currentPlayer];
+  const myVals = _draftCalcQuotaVals[currentPlayer] || [];
   // One row per potential partner rather than a single pick-a-player dropdown,
   // so the captain can scan every option's team quota at once instead of
-  // checking candidates one at a time.
+  // checking candidates one at a time. Team quota is a literal pooled
+  // average of BOTH players' individual round quota_out values (Dev-85,
+  // confirmed) -- 2 rounds each = 4 values pooled today, 3 rounds each = 6
+  // pooled once a draft happens after Rd3 -- not an average of the two
+  // already-averaged "Your quota"/"Theirs" numbers, which only matches when
+  // both players have the same number of closed rounds.
   const rows = _draftCalcRoster.map(name => {
     const q = _draftCalcQuotas[name];
-    const hasTeam = myQuota != null && q != null;
+    const partnerVals = _draftCalcQuotaVals[name] || [];
+    const pooled = myVals.concat(partnerVals);
     return {
       name,
       q,
-      diff: hasTeam ? (q - myQuota) : null,
-      teamQuota: hasTeam ? (myQuota + q) / 2 : null
+      diff: (myQuota != null && q != null) ? (q - myQuota) : null,
+      teamQuota: pooled.length ? (pooled.reduce((s, v) => s + v, 0) / pooled.length) : null
     };
   });
   // Best (highest) team quota first -- the strongest likely pairing floats to
@@ -13657,8 +13674,22 @@ function buildQuotaInfo(round, rounds, roster, allResults) {
   if (!round) return null;
   const byPlayer = {};
   if (round.engine === 'scramble_pair') {
-    roster.forEach(p => { byPlayer[p.name] = chainQuotaAverage(p.name, round.chainsFrom, rounds, allResults, p.initialQuota); });
-    return { mode: 'team', byPlayer };
+    // Dev-85 (Brian, confirmed): team quota is a literal pooled average of
+    // BOTH players' individual round quota_out values -- 2 rounds each = 4
+    // values pooled today, 3 rounds each = 6 pooled for a future event whose
+    // draft happens after Rd3 too. byPlayerVals carries each player's raw
+    // list (not just their own average) so renderGroupRoundBlock can pool
+    // across the whole team rather than averaging two already-averaged
+    // per-player numbers -- those only coincide when both players have the
+    // same number of closed rounds, which isn't guaranteed (a late add or a
+    // player who missed a round would have fewer).
+    const byPlayerVals = {};
+    roster.forEach(p => {
+      const vals = chainQuotaVals(p.name, round.chainsFrom, rounds, allResults);
+      byPlayerVals[p.name] = vals.length ? vals : ((p.initialQuota != null && !isNaN(p.initialQuota)) ? [Number(p.initialQuota)] : []);
+      byPlayer[p.name] = byPlayerVals[p.name].length ? (byPlayerVals[p.name].reduce((s, v) => s + v, 0) / byPlayerVals[p.name].length) : null;
+    });
+    return { mode: 'team', byPlayer, byPlayerVals };
   }
   roster.forEach(p => {
     if (!round.chainsFrom) { byPlayer[p.name] = numOrNull(p.initialQuota); return; }
@@ -13668,19 +13699,15 @@ function buildQuotaInfo(round, rounds, roster, allResults) {
   return { mode: 'individual', byPlayer };
 }
 function numOrNull(v) { return (v === null || v === undefined || isNaN(v)) ? null : Number(v); }
-// Mirrors BFE-Admin's Dev-78 team-quota chain walk (and Dev-84's fix,
-// carried here too): every stableford round from the first up through
-// `chainsFromName`, averaging each round's own quota_out into one smoothed
-// number for this player -- Rd1 + Rd2 today, Rd1 + Rd2 + Rd3 for a future
-// event whose draft happens after all three are closed. Falls back to
-// `fallbackInitial` (roster starting quota) if nothing in the chain has
-// this player's data yet. Dev-84: previously also pulled in each round's
-// quota_in -- including the first round's quota_in, which is just the
-// pre-season initial quota, not a round result -- which quietly dragged the
+// Every stableford round from the first up through `chainsFromName`'s own
+// quota_out, oldest first -- the raw values a team/individual quota average
+// is built from. Dev-84: no longer pulls in each round's quota_in --
+// including the first round's quota_in, which is just the pre-season
+// initial quota, not a round result -- which used to quietly drag the
 // average toward a stale number; chainRoundNames already ends with
 // chainsFromName itself, so no separate last-round lookup is needed.
-function chainQuotaAverage(playerName, chainsFromName, rounds, allResults, fallbackInitial) {
-  if (!chainsFromName) return numOrNull(fallbackInitial);
+function chainQuotaVals(playerName, chainsFromName, rounds, allResults) {
+  if (!chainsFromName) return [];
   const chainRoundNames = [];
   let cursor = chainsFromName;
   while (cursor) {
@@ -13693,6 +13720,15 @@ function chainQuotaAverage(playerName, chainsFromName, rounds, allResults, fallb
     const row = allResults.find(r => r.round_name === rn && r.player_name === playerName);
     if (row && row.quota_out != null && !isNaN(row.quota_out)) vals.push(Number(row.quota_out));
   });
+  return vals;
+}
+// Mirrors BFE-Admin's Dev-78 team-quota chain walk: averages this one
+// player's own chainQuotaVals() into a single smoothed number -- used for
+// an individual's own displayed quota. Falls back to `fallbackInitial`
+// (roster starting quota) if nothing in the chain has this player's data
+// yet. NOT used for team quota anymore (Dev-85) -- see buildQuotaInfo above.
+function chainQuotaAverage(playerName, chainsFromName, rounds, allResults, fallbackInitial) {
+  const vals = chainQuotaVals(playerName, chainsFromName, rounds, allResults);
   return vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : numOrNull(fallbackInitial);
 }
 function renderGroupRoundBlock(venue, groups, meNormalized, quotaInfo) {
@@ -13711,8 +13747,13 @@ function renderGroupRoundBlock(venue, groups, meNormalized, quotaInfo) {
           // IS set — it's a display label layered on top, never a
           // replacement for who's actually on the team.
           const teamLabel = (g.label && g.label.trim()) ? g.label.trim() : g.players.join(' & ');
-          const vals = g.players.map(n => quotaInfo.byPlayer[n]).filter(v => v != null);
-          const teamQuota = vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : null;
+          // Pooled average of every player's individual round quota_out
+          // values (Dev-85) -- not an average of the players' own already-
+          // averaged quotas, which only matches when every player on the
+          // team has the same number of closed rounds.
+          const pooledVals = [];
+          g.players.forEach(n => { (quotaInfo.byPlayerVals && quotaInfo.byPlayerVals[n] || []).forEach(v => pooledVals.push(v)); });
+          const teamQuota = pooledVals.length ? (pooledVals.reduce((s, v) => s + v, 0) / pooledVals.length) : null;
           bodyHtml = `<div style="font-size:0.85rem;color:var(--text)">${teamLabel}/${fmtQ(teamQuota)}</div>` +
             ((g.label && g.label.trim()) ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${g.players.join(' & ')}</div>` : '');
         } else if (quotaInfo && quotaInfo.mode === 'individual') {
