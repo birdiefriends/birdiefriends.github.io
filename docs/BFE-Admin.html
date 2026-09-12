@@ -416,6 +416,18 @@
     </div>
     <div id="publishResultsStatus" class="status"></div>
     <div id="publishResultsPreviewWrap" style="margin-top:12px"></div>
+    <details style="margin-top:18px">
+      <summary style="cursor:pointer;font-weight:700">🩹 Fix a round's Trip Memories boundary (optional)</summary>
+      <p class="hint">Trip Memories normally figures out when a round's "On Course" chapter ends on its own — from Close Round, or from Live Panel photo/note timestamps if you forgot. If neither happened (nobody captured anything through Live Panel that round, or you're fixing the boundary after the fact), photos/notes taken afterward can land in the wrong chapter. Set an exact cutoff time here and it overrides everything else for that round — closed_at included.</p>
+      <div class="row">
+        <div><button type="button" id="memoryCutoffLoadRoundsBtn">🔄 Load rounds</button></div>
+        <div><label for="memoryCutoffRound">Round</label><select id="memoryCutoffRound"><option value="">Load rounds first…</option></select></div>
+        <div><label for="memoryCutoffTime">Content ends at</label><input type="datetime-local" id="memoryCutoffTime"></div>
+        <div style="align-self:flex-end"><button type="button" id="memoryCutoffSetBtn">Set boundary</button></div>
+      </div>
+      <div id="memoryCutoffStatus" class="status"></div>
+      <div id="memoryCutoffList" style="margin-top:8px"></div>
+    </details>
   </section>
   <!-- ── Output / review ───────────────────────────────────────────── -->
   <section class="card gameday-section" id="outputSection">
@@ -3558,7 +3570,7 @@ function parseSqliteUtc(raw) {
 // resultsPayload:     GET /bfe/round-results?event=X  → {results, skins, cttp}
 // venuesByName:       {venueName: {pars:[18 ints]}} from main worker GET /venues
 // scorecardsByRound:  {roundName: [{player, holes:[18], total}]} from BFE worker GET /scorecards
-function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows, memories, notes, bfeBase, weatherByName) {
+function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows, memories, notes, bfeBase, weatherByName, manualEndOverrides) {
   weatherByName = weatherByName || {};
   const allResults = resultsPayload.results || [];
   const allSkins = resultsPayload.skins || [];
@@ -3962,7 +3974,7 @@ function buildResultsData(config, resultsPayload, venuesByName, scorecardsByRoun
     totalPaidOut, payableExpectedTotal, practicePotTotal, houseLeftover,
     reconciles: Math.abs((totalPaidOut + houseLeftover) - payableExpectedTotal) < 0.01,
   };
-  const memoryChapterData = buildMemoryChapters(config.eventName, originalRounds, memories || [], notes || [], scorecardsByRound, allResults);
+  const memoryChapterData = buildMemoryChapters(config.eventName, originalRounds, memories || [], notes || [], scorecardsByRound, allResults, manualEndOverrides);
   return {
     eventName: config.eventName, eventDate: config.eventDate, eventEndDate: config.eventEndDate,
     rounds: config.rounds.map((r, i) => ({
@@ -4075,7 +4087,7 @@ function shortRoundLabel(fullName, eventName) {
   s = s.replace(/^[\s\-–—:]+/, '').trim();
   return s || fullName || 'Round';
 }
-function buildMemoryChapters(eventName, originalRounds, memories, notes, scorecardsByRound, allResults) {
+function buildMemoryChapters(eventName, originalRounds, memories, notes, scorecardsByRound, allResults, manualEndOverrides) {
   const shortEvent = String(eventName || '').replace(/^\d{4}\s*/, '') || 'the trip';
   const now = Date.now();
   // Dev-90: closed_at per round, straight off whatever Close Round most
@@ -4166,6 +4178,28 @@ function buildMemoryChapters(eventName, originalRounds, memories, notes, scoreca
   // than a flat guess. Falls back to the old flat +6h only when a round has
   // no such evidence at all (e.g. nobody captured anything through Live
   // Panel for it).
+  //
+  // Dev-108 (Brian, live, Rd1 — Dev-106 still wasn't enough): Rd1 had ZERO
+  // round-tagged Live Panel evidence at all (Live Panel got turned off via
+  // Portal's Gear control before anyone captured a photo/note through it
+  // that round), so roundEndSignal('Rd1') returns null and Dev-106's fix was
+  // a no-op — it fell straight through to the same flat teeTime+6h fallback
+  // as before, which was still generous enough to sweep in same-day
+  // afternoon/evening bar & boat photos. There's no way to reconstruct a
+  // real end time from data that was never captured, so this adds a manual
+  // escape hatch: `manualEndOverrides[roundName]` (a datetime, set from the
+  // "Fix a round's memory boundary" control below) wins over EVERYTHING —
+  // closedAt included — since Brian setting it by hand is strictly more
+  // authoritative than any inferred signal or a closed_at stamped at
+  // whatever moment he happened to click Close Round. Also lets him
+  // retroactively fix a round's boundary after the fact without needing to
+  // (mis-)use Close Round just to change closed_at.
+  function manualEndFor(name) {
+    const v = manualEndOverrides && manualEndOverrides[name];
+    if (v == null) return null;
+    const d = new Date(v);
+    return isNaN(d) ? null : d;
+  }
   function roundEndSignal(name) {
     const times = [];
     (memories || []).forEach(m => { if (m.round_name === name) { const t = parseSqliteUtc(m.captured_at); if (t) times.push(t.getTime()); } });
@@ -4191,7 +4225,14 @@ function buildMemoryChapters(eventName, originalRounds, memories, notes, scoreca
       }
     }
     let end;
-    if (w.closedAt) {
+    const manualEnd = manualEndFor(w.name);
+    if (manualEnd) {
+      // Manual override wins outright — no closedAt/evidence/fallback
+      // reasoning, no next-round clamp. Brian set this by hand, so it's
+      // treated as ground truth even if it disagrees with closedAt or a
+      // later round's tee time.
+      end = manualEnd;
+    } else if (w.closedAt) {
       end = w.closedAt;
     } else {
       const res = roundEndSignal(w.name);
@@ -5274,8 +5315,89 @@ async function fetchResultsPageData() {
     const weatherData = await weatherRes.json();
     (weatherData.weather || []).forEach(w => { weatherByName[w.event_name] = w; });
   } catch (e) { console.warn('[BFE] Could not load weather history:', e.message); }
-  return buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows, memories, notes, bfeBase, weatherByName);
+  const manualEndOverrides = loadMemoryCutoffs(eventName);
+  return buildResultsData(config, resultsPayload, venuesByName, scorecardsByRound, groupRows, memories, notes, bfeBase, weatherByName, manualEndOverrides);
 }
+// ── Dev-108: manual Trip Memories round-boundary overrides ─────────────
+// Stored in this browser's localStorage, keyed per event — there's no D1
+// column for this (deliberately: it's a client-side escape hatch for a round
+// with no real end-time evidence, not a permanent schema addition needing a
+// Worker deploy mid-event). {roundName: isoString}.
+function memoryCutoffStorageKey(eventName) { return 'bfeMemoryCutoffs::' + eventName; }
+function loadMemoryCutoffs(eventName) {
+  if (!eventName) return {};
+  try {
+    const raw = localStorage.getItem(memoryCutoffStorageKey(eventName));
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+function saveMemoryCutoffs(eventName, map) {
+  try { localStorage.setItem(memoryCutoffStorageKey(eventName), JSON.stringify(map)); } catch (e) { /* best-effort */ }
+}
+let _memoryCutoffRoundNames = [];
+function renderMemoryCutoffList() {
+  const eventName = document.getElementById('eventName').value.trim();
+  const listEl = document.getElementById('memoryCutoffList');
+  if (!listEl) return;
+  if (!eventName) { listEl.innerHTML = '<div class="hint">Enter an event name above first.</div>'; return; }
+  const map = loadMemoryCutoffs(eventName);
+  const names = Object.keys(map);
+  if (!names.length) { listEl.innerHTML = '<div class="hint">No manual boundaries set for this event.</div>'; return; }
+  listEl.innerHTML = names.map(name => {
+    const d = new Date(map[name]);
+    const shown = isNaN(d) ? map[name] : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return `<div class="row" style="align-items:center;margin-top:4px">
+      <div style="flex:1">"${escapeHtml(name)}" content ends: <strong>${escapeHtml(shown)}</strong></div>
+      <button type="button" class="memoryCutoffClearBtn" data-round="${escapeHtml(name)}">✕ Clear</button>
+    </div>`;
+  }).join('');
+  listEl.querySelectorAll('.memoryCutoffClearBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ev = document.getElementById('eventName').value.trim();
+      const m = loadMemoryCutoffs(ev);
+      delete m[btn.dataset.round];
+      saveMemoryCutoffs(ev, m);
+      renderMemoryCutoffList();
+    });
+  });
+}
+document.getElementById('memoryCutoffLoadRoundsBtn').addEventListener('click', async () => {
+  const bfeBase = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const eventName = document.getElementById('eventName').value.trim();
+  const sel = document.getElementById('memoryCutoffRound');
+  const status = document.getElementById('memoryCutoffStatus');
+  if (!bfeBase || !eventName) { status.textContent = 'Fill in the BFE Worker URL and Event name above first.'; status.className = 'status err'; return; }
+  status.textContent = 'Loading rounds…'; status.className = 'status';
+  try {
+    const res = await fetch(bfeBase + '/bfe/events?event=' + encodeURIComponent(eventName));
+    const data = await res.json();
+    if (!res.ok || !data.config) throw new Error(data.error || 'Could not load this event\'s config.');
+    _memoryCutoffRoundNames = (data.config.rounds || []).map(r => r.name);
+    sel.innerHTML = _memoryCutoffRoundNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    status.textContent = `Loaded ${_memoryCutoffRoundNames.length} round(s).`; status.className = 'status ok';
+    renderMemoryCutoffList();
+  } catch (e) {
+    status.textContent = 'Could not load rounds: ' + e.message; status.className = 'status err';
+  }
+});
+document.getElementById('memoryCutoffSetBtn').addEventListener('click', () => {
+  const eventName = document.getElementById('eventName').value.trim();
+  const roundName = document.getElementById('memoryCutoffRound').value;
+  const timeVal = document.getElementById('memoryCutoffTime').value;
+  const status = document.getElementById('memoryCutoffStatus');
+  if (!eventName) { status.textContent = 'Enter an event name above first.'; status.className = 'status err'; return; }
+  if (!roundName) { status.textContent = 'Load rounds and pick one first.'; status.className = 'status err'; return; }
+  if (!timeVal) { status.textContent = 'Pick a date/time first.'; status.className = 'status err'; return; }
+  const d = new Date(timeVal);
+  if (isNaN(d)) { status.textContent = 'That date/time didn\'t parse — try again.'; status.className = 'status err'; return; }
+  const map = loadMemoryCutoffs(eventName);
+  map[roundName] = d.toISOString();
+  saveMemoryCutoffs(eventName, map);
+  status.textContent = `Set — "${roundName}" content now ends at ${d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}. Re-run Preview to see it take effect.`;
+  status.className = 'status ok';
+  renderMemoryCutoffList();
+});
+renderMemoryCutoffList();
 function setPublishResultsStatus(msg, isErr) {
   const el = document.getElementById('publishResultsStatus');
   el.className = 'status ' + (isErr ? 'err' : 'ok');
