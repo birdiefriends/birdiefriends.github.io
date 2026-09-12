@@ -466,7 +466,7 @@ export default {
 
     // GET /flags — read all flags from KV (public, no auth)
     if (request.method === 'GET' && url.pathname === '/flags') {
-      const keys = ['maintenance', 'live_test', 'live_override', 'live_override_since', 'gathering_panel_live', 'live_stopped_round'];
+      const keys = ['maintenance', 'live_test', 'live_override', 'live_override_since', 'gathering_panel_live', 'live_stopped_round', 'draft_calc_round'];
       const entries = await Promise.all(keys.map(async k => [k, await env.BF_FLAGS.get(k)]));
       const flags = {};
       entries.forEach(([k, v]) => {
@@ -488,7 +488,7 @@ export default {
       if (pin !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const allowed = ['maintenance', 'live_test', 'live_override', 'gathering_panel_live', 'live_stopped_round'];
+      const allowed = ['maintenance', 'live_test', 'live_override', 'gathering_panel_live', 'live_stopped_round', 'draft_calc_round'];
       if (!allowed.includes(key)) {
         return new Response(JSON.stringify({ error: 'Unknown flag key' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -2988,17 +2988,35 @@ export default {
     // same GitHub contents-API PUT, same response shape as /deploy.
     // Headers: X-BF-Pin, X-BF-Path (must start with source/ or docs/), X-BF-Message (optional)
     // Body: raw file content, e.g. Content-Type: text/plain; charset=utf-8
-    // Response: { ok, commitSha }   VERSION: 2026-09-10a
+    // Response: { ok, commitSha }
+    //
+    // Dev-85 (Brian, mobile Macrodroid): X-BF-Path may be a comma-separated
+    // list (e.g. "docs/portal.html,source/portal.html" -- mirrors
+    // bf_push.ps1's $FileMap, which pushes portal.html to both locations).
+    // Same content is pushed to every listed path in order, so one phone
+    // file-drop = one HTTP call regardless of how many GitHub destinations
+    // that file maps to -- Macrodroid never needs per-file branching logic.
+    // ok is true only if every destination committed; on a partial failure
+    // the response still lists which ones landed vs which failed, so a bad
+    // push is never silently half-applied without saying so.
+    // Response: { ok, results: [{ path, ok, commitSha? , error? }] }
+    // VERSION: 2026-09-11a
     if (request.method === 'POST' && url.pathname === '/deploy-raw') {
-      const pin     = request.headers.get('X-BF-Pin');
-      const ghPath  = request.headers.get('X-BF-Path');
-      const message = request.headers.get('X-BF-Message');
+      const pin      = request.headers.get('X-BF-Pin');
+      const pathsRaw = request.headers.get('X-BF-Path');
+      const message  = request.headers.get('X-BF-Message');
 
       if (String(pin) !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      if (!ghPath || (!ghPath.startsWith('source/') && !ghPath.startsWith('docs/'))) {
-        return new Response(JSON.stringify({ error: 'X-BF-Path must start with source/ or docs/' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      const ghPaths = String(pathsRaw || '').split(',').map(p => p.trim()).filter(Boolean);
+      if (!ghPaths.length) {
+        return new Response(JSON.stringify({ error: 'X-BF-Path is required (comma-separate multiple destinations)' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      for (const p of ghPaths) {
+        if (!p.startsWith('source/') && !p.startsWith('docs/')) {
+          return new Response(JSON.stringify({ error: `X-BF-Path entry "${p}" must start with source/ or docs/` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
       }
 
       const content = await request.text();
@@ -3006,37 +3024,50 @@ export default {
         return new Response(JSON.stringify({ error: 'Missing body content' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
 
-      const contentsUrl = `https://api.github.com/repos/${GH_REPO}/contents/${ghPath}`;
       const encoded = btoa(unescape(encodeURIComponent(content)));
+      const results = [];
 
-      let currentSha;
-      const currentResp = await fetch(`${contentsUrl}?ref=${GH_BRANCH}`, { headers: ghHeaders });
-      if (currentResp.ok) {
-        const currentData = await currentResp.json();
-        currentSha = currentData.sha;
-      } else if (currentResp.status !== 404) {
-        const errText = await currentResp.text();
-        return new Response(JSON.stringify({ error: 'GitHub error fetching current SHA', status: currentResp.status, detail: errText }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      for (const ghPath of ghPaths) {
+        const contentsUrl = `https://api.github.com/repos/${GH_REPO}/contents/${ghPath}`;
+        try {
+          let currentSha;
+          const currentResp = await fetch(`${contentsUrl}?ref=${GH_BRANCH}`, { headers: ghHeaders });
+          if (currentResp.ok) {
+            const currentData = await currentResp.json();
+            currentSha = currentData.sha;
+          } else if (currentResp.status !== 404) {
+            const errText = await currentResp.text();
+            results.push({ path: ghPath, ok: false, error: `GitHub error fetching current SHA (${currentResp.status}): ${errText}` });
+            continue;
+          }
+          // 404 = new file, currentSha stays undefined -- omit sha from PUT body
+
+          const putBody = {
+            message: message || `Deploy ${ghPath} (mobile)`,
+            content: encoded,
+            branch:  GH_BRANCH,
+          };
+          if (currentSha) putBody.sha = currentSha;
+
+          const putResp = await fetch(contentsUrl, {
+            method: 'PUT',
+            headers: { ...ghHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify(putBody),
+          });
+          const putData = await putResp.json();
+          if (putResp.status !== 200 && putResp.status !== 201) {
+            results.push({ path: ghPath, ok: false, error: `GitHub commit failed (${putResp.status}): ${JSON.stringify(putData)}` });
+            continue;
+          }
+          results.push({ path: ghPath, ok: true, commitSha: putData.commit.sha });
+        } catch (e) {
+          results.push({ path: ghPath, ok: false, error: String(e && e.message || e) });
+        }
       }
-      // 404 = new file, currentSha stays undefined -- omit sha from PUT body
 
-      const putBody = {
-        message: message || `Deploy ${ghPath} (mobile)`,
-        content: encoded,
-        branch:  GH_BRANCH,
-      };
-      if (currentSha) putBody.sha = currentSha;
-
-      const putResp = await fetch(contentsUrl, {
-        method: 'PUT',
-        headers: { ...ghHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(putBody),
-      });
-      const putData = await putResp.json();
-      if (putResp.status !== 200 && putResp.status !== 201) {
-        return new Response(JSON.stringify({ error: 'GitHub commit failed', status: putResp.status, detail: putData }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-      return new Response(JSON.stringify({ ok: true, commitSha: putData.commit.sha }), {
+      const allOk = results.every(r => r.ok);
+      return new Response(JSON.stringify({ ok: allOk, results }), {
+        status: allOk ? 200 : 502,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
     }
