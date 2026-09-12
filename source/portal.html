@@ -13036,7 +13036,6 @@ let _draftCalcEntry = null;      // the _bfeBackedIndex entry currently shown
 let _draftCalcQuotas = null;     // { name -> number|null }, loaded on open
 let _draftCalcRoster = [];       // [name, ...] excluding currentPlayer
 let _draftCalcLoading = false;
-let _draftCalcPartner = '';
 // Mirrors BFE-Admin's Close Round quota-averaging EXACTLY (same chain walk,
 // same quota_in/quota_out averaging) so what a player sees here always
 // matches what Close Round will actually compute — see that file's Close
@@ -13092,10 +13091,6 @@ function toggleDraftCalc() {
   if (_draftCalcOpen && _draftCalcEntry) loadDraftCalcQuotas(_draftCalcEntry);
   renderDraftCalcPanel();
 }
-function setDraftCalcPartner(name) {
-  _draftCalcPartner = name;
-  renderDraftCalcPanel();
-}
 function fmtQuota(v) {
   return (v == null || isNaN(v)) ? '—' : (Math.round(v * 10) / 10).toFixed(1);
 }
@@ -13109,22 +13104,54 @@ function renderDraftCalcPanel() {
     return;
   }
   const myQuota = _draftCalcQuotas[currentPlayer];
-  const partnerQuota = _draftCalcPartner ? _draftCalcQuotas[_draftCalcPartner] : null;
-  const hasTeam = _draftCalcPartner && myQuota != null && partnerQuota != null;
-  const teamQuota = hasTeam ? (myQuota + partnerQuota) / 2 : null;
+  // One row per potential partner rather than a single pick-a-player dropdown,
+  // so the captain can scan every option's team quota at once instead of
+  // checking candidates one at a time.
+  const rows = _draftCalcRoster.map(name => {
+    const q = _draftCalcQuotas[name];
+    const hasTeam = myQuota != null && q != null;
+    return {
+      name,
+      q,
+      diff: hasTeam ? (q - myQuota) : null,
+      teamQuota: hasTeam ? (myQuota + q) / 2 : null
+    };
+  });
+  // Best (highest) team quota first -- the strongest likely pairing floats to
+  // the top. Players with no result yet for this round (unrankable) sort to
+  // the bottom, alphabetically among themselves.
+  rows.sort((a, b) => {
+    if (a.teamQuota != null && b.teamQuota != null) return b.teamQuota - a.teamQuota;
+    if (a.teamQuota != null) return -1;
+    if (b.teamQuota != null) return 1;
+    return a.name.localeCompare(b.name);
+  });
+  const fmtDiff = d => {
+    if (d == null) return '—';
+    const s = fmtQuota(Math.abs(d));
+    return d > 0 ? `+${s}` : (d < 0 ? `−${s}` : s);
+  };
   panelEl.innerHTML = `
     <div style="padding:10px 2px 4px;font-size:0.82rem">
-      <div style="margin-bottom:8px">Your quota: <strong>${fmtQuota(myQuota)}</strong>${myQuota == null ? ' <span style="color:var(--text-hint)">(no result yet for this round)</span>' : ''}</div>
-      <label for="draftcalc-partner-sel" style="display:block;margin-bottom:4px;color:var(--text-muted)">Potential partner</label>
-      <select id="draftcalc-partner-sel" onchange="setDraftCalcPartner(this.value)" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;font-size:0.85rem">
-        <option value="">— pick a player —</option>
-        ${_draftCalcRoster.map(n => `<option value="${escapeHtml(n)}" ${n === _draftCalcPartner ? 'selected' : ''}>${escapeHtml(n)}${_draftCalcQuotas[n] == null ? ' (no result yet)' : ''}</option>`).join('')}
-      </select>
-      ${_draftCalcPartner ? `<div style="margin-top:10px;padding:10px;background:var(--bg-subtle,rgba(0,0,0,0.04));border-radius:8px">
-        <div>Their quota: <strong>${fmtQuota(partnerQuota)}</strong></div>
-        <div style="margin-top:4px;font-size:0.95rem">Team quota if paired: <strong>${teamQuota != null ? fmtQuota(teamQuota) : 'not enough data yet'}</strong></div>
-      </div>` : ''}
-      <div style="margin-top:8px;font-size:0.72rem;color:var(--text-hint)">Based on Rd1 standings. Who's actually still available to draft may have changed — check with your commissioner.</div>
+      <div style="margin-bottom:10px">Your quota: <strong>${fmtQuota(myQuota)}</strong>${myQuota == null ? ' <span style="color:var(--text-hint)">(no result yet for this round)</span>' : ''}</div>
+      <div style="display:flex;padding:0 10px 6px;font-size:0.68rem;color:var(--text-hint);text-transform:uppercase;letter-spacing:.03em">
+        <div style="flex:1.5">Partner</div>
+        <div style="flex:0.85;text-align:right">Theirs</div>
+        <div style="flex:0.85;text-align:right">Diff</div>
+        <div style="flex:0.95;text-align:right">Team</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;max-height:360px;overflow-y:auto">
+        ${rows.length ? rows.map((r, i) => {
+          const best = i === 0 && r.teamQuota != null;
+          return `<div style="display:flex;align-items:center;padding:8px 10px;border-radius:8px;background:${best ? 'var(--gold,#d4a017)26' : 'var(--bg-subtle,rgba(0,0,0,0.04))'}">
+            <div style="flex:1.5;font-weight:${best ? '700' : '400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:4px">${escapeHtml(r.name)}${best ? ' 🥇' : ''}</div>
+            <div style="flex:0.85;text-align:right">${fmtQuota(r.q)}</div>
+            <div style="flex:0.85;text-align:right;color:var(--text-muted)">${fmtDiff(r.diff)}</div>
+            <div style="flex:0.95;text-align:right;font-weight:600">${r.teamQuota != null ? fmtQuota(r.teamQuota) : '—'}</div>
+          </div>`;
+        }).join('') : `<div style="padding:8px 10px;color:var(--text-hint)">No other roster players found.</div>`}
+      </div>
+      <div style="margin-top:10px;font-size:0.72rem;color:var(--text-hint)">Sorted by best team quota first. Based on Rd1 standings — who's actually still available to draft may have changed, check with your commissioner.</div>
     </div>`;
 }
 function renderDraftCalcBanner() {
@@ -13135,14 +13162,14 @@ function renderDraftCalcBanner() {
   // A new/different round than what's currently loaded resets any open panel
   // state rather than showing stale numbers under a new round's banner.
   if (!_draftCalcEntry || _draftCalcEntry.roundName !== entry.roundName) {
-    _draftCalcEntry = entry; _draftCalcOpen = false; _draftCalcQuotas = null; _draftCalcPartner = '';
+    _draftCalcEntry = entry; _draftCalcOpen = false; _draftCalcQuotas = null;
   }
   el.innerHTML = `<div class="live-banner">
     <div class="live-banner-header" style="cursor:pointer" onclick="toggleDraftCalc()">
       <div class="live-dot" style="background:var(--gold)"></div>
       <div style="flex:1">
         <div class="live-banner-title">🤝 2Man Draft Calculator</div>
-        <div class="live-banner-sub">Check your team quota with a potential partner — tap to ${_draftCalcOpen ? 'close' : 'open'}</div>
+        <div class="live-banner-sub">Compare your team quota with every potential partner — tap to ${_draftCalcOpen ? 'close' : 'open'}</div>
       </div>
       <div class="live-banner-chev">${_draftCalcOpen ? '⌄' : '›'}</div>
     </div>
