@@ -2491,14 +2491,23 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
       }
       const lastRows = allPriorResults.filter(r => r.round_name === round.chainsFrom);
       if (!lastRows.length) throw new Error(`This round's team quota reads from "${round.chainsFrom}", which hasn't been closed yet — close it first.`);
+      // Dev-84 (Brian, live during the 2Man draft — same fix mirrored in
+      // portal.html's Draft Calculator, keep the two in sync): team quota is
+      // the average of each already-closed quota round's own quota_out --
+      // Rd1 + Rd2 today, Rd1 + Rd2 + Rd3 for a future event whose draft
+      // happens after all three are closed. Previously this also pulled in
+      // each round's quota_in -- including Rd1's quota_in, which is just the
+      // pre-season initial quota, not a round result -- which quietly
+      // dragged the average toward a stale number (this is what actually
+      // sets team quotaIn for scoring/payout, not just a preview display).
+      // chainRoundNames already ends with round.chainsFrom itself, so no
+      // separate last-round lookup is needed.
       assembledConfig.roster.forEach(p => {
         const vals = [];
         chainRoundNames.forEach(rn => {
           const row = allPriorResults.find(r => r.round_name === rn && r.player_name === p.name);
-          if (row && row.quota_in != null && !isNaN(row.quota_in)) vals.push(row.quota_in);
+          if (row && row.quota_out != null && !isNaN(row.quota_out)) vals.push(row.quota_out);
         });
-        const lastRow = allPriorResults.find(r => r.round_name === round.chainsFrom && r.player_name === p.name);
-        if (lastRow && lastRow.quota_out != null && !isNaN(lastRow.quota_out)) vals.push(lastRow.quota_out);
         quotaByPlayer[p.name] = vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : null;
       });
     } else {
