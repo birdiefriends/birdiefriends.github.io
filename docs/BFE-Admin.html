@@ -371,6 +371,17 @@
         <div><button type="button" class="secondary" id="startDraftBtn">Start draft</button></div>
         <div><button type="button" class="secondary" id="loadDraftBtn">Load saved</button></div>
       </div>
+      <!-- Dev-86 (Brian, 2Man morning) — player-facing quota calculator, so a
+           captain can check "what's our team quota" for a candidate partner
+           before picking, instead of trusting the math verbally. Lives in
+           Portal (a home-screen card, gated on the draft_calc_round KV flag —
+           same /flags mechanism as Live Panel's Start/Close), not here — this
+           button just flips that flag on/off for whichever round is selected
+           above. Off by default; nothing shows in Portal until you tap this. -->
+      <div class="row" style="align-items:center">
+        <div><button type="button" class="secondary" id="draftCalcToggleBtn" disabled>📱 Make live for players</button></div>
+        <div class="hint" style="flex:1;margin:0">Turns on a "check a pairing's team quota" widget in Portal for every roster player, scoped to this round only. Turn it off once the draft's done.</div>
+      </div>
       <div id="draftStatus" class="status"></div>
       <div id="draftBoard"></div>
       <div class="btnbar" style="margin-top:4px">
@@ -2923,7 +2934,7 @@ function toggleGroupingsMode(config) {
   const isDraft = !!round && round.engine === 'scramble_pair';
   document.getElementById('foursomeGroupingControls').hidden = isDraft;
   document.getElementById('draftBoardControls').hidden = !isDraft;
-  if (!isDraft) return;
+  if (!isDraft) { refreshDraftCalcToggle(); return; }
   const idx = config.rounds.findIndex(r => r.name === roundName);
   const priorStableford = config.rounds.slice(0, idx).filter(r => r.engine === 'stableford_quota');
   const basisSel = document.getElementById('draftRankBasisSelect');
@@ -2934,6 +2945,7 @@ function toggleGroupingsMode(config) {
     basisSel.innerHTML = priorStableford.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}">${r.name}</option>`).join('');
     basisSel.value = priorStableford.some(r => r.name === prev) ? prev : priorStableford[priorStableford.length - 1].name;
   }
+  refreshDraftCalcToggle();
 }
 function populatePinPlayerSelect(config) {
   const sel = document.getElementById('pinPlayerSelect');
@@ -3136,6 +3148,55 @@ document.getElementById('saveGroupsBtn').addEventListener('click', async () => {
 let draftTeams = [];
 let draftPool = [];
 let draftRoundName = '';
+// Dev-86 — whether the player-facing draft calculator (Portal) is currently
+// live, and for which round, per the shared /flags KV on the MAIN worker
+// (portalUrl here, NOT the BFE worker — /flags doesn't exist on the BFE
+// worker). Empty string ('') means off, matching how the toggle turns it
+// off below — never null, so it round-trips through KV's String(value)
+// cleanly with no risk of coming back as the literal string "null".
+let draftCalcLiveRound = '';
+async function refreshDraftCalcToggle() {
+  const btn = document.getElementById('draftCalcToggleBtn');
+  if (!btn) return;
+  const roundName = document.getElementById('groupRoundSelect').value;
+  if (!roundName) { btn.disabled = true; btn.textContent = '📱 Make live for players'; btn.dataset.live = '0'; return; }
+  const portalBase = document.getElementById('portalUrl').value.trim().replace(/\/$/, '');
+  try {
+    const resp = await fetch(portalBase + '/flags');
+    const flags = await resp.json();
+    draftCalcLiveRound = flags.draft_calc_round || '';
+  } catch (e) {
+    draftCalcLiveRound = '';
+  }
+  const isLive = draftCalcLiveRound === roundName;
+  btn.disabled = false;
+  btn.dataset.live = isLive ? '1' : '0';
+  btn.textContent = isLive ? '📱 Hide from players' : '📱 Make live for players';
+}
+document.getElementById('draftCalcToggleBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('draftCalcToggleBtn');
+  const roundName = document.getElementById('groupRoundSelect').value;
+  const pin = document.getElementById('hostPin').value.trim();
+  if (!roundName) return;
+  const portalBase = document.getElementById('portalUrl').value.trim().replace(/\/$/, '');
+  const goingLive = btn.dataset.live !== '1';
+  btn.disabled = true;
+  try {
+    const resp = await fetch(portalBase + '/flags', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin, key: 'draft_calc_round', value: goingLive ? roundName : '' })
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'unknown');
+    setDraftStatus(goingLive
+      ? `Draft calculator is now live in Portal for every roster player.`
+      : `Draft calculator hidden from Portal.`);
+    await refreshDraftCalcToggle();
+  } catch (e) {
+    setDraftStatus('Toggle failed: ' + e.message, true);
+    await refreshDraftCalcToggle();
+  }
+});
 function setDraftStatus(msg, isErr) {
   const el = document.getElementById('draftStatus');
   if (!msg) { el.className = 'status'; el.textContent = ''; return; }
