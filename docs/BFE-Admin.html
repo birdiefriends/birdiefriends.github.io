@@ -428,6 +428,15 @@
       <div id="memoryCutoffStatus" class="status"></div>
       <div id="memoryCutoffList" style="margin-top:8px"></div>
     </details>
+    <details style="margin-top:18px">
+      <summary style="cursor:pointer;font-weight:700">🗂️ Trip Memories alignment (review &amp; re-bucket)</summary>
+      <p class="hint">Lists every Trip Memories photo, video, and note for this event, grouped by the chapter it's currently landing in — the exact same grouping Preview/Publish above uses, built by the same buildMemoryChapters() function. Use this to spot anything that landed in the wrong chapter and move it. Reassigning an item sets its <code>round_name</code> directly, overriding whatever timestamp-based guess placed it; pick "— Untagged (auto-place by time) —" to clear an override and let it fall back to automatic placement.</p>
+      <div class="btnbar">
+        <button type="button" id="loadAlignmentBtn">🔄 Load for review</button>
+      </div>
+      <div id="alignmentStatus" class="status"></div>
+      <div id="alignmentBoard" style="margin-top:10px"></div>
+    </details>
   </section>
   <!-- ── Output / review ───────────────────────────────────────────── -->
   <section class="card gameday-section" id="outputSection">
@@ -5398,6 +5407,127 @@ document.getElementById('memoryCutoffSetBtn').addEventListener('click', () => {
   renderMemoryCutoffList();
 });
 renderMemoryCutoffList();
+// ── Dev-84: Trip Memories alignment widget ──────────────────────────────
+// Same idea as GS Photo Organizer's old chapter-reassign dropdown (Dev-58,
+// still lives in BF_Golf_Scorer_8.html for the old pre-BFE photo system) —
+// ported here for the BFE Wally Cup memories system instead of reinvented.
+// Deliberately reuses fetchResultsPageData()'s own memoryChapters output
+// rather than re-deriving grouping logic, so what this widget shows always
+// matches what Preview/Publish above will actually render — no risk of the
+// two disagreeing. Grouping is read-only (computed fresh every Load); the
+// only thing this widget writes is an item's round_name override, same
+// escape hatch the "Fix a round's Trip Memories boundary" control above
+// uses for whole rounds, just per-item and via PATCH instead of localStorage.
+let _alignmentRoundNames = [];
+function fmtAlignmentTime(raw) {
+  const d = parseSqliteUtc(raw);
+  if (!d) return '';
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+function alignmentRoundOptions(selected, eventName) {
+  let opts = `<option value=""${!selected ? ' selected' : ''}>— Untagged (auto-place by time) —</option>`;
+  opts += _alignmentRoundNames.map(n =>
+    `<option value="${escapeHtml(n)}"${n === selected ? ' selected' : ''}>${escapeHtml(shortRoundLabel(n, eventName))}</option>`
+  ).join('');
+  return opts;
+}
+function renderAlignmentPhoto(m, bfeBase, eventName) {
+  const src = `${bfeBase}/bfe/memories/serve/${m.id}`;
+  const media = m.media_type === 'video'
+    ? `<video src="${src}" controls preload="metadata" style="width:100%;height:110px;object-fit:cover;display:block;background:#000"></video>`
+    : `<img src="${src}" style="width:100%;height:110px;object-fit:cover;display:block" loading="lazy">`;
+  const tagLine = (m.tagged_players && m.tagged_players.length) ? `👤 ${m.tagged_players.map(escapeHtml).join(', ')}` : '';
+  const storedRound = m.round_name ? escapeHtml(shortRoundLabel(m.round_name, eventName)) : 'none (auto by time)';
+  return `<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)">
+    ${media}
+    <div style="padding:6px 8px;font-size:0.72rem">
+      <div style="display:flex;justify-content:space-between;color:var(--sub)">
+        <span>${escapeHtml(m.captured_by || 'Unknown')}${m.media_type === 'video' ? ' · 🎥' : ''}</span>
+        <span>${fmtAlignmentTime(m.captured_at)}</span>
+      </div>
+      ${m.caption ? `<div style="margin:3px 0;color:var(--ink)">${escapeHtml(m.caption)}</div>` : ''}
+      ${tagLine ? `<div style="margin:2px 0;color:var(--sub)">${tagLine}</div>` : ''}
+      <div style="margin:3px 0;color:var(--sub)">stored round: <strong>${storedRound}</strong></div>
+      <select onchange="patchAlignmentItem('photo', ${m.id}, this.value)" style="width:100%;font-size:0.7rem;padding:3px 4px;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--ink)" title="Reassign round">
+        ${alignmentRoundOptions(m.round_name, eventName)}
+      </select>
+    </div>
+  </div>`;
+}
+function renderAlignmentNote(n, eventName) {
+  const storedRound = n.round_name ? escapeHtml(shortRoundLabel(n.round_name, eventName)) : 'none (auto by time)';
+  return `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--card)">
+    <div style="font-size:0.72rem;color:var(--sub);display:flex;justify-content:space-between">
+      <span>📝 ${escapeHtml(n.player || 'Unknown')}</span>
+      <span>${fmtAlignmentTime(n.created_at)}</span>
+    </div>
+    <div style="margin:4px 0;font-size:0.8rem;color:var(--ink)">${escapeHtml(n.note)}</div>
+    <div style="margin:3px 0;font-size:0.72rem;color:var(--sub)">stored round: <strong>${storedRound}</strong></div>
+    <select onchange="patchAlignmentItem('note', ${n.id}, this.value)" style="width:100%;font-size:0.72rem;padding:3px 4px;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--ink)" title="Reassign round">
+      ${alignmentRoundOptions(n.round_name, eventName)}
+    </select>
+  </div>`;
+}
+function renderAlignmentBoard(data) {
+  const board = document.getElementById('alignmentBoard');
+  if (!data.memoryChapters.length) {
+    board.innerHTML = '<div class="hint">No Trip Memories photos, videos, or notes yet for this event.</div>';
+    return;
+  }
+  const columns = data.memoryChapters.map(ch => {
+    const items = [
+      ...ch.photos.map(m => ({ sortKey: m.captured_at, html: renderAlignmentPhoto(m, data.bfeBase, data.eventName) })),
+      ...ch.notes.map(n => ({ sortKey: n.created_at, html: renderAlignmentNote(n, data.eventName) })),
+    ].sort((a, b) => String(a.sortKey).localeCompare(String(b.sortKey)));
+    return `<div style="flex:1;min-width:230px;max-width:280px">
+      <div style="font-size:0.82rem;font-weight:700;color:var(--ink);margin-bottom:8px;position:sticky;top:0;background:var(--bg);padding:4px 0">
+        ${escapeHtml(ch.title)} <span style="font-weight:400;color:var(--sub)">(${ch.photos.length + ch.notes.length})</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">${items.map(it => it.html).join('')}</div>
+    </div>`;
+  }).join('');
+  board.innerHTML = `<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">${columns}</div>`;
+}
+async function patchAlignmentItem(kind, id, roundName) {
+  const bfeBase = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const pin = document.getElementById('hostPin').value.trim();
+  const path = kind === 'note' ? `/bfe/memories/notes/${id}` : `/bfe/memories/${id}`;
+  const status = document.getElementById('alignmentStatus');
+  try {
+    const res = await fetch(bfeBase + path, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin, round_name: roundName || null }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Update failed');
+    await loadAlignmentBoard();
+  } catch (e) {
+    status.textContent = 'Could not reassign: ' + e.message; status.className = 'status err';
+  }
+}
+async function loadAlignmentBoard() {
+  const status = document.getElementById('alignmentStatus');
+  const bfeBase = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
+  const eventName = document.getElementById('eventName').value.trim();
+  if (!bfeBase || !eventName) { status.textContent = 'Fill in the BFE Worker URL and Event name above first.'; status.className = 'status err'; return; }
+  status.textContent = 'Loading…'; status.className = 'status';
+  try {
+    const configRes = await fetch(bfeBase + '/bfe/events?event=' + encodeURIComponent(eventName));
+    const configData = await configRes.json();
+    if (!configRes.ok || !configData.config) throw new Error(configData.error || 'Could not load this event\'s config.');
+    _alignmentRoundNames = (configData.config.rounds || []).map(r => r.name);
+    const data = await fetchResultsPageData();
+    renderAlignmentBoard(data);
+    const total = data.memoryChapters.reduce((n, c) => n + c.photos.length + c.notes.length, 0);
+    status.textContent = `Loaded ${total} item(s) across ${data.memoryChapters.length} chapter(s).`;
+    status.className = 'status ok';
+  } catch (e) {
+    status.textContent = 'Could not load: ' + e.message; status.className = 'status err';
+    document.getElementById('alignmentBoard').innerHTML = '';
+  }
+}
+document.getElementById('loadAlignmentBtn').addEventListener('click', loadAlignmentBoard);
 function setPublishResultsStatus(msg, isErr) {
   const el = document.getElementById('publishResultsStatus');
   el.className = 'status ' + (isErr ? 'err' : 'ok');
