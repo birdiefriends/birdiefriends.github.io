@@ -208,3 +208,52 @@ material deviation from the draft's description found during this review.
   Brian's explicit instruction ("I don't want to turn on the Trip memories yet. If we add
   a widget all 16 will see it when opening the APP"). Mentioned here only for
   cross-reference; it isn't a WCRP Memories capability and has no entry in §1–§8 above.
+
+## What changed in Dev-83 — chapter-boundary bug found live, fixed in two passes
+
+`buildMemoryChapters()` (§4's shipped form, described above) uses each round's tee time
+as its window start and, until this session, a flat tee-time-plus-6-hours guess as its
+window end whenever a round hadn't been formally Closed. Real live use during the actual
+Wally Cup exposed that this guess is too generous — same-evening post-round content (a
+bar/pub photo, boat photos) was landing inside a round's own "On Course" chapter instead
+of its "After" chapter.
+
+**First pass:** added an evidence-based window-end signal — the LATEST round-tagged Live
+Panel photo/note/scorecard timestamp for a round, mirroring the evidence-based window
+*start* signal already built in Dev-91. Falls back to the old flat 6-hour guess only when
+a round has no such evidence at all. Verified correct in isolated testing, but didn't fix
+the real, live report — see below for why.
+
+**Root cause, found from a live screenshot Brian sent after the first pass didn't help:**
+Rd1 had ZERO round-tagged Live Panel evidence to find. Brian had stopped Rd1's Live Panel
+through Portal's Gear → Event Day Controls toggle (a display-only flag, unrelated to
+Close Round or `closed_at`) before anyone captured a single photo or note *through Live
+Panel itself* that round — all of Rd1's real photos came through the separate WCRP
+widget instead, which deliberately never sets `round_name` on its uploads (confirmed in
+code: "the widget deliberately has no round in mind"). With no evidence to find, the
+evidence-based fix was a correct no-op, and the round fell straight back to the same old
+flat-6-hour fallback as before the fix — which is exactly generous enough to still catch
+same-evening bar/boat content.
+
+**Second pass — the actual fix, since the missing evidence can't be reconstructed:** a
+manual override, not another automatic guess. A new "🩹 Fix a round's Trip Memories
+boundary" control lives in BFE-Admin's "Publish results page" section — pick a round from
+a live-loaded list, set its real "content ends at" time by hand. Stored per-event in that
+browser's own `localStorage` (`bfeMemoryCutoffs::<eventName>` → `{roundName: isoString}`)
+— deliberately NOT a new D1/Worker column, so using it never needs a Worker redeploy
+mid-event. It now takes priority over everything else for that round's window end,
+`closed_at` included, which also makes it useful for retroactively correcting a round
+whose real end doesn't match whenever Close Round happened to actually get clicked.
+
+Verified against a jsdom reproduction of the real scenario: confirms the bug reproduces
+with zero evidence and no override: confirms the override splits the same-day golf vs.
+bar/boat content correctly once set; confirms the override still wins even when a
+(possibly-late) `closed_at` also exists; confirms the no-override/`closed_at`-present path
+is completely unchanged (no regression for a round that closes normally); and confirms a
+later round still gets its own fresh chapter the moment its own real tee time elapses,
+independent of any override set on an earlier round.
+
+**Not yet independently re-verified against real Rd3 data** (Rd3 plays same-day as this
+close-out) — confirm in Dev-84 that Rd3, which should have normal Live Panel evidence
+and/or a real `closed_at`, doesn't need the manual override at all, and that the
+post-Rd3 "After"/event-wrap-up chapter reads sensibly with no further round to bound it.
