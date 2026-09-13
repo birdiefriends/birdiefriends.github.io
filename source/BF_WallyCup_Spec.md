@@ -1,6 +1,6 @@
 # BF_WallyCup_Spec.md — 2026 Wally Cup Architecture Spec
 
-**Status:** Living spec, fourth revision. Covers the event structure already live
+**Status:** Living spec, fifth revision. Covers the event structure already live
 (Practice Rd/Rd1/Rd2/Rd3, Wally Ball, Overall Standings, results page) plus the 2-Man
 Scramble round (Dev-78) — draft board, team scoring with team quota, results section, and
 the Overall guardrail fix are all built and delivered. Live Panel capture support for
@@ -15,9 +15,13 @@ Stitt, Tom Arnold, Scott Justus, Nate Stettler, Mohamed Walli, Mark Weaver, Lou 
 Jordan Knappenberger, Jeff Rapp, Jake Knappenberger, Evan Lindermuth, Dave Sherwin, Chooch
 Wernett, Brian Hager, Bill Steirer) and the real 5-round schedule below, not the old
 dry-run mock data — the long-carried "still has mock data" warning from Dev-75/77/78 is
-resolved.** Read this before touching Groupings,
-the results page, Close Round, or the Overall Standings rollup — it's the reference.
-`BF_Session_Bootstrap.md` and `BF_Session_Log.md` are both kept current as of Dev-80.
+resolved.** **Dev-83 (live, against real event data): the §3 team-quota formula
+documented below was wrong in this spec itself, not just in code — corrected twice this
+session (dropped an erroneous `quota_in` value, then fixed average-of-averages to a true
+pool) and this doc updated to match what actually shipped.** Read this before touching
+Groupings, the results page, Close Round, or the Overall Standings rollup — it's the
+reference. `BF_Session_Bootstrap.md` and `BF_Session_Log.md` are both kept current as of
+Dev-83.
 
 ---
 
@@ -95,16 +99,24 @@ nickname is purely a display label layered on top (e.g., shown as "The Peg-Leg T
 **Engine:** same per-hole points scoring already used for stableford rounds. Capture and
 points math are unchanged from stableford — what's new is what a team is *ranked against*.
 
-**Team quota.** Per Brian's spec — "each player's RD1-3 quotas averaged" — each partner's
-own quota is smoothed across every stableford round played so far this trip, not just
-their latest one, then the two partners' numbers are averaged together. Concretely, for
-each player: collect the quota they carried *into* every stableford round in the chain
-leading up to 2Man (`quota_in` for Rd1, `quota_in` for Rd2, ...), plus the quota they'd
-carry into the round immediately after (`quota_out` of the most recent closed round —
-i.e. the quota entering Rd3). With Rd1 and Rd2 both closed by the time 2Man plays, that's
-3 values per player ("RD1-3"), averaged into that player's own number; the two partners'
-numbers are then averaged into the team quota. This smooths out one hot or cold round
-rather than weighting the most recent round alone. All of it is read via the same
+**Team quota — corrected twice live during Dev-83, this is the actually-shipped
+formula.** Per Brian's spec — "each player's RD1-3 quotas averaged" — each partner's own
+quota is smoothed across every stableford round played so far this trip, not just their
+latest one, then pooled with the other partner's. Concretely, for each player: collect
+that round's `quota_out` for every stableford round in the chain leading up to 2Man
+(Rd1's `quota_out`, Rd2's `quota_out`, ...) — **not** any round's `quota_in`, including
+the first round's, which is just the pre-season starting quota, not a round result (an
+early build mistakenly averaged it in too, quietly dragging the number toward a stale
+value — fixed Dev-83, confirmed against Brian's own real numbers: "my quota today is
+26.9 not 29.9"). Then **pool every one of both partners' raw per-round values into one
+single average** — not each partner's own average, averaged again with the other's. An
+early build did exactly that second, wrong thing (`(playerA_avg + playerB_avg) / 2`),
+which only produces the same result as a true pool when both players have closed the
+same number of rounds — not guaranteed (a late add, a missed round) — and was corrected
+Dev-83 per Brian's own direct check: "confirm that the team quota displayed is the
+average of all of both players rounds. should be 6 quotas averaged" (2 players × 3
+closed stableford rounds, once Rd3 has played too). This smooths out one hot or cold
+round rather than weighting the most recent round alone. All of it is read via the same
 `chainsFrom` mechanism that already threads quota from round to round for Overall — no
 new handicap math, just averaging numbers BFE-Admin already has on hand for every closed
 stableford round in the chain. 2Man itself does **not** feed the real quota chain (Rd3's
@@ -183,12 +195,14 @@ nothing in the app currently guards against this specific misconfiguration.
 
 ## 6. Open items carried forward
 
-- **Team quota** (§3) — built, not just parked: teams rank by performance vs. each
-  partner's own quota averaged across every stableford round played so far (Rd1 + Rd2's
-  quota_in, plus Rd2's quota_out), then the two partners' numbers averaged together —
-  not just a snapshot of the latest round. Tested against the real close-round logic
-  (multi-round chain walking, a single-prior-round edge case, No-HCP fallback dropping
-  just that player's missing value, and the chainsFrom-not-closed hard stop).
+- **Team quota** (§3) — built, not just parked, and corrected twice live in Dev-83 against
+  Brian's own real numbers: teams rank by performance vs. a single pooled average of both
+  partners' `quota_out` from every closed stableford round so far (no `quota_in`, no
+  average-of-averages) — not just a snapshot of the latest round. Tested against the real
+  close-round logic (multi-round chain walking, a single-prior-round edge case, No-HCP
+  fallback dropping just that player's missing value, the chainsFrom-not-closed hard stop,
+  and — added Dev-83 — an unequal-round-count case confirming pooling and
+  average-of-averages genuinely diverge).
 - **Results-publish gap Brian found:** a round's incoming ("pre-round") quota can't
   appear in that round's own results section, because the report only ever renders
   *closed* rounds' saved results — there's nothing to show for a round that hasn't
