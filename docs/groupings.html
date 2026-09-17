@@ -3,41 +3,478 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Groupings — Groupings</title>
+<title>Groupings — 2026 BFSeries#7</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Instrument Sans',sans-serif;background:#f7f6f2;color:#1a1a1a;min-height:100vh}
+body{font-family:'Instrument Sans',sans-serif;background:#f7f6f2;color:#1a1a1a;min-height:100vh;padding-bottom:60px}
 header{background:#085041;color:#fff;padding:16px 20px 12px;text-align:center}
 .header-title h1{font-family:'DM Serif Display',serif;font-size:1.4rem;margin-bottom:4px}
 .header-title p{font-size:0.78rem;opacity:0.65;letter-spacing:0.04em}
 .pill-nav{display:flex;justify-content:center;gap:8px;padding:10px 16px;background:#085041;border-top:1px solid rgba(255,255,255,0.15);flex-wrap:wrap}
-.pill-nav a{padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:500;text-decoration:none;border:1.5px solid rgba(255,255,255,0.55);color:rgba(255,255,255,0.85)}
+.pill-nav a{padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:500;text-decoration:none;border:1.5px solid rgba(255,255,255,0.55);color:rgba(255,255,255,0.85);transition:all 0.15s}
 .pill-nav a.active{background:#fff;color:#085041;border-color:#fff}
-.holding{max-width:480px;margin:60px auto;text-align:center;padding:0 20px}
-.holding-icon{font-size:2.5rem;margin-bottom:16px}
-.holding h2{font-family:'DM Serif Display',serif;font-size:1.4rem;color:#085041;margin-bottom:10px}
-.holding p{font-size:0.9rem;color:#666;line-height:1.6}
+.pill-nav a:hover:not(.active){background:rgba(255,255,255,0.12)}
+.container{max-width:680px;margin:0 auto;padding:20px 16px;display:flex;flex-direction:column;gap:14px}
+.status-badge{display:inline-block;padding:3px 12px;border-radius:12px;font-size:0.78rem;font-weight:600;background:#E6F1FB;color:#185fa5}
+.group-card{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+.group-header{background:#085041;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.group-label{font-family:'DM Serif Display',serif;font-size:1.05rem;font-weight:400}
+.group-tee{font-size:0.82rem;opacity:0.85}
+.group-count{font-size:0.75rem;opacity:0.65;margin-left:auto}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.player-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.player-table th{background:#f0f4f2;color:#555;padding:7px 8px;font-size:0.72rem;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;text-align:left;border-bottom:1px solid #ddd}
+.player-table th:nth-child(1){width:auto}
+.player-table th:nth-child(2){width:52px;text-align:center}
+.player-table th:nth-child(3){width:40px;text-align:center}
+.player-table th:nth-child(4){width:62px;text-align:center}
+.player-table th:nth-child(5){width:54px;text-align:center}
+.player-table td{padding:8px 8px;vertical-align:middle}
+.player-table td:nth-child(2),.player-table td:nth-child(3),.player-table td:nth-child(4),.player-table td:nth-child(5){text-align:center}
+.player-table td:first-child{word-break:break-word}
+@media(max-width:400px){.player-table th,.player-table td{padding:6px 5px}}
+.tee-note{font-size:0.78rem;color:#666;padding:10px 14px;background:#fff;border-radius:8px;border-left:3px solid #1D9E75}
 </style>
 </head>
 <body>
-<header>
+<header id="grp-header">
   <div class="header-title">
     <h1>BirdieFriends</h1>
-    
+    <p>2026 BFSeries#7</p>
   </div>
 </header>
-<nav class="pill-nav">
+<nav class="pill-nav" id="grp-nav">
   <a href="portal.html" style="background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.9);font-weight:700">← Portal</a>
   <a href="groupings.html" class="active">Groupings</a>
   <a href="results.html">Results</a>
   <a href="standings.html">Standings</a>
   <a href="mygame.html">My Series</a>
 </nav>
-<div class="holding">
-  <div class="holding-icon">⛳</div>
-  <h2>Groupings Coming Soon</h2>
-  <p>Groupings for the next BFSeries event will be posted here once they're finalized.<br>Check back soon!</p>
+<script>
+if (new URLSearchParams(location.search).get('embed') === '1') {
+  document.addEventListener('DOMContentLoaded', function() {
+    var h = document.getElementById('grp-header');
+    var n = document.getElementById('grp-nav');
+    if (h) h.style.display = 'none';
+    if (n) n.style.display = 'none';
+    document.body.style.background = '#f7f6f2';
+    document.body.style.paddingTop = '0';
+  });
+}
+</script>
+<div class="container">
+  <div><div class="status-badge">Preliminary</div></div>
+<div class="group-card">
+  <div class="group-header">
+    <span class="group-label">Group 1</span>
+    <span class="group-tee">&#x23F0; 07:30</span>
+    <span class="group-count">4 players</span>
+  </div>
+  <div class="table-scroll">
+  <table class="player-table">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Rank</th>
+        <th>Evts</th>
+        <th>Tee</th>
+        <th>Quota</th>
+      </tr>
+    </thead>
+    <tbody><tr style="background:#f5f2ff;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Adam Costa <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 16.9</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>20.67</b></div>
+<div style="color:#555">Last score: 17 pts vs quota 20.67 &nbsp;→&nbsp; perf adj: -1.83</div>
+<div style="color:#555">HCP change (18.2 → 16.9, slope 128/113): +1.47</div>
+<div style="color:#555">Full calculation: 20.67 -1.83 +1.47 = 20.31</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>20.31</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#1</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">4</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#ede8fb;color:#3c3489;border:1px solid #c5baf5">Combo</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">20.31</td>
+</tr><tr style="background:#f5f2ff;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Jeremy Burkett <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 11.9</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>24.61</b></div>
+<div style="color:#555">Last score: 22 pts vs quota 24.61 &nbsp;→&nbsp; perf adj: -1.31</div>
+<div style="color:#555">HCP unchanged (11.9) — no HCP adjustment</div>
+<div style="color:#555">Full calculation: 24.61 -1.31 +0.00 = 23.31</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>23.31</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#2</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">4</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#ede8fb;color:#3c3489;border:1px solid #c5baf5">Combo</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">23.31</td>
+</tr><tr style="background:#f5f2ff;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Nate Stettler <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 11.0</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#5): <b>22.73</b></div>
+<div style="color:#555">Last score: 25 pts vs quota 22.73 &nbsp;→&nbsp; perf adj: +1.13</div>
+<div style="color:#555">HCP change (11.4 → 11.0, slope 128/113): +0.45</div>
+<div style="color:#555">Full calculation: 22.73 +1.13 +0.45 = 24.32</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>24.32</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#3</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">4</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#ede8fb;color:#3c3489;border:1px solid #c5baf5">Combo</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">24.32</td>
+</tr><tr style="background:#f5f2ff;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">BJ Kolonia <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 14.1</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>20.84</b></div>
+<div style="color:#555">Last score: 16 pts vs quota 20.84 &nbsp;→&nbsp; perf adj: -2.42</div>
+<div style="color:#555">HCP unchanged (14.1) — no HCP adjustment</div>
+<div style="color:#555">Full calculation: 20.84 -2.42 +0.00 = 18.42</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>18.42</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#10</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">4</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#ede8fb;color:#3c3489;border:1px solid #c5baf5">Combo</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">18.42</td>
+</tr></tbody>
+  </table>
+  </div>
+</div><div class="group-card">
+  <div class="group-header">
+    <span class="group-label">Group 2</span>
+    <span class="group-tee">&#x23F0; 07:38</span>
+    <span class="group-count">4 players</span>
+  </div>
+  <div class="table-scroll">
+  <table class="player-table">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Rank</th>
+        <th>Evts</th>
+        <th>Tee</th>
+        <th>Quota</th>
+      </tr>
+    </thead>
+    <tbody><tr style="background:#f0faf5;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Dave Sherwin <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 4.9</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>26.61</b></div>
+<div style="color:#555">Last score: 35 pts vs quota 26.61 &nbsp;→&nbsp; perf adj: +4.19</div>
+<div style="color:#555">HCP change (5.1 → 4.9, slope 132/113): +0.23</div>
+<div style="color:#555">Full calculation: 26.61 +4.19 +0.23 = 31.04</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>31.04</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#4</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">4</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#d4edda;color:#085041;border:1px solid #a8d5b5">Green</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">31.04</td>
+</tr><tr style="background:#f0faf5;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Scott Justus <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 7.8</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>26.46</b></div>
+<div style="color:#555">Last score: 28 pts vs quota 26.46 &nbsp;→&nbsp; perf adj: +0.77</div>
+<div style="color:#555">HCP change (7.1 → 7.8, slope 132/113): -0.82</div>
+<div style="color:#555">Full calculation: 26.46 +0.77 -0.82 = 26.41</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>26.41</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#7</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">4</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#d4edda;color:#085041;border:1px solid #a8d5b5">Green</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">26.41</td>
+</tr><tr style="background:#f0faf5;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Chooch Wernett <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 9.2</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>21.19</b></div>
+<div style="color:#555">Last score: 25 pts vs quota 21.19 &nbsp;→&nbsp; perf adj: +1.91</div>
+<div style="color:#555">HCP change (10.3 → 9.2, slope 132/113): +1.28</div>
+<div style="color:#555">Full calculation: 21.19 +1.91 +1.28 = 24.38</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>24.38</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#9</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">5</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#d4edda;color:#085041;border:1px solid #a8d5b5">Green</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">24.38</td>
+</tr><tr style="background:#f0faf5;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Brian Hager <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 5.7</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>26.60</b></div>
+<div style="color:#555">Last score: 26 pts vs quota 26.60 &nbsp;→&nbsp; perf adj: -0.30</div>
+<div style="color:#555">HCP change (5.5 → 5.7, slope 132/113): -0.23</div>
+<div style="color:#555">Full calculation: 26.60 -0.30 -0.23 = 26.07</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>26.07</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#12</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">5</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#d4edda;color:#085041;border:1px solid #a8d5b5">Green</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">26.07</td>
+</tr></tbody>
+  </table>
+  </div>
+</div><div class="group-card">
+  <div class="group-header">
+    <span class="group-label">Group 3</span>
+    <span class="group-tee">&#x23F0; 07:46</span>
+    <span class="group-count">4 players</span>
+  </div>
+  <div class="table-scroll">
+  <table class="player-table">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Rank</th>
+        <th>Evts</th>
+        <th>Tee</th>
+        <th>Quota</th>
+      </tr>
+    </thead>
+    <tbody><tr style="background:#f5f2ff;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Mohamed Walli <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 10.8</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>23.25</b></div>
+<div style="color:#555">Last score: 26 pts vs quota 23.25 &nbsp;→&nbsp; perf adj: +1.37</div>
+<div style="color:#555">HCP change (10.2 → 10.8, slope 128/113): -0.68</div>
+<div style="color:#555">Full calculation: 23.25 +1.37 -0.68 = 23.95</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>23.95</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#5</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">4</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#ede8fb;color:#3c3489;border:1px solid #c5baf5">Combo</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">23.95</td>
+</tr><tr style="background:#f5f2ff;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Jeff Rapp <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 11.5</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>17.15</b></div>
+<div style="color:#555">Last score: 22 pts vs quota 17.15 &nbsp;→&nbsp; perf adj: +2.43</div>
+<div style="color:#555">HCP change (11.4 → 11.5, slope 128/113): -0.11</div>
+<div style="color:#555">Full calculation: 17.15 +2.43 -0.11 = 19.46</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>19.46</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#11</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">5</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#ede8fb;color:#3c3489;border:1px solid #c5baf5">Combo</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">19.46</td>
+</tr><tr style="background:#f5f2ff;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Jake Knappenberger <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 12.7</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>13.54</b></div>
+<div style="color:#555">Last score: 19 pts vs quota 13.54 &nbsp;→&nbsp; perf adj: +2.73</div>
+<div style="color:#555">HCP change (11.9 → 12.7, slope 128/113): -0.91</div>
+<div style="color:#555">Full calculation: 13.54 +2.73 -0.91 = 15.36</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>15.36</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#15</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">5</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#ede8fb;color:#3c3489;border:1px solid #c5baf5">Combo</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">15.36</td>
+</tr><tr style="background:#f5f2ff;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Harry Pry <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 17.5</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#4): <b>17.70</b></div>
+<div style="color:#555">Last score: 15 pts vs quota 17.70 &nbsp;→&nbsp; perf adj: -1.35</div>
+<div style="color:#555">HCP change (17.4 → 17.5, slope 128/113): -0.11</div>
+<div style="color:#555">Full calculation: 17.70 -1.35 -0.11 = 16.24</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>16.24</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#999" title="Provisional — fewer than 4 events">(#19)</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">2</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#ede8fb;color:#3c3489;border:1px solid #c5baf5">Combo</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">16.24</td>
+</tr></tbody>
+  </table>
+  </div>
+</div><div class="group-card">
+  <div class="group-header">
+    <span class="group-label">Group 4</span>
+    <span class="group-tee">&#x23F0; 07:54</span>
+    <span class="group-count">4 players</span>
+  </div>
+  <div class="table-scroll">
+  <table class="player-table">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Rank</th>
+        <th>Evts</th>
+        <th>Tee</th>
+        <th>Quota</th>
+      </tr>
+    </thead>
+    <tbody><tr style="background:#fffbee;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Rich Penberg <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 26.4</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>6.57</b></div>
+<div style="color:#555">Last score: 9 pts vs quota 6.57 &nbsp;→&nbsp; perf adj: +1.22</div>
+<div style="color:#555">HCP change (27.6 → 26.4, slope 115/113): +1.22</div>
+<div style="color:#555">Full calculation: 6.57 +1.22 +1.22 = 9.00</div><div style="color:#555"><span title="Quota Stability Rule: each event, your quota adjusts based on your last round’s performance and any handicap change since. To keep things fair, that adjustment is capped at 25% of your previous quota in either direction. So even after a rough round or a big handicap swing, your new target stays within a reasonable range of where it was — never so low it’s an easy freebie, never so high it’s out of reach."
+    style="display:inline-flex;align-items:center;gap:5px;background:#fff8e8;color:#7a4a00;
+      font-size:0.72rem;padding:3px 10px;border-radius:10px;border:1px solid #e8b84b;cursor:help">
+    🔒 25% cap applied</span></div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>8.21</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#13</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">5</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#fff3cd;color:#856404;border:1px solid #ffd97d">Gold</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">8.21</td>
+</tr><tr style="background:#fffbee;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Ron Grow <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 26.0</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#3): <b>9.54</b></div>
+<div style="color:#555">Last score: 9 pts vs quota 9.54 &nbsp;→&nbsp; perf adj: -0.27</div>
+<div style="color:#555">HCP unchanged (26.0) — no HCP adjustment</div>
+<div style="color:#555">Full calculation: 9.54 -0.27 +0.00 = 9.27</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>9.27</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#999" title="Provisional — fewer than 4 events">(#20)</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">1</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#fff3cd;color:#856404;border:1px solid #ffd97d">Gold</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">9.27</td>
+</tr><tr style="background:#fffbee;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Paul Kametz <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 18.2</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>19.99</b></div>
+<div style="color:#555">Last score: 12 pts vs quota 19.99 &nbsp;→&nbsp; perf adj: -4.00</div>
+<div style="color:#555">HCP change (18.5 → 18.2, slope 115/113): +0.31</div>
+<div style="color:#555">Full calculation: 19.99 -4.00 +0.31 = 16.30</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>16.30</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#999" title="Provisional — fewer than 4 events">(#23)</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">2</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#fff3cd;color:#856404;border:1px solid #ffd97d">Gold</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">16.30</td>
+</tr><tr style="background:#fffbee;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Chauncey Lutte <span style="font-weight:400;font-size:0.78rem;color:#bbb">NoHCP</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">NoHCP E1 → E2 (pass-through, no regression yet)</div>
+<div style="color:#555">E1 (2026 BFSeries#6) achievement: <b>11</b> pts</div>
+<div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Estimated quota: <b>11.00</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="color:#bbb">—</span></td>
+  <td style="text-align:center"><span style="color:#bbb">New</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#fff3cd;color:#856404;border:1px solid #ffd97d">Gold</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">11.00</td>
+</tr></tbody>
+  </table>
+  </div>
+</div><div class="group-card">
+  <div class="group-header">
+    <span class="group-label">Group 5</span>
+    <span class="group-tee">&#x23F0; 08:02</span>
+    <span class="group-count">3 players</span>
+  </div>
+  <div class="table-scroll">
+  <table class="player-table">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Rank</th>
+        <th>Evts</th>
+        <th>Tee</th>
+        <th>Quota</th>
+      </tr>
+    </thead>
+    <tbody><tr style="background:#f0faf5;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Evan Lindermuth <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 8.4</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#5): <b>19.67</b></div>
+<div style="color:#555">Last score: 24 pts vs quota 19.67 &nbsp;→&nbsp; perf adj: +2.17</div>
+<div style="color:#555">HCP change (8.1 → 8.4, slope 132/113): -0.35</div>
+<div style="color:#555">Full calculation: 19.67 +2.17 -0.35 = 21.48</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>21.48</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#085041" title="">#14</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">4</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#d4edda;color:#085041;border:1px solid #a8d5b5">Green</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">21.48</td>
+</tr><tr style="background:#f0faf5;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Jordan Knappenberger <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 2.8</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>30.10</b></div>
+<div style="color:#555">Last score: 34 pts vs quota 30.10 &nbsp;→&nbsp; perf adj: +1.95</div>
+<div style="color:#555">HCP change (3.6 → 2.8, slope 132/113): +0.93</div>
+<div style="color:#555">Full calculation: 30.10 +1.95 +0.93 = 32.99</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>32.99</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#999" title="Provisional — fewer than 4 events">(#18)</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">3</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#d4edda;color:#085041;border:1px solid #a8d5b5">Green</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">32.99</td>
+</tr><tr style="background:#f0faf5;border-top:1px solid rgba(0,0,0,0.05)">
+  <td style="padding:8px 10px;font-weight:600">Tom Arnold <span style="font-weight:400;font-size:0.78rem;color:#888;font-family:'DM Mono',monospace">HCP 6.7</span>
+    <div style="margin-top:4px">
+      <button onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'"
+        style="font-size:0.7rem;padding:1px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">&#x2139; Why this quota?</button>
+      <div style="display:none;margin-top:6px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border:1px solid #ddd;font-size:0.78rem;line-height:1.7"><div style="font-weight:600;color:#333;margin-bottom:2px">Quota adjustment formula</div>
+<div style="color:#555">Prev quota (2026 BFSeries#6): <b>22.84</b></div>
+<div style="color:#555">Last score: 23 pts vs quota 22.84 &nbsp;→&nbsp; perf adj: +0.08</div>
+<div style="color:#555">HCP change (6.1 → 6.7, slope 132/113): -0.70</div>
+<div style="color:#555">Full calculation: 22.84 +0.08 -0.70 = 22.22</div><div style="font-weight:700;color:#085041;border-top:1px solid #ddd;margin-top:4px;padding-top:4px">Actual quota: <b>22.22</b></div></div>
+    </div>
+  </td>
+  <td style="text-align:center"><span style="font-weight:700;font-size:1rem;color:#999" title="Provisional — fewer than 4 events">(#29)</span></td>
+  <td style="text-align:center"><span style="font-size:0.9rem;color:#666">3</span></td>
+  <td style="text-align:center"><span style="font-size:0.76rem;padding:2px 9px;border-radius:10px;background:#d4edda;color:#085041;border:1px solid #a8d5b5">Green</span></td>
+  <td style="text-align:center;font-weight:700;font-size:1.05rem">22.22</td>
+</tr></tbody>
+  </table>
+  </div>
+</div>
+  <div class="tee-note">
+    <strong>Quota</strong> = your estimated target score for today's round.<br>
+    Tap <em>Why this quota?</em> on any player to see the full calculation.
+  </div>
 </div>
 </body>
 </html>
