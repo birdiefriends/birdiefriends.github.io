@@ -466,7 +466,7 @@ export default {
 
     // GET /flags — read all flags from KV (public, no auth)
     if (request.method === 'GET' && url.pathname === '/flags') {
-      const keys = ['maintenance', 'live_test', 'live_override', 'live_override_since', 'gathering_panel_live', 'live_stopped_round', 'draft_calc_round'];
+      const keys = ['maintenance', 'live_test', 'live_override', 'live_override_since', 'gathering_panel_live', 'live_stopped_round', 'draft_calc_round', 'canceled_events'];
       const entries = await Promise.all(keys.map(async k => [k, await env.BF_FLAGS.get(k)]));
       const flags = {};
       entries.forEach(([k, v]) => {
@@ -488,7 +488,13 @@ export default {
       if (pin !== '7797') {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const allowed = ['maintenance', 'live_test', 'live_override', 'gathering_panel_live', 'live_stopped_round', 'draft_calc_round'];
+      // canceled_events (Dev-94) — weather/other cancellations for a BF Series
+      // event that Brian wants left visible (not deleted) but unmistakably
+      // marked so a player who missed the push notification still sees it.
+      // Value is a JSON-stringified {eventName: reason} map (reason may be
+      // ''), same flags-KV mechanism as everything else here — not a boolean,
+      // so it's excluded from the value==='true'/'false' coercion below.
+      const allowed = ['maintenance', 'live_test', 'live_override', 'gathering_panel_live', 'live_stopped_round', 'draft_calc_round', 'canceled_events'];
       if (!allowed.includes(key)) {
         return new Response(JSON.stringify({ error: 'Unknown flag key' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
