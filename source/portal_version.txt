@@ -1,2 +1,2 @@
-v4.1.9 · 2026-09-12
-Deployed: 2026-09-12 (Draft Calc: pooled team-quota math confirmed/fixed)
+v4.2.0 · 2026-09-19
+Deployed: 2026-09-19 (Canceled-event card overlay: watermark stamp + commissioner Cancel/Un-cancel toggle)
