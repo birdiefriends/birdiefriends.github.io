@@ -308,6 +308,34 @@ body {
 }
 .event-card:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,0,0,0.18); }
 .event-card.past { opacity: 0.65; }
+/* Dev-94 — canceled event overlay: a dark scrim + rotated stamp over the
+   WHOLE card (not just a corner badge) so it reads unambiguously even at a
+   glance/scroll-past — this is the backup for a player who missed the push
+   notification, so it has to be impossible to miss on the card itself. Sits
+   on top of everything (.event-card already has position:relative) but
+   lets clicks/taps through to whatever's underneath (pointer-events:none) —
+   the card's own action row is separately suppressed in buildEventCard, so
+   there's nothing dangerous left to tap; the "who's playing"/icon-action
+   rows staying reachable is deliberate; players may still want to see who
+   already responded, view Rules, etc. */
+.event-card-canceled-overlay {
+  position: absolute; inset: 0; z-index: 6; border-radius: inherit;
+  background: rgba(10,12,14,0.6);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 16px; text-align: center; pointer-events: none;
+}
+.event-card-canceled-stamp {
+  font-family: 'DM Serif Display', serif; font-size: 1.8rem; font-weight: 700;
+  letter-spacing: 0.08em; color: #fff; text-transform: uppercase;
+  border: 3px solid #e74c3c; border-radius: 10px; padding: 4px 20px;
+  transform: rotate(-7deg);
+  background: rgba(192,57,43,0.25);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+}
+.event-card-canceled-reason {
+  font-size: 0.82rem; font-weight: 600; color: rgba(255,255,255,0.92);
+  max-width: 85%; text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
 .event-card-top {
   padding: 20px 18px 14px;
   display: flex;
@@ -3518,6 +3546,15 @@ let GATHERING_PANEL_LIVE = false;  // Host Management panel visibility — off b
 // window, since the live draft usually happens well before the 2Man round's
 // own tee time.
 let DRAFT_CALC_ROUND = null;
+// Dev-94 — canceled BF Series/Gathering events (weather, etc.) that Brian
+// wants left visible rather than deleted, but unmistakably marked in case a
+// player missed the push notification he sends separately. Same flags-KV
+// mechanism as everything else on this page; value is a JSON {eventName:
+// reason} map rather than a boolean, so it's parsed here instead of the
+// plain === true/false coercion the other flags use. Keyed by evt.name —
+// same identity buildEventCard/findMyReg already use for non-gathering
+// events, so no new event-matching logic is needed.
+let CANCELED_EVENTS = {};
 let groupingsMeta        = null;  // {eventName, status, visibility, publishedAt}
 // Dev-81 — which event getLiveEvent() should treat as "live" while Live Test
 // Mode / manual override is on, instead of always the next upcoming eligible
@@ -3540,6 +3577,8 @@ async function loadRemoteFlags() {
     LIVE_STOPPED_ROUND   = flags.live_stopped_round || null;
     GATHERING_PANEL_LIVE  = flags.gathering_panel_live === true;
     DRAFT_CALC_ROUND      = flags.draft_calc_round || null;
+    try { CANCELED_EVENTS = flags.canceled_events ? JSON.parse(flags.canceled_events) : {}; }
+    catch(e) { CANCELED_EVENTS = {}; }
   } catch(e) {
     console.warn('[Flags] Could not load remote flags — defaulting to false:', e.message);
   }
@@ -5140,6 +5179,11 @@ function showToastWithUndo(message, undoFn) {
   el.querySelector('button').addEventListener('click', () => clearTimeout(t));
 }
 function buildEventCard(evt, isPast) {
+  // Dev-94 — canceled overlay check, done first: a canceled event still
+  // renders (date/players/etc. all computed normally below) but the
+  // stamp/scrim overlay and the suppressed action row both key off this.
+  const isCanceled = Object.prototype.hasOwnProperty.call(CANCELED_EVENTS, evt.name);
+  const cancelReason = isCanceled ? (CANCELED_EVENTS[evt.name] || '') : '';
   const dateStr   = formatDate(evt.dt);
   const timeStr   = formatTime(evt.dt);
   const fmtClass  = formatClass(evt.format);
@@ -5175,7 +5219,10 @@ function buildEventCard(evt, isPast) {
   const fc6hCard = formatClass(evt.format) === 'format-series' || formatClass(evt.format) === 'format-weekend';
   const isInProgress = msSinceTee >= 0 && msSinceTee <= (fc6hCard ? 6 : 5) * 3600000;
   let actionHtml = '';
-  if (isInProgress) {
+  if (isCanceled) {
+    // No register/live-panel/etc. actions on a canceled card — the overlay
+    // stamp below is the only thing shown in that space.
+  } else if (isInProgress) {
     // Round is underway — suppress register/unregister, show status message.
     // Tier 2 (real Live Panel tap-target) vs Tier 1 (generic, no scoring
     // promise) — gated on hasLivePanelSupport(), not format directly. Dev-45.
@@ -5248,7 +5295,12 @@ function buildEventCard(evt, isPast) {
       style="color:rgba(255,255,255,0.55);text-decoration:none;font-size:0.78rem;font-weight:600;white-space:nowrap;transition:color 0.15s"
       onmouseenter="this.style.color='rgba(255,255,255,0.9)'" onmouseleave="this.style.color='rgba(255,255,255,0.55)'">💬 Text ${hostFirst}</a>`;
   })();
-  return `<div class="event-card ${fmtClass}${isPast?' past':''}" id="card-${evt.id}">
+  return `<div class="event-card ${fmtClass}${isPast?' past':''}${isCanceled?' canceled':''}" id="card-${evt.id}">
+    ${isCanceled ? `
+    <div class="event-card-canceled-overlay">
+      <div class="event-card-canceled-stamp">Canceled</div>
+      ${cancelReason ? `<div class="event-card-canceled-reason">${cancelReason}</div>` : ''}
+    </div>` : ''}
     <div class="event-card-top">
       <div style="flex:1;min-width:0">
         <div class="event-card-name">${evt.name}${isNewToPlayer(evt) ? '<span class="new-badge">New</span>' : ''}</div>
@@ -5414,14 +5466,61 @@ function buildTextAllBtn(evt, isHero) {
   const wrap = isHero
     ? 'padding:8px 0 4px;display:flex;gap:8px;flex-wrap:wrap'
     : 'padding:8px 16px 12px;border-radius:0 0 var(--radius) var(--radius);display:flex;gap:8px;flex-wrap:wrap';
+  const nameEsc = evt.name.replace(/'/g,"\\'");
+  // Dev-94 — the Cancel/Un-cancel toggle sits right next to Send Notification
+  // on purpose: canceling a BF Series event is meant to happen right after
+  // (or right before) sending the "it's canceled" push, same commissioner
+  // moment, same spot. Gatherings already have their own full cancel flow
+  // (Host panel → Cancel Gathering, D1-backed, auto-notifies) — this is a
+  // separate, lighter mechanism (flags KV, no auto-notify) scoped to
+  // non-Gathering events on purpose, so the two don't overlap/conflict.
+  const cancelBtn = evt.source === 'gathering' ? '' : (
+    Object.prototype.hasOwnProperty.call(CANCELED_EVENTS, evt.name)
+      ? `<button class="btn btn-secondary btn-sm" style="font-size:0.82rem;${heroStyle}" onclick="toggleEventCanceled('${nameEsc}', false)">
+          ✅ Un-cancel Event
+        </button>`
+      : `<button class="btn btn-secondary btn-sm" style="font-size:0.82rem;color:#e74c3c;${heroStyle}" onclick="toggleEventCanceled('${nameEsc}', true)">
+          🚫 Cancel Event
+        </button>`
+  );
   return `<div style="${wrap}">
-    <button class="btn btn-secondary btn-sm" style="font-size:0.82rem;${heroStyle}" onclick="textAllPlayers('${evt.id}','${evt.name.replace(/'/g,"\\'")}')">
+    <button class="btn btn-secondary btn-sm" style="font-size:0.82rem;${heroStyle}" onclick="textAllPlayers('${evt.id}','${nameEsc}')">
       📱 Text All Players
     </button>
-    <button class="btn btn-secondary btn-sm" style="font-size:0.82rem;${heroStyle}" onclick="openCommissionerPush('${evt.id}','${evt.name.replace(/'/g,"\\'")}')">
+    <button class="btn btn-secondary btn-sm" style="font-size:0.82rem;${heroStyle}" onclick="openCommissionerPush('${evt.id}','${nameEsc}')">
       📣 Send Notification
     </button>
+    ${cancelBtn}
   </div>`;
+}
+// Dev-94 — commissioner-only cancel/un-cancel toggle for a BF Series (or any
+// non-Gathering) event card. Deliberately minimal: no D1 row, no auto-notify
+// (Brian sends that separately, this is the backup visual for players who
+// miss it) — just a name→reason entry in the same flags-KV map every other
+// page-wide toggle here already uses, read back by buildEventCard via
+// CANCELED_EVENTS. Read-modify-write against the in-memory map (already kept
+// fresh by loadRemoteFlags) rather than a dedicated server-side add/remove
+// route, since flags/POST only ever replaces one key's whole value anyway.
+async function toggleEventCanceled(eventName, cancel) {
+  if (!isCommissioner()) return;
+  let reason = '';
+  if (cancel) {
+    reason = prompt(`Cancel "${eventName}"?\n\nOptional reason to show on the card (e.g. "Weather forecast") — leave blank for a plain "Canceled" stamp.`, '');
+    if (reason === null) return; // they hit Cancel on the prompt itself
+  } else {
+    if (!confirm(`Un-cancel "${eventName}"? The canceled stamp will be removed from the card.`)) return;
+  }
+  const updated = { ...CANCELED_EVENTS };
+  if (cancel) updated[eventName] = reason.trim();
+  else delete updated[eventName];
+  try {
+    await postFlag('canceled_events', JSON.stringify(updated));
+    CANCELED_EVENTS = updated;
+    showToast(cancel ? '🚫 Event marked canceled' : '✅ Cancellation cleared');
+    setTimeout(() => location.reload(), 600);
+  } catch(e) {
+    showToast('❌ Could not update — ' + e.message, true);
+  }
 }
 function textAllPlayers(evtId, evtName) {
   const evt = eventData.find(e => e.id === evtId);
