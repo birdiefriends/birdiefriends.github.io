@@ -3762,3 +3762,138 @@ operating rules for Dev-84 and beyond.
 
 **Session Dev-83 fully closed.**
 **Chat-rename string:** `Dev-83 - Worker Outage Restored, Draft Calc Rebuilt, Team-Quota Math Fixed Twice, Trip Memories Chapter Boundary Solved, Live Event + Missing CTP Recovered`
+
+## Dev-83b · 2026-09-20 — BFE Jotform Key Migration & AutoPush MacroDroid Manual-Invocation Fix
+
+**Focus:** A parallel side-thread kept open alongside Dev-84's live-event work, specifically
+to finish two pieces of infrastructure that needed this session's already-built context
+rather than re-establishing it fresh: getting `JOTFORM_API_KEY` out of client-side
+`BFE-Admin.html`, and getting the `BF AutoPush` MacroDroid macro working as a manual,
+icon-triggered phone-to-GitHub publish tool. Not part of the Dev-NN live-event numbering
+sequence — labeled "b" to avoid colliding with Dev-84's active thread.
+
+**Jotform key migration (BFE-Admin.html only — portal.html's own copy of this key is
+untouched, still open, see `BF_Operations_Guide.md`'s existing backlog row):** the trigger
+was repeated, hard-to-reproduce reports of a file "not downloading" when delivered to
+Brian's phone via `SendUserFile`, which turned out to be the platform's own credential-leak
+protection reacting somewhere in the delivery path whenever the real key was embedded in
+`BFE-Admin.html`. Rather than keep fighting that, moved the key server-side: added
+`JOTFORM_API_KEY`/`JF_API` constants and two new routes to `bf_experiences_worker.js` —
+`GET /bfe/jotform/submissions` (proxies `jfFetchSubmissions`, used by every existing read
+path: CttP leaders, round scorecards, event-name picker, request-event dates, GHIN member
+lookup) and `POST /bfe/jotform/submissions` (PIN-gated at `7797`, proxies the two "Generate
+test scorecards"/"Generate test CTP" testing-tool submission calls). Rewrote
+`BFE-Admin.html`'s three Jotform call sites to hit these routes instead of calling the
+Jotform API directly — the real key no longer exists anywhere in the client-side file.
+Rebuilt the worker changes on Brian's actual pasted live source (not a stale local copy)
+after self-catching a near-miss — the live source had a `Dev-84`-labeled route
+(`PATCH /bfe/memories/notes/:id`) this session's stale copy was missing. Deployed by Brian
+to Cloudflare; pushed and verified byte-exact in both `docs/BFE-Admin.html` and
+`source/bf_experiences_worker.js`.
+
+**BF AutoPush MacroDroid — automatic trigger to manual icon launch:** Brian's original ask
+was simply to resume testing the phone-side AutoPush pipeline with a key-free
+`BFE-Admin.html`. First real finding: there was never a download failure at all — the
+macro's own `File Changed` trigger was firing automatically the instant a matching file
+landed in Downloads, processing and deleting it within the same second, before Brian could
+see it in his file browser (proven by disabling the macro and watching the identical
+download land and stay). Brian asked for manual-only invocation via a home-screen icon
+instead of the automatic trigger, matching the existing Windows `bf_push.ps1`/`.bat`
+workflow. That surfaced a genuine chain of MacroDroid-specific bugs, in order:
+
+- Deleting the trigger removed the only source of MacroDroid's `{file_path}` system
+  variable, which every downstream action depended on (Read from File, both
+  filename-routing `If` checks, the HTTP message field, the final Delete). Fixed by adding
+  a `List Files` (exact filename pattern, `Array` output) existence-check for each target
+  filename at the top of the macro, an `If {lv=X_match} Value contains "<filename>"`
+  wrapper (this comparison mode on an Array-typed value correctly evaluates false on an
+  empty array, doubling as the existence test), and a new `manual_file_path` local variable
+  set inside each match — then swapping every remaining `{file_path}` reference to
+  `{lv=manual_file_path}`.
+- MacroDroid refuses to save a macro with zero triggers, even a fully manual one. Fixed by
+  adding a **Shortcut Launched** trigger — MacroDroid's dedicated tap-only trigger type,
+  which is also what correctly powers a working home-screen icon (rather than the raw
+  Android pin-to-home-screen used first, before this trigger existed).
+- The real, repeated root cause of the `file_content_json` 17-byte corruption seen across
+  several test runs (originally misdiagnosed as a File-Changed-trigger race condition,
+  which a `Wait 4 seconds` action was added to address but didn't actually fix): MacroDroid's
+  "Text Manipulation → Replace all" action's **New Text** field uses Java-regex-style
+  replacement semantics, where a backslash is an escape-and-consume marker — typing `\"` or
+  `\n` or `\\` produces only ONE literal character in the actual output, silently dropping
+  the backslash. Confirmed directly via the action's own `TEST` button using throwaway
+  substitutions (`e`→`Q`, then `\Q` as New Text) to isolate the behavior from a separate,
+  unrelated display quirk (the same `TEST` popup also visually strips backslashes from its
+  own preview regardless of the real underlying value — confirmed by cross-checking against
+  the macro's Local Variables panel, which renders correctly). Fixed by doubling the typed
+  backslashes in each New Text field: `\\"` for the quote-escaping step, `\\\\` for the
+  backslash-escaping step.
+- A second, independent bug remained even after that fix: the "Convert \n to newline"
+  checkbox (checked by default on all three Text Manipulation steps) was silently
+  pre-converting pre-existing literal `\n` two-character sequences already present in the
+  file's own JS source (e.g. `lines.join('\n')`) into real raw newline characters before
+  the escape chain ever ran — corrupting valid JS into a real syntax error (confirmed via
+  `node --check` failing on the live pushed file, pointing at a raw newline embedded inside
+  a single-quoted string, which is invalid JS). Fixed by unchecking that box on all three
+  Text Manipulation actions; none of them should ever want implicit newline conversion as a
+  side effect, since newline handling is deliberately and explicitly done by the dedicated
+  step for it.
+
+Verified success two ways: the worker's own `/deploy` response (`{"ok":true,"commitSha":...}`)
+captured into a `http_response_body_s` variable added specifically for this debugging pass
+(MacroDroid's HTTP Request action can save the response body to a string variable — worth
+remembering for any future HTTP Request debugging), and independently from this cloud
+sandbox via a full byte-for-byte `diff` of the live GitHub raw content against the known-good
+source plus a `node --check` syntax pass — both clean. The full manual pipeline (tap icon →
+existence-check both target filenames → read → three-step JSON escaping → PIN-gated POST to
+`/deploy` → delete local file) now works end-to-end, byte-exact, with no trigger and no race
+condition. Finished by pushing a final clean `BFE-Admin.html` with the temporary test-marker
+banner removed.
+
+**New reusable operational knowledge:**
+- MacroDroid's "Replace all" Text Manipulation action's New Text field needs a backslash
+  **doubled** to survive into the actual output — one typed `\` there is silently consumed
+  as an escape marker, not written out. This will bite any future macro doing manual
+  JSON-escaping or similar text transforms.
+- The "Convert \n to newline" checkbox on that same action type should stay **unchecked**
+  for any transform meant to touch only genuinely-real newline characters — it will also
+  silently rewrite pre-existing literal `\n` text sequences already in the source content.
+- MacroDroid's `TEST` button on a Text Manipulation action strips backslashes from its own
+  preview display, independent of what the underlying variable actually holds — don't trust
+  it for verifying backslash-sensitive output; check the Local Variables panel instead (or,
+  better, the actual downstream result).
+- MacroDroid's `List Files` action, filtered to an exact `Specify File Pattern` match with
+  `Array` output, doubles as a reliable file-existence check — an empty array reads as
+  false against a `Value contains` comparison.
+- This cloud sandbox's GitHub API access (`api.github.com`) is gated behind an explicit
+  `add_repo` grant not set up this session — raw content reads via
+  `raw.githubusercontent.com` work directly with no such gate, but commit-history/API
+  lookups do not.
+
+**Artifacts:** `bf_experiences_worker.js` (two new Jotform proxy routes, PIN-gated write),
+`BFE-Admin.html` (Jotform key removed from all three call sites, routed through the new
+worker proxy; test-marker banner removed in the final push) — both delivered, deployed by
+Brian, and pushed/verified live this session. The `BF AutoPush` MacroDroid macro itself
+lives only on Brian's phone (no file artifact) — final structure: `Shortcut Launched`
+trigger, two `List Files`/`If` existence-checks setting `manual_file_path`, `Wait 4 seconds`,
+`Read from File`, three corrected `Replace all` escaping steps, the existing
+filename-routing `If`/HTTP Request branches (message fields and Delete action repointed to
+`{lv=manual_file_path}`), each HTTP Request now also saving its response body to
+`http_response_body_s` for future debugging.
+
+**Carry-forward:**
+- `portal.html`'s own hardcoded `JOTFORM_API_KEY` is untouched and remains open — already
+  tracked in `BF_Operations_Guide.md`'s backlog table. The BFE-Admin.html fix this session
+  is a usable pattern/precedent if that one's ever picked up (same Worker, would just need
+  its own proxy routes or reuse of these — `BFE-Admin.html` and `portal.html` call
+  different subsets of Jotform functionality).
+- `BF_Session_Bootstrap.md` still describes `JOTFORM_API_KEY` as generically "hardcoded
+  client-side" without distinguishing `portal.html` (still true) from `BFE-Admin.html` (no
+  longer true) — worth a small correction pass so a future session doesn't reach for the
+  now-obsolete "call the page's own already-loaded Jotform function via the Browser bridge"
+  workaround for BFE-Admin.html specifically (that workaround still applies to
+  `portal.html`, unchanged).
+- No other loose ends — the AutoPush pipeline is stable and the macro's global toggle is
+  back on, gated only by the manual home-screen tap.
+
+**Session Dev-83b fully closed.**
+**Chat-rename string:** `Dev-83b - BFE Jotform Key Off Client-Side, BF AutoPush MacroDroid Manual-Invocation Fixed`
