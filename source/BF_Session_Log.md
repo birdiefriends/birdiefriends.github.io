@@ -3897,3 +3897,106 @@ filename-routing `If`/HTTP Request branches (message fields and Delete action re
 
 **Session Dev-83b fully closed.**
 **Chat-rename string:** `Dev-83b - BFE Jotform Key Off Client-Side, BF AutoPush MacroDroid Manual-Invocation Fixed`
+
+## Dev-84 · 2026-09-13 – 2026-09-20 — Trip Memories Alignment Tool, BF Series Cancel-Event Overlay, D1-Pinning Fix Recovered from Parallel-Session File Drift
+
+**Note on this entry:** this document was not updated incrementally as the standing rule in
+`BF_Session_Bootstrap.md` §4 calls for — it's being reconstructed now, at session close, from
+the visible conversation. Treat this as a catch-up pass rather than a contemporaneous log.
+Also per Brian's explicit instruction, **Wally Cup Rd3 / Overall Standings / event wrap-up
+status is not reconciled in this entry** — this session's actual work went a different
+direction than the old Dev-84-focus checklist expected, and no attempt was made here to
+determine whether Rd3 closed or the event wrapped up. Dev-85 should verify current status
+before assuming anything either way.
+
+**1. Trip Memories alignment widget + new `PATCH /bfe/memories/notes/:id` route.**
+Added a Commissioner-side alignment tool for the Trip Memories feature, backed by a new
+`PATCH /bfe/memories/notes/:id` route in `bf_experiences_worker.js`, letting a memory note be
+re-pointed to a different round/chapter after the fact.
+
+**2. Rd1 chapter-boundary bug — real diagnosis, fixed via the existing Dev-83 manual override.**
+The Rd1 chapter-boundary symptom recurred. Root cause this time: the round's `closed_at`
+timestamp was ~8:37pm ET, but the real on-course end was ~2:30pm ET on 9/11 — a live
+gap between when the round was actually finished and when it was marked closed in the
+system. Fixed using the pre-existing Dev-83 manual boundary-override control (not a new
+mechanism). Flagged but **not confirmed**: the override is persisted client-side only
+(`localStorage`, key `bfeMemoryCutoffs::<eventName>` → `{roundName: isoString}`), which may
+explain why the same symptom needed re-fixing here — this is an open question, not an
+established cause. Worth checking in Dev-85 whether a durability fix (server-side
+persistence) is warranted.
+
+**3. Buck Hill Golf Club geocoding.** Added/corrected geocoding for Buck Hill Golf Club.
+
+**4. BF Series canceled-event card overlay (portal.html v4.2.0).** Built a Commissioner-facing
+cancellation flow: marking a BF Series event cancelled sets a `canceled_events` flag in the
+flags KV, which drives an ❌ overlay on the event's card wherever it renders. Explicitly
+scoped to non-Gathering events only. This closes the pre-existing `BF_Operations_Guide.md`
+§10 backlog row for "Cancelled Events" (previously 🔴 Priority — see that doc's update this
+session).
+
+**5. Two follow-up investigations (no code changes):**
+   - Confirmed BF Series progression safety around `generateSeriesPage()` / `adjustQuota()`
+     in `BF_Golf_Scorer_8.html` — no issue found.
+   - Confirmed the cancel-overlay feature correctly does not apply to Gatherings (by design,
+     per item 4 above).
+
+**6. D1 primary-pinning fix — `GET /bfe/memories` and `GET /bfe/memories/notes`.** Closed the
+backlog gap where these two routes could read stale data from a D1 replica right after a
+write, unlike `GET /bfe/events-list`, `GET /bfe/events`, and `POST /bfe/events` (already
+pinned as of Dev-106). Same pattern applied to both routes:
+```js
+const db = (typeof env.DB.withSession === 'function') ? env.DB.withSession('first-primary') : env.DB;
+```
+with all `.prepare()` calls in those two handlers switched from `env.DB.prepare(...)` to
+`db.prepare(...)`. Verified with a mock-D1 test harness (fake `env.DB` exposing both
+`.prepare()` and `.withSession()`, calling the real exported `fetch` handler and asserting
+both that the routes return correct data and that `withSession('first-primary')` is actually
+invoked, with correct fallback to `env.DB` when unavailable).
+
+**7. Process incident: parallel-session file drift, caught before it caused damage.** Brian
+was running a parallel session ("dev-83") the same day that pushed a real, independent update
+to `bf_experiences_worker.js` — commit `7f68542` ("Local publish: BF_Experiences.js ->
+source/bf_experiences_worker.js"), authored 2026-09-20 11:03:18 -0400. This session's repo
+clone was never refreshed mid-session and was 23 commits behind by the time the D1-pinning
+fix was built, so the first version of that fix was built on a stale base. It was delivered
+and briefly committed to AutoPush, which would have overwritten Brian's parallel-session
+changes had he deployed it as-is. **Caught because Brian asked directly** where the worker
+source file had come from and then confirmed the parallel session's existence and its
+timestamp. Recovery: fetched `origin/main`, had Brian paste the actual live/production file
+for independent verification, confirmed via `diff` it was byte-identical to GitHub's `7f68542`
+(no drift between deployed code and GitHub at that point), rebuilt the D1-pinning fix on top
+of the correct base, verified the diff against production was exactly the intended two-route
+change and nothing else, reran the mock-D1 test, and redelivered. Local clone brought current
+via `git fetch` + `git reset --hard origin/main`.
+**Lesson for future sessions:** when editing a file in this repo — especially
+`bf_experiences_worker.js` or any other file Brian may be actively working on in a parallel
+session — fetch `origin` before editing rather than trusting a session-start clone, particularly
+on a day multiple sessions are running. (Added to `BF_Session_Bootstrap.md` §4.)
+
+**8. Process incident: AutoPush filename mismatch silently dropped the fix.** After Brian
+deployed the corrected worker via his own Cloudflare paste-and-deploy step, he reported the
+AutoPush pipeline hadn't picked up the file. Diagnosis: the corrected file had been delivered
+to the AutoPush folder under its destination-style name, `bf_experiences_worker.js`, but
+`bf_push.ps1`'s `$FileMap` recognizes this file only under the local key name
+`BF_Experiences.js` (mapping to GitHub destination `source/bf_experiences_worker.js`) — the
+one entry in the whole map where the local key and destination basename differ. This mismatch
+is documented only in the script's own v8 header comment (dated Dev-78) and had already been
+hit before; it was hit again here. Fixed by redelivering the same corrected file under the
+correct name, `BF_Experiences.js`. The stray wrongly-named copy did not need manual cleanup —
+`bf_push.ps1`'s own `$CleanupExtras` rule auto-deletes it once the correctly-named push
+verifies. **Lesson for future sessions:** always check `bf_push.ps1`'s actual `$FileMap` before
+naming a file for AutoPush delivery — don't assume the destination basename is the local key
+name. (Added to `BF_Session_Bootstrap.md` §4, since it was previously documented only inside
+the script itself.)
+
+**Carry-forward:**
+- Wally Cup Rd3 / Overall Standings / event wrap-up status: **unreconciled**, see note above.
+  Verify current state at the start of Dev-85 rather than assuming either way.
+- The Rd1 chapter-boundary override's `localStorage`-only persistence is a possible durability
+  gap, not yet confirmed as the cause of the recurrence — worth a look in Dev-85 if the
+  symptom shows up a third time.
+- This session log itself fell behind the standing "keep docs updated as you go" rule — worth
+  a conscious effort in Dev-85 to update it incrementally rather than reconstructing at close.
+
+**Session Dev-84 fully closed.**
+**Chat-rename string:** `Dev-84 - Trip Memories Alignment Tool, BF Series Cancel-Event Overlay, D1-Pinning Fix Recovered from Parallel-Session File Drift`
