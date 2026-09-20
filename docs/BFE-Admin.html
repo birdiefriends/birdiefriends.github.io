@@ -760,21 +760,34 @@ function recommendPayoutConfig(buyInPerPlayer, playerCount, potPlan) {
   return { buyInPerPlayer, playerCount, pots };
 }
 // ══════════════════════════════════════════════════════════════════════
-// Jotform — direct client-side fetch, same pattern portal.html already
-// uses in production (JOTFORM_API_KEY + api.jotform.com/form/:id/submissions,
-// called from the browser, no server proxy needed). Mirrors GS's real
-// Pre-Event Setup event-picker (grpLoadEventNames/grpFetchRegistrants):
-// load distinct Event Name values from the form, pick one, fetch only
-// that event's registrants (Register? = Yes/Sub). Matches by QUESTION
-// LABEL TEXT rather than hardcoded QIDs, so it works against any BF
-// Experiences registration form — shared multi-event or dedicated —
-// without per-event field-mapping. A form with no Event Name field at
-// all (rare — every real BF form seen so far has one) is treated as
-// "every submission belongs to this event," same as a dedicated form
+// Jotform — proxied through the BFE Worker's /bfe/jotform/submissions
+// routes (Dev-109) rather than fetched directly from the browser. Used to
+// hold JOTFORM_API_KEY + call api.jotform.com straight from client-side JS
+// (same pattern portal.html still uses in production) — moved server-side
+// because that hardcoded key was a real leaked-secret liability sitting in
+// plain page source on GitHub Pages, and separately because it turned out
+// to get silently blocked by platform-level credential-leak protection
+// when this file traveled through some delivery paths (e.g. Claude's own
+// file-download-to-phone feature) — "says downloaded, file's nowhere,"
+// no error surfaced either side. The Worker is the only thing that still
+// holds the real key; this file just calls its two proxy routes now.
+// Mirrors GS's real Pre-Event Setup event-picker (grpLoadEventNames/
+// grpFetchRegistrants): load distinct Event Name values from the form,
+// pick one, fetch only that event's registrants (Register? = Yes/Sub).
+// Matches by QUESTION LABEL TEXT rather than hardcoded QIDs, so it works
+// against any BF Experiences registration form — shared multi-event or
+// dedicated — without per-event field-mapping. A form with no Event Name
+// field at all (rare — every real BF form seen so far has one) is treated
+// as "every submission belongs to this event," same as a dedicated form
 // where all submissions share one Event Name value.
 // ══════════════════════════════════════════════════════════════════════
-const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
-const JF_API = 'https://api.jotform.com';
+function jfWorkerBase() {
+  const v = document.getElementById('workerUrl').value.trim();
+  return (v || DEFAULT_WORKER_URL).replace(/\/$/, '');
+}
+function hostPinValue() {
+  return document.getElementById('hostPin').value.trim() || DEFAULT_HOST_PIN;
+}
 // Dev-74 — same shared scorecard form portal.html's Live Panel writes to
 // (SCORECARD_FORM_ID/SC_QID/WB_QID must stay in sync with portal.html's
 // copies by hand — there's no shared config file between the two apps).
@@ -843,7 +856,7 @@ function extractJotformId(input) {
 }
 async function jfFetchSubmissions(formId, filter) {
   const filterQs = filter ? `&filter=${filter}` : '';
-  const res = await fetch(`${JF_API}/form/${formId}/submissions?apiKey=${JOTFORM_API_KEY}&limit=1000${filterQs}`);
+  const res = await fetch(`${jfWorkerBase()}/bfe/jotform/submissions?formId=${formId}&limit=1000${filterQs}`);
   const json = await res.json();
   if (json.responseCode !== 200) throw new Error('Jotform error: ' + (json.message || res.status));
   return json.content || [];
@@ -909,23 +922,23 @@ async function jfCreateScorecardSubmission(playerName, roundName, courseName, wb
   const total = front + back;
   const lostWb = alreadyOut ? true : Math.random() < wbLossRate;
   const lostWbThisRound = lostWb && !alreadyOut;
-  const params = new URLSearchParams();
-  params.set(`submission[${SC_QID.name}]`, playerName);
-  params.set(`submission[${SC_QID.event}]`, roundName);
-  params.set(`submission[${SC_QID.course}]`, courseName || '');
-  SC_QID.holes.forEach((qid, i) => params.set(`submission[${qid}]`, String(holes[i])));
-  params.set(`submission[${SC_QID.front}]`, String(front));
-  params.set(`submission[${SC_QID.back}]`, String(back));
-  params.set(`submission[${SC_QID.total}]`, String(total));
-  params.set(`submission[${WB_QID.status}]`, lostWb ? 'No' : 'Yes');
+  const fields = {};
+  fields[SC_QID.name] = playerName;
+  fields[SC_QID.event] = roundName;
+  fields[SC_QID.course] = courseName || '';
+  SC_QID.holes.forEach((qid, i) => { fields[qid] = String(holes[i]); });
+  fields[SC_QID.front] = String(front);
+  fields[SC_QID.back] = String(back);
+  fields[SC_QID.total] = String(total);
+  fields[WB_QID.status] = lostWb ? 'No' : 'Yes';
   if (lostWbThisRound) {
-    params.set(`submission[${WB_QID.hole}]`, String(1 + Math.floor(Math.random() * 18)));
-    params.set(`submission[${WB_QID.stroke}]`, String(1 + Math.floor(Math.random() * 3)));
+    fields[WB_QID.hole] = String(1 + Math.floor(Math.random() * 18));
+    fields[WB_QID.stroke] = String(1 + Math.floor(Math.random() * 3));
   }
-  const res = await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`, {
+  const res = await fetch(`${jfWorkerBase()}/bfe/jotform/submissions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString()
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ formId: SCORECARD_FORM_ID, fields, pin: hostPinValue() })
   });
   const data = await res.json();
   if (data.responseCode !== 200) throw new Error(data.message || `HTTP ${res.status}`);
@@ -1079,15 +1092,15 @@ function cttpHolesForSelectedTestRound() {
   return parseCttpHolesInput(block.querySelector('.venueCttpHoles').value);
 }
 async function jfCreateCttpSubmission(hole, playerName, roundName, dist) {
-  const params = new URLSearchParams();
-  params.set(`submission[${CTP_QID.hole}]`, '#' + hole);
-  params.set(`submission[${CTP_QID.player}]`, playerName);
-  params.set(`submission[${CTP_QID.event}]`, roundName);
-  if (dist !== null && dist !== undefined) params.set(`submission[${CTP_QID.dist}]`, String(dist));
-  const res = await fetch(`${JF_API}/form/${CTP_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`, {
+  const fields = {};
+  fields[CTP_QID.hole] = '#' + hole;
+  fields[CTP_QID.player] = playerName;
+  fields[CTP_QID.event] = roundName;
+  if (dist !== null && dist !== undefined) fields[CTP_QID.dist] = String(dist);
+  const res = await fetch(`${jfWorkerBase()}/bfe/jotform/submissions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString()
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ formId: CTP_FORM_ID, fields, pin: hostPinValue() })
   });
   const data = await res.json();
   if (data.responseCode !== 200) throw new Error(data.message || `HTTP ${res.status}`);
