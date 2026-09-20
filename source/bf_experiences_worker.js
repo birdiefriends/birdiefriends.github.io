@@ -399,6 +399,19 @@
 //   ALTER TABLE bfe_event_memory_notes_new RENAME TO bfe_event_memory_notes;
 // ══════════════════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════════════════
+// Jotform proxy (Dev-109) — BFE-Admin.html used to hold JOTFORM_API_KEY and
+// call api.jotform.com directly from the browser (same pattern portal.html
+// still uses in production). Moved server-side: that hardcoded key sitting
+// in plain client-side page source on GitHub Pages was a real leaked-secret
+// liability, and separately it turned out to get silently blocked by
+// platform-level credential-leak protection when the file traveled through
+// some delivery paths — the file would "download" with nothing arriving,
+// no error surfaced either side. This Worker is now the only thing that
+// ever sees the real key; BFE-Admin.html calls the two routes below instead.
+// ══════════════════════════════════════════════════════════════════════════
+const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
+const JF_API = 'https://api.jotform.com';
 
 export default {
   async fetch(request, env, ctx) {
@@ -1323,6 +1336,36 @@ export default {
       }
     }
 
+    // PATCH /bfe/memories/notes/:id — Dev-84: commissioner alignment
+    // correction for notes, mirroring the photo PATCH just below (round_name
+    // only — notes have no curation_status/is_trophy_moment/section_label
+    // concept). Notes previously had POST + GET + DELETE but no way to just
+    // move a misplaced one to the right round — this is what the Trip
+    // Memories alignment widget in BFE-Admin.html calls. Checked BEFORE the
+    // broader PATCH /bfe/memories/ handler below — same startsWith
+    // collision as the DELETE routes above, so an id of "notes/5" doesn't
+    // get swallowed by the generic photo route first.
+    if (request.method === 'PATCH' && url.pathname.startsWith('/bfe/memories/notes/')) {
+      let body;
+      try { body = await request.json(); } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const noteId = url.pathname.split('/bfe/memories/notes/')[1];
+      if (String(body.pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (body.round_name === undefined) {
+        return new Response(JSON.stringify({ error: 'No recognized fields to update' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        await env.DB.prepare(`UPDATE bfe_event_memory_notes SET round_name = ? WHERE id = ?`)
+          .bind(body.round_name === null ? null : String(body.round_name), noteId).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // PATCH /bfe/memories/:id — commissioner curation (Step 7 will build the
     // UI that calls this; the route itself is built now so upload/list/serve/
     // delete/PATCH ship as one complete surface). PIN-gated — same admin bar
@@ -1471,6 +1514,67 @@ export default {
         return new Response(JSON.stringify({ ok: true, notes: results }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /bfe/jotform/submissions?formId=<id>&filter=<url-encoded JSON>&limit=<n>
+    // Mirrors api.jotform.com/form/:id/submissions's own contract exactly
+    // (same {responseCode, message, content} envelope) so BFE-Admin.html's
+    // jfFetchSubmissions() barely changed — just swapped which URL it calls.
+    // No PIN: this only ever surfaces the same submission data the Admin
+    // panel already displayed with the key sitting in plain client-side JS,
+    // so nothing gets MORE exposed by opening it up — same posture as
+    // GET /bfe/event-config above.
+    if (request.method === 'GET' && url.pathname === '/bfe/jotform/submissions') {
+      const formId = url.searchParams.get('formId');
+      if (!formId) {
+        return new Response(JSON.stringify({ error: 'formId query param is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const filter = url.searchParams.get('filter');
+      const limit  = url.searchParams.get('limit') || '1000';
+      const jfUrl = `${JF_API}/form/${encodeURIComponent(formId)}/submissions?apiKey=${JOTFORM_API_KEY}&limit=${encodeURIComponent(limit)}` +
+                    (filter ? `&filter=${encodeURIComponent(filter)}` : '');
+      try {
+        const jfRes = await fetch(jfUrl);
+        const jfJson = await jfRes.json();
+        return new Response(JSON.stringify(jfJson), { status: jfRes.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Jotform proxy error: ' + String(e.message || e) }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /bfe/jotform/submissions — body: { formId, fields: {qid: value, ...}, pin }
+    // PIN-gated like the other admin write routes above: unlike the GET side,
+    // a raw client fetch could always READ with the key visible in Network
+    // tab, but couldn't WRITE without also copying that key out — so this is
+    // a genuinely new capability once proxied, and gets the same 7797 gate
+    // event-config/venue-tee-catalog already use rather than being left open.
+    if (request.method === 'POST' && url.pathname === '/bfe/jotform/submissions') {
+      let body;
+      try { body = await request.json(); } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { formId, fields, pin } = body;
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (!formId || !fields || typeof fields !== 'object') {
+        return new Response(JSON.stringify({ error: 'formId and fields (object) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const params = new URLSearchParams();
+      for (const [qid, value] of Object.entries(fields)) {
+        params.set(`submission[${qid}]`, String(value));
+      }
+      try {
+        const jfRes = await fetch(`${JF_API}/form/${encodeURIComponent(formId)}/submissions?apiKey=${JOTFORM_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString()
+        });
+        const jfJson = await jfRes.json();
+        return new Response(JSON.stringify(jfJson), { status: jfRes.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Jotform proxy error: ' + String(e.message || e) }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
