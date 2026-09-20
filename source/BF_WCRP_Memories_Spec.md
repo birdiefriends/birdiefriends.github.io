@@ -257,3 +257,31 @@ independent of any override set on an earlier round.
 close-out) — confirm in Dev-84 that Rd3, which should have normal Live Panel evidence
 and/or a real `closed_at`, doesn't need the manual override at all, and that the
 post-Rd3 "After"/event-wrap-up chapter reads sensibly with no further round to bound it.
+
+## What changed in Dev-84 — alignment widget, a new notes-repoint route, and Rd1's boundary bug recurring
+
+**New: a Commissioner-side Trip Memories alignment widget.** Lets a memory note be
+re-pointed to a different round/chapter after the fact, backed by a new
+`PATCH /bfe/memories/notes/:id` route on `bf_experiences_worker.js`. Added because the
+existing per-round boundary override (Dev-83, described above) only shifts a *round's*
+window, not an individual note that landed in the wrong chapter regardless.
+
+**The Rd1 chapter-boundary symptom recurred.** Real diagnosis this time: Rd1's `closed_at`
+timestamp was ~8:37pm ET, but the real on-course end was ~2:30pm ET on 9/11 — a genuine gap
+between when the round actually finished and when it was marked closed, not a repeat of the
+Dev-83 zero-evidence case. Fixed using the same Dev-83 manual boundary-override control
+(no new mechanism needed).
+
+**Open question, not yet confirmed either way:** the Dev-83 override is persisted
+client-side only, in that browser's own `localStorage`
+(`bfeMemoryCutoffs::<eventName>` → `{roundName: isoString}` — see the Dev-83 addendum
+above). Whether that `localStorage`-only durability is *why* the same round needed
+re-fixing here (e.g. a different browser/profile, or storage cleared between sessions) has
+not been investigated — this is flagged as a possible gap for a future session to check,
+not established as the cause. If it recurs a third time, checking whether the override
+actually persisted between sessions (rather than re-diagnosing the chapter logic again)
+would be the first thing to try.
+
+**Wally Cup Rd3 status is not addressed in this addendum** — per Brian's instruction, this
+session's documentation does not attempt to reconcile whether Rd3 closed or needed the
+manual override at all. See `BF_Session_Bootstrap.md`'s Dev-85 focus section.
