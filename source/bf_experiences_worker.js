@@ -1287,6 +1287,9 @@ export default {
     // to work with later without this route needing to change.
     if (request.method === 'GET' && url.pathname === '/bfe/memories') {
       try {
+        // Pinned to D1 primary — same read-replica-staleness fix already
+        // applied to GET /bfe/events-list, GET /bfe/events, POST /bfe/events.
+        const db = (typeof env.DB.withSession === 'function') ? env.DB.withSession('first-primary') : env.DB;
         const eventName  = url.searchParams.get('event');
         const eventIdQ   = url.searchParams.get('event_id');
         const roundNameQ = url.searchParams.get('round_name'); // Dev-80 fix — was round_id
@@ -1295,7 +1298,7 @@ export default {
 
         let eventId = eventIdQ ? Number(eventIdQ) : null;
         if (!eventId && eventName) {
-          const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
+          const eventRow = await db.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
           eventId = eventRow ? eventRow.id : null;
         }
         if (!eventId) {
@@ -1306,7 +1309,7 @@ export default {
         if (roundNameQ) { sql += ` AND round_name = ?`; binds.push(roundNameQ); }
         if (!isAdmin) { sql += ` AND curation_status = 'approved'`; }
         sql += ` ORDER BY captured_at ASC`;
-        const { results } = await env.DB.prepare(sql).bind(...binds).all();
+        const { results } = await db.prepare(sql).bind(...binds).all();
         const memories = results.map(r => ({ ...r, tagged_players: r.tagged_players ? JSON.parse(r.tagged_players) : [] }));
         return new Response(JSON.stringify({ ok: true, memories }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
@@ -1498,17 +1501,19 @@ export default {
     // reject-by-exception concept for notes, only for photos/video).
     if (request.method === 'GET' && url.pathname === '/bfe/memories/notes') {
       try {
+        // Pinned to D1 primary — see matching comment on GET /bfe/memories above.
+        const db = (typeof env.DB.withSession === 'function') ? env.DB.withSession('first-primary') : env.DB;
         const eventName = url.searchParams.get('event');
         const eventIdQ  = url.searchParams.get('event_id');
         let eventId = eventIdQ ? Number(eventIdQ) : null;
         if (!eventId && eventName) {
-          const eventRow = await env.DB.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
+          const eventRow = await db.prepare(`SELECT id FROM bfe_events WHERE event_name = ?`).bind(eventName).first();
           eventId = eventRow ? eventRow.id : null;
         }
         if (!eventId) {
           return new Response(JSON.stringify({ ok: true, notes: [] }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        const { results } = await env.DB.prepare(
+        const { results } = await db.prepare(
           `SELECT * FROM bfe_event_memory_notes WHERE event_id = ? ORDER BY created_at ASC`
         ).bind(eventId).all();
         return new Response(JSON.stringify({ ok: true, notes: results }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
