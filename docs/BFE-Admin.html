@@ -1142,19 +1142,12 @@ document.getElementById('generateTestCttpBtn').addEventListener('click', async (
     jobs.push({ hole: unconfiguredHole, roundName, entries: [{ player: players[0].name, dist: 1 }], canary: 'unconfigured-hole' });
   }
   const totalClaims = jobs.reduce((n, j) => n + j.entries.length, 0);
-  const confirmMsg = `Create ${totalClaims} REAL test CTP submissions on Jotform for "${roundName}"?
-
-` +
-    `• Holes ${holes.join(', ')}: 2-4 claims each, mostly improving (realistic leapfrog progression)
-` +
-    `• Hole ${proofHole}: PLUS one later claim that's deliberately FARTHER — should still win (proves timestamp, not distance)
-` +
-    `• One claim mistagged as round "${wrongRoundName}" on hole ${proofHole} — should NOT appear in this round's results
-` +
-    (unconfiguredHole ? `• One claim on hole ${unconfiguredHole} (not configured for CTP this round) — should be silently ignored
-` : '') +
-    `
-This writes to Jotform — delete them from Jotform's dashboard when you're done testing.`;
+  const confirmMsg = `Create ${totalClaims} REAL test CTP submissions on Jotform for "${roundName}"?\n\n` +
+    `• Holes ${holes.join(', ')}: 2-4 claims each, mostly improving (realistic leapfrog progression)\n` +
+    `• Hole ${proofHole}: PLUS one later claim that's deliberately FARTHER — should still win (proves timestamp, not distance)\n` +
+    `• One claim mistagged as round "${wrongRoundName}" on hole ${proofHole} — should NOT appear in this round's results\n` +
+    (unconfiguredHole ? `• One claim on hole ${unconfiguredHole} (not configured for CTP this round) — should be silently ignored\n` : '') +
+    `\nThis writes to Jotform — delete them from Jotform's dashboard when you're done testing.`;
   if (!confirm(confirmMsg)) return;
   statusEl.style.color = 'var(--sub)';
   let created = 0;
@@ -2060,12 +2053,8 @@ async function saveEventConfig() {
   if (suspectRounds.length) {
     const names = suspectRounds.map(r => `"${r.name}"`).join(', ');
     const proceed = confirm(
-      `${names} — engine is not "Stableford quota", but "Rolls into Overall" is checked in section 4.
-
-` +
-      `This will feed that round's result into the season-long Overall Standings and Wally Ball pot, which is almost never what you want for a standalone format like a 2Man scramble.
-
-` +
+      `${names} — engine is not "Stableford quota", but "Rolls into Overall" is checked in section 4.\n\n` +
+      `This will feed that round's result into the season-long Overall Standings and Wally Ball pot, which is almost never what you want for a standalone format like a 2Man scramble.\n\n` +
       `OK to save anyway (rolls into Overall) — Cancel to go back and uncheck it in section 4 first.`
     );
     if (!proceed) { setStatus('Save cancelled — go uncheck "Rolls into Overall" for the round(s) above in section 4.', true); return; }
@@ -2462,8 +2451,7 @@ async function closeScorecardOnlyRound(round, base, pin, eventName, btn) {
         lines.push('');
       }
       lines.push('OK to close anyway — this just publishes whatever scorecards exist, no scoring math involved. Cancel to go check first, nothing is saved yet.');
-      const proceed = confirm(lines.join('
-'));
+      const proceed = confirm(lines.join('\n'));
       if (!proceed) { setCloseRoundStatus('Close round cancelled — nothing saved. Check Jotform/roster, then try again.', true); btn.disabled = false; return; }
     }
     await Promise.allSettled(players.filter(p => p.sc).map(p => fetch(base + '/scorecards', {
@@ -2609,8 +2597,7 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
         lines.push('→ Check it was submitted under the team\'s exact display name (nickname if one was set, otherwise "PlayerA & PlayerB").', '');
       }
       lines.push('OK to close anyway — a team with no scorecard scores 0. Cancel to go check first, nothing is saved yet.');
-      const proceed = confirm(lines.join('
-'));
+      const proceed = confirm(lines.join('\n'));
       if (!proceed) { setCloseRoundStatus('Close round cancelled — nothing saved. Check Jotform/teams, then try again.', true); btn.disabled = false; return; }
     }
     await Promise.allSettled(teams.filter(t => t.sc).map(t => fetch(base + '/scorecards', {
@@ -2772,8 +2759,7 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
         lines.push('');
       }
       lines.push('OK to close the round anyway — missing players score 0 for it, and you\'ll get a chance to mark a withdrawal right after. Cancel to go check first, without saving anything.');
-      const proceed = confirm(lines.join('
-'));
+      const proceed = confirm(lines.join('\n'));
       if (!proceed) { setCloseRoundStatus('Close round cancelled — nothing saved. Check Jotform/roster, then try again.', true); btn.disabled = false; return; }
     }
     await Promise.allSettled(players.filter(p => p.sc).map(p => fetch(base + '/scorecards', {
@@ -3501,9 +3487,7 @@ async function loadEventsList() {
   }
 }
 async function deleteEventData(eventName) {
-  if (!confirm(`Delete ALL stored data for "${eventName}" — rounds, roster, and any saved round results/skins?
-
-This cannot be undone. (Jotform scorecard submissions are separate and are not touched.)`)) return;
+  if (!confirm(`Delete ALL stored data for "${eventName}" — rounds, roster, and any saved round results/skins?\n\nThis cannot be undone. (Jotform scorecard submissions are separate and are not touched.)`)) return;
   const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
   const pin  = document.getElementById('hostPin').value.trim();
   if (!base) { alert('Enter the BFE Worker base URL above first.'); return; }
