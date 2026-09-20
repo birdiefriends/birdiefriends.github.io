@@ -103,6 +103,13 @@ same delivery step: the live file gets updated directly; the archived copy
 still goes out through a normal push whenever bf_push_library.ps1 next sits
 in this folder.
 
+v11 (Dev-85): added BF_BFE_NextGen_Spec.md to $FileMap -- the new living
+design-notes doc from the Dev-85 GolfCourseAPI/game-engine/handicap/live-
+scoring discussion (companion doc, same treatment as BF_WallyCup_Spec.md
+and BF_WCRP_Memories_Spec.md above). Same standing rule as the v9/v10
+notes: a new durable doc gets a $FileMap entry the same turn it's first
+delivered, so it doesn't sit here unrecognized.
+
 Run this by double-clicking bf_push.bat in the same folder. Drop any of the
 recognized files below into this same folder and it will push them to
 GitHub via the PIN-gated Worker /deploy route, verify each one landed
@@ -141,6 +148,10 @@ $FileMap = [ordered]@{
     # Dev-80 (v10): standalone Trip Info page for the 2026 Wally Cup --
     # docs/ only (no source/ mirror needed, it's not app code).
     "2026-wally-cup-trip-info.html" = @("docs/2026-wally-cup-trip-info.html")
+    # Dev-85 (v11): BFE next-gen design-notes doc (venue data via GolfCourseAPI,
+    # game engine decomposition, handicap calculator, live/offline scoring) --
+    # same treatment as BF_WallyCup_Spec.md above.
+    "BF_BFE_NextGen_Spec.md" = @("source/BF_BFE_NextGen_Spec.md")
 }
 
 # Dev-78 follow-up (v8): local filenames known to be stray leftovers of a
@@ -179,7 +190,7 @@ foreach ($name in $FileMap.Keys) {
     if (Test-Path (Join-Path $ScriptDir $name)) { $Found += $name }
 }
 
-Write-Host "BirdieFriends publish tool (v10)" -ForegroundColor Cyan
+Write-Host "BirdieFriends publish tool (v11)" -ForegroundColor Cyan
 Write-Host "Folder: $ScriptDir"
 Write-Host ""
 
