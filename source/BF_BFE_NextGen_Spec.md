@@ -135,6 +135,26 @@ already lacks a handicap calculator, same as BFE-A — so this net-new engine wo
 BFE-A only. No GS/BFE-A convergence question to solve; GS is not a target platform for any
 of this.
 
+**Longer-horizon vision, explicitly "eventually" — not near-term scope (Brian, Dev-85):**
+Gatherings (`worker.js`/`birdiefriends-push`) today are pure host management —
+scheduling, roster, attendance — with zero access to BFE's gaming engine. Brian's actual
+long-term aim is for host-management and gaming to converge: a Gathering should
+eventually be able to carry a Round Configuration and become a scored competition,
+rather than "Gatherings" and "BFE events" staying two separate systems that happen to
+share a Worker's D1 database. **This means the Round Configuration object should not be
+designed as BFE-exclusive machinery bolted onto `bfe_events`** — it should be an
+attachable capability any hosted session could eventually carry. Worth keeping in mind
+while designing §2's schema even though nothing about this is scoped or scheduled: a
+design that only ever imagines `bfe_events` rows having a Round Config makes this
+convergence harder later than a design that treats "what kind of record has a Round
+Config attached" as an open question from the start. **Real open technical question, not
+yet investigated:** whether Gatherings (`worker.js`) and BFE (`bf-experiences`) actually
+share one physical D1 database or are genuinely separate — there's a real clue they share
+one (the Dev-80 memories bug involved deleting rows from both `bfe_event_memories` and
+`event_photos` "in the same D1 database" per the bootstrap doc), but this hasn't been
+confirmed against the actual schema, and it materially changes how hard this convergence
+would be to build.
+
 ---
 
 ## 3. Handicap / stroke-allocation calculator — a real gap, but not calendar-critical
@@ -411,10 +431,17 @@ the Host's job more complete" is the right question for *sequencing and priority
    any game or UI depends on it. Needed for Wolf/Nassau/BBB/Best-Ball/Hi-Lo and for the
    future BF-Cup-with-handicap-relief option (§3) — none of which are this year's
    problem.
-7. **One new individual game format via the registry — Nassau or BBB before Wolf.**
-   Neither needs live multiplayer coordination, so this exercises a full new-game build
-   through the registry without also having to solve live group-coordination in the same
-   step.
+7. **One new individual game format via the registry — Nassau, Hi/Lo, or a plain
+   Net/Gross ranking; Brian's explicit preference is that the specific choice doesn't
+   matter.** Neither Nassau nor Hi/Lo needs live multiplayer coordination, so either
+   exercises a full new-game build through the registry without also having to solve
+   live group-coordination in the same step. **Worth designing this step to double as a
+   Gatherings pilot** (see §2's convergence note): whichever format gets built, trying it
+   on a low-stakes Gathering with real hosts and players before trusting it on a BFE
+   competitive event is real, useful signal — Brian's own framing is that these simple
+   formats are meant to give hosts "something interesting to try" and serve as feedback
+   "while we are scheming." That reframes "done" for this step from "works for one BFE
+   event" to "survives a host actually trying it casually."
 8. **Live-scoring resilience (§6: local-first + sync queue), generalized beyond BF Cup's
    own hole-by-hole capture.** Insurance for the *existing* Live Panel too, and Buck Hill
    already proved the exposure is real, not hypothetical.
@@ -443,3 +470,7 @@ the Host's job more complete" is the right question for *sequencing and priority
   diverge — unresearched, Brian has no direct experience with a format where they differ.
 - §3: optional quota/handicap-relief layer for BF Cup matches — real future idea, not
   scoped, not this year.
+- §2: Gatherings/BFE convergence (Round Config as an attachable capability, not
+  BFE-exclusive) — explicitly "eventually," not near-term scope, and does not touch the
+  Nov 7 critical path (§7/§8). Whether Gatherings and BFE actually share one D1 database
+  is unconfirmed and should be checked before this is designed in earnest.
