@@ -2,7 +2,7 @@
 
 **Status:** Living spec, second revision (Dev-85). This is a design-notes doc, not a build
 plan — nothing here is scheduled or committed, and several open questions are marked
-explicitly rather than resolved. §5 adds a proposed build sequence (small iterative slices
+explicitly rather than resolved. §6 adds a proposed build sequence (small iterative slices
 against this doc as the roadmap, never a big-bang rewrite of a live production system) —
 also proposed, not committed. It exists so the architectural thinking from a Dev-85
 discussion survives into future sessions instead of needing to be re-derived. Read this
@@ -146,7 +146,60 @@ questions, deliberately unresolved:
 
 ---
 
-## 4. Live scoring vs. connectivity — a real, not hypothetical, risk
+## 4. Scoring representation — per-format input, not a universal raw capture
+
+**Corrected framing (Brian, Dev-85 — this took two passes to land right):** the initial
+assumption was that gross strokes-per-hole is (or should be) a universal raw fact
+captured during play, with every other representation (Stableford points, quota,
+net/gross totals) derived from it. That's wrong. **There is no fixed universal raw
+capture today.** What goes into the Jotform Scorecard field is whatever matches that
+format's actual on-course mental model — quota points (0–6 scale) for quota events,
+because that's how a player is genuinely thinking mid-round ("I need 30, I'm at 25 with 3
+holes to go"); gross/net strokes for a standard event, because that player is thinking
+"I need a birdie to hit my target." Jotform itself doesn't enforce either convention — it
+lives in how the round/format is set up, not in the form.
+
+**Design principle:** each game format declares its own on-course input representation,
+matched to how players actually think while playing that format — not forced onto a
+common raw unit for its own sake.
+
+**Two genuinely different needs, requiring two different mechanisms — do not conflate
+them:**
+
+1. **Within-format comparison (simpler than initially assumed).** Skins is the concrete
+   example: it only needs to know, per hole, whether a single player achieved an
+   unmatched best score — "did I win this hole outright." That requires no conversion to
+   any common representation at all, just a **declared comparison direction per format**:
+   in quota points, the *largest* unmatched number on a hole wins; in strokes, the
+   *smallest* unmatched number wins. Skins already runs inside quota events in production
+   today (Wally Cup's Rd1/Rd2/Rd3), which means Close Round's existing code already
+   implements exactly this per-format comparison-direction rule. **Action item: read that
+   existing skins-in-quota logic in `BFE-Admin.html`'s Close Round before designing
+   anything new here** — it's very likely already the correct, working version of this
+   mechanism, not something to redesign from scratch. This belongs in whichever session
+   tackles step 4 of §6's sequence (the Stableford-Quota migration).
+2. **Cross-format conversion (the deeper, harder case).** Needed when a consumer must
+   bridge between formats — combining or publishing results across a quota round and a
+   standard-scoring round, or converting a quota-recorded result into traditional
+   net/gross terms for display (the existing "quota → standard" translation Brian
+   described happening today, narrowly, at the results-display layer). This is the case
+   that actually needs a common pivot representation (net-score-relative-to-par is the
+   natural candidate, since a quota point value is presumably already a function of
+   net-to-par for that hole) and, to go all the way to gross strokes, needs §3's
+   handicap/stroke-allocation data — a quota point tells you net-to-par, not gross
+   strokes, without knowing how many strokes of relief that hole carried.
+
+**Net effect on the model:** not every consumer needs full value conversion. Skins-style
+consumers need only a declared per-format comparison rule and operate natively on
+whatever was actually recorded. Cross-format reporting/publishing consumers need the
+deeper conversion chain through the handicap calculator. Building the deeper mechanism
+first, when most of what's needed (skins, likely other hole-level comparisons) only ever
+needed the simpler rule, would be solving a harder problem than most consumers actually
+have.
+
+---
+
+## 5. Live scoring vs. connectivity — a real, not hypothetical, risk
 
 **The trigger:** Brian flagged that Buck Hill Golf Club had "all but non-existent" cell
 coverage during actual play — no prior real incident is recorded in `BF_Session_Log.md`,
@@ -188,7 +241,7 @@ or somewhere else hasn't been decided.
 
 ---
 
-## 5. Proposed build sequence (Dev-85 discussion) — a proposed order, not a commitment
+## 6. Proposed build sequence (Dev-85 discussion) — a proposed order, not a commitment
 
 Brian's framing going in: with almost every part of the system touched (venue management,
 player profiles/course handicaps, the gaming engine, payout calc, results recording,
@@ -221,9 +274,15 @@ is what the order below is built around.
    Pure refactor, zero new player-facing capability. Its only job is proving the new
    spine doesn't break something already live. Historical events keep their existing flat
    `engine` field as-is — this is additive going forward, not a retroactive migration.
+   **Also read the existing skins-in-quota comparison logic in `BFE-Admin.html`'s Close
+   Round as part of this slice** (see §4) — it's very likely already the correct,
+   working version of the per-format comparison-direction rule and should inform, not be
+   redesigned around, the general mechanism.
 5. **One add-on module (Skins is probably simplest) as a pluggable piece on that same
-   slice.** Proves the base-game/add-on separation is real, not just a diagram.
-6. **Live-scoring resilience (§4: local-first + sync queue).** Pulled forward rather than
+   slice.** Proves the base-game/add-on separation is real, not just a diagram — and
+   should land as a thin wrapper around whatever comparison logic step 4 already found,
+   generalized to declare its per-format comparison direction (§4) rather than rewritten.
+6. **Live-scoring resilience (§5: local-first + sync queue).** Pulled forward rather than
    deferred to "whenever Wolf needs it" — it's insurance for the *existing* Live Panel
    too, and Buck Hill already proved the exposure is real, not hypothetical.
 7. **One new game format via the registry — Nassau or BBB before Wolf.** Neither needs
@@ -233,13 +292,17 @@ is what the order below is built around.
    model has proven out on two real game formats risks redesigning it twice. The UI
    should follow the shape the config actually takes, not a guess at it made up front.
 
-## 6. Summary of open questions (carried forward, not yet answered)
+## 7. Summary of open questions (carried forward, not yet answered)
 
 - Priority order among Bingo/Bango/Bongo, Wolf, Nassau.
 - Course Handicap formula and allowance-% configurability model — needs Brian to "noodle
   on it" before this is scoped further.
 - Per-venue connectivity flag — worth building, and where it should live, both open.
 - Buck Hill: confirm genuine GC-API absence (try name variants) vs. a search-term miss.
-- §5's build sequence is a proposed order, not a decision — open to being argued with in
+- §6's build sequence is a proposed order, not a decision — open to being argued with in
   a future session, especially step ordering once real work starts surfacing constraints
   the discussion didn't anticipate.
+- §4: whether the existing skins-in-quota logic already generalizes cleanly to a
+  declared-comparison-direction mechanism, or whether it's more tightly coupled to the
+  quota engine specifically than assumed here — unconfirmed until that code is actually
+  read (see §6 step 4).
