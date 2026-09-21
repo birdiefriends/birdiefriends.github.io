@@ -1,12 +1,14 @@
 # BF_BFE_NextGen_Spec.md — BFE Next-Gen Architecture: Venue Data, Game Engine, Handicap, Live Scoring
 
-**Status:** Living spec, first draft (Dev-85). This is a design-notes doc, not a build
+**Status:** Living spec, second revision (Dev-85). This is a design-notes doc, not a build
 plan — nothing here is scheduled or committed, and several open questions are marked
-explicitly rather than resolved. It exists so the architectural thinking from a Dev-85
+explicitly rather than resolved. §5 adds a proposed build sequence (small iterative slices
+against this doc as the roadmap, never a big-bang rewrite of a live production system) —
+also proposed, not committed. It exists so the architectural thinking from a Dev-85
 discussion survives into future sessions instead of needing to be re-derived. Read this
 before scoping any of: a Venue/Tee Catalog rework, a new game engine beyond
-`stableford_quota`/`scramble_pair`, a handicap/stroke-allocation feature, or a live/offline
-scoring redesign.
+`stableford_quota`/`scramble_pair`, a handicap/stroke-allocation feature, a live/offline
+scoring redesign, or before deciding what order to tackle any of it in.
 
 The trigger for this doc: Brian signed up for a free GolfCourseAPI
 (`golfcourseapi.com`) account and we validated it live via the browser bridge against
@@ -73,6 +75,24 @@ worth wiring in even independent of the tee-data work, since it's a much smaller
 (`none` / `stableford_quota` / `scramble_pair`). This conflates three genuinely separate
 concerns into one value, and the whole model (chaining via `chainsFrom`, Wally Ball,
 Overall Standings) grew specifically around Wally Cup's and BF Series's known flows.
+
+**The technical spine: one composable Round Configuration object.** Whatever organizes
+the *code*, the underlying data model needs a single object — base game + add-on modules
++ timeframe/chaining + venue reference + handicap/allowance config + connectivity mode —
+that every consumer (payout calc, results recorder, groupings, Live Panel, BFE-A UI)
+*reads*, never re-derives. Without this, "payout for any combination" and "results for
+any combination" are a combinatorial explosion of special cases scattered across screens,
+which is a nicer-looking version of today's ad hoc `engine` checks, not a fix for them.
+The Host (the commissioner setting up an event) is the person who *fills in* this config
+via BFE-A — a useful lens for sequencing and prioritizing the work (see §6), but not the
+shape of the config itself.
+
+**Extensibility mechanism: a registry, not more upfront design.** Brian's explicit
+observation (Dev-85): "we'll never get it correctly pre-planned." The answer to that isn't
+trying harder to predict every future game — it's making each base game and each add-on
+module a self-contained, independently-registered definition (its own scoring function,
+its own declared data needs, its own UI fragment). Adding a new format later means adding
+one registry entry, not touching payout/results/groupings/UI code in six places.
 
 **Proposed decomposition** (Brian's framing, confirmed as the right shape):
 
@@ -168,10 +188,58 @@ or somewhere else hasn't been decided.
 
 ---
 
-## 5. Summary of open questions (carried forward, not yet answered)
+## 5. Proposed build sequence (Dev-85 discussion) — a proposed order, not a commitment
+
+Brian's framing going in: with almost every part of the system touched (venue management,
+player profiles/course handicaps, the gaming engine, payout calc, results recording,
+groupings, BFE-A UI/UX, Live Panel), this isn't a bolt-on capability — it's a
+rearchitecture. The approach agreed on: small, iterative, shippable slices against this
+doc as the roadmap, never a big-bang rewrite, because this is a live system real people
+use for real events and real money — it has to keep working for existing formats
+throughout.
+
+**"Organize by Host" — right as a prioritization compass, not as the technical
+structure.** Organizing the *code* around Host-facing screens (Setup, Groupings, Close
+Round, Publish Results) would relocate today's ad hoc `engine`-checking problem into
+prettier UI rather than fix it — each screen would grow its own copy of "what game is
+this." The Round Configuration object (§2) is the technical spine; "does this slice make
+the Host's job more complete" is the right question for *sequencing and priority*, which
+is what the order below is built around.
+
+**Proposed order, with reasoning:**
+
+1. **Round Configuration schema — design only, no UI yet.** Has to exist before anything
+   else can be built against it without getting rebuilt once the shape changes.
+2. **Venue data (GC-API + D1 cache/fallback, §1).** Do this early — most isolated of
+   everything listed, doesn't touch the game engine at all, already validated live
+   against 5 real venues.
+3. **Handicap calculator (§3), as a standalone testable unit.** Verify it against known
+   real numbers (Brian's own index and known course handicaps at specific tees) before
+   any game or UI depends on it.
+4. **Migrate ONE existing, known-good format (Stableford Quota, single round) onto the
+   new Round Config end-to-end** — Setup → Live Panel → Close Round → payout → results.
+   Pure refactor, zero new player-facing capability. Its only job is proving the new
+   spine doesn't break something already live. Historical events keep their existing flat
+   `engine` field as-is — this is additive going forward, not a retroactive migration.
+5. **One add-on module (Skins is probably simplest) as a pluggable piece on that same
+   slice.** Proves the base-game/add-on separation is real, not just a diagram.
+6. **Live-scoring resilience (§4: local-first + sync queue).** Pulled forward rather than
+   deferred to "whenever Wolf needs it" — it's insurance for the *existing* Live Panel
+   too, and Buck Hill already proved the exposure is real, not hypothetical.
+7. **One new game format via the registry — Nassau or BBB before Wolf.** Neither needs
+   live multiplayer coordination, so this exercises a full new-game build through the
+   registry without also having to solve live group-coordination in the same step.
+8. **BFE-A UI/UX redesign last, not first.** Redesigning the admin UI before the config
+   model has proven out on two real game formats risks redesigning it twice. The UI
+   should follow the shape the config actually takes, not a guess at it made up front.
+
+## 6. Summary of open questions (carried forward, not yet answered)
 
 - Priority order among Bingo/Bango/Bongo, Wolf, Nassau.
 - Course Handicap formula and allowance-% configurability model — needs Brian to "noodle
   on it" before this is scoped further.
 - Per-venue connectivity flag — worth building, and where it should live, both open.
 - Buck Hill: confirm genuine GC-API absence (try name variants) vs. a search-term miss.
+- §5's build sequence is a proposed order, not a decision — open to being argued with in
+  a future session, especially step ordering once real work starts surfacing constraints
+  the discussion didn't anticipate.
