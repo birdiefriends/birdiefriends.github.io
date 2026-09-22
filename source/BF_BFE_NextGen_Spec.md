@@ -1,16 +1,18 @@
 # BF_BFE_NextGen_Spec.md — BFE Next-Gen Architecture: Venue Data, Game Engine, Handicap, Live Scoring
 
-**Status:** Living spec, third revision (Dev-85). This is a design-notes doc, not a build
+**Status:** Living spec, fourth revision (Dev-85). This is a design-notes doc, not a build
 plan — nothing here is scheduled or committed, and several open questions are marked
-explicitly rather than resolved. §8 adds a proposed build sequence (small iterative slices
+explicitly rather than resolved. §9 adds a proposed build sequence (small iterative slices
 against this doc as the roadmap, never a big-bang rewrite of a live production system),
-now driven by a real deadline (§7's 2026 fall calendar) rather than an abstract order.
+now driven by a real deadline (§8's 2026 fall calendar) rather than an abstract order.
 It exists so the architectural thinking from a Dev-85 discussion survives into future
 sessions instead of needing to be re-derived. Read this before scoping any of: a
 Venue/Tee Catalog rework, a new game engine beyond `stableford_quota`/`scramble_pair`, a
-handicap/stroke-allocation feature, a scoring-representation/conversion feature, a
-team/entity-hierarchy feature (2Man, BF Cup), a live/offline scoring redesign, or before
-deciding what order to tackle any of it in.
+handicap/stroke-allocation feature, a persistent player HCP profile, a
+scoring-representation/conversion feature, a team/entity-hierarchy feature (2Man, BF
+Cup), a Quick Templates / spontaneous-play feature, a Gatherings/BFE convergence
+feature, a live/offline scoring redesign, or before deciding what order to tackle any of
+it in.
 
 The trigger for this doc: Brian signed up for a free GolfCourseAPI
 (`golfcourseapi.com`) account and we validated it live via the browser bridge against
@@ -68,7 +70,7 @@ worth wiring in even independent of the tee-data work, since it's a much smaller
   variant search (e.g. "Buck Hill Falls Golf Club") before concluding it's simply absent.
 - Whether GC-API coverage holds up for whatever other venues get added later hasn't been
   tested beyond these five.
-- Not calendar-critical for any of the known 2026 fall events (see §7) — BF Cup is played
+- Not calendar-critical for any of the known 2026 fall events (see §8) — BF Cup is played
   scratch, so it doesn't depend on course rating/slope data the way a handicap-relief
   format would.
 
@@ -83,14 +85,14 @@ Overall Standings) grew specifically around Wally Cup's and BF Series's known fl
 
 **The technical spine: one composable Round Configuration object.** Whatever organizes
 the *code*, the underlying data model needs a single object — base game + add-on modules
-+ timeframe/chaining + entity model (§5) + venue reference + handicap/allowance config +
-scoring representation (§4) + connectivity mode — that every consumer (payout calc,
++ timeframe/chaining + entity model (§6) + venue reference + handicap/allowance config +
+scoring representation (§5) + connectivity mode — that every consumer (payout calc,
 results recorder, groupings, Live Panel, BFE-A UI) *reads*, never re-derives. Without
 this, "payout for any combination" and "results for any combination" are a combinatorial
 explosion of special cases scattered across screens, which is a nicer-looking version of
 today's ad hoc `engine` checks, not a fix for them. The Host (the commissioner setting up
 an event) is the person who *fills in* this config via BFE-A — a useful lens for
-sequencing and prioritizing the work (see §8), but not the shape of the config itself.
+sequencing and prioritizing the work (see §9), but not the shape of the config itself.
 
 **Extensibility mechanism: a registry, not more upfront design.** Brian's explicit
 observation (Dev-85): "we'll never get it correctly pre-planned." The answer to that isn't
@@ -104,7 +106,7 @@ one registry entry, not touching payout/results/groupings/UI code in six places.
 1. **Base game** — the actual scoring math for a round. Known formats, by scoring
    archetype:
    - **Cumulative-score formats** (accumulate a total across 18 holes, compare totals at
-     the end): Stableford (existing, and see §4 — "quota" is a separable overlay, not
+     the end): Stableford (existing, and see §5 — "quota" is a separable overlay, not
      part of the base game itself), Scramble/Foursomes (single shared team ball, no
      score-derivation needed), Best Ball/Fourball (each plays their own ball, team score
      = best of the team's net scores per hole), Hi/Lo (team score = both best *and* worst
@@ -113,10 +115,10 @@ one registry entry, not touching payout/results/groupings/UI code in six places.
    - **Match-play formats** (no cumulative score at all — a running hole-by-hole
      win/lose/halve tally against a specific opponent, can end before hole 18 once
      mathematically decided, e.g. "3&2"): Wolf, and the BF Cup / Ryder-Cup-style team
-     match play covered in §5 and §7. Structurally distinct from every cumulative format
+     match play covered in §6 and §8. Structurally distinct from every cumulative format
      above — needs its own engine shape, not a variant of one of them.
    - Priority ordering among Bingo/Bango/Bongo, Wolf, and Nassau specifically is
-     explicitly open (see §9) — none of the three is calendar-critical (§7).
+     explicitly open (see §10) — none of the three is calendar-critical (§8).
 2. **Add-on modules** — selectable per round regardless of base game: Skins, CTP, Podium,
    BF Ball (the rename of Wally Ball, generalized beyond Wally-Cup-specific framing).
    These are currently entangled with the stableford engine's Close Round logic and need
@@ -127,7 +129,7 @@ one registry entry, not touching payout/results/groupings/UI code in six places.
 3. **Timeframe/chaining configuration** — generalizing what Wally Cup's `chainsFrom`
    round-sequencing already does (see `BF_WallyCup_Spec.md`), so a multi-round series
    isn't a Wally-Cup-specific concept baked into the code. BF Cup's own multi-session
-   structure (§7) is a variant of this — sessions within one event roll up to a team
+   structure (§8) is a variant of this — sessions within one event roll up to a team
    total, rather than rounds within an event rolling up to Overall Standings.
 
 **Scope resolved:** GS (`BF_Golf_Scorer_8.html`) is being sunset after this season and
@@ -157,7 +159,46 @@ would be to build.
 
 ---
 
-## 3. Handicap / stroke-allocation calculator — a real gap, but not calendar-critical
+## 3. Quick Templates — one-click setup-and-go for spontaneous play
+
+**The trigger (Brian, Dev-85):** many BF games get decided before the first tee, not
+planned in advance. **BFWeekends** — confirmed as an existing Gathering type Brian uses
+as commissioner to establish Saturday/Sunday tee times at BSGC (Blue Shamrock Golf Club),
+carrying its own complex scheduling logic that helps the club manage cash flow — reserves
+tee times, and someone often suggests a game format on the spot once the group is set.
+Brian's explicit claim: these spontaneous one-offs are **more frequent** than the formal
+planned events (Wally Cup, BF Cup). That means this deserves real design weight as a
+first-class flow, not treatment as a stripped-down afterthought retrofitted onto the
+planned-event UI once that's built.
+
+**The mechanism falls out of the registry (§2), no new engine work required.** A
+"template" is a named, saved preset of registry entries — "Nassau, individual, scratch,
+standard payout" or "Skins-only" — that a host applies with one click instead of walking
+through full Setup. This is the concrete shape the Gatherings/BFE convergence idea above
+takes in practice: a BFWeekend's reserved tee time is already a Gathering with a roster
+(the event card), so "one-click template + go" is what attaching a Round Config to a
+Gathering looks like at the exact moment someone at the tee says "let's play Nassau."
+
+**Real complexity flagged, not yet resolved:** BFWeekends' cash-flow-management
+scheduling logic is nontrivial — worth checking whether the final roster is locked in
+well before tee time or can still be shifting close to play, since a template needs to
+bind to the actual final roster at the moment of use, not a hypothetical one set up in
+advance. Unconfirmed until that logic is actually read.
+
+**Start scratch, layer handicap later (Brian, Dev-85).** Quick templates should launch
+as pure scratch options first, with handicap-aware versions of the same templates added
+as a later enhancement — the same "start simple, evolve" philosophy already established
+for the allowance-% and point-table configurability in §4/§5. See §4 for two ways to add
+fairness incrementally once that's wanted: the full precise stroke-relief calculator, or
+the much simpler tee-box-based coarse handicapping described there.
+
+**Not calendar-critical** — Brian's own framing was "along the way," not tied to a date.
+§9 step 7 (one new individual game format via the registry) should double as the first
+real Quick Template + Gatherings pilot, per the note already there.
+
+---
+
+## 4. Handicap / stroke-allocation calculator — a real gap, but not calendar-critical
 
 **Why quota didn't need this:** the existing Stableford Quota engine bakes relief into a
 single number (the quota, derived once from series history / GHIN index via BFE-A's
@@ -175,13 +216,43 @@ Shamrock's data showed hole handicap rankings genuinely differ between tees and 
 genders on the same tee, not a shared table) is what makes the last step possible. This
 calculator does not exist anywhere in BF today — not in GS, not in BFE-A.
 
+**GHIN API access will never happen — this is permanent, not a temporary gap (Brian,
+Dev-85).** GHIN's licensing fees are prohibitive, so BFE will never get live/direct API
+access to handicap data. This confirms the existing GHIN-paste-import mechanism (BFE-A's
+GHIN importer, built from GS's own hard-won multi-version history — see
+`BF_Session_Log.md`'s Dev-57 through Dev-65 entries) is the permanent solution here, not
+a stopgap awaiting a "real" integration that will never arrive.
+
+**Real correction, "probably something we should've done from the beginning" (Brian,
+Dev-85): a persistent, centrally-stored player HCP profile.** Rather than deriving or
+refreshing a player's handicap freshly within each event's own scoped data, BF should
+maintain one canonical HCP field per player profile that gets updated by *any*
+GHIN-paste import, wherever it happens — not siloed per-event the way it effectively is
+today. This directly enables Quick Templates (§3): since the roster is already known from
+the event card, and each player's HCP is already centrally maintained, a spontaneous game
+can pull a reasonably current number immediately, with no fresh import needed in the
+moment. Pair this with a fast "quick revise" screen — a lightweight prompt to confirm or
+nudge a player's stored number right before play if it looks stale — accepting some
+looseness as a fair tradeoff for casual play ("close enough to be fair") rather than
+blocking on a full import.
+
+**A simpler, coarser alternative to the full stroke-allocation calculator: tee-box
+selection as auto-handicapping (Brian, Dev-85).** Rather than computing exact per-hole
+stroke relief, letting players self-select or be assigned different tee boxes by skill
+level is a legitimate, much simpler fairness mechanism — higher-handicap players from
+forward tees, lower-handicap from back tees, naturally separating skill without any
+calculator at all. Worth treating as a first-class lightweight option in its own right,
+not just a stepping stone toward the "real" calculator — some hosts or formats may prefer
+it permanently, especially for Quick Templates (§3) where simplicity matters more than
+precision.
+
 **Confirmed NOT on BF Cup's critical path (Brian, Dev-85):** BF Cup is played scratch —
 competitiveness is managed through roster construction and captain's-choice pairing, not
-stroke relief. So §3 does not block the Nov 7 build (see §7). **Real future enhancement,
+stroke relief. So §4 does not block the Nov 7 build (see §8). **Real future enhancement,
 explicitly flagged, not scoped for this year:** Brian can see wanting an optional
 quota/handicap-relief layer on BF Cup matches later ("might be more competitive"),
 explicitly beyond what the old Jotform/spreadsheet tooling could ever support — a good
-candidate second-year feature once §3 exists for other reasons.
+candidate second-year feature once §4 exists for other reasons.
 
 **Explicit design principle (Brian, Dev-85): design for flexibility, not a fixed personal
 formula.** The playing-handicap allowance must be configurable, not hardcoded — same
@@ -197,7 +268,7 @@ questions, deliberately unresolved:
 
 ---
 
-## 4. Scoring representation — per-format input, not a universal raw capture
+## 5. Scoring representation — per-format input, not a universal raw capture
 
 **Corrected framing (Brian, Dev-85 — this took several passes to land right):** the
 initial assumption was that gross strokes-per-hole is (or should be) a universal raw fact
@@ -218,7 +289,7 @@ common raw unit for its own sake.
 Stableford point scale per hole (net-to-par → points) and the personal-quota-baseline
 comparison (is this round's point total over or under my target) always shipped together
 in BF's existing engine, but they don't have to. **Turkey 2Man and BlackFriday 1-man
-(§7) already prove the split is real**: both use the same Stableford point scale with the
+(§8) already prove the split is real**: both use the same Stableford point scale with the
 quota-baseline comparison simply turned off — a straight leaderboard on raw point total.
 That means Turkey/BlackFriday need **zero new engine work**, just a config flag
 ("has quota baseline: yes/no") once the Round Config decomposition exists — not a new
@@ -227,7 +298,7 @@ format to build.
 **The point table itself is a configurable parameter, not a fixed formula.** BirdieFriends'
 own scale gives birdie 4 points specifically to create a "birdie premium" (Brian, Dev-85:
 this is the reason for the group's name) — a deliberately non-standard table, not the more
-common birdie=3 scale. Same principle as §3's handicap-allowance configurability, showing
+common birdie=3 scale. Same principle as §4's handicap-allowance configurability, showing
 up a second time in a different place: the host must be able to define their own
 point-per-net-score table, not have Brian's specific numbers baked in.
 
@@ -252,10 +323,10 @@ them:**
    described happening today, narrowly, at the results-display layer). This is the case
    that actually needs a common pivot representation (net-score-relative-to-par is the
    natural candidate, since a quota point value is presumably already a function of
-   net-to-par for that hole) and, to go all the way to gross strokes, needs §3's
+   net-to-par for that hole) and, to go all the way to gross strokes, needs §4's
    handicap/stroke-allocation data — a quota point tells you net-to-par, not gross
    strokes, without knowing how many strokes of relief that hole carried. Not
-   calendar-critical for §7's fall events.
+   calendar-critical for §8's fall events.
 
 **Net effect on the model:** not every consumer needs full value conversion. Skins-style
 consumers need only a declared per-format comparison rule and operate natively on
@@ -267,7 +338,7 @@ harder problem than most consumers actually have.
 
 ---
 
-## 5. Player entity model — individual, team, and hierarchical team-of-teams
+## 6. Player entity model — individual, team, and hierarchical team-of-teams
 
 **The finding (Brian, Dev-85):** entity granularity — is the scored unit a person or a
 team — isn't a round-level property. It's declared **per consumer**, and different
@@ -281,16 +352,16 @@ score-derivation rule:**
 - **Scramble/Foursomes** — one shared ball, one score per team per hole. No derivation
   needed; there's only ever one number.
 - **Best Ball/Fourball** — each player plays an individual ball with their own net score
-  (after their own personal stroke relief, per §3); the team's hole score is the *best*
+  (after their own personal stroke relief, per §4); the team's hole score is the *best*
   of the team members' net scores.
 - **Hi/Lo** — same individual-ball setup as Best Ball, but the team's result combines
   *both* the best and the worst of the team's net scores per hole.
 - The "high handicap gets a blow" question (Brian, Dev-85) resolves cleanly here: it
-  doesn't add a new mechanism, it confirms §3 must run correctly per individual team
+  doesn't add a new mechanism, it confirms §4 must run correctly per individual team
   member *before* any team-derivation rule (best-of / hi-lo) can apply to the result.
 
 **Hierarchical entities — team-of-teams, driven by the BF Cup / Ryder-Cup-style format
-(§7):** a third level beyond individual and team is needed for events structured as
+(§8):** a third level beyond individual and team is needed for events structured as
 player → 2-man pairing → side. Each pairing plays a match (Foursomes, Fourball, or
 Singles rules) against an opposing pairing/player from the other side; the match result
 (win/loss/halve, possibly ending early) converts to standardized points that roll up to
@@ -313,7 +384,7 @@ either answer generalizes.
 
 ---
 
-## 6. Live scoring vs. connectivity — a real, not hypothetical, risk
+## 7. Live scoring vs. connectivity — a real, not hypothetical, risk
 
 **The trigger:** Brian flagged that Buck Hill Golf Club had "all but non-existent" cell
 coverage during actual play — no prior real incident is recorded in `BF_Session_Log.md`,
@@ -324,7 +395,7 @@ postmortem.
 Alert/photo capture during play) already depends on live connectivity to submit to
 Jotform in real time. The new hole-relief games make the exposure more acute (more
 frequent, more state-dependent interactions during play), but the underlying fragility
-already exists today for ordinary stableford rounds. BF Cup's match play (§5, §7) adds a
+already exists today for ordinary stableford rounds. BF Cup's match play (§6, §8) adds a
 new instance of this: auto-calculating hole-by-hole match results (replacing the old
 manual after-the-fact Red/Blue point entry) means the Live Panel needs to reliably
 capture hole-by-hole results *during* play for this format specifically — a real
@@ -359,28 +430,28 @@ or somewhere else hasn't been decided.
 
 ---
 
-## 7. The 2026 fall calendar — what's actually needed, by event
+## 8. The 2026 fall calendar — what's actually needed, by event
 
 Brian's ask (Dev-85): stop discovering architecture pieces turn by turn, map the complete
 known calendar against what's been designed above, and let real dates drive the build
-order (§8) instead of an abstract priority.
+order (§9) instead of an abstract priority.
 
 | Event | Date | Format | New engine work needed? |
 |---|---|---|---|
 | BF Series | through 10/26 | Regular season league play | **None from this doc** — stays on GS through its natural end this season; GS is being sunset (§2) but not touched before then. |
-| BF Cup ("BirdieFriends Cup") | 11/7–8 | Team match play (Foursomes/Fourball/Singles-style), 16/20/24 players, **scratch** (no handicap relief) | **Yes — the real build.** Entity hierarchy (§5: player → pairing → side), match-play engine (§2: hole-by-hole tally, ends early), point rollup across sessions (§2/§5), configurable side size on the draft/pairing mechanism, Live Panel hole-by-hole capture for auto-calculated match results (§6) replacing the old manual Red/Blue point entry. **Not needed:** §3's handicap calculator (scratch play), venue GC-API data (not blocking, nice-to-have). Skins/CTP layering (§2) requested for payout variety — desirable, not blocking. |
-| Turkey 2Man | 11/15 | 2-player scramble, Stableford scoring, **no quota baseline** | **None** — `scramble_pair` engine already covers the team format; the "no quota baseline" behavior is the config-flag decomposition in §4, not a new format. |
-| BlackFriday 1-man | 11/27 | Individual, Stableford scoring, **no quota baseline**, "hit 2 balls per shot, take the better" | **None** — same §4 config-flag decomposition as Turkey. The 2-balls-per-shot rule is a real-world play convention invisible to the data model; the scorecard only ever records the one resulting per-hole score. |
+| BF Cup ("BirdieFriends Cup") | 11/7–8 | Team match play (Foursomes/Fourball/Singles-style), 16/20/24 players, **scratch** (no handicap relief) | **Yes — the real build.** Entity hierarchy (§6: player → pairing → side), match-play engine (§2: hole-by-hole tally, ends early), point rollup across sessions (§2/§6), configurable side size on the draft/pairing mechanism, Live Panel hole-by-hole capture for auto-calculated match results (§7) replacing the old manual Red/Blue point entry. **Not needed:** §4's handicap calculator (scratch play), venue GC-API data (not blocking, nice-to-have). Skins/CTP layering (§2) requested for payout variety — desirable, not blocking. |
+| Turkey 2Man | 11/15 | 2-player scramble, Stableford scoring, **no quota baseline** | **None** — `scramble_pair` engine already covers the team format; the "no quota baseline" behavior is the config-flag decomposition in §5, not a new format. |
+| BlackFriday 1-man | 11/27 | Individual, Stableford scoring, **no quota baseline**, "hit 2 balls per shot, take the better" | **None** — same §5 config-flag decomposition as Turkey. The 2-balls-per-shot rule is a real-world play convention invisible to the data model; the scorecard only ever records the one resulting per-hole score. |
 
 **Net finding:** of three new fall asks, two (Turkey, BlackFriday) need no new engine work
-at all once §4's quota/point-scale decomposition exists — they're config, not build. BF
+at all once §5's quota/point-scale decomposition exists — they're config, not build. BF
 Cup is the one genuinely hard, genuinely deadline-critical item, and its scope is smaller
-than initially feared specifically *because* it's played scratch — §3 is not on its
+than initially feared specifically *because* it's played scratch — §4 is not on its
 critical path this year.
 
 ---
 
-## 8. Proposed build sequence — revised around the Nov 7 deadline
+## 9. Proposed build sequence — revised around the Nov 7 deadline
 
 Brian's framing going in: with almost every part of the system touched (venue management,
 player profiles/course handicaps, the gaming engine, payout calc, results recording,
@@ -388,7 +459,7 @@ groupings, BFE-A UI/UX, Live Panel), this isn't a bolt-on capability — it's a
 rearchitecture. The approach agreed on: small, iterative, shippable slices against this
 doc as the roadmap, never a big-bang rewrite, because this is a live system real people
 use for real events and real money — it has to keep working for existing formats
-throughout. §7's calendar sharpened this from an abstract order into a real forcing
+throughout. §8's calendar sharpened this from an abstract order into a real forcing
 function.
 
 **"Organize by Host" — right as a prioritization compass, not as the technical
@@ -406,16 +477,16 @@ the Host's job more complete" is the right question for *sequencing and priority
    scratch/no handicap config, add-ons optional) rather than the full eventual shape —
    the fuller shape (quota baseline flag, handicap allowance, connectivity mode) can
    extend it afterward without a rebuild, per §2's registry principle.
-2. **BF Cup's critical path (§5, §7): entity hierarchy, match-play engine, point rollup,
+2. **BF Cup's critical path (§6, §8): entity hierarchy, match-play engine, point rollup,
    configurable side size, Live Panel hole-by-hole capture.** This replaces "migrate
    Stableford Quota onto the new Round Config" as the first real vertical slice — a real
    Nov 7 deadline is a better forcing function than a synthetic refactor for proving the
    new architecture, and it exercises genuinely new territory (match play, hierarchy)
    rather than just re-plumbing something that already works. **Also read the existing
    skins-in-quota comparison logic in `BFE-Admin.html`'s Close Round before designing
-   anything new for Skins-on-BF-Cup** (see §4) — likely already the correct
+   anything new for Skins-on-BF-Cup** (see §5) — likely already the correct
    comparison-direction mechanism, generalizable rather than reusable-from-scratch.
-3. **§4's quota/point-scale decomposition (config flag, not new engine)** — unlocks
+3. **§5's quota/point-scale decomposition (config flag, not new engine)** — unlocks
    Turkey 2Man (11/15) and BlackFriday 1-man (11/27) for free once done. Small, isolated,
    worth doing alongside or immediately after BF Cup's core build since both fall events
    land within 3 weeks of BF Cup.
@@ -426,10 +497,10 @@ the Host's job more complete" is the right question for *sequencing and priority
    fall crunch — most isolated of everything listed, doesn't touch the game engine at
    all, already validated live against 5 real venues, and not calendar-critical for any
    2026 fall event.
-6. **Handicap calculator (§3), as a standalone testable unit.** Verify it against known
+6. **Handicap calculator (§4), as a standalone testable unit.** Verify it against known
    real numbers (Brian's own index and known course handicaps at specific tees) before
    any game or UI depends on it. Needed for Wolf/Nassau/BBB/Best-Ball/Hi-Lo and for the
-   future BF-Cup-with-handicap-relief option (§3) — none of which are this year's
+   future BF-Cup-with-handicap-relief option (§4) — none of which are this year's
    problem.
 7. **One new individual game format via the registry — Nassau, Hi/Lo, or a plain
    Net/Gross ranking; Brian's explicit preference is that the specific choice doesn't
@@ -442,7 +513,7 @@ the Host's job more complete" is the right question for *sequencing and priority
    formats are meant to give hosts "something interesting to try" and serve as feedback
    "while we are scheming." That reframes "done" for this step from "works for one BFE
    event" to "survives a host actually trying it casually."
-8. **Live-scoring resilience (§6: local-first + sync queue), generalized beyond BF Cup's
+8. **Live-scoring resilience (§7: local-first + sync queue), generalized beyond BF Cup's
    own hole-by-hole capture.** Insurance for the *existing* Live Panel too, and Buck Hill
    already proved the exposure is real, not hypothetical.
 9. **BFE-A UI/UX redesign last, not first.** Redesigning the admin UI before the config
@@ -452,25 +523,32 @@ the Host's job more complete" is the right question for *sequencing and priority
 
 ---
 
-## 9. Summary of open questions (carried forward, not yet answered)
+## 10. Summary of open questions (carried forward, not yet answered)
 
 - Priority order among Bingo/Bango/Bongo, Wolf, Nassau — none calendar-critical.
 - Course Handicap formula and allowance-% configurability model — needs Brian to "noodle
   on it" before this is scoped further; not calendar-critical this year.
 - Per-venue connectivity flag — worth building, and where it should live, both open.
 - Buck Hill: confirm genuine GC-API absence (try name variants) vs. a search-term miss.
-- §8's build sequence is a proposed order, not a decision — open to being argued with in
+- §9's build sequence is a proposed order, not a decision — open to being argued with in
   a future session, especially step ordering once real work starts surfacing constraints
   the discussion didn't anticipate.
-- §4: whether the existing skins-in-quota logic already generalizes cleanly to a
+- §5: whether the existing skins-in-quota logic already generalizes cleanly to a
   declared-comparison-direction mechanism, or whether it's more tightly coupled to the
   quota engine specifically than assumed here — unconfirmed until that code is actually
-  read (§8 step 2).
-- §5: whether the scoring team is always the same as the physical playing group, or can
+  read (§9 step 2).
+- §6: whether the scoring team is always the same as the physical playing group, or can
   diverge — unresearched, Brian has no direct experience with a format where they differ.
-- §3: optional quota/handicap-relief layer for BF Cup matches — real future idea, not
+- §4: optional quota/handicap-relief layer for BF Cup matches — real future idea, not
   scoped, not this year.
 - §2: Gatherings/BFE convergence (Round Config as an attachable capability, not
   BFE-exclusive) — explicitly "eventually," not near-term scope, and does not touch the
-  Nov 7 critical path (§7/§8). Whether Gatherings and BFE actually share one D1 database
+  Nov 7 critical path (§8/§9). Whether Gatherings and BFE actually share one D1 database
   is unconfirmed and should be checked before this is designed in earnest.
+- §3: BFWeekends' cash-flow scheduling logic hasn't been read — whether a Quick Template
+  can bind to a final, settled roster at tee time, or whether the roster can still be
+  shifting close to play, is unconfirmed.
+- §4: the persistent player HCP profile is a real, agreed correction ("should've been
+  done from the beginning") but unscoped — where it lives, exactly what "any GHIN import
+  updates it" means mechanically, and the design of the "quick revise" screen are all
+  open.
