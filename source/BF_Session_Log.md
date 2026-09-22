@@ -4000,3 +4000,131 @@ the script itself.)
 
 **Session Dev-84 fully closed.**
 **Chat-rename string:** `Dev-84 - Trip Memories Alignment Tool, BF Series Cancel-Event Overlay, D1-Pinning Fix Recovered from Parallel-Session File Drift`
+
+## Dev-85 · 2026-09-22 — GolfCourseAPI Validated as Venue-Data Source, BFE Next-Gen Architecture Spec Built, bf_push.ps1 v11
+
+**Note on this entry:** no code was touched this session — no deploys, no Worker changes, no
+D1 changes. This was a pure architecture/design-notes session, logged contemporaneously at
+close rather than reconstructed, since the whole session fit in one sitting. Per the standing
+"verify Wally Cup status" carry-forward from Dev-81 through Dev-84: **not addressed again this
+session** — Brian's focus went entirely to the BFE Next-Gen architecture discussion instead.
+Now carried five sessions (Dev-81/82/83/84/85). See `BF_Session_Bootstrap.md` §3 for the
+Dev-86 instruction on this.
+
+**1. GolfCourseAPI (golfcourseapi.com) validated as a real venue-data source.** Tested live
+against 5 of Brian's actual venues via the browser bridge (`javascript_tool` running `fetch()`
+with the API key in the Authorization header — required because `api.golfcourseapi.com` is not
+on the cloud workspace's network allowlist; `curl`/`Bash` confirmed blocked with a 403 connect-
+tunnel failure). 4 of 5 venues matched with full data: course rating, slope, and per-tee/per-
+gender hole-by-hole par, yardage, and stroke/hole-handicap ranking. Confirmed Blue Shamrock Golf
+Club's Green/Gold combo tee ("Combo tees" in GS) is correctly represented in the API. Buck Hill
+Golf Club returned zero results — a real coverage gap, not yet resolved (a name-variant retry
+is the obvious next step, not yet tried). Free tier is 35 requests/day, read-only; writes need
+the paid tier. As of API v1.1.0 (2026-09-13) results also include lat/long, which could replace
+the manual Buck Hill geocoding added in Dev-84.
+
+**2. `BF_BFE_NextGen_Spec.md` created — new living design-notes doc for the BFE rearchitecture.**
+Built iteratively through direct discussion with Brian (proposal → reflect back → Brian
+confirms or corrects → write), reaching its 4th revision by session close. Delivered to
+AutoPush after each confirmed revision, same pattern as `BF_WallyCup_Spec.md` and
+`BF_WCRP_Memories_Spec.md`. Ten numbered sections plus intro:
+   - **§1 Venue/course data** — flip priority to GC-API-first, with D1 as cache + fallback
+     rather than source of truth.
+   - **§2 Game engine** — replaces the current flat `engine` enum with three orthogonal axes
+     (base game archetype / add-on modules / timeframe-chaining), unified under one composable
+     **Round Configuration object** that every consumer (grouping, scoring, payout, results,
+     Live Panel) reads rather than re-deriving. New **registry pattern**: each base game/add-on
+     is a self-contained, independently-registered definition, so adding a format is one
+     registry entry, not code changes in six places. Adds a new **Match Play** base-game
+     archetype (hole-by-hole win/lose/halve tally against a specific opponent, can end early
+     e.g. "3&2", converts to points that roll up across sessions) — needed for the new BF Cup
+     event (see §8). Also captures the long-term "eventually" vision that the Round Config
+     should be an attachable capability on any hosted session — a Gathering or a BFE event —
+     not BFE-exclusive machinery; whether `worker.js` (Gatherings) and `bf-experiences` (BFE)
+     already share one physical D1 database is an open question (there's a suggestive clue from
+     the Dev-80 memories bug, but it's unconfirmed).
+   - **§3 Quick Templates (new)** — named, saved presets of registry entries (e.g. "Nassau,
+     individual, scratch") applied with one click to a Gathering — specifically BFWeekends,
+     Brian's existing reserved-tee-time Gathering type at BSGC — for spontaneous, pre-tee-box
+     game setup, which Brian says happens more often than formally planned events. Requires no
+     new engine work once the registry exists.
+   - **§4 Handicap/stroke-allocation calculator** — confirmed a real gap (neither GS nor BFE-A
+     has one; GHIN paste-import already exists in BFE-A, reusing GS's original
+     `grpCalcTeeAndQuota`/`grpGetEstimatedQuota` logic) but **not calendar-critical**, since BF
+     Cup is played scratch. Captures: GHIN direct API access will never happen (licensing fees
+     are prohibitive) so the paste-import is the permanent solution; a new idea for a centrally-
+     stored, per-player HCP profile updated by any GHIN-paste import wherever it happens (rather
+     than siloed per-event), paired with a "quick revise" screen for staleness; tee-box selection
+     as a simpler, coarser alternative to precise stroke allocation; the full handicap chain
+     (HCP Index → Course Handicap via USGA/WHS formula → Playing Handicap via configurable
+     allowance % → strokes-per-hole via the tee's hole-handicap ranking).
+   - **§5 Scoring representation** — corrected mid-session from an initial "universal raw
+     capture" idea to **per-format input**: Jotform captures whatever the game's on-course
+     mindset is (quota points 0-6 for BF's Stableford-quota events; strokes for standard
+     Net/Gross events) — the recording model differs by format (quota: biggest unmatched number
+     wins a hole/Skin; strokes: smallest unmatched number wins), and conversion happens only
+     where actually needed (e.g. quota→standard at the results level), not as a universal
+     internal representation. Decomposes the "Stableford Quota" pattern into two separable
+     pieces: the point scale per hole (net-to-par → points, configurable table — BF uses a
+     birdie=4 "birdie premium") and the personal-quota-baseline comparison (over/under a
+     target) — Turkey 2Man and BlackFriday 1-man (both confirmed Stableford-scored but without
+     a quota-achievement baseline) use the point scale alone, proving the baseline is a config
+     flag, not a separate engine.
+   - **§6 Player entity model** — individual, team (with sub-variants by derivation rule:
+     Scramble/Foursomes = no derivation, one shared ball; Best Ball/Fourball = best of team's
+     net scores; Hi/Lo = best AND worst combined), and hierarchical team-of-teams (player →
+     2-man pairing → side), needed for BF Cup's Ryder/Presidents-Cup-style format (16-24
+     players, even foursomes, 9-hole foursomes + 9-hole fourball + 18-hole match play across
+     2-3 rounds, captain-assigned pairings, auto-calculated from hole-by-hole results rather
+     than the current Jotform approach of players self-reporting team point totals after the
+     fact). Confirmed entity granularity is declared per consumer, not per round — proven by
+     2Man's team-level base game + individual-level CTP running simultaneously.
+   - **§7 Live scoring vs. connectivity** — a real, not hypothetical, risk (Buck Hill Golf Club
+     has poor cell coverage). Proposes local-first + sync-queue: device writes to local storage
+     instantly, background sync retries when connectivity returns.
+   - **§8 The 2026 fall calendar** — mapped against the architecture to find real build
+     priorities: BF Series (through 10/26, stays on the old GS engine, no BFE Next-Gen impact),
+     **BF Cup** (11/7-8, new Ryder-Cup-style event, scratch play, needs the new player-entity
+     model and Match Play archetype), **Turkey 2Man** (11/15, 2-player-team scramble,
+     Stableford scoring without quota baseline, no new engine work needed), **BlackFriday
+     1-man** (11/27, 1-player scramble with 2-ball-per-shot, same scoring pattern, no new engine
+     work needed). Two of three new fall events needing zero new engine work is a meaningful,
+     reassuring scope reduction from the initial "almost everything needs touching" framing.
+   - **§9 Proposed build sequence** — 9 ordered steps, revised around the Nov 7 BF Cup deadline;
+     this is Dev-86's starting point (see `BF_Session_Bootstrap.md` §3).
+   - **§10 Open questions** — carried forward, not yet answered (Gatherings/BFE D1 convergence,
+     Buck Hill GC-API coverage gap, exact scope of the "eventually" Round-Config-on-Gatherings
+     vision, others).
+   Also discussed but decided to keep separate from BFE proper: exposing a light subset of
+   registry capabilities (Skins, CTP, $payout, one or two simple game types — Nassau, Hi/Lo, or
+   a Net/Gross ranking) to **Gatherings** (the informal host-management system, no BFE access),
+   purely as a "something interesting to try" feature for hosts, feeding back into the broader
+   scheming rather than a firm commitment.
+
+**3. `bf_push.ps1` v11.** Added `"BF_BFE_NextGen_Spec.md" = @("source/BF_BFE_NextGen_Spec.md")`
+to the `$FileMap` ordered dictionary; bumped the version banner from `(v10)` to `(v11)`; added a
+v11 changelog comment block entry. Diff against the prior live file confirmed minimal (exactly
+those three spots). Committed directly to the live AutoPush path per the Dev-84 standing rule
+(script itself is committed live, not delivered only as an archival snapshot); the
+`bf_push_library.ps1` archival-snapshot companion was delivered separately.
+
+**4. `BF_Session_Bootstrap.md` updated for Dev-86.** Status header and §3 rewritten to reflect
+this session's actual work (previously stale at "Dev-84 close" describing Wally Cup
+verification that never happened this session either); §3 now points Dev-86 at
+`BF_BFE_NextGen_Spec.md` §9 as the build starting point, while keeping the Wally Cup carry-
+forward visible rather than letting it silently drop. `BF_BFE_NextGen_Spec.md` added to the
+doc's living-documents list.
+
+**Carry-forward:**
+- Wally Cup Rd3 / Overall Standings / event wrap-up status: **still unreconciled**, now five
+  sessions running (Dev-81/82/83/84/85). Dev-86 needs to make a deliberate call — verify live
+  status or explicitly decide it no longer matters — rather than letting it carry a sixth time.
+  See `BF_Session_Bootstrap.md` §3.
+- Buck Hill Golf Club has no GolfCourseAPI match — worth a name-variant retry before assuming
+  it's simply not in their database.
+- `BF_BFE_NextGen_Spec.md` is design notes, not a build plan with tickets — Dev-86 should expect
+  to keep firming up its §10 open questions as real implementation choices come up.
+- The Rd1 chapter-boundary override's `localStorage`-only persistence (Dev-84 carry-forward)
+  is still unconfirmed as a durability gap — not touched this session either.
+
+**Session Dev-85 fully closed.**
