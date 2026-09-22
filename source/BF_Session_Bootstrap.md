@@ -1,40 +1,49 @@
 # BF_Session_Bootstrap.md — Start Here for a New BirdieFriends Session
-**Status:** current as of Dev-84 close, 2026-09-20 — Wally Cup Rd3/Overall
-Standings/event-wrap-up status was **not reconciled** during Dev-84 (Brian asked that it not
-be chased down for the session log — verify current state before assuming anything either
-way). Dev-84 ran 2026-09-13 through 2026-09-20 and was mostly BF Series / Trip Memories work
-rather than the planned end-to-end verification pass (still not run — now carried at least
-four sessions running, see §3): built a Trip Memories alignment widget and a new
-`PATCH /bfe/memories/notes/:id` route, re-diagnosed and re-fixed a Rd1 memories chapter-
-boundary recurrence via the existing manual override (root cause: `closed_at` ~8:37pm ET vs.
-real on-course end ~2:30pm ET on 9/11 — the override's `localStorage`-only persistence is
-flagged as a possible, unconfirmed durability gap), added Buck Hill Golf Club geocoding,
-shipped a BF Series canceled-event card overlay (portal.html v4.2.0, non-Gathering events
-only — closes the §10 "Cancelled Events" backlog row), and closed the D1 primary-pinning gap
-on `GET /bfe/memories` and `GET /bfe/memories/notes` (same `withSession('first-primary')`
-pattern already used on the events routes). Also worked through two process incidents worth
-knowing about before you touch this repo again: a parallel-session file-drift near-miss (see
-§4) and an AutoPush filename-mismatch miss (see §4) — both fully recovered from, no lasting
-damage, but both are repeat mistakes and now have their own §4 bullets so they don't happen a
-third time. See `BF_Session_Log.md`'s Dev-84 entry for full detail. Read this file first in
+**Status:** current as of Dev-85 close, 2026-09-22 — Wally Cup Rd3/Overall
+Standings/event-wrap-up status is **still not reconciled** (now carried since Dev-81, five
+sessions running — Dev-85 did not touch it either; see §3). Dev-85 ran 2026-09-22 and went in
+a completely different direction than the Dev-85-focus section it inherited (that section
+expected Wally Cup verification / BF Series carry-forward work): instead of touching code,
+this session was a pure architecture/design-notes session. It (1) validated GolfCourseAPI
+(golfcourseapi.com) as a real, usable venue-data source by testing it live against 5 actual
+BF venues via the browser bridge (4/5 matched with full per-tee-box hole-by-hole par/yardage/
+handicap data; Buck Hill Golf Club returned zero results — a real coverage gap, name-variant
+retry not yet tried); and (2) built a new living design-notes spec, `BF_BFE_NextGen_Spec.md`
+(now at its 4th revision), capturing a near-total BFE rearchitecture discussion covering
+GC-API-first venue data, a 3-axis game engine model (base game / add-on modules / timeframe)
+with a registry pattern for extensibility, a Round Configuration object as the technical
+spine, a player entity model (individual / team / hierarchical team-of-teams, needed for the
+new BF Cup Ryder-Cup-style event), a handicap/stroke-allocation calculator gap analysis, a
+per-format scoring-representation model (quota vs. stroke, not a universal raw capture), live
+scoring vs. connectivity risk (Buck Hill has poor cell coverage), a Quick Templates concept
+for one-click Gatherings setup (e.g. BFWeekends at BSGC), and a build sequence organized
+around the real 2026 fall calendar (BF Series to 10/26 on the old GS engine, BF Cup 11/7-8,
+Turkey 2Man 11/15, BlackFriday 1-man 11/27) — two of the three new fall events turned out to
+need zero new engine work, which meaningfully de-risks the build. Also shipped `bf_push.ps1`
+v11 (added `BF_BFE_NextGen_Spec.md` to its `$FileMap`). No code was touched this session — no
+deploys, no Worker changes, no D1 changes. See `BF_Session_Log.md`'s Dev-85 entry for full
+detail (append it before closing if not already there). Read this file first in
 any new BirdieFriends chat before touching code — it's meant to be self-sufficient enough
 that you never need to re-read `BF_Session_Log.md` line by line to get oriented (that log
-is the detailed history; this doc is the map). Fetch it and the two spec docs below via
+is the detailed history; this doc is the map). Fetch it and the spec docs below via
 `curl` at session start — see §4, don't ask Brian to paste them. `BF_WallyCup_Spec.md` is
 the living design reference for the Wally Cup event specifically — read it too before
 touching Groupings, the results page, Close Round, Overall Standings, or the 2Man team
 quota (its formula was wrong in this spec itself until Dev-83 — now corrected).
 `BF_WCRP_Memories_Spec.md`'s "What actually shipped (Dev-80)", "What changed in Dev-83", and
 "What changed in Dev-84" addenda are the reference for the memories/Trip-Info work
-specifically. **There is no real session numbering beyond this one (Dev-85) — don't invent or
-reuse "Dev-NNN" labels for individual fixes. This has now happened twice (briefly in Dev-82,
-then again all through Dev-83's own code comments, climbing from wherever Dev-82 left off
-through "Dev-108") despite Dev-82 believing it had corrected the mistake same-session. It
-hadn't. It was also nearly repeated in Dev-84 (a code comment briefly read "Dev-95" before
-being caught and rewritten). Whatever number the codebase's own comments are already at when
-you start reading them is not a real precedent to continue from — a session is one Dev-# for
-its whole duration; describe an individual change by what it touches, never by inventing it
-its own number.**
+specifically. `BF_BFE_NextGen_Spec.md` is the new living design-notes doc for the BFE
+rearchitecture (venue data, game engine, handicap, scoring, live scoring, build sequence) —
+read it before starting any Dev-86+ work on that rearchitecture; it is still design notes,
+not yet a build plan with tickets. **There is no real session numbering beyond this one
+(Dev-85) — don't invent or reuse "Dev-NNN" labels for individual fixes. This has now happened
+twice (briefly in Dev-82, then again all through Dev-83's own code comments, climbing from
+wherever Dev-82 left off through "Dev-108") despite Dev-82 believing it had corrected the
+mistake same-session. It hadn't. It was also nearly repeated in Dev-84 (a code comment briefly
+read "Dev-95" before being caught and rewritten). Whatever number the codebase's own comments
+are already at when you start reading them is not a real precedent to continue from — a
+session is one Dev-# for its whole duration; describe an individual change by what it
+touches, never by inventing it its own number.**
 ---
 ## 1. What this project is
 BirdieFriends (birdiefriends.com) is a golf league management platform. Brian is the sole
@@ -265,36 +274,32 @@ this is the largest single body of work behind this bootstrap.** In build order:
 Full detail on all of the above (including the deviations from the original design draft)
 is in `BF_WCRP_Memories_Spec.md`'s "What actually shipped (Dev-80)" addendum — read that
 before touching any memories/Trip-Info code, not just this summary.
-## 3. Dev-85 focus — verify Wally Cup status first, then BF Series / Trip Memories carry-forward
-**Start by finding out where the Wally Cup actually stands — don't assume.** Dev-84's own
-focus checklist (the previous version of this section) expected Rd3 to close and Overall
-Standings/Wally Ball to resolve during that session; instead Dev-84 went a different
-direction (see §2's Dev-84 paragraph and `BF_Session_Log.md`'s Dev-84 entry) and, per Brian's
-explicit instruction, never reconciled whether Rd3 closed or the event wrapped up. So the
-real first step here is a live check (e.g. `GET /bfe/events` for `"2026 Wally Cup"`'s round
-statuses), not picking up the old checklist as if it were still accurate. If Rd3 is still
-open or Overall/Wally Ball haven't resolved, the old Dev-84 checklist items below are still
-the right shape of work; if the event already wrapped, they're moot and this section should
-be replaced with real post-event close-out concerns instead.
-- **Old Dev-84 checklist, for reference if Rd3 turns out still open:** confirm Rd3's Live
-  Panel opens on its own via the natural tee-time window (Dev-83 closed with
-  `live_override: false` and `live_stopped_round: "2026 Wally Cup - 2Man"`, 2Man only,
-  deliberately not touched further); close Rd3 and publish (same flow as every other round,
-  confirm payout/skins/CTP compute cleanly); confirm Overall Standings and Wally Ball
-  resolve correctly the first time real data flows through the full round chain (champion/
-  podium, Wally Ball bonus-holder, `payoutSummary.reconciles`); confirm the Trip Memories
-  chapter split gives Rd3 a clean "On Course" chapter without needing the manual boundary
-  override, and that the final post-event chapter reads sensibly.
-- **The end-to-end verification pass — now at least four sessions overdue (Dev-81/82/83/84).**
-  Make a deliberate call rather than letting it silently keep carrying forward: either run
-  whatever of it still applies, or explicitly close it out as "this event finished without
-  it, and that was fine" in the Dev-85 log entry. See the old checklist (Dev-83's own §3, in
-  `BF_Session_Log.md`'s Dev-83 entry) for what it would have covered.
-- **If the event has genuinely wrapped:** consider what belongs in a proper post-event
-  close-out — final payout summary for Brian's own records, whether the Trip Info page/WCRP
-  capture should be turned off, whether `live_override`/`live_stopped_round` need resetting
-  to a clean state for whatever event comes next.
-**Carried forward from Dev-84, not Wally-Cup-specific:**
+## 3. Dev-86 focus — begin BFE Next-Gen build (§9 of `BF_BFE_NextGen_Spec.md`), and the Wally
+Cup status check is still overdue
+**Read `BF_BFE_NextGen_Spec.md` in full before writing any code.** Dev-85 was pure design —
+no code was touched — so Dev-86 is the first session that can actually start building against
+it. Start from its §9 proposed build sequence (organized around the real Nov 7 BF Cup
+deadline), not from scratch: it was built precisely so a new session has an ordered starting
+point instead of "almost everything needs touching." The spec is still design notes, not
+tickets — expect to firm up open questions (§10) as real implementation choices come up, the
+same way this session's own understanding sharpened through several corrected drafts. Two of
+the three new fall events (Turkey 2Man, BlackFriday 1-man) need zero new engine work per the
+spec's §8 calendar table — worth confirming that's still Brian's read before assuming it and
+prioritizing BF Cup-critical work first.
+**The Wally Cup Rd3/Overall Standings/event-wrap-up check is now five sessions overdue
+(Dev-81/82/83/84/85) and Dev-85 did not touch it either** — Brian's focus shifted entirely to
+the BFE Next-Gen architecture discussion instead. Don't let it silently carry forward a sixth
+time without a deliberate call: either do a live check (e.g. `GET /bfe/events` for
+`"2026 Wally Cup"`'s round statuses) early in Dev-86, or explicitly ask Brian whether it still
+matters at this point in the season (BF Series runs through 10/26, BF Cup looms 11/7-8) before
+spending time on it. If Rd3 is still open, the old checklist (Dev-83's own §3, in
+`BF_Session_Log.md`'s Dev-83 entry) is still the right shape of work: confirm Rd3's Live Panel
+opens on its own via the natural tee-time window, close Rd3 and publish, confirm Overall
+Standings and Wally Ball resolve correctly, confirm the Trip Memories chapter split behaves.
+If the event already wrapped, this is moot and should be replaced with real post-event
+close-out concerns (final payout summary, whether Trip Info/WCRP capture should be turned
+off, whether `live_override`/`live_stopped_round` need resetting).
+**Carried forward from Dev-84, still not re-confirmed since:**
 - The Rd1 chapter-boundary override's `localStorage`-only persistence is a possible,
   unconfirmed durability gap — worth a look if the chapter-boundary symptom recurs a third
   time (see `BF_Session_Log.md`'s Dev-84 entry and `BF_WCRP_Memories_Spec.md`'s "What changed
@@ -303,12 +308,12 @@ be replaced with real post-event close-out concerns instead.
   checking whether it needs anything further before assuming it's quiet.
 - Confirm the D1-pinning fix and the AutoPush `BF_Experiences.js` filename fix both landed
   cleanly (i.e. GitHub `source/bf_experiences_worker.js` reflects the Dev-84 changes and
-  production matches it) — this session had a close call with both (see §4 and the Dev-84
-  log entry) and it's worth one quick confirmation rather than assuming it's settled.
-Nothing above is expected to be a large build — if something real breaks, fix it in place
-and log it the same way prior sessions' own live-data catches were logged (see those entries
-in `BF_Session_Log.md` for the pattern: what was found, how it was verified against live
-data, what Brian confirmed).
+  production matches it) — still worth one quick confirmation rather than assuming it's
+  settled, now two sessions on.
+Nothing above (aside from the BFE Next-Gen build itself) is expected to be a large item — if
+something real breaks, fix it in place and log it the same way prior sessions' own live-data
+catches were logged (see those entries in `BF_Session_Log.md` for the pattern: what was
+found, how it was verified against live data, what Brian confirmed).
 ## 4. Standing operating rules (apply every session)
 - **Never deploy.** Prepare files, verify them (jsdom/vm test against the actual extracted
   function source before delivery — this codebase is large enough that "looks right" isn't
