@@ -149,9 +149,21 @@
     </div>
     <textarea id="hcpSyncPasteInput" rows="8" style="width:100%;font-family:monospace;font-size:0.8rem;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="Paste the whole GHIN page here"></textarea>
     <div class="btnbar">
-      <button type="button" id="hcpSyncApplyBtn">Sync matched members to bf_players</button>
+      <button type="button" id="hcpSyncPreviewBtn">Preview matches</button>
     </div>
     <p class="status" id="hcpSyncStatus"></p>
+    <div id="hcpSyncReviewWrap" style="display:none">
+      <p class="hint">Review before writing anything. Uncheck a row to skip it, fix a name or HCP by editing the field directly, or type an HCP in for a row that didn't match automatically. Nothing is written to <code>bf_players</code> until you click Submit below.</p>
+      <p class="subtle" id="hcpSyncReviewCount"></p>
+      <table id="hcpSyncTable">
+        <thead><tr><th style="width:10%">Include</th><th style="width:40%">Name</th><th style="width:20%">HCP</th><th>Note</th></tr></thead>
+        <tbody id="hcpSyncBody"></tbody>
+      </table>
+      <div class="btnbar">
+        <button type="button" id="hcpSyncSubmitBtn">Submit checked rows to bf_players</button>
+      </div>
+      <p class="status" id="hcpSyncSubmitStatus"></p>
+    </div>
   </section>
   <!-- ── Generate test scorecards (Dev-74 — testing tool) ─────────────── -->
   <section class="card">
@@ -1495,11 +1507,36 @@ async function loadAllMembers() {
     return { submissionId: s.id, name: fullName, ghinName };
   }).filter(m => m.name);
 }
-async function bulkHcpSyncApply() {
+// Dev-86 addition (2026-09-23): the original bulkHcpSyncApply() wrote
+// straight from the parsed paste to bf_players with no review step — same
+// gap Brian flagged against this tool specifically ("needs the same player
+// edit UI that exists," referring to the editable name/HCP roster table in
+// section 3 above). Split into two steps: bulkHcpSyncPreview() only parses
+// and matches, rendering an editable table (same addPlayerRow-style
+// name/HCP inputs, plus an Include checkbox per row) — nothing is written
+// yet. bulkHcpSyncSubmit() then writes ONLY the checked rows, using
+// whatever name/HCP is in the field at submit time, so a bad auto-match,
+// a typo'd name, or a wrong nearby number can be fixed or excluded before
+// anything touches D1.
+const hcpSyncBody = document.getElementById('hcpSyncBody');
+function addHcpSyncRow(submissionId, name, hcp, included, note) {
+  const tr = document.createElement('tr');
+  tr.dataset.submissionId = submissionId || '';
+  tr.innerHTML = `
+    <td><input type="checkbox" class="s-include" style="width:auto" ${included ? 'checked' : ''}></td>
+    <td><input type="text" class="s-name" value="${name}"></td>
+    <td><input type="number" class="s-hcp" value="${hcp === undefined || hcp === null ? '' : hcp}" step="0.1" style="width:90px"></td>
+    <td class="subtle">${note || ''}</td>`;
+  hcpSyncBody.appendChild(tr);
+}
+async function bulkHcpSyncPreview() {
   const raw = document.getElementById('hcpSyncPasteInput').value;
   const statusEl = document.getElementById('hcpSyncStatus');
+  const reviewWrap = document.getElementById('hcpSyncReviewWrap');
+  reviewWrap.style.display = 'none';
+  hcpSyncBody.innerHTML = '';
+  document.getElementById('hcpSyncSubmitStatus').textContent = '';
   if (!raw || !raw.trim()) { statusEl.className = 'status err'; statusEl.textContent = 'Nothing pasted.'; return; }
-  const pin = document.getElementById('hcpSyncPin').value.trim() || hostPinValue();
   statusEl.className = 'status info';
   statusEl.textContent = 'Loading membership…';
   let members;
@@ -1511,28 +1548,63 @@ async function bulkHcpSyncApply() {
     return;
   }
   const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  let matched = 0, updated = 0, flagged = 0;
-  const notFound = [];
-  const failed = [];
+  let matchedCount = 0;
   statusEl.textContent = `Matching ${members.length} members…`;
-  for (const m of members) {
-    const searchTerms = [m.name];
-    if (m.ghinName) searchTerms.push(m.ghinName);
-    let idx = -1, matchedTerm = m.name;
-    for (const term of searchTerms) {
-      const found = raw.search(new RegExp(escapeRegex(term), 'i'));
-      if (found !== -1) { idx = found; matchedTerm = term; break; }
-    }
-    if (idx === -1) { notFound.push(m.name); continue; }
-    const windowText = raw.slice(idx + matchedTerm.length, idx + matchedTerm.length + 300);
-    const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
-    const hcp = numMatches.map(n => parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
-    if (hcp === undefined) { notFound.push(`${m.name} (no HCP-looking number nearby)`); continue; }
-    matched++;
+  members
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach(m => {
+      const searchTerms = [m.name];
+      if (m.ghinName) searchTerms.push(m.ghinName);
+      let idx = -1, matchedTerm = m.name;
+      for (const term of searchTerms) {
+        const found = raw.search(new RegExp(escapeRegex(term), 'i'));
+        if (found !== -1) { idx = found; matchedTerm = term; break; }
+      }
+      if (idx === -1) {
+        addHcpSyncRow(m.submissionId, m.name, '', false, 'not found in paste — fix name/HCP and check to include');
+        return;
+      }
+      const windowText = raw.slice(idx + matchedTerm.length, idx + matchedTerm.length + 300);
+      const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
+      const hcp = numMatches.map(n => parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
+      if (hcp === undefined) {
+        addHcpSyncRow(m.submissionId, m.name, '', false, 'name found but no HCP-looking number nearby');
+        return;
+      }
+      matchedCount++;
+      addHcpSyncRow(m.submissionId, m.name, hcp, true, 'matched');
+    });
+  document.getElementById('hcpSyncReviewCount').textContent =
+    `${matchedCount} of ${members.length} members matched — review below, then submit.`;
+  reviewWrap.style.display = 'block';
+  statusEl.className = 'status ok';
+  statusEl.textContent = `Matched ${matchedCount} of ${members.length} — nothing written yet, review the table below.`;
+}
+async function bulkHcpSyncSubmit() {
+  const pin = document.getElementById('hcpSyncPin').value.trim() || hostPinValue();
+  const submitStatusEl = document.getElementById('hcpSyncSubmitStatus');
+  const rows = [...hcpSyncBody.querySelectorAll('tr')].filter(tr => tr.querySelector('.s-include').checked);
+  if (!rows.length) {
+    submitStatusEl.className = 'status err';
+    submitStatusEl.textContent = 'No rows checked — nothing to submit.';
+    return;
+  }
+  let updated = 0, flagged = 0;
+  const skipped = [];
+  const failed = [];
+  submitStatusEl.className = 'status info';
+  for (const tr of rows) {
+    const name = tr.querySelector('.s-name').value.trim();
+    const hcpRaw = tr.querySelector('.s-hcp').value;
+    const submissionId = tr.dataset.submissionId;
+    if (!name || hcpRaw === '') { skipped.push(name || '(blank name)'); continue; }
+    const hcp = parseFloat(hcpRaw);
+    submitStatusEl.textContent = `Writing ${name}…`;
     try {
       const resolveRes = await fetch(`${jfWorkerBase()}/bfe/players/resolve`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jotform_submission_id: m.submissionId, name: m.name })
+        body: JSON.stringify({ jotform_submission_id: submissionId, name })
       });
       const resolveJson = await resolveRes.json();
       if (!resolveJson.ok) throw new Error(resolveJson.error || 'resolve failed');
@@ -1546,16 +1618,17 @@ async function bulkHcpSyncApply() {
       updated++;
       if (hcpJson.flagged) flagged++;
     } catch (e) {
-      failed.push(`${m.name} (${e.message})`);
+      failed.push(`${name} (${e.message})`);
     }
   }
-  const parts = [`✓ ${updated}/${matched} matched-and-updated in bf_players`];
-  if (notFound.length) parts.push(`⚠ ${notFound.length} not found in the paste: ${notFound.join(', ')}`);
+  const parts = [`✓ ${updated} written to bf_players`];
+  if (skipped.length) parts.push(`⚠ ${skipped.length} skipped (blank name or HCP): ${skipped.join(', ')}`);
   if (failed.length) parts.push(`✗ ${failed.length} failed to write: ${failed.join('; ')}`);
-  statusEl.textContent = parts.join(' · ');
-  statusEl.className = 'status ' + (failed.length ? 'err' : (notFound.length ? 'info' : 'ok'));
+  submitStatusEl.textContent = parts.join(' · ');
+  submitStatusEl.className = 'status ' + (failed.length ? 'err' : (skipped.length ? 'info' : 'ok'));
 }
-document.getElementById('hcpSyncApplyBtn').addEventListener('click', bulkHcpSyncApply);
+document.getElementById('hcpSyncPreviewBtn').addEventListener('click', bulkHcpSyncPreview);
+document.getElementById('hcpSyncSubmitBtn').addEventListener('click', bulkHcpSyncSubmit);
 
 function setRosterStatus(msg, kind) {
   const el = document.getElementById('rosterFetchStatus');
