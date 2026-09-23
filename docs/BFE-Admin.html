@@ -140,6 +140,19 @@
     </div>
     <div id="eventsListBody"><p class="subtle">Click Refresh to see what's currently stored.</p></div>
   </section>
+  <!-- ── Membership HCP Sync (Dev-86 — bf_players bulk admin tool) ─────── -->
+  <section class="card">
+    <h2>Membership HCP sync <span class="badge">admin tool</span></h2>
+    <p class="hint">Bulk-refresh <code>bf_players</code> (the central, D1-native HCP record — separate from any single event's roster) against a fresh GHIN paste, for the WHOLE active membership at once, not just whoever's in an upcoming event's roster. Paste the whole GHIN roster page below (Ctrl+A, Ctrl+C on ghin.com is fine — this searches the whole pasted blob, same matching approach as the per-event GHIN paste in Setup). Matches against every active BF member (from the shared Membership Jotform), not just players already on <code>bf_players</code> — a member touched here for the first time gets created. Every match is written with source <code>ghin_import</code> — gospel, always applied, never flagged, and clears any prior self-report lock. Requires the commissioner PIN below (same as other write actions on this page).</p>
+    <div class="row">
+      <div><label for="hcpSyncPin">Host PIN</label><input type="password" id="hcpSyncPin" placeholder="uses the PIN above if left blank" style="width:120px"></div>
+    </div>
+    <textarea id="hcpSyncPasteInput" rows="8" style="width:100%;font-family:monospace;font-size:0.8rem;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="Paste the whole GHIN page here"></textarea>
+    <div class="btnbar">
+      <button type="button" id="hcpSyncApplyBtn">Sync matched members to bf_players</button>
+    </div>
+    <p class="status" id="hcpSyncStatus"></p>
+  </section>
   <!-- ── Generate test scorecards (Dev-74 — testing tool) ─────────────── -->
   <section class="card">
     <h2>Generate test scorecards <span class="badge">testing tool</span></h2>
@@ -1460,6 +1473,90 @@ document.getElementById('ghinPasteCancelBtn').addEventListener('click', () => {
   document.getElementById('ghinPastePanel').style.display = 'none';
 });
 document.getElementById('ghinPasteApplyBtn').addEventListener('click', ghinApplyPaste);
+
+// ── Membership HCP Sync (Dev-86) — bulk-refresh bf_players against a
+// fresh GHIN paste, for the whole active membership, not just one event's
+// roster. Reuses the SAME name/GHIN-name matching approach as
+// ghinApplyPaste above (loadGhinNameMap + nearest-number-after-name), but
+// matches against the full Membership list instead of just the current
+// roster rows, and writes each match through to the new bf_players table
+// (POST /bfe/players/resolve then PATCH .../hcp, source: ghin_import)
+// instead of a Setup roster input field. Sequential, not parallel — this
+// is an occasional admin action against ~30 people, not a hot path, and
+// sequential calls are much easier to reason about if one fails partway.
+async function loadAllMembers() {
+  const subs = await jfFetchSubmissions(MEMBER_FORM_ID, JF_FILTER);
+  return subs.map(s => {
+    const a = s.answers || {};
+    const first = bfeGetAnswer(a, ['First Name', 'name', 'firstName']);
+    const last = bfeGetAnswer(a, ['Last Name', 'lastname', 'lastName']);
+    const fullName = [first, last].filter(Boolean).join(' ').trim();
+    const ghinName = bfeGetAnswer(a, ['GHIN Name', 'ghinName', 'ghinname']);
+    return { submissionId: s.id, name: fullName, ghinName };
+  }).filter(m => m.name);
+}
+async function bulkHcpSyncApply() {
+  const raw = document.getElementById('hcpSyncPasteInput').value;
+  const statusEl = document.getElementById('hcpSyncStatus');
+  if (!raw || !raw.trim()) { statusEl.className = 'status err'; statusEl.textContent = 'Nothing pasted.'; return; }
+  const pin = document.getElementById('hcpSyncPin').value.trim() || hostPinValue();
+  statusEl.className = 'status info';
+  statusEl.textContent = 'Loading membership…';
+  let members;
+  try {
+    members = await loadAllMembers();
+  } catch (e) {
+    statusEl.className = 'status err';
+    statusEl.textContent = 'Could not load membership: ' + e.message;
+    return;
+  }
+  const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let matched = 0, updated = 0, flagged = 0;
+  const notFound = [];
+  const failed = [];
+  statusEl.textContent = `Matching ${members.length} members…`;
+  for (const m of members) {
+    const searchTerms = [m.name];
+    if (m.ghinName) searchTerms.push(m.ghinName);
+    let idx = -1, matchedTerm = m.name;
+    for (const term of searchTerms) {
+      const found = raw.search(new RegExp(escapeRegex(term), 'i'));
+      if (found !== -1) { idx = found; matchedTerm = term; break; }
+    }
+    if (idx === -1) { notFound.push(m.name); continue; }
+    const windowText = raw.slice(idx + matchedTerm.length, idx + matchedTerm.length + 300);
+    const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
+    const hcp = numMatches.map(n => parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
+    if (hcp === undefined) { notFound.push(`${m.name} (no HCP-looking number nearby)`); continue; }
+    matched++;
+    try {
+      const resolveRes = await fetch(`${jfWorkerBase()}/bfe/players/resolve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jotform_submission_id: m.submissionId, name: m.name })
+      });
+      const resolveJson = await resolveRes.json();
+      if (!resolveJson.ok) throw new Error(resolveJson.error || 'resolve failed');
+      const playerId = resolveJson.player.id;
+      const hcpRes = await fetch(`${jfWorkerBase()}/bfe/players/${playerId}/hcp`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hcp, source: 'ghin_import', pin })
+      });
+      const hcpJson = await hcpRes.json();
+      if (!hcpRes.ok) throw new Error(hcpJson.error || `hcp update failed (${hcpRes.status})`);
+      updated++;
+      if (hcpJson.flagged) flagged++;
+    } catch (e) {
+      failed.push(`${m.name} (${e.message})`);
+    }
+  }
+  const parts = [`✓ ${updated}/${matched} matched-and-updated in bf_players`];
+  if (notFound.length) parts.push(`⚠ ${notFound.length} not found in the paste: ${notFound.join(', ')}`);
+  if (failed.length) parts.push(`✗ ${failed.length} failed to write: ${failed.join('; ')}`);
+  statusEl.textContent = parts.join(' · ');
+  statusEl.className = 'status ' + (failed.length ? 'err' : (notFound.length ? 'info' : 'ok'));
+}
+document.getElementById('hcpSyncApplyBtn').addEventListener('click', bulkHcpSyncApply);
+
 function setRosterStatus(msg, kind) {
   const el = document.getElementById('rosterFetchStatus');
   if (!msg) { el.className = 'status'; el.textContent = ''; return; }
