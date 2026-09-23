@@ -162,6 +162,13 @@
             <option value="unmatched">Unmatched (no GHIN match)</option>
           </select>
         </div>
+        <div><label for="hcpSyncActiveFilterSelect">Status</label>
+          <select id="hcpSyncActiveFilterSelect">
+            <option value="all">All statuses</option>
+            <option value="active">Active only</option>
+            <option value="inactive">Inactive only</option>
+          </select>
+        </div>
         <p class="subtle" id="hcpSyncReviewCount" style="align-self:flex-end;margin-bottom:8px"></p>
       </div>
       <table id="hcpSyncTable">
@@ -1513,7 +1520,13 @@ async function loadAllMembers() {
     const last = bfeGetAnswer(a, ['Last Name', 'lastname', 'lastName']);
     const fullName = [first, last].filter(Boolean).join(' ').trim();
     const ghinName = bfeGetAnswer(a, ['GHIN Name', 'ghinName', 'ghinname']);
-    return { submissionId: s.id, name: fullName, ghinName };
+    // "Active" question on Member Sign Up holds exactly "Active" or
+    // "InActive" (confirmed against the live form) — treat anything else
+    // (blank, a future third value) as inactive rather than assume active,
+    // since the whole point of this flag is to keep stale members out of
+    // bulk HCP writes by default.
+    const active = bfeGetAnswer(a, ['Active']).trim().toLowerCase() === 'active';
+    return { submissionId: s.id, name: fullName, ghinName, active };
   }).filter(m => m.name);
 }
 // Dev-86 addition (2026-09-23): the original bulkHcpSyncApply() wrote
@@ -1534,13 +1547,14 @@ const hcpSyncBody = document.getElementById('hcpSyncBody');
 // fixed record of whether the GHIN paste actually found this member, used
 // only by the Show filter below, and never changes even if he manually
 // checks an unmatched row back in or unchecks a matched one.
-function addHcpSyncRow(submissionId, name, hcp, included, note, matched) {
+function addHcpSyncRow(submissionId, name, hcp, included, note, matched, active) {
   const tr = document.createElement('tr');
   tr.dataset.submissionId = submissionId || '';
   tr.dataset.matched = matched ? 'true' : 'false';
+  tr.dataset.active = active ? 'true' : 'false';
   tr.innerHTML = `
     <td><input type="checkbox" class="s-include" style="width:auto" ${included ? 'checked' : ''}></td>
-    <td><input type="text" class="s-name" value="${name}"></td>
+    <td><input type="text" class="s-name" value="${name}">${active ? '' : ' <span class="subtle">(inactive)</span>'}</td>
     <td><input type="number" class="s-hcp" value="${hcp === undefined || hcp === null ? '' : hcp}" step="0.1" style="width:90px"></td>
     <td class="subtle">${note || ''}</td>`;
   hcpSyncBody.appendChild(tr);
@@ -1578,39 +1592,49 @@ async function bulkHcpSyncPreview() {
         if (found !== -1) { idx = found; matchedTerm = term; break; }
       }
       if (idx === -1) {
-        addHcpSyncRow(m.submissionId, m.name, '', false, 'not found in paste — fix name/HCP and check to include', false);
+        addHcpSyncRow(m.submissionId, m.name, '', false, 'not found in paste — fix name/HCP and check to include', false, m.active);
         return;
       }
       const windowText = raw.slice(idx + matchedTerm.length, idx + matchedTerm.length + 300);
       const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
       const hcp = numMatches.map(n => parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
       if (hcp === undefined) {
-        addHcpSyncRow(m.submissionId, m.name, '', false, 'name found but no HCP-looking number nearby', false);
+        addHcpSyncRow(m.submissionId, m.name, '', false, 'name found but no HCP-looking number nearby', false, m.active);
         return;
       }
       matchedCount++;
-      addHcpSyncRow(m.submissionId, m.name, hcp, true, 'matched', true);
+      // Matched AND active auto-checks; matched-but-inactive is still shown
+      // (with its HCP pre-filled, in case Brian wants it) but starts
+      // unchecked — inactive members shouldn't get written by default just
+      // because their old GHIN Name still happens to match the paste.
+      addHcpSyncRow(m.submissionId, m.name, hcp, m.active, m.active ? 'matched' : 'matched — inactive member, unchecked by default', true, m.active);
     });
   document.getElementById('hcpSyncReviewCount').textContent =
     `${matchedCount} of ${members.length} members matched — review below, then submit.`;
   reviewWrap.style.display = 'block';
   document.getElementById('hcpSyncFilterSelect').value = 'all';
+  document.getElementById('hcpSyncActiveFilterSelect').value = 'all';
   applyHcpSyncFilter();
   statusEl.className = 'status ok';
   statusEl.textContent = `Matched ${matchedCount} of ${members.length} — nothing written yet, review the table below.`;
 }
 function applyHcpSyncFilter() {
   const mode = document.getElementById('hcpSyncFilterSelect').value;
+  const activeMode = document.getElementById('hcpSyncActiveFilterSelect').value;
   let shown = 0;
   hcpSyncBody.querySelectorAll('tr').forEach(tr => {
     const isMatched = tr.dataset.matched === 'true';
-    const show = mode === 'all' || (mode === 'matched' && isMatched) || (mode === 'unmatched' && !isMatched);
+    const isActive = tr.dataset.active === 'true';
+    const matchOk = mode === 'all' || (mode === 'matched' && isMatched) || (mode === 'unmatched' && !isMatched);
+    const activeOk = activeMode === 'all' || (activeMode === 'active' && isActive) || (activeMode === 'inactive' && !isActive);
+    const show = matchOk && activeOk;
     tr.style.display = show ? '' : 'none';
     if (show) shown++;
   });
   return shown;
 }
 document.getElementById('hcpSyncFilterSelect').addEventListener('change', applyHcpSyncFilter);
+document.getElementById('hcpSyncActiveFilterSelect').addEventListener('change', applyHcpSyncFilter);
 async function bulkHcpSyncSubmit() {
   const pin = document.getElementById('hcpSyncPin').value.trim() || hostPinValue();
   const submitStatusEl = document.getElementById('hcpSyncSubmitStatus');
