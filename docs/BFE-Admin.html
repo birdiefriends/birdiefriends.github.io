@@ -154,7 +154,16 @@
     <p class="status" id="hcpSyncStatus"></p>
     <div id="hcpSyncReviewWrap" style="display:none">
       <p class="hint">Review before writing anything. Uncheck a row to skip it, fix a name or HCP by editing the field directly, or type an HCP in for a row that didn't match automatically. Nothing is written to <code>bf_players</code> until you click Submit below.</p>
-      <p class="subtle" id="hcpSyncReviewCount"></p>
+      <div class="row" style="align-items:center">
+        <div><label for="hcpSyncFilterSelect">Show</label>
+          <select id="hcpSyncFilterSelect">
+            <option value="all">All players</option>
+            <option value="matched">Matched (GHIN found)</option>
+            <option value="unmatched">Unmatched (no GHIN match)</option>
+          </select>
+        </div>
+        <p class="subtle" id="hcpSyncReviewCount" style="align-self:flex-end;margin-bottom:8px"></p>
+      </div>
       <table id="hcpSyncTable">
         <thead><tr><th style="width:10%">Include</th><th style="width:40%">Name</th><th style="width:20%">HCP</th><th>Note</th></tr></thead>
         <tbody id="hcpSyncBody"></tbody>
@@ -1519,9 +1528,16 @@ async function loadAllMembers() {
 // a typo'd name, or a wrong nearby number can be fixed or excluded before
 // anything touches D1.
 const hcpSyncBody = document.getElementById('hcpSyncBody');
-function addHcpSyncRow(submissionId, name, hcp, included, note) {
+// `included` and `matched` are separate on purpose: `included` only drives
+// the checkbox's starting state (checked for an auto-match, unchecked
+// otherwise) and can be freely toggled by Brian afterward; `matched` is a
+// fixed record of whether the GHIN paste actually found this member, used
+// only by the Show filter below, and never changes even if he manually
+// checks an unmatched row back in or unchecks a matched one.
+function addHcpSyncRow(submissionId, name, hcp, included, note, matched) {
   const tr = document.createElement('tr');
   tr.dataset.submissionId = submissionId || '';
+  tr.dataset.matched = matched ? 'true' : 'false';
   tr.innerHTML = `
     <td><input type="checkbox" class="s-include" style="width:auto" ${included ? 'checked' : ''}></td>
     <td><input type="text" class="s-name" value="${name}"></td>
@@ -1562,25 +1578,39 @@ async function bulkHcpSyncPreview() {
         if (found !== -1) { idx = found; matchedTerm = term; break; }
       }
       if (idx === -1) {
-        addHcpSyncRow(m.submissionId, m.name, '', false, 'not found in paste — fix name/HCP and check to include');
+        addHcpSyncRow(m.submissionId, m.name, '', false, 'not found in paste — fix name/HCP and check to include', false);
         return;
       }
       const windowText = raw.slice(idx + matchedTerm.length, idx + matchedTerm.length + 300);
       const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
       const hcp = numMatches.map(n => parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
       if (hcp === undefined) {
-        addHcpSyncRow(m.submissionId, m.name, '', false, 'name found but no HCP-looking number nearby');
+        addHcpSyncRow(m.submissionId, m.name, '', false, 'name found but no HCP-looking number nearby', false);
         return;
       }
       matchedCount++;
-      addHcpSyncRow(m.submissionId, m.name, hcp, true, 'matched');
+      addHcpSyncRow(m.submissionId, m.name, hcp, true, 'matched', true);
     });
   document.getElementById('hcpSyncReviewCount').textContent =
     `${matchedCount} of ${members.length} members matched — review below, then submit.`;
   reviewWrap.style.display = 'block';
+  document.getElementById('hcpSyncFilterSelect').value = 'all';
+  applyHcpSyncFilter();
   statusEl.className = 'status ok';
   statusEl.textContent = `Matched ${matchedCount} of ${members.length} — nothing written yet, review the table below.`;
 }
+function applyHcpSyncFilter() {
+  const mode = document.getElementById('hcpSyncFilterSelect').value;
+  let shown = 0;
+  hcpSyncBody.querySelectorAll('tr').forEach(tr => {
+    const isMatched = tr.dataset.matched === 'true';
+    const show = mode === 'all' || (mode === 'matched' && isMatched) || (mode === 'unmatched' && !isMatched);
+    tr.style.display = show ? '' : 'none';
+    if (show) shown++;
+  });
+  return shown;
+}
+document.getElementById('hcpSyncFilterSelect').addEventListener('change', applyHcpSyncFilter);
 async function bulkHcpSyncSubmit() {
   const pin = document.getElementById('hcpSyncPin').value.trim() || hostPinValue();
   const submitStatusEl = document.getElementById('hcpSyncSubmitStatus');
