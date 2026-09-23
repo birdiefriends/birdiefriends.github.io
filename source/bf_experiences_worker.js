@@ -400,6 +400,40 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 // ══════════════════════════════════════════════════════════════════════════
+// Dev-86 addition — bf_players (D1-native player master table)
+// Additive only — does NOT touch or deprecate bfe_player_profiles above
+// (still read by Setup as-is). New identity model: a stable D1 id, not a
+// name string and not a Jotform submission id. Jotform Membership stays
+// the system of record for signup/active-status/portal prefs; this table
+// is a D1-native mirror plus the new home for member insight Jotform has
+// no concept of (HCP, and eventually Round Config rosters/templates).
+// One-way sync only, Jotform -> D1, read-through via POST /bfe/players/
+// resolve on first touch — nothing here ever writes back to Jotform.
+// See source/bf_players_migration.sql for the create-and-seed script (run
+// once in the D1 Console; seeds from the existing bfe_player_profiles
+// rows, jotform_submission_id left NULL until first resolved).
+//   CREATE TABLE bf_players (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     jotform_submission_id TEXT UNIQUE,  -- bridge to Membership; NULL until first read-through
+//     name TEXT NOT NULL,                 -- denormalized display copy, NOT the key
+//     nickname TEXT,
+//     current_hcp REAL,
+//     hcp_history TEXT,                   -- JSON [{date, hcp, source, flagged}], oldest first
+//     hcp_source TEXT,                    -- source of the CURRENT value: ghin_import | estimated | manual | player_weekly
+//                                          -- 'estimated' locks player_weekly self-report until replaced
+//     last_hcp_prompted_at TEXT,          -- last time Portal's weekly HCP nudge was shown to this player
+//     ghin_member INTEGER DEFAULT 0,
+//     active INTEGER DEFAULT 1,
+//     synced_at TEXT,
+//     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+//     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+//   );
+// Routes: GET /bfe/players, POST /bfe/players/resolve, PATCH /bfe/players/
+// :id/hcp, POST /bfe/players/:id/hcp-prompt-shown — see inline comments
+// at each route below for the HCP source/lock rules.
+// ══════════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════════
 // Jotform proxy (Dev-109) — BFE-Admin.html used to hold JOTFORM_API_KEY and
 // call api.jotform.com directly from the browser (same pattern portal.html
 // still uses in production). Moved server-side: that hardcoded key sitting
@@ -764,6 +798,135 @@ export default {
         return new Response(JSON.stringify({ ok: true, updated }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error saving profiles: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // ── bf_players (Dev-86 — D1-native player master table) ───────────────
+    // Deliberately separate from bfe_player_profiles above (left untouched,
+    // still read by Setup) — this is the new, D1-native master identity:
+    // own stable id, not name-as-PK (bfe_player_profiles) and not a Jotform
+    // submission id (every player_id/host_id in the Gatherings tables). One-
+    // way sync only, Jotform -> D1: Jotform Membership stays the system of
+    // record for signup/active-status/portal prefs; nothing here ever writes
+    // back to Jotform. jotform_submission_id is the bridge column, filled in
+    // lazily by /bfe/players/resolve the first time a caller (e.g. Gatherings'
+    // existing stub-creation flow, BF_Gatherings_Spec.md §5) already has a
+    // Jotform submission in hand — this Worker never calls Jotform itself.
+    //
+    // HCP source/lock rules (decided with Brian, Dev-86):
+    //   ghin_import  — always gospel. Applied unconditionally, never flagged,
+    //                  clears any existing self-report lock.
+    //   estimated    — Brian's own judgment call for a player with no GHIN
+    //                  and no other tracked HCP. Applied unconditionally, AND
+    //                  locks that player out of player_weekly self-report
+    //                  until replaced by ghin_import/estimated/manual.
+    //   manual       — a one-off commissioner correction. Applied
+    //                  unconditionally, does NOT lock (unlike 'estimated').
+    //   player_weekly — the Portal's weekly self-report nudge. Rejected
+    //                  (423) if the player is currently estimated-locked.
+    //                  Otherwise always applied (never blocked on magnitude)
+    //                  but flagged:true when the delta from the player's
+    //                  last current_hcp is >= 1.0, so a Host can see
+    //                  "self-reported, flagged" on their own event's roster
+    //                  without the number itself being second-guessed
+    //                  automatically. Host-facing surfacing of that flag is
+    //                  separate follow-up work, not built in this slice.
+    //
+    // Manual migration step (D1 Console, once, before these routes work):
+    // see source/bf_players_migration.sql — creates the table and seeds it
+    // from the existing bfe_player_profiles rows.
+    const HCP_FLAG_DELTA = 1.0;
+    const HCP_VALID_SOURCES = ['ghin_import', 'estimated', 'manual', 'player_weekly'];
+
+    // GET /bfe/players — list all, same shape/ordering as /bfe/player-profiles
+    if (request.method === 'GET' && url.pathname === '/bfe/players') {
+      try {
+        const { results } = await env.DB.prepare(`SELECT * FROM bf_players ORDER BY name ASC`).all();
+        const players = results.map(r => ({ ...r, hcp_history: r.hcp_history ? JSON.parse(r.hcp_history) : [] }));
+        return new Response(JSON.stringify({ ok: true, players }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'List error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /bfe/players/resolve  { jotform_submission_id, name, nickname? }
+    // Read-through: returns the existing row for this Jotform submission id,
+    // or creates one. Idempotent — safe to call on every touch, not just the
+    // first.
+    if (request.method === 'POST' && url.pathname === '/bfe/players/resolve') {
+      try {
+        const body = await request.json();
+        const { jotform_submission_id, name, nickname } = body || {};
+        if (!jotform_submission_id || !name) {
+          return new Response(JSON.stringify({ error: 'jotform_submission_id and name are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const existing = await env.DB.prepare(`SELECT * FROM bf_players WHERE jotform_submission_id = ?`).bind(jotform_submission_id).first();
+        if (existing) {
+          return new Response(JSON.stringify({ ok: true, created: false, player: { ...existing, hcp_history: existing.hcp_history ? JSON.parse(existing.hcp_history) : [] } }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const result = await env.DB.prepare(
+          `INSERT INTO bf_players (jotform_submission_id, name, nickname, synced_at, updated_at)
+           VALUES (?, ?, ?, datetime('now'), datetime('now'))`
+        ).bind(jotform_submission_id, name, nickname || null).run();
+        const created = await env.DB.prepare(`SELECT * FROM bf_players WHERE id = ?`).bind(result.meta.last_row_id).first();
+        return new Response(JSON.stringify({ ok: true, created: true, player: { ...created, hcp_history: created.hcp_history ? JSON.parse(created.hcp_history) : [] } }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Resolve error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // PATCH /bfe/players/:id/hcp  { hcp, source }
+    if (request.method === 'PATCH' && url.pathname.startsWith('/bfe/players/') && url.pathname.endsWith('/hcp')) {
+      try {
+        const playerId = url.pathname.split('/bfe/players/')[1].split('/hcp')[0];
+        const body = await request.json();
+        const hcp = (body?.hcp === undefined || body?.hcp === null || isNaN(body.hcp)) ? null : Number(body.hcp);
+        const source = body?.source;
+        if (!HCP_VALID_SOURCES.includes(source)) {
+          return new Response(JSON.stringify({ error: `source must be one of: ${HCP_VALID_SOURCES.join(', ')}` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        // player_weekly is the PLAYER's own self-report from the Portal — they
+        // don't know the commissioner PIN, so it stays open, same posture as
+        // the rest of the Portal-facing write paths. Every other source is a
+        // Host/Commissioner action writing an authoritative value, so it needs
+        // the same PIN discipline already used for bfe_player_profiles writes.
+        if (source !== 'player_weekly' && String(body?.pin) !== '7797') {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const existing = await env.DB.prepare(`SELECT current_hcp, hcp_history, hcp_source FROM bf_players WHERE id = ?`).bind(playerId).first();
+        if (!existing) {
+          return new Response(JSON.stringify({ error: 'Player not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const locked = existing.hcp_source === 'estimated';
+        if (source === 'player_weekly' && locked) {
+          return new Response(JSON.stringify({ error: 'This player\'s HCP is commissioner-estimated and locked from self-report.', locked: true }), { status: 423, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        let history = existing.hcp_history ? JSON.parse(existing.hcp_history) : [];
+        const changed = existing.current_hcp !== hcp;
+        const delta = (existing.current_hcp === null || existing.current_hcp === undefined || hcp === null) ? null : Math.abs(hcp - existing.current_hcp);
+        const flagged = source === 'player_weekly' && delta !== null && delta >= HCP_FLAG_DELTA;
+        if (changed) {
+          history.push({ date: new Date().toISOString().slice(0, 10), hcp, source, flagged });
+        }
+        await env.DB.prepare(
+          `UPDATE bf_players SET current_hcp = ?, hcp_history = ?, hcp_source = ?, updated_at = datetime('now') WHERE id = ?`
+        ).bind(hcp, JSON.stringify(history), source, playerId).run();
+        return new Response(JSON.stringify({ ok: true, changed, flagged, delta, locked: false }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Update error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /bfe/players/:id/hcp-prompt-shown — stamps last_hcp_prompted_at,
+    // so the Portal's weekly nudge fires once a week per player, not once
+    // per app open.
+    if (request.method === 'POST' && url.pathname.startsWith('/bfe/players/') && url.pathname.endsWith('/hcp-prompt-shown')) {
+      try {
+        const playerId = url.pathname.split('/bfe/players/')[1].split('/hcp-prompt-shown')[0];
+        await env.DB.prepare(`UPDATE bf_players SET last_hcp_prompted_at = datetime('now') WHERE id = ?`).bind(playerId).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Stamp error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
