@@ -292,13 +292,15 @@
     </div>
     <div id="rosterFetchStatus" class="status"></div>
     <table id="rosterTable">
-      <thead><tr><th style="width:32%">Name</th><th style="width:26%">Email</th><th>HCP</th><th style="width:22%">Withdrew?</th><th></th></tr></thead>
+      <thead><tr><th style="width:24%">Name</th><th style="width:20%">Email</th><th>HCP</th><th style="width:24%">Last known (on file)</th><th style="width:18%">Withdrew?</th><th></th></tr></thead>
       <tbody id="rosterBody"></tbody>
     </table>
     <div class="btnbar">
       <button type="button" class="secondary" id="addPlayerBtn">+ Add player manually</button>
       <button type="button" class="secondary" id="ghinPasteToggleBtn">📋 Paste GHIN list</button>
+      <button type="button" class="secondary" id="refreshLastKnownBtn">🔄 Refresh last known HCP</button>
       <span class="subtle" id="rosterCount"></span>
+      <span class="subtle" id="rosterLastKnownStatus"></span>
     </div>
     <div id="ghinPastePanel" style="display:none;margin-top:10px;padding:10px;border:1.5px dashed var(--line);border-radius:8px;background:var(--bg)">
       <p class="hint" style="margin:0 0 8px">Paste the whole GHIN roster page here (Ctrl+A, Ctrl+C on ghin.com is fine — this searches the whole pasted blob, not specific rows/columns, since the exact plain-text layout varies by browser). Matches each name already entered above and grabs the nearest handicap-looking number after it.</p>
@@ -1378,6 +1380,7 @@ function addPlayerRow(name = '', email = '', hcp = '', withdrawn = false, withdr
     <td><input type="text" class="p-name" value="${name}" placeholder="Player name"></td>
     <td><input type="text" class="p-email" value="${email}" placeholder="Email"></td>
     <td><input type="number" class="p-hcp" value="${hcp}" placeholder="HCP" style="width:90px"></td>
+    <td class="subtle p-lastknown">—</td>
     <td>
       <label style="display:flex;align-items:center;gap:5px;white-space:nowrap">
         <input type="checkbox" class="p-withdrawn" style="width:auto" ${withdrawn ? 'checked' : ''}>
@@ -1411,6 +1414,64 @@ function readRosterInput() {
     return { name, email, hcp, withdrawn, withdrawnNote: withdrawnNote || null };
   }).filter(p => p.name);
 }
+// ── Roster HCP transparency (Dev-86, 2026-09-24) ──────────────────────────
+// Brian's revised design: no player self-report at all. Instead, the Host
+// building THIS event's roster (above) sees the master bf_players record for
+// each invited player — its value, source, and date — right next to the HCP
+// field they're typing into, so a gap (never touched, or deliberately
+// no_hcp) is obvious before the round instead of discovered mid-event. This
+// is read-only against bf_players: the Host's own HCP entry in the roster
+// table stays exactly what it's always been — saved with this event's config
+// only (bfe_event_config), never written back to bf_players. Reuses
+// loadExistingPlayers()/findExistingPlayer() from the Membership HCP sync
+// tool below rather than duplicating that fetch+match logic.
+function formatLastKnownHcp(existingPlayer) {
+  if (!existingPlayer || existingPlayer.hcp_source === null || existingPlayer.hcp_source === undefined) {
+    return { text: 'No HCP on file yet', gap: true };
+  }
+  // no_hcp is a deliberate commissioner call to withhold a number, not an
+  // oversight — still a gap the Host needs to know about before the round,
+  // but worded differently so it doesn't read as "nobody's looked at this."
+  if (existingPlayer.hcp_source === 'no_hcp') {
+    return { text: 'Deliberately no HCP on file', gap: true };
+  }
+  if (existingPlayer.current_hcp === null || existingPlayer.current_hcp === undefined) {
+    return { text: 'No HCP on file yet', gap: true };
+  }
+  // D1 datetime('now') is UTC with no tz suffix — same parse used elsewhere
+  // in this project (portal.html's hcpNudgeIsDue) to avoid local-timezone
+  // misreads.
+  const dateStr = existingPlayer.updated_at
+    ? new Date(existingPlayer.updated_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : null;
+  return {
+    text: `${existingPlayer.current_hcp} (${existingPlayer.hcp_source}${dateStr ? ' — ' + dateStr : ''})`,
+    gap: false
+  };
+}
+function renderRosterLastKnownCell(existingPlayer) {
+  const { text, gap } = formatLastKnownHcp(existingPlayer);
+  return gap ? `⚠️ ${text}` : text;
+}
+async function refreshRosterLastKnownHcp() {
+  const statusEl = document.getElementById('rosterLastKnownStatus');
+  if (statusEl) statusEl.textContent = 'Checking last known HCP…';
+  try {
+    const existing = await loadExistingPlayers();
+    [...rosterBody.querySelectorAll('tr')].forEach(tr => {
+      const cell = tr.querySelector('.p-lastknown');
+      if (!cell) return;
+      const name = tr.querySelector('.p-name').value.trim();
+      if (!name) { cell.innerHTML = '—'; return; }
+      const player = findExistingPlayer(existing, null, name);
+      cell.innerHTML = renderRosterLastKnownCell(player);
+    });
+    if (statusEl) statusEl.textContent = '';
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Could not load last known HCP: ' + e.message;
+  }
+}
+document.getElementById('refreshLastKnownBtn').addEventListener('click', refreshRosterLastKnownHcp);
 function bfeGetAnswer(answers, keys) {
   for (const key of keys) {
     for (const ans of Object.values(answers || {})) {
@@ -1874,7 +1935,8 @@ document.getElementById('fetchRosterBtn').addEventListener('click', async () => 
       if (!tr.querySelector('.p-name').value.trim() && !tr.querySelector('.p-email').value.trim() && !tr.querySelector('.p-hcp').value.trim()) tr.remove();
     });
     updateRosterCount();
-    setRosterStatus(`Pulled ${fetched.length} registrant(s) — ${added} added, ${updated} matched existing rows. HCP still needs to be set below in Quick HCP.`, 'ok');
+    setRosterStatus(`Pulled ${fetched.length} registrant(s) — ${added} added, ${updated} matched existing rows. HCP still needs to be set below.`, 'ok');
+    refreshRosterLastKnownHcp(); // fire-and-forget — fills the "Last known" column now that names are in
   } catch (e) {
     setRosterStatus('Fetch failed: ' + e.message, 'err');
   }
