@@ -4368,7 +4368,7 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
@@ -4474,6 +4474,35 @@ biasing to always-available on event day, with activity signals (first group cap
 cards in / long quiet = wrap-up) driving only the dismissible transitions. Mockup rendered
 (`inplay_mockup.png`), not built. **Interim fix shipped:** Rules moved to the far right of the icon
 row so Venue shifts into view (Brian is testing the Venue viewer at Moselem the next day).
+
+**8. "At the course" rail — beta, live for Brian only (v4.7.2 + main `worker.js`), same session.**
+Brian liked location as the on-course signal ("pop a vertical 'at course' icon widget toolbar. They
+leave, open the APP somewhere else and back to normal") and asked for it "live just for me as test."
+   - **Found while checking feasibility:** the public `GET /venues` (main Worker) omitted `lat/lng` —
+     only the commissioner-PIN query returned them — so the venue viewer's 📍 Maps button never showed
+     for regular players. **Fixed:** the public query now includes `lat, lng` (a course's location
+     isn't sensitive). Coordinates on file: Blue Shamrock, Whitetail, **Moselem**, Allentown Muni,
+     Buck Hill. **Missing:** Woodstone, Lord's Valley, Honesdale, Paupack Hills, Skytop.
+   - **Rail** (`AT_COURSE_BETA_PLAYERS = ['Brian Hager']`): `refreshAtCourse()` takes today's rounds
+     you're Yes/Sub on (`findMyReg`), pairs each with its venue, and — only if one has coordinates —
+     makes one `getCurrentPosition` (`maximumAge` 5 min) and does the haversine check **on the
+     phone** against a 1,600 m radius. The position is never sent anywhere. It runs on first data
+     load (`atCourseInitOnce` from `renderAll`) and on every `visibilitychange` → visible; leaving
+     and reopening removes the rail. Items: Photo/Note (hidden on BFE-backed rounds, same as the
+     card), Yardage, Rules, Course (the venue viewer), Games (only when `getLiveEvent()` is this round
+     → opens the Live Panel). The status chip shows the distance (e.g. "0.3 mi") for beta verification.
+     A grip tucks it to an 18 px tab; it also slides aside while scrolling and returns ~1 s after.
+     `z-index` 150 (below modals). Test switch: `?atcourse=1` (sticky, labeled TEST, skips GPS; falls
+     back to the next registered round) / `?atcourse=0`. Location permission is prompted by the first
+     real check — fine for a one-person beta; the permission moment needs design before wider rollout.
+   - **Tests:** `test_at_course.mjs` — 21 checks (on course → rail + miles; 20 mi away / denied /
+     not registered / round not today → none; **non-beta players are never asked for location**;
+     forced TEST mode; URL switch; Games only when live; BFE round hides Photo/Note; tuck; leaving
+     removes it). Test extractor switched to an acorn parser (the regex brace-matcher tripped on a
+     `/'/g` literal). All suites: 88 checks passing.
+   - **Deploy order:** paste `worker.js` into the `birdiefriends-push` Worker, **then** `bf_push`. The
+     rail needs the Worker change even for Brian: `loadVenues()` always uses the public route (no
+     PIN), so without it the phone never sees Moselem's coordinates and the rail stays hidden.
 
 **Carry-forward:**
 - Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
