@@ -1758,6 +1758,99 @@ export default {
       }
     }
 
+    // ── GolfCourseAPI proxy (Dev-86, venue management — BF_BFE_NextGen_Spec.md
+    // §1: "GC-API-first, D1 as cache + fallback"). Unlike JOTFORM_API_KEY above
+    // (a known, already-flagged hardcoded-secret gap), this key is a real
+    // Worker secret (env.GOLFCOURSE_API_KEY — set via `wrangler secret put` or
+    // the Cloudflare dashboard, never committed to this file) — it must never
+    // reach a browser. Read-only lookups only: GolfCourseAPI's own write
+    // endpoints need a paid tier and aren't part of this proxy. Nothing here
+    // writes to D1 — Venue Manager (portal.html) uses these results to
+    // pre-fill the EXISTING manual pars/coords editors for the commissioner
+    // to review and save with their own existing Save buttons, the same
+    // review-before-write pattern used everywhere else in this project,
+    // rather than auto-applying anything. Confirmed live response shapes
+    // against the real API (2026-09-24):
+    //   GET /v1/search?search_query=X ->
+    //     { courses: [{ id, club_name, course_name,
+    //                    location: { city, state, latitude, longitude, ... } }] }
+    //   GET /v1/courses/:id ->
+    //     { course: { id, club_name, course_name, location: {...},
+    //                  tees: { male: [tee...], female: [tee...] } } }
+    //     each tee: { tee_name, course_rating, slope_rating, total_yards,
+    //                 par_total, holes: [{ par, yardage, handicap } x18] }
+    const GC_API_BASE = 'https://api.golfcourseapi.com';
+
+    // GET /bfe/coursedata/search?q=<name>
+    if (request.method === 'GET' && url.pathname === '/bfe/coursedata/search') {
+      const q = (url.searchParams.get('q') || '').trim();
+      if (!q) {
+        return new Response(JSON.stringify({ error: 'q (search query) is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (!env.GOLFCOURSE_API_KEY) {
+        return new Response(JSON.stringify({ error: 'GolfCourseAPI is not configured on this Worker yet (missing GOLFCOURSE_API_KEY secret)' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const gcRes = await fetch(`${GC_API_BASE}/v1/search?search_query=${encodeURIComponent(q)}`, {
+          headers: { 'Authorization': 'Key ' + env.GOLFCOURSE_API_KEY }
+        });
+        const gcJson = await gcRes.json();
+        if (!gcRes.ok) {
+          return new Response(JSON.stringify({ error: gcJson.message || `GolfCourseAPI search failed (${gcRes.status})` }), { status: gcRes.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const courses = (gcJson.courses || []).map(c => ({
+          id: c.id,
+          club_name: c.club_name,
+          course_name: c.course_name,
+          city: c.location?.city ?? null,
+          state: c.location?.state ?? null,
+          latitude: c.location?.latitude ?? null,
+          longitude: c.location?.longitude ?? null
+        }));
+        return new Response(JSON.stringify({ ok: true, courses }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'GolfCourseAPI search error: ' + String(e.message || e) }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // GET /bfe/coursedata/courses/:id — full tee/hole detail for one course.
+    const courseDetailsMatch = url.pathname.match(/^\/bfe\/coursedata\/courses\/([^/]+)$/);
+    if (request.method === 'GET' && courseDetailsMatch) {
+      const courseId = decodeURIComponent(courseDetailsMatch[1]);
+      if (!env.GOLFCOURSE_API_KEY) {
+        return new Response(JSON.stringify({ error: 'GolfCourseAPI is not configured on this Worker yet (missing GOLFCOURSE_API_KEY secret)' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const gcRes = await fetch(`${GC_API_BASE}/v1/courses/${encodeURIComponent(courseId)}`, {
+          headers: { 'Authorization': 'Key ' + env.GOLFCOURSE_API_KEY }
+        });
+        const gcJson = await gcRes.json();
+        if (!gcRes.ok) {
+          return new Response(JSON.stringify({ error: gcJson.message || `GolfCourseAPI course lookup failed (${gcRes.status})` }), { status: gcRes.status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const c = gcJson.course || {};
+        // Flatten male+female tees into one list with a `gender` tag — Venue
+        // Manager's own model (bfe_venue_tee_catalog) is "same tee for
+        // everyone" or "by HCP tier", not gendered, so this just gives the
+        // commissioner every tee GC-API has on offer to choose from.
+        const tees = [
+          ...(c.tees?.male || []).map(t => ({ ...t, gender: 'male' })),
+          ...(c.tees?.female || []).map(t => ({ ...t, gender: 'female' }))
+        ];
+        return new Response(JSON.stringify({
+          ok: true,
+          id: c.id,
+          club_name: c.club_name,
+          course_name: c.course_name,
+          latitude: c.location?.latitude ?? null,
+          longitude: c.location?.longitude ?? null,
+          tees
+        }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'GolfCourseAPI course lookup error: ' + String(e.message || e) }), { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
   }
 };
