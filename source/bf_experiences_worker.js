@@ -87,6 +87,43 @@
 //                                          -- the prefill Setup offers next time
 //     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 //   );
+//
+// Added for the Dev-86 multi-tee venue redesign (BF_BFE_NextGen_Spec.md §1 —
+// GC-API-first, D1 as cache + fallback, non-destructive-override pattern).
+// bfe_venue_tee_catalog (above) stays as-is — it's the lightweight "which
+// tee does a player get" POLICY (same-for-all vs by-HCP-tier). This table is
+// the actual per-tee DATA that policy and event config point at: real
+// per-hole par/yardage/handicap for every tee a venue has in play (Green,
+// Gold, Green/Gold Combo, etc.), not one flat par line per venue.
+//
+//   CREATE TABLE bfe_venue_tees (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     venue_id INTEGER NOT NULL,          -- matches an id from the shared
+//                                          -- `venues` table (main worker) —
+//                                          -- same cross-Worker-reference
+//                                          -- pattern as bfe_venue_tee_catalog
+//     venue_name TEXT,                    -- denormalized, display/debug only
+//     tee_name TEXT NOT NULL,             -- e.g. "Green", "Green/Gold Combo"
+//     gender TEXT,                        -- 'male' | 'female' | null
+//     course_rating REAL,
+//     slope_rating REAL,
+//     total_yards INTEGER,
+//     par_total INTEGER,
+//     holes TEXT NOT NULL,                -- JSON array, 18x {par, yardage, handicap}
+//                                          -- handicap = stroke-index rank (1-18)
+//     gc_api_course_id TEXT,              -- GC-API course id this came from, if any
+//     source TEXT NOT NULL DEFAULT 'gc_api', -- 'gc_api' | 'manual'
+//     locked INTEGER NOT NULL DEFAULT 0,  -- 1 once a human has hand-edited this
+//                                          -- tee (via manual entry, or editing a
+//                                          -- gc_api-sourced row) — a later GC-API
+//                                          -- refresh must NOT silently overwrite
+//                                          -- a locked row (spec's override-
+//                                          -- protection pattern); caller must
+//                                          -- pass force:true to replace it anyway
+//     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+//     UNIQUE(venue_id, tee_name, gender)
+//   );
+//
 //   CREATE TABLE bfe_player_profiles (
 //     name TEXT PRIMARY KEY,
 //     current_hcp REAL,
@@ -737,6 +774,91 @@ export default {
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error saving tee catalog: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // ── Venue tees (Dev-86 multi-tee redesign) ──────────────────────────
+    // Real per-hole data for every tee a venue has in play, replacing the
+    // old single flat `pars` array on the main worker's `venues` table for
+    // any venue upgraded here. See the bfe_venue_tees schema comment above.
+
+    // GET /bfe/venue-tees?venue_id=X — every stored tee for one venue.
+    if (request.method === 'GET' && url.pathname === '/bfe/venue-tees') {
+      try {
+        const venueId = url.searchParams.get('venue_id');
+        if (!venueId) {
+          return new Response(JSON.stringify({ error: 'venue_id query param is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const { results } = await env.DB.prepare(`SELECT * FROM bfe_venue_tees WHERE venue_id = ? ORDER BY tee_name ASC, gender ASC`).bind(venueId).all();
+        const tees = (results || []).map(r => ({ ...r, holes: JSON.parse(r.holes), locked: !!r.locked }));
+        return new Response(JSON.stringify({ ok: true, venue_id: Number(venueId), tees }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /bfe/venue-tees — add or update one tee. PIN-gated, same admin
+    // bar as event-config/venue-tee-catalog saves. Body: { venue_id,
+    // venue_name, tee_name, gender, course_rating, slope_rating,
+    // total_yards, par_total, holes (18x {par,yardage,handicap}),
+    // gc_api_course_id, source ('gc_api'|'manual'), force, pin }.
+    //
+    // Override protection: if a matching row (same venue_id+tee_name+gender)
+    // already exists and is locked, this refuses to overwrite it unless
+    // force:true is passed — so a GC-API re-fetch never silently clobbers a
+    // hand-correction. A 'manual' source save always sets locked=1 on write
+    // (a human just told us this data directly); a 'gc_api' source save
+    // sets locked=0 unless it's itself overwriting a locked row via force,
+    // in which case it stays locked=0 (GC-API data is being restored as the
+    // source of truth again).
+    if (request.method === 'POST' && url.pathname === '/bfe/venue-tees') {
+      let body;
+      try { body = await request.json(); } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { venue_id, venue_name, tee_name, gender, course_rating, slope_rating, total_yards, par_total, holes, gc_api_course_id, source, force, pin } = body;
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (!venue_id || !tee_name || !Array.isArray(holes) || holes.length !== 18) {
+        return new Response(JSON.stringify({ error: 'venue_id, tee_name, and holes (array of 18) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const teeSource = source === 'manual' ? 'manual' : 'gc_api';
+      try {
+        const existing = await env.DB.prepare(`SELECT id, locked FROM bfe_venue_tees WHERE venue_id = ? AND tee_name = ? AND gender IS ?`).bind(venue_id, tee_name, gender ?? null).first();
+        if (existing && existing.locked && !force) {
+          return new Response(JSON.stringify({ error: 'locked', message: `"${tee_name}" has been manually edited here and won't be auto-overwritten. Pass force:true to replace it anyway.` }), { status: 409, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const newLocked = teeSource === 'manual' ? 1 : 0;
+        const result = await env.DB.prepare(
+          `INSERT INTO bfe_venue_tees (venue_id, venue_name, tee_name, gender, course_rating, slope_rating, total_yards, par_total, holes, gc_api_course_id, source, locked, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(venue_id, tee_name, gender) DO UPDATE SET
+             venue_name = excluded.venue_name, course_rating = excluded.course_rating, slope_rating = excluded.slope_rating,
+             total_yards = excluded.total_yards, par_total = excluded.par_total, holes = excluded.holes,
+             gc_api_course_id = excluded.gc_api_course_id, source = excluded.source, locked = excluded.locked, updated_at = excluded.updated_at`
+        ).bind(venue_id, venue_name || null, tee_name, gender || null, course_rating ?? null, slope_rating ?? null, total_yards ?? null, par_total ?? null, JSON.stringify(holes), gc_api_course_id || null, teeSource, newLocked).run();
+        return new Response(JSON.stringify({ ok: true, id: existing ? existing.id : result.meta.last_row_id, locked: !!newLocked }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error saving tee: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // DELETE /bfe/venue-tees/:id — PIN-gated (pin passed as query param since
+    // DELETE bodies are awkward cross-client; same low-stakes tradeoff as
+    // other admin-only routes in this file).
+    const venueTeeDeleteMatch = url.pathname.match(/^\/bfe\/venue-tees\/(\d+)$/);
+    if (request.method === 'DELETE' && venueTeeDeleteMatch) {
+      const teeId = venueTeeDeleteMatch[1];
+      const pin = url.searchParams.get('pin');
+      if (String(pin) !== '7797') {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        await env.DB.prepare(`DELETE FROM bfe_venue_tees WHERE id = ?`).bind(teeId).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Delete error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
@@ -1764,12 +1886,11 @@ export default {
     // Worker secret (env.GOLFCOURSE_API_KEY — set via `wrangler secret put` or
     // the Cloudflare dashboard, never committed to this file) — it must never
     // reach a browser. Read-only lookups only: GolfCourseAPI's own write
-    // endpoints need a paid tier and aren't part of this proxy. Nothing here
-    // writes to D1 — Venue Manager (portal.html) uses these results to
-    // pre-fill the EXISTING manual pars/coords editors for the commissioner
-    // to review and save with their own existing Save buttons, the same
-    // review-before-write pattern used everywhere else in this project,
-    // rather than auto-applying anything. Confirmed live response shapes
+    // endpoints need a paid tier and aren't part of this proxy. These two
+    // routes never write to D1 themselves — Venue Manager (portal.html) uses
+    // their results to let the commissioner pick a tee, which is then saved
+    // via POST /bfe/venue-tees above (a separate, explicit step) rather than
+    // anything here auto-applying data. Confirmed live response shapes
     // against the real API (2026-09-24):
     //   GET /v1/search?search_query=X ->
     //     { courses: [{ id, club_name, course_name,
