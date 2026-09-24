@@ -4368,10 +4368,38 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 — portal-only, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
+
+**4. Gatherings CTP moved from Jotform to D1 (v4.6.1), same session.** Brian: "let's just do it now,
+there's no reason not to. If tomorrow goes sideways it's not a big deal." (Claude had suggested
+waiting until after the next day's live round.) Found that most of it already existed: the BFE Worker
+already had a `bfe_cttp_entries` table plus `POST/GET/DELETE /cttp` routes (whose comment reads
+"Replaces the Jotform round-trip for the new system"), and the portal had never been wired to them.
+**Confirmed the table exists in production** via the browser pane (`GET /cttp` → `{"ok":true,
+"entries":[]}`), so no migration or Worker change was needed. **Portal-only change:**
+   - `ctpUsesD1(evt)` — true for `source === 'gathering'` only. Series / Wally Cup stay on the
+     Jotform CTP form deliberately, because GS and BFE-Admin's Close Round both read CTP from there.
+   - `loadCtpData` — the Gathering branch reads `GET /cttp?event=gathering:<id>` (`evtPhotoKey`, the
+     same key as its scorecards; a Gathering's title isn't unique). It sorts by `captured_at` then `id`
+     (captured_at is whole-second, so id makes same-second claims deterministic, newest leads), then
+     builds the same `_ctpData`/`_ctpHistory` shapes, so the board, Close & Calculate and the
+     already-entered guard are untouched.
+   - `submitCttp` — resolves the full evt (live event first, then by name); a Gathering POSTs JSON to
+     `/cttp`, **throws on `!ok`** (so a failed save no longer fires the Frontrunner push; the Jotform
+     path still has the old no-check behavior), and Undo DELETEs `/cttp/:id?requested_by=<claimant>`
+     (the owner path).
+   - **Tests:** 14 new checks (`test_ctp_d1.mjs`): D1 read key, same-second tie → higher id leads,
+     oldest-first history, null dist, no Jotform call for a Gathering, Series still Jotform for
+     read/submit/undo, D1 payload, push + local leader, undo URL, failed save → no push/no
+     leader/unlocked. All earlier suites re-run clean (53 total).
+   - **Live production round trip** via the browser pane: POST a probe claim (`__dev87_probe__`) →
+     read back in the expected shape → owner DELETE → table empty again. Probe fully cleaned up.
+   - **Test cleanup is now simpler:** a Gathering's CTP claims are deleted with
+     `DELETE /cttp/:id?pin=7797` or `DELETE FROM bfe_cttp_entries WHERE event_name='gathering:<id>'`
+     — no Jotform inbox step.
 
 **Carry-forward:**
 - Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
