@@ -10338,7 +10338,7 @@ function storedVenueTeesHtml(v) {
     <div style="padding:4px 0;border-bottom:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:8px">
         <div style="flex:1;font-size:0.78rem">
-          <strong>${t.tee_name}</strong> <span style="color:var(--text-muted)">(${t.gender || 'unspecified'}${t.course_rating != null ? `, ${t.course_rating}/${t.slope_rating}` : ''}${t.par_total != null ? `, par ${t.par_total}` : ''})</span>
+          <strong>${t.tee_name}</strong> <span style="color:var(--text-muted)">(${t.gender || 'unspecified'}${t.course_rating != null ? `, ${t.course_rating}/${t.slope_rating}` : ''}${t.par_total != null ? `, par ${t.par_total}` : ''}${t.total_yards != null ? `, ${t.total_yards}y` : ''})</span>
           ${t.locked ? ' <span style="color:#b45309;font-size:0.7rem">🔒 manually edited</span>' : ''}
         </div>
         <button class="btn btn-ghost btn-sm" style="font-size:0.7rem;white-space:nowrap" onclick="adminToggleVenueTeeView(${t.id})">
