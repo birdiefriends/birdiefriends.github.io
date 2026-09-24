@@ -2910,6 +2910,21 @@ body {
     <div id="score-detail-body" style="max-height:60vh;overflow-y:auto"></div>
   </div>
 </div>
+<!-- Dev-87 — Gatherings Close & Calculate (host-only, opened from the Live
+     Panel's 🏁 section). z-index matches the other card sheets. -->
+<div class="bf-modal-overlay" id="gathering-close-modal" onclick="closeModalOnOverlay(event,'gathering-close-modal')" style="z-index:9000">
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="bf-modal-title" style="margin-bottom:0">🏁 Close &amp; Calculate</div>
+      <button onclick="closeModal('gathering-close-modal')" title="Close"
+        style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
+          color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px;line-height:1.5">Checks every scorecard is in, previews the payout, then saves it to everyone's My History.</div>
+    <div id="gathering-close-body" style="max-height:62vh;overflow-y:auto"></div>
+  </div>
+</div>
 <div class="bf-modal-overlay" id="card-score-modal" onclick="closeModalOnOverlay(event,'card-score-modal')" style="z-index:9000">
   <!-- z-index explicit — same stacking bug class as score-detail-modal/photo-lightbox
        (Dev-67): now also opened from inside My History's detail view (8950) via the
@@ -8083,6 +8098,9 @@ function buildLivePanel(evt) {
   const _liveGames = (_liveGamesConfig && Array.isArray(_liveGamesConfig.games)) ? _liveGamesConfig.games : null;
   const showCttpSection = evt.source !== 'gathering' || !!(_liveGames && _liveGames.includes('cttp'));
   const showBirdieBallSection = !!(_liveGames && _liveGames.includes('birdieball'));
+  // Dev-87 — host-only Close & Calculate. Only a gamed Gathering (open
+  // config in the index) reaching this panel, and only its own host.
+  const showCloseSection = evt.source === 'gathering' && !!_liveGamesConfig && evt.hostId === currentPlayer;
   // ── SECTION 1: Birdie Alert ──────────────────────────────────────────────
   // Team rounds never default to currentPlayer (not a valid team) — the
   // submitter must explicitly tap "Select your team" (Dev-80).
@@ -8607,6 +8625,14 @@ function buildLivePanel(evt) {
       <div class="live-section-header"><span class="lsh-icon">📋</span>Post-Round Scorecard</div>
       <div class="live-section-body">${scSection}</div>
     </div>
+    ${showCloseSection ? `
+    <div class="live-section">
+      <div class="live-section-header"><span class="lsh-icon">🏁</span>Host · Close &amp; Calculate</div>
+      <div class="live-section-body">
+        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:10px;line-height:1.45">Once everyone's card is in: check scorecards, preview Skins/CTP/BirdieBall payouts, and post results to My History.</div>
+        <button class="sc-submit-btn" onclick="openGatheringCloseSheet(${evt.gatheringId})">🏁 Close &amp; Calculate</button>
+      </div>
+    </div>` : ''}
   </div>`;
 }
 // ── Live Panel Photo Capture (Dev-57) ──────────────────────────────────────
@@ -11811,6 +11837,7 @@ function openHistoryDetail(idx) {
         ${crewLine}
       </div>
       ${resultsClippingLink(groupEvt)}
+      ${key.startsWith('gathering:') ? '<div id="history-game-results"></div>' : ''}
       ${scoreBlock}
       ${photoBlock}
       ${notesBlock}
@@ -11818,6 +11845,7 @@ function openHistoryDetail(idx) {
     </div>`;
   document.getElementById('my-history-detail-view').style.display = 'flex';
   loadResultsClippingPodium(groupEvt); // Dev-67 — fire-and-forget, fills in the winner once fetched
+  loadHistoryGameResults(key);         // Dev-87 — closed Gathering games payout, fire-and-forget
 }
 function renderHistoryNoteCompose(idx, evt, key) {
   if (!evt || !isPlayerEligibleForNotes(evt)) return '';
@@ -13807,6 +13835,363 @@ function bfeEventNameCandidates(name) {
 // fix established, deliberately kept separate from _hostGamesByGathering
 // (Host Panel's own host-scoped Map, loaded lazily only when that panel
 // opens) since the two caches serve different readers at different times.
+// ════════════════════════════════════════════════════════════════════════
+// Dev-87 — Gatherings Close & Calculate payout engine. Pure function (no
+// DOM, no fetch) so it can be tested directly against extracted source.
+// Brian's rules, Dev-87:
+//   • Pot = config.dollar_per_player × players who actually turned in a
+//     scorecard ("If the event was 8, but only 7 played the host would
+//     close with 7"). Everything below keys off that same N.
+//   • CTP: fixed dollar_per_hole per configured hole, paid to that hole's
+//     leader (most-recent claim, same rule as loadCtpData). An unclaimed
+//     hole's money rolls into Skins (same as GS calculatePayout).
+//   • BirdieBall: bb dollar_per_player × N. Every player who kept it splits
+//     it. If nobody kept it, whoever held it longest (latest lost_hole, then
+//     latest lost_stroke) wins; ties at the longest split. No answers at
+//     all → given back evenly.
+//   • Skins: GROSS strokes (net toggle deferred until HCP calcs land). A
+//     skin is the outright lowest score on a hole — tie = no skin, no
+//     carryover. $/skin = skin pot ÷ skins won. Zero skins won → skin pot
+//     given back evenly.
+//   • Round DOWN (whole dollars) on every pot split; the rounding remainder
+//     is reported as `unallocated`, never silently redistributed.
+// Inputs:
+//   config     — bfe_gathering_games row (games, dollar_per_player,
+//                cttp_config, birdieball_config)
+//   scorecards — [{player, holes:[18 or 9 gross strokes|null]}], already
+//                de-duplicated to one (latest) card per player
+//   ctpLeaders — {hole: {player, dist}} (loadCtpData's _ctpData shape)
+//   bbAnswers  — [{player_name, kept, lost_hole, lost_stroke}]
+function computeGatheringGamesPayout(config, scorecards, ctpLeaders, bbAnswers) {
+  const games = (config && Array.isArray(config.games)) ? config.games : [];
+  const dpp = Number(config && config.dollar_per_player) || 0;
+  const cards = (scorecards || []).filter(c => c && c.player);
+  const players = cards.map(c => c.player);
+  const n = players.length;
+  const norm = s => String(s || '').trim().toLowerCase();
+  const canonical = new Map(players.map(p => [norm(p), p]));
+  const totalPot = dpp * n;
+  const payouts = new Map(players.map(p => [p, { player: p, skins: 0, cttp: 0, birdieball: 0, given_back: 0 }]));
+  const credit = (name, field, amt) => {
+    if (!(amt > 0)) return;
+    const key = canonical.get(norm(name)) || name;
+    if (!payouts.has(key)) payouts.set(key, { player: key, skins: 0, cttp: 0, birdieball: 0, given_back: 0 });
+    payouts.get(key)[field] += amt;
+  };
+  const giveBack = (pot) => {
+    if (!(pot > 0) || !n) return { each: 0, unallocated: Math.max(0, pot) };
+    const each = Math.floor(pot / n);
+    players.forEach(p => credit(p, 'given_back', each));
+    return { each, unallocated: pot - each * n };
+  };
+  let remaining = totalPot;
+  let unallocated = 0;
+
+  // ── CTP ────────────────────────────────────────────────────────────────
+  let cttp = null;
+  let unclaimedCttp = 0;
+  if (games.includes('cttp') && config.cttp_config) {
+    const perHole = Number(config.cttp_config.dollar_per_hole) || 0;
+    const holes = (config.cttp_config.holes || []).slice().sort((a, b) => a - b);
+    const rows = holes.map(h => {
+      const lead = ctpLeaders && (ctpLeaders[h] || ctpLeaders[String(h)]);
+      if (lead && lead.player) {
+        credit(lead.player, 'cttp', perHole);
+        return { hole: h, player: canonical.get(norm(lead.player)) || lead.player, dist: lead.dist ?? null, paid: perHole };
+      }
+      unclaimedCttp += perHole;
+      return { hole: h, player: null, dist: null, paid: 0 };
+    });
+    remaining -= perHole * holes.length;
+    cttp = { per_hole: perHole, holes: rows, unclaimed_to_skins: unclaimedCttp };
+  }
+
+  // ── BirdieBall ─────────────────────────────────────────────────────────
+  let birdieball = null;
+  if (games.includes('birdieball') && config.birdieball_config) {
+    const pot = (Number(config.birdieball_config.dollar_per_player) || 0) * n;
+    remaining -= pot;
+    // Only answers from players who actually played count.
+    const answers = (bbAnswers || []).filter(a => canonical.has(norm(a.player_name)));
+    const kept = answers.filter(a => a.kept);
+    let mode, winners;
+    if (kept.length) {
+      mode = 'kept';
+      winners = kept.map(a => canonical.get(norm(a.player_name)));
+    } else {
+      const lost = answers.filter(a => !a.kept && a.lost_hole != null);
+      if (lost.length) {
+        mode = 'longest';
+        const score = a => (Number(a.lost_hole) || 0) * 100 + (Number(a.lost_stroke) || 0);
+        const best = Math.max(...lost.map(score));
+        winners = lost.filter(a => score(a) === best).map(a => canonical.get(norm(a.player_name)));
+      } else {
+        mode = 'none';
+        winners = [];
+      }
+    }
+    let perWinner = 0, bbUnalloc = 0, givenBackEach = 0;
+    if (winners.length) {
+      perWinner = Math.floor(pot / winners.length);
+      winners.forEach(w => credit(w, 'birdieball', perWinner));
+      bbUnalloc = pot - perWinner * winners.length;
+    } else {
+      const gb = giveBack(pot);
+      givenBackEach = gb.each; bbUnalloc = gb.unallocated;
+    }
+    unallocated += bbUnalloc;
+    const longest = mode === 'longest'
+      ? answers.filter(a => winners.includes(canonical.get(norm(a.player_name))))[0]
+      : null;
+    birdieball = {
+      pot, mode, winners, per_winner: perWinner, given_back_each: givenBackEach,
+      longest_hole: longest ? longest.lost_hole : null, longest_stroke: longest ? longest.lost_stroke : null
+    };
+  }
+
+  // ── Skins (gross) ──────────────────────────────────────────────────────
+  let skins = null;
+  if (games.includes('skins')) {
+    const pot = Math.max(0, remaining) + unclaimedCttp;
+    remaining = 0;
+    const holeCount = Math.max(0, ...cards.map(c => Array.isArray(c.holes) ? c.holes.length : 0));
+    const won = [];
+    for (let h = 0; h < holeCount; h++) {
+      const entries = cards
+        .map(c => ({ player: c.player, s: Array.isArray(c.holes) ? c.holes[h] : null }))
+        .filter(e => typeof e.s === 'number' && e.s > 0);
+      // A skin needs a contest: with <2 scores entered on a hole (blank /
+      // incomplete cards), nobody "beat" anybody — no skin. The Close
+      // preview flags incomplete cards so the host can fix before closing.
+      if (entries.length < 2) continue;
+      const low = Math.min(...entries.map(e => e.s));
+      const at = entries.filter(e => e.s === low);
+      if (at.length === 1) won.push({ hole: h + 1, player: at[0].player, strokes: low });
+    }
+    let perSkin = 0, givenBackEach = 0, skUnalloc = 0;
+    if (won.length) {
+      perSkin = Math.floor(pot / won.length);
+      won.forEach(w => credit(w.player, 'skins', perSkin));
+      skUnalloc = pot - perSkin * won.length;
+    } else {
+      const gb = giveBack(pot);
+      givenBackEach = gb.each; skUnalloc = gb.unallocated;
+    }
+    unallocated += skUnalloc;
+    skins = { pot, won, per_skin: perSkin, given_back_each: givenBackEach, basis: 'gross' };
+  } else {
+    // No Skins game to absorb the balance (incl. unclaimed CTP) — give it back.
+    const leftover = Math.max(0, remaining) + unclaimedCttp;
+    if (leftover > 0) unallocated += giveBack(leftover).unallocated;
+  }
+
+  const rows = [...payouts.values()].map(r => ({ ...r, total: r.skins + r.cttp + r.birdieball + r.given_back }))
+    .sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
+  return {
+    calc_version: 1,
+    players_count: n, players, dollar_per_player: dpp, total_pot: totalPot,
+    games, cttp, birdieball, skins, payouts: rows,
+    unallocated: Math.round(unallocated * 100) / 100
+  };
+}
+// Dev-87 — one latest card per player (GET /scorecards is already ordered
+// captured_at DESC, so the first row seen per player is the newest — a
+// Live Panel submit and a later Card Score Sheet fix collapse to the fix).
+function latestScorecardPerPlayer(rows) {
+  const seen = new Set();
+  const out = [];
+  (rows || []).forEach(r => {
+    const k = String(r.player || '').trim().toLowerCase();
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    out.push(r);
+  });
+  return out;
+}
+// Holes a card is missing a gross score on, within the round's hole count.
+function scorecardMissingHoles(card, holeCount) {
+  const holes = Array.isArray(card.holes) ? card.holes : [];
+  const missing = [];
+  for (let i = 0; i < holeCount; i++) {
+    if (!(typeof holes[i] === 'number' && holes[i] > 0)) missing.push(i + 1);
+  }
+  return missing;
+}
+// Shared renderer for a computed/saved payout snapshot — used by the Close
+// preview AND the My History detail, so what the host confirmed is exactly
+// what players see.
+function renderGatheringPayoutHtml(s) {
+  if (!s) return '';
+  const esc = v => escapeHtml(String(v ?? ''));
+  const money = v => '$' + (Number(v) || 0).toFixed(Number.isInteger(Number(v)) ? 0 : 2);
+  const label = t => `<div style="font-size:0.7rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 4px">${t}</div>`;
+  const line = (l, r) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:0.8rem;padding:2px 0"><span>${l}</span><span style="font-weight:700">${r}</span></div>`;
+  let html = `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:4px">${s.players_count} player${s.players_count === 1 ? '' : 's'} × ${money(s.dollar_per_player)} = <b style="color:var(--text)">${money(s.total_pot)} pot</b></div>`;
+  if (s.skins) {
+    html += label(`⛳ Skins (${s.skins.basis || 'gross'}) — ${money(s.skins.pot)}`);
+    if (s.skins.won.length) {
+      html += `<div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:2px">${s.skins.won.length} skin${s.skins.won.length === 1 ? '' : 's'} × ${money(s.skins.per_skin)}</div>`;
+      html += s.skins.won.map(w => line(`#${w.hole} ${esc(w.player)} <span style="color:var(--text-muted)">(${w.strokes})</span>`, money(s.skins.per_skin))).join('');
+    } else {
+      html += `<div style="font-size:0.78rem;color:var(--text-muted)">No skins won — ${money(s.skins.given_back_each)} back to each player</div>`;
+    }
+  }
+  if (s.cttp) {
+    html += label(`🎯 CTP — ${money(s.cttp.per_hole)}/hole`);
+    html += s.cttp.holes.map(h => h.player
+      ? line(`#${h.hole} ${esc(h.player)}${h.dist ? ` <span style="color:var(--text-muted)">(${h.dist} ft)</span>` : ''}`, money(h.paid))
+      : line(`#${h.hole} <span style="color:var(--text-muted)">unclaimed → Skins</span>`, '—')).join('');
+  }
+  if (s.birdieball) {
+    const b = s.birdieball;
+    html += label(`🐦 BirdieBall — ${money(b.pot)}`);
+    if (b.mode === 'kept') html += `<div style="font-size:0.78rem">Kept it: ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)} each</div>`;
+    else if (b.mode === 'longest') html += `<div style="font-size:0.78rem">Nobody kept it — held longest (#${esc(b.longest_hole)}, stroke ${esc(b.longest_stroke)}): ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)}${b.winners.length > 1 ? ' each' : ''}</div>`;
+    else html += `<div style="font-size:0.78rem;color:var(--text-muted)">No answers recorded — ${money(b.given_back_each)} back to each player</div>`;
+  }
+  html += label('💰 Payouts');
+  const rows = (s.payouts || []).filter(r => r.total > 0);
+  html += rows.length ? rows.map(r => {
+    const parts = [];
+    if (r.skins) parts.push('⛳' + money(r.skins));
+    if (r.cttp) parts.push('🎯' + money(r.cttp));
+    if (r.birdieball) parts.push('🐦' + money(r.birdieball));
+    if (r.given_back) parts.push('↩️' + money(r.given_back));
+    return `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--green-light);border-radius:10px;padding:7px 12px;margin-bottom:5px">
+      <span style="font-size:0.82rem;font-weight:600;color:var(--green-dark)">${esc(r.player)} <span style="font-weight:400;font-size:0.7rem;opacity:0.8">${parts.join(' ')}</span></span>
+      <span style="font-size:0.95rem;font-weight:800;color:var(--green-dark)">${money(r.total)}</span></div>`;
+  }).join('') : `<div style="font-size:0.78rem;color:var(--text-muted)">No payouts</div>`;
+  if (s.unallocated > 0) html += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px">Rounding (whole dollars): ${money(s.unallocated)} stays with the host</div>`;
+  return html;
+}
+let _gcClose = null; // { gatheringId, summary, meta } — the preview the host is looking at
+async function openGatheringCloseSheet(gatheringId) {
+  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  if (!g) { showToast('Could not find Gathering', true); return; }
+  if (g.hostId !== currentPlayer) { showToast('Only the host can close this Gathering', true); return; }
+  _gcClose = null;
+  const body = document.getElementById('gathering-close-body');
+  body.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:20px 0">Checking scorecards…</div>`;
+  openModal('gathering-close-modal');
+  try {
+    const key = evtPhotoKey({ source: 'gathering', gatheringId });
+    const [cfgRes, scRes, bbRes] = await Promise.all([
+      fetch(`${BFE_API}/bfe/gathering-games?gathering_id=${gatheringId}`),
+      fetch(`${GATHERINGS_API}/scorecards?event=${encodeURIComponent(key)}`),
+      fetch(`${BFE_API}/bfe/birdieball-answers?gathering_id=${gatheringId}`)
+    ]);
+    const cfgData = await cfgRes.json();
+    const scData = await scRes.json();
+    const bbData = await bbRes.json();
+    const config = cfgData.ok ? cfgData.config : null;
+    if (!config) throw new Error('No games config found for this Gathering');
+    // CTP leaders — same Jotform read + "most recent claim leads" rule the
+    // Live Panel board uses, so the payout matches what players saw live.
+    let ctpLeaders = {};
+    if ((config.games || []).includes('cttp')) {
+      const liveEvt = eventData.find(e => e.source === 'gathering' && e.gatheringId === gatheringId) || g;
+      await loadCtpData(liveEvt);
+      ctpLeaders = { ..._ctpData };
+    }
+    const cards = latestScorecardPerPlayer(scData.scorecards || []);
+    const holeCount = g.holes === 9 ? 9 : 18;
+    const norm = s => String(s || '').trim().toLowerCase();
+    const cardNames = new Set(cards.map(c => norm(c.player)));
+    const registered = gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes').map(r => r.player);
+    const missingCards = registered.filter(p => !cardNames.has(norm(p)));
+    const incomplete = cards.map(c => ({ player: c.player, holes: scorecardMissingHoles(c, holeCount) })).filter(x => x.holes.length);
+    const summary = computeGatheringGamesPayout(config, cards, ctpLeaders, bbData.ok ? (bbData.answers || []) : []);
+    _gcClose = { gatheringId, summary, meta: { registered_count: registered.length, missing_scorecards: missingCards, incomplete_scorecards: incomplete } };
+    const esc = v => escapeHtml(String(v ?? ''));
+    const statusLine = `<div style="font-size:0.85rem;font-weight:700;margin-bottom:6px">📋 Scorecards in: ${cards.length} of ${registered.length} confirmed</div>`;
+    const missingHtml = missingCards.length
+      ? `<div style="background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
+          ⚠️ No scorecard yet: <b>${missingCards.map(esc).join(', ')}</b><br>
+          <span style="color:var(--text-muted)">If they didn't play, close anyway — the pot counts only the ${cards.length} who turned in a card.</span></div>`
+      : '';
+    const incompleteHtml = incomplete.length
+      ? `<div style="background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
+          ⚠️ Blank holes: ${incomplete.map(x => `<b>${esc(x.player)}</b> (#${x.holes.slice(0, 6).join(', #')}${x.holes.length > 6 ? '…' : ''})`).join('; ')}<br>
+          <span style="color:var(--text-muted)">A blank hole can't win or tie a skin. Fix it in the Card Score Sheet, then Refresh.</span></div>`
+      : '';
+    const alreadyClosed = config.status === 'closed';
+    body.innerHTML = `
+      ${statusLine}${missingHtml}${incompleteHtml}
+      ${alreadyClosed ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Already closed — saving again replaces the earlier result.</div>` : ''}
+      <div style="border-top:1px solid var(--border);padding-top:6px">${renderGatheringPayoutHtml(summary)}</div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openGatheringCloseSheet(${gatheringId})">🔄 Refresh</button>
+        <button class="btn btn-primary btn-sm" id="btn-gathering-close-confirm" style="flex:2" ${cards.length ? '' : 'disabled'}
+          onclick="confirmGatheringClose()">🏁 Close with ${cards.length} player${cards.length === 1 ? '' : 's'}</button>
+      </div>`;
+  } catch (e) {
+    body.innerHTML = `<div style="font-size:0.85rem;color:var(--danger, #c0392b);padding:12px 0">Couldn't load: ${escapeHtml(e.message)}</div>
+      <button class="btn btn-secondary btn-sm" style="width:100%" onclick="openGatheringCloseSheet(${gatheringId})">🔄 Try again</button>`;
+  }
+}
+async function confirmGatheringClose() {
+  if (!_gcClose) return;
+  const { gatheringId, summary, meta } = _gcClose;
+  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  const btn = document.getElementById('btn-gathering-close-confirm');
+  if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); btn.textContent = 'Saving…'; }
+  try {
+    const payout_summary = { ...summary, ...meta, gathering_name: g ? g.name : null, closed_by: currentPlayer, closed_at_client: new Date().toISOString() };
+    const res = await fetch(`${BFE_API}/bfe/gathering-games/${gatheringId}/close`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: currentPlayer, payout_summary })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Close failed');
+    closeModal('gathering-close-modal');
+    showToast('🏁 Closed — results are in My History');
+    _gcClose = null;
+    refreshGatheringGamesIndex(); // drops it from the open index → Live Panel retires for this Gathering
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+    if (btn) { btn.disabled = false; btn.classList.remove('btn-loading'); btn.textContent = '🏁 Close'; }
+  }
+}
+// My History — fills the game-results slot for a Gathering group, if its
+// games were closed. Fire-and-forget, same pattern as
+// loadResultsClippingPodium. The host also gets a Reopen control for a
+// late fix (puts the Live Panel back; closing again replaces the result).
+async function loadHistoryGameResults(key) {
+  const el = document.getElementById('history-game-results');
+  if (!el || !key || !key.startsWith('gathering:')) return;
+  const gid = key.slice('gathering:'.length);
+  try {
+    const res = await fetch(`${BFE_API}/bfe/gathering-games?gathering_id=${encodeURIComponent(gid)}`);
+    const data = await res.json();
+    const cfg = data.ok ? data.config : null;
+    if (document.getElementById('history-game-results') !== el) return; // detail view moved on
+    if (!cfg || cfg.status !== 'closed' || !cfg.payout_summary) { el.innerHTML = ''; return; }
+    const isHost = String(cfg.host_id || '').trim().toLowerCase() === String(currentPlayer || '').trim().toLowerCase();
+    el.innerHTML = `
+      <div style="background:rgba(255,255,255,0.55);border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+        <div style="font-size:0.78rem;font-weight:800;margin-bottom:2px">🏆 Game Results</div>
+        ${renderGatheringPayoutHtml(cfg.payout_summary)}
+        ${isHost ? `<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;color:var(--text-muted)" onclick="reopenGatheringGames(${Number(gid)})">↩️ Reopen to fix &amp; re-close</button>` : ''}
+      </div>`;
+  } catch (e) {
+    console.warn('[Games] history results load failed:', e.message);
+  }
+}
+async function reopenGatheringGames(gatheringId) {
+  try {
+    const res = await fetch(`${BFE_API}/bfe/gathering-games/${gatheringId}/reopen`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: currentPlayer })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Reopen failed');
+    showToast('↩️ Reopened — Live Panel is back; close again when fixed');
+    await refreshGatheringGamesIndex();
+    loadHistoryGameResults(`gathering:${gatheringId}`);
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
 let _gatheringGamesIndex = new Map();
 async function refreshGatheringGamesIndex() {
   try {
