@@ -3143,6 +3143,20 @@ body {
     </div>
   </div>
 </div>
+<div class="bf-modal-overlay" id="venue-viewer-modal" onclick="closeModalOnOverlay(event,'venue-viewer-modal')">
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="bf-modal-title" style="margin-bottom:0" id="venue-viewer-title">⛳ Venue</div>
+      <button onclick="closeModal('venue-viewer-modal')" title="Close"
+        style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
+          color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div id="venue-viewer-body" style="max-height:65vh;overflow-y:auto">
+      <div style="font-size:0.82rem;color:var(--text-muted)">Loading…</div>
+    </div>
+  </div>
+</div>
 <div class="bf-modal-overlay" id="notif-guide-modal" onclick="closeModalOnOverlay(event,'notif-guide-modal')">
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
@@ -5410,6 +5424,11 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-badge secondary">📏</span>
         <span class="icon-action-label">Yardage</span>
       </button>
+      ${findVenueByName(csNormalizedVenueName(evt)) ? `
+      <button class="icon-action-btn" onclick="openVenueViewerModal('${evt.id}')">
+        <span class="icon-action-badge secondary">🗺️</span>
+        <span class="icon-action-label">Venue</span>
+      </button>` : ''}
       ${['format-wally','format-scramble'].includes(formatClass(evt.format)) ? `
       <button class="icon-action-btn" onclick="openCardGroupSheet('${evt.id}')">
         <span class="icon-action-badge secondary">👥</span>
@@ -12960,6 +12979,67 @@ function openRulesModal() {
   setRulesTab('usga');
   renderRulesContent();
   openModal('rules-modal');
+}
+// Dev-86 — player-facing Venue viewer, riding the same GolfCourseAPI-sourced
+// bfe_venue_tees data Venue Manager collects (icon-action-row "nice touch"
+// per Brian, now that real multi-tee data actually exists to show). Reuses
+// venueTeeHolesTableHtml (the same Par/Yardage/Hole-HCP table Venue Manager
+// renders) so the two views never drift apart. Read-only, no PIN — GET
+// /bfe/venue-tees is already a public route, same trust level as every
+// other player-facing venue lookup (logo, weather chip, CTP holes).
+let _venueViewerVenue = null;
+let _venueViewerTees = [];
+let _venueViewerTeeOpen = {};
+async function openVenueViewerModal(evtOrId) {
+  const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => e.id === evtOrId);
+  if (!evt) return;
+  const venue = findVenueByName(csNormalizedVenueName(evt));
+  if (!venue) return;
+  _venueViewerVenue = venue;
+  _venueViewerTees = [];
+  _venueViewerTeeOpen = {};
+  const titleEl = document.getElementById('venue-viewer-title');
+  if (titleEl) titleEl.textContent = `⛳ ${venue.name}`;
+  const bodyEl = document.getElementById('venue-viewer-body');
+  if (bodyEl) bodyEl.innerHTML = '<div style="font-size:0.82rem;color:var(--text-muted)">Loading…</div>';
+  openModal('venue-viewer-modal');
+  try {
+    const res = await fetch(`${BFE_API}/bfe/venue-tees?venue_id=${venue.id}`);
+    const data = await res.json();
+    _venueViewerTees = data.ok ? (data.tees || []) : [];
+  } catch (e) {
+    _venueViewerTees = [];
+  }
+  renderVenueViewer();
+}
+function renderVenueViewer() {
+  const bodyEl = document.getElementById('venue-viewer-body');
+  const v = _venueViewerVenue;
+  if (!bodyEl || !v) return;
+  const mapLine = (v.lat != null && v.lng != null)
+    ? `<a href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank" rel="noopener"
+        style="display:inline-block;margin-bottom:10px;font-size:0.78rem;color:var(--green-dark);text-decoration:none">📍 Open in Maps</a>`
+    : '';
+  if (!_venueViewerTees.length) {
+    bodyEl.innerHTML = `${mapLine}<div style="font-size:0.82rem;color:var(--text-muted)">No tee data on file yet for this course.</div>`;
+    return;
+  }
+  bodyEl.innerHTML = `${mapLine}${_venueViewerTees.map(t => `
+    <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;font-size:0.84rem">
+          <strong>${t.tee_name}</strong> <span style="color:var(--text-muted)">(${t.gender || 'unspecified'}${t.course_rating != null ? `, ${t.course_rating}/${t.slope_rating}` : ''}${t.par_total != null ? `, par ${t.par_total}` : ''}${t.total_yards != null ? `, ${t.total_yards}y` : ''})</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;white-space:nowrap" onclick="toggleVenueViewerTee(${t.id})">
+          ${_venueViewerTeeOpen[t.id] ? 'Hide' : 'View'} ${_venueViewerTeeOpen[t.id] ? '▾' : '▸'}
+        </button>
+      </div>
+      ${_venueViewerTeeOpen[t.id] ? venueTeeHolesTableHtml(t) : ''}
+    </div>`).join('')}`;
+}
+function toggleVenueViewerTee(teeId) {
+  _venueViewerTeeOpen[teeId] = !_venueViewerTeeOpen[teeId];
+  renderVenueViewer();
 }
 // Dev-76 — read-only Results link (spec §4c) for BFE-backed events
 // (format-wally / format-scramble): a plain <a href> straight to the static
