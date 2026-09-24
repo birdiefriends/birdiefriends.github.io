@@ -5507,10 +5507,6 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-badge secondary">💬</span>
         <span class="icon-action-label">Notes</span>
       </button>` : ''}
-      <button class="icon-action-btn" onclick="openRulesModal()">
-        <span class="icon-action-badge secondary">📖</span>
-        <span class="icon-action-label">Rules</span>
-      </button>
       <button class="icon-action-btn" onclick="openYardageModal()">
         <span class="icon-action-badge secondary">📏</span>
         <span class="icon-action-label">Yardage</span>
@@ -5525,6 +5521,14 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-badge secondary">👥</span>
         <span class="icon-action-label">Group</span>
       </button>` : ''}
+      <!-- Dev-87 (v4.7.1) — Rules moved last: on a phone the row fits ~5 icons,
+           and Venue (6th) was cut off with no way to reach it. Rules is the
+           least-used here (not event-specific); the In-Play hub redesign may
+           move it off the card entirely. -->
+      <button class="icon-action-btn" onclick="openRulesModal()">
+        <span class="icon-action-badge secondary">📖</span>
+        <span class="icon-action-label">Rules</span>
+      </button>
     </div>
     <div id="${whoId}" style="display:none">
       ${buildPlayerChips(evt)}
