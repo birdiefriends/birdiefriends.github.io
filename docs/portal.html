@@ -9118,8 +9118,40 @@ function ctpSelectHole(h) {
   renderLiveBanner();
 }
 // Load live CttP data for this event — most recent submission per hole = leader
+// Dev-87 — Gatherings keep CTP in D1 (BFE Worker bfe_cttp_entries, keyed by
+// evtPhotoKey = 'gathering:<id>', same key as their scorecards), so the whole
+// Gatherings games flow is off Jotform. Series / Wally Cup rounds stay on the
+// Jotform CTP form: GS and BFE-Admin's Close Round both read CTP from there.
+function ctpUsesD1(evt) { return !!(evt && evt.source === 'gathering'); }
 async function loadCtpData(evt) {
   if (!evt) return;
+  if (ctpUsesD1(evt)) {
+    try {
+      const res = await fetch(`${BFE_API}/cttp?event=${encodeURIComponent(evtPhotoKey(evt))}`);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'CTP load failed');
+      // captured_at is whole-second — id breaks same-second ties, so
+      // "newest claim leads" is deterministic.
+      const asc = (data.entries || []).slice().sort((x, y) =>
+        String(x.captured_at).localeCompare(String(y.captured_at)) || (x.id - y.id));
+      const leaders = {};
+      const history = {};
+      asc.forEach(e => {
+        const hole = parseInt(e.hole);
+        const player = String(e.player || '').trim();
+        if (!hole || !player) return;
+        const dist = (e.dist != null && !isNaN(parseFloat(e.dist)) && parseFloat(e.dist) > 0) ? parseFloat(e.dist) : null;
+        leaders[hole] = { player, dist };  // later rows overwrite → newest leads
+        (history[hole] = history[hole] || []).push({ player, dist });
+      });
+      _ctpData = leaders;
+      _ctpHistory = history;
+      renderLiveBanner();
+    } catch (e) {
+      console.warn('[CttP] loadCtpData (D1) error:', e.message);
+    }
+    return;
+  }
   try {
     const filter = encodeURIComponent(JSON.stringify({"status:ne":["DELETED","ARCHIVED"]}));
     const url = `${JF_API}/form/${CTP_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}&limit=200&orderby=created_at&direction=DESC&filter=${filter}`;
@@ -9337,16 +9369,33 @@ async function submitCttp(evtName) {
   }
   _ctpSubmitting = true;
   renderLiveBanner();
+  // Dev-87 — resolve the full evt (a Gathering needs its gatheringId for the
+  // D1 key; its title alone isn't unique). Live event first, then by name.
+  const _ctpLive = getLiveEvent();
+  const _ctpEvt = (_ctpLive && _ctpLive.name === evtName) ? _ctpLive : eventData.find(e => e.name === evtName);
+  const useD1 = ctpUsesD1(_ctpEvt);
   try {
-    const body = new URLSearchParams();
-    body.append(`submission[${CTP_QID.hole}]`,   '#' + _ctpHole);
-    body.append(`submission[${CTP_QID.player}]`, ctpPlayer);
-    body.append(`submission[${CTP_QID.event}]`,  evtName);
-    if (!isNaN(dist) && dist > 0) body.append(`submission[${CTP_QID.dist}]`, String(dist));
-    const resp = await fetch(`${JF_API}/form/${CTP_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`,
-      { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() });
-    const data = await resp.json().catch(() => ({}));
-    const submissionId = data.content?.submissionID || data.content?.id;
+    let submissionId;
+    if (useD1) {
+      const resp = await fetch(`${BFE_API}/cttp`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_name: evtPhotoKey(_ctpEvt), hole: _ctpHole, player: ctpPlayer,
+          dist: (!isNaN(dist) && dist > 0) ? dist : null })
+      });
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || 'CTP save failed'); // no push for a claim that didn't save
+      submissionId = data.id;
+    } else {
+      const body = new URLSearchParams();
+      body.append(`submission[${CTP_QID.hole}]`,   '#' + _ctpHole);
+      body.append(`submission[${CTP_QID.player}]`, ctpPlayer);
+      body.append(`submission[${CTP_QID.event}]`,  evtName);
+      if (!isNaN(dist) && dist > 0) body.append(`submission[${CTP_QID.dist}]`, String(dist));
+      const resp = await fetch(`${JF_API}/form/${CTP_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`,
+        { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() });
+      const data = await resp.json().catch(() => ({}));
+      submissionId = data.content?.submissionID || data.content?.id;
+    }
     const hole = _ctpHole;
     // Snapshot prior leader BEFORE overwriting — needed for undo restore
     const prevEntry = _ctpData[hole] ? { ...(_ctpData[hole]) } : null;
@@ -9373,7 +9422,12 @@ async function submitCttp(evtName) {
     if (submissionId) {
       showUndoToast(sentMsg, async () => {
         try {
-          await fetch(`${JF_API}/submission/${submissionId}?apiKey=${JOTFORM_API_KEY}`, { method: 'DELETE' });
+          if (useD1) {
+            // Owner path (requested_by = the claimant), same as DELETE /scorecards/:id.
+            await fetch(`${BFE_API}/cttp/${submissionId}?requested_by=${encodeURIComponent(ctpPlayer)}`, { method: 'DELETE' });
+          } else {
+            await fetch(`${JF_API}/submission/${submissionId}?apiKey=${JOTFORM_API_KEY}`, { method: 'DELETE' });
+          }
         } catch(e) { console.warn('[CttP] undo delete failed:', e.message); }
         if (prevEntry) _ctpData[hole] = prevEntry; else delete _ctpData[hole];
         if (_ctpHistory[hole]) _ctpHistory[hole].pop();
@@ -14085,8 +14139,9 @@ async function openGatheringCloseSheet(gatheringId) {
     const bbData = await bbRes.json();
     const config = cfgData.ok ? cfgData.config : null;
     if (!config) throw new Error('No games config found for this Gathering');
-    // CTP leaders — same Jotform read + "most recent claim leads" rule the
-    // Live Panel board uses, so the payout matches what players saw live.
+    // CTP leaders — same loadCtpData read (D1 for Gatherings) + "most recent
+    // claim leads" rule the Live Panel board uses, so the payout matches what
+    // players saw live.
     let ctpLeaders = {};
     if ((config.games || []).includes('cttp')) {
       const liveEvt = eventData.find(e => e.source === 'gathering' && e.gatheringId === gatheringId) || g;
