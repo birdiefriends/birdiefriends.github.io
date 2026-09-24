@@ -6099,6 +6099,24 @@ function hasLivePanelSupport(evt) {
   if (fc === 'format-scramble') return true;   // Dev-74 — was targeted Oct/Nov 2026, needed now for WC Rd2 2-man
   return false;  // format-weekend, blank, ParTee, Practice, etc.
 }
+// Dev-86 round 3 follow-up (Brian: "the live panel scoring will need to
+// accept either strokes or points depending on the game") — the Live
+// Panel's built-in Post-Round Scorecard section captures Stableford POINTS
+// by default (feeds the Wally Cup quota engine via SCORECARD_FORM_ID), but
+// a gamed Gathering running Skins needs raw GROSS STROKES instead — Skins
+// math can't be done from points. Only Skins needs strokes; CTP and
+// BirdieBall already have their own separate capture (CTP's own Jotform
+// flow, BirdieBall's "kept it" Yes/No via bfe_birdieball_answers) and don't
+// touch this at all. Kept as its own single-purpose lookup, not folded into
+// hasLivePanelSupport, since "is scoring even shown" and "which shape does
+// it capture" are two different questions with two different answers.
+function evtScoreMode(evt) {
+  if (evt && evt.source === 'gathering') {
+    const cfg = _gatheringGamesIndex.get(evt.gatheringId);
+    if (cfg && Array.isArray(cfg.games) && cfg.games.includes('skins')) return 'strokes';
+  }
+  return 'points';
+}
 // ══════════════════════════════════════════════════════════════════
 // IN-PORTAL REGISTRATION ENGINE
 // All registration actions happen silently via Jotform API.
@@ -8167,6 +8185,16 @@ function buildLivePanel(evt) {
       ${ctpLeaderboard}
     </div>`;
   // ── SECTION 3: Post-round Scorecard ─────────────────────────────────────
+  // Dev-86 round 3 follow-up — a gamed Gathering running Skins captures raw
+  // gross strokes here instead of Stableford points (Brian: "the live panel
+  // scoring will need to accept either strokes or points depending on the
+  // game"). scoreMode drives the picker UI below and submitScorecard()'s
+  // choice of backend (Jotform SCORECARD_FORM_ID for points, the same
+  // GATHERINGS_API/scorecards D1 endpoint Card Score Sheet already uses for
+  // strokes). Stashed on window so submitScorecard/scActionHtml's onclick
+  // handlers — fired outside this closure — can read it too.
+  const scoreMode = evtScoreMode(evt);
+  window._liveScoreMode = scoreMode;
   // Team rounds never default to currentPlayer (not a valid team) — Dev-80.
   const scPlayerSel = isTeamRound ? (_scPlayer || '') : (_scPlayer || currentPlayer);
   const scPlayerOpts = evtPlayers.map(p =>
@@ -8188,7 +8216,16 @@ function buildLivePanel(evt) {
     html += '</div>';
     return html;
   };
-  const picker = _scPicking !== null ? `
+  const strokesPicker = `
+    <div class="sc-picker">
+      <div class="sc-picker-title">Hole ${_scPicking+1} — strokes</div>
+      <div class="sc-picker-opts">
+        ${Array.from({ length: 12 }, (_, n) => n + 1).map(n =>
+          `<button class="sc-picker-opt" onclick="scSetPts(${_scPicking},${n})"><span class="sc-pts">${n}</span></button>`
+        ).join('')}
+      </div>
+    </div>`;
+  const pointsPicker = `
     <div class="sc-picker">
       <div class="sc-picker-title">Hole ${_scPicking+1} — select points</div>
       <div class="sc-picker-opts">
@@ -8199,7 +8236,8 @@ function buildLivePanel(evt) {
         <button class="sc-picker-opt" onclick="scSetPts(${_scPicking},6)"><span class="sc-pts">6</span><span class="sc-lbl">Eagle</span></button>
         <button class="sc-picker-opt" onclick="scSetPts(${_scPicking},8)"><span class="sc-pts">8</span><span class="sc-lbl">Albatross</span></button>
       </div>
-    </div>` : '';
+    </div>`;
+  const picker = _scPicking !== null ? (scoreMode === 'strokes' ? strokesPicker : pointsPicker) : '';
   const allEntered = enteredCount === 18;
   // Wally Ball \u2014 "Do you still have the Wally Ball?" + conditional lost-hole/stroke (Dev-74)
   // Only asked for Wally Cup rounds (format-wally / format-scramble), and only if this
@@ -8268,7 +8306,7 @@ function buildLivePanel(evt) {
         'border-radius:10px;padding:14px;text-align:center;margin-bottom:8px">' +
         '<div style="font-size:1.1rem;margin-bottom:4px">\u2705</div>' +
         '<div style="color:#fff;font-weight:700;font-size:0.9rem;margin-bottom:2px">Scorecard submitted!</div>' +
-        '<div style="color:rgba(255,255,255,0.65);font-size:0.8rem">Total: ' + total + ' pts \u00b7 ' + scPlayerSel + '</div>' +
+        '<div style="color:rgba(255,255,255,0.65);font-size:0.8rem">Total: ' + total + (scoreMode === 'strokes' ? ' strokes' : ' pts') + ' \u00b7 ' + scPlayerSel + '</div>' +
       '</div>' +
       '<button class="sc-submit-btn" onclick="scNextPlayer()" ' +
         'style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3)">' +
@@ -8915,7 +8953,11 @@ async function loadSkinBoardData() {
     console.warn('[SkinBoard] loadSkinBoardData error:', e.message);
   }
 }
-// Submit scorecard to Jotform
+// Submit scorecard — to Jotform (Stableford points, feeds Wally Cup quota)
+// or to the GATHERINGS_API/scorecards D1 endpoint (raw gross strokes, feeds
+// Skins) depending on window._liveScoreMode, set by buildLivePanel() from
+// evtScoreMode(evt) on the render just before this fires (Dev-86 round 3
+// follow-up — see evtScoreMode's own comment for why).
 async function submitScorecard(evtName) {
   if (_scSubmitting) return;
   const scName = window._liveIsTeamRound ? _scPlayer : (_scPlayer || currentPlayer);
@@ -8923,35 +8965,55 @@ async function submitScorecard(evtName) {
   const front = _scHoles.slice(0,9).reduce((s,v) => s+(v||0),0);
   const back  = _scHoles.slice(9,18).reduce((s,v) => s+(v||0),0);
   const total = front + back;
+  // Dev-74 fix: real venue instead of hardcoded 'BSGC'
+  const _scEvt = eventData.find(e => e.name === evtName);
+  const strokeMode = window._liveScoreMode === 'strokes';
   _scSubmitting = true;
   renderLiveBanner();
   try {
-    const body = new URLSearchParams();
-    // Dev-74 fix: real venue instead of hardcoded 'BSGC'
-    const _scEvt = eventData.find(e => e.name === evtName);
-    body.append(`submission[${SC_QID.name}]`,  scName);
-    body.append(`submission[${SC_QID.event}]`, evtName);
-    body.append(`submission[${SC_QID.course}]`, (_scEvt && _scEvt.location) || 'BSGC');
-    SC_QID.holes.forEach((qid, i) => {
-      body.append(`submission[${qid}]`, String(_scHoles[i] ?? 0));
-    });
-    body.append(`submission[${SC_QID.front}]`, String(front));
-    body.append(`submission[${SC_QID.back}]`,  String(back));
-    body.append(`submission[${SC_QID.total}]`, String(total));
-    // Wally Ball — Dev-74
-    if (_wbStatus) {
-      body.append(`submission[${WB_QID.status}]`, _wbStatus);
-      if (_wbStatus === 'No') {
-        if (_wbHole)   body.append(`submission[${WB_QID.hole}]`,   String(_wbHole));
-        if (_wbStroke) body.append(`submission[${WB_QID.stroke}]`, String(_wbStroke));
+    if (strokeMode) {
+      // Raw gross strokes — same D1 backend + payload shape Card Score
+      // Sheet's submitCardScore() already uses, so Skins math reads one
+      // consistent source regardless of which surface entered the round.
+      const res = await fetch(`${GATHERINGS_API}/scorecards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_name: evtPhotoKey(_scEvt || { name: evtName }), player: scName,
+          holes: _scHoles, marks: null, tee_box: null,
+          front9: front, back9: back, total,
+          hole_count: (_scEvt && _scEvt.holes === 9) ? 9 : 18, hole_half: null,
+          venue: csNormalizedVenueName(_scEvt)
+        })
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Save failed');
+    } else {
+      const body = new URLSearchParams();
+      body.append(`submission[${SC_QID.name}]`,  scName);
+      body.append(`submission[${SC_QID.event}]`, evtName);
+      body.append(`submission[${SC_QID.course}]`, (_scEvt && _scEvt.location) || 'BSGC');
+      SC_QID.holes.forEach((qid, i) => {
+        body.append(`submission[${qid}]`, String(_scHoles[i] ?? 0));
+      });
+      body.append(`submission[${SC_QID.front}]`, String(front));
+      body.append(`submission[${SC_QID.back}]`,  String(back));
+      body.append(`submission[${SC_QID.total}]`, String(total));
+      // Wally Ball — Dev-74
+      if (_wbStatus) {
+        body.append(`submission[${WB_QID.status}]`, _wbStatus);
+        if (_wbStatus === 'No') {
+          if (_wbHole)   body.append(`submission[${WB_QID.hole}]`,   String(_wbHole));
+          if (_wbStroke) body.append(`submission[${WB_QID.stroke}]`, String(_wbStroke));
+        }
       }
+      await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`,
+        { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() });
     }
-    await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`,
-      { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() });
     _scSubmitDone = true;
     _scSubmitting = false;
     renderLiveBanner();
-    showToast('✅ Scorecard submitted! Total: ' + total + ' pts');
+    showToast('✅ Scorecard submitted! Total: ' + total + (strokeMode ? ' strokes' : ' pts'));
     // Dev-96 — weather capture for BFE rounds too (previously only fired for
     // GATHERINGS_API-backed scorecards/photos, see captureEventWeather).
     // Also covers a round where nobody uploads a photo but everyone submits
