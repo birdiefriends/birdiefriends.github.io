@@ -3293,14 +3293,14 @@ export default {
   // schedules aren't stored in this repo, so they're not visible/editable
   // from here — add them under Workers → this worker → Triggers → Cron
   // Triggers):
-  //   "0 22 * * *"  — evening-before, ~6pm ET (EDT; ET is UTC-4 Mar–Nov,
+  //   "0 22 * * *"  — evening-before, 6pm ET (EDT; ET is UTC-4 Mar–Nov,
   //                   UTC-5 the rest of the year, so this drifts an hour
-  //                   earlier — ~5pm ET — outside daylight saving)
-  //   "0 11 * * *"  — morning-of, ~7am ET (same DST caveat)
+  //                   earlier — 5pm ET — outside daylight saving)
+  //   "0 10 * * *"  — morning-of, 6am ET (same DST caveat)
   // event.cron tells scheduled() which one fired.
   async scheduled(event, env, ctx) {
     const EVENING_BEFORE_CRON = '0 22 * * *';
-    const MORNING_OF_CRON     = '0 11 * * *';
+    const MORNING_OF_CRON     = '0 10 * * *';
     const daysOut = event.cron === EVENING_BEFORE_CRON ? 1 : 0; // MORNING_OF_CRON, or any unrecognized cron, defaults to "today"
     ctx.waitUntil(runHostHcpNudgeCheck(env, daysOut));
   }
