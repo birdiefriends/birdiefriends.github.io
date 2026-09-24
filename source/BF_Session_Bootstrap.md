@@ -1,21 +1,11 @@
 # BF_Session_Bootstrap.md — Start Here for a New BirdieFriends Session
-**Status:** current as of Dev-86 close, 2026-09-24 — Wally Cup Rd3/Overall
-Standings/event-wrap-up status is **still not reconciled** (now carried since Dev-81, SIX
-sessions running — Dev-86 did not touch it either; see §3), and the BFE Next-Gen build (spec
-§9, flagged as Dev-86's focus) also was not started — Dev-86 went in yet another different
-direction, this time a real, substantial feature: a lightweight per-Gathering game-config
-system (Skins/CTP/BirdieBall) for **Gatherings** (the informal host-management system, not the
-standalone BFE Wally Cup production) — see the new §2a below and `BF_Session_Log.md`'s Dev-86
-entry for full detail. Portal shipped four versions this session (v4.5.4 → v4.5.7): the
-BirdieBall Host Panel UI redesign (round 3 of that build), Live Panel dual-mode scoring
-(strokes for a Skins-enabled Gathering, points otherwise), two real bugs fixed from Brian's own
-live-testing (a stale Live-Test-picker eligibility gap, and CTP holes falling back to BSGC's
-hardcoded default for any venue — including the real test venue, Moselem — with no legacy
-`venue-tee-catalog` entry), and finally Live Panel section gating (CTP/BirdieBall show only
-when a Gathering's own config has them on) plus a full BirdieBall live-alert widget and a
-Post-Round Scorecard confirmation safety net for players who forget to use it. Also confirmed
-directly from Brian that the HCP nudge feature (flagged as a mystery test failure earlier this
-session) was intentionally backed out, not a live bug — its dead test file was retired. Read
+**Status:** current as of Dev-87 close, 2026-09-24 — **Gatherings Close & Calculate shipped**
+(portal v4.6.0 + a `BF_Experiences.js` route): the host of a gamed Gathering closes the round from
+the Live Panel, the Skins/CTP/BirdieBall payout is computed on whoever actually turned in a scorecard,
+and results post to that Gathering's My History story (see §2a). **The Wally Cup Rd3/Overall
+carry-forward is retired** — Brian confirmed in Dev-87 that the event wrapped; it's no longer an open
+item anywhere in this doc. **Not yet live-verified** — Dev-87 ended at delivery; first thing next
+session is a real close on a test Gathering (see §3). Read
 this file first in
 any new BirdieFriends chat before touching code — it's meant to be self-sufficient enough
 that you never need to re-read `BF_Session_Log.md` line by line to get oriented (that log
@@ -30,7 +20,7 @@ specifically. `BF_BFE_NextGen_Spec.md` is the new living design-notes doc for th
 rearchitecture (venue data, game engine, handicap, scoring, live scoring, build sequence) —
 read it before starting any Dev-87+ work on that rearchitecture; it is still design notes,
 not yet a build plan with tickets. **There is no real session numbering beyond this one
-(Dev-86) — don't invent or reuse "Dev-NNN" labels for individual fixes. This has now happened
+(Dev-87) — don't invent or reuse "Dev-NNN" labels for individual fixes. This has now happened
 twice (briefly in Dev-82, then again all through Dev-83's own code comments, climbing from
 wherever Dev-82 left off through "Dev-108") despite Dev-82 believing it had corrected the
 mistake same-session. It hadn't. It was also nearly repeated in Dev-84 (a code comment briefly
@@ -48,7 +38,7 @@ apps and two Cloudflare Workers:
 - **`portal.html`** — the player-facing app. Events/Gatherings home screen, registration,
   the Live Panel (in-round scorecard/CTP/Birdie Alert/photo capture during play), results
   pages, admin/commissioner controls behind a gear icon. This is the file most session work
-  touches. Currently v4.5.7 (see `portal_version.txt` — **bump this with every
+  touches. Currently v4.6.0 (see `portal_version.txt` — **bump this with every
   `portal.html` change and deliver it alongside**, format `vX.Y.Z · YYYY-MM-DD` /
   `Deployed: YYYY-MM-DD HH:MM`; nothing bumps it automatically).
 - **`BFE-Admin.html`** — commissioner-only admin tool for BFE ("BirdieFriends
@@ -101,6 +91,8 @@ Cloudflare/GitHub myself. **Since Dev-80, one exception:** changes to `bf_push.p
 get committed DIRECTLY to the live file at that AutoPush path (not just delivered as the
 `bf_push_library.ps1` archival snapshot) — see §4 for the full rule.
 ## 2. Where the 2026 Wally Cup stands
+**Event wrapped — confirmed by Brian, Dev-87.** Everything below is history for reference; the
+Dev-84 "status unknown" note and every Rd3/Overall carry-forward are resolved.
 Full design is in `BF_WallyCup_Spec.md` — read it before touching any of this. Summary:
 one BFE event (`"2026 Wally Cup"`), five rounds in sequence `Practice Rd → Rd1 → Rd2 →
 2Man → Rd3 → Overall`. The Practice Rd (`engine: none`) doesn't score or roll into
@@ -321,38 +313,35 @@ Panel adapts around whatever's turned on. Backend: `bfe_gathering_games` (host c
   once an answer exists from **either** touchpoint). `window._liveBbConfirmPending` carries a
   completed answer into `submitScorecard()`, which persists it via a best-effort,
   fire-and-forget POST alongside the strokes/points save.
-- **Not yet built:** Close & Calculate payout logic for this system — Skins tie-break
-  handling, BirdieBall payout split among keepers. See §3.
+- **Close & Calculate (built Dev-87, v4.6.0).** Host-only "🏁 Host · Close & Calculate" Live Panel
+  section → `openGatheringCloseSheet()`: scorecards-in check ("N of M confirmed", flags no-card and
+  blank-hole players), payout preview, "Close with N players". Rules (Brian, Dev-87): pot =
+  `dollar_per_player` × **scorecards in** (8 registered, 7 played → 7); **Skins = lowest GROSS,
+  outright only — a tie is simply no skin (no carryover, no "tie-break" concept); $/skin = skin pot ÷
+  skins won; zero skins → given back**; a hole needs ≥2 scores entered to award a skin; CTP pays
+  `dollar_per_hole` to each configured hole's leader, **unclaimed → Skins**; BirdieBall: keepers
+  split, else **held longest** (latest `lost_hole`, then `lost_stroke`) wins, ties split, no answers →
+  given back; **everything rounds DOWN to whole dollars**, remainder shown, not redistributed. Engine
+  is the pure `computeGatheringGamesPayout()`; `renderGatheringPayoutHtml()` renders it identically
+  in the preview and My History. Snapshot saved via `POST /bfe/gathering-games/:id/close` (host_id
+  checked against the stored row → 403) into the pre-existing `payout_summary`/`status='closed'`/
+  `closed_at` columns (no migration). Closing drops the Gathering from the `status=open` index, so its
+  Live Panel retires. **My History:** `loadHistoryGameResults()` fills a "🏆 Game Results" block on
+  the Gathering's story; the host also gets "↩️ Reopen to fix & re-close" (`POST .../:id/reopen` →
+  `status='open'`, Live Panel returns).
 Full build detail, including the exact bug chases and test coverage, is in
 `BF_Session_Log.md`'s Dev-86 entry.
-## 3. Dev-87 focus — Close & Calculate for the new Gatherings games config, and the Wally Cup
-status check is now six sessions overdue
-Three real candidates are open for Dev-87 — confirm priority with Brian rather than assuming
-one, since Dev-86 itself is the second session running where the actual work diverged from
-what the prior bootstrap flagged as focus:
-1. **Close & Calculate for the new Gatherings games config (§2a)** — the most direct
-   continuation of what Dev-86 just shipped. Skins tie-break handling and BirdieBall payout
-   split among keepers both still need real logic; Brian gave "[No preference]" on both when
-   last asked (Claude's lean: push/carryover for Skins ties, even split for BirdieBall) — get
-   his actual call before building rather than assuming that lean is final.
-2. **BFE Next-Gen build (§9 of `BF_BFE_NextGen_Spec.md`)** — still not started, now carried
-   since Dev-85 through Dev-86 into Dev-87. Read the spec in full before writing any code if
-   this is what Brian wants to pick up; start from its §9 proposed build sequence (organized
-   around the real Nov 7 BF Cup deadline), not from scratch. Two of the three new fall events
-   (Turkey 2Man, BlackFriday 1-man) need zero new engine work per the spec's §8 calendar
-   table — worth confirming that's still Brian's read before assuming it.
-3. **The Wally Cup Rd3/Overall Standings/event-wrap-up check is now SIX sessions overdue
-   (Dev-81/82/83/84/85/86)** and hasn't been touched once in that whole span — Brian's focus
-   has gone elsewhere every single time it's come up. Don't let it silently carry a seventh
-   time: either do a live check (`GET /bfe/events` for `"2026 Wally Cup"`'s round statuses)
-   early in Dev-87, or explicitly ask Brian whether it still matters at this point in the
-   season (BF Series runs through 10/26, BF Cup looms 11/7-8) — six sessions of silent carry
-   is itself a signal this may simply no longer be a live priority, not a reason to keep
-   re-flagging it forever without resolution. If Rd3 is still open, the old checklist
-   (Dev-83's own §3, in `BF_Session_Log.md`'s Dev-83 entry) is still the right shape of work.
-   If the event already wrapped, this is moot and should be replaced with real post-event
-   close-out concerns (final payout summary, whether Trip Info/WCRP capture should be turned
-   off, whether `live_override`/`live_stopped_round` need resetting).
+## 3. Dev-88 focus — live-verify Gatherings Close & Calculate, then confirm next priority
+1. **Live-verify Close & Calculate (§2a) before building anything else on it.** Dev-87 shipped it
+   tested (18 engine + 21 jsdom checks against extracted source), but not against production. After
+   Brian deploys the Worker (`BF_Experiences.js`) **and** portal v4.6.0 (Worker first, or Close
+   404s): on a real test Gathering (e.g. Jefferson @ Moselem), enter a couple of scorecards, close as
+   host, check the My History "🏆 Game Results" block as host and as a non-host player, then Reopen →
+   Live Panel returns → re-close replaces the result. Verify one payout by hand against the live data.
+2. **Then confirm priority with Brian** rather than assuming. The obvious candidate is the **BFE Next-Gen
+   build (§9 of `BF_BFE_NextGen_Spec.md`)**, still not started (carried since Dev-85). Read the spec in
+   full first and start from its §9 build sequence, which is organized around the real Nov 7 BF Cup
+   deadline.
 **Carried forward, still not re-confirmed since Dev-84:**
 - The Rd1 chapter-boundary override's `localStorage`-only persistence is a possible,
   unconfirmed durability gap — worth a look if the chapter-boundary symptom recurs a third
@@ -525,6 +514,10 @@ live data, what Brian confirmed).
   regression run clean without losing the file in case anything in it is worth salvaging
   later.
 ## 5. Known backlog (not urgent, parked)
+- **Gross/Net Skins toggle for Gatherings** (Brian, Dev-87): Skins are Gross unless otherwise
+  directed; add a Gross/Net toggle to the Games config once HCP calcs are layered in. Net would need a
+  per-player handicap source at Close time — `computeGatheringGamesPayout` already stamps
+  `skins.basis: 'gross'` in every saved snapshot so older results stay self-describing.
 - **Small-group payout rounding** (`BF_WallyCup_Spec.md` §6) — round-pot podium split can
   zero out 2nd/3rd place under ~9 players at the current $10/player rate. Fine for Brian's
   own groups; a gap if BFE ever opens to other hosts.
