@@ -4368,7 +4368,7 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6 — all portal-only, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
@@ -4460,6 +4460,20 @@ frowned on."
    - **Verified** by rendering both pieces with the portal's real CSS and the real functions,
      against **live Moselem tee data** (4 tees, read from `/bfe/venue-tees?venue_id=3` via the
      browser pane). No horizontal overflow at 375px. All test suites re-run clean (67 checks).
+
+**7. Card icon overflow (v4.7.1), same session.** Brian, from his phone: Venue wasn't showing — the
+card icon row (up to 7: Photos, Score, Notes, Rules, Yardage, Venue, Group) fits about 5 on a phone
+and can't scroll. Talked through the options (wrap, a "⋯ More" overflow, a Course hub, contextual
+icons), which led to a bigger design direction Brian is sleeping on: an **In-Play hub** — the Live
+Panel extended to every round, with capture (photo/video/note) and course tools (yardage/rules/course
++ stroke holes) during the round, games sections gated on as today, a post-round score wrap-up, and
+the card slimmed to Photos/Score/Notes/Venue. Brian's key caveats: photos/notes are *during*
+(capturing the moment), casual score is *after* (performance); and **timing can't rely on the clock
+or on manual start/stop** (rain delays, early finishes, player personality vary) — Claude suggested
+biasing to always-available on event day, with activity signals (first group capture = started,
+cards in / long quiet = wrap-up) driving only the dismissible transitions. Mockup rendered
+(`inplay_mockup.png`), not built. **Interim fix shipped:** Rules moved to the far right of the icon
+row so Venue shifts into view (Brian is testing the Venue viewer at Moselem the next day).
 
 **Carry-forward:**
 - Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
