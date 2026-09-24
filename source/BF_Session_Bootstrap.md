@@ -1,6 +1,6 @@
 # BF_Session_Bootstrap.md — Start Here for a New BirdieFriends Session
 **Status:** current as of Dev-87 close, 2026-09-24 — **Gatherings Close & Calculate shipped**
-(portal v4.6.0 + a `BF_Experiences.js` route): the host of a gamed Gathering closes the round from
+(portal v4.6.0 + a `BF_Experiences.js` route; v4.6.1 then moved Gatherings CTP from Jotform to D1): the host of a gamed Gathering closes the round from
 the Live Panel, the Skins/CTP/BirdieBall payout is computed on whoever actually turned in a scorecard,
 and results post to that Gathering's My History story (see §2a). **The Wally Cup Rd3/Overall
 carry-forward is retired** — Brian confirmed in Dev-87 that the event wrapped; it's no longer an open
@@ -38,7 +38,7 @@ apps and two Cloudflare Workers:
 - **`portal.html`** — the player-facing app. Events/Gatherings home screen, registration,
   the Live Panel (in-round scorecard/CTP/Birdie Alert/photo capture during play), results
   pages, admin/commissioner controls behind a gear icon. This is the file most session work
-  touches. Currently v4.6.0 (see `portal_version.txt` — **bump this with every
+  touches. Currently v4.6.1 (see `portal_version.txt` — **bump this with every
   `portal.html` change and deliver it alongside**, format `vX.Y.Z · YYYY-MM-DD` /
   `Deployed: YYYY-MM-DD HH:MM`; nothing bumps it automatically).
 - **`BFE-Admin.html`** — commissioner-only admin tool for BFE ("BirdieFriends
@@ -329,6 +329,12 @@ Panel adapts around whatever's turned on. Backend: `bfe_gathering_games` (host c
   Live Panel retires. **My History:** `loadHistoryGameResults()` fills a "🏆 Game Results" block on
   the Gathering's story; the host also gets "↩️ Reopen to fix & re-close" (`POST .../:id/reopen` →
   `status='open'`, Live Panel returns).
+- **CTP storage for Gatherings is D1, not Jotform (Dev-87, v4.6.1).** `ctpUsesD1(evt)` routes a
+  Gathering's CTP load/submit/Undo to the BFE Worker's pre-existing `bfe_cttp_entries` + `/cttp`
+  routes, keyed `gathering:<id>` (same as its scorecards). The whole Gatherings games flow is now
+  Jotform-free. **Series / Wally Cup CTP deliberately stays on the Jotform CTP form** — GS and
+  BFE-Admin's Close Round read it there. Moving those is a separate job that would have to switch
+  both readers too.
 Full build detail, including the exact bug chases and test coverage, is in
 `BF_Session_Log.md`'s Dev-86 entry.
 ## 3. Dev-88 focus — live-verify Gatherings Close & Calculate, then confirm next priority
