@@ -4128,3 +4128,166 @@ doc's living-documents list.
   is still unconfirmed as a durability gap — not touched this session either.
 
 **Session Dev-85 fully closed.**
+
+## Dev-86 · 2026-09-24 — Gatherings Game-Config System (Skins/CTP/BirdieBall), Live Panel Dual-Mode Scoring & Section Gating, BirdieBall Live Alert + Scorecard Confirmation
+
+**Note on this entry:** this was a long session that ran through multiple auto-compactions, so
+the earliest phases (the initial `bfe_gathering_games` D1 table/Host Panel config UI, and
+BirdieBall rounds 1–2 of its Host Panel carve-out) are logged here only at summary level —
+verified as built/tested at the time, but their step-by-step chase detail did not survive into
+this entry's context. Everything from BirdieBall round 3 onward is logged at full detail, since
+it stayed in view. **Neither of Dev-86's two flagged-focus items from the Bootstrap (beginning
+the BFE Next-Gen build per spec §9, and the Wally Cup Rd3/Overall/wrap-up status check) was
+touched this session** — Brian's actual priority turned out to be a different, real capability:
+letting **Gatherings** (the informal host-management system, not the standalone BFE Wally Cup
+production) carry its own lightweight per-Gathering game config — Skins, Closest-to-the-Pin, and
+BirdieBall — configured by the host and captured live through the existing Portal Live Panel.
+This is, in effect, the "expose a light subset of registry capabilities to Gatherings" idea
+Dev-85's `BF_BFE_NextGen_Spec.md` discussion flagged as a maybe-someday item — it turned out to
+be Brian's actual next priority, done directly rather than through the not-yet-built registry
+architecture.
+
+**1. Gatherings games config (earlier phases this session, summary-level).** New `bfe_gathering_games`
+D1 table (host-configured per-Gathering game selection + per-game config JSON, incl. `cttp_config`
+and `birdieball_config`), a Host Panel Games config form (toggle Skins/CTP/BirdieBall on/off per
+Gathering, CTP hole picker, BirdieBall $/player carve-out), and the `bfe_birdieball_answers` table
+(`gathering_id`, `player_name`, `kept` bool, `lost_hole`, `lost_stroke`, `UNIQUE(gathering_id,
+player_name)` upsert) — all built and tested before the portion of this session covered in detail
+below. `_gatheringGamesIndex` (`Map<gatheringId, parsedConfigRow>`) is pre-warmed on Home's
+initial load via `refreshGatheringGamesIndex()` and is what every later Live Panel gating check
+this session reads from.
+
+**2. BirdieBall frontend redesign (round 3), delivered v4.5.4.** Replaced the entire %-allocation
+BirdieBall UI in the Host Panel Games config form with a `$/player` carve-out field, mirroring
+CTP's own structural pattern exactly (backend for this was already done/tested by round 2).
+
+**3. Live Panel dual-mode scoring, delivered v4.5.5.** Brian: "the live panel scoring will need
+to accept either strokes or points depending on the game." New `evtScoreMode(evt)` — a
+Skins-enabled Gathering's Post-Round Scorecard now captures raw gross strokes (posted to
+`GATHERINGS_API/scorecards`, the same D1 endpoint the separate Card Score Sheet uses — one
+source of truth for Skins math), while every other event keeps the original Stableford
+points-bucket capture on the unchanged Jotform `SCORECARD_FORM_ID` path. `buildLivePanel`
+stashes the computed mode on `window._liveScoreMode` so `submitScorecard` (fired later via
+onclick, outside that closure) branches its submit target correctly.
+
+**4. Two real bugs fixed from Brian's live-testing of "Jefferson Event @ Moselem" (his real test
+Gathering), delivered v4.5.6.** Brian's report, verbatim, had five findings — two were real bugs,
+two needed no change, one (BirdieBall's own live-alert widget) became this session's next chunk
+of work:
+   - **Fixed — stale test-picker eligibility:** Gear → Event Day's "which round is live" picker
+     (`populateLiveTestEventSelect()`) was filtering only on `dt >= now`, so a round whose tee
+     time was technically still ahead but whose scorecards were already all in (wrapped up early)
+     stayed selectable. Added `&& !isRoundScorecardComplete(e.name)` to the eligibility filter.
+   - **Confirmed correct, no change — Birdie Alert vs. real Skins source of truth:** Birdie Alert
+     stays exactly as-is (fires alerts, drives the social "Skin Status" board); the actual
+     real-money Skins payout source of truth is, and remains, the raw gross strokes submitted via
+     the scorecard — the two "Skins" names refer to genuinely separate features, not a bug.
+   - **Fixed — CTP hole source falling back to BSGC's default for Moselem:** `buildLivePanel`'s
+     `ctpHoles` only ever checked the legacy per-venue `venue-tee-catalog` (`_resolvedCttpHoles`,
+     which has no entry for Moselem) before falling to `CTP_HOLES_DEFAULT` (BSGC's hardcoded
+     holes) — it never checked the Gathering's own `cttp_config.holes` set via the Host Panel at
+     all. Fixed by resolving the Gathering's own games config (`_gatheringGamesIndex.get
+     (evt.gatheringId)`) first; fallback order is now Gathering's `cttp_config.holes` →
+     `_resolvedCttpHoles` → `CTP_HOLES_DEFAULT`. A non-Gathering (Series) event is unaffected —
+     `_liveGamesConfig` stays `null` for those, leaving the original fallback chain untouched.
+   - **Confirmed correct, no change — players list.**
+   - **BirdieBall (single-day vs. multi-day):** Brian's own framing — "For single day events, we
+     could just replicate an alert like BirdieAlerts and create a table of who lost the B-Ball.
+     Multi-day like Wally Cup is trickier and probably best on the scorecard" — became the shape
+     of item 5 below, in his very next message.
+
+**5. Three-part Live Panel enhancement, delivered v4.5.7 (this session's final, most-detailed
+piece of work).** Brian: "Live panel sections should turn on/off based on the host's gaming
+config. That'll help with clarity and real-estate. For B-Ball, let's add the skins-type alert
+now, it's simple enough. Though I am wondering about a confirmation on the scorecard, in case
+someone forgets to issue an alert."
+   - **Section gating.** `buildLivePanel` now computes `_liveGamesConfig` once up front (shared by
+     every gate below and by the CTP hole-source resolution from item 4), then
+     `showCttpSection`/`showBirdieBallSection`: a Series/Wally Cup event always shows CTP (no
+     games-config concept exists there); a Gathering only shows CTP or BirdieBall when that
+     specific game is actually turned on in its own config. Both the CTP and new BirdieBall
+     `<div class="live-section">` blocks in the final panel assembly are wrapped on these flags.
+   - **Standalone BirdieBall live-alert widget**, mirroring Birdie Alert's own UX exactly: a
+     player picker (`bbSelectPlayer` — hydrates `_bbKept`/`_bbLostHole`/`_bbLostStroke` from any
+     existing saved answer for that player, via `bbAnswerFor()`, rather than leaking whatever the
+     previously-selected player had mid-edit), Kept It / Lost It buttons (`bbSetKept` — a
+     `_bbTouchedPlayer` guard clears stale hole/stroke if the active player changed since they
+     were last set), a conditional hole/stroke grid for a loss, `submitBirdieBall()` (posts the
+     upsert to `bfe_birdieball_answers`, requires hole+stroke before allowing a "lost it"
+     submission, upserts the local `_bbAnswers` cache in place on success), and a live "who's lost
+     the BirdieBall" board rendered from that same cache. `loadBirdieBallAnswers(evt)` populates
+     `_bbAnswers` alongside the existing `loadCtpData`/`loadSkinBoardData` calls (wired into
+     `toggleLivePanel()`, the 60s CTP-refresh timer, and `setLiveTestEventOverride()`).
+   - **Post-Round Scorecard BirdieBall confirmation safety net** — the actual answer to "in case
+     someone forgets to issue an alert." Scoped to whoever's scorecard is currently being filled
+     (`scPlayerSel`) via its own separate local state (`_scBbKept`/`_scBbLostHole`/
+     `_scBbLostStroke`, mirroring the existing Wally Ball pattern) so it can't collide with the
+     live-alert widget mid-edit for a different player. `bbConfirmSaved = bbAnswerFor(scPlayerSel)`
+     — if an answer already exists for this player from **either** touchpoint, the scorecard shows
+     a read-only "already recorded" line instead of asking again; only when nothing exists yet
+     does it ask Kept It/Lost It before the scorecard can be submitted (`bbConfirmAnswered` folds
+     into the submit button's existing `disabled` condition and status-text chain, alongside the
+     pre-existing `wbAnswered` Wally Ball gate). `window._liveBbConfirmPending` carries a completed
+     confirmation answer out of `buildLivePanel`'s closure; `submitScorecard()` persists it via a
+     best-effort, fire-and-forget POST to the same `bfe_birdieball_answers` upsert right alongside
+     the strokes/points save (`.then`/`.catch`, never awaited — a failure there is logged, not
+     surfaced, and never blocks or undoes the scorecard save that already succeeded).
+   - **Testing:** all `showCttpSection`/`showBirdieBallSection`/CTP-hole-source assertions
+     re-verified against the actual refactored source (15 checks). A new dedicated test file,
+     `test_live_panel_birdieball.mjs` (38 checks), covers `bbAnswerFor` lookup, the live-alert
+     widget's state transitions (including the player-switch hydration and the
+     `_bbTouchedPlayer`-changed stale-clear guard), `submitBirdieBall`'s payload/guard logic,
+     `scBbSetStatus`/`scBbSetHole`/`scBbSetStroke`, and the full `bbConfirmSaved`/
+     `bbConfirmNeedsAsk`/`bbConfirmAnswered`/`window._liveBbConfirmPending` gate chain in both
+     `buildLivePanel` and `submitScorecard`. Full regression suite (all 16 live test files, one
+     retired mid-session — see below) re-run clean before delivery.
+
+**6. Housekeeping.**
+   - **Confirmed the HCP nudge feature was intentionally backed out**, not a live bug: Brian, when
+     asked about a `test_portal_hcp_nudge.mjs` failure surfaced during the regression run —
+     "We backed the HCP nudge out after I decided it wasn't a good player direction." The whole
+     portal-side feature (`resolveCurrentPlayerBfRecord`, `renderHcpNudge`, etc.) is genuinely
+     absent from `portal.html`; the worker-side HCP nudge pieces are untouched and still pass.
+     Retired the now-permanently-stale test file to `/home/claude/bf-work/retired_tests/
+     test_portal_hcp_nudge.mjs.retired` (moved, not deleted) so it stops false-failing future
+     regression runs.
+   - **Synced the local scratch git clone** at `/home/claude/bf-repo` to `origin/main` (had drifted
+     8 commits behind — this clone is a scratch workspace only, never part of the actual deploy
+     path; Brian's own `bf_push.ps1` pushes straight to GitHub via its own commits, bypassing this
+     clone entirely, confirmed from his own push-tool screenshot this session). A plain `git pull
+     --ff-only` was refused by git's dirty-path guard even though every "modified" file's content
+     was byte-identical to `origin/main` (verified via `git diff origin/main -- <file> | wc -l` =
+     0 for all five) — git's fast-forward check is path-dirty-based, not content-aware. Resolved
+     safely with `git reset origin/main` (moves the branch ref + index only, leaves the working
+     tree untouched — safe specifically because content equality was already verified, as opposed
+     to `git reset --hard` which would forcibly overwrite the working tree regardless), then
+     `git checkout -- docs/portal.html docs/portal_version.txt` for the two files that were
+     genuinely stale locally (this session never touched `docs/`, only `source/`). Confirmed clean
+     working tree and local `portal.html` byte-identical to the delivered v4.5.7 afterward. Done
+     only after asking Brian directly, since a stop-hook was pushing for a commit+push that would
+     have gone live immediately (this repo is `birdiefriends/birdiefriends.github.io` — GitHub
+     Pages serves straight from `main`) and conflicted with the established never-commit-from-here
+     workflow.
+
+**Carry-forward:**
+- **BFE Next-Gen build (spec §9) — still not started, now carried since Dev-85 into Dev-87.**
+  Dev-86 spent its whole session on the Gatherings games-config/BirdieBall work instead.
+- **Wally Cup Rd3/Overall Standings/event-wrap-up status — now SIX sessions overdue
+  (Dev-81/82/83/84/85/86).** Not touched again this session. Dev-87 should make a deliberate
+  call — verify live status or explicitly decide it no longer matters (BF Series runs through
+  10/26, BF Cup looms 11/7-8) — rather than letting it carry a seventh time.
+- **Close & Calculate payout computation logic** (Skins tie-break handling, BirdieBall payout
+  split among keepers) for the new Gatherings games-config system — not started. Brian gave
+  "[No preference]" on both earlier this session (Claude's lean: push/carryover for Skins ties,
+  even split for BirdieBall); hasn't come back into scope since.
+- Buck Hill Golf Club GolfCourseAPI name-variant retry (Dev-85 carry-forward) — still not
+  attempted, not touched this session.
+- The Rd1 chapter-boundary override's `localStorage`-only persistence (Dev-84 carry-forward) —
+  still unconfirmed as a durability gap, not touched this session.
+- Earliest phases of this session's own Gatherings games-config build (the `bfe_gathering_games`
+  D1 table, its Host Panel config UI, and BirdieBall rounds 1–2) are logged here only at summary
+  level per the note at the top of this entry — worth a quick sanity read of the actual shipped
+  code early in Dev-87 rather than relying solely on this summary if deep changes are needed there.
+
+**Session Dev-86 fully closed.**
+**Chat-rename string:** `Dev-86 - Gatherings Game-Config System (Skins/CTP/BirdieBall), Live Panel Dual-Mode Scoring & Section Gating, BirdieBall Live Alert + Scorecard Confirmation Safety Net`
