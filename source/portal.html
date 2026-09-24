@@ -7969,7 +7969,15 @@ function populateLiveTestEventSelect() {
   const sel = document.getElementById('livetest-event-select');
   if (!sel) return;
   const now = new Date();
-  const eligible = eventData.filter(e => e.dt && e.dt >= now && hasLivePanelSupport(e)).sort((a,b) => a.dt - b.dt);
+  // Dev-86 round 3 bug fix (Brian, live-testing) — "upcoming" by dt alone
+  // isn't enough: a round whose scorecards are already all in (per the same
+  // isRoundScorecardComplete() cache getLiveEvent()'s real, non-override
+  // path already gates on — Dev-93 auto-close) is functionally over even
+  // when its tee time is technically later than right now (e.g. an evening
+  // tee time on a round that already wrapped up early). Without this, an
+  // already-finished round could sit in this "walk each round" picker
+  // looking exactly like a legitimately-upcoming one.
+  const eligible = eventData.filter(e => e.dt && e.dt >= now && hasLivePanelSupport(e) && !isRoundScorecardComplete(e.name)).sort((a,b) => a.dt - b.dt);
   const current = LIVE_TEST_EVENT_OVERRIDE;
   sel.innerHTML = '<option value="">— Next upcoming (default) —</option>' +
     eligible.map(e => `<option value="${e.name.replace(/"/g,'&quot;')}" ${e.name === current ? 'selected' : ''}>` +
@@ -8102,7 +8110,22 @@ function buildLivePanel(evt) {
   // note on evtIndividualPlayers above. Defaults to currentPlayer exactly
   // like a non-team round always has.
   const ctpPlayerSel = _ctpPlayer || currentPlayer;
-  const ctpHoles = (_resolvedCttpHoles && _resolvedCttpHoles.length) ? _resolvedCttpHoles : CTP_HOLES_DEFAULT;
+  // Dev-86 round 3 bug fix (Brian, live-testing Jefferson @ Moselem) — a
+  // gamed Gathering's own cttp_config.holes (set by the host in the Games
+  // form, resolved from the venue's real Par-3 data or picked manually) is
+  // the actual designated holes for THIS round's CTP payout, and must win
+  // over the legacy venue-tee-catalog lookup (_resolvedCttpHoles, an older
+  // admin-managed per-venue default that predates gamed Gatherings — most
+  // venues, Moselem included, simply have no entry there) and CTP_HOLES_DEFAULT
+  // (BSGC's hardcoded fallback). Without this, any Gathering at a venue with
+  // no venue-tee-catalog entry silently fell all the way back to BSGC's
+  // holes regardless of what the host actually configured.
+  const gatheringCttpConfig = evt.source === 'gathering'
+    ? ((_gatheringGamesIndex.get(evt.gatheringId) || {}).cttp_config || null)
+    : null;
+  const ctpHoles = (gatheringCttpConfig && Array.isArray(gatheringCttpConfig.holes) && gatheringCttpConfig.holes.length)
+    ? gatheringCttpConfig.holes
+    : (_resolvedCttpHoles && _resolvedCttpHoles.length) ? _resolvedCttpHoles : CTP_HOLES_DEFAULT;
   const ctpPills = ctpHoles.map(h => {
     const leader = _ctpData[h];
     const alreadyIn = (_ctpHistory[h] || []).some(e => e.player.trim().toLowerCase() === ctpPlayerSel.trim().toLowerCase());
