@@ -158,12 +158,39 @@
 //                                             -- gatherings.host_id
 //     games TEXT NOT NULL,                   -- JSON array, subset of
 //                                             -- ['skins','cttp','birdieball']
-//     dollar_per_player REAL NOT NULL,
-//     allocations TEXT NOT NULL,             -- JSON: {skins: pct, cttp: pct,
-//                                             -- birdieball: pct} — one entry
-//                                             -- per selected game, meant to
+//     dollar_per_player REAL NOT NULL,       -- total pot = this x confirmed
+//                                             -- Yes registrants
+//     allocations TEXT NOT NULL,             -- JSON: {skins: pct, birdieball:
+//                                             -- pct} — %-of-pot games ONLY.
+//                                             -- CTP is deliberately excluded
+//                                             -- (see cttp_config below) —
+//                                             -- Brian, Dev-86 round 2: "the
+//                                             -- CttP $payout needs to be per
+//                                             -- hole rather than %". One entry
+//                                             -- per selected %-game, meant to
 //                                             -- sum to 100 (not DB-enforced;
-//                                             -- the Games modal enforces it)
+//                                             -- the Games modal enforces it).
+//                                             -- {} when neither skins nor
+//                                             -- birdieball is selected.
+//     cttp_config TEXT,                      -- JSON, only when 'cttp' is in
+//                                             -- games: {dollar_per_hole,
+//                                             -- hole_mode: 'all_par3'|
+//                                             -- 'custom', holes: [3,7,12,16]}.
+//                                             -- CTP's $ cost = dollar_per_hole
+//                                             -- x holes.length, CARVED OUT of
+//                                             -- the same $/player pot (Brian's
+//                                             -- explicit call) BEFORE
+//                                             -- skins/birdieball split their
+//                                             -- 100% of what's left. `holes`
+//                                             -- is always resolved to real
+//                                             -- hole numbers at save time
+//                                             -- (even for 'all_par3') from
+//                                             -- the venue's stored tee data,
+//                                             -- so payout calc never needs a
+//                                             -- second venue lookup — same
+//                                             -- frozen-snapshot reasoning as
+//                                             -- payout_summary below. NULL
+//                                             -- when 'cttp' isn't selected.
 //     status TEXT NOT NULL DEFAULT 'open',   -- 'open' (configured, Live Panel
 //                                             -- carve-out active) | 'closed'
 //                                             -- (payout calculated & posted
@@ -955,19 +982,26 @@ export default {
         const gatheringId = url.searchParams.get('gathering_id');
         const hostId = url.searchParams.get('host_id');
         const status = url.searchParams.get('status');
+        const parseConfigRow = (row) => ({
+          ...row,
+          games: JSON.parse(row.games),
+          allocations: JSON.parse(row.allocations),
+          cttp_config: row.cttp_config ? JSON.parse(row.cttp_config) : null,
+          payout_summary: row.payout_summary ? JSON.parse(row.payout_summary) : null
+        });
         if (gatheringId) {
           const row = await env.DB.prepare(`SELECT * FROM bfe_gathering_games WHERE gathering_id = ?`).bind(gatheringId).first();
-          const config = row ? { ...row, games: JSON.parse(row.games), allocations: JSON.parse(row.allocations), payout_summary: row.payout_summary ? JSON.parse(row.payout_summary) : null } : null;
+          const config = row ? parseConfigRow(row) : null;
           return new Response(JSON.stringify({ ok: true, config }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         if (hostId) {
           const { results } = await env.DB.prepare(`SELECT * FROM bfe_gathering_games WHERE host_id = ?`).bind(hostId).all();
-          const configs = (results || []).map(row => ({ ...row, games: JSON.parse(row.games), allocations: JSON.parse(row.allocations), payout_summary: row.payout_summary ? JSON.parse(row.payout_summary) : null }));
+          const configs = (results || []).map(parseConfigRow);
           return new Response(JSON.stringify({ ok: true, configs }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         if (status) {
           const { results } = await env.DB.prepare(`SELECT * FROM bfe_gathering_games WHERE status = ?`).bind(status).all();
-          const configs = (results || []).map(row => ({ ...row, games: JSON.parse(row.games), allocations: JSON.parse(row.allocations), payout_summary: row.payout_summary ? JSON.parse(row.payout_summary) : null }));
+          const configs = (results || []).map(parseConfigRow);
           return new Response(JSON.stringify({ ok: true, configs }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         return new Response(JSON.stringify({ error: 'gathering_id, host_id, or status query param is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -977,13 +1011,22 @@ export default {
     }
 
     // POST /bfe/gathering-games — create or update a gathering's games config.
-    // Body: { gathering_id, gathering_name, host_id, games: [...], dollar_per_player, allocations: {game: pct, ...} }
+    // Body: { gathering_id, gathering_name, host_id, games: [...], dollar_per_player,
+    //         allocations: {skins: pct, birdieball: pct},   -- %-of-pot games only
+    //         cttp_config: {dollar_per_hole, hole_mode, holes: [n,...]}  -- required iff 'cttp' in games
+    //       }
+    // CTP is carved out of the SAME $/player pot as a fixed dollar amount
+    // (dollar_per_hole x holes.length) BEFORE skins/birdieball split 100% of
+    // what's left — Brian's explicit call, Dev-86 round 2. allocations is
+    // therefore validated against only the %-based games actually selected
+    // (skins/birdieball), not against the full `games` array.
+    const PCT_GAMES = ['skins', 'birdieball'];
     if (request.method === 'POST' && url.pathname === '/bfe/gathering-games') {
       let body;
       try { body = await request.json(); } catch (e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { gathering_id, gathering_name, host_id, games, dollar_per_player, allocations } = body;
+      const { gathering_id, gathering_name, host_id, games, dollar_per_player, allocations, cttp_config } = body;
       if (!gathering_id || !host_id) {
         return new Response(JSON.stringify({ error: 'gathering_id and host_id are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -993,22 +1036,42 @@ export default {
       if (!(Number(dollar_per_player) > 0)) {
         return new Response(JSON.stringify({ error: 'dollar_per_player must be a positive number' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      if (!allocations || typeof allocations !== 'object') {
-        return new Response(JSON.stringify({ error: 'allocations (object) is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      const pctGames = games.filter(g => PCT_GAMES.includes(g));
+      if (pctGames.length) {
+        if (!allocations || typeof allocations !== 'object') {
+          return new Response(JSON.stringify({ error: 'allocations (object) is required when skins or birdieball is selected' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const allocSum = pctGames.reduce((sum, g) => sum + (Number(allocations[g]) || 0), 0);
+        if (Math.abs(allocSum - 100) > 0.5) {
+          return new Response(JSON.stringify({ error: `Allocations for the selected games must add up to 100% (got ${allocSum}%)` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
       }
-      const allocSum = games.reduce((sum, g) => sum + (Number(allocations[g]) || 0), 0);
-      if (Math.abs(allocSum - 100) > 0.5) {
-        return new Response(JSON.stringify({ error: `Allocations for the selected games must add up to 100% (got ${allocSum}%)` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      if (games.includes('cttp')) {
+        if (!cttp_config || typeof cttp_config !== 'object') {
+          return new Response(JSON.stringify({ error: 'cttp_config is required when cttp is selected' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (!(Number(cttp_config.dollar_per_hole) > 0)) {
+          return new Response(JSON.stringify({ error: 'cttp_config.dollar_per_hole must be a positive number' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (!Array.isArray(cttp_config.holes) || !cttp_config.holes.length || !cttp_config.holes.every(h => Number.isInteger(h) && h >= 1 && h <= 18)) {
+          return new Response(JSON.stringify({ error: 'cttp_config.holes must be a non-empty array of hole numbers (1-18)' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
       }
+      const allocationsToStore = {};
+      pctGames.forEach(g => { allocationsToStore[g] = Number(allocations[g]) || 0; });
+      const cttpConfigToStore = games.includes('cttp')
+        ? { dollar_per_hole: Number(cttp_config.dollar_per_hole), hole_mode: cttp_config.hole_mode === 'custom' ? 'custom' : 'all_par3', holes: cttp_config.holes.slice().sort((a, b) => a - b) }
+        : null;
       try {
         const result = await env.DB.prepare(
-          `INSERT INTO bfe_gathering_games (gathering_id, gathering_name, host_id, games, dollar_per_player, allocations, status, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'open', datetime('now'))
+          `INSERT INTO bfe_gathering_games (gathering_id, gathering_name, host_id, games, dollar_per_player, allocations, cttp_config, status, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'))
            ON CONFLICT(gathering_id) DO UPDATE SET
              gathering_name = excluded.gathering_name, host_id = excluded.host_id, games = excluded.games,
              dollar_per_player = excluded.dollar_per_player, allocations = excluded.allocations,
+             cttp_config = excluded.cttp_config,
              status = 'open', payout_summary = NULL, closed_at = NULL, updated_at = excluded.updated_at`
-        ).bind(gathering_id, gathering_name || null, host_id, JSON.stringify(games), Number(dollar_per_player), JSON.stringify(allocations)).run();
+        ).bind(gathering_id, gathering_name || null, host_id, JSON.stringify(games), Number(dollar_per_player), JSON.stringify(allocationsToStore), cttpConfigToStore ? JSON.stringify(cttpConfigToStore) : null).run();
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error saving games config: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
