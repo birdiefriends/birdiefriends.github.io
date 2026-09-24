@@ -38,7 +38,7 @@ apps and two Cloudflare Workers:
 - **`portal.html`** — the player-facing app. Events/Gatherings home screen, registration,
   the Live Panel (in-round scorecard/CTP/Birdie Alert/photo capture during play), results
   pages, admin/commissioner controls behind a gear icon. This is the file most session work
-  touches. Currently v4.7.1 (see `portal_version.txt` — **bump this with every
+  touches. Currently v4.7.2 (see `portal_version.txt` — **bump this with every
   `portal.html` change and deliver it alongside**, format `vX.Y.Z · YYYY-MM-DD` /
   `Deployed: YYYY-MM-DD HH:MM`; nothing bumps it automatically).
 - **`BFE-Admin.html`** — commissioner-only admin tool for BFE ("BirdieFriends
@@ -351,6 +351,11 @@ Panel adapts around whatever's turned on. Backend: `bfe_gathering_games` (host c
   itself must stay overflow-visible). The player-facing venue viewer is now a tee dropdown +
   stat strip + `venueScorecardHtml` grid. It no longer shares `venueTeeHolesTableHtml` with the admin
   Venue Manager, which keeps the old table.
+- **"At the course" rail — BETA, Brian only (v4.7.2).** Location-gated vertical toolbar (see the
+  Session Log's Dev-87 item 8). The gate is `AT_COURSE_BETA_PLAYERS`; widening it needs a designed
+  location-permission moment first. It depends on venue `lat/lng`, which the main Worker's public
+  `GET /venues` now returns (five venues still have none). This is the proving ground for the
+  In-Play hub direction Brian is weighing.
 Full build detail, including the exact bug chases and test coverage, is in
 `BF_Session_Log.md`'s Dev-86 entry.
 ## 3. Dev-88 focus — live-verify Gatherings Close & Calculate, then confirm next priority
