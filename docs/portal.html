@@ -10306,18 +10306,52 @@ async function adminLoadVenueTees(id) {
   }
   loadAdminVenues();
 }
+let _adminVenueTeeViewOpen = {}; // tee id -> bool, which per-tee hole tables are expanded (Dev-86)
+function venueTeeHolesTableHtml(t) {
+  const holes = Array.isArray(t.holes) ? t.holes : [];
+  if (!holes.length) return '<div style="font-size:0.72rem;color:var(--text-muted);padding:6px 0">No hole data stored for this tee.</div>';
+  const cell = (label, val) => `<td style="padding:3px 6px;text-align:center;border-bottom:1px solid var(--border)">${val ?? '—'}</td>`;
+  const front = holes.slice(0, 9), back = holes.slice(9, 18);
+  const rowSet = (set, offset) => `
+    <tr>${set.map((h, i) => `<th style="padding:3px 6px;font-size:0.68rem;color:var(--text-muted);text-align:center;border-bottom:1px solid var(--border)">${offset + i + 1}</th>`).join('')}</tr>
+    <tr><td colspan="${set.length}" style="font-size:0.65rem;color:var(--text-muted);padding:2px 6px">Par</td></tr>
+    <tr>${set.map(h => cell('par', h.par)).join('')}</tr>
+    <tr><td colspan="${set.length}" style="font-size:0.65rem;color:var(--text-muted);padding:2px 6px">Yardage</td></tr>
+    <tr>${set.map(h => cell('yardage', h.yardage)).join('')}</tr>
+    <tr><td colspan="${set.length}" style="font-size:0.65rem;color:var(--text-muted);padding:2px 6px">Hole HCP</td></tr>
+    <tr>${set.map(h => cell('handicap', h.handicap)).join('')}</tr>`;
+  return `
+    <div style="overflow-x:auto;margin:6px 0">
+      <table style="border-collapse:collapse;font-size:0.74rem;width:100%">
+        <tbody>
+          ${front.length ? rowSet(front, 0) : ''}
+        </tbody>
+      </table>
+      ${back.length ? `<table style="border-collapse:collapse;font-size:0.74rem;width:100%;margin-top:4px"><tbody>${rowSet(back, 9)}</tbody></table>` : ''}
+    </div>`;
+}
 function storedVenueTeesHtml(v) {
   const tees = _adminVenueTees[v.id];
   if (!tees) return '<div style="font-size:0.74rem;color:var(--text-muted)">Loading stored tees…</div>';
   if (!tees.length) return '<div style="font-size:0.74rem;color:var(--text-muted)">No tees stored yet for this venue.</div>';
   return tees.map(t => `
-    <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">
-      <div style="flex:1;font-size:0.78rem">
-        <strong>${t.tee_name}</strong> <span style="color:var(--text-muted)">(${t.gender || 'unspecified'}${t.course_rating != null ? `, ${t.course_rating}/${t.slope_rating}` : ''}${t.par_total != null ? `, par ${t.par_total}` : ''})</span>
-        ${t.locked ? ' <span style="color:#b45309;font-size:0.7rem">🔒 manually edited</span>' : ''}
+    <div style="padding:4px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;font-size:0.78rem">
+          <strong>${t.tee_name}</strong> <span style="color:var(--text-muted)">(${t.gender || 'unspecified'}${t.course_rating != null ? `, ${t.course_rating}/${t.slope_rating}` : ''}${t.par_total != null ? `, par ${t.par_total}` : ''})</span>
+          ${t.locked ? ' <span style="color:#b45309;font-size:0.7rem">🔒 manually edited</span>' : ''}
+        </div>
+        <button class="btn btn-ghost btn-sm" style="font-size:0.7rem;white-space:nowrap" onclick="adminToggleVenueTeeView(${t.id})">
+          ${_adminVenueTeeViewOpen[t.id] ? 'Hide' : 'View'} ${_adminVenueTeeViewOpen[t.id] ? '▾' : '▸'}
+        </button>
+        <button class="btn btn-secondary btn-sm" style="font-size:0.7rem;white-space:nowrap;color:#b91c1c" onclick="adminDeleteVenueTee(${v.id}, ${t.id})">Delete</button>
       </div>
-      <button class="btn btn-secondary btn-sm" style="font-size:0.7rem;white-space:nowrap;color:#b91c1c" onclick="adminDeleteVenueTee(${v.id}, ${t.id})">Delete</button>
+      ${_adminVenueTeeViewOpen[t.id] ? venueTeeHolesTableHtml(t) : ''}
     </div>`).join('');
+}
+function adminToggleVenueTeeView(teeId) {
+  _adminVenueTeeViewOpen[teeId] = !_adminVenueTeeViewOpen[teeId];
+  loadAdminVenues();
 }
 function venueGcLookupEditorHtml(v) {
   const results = _adminVenueGcResults[v.id] || [];
