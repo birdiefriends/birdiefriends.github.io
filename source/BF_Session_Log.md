@@ -4368,7 +4368,7 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
@@ -4503,6 +4503,16 @@ leave, open the APP somewhere else and back to normal") and asked for it "live j
    - **Deploy order:** paste `worker.js` into the `birdiefriends-push` Worker, **then** `bf_push`. The
      rail needs the Worker change even for Brian: `loadVenues()` always uses the public route (no
      PIN), so without it the phone never sees Moselem's coordinates and the rail stays hidden.
+
+**9. Rail + Live Panel coexistence (v4.7.3), same session.** Brian asked to see the rail with a gamed
+round's Live Panel open. Rendered (real Live Panel classes + the shipped rail renderer): with the
+banner collapsed they coexist cleanly, but with the panel open the rail covered the hole 9/18 buttons,
+Albatross and "Change ›", and Photo/Note appeared twice. **Shipped:** the rail auto-tucks while
+`_livePanelOpen` (the effective state is `_livePanelOpen ? !_atCoursePanelPeek : _atCourseTucked`); the
+grip "peeks" it without touching the manual tuck state; `toggleLivePanel()` resets the peek and
+re-renders the rail. The direction this suggests (to decide after the beta, per Brian): **rail = quick
+shortcut layer, Live Panel = full workspace**, likely with capture on the rail only and the panel's
+Photos section retired. Tests: 7 new rail checks (28 in the file, 95 total).
 
 **Carry-forward:**
 - Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
