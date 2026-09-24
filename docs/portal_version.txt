@@ -1,3 +1,6 @@
+v4.7.1 · 2026-09-24
+Deployed: 2026-09-24 18:46 (Event card icon row: Rules moved to the far right so Venue shifts left into view — on a phone the row fits about five icons, and Venue was being cut off with no way to reach it.)
+
 v4.7.0 · 2026-09-24
 Deployed: 2026-09-24 18:05 (UI: (1) A Gathering with games turned on now carries a faint gold "competition seal" watermark on its event card — trophy in a laurel wreath, with the Gathering's own games (e.g. GAME ON · SKINS · CTP · BIRDIEBALL) running around the ring, cropped off the right edge like a stamp. It sits behind the card's text and buttons. (2) Venue viewer redesigned: a tee dropdown with a color swatch (defaults to the median-length men's tee and remembers your pick for the session), a Par / Yards / Rating / Slope strip, and a dense scorecard grid — Out/In/Total with clearly separated Yds, Par and HCP rows, hardest holes (HCP 1–6) shaded, front and back nines column-aligned. The admin Venue Manager's own table is unchanged.)
 
