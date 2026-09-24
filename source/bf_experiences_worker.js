@@ -158,8 +158,11 @@
 //                                             -- gatherings.host_id
 //     games TEXT NOT NULL,                   -- JSON array, subset of
 //                                             -- ['skins','cttp','birdieball']
-//     dollar_per_player REAL NOT NULL,       -- total pot = this x confirmed
-//                                             -- Yes registrants
+//     dollar_per_player REAL NOT NULL,       -- total pot = this x players
+//                                             -- with a scorecard in at Close
+//                                             -- (Dev-87 — was "confirmed Yes"
+//                                             -- in the Host Panel preview,
+//                                             -- which is still just a preview)
 //     allocations TEXT NOT NULL,             -- DEPRECATED as of Dev-86 round
 //                                             -- 3 — left in the schema (still
 //                                             -- written as '{}') but no
@@ -214,9 +217,11 @@
 //                                             -- BirdieBall's slice of it).
 //     status TEXT NOT NULL DEFAULT 'open',   -- 'open' (configured, Live Panel
 //                                             -- carve-out active) | 'closed'
-//                                             -- (payout calculated & posted
-//                                             -- to My History via the Notes
-//                                             -- endpoint)
+//                                             -- (payout calculated & frozen
+//                                             -- in payout_summary via POST
+//                                             -- .../:id/close; My History
+//                                             -- reads it straight from here —
+//                                             -- Dev-87, NOT via Notes)
 //     payout_summary TEXT,                   -- JSON snapshot of the computed
 //                                             -- payout, once closed — same
 //                                             -- "frozen snapshot" reasoning as
@@ -1096,6 +1101,59 @@ export default {
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error saving games config: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /bfe/gathering-games/:gathering_id/close — Dev-87 Close & Calculate.
+    // Body: { host_id, payout_summary: {...} }. The payout is computed
+    // client-side in portal.html (computeGatheringGamesPayout) because its
+    // inputs live in three other places this Worker can't read — gross-stroke
+    // scorecards (birdiefriends-push D1), CTP claims (Jotform), BirdieBall
+    // answers (here) — so this route just freezes the snapshot the host
+    // confirmed, same "frozen snapshot" reasoning as payout_plan. Re-closing
+    // overwrites the snapshot (a late scorecard fix). Unlike the other
+    // gathering-games routes, this one DOES check host_id against the stored
+    // row: it's the one write here that moves money numbers other players
+    // see in My History.
+    // POST /bfe/gathering-games/:gathering_id/reopen — Body: { host_id }.
+    // Flips back to 'open' and clears the snapshot, which puts the Gathering
+    // back in the status=open index (Live Panel returns) so the host can fix
+    // data and close again.
+    const gatheringGamesCloseMatch = url.pathname.match(/^\/bfe\/gathering-games\/(\d+)\/(close|reopen)$/);
+    if (request.method === 'POST' && gatheringGamesCloseMatch) {
+      let body;
+      try { body = await request.json(); } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const gid = gatheringGamesCloseMatch[1];
+      const action = gatheringGamesCloseMatch[2];
+      const { host_id, payout_summary } = body || {};
+      if (!host_id) {
+        return new Response(JSON.stringify({ error: 'host_id is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (action === 'close' && (!payout_summary || typeof payout_summary !== 'object')) {
+        return new Response(JSON.stringify({ error: 'payout_summary (object) is required to close' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const row = await env.DB.prepare(`SELECT host_id FROM bfe_gathering_games WHERE gathering_id = ?`).bind(gid).first();
+        if (!row) {
+          return new Response(JSON.stringify({ error: 'No games config for this gathering' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (String(row.host_id).trim().toLowerCase() !== String(host_id).trim().toLowerCase()) {
+          return new Response(JSON.stringify({ error: 'Only the host can ' + action + ' this Gathering\'s games' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (action === 'close') {
+          await env.DB.prepare(
+            `UPDATE bfe_gathering_games SET status = 'closed', payout_summary = ?, closed_at = datetime('now'), updated_at = datetime('now') WHERE gathering_id = ?`
+          ).bind(JSON.stringify(payout_summary), gid).run();
+        } else {
+          await env.DB.prepare(
+            `UPDATE bfe_gathering_games SET status = 'open', payout_summary = NULL, closed_at = NULL, updated_at = datetime('now') WHERE gathering_id = ?`
+          ).bind(gid).run();
+        }
+        return new Response(JSON.stringify({ ok: true, status: action === 'close' ? 'closed' : 'open' }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
