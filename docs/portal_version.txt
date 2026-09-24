@@ -1,2 +1,2 @@
-v4.4.0 · 2026-09-24
-Deployed: 2026-09-24 (New player-facing "Venue" icon on event cards — course tees, par/yardage/hole-HCP, and a Maps link, pulled from the same GolfCourseAPI data Venue Manager now collects)
+v4.4.1 · 2026-09-24
+Deployed: 2026-09-24 (Fix: Venue icon never appeared on first Home load — _venues cache was never warmed until My History/admin screens were opened; now loads alongside everything else and re-renders once ready)
