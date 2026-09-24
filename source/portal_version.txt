@@ -1,2 +1,2 @@
-v4.4.1 · 2026-09-24
-Deployed: 2026-09-24 (Fix: Venue icon never appeared on first Home load — _venues cache was never warmed until My History/admin screens were opened; now loads alongside everything else and re-renders once ready)
+v4.5.1 · 2026-09-24
+Deployed: 2026-09-24 (Dev-86 Phase 1 gaming, part 2: Live Panel now opens for a Gathering whenever its host has an active Games config — was hard-excluded before. New _gatheringGamesIndex cache, pre-warmed on Home load same as the _venues fix, backed by new /bfe/gathering-games?status=open)
