@@ -4368,7 +4368,7 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 and v4.6.2 for item 5 — both portal-only, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6 — all portal-only, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
@@ -4433,6 +4433,33 @@ first two:
      non-host sees nothing, aged-out Gathering closes via config, aged-out non-host refused, name
      from config, results render in place after closing). One Dev-87 assertion ("open → nothing
      shown") was deliberately updated to the new behavior. All suites: 67 checks passing.
+
+**6. UI polish (v4.7.0), same session.** Brian: "for gathering with Games, let's [add] a nice
+'competition' watermark, I don't have one in mind, find something cool" and "spruce up the venue
+detail: a dropdown tee selector, be much clearer, delineated par & hole handicap #'s. Whitespace is
+frowned on."
+   - **Competition seal** — `gamesSealSvg(games, uid)` and `gamesSealWatermarkHtml(evt)`: a gold
+     trophy with a generated laurel wreath and ring text built from the Gathering's own games
+     (`GAMES_SEAL_LABELS`), shown on a card only when `_gatheringGamesIndex` has an open config for
+     it. **Layering:** the card deliberately stays `overflow: visible` (the who's-playing panel
+     expands out of it), so the seal sits in its own clipped `.games-seal-layer` (inset 0, overflow
+     hidden, border-radius inherit, `z-index: -1`) inside a card with `.has-games { isolation:
+     isolate }`. That puts it above the card gradient but behind all text and buttons. Opacity 0.2,
+     cropped off the right edge, rotated -14°. It disappears once games are closed (the open index
+     drops the Gathering).
+   - **Venue viewer** — rewrote `renderVenueViewer`: a native `<select>` of tees with a colour swatch
+     parsed from the tee name (`TEE_COLORS`, `teeSwatchCss`; two-colour names like "Blue/White"
+     split diagonally), default = the median-yardage men's tee (`venueViewerDefaultTee`), with
+     `_venueViewerTeeSel[venue_id]` remembering the pick for the session. A Par/Yards/Rating/Slope
+     strip with a tee-coloured top border, and `venueScorecardHtml(t)`: fixed-layout Hole/Yds/Par/HCP
+     grid, tee-coloured header, bold par row, HCP 1–6 shaded (strongest on 1), OUT/IN/TOT totals,
+     front nine padded with a spacer column so both nines align. `toggleVenueViewerTee` /
+     `_venueViewerTeeOpen` removed (no other references). **The admin Venue Manager still uses
+     `venueTeeHolesTableHtml`, unchanged**, so the old "one shared table" comment no longer
+     applies to the player viewer.
+   - **Verified** by rendering both pieces with the portal's real CSS and the real functions,
+     against **live Moselem tee data** (4 tees, read from `/bfe/venue-tees?venue_id=3` via the
+     browser pane). No horizontal overflow at 375px. All test suites re-run clean (67 checks).
 
 **Carry-forward:**
 - Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
