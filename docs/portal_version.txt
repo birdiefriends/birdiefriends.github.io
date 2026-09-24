@@ -1,3 +1,6 @@
+v4.6.2 · 2026-09-24
+Deployed: 2026-09-24 17:45 (Gatherings games — two gaps closed: (1) A Gathering running only CTP and/or BirdieBall (no Skins) now captures gross strokes to D1 like a Skins one. Before, its Live Panel scorecards went to the old Jotform points form, so Close & Calculate found 0 players and couldn't close. (2) The host can now close from My History: an open gamed Gathering shows "🎮 Games still open → 🏁 Close & Calculate" on its My History story, so closing still works after the Live Panel's 8-hour window ends. Works even after the Gathering has aged out of the loaded list; after closing there, the results appear in place.)
+
 v4.6.1 · 2026-09-24
 Deployed: 2026-09-24 17:25 (Gatherings CTP moved off Jotform onto D1: a Gathering's Closest-to-the-Pin claims, live leaderboard, Undo, and Close & Calculate now all read/write the BFE Worker's bfe_cttp_entries table (keyed gathering:<id>, same as its scorecards) — the whole Gatherings games flow (scorecards, CTP, BirdieBall, results) is now Jotform-free. Series and Wally Cup rounds are unchanged and stay on the Jotform CTP form. Also: a Gathering CTP claim that fails to save no longer sends the "CttP Frontrunner" push.)
 
