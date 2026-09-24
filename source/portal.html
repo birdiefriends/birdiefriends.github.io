@@ -243,6 +243,12 @@ body {
 }
 .bf-card-body { padding: 14px 16px; }
 /* ── Event Cards ── */
+/* Dev-87 — games "competition seal" watermark (see gamesSealWatermarkHtml) */
+.event-card.has-games { isolation: isolate; }
+.games-seal-layer { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; z-index: -1; }
+.games-seal { position: absolute; right: -46px; top: 50%; width: 200px; height: 200px;
+  transform: translateY(-58%) rotate(-14deg); opacity: 0.2; }
+.games-seal svg { width: 100%; height: 100%; display: block; }
 .event-card {
   background: linear-gradient(135deg, #085041 0%, #0d6b54 100%);
   border-radius: var(--radius);
@@ -5222,6 +5228,59 @@ function showToastWithUndo(message, undoFn) {
   const t = setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 4500);
   el.querySelector('button').addEventListener('click', () => clearTimeout(t));
 }
+// Dev-87 — "competition seal" watermark for a Gathering with games on:
+// laurel wreath + trophy, with the Gathering's own game list running round
+// the ring. Faint gold, cropped off the card's right edge and tilted like a
+// stamp. Rendered in its own clipped layer at z-index:-1 inside an
+// isolation:isolate card, so it sits above the card gradient but BEHIND all
+// card text/buttons (and the card itself stays overflow-visible for the
+// expanding who's-playing panel).
+const GAMES_SEAL_LABELS = { skins: 'SKINS', cttp: 'CTP', birdieball: 'BIRDIEBALL' };
+function gamesSealSvg(games, uid) {
+  const names = (games || []).map(g => GAMES_SEAL_LABELS[g] || String(g).toUpperCase());
+  const ringText = `★ GAME ON ★ ${names.join(' · ')} `;
+  const c = 100, gold = '#F5C842';
+  // Laurel: two mirrored branches of leaves around the lower ring
+  let leaves = '';
+  for (let i = 0; i < 7; i++) {
+    for (const side of [-1, 1]) {
+      const deg = 90 + side * (28 + i * 17);          // from bottom centre up each side
+      const rad = deg * Math.PI / 180;
+      const x = (c + 50 * Math.cos(rad)).toFixed(1), y = (c + 50 * Math.sin(rad)).toFixed(1);
+      const rot = (deg + 90 + side * 28).toFixed(1);  // along the arc, tilted outward
+      leaves += `<ellipse cx="${x}" cy="${y}" rx="8.5" ry="3.4" transform="rotate(${rot} ${x} ${y})"/>`;
+    }
+  }
+  return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs><path id="gs-ring-${uid}" d="M ${c},${c} m -77,0 a 77,77 0 1,1 154,0 a 77,77 0 1,1 -154,0"/></defs>
+    <g fill="none" stroke="${gold}">
+      <circle cx="${c}" cy="${c}" r="96" stroke-width="2.5"/>
+      <circle cx="${c}" cy="${c}" r="90" stroke-width="0.9" stroke-dasharray="2 3"/>
+      <circle cx="${c}" cy="${c}" r="64" stroke-width="1.6"/>
+    </g>
+    <text fill="${gold}" font-family="'Instrument Sans',system-ui,sans-serif" font-size="12.5" font-weight="800" letter-spacing="2">
+      <textPath href="#gs-ring-${uid}" textLength="478" lengthAdjust="spacing">${ringText}</textPath>
+    </text>
+    <g fill="${gold}">${leaves}</g>
+    <g fill="${gold}">
+      <path d="M80 66 H120 V82 C120 101 110 110 100 110 C90 110 80 101 80 82 Z"/>
+      <rect x="96" y="110" width="8" height="10"/>
+      <rect x="87" y="120" width="26" height="5" rx="1.5"/>
+      <rect x="83" y="126" width="34" height="7" rx="2"/>
+    </g>
+    <g fill="none" stroke="${gold}" stroke-width="3.2" stroke-linecap="round">
+      <path d="M80 71 C66 71 66 93 84 96"/><path d="M120 71 C134 71 134 93 116 96"/>
+    </g>
+    <path fill="#085041" d="M100 74 l2.9 5.9 6.5 .9 -4.7 4.6 1.1 6.5 -5.8 -3.1 -5.8 3.1 1.1 -6.5 -4.7 -4.6 6.5 -.9z"/>
+  </svg>`;
+}
+function gamesSealWatermarkHtml(evt) {
+  if (!evt || evt.source !== 'gathering') return '';
+  const cfg = _gatheringGamesIndex.get(evt.gatheringId);
+  if (!cfg || !Array.isArray(cfg.games) || !cfg.games.length) return '';
+  const uid = String(evt.gatheringId).replace(/[^\w-]/g, '');
+  return `<div class="games-seal-layer" aria-hidden="true"><div class="games-seal">${gamesSealSvg(cfg.games, uid)}</div></div>`;
+}
 function buildEventCard(evt, isPast) {
   // Dev-94 — canceled overlay check, done first: a canceled event still
   // renders (date/players/etc. all computed normally below) but the
@@ -5339,7 +5398,9 @@ function buildEventCard(evt, isPast) {
       style="color:rgba(255,255,255,0.55);text-decoration:none;font-size:0.78rem;font-weight:600;white-space:nowrap;transition:color 0.15s"
       onmouseenter="this.style.color='rgba(255,255,255,0.9)'" onmouseleave="this.style.color='rgba(255,255,255,0.55)'">💬 Text ${hostFirst}</a>`;
   })();
-  return `<div class="event-card ${fmtClass}${isPast?' past':''}${isCanceled?' canceled':''}" id="card-${evt.id}">
+  const gamesSeal = gamesSealWatermarkHtml(evt); // Dev-87
+  return `<div class="event-card ${fmtClass}${isPast?' past':''}${isCanceled?' canceled':''}${gamesSeal ? ' has-games' : ''}" id="card-${evt.id}">
+    ${gamesSeal}
     ${isCanceled ? `
     <div class="event-card-canceled-overlay">
       <div class="event-card-canceled-stamp">Canceled</div>
@@ -13559,7 +13620,7 @@ function openRulesModal() {
 // other player-facing venue lookup (logo, weather chip, CTP holes).
 let _venueViewerVenue = null;
 let _venueViewerTees = [];
-let _venueViewerTeeOpen = {};
+let _venueViewerTeeSel = {}; // venue_id -> selected tee id (session memory: reopening a venue keeps your tee)
 async function openVenueViewerModal(evtOrId) {
   const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => e.id === evtOrId);
   if (!evt) return;
@@ -13567,7 +13628,6 @@ async function openVenueViewerModal(evtOrId) {
   if (!venue) return;
   _venueViewerVenue = venue;
   _venueViewerTees = [];
-  _venueViewerTeeOpen = {};
   const titleEl = document.getElementById('venue-viewer-title');
   if (titleEl) titleEl.textContent = `⛳ ${venue.name}`;
   const bodyEl = document.getElementById('venue-viewer-body');
@@ -13582,33 +13642,117 @@ async function openVenueViewerModal(evtOrId) {
   }
   renderVenueViewer();
 }
+// Dev-87 — tee colour swatch from the tee's own name ("Blue", "Blue/White",
+// "Gold", "Combo"…). Two-colour names split the swatch diagonally.
+const TEE_COLORS = { black: '#1b1b1b', blue: '#1f5fbf', white: '#f4f4f1', gold: '#d4a017', yellow: '#e8c31b',
+  red: '#c0392b', green: '#1f8a4c', silver: '#a7afb6', gray: '#8d959c', grey: '#8d959c', orange: '#e67e22',
+  purple: '#7d3c98', copper: '#b87333', bronze: '#a0703c', tan: '#c8a97e', maroon: '#7b1e2b' };
+function teeSwatchCss(name) {
+  const cols = String(name || '').toLowerCase().split(/[\/\-&+ ]+/).map(w => TEE_COLORS[w]).filter(Boolean);
+  if (!cols.length) return '#8d959c';
+  if (cols.length === 1) return cols[0];
+  return `linear-gradient(135deg, ${cols[0]} 0 50%, ${cols[1]} 50% 100%)`;
+}
+function teeHeaderColor(name) {
+  const w = String(name || '').toLowerCase().split(/[\/\-&+ ]+/).find(x => TEE_COLORS[x] && !['white', 'yellow', 'tan', 'silver'].includes(x));
+  return w ? TEE_COLORS[w] : 'var(--green-dark)';
+}
+// Default tee: the men's tee with the median yardage (the one most of the
+// group plays), unless one was picked earlier this session.
+function venueViewerDefaultTee(tees) {
+  const pool = tees.filter(t => /^m/i.test(t.gender || '')).length ? tees.filter(t => /^m/i.test(t.gender || '')) : tees;
+  const byYds = pool.slice().sort((a, b) => (a.total_yards || 0) - (b.total_yards || 0));
+  return byYds[Math.floor((byYds.length - 1) / 2)] || tees[0];
+}
+// Dense scorecard grid: Hole / Yds / Par / HCP, Out + In + Tot. Hardest
+// holes (HCP 1–6) shaded darker so they pop; par row is the bold one.
+function venueScorecardHtml(t) {
+  const holes = Array.isArray(t.holes) ? t.holes : [];
+  if (!holes.length) return '<div style="font-size:0.78rem;color:var(--text-muted);padding:8px 0">No hole-by-hole data stored for this tee.</div>';
+  const head = teeHeaderColor(t.tee_name);
+  const sum = (arr, k) => arr.reduce((a, h) => a + (Number(h[k]) || 0), 0);
+  const td = 'padding:5px 0;text-align:center;border-right:1px solid var(--border)';
+  const lbl = 'padding:5px 6px;text-align:left;font-size:0.62rem;font-weight:800;letter-spacing:0.04em;border-right:1px solid var(--border);white-space:nowrap';
+  const hcpShade = n => (n >= 1 && n <= 6) ? `background:rgba(192,57,43,${(0.30 - (n - 1) * 0.04).toFixed(2)});font-weight:800` : '';
+  const half = (set, offset, extra) => {
+    const tot = (k, x) => x.map(([lab, v]) => `<td style="${td};font-weight:800;background:rgba(0,0,0,0.05)">${v(k)}</td>`).join('');
+    return `<table class="venue-sc" style="border-collapse:collapse;width:100%;table-layout:fixed;font-size:0.72rem;margin-bottom:6px;border:1px solid var(--border)">
+      <colgroup><col style="width:38px">${set.map(() => '<col>').join('')}${extra.map(() => '<col style="width:38px">').join('')}</colgroup>
+      <tr style="background:${head};color:#fff">
+        <td style="${lbl};border-color:rgba(255,255,255,0.25)">HOLE</td>
+        ${set.map((h, i) => `<td style="${td};border-color:rgba(255,255,255,0.25);font-weight:800">${offset + i + 1}</td>`).join('')}
+        ${extra.map(([lab]) => `<td style="${td};border-color:rgba(255,255,255,0.25);font-weight:800;font-size:0.62rem">${lab}</td>`).join('')}
+      </tr>
+      <tr style="border-top:1px solid var(--border)">
+        <td style="${lbl};color:var(--text-muted)">YDS</td>
+        ${set.map(h => `<td style="${td};color:var(--text-muted);font-size:0.68rem">${h.yardage ?? '—'}</td>`).join('')}
+        ${tot('yardage', extra)}
+      </tr>
+      <tr style="border-top:1px solid var(--border);background:var(--green-light)">
+        <td style="${lbl};color:var(--green-dark)">PAR</td>
+        ${set.map(h => `<td style="${td};font-weight:800;font-size:0.8rem;color:var(--green-dark)">${h.par ?? '—'}</td>`).join('')}
+        ${tot('par', extra)}
+      </tr>
+      <tr style="border-top:1px solid var(--border)">
+        <td style="${lbl};color:#8e2b20">HCP</td>
+        ${set.map(h => `<td style="${td};${hcpShade(Number(h.handicap))}">${h.handicap ?? '—'}</td>`).join('')}
+        ${extra.map(() => `<td style="${td};background:rgba(0,0,0,0.05)"></td>`).join('')}
+      </tr>
+    </table>`;
+  };
+  const front = holes.slice(0, 9), back = holes.slice(9, 18);
+  const outCol = ['OUT', k => sum(front, k) || '—'];
+  const inCol  = ['IN',  k => sum(back, k) || '—'];
+  const totCol = ['TOT', k => sum(holes, k) || '—'];
+  // Front gets an empty spacer column when there's a back nine, so its hole
+  // columns line up exactly with the back nine's (which carries IN + TOT).
+  const spacer = ['', () => ''];
+  return half(front, 0, back.length ? [outCol, spacer] : [outCol])
+    + (back.length ? half(back, 9, [inCol, totCol]) : '')
+    + `<div style="display:flex;gap:10px;font-size:0.64rem;color:var(--text-muted);margin-top:-2px">
+        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:rgba(192,57,43,0.3);vertical-align:-1px"></span> HCP 1–6 · hardest holes</span>
+        <span>HCP = hole handicap (stroke index)</span></div>`;
+}
 function renderVenueViewer() {
   const bodyEl = document.getElementById('venue-viewer-body');
   const v = _venueViewerVenue;
   if (!bodyEl || !v) return;
-  const mapLine = (v.lat != null && v.lng != null)
-    ? `<a href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank" rel="noopener"
-        style="display:inline-block;margin-bottom:10px;font-size:0.78rem;color:var(--green-dark);text-decoration:none">📍 Open in Maps</a>`
+  const mapBtn = (v.lat != null && v.lng != null)
+    ? `<a href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank" rel="noopener" title="Open in Maps"
+        style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;
+        border:1.5px solid var(--border);text-decoration:none;font-size:1.05rem;background:var(--surface)">📍</a>`
     : '';
   if (!_venueViewerTees.length) {
-    bodyEl.innerHTML = `${mapLine}<div style="font-size:0.82rem;color:var(--text-muted)">No tee data on file yet for this course.</div>`;
+    bodyEl.innerHTML = `<div style="display:flex;gap:8px;align-items:center">${mapBtn}<div style="font-size:0.82rem;color:var(--text-muted)">No tee data on file yet for this course.</div></div>`;
     return;
   }
-  bodyEl.innerHTML = `${mapLine}${_venueViewerTees.map(t => `
-    <div style="padding:8px 0;border-bottom:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="flex:1;font-size:0.84rem">
-          <strong>${t.tee_name}</strong> <span style="color:var(--text-muted)">(${t.gender || 'unspecified'}${t.course_rating != null ? `, ${t.course_rating}/${t.slope_rating}` : ''}${t.par_total != null ? `, par ${t.par_total}` : ''}${t.total_yards != null ? `, ${t.total_yards}y` : ''})</span>
-        </div>
-        <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;white-space:nowrap" onclick="toggleVenueViewerTee(${t.id})">
-          ${_venueViewerTeeOpen[t.id] ? 'Hide' : 'View'} ${_venueViewerTeeOpen[t.id] ? '▾' : '▸'}
-        </button>
+  let t = _venueViewerTees.find(x => x.id === _venueViewerTeeSel[v.id]);
+  if (!t) { t = venueViewerDefaultTee(_venueViewerTees); _venueViewerTeeSel[v.id] = t.id; }
+  const g = x => /^m/i.test(x.gender || '') ? 'M' : (/^(f|w)/i.test(x.gender || '') ? 'W' : '');
+  const optLabel = x => `${x.tee_name}${g(x) ? ` (${g(x)})` : ''}${x.total_yards != null ? ` — ${Number(x.total_yards).toLocaleString()} yds` : ''}`;
+  const stat = (label, val) => `<div style="flex:1;padding:6px 4px;text-align:center;border-right:1px solid var(--border)">
+      <div style="font-size:0.58rem;font-weight:800;letter-spacing:0.06em;color:var(--text-muted)">${label}</div>
+      <div style="font-size:0.98rem;font-weight:800;line-height:1.2">${val ?? '—'}</div></div>`;
+  bodyEl.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <div style="position:relative;flex:1;min-width:0">
+        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;
+          background:${teeSwatchCss(t.tee_name)};border:1.5px solid rgba(0,0,0,0.25);pointer-events:none"></span>
+        <select id="venue-viewer-tee" onchange="selectVenueViewerTee(this.value)"
+          style="width:100%;height:40px;padding:0 30px 0 36px;border-radius:10px;border:1.5px solid var(--border);
+          font-family:inherit;font-size:0.86rem;font-weight:700;background:var(--surface);color:var(--text);appearance:auto">
+          ${_venueViewerTees.map(x => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${escapeHtml(optLabel(x))}</option>`).join('')}
+        </select>
       </div>
-      ${_venueViewerTeeOpen[t.id] ? venueTeeHolesTableHtml(t) : ''}
-    </div>`).join('')}`;
+      ${mapBtn}
+    </div>
+    <div style="display:flex;border:1px solid var(--border);border-top:3px solid ${teeHeaderColor(t.tee_name)};border-radius:8px;overflow:hidden;margin-bottom:8px">
+      ${stat('PAR', t.par_total)}${stat('YARDS', t.total_yards != null ? Number(t.total_yards).toLocaleString() : null)}${stat('RATING', t.course_rating)}${stat('SLOPE', t.slope_rating).replace('border-right:1px solid var(--border)', '')}
+    </div>
+    ${venueScorecardHtml(t)}`;
 }
-function toggleVenueViewerTee(teeId) {
-  _venueViewerTeeOpen[teeId] = !_venueViewerTeeOpen[teeId];
+function selectVenueViewerTee(teeId) {
+  if (_venueViewerVenue) _venueViewerTeeSel[_venueViewerVenue.id] = Number(teeId);
   renderVenueViewer();
 }
 // Dev-76 — read-only Results link (spec §4c) for BFE-backed events
