@@ -1,2 +1,2 @@
-v4.3.1 · 2026-09-24
-Deployed: 2026-09-24 (Venue Manager: per-tee hole viewer — Par/Yardage/Hole HCP table for each stored tee)
+v4.3.2 · 2026-09-24
+Deployed: 2026-09-24 (Venue Manager: total yardage now shown in the stored-tee summary line, always visible, not only in the expanded hole view)
