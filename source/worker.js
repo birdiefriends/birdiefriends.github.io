@@ -1009,7 +1009,11 @@ export default {
       try {
         const sql = isCommissioner
           ? `SELECT id, name, active, sort_order, pars, lat, lng, logo_key, theme_motif FROM venues ORDER BY sort_order ASC, name ASC`
-          : `SELECT id, name, pars, logo_key, theme_motif FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`;
+          // Dev-87 — lat/lng now public too: a golf course's location isn't
+          // sensitive, and players' phones need it for the venue viewer's Maps
+          // button and the on-device "at the course" check (no player location
+          // is ever sent back here — the distance math runs on the phone).
+          : `SELECT id, name, pars, lat, lng, logo_key, theme_motif FROM venues WHERE active = 1 ORDER BY sort_order ASC, name ASC`;
         const rows = await env.DB.prepare(sql).all();
         return new Response(JSON.stringify({ ok: true, venues: rows.results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
