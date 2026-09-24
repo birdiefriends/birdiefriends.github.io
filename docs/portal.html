@@ -4426,6 +4426,13 @@ async function loadAllData() {
     // appeared on first paint (findVenueByName returns null while _venues
     // is still null), for every event, not just a BSGC-nickname mismatch.
     loadVenues().then(() => { if (dataLoaded) renderAll(); });
+    // Dev-86 (Task #6) — same fire-and-forget-then-re-render pattern again:
+    // hasLivePanelSupport()'s Gathering carve-out needs to know, for EVERY
+    // player viewing a card (not just the host), whether that Gathering has
+    // an open bfe_gathering_games config. _venues taught the lesson — this
+    // MUST be warmed on Home's own initial load, not lazily, or the Live
+    // Panel icon silently never appears on first paint.
+    refreshGatheringGamesIndex();
     // Silent subscription health check + identity refresh (invisible to players)
     setTimeout(osHealthCheck, 2000);
     // Write capacity=4 back to Jotform for any events that hit the 48hr lock
@@ -6058,7 +6065,16 @@ function formatClass(fmt) {
 // true individually as GS support lands, no other code changes needed.
 function hasLivePanelSupport(evt) {
   if (!evt) return false;
-  if (evt.source === 'gathering') return false;
+  if (evt.source === 'gathering') {
+    // Dev-86 (Task #6) — carve-out: a Gathering stays excluded from the
+    // Live Panel UNLESS its host has an open bfe_gathering_games config
+    // ("if the host config, selects 'gaming' then live panel is in play" —
+    // Brian). _gatheringGamesIndex is pre-warmed on Home's initial load
+    // (see refreshGatheringGamesIndex()) so this stays a synchronous
+    // lookup, not a fetch on every card render — same lesson the _venues
+    // warm-up bug already taught this session.
+    return _gatheringGamesIndex.has(evt.gatheringId);
+  }
   // Dev-92 (Scorecard Engine) — a BFE round explicitly running the
   // scorecard_only engine (Practice / fun round — no competitive calc)
   // gets Live Panel access regardless of its format string, checked BEFORE
@@ -9537,6 +9553,15 @@ let _crewPickerMode     = 'create';  // 'create' | 'invite' — controls Done bu
 let _pendingCrewName    = null;      // set by save-crew dialog; read by submitNewGathering
 let _venues             = null;      // D1 confirmed venues, loaded once per session
 let _hostTemplates      = null;      // gathering templates for current host, loaded on panel open
+// Dev-86 Phase 1 gaming — host's own bfe_gathering_games configs, keyed by
+// gathering_id, loaded once per panel open alongside templates. Map, not
+// array: renderHostPanelList() needs an O(1) lookup per card, and the
+// _venues warm-up bug (fixed earlier this session) taught the lesson —
+// this MUST be populated before the list renders, not lazily on click.
+let _hostGamesByGathering = null;
+let _gamesFormGathering = null;       // gatheringId currently open in showGatheringGamesForm
+let _gamesFormSelected  = new Set();  // subset of ['skins','cttp','birdieball']
+let _gamesFormAllocations = {};       // { skins: pct, cttp: pct, birdieball: pct }
 // ── Text formatting utilities ────────────────────────────────────────────────
 // Applied on form submit — never on keystroke (would be jarring while typing).
 const _tcSkip = new Set(['a','an','the','at','by','for','in','of','on','or','and','but','nor','to','up','as','is']);
@@ -9867,7 +9892,11 @@ function openHostPanel() {
   const eyebrow = document.getElementById('host-sheet-eyebrow');
   if (eyebrow) eyebrow.textContent = `Hosting as ${currentPlayer}`;
   loadVenues();  // warm the cache so first venue keystroke is instant
-  loadHostTemplates().then(() => renderHostPanelList());
+  // Dev-86 — warm the games-config cache alongside templates. Both feed the
+  // very first renderHostPanelList() paint, so both are awaited before it
+  // renders (unlike the Home-screen _venues fix, this panel doesn't need to
+  // paint anything until this data is ready anyway).
+  Promise.all([loadHostTemplates(), loadHostGamesConfigs()]).then(() => renderHostPanelList());
 }
 function closeHostPanel(e) {
   if (e && e.target !== document.getElementById('host-sheet-overlay')) return;
@@ -9883,6 +9912,19 @@ async function loadHostTemplates() {
     _hostTemplates = [];
   }
   return _hostTemplates;
+}
+// Dev-86 — one call for every gathering this host has configured Phase 1
+// games on, avoiding an N+1 fetch per card in renderHostPanelList().
+async function loadHostGamesConfigs() {
+  try {
+    const res = await fetch(`${BFE_API}/bfe/gathering-games?host_id=${encodeURIComponent(currentPlayer)}`);
+    const data = await res.json();
+    const configs = data.ok ? (data.configs || []) : [];
+    _hostGamesByGathering = new Map(configs.map(c => [c.gathering_id, c]));
+  } catch(e) {
+    _hostGamesByGathering = new Map();
+  }
+  return _hostGamesByGathering;
 }
 function showTemplatePicker() {
   const templates = _hostTemplates || [];
@@ -13323,6 +13365,27 @@ function bfeEventNameCandidates(name) {
 //   "<umbrella>"                 — a single-round BFE event (one card, no split)
 // Value: { bfeEventId, bfeRoundId, roundName, umbrellaName, captureOpen,
 //   roster: Set<lowercased player name> }
+// Dev-86 (Task #6) — gathering_id -> open bfe_gathering_games config, for
+// EVERY host (not just currentPlayer), so hasLivePanelSupport() can grant
+// Live Panel access to any player viewing a Gathering with gaming active,
+// not only the host who configured it. Warmed once on Home's initial load
+// by refreshGatheringGamesIndex() (see loadAllData()) — same "pre-warm
+// before first paint, re-render once it lands" pattern the _venues bug
+// fix established, deliberately kept separate from _hostGamesByGathering
+// (Host Panel's own host-scoped Map, loaded lazily only when that panel
+// opens) since the two caches serve different readers at different times.
+let _gatheringGamesIndex = new Map();
+async function refreshGatheringGamesIndex() {
+  try {
+    const res = await fetch(`${BFE_API}/bfe/gathering-games?status=open`);
+    const data = await res.json();
+    const configs = data.ok ? (data.configs || []) : [];
+    _gatheringGamesIndex = new Map(configs.map(c => [c.gathering_id, c]));
+    if (typeof dataLoaded !== 'undefined' && dataLoaded) renderAll();
+  } catch (e) {
+    console.warn('[BFE] gathering-games index load failed:', e.message);
+  }
+}
 let _bfeBackedIndex = new Map();
 // umbrellaName -> same-shaped summary (one row per BFE EVENT, not per round)
 // — what the widget banner scans to find "is there a BFE trip open for
@@ -14284,6 +14347,10 @@ function renderHostPanelList() {
           <button class="btn btn-secondary-danger btn-sm"
             onclick="cancelGatheringFromPanel(${g.gatheringId},'${g.name.replace(/'/g, "\\'")}')">Cancel Gathering</button>
         </div>
+        <div class="host-gathering-actions">
+          <button class="btn btn-secondary btn-sm" style="flex:1;${(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId)) ? 'background:rgba(29,158,117,0.12);border-color:rgba(29,158,117,0.35);color:#1D9E75;font-weight:700' : ''}"
+            onclick="showGatheringGamesForm(${g.gatheringId})">🎮 Games${(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId)) ? ' ✓' : ''}</button>
+        </div>
       </div>`;
     }).join('');
   }
@@ -14881,6 +14948,172 @@ async function submitEditGathering(gatheringId) {
     console.error('submitEditGathering error:', e);
   } finally {
     if (btn) { btn.disabled = false; btn.classList.remove('btn-loading'); btn.textContent = '💾 Save Changes'; }
+  }
+}
+// ════════════════════════════════════════════════════════════════════════
+// Dev-86 Phase 1 gaming — Host Panel "🎮 Games" config
+// Whoever generates the gathering is responsible for the gaming config (no
+// commissioner gate here — Host Panel already scopes to this host's own
+// gatherings, per Brian: "Whoever generates the gathering is responsible
+// for the gaming config."). Same in-place host-sheet-body navigation as
+// showEditGatheringForm — no separate modal.
+// ════════════════════════════════════════════════════════════════════════
+const GATHERING_GAMES_META = {
+  skins:      { label: 'Skins',      icon: '⛳' },
+  cttp:       { label: 'CTP',        icon: '🎯' },
+  birdieball: { label: 'BirdieBall', icon: '🐦' }
+};
+function showGatheringGamesForm(gatheringId) {
+  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  if (!g) { showToast('Could not find Gathering', true); return; }
+  clearHostActionBar();
+  const existing = (_hostGamesByGathering && _hostGamesByGathering.get(gatheringId)) || null;
+  _gamesFormGathering = gatheringId;
+  _gamesFormSelected = new Set(existing ? existing.games : []);
+  _gamesFormAllocations = existing ? { ...existing.allocations } : {};
+  const backBtn = document.getElementById('host-sheet-back');
+  if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; renderHostPanelList(); }; }
+  const closeBtn = document.getElementById('host-sheet-close-btn');
+  if (closeBtn) { closeBtn.textContent = 'Cancel'; closeBtn.style.color = '#fff'; closeBtn.style.background = 'rgba(192,57,43,0.35)'; closeBtn.style.border = '1px solid rgba(224,82,82,0.4)'; }
+  const yesCount = gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes').length;
+  const body = document.getElementById('host-sheet-body');
+  body.innerHTML = `
+    <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;
+      letter-spacing:0.06em;margin-bottom:12px">🎮 Games — ${g.name}</div>
+    <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;margin-bottom:14px">
+      Pick what's in play. Every registered player's My History gets the result once it's published —
+      no separate scoring UI, this reuses your regular scorecards and CTP.
+    </div>
+    <div class="host-form-field">
+      <label>Games</label>
+      <div id="games-form-checklist">${gatheringGamesChecklistHtml()}</div>
+    </div>
+    <div class="host-form-field">
+      <label>$ per Player <span style="color:#c0392b">*</span></label>
+      <input type="number" id="games-form-dpp" min="0.01" step="0.01"
+        value="${existing ? existing.dollar_per_player : ''}" style="width:100px"
+        oninput="updateGamesFormPotPreview(${yesCount})">
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px" id="games-form-pot-preview"></div>
+    </div>
+    <div class="host-form-field" id="games-form-allocations-field" style="display:none">
+      <label>% Allocation <span style="font-size:0.75rem;font-weight:400;opacity:0.6">(must total 100%)</span></label>
+      <div id="games-form-allocations">${gatheringGamesAllocationsHtml()}</div>
+      <div style="font-size:0.78rem;font-weight:700;margin-top:6px" id="games-form-alloc-total"></div>
+    </div>
+    <button class="host-cta-btn" style="margin-top:16px" id="btn-save-games"
+      onclick="submitGatheringGames(${gatheringId})">💾 Save Games</button>
+    ${existing ? `
+    <button class="btn btn-secondary-danger btn-sm" style="width:100%;margin-top:10px"
+      onclick="deleteGatheringGames(${gatheringId},'${g.name.replace(/'/g,"\\'")}')">Turn Off Games</button>` : ''}
+  `;
+  updateGamesFormPotPreview(yesCount);
+  updateGamesFormAllocTotal();
+}
+function gatheringGamesChecklistHtml() {
+  return Object.keys(GATHERING_GAMES_META).map(key => {
+    const meta = GATHERING_GAMES_META[key];
+    const checked = _gamesFormSelected.has(key);
+    return `<div onclick="toggleGamesFormGame('${key}')"
+      style="padding:11px 14px;margin-bottom:8px;background:${checked ? 'var(--green-light)' : 'rgba(255,255,255,0.5)'};
+      border:1.5px solid ${checked ? 'var(--green)' : 'var(--border-med)'};border-radius:10px;
+      display:flex;align-items:center;gap:10px;cursor:pointer">
+      <span style="font-size:1.1rem">${checked ? '☑' : '☐'}</span>
+      <span style="font-weight:600;color:${checked ? 'var(--green-dark)' : 'var(--text)'}">${meta.icon} ${meta.label}</span>
+    </div>`;
+  }).join('');
+}
+function toggleGamesFormGame(key) {
+  if (_gamesFormSelected.has(key)) {
+    _gamesFormSelected.delete(key);
+    delete _gamesFormAllocations[key];
+  } else {
+    _gamesFormSelected.add(key);
+    if (!(key in _gamesFormAllocations)) _gamesFormAllocations[key] = 0;
+  }
+  const checklist = document.getElementById('games-form-checklist');
+  if (checklist) checklist.innerHTML = gatheringGamesChecklistHtml();
+  const allocField = document.getElementById('games-form-allocations-field');
+  if (allocField) allocField.style.display = _gamesFormSelected.size ? '' : 'none';
+  const allocDiv = document.getElementById('games-form-allocations');
+  if (allocDiv) allocDiv.innerHTML = gatheringGamesAllocationsHtml();
+  updateGamesFormAllocTotal();
+}
+function gatheringGamesAllocationsHtml() {
+  return [..._gamesFormSelected].map(key => {
+    const meta = GATHERING_GAMES_META[key];
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span style="flex:1;font-size:0.88rem;font-weight:600">${meta.icon} ${meta.label}</span>
+      <input type="number" min="0" max="100" step="1" value="${_gamesFormAllocations[key] || 0}"
+        oninput="setGamesFormAllocation('${key}', this.value)" style="width:70px;text-align:right">
+      <span style="font-size:0.85rem;color:var(--text-muted)">%</span>
+    </div>`;
+  }).join('');
+}
+function setGamesFormAllocation(key, val) {
+  _gamesFormAllocations[key] = parseFloat(val) || 0;
+  updateGamesFormAllocTotal();
+}
+function updateGamesFormAllocTotal() {
+  const el = document.getElementById('games-form-alloc-total');
+  if (!el) return;
+  const total = [..._gamesFormSelected].reduce((sum, key) => sum + (_gamesFormAllocations[key] || 0), 0);
+  const ok = Math.abs(total - 100) < 0.5;
+  el.textContent = `Total: ${total}%${ok ? ' ✅' : ' — must equal 100%'}`;
+  el.style.color = ok ? 'var(--green-dark)' : '#c0392b';
+}
+function updateGamesFormPotPreview(yesCount) {
+  const el = document.getElementById('games-form-pot-preview');
+  const input = document.getElementById('games-form-dpp');
+  if (!el || !input) return;
+  const dpp = parseFloat(input.value) || 0;
+  el.textContent = dpp > 0
+    ? `Pot preview: $${(dpp * yesCount).toFixed(2)} (${yesCount} confirmed Yes × $${dpp.toFixed(2)})`
+    : `${yesCount} confirmed Yes so far`;
+}
+async function submitGatheringGames(gatheringId) {
+  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  if (!g) { showToast('Gathering not found', true); return; }
+  const games = [..._gamesFormSelected];
+  if (!games.length) { showToast('Select at least one game', true); return; }
+  const dpp = parseFloat(document.getElementById('games-form-dpp').value);
+  if (!dpp || dpp <= 0) { showToast('$ per Player must be greater than 0', true); return; }
+  const allocations = {};
+  games.forEach(key => { allocations[key] = _gamesFormAllocations[key] || 0; });
+  const total = games.reduce((sum, key) => sum + allocations[key], 0);
+  if (Math.abs(total - 100) >= 0.5) { showToast(`Allocations must add up to 100% (got ${total}%)`, true); return; }
+  const btn = document.getElementById('btn-save-games');
+  if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); btn.textContent = 'Saving…'; }
+  try {
+    const resp = await gatheringsFetchJSON(`${BFE_API}/bfe/gathering-games`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        gathering_id: gatheringId, gathering_name: g.name, host_id: currentPlayer,
+        games, dollar_per_player: dpp, allocations
+      })
+    });
+    if (!resp.ok) throw new Error(resp.error || 'Save failed');
+    await loadHostGamesConfigs();
+    showToast('✅ Games configured');
+    renderHostPanelList();
+  } catch(e) {
+    showToast('❌ ' + e.message, true);
+    console.error('submitGatheringGames error:', e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.classList.remove('btn-loading'); btn.textContent = '💾 Save Games'; }
+  }
+}
+async function deleteGatheringGames(gatheringId, name) {
+  if (!confirm(`Turn off games for "${name}"? This clears the current config.`)) return;
+  try {
+    const resp = await gatheringsFetchJSON(`${BFE_API}/bfe/gathering-games/${gatheringId}`, { method: 'DELETE' });
+    if (!resp.ok) throw new Error(resp.error || 'Failed to turn off games');
+    await loadHostGamesConfigs();
+    showToast('✅ Games turned off');
+    renderHostPanelList();
+  } catch(e) {
+    showToast('❌ ' + e.message, true);
+    console.error('deleteGatheringGames error:', e);
   }
 }
 async function showNewGatheringForm() {
