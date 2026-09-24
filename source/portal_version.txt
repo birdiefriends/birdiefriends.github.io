@@ -1,3 +1,6 @@
+v4.7.3 · 2026-09-24
+Deployed: 2026-09-24 19:15 (BETA rail: it now tucks itself whenever the Live Panel is open — the panel already has capture and scoring and needs its full width (otherwise the rail covered holes 9/18 and the right-hand buttons). Tap the ‹ tab to peek it open anyway; closing the Live Panel brings the rail back. The rail's 🏆 Games opens the panel and tucks the rail in one move.)
+
 v4.7.2 · 2026-09-24
 Deployed: 2026-09-24 19:20 (BETA, Brian only: "At the course" rail — a slim vertical toolbar on the right edge (Photo, Note, Yardage, Rules, Course, + Games when the round is live) that appears only while your phone is within ~1 mile of the venue of a round you're registered for today. Location is checked on the phone when the app opens or comes back to the foreground, and is never sent anywhere. Tuck it with ›; it also slides aside while you scroll. Test switch: portal.html?atcourse=1 forces it on (labeled TEST), ?atcourse=0 turns that off. Also: the venue viewer's 📍 Maps button now works for all players, since the main Worker sends venue coordinates publicly.)
 
