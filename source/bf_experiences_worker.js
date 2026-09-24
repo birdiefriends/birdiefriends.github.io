@@ -419,7 +419,7 @@
 //     nickname TEXT,
 //     current_hcp REAL,
 //     hcp_history TEXT,                   -- JSON [{date, hcp, source, flagged}], oldest first
-//     hcp_source TEXT,                    -- source of the CURRENT value: ghin_import | estimated | manual | player_weekly
+//     hcp_source TEXT,                    -- source of the CURRENT value: ghin_import | estimated | manual | no_hcp | player_weekly
 //                                          -- 'estimated' locks player_weekly self-report until replaced
 //     last_hcp_prompted_at TEXT,          -- last time Portal's weekly HCP nudge was shown to this player
 //     ghin_member INTEGER DEFAULT 0,
@@ -836,7 +836,13 @@ export default {
     // see source/bf_players_migration.sql — creates the table and seeds it
     // from the existing bfe_player_profiles rows.
     const HCP_FLAG_DELTA = 1.0;
-    const HCP_VALID_SOURCES = ['ghin_import', 'estimated', 'manual', 'player_weekly'];
+    const HCP_VALID_SOURCES = ['ghin_import', 'estimated', 'manual', 'no_hcp', 'player_weekly'];
+    // no_hcp (Dev-86 addition, 2026-09-24): an explicit "we don't have
+    // enough data to even estimate" state (e.g. a player after one
+    // BFSeries event, no GHIN profile) — distinct from a player who's
+    // simply never been touched (hcp_source IS NULL). Locks player_weekly
+    // the same way estimated does.
+    const HCP_LOCKING_SOURCES = ['estimated', 'no_hcp'];
 
     // GET /bfe/players — list all, same shape/ordering as /bfe/player-profiles
     if (request.method === 'GET' && url.pathname === '/bfe/players') {
@@ -880,11 +886,14 @@ export default {
       try {
         const playerId = url.pathname.split('/bfe/players/')[1].split('/hcp')[0];
         const body = await request.json();
-        const hcp = (body?.hcp === undefined || body?.hcp === null || isNaN(body.hcp)) ? null : Number(body.hcp);
         const source = body?.source;
         if (!HCP_VALID_SOURCES.includes(source)) {
           return new Response(JSON.stringify({ error: `source must be one of: ${HCP_VALID_SOURCES.join(', ')}` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
+        // no_hcp always means null, whatever (if anything) was sent as `hcp`.
+        const hcp = source === 'no_hcp'
+          ? null
+          : (body?.hcp === undefined || body?.hcp === null || isNaN(body.hcp)) ? null : Number(body.hcp);
         // player_weekly is the PLAYER's own self-report from the Portal — they
         // don't know the commissioner PIN, so it stays open, same posture as
         // the rest of the Portal-facing write paths. Every other source is a
@@ -897,9 +906,12 @@ export default {
         if (!existing) {
           return new Response(JSON.stringify({ error: 'Player not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        const locked = existing.hcp_source === 'estimated';
+        const locked = HCP_LOCKING_SOURCES.includes(existing.hcp_source);
         if (source === 'player_weekly' && locked) {
-          return new Response(JSON.stringify({ error: 'This player\'s HCP is commissioner-estimated and locked from self-report.', locked: true }), { status: 423, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          const lockedMessage = existing.hcp_source === 'no_hcp'
+            ? 'This player has no established HCP yet — ask the commissioner to set one before self-reporting.'
+            : 'This player\'s HCP is commissioner-estimated and locked from self-report.';
+          return new Response(JSON.stringify({ error: lockedMessage, locked: true, lockedReason: existing.hcp_source }), { status: 423, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         let history = existing.hcp_history ? JSON.parse(existing.hcp_history) : [];
         const changed = existing.current_hcp !== hcp;
