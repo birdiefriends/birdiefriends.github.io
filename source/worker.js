@@ -3276,5 +3276,86 @@ export default {
       status: osResp.status,
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
+  },
+
+  // ── Host HCP nudge (Dev-86, 2026-09-24) ─────────────────────────────────
+  // Replaces player self-report: instead of asking players to keep their own
+  // HCP current, Brian gets pinged himself ahead of any event hosted by
+  // someone OTHER than him — the D1 Gatherings model already tracks who's
+  // hosting via host_id — so he can run his usual full membership HCP sync
+  // (BFE-Admin's Membership HCP review & sync panel) before it's needed.
+  // "When I do this, I'll be updating the entire player HCP inventory, not
+  // just event players" — so this push deliberately carries no per-event gap
+  // analysis, just who/what/when; the sync itself stays a separate, manual,
+  // whole-membership action.
+  //
+  // Two Cron Triggers, registered in the Cloudflare dashboard (cron
+  // schedules aren't stored in this repo, so they're not visible/editable
+  // from here — add them under Workers → this worker → Triggers → Cron
+  // Triggers):
+  //   "0 22 * * *"  — evening-before, ~6pm ET (EDT; ET is UTC-4 Mar–Nov,
+  //                   UTC-5 the rest of the year, so this drifts an hour
+  //                   earlier — ~5pm ET — outside daylight saving)
+  //   "0 11 * * *"  — morning-of, ~7am ET (same DST caveat)
+  // event.cron tells scheduled() which one fired.
+  async scheduled(event, env, ctx) {
+    const EVENING_BEFORE_CRON = '0 22 * * *';
+    const MORNING_OF_CRON     = '0 11 * * *';
+    const daysOut = event.cron === EVENING_BEFORE_CRON ? 1 : 0; // MORNING_OF_CRON, or any unrecognized cron, defaults to "today"
+    ctx.waitUntil(runHostHcpNudgeCheck(env, daysOut));
   }
 };
+
+// ET calendar-day key (YYYY-MM-DD) for a given instant — used instead of raw
+// UTC date math so "today"/"tomorrow" match Brian's actual calendar day
+// regardless of what UTC offset the Cron Trigger itself fires under.
+function etDateKey(d) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+function etDateTimeLabel(d) {
+  const datePart = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric' }).format(d);
+  const timePart = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }).format(d);
+  return `${datePart} ${timePart}`;
+}
+async function runHostHcpNudgeCheck(env, targetDaysOut) {
+  const target = new Date(Date.now() + targetDaysOut * 86400000);
+  const targetKey = etDateKey(target);
+  let results;
+  try {
+    ({ results } = await env.DB.prepare(
+      `SELECT host_id, title, event_time FROM gatherings WHERE status = 'active'`
+    ).all());
+  } catch (e) {
+    console.warn('[Host HCP nudge] gatherings query failed:', e.message);
+    return 0;
+  }
+  const matches = (results || []).filter(g => {
+    if (!g.event_time || !g.host_id || g.host_id === 'Brian Hager') return false;
+    const dt = new Date(g.event_time);
+    if (isNaN(dt.getTime())) return false;
+    return etDateKey(dt) === targetKey;
+  });
+  for (const g of matches) {
+    const dt = new Date(g.event_time);
+    const bodyText = `${g.host_id} has "${g.title}" on ${etDateTimeLabel(dt)}.`;
+    try {
+      await fetch('https://onesignal.com/api/v1/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
+        body: JSON.stringify({
+          app_id: env.OS_APP_ID,
+          headings: { en: 'Host HCP check' },
+          contents: { en: bodyText },
+          // Targets Brian's own subscription by the same player_name tag
+          // every other host-notification in this file already uses.
+          filters: [{ field: 'tag', key: 'player_name', relation: '=', value: 'Brian Hager' }],
+          url: 'https://birdiefriends.com/portal.html',
+          bf_type: 'host_hcp_nudge'
+        })
+      });
+    } catch (e) {
+      console.warn('[Host HCP nudge] push failed for gathering', g.title, e.message);
+    }
+  }
+  return matches.length;
+}
