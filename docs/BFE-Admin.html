@@ -1576,10 +1576,16 @@ function findExistingPlayer(existing, submissionId, name) {
     || null;
 }
 function formatCurrentD1(existingPlayer) {
-  if (!existingPlayer || existingPlayer.current_hcp === null || existingPlayer.current_hcp === undefined) {
-    return 'none yet';
+  if (!existingPlayer || existingPlayer.hcp_source === null || existingPlayer.hcp_source === undefined) {
+    return 'none yet'; // no bf_players row, or one nobody has touched
   }
-  return `${existingPlayer.current_hcp} (${existingPlayer.hcp_source || 'unknown source'})`;
+  // no_hcp is a DELIBERATE commissioner decision to withhold a number
+  // (e.g. Chauncey Lutte — one BFSeries event, not enough to estimate),
+  // distinct from "nobody's looked at this player yet" — say so plainly
+  // rather than showing the same "none yet" as a genuinely untouched row.
+  if (existingPlayer.hcp_source === 'no_hcp') return 'No HCP (deliberate)';
+  if (existingPlayer.current_hcp === null || existingPlayer.current_hcp === undefined) return 'none yet';
+  return `${existingPlayer.current_hcp} (${existingPlayer.hcp_source})`;
 }
 // `included` and `matched` are separate on purpose: `included` only drives
 // the checkbox's starting state (checked for an auto-match, unchecked
@@ -1590,7 +1596,8 @@ function formatCurrentD1(existingPlayer) {
 const HCP_SYNC_SOURCE_OPTIONS = [
   ['ghin_import', 'GHIN import'],
   ['manual', 'Manual'],
-  ['estimated', 'Estimated']
+  ['estimated', 'Estimated'],
+  ['no_hcp', 'No HCP']
 ];
 function addHcpSyncRow(submissionId, name, hcp, included, note, matched, active, source, currentDisplay) {
   const tr = document.createElement('tr');
@@ -1607,6 +1614,20 @@ function addHcpSyncRow(submissionId, name, hcp, included, note, matched, active,
     <td><select class="s-source">${sourceOptionsHtml}</select></td>
     <td class="subtle">${currentDisplay || ''}</td>
     <td class="subtle">${note || ''}</td>`;
+  const hcpInput = tr.querySelector('.s-hcp');
+  const sourceSelect = tr.querySelector('.s-source');
+  // No HCP means "deliberately no number" — disable the field so it's
+  // visually obvious it isn't being used, and clear it so a leftover
+  // typed/parsed value can't be confused for one that's actually sent
+  // (submit forces hcp to null for this source regardless, but a stale
+  // number sitting in a disabled field reads as a bug even though it isn't one).
+  const syncHcpFieldToSource = () => {
+    const isNoHcp = sourceSelect.value === 'no_hcp';
+    hcpInput.disabled = isNoHcp;
+    if (isNoHcp) hcpInput.value = '';
+  };
+  sourceSelect.addEventListener('change', syncHcpFieldToSource);
+  syncHcpFieldToSource(); // in case this row was rendered with source already set to no_hcp
   hcpSyncBody.appendChild(tr);
 }
 async function bulkHcpSyncPreview() {
@@ -1654,17 +1675,22 @@ async function bulkHcpSyncPreview() {
         const found = raw.search(new RegExp(escapeRegex(term), 'i'));
         if (found !== -1) { idx = found; matchedTerm = term; break; }
       }
+      // For an unmatched row, default the Source to whatever's already true
+      // of this player rather than always guessing 'manual' — a player
+      // already marked no_hcp (e.g. Chauncey Lutte) should stay defaulted
+      // to no_hcp, not get bumped to manual just because this tool doesn't
+      // know their GHIN status yet.
+      const unmatchedDefaultSource = (existingPlayer && existingPlayer.hcp_source === 'no_hcp') ? 'no_hcp' : 'manual';
       if (idx === -1) {
         // Not found in the paste — likely a non-GHIN player (or just missed
         // this paste). Pre-fill the HCP field with their last known D1
-        // value (not blank) so it's visible and ready to edit, default the
-        // Source to manual (since ghin_import wouldn't be honest here), and
-        // leave unchecked — nothing changes unless Brian deliberately opts
-        // this row in.
+        // value (not blank) so it's visible and ready to edit, and leave
+        // unchecked — nothing changes unless Brian deliberately opts this
+        // row in.
         addHcpSyncRow(
           m.submissionId, m.name, existingPlayer ? existingPlayer.current_hcp : '', false,
           'not found in paste — showing last D1 value; pick a Source and check to update',
-          false, m.active, 'manual', currentDisplay
+          false, m.active, unmatchedDefaultSource, currentDisplay
         );
         return;
       }
@@ -1674,7 +1700,7 @@ async function bulkHcpSyncPreview() {
       if (hcp === undefined) {
         addHcpSyncRow(
           m.submissionId, m.name, existingPlayer ? existingPlayer.current_hcp : '', false,
-          'name found but no HCP-looking number nearby', false, m.active, 'manual', currentDisplay
+          'name found but no HCP-looking number nearby', false, m.active, unmatchedDefaultSource, currentDisplay
         );
         return;
       }
@@ -1735,8 +1761,13 @@ async function bulkHcpSyncSubmit() {
     const hcpRaw = tr.querySelector('.s-hcp').value;
     const source = tr.querySelector('.s-source').value;
     const submissionId = tr.dataset.submissionId;
-    if (!name || hcpRaw === '') { skipped.push(name || '(blank name)'); continue; }
-    const hcp = parseFloat(hcpRaw);
+    // no_hcp is the one source where a blank HCP field is correct, not a
+    // mistake — it means "deliberately no number" (the Worker also forces
+    // this to null server-side regardless of what's sent, but sending null
+    // explicitly here keeps the request honest).
+    if (!name) { skipped.push(name || '(blank name)'); continue; }
+    if (hcpRaw === '' && source !== 'no_hcp') { skipped.push(name); continue; }
+    const hcp = source === 'no_hcp' ? null : parseFloat(hcpRaw);
     submitStatusEl.textContent = `Writing ${name}…`;
     try {
       const resolveRes = await fetch(`${jfWorkerBase()}/bfe/players/resolve`, {
