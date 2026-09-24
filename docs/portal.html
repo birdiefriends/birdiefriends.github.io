@@ -9579,6 +9579,8 @@ let _adminVenueCttpOpen = {};        // venue id -> bool, which CTP-holes editor
 let _adminVenueGcOpen = {};          // venue id -> bool, which GolfCourseAPI lookup panels are expanded (Dev-86)
 let _adminVenueGcResults = {};       // venue id -> array of search results from GET /bfe/coursedata/search
 let _adminVenueGcCourse = {};        // venue id -> full course-details object from GET /bfe/coursedata/courses/:id, once a search result is picked
+let _adminVenueTees = {};            // venue id -> array of stored tee rows from GET /bfe/venue-tees (Dev-86 multi-tee redesign)
+let _adminVenuesCache = [];          // last-loaded venues list (from loadAdminVenues), so helpers like adminGcSaveTee can look up a venue's name by id without a re-fetch
 // venue id -> { cttpHoles, raw } | null (fetched-and-empty) | undefined (not fetched yet).
 // Lazily populated from BFE_API — this data lives in bf-experiences' own
 // bfe_venue_tee_catalog table (shared venue_id space with GATHERINGS_API's
@@ -9994,6 +9996,7 @@ async function loadAdminVenues() {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Failed');
     const venues = data.venues || [];
+    _adminVenuesCache = venues;
     if (venues.length === 0) {
       listEl.innerHTML = '<div style="color:var(--text-hint);font-size:0.82rem">No venues found.</div>';
       return;
@@ -10277,16 +10280,44 @@ async function adminClearVenueCoords(id, name) {
 // §1 "GC-API-first, D1 as cache + fallback"). Calls bf-experiences' own
 // proxy routes (GET /bfe/coursedata/search, GET /bfe/coursedata/courses/:id)
 // — never GolfCourseAPI directly, so the API key never reaches this page.
-// Deliberately does NOT auto-save anything: picking a tee here only fills in
-// the EXISTING Vs Par / Weather Location editor fields above (opening those
-// panels if they're closed), same as adminPrefillBsgcPars() already does for
-// BSGC's hardcoded pars — Brian still reviews and taps the existing Save
-// buttons himself. This is also why there's no override-tracking flag here:
-// nothing is written until the human explicitly saves, so there's nothing
-// for a later re-fetch to silently clobber.
+// Dev-86 multi-tee redesign: a venue can have several tees actually in play
+// (Green, Gold, Green/Gold Combo, etc.) with hole handicap ranking that
+// differs by tee, so this no longer flattens everything into the single
+// legacy Vs Par array. GC-API tee picks now save as their own row via
+// POST /bfe/venue-tees (see bfe_venue_tees on bf_experiences_worker.js),
+// independent per tee, with the locked/override-protection flag guarding
+// any tee Brian has hand-corrected from a later GC-API re-fetch clobbering
+// it. The old flat Vs Par / Weather Location editors above are untouched —
+// they remain for venues not yet upgraded to per-tee storage, and Weather
+// Location's lat/lng still gets filled here since that's venue-level, not
+// tee-level.
 function adminToggleVenueGcPanel(id) {
   _adminVenueGcOpen[id] = !_adminVenueGcOpen[id];
+  if (_adminVenueGcOpen[id] && !_adminVenueTees[id]) adminLoadVenueTees(id);
   loadAdminVenues();
+}
+async function adminLoadVenueTees(id) {
+  try {
+    const res = await fetch(`${BFE_API}/bfe/venue-tees?venue_id=${id}`);
+    const data = await res.json();
+    _adminVenueTees[id] = data.ok ? (data.tees || []) : [];
+  } catch (e) {
+    _adminVenueTees[id] = [];
+  }
+  loadAdminVenues();
+}
+function storedVenueTeesHtml(v) {
+  const tees = _adminVenueTees[v.id];
+  if (!tees) return '<div style="font-size:0.74rem;color:var(--text-muted)">Loading stored tees…</div>';
+  if (!tees.length) return '<div style="font-size:0.74rem;color:var(--text-muted)">No tees stored yet for this venue.</div>';
+  return tees.map(t => `
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;font-size:0.78rem">
+        <strong>${t.tee_name}</strong> <span style="color:var(--text-muted)">(${t.gender || 'unspecified'}${t.course_rating != null ? `, ${t.course_rating}/${t.slope_rating}` : ''}${t.par_total != null ? `, par ${t.par_total}` : ''})</span>
+        ${t.locked ? ' <span style="color:#b45309;font-size:0.7rem">🔒 manually edited</span>' : ''}
+      </div>
+      <button class="btn btn-secondary btn-sm" style="font-size:0.7rem;white-space:nowrap;color:#b91c1c" onclick="adminDeleteVenueTee(${v.id}, ${t.id})">Delete</button>
+    </div>`).join('');
 }
 function venueGcLookupEditorHtml(v) {
   const results = _adminVenueGcResults[v.id] || [];
@@ -10303,20 +10334,24 @@ function venueGcLookupEditorHtml(v) {
     : '';
   const teesHtml = course
     ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-        <div style="font-size:0.78rem;font-weight:600;margin-bottom:6px">${course.club_name || course.course_name}${(course.latitude != null) ? ' — lat/long found' : ''}</div>
+        <div style="font-size:0.78rem;font-weight:600;margin-bottom:6px">${course.club_name || course.course_name}${(course.latitude != null) ? ' — lat/long filled into Weather Location above' : ''}</div>
         ${(course.tees || []).map((t, i) => `
           <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
             <div style="flex:1;font-size:0.78rem">
               ${t.tee_name} <span style="color:var(--text-muted)">(${t.gender}${t.course_rating != null ? `, ${t.course_rating}/${t.slope_rating}` : ''}${t.total_yards != null ? `, ${t.total_yards}y` : ''})</span>
             </div>
-            <button class="btn btn-secondary btn-sm" style="font-size:0.72rem;white-space:nowrap" onclick="adminGcApplyTee(${v.id}, ${i})">Fill Par + Location</button>
+            <button class="btn btn-secondary btn-sm" style="font-size:0.72rem;white-space:nowrap" onclick="adminGcSaveTee(${v.id}, ${i})">Save Tee</button>
           </div>`).join('') || '<div style="font-size:0.76rem;color:var(--text-muted)">No tee data on this course.</div>'}
       </div>`
     : '';
   return `
     <div style="background:var(--surface);border-radius:10px;padding:10px;margin-top:6px">
       <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
-        Searches GolfCourseAPI (read-only, free tier — use sparingly). Picking a tee below only fills in the Vs Par and Weather Location fields above for you to review — nothing saves until you tap their own Save buttons.
+        Searches GolfCourseAPI (read-only, free tier — use sparingly). "Save Tee" stores that tee's full hole-by-hole data for this venue — each tee saves independently, so a venue can carry Green, Gold, a Combo, etc. all at once. A tee you've hand-edited (🔒 below) won't be silently overwritten by a later save of the same tee unless you confirm.
+      </div>
+      <div style="margin-bottom:8px">
+        <div style="font-size:0.74rem;font-weight:600;margin-bottom:4px">Stored tees</div>
+        <div id="admin-gc-stored-${v.id}">${storedVenueTeesHtml(v)}</div>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:6px">
         <input type="text" id="admin-gc-query-${v.id}" placeholder="Course name" value="${v.name.replace(/"/g, '&quot;')}"
@@ -10346,6 +10381,10 @@ async function adminGcSearch(id) {
     if (statusEl) statusEl.textContent = 'Error: ' + e.message;
   }
 }
+// Selecting a course fills Weather Location's lat/lng right away (that's a
+// venue-level fact, not a per-tee one) — opens the coords panel if closed,
+// same "prefill then Brian reviews/Saves" pattern as before. Par data is
+// no longer touched here; that now happens per-tee via adminGcSaveTee.
 async function adminGcSelectCourse(id, courseId) {
   const statusEl = document.getElementById(`admin-gc-status-${id}`);
   if (statusEl) statusEl.textContent = 'Loading tee data…';
@@ -10355,37 +10394,66 @@ async function adminGcSelectCourse(id, courseId) {
     if (!data.ok) throw new Error(data.error || 'Course lookup failed');
     _adminVenueGcCourse[id] = data;
     if (statusEl) statusEl.textContent = '';
-    loadAdminVenues();
+    if (data.latitude != null && data.longitude != null) {
+      _adminVenueCoordsOpen[id] = true;
+      await loadAdminVenues();
+      const latEl = document.getElementById(`admin-coord-lat-${id}`);
+      const lngEl = document.getElementById(`admin-coord-lng-${id}`);
+      if (latEl) latEl.value = data.latitude;
+      if (lngEl) lngEl.value = data.longitude;
+    } else {
+      loadAdminVenues();
+    }
   } catch(e) {
     if (statusEl) statusEl.textContent = 'Error: ' + e.message;
   }
 }
-// Fills the (still-unsaved) Vs Par + Weather Location editor fields from one
-// GolfCourseAPI tee. Opens both panels first if they're closed, same
-// "prefill then let Brian review/Save" flow as adminPrefillBsgcPars().
-async function adminGcApplyTee(id, teeIndex) {
+// Saves one GolfCourseAPI tee as its own row for this venue via POST
+// /bfe/venue-tees. If that tee was previously hand-edited here (locked),
+// the server refuses with 409 — confirm with Brian before forcing it.
+async function adminGcSaveTee(id, teeIndex, force) {
   const course = _adminVenueGcCourse[id];
   const tee = course && course.tees && course.tees[teeIndex];
   if (!tee) return;
-  _adminVenueParsOpen[id] = true;
-  _adminVenueCoordsOpen[id] = true;
-  // loadAdminVenues() rebuilds the whole list (including these par/coord
-  // inputs) from a fresh network fetch — must actually await it, not just
-  // queue a setTimeout, or the fields below won't exist in the DOM yet.
-  await loadAdminVenues();
-  (tee.holes || []).forEach((h, i) => {
-    if (i >= 18) return;
-    const el = document.getElementById(`admin-par-${id}-${i}`);
-    if (el && h.par != null) el.value = h.par;
-  });
-  adminUpdateVenueParTotals(id);
-  if (course.latitude != null && course.longitude != null) {
-    const latEl = document.getElementById(`admin-coord-lat-${id}`);
-    const lngEl = document.getElementById(`admin-coord-lng-${id}`);
-    if (latEl) latEl.value = course.latitude;
-    if (lngEl) lngEl.value = course.longitude;
+  const v = (_adminVenuesCache || []).find(x => x.id === id);
+  const statusEl = document.getElementById(`admin-gc-status-${id}`);
+  try {
+    const res = await fetch(`${BFE_API}/bfe/venue-tees`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        venue_id: id, venue_name: v ? v.name : null,
+        tee_name: tee.tee_name, gender: tee.gender,
+        course_rating: tee.course_rating, slope_rating: tee.slope_rating,
+        total_yards: tee.total_yards, par_total: tee.par_total,
+        holes: tee.holes, gc_api_course_id: course.id,
+        source: 'gc_api', force: !!force, pin: COMMISSIONER_PIN
+      })
+    });
+    const data = await res.json();
+    if (res.status === 409 && data.error === 'locked') {
+      if (confirm(data.message + '\n\nOverwrite it with this GolfCourseAPI data?')) {
+        return adminGcSaveTee(id, teeIndex, true);
+      }
+      return;
+    }
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    showToast(`Saved ${tee.tee_name} tee for ${v ? v.name : 'venue'}`);
+    await adminLoadVenueTees(id);
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Error saving tee: ' + e.message;
   }
-  showToast(`Filled from ${tee.tee_name} tee — review and Save above`);
+}
+async function adminDeleteVenueTee(venueId, teeId) {
+  if (!confirm('Delete this stored tee?')) return;
+  try {
+    const res = await fetch(`${BFE_API}/bfe/venue-tees/${teeId}?pin=${COMMISSIONER_PIN}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Delete failed');
+    await adminLoadVenueTees(venueId);
+  } catch (e) {
+    showToast('Error deleting tee: ' + e.message);
+  }
 }
 function adminToggleVenueLogoPanel(id) {
   _adminVenueLogoOpen[id] = !_adminVenueLogoOpen[id];
