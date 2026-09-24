@@ -4291,3 +4291,92 @@ someone forgets to issue an alert."
 
 **Session Dev-86 fully closed.**
 **Chat-rename string:** `Dev-86 - Gatherings Game-Config System (Skins/CTP/BirdieBall), Live Panel Dual-Mode Scoring & Section Gating, BirdieBall Live Alert + Scorecard Confirmation Safety Net`
+
+## Dev-87 · 2026-09-24 — Gatherings Close & Calculate (Skins/CTP/BirdieBall payout), Wally Cup Carry-Forward Retired
+
+**Session start.** Oriented from `BF_Session_Bootstrap.md` (fetched byte-exact via `curl`), repo clone
+current at v4.5.7, AutoPush folder connected (Brian explicitly authorized the folder request), live
+`bf_push.ps1` byte-identical to the repo copy (16,082 bytes). Asked Brian for Dev-87 priority per the
+Bootstrap's §3 instruction rather than assuming: **Gatherings Close & Calculate**. Also asked directly
+about the six-session Wally Cup carry-forward — Brian: **the event wrapped; retire it.** Removed from
+the Bootstrap's carry-forward list this session.
+
+**1. Payout rules — settled with Brian directly (supersedes Dev-86's "[No preference]" / Claude's
+push-vs-carryover lean, which turned out to be the wrong framing entirely).**
+   - **Skins:** Brian — "For each hole someone was best score alone or they weren't. The $payout [is]
+     the $pot/#skins." Same model GS `calculateResults()` already uses (outright only, tie = no skin,
+     no carryover, pot ÷ skins won); only difference is Gatherings use lowest GROSS strokes where GS
+     uses highest Stableford points. There is no separate "tie-break" question.
+   - **Gross vs Net:** "Unless otherwise directed Gross. We should make a note to add a Gross/Net
+     Skins toggle once we start layering in HCP calcs." → noted in the Bootstrap backlog.
+   - **Zero skins won:** "Unlikely, but give it back" (evenly, to players who played).
+   - **Rounding:** "round down for all pot calcs." Whole dollars; the remainder is shown on the
+     results ("stays with the host"), never redistributed.
+   - **Pot size:** Brian — the host gets "a 'close' button ... on their live panel, source the
+     scorecards to ensure they are all there. If the event was 8, but only 7 played the host would
+     close with 7." → pot = `dollar_per_player` × players with a scorecard in at close time (the Host
+     Panel's "confirmed Yes" pot figure stays a preview only).
+   - **Unclaimed CTP hole:** rolls into Skins (same as GS). If Skins isn't one of the games, leftover
+     money is given back.
+   - **BirdieBall:** "if no BBall survived the entire Rd, then whoever held it the longest wins the pot.
+     If multiple players kept it for the entirety divide the Bball pot." → keepers split; else latest
+     `lost_hole`, then latest `lost_stroke`, wins (ties at the longest split). No answers at all →
+     given back. Only players with a scorecard count (a registered no-show's answer is ignored).
+     Players with no recorded answer are treated as not keepers.
+   - **Where results live:** "the results get added to the MyHistory story for the event card."
+
+**2. Built (portal.html v4.6.0 + BF_Experiences.js).**
+   - `computeGatheringGamesPayout(config, scorecards, ctpLeaders, bbAnswers)` — pure function, all the
+     rules above. One addition beyond Brian's stated rules, caught in testing: **a skin needs at least
+     2 scores entered on a hole.** Without it, a hole where everyone else left a blank awarded an
+     uncontested skin to the one player who entered one. The Close preview flags blank holes so the host
+     can fix them before closing.
+   - `latestScorecardPerPlayer` (GET `/scorecards` is `captured_at DESC`, so a later Card Score Sheet
+     fix supersedes an earlier Live Panel submit), `scorecardMissingHoles`, and a shared
+     `renderGatheringPayoutHtml` used by **both** the Close preview and My History, so what the host
+     confirms is exactly what players see.
+   - **Live Panel:** new host-only "🏁 Host · Close & Calculate" section (`showCloseSection` =
+     Gathering + open games config + `evt.hostId === currentPlayer`) → `openGatheringCloseSheet()` in a
+     new `gathering-close-modal`: pulls the config, scorecards (`event=gathering:<id>`), BirdieBall
+     answers and CTP leaders (via the existing `loadCtpData`, so it matches the live board), shows
+     "Scorecards in: N of M confirmed", flags no-card and blank-hole players, previews the payout, and
+     offers Refresh / "🏁 Close with N players". `confirmGatheringClose()` posts the snapshot (plus
+     `registered_count`, `missing_scorecards`, `incomplete_scorecards`, `closed_by`), then refreshes
+     `_gatheringGamesIndex`. Closed = no longer `status=open`, so the Gathering's Live Panel retires.
+   - **My History:** Gathering detail views get a `#history-game-results` slot filled by
+     `loadHistoryGameResults(key)` (fire-and-forget, same pattern as `loadResultsClippingPodium`) —
+     "🏆 Game Results" for every player once closed; the host also gets "↩️ Reopen to fix & re-close"
+     (`reopenGatheringGames`), which restores `status='open'` so the Live Panel comes back.
+   - **Worker:** new `POST /bfe/gathering-games/:id/close` `{host_id, payout_summary}` and
+     `POST /bfe/gathering-games/:id/reopen` `{host_id}`. Unlike the rest of the gathering-games routes,
+     these **do** check `host_id` against the stored row (403 otherwise), since they publish money
+     numbers other players see. **No D1 migration needed** — `status`/`payout_summary`/`closed_at`
+     were already in the Dev-86 schema (and are already written, as NULL, by the existing upsert —
+     which works in production, so the columns exist). Fixed two now-stale schema comments (pot basis;
+     "posted via the Notes endpoint" → read straight from `payout_summary`).
+
+**3. Testing.** Payout engine against the extracted function: 18 checks (N = scorecards in, CTP
+canonical names + unclaimed → Skins, BirdieBall kept / longest-held / tie-at-longest / same-hole-later-
+stroke / no answers, zero-skins give-back with and without a CTP carve-out, 9-hole cards, blank and
+0 holes, the ≥2-scores rule, empty close, and **conservation: paid + unallocated = pot**). jsdom UI
+suite: 21 checks (sheet opens, fetches by gathering key, Yes-only confirmed count excluding "No",
+de-dup keeps the newest card, missing and blank-hole warnings, button label, close route + payload,
+non-host refused before any fetch, My History host vs player vs open vs non-Gathering, reopen route,
+HTML-escaping of player names). All 3 inline script blocks parse; no literal `</script>` added; the
+`showCloseSection` gate line evaluated from source against 4 cases. **Note:** the Dev-86 regression
+suite and `retired_tests/` folder did not survive into this container (the workspace is ephemeral),
+so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
+**Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
+
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0), `BF_Experiences.js` (AutoPush key, NOT
+`bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
+Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
+returns 404.
+
+**Carry-forward:**
+- Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
+  History as host and as a player, then reopen → Live Panel back → re-close.
+- Gross/Net Skins toggle — once HCP calcs are layered in (Brian, Dev-87).
+- BFE Next-Gen build (spec §9) — still not started.
+- Buck Hill GolfCourseAPI name-variant retry; Rd1 chapter-boundary override `localStorage` durability
+  — both untouched.
