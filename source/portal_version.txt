@@ -1,2 +1,2 @@
-v4.3.2 · 2026-09-24
-Deployed: 2026-09-24 (Venue Manager: total yardage now shown in the stored-tee summary line, always visible, not only in the expanded hole view)
+v4.4.0 · 2026-09-24
+Deployed: 2026-09-24 (New player-facing "Venue" icon on event cards — course tees, par/yardage/hole-HCP, and a Maps link, pulled from the same GolfCourseAPI data Venue Manager now collects)
