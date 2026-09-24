@@ -1,2 +1,2 @@
-v4.5.1 · 2026-09-24
-Deployed: 2026-09-24 (Dev-86 Phase 1 gaming, part 2: Live Panel now opens for a Gathering whenever its host has an active Games config — was hard-excluded before. New _gatheringGamesIndex cache, pre-warmed on Home load same as the _venues fix, backed by new /bfe/gathering-games?status=open)
+v4.5.2 · 2026-09-24
+Deployed: 2026-09-24 (Dev-86 Phase 1 gaming, part 3: CTP payout redesigned to $/hole instead of %, with hole designation — All Par 3s (auto, from venue tee data) or Select Holes. CTP's $ is carved out of the $/player pot before Skins/BirdieBall split the rest. NEEDS A D1 MIGRATION — see delivery note — ALTER TABLE bfe_gathering_games ADD COLUMN cttp_config TEXT)
