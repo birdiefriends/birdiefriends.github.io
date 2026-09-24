@@ -6128,7 +6128,12 @@ function hasLivePanelSupport(evt) {
 function evtScoreMode(evt) {
   if (evt && evt.source === 'gathering') {
     const cfg = _gatheringGamesIndex.get(evt.gatheringId);
-    if (cfg && Array.isArray(cfg.games) && cfg.games.includes('skins')) return 'strokes';
+    // Dev-87 (v4.6.2) — ANY gamed Gathering captures gross strokes to D1, not
+    // just Skins ones: Close & Calculate counts players (the pot) from D1
+    // scorecards, so a CTP-/BirdieBall-only Gathering on the old Jotform
+    // points path closed with 0 players — and dropped its cards into the
+    // Wally Cup's Jotform scorecard form.
+    if (cfg && Array.isArray(cfg.games) && cfg.games.length) return 'strokes';
   }
   return 'points';
 }
@@ -14120,9 +14125,11 @@ function renderGatheringPayoutHtml(s) {
 }
 let _gcClose = null; // { gatheringId, summary, meta } — the preview the host is looking at
 async function openGatheringCloseSheet(gatheringId) {
-  const g = gatheringData.find(x => x.gatheringId === gatheringId);
-  if (!g) { showToast('Could not find Gathering', true); return; }
-  if (g.hostId !== currentPlayer) { showToast('Only the host can close this Gathering', true); return; }
+  // Dev-87 (v4.6.2) — also opened from My History (after the Live Panel's
+  // 8-hour window), where the Gathering may have aged out of gatheringData:
+  // fall back to the games config for host/name/holes instead of refusing.
+  const g = gatheringData.find(x => x.gatheringId === gatheringId) || null;
+  if (g && g.hostId !== currentPlayer) { showToast('Only the host can close this Gathering', true); return; }
   _gcClose = null;
   const body = document.getElementById('gathering-close-body');
   body.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:20px 0">Checking scorecards…</div>`;
@@ -14139,26 +14146,33 @@ async function openGatheringCloseSheet(gatheringId) {
     const bbData = await bbRes.json();
     const config = cfgData.ok ? cfgData.config : null;
     if (!config) throw new Error('No games config found for this Gathering');
+    if (!g && String(config.host_id || '').trim().toLowerCase() !== String(currentPlayer || '').trim().toLowerCase()) {
+      throw new Error('Only the host can close this Gathering');
+    }
     // CTP leaders — same loadCtpData read (D1 for Gatherings) + "most recent
     // claim leads" rule the Live Panel board uses, so the payout matches what
     // players saw live.
     let ctpLeaders = {};
     if ((config.games || []).includes('cttp')) {
-      const liveEvt = eventData.find(e => e.source === 'gathering' && e.gatheringId === gatheringId) || g;
+      const liveEvt = eventData.find(e => e.source === 'gathering' && e.gatheringId === gatheringId)
+        || g || { source: 'gathering', gatheringId, name: config.gathering_name || '' };
       await loadCtpData(liveEvt);
       ctpLeaders = { ..._ctpData };
     }
     const cards = latestScorecardPerPlayer(scData.scorecards || []);
-    const holeCount = g.holes === 9 ? 9 : 18;
+    const holeCount = (g && g.holes === 9) ? 9 : 18;
     const norm = s => String(s || '').trim().toLowerCase();
     const cardNames = new Set(cards.map(c => norm(c.player)));
     const registered = gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes').map(r => r.player);
     const missingCards = registered.filter(p => !cardNames.has(norm(p)));
     const incomplete = cards.map(c => ({ player: c.player, holes: scorecardMissingHoles(c, holeCount) })).filter(x => x.holes.length);
     const summary = computeGatheringGamesPayout(config, cards, ctpLeaders, bbData.ok ? (bbData.answers || []) : []);
-    _gcClose = { gatheringId, summary, meta: { registered_count: registered.length, missing_scorecards: missingCards, incomplete_scorecards: incomplete } };
+    _gcClose = { gatheringId, summary, gatheringName: (g && g.name) || config.gathering_name || null,
+      meta: { registered_count: registered.length, missing_scorecards: missingCards, incomplete_scorecards: incomplete } };
     const esc = v => escapeHtml(String(v ?? ''));
-    const statusLine = `<div style="font-size:0.85rem;font-weight:700;margin-bottom:6px">📋 Scorecards in: ${cards.length} of ${registered.length} confirmed</div>`;
+    const statusLine = registered.length
+      ? `<div style="font-size:0.85rem;font-weight:700;margin-bottom:6px">📋 Scorecards in: ${cards.length} of ${registered.length} confirmed</div>`
+      : `<div style="font-size:0.85rem;font-weight:700;margin-bottom:6px">📋 Scorecards in: ${cards.length}</div>`; // RSVPs no longer loaded (aged out) — count only
     const missingHtml = missingCards.length
       ? `<div style="background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
           ⚠️ No scorecard yet: <b>${missingCards.map(esc).join(', ')}</b><br>
@@ -14186,12 +14200,11 @@ async function openGatheringCloseSheet(gatheringId) {
 }
 async function confirmGatheringClose() {
   if (!_gcClose) return;
-  const { gatheringId, summary, meta } = _gcClose;
-  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  const { gatheringId, summary, meta, gatheringName } = _gcClose;
   const btn = document.getElementById('btn-gathering-close-confirm');
   if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); btn.textContent = 'Saving…'; }
   try {
-    const payout_summary = { ...summary, ...meta, gathering_name: g ? g.name : null, closed_by: currentPlayer, closed_at_client: new Date().toISOString() };
+    const payout_summary = { ...summary, ...meta, gathering_name: gatheringName, closed_by: currentPlayer, closed_at_client: new Date().toISOString() };
     const res = await fetch(`${BFE_API}/bfe/gathering-games/${gatheringId}/close`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ host_id: currentPlayer, payout_summary })
@@ -14202,6 +14215,7 @@ async function confirmGatheringClose() {
     showToast('🏁 Closed — results are in My History');
     _gcClose = null;
     refreshGatheringGamesIndex(); // drops it from the open index → Live Panel retires for this Gathering
+    if (document.getElementById('history-game-results')) loadHistoryGameResults(`gathering:${gatheringId}`); // closed from My History → show results in place
   } catch (e) {
     showToast('❌ ' + e.message, true);
     if (btn) { btn.disabled = false; btn.classList.remove('btn-loading'); btn.textContent = '🏁 Close'; }
@@ -14220,8 +14234,20 @@ async function loadHistoryGameResults(key) {
     const data = await res.json();
     const cfg = data.ok ? data.config : null;
     if (document.getElementById('history-game-results') !== el) return; // detail view moved on
+    const isHost = !!cfg && String(cfg.host_id || '').trim().toLowerCase() === String(currentPlayer || '').trim().toLowerCase();
+    // Dev-87 (v4.6.2) — the Live Panel (and its Close button) is gone 8 hours
+    // after tee time; this is the host's always-available way to close later
+    // (settling up at dinner, or the next morning).
+    if (cfg && cfg.status === 'open' && isHost) {
+      el.innerHTML = `
+        <div style="background:rgba(255,255,255,0.55);border:1px dashed rgba(0,0,0,0.18);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+          <div style="font-size:0.78rem;font-weight:800;margin-bottom:2px">🎮 Games still open</div>
+          <div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:8px">Close to calculate Skins/CTP/BirdieBall payouts and post results here for everyone.</div>
+          <button class="btn btn-primary btn-sm" style="width:100%" onclick="openGatheringCloseSheet(${Number(gid)})">🏁 Close &amp; Calculate</button>
+        </div>`;
+      return;
+    }
     if (!cfg || cfg.status !== 'closed' || !cfg.payout_summary) { el.innerHTML = ''; return; }
-    const isHost = String(cfg.host_id || '').trim().toLowerCase() === String(currentPlayer || '').trim().toLowerCase();
     el.innerHTML = `
       <div style="background:rgba(255,255,255,0.55);border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:10px 12px;margin-bottom:10px">
         <div style="font-size:0.78rem;font-weight:800;margin-bottom:2px">🏆 Game Results</div>
