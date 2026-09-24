@@ -7973,7 +7973,17 @@ function buildLivePanel(evt) {
   // "8. Close a round" hint text) — a claim submitted under a team name
   // fails BFE-Admin's roster match and goes unpaid. Scorecard/Birdie Alert
   // are the ones that actually need the team picker.
-  const evtIndividualPlayers = regData.filter(r => r.eventName === evt.name && r.status !== 'No').map(r => r.player).sort();
+  // Dev-86 (Task #6 follow-up) — a Gathering's RSVPs live in gatheringRegData
+  // (D1, keyed by gatheringId), never in regData (Jotform, keyed by
+  // eventName). Before this, the Live Panel was hard-excluded for every
+  // Gathering so this branch never mattered; now that a gamed Gathering can
+  // reach it, reading plain regData for one silently returns an empty
+  // roster — Birdie Alert's player picker (and anything else built on
+  // evtIndividualPlayers) would render with nobody in it.
+  const evtIndividualPlayers = (evt.source === 'gathering'
+    ? gatheringRegData.filter(r => r.gatheringId === evt.gatheringId)
+    : regData.filter(r => r.eventName === evt.name)
+  ).filter(r => r.status !== 'No').map(r => r.player).sort();
   const evtPlayers = isTeamRound
     ? _liveRoundTeams.teams
     : evtIndividualPlayers;
@@ -9561,13 +9571,18 @@ let _hostTemplates      = null;      // gathering templates for current host, lo
 let _hostGamesByGathering = null;
 let _gamesFormGathering = null;       // gatheringId currently open in showGatheringGamesForm
 let _gamesFormSelected  = new Set();  // subset of ['skins','cttp','birdieball']
-let _gamesFormAllocations = {};       // { skins: pct, birdieball: pct } — %-based games only, CTP excluded
+// Dev-86 round 3 — _gamesFormAllocations/%-allocation UI is retired. Brian:
+// "BirdieBall should also be a $/player payout, the balance going to Skins."
+// CTP and BirdieBall are now both fixed-dollar carve-outs off the same
+// $/player pot; Skins takes 100% of whatever remains — no host input at all.
 // Dev-86 round 2 — Brian: "the CttP $payout needs to be per hole rather
 // than %. Which means we need to also designate all holes or selected
 // holes [...] all Par 3 holes or select Par 3 holes." CTP is carved out of
-// the same $/player pot as a fixed dollar amount BEFORE skins/birdieball
-// split 100% of what's left (Brian's explicit call on the funding model).
+// the same $/player pot as a fixed dollar amount BEFORE BirdieBall's own
+// carve-out, and Skins gets whatever is left after both (Brian's explicit
+// call on the funding model, rounds 2 and 3 combined).
 let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
+let _gamesFormBirdieballConfig = { dollar_per_player: null }; // BirdieBall's OWN per-player rate — distinct from the main $/player pot rate
 let _gamesFormPar3Holes = [];             // hole numbers (1-18) with par===3, from the venue's stored tee data
 let _gamesFormVenueParDataAvailable = false; // false -> no tee data on file, host picks holes manually (any 1-18)
 let _gamesFormYesCount = 0;               // cached so CTP-only handlers can refresh the pot preview without re-reading the DOM
@@ -14979,10 +14994,12 @@ async function showGatheringGamesForm(gatheringId) {
   const existing = (_hostGamesByGathering && _hostGamesByGathering.get(gatheringId)) || null;
   _gamesFormGathering = gatheringId;
   _gamesFormSelected = new Set(existing ? existing.games : []);
-  _gamesFormAllocations = existing ? { ...existing.allocations } : {};
   _gamesFormCttpConfig = (existing && existing.cttp_config)
     ? { ...existing.cttp_config, holes: [...existing.cttp_config.holes] }
     : { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
+  _gamesFormBirdieballConfig = (existing && existing.birdieball_config)
+    ? { ...existing.birdieball_config }
+    : { dollar_per_player: null };
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; renderHostPanelList(); }; }
   const closeBtn = document.getElementById('host-sheet-close-btn');
@@ -15040,12 +15057,8 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
         oninput="updateGamesFormPotPreview()">
       <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px" id="games-form-pot-preview"></div>
     </div>
-    <div class="host-form-field" id="games-form-allocations-field" style="display:none">
-      <label>% Allocation <span style="font-size:0.75rem;font-weight:400;opacity:0.6">(Skins/BirdieBall — must total 100%)</span></label>
-      <div id="games-form-allocations">${gatheringGamesAllocationsHtml()}</div>
-      <div style="font-size:0.78rem;font-weight:700;margin-top:6px" id="games-form-alloc-total"></div>
-    </div>
     <div id="games-form-cttp-section">${gatheringGamesCttpSectionHtml()}</div>
+    <div id="games-form-birdieball-section">${gatheringGamesBirdieballSectionHtml()}</div>
     <button class="host-cta-btn" style="margin-top:16px" id="btn-save-games"
       onclick="submitGatheringGames(${gatheringId})">💾 Save Games</button>
     ${existing ? `
@@ -15053,7 +15066,6 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
       onclick="deleteGatheringGames(${gatheringId},'${g.name.replace(/'/g,"\\'")}')">Turn Off Games</button>` : ''}
   `;
   updateGamesFormPotPreview();
-  updateGamesFormAllocTotal();
 }
 function gatheringGamesChecklistHtml() {
   return Object.keys(GATHERING_GAMES_META).map(key => {
@@ -15073,9 +15085,10 @@ function toggleGamesFormGame(key) {
     _gamesFormSelected.delete(key);
     if (key === 'cttp') {
       _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
-    } else {
-      delete _gamesFormAllocations[key];
+    } else if (key === 'birdieball') {
+      _gamesFormBirdieballConfig = { dollar_per_player: null };
     }
+    // skins needs no per-game state at all — it's just whatever's left over.
   } else {
     _gamesFormSelected.add(key);
     if (key === 'cttp') {
@@ -15085,49 +15098,17 @@ function toggleGamesFormGame(key) {
       if (_gamesFormCttpConfig.hole_mode === 'all_par3' && _gamesFormVenueParDataAvailable) {
         _gamesFormCttpConfig.holes = [..._gamesFormPar3Holes];
       }
-    } else if (!(key in _gamesFormAllocations)) {
-      _gamesFormAllocations[key] = 0;
     }
+    // birdieball and skins need no selection-time defaulting — birdieball's
+    // $/player field just starts blank, skins has no config at all.
   }
   const checklist = document.getElementById('games-form-checklist');
   if (checklist) checklist.innerHTML = gatheringGamesChecklistHtml();
-  const pctSelected = [..._gamesFormSelected].some(k => k !== 'cttp');
-  const allocField = document.getElementById('games-form-allocations-field');
-  if (allocField) allocField.style.display = pctSelected ? '' : 'none';
-  const allocDiv = document.getElementById('games-form-allocations');
-  if (allocDiv) allocDiv.innerHTML = gatheringGamesAllocationsHtml();
   const cttpSection = document.getElementById('games-form-cttp-section');
   if (cttpSection) cttpSection.innerHTML = gatheringGamesCttpSectionHtml();
-  updateGamesFormAllocTotal();
+  const birdieballSection = document.getElementById('games-form-birdieball-section');
+  if (birdieballSection) birdieballSection.innerHTML = gatheringGamesBirdieballSectionHtml();
   updateGamesFormPotPreview();
-}
-// %-allocation rows — Skins/BirdieBall only. CTP is deliberately excluded:
-// its payout is a $/hole rate now, carved out of the pot before this split,
-// not a % slice of it (Dev-86 round 2).
-function gatheringGamesAllocationsHtml() {
-  return [..._gamesFormSelected].filter(key => key !== 'cttp').map(key => {
-    const meta = GATHERING_GAMES_META[key];
-    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <span style="flex:1;font-size:0.88rem;font-weight:600">${meta.icon} ${meta.label}</span>
-      <input type="number" min="0" max="100" step="1" value="${_gamesFormAllocations[key] || 0}"
-        oninput="setGamesFormAllocation('${key}', this.value)" style="width:70px;text-align:right">
-      <span style="font-size:0.85rem;color:var(--text-muted)">%</span>
-    </div>`;
-  }).join('');
-}
-function setGamesFormAllocation(key, val) {
-  _gamesFormAllocations[key] = parseFloat(val) || 0;
-  updateGamesFormAllocTotal();
-}
-function updateGamesFormAllocTotal() {
-  const el = document.getElementById('games-form-alloc-total');
-  if (!el) return;
-  const pctKeys = [..._gamesFormSelected].filter(key => key !== 'cttp');
-  if (!pctKeys.length) { el.textContent = ''; return; }
-  const total = pctKeys.reduce((sum, key) => sum + (_gamesFormAllocations[key] || 0), 0);
-  const ok = Math.abs(total - 100) < 0.5;
-  el.textContent = `Total: ${total}%${ok ? ' ✅' : ' — must equal 100%'}`;
-  el.style.color = ok ? 'var(--green-dark)' : '#c0392b';
 }
 // CTP section — $/hole rate + hole designation, restricted to Par-3 holes
 // when the venue's par data is on file ("all Par 3 holes or select Par 3
@@ -15192,6 +15173,28 @@ function toggleGamesFormCttpHole(hole) {
   if (cttpSection) cttpSection.innerHTML = gatheringGamesCttpSectionHtml();
   updateGamesFormPotPreview();
 }
+// BirdieBall section — its OWN $/player rate (Dev-86 round 3, Brian:
+// "BirdieBall should also be a $/player payout, the balance going to
+// Skins"). Same carve-out shape as CTP, just per-player instead of
+// per-hole, and no hole picker needed.
+function gatheringGamesBirdieballSectionHtml() {
+  if (!_gamesFormSelected.has('birdieball')) return '';
+  return `
+    <div class="host-form-field" id="games-form-birdieball-field">
+      <label>🐦 BirdieBall</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.86rem">$</span>
+        <input type="number" id="games-form-bb-dpp" min="0.01" step="0.01"
+          value="${_gamesFormBirdieballConfig.dollar_per_player || ''}" style="width:90px"
+          oninput="setGamesFormBirdieballDollarPerPlayer(this.value)">
+        <span style="font-size:0.86rem;color:var(--text-muted)">per player</span>
+      </div>
+    </div>`;
+}
+function setGamesFormBirdieballDollarPerPlayer(val) {
+  _gamesFormBirdieballConfig.dollar_per_player = parseFloat(val) || 0;
+  updateGamesFormPotPreview();
+}
 function updateGamesFormPotPreview(yesCount) {
   if (yesCount !== undefined) _gamesFormYesCount = yesCount;
   yesCount = _gamesFormYesCount;
@@ -15202,12 +15205,23 @@ function updateGamesFormPotPreview(yesCount) {
   if (!(dpp > 0)) { el.textContent = `${yesCount} confirmed Yes so far`; return; }
   const totalPot = dpp * yesCount;
   const lines = [`Pot preview: $${totalPot.toFixed(2)} total (${yesCount} confirmed Yes × $${dpp.toFixed(2)})`];
-  // CTP is carved out of this SAME pot as a fixed dollar amount before
-  // Skins/BirdieBall split what's left (Brian's explicit call).
+  // CTP and BirdieBall are both carved out of this SAME pot as fixed dollar
+  // amounts; Skins gets whatever's left after both (Dev-86 round 3, Brian's
+  // explicit call on the funding model). Informational only — this preview
+  // will move as players register/drop before the round closes.
+  let remaining = totalPot;
   if (_gamesFormSelected.has('cttp') && _gamesFormCttpConfig.dollar_per_hole > 0 && _gamesFormCttpConfig.holes.length) {
     const cttpCost = _gamesFormCttpConfig.dollar_per_hole * _gamesFormCttpConfig.holes.length;
-    lines.push(`🎯 CTP: $${cttpCost.toFixed(2)} (${_gamesFormCttpConfig.holes.length} hole${_gamesFormCttpConfig.holes.length !== 1 ? 's' : ''} × $${_gamesFormCttpConfig.dollar_per_hole.toFixed(2)}), carved out first`);
-    lines.push(`Remaining for Skins/BirdieBall: $${Math.max(0, totalPot - cttpCost).toFixed(2)}`);
+    remaining -= cttpCost;
+    lines.push(`🎯 CTP: $${cttpCost.toFixed(2)} (${_gamesFormCttpConfig.holes.length} hole${_gamesFormCttpConfig.holes.length !== 1 ? 's' : ''} × $${_gamesFormCttpConfig.dollar_per_hole.toFixed(2)}), carved out`);
+  }
+  if (_gamesFormSelected.has('birdieball') && _gamesFormBirdieballConfig.dollar_per_player > 0) {
+    const bbCost = _gamesFormBirdieballConfig.dollar_per_player * yesCount;
+    remaining -= bbCost;
+    lines.push(`🐦 BirdieBall: $${bbCost.toFixed(2)} (${yesCount} × $${_gamesFormBirdieballConfig.dollar_per_player.toFixed(2)}), carved out`);
+  }
+  if (_gamesFormSelected.has('skins')) {
+    lines.push(`⛳ Skins gets: $${Math.max(0, remaining).toFixed(2)}`);
   }
   el.innerHTML = lines.join('<br>');
 }
@@ -15218,13 +15232,6 @@ async function submitGatheringGames(gatheringId) {
   if (!games.length) { showToast('Select at least one game', true); return; }
   const dpp = parseFloat(document.getElementById('games-form-dpp').value);
   if (!dpp || dpp <= 0) { showToast('$ per Player must be greater than 0', true); return; }
-  const pctGames = games.filter(key => key !== 'cttp');
-  const allocations = {};
-  pctGames.forEach(key => { allocations[key] = _gamesFormAllocations[key] || 0; });
-  if (pctGames.length) {
-    const total = pctGames.reduce((sum, key) => sum + allocations[key], 0);
-    if (Math.abs(total - 100) >= 0.5) { showToast(`Allocations must add up to 100% (got ${total}%)`, true); return; }
-  }
   let cttp_config = null;
   if (games.includes('cttp')) {
     if (!(_gamesFormCttpConfig.dollar_per_hole > 0)) { showToast('CTP: $ per hole must be greater than 0', true); return; }
@@ -15235,12 +15242,17 @@ async function submitGatheringGames(gatheringId) {
       holes: _gamesFormCttpConfig.holes
     };
   }
+  let birdieball_config = null;
+  if (games.includes('birdieball')) {
+    if (!(_gamesFormBirdieballConfig.dollar_per_player > 0)) { showToast('BirdieBall: $ per player must be greater than 0', true); return; }
+    birdieball_config = { dollar_per_player: _gamesFormBirdieballConfig.dollar_per_player };
+  }
   const btn = document.getElementById('btn-save-games');
   if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); btn.textContent = 'Saving…'; }
   try {
     const payload = { gathering_id: gatheringId, gathering_name: g.name, host_id: currentPlayer, games, dollar_per_player: dpp };
-    if (pctGames.length) payload.allocations = allocations;
     if (cttp_config) payload.cttp_config = cttp_config;
+    if (birdieball_config) payload.birdieball_config = birdieball_config;
     const resp = await gatheringsFetchJSON(`${BFE_API}/bfe/gathering-games`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
