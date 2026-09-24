@@ -4368,7 +4368,7 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 — portal-only, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 and v4.6.2 for item 5 — both portal-only, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
@@ -4400,6 +4400,39 @@ already had a `bfe_cttp_entries` table plus `POST/GET/DELETE /cttp` routes (whos
    - **Test cleanup is now simpler:** a Gathering's CTP claims are deleted with
      `DELETE /cttp/:id?pin=7797` or `DELETE FROM bfe_cttp_entries WHERE event_name='gathering:<id>'`
      — no Jotform inbox step.
+
+**5. Gap review → two fixes (v4.6.2), same session.** Brian asked "can you think of anything we might
+have missed?" Claude checked candidates against the code before answering; Brian approved fixing the
+first two:
+   - **Fixed, bug:** `evtScoreMode` returned `'strokes'` only when Skins was selected, so a
+     CTP-/BirdieBall-only Gathering's Live Panel scorecards went to the Jotform points form
+     (`SCORECARD_FORM_ID`, the Wally Cup's). Close & Calculate counts players from D1 → 0 players,
+     $0 pot, Close disabled, plus stray rows in the Wally Cup Jotform form. Now any Gathering with a
+     non-empty games config captures strokes. `evtScoreMode`'s only consumer is the Live Panel
+     scorecard (checked).
+   - **Fixed, gap:** the Live Panel disappears `LIVE_EVENT_HOURS` (8) after tee time, and with it the
+     only Close button. `loadHistoryGameResults` now shows the **host** a "🎮 Games still open → 🏁
+     Close & Calculate" block while `status='open'` (non-hosts see nothing until it's closed).
+     `openGatheringCloseSheet` no longer requires the Gathering to still be in `gatheringData`: it
+     falls back to the games config for the host check (`config.host_id`), the name
+     (`config.gathering_name`) and CTP evt resolution, defaults to 18 holes, and shows a count-only
+     "Scorecards in: N" when RSVPs aren't loaded. Closing from My History re-renders the slot with
+     the results in place.
+   - **Latent, deliberately left alone (documented in the Bootstrap):** the Dev-93 "all scorecards in"
+     auto-close (`refreshLiveCompletionCheck`) never fires for Gatherings. It reads BFE
+     `/scorecards?event=<title>` and `regData`, but Gathering cards live in the main Worker's D1
+     under `gathering:<id>` and its RSVPs in `gatheringRegData`. That accident is what keeps the
+     host's Live Panel Close button from vanishing the moment the last card lands. Fixing that check
+     without an exception for gamed Gatherings would reintroduce the gap.
+   - **Raised, parked (Bootstrap backlog):** BirdieBall "held longest" assumes the round starts on
+     #1 (a shotgun or back-nine start picks the wrong player); no "results are in" push; the Host
+     Panel pot preview still reads "confirmed Yes" while Close uses scorecards in; self-reported
+     entries under anyone's name now carry real dollars; and for the next step the Live Panel
+     scorecard sends `tee_box: null`, which HCP/course-handicap games will need captured.
+   - **Tests:** `test_score_mode.mjs` (7 cases) and 7 new UI checks (host Close entry in My History,
+     non-host sees nothing, aged-out Gathering closes via config, aged-out non-host refused, name
+     from config, results render in place after closing). One Dev-87 assertion ("open → nothing
+     shown") was deliberately updated to the new behavior. All suites: 67 checks passing.
 
 **Carry-forward:**
 - Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
