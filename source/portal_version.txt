@@ -1,2 +1,2 @@
-v4.5.4 · 2026-09-24
-Deployed: 2026-09-24 (Games config round 3: BirdieBall is now its own $/player carve-out off the pot, same as CTP's $/hole carve-out — the balance goes 100% to Skins. Retires the %-allocation system entirely; Skins needs no config of its own.)
+v4.5.5 · 2026-09-24
+Deployed: 2026-09-24 (Live Panel's Post-Round Scorecard now captures raw gross strokes for a gamed Gathering running Skins, instead of Stableford points — feeds Skins math directly, no separate Card Score Sheet trip needed. Everything else (Series/Wally Cup rounds, CTP, BirdieBall) is untouched — still points mode, same Jotform path as always.)
