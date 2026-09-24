@@ -4845,6 +4845,7 @@ let _atCourse = null;              // { evt, venue, distM, forced }
 let _atCourseTucked = false;
 let _atCourseInit = false;
 let _atCourseScrollTimer = null;
+let _atCoursePanelPeek = false;   // grip tapped while the Live Panel is open → show anyway (resets when the panel toggles)
 function atCourseEnabled() { return !!currentPlayer && AT_COURSE_BETA_PLAYERS.includes(currentPlayer); }
 function atCourseForced() { try { return localStorage.getItem('bf_atcourse_force') === '1'; } catch (e) { return false; } }
 function haversineM(lat1, lng1, lat2, lng2) {
@@ -4907,7 +4908,8 @@ function atCourseOpenGames() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function toggleAtCourseRail() {
-  _atCourseTucked = !_atCourseTucked;
+  if (_livePanelOpen) _atCoursePanelPeek = !_atCoursePanelPeek;
+  else _atCourseTucked = !_atCourseTucked;
   renderAtCourseRail();
 }
 function renderAtCourseRail() {
@@ -4921,9 +4923,13 @@ function renderAtCourseRail() {
   const gamesOn = !!(live && live.id === evt.id);
   const btn = (icon, label, onclick) => `<button class="acr-btn" onclick="${onclick}"><span class="acr-ico">${icon}</span><span class="acr-lbl">${label}</span></button>`;
   const where = _atCourse.forced ? 'TEST' : `${(_atCourse.distM / 1609.34).toFixed(1)} mi`;
-  el.className = _atCourseTucked ? 'tucked' : '';
+  // While the Live Panel is open the rail tucks itself — the panel already has
+  // capture + scoring and needs its full width (otherwise the rail covers
+  // holes 9/18 and the right-hand buttons). The grip still peeks it open.
+  const tucked = _livePanelOpen ? !_atCoursePanelPeek : _atCourseTucked;
+  el.className = tucked ? 'tucked' : '';
   el.innerHTML = `
-    <button class="acr-grip" onclick="toggleAtCourseRail()" title="${_atCourseTucked ? 'Show' : 'Tuck away'}">${_atCourseTucked ? '‹' : '›'}</button>
+    <button class="acr-grip" onclick="toggleAtCourseRail()" title="${tucked ? 'Show' : 'Tuck away'}">${tucked ? '‹' : '›'}</button>
     <div class="acr-col">
       <div class="acr-status" title="${escapeHtml(evt.name)}"><span style="font-size:1rem">⛳</span><span>${where}</span></div>
       ${!bfe ? btn('📷', 'Photo', `openCardPhotoSheet('${id}')`) : ''}
@@ -8160,6 +8166,8 @@ function renderLiveBanner() {
 }
 function toggleLivePanel() {
   _livePanelOpen = !_livePanelOpen;
+  _atCoursePanelPeek = false; // Dev-87 beta — rail auto-tucks with the panel open, returns when it closes
+  if (typeof renderAtCourseRail === 'function') setTimeout(renderAtCourseRail, 0);
   if (_livePanelOpen) {
     loadCtpData(getLiveEvent());
     loadVenueCttpHoles(getLiveEvent()).then(renderLiveBanner); // which holes to show — resolved once per panel-open, not every refresh tick
