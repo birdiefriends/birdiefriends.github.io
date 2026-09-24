@@ -124,6 +124,78 @@
 //     UNIQUE(venue_id, tee_name, gender)
 //   );
 //
+// Dev-86 addition — Phase 1 lightweight side games (Skins/CTP/BirdieBall),
+// deliberately kept OUT of the bfe_events/bfe_event_rounds/bfe_round_results
+// "assembly layer" above — that whole graph exists to serve the Wally Cup
+// quota engine (HCP, tee policy, chained-round scoring) and a simple weekly
+// side game needs none of it. This table is the entire "assembly" a side
+// game needs: one row per Gathering that has gaming turned on. Skins/CTP
+// payouts are computed from data that ALREADY exists (scorecards via
+// GATHERINGS_API, CTP submissions via the existing CTP_FORM_ID Jotform form)
+// — nothing new to capture there. BirdieBall is the one new capture, stored
+// separately below since it's per-player, not per-gathering.
+//
+// Configured by whoever hosts the Gathering (Host Panel, "🎮 Games" on their
+// own gathering card) — NOT commissioner-gated. Brian's own framing: "the
+// point of these things [is] players get together and decide to have a
+// thing... whoever generates the gathering is responsible for the gaming
+// config." host_id is trusted from the client the same way every other
+// non-commissioner action in this app trusts currentPlayer — no PIN, no
+// server-side ownership re-check against the real gatherings table (that
+// would mean this Worker reading another Worker's D1, out of scope here).
+//
+//   CREATE TABLE bfe_gathering_games (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     gathering_id INTEGER NOT NULL UNIQUE, -- references the shared
+//                                             -- `gatherings` table's id
+//                                             -- (birdiefriends-push Worker) —
+//                                             -- cross-Worker reference, same
+//                                             -- pattern already used for
+//                                             -- venue_id above
+//     gathering_name TEXT,                   -- denormalized, display/debug only
+//     host_id TEXT NOT NULL,                 -- the hosting player's display
+//                                             -- name — same identity space as
+//                                             -- gatherings.host_id
+//     games TEXT NOT NULL,                   -- JSON array, subset of
+//                                             -- ['skins','cttp','birdieball']
+//     dollar_per_player REAL NOT NULL,
+//     allocations TEXT NOT NULL,             -- JSON: {skins: pct, cttp: pct,
+//                                             -- birdieball: pct} — one entry
+//                                             -- per selected game, meant to
+//                                             -- sum to 100 (not DB-enforced;
+//                                             -- the Games modal enforces it)
+//     status TEXT NOT NULL DEFAULT 'open',   -- 'open' (configured, Live Panel
+//                                             -- carve-out active) | 'closed'
+//                                             -- (payout calculated & posted
+//                                             -- to My History via the Notes
+//                                             -- endpoint)
+//     payout_summary TEXT,                   -- JSON snapshot of the computed
+//                                             -- payout, once closed — same
+//                                             -- "frozen snapshot" reasoning as
+//                                             -- bfe_events.payout_plan above
+//     closed_at TEXT,
+//     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+//     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+//   );
+//
+// Dev-86 addition — BirdieBall per-player answers. Same "keep it or lose it"
+// UX pattern as the existing Wally Ball question (Yes/No + conditional lost-
+// hole/stroke), deliberately NOT reusing Wally Ball's own WB_QID/Jotform
+// fields or its cross-round "already lost" carryforward — those carry
+// Wally-Cup-specific meaning (season-long elimination). BirdieBall is scoped
+// to exactly one gathering, one round, done.
+//
+//   CREATE TABLE bfe_birdieball_answers (
+//     id INTEGER PRIMARY KEY AUTOINCREMENT,
+//     gathering_id INTEGER NOT NULL,
+//     player_name TEXT NOT NULL,
+//     kept INTEGER NOT NULL,          -- 1 = kept it, 0 = lost it
+//     lost_hole INTEGER,              -- only set when kept = 0
+//     lost_stroke INTEGER,            -- only set when kept = 0
+//     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+//     UNIQUE(gathering_id, player_name)
+//   );
+//
 //   CREATE TABLE bfe_player_profiles (
 //     name TEXT PRIMARY KEY,
 //     current_hcp REAL,
@@ -859,6 +931,141 @@ export default {
         return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Delete error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // ── Gathering games (Dev-86 Phase 1 — lightweight Skins/CTP/BirdieBall) ─
+    // See the bfe_gathering_games schema comment above for the full design
+    // reasoning. No PIN gate anywhere here — configuring and closing games is
+    // the hosting player's own call, same trust level as posting a Note or a
+    // Card Score (client-supplied player identity, no server-side ownership
+    // re-check against the real gatherings table).
+    const VALID_GAMES = ['skins', 'cttp', 'birdieball'];
+
+    // GET /bfe/gathering-games?gathering_id=X -> single config (or null)
+    // GET /bfe/gathering-games?host_id=X      -> every config that host owns
+    // GET /bfe/gathering-games?status=open    -> every OPEN config, any host
+    //   (Task #6 — hasLivePanelSupport's Gathering carve-out needs a single
+    //   cheap call ANY player's Home load can use to warm a synchronous
+    //   cache, same "pre-warm before first render" lesson the _venues bug
+    //   taught: a player who isn't the host still needs to know a Gathering
+    //   has gaming active, and host_id= only tells you about your own.)
+    if (request.method === 'GET' && url.pathname === '/bfe/gathering-games') {
+      try {
+        const gatheringId = url.searchParams.get('gathering_id');
+        const hostId = url.searchParams.get('host_id');
+        const status = url.searchParams.get('status');
+        if (gatheringId) {
+          const row = await env.DB.prepare(`SELECT * FROM bfe_gathering_games WHERE gathering_id = ?`).bind(gatheringId).first();
+          const config = row ? { ...row, games: JSON.parse(row.games), allocations: JSON.parse(row.allocations), payout_summary: row.payout_summary ? JSON.parse(row.payout_summary) : null } : null;
+          return new Response(JSON.stringify({ ok: true, config }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (hostId) {
+          const { results } = await env.DB.prepare(`SELECT * FROM bfe_gathering_games WHERE host_id = ?`).bind(hostId).all();
+          const configs = (results || []).map(row => ({ ...row, games: JSON.parse(row.games), allocations: JSON.parse(row.allocations), payout_summary: row.payout_summary ? JSON.parse(row.payout_summary) : null }));
+          return new Response(JSON.stringify({ ok: true, configs }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (status) {
+          const { results } = await env.DB.prepare(`SELECT * FROM bfe_gathering_games WHERE status = ?`).bind(status).all();
+          const configs = (results || []).map(row => ({ ...row, games: JSON.parse(row.games), allocations: JSON.parse(row.allocations), payout_summary: row.payout_summary ? JSON.parse(row.payout_summary) : null }));
+          return new Response(JSON.stringify({ ok: true, configs }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        return new Response(JSON.stringify({ error: 'gathering_id, host_id, or status query param is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /bfe/gathering-games — create or update a gathering's games config.
+    // Body: { gathering_id, gathering_name, host_id, games: [...], dollar_per_player, allocations: {game: pct, ...} }
+    if (request.method === 'POST' && url.pathname === '/bfe/gathering-games') {
+      let body;
+      try { body = await request.json(); } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { gathering_id, gathering_name, host_id, games, dollar_per_player, allocations } = body;
+      if (!gathering_id || !host_id) {
+        return new Response(JSON.stringify({ error: 'gathering_id and host_id are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (!Array.isArray(games) || !games.length || !games.every(g => VALID_GAMES.includes(g))) {
+        return new Response(JSON.stringify({ error: `games must be a non-empty array from: ${VALID_GAMES.join(', ')}` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (!(Number(dollar_per_player) > 0)) {
+        return new Response(JSON.stringify({ error: 'dollar_per_player must be a positive number' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (!allocations || typeof allocations !== 'object') {
+        return new Response(JSON.stringify({ error: 'allocations (object) is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const allocSum = games.reduce((sum, g) => sum + (Number(allocations[g]) || 0), 0);
+      if (Math.abs(allocSum - 100) > 0.5) {
+        return new Response(JSON.stringify({ error: `Allocations for the selected games must add up to 100% (got ${allocSum}%)` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const result = await env.DB.prepare(
+          `INSERT INTO bfe_gathering_games (gathering_id, gathering_name, host_id, games, dollar_per_player, allocations, status, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'open', datetime('now'))
+           ON CONFLICT(gathering_id) DO UPDATE SET
+             gathering_name = excluded.gathering_name, host_id = excluded.host_id, games = excluded.games,
+             dollar_per_player = excluded.dollar_per_player, allocations = excluded.allocations,
+             status = 'open', payout_summary = NULL, closed_at = NULL, updated_at = excluded.updated_at`
+        ).bind(gathering_id, gathering_name || null, host_id, JSON.stringify(games), Number(dollar_per_player), JSON.stringify(allocations)).run();
+        return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error saving games config: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // DELETE /bfe/gathering-games/:gathering_id — host turns gaming back off
+    // entirely (distinct from 'closed', which keeps the record + payout
+    // history; this removes the config so the Live Panel carve-out reverts).
+    const gatheringGamesDeleteMatch = url.pathname.match(/^\/bfe\/gathering-games\/(\d+)$/);
+    if (request.method === 'DELETE' && gatheringGamesDeleteMatch) {
+      try {
+        await env.DB.prepare(`DELETE FROM bfe_gathering_games WHERE gathering_id = ?`).bind(gatheringGamesDeleteMatch[1]).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Delete error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // ── BirdieBall answers (Dev-86) — "kept it or lost it," scoped to one
+    // gathering, self-reported. See the bfe_birdieball_answers schema
+    // comment above for why this doesn't reuse Wally Ball's own fields.
+    if (request.method === 'GET' && url.pathname === '/bfe/birdieball-answers') {
+      try {
+        const gatheringId = url.searchParams.get('gathering_id');
+        if (!gatheringId) {
+          return new Response(JSON.stringify({ error: 'gathering_id query param is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const { results } = await env.DB.prepare(`SELECT * FROM bfe_birdieball_answers WHERE gathering_id = ?`).bind(gatheringId).all();
+        const answers = (results || []).map(r => ({ ...r, kept: !!r.kept }));
+        return new Response(JSON.stringify({ ok: true, answers }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // POST /bfe/birdieball-answers — one player's own answer, upserted.
+    // Body: { gathering_id, player_name, kept: bool, lost_hole?, lost_stroke? }
+    if (request.method === 'POST' && url.pathname === '/bfe/birdieball-answers') {
+      let body;
+      try { body = await request.json(); } catch (e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { gathering_id, player_name, kept, lost_hole, lost_stroke } = body;
+      if (!gathering_id || !player_name || typeof kept !== 'boolean') {
+        return new Response(JSON.stringify({ error: 'gathering_id, player_name, and kept (boolean) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        await env.DB.prepare(
+          `INSERT INTO bfe_birdieball_answers (gathering_id, player_name, kept, lost_hole, lost_stroke, updated_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(gathering_id, player_name) DO UPDATE SET
+             kept = excluded.kept, lost_hole = excluded.lost_hole, lost_stroke = excluded.lost_stroke, updated_at = excluded.updated_at`
+        ).bind(gathering_id, player_name, kept ? 1 : 0, kept ? null : (lost_hole ?? null), kept ? null : (lost_stroke ?? null)).run();
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database error saving BirdieBall answer: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
