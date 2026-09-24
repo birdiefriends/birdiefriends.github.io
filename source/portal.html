@@ -4418,6 +4418,14 @@ async function loadAllData() {
     // it lands rather than making every player wait on an extra round trip
     // to BFE_API before Home shows anything.
     refreshBFEBackedIndex();
+    // Dev-86 — same fire-and-forget-then-re-render pattern as
+    // refreshBFEBackedIndex() just above: buildEventCard's new Venue icon
+    // gates on findVenueByName(), which needs _venues loaded, but _venues
+    // was previously only ever warmed by My History/admin screens — never
+    // by Home's own initial load. Without this, the icon silently never
+    // appeared on first paint (findVenueByName returns null while _venues
+    // is still null), for every event, not just a BSGC-nickname mismatch.
+    loadVenues().then(() => { if (dataLoaded) renderAll(); });
     // Silent subscription health check + identity refresh (invisible to players)
     setTimeout(osHealthCheck, 2000);
     // Write capacity=4 back to Jotform for any events that hit the 48hr lock
