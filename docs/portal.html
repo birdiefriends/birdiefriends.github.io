@@ -7638,6 +7638,30 @@ let _ctpPlayer    = null;   // player selected for CttP entry (overseer proxy)
 let _ctpData      = {};     // { holeNum: { player, dist } } — live leaders
 let _ctpHistory   = {};     // { holeNum: [{player, dist}, ...] } — chronological progression, oldest first
 let _ctpExpanded  = {};     // { holeNum: true } — which CttP progression trails are tap-expanded
+// BirdieBall — Dev-86 round 3 follow-up (Brian: "let's add the skins-type
+// alert now"). Two separate touchpoints share this same backend
+// (bfe_birdieball_answers, an upsert keyed on gathering_id+player_name):
+// (1) a standalone live-alert widget (own player picker, like Birdie
+// Alert/CttP — anyone can log anyone's status at any point in the round),
+// and (2) a confirmation baked into the Post-Round Scorecard flow as a
+// backstop for whoever forgets to use the alert (Brian's explicit ask).
+// Kept as two separate sets of local state below since they can be
+// mid-edit for two different players at once (the alert widget's picked
+// player vs. whoever's scorecard is currently being filled).
+let _bbPlayer         = null;  // live-alert widget's currently-selected player (overseer proxy, like CttP/Birdie Alert)
+let _bbTouchedPlayer  = null;  // which player _bbKept/_bbLostHole/_bbLostStroke below currently reflect — guards against edits bleeding onto a different player after a picker switch
+let _bbKept           = null;  // true = kept it, false = lost it, null = not edited this render session (falls back to the saved answer, if any)
+let _bbLostHole       = null;
+let _bbLostStroke     = null;
+let _bbSubmitting     = false;
+let _bbAnswers        = [];    // [{gathering_id, player_name, kept, lost_hole, lost_stroke}] — GET cache, one row per player who's answered
+let _bbAnswersForGathering = null; // which gathering_id _bbAnswers currently reflects — guards a stale load landing after a round switch
+// Scorecard-embedded confirmation — scoped to scPlayerSel (whoever's card
+// is being filled), exactly like Wally Ball's own _wbStatus/_wbHole/_wbStroke
+// pattern just below, not the live-alert widget's _bbPlayer above.
+let _scBbKept         = null;
+let _scBbLostHole     = null;
+let _scBbLostStroke   = null;
 let _livePanelOpen   = false;
 let _scModalOpen     = false;  // post-round scorecard modal open
 // Push notification text can only use emoji (no custom images), so Birdie keeps
@@ -7915,6 +7939,7 @@ function toggleLivePanel() {
     loadCtpData(getLiveEvent());
     loadVenueCttpHoles(getLiveEvent()).then(renderLiveBanner); // which holes to show — resolved once per panel-open, not every refresh tick
     loadSkinBoardData();
+    loadBirdieBallAnswers(getLiveEvent()); // Dev-86 round 3 follow-up — no-op for a non-Gathering evt
     loadLiveRoundTeams(getLiveEvent()); // resolved once per panel-open (Dev-80) — decides team vs individual pickers below
     startCtpRefresh();
   } else {
@@ -7929,6 +7954,7 @@ function startCtpRefresh() {
     if (!evt || !_livePanelOpen) { stopCtpRefresh(); return; }
     loadCtpData(evt);
     loadSkinBoardData();
+    loadBirdieBallAnswers(evt); // Dev-86 round 3 follow-up — keeps the "who's lost it" board and the already-answered check both live
   }, 60000);  // refresh every 60 seconds
 }
 function stopCtpRefresh() {
@@ -7950,6 +7976,9 @@ function setLiveTestEventOverride(name) {
   _wbStatus = null; _wbHole = null; _wbStroke = null; _wbAlreadyLost = false; _wbHistoryPlayer = null;
   _ctpPlayer = null; _ctpHole = null; _ctpSubmitting = false;
   _birdiePlayer = null; _birdieHole = null; _birdieScoreType = 'Birdie'; _birdieSubmitting = false;
+  _bbPlayer = null; _bbTouchedPlayer = null; _bbKept = null; _bbLostHole = null; _bbLostStroke = null; _bbSubmitting = false;
+  _bbAnswers = []; _bbAnswersForGathering = null;
+  _scBbKept = null; _scBbLostHole = null; _scBbLostStroke = null;
   _liveRoundTeams = null;
   const evt = getLiveEvent();
   showToast(evt ? `🧪 Live Panel testing: ${evt.name}` : '🧪 No eligible event found for that pick');
@@ -7957,6 +7986,7 @@ function setLiveTestEventOverride(name) {
     loadCtpData(evt);
     loadVenueCttpHoles(evt).then(renderLiveBanner);
     loadSkinBoardData();
+    loadBirdieBallAnswers(evt);
     loadLiveRoundTeams(evt);
   }
   renderLiveBanner();
@@ -7985,6 +8015,29 @@ function populateLiveTestEventSelect() {
   // If the stored override no longer matches anything eligible, fall back
   // to showing "Next upcoming" selected rather than a blank/mismatched menu.
   if (current && !eligible.some(e => e.name === current)) sel.value = '';
+}
+// Shared hole/stroke tap-grids for BirdieBall's "which hole did you lose it
+// on" detail — same visual pattern as Wally Ball's own wbHoleGrid/wbStrokeGrid
+// closures, just factored out as standalone functions since BirdieBall needs
+// the identical grid wired to two different setters (the live-alert widget's
+// bbSetHole/bbSetStroke vs. the scorecard confirmation's scBbSetHole/
+// scBbSetStroke) rather than one fixed pair.
+function bbHoleGridHtml(selectedHole, setFnName) {
+  let html = '<div class="sc-grid">';
+  for (let h = 1; h <= 18; h++) {
+    const cls = selectedHole === h ? 'sc-active' : '';
+    html += `<div><div class="sc-hole-num">${h}</div>
+      <button class="sc-hole-btn ${cls}" onclick="${setFnName}(${h})">${h}</button></div>`;
+  }
+  return html + '</div>';
+}
+function bbStrokeGridHtml(selectedStroke, setFnName) {
+  let html = '<div class="sc-grid" style="grid-template-columns:repeat(6,1fr)">';
+  for (let s = 1; s <= 6; s++) {
+    const cls = selectedStroke === s ? 'sc-active' : '';
+    html += `<div><button class="sc-hole-btn ${cls}" onclick="${setFnName}(${s})">${s}</button></div>`;
+  }
+  return html + '</div>';
 }
 // Build the expanded scorecard + CttP panel
 function buildLivePanel(evt) {
@@ -8017,6 +8070,19 @@ function buildLivePanel(evt) {
   window._liveEvtIndividualPlayers = evtIndividualPlayers;  // CttP picker — always individuals
   window._liveIsTeamRound = isTeamRound;
   window._liveTeamSubLabels = isTeamRound ? _liveRoundTeams.subLabels : {};
+  // Dev-86 round 3 follow-up (Brian: "Live panel sections should turn
+  // on/off based on the host's gaming config" — clarity + real estate).
+  // Resolved once, up front, and reused by every section below that needs
+  // to know which games (if any) this round is actually running. A
+  // non-Gathering (Series/Wally Cup) round has no games config at all —
+  // those keep showing CTP exactly as they always have; only a gamed
+  // Gathering's sections turn on/off, and only CTP/BirdieBall have a
+  // dedicated on/off section (Birdie Alert and the Scorecard are general —
+  // every Live Panel round needs those regardless of which games are on).
+  const _liveGamesConfig = evt.source === 'gathering' ? (_gatheringGamesIndex.get(evt.gatheringId) || null) : null;
+  const _liveGames = (_liveGamesConfig && Array.isArray(_liveGamesConfig.games)) ? _liveGamesConfig.games : null;
+  const showCttpSection = evt.source !== 'gathering' || !!(_liveGames && _liveGames.includes('cttp'));
+  const showBirdieBallSection = !!(_liveGames && _liveGames.includes('birdieball'));
   // ── SECTION 1: Birdie Alert ──────────────────────────────────────────────
   // Team rounds never default to currentPlayer (not a valid team) — the
   // submitter must explicitly tap "Select your team" (Dev-80).
@@ -8120,9 +8186,7 @@ function buildLivePanel(evt) {
   // (BSGC's hardcoded fallback). Without this, any Gathering at a venue with
   // no venue-tee-catalog entry silently fell all the way back to BSGC's
   // holes regardless of what the host actually configured.
-  const gatheringCttpConfig = evt.source === 'gathering'
-    ? ((_gatheringGamesIndex.get(evt.gatheringId) || {}).cttp_config || null)
-    : null;
+  const gatheringCttpConfig = _liveGamesConfig ? (_liveGamesConfig.cttp_config || null) : null;
   const ctpHoles = (gatheringCttpConfig && Array.isArray(gatheringCttpConfig.holes) && gatheringCttpConfig.holes.length)
     ? gatheringCttpConfig.holes
     : (_resolvedCttpHoles && _resolvedCttpHoles.length) ? _resolvedCttpHoles : CTP_HOLES_DEFAULT;
@@ -8207,6 +8271,75 @@ function buildLivePanel(evt) {
       </div>
       ${ctpLeaderboard}
     </div>`;
+  // ── SECTION 2.5: BirdieBall ──────────────────────────────────────────────
+  // Dev-86 round 3 follow-up (Brian: "let's add the skins-type alert now,
+  // it's simple enough") — same lightweight, explicit-tap UX pattern as
+  // Birdie Alert (player picker → pick a status → tap to send), but a
+  // straight upsert against bfe_birdieball_answers rather than the
+  // feed/skin-frontrunner machinery Birdie Alert uses — BirdieBall is a
+  // simple kept-it/lost-it fact per player, not a competitive "who's
+  // ahead right now" story. Only built when showBirdieBallSection is true.
+  let bbSection = '';
+  if (showBirdieBallSection) {
+    const bbPlayerSel = _bbPlayer || currentPlayer;
+    const bbSaved = bbAnswerFor(bbPlayerSel);
+    // Local edits only apply to whoever they were made for — switching
+    // players via the picker falls back to THAT player's saved answer
+    // (or blank, if they haven't answered at all) rather than carrying
+    // over whatever was mid-edit for the previous player.
+    const bbFresh    = _bbTouchedPlayer !== bbPlayerSel;
+    const bbKeptSel  = bbFresh ? (bbSaved ? bbSaved.kept : null)       : _bbKept;
+    const bbHoleSel  = bbFresh ? (bbSaved ? bbSaved.lost_hole : null)  : _bbLostHole;
+    const bbStrokeSel = bbFresh ? (bbSaved ? bbSaved.lost_stroke : null) : _bbLostStroke;
+    const bbCanSubmit = bbKeptSel === true || (bbKeptSel === false && bbHoleSel && bbStrokeSel);
+    const bbUnchanged = bbSaved && bbSaved.kept === bbKeptSel &&
+      (bbKeptSel === true || (bbSaved.lost_hole === bbHoleSel && bbSaved.lost_stroke === bbStrokeSel));
+    const bbPlayerEsc = bbPlayerSel.replace(/'/g, "\\'");
+    const bbDetailGrid = bbKeptSel === false ? `
+      <div style="margin-top:10px">
+        <div class="sc-section-label" style="margin-bottom:4px">Which hole?</div>
+        ${bbHoleGridHtml(bbHoleSel, 'bbSetHole')}
+        <div class="sc-section-label" style="margin:6px 0 4px">Strokes</div>
+        ${bbStrokeGridHtml(bbStrokeSel, 'bbSetStroke')}
+      </div>` : '';
+    const bbLossRows = _bbAnswers.filter(a => a.kept === false);
+    const bbBoard = bbLossRows.length ? `
+      <div style="margin-top:12px;background:rgba(0,0,0,0.15);border-radius:10px;padding:4px 12px">
+        <div style="font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;
+          color:rgba(255,255,255,0.35);padding:6px 0 4px;font-family:'DM Mono',monospace">
+          Lost the BirdieBall
+        </div>
+        ${bbLossRows.map(a => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;
+          border-bottom:0.5px solid rgba(255,255,255,0.08);font-size:0.82rem;color:#fff">
+          <span>🐦💔</span><span>${a.player_name} — hole #${a.lost_hole}</span>
+        </div>`).join('')}
+      </div>` : '';
+    bbSection = `
+      <button onclick="openPlayerSheet(window._liveEvtIndividualPlayers,'${bbPlayerEsc}',function(n){bbSelectPlayer(n)})"
+        style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);
+          border-radius:8px;padding:9px 14px;color:#fff;font-size:0.85rem;font-family:inherit;
+          text-align:left;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+        <span>👤</span><span style="flex:1">${bbPlayerSel || ''}</span>
+        <span style="color:rgba(255,255,255,0.4);font-size:0.75rem">Change ›</span>
+      </button>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button onclick="bbSetKept(true)" style="flex:1;padding:9px 6px;border-radius:8px;font-family:inherit;
+          cursor:pointer;font-size:0.85rem;font-weight:600;text-align:center;color:#fff;
+          background:${bbKeptSel===true?'rgba(29,158,117,0.35)':'rgba(255,255,255,0.08)'};
+          border:1px solid ${bbKeptSel===true?'rgba(29,158,117,0.6)':'rgba(255,255,255,0.2)'}">🐦 Kept it</button>
+        <button onclick="bbSetKept(false)" style="flex:1;padding:9px 6px;border-radius:8px;font-family:inherit;
+          cursor:pointer;font-size:0.85rem;font-weight:600;text-align:center;color:#fff;
+          background:${bbKeptSel===false?'rgba(220,80,80,0.35)':'rgba(255,255,255,0.08)'};
+          border:1px solid ${bbKeptSel===false?'rgba(220,80,80,0.6)':'rgba(255,255,255,0.2)'}">Lost it</button>
+      </div>
+      ${bbDetailGrid}
+      <button class="sc-submit-btn" style="background:#c9892a"
+        ${bbCanSubmit && !_bbSubmitting ? '' : 'disabled'}
+        onclick="submitBirdieBall()">
+        ${_bbSubmitting ? '⏳ Sending…' : bbUnchanged ? '✅ Recorded' : bbKeptSel === null ? 'Pick kept it or lost it above' : '🐦 Confirm'}
+      </button>
+      ${bbBoard}`;
+  }
   // ── SECTION 3: Post-round Scorecard ─────────────────────────────────────
   // Dev-86 round 3 follow-up — a gamed Gathering running Skins captures raw
   // gross strokes here instead of Stableford points (Brian: "the live panel
@@ -8323,6 +8456,57 @@ function buildLivePanel(evt) {
       '</div>' +
       wbDetail +
     '</div>';
+  // BirdieBall confirmation — Dev-86 round 3 follow-up (Brian: "I am
+  // wondering about a confirmation on the scorecard, in case someone
+  // forgets to issue an alert"). Scoped to scPlayerSel (whoever's card is
+  // being filled) via its own local state (_scBbKept et al.), separate from
+  // the live-alert widget above (_bbPlayer et al.) since the two can be
+  // mid-edit for different players at once. Skipped entirely the moment an
+  // answer for THIS player already exists in _bbAnswers, from EITHER
+  // touchpoint — the alert and this confirmation both write the exact same
+  // upsert, so whichever happens first satisfies both and this collapses
+  // to a read-only "already recorded" line instead of asking twice.
+  const bbConfirmSaved = showBirdieBallSection ? bbAnswerFor(scPlayerSel) : null;
+  const bbConfirmNeedsAsk = showBirdieBallSection && !bbConfirmSaved;
+  const bbConfirmAnswered = !bbConfirmNeedsAsk || (_scBbKept !== null && (_scBbKept === true || (_scBbLostHole && _scBbLostStroke)));
+  const bbConfirmYesActive = _scBbKept === true;
+  const bbConfirmNoActive  = _scBbKept === false;
+  const bbConfirmDetail = bbConfirmNoActive ? '' +
+    '<div style="margin-top:10px">' +
+      '<div class="sc-section-label" style="margin-bottom:4px">Which hole did you lose it?</div>' +
+      bbHoleGridHtml(_scBbLostHole, 'scBbSetHole') +
+      '<div class="sc-section-label" style="margin:6px 0 4px">Strokes</div>' +
+      bbStrokeGridHtml(_scBbLostStroke, 'scBbSetStroke') +
+    '</div>' : '';
+  const bbConfirmSection = !showBirdieBallSection ? '' : bbConfirmSaved ? '' +
+    '<div style="margin:12px 0;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);' +
+      'border-radius:10px;padding:10px 12px">' +
+      '<div class="sc-section-label" style="margin-bottom:2px;color:rgba(255,255,255,0.5)">\u{1F426} BirdieBall</div>' +
+      '<div style="color:rgba(255,255,255,0.75);font-size:0.85rem">' +
+        (bbConfirmSaved.kept ? 'Recorded — you kept it.' : 'Recorded — lost it on #' + bbConfirmSaved.lost_hole + '.') +
+      '</div>' +
+    '</div>' : '' +
+    '<div style="margin:12px 0;background:rgba(0,0,0,0.15);border-radius:10px;padding:10px 12px">' +
+      '<div class="sc-section-label" style="margin-bottom:6px">\u{1F426} Did you keep the BirdieBall?</div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button onclick="scBbSetStatus(true)" style="flex:1;padding:8px;border-radius:8px;font-family:inherit;' +
+          'cursor:pointer;color:#fff;background:' + (bbConfirmYesActive?'rgba(29,158,117,0.35)':'rgba(255,255,255,0.08)') +
+          ';border:1px solid ' + (bbConfirmYesActive?'rgba(29,158,117,0.6)':'rgba(255,255,255,0.2)') + '">Kept it</button>' +
+        '<button onclick="scBbSetStatus(false)" style="flex:1;padding:8px;border-radius:8px;font-family:inherit;' +
+          'cursor:pointer;color:#fff;background:' + (bbConfirmNoActive?'rgba(220,80,80,0.35)':'rgba(255,255,255,0.08)') +
+          ';border:1px solid ' + (bbConfirmNoActive?'rgba(220,80,80,0.6)':'rgba(255,255,255,0.2)') + '">Lost it</button>' +
+      '</div>' +
+      bbConfirmDetail +
+    '</div>';
+  // Stashed on window so submitScorecard (fired via onclick, outside this
+  // closure) can persist this same answer to bfe_birdieball_answers right
+  // alongside the scorecard save — one submit covers both, so a player who
+  // never touched the live-alert widget still ends up with a real answer
+  // on record. Null when there's nothing new to persist (no BirdieBall on
+  // this Gathering, or this player already has an answer on file).
+  window._liveBbConfirmPending = (showBirdieBallSection && bbConfirmNeedsAsk && _scBbKept !== null)
+    ? { kept: _scBbKept, lost_hole: _scBbKept ? null : _scBbLostHole, lost_stroke: _scBbKept ? null : _scBbLostStroke }
+    : null;
   // Pre-compute confirm vs submit UI to avoid nested template literals
   const scActionHtml = _scSubmitDone
     ? '<div style="background:rgba(29,158,117,0.25);border:1px solid rgba(29,158,117,0.5);' +
@@ -8339,11 +8523,12 @@ function buildLivePanel(evt) {
         'style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.6)">' +
         '\u2713 Done \u2014 All Scorecards In' +
       '</button>'
-    : '<button class="sc-submit-btn" ' + (allEntered && wbAnswered && scPlayerSel && !_scSubmitting ? '' : 'disabled') +
+    : '<button class="sc-submit-btn" ' + (allEntered && wbAnswered && bbConfirmAnswered && scPlayerSel && !_scSubmitting ? '' : 'disabled') +
         ' onclick="submitScorecard(\'' + evt.name.replace(/'/g,"\'") + '\')">' +
         (_scSubmitting ? '\u23f3 Submitting\u2026'
           : !allEntered ? 'Enter all 18 holes (' + enteredCount + '/18)'
           : !wbAnswered ? 'Answer Wally Ball above \u2191'
+          : !bbConfirmAnswered ? 'Confirm BirdieBall above \u2191'
           : !scPlayerSel ? 'Select your team above \u2191'
           : '\u2705 Submit Scorecard') +
       '</button>';
@@ -8374,6 +8559,7 @@ function buildLivePanel(evt) {
       '</div>' +
       (picker || '') +
       wbSection +
+      bbConfirmSection +
       scActionHtml
     : '<button class="sc-submit-btn" onclick="toggleScorecard()" ' +
         'style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.3)">' +
@@ -8407,10 +8593,16 @@ function buildLivePanel(evt) {
       <div class="live-section-header"><span class="lsh-icon">🦅</span>Birdie Alert</div>
       <div class="live-section-body">${birdieSection}</div>
     </div>
+    ${showCttpSection ? `
     <div class="live-section">
       <div class="live-section-header"><span class="lsh-icon">🎯</span>Closest to the Pin</div>
       <div class="live-section-body">${ctpSection}</div>
-    </div>
+    </div>` : ''}
+    ${showBirdieBallSection ? `
+    <div class="live-section">
+      <div class="live-section-header"><span class="lsh-icon">🐦</span>BirdieBall</div>
+      <div class="live-section-body">${bbSection}</div>
+    </div>` : ''}
     <div class="live-section">
       <div class="live-section-header"><span class="lsh-icon">📋</span>Post-Round Scorecard</div>
       <div class="live-section-body">${scSection}</div>
@@ -8853,6 +9045,9 @@ function scNextPlayer() {
   _wbHole       = null;
   _wbStroke     = null;
   _wbAlreadyLost = false;
+  _scBbKept     = null;
+  _scBbLostHole = null;
+  _scBbLostStroke = null;
   refreshWbHistory(currentPlayer);  // "next player" defaults to currentPlayer until overseer picks someone else
   renderLiveBanner();
   // Scroll live panel into view
@@ -8873,6 +9068,9 @@ function scDoneAllPlayers() {
   _wbStroke     = null;
   _wbAlreadyLost = false;
   _wbHistoryPlayer = null;
+  _scBbKept     = null;
+  _scBbLostHole = null;
+  _scBbLostStroke = null;
   _scExpanded   = false;
   _livePanelOpen = false;
   stopCtpRefresh();
@@ -8976,6 +9174,28 @@ async function loadSkinBoardData() {
     console.warn('[SkinBoard] loadSkinBoardData error:', e.message);
   }
 }
+// BirdieBall answers — Dev-86 round 3 follow-up. Loads the whole gathering's
+// answer set in one call (same shape as loadSkinBoardData/loadCtpData) so
+// both the live-alert widget and the scorecard confirmation can read the
+// same cache without a fetch each. No-ops for a non-Gathering evt — there's
+// no such thing as a BirdieBall config outside a gamed Gathering.
+async function loadBirdieBallAnswers(evt) {
+  if (!evt || evt.source !== 'gathering') { _bbAnswers = []; _bbAnswersForGathering = null; return; }
+  try {
+    const res = await fetch(`${BFE_API}/bfe/birdieball-answers?gathering_id=${evt.gatheringId}`);
+    const data = await res.json();
+    _bbAnswers = data.ok ? (data.answers || []) : [];
+    _bbAnswersForGathering = evt.gatheringId;
+    renderLiveBanner();
+  } catch(e) {
+    console.warn('[BirdieBall] loadBirdieBallAnswers error:', e.message);
+  }
+}
+function bbAnswerFor(playerName) {
+  if (!playerName) return null;
+  const p = playerName.trim().toLowerCase();
+  return _bbAnswers.find(a => (a.player_name || '').trim().toLowerCase() === p) || null;
+}
 // Submit scorecard — to Jotform (Stableford points, feeds Wally Cup quota)
 // or to the GATHERINGS_API/scorecards D1 endpoint (raw gross strokes, feeds
 // Skins) depending on window._liveScoreMode, set by buildLivePanel() from
@@ -9032,6 +9252,28 @@ async function submitScorecard(evtName) {
       }
       await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`,
         { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() });
+    }
+    // BirdieBall safety-net confirmation (Brian: "a confirmation on the
+    // scorecard, in case someone forgets to issue an alert") — piggybacks
+    // on the same submit tap, writing to the exact same bfe_birdieball_answers
+    // upsert the live-alert widget uses. window._liveBbConfirmPending is only
+    // non-null when this Gathering runs BirdieBall AND this player didn't
+    // already have an answer on file when the panel last rendered, so this
+    // never overwrites something the live alert already recorded. Best-effort
+    // — a failure here doesn't undo the scorecard save that already succeeded.
+    if (window._liveBbConfirmPending && _scEvt && _scEvt.source === 'gathering') {
+      const bbPending = window._liveBbConfirmPending;
+      fetch(`${BFE_API}/bfe/birdieball-answers`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gathering_id: _scEvt.gatheringId, player_name: scName, ...bbPending })
+      }).then(async (res) => {
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Save failed');
+        const idx = _bbAnswers.findIndex(a => (a.player_name || '').trim().toLowerCase() === scName.trim().toLowerCase());
+        const row = { gathering_id: _scEvt.gatheringId, player_name: scName, ...bbPending };
+        if (idx === -1) _bbAnswers.push(row); else _bbAnswers[idx] = row;
+        renderLiveBanner();
+      }).catch(e => console.warn('[BirdieBall] scorecard-confirmation save failed:', e.message));
     }
     _scSubmitDone = true;
     _scSubmitting = false;
@@ -9120,6 +9362,84 @@ async function submitCttp(evtName) {
     _ctpSubmitting = false;
     renderLiveBanner();
   }
+}
+// BirdieBall live-alert widget (Dev-86 round 3 follow-up, Brian: "let's add
+// the skins-type alert now") — switching the picked player hydrates the
+// local edit state FROM that player's saved answer (if any), so the picker
+// always shows a real current status rather than carrying over whatever was
+// mid-edit for whoever was selected before.
+function bbSelectPlayer(name) {
+  _bbPlayer = name;
+  const saved = bbAnswerFor(name);
+  _bbTouchedPlayer = name;
+  _bbKept = saved ? saved.kept : null;
+  _bbLostHole = saved ? saved.lost_hole : null;
+  _bbLostStroke = saved ? saved.lost_stroke : null;
+  renderLiveBanner();
+}
+function bbSetKept(kept) {
+  const player = _bbPlayer || currentPlayer;
+  if (_bbTouchedPlayer !== player) { _bbLostHole = null; _bbLostStroke = null; }
+  _bbTouchedPlayer = player;
+  _bbKept = kept;
+  renderLiveBanner();
+}
+function bbSetHole(h) {
+  _bbLostHole = h;
+  renderLiveBanner();
+}
+function bbSetStroke(s) {
+  _bbLostStroke = s;
+  renderLiveBanner();
+}
+async function submitBirdieBall() {
+  if (_bbSubmitting) return;
+  const evt = getLiveEvent();
+  if (!evt || evt.source !== 'gathering') return;
+  const player = _bbPlayer || currentPlayer;
+  if (!player || _bbKept === null) return;
+  if (_bbKept === false && !(_bbLostHole && _bbLostStroke)) { showToast('Pick which hole and how many strokes', true); return; }
+  _bbSubmitting = true;
+  renderLiveBanner();
+  try {
+    const payload = { gathering_id: evt.gatheringId, player_name: player, kept: _bbKept,
+      lost_hole: _bbKept ? null : _bbLostHole, lost_stroke: _bbKept ? null : _bbLostStroke };
+    const res = await fetch(`${BFE_API}/bfe/birdieball-answers`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    // Upsert into the local cache in place so the "who's lost it" board and
+    // the scorecard's already-answered line both refresh instantly, without
+    // waiting for the next poll.
+    const idx = _bbAnswers.findIndex(a => (a.player_name || '').trim().toLowerCase() === player.trim().toLowerCase());
+    if (idx === -1) _bbAnswers.push(payload); else _bbAnswers[idx] = payload;
+    _bbSubmitting = false;
+    showToast(_bbKept ? `🐦 Recorded — ${player} kept it` : `Recorded — ${player} lost it on #${_bbLostHole}`);
+    renderLiveBanner();
+  } catch(e) {
+    _bbSubmitting = false;
+    showToast('❌ Could not save — try again', true);
+    renderLiveBanner();
+  }
+}
+// BirdieBall scorecard confirmation (Brian: "a confirmation on the
+// scorecard, in case someone forgets to issue an alert") — separate local
+// state from the live-alert widget above, scoped to whoever's scorecard is
+// currently being filled (scPlayerSel), same convention as Wally Ball's own
+// wbSetStatus/wbSetHole/wbSetStroke just below.
+function scBbSetStatus(kept) {
+  _scBbKept = kept;
+  if (!kept) { /* keep any hole/stroke already picked */ } else { _scBbLostHole = null; _scBbLostStroke = null; }
+  renderLiveBanner();
+}
+function scBbSetHole(h) {
+  _scBbLostHole = h;
+  renderLiveBanner();
+}
+function scBbSetStroke(s) {
+  _scBbLostStroke = s;
+  renderLiveBanner();
 }
 // Birdie Alert — announce a sub-par score, detect skin opportunity, send push
 async function submitBirdieAlert(evtName) {
@@ -9453,6 +9773,7 @@ function toggleScorecard() {
     _scPicking = null;
     _wbStatus = null; _wbHole = null; _wbStroke = null;
     _wbAlreadyLost = false; _wbHistoryPlayer = null;
+    _scBbKept = null; _scBbLostHole = null; _scBbLostStroke = null;
   } else if (!window._liveIsTeamRound) {
     refreshWbHistory(_scPlayer || currentPlayer);
   }
@@ -9468,6 +9789,9 @@ function scChangePlayer(name) {
   _wbHole       = null;
   _wbStroke     = null;
   _wbAlreadyLost = false;
+  _scBbKept     = null;
+  _scBbLostHole = null;
+  _scBbLostStroke = null;
   if (!window._liveIsTeamRound) refreshWbHistory(name); // 2Man is excluded from Wally Ball (Dev-80)
   renderLiveBanner();
 }
