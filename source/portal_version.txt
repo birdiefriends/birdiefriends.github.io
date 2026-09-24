@@ -1,2 +1,2 @@
-v4.5.5 · 2026-09-24
-Deployed: 2026-09-24 (Live Panel's Post-Round Scorecard now captures raw gross strokes for a gamed Gathering running Skins, instead of Stableford points — feeds Skins math directly, no separate Card Score Sheet trip needed. Everything else (Series/Wally Cup rounds, CTP, BirdieBall) is untouched — still points mode, same Jotform path as always.)
+v4.5.6 · 2026-09-24
+Deployed: 2026-09-24 (Two Live Panel bugs from live-testing Jefferson @ Moselem: (1) Gear → Event Day's "which round is live" test picker now also excludes rounds whose scorecards are already all in, not just past-dt ones — a round that wrapped up early was still showing as selectable. (2) CTP hole picker now uses the Gathering's own cttp_config.holes first — it was silently falling back to BSGC's hardcoded default holes for any venue with no legacy venue-tee-catalog entry, which is most venues including Moselem.)
