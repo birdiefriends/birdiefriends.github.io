@@ -1,3 +1,6 @@
+v4.7.4 · 2026-09-25
+Deployed: 2026-09-25 09:15 (Admin → Venue Manager → GC-API Lookup: "Stored tees" now uses the same layout as the player venue viewer — tee dropdown with color swatch, Par/Yards/Rating/Slope strip, and the full scorecard grid — instead of a stacked list of View/Delete rows. Delete applies to the tee selected in the dropdown; the footer shows how many tees are stored, the data source and save date, and a 🔒 badge for hand-edited tees. Both views now share one renderer, so they can't drift apart.)
+
 v4.7.3 · 2026-09-24
 Deployed: 2026-09-24 19:15 (BETA rail: it now tucks itself whenever the Live Panel is open — the panel already has capture and scoring and needs its full width (otherwise the rail covered holes 9/18 and the right-hand buttons). Tap the ‹ tab to peek it open anyway; closing the Live Panel brings the rail back. The rail's 🏆 Games opens the panel and tucks the rail in one move.)
 
