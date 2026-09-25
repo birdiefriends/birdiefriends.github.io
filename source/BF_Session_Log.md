@@ -4368,7 +4368,7 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, v4.7.4 for item 10, v4.7.5 for item 11, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, v4.7.4 for item 10, v4.7.5 for item 11, v4.7.6 for item 12, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
@@ -4544,6 +4544,17 @@ CC, "Skytop" → Skytop Lodge, "Woodstone" → Woodstone GC, "Honesdale" → Hon
 → nothing, but "Lords Valley" → Lords Valley CC (hence the apostrophe strip). Tests:
 `test_gc_search.mjs` (16 checks, incl. status + query surviving a full re-render); all suites 123
 passing.
+
+**12. GolfCourseAPI quota (429) handling (v4.7.6), 2026-09-25.** Right after item 11, every search
+returned "GolfCourseAPI search failed (429)" — the free-tier quota was exhausted (Claude's 7
+verification calls that morning plus Brian's own searches). A third-party project reports the free tier
+as **35 requests/day**, with a `retry-after` of ~18–19 h once spent (unconfirmed against GolfCourseAPI's
+own docs, which didn't render). **Not a code bug.** Portal now recognizes it (`gcIsQuotaError` — HTTP
+429 or rate-limit/quota wording) and shows `GC_QUOTA_MSG` (amber: daily limit reached, nothing broken,
+try tomorrow) in both search and course lookup. A quota error throws before the name-variant retry, so
+no call is wasted. **Lesson for future sessions: every GC-API verification call spends Brian's small
+daily budget — batch them, and don't probe casually.** The Worker could cache search/course responses in
+D1 to stretch the quota (not done). Tests: 2 new (18 in `test_gc_search.mjs`); all suites 125 passing.
 
 **Carry-forward:**
 - Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
