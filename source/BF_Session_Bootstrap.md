@@ -38,7 +38,7 @@ apps and two Cloudflare Workers:
 - **`portal.html`** — the player-facing app. Events/Gatherings home screen, registration,
   the Live Panel (in-round scorecard/CTP/Birdie Alert/photo capture during play), results
   pages, admin/commissioner controls behind a gear icon. This is the file most session work
-  touches. Currently v4.7.4 (see `portal_version.txt` — **bump this with every
+  touches. Currently v4.7.5 (see `portal_version.txt` — **bump this with every
   `portal.html` change and deliver it alongside**, format `vX.Y.Z · YYYY-MM-DD` /
   `Deployed: YYYY-MM-DD HH:MM`; nothing bumps it automatically).
 - **`BFE-Admin.html`** — commissioner-only admin tool for BFE ("BirdieFriends
@@ -380,8 +380,10 @@ Full build detail, including the exact bug chases and test coverage, is in
   cleanly (i.e. GitHub `source/bf_experiences_worker.js` reflects the Dev-84 changes and
   production matches it) — still worth one quick confirmation rather than assuming it's
   settled, now three sessions on.
-- Buck Hill Golf Club GolfCourseAPI name-variant retry (Dev-85 carry-forward) — still not
-  attempted.
+- ~~Buck Hill GolfCourseAPI name-variant retry~~ — **resolved Dev-87 (v4.7.5)**: Venue Manager's
+  search now retries automatically with a simplified name; "Buck Hill" finds Buck Hill Falls GC.
+  GolfCourseAPI matches were found for Paupack, Skytop, Woodstone, Honesdale and Lords Valley too — all
+  five venues missing coordinates can now be filled from GC-API Lookup.
 Nothing above is expected to be a large item on its own — if something real breaks, fix it in
 place and log it the same way prior sessions' own live-data catches were logged (see those
 entries in `BF_Session_Log.md` for the pattern: what was found, how it was verified against
