@@ -65,14 +65,75 @@ geocoding Brian has been doing per new venue (Buck Hill was geocoded by hand in 
 worth wiring in even independent of the tee-data work, since it's a much smaller lift.
 
 **Open/unverified:**
-- Buck Hill's absence from GC-API's dataset means the manual-entry fallback path is not
-  optional — it's a real, expected branch, not a rare edge case. Worth trying a name
-  variant search (e.g. "Buck Hill Falls Golf Club") before concluding it's simply absent.
+- ~~Buck Hill's absence from GC-API~~ — **resolved Dev-87:** it was a search-term miss.
+  "Buck Hill" finds Buck Hill Falls Golf Club (Venue Manager now retries with a simplified
+  name automatically). The manual-entry fallback is still needed for courses GC-API truly
+  lacks — see §1a.
 - Whether GC-API coverage holds up for whatever other venues get added later hasn't been
   tested beyond these five.
 - Not calendar-critical for any of the known 2026 fall events (see §8) — BF Cup is played
   scratch, so it doesn't depend on course rating/slope data the way a handicap-relief
   format would.
+
+---
+
+## 1a. Course layouts — 9-hole play, 27-hole pairings, manual tee entry (Dev-87 design, not built)
+
+**Why:** three real needs surfaced together in Dev-87. (1) Chooch's 9-hole league needs the games
+component to know *which* nine is being played. (2) Some venues (Buck Hill) have 27 holes, and a
+round is a pair of nines. (3) Courses GC-API doesn't have need a manual entry tool. Brian: "a bigger
+piece of work … let's document it and tackle the dev later."
+
+**What already exists (verified in code, Dev-87):**
+- `bfe_venue_tees` rows are 18-hole tees (`holes` must be an array of 18 — the Worker rejects anything
+  else), `UNIQUE(venue_id, tee_name, gender)`.
+- `POST /bfe/venue-tees` **already accepts hand-entered tees**: `source:'manual'` saves with `locked=1`,
+  so a later GC-API refresh can't overwrite them without `force:true`. **No Worker work is needed for
+  basic manual entry** — only UI.
+- Scorecards already carry `hole_count` (9|18) and `hole_half` ('front'|'back') end to end (main Worker
+  D1, Card Score Sheet UI, My History detail).
+- **Gap:** the Live Panel scorecard always sends `hole_half: null` (see `submitScorecard`) and has no
+  notion of which nine. A 9-hole gamed Gathering played on the back nine would record its holes as
+  1–9, so Skins, CTP holes and stroke holes would all line up against the wrong holes. **Fix this
+  before a 9-hole league runs games.**
+- The legacy venue-level par table (`venues.pars`, main Worker, Venue Manager's older "manual entry")
+  is a separate 18-par list used for Card Score Sheet marks. The new editor should seed from it.
+
+**Proposed model — a venue has one or more *layouts*; each is an 18-hole routing:**
+- Standard course → one layout (blank/default). Nothing changes for existing venues.
+- 27-hole course → one layout per pairing (e.g. Red/White, White/Blue, Blue/Red), each with its own
+  tees, rating/slope and 18-hole hole handicaps. That's how ratings are published, and very likely how
+  GC-API stores them: a "Buck Hill" search returned four near-identical "Buck Hill Falls Golf Club"
+  entries, consistent with one per pairing. **Not yet opened to confirm** — spend 1 search + a few
+  course lookups of the daily GC-API budget.
+- 9-hole play → a layout + a half (front/back), reusing the scorecard's existing `hole_half`.
+- A 9-hole-only course → one layout whose back half repeats the front (or a 9-hole-only flag), to be
+  decided when a real one comes up.
+- Rejected alternative: storing each *nine* as the building block and assembling rounds from nines.
+  Cleaner in theory, but it fights how both GC-API and the rating system publish data, and it's a
+  much larger rework. Revisit only if a course can't be described as layouts.
+
+**Build plan (in order):**
+1. **Schema:** add `layout TEXT` (NULL = default) to `bfe_venue_tees`; widen the unique key to
+   `(venue_id, layout, tee_name, gender)`. Additive migration; GC-API imports fill `layout` from the
+   course name when a venue has multiple GC-API courses.
+2. **Manual tee editor (Venue Manager):** "➕ Add tee / ✏️ Edit tee" using the same grid as
+   `venueScorecardHtml`, but with every Yds/Par/HCP cell as an input. Fields: layout, tee name, gender,
+   rating, slope. Live OUT/IN/TOT sums, so you can check against the physical card. **"Copy from another
+   tee"** (par + HCP are almost always the same across a course's tees, so only yardage/rating/slope
+   need typing). Validation: every par 3–6; HCP must use 1–18 exactly once (highlight duplicates or
+   gaps, don't just refuse); yardage optional; warn if rating/slope are missing (HCP strokes need
+   them). Seed pars from `venues.pars` when present. Saves via the existing `POST /bfe/venue-tees`
+   with `source:'manual'`.
+3. **Holes played in the Games config:** "18 / Front 9 / Back 9" (+ a layout dropdown when the venue
+   has more than one). The Live Panel scorecard shows only those holes with their real numbers, and
+   sends `hole_half`. The CTP hole picker is limited to that nine. `computeGatheringGamesPayout` already
+   copes with 9-length cards, but hole numbering must stay aligned with the actual holes played.
+4. **Viewer/rail:** the venue viewer and the at-course rail get the layout dropdown when needed.
+
+**Open questions:** 9-hole ratings and 9-hole stroke index (WHS publishes 9-hole ratings; the stroke
+allocation for a single nine is usually the 18-hole index re-ranked 1–9, or odd/even — confirm when
+handicaps are built, §4); how GC-API labels 27-hole pairings; whether any BF venue is 9-hole-only.
 
 ---
 
@@ -529,7 +590,8 @@ the Host's job more complete" is the right question for *sequencing and priority
 - Course Handicap formula and allowance-% configurability model — needs Brian to "noodle
   on it" before this is scoped further; not calendar-critical this year.
 - Per-venue connectivity flag — worth building, and where it should live, both open.
-- Buck Hill: confirm genuine GC-API absence (try name variants) vs. a search-term miss.
+- ~~Buck Hill: GC-API absence vs. search-term miss~~ — resolved Dev-87 (search-term miss).
+- §1a course layouts: confirm how GC-API returns 27-hole pairings (Buck Hill), and 9-hole ratings.
 - §9's build sequence is a proposed order, not a decision — open to being argued with in
   a future session, especially step ordering once real work starts surfacing constraints
   the discussion didn't anticipate.
