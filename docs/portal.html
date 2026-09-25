@@ -249,6 +249,20 @@ body {
   border: 1px solid rgba(245,200,66,0.5); border-right: none; border-radius: 16px 0 0 16px;
   box-shadow: -4px 4px 18px rgba(0,0,0,0.3); transition: transform 0.25s ease; }
 #at-course-rail.tucked, #at-course-rail.scrolling { transform: translate(calc(100% - 18px), -50%); }
+/* Dev-87 — draggable: .placed = dropped at a remembered height (no vertical centring);
+   .left = snapped to the left edge (mirror image); .dragging = following the finger */
+#at-course-rail.placed { transform: none; }
+#at-course-rail.placed.tucked, #at-course-rail.placed.scrolling { transform: translateX(calc(100% - 18px)); }
+#at-course-rail.left { right: auto; left: 0; flex-direction: row-reverse; border-right: 1px solid rgba(245,200,66,0.5);
+  border-left: none; border-radius: 0 16px 16px 0; box-shadow: 4px 4px 18px rgba(0,0,0,0.3); }
+#at-course-rail.left .acr-grip { border-radius: 0 16px 16px 0; }
+#at-course-rail.left .acr-col { padding: 6px 4px 6px 5px; }
+#at-course-rail.left.tucked, #at-course-rail.left.scrolling { transform: translate(calc(-100% + 18px), -50%); }
+#at-course-rail.left.placed.tucked, #at-course-rail.left.placed.scrolling { transform: translateX(calc(-100% + 18px)); }
+#at-course-rail.dragging { transition: none; transform: none !important; border-radius: 16px; border: 1px solid rgba(245,200,66,0.8);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45); opacity: 0.95; }
+#at-course-rail .acr-grip, #at-course-rail .acr-status { touch-action: none; cursor: grab; }
+#at-course-rail.dragging .acr-grip, #at-course-rail.dragging .acr-status { cursor: grabbing; }
 #at-course-rail .acr-grip { width: 18px; border: none; background: rgba(245,200,66,0.18); color: #F5C842;
   font-size: 0.9rem; font-weight: 800; cursor: pointer; border-radius: 16px 0 0 16px; padding: 0; font-family: inherit; }
 #at-course-rail .acr-col { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 5px 6px 4px; }
@@ -4907,7 +4921,61 @@ function atCourseOpenGames() {
   if (!_livePanelOpen) toggleLivePanel();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+// Dev-87 — drag the rail anywhere: grab the gold tab or the ⛳ chip, move it,
+// let go. It snaps to the nearest side (left/right) at the drop height, and
+// the spot is remembered on this device (localStorage — a per-phone
+// convenience, safe to lose). A plain tap on the tab still tucks/untucks.
+let _atCourseJustDragged = false;
+function atCourseLoadPos() {
+  try { const p = JSON.parse(localStorage.getItem('bf_atcourse_pos') || 'null'); if (p && (p.side === 'left' || p.side === 'right') && typeof p.topFrac === 'number') return p; } catch (e) {}
+  return { side: 'right', topFrac: null }; // null = vertically centred (default)
+}
+function atCourseSavePos(p) { try { localStorage.setItem('bf_atcourse_pos', JSON.stringify(p)); } catch (e) {} }
+function atCourseApplyPos(el) {
+  const p = atCourseLoadPos();
+  el.classList.toggle('left', p.side === 'left');
+  if (p.topFrac == null) { el.style.top = ''; el.classList.remove('placed'); return; }
+  const h = el.offsetHeight || 300, vh = window.innerHeight || 700;
+  const top = Math.max(60, Math.min(vh - h - 70, p.topFrac * vh)); // clear of the header and bottom nav
+  el.style.top = top + 'px';
+  el.classList.add('placed');
+}
+function atCourseDragStart(ev) {
+  const el = document.getElementById('at-course-rail');
+  if (!el || (ev.button != null && ev.button !== 0)) return;
+  const rect = el.getBoundingClientRect();
+  const startX = ev.clientX, startY = ev.clientY, grabDy = ev.clientY - rect.top;
+  let moved = false;
+  const move = (e) => {
+    if (!moved && Math.hypot(e.clientX - startX, e.clientY - startY) < 8) return; // still a tap
+    if (!moved) { moved = true; el.classList.add('dragging', 'placed'); el.classList.remove('tucked'); }
+    e.preventDefault();
+    el.style.top = (e.clientY - grabDy) + 'px';
+    el.style.left = Math.max(0, Math.min(window.innerWidth - rect.width, e.clientX - rect.width / 2)) + 'px';
+    el.style.right = 'auto';
+  };
+  const up = (e) => {
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', up);
+    document.removeEventListener('pointercancel', up);
+    if (!moved) return; // a tap — let the tab's onclick handle tuck
+    _atCourseJustDragged = true;
+    setTimeout(() => { _atCourseJustDragged = false; }, 250); // swallow the click that follows a drag
+    const vh = window.innerHeight || 700;
+    const side = e.clientX < window.innerWidth / 2 ? 'left' : 'right';
+    const topFrac = Math.max(0, (e.clientY - grabDy) / vh);
+    el.classList.remove('dragging');
+    el.style.left = ''; el.style.right = '';
+    atCourseSavePos({ side, topFrac });
+    _atCourseTucked = false;
+    renderAtCourseRail();
+  };
+  document.addEventListener('pointermove', move, { passive: false });
+  document.addEventListener('pointerup', up);
+  document.addEventListener('pointercancel', up);
+}
 function toggleAtCourseRail() {
+  if (_atCourseJustDragged) return;
   if (_livePanelOpen) _atCoursePanelPeek = !_atCoursePanelPeek;
   else _atCourseTucked = !_atCourseTucked;
   renderAtCourseRail();
@@ -4928,10 +4996,11 @@ function renderAtCourseRail() {
   // holes 9/18 and the right-hand buttons). The grip still peeks it open.
   const tucked = _livePanelOpen ? !_atCoursePanelPeek : _atCourseTucked;
   el.className = tucked ? 'tucked' : '';
+  atCourseApplyPos(el); // side + height from the last drag (left class set here, before the markup reads it)
   el.innerHTML = `
-    <button class="acr-grip" onclick="toggleAtCourseRail()" title="${tucked ? 'Show' : 'Tuck away'}">${tucked ? '‹' : '›'}</button>
+    <button class="acr-grip" onclick="toggleAtCourseRail()" onpointerdown="atCourseDragStart(event)" title="Tap: ${tucked ? 'show' : 'tuck away'} · Drag: move">${(el.classList.contains('left') ? !tucked : tucked) ? '‹' : '›'}</button>
     <div class="acr-col">
-      <div class="acr-status" title="${escapeHtml(evt.name)}"><span style="font-size:1rem">⛳</span><span>${where}</span></div>
+      <div class="acr-status" onpointerdown="atCourseDragStart(event)" title="${escapeHtml(evt.name)} · drag to move"><span style="font-size:1rem">⛳</span><span>${where}</span></div>
       ${!bfe ? btn('📷', 'Photo', `openCardPhotoSheet('${id}')`) : ''}
       ${!bfe ? btn('💬', 'Note', `openCardNoteSheet('${id}')`) : ''}
       ${btn('📏', 'Yardage', 'openYardageModal()')}
@@ -4939,6 +5008,7 @@ function renderAtCourseRail() {
       ${btn('🗺️', 'Course', `openVenueViewerModal('${id}')`)}
       ${gamesOn ? btn('🏆', 'Games', 'atCourseOpenGames()') : ''}
     </div>`;
+  atCourseApplyPos(el); // again now that the buttons exist, so the height clamp is exact
 }
 function atCourseInitOnce() {
   if (_atCourseInit) return;
