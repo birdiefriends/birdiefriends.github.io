@@ -10362,6 +10362,12 @@ let _adminVenueCttpOpen = {};        // venue id -> bool, which CTP-holes editor
 let _adminVenueGcOpen = {};          // venue id -> bool, which GolfCourseAPI lookup panels are expanded (Dev-86)
 let _adminVenueGcResults = {};       // venue id -> array of search results from GET /bfe/coursedata/search
 let _adminVenueGcCourse = {};        // venue id -> full course-details object from GET /bfe/coursedata/courses/:id, once a search result is picked
+// Dev-87 — status + last query live in state, not only the DOM: every GC
+// action ends in loadAdminVenues(), which re-renders the whole list and was
+// wiping the status line ("No matches…" flashed and vanished) and resetting
+// the query box back to the venue name.
+let _adminVenueGcStatus = {};        // venue id -> { text, kind: 'info'|'warn'|'error' }
+let _adminVenueGcQuery = {};         // venue id -> last query typed
 let _adminVenueTees = {};            // venue id -> array of stored tee rows from GET /bfe/venue-tees (Dev-86 multi-tee redesign)
 let _adminVenuesCache = [];          // last-loaded venues list (from loadAdminVenues), so helpers like adminGcSaveTee can look up a venue's name by id without a re-fetch
 // venue id -> { cttpHoles, raw } | null (fetched-and-empty) | undefined (not fetched yet).
@@ -11163,31 +11169,71 @@ function venueGcLookupEditorHtml(v) {
         <div id="admin-gc-stored-${v.id}">${storedVenueTeesHtml(v)}</div>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input type="text" id="admin-gc-query-${v.id}" placeholder="Course name" value="${v.name.replace(/"/g, '&quot;')}"
+        <input type="text" id="admin-gc-query-${v.id}" placeholder="Course name" value="${(_adminVenueGcQuery[v.id] ?? v.name).replace(/"/g, '&quot;')}"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();adminGcSearch(${v.id})}"
           style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--border);font-size:0.8rem;font-family:inherit;box-sizing:border-box">
         <button class="btn btn-secondary btn-sm" style="font-size:0.76rem;white-space:nowrap" onclick="adminGcSearch(${v.id})">Search</button>
       </div>
-      <div id="admin-gc-status-${v.id}" style="font-size:0.74rem;color:var(--text-muted)"></div>
+      <div id="admin-gc-status-${v.id}">${adminGcStatusHtml(v.id)}</div>
       <div id="admin-gc-results-${v.id}">${resultsHtml}</div>
       <div id="admin-gc-tees-${v.id}">${teesHtml}</div>
     </div>`;
 }
+function adminGcStatusHtml(id) {
+  const st = _adminVenueGcStatus[id];
+  if (!st || !st.text) return '';
+  const tone = st.kind === 'warn' ? 'background:#fff8e1;border:1px solid #e8c31b;color:#5a4a00'
+    : st.kind === 'error' ? 'background:#fdecea;border:1px solid rgba(185,28,28,0.35);color:#8e2b20'
+    : 'background:#fff;border:1px solid var(--border);color:var(--text-muted)';
+  return `<div style="${tone};border-radius:8px;padding:7px 10px;margin:4px 0 6px;font-size:0.76rem;line-height:1.45">${st.text}</div>`;
+}
+function adminGcSetStatus(id, text, kind = 'info') {
+  _adminVenueGcStatus[id] = text ? { text, kind } : null;
+  const el = document.getElementById(`admin-gc-status-${id}`);
+  if (el) el.innerHTML = adminGcStatusHtml(id);
+}
+// Name variant for a no-match retry: drop the club-type words and apostrophes
+// GolfCourseAPI files differently — verified live Dev-87: "Buck Hill G.C." →
+// "Buck Hill" finds Buck Hill Falls GC; "Lord's Valley" only matches as
+// "Lords Valley".
+function gcSimplifiedQuery(q) {
+  const s = String(q || '')
+    .replace(/\b(golf\s*(&|and)\s*country\s*club|country\s*club|golf\s*club|golf\s*course|golf\s*links|golf\s*resort|resort|lodge|g\.?\s*c\.?|c\.?\s*c\.?|municipal|muni)\b/gi, ' ')
+    .replace(/['’]/g, '')              // "Lord's Valley" is filed as "Lords Valley"
+    .replace(/[^\w -]/g, ' ').replace(/\s+/g, ' ').trim();
+  return (s && s.toLowerCase() !== String(q).trim().toLowerCase()) ? s : null;
+}
 async function adminGcSearch(id) {
   const input = document.getElementById(`admin-gc-query-${id}`);
-  const statusEl = document.getElementById(`admin-gc-status-${id}`);
   const q = (input?.value || '').trim();
-  if (!q) { if (statusEl) statusEl.textContent = 'Enter a course name first.'; return; }
-  if (statusEl) statusEl.textContent = 'Searching…';
-  try {
-    const res = await fetch(`${BFE_API}/bfe/coursedata/search?q=${encodeURIComponent(q)}`);
+  _adminVenueGcQuery[id] = q;
+  if (!q) { adminGcSetStatus(id, 'Enter a course name first.', 'warn'); return; }
+  adminGcSetStatus(id, `Searching GolfCourseAPI for “${escapeHtml(q)}”…`);
+  const search = async (term) => {
+    const res = await fetch(`${BFE_API}/bfe/coursedata/search?q=${encodeURIComponent(term)}`);
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Search failed');
-    _adminVenueGcResults[id] = data.courses || [];
+    return data.courses || [];
+  };
+  try {
+    let courses = await search(q);
+    let usedAlt = null;
+    const alt = !courses.length ? gcSimplifiedQuery(q) : null;
+    if (alt) {
+      adminGcSetStatus(id, `No match for “${escapeHtml(q)}” — trying “${escapeHtml(alt)}”…`);
+      courses = await search(alt);
+      if (courses.length) usedAlt = alt;
+    }
+    _adminVenueGcResults[id] = courses;
     _adminVenueGcCourse[id] = null;
-    if (statusEl) statusEl.textContent = data.courses.length ? '' : 'No matches — this course may not be in GolfCourseAPI (use manual entry above instead).';
-    loadAdminVenues();
-  } catch(e) {
-    if (statusEl) statusEl.textContent = 'Error: ' + e.message;
+    if (courses.length) {
+      adminGcSetStatus(id, `${courses.length} match${courses.length === 1 ? '' : 'es'}${usedAlt ? ` for “${escapeHtml(usedAlt)}” (simplified from your search)` : ''} — pick the right course below.`);
+    } else {
+      adminGcSetStatus(id, `<b>No matches</b> for “${escapeHtml(q)}”${alt ? ` or “${escapeHtml(alt)}”` : ''}. Try the town or a shorter name (e.g. just “${escapeHtml((alt || q).split(' ')[0])}”) — or the course may not be in GolfCourseAPI, in which case use manual entry above.`, 'warn');
+    }
+    loadAdminVenues(); // status + query now survive this re-render
+  } catch (e) {
+    adminGcSetStatus(id, 'Search error: ' + escapeHtml(e.message), 'error');
   }
 }
 // Selecting a course fills Weather Location's lat/lng right away (that's a
@@ -11195,14 +11241,13 @@ async function adminGcSearch(id) {
 // same "prefill then Brian reviews/Saves" pattern as before. Par data is
 // no longer touched here; that now happens per-tee via adminGcSaveTee.
 async function adminGcSelectCourse(id, courseId) {
-  const statusEl = document.getElementById(`admin-gc-status-${id}`);
-  if (statusEl) statusEl.textContent = 'Loading tee data…';
+  adminGcSetStatus(id, 'Loading tee data…');
   try {
     const res = await fetch(`${BFE_API}/bfe/coursedata/courses/${encodeURIComponent(courseId)}`);
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Course lookup failed');
     _adminVenueGcCourse[id] = data;
-    if (statusEl) statusEl.textContent = '';
+    adminGcSetStatus(id, (data.tees || []).length ? `${(data.tees || []).length} tee${(data.tees || []).length === 1 ? '' : 's'} found — “Save Tee” stores the ones you want.` : 'This course has no tee data in GolfCourseAPI.', (data.tees || []).length ? 'info' : 'warn');
     if (data.latitude != null && data.longitude != null) {
       _adminVenueCoordsOpen[id] = true;
       await loadAdminVenues();
@@ -11214,7 +11259,7 @@ async function adminGcSelectCourse(id, courseId) {
       loadAdminVenues();
     }
   } catch(e) {
-    if (statusEl) statusEl.textContent = 'Error: ' + e.message;
+    adminGcSetStatus(id, 'Course lookup error: ' + escapeHtml(e.message), 'error');
   }
 }
 // Saves one GolfCourseAPI tee as its own row for this venue via POST
@@ -11225,7 +11270,6 @@ async function adminGcSaveTee(id, teeIndex, force) {
   const tee = course && course.tees && course.tees[teeIndex];
   if (!tee) return;
   const v = (_adminVenuesCache || []).find(x => x.id === id);
-  const statusEl = document.getElementById(`admin-gc-status-${id}`);
   try {
     const res = await fetch(`${BFE_API}/bfe/venue-tees`, {
       method: 'POST',
@@ -11250,7 +11294,7 @@ async function adminGcSaveTee(id, teeIndex, force) {
     showToast(`Saved ${tee.tee_name} tee for ${v ? v.name : 'venue'}`);
     await adminLoadVenueTees(id);
   } catch (e) {
-    if (statusEl) statusEl.textContent = 'Error saving tee: ' + e.message;
+    adminGcSetStatus(id, 'Error saving tee: ' + escapeHtml(e.message), 'error');
   }
 }
 async function adminDeleteVenueTee(venueId, teeId) {
