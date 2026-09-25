@@ -38,7 +38,7 @@ apps and two Cloudflare Workers:
 - **`portal.html`** — the player-facing app. Events/Gatherings home screen, registration,
   the Live Panel (in-round scorecard/CTP/Birdie Alert/photo capture during play), results
   pages, admin/commissioner controls behind a gear icon. This is the file most session work
-  touches. Currently v4.7.3 (see `portal_version.txt` — **bump this with every
+  touches. Currently v4.7.4 (see `portal_version.txt` — **bump this with every
   `portal.html` change and deliver it alongside**, format `vX.Y.Z · YYYY-MM-DD` /
   `Deployed: YYYY-MM-DD HH:MM`; nothing bumps it automatically).
 - **`BFE-Admin.html`** — commissioner-only admin tool for BFE ("BirdieFriends
@@ -348,9 +348,9 @@ Panel adapts around whatever's turned on. Backend: `bfe_gathering_games` (host c
   last card lands.
 - **UI (v4.7.0):** gamed Gathering cards get a "competition seal" watermark (`gamesSealWatermarkHtml`
   — it lives in a clipped `z-index:-1` layer inside an `isolation:isolate` card, because the card
-  itself must stay overflow-visible). The player-facing venue viewer is now a tee dropdown +
-  stat strip + `venueScorecardHtml` grid. It no longer shares `venueTeeHolesTableHtml` with the admin
-  Venue Manager, which keeps the old table.
+  itself must stay overflow-visible). The player venue viewer **and** Venue Manager's stored-tees
+  list both render through `venueTeeSummaryHtml` (tee dropdown + stat strip + `venueScorecardHtml`
+  grid, v4.7.4). The old `venueTeeHolesTableHtml` table is gone.
 - **"At the course" rail — BETA, Brian only (v4.7.2).** Location-gated vertical toolbar (see the
   Session Log's Dev-87 item 8). The gate is `AT_COURSE_BETA_PLAYERS`; widening it needs a designed
   location-permission moment first. It depends on venue `lat/lng`, which the main Worker's public
