@@ -1,3 +1,6 @@
+v4.7.7 · 2026-09-25
+Deployed: 2026-09-25 09:55 (BETA rail: drag it anywhere. Grab the gold tab or the ⛳ distance chip and move it; let go and it snaps to the nearest side (left or right) at that height, mirrored when on the left. Your spot is remembered on your phone. A plain tap on the tab still tucks/untucks, and it stays clear of the header and bottom nav.)
+
 v4.7.6 · 2026-09-25
 Deployed: 2026-09-25 09:30 (GC-API Lookup: when GolfCourseAPI's free daily quota is used up (HTTP 429), the search and course-lookup now say so plainly — "daily limit reached, nothing is broken, try again tomorrow" — instead of a raw "(429)" error. A quota hit also skips the automatic name-variant retry, so it doesn't waste another call.)
 
