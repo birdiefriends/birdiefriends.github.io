@@ -11106,52 +11106,27 @@ async function adminLoadVenueTees(id) {
   }
   loadAdminVenues();
 }
-let _adminVenueTeeViewOpen = {}; // tee id -> bool, which per-tee hole tables are expanded (Dev-86)
-function venueTeeHolesTableHtml(t) {
-  const holes = Array.isArray(t.holes) ? t.holes : [];
-  if (!holes.length) return '<div style="font-size:0.72rem;color:var(--text-muted);padding:6px 0">No hole data stored for this tee.</div>';
-  const cell = (label, val) => `<td style="padding:3px 6px;text-align:center;border-bottom:1px solid var(--border)">${val ?? '—'}</td>`;
-  const front = holes.slice(0, 9), back = holes.slice(9, 18);
-  const rowSet = (set, offset) => `
-    <tr>${set.map((h, i) => `<th style="padding:3px 6px;font-size:0.68rem;color:var(--text-muted);text-align:center;border-bottom:1px solid var(--border)">${offset + i + 1}</th>`).join('')}</tr>
-    <tr><td colspan="${set.length}" style="font-size:0.65rem;color:var(--text-muted);padding:2px 6px">Par</td></tr>
-    <tr>${set.map(h => cell('par', h.par)).join('')}</tr>
-    <tr><td colspan="${set.length}" style="font-size:0.65rem;color:var(--text-muted);padding:2px 6px">Yardage</td></tr>
-    <tr>${set.map(h => cell('yardage', h.yardage)).join('')}</tr>
-    <tr><td colspan="${set.length}" style="font-size:0.65rem;color:var(--text-muted);padding:2px 6px">Hole HCP</td></tr>
-    <tr>${set.map(h => cell('handicap', h.handicap)).join('')}</tr>`;
-  return `
-    <div style="overflow-x:auto;margin:6px 0">
-      <table style="border-collapse:collapse;font-size:0.74rem;width:100%">
-        <tbody>
-          ${front.length ? rowSet(front, 0) : ''}
-        </tbody>
-      </table>
-      ${back.length ? `<table style="border-collapse:collapse;font-size:0.74rem;width:100%;margin-top:4px"><tbody>${rowSet(back, 9)}</tbody></table>` : ''}
-    </div>`;
-}
+let _adminVenueTeeSel = {}; // venue id -> selected stored tee id (Dev-87)
 function storedVenueTeesHtml(v) {
   const tees = _adminVenueTees[v.id];
   if (!tees) return '<div style="font-size:0.74rem;color:var(--text-muted)">Loading stored tees…</div>';
   if (!tees.length) return '<div style="font-size:0.74rem;color:var(--text-muted)">No tees stored yet for this venue.</div>';
-  return tees.map(t => `
-    <div style="padding:4px 0;border-bottom:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="flex:1;font-size:0.78rem">
-          <strong>${t.tee_name}</strong> <span style="color:var(--text-muted)">(${t.gender || 'unspecified'}${t.course_rating != null ? `, ${t.course_rating}/${t.slope_rating}` : ''}${t.par_total != null ? `, par ${t.par_total}` : ''}${t.total_yards != null ? `, ${t.total_yards}y` : ''})</span>
-          ${t.locked ? ' <span style="color:#b45309;font-size:0.7rem">🔒 manually edited</span>' : ''}
-        </div>
-        <button class="btn btn-ghost btn-sm" style="font-size:0.7rem;white-space:nowrap" onclick="adminToggleVenueTeeView(${t.id})">
-          ${_adminVenueTeeViewOpen[t.id] ? 'Hide' : 'View'} ${_adminVenueTeeViewOpen[t.id] ? '▾' : '▸'}
-        </button>
-        <button class="btn btn-secondary btn-sm" style="font-size:0.7rem;white-space:nowrap;color:#b91c1c" onclick="adminDeleteVenueTee(${v.id}, ${t.id})">Delete</button>
-      </div>
-      ${_adminVenueTeeViewOpen[t.id] ? venueTeeHolesTableHtml(t) : ''}
-    </div>`).join('');
+  let t = tees.find(x => x.id === _adminVenueTeeSel[v.id]);
+  if (!t) { t = venueViewerDefaultTee(tees); _adminVenueTeeSel[v.id] = t.id; }
+  const del = `<button onclick="adminDeleteVenueTee(${v.id}, ${t.id})" title="Delete the ${escapeHtml(t.tee_name)} tee"
+      style="flex-shrink:0;height:40px;padding:0 12px;border-radius:10px;border:1.5px solid rgba(185,28,28,0.35);
+      background:#fff;color:#b91c1c;font-weight:800;font-size:0.76rem;font-family:inherit;cursor:pointer">🗑 Delete</button>`;
+  const src = t.source === 'gc_api' ? 'GolfCourseAPI' : (t.source || 'manual');
+  const foot = `<div style="display:flex;justify-content:space-between;gap:8px;font-size:0.66rem;color:var(--text-muted);margin-top:4px">
+      <span>${tees.length} tee${tees.length === 1 ? '' : 's'} stored · source: ${escapeHtml(src)}${t.updated_at ? ` · saved ${escapeHtml(String(t.updated_at).slice(0, 10))}` : ''}</span>
+      ${t.locked ? '<span style="color:#b45309;font-weight:700">🔒 manually edited</span>' : ''}</div>`;
+  return venueTeeSummaryHtml({ tees, sel: t.id, selectId: `admin-tee-sel-${v.id}`,
+    onchange: `adminSelectVenueTee(${v.id}, this.value)`, sideHtml: del, footHtml: foot, selectBg: '#fff' });
 }
-function adminToggleVenueTeeView(teeId) {
-  _adminVenueTeeViewOpen[teeId] = !_adminVenueTeeViewOpen[teeId];
-  loadAdminVenues();
+function adminSelectVenueTee(venueId, teeId) {
+  _adminVenueTeeSel[venueId] = Number(teeId);
+  const el = document.getElementById(`admin-gc-stored-${venueId}`);
+  if (el) el.innerHTML = storedVenueTeesHtml({ id: venueId }); // in place — no full Venue Manager re-render
 }
 function venueGcLookupEditorHtml(v) {
   const results = _adminVenueGcResults[v.id] || [];
@@ -13764,12 +13739,10 @@ function openRulesModal() {
   openModal('rules-modal');
 }
 // Dev-86 — player-facing Venue viewer, riding the same GolfCourseAPI-sourced
-// bfe_venue_tees data Venue Manager collects (icon-action-row "nice touch"
-// per Brian, now that real multi-tee data actually exists to show). Reuses
-// venueTeeHolesTableHtml (the same Par/Yardage/Hole-HCP table Venue Manager
-// renders) so the two views never drift apart. Read-only, no PIN — GET
-// /bfe/venue-tees is already a public route, same trust level as every
-// other player-facing venue lookup (logo, weather chip, CTP holes).
+// bfe_venue_tees data Venue Manager collects. Dev-87: both this viewer and
+// Venue Manager's stored-tees list render through venueTeeSummaryHtml (tee
+// dropdown + stat strip + venueScorecardHtml grid), so the two never drift.
+// Read-only, no PIN — GET /bfe/venue-tees is a public route.
 let _venueViewerVenue = null;
 let _venueViewerTees = [];
 let _venueViewerTeeSel = {}; // venue_id -> selected tee id (session memory: reopening a venue keeps your tee)
@@ -13865,6 +13838,36 @@ function venueScorecardHtml(t) {
         <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:rgba(192,57,43,0.3);vertical-align:-1px"></span> HCP 1–6 · hardest holes</span>
         <span>HCP = hole handicap (stroke index)</span></div>`;
 }
+// Dev-87 — shared tee summary: dropdown + stat strip + scorecard grid. Used by
+// the player venue viewer AND the admin Venue Manager's stored-tees list so
+// the two never drift. Callers supply their own select id/handler and an
+// optional side control (Maps button / Delete) and footer.
+function venueTeeSummaryHtml({ tees, sel, selectId, onchange, sideHtml = '', footHtml = '', selectBg = 'var(--surface)' }) {
+  const t = tees.find(x => x.id === sel) || tees[0];
+  const g = x => /^m/i.test(x.gender || '') ? 'M' : (/^(f|w)/i.test(x.gender || '') ? 'W' : '');
+  const optLabel = x => `${x.tee_name}${g(x) ? ` (${g(x)})` : ''}${x.total_yards != null ? ` — ${Number(x.total_yards).toLocaleString()} yds` : ''}${x.locked ? ' 🔒' : ''}`;
+  const stat = (label, val, last) => `<div style="flex:1;padding:6px 4px;text-align:center;${last ? '' : 'border-right:1px solid var(--border)'}">
+      <div style="font-size:0.58rem;font-weight:800;letter-spacing:0.06em;color:var(--text-muted)">${label}</div>
+      <div style="font-size:0.98rem;font-weight:800;line-height:1.2">${val ?? '—'}</div></div>`;
+  return `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <div style="position:relative;flex:1;min-width:0">
+        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;
+          background:${teeSwatchCss(t.tee_name)};border:1.5px solid rgba(0,0,0,0.25);pointer-events:none"></span>
+        <select id="${selectId}" onchange="${onchange}"
+          style="width:100%;height:40px;padding:0 30px 0 36px;border-radius:10px;border:1.5px solid var(--border);
+          font-family:inherit;font-size:0.86rem;font-weight:700;background:${selectBg};color:var(--text);appearance:auto">
+          ${tees.map(x => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${escapeHtml(optLabel(x))}</option>`).join('')}
+        </select>
+      </div>
+      ${sideHtml}
+    </div>
+    <div style="display:flex;border:1px solid var(--border);border-top:3px solid ${teeHeaderColor(t.tee_name)};border-radius:8px;overflow:hidden;margin-bottom:8px;background:#fff">
+      ${stat('PAR', t.par_total)}${stat('YARDS', t.total_yards != null ? Number(t.total_yards).toLocaleString() : null)}${stat('RATING', t.course_rating)}${stat('SLOPE', t.slope_rating, true)}
+    </div>
+    <div style="background:#fff">${venueScorecardHtml(t)}</div>
+    ${footHtml}`;
+}
 function renderVenueViewer() {
   const bodyEl = document.getElementById('venue-viewer-body');
   const v = _venueViewerVenue;
@@ -13880,28 +13883,8 @@ function renderVenueViewer() {
   }
   let t = _venueViewerTees.find(x => x.id === _venueViewerTeeSel[v.id]);
   if (!t) { t = venueViewerDefaultTee(_venueViewerTees); _venueViewerTeeSel[v.id] = t.id; }
-  const g = x => /^m/i.test(x.gender || '') ? 'M' : (/^(f|w)/i.test(x.gender || '') ? 'W' : '');
-  const optLabel = x => `${x.tee_name}${g(x) ? ` (${g(x)})` : ''}${x.total_yards != null ? ` — ${Number(x.total_yards).toLocaleString()} yds` : ''}`;
-  const stat = (label, val) => `<div style="flex:1;padding:6px 4px;text-align:center;border-right:1px solid var(--border)">
-      <div style="font-size:0.58rem;font-weight:800;letter-spacing:0.06em;color:var(--text-muted)">${label}</div>
-      <div style="font-size:0.98rem;font-weight:800;line-height:1.2">${val ?? '—'}</div></div>`;
-  bodyEl.innerHTML = `
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <div style="position:relative;flex:1;min-width:0">
-        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;
-          background:${teeSwatchCss(t.tee_name)};border:1.5px solid rgba(0,0,0,0.25);pointer-events:none"></span>
-        <select id="venue-viewer-tee" onchange="selectVenueViewerTee(this.value)"
-          style="width:100%;height:40px;padding:0 30px 0 36px;border-radius:10px;border:1.5px solid var(--border);
-          font-family:inherit;font-size:0.86rem;font-weight:700;background:var(--surface);color:var(--text);appearance:auto">
-          ${_venueViewerTees.map(x => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${escapeHtml(optLabel(x))}</option>`).join('')}
-        </select>
-      </div>
-      ${mapBtn}
-    </div>
-    <div style="display:flex;border:1px solid var(--border);border-top:3px solid ${teeHeaderColor(t.tee_name)};border-radius:8px;overflow:hidden;margin-bottom:8px">
-      ${stat('PAR', t.par_total)}${stat('YARDS', t.total_yards != null ? Number(t.total_yards).toLocaleString() : null)}${stat('RATING', t.course_rating)}${stat('SLOPE', t.slope_rating).replace('border-right:1px solid var(--border)', '')}
-    </div>
-    ${venueScorecardHtml(t)}`;
+  bodyEl.innerHTML = venueTeeSummaryHtml({ tees: _venueViewerTees, sel: t.id, selectId: 'venue-viewer-tee',
+    onchange: 'selectVenueViewerTee(this.value)', sideHtml: mapBtn });
 }
 function selectVenueViewerTee(teeId) {
   if (_venueViewerVenue) _venueViewerTeeSel[_venueViewerVenue.id] = Number(teeId);
