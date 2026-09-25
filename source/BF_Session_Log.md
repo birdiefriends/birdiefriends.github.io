@@ -4368,7 +4368,7 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, v4.7.4 for item 10, v4.7.5 for item 11, v4.7.6 for item 12, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, v4.7.4 for item 10, v4.7.5 for item 11, v4.7.6 for item 12, v4.7.7 + `BF_BFE_NextGen_Spec.md` §1a for item 13, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
@@ -4555,6 +4555,29 @@ try tomorrow) in both search and course lookup. A quota error throws before the 
 no call is wasted. **Lesson for future sessions: every GC-API verification call spends Brian's small
 daily budget — batch them, and don't probe casually.** The Worker could cache search/course responses in
 D1 to stretch the quota (not done). Tests: 2 new (18 in `test_gc_search.mjs`); all suites 125 passing.
+
+**13. Course layouts designed + documented (not built); draggable rail (v4.7.7), 2026-09-25.**
+   - **Layouts:** Brian raised 9-hole leagues (Chooch — "the gaming component [must] be able to select
+     the 9") and 27-hole courses (Buck Hill — "you play a pair of them"), alongside the manual tee
+     editor for courses GC-API lacks. Agreed direction: **venue → one or more 18-hole *layouts***
+     (27-hole = one per pairing; 9-hole play = layout + front/back half via the existing `hole_half`).
+     Brian: "a bigger piece of work … let's document it and tackle the dev later." **Written up as
+     `BF_BFE_NextGen_Spec.md` §1a** (what exists, the model, the rejected nines-as-building-blocks
+     alternative, a 4-step build plan, open questions). Key facts found: the manual-entry backend
+     already exists (`POST /bfe/venue-tees` with `source:'manual'` → `locked=1`), so the editor is
+     UI-only; **the Live Panel scorecard always sends `hole_half: null` — must be fixed before a 9-hole
+     league runs games.** Also resolved the spec's Buck Hill open question (item 11).
+   - **Draggable rail:** `atCourseDragStart` on `pointerdown` of the grip and the ⛳ chip. Moves under
+     8 px count as a tap (tuck toggle); anything more is a drag. The rail follows the finger
+     (`.dragging`), and on release snaps to the nearer side (`.left` mirrors it via
+     `flex-direction:row-reverse`) at the drop height. `{side, topFrac}` is saved in localStorage
+     (`bf_atcourse_pos`, a per-device convenience; storage calls are try-wrapped).
+     `atCourseApplyPos` clamps it between 60 px and the bottom nav and runs twice per render (the second
+     time after the buttons exist, for an exact height). The click that follows a drag is swallowed
+     (`_atCourseJustDragged`). Tucked states per side via `.placed`/`.left` transform variants.
+     **Tested in real Chromium with mouse drags** (`test_rail_drag.mjs`, 11 checks: tap tucks, drag
+     snaps left and right, position persists across re-render, clamp above the nav, left-tucked shows
+     only the tab). All suites 136 passing.
 
 **Carry-forward:**
 - Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
