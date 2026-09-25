@@ -4368,7 +4368,7 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, v4.7.4 for item 10, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
@@ -4513,6 +4513,19 @@ grip "peeks" it without touching the manual tuck state; `toggleLivePanel()` rese
 re-renders the rail. The direction this suggests (to decide after the beta, per Brian): **rail = quick
 shortcut layer, Live Panel = full workspace**, likely with capture on the rail only and the panel's
 Photos section retired. Tests: 7 new rail checks (28 in the file, 95 total).
+
+**10. Admin stored-tees restyle (v4.7.4), 2026-09-25 morning.** Brian: "add similar style Venue
+formatting to the admin/setup that we used on the eventcards." Extracted the player viewer's markup
+into `venueTeeSummaryHtml({tees, sel, selectId, onchange, sideHtml, footHtml, selectBg})` — tee dropdown
++ stat strip + `venueScorecardHtml` grid — now used by **both** `renderVenueViewer` (side control:
+Maps) and Venue Manager's `storedVenueTeesHtml` (side control: 🗑 Delete for the selected tee; footer:
+tee count · source · save date · 🔒 badge; locked tees also marked in the dropdown).
+`_adminVenueTeeSel[venueId]` holds the admin pick; `adminSelectVenueTee` re-renders just that venue's
+`#admin-gc-stored-<id>` container in place. If the selected tee is deleted, it falls back to the default
+(the median men's tee). **Removed dead code:** `venueTeeHolesTableHtml`, `_adminVenueTeeViewOpen`,
+`adminToggleVenueTeeView` (no remaining callers), plus the viewer's stale "reuses venueTeeHolesTableHtml"
+comment. Tests: `test_venue_admin.mjs` (12 checks); all suites 107 passing. Rendered against the live
+Moselem tees; no phone overflow.
 
 **Carry-forward:**
 - Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
