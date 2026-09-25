@@ -1,3 +1,6 @@
+v4.7.6 · 2026-09-25
+Deployed: 2026-09-25 09:30 (GC-API Lookup: when GolfCourseAPI's free daily quota is used up (HTTP 429), the search and course-lookup now say so plainly — "daily limit reached, nothing is broken, try again tomorrow" — instead of a raw "(429)" error. A quota hit also skips the automatic name-variant retry, so it doesn't waste another call.)
+
 v4.7.5 · 2026-09-25
 Deployed: 2026-09-25 09:30 (Admin → Venue Manager → GC-API Lookup: search feedback no longer flashes and disappears. "No matches", errors, and match counts now stay on screen in a colored box, and your typed search is kept instead of resetting to the venue name. Enter runs the search. A search with no results automatically retries once with a simplified name (drops "Golf Club", "G.C.", "Country Club", "Lodge", apostrophes, etc.) — e.g. "Buck Hill G.C." now finds Buck Hill Falls Golf Club, and "Lord's Valley" finds Lords Valley Country Club.)
 
