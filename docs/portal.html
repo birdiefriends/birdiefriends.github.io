@@ -11203,6 +11203,11 @@ function gcSimplifiedQuery(q) {
     .replace(/[^\w -]/g, ' ').replace(/\s+/g, ' ').trim();
   return (s && s.toLowerCase() !== String(q).trim().toLowerCase()) ? s : null;
 }
+// GolfCourseAPI's free tier allows only a few dozen requests a day; once it's
+// spent, every call returns 429 until the quota resets. Say so plainly
+// instead of a raw "(429)" that reads like a bug.
+const GC_QUOTA_MSG = '<b>GolfCourseAPI daily limit reached.</b> The free tier allows only a few dozen lookups a day, and today\'s are used up. Nothing is broken — try again tomorrow. Stored tees are unaffected.';
+function gcIsQuotaError(status, msg) { return status === 429 || /\(429\)|rate.?limit|too many requests|quota/i.test(String(msg || '')); }
 async function adminGcSearch(id) {
   const input = document.getElementById(`admin-gc-query-${id}`);
   const q = (input?.value || '').trim();
@@ -11212,7 +11217,7 @@ async function adminGcSearch(id) {
   const search = async (term) => {
     const res = await fetch(`${BFE_API}/bfe/coursedata/search?q=${encodeURIComponent(term)}`);
     const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Search failed');
+    if (!data.ok) { const err = new Error(data.error || 'Search failed'); err.quota = gcIsQuotaError(res.status, data.error); throw err; }
     return data.courses || [];
   };
   try {
@@ -11233,7 +11238,8 @@ async function adminGcSearch(id) {
     }
     loadAdminVenues(); // status + query now survive this re-render
   } catch (e) {
-    adminGcSetStatus(id, 'Search error: ' + escapeHtml(e.message), 'error');
+    if (e.quota) adminGcSetStatus(id, GC_QUOTA_MSG, 'warn');
+    else adminGcSetStatus(id, 'Search error: ' + escapeHtml(e.message), 'error');
   }
 }
 // Selecting a course fills Weather Location's lat/lng right away (that's a
@@ -11245,7 +11251,7 @@ async function adminGcSelectCourse(id, courseId) {
   try {
     const res = await fetch(`${BFE_API}/bfe/coursedata/courses/${encodeURIComponent(courseId)}`);
     const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Course lookup failed');
+    if (!data.ok) { const err = new Error(data.error || 'Course lookup failed'); err.quota = gcIsQuotaError(res.status, data.error); throw err; }
     _adminVenueGcCourse[id] = data;
     adminGcSetStatus(id, (data.tees || []).length ? `${(data.tees || []).length} tee${(data.tees || []).length === 1 ? '' : 's'} found — “Save Tee” stores the ones you want.` : 'This course has no tee data in GolfCourseAPI.', (data.tees || []).length ? 'info' : 'warn');
     if (data.latitude != null && data.longitude != null) {
@@ -11259,7 +11265,7 @@ async function adminGcSelectCourse(id, courseId) {
       loadAdminVenues();
     }
   } catch(e) {
-    adminGcSetStatus(id, 'Course lookup error: ' + escapeHtml(e.message), 'error');
+    adminGcSetStatus(id, e.quota ? GC_QUOTA_MSG : 'Course lookup error: ' + escapeHtml(e.message), e.quota ? 'warn' : 'error');
   }
 }
 // Saves one GolfCourseAPI tee as its own row for this venue via POST
