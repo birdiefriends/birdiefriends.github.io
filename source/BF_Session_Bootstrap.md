@@ -38,7 +38,7 @@ apps and two Cloudflare Workers:
 - **`portal.html`** — the player-facing app. Events/Gatherings home screen, registration,
   the Live Panel (in-round scorecard/CTP/Birdie Alert/photo capture during play), results
   pages, admin/commissioner controls behind a gear icon. This is the file most session work
-  touches. Currently v4.7.5 (see `portal_version.txt` — **bump this with every
+  touches. Currently v4.7.6 (see `portal_version.txt` — **bump this with every
   `portal.html` change and deliver it alongside**, format `vX.Y.Z · YYYY-MM-DD` /
   `Deployed: YYYY-MM-DD HH:MM`; nothing bumps it automatically).
 - **`BFE-Admin.html`** — commissioner-only admin tool for BFE ("BirdieFriends
@@ -543,6 +543,10 @@ live data, what Brian confirmed).
   regression run clean without losing the file in case anything in it is worth salvaging
   later.
 ## 5. Known backlog (not urgent, parked)
+- **GolfCourseAPI free tier is tiny (reportedly ~35 requests/day, shared by everything using the key).**
+  Every search and course lookup counts, including Claude's verification probes. Once it's spent, calls
+  return 429 until the reset (the portal says so plainly since v4.7.6). Budget it, and consider caching
+  search/course responses in D1 on the BFE Worker if Venue Manager use grows.
 - **Gatherings games edge cases (raised Dev-87):** BirdieBall "held longest" assumes the round
   starts on #1 (a shotgun or back-nine start picks the wrong player — it needs start-hole-relative
   ordering); no "🏆 results are in" push to players on close; the Host Panel pot preview says
