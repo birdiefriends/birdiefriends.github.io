@@ -4368,7 +4368,7 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, v4.7.4 for item 10, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, v4.7.4 for item 10, v4.7.5 for item 11, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
@@ -4526,6 +4526,24 @@ tee count · source · save date · 🔒 badge; locked tees also marked in the d
 `adminToggleVenueTeeView` (no remaining callers), plus the viewer's stale "reuses venueTeeHolesTableHtml"
 comment. Tests: `test_venue_admin.mjs` (12 checks); all suites 107 passing. Rendered against the live
 Moselem tees; no phone overflow.
+
+**11. GC-API search feedback fix + name-variant retry (v4.7.5), 2026-09-25.** Brian: "when a venue
+isn't found, I think it's just flashing fast with no viewable feedback." **Root cause:** `adminGcSearch`
+wrote "No matches…" into `#admin-gc-status-<id>`, then immediately called `loadAdminVenues()`, which
+re-renders the entire Venue Manager — replacing that element with a fresh empty one (and resetting the
+query input to `v.name`). **Fix:** status and last query now live in state (`_adminVenueGcStatus`,
+`_adminVenueGcQuery`) and are rendered by `venueGcLookupEditorHtml` via `adminGcStatusHtml`;
+`adminGcSetStatus(id, text, kind)` updates state + DOM. info/warn/error tones; Enter runs the search.
+`adminGcSelectCourse` and `adminGcSaveTee` also route through it — **that also fixed a latent crash**:
+select-course's error path still referenced the removed `statusEl`. **Name-variant retry**
+(`gcSimplifiedQuery`): a zero-result search retries once with club-type words (Golf Club, G.C., Country
+Club, Golf Course, Lodge, Municipal…) and apostrophes stripped. A direct hit costs one call, as
+before. **Verified live against GolfCourseAPI** (via the browser pane): "Buck Hill" → Buck Hill
+Falls Golf Club (**resolves the Dev-85 "no match" carry-forward**), "Paupack Hills" → Paupack Hills
+CC, "Skytop" → Skytop Lodge, "Woodstone" → Woodstone GC, "Honesdale" → Honesdale GC; "Lord's Valley"
+→ nothing, but "Lords Valley" → Lords Valley CC (hence the apostrophe strip). Tests:
+`test_gc_search.mjs` (16 checks, incl. status + query surviving a full re-render); all suites 123
+passing.
 
 **Carry-forward:**
 - Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
