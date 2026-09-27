@@ -1963,6 +1963,15 @@ body {
   font-family: 'DM Mono', monospace;
   margin-top: 2px;
 }
+/* My History scrapbook grid (Wally Cup results branch): 3-up polaroids on a
+   phone instead of one 130px tile per row; long sets collapse to 3 rows. */
+.mh-scrap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px 8px;margin-bottom:8px;}
+.mh-scrap-grid .mh-scrap-tile{width:auto !important;margin:0 !important;padding:4px 4px 3px !important;min-width:0;}
+.mh-scrap-grid .mh-scrap-tile img,.mh-scrap-grid .mh-scrap-tile video{height:auto !important;aspect-ratio:1/1;}
+.mh-scrap-grid .mh-scrap-tile > div:last-child{padding:5px 1px 2px !important;}
+.mh-scrap-grid .mh-scrap-tile > div:last-child > div > div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mh-scrap-grid:not(.expanded) .mh-extra{display:none;}
+.mh-scrap-more{display:block;width:100%;margin:2px 0 10px;padding:9px 12px;border-radius:10px;border:1px solid rgba(90,86,72,0.35);background:rgba(255,255,255,0.55);color:#3a3a3a;font-size:0.8rem;font-weight:600;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -12165,6 +12174,15 @@ async function loadResultsClippingPodium(evt) {
     <div style="font-size:0.85rem;font-weight:700;color:#8a6d1d">🥇 ${winner.name} — ${sign}${winner.result.toFixed(0)}</div>
     <div style="font-size:0.68rem;color:#6a6a6a">See official results — quota, skins, CttP &amp; payouts</div>`;
 }
+// My History scrapbook: first 9 photos (3 rows on a phone) show; the rest sit
+// behind a Show all toggle so a 36-photo round isn't a 36-screen scroll.
+const MH_SCRAP_LIMIT = 9;
+function toggleHistoryScrapMore(btn) {
+  const grid = btn.previousElementSibling;
+  if (!grid) return;
+  const open = grid.classList.toggle('expanded');
+  btn.textContent = open ? 'Show fewer ▴' : btn.getAttribute('data-more');
+}
 function openHistoryDetail(idx) {
   const key = _historyGroupsSorted[idx];
   if (!key) return;
@@ -12197,7 +12215,12 @@ function openHistoryDetail(idx) {
       }).join('')}</div>`
     : '';
   const photoBlock = evtPhotos.length
-    ? `<div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:10px">${evtPhotos.map(p => renderCardPhotoThumb(p, true)).join('')}</div>`
+    ? `<div class="mh-scrap-grid">${evtPhotos.map((p, i) => {
+        const tile = renderCardPhotoThumb(p, true);
+        return i < MH_SCRAP_LIMIT ? tile : tile.replace('class="mh-scrap-tile"', 'class="mh-scrap-tile mh-extra"');
+      }).join('')}</div>${evtPhotos.length > MH_SCRAP_LIMIT
+        ? `<button type="button" class="mh-scrap-more" data-more="Show all ${evtPhotos.length} photos ▾" onclick="toggleHistoryScrapMore(this)">Show all ${evtPhotos.length} photos ▾</button>`
+        : ''}`
     : `<div style="font-size:0.78rem;color:var(--text-hint);margin-bottom:10px">No photos captured</div>`;
   const notesList = evtNotes.length
     ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${evtNotes.slice().reverse().map(n => renderNoteChip(n)).join('')}</div>`
@@ -13569,9 +13592,9 @@ function renderCardPhotoThumb(p, scrapbook) {
     return isNaN(d) ? '' : d.toLocaleString('en-US', {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
   })();
   if (scrapbook) {
-    const tilt = seededTilt(p.id);
+    const tilt = seededTilt(p.id) * 0.35; // gentler than the old free-flow row — tiles sit tight in a 3-up grid now
     return `
-      <div style="width:130px;background:#fdfcf8;padding:6px 6px 4px;border-radius:2px;
+      <div class="mh-scrap-tile" style="width:130px;background:#fdfcf8;padding:6px 6px 4px;border-radius:2px;
         box-shadow:0 2px 5px rgba(0,0,0,0.22);transform:rotate(${tilt}deg);margin:6px 4px">
         ${media}
         <div style="padding:6px 2px 4px;display:flex;justify-content:space-between;align-items:flex-end;gap:4px">
