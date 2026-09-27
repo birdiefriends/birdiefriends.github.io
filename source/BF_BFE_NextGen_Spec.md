@@ -220,6 +220,175 @@ would be to build.
 
 ---
 
+## 2a. Round Configuration v1 — draft schema, scoped to BF Cup (Dev-87 DRAFT for Brian's review)
+
+**Status: design draft, nothing built. BF Cup work PARKED (Dev-87 close) — see the revised §9.** The generic parts (§2a.2, §2a.3's object, §2a.5 legacy mapping, §2a.7 consumer contract) are the contract for §9 layer 2. The BF-Cup-specific parts (match play, sides, §2a.9 decisions, §2a.10 slices) wait for dedicated BF Cup sessions. Originally drafted as the old §9 step 1. It is deliberately scoped to what BF Cup
+(11/7–8) needs plus a lossless mapping of every round type that already exists. The fuller shape
+(handicap allowance, connectivity mode, new individual games) extends it later without a rebuild.
+Decisions only Brian can make are collected at the end (**§2a.9**). Nothing here should be built until
+those are answered.
+
+### 2a.1 What already exists that this builds on (verified in code, Dev-87)
+- **A small registry already exists in BFE-Admin.html.** `ENGINES = { stableford_quota, scramble_pair,
+  points_by_score_type }` plus `INFLUENCERS = { wally_ball }`, run by `scoreRound(roundCfg, rawInput,
+  sideData)` → `engineFn(rawInput, engineParams)` then each influencer in order. **Round Config v1 is
+  the formalized, stored version of exactly this triple** (`engine`, `engineParams`, `influencers`), not
+  a replacement for it.
+- `bfe_event_rounds` already stores `engine`, `engine_params` (JSON) and `influencers` (JSON), and
+  **is deleted and reinserted on every Setup save** (results are keyed by `round_name` for that reason).
+- **2Man's draft already models "a group made of teams":** `bfe_round_groups` rows carry `group_index`,
+  `strategy:'draft'` and `team_label`. A BF Cup *match* is the same shape (one playing group =
+  two sides' players), so Groupings is the natural place to build match pairings.
+- **§5's assumption corrected:** Close Round's `computeSkins` (BFE-Admin) is hard-wired to *highest
+  points wins*. It is **not** a generalized comparison-direction mechanism. The *lowest strokes wins*
+  version exists separately in the portal's `computeGatheringGamesPayout` (Dev-87). Both directions
+  exist, in two places, so the config must declare the direction explicitly (`compare`, below).
+- Gatherings already carry a mini-config (`bfe_gathering_games`: games[], dollar_per_player,
+  cttp_config, birdieball_config). It maps cleanly onto v1 (§2a.5) — the convergence path §2 asked
+  to keep open.
+
+### 2a.2 Principles
+1. **Every consumer reads the config; none re-derive it.** Payout, results, Groupings, Live Panel, the
+   results page and the portal all call one resolver, `roundConfig(round)`, and branch on its fields
+   — never on `round.engine` string checks (today there are 35 of those in BFE-Admin alone, counted Dev-87).
+2. **Legacy rounds are adapted, not migrated.** A round with no stored config gets one synthesized from
+   `engine`/`engine_params`/`influencers` by `configFromLegacy()`. Wally Cup history and the Practice
+   / 2Man / quota rounds keep working with zero data changes.
+3. **Declared per consumer, not per round** (§6): the base game can score sides while CTP pays the
+   individual — each add-on declares its own `entity`.
+4. **Input matches the on-course mental model** (§5): match play is played as "we won / halved / lost
+   the hole", so that's a valid capture unit in its own right.
+
+### 2a.3 The object
+```jsonc
+{
+  "v": 1,
+  "base": {
+    "game": "match_play",          // registry id: stableford | scramble_pair | match_play | scorecard_only | points_by_score_type
+    "format": "fourball",          // game-specific: match_play → singles | fourball | foursomes
+    "params": {}                   // game-specific (stableford: pointTable, hcpMode …)
+  },
+  "entity": {                      // who the BASE game scores
+    "level": "side",               // individual | team | side   (side = team-of-teams, §6)
+    "unit": "pair",                // what plays each match/entry: player | pair
+    "derive": "best_ball"          // pair → one hole score: shared_ball | best_ball | hi_lo | null
+  },
+  "input": "strokes",              // Live Panel capture: strokes | points | hole_result   (see §2a.9 Q4)
+  "compare": "low",                // hole/round comparison direction for this input: low (strokes) | high (points)
+  "handicap": { "mode": "scratch" },        // scratch | full | allowance(pct) — BF Cup: scratch; §4 later
+  "quota":    { "enabled": false, "chainsFrom": null },   // §5 split: stableford ± quota baseline
+  "holes":    { "layout": null, "half": null },           // §1a: null = standard 18
+  "addons": [                      // independently computed, each with its own entity
+    { "id": "skins", "entity": "individual", "basis": "gross" },
+    { "id": "cttp",  "entity": "individual", "holes": [3, 7, 12, 16] }
+  ],
+  "rollup": {                      // where this round's result goes
+    "into": "side_total",          // overall | side_total | none
+    "points": { "win": 1, "halve": 0.5, "loss": 0 }
+  },
+  "connectivity": "live"           // live | paper_then_enter (§7 — default live; BF Cup doesn't need the other yet)
+}
+```
+**Event-level additions for side competitions** (on `bfe_events`, only when any round rolls into
+`side_total`):
+```jsonc
+"sides": [ { "key": "red", "name": "Red", "color": "#c0392b" },
+           { "key": "blue", "name": "Blue", "color": "#1f5fbf" } ],
+"sideTarget": 14.5,                 // points to clinch; see §2a.9 Q2 for ties
+"sideAssignment": { "Brian Hager": "red", "...": "blue" }
+```
+
+### 2a.4 Match-play engine (the one genuinely new engine)
+A pure function, registered as `ENGINES.match_play`, testable in isolation like
+`computeGatheringGamesPayout`:
+```
+matchState(holeResults[18 of 'A'|'B'|'H'|null], holesInMatch = 18) →
+  { upSide: 'A'|'B'|null, upBy, played, remaining, dormie, closed, result: 'A 3&2' | 'B 2 up' | 'Halved' | null,
+    points: { A, B } }
+```
+- A match **closes early** when `upBy > remaining` ("3&2"); if it goes the distance the result is
+  "N up" or "Halved". Points come from `rollup.points`.
+- **Hole winner from strokes** (if `input: strokes`): per side, derive the pair's hole score with
+  `entity.derive` (fourball = best ball of the two; foursomes = the one shared ball; singles = the
+  player's own), then low wins (scratch → gross, so no handicap strokes are involved this year).
+- **From hole results** (if `input: hole_result`): taken directly.
+- Side totals = sum of match points across every round whose `rollup.into === 'side_total'`, plus
+  "clinched" once a side reaches `sideTarget`.
+
+### 2a.5 Legacy mapping (every existing round type → v1, via `configFromLegacy`)
+| Today | v1 |
+|---|---|
+| `stableford_quota` (+ `hcpMode`, `wally_ball` influencer, `chainsFrom`) | `base.game: stableford`, `entity.level: individual`, `input: points`, `compare: high`, `quota.enabled: true` + `chainsFrom`, `addons: [skins(high), cttp, bf_ball]`, `rollup.into: overall` (if `rolls_into_overall`) |
+| `scramble_pair` (2Man) | `base.game: scramble_pair`, `entity: {level: team, unit: pair, derive: shared_ball}`, `input: points`, `compare: high`, quota from pooled partners (read-only `chainsFrom`), `addons: [skins(team), cttp(individual)]`, `rollup.into: none` |
+| `scorecard_only` (Practice) | `base.game: scorecard_only`, `rollup.into: none`, no add-ons |
+| `points_by_score_type` | `base.game: points_by_score_type`, `input: points`, `compare: high` |
+| Gathering games (`bfe_gathering_games`) | `base.game: scorecard_only`, `input: strokes`, `compare: low`, `addons: [skins(gross), cttp{dollar_per_hole, holes}, birdieball{dollar_per_player}]`, payout = `dollar_per_player` pot (Dev-87 rules) |
+| **Turkey 2Man / BlackFriday** (new, §8) | `scramble_pair` / `stableford` with `quota.enabled: false` — **config only, no new engine** |
+| **BF Cup** (new) | `base.game: match_play`, `format` per session, `entity.level: side`, `rollup.into: side_total` |
+
+### 2a.6 Storage
+- **`bfe_event_rounds.config TEXT`** (new, JSON, nullable) — written by Setup alongside the existing
+  columns, so it rides the same delete/reinsert on save. NULL → `configFromLegacy()`. Additive
+  migration: `ALTER TABLE bfe_event_rounds ADD COLUMN config TEXT;`.
+- **`bfe_events.sides TEXT`** (JSON: sides, target, assignment) — nullable, only side competitions.
+- **Matches reuse `bfe_round_groups`**: one `group_index` per match; **add `side_key TEXT`** per player
+  row, so a group of 4 = 2 red + 2 blue (fourball/foursomes) and a group of 2 = 1 + 1 (singles). A
+  *playing group* can carry two singles matches — then `match_key` (new, nullable) separates them
+  inside one group. (This also settles §6's open question for BF Cup specifically: scoring unit ≠
+  playing group is allowed.)
+- **`bfe_round_matches`** (new; results layer, same delete-then-insert-per-round lifecycle as
+  `bfe_round_skins`): `event_id, round_name, match_key, side_a_players, side_b_players (JSON), format,
+  hole_results (JSON 18), result_text, points_a, points_b, closed_at`.
+- **Live capture**: hole-by-hole data goes to the existing BFE `/scorecards` (strokes) or a new
+  `/bfe/match-holes` upsert (hole results), keyed by `(event, round_name, match_key, hole)` so two
+  phones in the same match can't double-count — a later write for the same hole replaces the earlier
+  one.
+
+### 2a.7 Who reads what (the consumer contract)
+| Consumer | Reads | Today it branches on |
+|---|---|---|
+| Setup (BFE-Admin) | writes `config` per round, `sides` per event | `ENGINE_OPTIONS` dropdown |
+| Groupings | `entity.unit`, `sides` → build matches instead of foursomes | `engine === 'scramble_pair'` |
+| Live Panel (portal) | `input`, `holes`, `addons`, match roster from groups | `evtScoreMode`, `isTeamRound` |
+| Close Round | `base.game` → `ENGINES[...]`, `addons` → add-on registry, `rollup` | many of the 35 `engine ===` checks |
+| Results page | `rollup.into`, side totals, match results | round-type special cases |
+| Payout | `addons` + event payout plan | stableford-specific pot logic |
+
+### 2a.8 Out of scope for v1 (deliberately)
+Handicap strokes (§4 — BF Cup is scratch), Wolf / Nassau / BBB, the offline sync queue (§7; BF Cup
+uses `live` and accepts the Jotform/manual fallback), the BFE-Admin redesign (after §9 Phase D),
+and converting Gatherings to store a v1 config (mapping documented above, migration later).
+
+### 2a.9 Decisions only Brian can make (needed before building)
+1. **Session structure for 11/7–8:** how many sessions, which format each (fourball / foursomes /
+   singles), and matches per session. Field size (16/20/24) sets the matches per session.
+2. **Points and winning:** win 1 / halve ½ / loss 0? The points to clinch? What happens on a tie
+   (shared, or a playoff)?
+3. **Side selection:** captains' draft (reuse the 2Man draft UI), commissioner-assigned, or random?
+4. **Live capture:** *hole results only* (one tap per hole per match — lightest, the match-play mental
+   model) **or** *strokes per player* (more entry, but it auto-derives fourball/foursomes results **and**
+   makes Skins possible — Brian asked for Skins/CTP on BF Cup for payout variety). **Skins requires
+   strokes.** Recommendation: strokes per ball (each player in fourball/singles, one per pair in
+   foursomes), since it serves both the match result and Skins.
+5. **When a match closes early (e.g. 4&3):** do players keep recording the remaining holes (needed if
+   Skins runs over the full round), or stop?
+6. **Money:** a side-win payout? Per-match payouts? Skins/CTP as $-per-player carve-outs like
+   Gatherings, or a pot split?
+7. **Venue(s)** for the two days, and whether it's the same course both days.
+
+### 2a.10 Build slices once §2a.9 is answered (in order, each shippable)
+1. `configFromLegacy()` + `roundConfig()` resolver in BFE-Admin, and replace the `engine ===` checks with
+   config reads — **behavior-neutral**, proven by re-running Close Round on Wally Cup data and diffing
+   against stored results.
+2. The `match_play` engine as a pure, test-first function (§2a.4).
+3. Sides on the event + side-aware Groupings (match building) + `side_key`/`match_key` columns.
+4. Live Panel match capture (per §2a.9 Q4) + `bfe_round_matches`.
+5. Close Round for `match_play` + side totals + results page section.
+6. The `quota.enabled: false` flag (Turkey 2Man 11/15, BlackFriday 11/27).
+7. Go/no-go checkpoint (~Oct 24).
+
+---
+
 ## 3. Quick Templates — one-click setup-and-go for spontaneous play
 
 **The trigger (Brian, Dev-85):** many BF games get decided before the first tee, not
@@ -254,7 +423,7 @@ fairness incrementally once that's wanted: the full precise stroke-relief calcul
 the much simpler tee-box-based coarse handicapping described there.
 
 **Not calendar-critical** — Brian's own framing was "along the way," not tied to a date.
-§9 step 7 (one new individual game format via the registry) should double as the first
+The first new individual game format via the registry (after §9's Phase A–B foundation) should double as the first
 real Quick Template + Gatherings pilot, per the note already there.
 
 ---
@@ -375,7 +544,7 @@ them:**
    today (Wally Cup's Rd1/Rd2/Rd3), which means Close Round's existing code already
    implements exactly this per-format comparison-direction rule. **Action item: read that
    existing skins-in-quota logic in `BFE-Admin.html`'s Close Round before designing
-   anything new here** — it's very likely already the correct, working version of this
+   anything new here** *(Done, Dev-87: it is hard-wired to highest-points-wins, not generalized — see §2a.1)* — it's very likely already the correct, working version of this
    mechanism, not something to redesign from scratch.
 2. **Cross-format conversion (the deeper, harder case).** Needed when a consumer must
    bridge between formats — combining or publishing results across a quota round and a
@@ -504,6 +673,8 @@ order (§9) instead of an abstract priority.
 | Turkey 2Man | 11/15 | 2-player scramble, Stableford scoring, **no quota baseline** | **None** — `scramble_pair` engine already covers the team format; the "no quota baseline" behavior is the config-flag decomposition in §5, not a new format. |
 | BlackFriday 1-man | 11/27 | Individual, Stableford scoring, **no quota baseline**, "hit 2 balls per shot, take the better" | **None** — same §5 config-flag decomposition as Turkey. The 2-balls-per-shot rule is a real-world play convention invisible to the data model; the scorecard only ever records the one resulting per-hole score. |
 
+**Dev-87 update (2026-09-27):** Brian paused BF Cup development in favour of unifying the engine first (§9); BF Cup 2026 is expected to use the pre-agreed Jotform/manual fallback, and Turkey/BlackFriday get their quota-off flag once §9 Phase B lands.
+
 **Net finding:** of three new fall asks, two (Turkey, BlackFriday) need no new engine work
 at all once §5's quota/point-scale decomposition exists — they're config, not build. BF
 Cup is the one genuinely hard, genuinely deadline-critical item, and its scope is smaller
@@ -512,93 +683,98 @@ critical path this year.
 
 ---
 
-## 9. Proposed build sequence — revised around the Nov 7 deadline
+## 9. Build roadmap — unify the engine first, then events are configuration (revised Dev-87, 2026-09-27)
 
-Brian's framing going in: with almost every part of the system touched (venue management,
-player profiles/course handicaps, the gaming engine, payout calc, results recording,
-groupings, BFE-A UI/UX, Live Panel), this isn't a bolt-on capability — it's a
-rearchitecture. The approach agreed on: small, iterative, shippable slices against this
-doc as the roadmap, never a big-bang rewrite, because this is a live system real people
-use for real events and real money — it has to keep working for existing formats
-throughout. §8's calendar sharpened this from an abstract order into a real forcing
-function.
+**Why this replaced the BF-Cup-first sequence.** Drafting §2a showed that most of what BF Cup needs is
+plumbing *every* event needs, and that BirdieFriends currently runs **two separate game systems** that
+share almost nothing. Brian (Dev-87): "Let's stop the BFCup dev, I don't think we are ready … there are
+still gaming engine things to solidify … do specific dev session(s) for BFCup." The goal: individual
+EventCard Gatherings and BFE-A events both run on one base engine, flow and UI, so BF Cup, Wally Cup
+and a Tuesday skins game are each **configured**, not coded. **Accepted trade-off:** BF Cup 2026
+(11/7–8) most likely runs on the pre-agreed Jotform/manual fallback.
 
-**"Organize by Host" — right as a prioritization compass, not as the technical
-structure.** Organizing the *code* around Host-facing screens (Setup, Groupings, Close
-Round, Publish Results) would relocate today's ad hoc `engine`-checking problem into
-prettier UI rather than fix it — each screen would grow its own copy of "what game is
-this." The Round Configuration object (§2) is the technical spine; "does this slice make
-the Host's job more complete" is the right question for *sequencing and priority*.
+**The two systems today (verified in code, Dev-87):**
 
-**Proposed order, with reasoning:**
+| | Gatherings (EventCard) | BFE-A events (Wally Cup) |
+|---|---|---|
+| Game setup | `bfe_gathering_games` via Host Panel | round `engine` + `engine_params` + `influencers` via BFE-Admin Setup |
+| Scorecards | main-Worker D1 `scorecards` (gross strokes), key `gathering:<id>` | Jotform (quota points) |
+| CTP / side games | BFE D1 (`bfe_cttp_entries`, `bfe_birdieball_answers`) | Jotform + Close Round |
+| Scoring code | `portal.html` (`computeGatheringGamesPayout`) | `BFE-Admin.html` (`ENGINES`/`INFLUENCERS`/`scoreRound`, `computeSkins`, 35 `engine ===` checks) |
+| Close | Close & Calculate → `payout_summary` snapshot | Close Round → `bfe_round_results`/`_skins`/`_cttp` |
+| Results | My History "Game Results" block | generated static results page |
 
-1. **Round Configuration schema — design only, no UI yet.** Has to exist before anything
-   else can be built against it without getting rebuilt once the shape changes. Scope it
-   to what BF Cup actually needs first (base game = match play, entity = hierarchical,
-   scratch/no handicap config, add-ons optional) rather than the full eventual shape —
-   the fuller shape (quota baseline flag, handicap allowance, connectivity mode) can
-   extend it afterward without a rebuild, per §2's registry principle.
-2. **BF Cup's critical path (§6, §8): entity hierarchy, match-play engine, point rollup,
-   configurable side size, Live Panel hole-by-hole capture.** This replaces "migrate
-   Stableford Quota onto the new Round Config" as the first real vertical slice — a real
-   Nov 7 deadline is a better forcing function than a synthetic refactor for proving the
-   new architecture, and it exercises genuinely new territory (match play, hierarchy)
-   rather than just re-plumbing something that already works. **Also read the existing
-   skins-in-quota comparison logic in `BFE-Admin.html`'s Close Round before designing
-   anything new for Skins-on-BF-Cup** (see §5) — likely already the correct
-   comparison-direction mechanism, generalizable rather than reusable-from-scratch.
-3. **§5's quota/point-scale decomposition (config flag, not new engine)** — unlocks
-   Turkey 2Man (11/15) and BlackFriday 1-man (11/27) for free once done. Small, isolated,
-   worth doing alongside or immediately after BF Cup's core build since both fall events
-   land within 3 weeks of BF Cup.
-4. **Go/no-go checkpoint, a couple weeks before Nov 7.** Brian confirmed the Jotform/
-   manual fallback is acceptable for BF Cup if the BFE build isn't ready — this turns
-   "we're behind" into a calm, pre-agreed decision rather than a last-minute scramble.
-5. **Venue data (GC-API + D1 cache/fallback, §1).** Do this whenever convenient after the
-   fall crunch — most isolated of everything listed, doesn't touch the game engine at
-   all, already validated live against 5 real venues, and not calendar-critical for any
-   2026 fall event.
-6. **Handicap calculator (§4), as a standalone testable unit.** Verify it against known
-   real numbers (Brian's own index and known course handicaps at specific tees) before
-   any game or UI depends on it. Needed for Wolf/Nassau/BBB/Best-Ball/Hi-Lo and for the
-   future BF-Cup-with-handicap-relief option (§4) — none of which are this year's
-   problem.
-7. **One new individual game format via the registry — Nassau, Hi/Lo, or a plain
-   Net/Gross ranking; Brian's explicit preference is that the specific choice doesn't
-   matter.** Neither Nassau nor Hi/Lo needs live multiplayer coordination, so either
-   exercises a full new-game build through the registry without also having to solve
-   live group-coordination in the same step. **Worth designing this step to double as a
-   Gatherings pilot** (see §2's convergence note): whichever format gets built, trying it
-   on a low-stakes Gathering with real hosts and players before trusting it on a BFE
-   competitive event is real, useful signal — Brian's own framing is that these simple
-   formats are meant to give hosts "something interesting to try" and serve as feedback
-   "while we are scheming." That reframes "done" for this step from "works for one BFE
-   event" to "survives a host actually trying it casually."
-8. **Live-scoring resilience (§7: local-first + sync queue), generalized beyond BF Cup's
-   own hole-by-hole capture.** Insurance for the *existing* Live Panel too, and Buck Hill
-   already proved the exposure is real, not hypothetical.
-9. **BFE-A UI/UX redesign last, not first.** Redesigning the admin UI before the config
-   model has proven out on real game formats (BF Cup, then Turkey/BlackFriday, then a new
-   individual format) risks redesigning it twice. The UI should follow the shape the
-   config actually takes, not a guess at it made up front.
+Skins is implemented twice, with opposite comparison directions (points high vs strokes low).
+
+**The nine foundation layers** (each shippable on its own; order below):
+
+1. **Shared engine module (`bf_engine.js`).** Pull scoring out of both HTML files into one script both
+   load (and Node tests import directly): base-game registry (stableford, scramble_pair,
+   scorecard_only, points_by_score_type; match_play later), add-on registry (skins with declared
+   `compare`, cttp, birdieball/bf_ball, podium), payout, rollup. Pure functions only. **The single most
+   important asset** — every future format becomes one registry entry.
+2. **One round identity + one stored config.** Every playable round gets a `round_key`
+   (`gathering:42`, `bfe:<event>/<round>`) and a Round Config (§2a's object, minus BF Cup specifics).
+   `configFromLegacy()` synthesizes one for existing BFE rounds and for `bfe_gathering_games`.
+3. **One scorecard store.** Hole-by-hole in D1 for every round, tagged with its input type
+   (strokes | points | hole_result). Retire Jotform scorecards the way Gathering CTP was retired
+   (v4.6.1). Prerequisite for offline capture (§7) and for any consumer to read scores uniformly.
+4. **One lifecycle.** Setup → Register → Group → Play → Close → Publish → History, with the same
+   states and one Close call for both kinds of event, always producing the same **results snapshot**
+   shape (generalizing Gatherings' `payout_summary`).
+5. **One results renderer.** The snapshot drives My History's results block, a BFE results page and
+   archives. (The hand-finalized 2026 Wally Cup page stays as it is — never regenerate it; see the
+   2026-09-27 branch record.)
+6. **Config-driven Live Panel.** Scorecard input, hole range (§1a), player/team/side pickers and
+   sections all read the config — finishing what Dev-86/87 started with per-game section gating.
+7. **Generic payout module.** Gatherings' rules (entry × players who played, carve-outs, round down,
+   give-back) plus BFE's podium/pot plan, expressed as add-on settings.
+8. **One config builder with presets.** The same builder in the Host Panel (pick a template, adjust a
+   couple of numbers) and in BFE-A (full). §3's Quick Templates = saved configs. Wally Cup, Tuesday
+   skins and BF Cup each become a template.
+9. **Course + player data it leans on.** Layouts, manual tee editor and 9-hole selection (§1a); later
+   the handicap calculator (§4) when net games arrive.
+
+**Sequence:**
+- **Phase A — prove the foundation on Gatherings** (closest to the target already: D1 scorecards, a
+  stored config, a snapshot close): layers 1–4 for Gatherings, with the Dev-87 test suite
+  (`source/tests/`) moved onto `bf_engine.js` and kept green throughout. Fix the Live Panel
+  `hole_half: null` gap here (§1a).
+- **Phase B — re-express BFE quota rounds on the shared engine, behavior-neutrally:** BFE-Admin's Close
+  Round calls `bf_engine.js`; verify by recomputing Wally Cup rounds and diffing against stored
+  `bfe_round_results`/`_skins`/`_cttp` (compute and diff only — never "Generate & publish" the 2026 Wally
+  Cup page). Retire the 35 `engine ===` checks behind `roundConfig()`.
+- **Phase C — the shared surfaces:** results renderer (5), config-driven Live Panel (6), payout module
+  (7).
+- **Phase D — the config builder + templates (8)**, then layouts/manual tees (9, §1a).
+- **Then BF Cup, in its own sessions:** register `match_play` + a side rollup, write its config
+  (§2a.3–2a.6 are the parked design), answer §2a.9. Turkey 2Man / BlackFriday become the
+  `quota.enabled: false` flag at whatever point Phase B lands.
+
+**Standing constraints** (carried from the earlier sequence, still true): small, shippable slices,
+never a big-bang rewrite — this is a live system with real money; a registry, not upfront prediction
+("we'll never get it correctly pre-planned"); BFE-A UI redesign follows the config's proven shape,
+not before it; live-scoring resilience (§7) builds on layer 3.
 
 ---
 
 ## 10. Summary of open questions (carried forward, not yet answered)
 
+- **§2a.9 — seven BF Cup decisions** (sessions, points/ties, side selection, capture mode, early-close
+  recording, money, venue). **Parked with BF Cup** (§9); not blocking Phase A.
+- §9 Phase A: where `bf_engine.js` lives (`docs/` so both pages can load it) and whether the main Worker
+  or the BFE Worker owns the unified scorecard store (layer 3) — decide at the start of Phase A.
 - Priority order among Bingo/Bango/Bongo, Wolf, Nassau — none calendar-critical.
 - Course Handicap formula and allowance-% configurability model — needs Brian to "noodle
   on it" before this is scoped further; not calendar-critical this year.
 - Per-venue connectivity flag — worth building, and where it should live, both open.
 - ~~Buck Hill: GC-API absence vs. search-term miss~~ — resolved Dev-87 (search-term miss).
 - §1a course layouts: confirm how GC-API returns 27-hole pairings (Buck Hill), and 9-hole ratings.
-- §9's build sequence is a proposed order, not a decision — open to being argued with in
-  a future session, especially step ordering once real work starts surfacing constraints
-  the discussion didn't anticipate.
-- §5: whether the existing skins-in-quota logic already generalizes cleanly to a
-  declared-comparison-direction mechanism, or whether it's more tightly coupled to the
-  quota engine specifically than assumed here — unconfirmed until that code is actually
-  read (§9 step 2).
+- §9's roadmap (revised Dev-87) is agreed in direction; phase order stays open to argument once real
+  work surfaces constraints.
+- ~~§5: does the skins-in-quota logic generalize?~~ **Answered Dev-87: no** — BFE-Admin's
+  `computeSkins` is hard-wired to highest-points-wins; the strokes version lives separately in the
+  portal. §9 layer 1 unifies them with a declared `compare`.
 - §6: whether the scoring team is always the same as the physical playing group, or can
   diverge — unresearched, Brian has no direct experience with a format where they differ.
 - §4: optional quota/handicap-relief layer for BF Cup matches — real future idea, not
