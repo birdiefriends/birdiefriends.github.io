@@ -4598,3 +4598,32 @@ D1 to stretch the quota (not done). Tests: 2 new (18 in `test_gc_search.mjs`); a
 - BFE Next-Gen build (spec §9) — still not started.
 - Buck Hill GolfCourseAPI name-variant retry; Rd1 chapter-boundary override `localStorage` durability
   — both untouched.
+
+---
+## Branch · 2026-09-27 — Wally Cup Results Finalization (parallel to Dev-87, NOT a Dev session)
+
+Run by Brian alongside Dev-87 and deliberately kept out of the dev sequence, so it has no
+Dev number and doesn't continue any numbering. **Full record:
+`source/BF_Branch_WallyCupResults_2026-09-27.md`**. This entry is only a pointer, so
+the detail isn't duplicated. It's closed and fully live.
+
+- **`docs/wally-cup-results.html` is now a hand-finalized static page. Never run BFE-Admin
+  "Generate & publish" for the 2026 Wally Cup again**, because it would wipe everything
+  below.
+- On the page:
+  - Tom Stitt's "Wally Cup Weekend" recap.
+  - The Rd2 group photo leads the Rd2 memories chapter, and a new "After Wally Cup" chapter
+    holds the Wally Ball survivors photo (both inline base64).
+  - Trip Memories were re-synced to Brian's post-Sep-13 alignment. The page was last
+    generated Sep 13, so none of the Dev-84 realignment had ever gone live.
+  - New section 05 Scoring Breakdown (GLS-style, Rd1–Rd3, "Double+" bucket).
+  - A client-side "💾 Download Archive" historic package (~31 MB, offline-capable).
+  - Phone 3-up scrapbook grid.
+- **portal v4.7.9** (My History 3-up scrapbook grid) shipped from this branch on top of
+  v4.7.8. **The next portal.html edit must start from v4.7.9.**
+- **bf_push.ps1 v13** (v12 added `wally-cup-results.html`, v13 added the branch note).
+- **Data:** deleted main-Worker `event_photos` id 86 (Series #7 was rained out; the photo was
+  actually the Wally Ball survivors, now on the results page).
+- **Carried forward:** post-event adjustment tools for hosts (Brian: "another day"),
+  memory cutoffs moving from localStorage to D1, and teaching BFE-Admin's generator the
+  Scoring Breakdown + Download Archive.
