@@ -211,6 +211,22 @@ body.tabs-mode [data-tabsection].tab-active{display:block;}
 .feature-photo figcaption{padding:0.7rem 1rem 0.8rem;}
 .feature-photo .fp-label{font-size:9.5px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-light);margin-bottom:0.2rem;}
 .feature-photo .fp-text{font-size:13px;color:var(--white-dim);line-height:1.45;}
+
+.recap{margin:1.6rem 1.5rem 0.4rem;padding:1.3rem 1.3rem 1.2rem;border-radius:16px;background:linear-gradient(160deg,rgba(245,240,232,0.07) 0%,rgba(245,240,232,0.02) 100%);border:1px solid rgba(245,240,232,0.10);}
+.recap-label{font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:var(--accent-light);margin-bottom:0.35rem;}
+.recap-title{font-family:'Baloo 2',sans-serif;font-weight:800;font-size:1.45rem;line-height:1.1;color:var(--white);margin-bottom:0.9rem;}
+.recap-quote{margin:0;font-family:'DM Serif Display',serif;font-style:italic;font-size:1.08rem;line-height:1.6;color:var(--white);}
+.recap-quote p{margin:0 0 0.8rem;}
+.recap-quote .recap-champ{font-style:normal;font-family:'Baloo 2',sans-serif;font-weight:800;font-size:1.35rem;color:var(--accent-light);white-space:nowrap;}
+.recap-yards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:1.1rem;}
+.recap-yard{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.08);border-radius:10px;padding:0.6rem 0.7rem;}
+.recap-yard .ry-course{font-size:11px;font-weight:600;color:var(--white);}
+.recap-yard .ry-tee{font-size:10px;color:var(--white-dim);margin-bottom:0.25rem;}
+.recap-yard .ry-num{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:1.15rem;color:var(--white);line-height:1.1;}
+.recap-yard.total{background:rgba(232,57,42,0.12);border-color:rgba(232,57,42,0.35);}
+.recap-yard.total .ry-num{color:var(--accent-light);}
+.recap-credit{margin-top:0.9rem;font-size:12px;color:var(--white-dim);text-align:right;}
+@media (max-width:640px){.recap{margin:1.3rem 1rem 0.3rem;padding:1.1rem 1rem 1rem;}.recap-yards{grid-template-columns:repeat(2,1fr);}.recap-quote{font-size:1rem;}}
 </style>
 </head><body>
 <div class="page" style="--accent:#e8392a">
@@ -220,6 +236,21 @@ body.tabs-mode [data-tabsection].tab-active{display:block;}
     <div class="hero-title">Wally Cup</div>
     <div class="hero-subtitle">Sep 10–13, 2026</div>
     <div class="state-pill "><span class="state-dot"></span>Final</div>
+  </div>
+  <div class="recap">
+    <div class="recap-label">The Recap</div>
+    <div class="recap-title">Wally Cup Weekend</div>
+    <blockquote class="recap-quote">
+      <p>&ldquo;Sixteen players. Three legendary Pocono courses. Four grueling rounds. From the historic grounds of Honesdale to the back-to-back battles at Skytop, all the way to the fairways of Paupack Hills &mdash; this weekend, our golfers didn&rsquo;t just play a game. They covered twenty-two thousand, one hundred eighteen yards. That&rsquo;s twelve and a half miles of fairways, roughs, and &mdash; for some of you &mdash; a few extra trips into the woods.</p>
+      <p>But when the dust settled, only one player could be crowned champion&hellip; <span class="recap-champ">Mohamed Walli!</span>&rdquo;</p>
+    </blockquote>
+    <div class="recap-yards">
+      <div class="recap-yard"><div class="ry-course">Honesdale GC</div><div class="ry-tee">Rd1 &middot; White tees</div><div class="ry-num">5,487</div></div>
+      <div class="recap-yard"><div class="ry-course">Skytop &times; 2</div><div class="ry-tee">Rd2 &amp; 2Man &middot; Red tees</div><div class="ry-num">11,046</div></div>
+      <div class="recap-yard"><div class="ry-course">Paupack Hills</div><div class="ry-tee">Rd3 &middot; White / forward tees</div><div class="ry-num">5,585</div></div>
+      <div class="recap-yard total"><div class="ry-course">Total</div><div class="ry-tee">22,118 yards</div><div class="ry-num">12.57 mi</div></div>
+    </div>
+    <div class="recap-credit">&mdash; Tom Stitt</div>
   </div>
   <div class="view-toggle">
     <div class="view-toggle-btn active" data-mode="scroll">📜 Full Page</div>
