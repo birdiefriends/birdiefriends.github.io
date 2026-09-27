@@ -50,7 +50,9 @@ insert.
   - The Wally Ball survivors photo (Mohamed Walli, Jordan Knappenberger and Dave Sherwin,
     who split the $80 pot; 900 px) is the only tile of a new closing chapter, "After Wally
     Cup". It was taken 2026-09-15 and uploaded by mistake under `2026 BFSeries#7`.
-  - The lightbox walks 83 items. An earlier pass had placed them as `<figure>`s in sections
+  - A closing deer photo ("Evan, please don’t feed the rats.", 900 px) was added as the
+    last tile of "After Wally Cup" at Brian's request.
+  - The lightbox walks 84 items. An earlier pass had placed them as `<figure>`s in sections
     02/03, which was a misread of Brian's intent; those were removed.
 - **Trip Memories re-synced to Brian's post-Sep-13 alignment.**
   - Root cause: the last BFE-Admin generate was 2026-09-13 15:52 ET, and every alignment
