@@ -4292,7 +4292,7 @@ someone forgets to issue an alert."
 **Session Dev-86 fully closed.**
 **Chat-rename string:** `Dev-86 - Gatherings Game-Config System (Skins/CTP/BirdieBall), Live Panel Dual-Mode Scoring & Section Gating, BirdieBall Live Alert + Scorecard Confirmation Safety Net`
 
-## Dev-87 · 2026-09-24 — Gatherings Close & Calculate (Skins/CTP/BirdieBall payout), Wally Cup Carry-Forward Retired
+## Dev-87 · 2026-09-24 – 2026-09-27 — Gatherings Games End-to-End (Close & Calculate, CTP→D1), At-the-Course Rail (beta, GPS verified live), Venue Viewer + GC-API Fixes, Engine-Unification Roadmap
 
 **Session start.** Oriented from `BF_Session_Bootstrap.md` (fetched byte-exact via `curl`), repo clone
 current at v4.5.7, AutoPush folder connected (Brian explicitly authorized the folder request), live
@@ -4368,7 +4368,7 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, v4.7.4 for item 10, v4.7.5 for item 11, v4.7.6 for item 12, v4.7.7 + `BF_BFE_NextGen_Spec.md` §1a for item 13, v4.7.8 for item 14, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, v4.7.4 for item 10, v4.7.5 for item 11, v4.7.6 for item 12, v4.7.7 + `BF_BFE_NextGen_Spec.md` §1a for item 13, v4.7.8 for item 14, spec §2a for item 15, spec §9 + `source/tests/` + `bf_push.ps1` v14 + starter for item 16, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
@@ -4591,13 +4591,79 @@ D1 to stretch the quota (not done). Tests: 2 new (18 in `test_gc_search.mjs`); a
      legacy `'1'` flag is treated as expired and cleared; the chip reads "TEST ✕" and
      `atCourseExitTest()` turns it off on tap. Tests: 4 new (32 in `test_at_course.mjs`).
 
+**15. Round Configuration v1 drafted (then-§9 step 1), 2026-09-27 — superseded as the plan by item 16.** Brian back in dev mode "without much
+feedback" and asked where the build plan stands: **BF Cup's critical path (§9 steps 1–4) was untouched —
+41 days to 11/7, go/no-go ~Oct 24.** Drafted the Round Configuration as **`BF_BFE_NextGen_Spec.md` §2a**
+(design only; nothing built): the v1 object (base game / entity / input / compare / handicap / quota /
+holes / add-ons / rollup / connectivity), event-level `sides`, a pure `matchState()` match-play engine,
+a legacy mapping for every existing round type (quota, 2Man, Practice, points-by-score-type, Gatherings
+games, and Turkey/BlackFriday as config only), storage (new `bfe_event_rounds.config` JSON,
+`bfe_events.sides`, matches reuse `bfe_round_groups` + `side_key`/`match_key`, new
+`bfe_round_matches`), the consumer contract, out-of-scope items, and ordered build slices. **Findings
+from the code:** BFE-Admin already has a mini registry (`ENGINES` + `INFLUENCERS` via `scoreRound`) — v1
+formalizes that triple rather than replacing it; there are **35** `engine ===` string checks in
+BFE-Admin, which v1's `roundConfig()` resolver is meant to retire, behavior-neutrally, as slice 1;
+**§5's assumption was wrong** — Close Round's `computeSkins` is hard-wired to highest-points-wins, and
+lowest-strokes-wins lives separately in the portal's Gatherings payout, hence the explicit `compare`
+field. **Blocked on seven decisions for Brian (§2a.9):** sessions/formats, points and ties, side
+selection, live capture (hole results vs strokes — Skins needs strokes), recording after an early close,
+money, venue. **Process note:** the day's parallel Wally Cup results branch (see its own entry below)
+had pushed Log/Bootstrap/portal updates mid-draft; this session's doc edits were rebuilt on top of those
+(`git reset --hard origin/main`, then re-applied) rather than delivered from a stale base.
+
+**16. BF Cup paused → engine-unification roadmap; tests into the repo; session closed (2026-09-27).**
+   - **Brian reversed course on item 15's direction:** "Let's stop the BFCup dev, I don't think we are
+     ready … there are still gaming engine things to solidify … do specific dev session(s) for BFCup,"
+     and asked what general engine/flow/UI work would let both EventCard Gatherings and BFE-A events run
+     on one base engine so events like BF Cup and Wally Cup are just *configured*. Claude's answer, which
+     Brian called "aligned with the evolving vision," is now **`BF_BFE_NextGen_Spec.md` §9 (rewritten)**:
+     the two-systems comparison table, **nine foundation layers** (shared `bf_engine.js`; round key +
+     stored config; one D1 scorecard store retiring Jotform scorecards; one lifecycle + results snapshot;
+     one results renderer; config-driven Live Panel; generic payout; one config builder with templates;
+     course/player data), and **Phases A–D** — prove it on Gatherings first, re-express BFE quota rounds
+     behavior-neutrally (diff against stored Wally Cup results; never regenerate that page), then the
+     shared surfaces, then the builder — **then BF Cup in its own sessions**. §2a's generic parts become
+     layer 2's contract; its BF Cup parts (match play, sides, the seven §2a.9 decisions) are **parked**.
+     §8 notes BF Cup 2026 is expected to use the Jotform/manual fallback. Stale "§9 step N" references
+     repointed, and §10's skins question marked answered.
+   - **Test suites preserved in the repo:** `source/tests/` (8 suites + `extract.mjs` acorn extractor,
+     `syntax_check.mjs`, `run_all.mjs`, `package.json`, `README.md`, `moselem_tees.json` fixture), paths
+     made relative so it runs anywhere with `npm install && node run_all.mjs`. **140 checks, all passing
+     against v4.7.9** (i.e. the parallel branch's photo-grid change broke nothing). Previously these
+     lived only in the ephemeral workspace, which is how Dev-86's suite was lost.
+   - **`bf_push.ps1` v14:** 14 `bftest_<name>` → `source/tests/<name>` entries (prefixed so `README.md` /
+     `package.json` can never collide in AutoPush). Per the Dev-80 rule, committed **directly to the live
+     `bf_push.ps1`** (byte-verified identical to GitHub v13 before editing) and delivered identically as
+     `bf_push_library.ps1`.
+   - **Session starter refreshed:** `BF_Golf_Scorer_Session_Starter_current.md`'s current-state header had
+     frozen at Dev-74 (portal v4.0.0); now current as of Dev-87, with a Dev-87 architecture-notes pointer.
+
+**Dev-87 in one screen (for the next session):**
+- **Shipped:** portal v4.6.0 → v4.7.8 (v4.7.9 came from the parallel branch). Gatherings games are
+  end to end — Close & Calculate (host, from the Live Panel or My History), payout rules, results in My
+  History, CTP on D1, and every gamed Gathering scoring strokes. Plus the competition-seal watermark,
+  the venue viewer + admin stored tees on one shared renderer, GC-API search feedback/retry/quota
+  messaging, and the **at-the-course rail (beta, Brian only; GPS verified live at Moselem 2026-09-25)**
+  with auto-tuck, drag and self-expiring test mode.
+- **Workers:** BFE `/bfe/gathering-games/:id/close|reopen`; main Worker's public `/venues` now returns
+  `lat/lng`.
+- **Designed, not built:** In-Play hub direction (rail as proving ground); course layouts + manual tee
+  editor + 9-hole games (spec §1a); Round Config v1 (§2a); **engine-unification roadmap (§9)**.
+
 **Carry-forward:**
-- Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
-  History as host and as a player, then reopen → Live Panel back → re-close.
-- Gross/Net Skins toggle — once HCP calcs are layered in (Brian, Dev-87).
-- BFE Next-Gen build (spec §9) — still not started.
-- Buck Hill GolfCourseAPI name-variant retry; Rd1 chapter-boundary override `localStorage` durability
-  — both untouched.
+- **Dev-88 starts §9 Phase A** (see Bootstrap §3): decide where `bf_engine.js` lives and which Worker
+  owns the unified scorecard store, then extract the Gatherings engine into `bf_engine.js` with
+  `source/tests/` repointed at it and kept green.
+- Still unverified live: Gatherings Close & Calculate and Gathering CTP on D1 (the Moselem round's games
+  changed) — verify on the next gamed Gathering.
+- Live Panel `hole_half: null` gap (blocks 9-hole gamed Gatherings) — fold into Phase A.
+- At-the-course rail: widening beyond Brian needs a designed location-permission moment; In-Play hub
+  decision still open.
+- Gross/Net Skins toggle (with handicaps); five venues still need coordinates/tees via GC-API Lookup
+  (≈12 calls of the 35/day quota); Rd1 chapter-boundary `localStorage` durability — untouched.
+
+**Session Dev-87 fully closed.**
+**Chat-rename string:** `Dev-87 - Gatherings Games End-to-End, At-Course Rail Beta (GPS Verified), Venue Viewer + GC-API Fixes, Engine-Unification Roadmap`
 
 ---
 ## Branch · 2026-09-27 — Wally Cup Results Finalization (parallel to Dev-87, NOT a Dev session)
