@@ -1,0 +1,8 @@
+{
+  "name": "birdiefriends-tests",
+  "private": true,
+  "type": "module",
+  "description": "Test suites for portal.html engine/UI functions (Dev-87). Run: npm install && node run_all.mjs",
+  "scripts": { "test": "node run_all.mjs" },
+  "dependencies": { "acorn": "^8.12.0", "jsdom": "^24.0.0", "playwright": "^1.47.0" }
+}
