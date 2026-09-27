@@ -117,6 +117,11 @@ the end of Rd3, both embedded inline) can be pushed from here.
 v13: added BF_Branch_WallyCupResults_2026-09-27.md to $FileMap -- the
 record of the un-numbered Wally Cup results branch run alongside Dev-87.
 
+v14 (Dev-87 close-out): added the source/tests/ suite (Node test files that run
+against the real functions in portal.html). Local names carry a bftest_ prefix so
+generic names like README.md or package.json can never collide in this folder:
+bftest_<name> -> source/tests/<name>.
+
 Run this by double-clicking bf_push.bat in the same folder. Drop any of the
 recognized files below into this same folder and it will push them to
 GitHub via the PIN-gated Worker /deploy route, verify each one landed
@@ -166,6 +171,21 @@ $FileMap = [ordered]@{
     # v13: record of the 2026-09-27 Wally Cup results branch (parallel to Dev-87,
     # deliberately un-numbered) -- same treatment as the other library docs.
     "BF_Branch_WallyCupResults_2026-09-27.md" = @("source/BF_Branch_WallyCupResults_2026-09-27.md")
+    # v14 (Dev-87): test suite -> source/tests/ (bftest_ prefix locally, see header)
+    "bftest_README.md" = @("source/tests/README.md")
+    "bftest_package.json" = @("source/tests/package.json")
+    "bftest_run_all.mjs" = @("source/tests/run_all.mjs")
+    "bftest_extract.mjs" = @("source/tests/extract.mjs")
+    "bftest_syntax_check.mjs" = @("source/tests/syntax_check.mjs")
+    "bftest_moselem_tees.json" = @("source/tests/moselem_tees.json")
+    "bftest_test_gathering_payout.mjs" = @("source/tests/test_gathering_payout.mjs")
+    "bftest_test_gathering_close_ui.mjs" = @("source/tests/test_gathering_close_ui.mjs")
+    "bftest_test_score_mode.mjs" = @("source/tests/test_score_mode.mjs")
+    "bftest_test_ctp_d1.mjs" = @("source/tests/test_ctp_d1.mjs")
+    "bftest_test_at_course.mjs" = @("source/tests/test_at_course.mjs")
+    "bftest_test_rail_drag.mjs" = @("source/tests/test_rail_drag.mjs")
+    "bftest_test_venue_admin.mjs" = @("source/tests/test_venue_admin.mjs")
+    "bftest_test_gc_search.mjs" = @("source/tests/test_gc_search.mjs")
 }
 
 # Dev-78 follow-up (v8): local filenames known to be stray leftovers of a
