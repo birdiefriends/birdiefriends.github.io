@@ -4761,3 +4761,38 @@ engine holds portal back. v15/v16 were committed straight to the live `bf_push.p
 **Next in Phase A:** layer 2 (round key + stored config for Gatherings via `gatheringConfigFromLegacy`),
 layer 3 (the `bfe_scorecards` migration above), the Live Panel `hole_half: null` fix (§1a).
 
+**Deployed + verified live (v4.8.0).** After Brian's push: all 15 delivered files matched `origin/main`
+byte for byte; AutoPush was left holding only the tool (the two JSON files verified and cleared under
+v16). On birdiefriends.com the page loads `bf_engine.js?v=1.0.0`, `BFEngine.ENGINE_VERSION` is 1.0.0,
+and a sample close paid correctly (unclaimed $5 CTP rolled into Skins; two outright skins took $10 each).
+
+**5. Layer 3 — one D1 scorecard store, built (portal v4.8.1, BFE Worker, BFE-Admin).**
+- **Hazard found and designed around:** My History reads every scorecard in the table with no filter,
+  and the 71 Wally Cup rows in `bfe_scorecards` hold Stableford **points** per hole. Pointing it at that
+  table as-is would have shown Wally Cup points as strokes. New column `input_type`
+  (`strokes|points|hole_result`, default `strokes`) plus `round_key` (default `event_name`, which is
+  already the key for Gatherings; BFE rounds = `bfe:<round name>`).
+- **BFE Worker:** POST stores both columns; unknown `input_type` falls back to `strokes`; GET accepts
+  `?input=` (`COALESCE(input_type,'strokes')`). No `input` = every type, so the Wally Cup completion
+  check is unchanged.
+- **Portal:** new `const SCORECARD_API = BFE_API`. All 6 former main-Worker scorecard calls (Live Panel
+  submit, Card Score Sheet submit/load/default tee, My History, Close & Calculate) go through it.
+  Readers ask for `input=strokes`, writers send `input_type:'strokes'`. The main Worker's `scorecards`
+  table and routes are untouched, a frozen read-only fallback.
+- **BFE-Admin:** the three Close Round copy paths (Practice/scorecard-only, 2Man teams, stableford + WB)
+  send `input_type:'points', round_key:'bfe:'+roundName`.
+- **Migration (Brian runs, D1 Console, one statement at a time):** ADD COLUMN ×2 → tag the Wally Cup rows
+  `points` (expect 71) → deploy the Worker → push → copy the 18 main-Worker rows (`INSERT … SELECT … ON
+  CONFLICT DO NOTHING`, safe to re-run for stragglers) → verify (points 71 / strokes 18). File:
+  `Dev88_scorecards_migration.sql` (delivered in chat, not archived by bf_push).
+- **Tests:** new `test_scorecard_store.mjs` (27 checks). It covers every portal scorecard fetch, the
+  strokes filter on every reader, the declared type on both writers, BFE-Admin's three tagged copies,
+  and the Worker's SQL/binds against a fake D1 (defaults, explicit points, bad input, GET filter, no
+  filter). `test_gathering_close_ui.mjs` was updated **on purpose**: Close & Calculate's scorecard URL is
+  now `…bfe/scorecards?event=gathering%3A42&input=strokes`. Full suite green: 12 files.
+
+**6. bf_push.ps1 v17.** Any `bftest_<name>` file is auto-mapped (→ `source/tests/<name>`;
+`bftest_fixtures_<name>` → `source/tests/fixtures/<name>`), so new tests no longer need a `$FileMap`
+line. Explicit entries still win. Dry-run with mocked network: the Worker file, an explicit test, an
+auto-mapped test, a fixture and a JSON file all pushed and verified.
+
