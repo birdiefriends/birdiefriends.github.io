@@ -138,6 +138,11 @@ missing engine would break Close & Calculate. Also added the Dev-88 tests:
 test_engine_parity.mjs, test_engine_wiring.mjs and the frozen fixture
 fixtures/dev87_gathering_payout.js (local key bftest_fixtures_<name>).
 
+v17 (Dev-88): ANY file named bftest_<name> is now picked up automatically
+(-> source/tests/<name>; bftest_fixtures_<name> -> source/tests/fixtures/<name>),
+so a new test file no longer needs its own $FileMap line. The explicit
+bftest_ entries below still work and take precedence.
+
 Run this by double-clicking bf_push.bat in the same folder. Drop any of the
 recognized files below into this same folder and it will push them to
 GitHub via the PIN-gated Worker /deploy route, verify each one landed
@@ -241,12 +246,23 @@ function ConvertTo-JsonStringLiteral {
 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# v17 (Dev-88): auto-map any bftest_<name> file not already listed above.
+Get-ChildItem -LiteralPath $ScriptDir -File -Filter "bftest_*" | ForEach-Object {
+    $n = $_.Name
+    if (-not $FileMap.Contains($n)) {
+        $rest = $n.Substring(7)
+        if ($rest.StartsWith("fixtures_")) { $dest = "source/tests/fixtures/" + $rest.Substring(9) }
+        else { $dest = "source/tests/" + $rest }
+        $FileMap[$n] = @($dest)
+    }
+}
 $Found = @()
 foreach ($name in $FileMap.Keys) {
     if (Test-Path (Join-Path $ScriptDir $name)) { $Found += $name }
 }
 
-Write-Host "BirdieFriends publish tool (v16)" -ForegroundColor Cyan
+Write-Host "BirdieFriends publish tool (v17)" -ForegroundColor Cyan
 Write-Host "Folder: $ScriptDir"
 Write-Host ""
 
