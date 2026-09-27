@@ -16,3 +16,12 @@ export function extractFn(src, name) {
   try { map = index(src); } catch (e) { map = index(src.replace(/^(?!)/, '')); }
   const f = map.get(name); if (!f) throw new Error('not found ' + name); return f;
 }
+
+// Dev-88: the shared engine module (source/bf_engine.js), for sandboxes
+// that run portal functions which now delegate to BFEngine.
+import { createRequire } from 'module';
+import { fileURLToPath as _f2p } from 'url';
+export function loadEngine() {
+  const req = createRequire(import.meta.url);
+  return req(_f2p(new URL('../bf_engine.js', import.meta.url)));
+}
