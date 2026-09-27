@@ -122,6 +122,22 @@ against the real functions in portal.html). Local names carry a bftest_ prefix s
 generic names like README.md or package.json can never collide in this folder:
 bftest_<name> -> source/tests/<name>.
 
+v15 (Dev-88): fixed a verify bug that made every .json file fail as
+"COULD NOT VERIFY" forever. Invoke-RestMethod turns JSON-looking text into a
+PowerShell object, so the fetched copy could never string-equal what was sent
+(it was never CDN lag). If the fetch comes back as anything other than a
+string, verify now re-fetches with Invoke-WebRequest and decodes the raw
+bytes as UTF-8. Plain-text files verify exactly as before. The startup banner
+now reads v15 (v14 had left it at v13).
+
+v16 (Dev-88): added the shared game engine bf_engine.js (docs/ + source/),
+FIRST in $FileMap so it always pushes before portal.html, which loads it.
+If bf_engine.js is in the folder and its commit is REJECTED (not just slow
+to verify), portal.html is skipped this run -- a portal pointing at a
+missing engine would break Close & Calculate. Also added the Dev-88 tests:
+test_engine_parity.mjs, test_engine_wiring.mjs and the frozen fixture
+fixtures/dev87_gathering_payout.js (local key bftest_fixtures_<name>).
+
 Run this by double-clicking bf_push.bat in the same folder. Drop any of the
 recognized files below into this same folder and it will push them to
 GitHub via the PIN-gated Worker /deploy route, verify each one landed
@@ -135,6 +151,8 @@ $UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 
 # Local filename (must sit next to this script) -> GitHub destination path(s).
 $FileMap = [ordered]@{
+    # v16 (Dev-88): shared game engine -- MUST stay first: portal.html loads it.
+    "bf_engine.js"           = @("docs/bf_engine.js", "source/bf_engine.js")
     "portal.html"            = @("docs/portal.html", "source/portal.html")
     "portal_version.txt"     = @("docs/portal_version.txt", "source/portal_version.txt")
     "worker.js"              = @("source/worker.js")
@@ -186,6 +204,10 @@ $FileMap = [ordered]@{
     "bftest_test_rail_drag.mjs" = @("source/tests/test_rail_drag.mjs")
     "bftest_test_venue_admin.mjs" = @("source/tests/test_venue_admin.mjs")
     "bftest_test_gc_search.mjs" = @("source/tests/test_gc_search.mjs")
+    # v16 (Dev-88): engine parity + wiring tests, and the frozen Dev-87 reference copy
+    "bftest_test_engine_parity.mjs" = @("source/tests/test_engine_parity.mjs")
+    "bftest_test_engine_wiring.mjs" = @("source/tests/test_engine_wiring.mjs")
+    "bftest_fixtures_dev87_gathering_payout.js" = @("source/tests/fixtures/dev87_gathering_payout.js")
 }
 
 # Dev-78 follow-up (v8): local filenames known to be stray leftovers of a
@@ -224,7 +246,7 @@ foreach ($name in $FileMap.Keys) {
     if (Test-Path (Join-Path $ScriptDir $name)) { $Found += $name }
 }
 
-Write-Host "BirdieFriends publish tool (v13)" -ForegroundColor Cyan
+Write-Host "BirdieFriends publish tool (v16)" -ForegroundColor Cyan
 Write-Host "Folder: $ScriptDir"
 Write-Host ""
 
@@ -247,7 +269,13 @@ if ($confirm -ne "y" -and $confirm -ne "Y") {
     exit
 }
 
+$engineRejected = $false   # v16: set if bf_engine.js's commit is rejected
 foreach ($name in $Found) {
+    if ($name -eq "portal.html" -and $engineRejected) {
+        Write-Host ""
+        Write-Host "SKIPPING portal.html -- bf_engine.js was rejected above, and this portal loads it. Fix that and re-run; portal.html stays in the folder." -ForegroundColor Red
+        continue
+    }
     $fullPath = Join-Path $ScriptDir $name
     $content  = Get-Content -Raw -Encoding UTF8 -LiteralPath $fullPath
 
@@ -284,7 +312,11 @@ foreach ($name in $Found) {
             }
         }
 
-        if (-not $pushOk) { $allVerified = $false; continue }
+        if (-not $pushOk) {
+            $allVerified = $false
+            if ($name -eq "bf_engine.js") { $engineRejected = $true }
+            continue
+        }
 
         # Verify: re-fetch the raw file and byte-compare to what we sent.
         # GitHub's raw CDN can lag -- usually a couple seconds, but occasionally
@@ -301,6 +333,12 @@ foreach ($name in $Found) {
             try {
                 $rawUrl = "$RawBase/$ghPath`?cb=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
                 $fetched = Invoke-RestMethod -Uri $rawUrl -Headers @{ "User-Agent" = $UserAgent }
+                if ($fetched -isnot [string]) {
+                    # v15: Invoke-RestMethod parsed it (e.g. a .json file) --
+                    # re-fetch as raw bytes and decode as UTF-8 to compare text.
+                    $wr = Invoke-WebRequest -Uri $rawUrl -UseBasicParsing -Headers @{ "User-Agent" = $UserAgent }
+                    $fetched = [System.Text.Encoding]::UTF8.GetString($wr.RawContentStream.ToArray())
+                }
                 if ($fetched -ceq $content) { $verified = $true; break }
             } catch {}
         }
