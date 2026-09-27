@@ -114,6 +114,9 @@ v12: added wally-cup-results.html to $FileMap so the hand-finalized 2026
 Wally Cup results page (group photo in Rd2, Wally Ball survivors photo at
 the end of Rd3, both embedded inline) can be pushed from here.
 
+v13: added BF_Branch_WallyCupResults_2026-09-27.md to $FileMap -- the
+record of the un-numbered Wally Cup results branch run alongside Dev-87.
+
 Run this by double-clicking bf_push.bat in the same folder. Drop any of the
 recognized files below into this same folder and it will push them to
 GitHub via the PIN-gated Worker /deploy route, verify each one landed
@@ -160,6 +163,9 @@ $FileMap = [ordered]@{
     # (photos embedded inline) -- docs/ only. NOTE: a BFE-Admin "Generate &
     # publish" regenerates this page from D1 and would overwrite those edits.
     "wally-cup-results.html" = @("docs/wally-cup-results.html")
+    # v13: record of the 2026-09-27 Wally Cup results branch (parallel to Dev-87,
+    # deliberately un-numbered) -- same treatment as the other library docs.
+    "BF_Branch_WallyCupResults_2026-09-27.md" = @("source/BF_Branch_WallyCupResults_2026-09-27.md")
 }
 
 # Dev-78 follow-up (v8): local filenames known to be stray leftovers of a
@@ -198,7 +204,7 @@ foreach ($name in $FileMap.Keys) {
     if (Test-Path (Join-Path $ScriptDir $name)) { $Found += $name }
 }
 
-Write-Host "BirdieFriends publish tool (v12)" -ForegroundColor Cyan
+Write-Host "BirdieFriends publish tool (v13)" -ForegroundColor Cyan
 Write-Host "Folder: $ScriptDir"
 Write-Host ""
 
