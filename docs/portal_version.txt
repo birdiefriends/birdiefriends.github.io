@@ -1,3 +1,6 @@
+v4.7.9 · 2026-09-27
+Deployed: 2026-09-27 12:28 (My History photos now sit three across as square polaroids on a phone instead of one per row. Events with more than 9 photos show the first 9 with a "Show all" button — tap it again to show fewer.)
+
 v4.7.8 · 2026-09-25
 Deployed: 2026-09-25 12:15 (BETA rail test mode can no longer get stuck: it now switches itself off after 4 hours, and the TEST chip on the rail shows ✕ — tap it to turn test mode off and go back to real location. Any old test flag left on a phone from before this version is cleared automatically.)
 
