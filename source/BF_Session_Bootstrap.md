@@ -1,5 +1,5 @@
 # BF_Session_Bootstrap.md — Start Here for a New BirdieFriends Session
-**Status:** current as of Dev-87 close, 2026-09-24 — **Gatherings Close & Calculate shipped**
+**Status:** current as of **Dev-87 close (2026-09-27). Next session is Dev-88: start the engine-unification roadmap, `BF_BFE_NextGen_Spec.md` §9 Phase A (see §3 below).** BF Cup development is paused on purpose (Brian, 2026-09-27); its design is parked in spec §2a. Earlier in Dev-87 (2026-09-24) — **Gatherings Close & Calculate shipped**
 (portal v4.6.0 + a `BF_Experiences.js` route; v4.6.1 then moved Gatherings CTP from Jotform to D1; v4.6.2 fixed non-Skins Gatherings scoring to Jotform and added a My History Close entry for the host): the host of a gamed Gathering closes the round from
 the Live Panel, the Skins/CTP/BirdieBall payout is computed on whoever actually turned in a scorecard,
 and results post to that Gathering's My History story (see §2a). **The Wally Cup Rd3/Overall
@@ -34,7 +34,7 @@ What matters for every later session:
 1. `docs/wally-cup-results.html` is now hand-finalized. **Never run BFE-Admin "Generate &
    publish" for the 2026 Wally Cup again**; edit the static file directly.
 2. portal.html is now **v4.7.9** (shipped from that branch), so start from it.
-3. bf_push.ps1 is now **v13**.
+3. bf_push.ps1 is now **v13** — *superseded at Dev-87 close: **v14** adds the `source/tests/` suite (`bftest_<name>` local keys).*
 4. Brian's Trip Memories cutoffs are confirmed to live only in his BFE-Admin browser's
    localStorage.
 ---
@@ -369,17 +369,30 @@ Panel adapts around whatever's turned on. Backend: `bfe_gathering_games` (host c
   at Moselem (Dev-87).** Test mode (`?atcourse=1`) lapses after 4 h, and a tap on TEST ✕ turns it off (v4.7.8).
 Full build detail, including the exact bug chases and test coverage, is in
 `BF_Session_Log.md`'s Dev-86 entry.
-## 3. Dev-88 focus — live-verify Gatherings Close & Calculate, then confirm next priority
-1. **Live-verify Close & Calculate (§2a) before building anything else on it.** Dev-87 shipped it
-   tested (18 engine + 21 jsdom checks against extracted source), but not against production. After
-   Brian deploys the Worker (`BF_Experiences.js`) **and** portal v4.6.0 (Worker first, or Close
-   404s): on a real test Gathering (e.g. Jefferson @ Moselem), enter a couple of scorecards, close as
-   host, check the My History "🏆 Game Results" block as host and as a non-host player, then Reopen →
-   Live Panel returns → re-close replaces the result. Verify one payout by hand against the live data.
-2. **Then confirm priority with Brian** rather than assuming. The obvious candidate is the **BFE Next-Gen
-   build (§9 of `BF_BFE_NextGen_Spec.md`)**, still not started (carried since Dev-85). Read the spec in
-   full first and start from its §9 build sequence, which is organized around the real Nov 7 BF Cup
-   deadline.
+## 3. Dev-88 focus — engine unification, Phase A (prove it on Gatherings)
+**Read `BF_BFE_NextGen_Spec.md` §9 in full first** (the two-systems table, the nine layers, Phases A–D),
+then §2a.2/§2a.3/§2a.5/§2a.7 (the generic Round Config contract). BF Cup is **parked** (§2a.9's seven
+decisions wait for dedicated BF Cup sessions) — don't start match play.
+
+**Phase A, in order:**
+1. **Two decisions to settle with Brian at the start:** where `bf_engine.js` lives (likely `docs/`, so
+   portal.html and BFE-Admin.html can both `<script src>` it — needs a `bf_push.ps1` `$FileMap` entry,
+   edited directly on the live file per the Dev-80 rule), and which Worker owns the unified scorecard
+   store (layer 3; main-Worker D1 already holds Gathering strokes).
+2. **Extract the Gatherings engine into `bf_engine.js`**: `computeGatheringGamesPayout` and its helpers
+   become registry entries (a `scorecard_only` base game + `skins` with a declared `compare`, `cttp`,
+   `birdieball` add-ons + payout). portal.html calls the module instead. **Repoint `source/tests/` at
+   the module and keep all 140 checks green**; that suite is the safety net.
+3. **Round key + stored config for Gatherings** (layer 2): express `bfe_gathering_games` through
+   `configFromLegacy()`.
+4. **Fix the Live Panel `hole_half: null` gap** (spec §1a) while you're in there, since it blocks 9-hole
+   gamed Gatherings.
+5. Log incrementally; small shippable slices, each behavior-neutral unless Brian asks otherwise.
+
+**Also open from Dev-87:** Close & Calculate and Gathering CTP on D1 are still unverified in a real round
+(verify on the next gamed Gathering); the at-the-course rail stays beta (Brian only) until a location-
+permission moment is designed; the In-Play hub decision is still Brian's to make.
+
 **Carried forward, still not re-confirmed since Dev-84:**
 - The Rd1 chapter-boundary override's `localStorage`-only persistence is a possible,
   unconfirmed durability gap — worth a look if the chapter-boundary symptom recurs a third
@@ -400,6 +413,16 @@ place and log it the same way prior sessions' own live-data catches were logged 
 entries in `BF_Session_Log.md` for the pattern: what was found, how it was verified against
 live data, what Brian confirmed).
 ## 4. Standing operating rules (apply every session)
+- **Run the test suite before delivering any portal.html change (added Dev-87).** `source/tests/`:
+  `npm install && node run_all.mjs` (details in its README). It tests the real functions inside
+  portal.html. A failing test means either the behavior changed on purpose (update the test and say so
+  in the log) or by accident (fix the code). Add tests for new engine/UI logic in the same style.
+- **Before editing any library doc, sync to `origin/main` first — especially the Log and Bootstrap
+  (Dev-87).** A parallel session (the 2026-09-27 Wally Cup branch) pushed Log/Bootstrap/portal updates
+  mid-session. Dev-87 caught it only because `git diff --stat` showed files it hadn't touched: whole-file
+  delivery of a stale Log/Bootstrap would have erased the other session's notes. Fetch, reset to origin,
+  re-apply your edits, and check `git diff --stat` lists only files you meant to change before delivering.
+- **GolfCourseAPI calls spend Brian's 35/day free quota** — no casual probing (see §5).
 - **Never deploy.** Prepare files, verify them (jsdom/vm test against the actual extracted
   function source before delivery — this codebase is large enough that "looks right" isn't
   enough), deliver via `SendUserFile` + `device_commit_files` into AutoPush. Brian pushes.
@@ -431,6 +454,10 @@ live data, what Brian confirmed).
 - **Library-doc access, solved (Dev-82):** fetch `BF_Session_Log.md`/this bootstrap/the
   spec docs at session start via plain `Bash`/`curl` —
   `curl -sS "https://raw.githubusercontent.com/birdiefriends/birdiefriends.github.io/main/source/<filename>"` —
+  **(Dev-87: for code work, also `git clone --depth 50 https://github.com/birdiefriends/birdiefriends.github.io.git`
+  into `/home/claude/bf-repo` — it's public, so cloning works without push access — to get `docs/portal.html`,
+  `docs/BFE-Admin.html` and `source/tests/` together; `git fetch` + compare against `origin/main` before
+  every delivery.)** —
   confirmed reliable and byte-exact (this cloud workspace's proxy allows
   `raw.githubusercontent.com` for GET). Don't use `WebFetch` for these; it answers
   through a small summarizing model, not raw content, which risks silently truncating or
