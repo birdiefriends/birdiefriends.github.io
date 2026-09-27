@@ -4368,7 +4368,7 @@ suite and `retired_tests/` folder did not survive into this container (the works
 so those files weren't re-run. The two new suites live only in this session's `/home/claude/bf-work/`.
 **Not yet verified live** — needs Brian's deploy, then a real close on a test Gathering.
 
-**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, v4.7.4 for item 10, v4.7.5 for item 11, v4.7.6 for item 12, v4.7.7 + `BF_BFE_NextGen_Spec.md` §1a for item 13, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
+**Delivered:** `portal.html`, `portal_version.txt` (v4.6.0, then v4.6.1 for item 4 v4.6.2 for item 5, v4.7.0 for item 6, v4.7.1 for item 7 — all portal-only; v4.7.2 + main `worker.js` for item 8, v4.7.3 for item 9, v4.7.4 for item 10, v4.7.5 for item 11, v4.7.6 for item 12, v4.7.7 + `BF_BFE_NextGen_Spec.md` §1a for item 13, v4.7.8 for item 14, no Worker redeploy), `BF_Experiences.js` (AutoPush key, NOT
 `bf_experiences_worker.js`), `BF_Session_Log.md`, `BF_Session_Bootstrap.md`. The Worker change needs
 Brian's Cloudflare paste-and-deploy, and it must land **before or with** the portal deploy, or Close
 returns 404.
@@ -4578,6 +4578,18 @@ D1 to stretch the quota (not done). Tests: 2 new (18 in `test_gc_search.mjs`); a
      **Tested in real Chromium with mouse drags** (`test_rail_drag.mjs`, 11 checks: tap tucks, drag
      snaps left and right, position persists across re-render, clamp above the nav, left-tucked shows
      only the tab). All suites 136 passing.
+
+**14. First live field test at Moselem + stuck test mode fixed (v4.7.8), 2026-09-25 midday.**
+   - **Verified live on Brian's Android phone at Moselem:** the rail showed a real GPS distance to the
+     venue point, so the on-device location check, the public venue coordinates (main Worker) and the
+     beta gate all work end to end. The Gathering's games had changed, so Close & Calculate / D1
+     CTP were **not** exercised live — still carried.
+   - **Bug (design flaw):** `?atcourse=1` from the previous night had set a permanent localStorage flag,
+     and the home-screen app (no address bar) had no way to pass `?atcourse=0`. Worked around live by
+     opening `portal.html?atcourse=0` in Chrome (Android home-screen apps share storage with
+     Chrome). **Fixed:** the flag now stores a timestamp and lapses after `AT_COURSE_TEST_HOURS` (4); a
+     legacy `'1'` flag is treated as expired and cleared; the chip reads "TEST ✕" and
+     `atCourseExitTest()` turns it off on tap. Tests: 4 new (32 in `test_at_course.mjs`).
 
 **Carry-forward:**
 - Live-verify Close & Calculate on a real test Gathering (e.g. Jefferson @ Moselem): close, check My
