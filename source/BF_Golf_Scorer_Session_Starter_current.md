@@ -125,34 +125,57 @@ is now the sole source of truth for the current Dev-N number. Read it, not this 
 -->
 
 # BirdieFriends Golf Scorer — Session Starter
-**Current session number:** see `BF_Session_Log.md` (this file no longer tracks it)
-**Date:** 2026-08-31 (last updated Dev-74; earlier fields below carried forward unverified except where noted)
-**Portal Version (production):** per `portal_version.txt` (source of truth): v4.0.0 · 2026-08-31.
-  ✅ Dev-72's version-drift discrepancy has stayed RESOLVED since Dev-73 — no recurrence
-  Dev-74. Confirmed Dev-74: `docs/portal.html` on GitHub is byte-identical to the final
-  local copy (Phase 1 Wally Ball wiring included) — see Dev-74 Architecture Notes below.
-**GolfScorer Version:** v8.17 · 2026-06-17g (deployed) — unverified this session, carried forward
-**Worker Version (birdiefriends-push — push/deploy/flags/etc.):** 2026-06-18b + all Gatherings routes through Dev-52 (GET/POST /venues, PATCH /venues/:id, GET/POST/DELETE /gathering-templates) — unverified this session, carried forward
-**Worker (bf-experiences — NEW as of Dev-71):** separate Cloudflare Worker, source `bf_experiences_worker.js`, powers the BFE Competitive Events system. Deployed manually by Brian via the Cloudflare dashboard (not via the /deploy route). Confirmed Dev-74: the results/computation layer is now built and live — `bfe_round_results`/`bfe_round_skins` (2 new tables, not the `bfe_quota_progress` name originally guessed at) — bringing the total to 10 `bfe_*` tables live. See Dev-74 Architecture Notes below.
-**Live URL:** https://birdiefriends.com/portal.html
-**BFE Admin Panel (NEW as of Dev-71):** https://birdiefriends.com/BFE-Admin.html — confirmed Dev-74: the full Close Round scoring engine (quota, skins, CTP, Wally Ball round bonus + season pot, Overall rollup) is built and validated end-to-end against a complete 3-round test cycle. `docs/BFE-Admin.html` on GitHub confirmed byte-identical to the final local copy. **Not fetched by the bootstrap's standard 8-step sequence** — if continuing this work, `curl` it fresh from `docs/BFE-Admin.html` before editing (see Dev-74 Architecture Notes below).
-**Local publish tool (NEW as of Dev-73, updated Dev-74):** `bf_push.bat`/`bf_push.ps1` (v5), Brian's machine
-  only, `C:\Users\16177\Downloads\GolfScorer\AutoPush` — PIN-gated, pushes straight to the
-  same Worker `/deploy` route, with mandatory post-push byte-verification before deleting
-  the local copy. Covers `portal.html`, `portal_version.txt`, `worker.js`, `guide.html`,
-  `BF_Golf_Scorer_8.html`, `BF_Operations_Guide.md`, `BF_Experiences.js` (→
-  `source/bf_experiences_worker.js`), `BFE-Admin.html`, `BF_Session_Log.md`,
-  `BF_WallyCup_Spec.md`, `BF_Session_Bootstrap.md`, and `deploy.html`. **Confirmed Dev-74:
-  this FileMap needed no changes all session** — the DEVICE-BRIDGE RULE below and this
-  tool held up with zero workflow friction start to finish; every push this session
-  verified byte-identical against GitHub before being trusted.
+**Current session number:** see `BF_Session_Log.md` (this file no longer tracks it). **The last closed
+session is Dev-87 (2026-09-24 – 09-27); the next is Dev-88.**
+**Date:** 2026-09-27 (header refreshed at Dev-87 close; it had been frozen at Dev-74 / portal v4.0.0)
+**Start here:** `source/BF_Session_Bootstrap.md` — it is the map and names the next focus (§3). Then
+`source/BF_BFE_NextGen_Spec.md` §9 (the engine-unification roadmap). This starter holds the standing
+rules above plus older architecture notes; the Bootstrap supersedes it wherever they differ.
+**Session-start paste:** the command in the rules block above — `deploy.html`'s Claude tab generates it
+with a cache-busting `?cb=` parameter.
+**Portal Version (production):** per `portal_version.txt` (source of truth) — **v4.7.9 · 2026-09-27**
+  at Dev-87 close (v4.7.9 shipped from the parallel Wally Cup results branch, on top of Dev-87's v4.7.8).
+**GolfScorer (`BF_Golf_Scorer_8.html`):** still used for BF Series through its 10/26 season end, then
+  sunset (spec §2). Not a target for new engine work.
+**Worker (birdiefriends-push, `source/worker.js`):** Gatherings, push, flags, `/scorecards` (Gathering
+  gross strokes), venues. Dev-87: public `GET /venues` now returns `lat/lng`. Deployed by Brian
+  pasting into Cloudflare.
+**Worker (bf-experiences, `source/bf_experiences_worker.js`; AutoPush name `BF_Experiences.js`):** BFE
+  events, rounds, results, memories, venue tees, GC-API proxy (35 requests/day free tier), Gatherings
+  games (`bfe_gathering_games` + `/close|/reopen`), BirdieBall answers, CTP on D1 (`/cttp`). Deployed
+  by Brian pasting into Cloudflare. Not reachable by `curl` from the Claude workspace — use the
+  browser pane.
+**Live URLs:** https://birdiefriends.com/portal.html · https://birdiefriends.com/BFE-Admin.html ·
+  https://birdiefriends.com/wally-cup-results.html (**hand-finalized; never regenerate** — see
+  `BF_Branch_WallyCupResults_2026-09-27.md`)
+**Local publish tool:** `bf_push.bat`/`bf_push.ps1` **v14**, `C:\Users\16177\Downloads\GolfScorer\AutoPush`.
+  Pushes whole files via the Worker `/deploy` route, with byte-verification after each push. Claude
+  cannot push to GitHub directly (the session proxy refuses — re-confirmed Dev-87); Claude delivers
+  into AutoPush with `device_commit_files` and Brian runs the tool. `$FileMap` keys are local names, and
+  a few differ from the destination (`BF_Experiences.js`, `bf_push_library.ps1`, `bftest_*`).
+**Tests:** `source/tests/` (Dev-87) — `npm install && node run_all.mjs`; they exercise the real functions
+  inside portal.html. Run them before delivering any portal change.
 **Jotform API Key:** dd0cb09a71eee7d0db3aa690e292660f
 **Google Places API Key:** AIzaSyAn1TR2p6JbWR2fr5ydhkurygKpYU9HYtw (restricted to birdiefriends.com)
-**Wally Cup Rd1 tee-off:** confirmed 10am, 9/11/2026. Scoring Engine build is **complete**
-  as of Dev-74 (Phases 0–2 all done and validated) — only Phase 3 (the player-facing
-  results page) remains before the deadline. See Dev-74 Architecture Notes below and the
-  full Dev-74 entry in `BF_Session_Log.md` for the complete verification detail and
-  carry-forward list before starting Dev-75 code work.
+
+---
+
+## Dev-87 Architecture Notes (2026-09-24 – 09-27) — pointer
+
+Full detail is in the Dev-87 entry of `BF_Session_Log.md` (items 1–16 plus a one-screen summary); the
+live plan is `BF_BFE_NextGen_Spec.md` §9. In brief:
+- **Gatherings games are end to end:** host config (Skins/CTP/BirdieBall), Live Panel capture (gross
+  strokes to D1 for every gamed Gathering), CTP on D1, Close & Calculate (Live Panel or My History),
+  frozen payout snapshot → My History "Game Results". Engine: `computeGatheringGamesPayout` (portal).
+- **BirdieFriends runs two parallel game systems** (Gatherings vs BFE-A). Unifying them is the roadmap
+  (spec §9: nine layers, Phases A–D). **BF Cup is parked** until that foundation exists; its design is
+  in spec §2a.
+- **At-the-course rail (beta, Brian only):** a location-gated toolbar, with the GPS check done on the
+  phone (verified live at Moselem 2026-09-25). Drag/tuck/auto-tuck. `?atcourse=1` test mode expires
+  after 4 h, or tap TEST ✕ to turn it off.
+- **Venue:** player viewer + admin stored tees share `venueTeeSummaryHtml`. GC-API search keeps its
+  status on screen, retries with a simplified name, and explains 429 quota errors. Layouts, the manual
+  tee editor and 9-hole games are designed in spec §1a, not built.
 
 ---
 
