@@ -28,6 +28,15 @@ read "Dev-95" before being caught and rewritten). Whatever number the codebase's
 are already at when you start reading them is not a real precedent to continue from — a
 session is one Dev-# for its whole duration; describe an individual change by what it
 touches, never by inventing it its own number.**
+**⚠️ Parallel branch, 2026-09-27 (not a Dev session): Wally Cup results finalized.**
+Record: `BF_Branch_WallyCupResults_2026-09-27.md` (fetch it like the other library docs).
+What matters for every later session:
+1. `docs/wally-cup-results.html` is now hand-finalized. **Never run BFE-Admin "Generate &
+   publish" for the 2026 Wally Cup again**; edit the static file directly.
+2. portal.html is now **v4.7.9** (shipped from that branch), so start from it.
+3. bf_push.ps1 is now **v13**.
+4. Brian's Trip Memories cutoffs are confirmed to live only in his BFE-Admin browser's
+   localStorage.
 ---
 ## 1. What this project is
 BirdieFriends (birdiefriends.com) is a golf league management platform. Brian is the sole
@@ -38,7 +47,7 @@ apps and two Cloudflare Workers:
 - **`portal.html`** — the player-facing app. Events/Gatherings home screen, registration,
   the Live Panel (in-round scorecard/CTP/Birdie Alert/photo capture during play), results
   pages, admin/commissioner controls behind a gear icon. This is the file most session work
-  touches. Currently v4.7.8 (see `portal_version.txt` — **bump this with every
+  touches. Currently v4.7.9 (see `portal_version.txt` — **bump this with every
   `portal.html` change and deliver it alongside**, format `vX.Y.Z · YYYY-MM-DD` /
   `Deployed: YYYY-MM-DD HH:MM`; nothing bumps it automatically).
 - **`BFE-Admin.html`** — commissioner-only admin tool for BFE ("BirdieFriends
