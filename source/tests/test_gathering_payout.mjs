@@ -1,8 +1,8 @@
-import fs from 'fs'; import vm from 'vm'; import { extractFn } from './extract.mjs';
+import fs from 'fs'; import vm from 'vm'; import { extractFn, loadEngine } from './extract.mjs';
 import { fileURLToPath } from 'url';
 const HERE = (p) => fileURLToPath(new URL(p, import.meta.url));
 const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
-const ctx = {}; vm.createContext(ctx);
+const ctx = { BFEngine: loadEngine() }; vm.createContext(ctx); // Dev-88: portal delegates to bf_engine.js
 vm.runInContext(extractFn(src, 'computeGatheringGamesPayout') + ';this.f=computeGatheringGamesPayout;', ctx);
 const f = ctx.f; let pass = 0, fail = 0;
 const eq = (a, b, msg) => { const ok = JSON.stringify(a) === JSON.stringify(b); ok ? pass++ : fail++; if (!ok) console.log('FAIL', msg, '\n  got', JSON.stringify(a), '\n  exp', JSON.stringify(b)); };
