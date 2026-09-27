@@ -4693,3 +4693,71 @@ the detail isn't duplicated. It's closed and fully live.
 - **Carried forward:** post-event adjustment tools for hosts (Brian: "another day"),
   memory cutoffs moving from localStorage to D1, and teaching BFE-Admin's generator the
   Scoring Breakdown + Download Archive.
+
+---
+## Dev-88 · 2026-09-27 — Engine Unification Phase A begins: bf_engine.js extracted, scorecard store decided, bf_push v15/v16 *(in progress — logged incrementally)*
+
+**Start of session.** Fetched the bootstrap with WebFetch, then pulled the library docs with curl. The
+GitHub bootstrap was one step stale: Dev-87's close-out files (spec §9 rewrite, bootstrap, log,
+session starter, bf_push v14, the 14-file test suite) were still sitting unpushed in AutoPush. I read
+the AutoPush copies directly, Brian ran bf_push.bat, and they landed. Brian set scope: **the Close &
+Calculate live check is dropped** (Jefferson @ Moselem was a failed real-world test for human reasons,
+not code) and **BF Cup stays parked**. Dev-88 = §9 Phase A.
+
+**1. bf_push.ps1 v15 — the ".json never verifies" bug (not CDN lag).** `bftest_package.json` and
+`bftest_moselem_tees.json` failed verification on two runs in a row while every other file passed.
+Cause: the verifier re-fetches with `Invoke-RestMethod`, and Windows PowerShell 5.1 turns JSON-looking
+text into an object, so it could never string-equal the file. Both files were confirmed byte-identical
+on GitHub. Fix: if the fetch comes back as anything other than a string, re-fetch with
+`Invoke-WebRequest -UseBasicParsing` and decode the raw bytes as UTF-8. The banner also now shows the
+real version (v14 still printed "v13").
+
+**2. Scorecard store — decided (Brian: yes): `bfe_scorecards` on the BFE Worker becomes the one D1
+store.** Research, all live data read 2026-09-27:
+| Store | Live contents | Writers | Readers |
+|---|---|---|---|
+| Jotform `SCORECARD_FORM_ID` | BF Series + Wally Cup as played | Live Panel (points mode), GS | GS (Series), BFE-Admin Close Round |
+| main-Worker `scorecards` | 18 rows: 17 `gathering:*`, 1 Card Score Sheet ("Sun 8/2") | Gathering Live Panel, Card Score Sheet | My History, Close & Calculate, default tee pick |
+| BFE `bfe_scorecards` | 71 rows, all 2026 Wally Cup (Practice 7, Rd1/Rd2/2Man/Rd3 16 each; 32 with WB status) | BFE-Admin Close Round (a copy from Jotform at close) | Live Panel completion check |
+Wally Cup was captured on Jotform (Brian's recollection was right); Close Round saved a D1 copy. Same
+physical D1 database throughout. Plan (layer 3): additive `round_key` + `input_type` columns on
+`bfe_scorecards`, one-time copy of the 18 main-Worker rows (SQL for Brian to run), then repoint
+Gathering capture / Close & Calculate / Card Score Sheet / My History; the main Worker's `/scorecards`
+stays read-only as a fallback for a while. **Series Jotform scorecards are untouched until the 2026
+Series concludes** (Brian); from now on, anything new is D1 only.
+
+**3. `bf_engine.js` — shared engine module (layer 1), portal v4.8.0.** New `docs/bf_engine.js` (+
+`source/` mirror), a UMD script: `window.BFEngine` in the browser, `require()`-able by the tests. Pure
+functions only. Contents: `ADDONS` registry (`cttp` order 10, `birdieball` 20, `skins` 90 as the
+*residual* game with a declared `compare` low|high), `BASE_GAMES` (`scorecard_only` for now),
+`skinsWon(cards, compare)`, `gatheringConfigFromLegacy(row)` (a `bfe_gathering_games` row → Round
+Config v1, spec §2a.5), generic `computeRoundPayout(config, inputs)`, and
+`computeGatheringGamesPayout` / `latestScorecardPerPlayer` / `scorecardMissingHoles` with the Dev-87
+contract unchanged. portal.html now loads `<script src="bf_engine.js?v=1.0.0">` before its main script;
+the three portal functions are thin delegates (same names, so every caller and test is unchanged), and
+they throw a clear "bf_engine.js did not load" error if the file is missing.
+- **Behavior-neutral, proven:** `test_engine_parity.mjs` runs the frozen Dev-87 function
+  (`tests/fixtures/dev87_gathering_payout.js`, verbatim from v4.7.9, never edit) against the engine on
+  5,000 seeded random closes, including odd names/case, 9-hole and blank cards, missing configs,
+  string holes and null inputs. It requires identical JSON, key order included. Coverage: skins won
+  2,492, skins given back 499, CTP paid 599, CTP unclaimed 403, BirdieBall kept/longest/none
+  400/999/997. **5,005/5,005.**
+- `test_engine_wiring.mjs`: the tag exists, `?v=` equals `ENGINE_VERSION`, the tag sits before its
+  user, the delegates are delegates, and docs/ and source/ copies are identical.
+- Also loaded real `docs/portal.html` in Chromium over HTTP: `BFEngine` 1.0.0 present, the delegate
+  pays correctly, no engine errors.
+- Full suite: 11 files green (original 140 checks + 5,012 new).
+- **Standing rule: when `bf_engine.js` changes, bump `ENGINE_VERSION` and portal's `?v=` together**
+  (the wiring test enforces it). GitHub Pages caches about 10 minutes.
+
+**4. bf_push.ps1 v16.** `bf_engine.js` is now the **first** `$FileMap` entry (→ `docs/` + `source/`), so
+it always pushes before portal.html. If its commit is **rejected** (not merely slow to verify),
+portal.html is skipped that run. Added the three new test files (fixture key
+`bftest_fixtures_dev87_gathering_payout.js` → `source/tests/fixtures/…`). Dry-run in PowerShell 7 with
+mocked network calls: push order is correct, the JSON fallback verifies and deletes, and a rejected
+engine holds portal back. v15/v16 were committed straight to the live `bf_push.ps1` plus
+`bf_push_library.ps1` (Dev-80 rule).
+
+**Next in Phase A:** layer 2 (round key + stored config for Gatherings via `gatheringConfigFromLegacy`),
+layer 3 (the `bfe_scorecards` migration above), the Live Panel `hole_half: null` fix (§1a).
+
