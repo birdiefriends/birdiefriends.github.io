@@ -13,7 +13,7 @@ function setup({ player = 'Brian Hager', status = 'open', hostId = 'Brian Hager'
   const h = o => Array(18).fill(5).map((v, i) => o[i + 1] ?? v);
   const ctx = {
     document: dom.window.document, console, Promise, JSON, Math, Number, String, Set, Map, Array, Object, Date, encodeURIComponent,
-    BFEngine: loadEngine(), currentPlayer: player, BFE_API: 'https://bfe', GATHERINGS_API: 'https://push',
+    BFEngine: loadEngine(), currentPlayer: player, BFE_API: 'https://bfe', GATHERINGS_API: 'https://push', SCORECARD_API: 'https://bfe',
     gatheringData: agedOut ? [] : [{ gatheringId: 42, hostId, name: 'Jefferson Event', source: 'gathering', holes: 18 }],
     eventData: agedOut ? [] : [{ source: 'gathering', gatheringId: 42, name: 'Jefferson Event' }],
     gatheringRegData: agedOut ? [] : ['Brian Hager','Scott Justus','Tony Choy','No Show'].map(p => ({ gatheringId: 42, player: p, status: 'Yes' })).concat([{ gatheringId: 42, player: 'Nope', status: 'No' }]),
@@ -40,7 +40,7 @@ let c = setup();
 await c.openGatheringCloseSheet(42);
 const body = c.document.getElementById('gathering-close-body').innerHTML;
 ok(c.document.getElementById('gathering-close-modal').classList.contains('open'), 'modal opened');
-ok(c._scUrl.endsWith('event=gathering%3A42'), 'scorecards fetched by gathering key: ' + c._scUrl);
+ok(c._scUrl === 'https://bfe/scorecards?event=gathering%3A42&input=strokes', 'scorecards fetched from the D1 store (Dev-88) by gathering key, strokes only: ' + c._scUrl);
 ok(c._ctpLoadedFor === 'Jefferson Event', 'CTP leaders loaded via loadCtpData');
 ok(body.includes('Scorecards in: 3 of 4 confirmed'), 'count uses Yes only, deduped cards');
 ok(body.includes('No scorecard yet: <b>No Show</b>'), 'missing player flagged');
