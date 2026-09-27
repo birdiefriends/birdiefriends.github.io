@@ -1,4 +1,4 @@
-import fs from 'fs'; import vm from 'vm'; import { JSDOM } from 'jsdom'; import { extractFn } from './extract.mjs';
+import fs from 'fs'; import vm from 'vm'; import { JSDOM } from 'jsdom'; import { extractFn, loadEngine } from './extract.mjs';
 import { fileURLToPath } from 'url';
 const HERE = (p) => fileURLToPath(new URL(p, import.meta.url));
 const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
@@ -13,7 +13,7 @@ function setup({ player = 'Brian Hager', status = 'open', hostId = 'Brian Hager'
   const h = o => Array(18).fill(5).map((v, i) => o[i + 1] ?? v);
   const ctx = {
     document: dom.window.document, console, Promise, JSON, Math, Number, String, Set, Map, Array, Object, Date, encodeURIComponent,
-    currentPlayer: player, BFE_API: 'https://bfe', GATHERINGS_API: 'https://push',
+    BFEngine: loadEngine(), currentPlayer: player, BFE_API: 'https://bfe', GATHERINGS_API: 'https://push',
     gatheringData: agedOut ? [] : [{ gatheringId: 42, hostId, name: 'Jefferson Event', source: 'gathering', holes: 18 }],
     eventData: agedOut ? [] : [{ source: 'gathering', gatheringId: 42, name: 'Jefferson Event' }],
     gatheringRegData: agedOut ? [] : ['Brian Hager','Scott Justus','Tony Choy','No Show'].map(p => ({ gatheringId: 42, player: p, status: 'Yes' })).concat([{ gatheringId: 42, player: 'Nope', status: 'No' }]),
