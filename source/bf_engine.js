@@ -1,0 +1,305 @@
+/* ════════════════════════════════════════════════════════════════════════
+   bf_engine.js — BirdieFriends shared game engine (Dev-88, engine
+   unification Phase A — see source/BF_BFE_NextGen_Spec.md §9 layer 1).
+
+   ONE place for game scoring + payout math, loaded by portal.html (and,
+   from Phase B, BFE-Admin.html) with <script src="bf_engine.js?v=...">,
+   and imported directly by the Node tests in source/tests/.
+
+   Rules for this file:
+     • Pure functions only — no DOM, no fetch, no globals read. Anything
+       it needs is passed in. That's what lets the tests run it as-is.
+     • Every game is a registry entry. A new format = a new entry, not a
+       new branch in five files.
+     • Behavior changes here change real money. Any change to an existing
+       entry's output needs a test update AND a Session Log line saying so.
+
+   Load order: portal.html loads this BEFORE its own inline script. The
+   `?v=` query must match ENGINE_VERSION below whenever this file changes
+   (GitHub Pages caches ~10 min; the query is what makes a new portal pick
+   up the matching engine). bf_push.ps1 pushes this before portal.html.
+   ════════════════════════════════════════════════════════════════════════ */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  root.BFEngine = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  const ENGINE_VERSION = '1.0.0';
+
+  const norm = s => String(s || '').trim().toLowerCase();
+
+  // ── Hole-by-hole skins (the comparison half only — no money) ───────────
+  // compare: 'low' (strokes — Gatherings) | 'high' (Stableford points —
+  // BFE quota rounds, wired in Phase B). A skin is the OUTRIGHT best score
+  // on a hole: a tie at the best = no skin, no carryover. A hole needs ≥2
+  // entered scores to be a contest (blank/incomplete cards beat nobody).
+  // cards: [{player, holes:[number|null, …]}]
+  function skinsWon(cards, compare) {
+    const dir = compare === 'high' ? 'high' : 'low';
+    const list = (cards || []).filter(c => c && c.player);
+    const holeCount = Math.max(0, ...list.map(c => Array.isArray(c.holes) ? c.holes.length : 0));
+    const won = [];
+    for (let h = 0; h < holeCount; h++) {
+      const entries = list
+        .map(c => ({ player: c.player, s: Array.isArray(c.holes) ? c.holes[h] : null }))
+        .filter(e => typeof e.s === 'number' && (dir === 'low' ? e.s > 0 : e.s >= 0));
+      if (entries.length < 2) continue;
+      const best = dir === 'low' ? Math.min(...entries.map(e => e.s)) : Math.max(...entries.map(e => e.s));
+      const at = entries.filter(e => e.s === best);
+      if (at.length === 1) won.push(dir === 'low'
+        ? { hole: h + 1, player: at[0].player, strokes: best }
+        : { hole: h + 1, player: at[0].player, points: best });
+    }
+    return won;
+  }
+
+  // ── Payout ledger shared by every add-on in one close ──────────────────
+  // Rounds DOWN to whole dollars on every split; the remainder is reported
+  // as unallocated, never silently redistributed (Brian, Dev-87).
+  function makeLedger(players) {
+    const canonical = new Map(players.map(p => [norm(p), p]));
+    const rows = new Map(players.map(p => [p, { player: p, skins: 0, cttp: 0, birdieball: 0, given_back: 0 }]));
+    const n = players.length;
+    const canon = name => canonical.get(norm(name)) || name;
+    const credit = (name, field, amt) => {
+      if (!(amt > 0)) return;
+      const key = canon(name);
+      if (!rows.has(key)) rows.set(key, { player: key, skins: 0, cttp: 0, birdieball: 0, given_back: 0 });
+      rows.get(key)[field] += amt;
+    };
+    const giveBack = pot => {
+      if (!(pot > 0) || !n) return { each: 0, unallocated: Math.max(0, pot) };
+      const each = Math.floor(pot / n);
+      players.forEach(p => credit(p, 'given_back', each));
+      return { each, unallocated: pot - each * n };
+    };
+    return { players, n, canonical, canon, has: name => canonical.has(norm(name)), credit, giveBack, rows };
+  }
+
+  // ── Add-on registry ────────────────────────────────────────────────────
+  // Each add-on: { id, order, carve(state, addon, inputs) → result }.
+  // `order` is the payout pipeline position: fixed carve-outs first, then
+  // the residual game (skins) takes whatever pot is left. state carries
+  // remaining (pot not yet carved), unallocated, and rollover (money that
+  // flows to the residual game, e.g. unclaimed CTP).
+  const ADDONS = {
+    // Closest to the pin: fixed $ per configured hole to that hole's leader
+    // (most-recent claim — the caller passes leaders already resolved).
+    // An unclaimed hole's money rolls into the residual game (Skins).
+    cttp: {
+      id: 'cttp', order: 10, entity: 'individual',
+      carve(state, addon, inputs) {
+        const L = state.ledger;
+        const perHole = Number(addon.dollar_per_hole) || 0;
+        const holes = (addon.holes || []).slice().sort((a, b) => a - b);
+        const leaders = inputs.ctpLeaders;
+        let unclaimed = 0;
+        const rows = holes.map(h => {
+          const lead = leaders && (leaders[h] || leaders[String(h)]);
+          if (lead && lead.player) {
+            L.credit(lead.player, 'cttp', perHole);
+            return { hole: h, player: L.canon(lead.player), dist: lead.dist ?? null, paid: perHole };
+          }
+          unclaimed += perHole;
+          return { hole: h, player: null, dist: null, paid: 0 };
+        });
+        state.remaining -= perHole * holes.length;
+        state.rollover += unclaimed;
+        return { per_hole: perHole, holes: rows, unclaimed_to_skins: unclaimed };
+      }
+    },
+
+    // BirdieBall: $ per player × N. Everyone who kept it splits it; if
+    // nobody kept it, whoever held it longest (latest lost_hole, then
+    // lost_stroke) wins, ties split; no answers at all → given back.
+    // Only answers from players who turned in a card count.
+    birdieball: {
+      id: 'birdieball', order: 20, entity: 'individual',
+      carve(state, addon, inputs) {
+        const L = state.ledger;
+        const pot = (Number(addon.dollar_per_player) || 0) * L.n;
+        state.remaining -= pot;
+        const answers = (inputs.bbAnswers || []).filter(a => L.has(a.player_name));
+        const kept = answers.filter(a => a.kept);
+        let mode, winners;
+        if (kept.length) {
+          mode = 'kept';
+          winners = kept.map(a => L.canonical.get(norm(a.player_name)));
+        } else {
+          const lost = answers.filter(a => !a.kept && a.lost_hole != null);
+          if (lost.length) {
+            mode = 'longest';
+            const score = a => (Number(a.lost_hole) || 0) * 100 + (Number(a.lost_stroke) || 0);
+            const best = Math.max(...lost.map(score));
+            winners = lost.filter(a => score(a) === best).map(a => L.canonical.get(norm(a.player_name)));
+          } else {
+            mode = 'none';
+            winners = [];
+          }
+        }
+        let perWinner = 0, unalloc = 0, givenBackEach = 0;
+        if (winners.length) {
+          perWinner = Math.floor(pot / winners.length);
+          winners.forEach(w => L.credit(w, 'birdieball', perWinner));
+          unalloc = pot - perWinner * winners.length;
+        } else {
+          const gb = L.giveBack(pot);
+          givenBackEach = gb.each; unalloc = gb.unallocated;
+        }
+        state.unallocated += unalloc;
+        const longest = mode === 'longest'
+          ? answers.filter(a => winners.includes(L.canonical.get(norm(a.player_name))))[0]
+          : null;
+        return {
+          pot, mode, winners, per_winner: perWinner, given_back_each: givenBackEach,
+          longest_hole: longest ? longest.lost_hole : null, longest_stroke: longest ? longest.lost_stroke : null
+        };
+      }
+    },
+
+    // Skins — the residual game: takes everything not carved out above,
+    // plus rollover. $/skin = pot ÷ skins won (round down); zero skins won
+    // → pot given back evenly.
+    skins: {
+      id: 'skins', order: 90, entity: 'individual', residual: true,
+      carve(state, addon, inputs) {
+        const L = state.ledger;
+        const pot = Math.max(0, state.remaining) + state.rollover;
+        state.remaining = 0; state.rollover = 0;
+        const won = skinsWon(inputs.scorecards, addon.compare || 'low');
+        let perSkin = 0, givenBackEach = 0, unalloc = 0;
+        if (won.length) {
+          perSkin = Math.floor(pot / won.length);
+          won.forEach(w => L.credit(w.player, 'skins', perSkin));
+          unalloc = pot - perSkin * won.length;
+        } else {
+          const gb = L.giveBack(pot);
+          givenBackEach = gb.each; unalloc = gb.unallocated;
+        }
+        state.unallocated += unalloc;
+        return { pot, won, per_skin: perSkin, given_back_each: givenBackEach, basis: addon.basis || 'gross' };
+      }
+    }
+  };
+
+  // ── Base-game registry (Phase A: only what Gatherings uses) ─────────────
+  // scorecard_only: no competition of its own — the round exists to carry
+  // cards; any money comes from add-ons. Phase B registers stableford,
+  // scramble_pair and points_by_score_type from BFE-Admin's ENGINES.
+  const BASE_GAMES = {
+    scorecard_only: { id: 'scorecard_only' }
+  };
+
+  // ── Round Config v1 from a Gathering's bfe_gathering_games row ─────────
+  // (spec §2a.5). Legacy rows are adapted, never migrated. An add-on is
+  // only present when its game is on AND (for cttp/birdieball) its config
+  // exists — the same gate the Dev-87 engine used.
+  function gatheringConfigFromLegacy(row) {
+    const games = (row && Array.isArray(row.games)) ? row.games : [];
+    const addons = [];
+    if (games.includes('cttp') && row.cttp_config) {
+      addons.push({ id: 'cttp', entity: 'individual', dollar_per_hole: row.cttp_config.dollar_per_hole, holes: row.cttp_config.holes || [] });
+    }
+    if (games.includes('birdieball') && row.birdieball_config) {
+      addons.push({ id: 'birdieball', entity: 'individual', dollar_per_player: row.birdieball_config.dollar_per_player });
+    }
+    if (games.includes('skins')) {
+      addons.push({ id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' });
+    }
+    return {
+      v: 1,
+      base: { game: 'scorecard_only', params: {} },
+      entity: { level: 'individual', unit: 'player', derive: null },
+      input: 'strokes',
+      compare: 'low',
+      handicap: { mode: 'scratch' },
+      holes: { layout: null, half: row && row.hole_half ? row.hole_half : null },
+      addons,
+      payout: { entry_per_player: Number(row && row.dollar_per_player) || 0 },
+      legacy: { source: 'bfe_gathering_games', games: games }
+    };
+  }
+
+  // ── Generic payout close for an individual-entity round ────────────────
+  // config: Round Config v1. inputs: { scorecards, ctpLeaders, bbAnswers }.
+  // Pot = entry_per_player × players who actually turned in a card.
+  // Returns the results snapshot (same shape Dev-87 saved as payout_summary,
+  // calc_version 1 — existing saved snapshots stay readable as-is).
+  function computeRoundPayout(config, inputs) {
+    inputs = inputs || {};
+    const cards = (inputs.scorecards || []).filter(c => c && c.player);
+    const players = cards.map(c => c.player);
+    const ledger = makeLedger(players);
+    const dpp = Number(config && config.payout && config.payout.entry_per_player) || 0;
+    const totalPot = dpp * ledger.n;
+    const state = { ledger, remaining: totalPot, unallocated: 0, rollover: 0 };
+    const results = { cttp: null, birdieball: null, skins: null };
+    const addons = ((config && config.addons) || [])
+      .filter(a => ADDONS[a.id])
+      .slice()
+      .sort((a, b) => ADDONS[a.id].order - ADDONS[b.id].order);
+    const withCards = Object.assign({}, inputs, { scorecards: cards });
+    let residualRan = false;
+    addons.forEach(a => {
+      results[a.id] = ADDONS[a.id].carve(state, a, withCards);
+      if (ADDONS[a.id].residual) residualRan = true;
+    });
+    if (!residualRan) {
+      // No residual game to absorb the balance (incl. rollover) — give it back.
+      const leftover = Math.max(0, state.remaining) + state.rollover;
+      if (leftover > 0) state.unallocated += ledger.giveBack(leftover).unallocated;
+    }
+    const rows = [...ledger.rows.values()]
+      .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + r.given_back }))
+      .sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
+    const games = (config && config.legacy && config.legacy.games) || addons.map(a => a.id);
+    return {
+      calc_version: 1,
+      players_count: ledger.n, players, dollar_per_player: dpp, total_pot: totalPot,
+      games, cttp: results.cttp, birdieball: results.birdieball, skins: results.skins, payouts: rows,
+      unallocated: Math.round(state.unallocated * 100) / 100
+    };
+  }
+
+  // ── Gatherings Close & Calculate (Dev-87 contract, unchanged) ──────────
+  function computeGatheringGamesPayout(row, scorecards, ctpLeaders, bbAnswers) {
+    return computeRoundPayout(gatheringConfigFromLegacy(row), { scorecards, ctpLeaders, bbAnswers });
+  }
+
+  // ── Scorecard helpers ──────────────────────────────────────────────────
+  // One latest card per player. Rows must arrive newest-first (GET
+  // /scorecards orders captured_at DESC), so the first seen per player wins.
+  function latestScorecardPerPlayer(rows) {
+    const seen = new Set();
+    const out = [];
+    (rows || []).forEach(r => {
+      const k = norm(r.player);
+      if (!k || seen.has(k)) return;
+      seen.add(k);
+      out.push(r);
+    });
+    return out;
+  }
+  // Holes a card is missing a gross score on, within the round's hole count.
+  function scorecardMissingHoles(card, holeCount) {
+    const holes = Array.isArray(card.holes) ? card.holes : [];
+    const missing = [];
+    for (let i = 0; i < holeCount; i++) {
+      if (!(typeof holes[i] === 'number' && holes[i] > 0)) missing.push(i + 1);
+    }
+    return missing;
+  }
+
+  return {
+    ENGINE_VERSION,
+    BASE_GAMES, ADDONS,
+    skinsWon,
+    gatheringConfigFromLegacy,
+    computeRoundPayout,
+    computeGatheringGamesPayout,
+    latestScorecardPerPlayer,
+    scorecardMissingHoles
+  };
+});
