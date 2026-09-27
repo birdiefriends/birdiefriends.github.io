@@ -635,7 +635,7 @@ export default {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       const { event_name, player, holes, marks, tee_box, front9, back9, total, hole_count, hole_half, venue,
-              wb_status, wb_hole, wb_stroke } = body;
+              wb_status, wb_hole, wb_stroke, input_type, round_key } = body;
       if (!event_name || !player || !Array.isArray(holes) || holes.length !== 18) {
         return new Response(JSON.stringify({ error: 'event_name, player, and an 18-entry holes array are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -643,19 +643,30 @@ export default {
       const holeCount = (hole_count === 9) ? 9 : 18;
       const holeHalf  = (holeCount === 9 && (hole_half === 'back' || hole_half === 'front')) ? hole_half : null;
       const wbStatus  = (wb_status === 'kept' || wb_status === 'lost') ? wb_status : null;
+      // Dev-88 — engine unification layer 3: bfe_scorecards is now THE one D1
+      // scorecard store (Gatherings, Card Score Sheet, BFE rounds). input_type
+      // says what `holes` holds — 'strokes' (gross), 'points' (Stableford, e.g.
+      // the Wally Cup copies Close Round saves) or 'hole_result' (match play,
+      // later). Default 'strokes': every new capture path sends gross strokes.
+      // round_key is the round's identity (gathering:<id>, bfe:<event>/<round>);
+      // defaults to event_name, which already IS the key for Gatherings.
+      const inputType = (input_type === 'points' || input_type === 'hole_result') ? input_type : 'strokes';
+      const roundKey  = (typeof round_key === 'string' && round_key.trim()) ? round_key.trim() : event_name;
       try {
         const result = await env.DB.prepare(
-          `INSERT INTO bfe_scorecards (event_name, player, holes, marks, tee_box, front9, back9, total, hole_count, hole_half, venue, wb_status, wb_hole, wb_stroke, captured_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `INSERT INTO bfe_scorecards (event_name, player, holes, marks, tee_box, front9, back9, total, hole_count, hole_half, venue, wb_status, wb_hole, wb_stroke, input_type, round_key, captured_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
            ON CONFLICT(event_name, player) DO UPDATE SET
              holes = excluded.holes, marks = excluded.marks, tee_box = excluded.tee_box,
              front9 = excluded.front9, back9 = excluded.back9,
              total = excluded.total, hole_count = excluded.hole_count, hole_half = excluded.hole_half,
              venue = excluded.venue, wb_status = excluded.wb_status, wb_hole = excluded.wb_hole,
-             wb_stroke = excluded.wb_stroke, captured_at = excluded.captured_at`
+             wb_stroke = excluded.wb_stroke, input_type = excluded.input_type, round_key = excluded.round_key,
+             captured_at = excluded.captured_at`
         ).bind(event_name, player, JSON.stringify(holes), marksJson, tee_box || null, front9 ?? null, back9 ?? null,
                total ?? null, holeCount, holeHalf, venue || null,
-               wbStatus, wbStatus === 'lost' ? (wb_hole ?? null) : null, wbStatus === 'lost' ? (wb_stroke ?? null) : null)
+               wbStatus, wbStatus === 'lost' ? (wb_hole ?? null) : null, wbStatus === 'lost' ? (wb_stroke ?? null) : null,
+               inputType, roundKey)
           .run();
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
@@ -670,9 +681,11 @@ export default {
         const event  = url.searchParams.get('event');
         const player = url.searchParams.get('player');
         const venue  = url.searchParams.get('venue');
+        const input  = url.searchParams.get('input');  // Dev-88 — e.g. input=strokes: My History must never show Wally Cup points as strokes
         let sql = `SELECT * FROM bfe_scorecards WHERE 1=1`;
         const binds = [];
         if (event)  { sql += ` AND event_name = ?`; binds.push(event); }
+        if (input)  { sql += ` AND COALESCE(input_type, 'strokes') = ?`; binds.push(input); }
         if (player) { sql += ` AND player = ?`;      binds.push(player); }
         if (venue)  { sql += ` AND venue = ?`;       binds.push(venue); }
         sql += ` ORDER BY captured_at DESC`;
