@@ -1,3 +1,6 @@
+v4.8.0 · 2026-09-27
+Deployed: 2026-09-27 14:30 (Behind the scenes, no visible change: the Gatherings payout math behind Close & Calculate (Skins, CTP, BirdieBall) moved out of the portal into a new shared engine file, bf_engine.js, that the portal now loads. Payouts are unchanged — checked against the previous version on 5,000 simulated rounds. This is the first step toward one game engine for Gatherings and BFE events.)
+
 v4.7.9 · 2026-09-27
 Deployed: 2026-09-27 12:28 (My History photos now sit three across as square polaroids on a phone instead of one per row. Events with more than 9 photos show the first 9 with a "Show all" button — tap it again to show fewer.)
 
