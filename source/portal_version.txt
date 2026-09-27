@@ -1,3 +1,6 @@
+v4.7.8 · 2026-09-25
+Deployed: 2026-09-25 12:15 (BETA rail test mode can no longer get stuck: it now switches itself off after 4 hours, and the TEST chip on the rail shows ✕ — tap it to turn test mode off and go back to real location. Any old test flag left on a phone from before this version is cleared automatically.)
+
 v4.7.7 · 2026-09-25
 Deployed: 2026-09-25 09:55 (BETA rail: drag it anywhere. Grab the gold tab or the ⛳ distance chip and move it; let go and it snaps to the nearest side (left or right) at that height, mirrored when on the left. Your spot is remembered on your phone. A plain tap on the tab still tucks/untucks, and it stays clear of the header and bottom nav.)
 
