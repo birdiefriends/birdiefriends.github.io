@@ -249,6 +249,47 @@ body.tabs-mode [data-tabsection].tab-active{display:block;}
   .mem-more{display:block;width:100%;margin:4px 0 10px;padding:9px 12px;border-radius:10px;border:1px solid rgba(90,86,72,0.35);background:rgba(255,255,255,0.55);color:#3a3a3a;font:600 12.5px 'DM Sans',sans-serif;cursor:pointer;}
   .memory-note{margin:6px 2px;}
 }
+
+/* Scoring Breakdown (GLS-style player cards) */
+.sb-note{font-size:12.5px;font-style:italic;color:var(--white-dim);background:var(--white-faintest);border-left:3px solid rgba(232,57,42,0.45);border-radius:0 10px 10px 0;padding:0.6rem 0.85rem;margin-bottom:0.9rem;}
+.sb-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem;}
+.sb-filter{font:600 12.5px 'DM Sans',sans-serif;color:var(--white-dim);background:transparent;border:1px solid rgba(245,240,232,0.18);border-radius:99px;padding:6px 14px;cursor:pointer;}
+.sb-filter.active{color:var(--white);background:rgba(232,57,42,0.18);border-color:rgba(232,57,42,0.55);}
+.sb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;}
+.sb-card{background:var(--white-faintest);border:1px solid rgba(245,240,232,0.09);border-radius:14px;padding:0.95rem 1rem 0.85rem;}
+.sb-top{display:flex;align-items:center;gap:10px;margin-bottom:0.7rem;}
+.sb-rank{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:13px;color:var(--white-dim);min-width:18px;}
+.sb-avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--white-dim);border:1px solid rgba(245,240,232,0.2);background:rgba(245,240,232,0.05);}
+.sb-name{font-weight:700;font-size:14px;color:var(--white);line-height:1.2;}
+.sb-sub{font-size:11px;color:var(--white-dim);margin-top:1px;}
+.sb-rows{border-top:1px solid rgba(245,240,232,0.08);border-bottom:1px solid rgba(245,240,232,0.08);padding:0.55rem 0;display:flex;flex-direction:column;gap:6px;}
+.sb-row{display:grid;grid-template-columns:54px 1fr 22px;align-items:center;gap:8px;font-size:12.5px;color:var(--white-dim);}
+.sb-track{height:5px;border-radius:99px;background:rgba(245,240,232,0.08);overflow:hidden;}
+.sb-fill{height:100%;border-radius:99px;}
+.sb-n{text-align:right;color:var(--white);font-weight:600;font-variant-numeric:tabular-nums;}
+.sb-foot{display:grid;grid-template-columns:repeat(4,1fr);text-align:center;padding-top:0.6rem;}
+.sb-fv{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:1.05rem;color:var(--white);line-height:1.1;}
+.sb-fl{font-size:10px;color:var(--white-dim);}
+@media (max-width:640px){
+  .sb-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .sb-card{padding:0.7rem 0.65rem 0.6rem;}
+  .sb-avatar{display:none;}
+  .sb-strokes{display:none;}
+  .sb-name{font-size:12.5px;}
+  .sb-sub{font-size:10px;}
+  .sb-row{grid-template-columns:40px 1fr 18px;gap:5px;font-size:11px;}
+  .sb-foot{grid-template-columns:repeat(2,1fr);row-gap:6px;}
+  .sb-fv{font-size:0.95rem;}
+}
+
+/* Historic package download */
+.dl-bar{display:flex;flex-direction:column;align-items:center;gap:6px;margin:1.2rem 1.5rem 0.2rem;}
+.dl-btn{display:inline-flex;align-items:center;gap:8px;font:700 13.5px 'DM Sans',sans-serif;color:var(--white);background:rgba(232,57,42,0.16);border:1px solid rgba(232,57,42,0.55);border-radius:99px;padding:10px 20px;cursor:pointer;}
+.dl-btn:hover{background:rgba(232,57,42,0.26);}
+.dl-btn[disabled]{opacity:0.6;cursor:progress;}
+.dl-hint{font-size:11.5px;color:var(--white-dim);text-align:center;max-width:460px;line-height:1.45;}
+.dl-status{font-size:12px;color:var(--accent-light);min-height:1em;text-align:center;}
+.archive-stamp{margin:1rem auto 0;text-align:center;font-size:11.5px;color:var(--white-dim);}
 </style>
 </head><body>
 <div class="page" style="--accent:#e8392a">
@@ -274,6 +315,60 @@ body.tabs-mode [data-tabsection].tab-active{display:block;}
     </div>
     <div class="recap-credit">&mdash; Tom Stitt</div>
   </div>
+  <!--DL-START--><div class="dl-bar">
+    <button type="button" class="dl-btn" id="dlArchiveBtn">💾 Download Archive</button>
+    <div class="dl-hint">Saves this whole page — results, recap, scorecards and every photo — as one file you can keep on your own drive, cloud or USB stick. Opens in any browser, no internet needed.</div>
+    <div class="dl-status" id="dlArchiveStatus"></div>
+  </div>
+  <script>
+  (function(){
+    var btn = document.getElementById('dlArchiveBtn'), status = document.getElementById('dlArchiveStatus');
+    var MAX = 1200, Q = 0.72, FILE = '2026-Wally-Cup-Results.html';
+    function blobToDataUrl(b){ return new Promise(function(res, rej){ var fr = new FileReader(); fr.onload = function(){ res(fr.result); }; fr.onerror = rej; fr.readAsDataURL(b); }); }
+    async function shrink(blob){
+      if (!/^image\//.test(blob.type) || !window.createImageBitmap) return blob;
+      try {
+        var bmp = await createImageBitmap(blob);
+        var s = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+        if (s === 1 && blob.size < 450000) return blob;
+        var c = document.createElement('canvas'); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+        c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+        var out = await new Promise(function(r){ c.toBlob(r, 'image/jpeg', Q); });
+        return (out && out.size < blob.size) ? out : blob;
+      } catch (e) { return blob; }
+    }
+    btn.addEventListener('click', async function(){
+      btn.disabled = true;
+      try {
+        status.textContent = 'Preparing…';
+        var src = await (await fetch(location.href.split('#')[0], { cache: 'no-store' })).text();
+        var urls = Array.from(new Set(src.match(/https:\/\/bf-experiences\.birdiefriends01\.workers\.dev\/bfe\/memories\/serve\/\d+/g) || []));
+        var map = {}, done = 0, failed = 0, queue = urls.slice();
+        async function worker(){
+          while (queue.length) {
+            var u = queue.shift();
+            try { var b = await (await fetch(u)).blob(); map[u] = await blobToDataUrl(await shrink(b)); }
+            catch (e) { failed++; }
+            done++; status.textContent = 'Packaging photos & videos… ' + done + ' / ' + urls.length;
+          }
+        }
+        await Promise.all([worker(), worker(), worker(), worker()]);
+        status.textContent = 'Building the file…';
+        urls.forEach(function(u){ if (map[u]) src = src.split('"' + u + '"').join('"' + map[u] + '"'); });
+        var M0 = '<' + '!--DL-START--' + '>', M1 = '<' + '!--DL-END--' + '>'; var a = src.indexOf(M0), z = src.lastIndexOf(M1);
+        if (a > -1 && z > a) src = src.slice(0, a) + '<div class="archive-stamp">Archived copy · saved ' + new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) + ' · birdiefriends.com</div>' + src.slice(z + M1.length);
+        src = src.split('href="/portal.html"').join('href="https://birdiefriends.com/portal.html"');
+        var blob = new Blob([src], { type: 'text/html' });
+        var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = FILE;
+        document.body.appendChild(link); link.click(); link.remove();
+        setTimeout(function(){ URL.revokeObjectURL(link.href); }, 60000);
+        status.textContent = 'Saved ' + FILE + ' (' + (blob.size / 1048576).toFixed(0) + ' MB)' + (failed ? ' — ' + failed + ' item(s) couldn\'t be fetched and still point online' : '') + '.';
+      } catch (e) {
+        status.textContent = 'Something went wrong: ' + e.message + '. Please try again.';
+      } finally { btn.disabled = false; }
+    });
+  })();
+  </script><!--DL-END-->
   <div class="view-toggle">
     <div class="view-toggle-btn active" data-mode="scroll">📜 Full Page</div>
     <div class="view-toggle-btn" data-mode="tabs">🗂️ Tabs</div>
@@ -4960,8 +5055,69 @@ body.tabs-mode [data-tabsection].tab-active{display:block;}
   </div></div></div>
     </div>
   </div>
-  <div class="section wb-section" id="wallyball" data-tabsection="wallyball" data-tablabel="Wally Ball">
+  <div class="section" id="scoring" data-tabsection="scoring" data-tablabel="Scoring">
     <div class="section-head"><div class="section-num">05</div><div>
+      <div class="section-title">Scoring Breakdown</div>
+      <div class="section-desc">Every hole of Rd1, Rd2 &amp; Rd3 · ranked by average strokes per hole</div>
+    </div></div>
+    <div class="sb-note">Scores were entered as Stableford points, so anything worse than bogey is counted together as Double+.</div>
+    <div class="sb-filters" id="sbFilters">
+      <button type="button" class="sb-filter active" data-r="all">All rounds</button>
+      <button type="button" class="sb-filter" data-r="Rd1">Rd1 · Honesdale</button>
+      <button type="button" class="sb-filter" data-r="Rd2">Rd2 · Skytop</button>
+      <button type="button" class="sb-filter" data-r="Rd3">Rd3 · Paupack</button>
+    </div>
+    <div class="sb-grid" id="sbGrid"></div>
+  </div>
+  <script>
+  (function(){
+    var DATA = {"Tom Arnold":{"Rd1":[[4,5],[5,4],[4,4],[3,4],[5,5],[3,4],[3,3],[4,6],[4,5],[4,4],[4,5],[4,4],[3,3],[5,4],[3,3],[3,3],[5,4],[4,5]],"Rd2":[[4,5],[4,5],[3,3],[4,4],[4,4],[3,3],[5,7],[4,4],[5,6],[4,6],[5,6],[3,4],[4,4],[4,4],[5,5],[3,3],[4,5],[4,6]],"Rd3":[[4,4],[4,5],[4,4],[5,5],[3,4],[4,5],[3,4],[4,5],[5,5],[4,4],[4,4],[4,5],[5,6],[4,4],[4,4],[3,4],[3,4],[4,4]]},"Lou Strohl":{"Rd1":[[4,6],[5,4],[4,5],[3,3],[5,5],[3,4],[3,4],[4,6],[4,5],[4,5],[4,5],[4,5],[3,3],[5,6],[3,5],[3,4],[5,6],[4,4]],"Rd2":[[4,6],[4,5],[3,4],[4,5],[4,6],[3,5],[5,7],[4,4],[5,7],[4,3],[5,6],[3,4],[4,5],[4,6],[5,6],[3,5],[4,5],[4,5]],"Rd3":[[4,6],[4,5],[4,6],[5,5],[3,3],[4,5],[3,3],[4,5],[5,5],[4,6],[4,5],[4,4],[5,6],[4,5],[4,6],[3,5],[3,4],[4,5]]},"Bill Steirer":{"Rd1":[[4,4],[5,5],[4,4],[3,4],[5,5],[3,3],[3,4],[4,5],[4,4],[4,4],[4,3],[4,4],[3,4],[5,5],[3,4],[3,3],[5,7],[4,4]],"Rd2":[[4,4],[4,5],[3,4],[4,4],[4,5],[3,5],[5,5],[4,5],[5,6],[4,5],[5,5],[3,4],[4,3],[4,5],[5,6],[3,4],[4,5],[4,5]],"Rd3":[[4,3],[4,5],[4,5],[5,5],[3,4],[4,6],[3,4],[4,4],[5,6],[4,6],[4,3],[4,4],[5,6],[4,5],[4,4],[3,3],[3,2],[4,4]]},"Rich Potts":{"Rd1":[[4,4],[5,6],[4,5],[3,4],[5,4],[3,3],[3,3],[4,6],[4,6],[4,6],[4,5],[4,4],[3,4],[5,5],[3,3],[3,3],[5,5],[4,5]],"Rd2":[[4,6],[4,5],[3,4],[4,4],[4,4],[3,5],[5,6],[4,5],[5,5],[4,4],[5,7],[3,3],[4,4],[4,6],[5,5],[3,4],[4,5],[4,6]],"Rd3":[[4,4],[4,6],[4,4],[5,6],[3,3],[4,5],[3,4],[4,5],[5,5],[4,6],[4,5],[4,4],[5,6],[4,4],[4,4],[3,4],[3,4],[4,4]]},"Mohamed Walli":{"Rd1":[[4,6],[5,5],[4,5],[3,3],[5,5],[3,4],[3,4],[4,6],[4,5],[4,5],[4,5],[4,3],[3,3],[5,6],[3,4],[3,3],[5,6],[4,5]],"Rd2":[[4,6],[4,4],[3,3],[4,4],[4,3],[3,5],[5,5],[4,5],[5,5],[4,4],[5,7],[3,3],[4,4],[4,5],[5,3],[3,3],[4,5],[4,5]],"Rd3":[[4,5],[4,5],[4,5],[5,5],[3,5],[4,4],[3,5],[4,6],[5,6],[4,4],[4,5],[4,4],[5,5],[4,5],[4,4],[3,4],[3,3],[4,4]]},"Dave Sherwin":{"Rd1":[[4,6],[5,4],[4,4],[3,3],[5,6],[3,3],[3,4],[4,4],[4,4],[4,6],[4,5],[4,6],[3,4],[5,5],[3,3],[3,3],[5,4],[4,4]],"Rd2":[[4,4],[4,4],[3,4],[4,4],[4,4],[3,4],[5,4],[4,4],[5,5],[4,4],[5,6],[3,3],[4,4],[4,5],[5,4],[3,4],[4,4],[4,5]],"Rd3":[[4,4],[4,4],[4,5],[5,5],[3,3],[4,5],[3,4],[4,4],[5,5],[4,4],[4,4],[4,5],[5,6],[4,4],[4,5],[3,4],[3,4],[4,4]]},"Evan Lindermuth":{"Rd1":[[4,5],[5,6],[4,4],[3,3],[5,5],[3,4],[3,3],[4,5],[4,4],[4,5],[4,4],[4,4],[3,4],[5,7],[3,4],[3,2],[5,6],[4,5]],"Rd2":[[4,6],[4,5],[3,3],[4,4],[4,4],[3,5],[5,5],[4,5],[5,5],[4,6],[5,7],[3,4],[4,5],[4,6],[5,4],[3,3],[4,4],[4,5]],"Rd3":[[4,5],[4,6],[4,3],[5,6],[3,4],[4,4],[3,4],[4,5],[5,7],[4,4],[4,5],[4,6],[5,7],[4,5],[4,4],[3,3],[3,5],[4,6]]},"Jordan Knappenberger":{"Rd1":[[4,5],[5,5],[4,4],[3,4],[5,6],[3,3],[3,3],[4,4],[4,5],[4,4],[4,5],[4,4],[3,4],[5,6],[3,3],[3,4],[5,3],[4,5]],"Rd2":[[4,6],[4,4],[3,5],[4,4],[4,4],[3,2],[5,7],[4,4],[5,5],[4,5],[5,5],[3,3],[4,4],[4,4],[5,6],[3,3],[4,3],[4,6]],"Rd3":[[4,6],[4,4],[4,5],[5,5],[3,3],[4,3],[3,4],[4,4],[5,6],[4,4],[4,4],[4,4],[5,6],[4,4],[4,4],[3,3],[3,3],[4,4]]},"Chooch Wernett":{"Rd1":[[4,6],[5,5],[4,3],[3,4],[5,6],[3,5],[3,2],[4,3],[4,5],[4,6],[4,6],[4,4],[3,4],[5,7],[3,3],[3,4],[5,5],[4,6]],"Rd2":[[4,5],[4,3],[3,5],[4,5],[4,4],[3,4],[5,6],[4,5],[5,7],[4,6],[5,5],[3,5],[4,6],[4,6],[5,5],[3,4],[4,4],[4,3]],"Rd3":[[4,5],[4,5],[4,4],[5,7],[3,5],[4,5],[3,3],[4,4],[5,5],[4,6],[4,5],[4,3],[5,4],[4,6],[4,6],[3,3],[3,4],[4,6]]},"Scott Justus":{"Rd1":[[4,6],[5,5],[4,5],[3,3],[5,5],[3,3],[3,4],[4,5],[4,4],[4,5],[4,5],[4,4],[3,3],[5,6],[3,4],[3,3],[5,6],[4,5]],"Rd2":[[4,4],[4,4],[3,3],[4,4],[4,3],[3,5],[5,7],[4,5],[5,5],[4,4],[5,6],[3,4],[4,5],[4,6],[5,5],[3,5],[4,5],[4,4]],"Rd3":[[4,5],[4,5],[4,6],[5,5],[3,3],[4,6],[3,3],[4,4],[5,6],[4,5],[4,5],[4,4],[5,4],[4,4],[4,4],[3,3],[3,3],[4,5]]},"Jeff Rapp":{"Rd1":[[4,5],[5,5],[4,4],[3,4],[5,6],[3,4],[3,3],[4,6],[4,6],[4,5],[4,5],[4,4],[3,5],[5,6],[3,5],[3,3],[5,5],[4,5]],"Rd2":[[4,6],[4,4],[3,3],[4,5],[4,6],[3,5],[5,7],[4,5],[5,5],[4,4],[5,6],[3,3],[4,3],[4,6],[5,5],[3,4],[4,4],[4,5]],"Rd3":[[4,3],[4,6],[4,4],[5,5],[3,5],[4,6],[3,3],[4,4],[5,6],[4,6],[4,4],[4,4],[5,6],[4,5],[4,4],[3,3],[3,5],[4,4]]},"Mark Weaver":{"Rd1":[[4,6],[5,6],[4,6],[3,5],[5,7],[3,5],[3,4],[4,5],[4,5],[4,6],[4,5],[4,6],[3,3],[5,6],[3,4],[3,3],[5,7],[4,6]],"Rd2":[[4,5],[4,6],[3,3],[4,6],[4,5],[3,5],[5,7],[4,6],[5,7],[4,6],[5,5],[3,3],[4,5],[4,6],[5,7],[3,4],[4,5],[4,6]],"Rd3":[[4,6],[4,6],[4,5],[5,6],[3,5],[4,6],[3,5],[4,5],[5,6],[4,6],[4,6],[4,5],[5,6],[4,5],[4,5],[3,4],[3,5],[4,5]]},"Brian Hager":{"Rd1":[[4,6],[5,5],[4,5],[3,3],[5,5],[3,4],[3,4],[4,6],[4,5],[4,5],[4,5],[4,6],[3,3],[5,5],[3,4],[3,2],[5,6],[4,4]],"Rd2":[[4,6],[4,4],[3,5],[4,4],[4,5],[3,3],[5,5],[4,5],[5,7],[4,4],[5,5],[3,3],[4,5],[4,6],[5,5],[3,3],[4,5],[4,5]],"Rd3":[[4,4],[4,6],[4,5],[5,5],[3,3],[4,4],[3,3],[4,5],[5,6],[4,4],[4,5],[4,3],[5,5],[4,3],[4,4],[3,4],[3,3],[4,5]]},"Tom Stitt":{"Rd1":[[4,5],[5,6],[4,5],[3,5],[5,7],[3,5],[3,4],[4,5],[4,6],[4,5],[4,5],[4,6],[3,5],[5,5],[3,4],[3,3],[5,5],[4,5]],"Rd2":[[4,6],[4,4],[3,4],[4,4],[4,4],[3,4],[5,6],[4,6],[5,5],[4,4],[5,7],[3,4],[4,6],[4,4],[5,6],[3,3],[4,6],[4,4]],"Rd3":[[4,5],[4,5],[4,4],[5,6],[3,4],[4,6],[3,5],[4,6],[5,6],[4,6],[4,4],[4,5],[5,6],[4,4],[4,5],[3,5],[3,3],[4,6]]},"Nate Stettler":{"Rd1":[[4,5],[5,5],[4,4],[3,4],[5,7],[3,4],[3,5],[4,6],[4,4],[4,6],[4,5],[4,4],[3,5],[5,6],[3,4],[3,5],[5,7],[4,4]],"Rd2":[[4,6],[4,6],[3,5],[4,5],[4,5],[3,4],[5,7],[4,6],[5,6],[4,6],[5,6],[3,4],[4,6],[4,6],[5,7],[3,5],[4,4],[4,6]],"Rd3":[[4,6],[4,6],[4,6],[5,6],[3,4],[4,5],[3,4],[4,4],[5,5],[4,5],[4,4],[4,6],[5,5],[4,6],[4,4],[3,4],[3,2],[4,5]]},"Jake Knappenberger":{"Rd1":[[4,6],[5,6],[4,6],[3,4],[5,7],[3,5],[3,5],[4,6],[4,5],[4,5],[4,5],[4,5],[3,3],[5,7],[3,4],[3,5],[5,7],[4,4]],"Rd2":[[4,5],[4,6],[3,5],[4,5],[4,4],[3,4],[5,7],[4,6],[5,6],[4,4],[5,6],[3,3],[4,5],[4,6],[5,4],[3,3],[4,6],[4,6]],"Rd3":[[4,5],[4,4],[4,4],[5,7],[3,4],[4,6],[3,5],[4,6],[5,6],[4,6],[4,6],[4,5],[5,7],[4,5],[4,6],[3,5],[3,5],[4,6]]}};
+    var KINDS = [
+      ['eagle','Eagle','#7aa7ff'], ['birdie','Birdie','var(--good)'], ['par','Par','rgba(245,240,232,0.55)'],
+      ['bogey','Bogey','var(--bad)'], ['double','Double+','var(--accent)']
+    ];
+    var ROUNDS = ['Rd1','Rd2','Rd3'];
+    function initials(n){ return n.split(' ').map(function(w){return w[0];}).join(''); }
+    function stats(name, which){
+      var t = {eagle:0,birdie:0,par:0,bogey:0,double:0}, strokes = 0, holes = 0;
+      (which === 'all' ? ROUNDS : [which]).forEach(function(r){
+        (DATA[name][r] || []).forEach(function(h){
+          var d = h[1] - h[0];
+          t[d <= -2 ? 'eagle' : d === -1 ? 'birdie' : d === 0 ? 'par' : d === 1 ? 'bogey' : 'double']++;
+          strokes += h[1]; holes++;
+        });
+      });
+      return {name:name, t:t, holes:holes, strokes:strokes, avg: holes ? strokes/holes : 99};
+    }
+    function render(which){
+      var list = Object.keys(DATA).map(function(n){ return stats(n, which); })
+        .sort(function(a,b){ return a.avg - b.avg || a.name.localeCompare(b.name); });
+      var sub = which === 'all' ? ' holes · Rd1–3' : ' holes · ' + which;
+      document.getElementById('sbGrid').innerHTML = list.map(function(p, i){
+        var rows = KINDS.filter(function(k){ return k[0] !== 'eagle' || p.t.eagle; }).map(function(k){
+          var n = p.t[k[0]], pct = p.holes ? Math.round(n / p.holes * 100) : 0;
+          return '<div class="sb-row"><span>' + k[1] + '</span><div class="sb-track"><div class="sb-fill" style="width:' + pct + '%;background:' + k[2] + '"></div></div><span class="sb-n">' + n + '</span></div>';
+        }).join('');
+        var under = p.t.eagle + p.t.birdie, over = p.t.bogey + p.t.double;
+        return '<div class="sb-card"><div class="sb-top"><span class="sb-rank">' + (i+1) + '</span><div class="sb-avatar">' + initials(p.name) + '</div><div><div class="sb-name">' + p.name + '</div><div class="sb-sub">' + p.holes + sub + '<span class="sb-strokes"> · ' + p.strokes + ' strokes</span></div></div></div>'
+          + '<div class="sb-rows">' + rows + '</div>'
+          + '<div class="sb-foot"><div><div class="sb-fv" style="color:var(--good)">' + under + '</div><div class="sb-fl">sub-par</div></div>'
+          + '<div><div class="sb-fv">' + p.t.par + '</div><div class="sb-fl">pars</div></div>'
+          + '<div><div class="sb-fv" style="color:var(--accent-light)">' + over + '</div><div class="sb-fl">over par</div></div>'
+          + '<div><div class="sb-fv">' + p.avg.toFixed(2) + '</div><div class="sb-fl">avg/hole</div></div></div></div>';
+      }).join('');
+    }
+    document.querySelectorAll('#sbFilters .sb-filter').forEach(function(b){
+      b.addEventListener('click', function(){
+        document.querySelectorAll('#sbFilters .sb-filter').forEach(function(x){ x.classList.toggle('active', x === b); });
+        render(b.getAttribute('data-r'));
+      });
+    });
+    render('all');
+  })();
+  </script>
+  <div class="section wb-section" id="wallyball" data-tabsection="wallyball" data-tablabel="Wally Ball">
+    <div class="section-head"><div class="section-num">06</div><div>
       <div class="section-title">Wally Ball</div>
       <div class="section-desc">Round bonus + season elimination pot — tracked separately from quota, and from each other</div>
     </div></div>
@@ -5020,7 +5176,7 @@ body.tabs-mode [data-tabsection].tab-active{display:block;}
     </div></div>
   </div>
   <div class="section twoman-section" id="twoman" data-tabsection="twoman" data-tablabel="2Man"><div class="wrap" style="padding:0;">
-    <div class="section-head"><div class="section-num">06</div><div>
+    <div class="section-head"><div class="section-num">07</div><div>
       <div class="section-title">2Man Scramble · Skytop Lodge — Final</div>
       <div class="section-desc">Standalone event — does not count toward the 2026 Wally Cup Overall</div>
       
@@ -5760,7 +5916,7 @@ body.tabs-mode [data-tabsection].tab-active{display:block;}
   </div></div></div>
   </div></div>
   <div class="section twoman-section" id="practice-0" data-tabsection="practice-0" data-tablabel="Practice"><div class="wrap" style="padding:0;">
-    <div class="section-head"><div class="section-num">07</div><div>
+    <div class="section-head"><div class="section-num">08</div><div>
       <div class="section-title">2026 Wally Cup - Practice Rd · Paupack Hills GC — Final</div>
       <div class="section-desc">Practice round · scorecards only — no standings or payouts</div>
       
@@ -6350,7 +6506,7 @@ body.tabs-mode [data-tabsection].tab-active{display:block;}
   </div></div></div>
   </div></div>
   <div class="wrap" data-tabsection="payout" data-tablabel="Payout"><div class="section" id="payout">
-    <div class="section-head"><div class="section-num">08</div><div>
+    <div class="section-head"><div class="section-num">09</div><div>
       <div class="section-title">Payout Summary</div>
       <div class="section-desc">Every dollar owed, summed across rounds, Overall, and Wally Ball — held until the trip wraps</div>
     </div></div>
@@ -6570,7 +6726,7 @@ body.tabs-mode [data-tabsection].tab-active{display:block;}
     </div>
   </div></div>
   <div class="wrap" id="memories" data-tabsection="memories" data-tablabel="Trip Memories"><div class="section">
-    <div class="section-head"><div class="section-num">09</div><div>
+    <div class="section-head"><div class="section-num">10</div><div>
       <div class="section-title">Trip Memories</div>
       <div class="section-desc">83 photos · 6 notes — grouped by when they happened</div>
     </div></div>
