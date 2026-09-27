@@ -227,6 +227,28 @@ body.tabs-mode [data-tabsection].tab-active{display:block;}
 .recap-yard.total .ry-num{color:var(--accent-light);}
 .recap-credit{margin-top:0.9rem;font-size:12px;color:var(--white-dim);text-align:right;}
 @media (max-width:640px){.recap{margin:1.3rem 1rem 0.3rem;padding:1.1rem 1rem 1rem;}.recap-yards{grid-template-columns:repeat(2,1fr);}.recap-quote{font-size:1rem;}}
+
+/* Phone scrapbook: 3-up grid, tighter padding, long chapters collapse */
+.mem-more{display:none;}
+.rail{overflow-x:clip;}
+@media (max-width:640px){
+  #memories{padding:0 0.4rem;}
+  #memories > .section{padding:1.6rem 0.35rem;}
+  #memories .section-head{padding:0 0.6rem;}
+  .chapter-block{padding:0.9rem 0.6rem 1rem;margin-bottom:1.1rem;}
+  .memory-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 8px;margin-bottom:8px;}
+  .memory-tile{width:auto;margin:0;padding:4px 4px 3px;transform:rotate(-1.2deg) !important;}
+  .memory-tile:nth-child(3n+2){transform:rotate(1deg) !important;}
+  .memory-tile:nth-child(3n){transform:rotate(-0.4deg) !important;}
+  .memory-media{height:auto;aspect-ratio:1/1;}
+  .memory-tile-meta{padding:4px 1px 1px;}
+  .memory-tile-by{font-size:9.5px;}
+  .memory-tile-tags{display:none;}
+  .memory-tile-caption{font-size:9.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .memory-grid:not(.expanded) .mem-extra{display:none;}
+  .mem-more{display:block;width:100%;margin:4px 0 10px;padding:9px 12px;border-radius:10px;border:1px solid rgba(90,86,72,0.35);background:rgba(255,255,255,0.55);color:#3a3a3a;font:600 12.5px 'DM Sans',sans-serif;cursor:pointer;}
+  .memory-note{margin:6px 2px;}
+}
 </style>
 </head><body>
 <div class="page" style="--accent:#e8392a">
@@ -7335,4 +7357,25 @@ body.tabs-mode [data-tabsection].tab-active{display:block;}
     <div class="footer-meta">BirdieFriends Experiences · generated 2026-09-13 19:52 UTC</div>
   </div></div>
 </div>
+<script>
+(function(){
+  var LIMIT = 9; // 3 rows of 3 on a phone
+  document.querySelectorAll('.memory-grid').forEach(function(grid){
+    var tiles = grid.querySelectorAll('.memory-tile');
+    if (tiles.length <= LIMIT) return;
+    for (var i = LIMIT; i < tiles.length; i++) tiles[i].classList.add('mem-extra');
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mem-more';
+    var label = 'Show all ' + tiles.length + ' photos \u25BE';
+    btn.textContent = label;
+    btn.addEventListener('click', function(){
+      var open = grid.classList.toggle('expanded');
+      btn.textContent = open ? 'Show fewer \u25B4' : label;
+      if (!open) grid.closest('.chapter-block').scrollIntoView({block:'start'});
+    });
+    grid.parentNode.insertBefore(btn, grid.nextSibling);
+  });
+})();
+</script>
 </body></html>
