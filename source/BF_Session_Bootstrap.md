@@ -1,5 +1,5 @@
 # BF_Session_Bootstrap.md — Start Here for a New BirdieFriends Session
-**Status:** current as of **Dev-87 close (2026-09-27). Next session is Dev-88: start the engine-unification roadmap, `BF_BFE_NextGen_Spec.md` §9 Phase A (see §3 below).** BF Cup development is paused on purpose (Brian, 2026-09-27); its design is parked in spec §2a. Earlier in Dev-87 (2026-09-24) — **Gatherings Close & Calculate shipped**
+**Status:** **Dev-88 in progress (2026-09-27) — engine unification §9 Phase A underway.** Shipped so far: `bf_engine.js` (shared engine, layer 1) + portal **v4.8.0**, bf_push **v16**, and the scorecard-store decision (`bfe_scorecards` on the BFE Worker; see the Dev-88 log entry). current as of **Dev-87 close (2026-09-27). Next session is Dev-88: start the engine-unification roadmap, `BF_BFE_NextGen_Spec.md` §9 Phase A (see §3 below).** BF Cup development is paused on purpose (Brian, 2026-09-27); its design is parked in spec §2a. Earlier in Dev-87 (2026-09-24) — **Gatherings Close & Calculate shipped**
 (portal v4.6.0 + a `BF_Experiences.js` route; v4.6.1 then moved Gatherings CTP from Jotform to D1; v4.6.2 fixed non-Skins Gatherings scoring to Jotform and added a My History Close entry for the host): the host of a gamed Gathering closes the round from
 the Live Panel, the Skins/CTP/BirdieBall payout is computed on whoever actually turned in a scorecard,
 and results post to that Gathering's My History story (see §2a). **The Wally Cup Rd3/Overall
@@ -34,7 +34,7 @@ What matters for every later session:
 1. `docs/wally-cup-results.html` is now hand-finalized. **Never run BFE-Admin "Generate &
    publish" for the 2026 Wally Cup again**; edit the static file directly.
 2. portal.html is now **v4.7.9** (shipped from that branch), so start from it.
-3. bf_push.ps1 is now **v13** — *superseded at Dev-87 close: **v14** adds the `source/tests/` suite (`bftest_<name>` local keys).*
+3. bf_push.ps1 is now **v16** (Dev-88): v14 test suite, v15 `.json` verify fix, v16 `bf_engine.js` first in `$FileMap`.
 4. Brian's Trip Memories cutoffs are confirmed to live only in his BFE-Admin browser's
    localStorage.
 ---
@@ -413,6 +413,13 @@ place and log it the same way prior sessions' own live-data catches were logged 
 entries in `BF_Session_Log.md` for the pattern: what was found, how it was verified against
 live data, what Brian confirmed).
 ## 4. Standing operating rules (apply every session)
+- **`bf_engine.js` is the shared game engine (Dev-88).** Scoring/payout logic goes THERE as registry
+  entries, not into portal.html or BFE-Admin.html. When it changes, bump `ENGINE_VERSION` and portal's
+  `<script src="bf_engine.js?v=...">` together (`test_engine_wiring.mjs` fails otherwise), and deliver
+  it alongside portal.html — bf_push pushes it first. `test_engine_parity.mjs` pins the Dev-87
+  Gatherings payout; a deliberate payout change means updating that test and logging why.
+- **Scorecards: new work is D1-only, in `bfe_scorecards` (BFE Worker) — Brian, Dev-88.** Series
+  Jotform scorecards stay untouched until the 2026 Series concludes.
 - **Run the test suite before delivering any portal.html change (added Dev-87).** `source/tests/`:
   `npm install && node run_all.mjs` (details in its README). It tests the real functions inside
   portal.html. A failing test means either the behavior changed on purpose (update the test and say so
