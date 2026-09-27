@@ -38,7 +38,7 @@ apps and two Cloudflare Workers:
 - **`portal.html`** — the player-facing app. Events/Gatherings home screen, registration,
   the Live Panel (in-round scorecard/CTP/Birdie Alert/photo capture during play), results
   pages, admin/commissioner controls behind a gear icon. This is the file most session work
-  touches. Currently v4.7.7 (see `portal_version.txt` — **bump this with every
+  touches. Currently v4.7.8 (see `portal_version.txt` — **bump this with every
   `portal.html` change and deliver it alongside**, format `vX.Y.Z · YYYY-MM-DD` /
   `Deployed: YYYY-MM-DD HH:MM`; nothing bumps it automatically).
 - **`BFE-Admin.html`** — commissioner-only admin tool for BFE ("BirdieFriends
@@ -356,7 +356,8 @@ Panel adapts around whatever's turned on. Backend: `bfe_gathering_games` (host c
   location-permission moment first. It depends on venue `lat/lng`, which the main Worker's public
   `GET /venues` now returns (five venues still have none). This is the proving ground for the
   In-Play hub direction Brian is weighing. It auto-tucks while the Live Panel is open (v4.7.3), and it
-  can be dragged to either side at any height, remembered per device (v4.7.7).
+  can be dragged to either side at any height, remembered per device (v4.7.7). **Location check verified live
+  at Moselem (Dev-87).** Test mode (`?atcourse=1`) lapses after 4 h, and a tap on TEST ✕ turns it off (v4.7.8).
 Full build detail, including the exact bug chases and test coverage, is in
 `BF_Session_Log.md`'s Dev-86 entry.
 ## 3. Dev-88 focus — live-verify Gatherings Close & Calculate, then confirm next priority
