@@ -3228,6 +3228,22 @@ body {
     </div>
   </div>
 </div>
+<!-- Dev-88 — read-only game details, reachable from the event card's 🏆 Games
+     icon whether or not the round is live yet (Brian: players want to know
+     the game before heading to the course). No fetch — gatheringGameDetailsBody
+     reads the already-loaded, already-resolved gatheringRoundConfig(). -->
+<div class="bf-modal-overlay" id="game-details-modal" onclick="closeModalOnOverlay(event,'game-details-modal')">
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="bf-modal-title" style="margin-bottom:0" id="game-details-title">🏆 Games</div>
+      <button onclick="closeModal('game-details-modal')" title="Close"
+        style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
+          color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div id="game-details-body" style="max-height:65vh;overflow-y:auto"></div>
+  </div>
+</div>
 <div class="bf-modal-overlay" id="notif-guide-modal" onclick="closeModalOnOverlay(event,'notif-guide-modal')">
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
@@ -4976,10 +4992,6 @@ async function refreshAtCourse() {
     renderAtCourseRail();
   }, { enableHighAccuracy: false, maximumAge: 5 * 60000, timeout: 15000 });
 }
-function atCourseOpenGames() {
-  if (!_livePanelOpen) toggleLivePanel();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
 // Dev-88 — Video/Upload quick-capture from the rail. Reuses the card-photo
 // sheet's own handler (cardPhotoCameraPicked) and its already-in-the-DOM
 // hidden inputs rather than opening the sheet first — same upload pipeline
@@ -5095,8 +5107,6 @@ function renderAtCourseRail() {
   const evt = _atCourse.evt;
   const id = String(evt.id).replace(/'/g, "\\'");
   const bfe = isBFEBackedCard(evt);
-  const live = getLiveEvent();
-  const gamesOn = !!(live && live.id === evt.id);
   // Dev-88 — the rail is now the ONE capture point for a non-BFE (Gathering)
   // round, gamed or not: the Live Panel's own Photos section was dropped for
   // these (it posted to this exact same event_photos pipeline — a straight
@@ -5124,7 +5134,6 @@ function renderAtCourseRail() {
       ${btn('📏', 'Yardage', 'openYardageModal()')}
       ${btn('📖', 'Rules', 'openRulesModal()')}
       ${btn('🗺️', 'Course', `openVenueViewerModal('${id}')`)}
-      ${gamesOn ? btn('🏆', 'Games', 'atCourseOpenGames()') : ''}
     </div>`;
   atCourseApplyPos(el); // again now that the buttons exist, so the height clamp is exact
   renderAtCourseLocDetail();
@@ -5839,6 +5848,18 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-badge secondary">🏌️</span>
         <span class="icon-action-label">Score</span>
       </button>`}
+      <!-- Dev-88 — Games detail is the opposite of the three above: it stays
+           up in BOTH modes, live or not. Brian's reasoning: "players will
+           want to know the game before heading to the course," so this can't
+           wait for the round to go live the way the rail's own Games button
+           did (that button is gone — it only ever opened the Live Panel,
+           which the card itself already does). Read-only pot breakdown, not
+           a capture path, so there's nothing here for Gaming Mode to hide. -->
+      ${(evt.source === 'gathering' && gatheringIsGamed(gatheringRoundConfig(evt.gatheringId))) ? `
+      <button class="icon-action-btn" onclick="openGameDetailsModal('${evt.id}')">
+        <span class="icon-action-badge secondary">🏆</span>
+        <span class="icon-action-label">Games</span>
+      </button>` : ''}
       <!-- Dev-80 (spec §5 / Step 6): a BFE-backed round card omits Photos/Notes
            entirely — that capture belongs to the WCRP widget/Live Panel now,
            not this card's own event_photos/notes thread (spec's whole reason
@@ -14834,6 +14855,63 @@ function gatheringIsGamed(config) {
 // when the game is selected AND its config was actually saved).
 function gatheringAddon(config, id) {
   return (config && config.addons.find(a => a.id === id)) || null;
+}
+// Dev-88 — read-only "what's the game" summary for the event card's new
+// 🏆 Games icon (Brian: "players will want to know the game before heading
+// to the course"). Same pot math as the Host Panel's live updateGamesFormPotPreview
+// (CTP and BirdieBall carved out of the $/player pot as fixed dollar amounts,
+// Skins gets whatever's left), just against the SAVED config any registered
+// player can read, not the host's in-progress form state.
+function gatheringGameDetailsBody(evt, config) {
+  const regMatchesEvt = r => (evt.source === 'gathering') ? r.gatheringId === evt.gatheringId : r.eventName === evt.name;
+  const yesCount = regData.filter(r => regMatchesEvt(r) && r.status === 'Yes').length;
+  const dpp = (config.payout && config.payout.entry_per_player) || 0;
+  const totalPot = dpp * yesCount;
+  let remaining = totalPot;
+  const row = (icon, label, detail) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--surface)">
+      <span style="font-size:1.3rem;flex-shrink:0">${icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:0.88rem">${label}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted)">${detail}</div>
+      </div>
+    </div>`;
+  const rows = [];
+  const cttp = gatheringAddon(config, 'cttp');
+  if (cttp) {
+    const holes = cttp.holes || [];
+    const cost = (cttp.dollar_per_hole || 0) * holes.length;
+    remaining -= cost;
+    rows.push(row('🎯', 'Closest to the Pin', `${holes.length} hole${holes.length === 1 ? '' : 's'} · $${(cttp.dollar_per_hole || 0).toFixed(2)}/hole · $${cost.toFixed(2)} pot`));
+  }
+  const bb = gatheringAddon(config, 'birdieball');
+  if (bb) {
+    const cost = (bb.dollar_per_player || 0) * yesCount;
+    remaining -= cost;
+    rows.push(row('🐦', 'BirdieBall', `$${(bb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot`));
+  }
+  if ((config.legacy.games || []).includes('skins')) {
+    rows.push(row('⛳', 'Skins', `Gets what's left: $${Math.max(0, remaining).toFixed(2)} pot`));
+  }
+  return `
+    <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px">
+      $${dpp.toFixed(2)}/player · ${yesCount} confirmed Yes · <b style="color:var(--text)">$${totalPot.toFixed(2)} total pot</b>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">${rows.join('')}</div>
+    <div style="font-size:0.72rem;color:var(--text-hint);margin-top:12px;line-height:1.5">
+      Scores and results publish to My History once the round is scored — no separate entry needed.
+    </div>`;
+}
+function openGameDetailsModal(evtOrId) {
+  const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => String(e.id) === String(evtOrId));
+  if (!evt) return;
+  const config = evt.source === 'gathering' ? gatheringRoundConfig(evt.gatheringId) : null;
+  if (!gatheringIsGamed(config)) return; // guard — the calling icon is already gated on this
+  const titleEl = document.getElementById('game-details-title');
+  if (titleEl) titleEl.textContent = `🏆 ${evt.name}`;
+  const bodyEl = document.getElementById('game-details-body');
+  if (bodyEl) bodyEl.innerHTML = gatheringGameDetailsBody(evt, config);
+  openModal('game-details-modal');
 }
 let _bfeBackedIndex = new Map();
 // umbrellaName -> same-shaped summary (one row per BFE EVENT, not per round)
