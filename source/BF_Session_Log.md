@@ -4949,3 +4949,19 @@ Live Panel and event card:
   for this batch, just the usual `bf_push.bat`.
 - Full suite: **15 files, 17,245 checks, all green.**
 
+**11. "At the course" rail: opened from beta to every player (portal v4.8.6).** With a real
+4-player Gathering (Golf More, Work Less — Skins/CTP/BirdieBall) live and everyone wanting in on
+the games flow, Brian opened the rail up: `atCourseEnabled()` dropped its
+`AT_COURSE_BETA_PLAYERS.includes(currentPlayer)` check (the constant and its single-name allowlist
+— `['Brian Hager']` — removed entirely) down to a plain `!!currentPlayer`. Every other rule is
+unchanged: still gated on being at the venue (within `AT_COURSE_RADIUS_M`) of a round you're
+registered Yes/Sub for today, still checked on-device via `atCourseCandidates()`/`findMyReg()`.
+- **Test fix:** `test_at_course.mjs`'s old "beta gate" check (a non-Brian player sees no rail) no
+  longer describes real behavior; replaced with two checks — a non-Brian player who *is*
+  registered for today's round now sees the rail and gets a location request, and a signed-out
+  session (`currentPlayer` empty) still skips it entirely, since that's the one condition
+  `atCourseEnabled()` still enforces. Also dropped the now-nonexistent `AT_COURSE_BETA_PLAYERS`
+  from the test's const-extraction list. 32 → 52 checks (net +1 from the split).
+- Client-side only (`portal.html`) — no `worker.js` changes, no separate Cloudflare deploy step.
+- Full suite: **15 files, 17,246 checks, all green.**
+
