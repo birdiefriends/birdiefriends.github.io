@@ -4872,23 +4872,34 @@ function parseDateFromJF(str) {
 // live "you're the 5th player" banner is computed fresh from regData on every
 // render via getCapacityStatus(evt).fivePending — this was dead weight.)
 // ════════════════════════════════════════════════════════════════════════
-// Dev-87 — "At the course" rail — BETA (AT_COURSE_BETA_PLAYERS only).
-// A slim vertical toolbar on the right edge that exists only while your
-// phone is at the venue of a round you're registered for today. The location
-// decides whether it exists, so there's no clock to guess (rain delays, early
-// finishes). Location is checked ON THE PHONE, once per app open / return to
-// foreground, and never sent anywhere — only "at the course: yes/no" is used.
+// Dev-87 — "At the course" rail — opened to all players Dev-88 (previously
+// BETA, gated to AT_COURSE_BETA_PLAYERS only, Brian Hager while it was being
+// shaken out solo). A slim vertical toolbar on the right edge that exists
+// only while your phone is at the venue of a round you're registered for
+// today. The location decides whether it exists, so there's no clock to
+// guess (rain delays, early finishes). Location is checked ON THE PHONE,
+// once per app open / return to foreground, and never sent anywhere — only
+// "at the course: yes/no" is used.
 // Test switch: open portal.html?atcourse=1 to force it on (sticky), ?atcourse=0
 // to turn the force off again.
-const AT_COURSE_BETA_PLAYERS = ['Brian Hager'];
-const AT_COURSE_RADIUS_M = 1600;   // ~1 mile from the venue point
+// Dev-88 — shrunk from 1600m (~1 mile) after Brian flagged that his own
+// home is close enough to Blue Shamrock Golf Club to fall inside a 1-mile
+// radius: BSGC's stored venue point (40.8134, -75.6208) is only ~1345m/0.84mi
+// from his house as the crow flies (haversine), even though it's 1.2 road
+// miles — so the rail would have quietly gone "at the course" at home for
+// every BSGC event. 700m/~0.43mi clears that with a ~645m margin while still
+// covering a typical 18-hole course footprint from a roughly central point
+// (clubhouse or similar). If a real on-course spot ever falls just outside
+// this, it's an easy number to nudge back up — better to start tight and
+// widen than to risk more false "at the course" positives at someone's house.
+const AT_COURSE_RADIUS_M = 700;
 let _atCourse = null;              // { evt, venue, distM, forced }
 let _atCourseTucked = false;
 let _atCourseInit = false;
 let _atCourseScrollTimer = null;
 let _atCoursePanelPeek = false;   // grip tapped while the Live Panel is open → show anyway (resets when the panel toggles)
 let _atCourseLocDetailOpen = false; // Dev-88 — the ⛳ distance pill's popover, toggled by atCourseToggleLocDetail()
-function atCourseEnabled() { return !!currentPlayer && AT_COURSE_BETA_PLAYERS.includes(currentPlayer); }
+function atCourseEnabled() { return !!currentPlayer; } // Dev-88 — opened from beta (was AT_COURSE_BETA_PLAYERS.includes(currentPlayer)) to every signed-in, registered player
 // Test mode is time-limited (v4.7.8): the flag stores when it was switched
 // on and lapses after AT_COURSE_TEST_HOURS, so it can never get stuck on a
 // home-screen app that can't be given ?atcourse=0. The old plain '1' flag
@@ -5086,16 +5097,19 @@ function renderAtCourseRail() {
   const bfe = isBFEBackedCard(evt);
   const live = getLiveEvent();
   const gamesOn = !!(live && live.id === evt.id);
-  // Dev-88 — the Live Panel's own "📸 Photos" section already has Photo/
-  // Video/Upload/Note inline the moment it's open for this event, so the
-  // rail no longer offers its own copies of those four right alongside it
-  // (Yardage/Rules/Course have no Live Panel equivalent, so they stay).
-  const livePanelHere = _livePanelOpen && gamesOn;
+  // Dev-88 — the rail is now the ONE capture point for a non-BFE (Gathering)
+  // round, gamed or not: the Live Panel's own Photos section was dropped for
+  // these (it posted to this exact same event_photos pipeline — a straight
+  // duplicate, not an alternative), so Photo/Video/Upload/Note here no longer
+  // need to hide just because the Live Panel happens to be open. BFE-backed
+  // rounds still capture through the Live Panel's WCRP memories pipeline
+  // only (a player capturing mid-round shouldn't create a memory that lives
+  // outside the WCRP by accident) — that's the sole reason for the `!bfe` gate.
   const btn = (icon, label, onclick) => `<button class="acr-btn" onclick="${onclick}"><span class="acr-ico">${icon}</span><span class="acr-lbl">${label}</span></button>`;
   const where = _atCourse.forced ? 'TEST ✕' : `${(_atCourse.distM / 1609.34).toFixed(1)} mi`;
-  // While the Live Panel is open the rail tucks itself — the panel already has
-  // capture + scoring and needs its full width (otherwise the rail covers
-  // holes 9/18 and the right-hand buttons). The grip still peeks it open.
+  // While the Live Panel is open the rail tucks itself — the panel still needs
+  // its full width for scoring/games (otherwise it covers holes 9/18 and the
+  // right-hand buttons). The grip still peeks it open.
   const tucked = _livePanelOpen ? !_atCoursePanelPeek : _atCourseTucked;
   el.className = tucked ? 'tucked' : '';
   atCourseApplyPos(el); // side + height from the last drag (left class set here, before the markup reads it)
@@ -5103,10 +5117,10 @@ function renderAtCourseRail() {
     <button class="acr-grip" onclick="toggleAtCourseRail()" onpointerdown="atCourseDragStart(event)" title="Tap: ${tucked ? 'show' : 'tuck away'} · Drag: move">${(el.classList.contains('left') ? !tucked : tucked) ? '‹' : '›'}</button>
     <div class="acr-col">
       <div class="acr-status" onpointerdown="atCourseDragStart(event)" onclick="${_atCourse.forced ? 'atCourseExitTest()' : 'atCourseToggleLocDetail()'}" title="${_atCourse.forced ? 'Test mode — tap to turn off' : 'Tap for location detail · drag to move'}"><span style="font-size:1rem">⛳</span><span>${where}</span></div>
-      ${(!bfe && !livePanelHere) ? btn('📷', 'Photo', `openCardPhotoSheet('${id}')`) : ''}
-      ${(!bfe && !livePanelHere) ? btn('🎥', 'Video', `atCourseQuickCapture('${id}','video')`) : ''}
-      ${(!bfe && !livePanelHere) ? btn('⬆️', 'Upload', `atCourseQuickCapture('${id}','upload')`) : ''}
-      ${(!bfe && !livePanelHere) ? btn('💬', 'Note', `openCardNoteSheet('${id}')`) : ''}
+      ${!bfe ? btn('📷', 'Photo', `openCardPhotoSheet('${id}')`) : ''}
+      ${!bfe ? btn('🎥', 'Video', `atCourseQuickCapture('${id}','video')`) : ''}
+      ${!bfe ? btn('⬆️', 'Upload', `atCourseQuickCapture('${id}','upload')`) : ''}
+      ${!bfe ? btn('💬', 'Note', `openCardNoteSheet('${id}')`) : ''}
       ${btn('📏', 'Yardage', 'openYardageModal()')}
       ${btn('📖', 'Rules', 'openRulesModal()')}
       ${btn('🗺️', 'Course', `openVenueViewerModal('${id}')`)}
@@ -5808,16 +5822,19 @@ function buildEventCard(evt, isPast) {
       <span style="pointer-events:none;margin-left:auto;font-size:0.82rem;color:rgba(255,255,255,0.5)">Players ›</span>
     </button>
     <div class="icon-action-row" style="justify-content:flex-start;gap:26px;margin:10px 4px 2px">
-      <!-- Dev-88 — Photos/Notes now also drop out while THIS event's Live
-           Panel is open, same as Score already did: the Live Panel's own
-           "📸 Photos" section has Photo/Video/Upload/Note inline right there,
-           so the card's copies were a straight duplicate, not an alternative. -->
-      ${(!isBFEBackedCard(evt) && !(_livePanelOpen && getLiveEvent()?.id === evt.id)) ? `
+      <!-- Dev-88 — Photo/Score/Notes are "Gaming Mode" only icons: they drop
+           out for as long as THIS event IS the live gamed round (getLiveEvent
+           matches it), whether or not the Live Panel happens to be expanded
+           right now — capture and scoring belong to the rail + Live Panel for
+           a gamed round. Non-gamed ("Non-gaming Mode") events keep all three
+           right here, since the card is their only capture path — this is
+           how a myMemory gets created for a non-competitive event. -->
+      ${(!isBFEBackedCard(evt) && getLiveEvent()?.id !== evt.id) ? `
       <button class="icon-action-btn" onclick="openCardPhotoSheet('${evt.id}')">
         <span class="icon-action-badge secondary">📷</span>
         <span class="icon-action-label">Photos</span>
       </button>` : ''}
-      ${(_livePanelOpen && getLiveEvent()?.id === evt.id) ? '' : `
+      ${getLiveEvent()?.id === evt.id ? '' : `
       <button class="icon-action-btn" onclick="openCardScoreSheet('${evt.id}')">
         <span class="icon-action-badge secondary">🏌️</span>
         <span class="icon-action-label">Score</span>
@@ -5827,7 +5844,7 @@ function buildEventCard(evt, isPast) {
            not this card's own event_photos/notes thread (spec's whole reason
            for the split: a player capturing mid-round shouldn't be able to
            create a memory that lives outside the WCRP by accident). -->
-      ${(!isBFEBackedCard(evt) && !(_livePanelOpen && getLiveEvent()?.id === evt.id)) ? `
+      ${(!isBFEBackedCard(evt) && getLiveEvent()?.id !== evt.id) ? `
       <button class="icon-action-btn" onclick="openCardNoteSheet('${evt.id}')">
         <span class="icon-action-badge secondary">💬</span>
         <span class="icon-action-label">Notes</span>
@@ -9033,12 +9050,23 @@ function buildLivePanel(evt) {
   // text note at all, on-course or off. isBFEBackedCard check happens once
   // here and threads through to the button label + compose box below.
   const isBfeRound = isBFEBackedCard(evt);
+  // Dev-88 — the Photos section only exists here for a BFE-backed round now.
+  // Its capture posts to the WCRP memories pipeline (bfe/memories/upload),
+  // a different destination than the rail's/card's event_photos pipeline, so
+  // it's the one place that capture can happen for a BFE round (the rail
+  // deliberately excludes BFE rounds — see atCourseRail's own comment).
+  // A non-BFE (Gathering) round's Photo/Video/Upload here posted to the exact
+  // same /photos/upload endpoint the rail's atCourseQuickCapture now covers,
+  // so that copy was dropped — the rail is that round's only capture point
+  // while it's live and gamed.
+  const photosSection = isBfeRound ? `
+    <div class="live-section">
+      <div class="live-section-header"><span class="lsh-icon">📸</span>Photos &amp; Notes</div>
+      <div class="live-section-body">${buildLivePanelPhotoSection(evt)}</div>
+    </div>` : '';
   return `<div class="live-panel">
     ${groupingsLink}
-    <div class="live-section">
-      <div class="live-section-header"><span class="lsh-icon">📸</span>${isBfeRound ? 'Photos &amp; Notes' : 'Photos'}</div>
-      <div class="live-section-body">${buildLivePanelPhotoSection(evt)}</div>
-    </div>
+    ${photosSection}
     <div class="live-section">
       <div class="live-section-header"><span class="lsh-icon">🦅</span>Birdie Alert</div>
       <div class="live-section-body">${birdieSection}</div>
