@@ -4796,3 +4796,12 @@ and a sample close paid correctly (unclaimed $5 CTP rolled into Skins; two outri
 line. Explicit entries still win. Dry-run with mocked network: the Worker file, an explicit test, an
 auto-mapped test, a fixture and a JSON file all pushed and verified.
 
+**2026-09-28 — migration run + batch 1 verified.** Brian ran all the SQL (including the copy step, ahead of
+the planned order) and deployed the BFE Worker. Verified live through the browser pane: 89 rows = 71
+`points` (all `bfe:2026 Wally Cup - …` round keys) + 18 `strokes`. `?input=strokes` returns exactly 18 and
+`?input=points` 71. The 18 copied rows are identical to the main-Worker table (event, player, holes,
+captured_at, hole_count/half, tee_box, total), both 9-hole back-nine cards included. Batch 1 (Worker
+source, bf_push v17, tests, docs) matched `origin/main`. The copy ran before portal v4.8.1 went live, so
+**re-run the `INSERT … ON CONFLICT DO NOTHING` once after v4.8.1 is live** to catch any card an old
+portal wrote to the main table in between (the main table showed no new rows as of this check).
+
