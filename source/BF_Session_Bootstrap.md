@@ -1,5 +1,5 @@
 # BF_Session_Bootstrap.md — Start Here for a New BirdieFriends Session
-**Status:** **Dev-88 in progress (2026-09-27) — engine unification §9 Phase A underway.** Shipped so far: `bf_engine.js` (shared engine, layer 1) + portal **v4.8.0** (live, verified); layer 3 one-D1-scorecard-store built as portal **v4.8.1** + BFE Worker + BFE-Admin (`bfe_scorecards` with `input_type`/`round_key`; stroke readers pass `input=strokes`); bf_push **v17** (auto-maps `bftest_*`). See the Dev-88 log entry. current as of **Dev-87 close (2026-09-27). Next session is Dev-88: start the engine-unification roadmap, `BF_BFE_NextGen_Spec.md` §9 Phase A (see §3 below).** BF Cup development is paused on purpose (Brian, 2026-09-27); its design is parked in spec §2a. Earlier in Dev-87 (2026-09-24) — **Gatherings Close & Calculate shipped**
+**Status:** **Dev-88 in progress (2026-09-27) — engine unification §9 Phase A underway.** Shipped so far: `bf_engine.js` (shared engine, layer 1) + portal **v4.8.0** (live, verified); layer 3 one-D1-scorecard-store built as portal **v4.8.1** + BFE Worker + BFE-Admin (`bfe_scorecards` with `input_type`/`round_key`; stroke readers pass `input=strokes`); layer 2 round-key + stored config for Gatherings built as portal **v4.8.2** (`gatheringRoundConfig()`/`gatheringIsGamed()`/`gatheringAddon()` resolver helpers, replacing five separate raw reads of `_gatheringGamesIndex`/`cfg.games` with one config read via `BFEngine.gatheringConfigFromLegacy()`; 12,003-check fuzz parity test, `hasLivePanelSupport` deliberately left as a plain existence check); bf_push **v17** (auto-maps `bftest_*`). See the Dev-88 log entry. **Next in Phase A: the Live Panel `hole_half: null` fix (spec §1a) — not yet started, only upon Brian's go-ahead.** BF Cup development is paused on purpose (Brian, 2026-09-27); its design is parked in spec §2a. Earlier in Dev-87 (2026-09-24) — **Gatherings Close & Calculate shipped**
 (portal v4.6.0 + a `BF_Experiences.js` route; v4.6.1 then moved Gatherings CTP from Jotform to D1; v4.6.2 fixed non-Skins Gatherings scoring to Jotform and added a My History Close entry for the host): the host of a gamed Gathering closes the round from
 the Live Panel, the Skins/CTP/BirdieBall payout is computed on whoever actually turned in a scorecard,
 and results post to that Gathering's My History story (see §2a). **The Wally Cup Rd3/Overall
@@ -379,14 +379,20 @@ decisions wait for dedicated BF Cup sessions) — don't start match play.
    portal.html and BFE-Admin.html can both `<script src>` it — needs a `bf_push.ps1` `$FileMap` entry,
    edited directly on the live file per the Dev-80 rule), and which Worker owns the unified scorecard
    store (layer 3; main-Worker D1 already holds Gathering strokes).
-2. **Extract the Gatherings engine into `bf_engine.js`**: `computeGatheringGamesPayout` and its helpers
-   become registry entries (a `scorecard_only` base game + `skins` with a declared `compare`, `cttp`,
-   `birdieball` add-ons + payout). portal.html calls the module instead. **Repoint `source/tests/` at
-   the module and keep all 140 checks green**; that suite is the safety net.
-3. **Round key + stored config for Gatherings** (layer 2): express `bfe_gathering_games` through
-   `configFromLegacy()`.
-4. **Fix the Live Panel `hole_half: null` gap** (spec §1a) while you're in there, since it blocks 9-hole
-   gamed Gatherings.
+2. ~~**Extract the Gatherings engine into `bf_engine.js`**~~ — **done (layer 1, portal v4.8.0).**
+   `computeGatheringGamesPayout` and its helpers are registry entries in `bf_engine.js`; portal.html
+   calls the module. `source/tests/` repointed at the module, all checks green.
+3. ~~**Round key + stored config for Gatherings** (layer 2)~~ — **done (portal v4.8.2).**
+   `bfe_gathering_games` now expressed through `BFEngine.gatheringConfigFromLegacy()` via three new
+   resolver helpers (`gatheringRoundConfig`/`gatheringIsGamed`/`gatheringAddon`), replacing five separate
+   raw reads of the legacy row across the event-card seal, `evtScoreMode`, and the Live Panel's
+   CTP/BirdieBall section gating + CTP-holes resolution. 12,003-check fuzz test proves exact parity on
+   form-valid data; malformed-data divergence is real but bounded and counted, not hidden (new is
+   stricter by design). `hasLivePanelSupport` was deliberately left as a plain existence check — it isn't
+   shape-derived. Full detail in the Dev-88 log entry.
+4. **Next: fix the Live Panel `hole_half: null` gap** (spec §1a), since it blocks 9-hole gamed
+   Gatherings. Not yet started — only upon Brian's go-ahead, per this session's pattern of checking in
+   after each layer.
 5. Log incrementally; small shippable slices, each behavior-neutral unless Brian asks otherwise.
 
 **Also open from Dev-87:** Close & Calculate and Gathering CTP on D1 are still unverified in a real round
