@@ -1,3 +1,6 @@
+v4.8.1 · 2026-09-28
+Deployed: 2026-09-28 07:15 (Behind the scenes: every scorecard (Live Panel on a gamed Gathering, the Card Score Sheet, My History, Close & Calculate) now saves to and reads from one D1 scorecard store on the BFE Worker, instead of a separate table on the main Worker. Existing scores were copied over. Wally Cup cards, which are stored as Stableford points, are kept out of stroke views like My History. Nothing looks different.)
+
 v4.8.0 · 2026-09-27
 Deployed: 2026-09-27 14:30 (Behind the scenes, no visible change: the Gatherings payout math behind Close & Calculate (Skins, CTP, BirdieBall) moved out of the portal into a new shared engine file, bf_engine.js, that the portal now loads. Payouts are unchanged — checked against the previous version on 5,000 simulated rounds. This is the first step toward one game engine for Gatherings and BFE events.)
 
