@@ -4903,12 +4903,19 @@ function parseDateFromJF(str) {
 // radius: BSGC's stored venue point (40.8134, -75.6208) is only ~1345m/0.84mi
 // from his house as the crow flies (haversine), even though it's 1.2 road
 // miles — so the rail would have quietly gone "at the course" at home for
-// every BSGC event. 700m/~0.43mi clears that with a ~645m margin while still
-// covering a typical 18-hole course footprint from a roughly central point
-// (clubhouse or similar). If a real on-course spot ever falls just outside
-// this, it's an easy number to nudge back up — better to start tight and
-// widen than to risk more false "at the course" positives at someone's house.
-const AT_COURSE_RADIUS_M = 700;
+// every BSGC event. 700m/~0.43mi was tried first but proved too tight the
+// same day — live at BSGC, the rail didn't show ("guessing geo isn't
+// working"), almost certainly because 700m from that one stored clubhouse
+// point doesn't reach a full 18-hole property. Bumped to 1000m/~0.62mi:
+// still a clear ~345m margin below Brian's own 1345m home distance, while
+// giving real on-course play meaningfully more room. This number is a
+// standing guess, not a measured course boundary — the proper fix (talked
+// through same session) is to stop gating the rail's EXISTENCE on distance
+// at all and make it time+registration gated with geolocation only refining
+// the display, so no single radius number has to be exactly right. Until
+// that's built, nudge this up further if it happens again rather than
+// re-guessing from scratch.
+const AT_COURSE_RADIUS_M = 1000;
 let _atCourse = null;              // { evt, venue, distM, forced }
 let _atCourseTucked = false;
 let _atCourseInit = false;
@@ -14351,8 +14358,8 @@ function renderRulesContent() {
   const mode = _rulesMode;
   el.innerHTML =
     renderRulesSection(RULES_CONTENT.penalty, RULES_CONTENT.penalty.body) +
-    renderRulesSection(RULES_CONTENT.ob, RULES_CONTENT.ob[mode]) +
-    renderRulesSection(RULES_CONTENT.lost, RULES_CONTENT.lost[mode]) +
+    renderRulesSection(RULES_CONTENT.ob, RULES_CONTENT.obStandard) +
+    renderRulesSection(RULES_CONTENT.lost, RULES_CONTENT.lostStandard) +
     renderRulesSection(RULES_CONTENT.netdouble, RULES_CONTENT.netdouble.body);
 }
 // Dev-69 — accepts either an evtId or a full evt object directly; see
@@ -18248,7 +18255,7 @@ async function loadAdminGatherings() {
               <div style="font-size:0.85rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${g.title}</div>
               <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;line-height:1.5">
                 ${dateStr} · ${timeStr}${teeStatus}<br>
-                ${g.venue || '—'} · ${g.gathering_type || '—'} · ${mode}${crewInfo}<br>
+                ${g.venue || '—'} · ${g.gathering_type || '—'} · $Standard${crewInfo}<br>
                 ${yesLine}
               </div>
             </div>
