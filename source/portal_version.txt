@@ -1,3 +1,6 @@
+v4.8.4 · 2026-09-28
+Deployed: 2026-09-28 (Live Panel: a 9-hole gamed Gathering's Post-Round Scorecard now asks for the right 9 holes instead of demanding all 18 -- pick Front 9 or Back 9, enter just those, and it records which half was actually played (previously always saved as if it were the front nine, regardless of which nine was really played). 18-hole rounds are unaffected.)
+
 v4.8.3 · 2026-09-28
 Deployed: 2026-09-28 (Venue Manager: (1) venue names can now be renamed in place -- tap the pencil next to a venue's name, edit, Save. Renaming only updates the Venue Manager entry itself; past events already saved under the old spelling aren't relinked automatically, and the app warns about that before saving. (2) The Weather Location panel now links straight to GC-API Lookup -- pick a course there and its coordinates fill in automatically, instead of only the manual Google-Maps-paste flow. Opening that link never calls GolfCourseAPI by itself; only tapping Search there does.)
 
