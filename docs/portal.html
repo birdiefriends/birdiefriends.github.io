@@ -3559,6 +3559,12 @@ const CTP_HOLES_DEFAULT = [3,8,10,15,18];
 // separate deploy artifact specifically so churn there never risks this
 // file). Read-only GET here; portal.html never writes to this Worker.
 const BFE_API = 'https://bf-experiences.birdiefriends01.workers.dev';
+// Dev-88 — engine unification layer 3: ONE D1 scorecard store, bfe_scorecards
+// on the BFE Worker (Brian's call). Every scorecard read/write goes through
+// SCORECARD_API. Readers of gross strokes pass input=strokes so Wally Cup rows
+// (Stableford POINTS, saved by BFE-Admin Close Round) never show up as strokes.
+// The main Worker's old `scorecards` table is frozen as a read-only fallback.
+const SCORECARD_API = BFE_API;
 let _venueCttpHolesCache = {};  // venue_id -> array|null, cached per session
 let _resolvedCttpHoles   = null; // CTP holes for whichever event the Live Panel is currently open on
 // Resolves the live event's venue to its BFE-recorded CTP holes, if any.
@@ -8682,7 +8688,7 @@ function buildLivePanel(evt) {
   // scoring will need to accept either strokes or points depending on the
   // game"). scoreMode drives the picker UI below and submitScorecard()'s
   // choice of backend (Jotform SCORECARD_FORM_ID for points, the same
-  // GATHERINGS_API/scorecards D1 endpoint Card Score Sheet already uses for
+  // SCORECARD_API (bfe_scorecards, Dev-88; was GATHERINGS_API) D1 endpoint Card Score Sheet already uses for
   // strokes). Stashed on window so submitScorecard/scActionHtml's onclick
   // handlers — fired outside this closure — can read it too.
   const scoreMode = evtScoreMode(evt);
@@ -9573,7 +9579,7 @@ function bbAnswerFor(playerName) {
   return _bbAnswers.find(a => (a.player_name || '').trim().toLowerCase() === p) || null;
 }
 // Submit scorecard — to Jotform (Stableford points, feeds Wally Cup quota)
-// or to the GATHERINGS_API/scorecards D1 endpoint (raw gross strokes, feeds
+// or to the SCORECARD_API/scorecards D1 endpoint (Dev-88; was GATHERINGS_API) (raw gross strokes, feeds
 // Skins) depending on window._liveScoreMode, set by buildLivePanel() from
 // evtScoreMode(evt) on the render just before this fires (Dev-86 round 3
 // follow-up — see evtScoreMode's own comment for why).
@@ -9594,10 +9600,11 @@ async function submitScorecard(evtName) {
       // Raw gross strokes — same D1 backend + payload shape Card Score
       // Sheet's submitCardScore() already uses, so Skins math reads one
       // consistent source regardless of which surface entered the round.
-      const res = await fetch(`${GATHERINGS_API}/scorecards`, {
+      const res = await fetch(`${SCORECARD_API}/scorecards`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          input_type: 'strokes',
           event_name: evtPhotoKey(_scEvt || { name: evtName }), player: scName,
           holes: _scHoles, marks: null, tee_box: null,
           front9: front, back9: back, total,
@@ -11903,7 +11910,7 @@ async function loadMyHistory() {
     await loadVenues(); // Dev-67 — needed for venue logo badges; no-op if already cached
     const [photoRes, scoreRes, weatherRes, noteRes] = await Promise.all([
       fetch(`${GATHERINGS_API}/photos`),
-      fetch(`${GATHERINGS_API}/scorecards`),  // no filter = everyone's scores (Dev-65) — group gating below still limits to events the viewer was part of, but shows every player's score within those, not just their own
+      fetch(`${SCORECARD_API}/scorecards?input=strokes`),  // Dev-88: D1 store, strokes only; no event filter = everyone's scores (Dev-65) — group gating below still limits to events the viewer was part of, but shows every player's score within those, not just their own
       fetch(`${GATHERINGS_API}/weather`),     // no filter = everything cached so far (Dev-67), same shape
       fetch(`${GATHERINGS_API}/notes`)        // no filter = every note so far (Dev-67), same shape
     ]);
@@ -13183,7 +13190,7 @@ async function loadExistingScore() {
   if (!evt || !currentPlayer) { _csHadFullEntry = false; return; }
   try {
     const key = evtPhotoKey(evt);
-    const res = await fetch(`${GATHERINGS_API}/scorecards?event=${encodeURIComponent(key)}`);
+    const res = await fetch(`${SCORECARD_API}/scorecards?event=${encodeURIComponent(key)}&input=strokes`);
     const data = await res.json();
     const mine = (data.scorecards || []).find(s =>
       (s.player || '').trim().toLowerCase() === currentPlayer.trim().toLowerCase());
@@ -13250,7 +13257,7 @@ async function csDefaultTeeBoxFromHistory(evt) {
   const venue = csNormalizedVenueName(evt);
   if (!venue) return;
   try {
-    const res = await fetch(`${GATHERINGS_API}/scorecards?player=${encodeURIComponent(currentPlayer)}&venue=${encodeURIComponent(venue)}`);
+    const res = await fetch(`${SCORECARD_API}/scorecards?player=${encodeURIComponent(currentPlayer)}&venue=${encodeURIComponent(venue)}&input=strokes`);
     const data = await res.json();
     const last = (data.scorecards || [])[0]; // already sorted newest-first
     if (last && last.tee_box && _cardScoreEvt === evt) { // still the same sheet — not reopened for a different event while this was in flight
@@ -13339,10 +13346,10 @@ async function submitCardScore() {
     .filter(Boolean);
   const teeBoxStr = teeBoxTokens.length ? teeBoxTokens.join('/') : null;
   try {
-    const res = await fetch(`${GATHERINGS_API}/scorecards`, {
+    const res = await fetch(`${SCORECARD_API}/scorecards`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_name: evtPhotoKey(evt), player: currentPlayer, holes, marks, tee_box: teeBoxStr, front9, back9, total, hole_count: _csHoleCount, hole_half: _csHoleHalf, venue: csNormalizedVenueName(evt) })
+      body: JSON.stringify({ input_type: 'strokes', event_name: evtPhotoKey(evt), player: currentPlayer, holes, marks, tee_box: teeBoxStr, front9, back9, total, hole_count: _csHoleCount, hole_half: _csHoleHalf, venue: csNormalizedVenueName(evt) })
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Save failed');
@@ -14419,7 +14426,7 @@ async function openGatheringCloseSheet(gatheringId) {
     const key = evtPhotoKey({ source: 'gathering', gatheringId });
     const [cfgRes, scRes, bbRes] = await Promise.all([
       fetch(`${BFE_API}/bfe/gathering-games?gathering_id=${gatheringId}`),
-      fetch(`${GATHERINGS_API}/scorecards?event=${encodeURIComponent(key)}`),
+      fetch(`${SCORECARD_API}/scorecards?event=${encodeURIComponent(key)}&input=strokes`),
       fetch(`${BFE_API}/bfe/birdieball-answers?gathering_id=${gatheringId}`)
     ]);
     const cfgData = await cfgRes.json();
