@@ -1,3 +1,6 @@
+v4.8.2 · 2026-09-28
+Deployed: 2026-09-28 (Behind the scenes, no visible change: five places that read a gamed Gathering's own settings — the event-card "competition seal," which scoring mode the Live Panel captures, and the Live Panel's CTP/BirdieBall section switches and CTP holes — now all read through one shared function instead of five separate copies of the same check. Checked against the old behavior on 14,000 simulated Gatherings.)
+
 v4.8.1 · 2026-09-28
 Deployed: 2026-09-28 07:15 (Behind the scenes: every scorecard (Live Panel on a gamed Gathering, the Card Score Sheet, My History, Close & Calculate) now saves to and reads from one D1 scorecard store on the BFE Worker, instead of a separate table on the main Worker. Existing scores were copied over. Wally Cup cards, which are stored as Stableford points, are kept out of stroke views like My History. Nothing looks different.)
 
