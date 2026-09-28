@@ -1,3 +1,6 @@
+v4.8.6 · 2026-09-28
+Deployed: 2026-09-28 (The "At the course" rail is no longer limited to one player -- it's now on for every signed-in, registered player, the same location-based, same-day-round rule as before. Opened up live during a real 4-player Gathering (Skins/CTP/BirdieBall) to bring everyone into the games flow together.)
+
 v4.8.5 · 2026-09-28
 Deployed: 2026-09-28 (BETA "At the course" rail cleanup: (1) Video and Upload are now their own quick-tap buttons on the rail, alongside Photo and Note -- same capture pipeline, no need to open the Photo sheet first. (2) When the Live Panel is open for the round you're on, the rail drops its own Photo/Video/Upload/Note (the Live Panel's own Photos section already has them inline) -- Yardage/Rules/Course/Games stay, since those have no Live Panel equivalent. The event card's Photos/Notes buttons are hidden the same way while that event's Live Panel is open. (3) The rail's ⛳ distance pill is now a real action outside test mode -- tap it for a small popover with the venue name, a more precise distance, and a Maps link. In test mode the pill still just turns test mode off.)
 
