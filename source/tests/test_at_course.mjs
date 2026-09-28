@@ -7,7 +7,11 @@ const MOSELEM = { id: 3, name: 'Moselem Springs Golf Club', lat: 40.500372, lng:
 const today = new Date(); today.setHours(12, 50, 0, 0);
 const tomorrow = new Date(today.getTime() + 86400000);
 function setup({ player = 'Brian Hager', pos = null, geoErr = false, forced = false, regStatus = 'Yes', evtDay = today, bfe = false, liveId = null, search = '' } = {}) {
-  const dom = new JSDOM('<body></body>', { url: 'https://birdiefriends.com/portal.html' + search });
+  const dom = new JSDOM('<body><input id="card-video-camera-input"><input id="card-photo-upload-input"></body>', { url: 'https://birdiefriends.com/portal.html' + search });
+  const clickLog = [];
+  ['card-video-camera-input', 'card-photo-upload-input'].forEach(id => {
+    dom.window.document.getElementById(id).click = () => clickLog.push(id);
+  });
   const store = new Map(forced ? [['bf_atcourse_force', forced === 'legacy' ? '1' : String(forced === 'old' ? Date.now() - 5 * 3600000 : Date.now())]] : []);
   const calls = [];
   const evt = { id: 'gathering-42', name: 'Jefferson Classic', source: 'gathering', gatheringId: 42, location: 'Moselem Springs Golf Club', dt: evtDay };
@@ -24,10 +28,10 @@ function setup({ player = 'Brian Hager', pos = null, geoErr = false, forced = fa
   };
   vm.createContext(ctx);
   const consts = ['AT_COURSE_BETA_PLAYERS', 'AT_COURSE_RADIUS_M', 'AT_COURSE_TEST_HOURS'].map(n => src.match(new RegExp(`const ${n} = [^;]+;`))[0]).join('\n');
-  const fns = ['atCourseExitTest','atCourseLoadPos','atCourseSavePos','atCourseApplyPos','escapeHtml','findMyReg','atCourseEnabled','atCourseForced','haversineM','atCourseMyRoundOk','atCourseCandidates','refreshAtCourse','atCourseOpenGames','toggleAtCourseRail','renderAtCourseRail','atCourseInitOnce'];
-  vm.runInContext(consts + '\nvar _atCourse = null, _atCourseTucked = false, _atCourseInit = false, _atCourseScrollTimer = null, _atCoursePanelPeek = false, _atCourseJustDragged = false;\n' + fns.map(n => extractFn(src, n)).join('\n'), ctx);
+  const fns = ['atCourseExitTest','atCourseLoadPos','atCourseSavePos','atCourseApplyPos','escapeHtml','findMyReg','atCourseEnabled','atCourseForced','haversineM','atCourseMyRoundOk','atCourseCandidates','refreshAtCourse','atCourseOpenGames','toggleAtCourseRail','renderAtCourseRail','atCourseInitOnce','renderAtCourseLocDetail','atCourseToggleLocDetail','atCourseQuickCapture'];
+  vm.runInContext(consts + '\nvar _atCourse = null, _atCourseTucked = false, _atCourseInit = false, _atCourseScrollTimer = null, _atCoursePanelPeek = false, _atCourseJustDragged = false, _atCourseLocDetailOpen = false, _cardPhotoEvt = null;\n' + fns.map(n => extractFn(src, n)).join('\n'), ctx);
   // document.addEventListener exists on jsdom document
-  return Object.assign(ctx, { calls, store, rail: () => dom.window.document.getElementById('at-course-rail') });
+  return Object.assign(ctx, { calls, store, clickLog, rail: () => dom.window.document.getElementById('at-course-rail'), locDetail: () => dom.window.document.getElementById('at-course-loc-detail') });
 }
 const flush = () => new Promise(r => setTimeout(r, 0));
 const onCourse = { latitude: 40.5031, longitude: -75.8452 };   // ~0.4 km from the venue point
@@ -39,9 +43,12 @@ ok(c.haversineM(onCourse.latitude, onCourse.longitude, MOSELEM.lat, MOSELEM.lng)
 c = setup({ pos: onCourse }); await c.refreshAtCourse(); await flush();
 let r = c.rail(); ok(!!r, 'rail shown at the course');
 ok(r && /0\.\d mi/.test(r.innerHTML), 'shows distance in miles');
-ok(r && ['Photo','Note','Yardage','Rules','Course'].every(l => r.innerHTML.includes(`>${l}<`)), 'core tools present');
+ok(r && ['Photo','Video','Upload','Note','Yardage','Rules','Course'].every(l => r.innerHTML.includes(`>${l}<`)), 'core tools present, incl. new Video/Upload');
+ok(r && r.innerHTML.includes("atCourseQuickCapture('gathering-42','video')"), 'Video button wired to quick capture');
+ok(r && r.innerHTML.includes("atCourseQuickCapture('gathering-42','upload')"), 'Upload button wired to quick capture');
 ok(r && !r.innerHTML.includes('>Games<'), 'no Games when not live');
 ok(r && r.innerHTML.includes("openVenueViewerModal('gathering-42')"), 'Course opens venue viewer for this round');
+ok(r && r.innerHTML.includes('atCourseToggleLocDetail()'), 'distance pill wired to location detail popover when not forced');
 // 2. Away from the course → no rail
 c = setup({ pos: home }); await c.refreshAtCourse(); await flush(); ok(!c.rail(), 'no rail 20 mi away');
 // 3. Location denied → no rail, no crash
@@ -64,6 +71,14 @@ c = setup({ forced: true, search: '?atcourse=0', pos: home }); c.atCourseInitOnc
 c = setup({ pos: onCourse, liveId: 'gathering-42' }); await c.refreshAtCourse(); await flush();
 r = c.rail(); ok(r && r.innerHTML.includes('>Games<'), 'Games shown when this round is live');
 c.atCourseOpenGames(); ok(c.calls.includes('toggleLive') && c.calls.includes('scrollTo'), 'Games opens Live Panel');
+// 9b. Once the Live Panel is actually open for THIS event, the rail drops its
+// own Photo/Video/Upload/Note (the panel's own Photos section already has them)
+// but keeps Yardage/Rules/Course/Games, which have no Live Panel equivalent.
+c._livePanelOpen = true; c.renderAtCourseRail(); r = c.rail();
+ok(r && ['Photo','Video','Upload','Note'].every(l => !r.innerHTML.includes(`>${l}<`)), 'dupes removed once Live Panel is open for this event');
+ok(r && ['Yardage','Rules','Course','Games'].every(l => r.innerHTML.includes(`>${l}<`)), 'non-duplicate tools remain when Live Panel is open');
+c._livePanelOpen = false; c.renderAtCourseRail(); r = c.rail();
+ok(r && ['Photo','Video','Upload','Note'].every(l => r.innerHTML.includes(`>${l}<`)), 'closing the Live Panel brings the capture buttons back');
 // 10. BFE-backed round hides Photo/Note (capture lives in WCRP/Live Panel there)
 c = setup({ pos: onCourse, bfe: true }); await c.refreshAtCourse(); await flush();
 r = c.rail(); ok(r && !r.innerHTML.includes('>Photo<') && !r.innerHTML.includes('>Note<') && r.innerHTML.includes('>Yardage<'), 'BFE round: no Photo/Note');
@@ -92,4 +107,32 @@ c = setup({ forced: true, evtDay: tomorrow, pos: home }); await c.refreshAtCours
 ok(c.rail().innerHTML.includes('TEST ✕') && c.rail().innerHTML.includes('atCourseExitTest()'), 'TEST chip is tappable');
 c.atCourseExitTest(); await flush();
 ok(!c.store.has('bf_atcourse_force') && !c.rail(), 'tap TEST → flag cleared, real check (away) → rail gone');
+// 15. TEST mode: the pill falls back to atCourseExitTest(), not the location popover
+c = setup({ forced: true, evtDay: tomorrow, pos: home }); await c.refreshAtCourse(); await flush();
+ok(c.rail().innerHTML.includes('atCourseExitTest()') && !c.rail().innerHTML.includes('atCourseToggleLocDetail()'), 'forced/TEST pill still exits test mode, not the popover');
+// 16. atCourseQuickCapture: sets _cardPhotoEvt and fires the right hidden input
+c = setup({ pos: onCourse }); await c.refreshAtCourse(); await flush();
+c.atCourseQuickCapture('gathering-42', 'video');
+ok(c._cardPhotoEvt && c._cardPhotoEvt.id === 'gathering-42', 'quick capture (video) sets _cardPhotoEvt');
+ok(c.clickLog.includes('card-video-camera-input') && !c.clickLog.includes('card-photo-upload-input'), 'quick capture (video) clicks the video input');
+c.clickLog.length = 0; c._cardPhotoEvt = null;
+c.atCourseQuickCapture('gathering-42', 'upload');
+ok(c._cardPhotoEvt && c._cardPhotoEvt.id === 'gathering-42', 'quick capture (upload) sets _cardPhotoEvt');
+ok(c.clickLog.includes('card-photo-upload-input') && !c.clickLog.includes('card-video-camera-input'), 'quick capture (upload) clicks the upload input');
+// 17. Location detail popover: toggling opens/closes #at-course-loc-detail
+// with venue name, distance, and a Maps link (MOSELEM has lat/lng).
+c = setup({ pos: onCourse }); await c.refreshAtCourse(); await flush();
+ok(!c.locDetail(), 'popover closed by default');
+c.atCourseToggleLocDetail();
+let ld = c.locDetail();
+ok(!!ld, 'popover opens on toggle');
+ok(ld.innerHTML.includes('Moselem Springs Golf Club'), 'popover shows venue name');
+ok(/0\.\d+ mi|<?\d+ ft/.test(ld.innerHTML), 'popover shows a distance label');
+ok(ld.innerHTML.includes('maps.google.com') && ld.innerHTML.includes(String(MOSELEM.lat)), 'popover includes a Maps link with the venue coords');
+c.atCourseToggleLocDetail();
+ok(!c.locDetail(), 'toggling again closes the popover');
+// 18. Tucking/peeking the rail closes any open popover
+c = setup({ pos: onCourse }); await c.refreshAtCourse(); await flush();
+c.atCourseToggleLocDetail(); ok(!!c.locDetail(), 'popover open before tuck');
+c.toggleAtCourseRail(); ok(!c.locDetail(), 'tucking the rail closes the popover');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
