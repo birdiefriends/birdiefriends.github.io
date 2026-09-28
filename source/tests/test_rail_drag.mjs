@@ -3,9 +3,9 @@ import { fileURLToPath } from 'url';
 const HERE = (p) => fileURLToPath(new URL(p, import.meta.url));
 const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
 const css = src.match(/<style[^>]*>([\s\S]*?)<\/style>/)[1];
-const fns = ['escapeHtml','atCourseLoadPos','atCourseSavePos','atCourseApplyPos','atCourseDragStart','toggleAtCourseRail','renderAtCourseRail'].map(n => extractFn(src, n)).join('\n');
+const fns = ['escapeHtml','atCourseLoadPos','atCourseSavePos','atCourseApplyPos','atCourseDragStart','toggleAtCourseRail','renderAtCourseRail','renderAtCourseLocDetail','atCourseToggleLocDetail'].map(n => extractFn(src, n)).join('\n');
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=390"><style>${css}</style></head><body style="margin:0;background:#f3f1ea;height:2000px">
-<script>var _atCourse = { evt: { id: 'g1', name: 'Jefferson' }, venue: {}, distM: 420, forced: false }, _atCourseTucked = false, _livePanelOpen = false, _atCoursePanelPeek = false, _atCourseJustDragged = false;
+<script>var _atCourse = { evt: { id: 'g1', name: 'Jefferson' }, venue: {}, distM: 420, forced: false }, _atCourseTucked = false, _livePanelOpen = false, _atCoursePanelPeek = false, _atCourseJustDragged = false, _atCourseLocDetailOpen = false;
 function isBFEBackedCard(){return false} function getLiveEvent(){return null}
 ${fns.replace(/<\/script>/g, '<\\/script>')}
 renderAtCourseRail();</script></body></html>`;
