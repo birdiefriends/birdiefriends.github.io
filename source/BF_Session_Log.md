@@ -4843,3 +4843,33 @@ independently branched on the raw `bfe_gathering_games` row — `games.includes(
 
 **Layer 2 done for Gatherings.** Next in Phase A: the Live Panel `hole_half: null` fix (§1a).
 
+**8. Venue Manager: rename venues, and a quota-free bridge to GC-API coordinates (portal v4.8.3,
+worker.js).** Brian added Woodloch Springs and hit two real gaps, not part of the Phase A engine work
+but quick sidebar fixes:
+- **Rename.** There was no way to fix a venue name after adding it — the only workaround was
+  deactivate + re-add under the corrected spelling, losing continuity with the venue's own id (pars,
+  coords, logo, motif, stored tees all key off the id, so those wouldn't actually have been lost, but
+  it's a clumsy path). Added a ✏️ next to the venue name in Venue Manager that swaps in an inline
+  input; Save PATCHes the existing `PATCH /venues/:id` route, now extended to accept `name` alongside
+  `active` (either or both). **Flagged, not silently glossed over:** renaming only changes the
+  canonical `venues` row — it does not touch the free-text venue name already stored on past
+  Gathering/event rows or in Jotform's own venue field, so anything matched by name (`findVenueByName`'s
+  abbreviation-tolerant lookup, the weather-history query) can stop resolving for OLD events under the
+  old spelling going forward. `adminSaveVenueName` confirms this in plain language before saving.
+- **GC-API coordinate autofill.** This already existed — `adminGcSelectCourse`'s "Use this course" has
+  filled the Weather Location lat/lng fields since Dev-86 — but nothing in the Weather Location panel
+  itself said so, so Brian was only aware of the manual Google-Maps-long-press flow. Added a "try
+  GolfCourseAPI ▾" link right in that panel's copy, wired to a new `adminJumpToGcLookup()` that just
+  opens the GC-API Lookup panel (and loads any already-stored tees, a quota-free `/bfe/venue-tees` read)
+  — it does **not** fire a search itself, so opening it never spends any of the 35/day GolfCourseAPI
+  budget; that still only happens when Brian taps Search.
+- **`test_venue_rename.mjs` (new, 15 checks):** the row template renders the rename input/✏️ correctly
+  keyed off `_adminVenueRenaming`; `venueCoordsEditorHtml` links to `adminJumpToGcLookup` and contains no
+  GC-API fetch call itself; `adminToggleVenueRename` is a pure state flip with no network; `adminSaveVenueName`
+  PATCHes `{pin, name}` to `/venues/:id`, resets the venue cache, closes the input; `adminJumpToGcLookup`
+  opens both panels and loads stored tees but calls no `fetch` on its own.
+- Full suite: **14 files, 17,237 checks, all green.** `worker.js` (main Worker) syntax-checked separately
+  — it's not part of this test harness (BFE-A production code path), and unlike `portal.html`/`bf_engine.js`
+  it isn't pushed live by `bf_push.bat` alone: Brian still has to paste-deploy it to Cloudflare himself for
+  the rename PATCH to actually take effect server-side.
+
