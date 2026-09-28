@@ -5528,10 +5528,10 @@ function gamesSealSvg(games, uid) {
 }
 function gamesSealWatermarkHtml(evt) {
   if (!evt || evt.source !== 'gathering') return '';
-  const cfg = _gatheringGamesIndex.get(evt.gatheringId);
-  if (!cfg || !Array.isArray(cfg.games) || !cfg.games.length) return '';
+  const config = gatheringRoundConfig(evt.gatheringId);  // Dev-88: was a raw _gatheringGamesIndex read
+  if (!gatheringIsGamed(config)) return '';
   const uid = String(evt.gatheringId).replace(/[^\w-]/g, '');
-  return `<div class="games-seal-layer" aria-hidden="true"><div class="games-seal">${gamesSealSvg(cfg.games, uid)}</div></div>`;
+  return `<div class="games-seal-layer" aria-hidden="true"><div class="games-seal">${gamesSealSvg(config.legacy.games, uid)}</div></div>`;
 }
 function buildEventCard(evt, isPast) {
   // Dev-94 — canceled overlay check, done first: a canceled event still
@@ -6444,13 +6444,14 @@ function hasLivePanelSupport(evt) {
 // it capture" are two different questions with two different answers.
 function evtScoreMode(evt) {
   if (evt && evt.source === 'gathering') {
-    const cfg = _gatheringGamesIndex.get(evt.gatheringId);
     // Dev-87 (v4.6.2) — ANY gamed Gathering captures gross strokes to D1, not
     // just Skins ones: Close & Calculate counts players (the pot) from D1
     // scorecards, so a CTP-/BirdieBall-only Gathering on the old Jotform
     // points path closed with 0 players — and dropped its cards into the
     // Wally Cup's Jotform scorecard form.
-    if (cfg && Array.isArray(cfg.games) && cfg.games.length) return 'strokes';
+    // Dev-88: reads via gatheringRoundConfig()/gatheringIsGamed(), was a raw
+    // _gatheringGamesIndex read.
+    if (gatheringIsGamed(gatheringRoundConfig(evt.gatheringId))) return 'strokes';
   }
   return 'points';
 }
@@ -8418,13 +8419,15 @@ function buildLivePanel(evt) {
   // Gathering's sections turn on/off, and only CTP/BirdieBall have a
   // dedicated on/off section (Birdie Alert and the Scorecard are general —
   // every Live Panel round needs those regardless of which games are on).
-  const _liveGamesConfig = evt.source === 'gathering' ? (_gatheringGamesIndex.get(evt.gatheringId) || null) : null;
-  const _liveGames = (_liveGamesConfig && Array.isArray(_liveGamesConfig.games)) ? _liveGamesConfig.games : null;
-  const showCttpSection = evt.source !== 'gathering' || !!(_liveGames && _liveGames.includes('cttp'));
-  const showBirdieBallSection = !!(_liveGames && _liveGames.includes('birdieball'));
+  // Dev-88: ONE resolved config for this panel, via gatheringRoundConfig() —
+  // was a raw _gatheringGamesIndex read plus per-call re-derivation of games
+  // array/cttp_config/birdieball_config at each site below.
+  const _liveConfig = evt.source === 'gathering' ? gatheringRoundConfig(evt.gatheringId) : null;
+  const showCttpSection = evt.source !== 'gathering' || !!gatheringAddon(_liveConfig, 'cttp');
+  const showBirdieBallSection = !!gatheringAddon(_liveConfig, 'birdieball');
   // Dev-87 — host-only Close & Calculate. Only a gamed Gathering (open
   // config in the index) reaching this panel, and only its own host.
-  const showCloseSection = evt.source === 'gathering' && !!_liveGamesConfig && evt.hostId === currentPlayer;
+  const showCloseSection = evt.source === 'gathering' && !!_liveConfig && evt.hostId === currentPlayer;
   // ── SECTION 1: Birdie Alert ──────────────────────────────────────────────
   // Team rounds never default to currentPlayer (not a valid team) — the
   // submitter must explicitly tap "Select your team" (Dev-80).
@@ -8528,9 +8531,9 @@ function buildLivePanel(evt) {
   // (BSGC's hardcoded fallback). Without this, any Gathering at a venue with
   // no venue-tee-catalog entry silently fell all the way back to BSGC's
   // holes regardless of what the host actually configured.
-  const gatheringCttpConfig = _liveGamesConfig ? (_liveGamesConfig.cttp_config || null) : null;
-  const ctpHoles = (gatheringCttpConfig && Array.isArray(gatheringCttpConfig.holes) && gatheringCttpConfig.holes.length)
-    ? gatheringCttpConfig.holes
+  const cttpAddon = gatheringAddon(_liveConfig, 'cttp');  // Dev-88: was reading _liveGamesConfig.cttp_config directly
+  const ctpHoles = (cttpAddon && Array.isArray(cttpAddon.holes) && cttpAddon.holes.length)
+    ? cttpAddon.holes
     : (_resolvedCttpHoles && _resolvedCttpHoles.length) ? _resolvedCttpHoles : CTP_HOLES_DEFAULT;
   const ctpPills = ctpHoles.map(h => {
     const leader = _ctpData[h];
@@ -14572,6 +14575,31 @@ async function refreshGatheringGamesIndex() {
   } catch (e) {
     console.warn('[BFE] gathering-games index load failed:', e.message);
   }
+}
+// Dev-88 — engine unification layer 2: the ONE way any consumer reads a
+// gamed Gathering's settings. Wraps BFEngine.gatheringConfigFromLegacy so
+// every reader gets the same Round Config v1 object (spec §2a.2 principle 1
+// — "every consumer reads the config; none re-derive it") instead of each
+// hand-checking games.includes(...)/cttp_config/birdieball_config on the raw
+// bfe_gathering_games row, as five separate call sites used to. Returns null
+// when the Gathering has no saved games config at all (ungamed).
+function gatheringRoundConfig(gatheringId) {
+  const row = _gatheringGamesIndex.get(gatheringId);
+  return row ? BFEngine.gatheringConfigFromLegacy(row) : null;
+}
+// Whether ANY game is configured — "is this Gathering gamed at all," the gate
+// used for strokes-vs-points capture (evtScoreMode), the event-card seal, and
+// Close & Calculate eligibility. Distinct from gatheringAddon() below, which
+// asks about one specific game's own settings.
+function gatheringIsGamed(config) {
+  return !!(config && config.legacy && config.legacy.games.length);
+}
+// One add-on's resolved settings — cttp: {dollar_per_hole, holes}, birdieball:
+// {dollar_per_player} — or null if that game isn't on, or its own config is
+// missing (gatheringConfigFromLegacy requires both: an add-on only exists
+// when the game is selected AND its config was actually saved).
+function gatheringAddon(config, id) {
+  return (config && config.addons.find(a => a.id === id)) || null;
 }
 let _bfeBackedIndex = new Map();
 // umbrellaName -> same-shaped summary (one row per BFE EVENT, not per round)
