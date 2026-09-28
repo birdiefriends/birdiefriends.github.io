@@ -4911,3 +4911,41 @@ scorecard store, config resolver, and the 9-hole Live Panel fix are all live. Pe
 (re-expressing BFE quota rounds on the shared engine) is next, but only on Brian's go-ahead — not
 started.
 
+**10. "At the course" rail cleanup — Video/Upload, dupe removal, clickable location pill (portal
+v4.8.5).** UI polish requested live while Brian had a real 18-hole Gathering running with Skins/
+CTP/BirdieBall turned on for the first time — three asks against the rail and its overlap with the
+Live Panel and event card:
+- **Video/Upload buttons.** New `atCourseQuickCapture(id, kind)` sets `_cardPhotoEvt` directly and
+  clicks the card-photo sheet's own hidden `card-video-camera-input` / `card-photo-upload-input`
+  inputs (`cardPhotoCameraPicked` reads `_cardPhotoEvt`, normally set by `openCardPhotoSheet`) — a
+  one-tap entry point into the same `event_photos` pipeline the Photo sheet already uses, rather
+  than opening the full sheet just to tap Video or Upload inside it. Rail now shows Photo/Video/
+  Upload/Note in a row (same `!bfe` gate as before).
+- **Dupe removal.** The Live Panel's own "📸 Photos" section already renders Photo/Video/Upload
+  inline (plus Note for BFE-backed rounds) the moment it's open for an event. New `livePanelHere =
+  _livePanelOpen && gamesOn` gate hides the rail's Photo/Video/Upload/Note specifically when the
+  Live Panel is open *for this event* — Yardage/Rules/Course/Games stay, since the Live Panel has
+  no equivalent for those. Same pattern applied to the event card's `icon-action-row`: Photos and
+  Notes buttons gate on `!(_livePanelOpen && getLiveEvent()?.id === evt.id)`, mirroring the
+  pre-existing Score-button suppression.
+- **Clickable location pill.** The rail's `⛳ 0.8 mi` status pill was inert outside test mode.
+  New `atCourseToggleLocDetail()` / `renderAtCourseLocDetail()` open a small popover (venue name,
+  a more precise distance in ft/mi, and a "📍 Open in Maps" link when the venue has stored
+  coordinates) anchored beside the rail, on the opposite side from wherever the rail is currently
+  docked. Deliberately a different view than the rail's own "Course" button (full tee/scorecard
+  viewer) so it isn't just another duplicate. In forced/TEST mode the pill keeps its original job
+  (`atCourseExitTest()`) rather than opening the popover. Tucking or peeking the rail closes any
+  open popover.
+- **Tests:** extended `test_at_course.mjs` (32 → 51 checks) — Video/Upload present and wired,
+  dupe suppression on entering/leaving a live Live Panel for this event, forced-mode pill still
+  exits test mode, `atCourseQuickCapture` sets `_cardPhotoEvt` and fires the right hidden input
+  for each kind, and the location popover opens/closes with the right venue name, distance, and
+  Maps link. Also fixed `test_at_course.mjs` and `test_rail_drag.mjs`'s function-extraction
+  whitelists, which broke (`ReferenceError: renderAtCourseLocDetail is not defined`) the moment
+  `renderAtCourseRail()` started calling the new function — both now extract
+  `renderAtCourseLocDetail`/`atCourseToggleLocDetail` (and `atCourseQuickCapture` in
+  `test_at_course.mjs`) alongside the rail's other functions.
+- Client-side only (`portal.html`) — no `worker.js` changes, so no separate Cloudflare deploy step
+  for this batch, just the usual `bf_push.bat`.
+- Full suite: **15 files, 17,245 checks, all green.**
+
