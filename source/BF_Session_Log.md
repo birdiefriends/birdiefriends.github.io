@@ -4965,3 +4965,46 @@ registered Yes/Sub for today, still checked on-device via `atCourseCandidates()`
 - Client-side only (`portal.html`) — no `worker.js` changes, no separate Cloudflare deploy step.
 - Full suite: **15 files, 17,246 checks, all green.**
 
+**12. Dupe removal, take two — the real fix, plus the radius (portal v4.8.7).** Brian caught two
+problems live, both against the same real 4-player Gathering (Golf More, Work Less):
+- **The v4.8.5 "kill the dupes" fix was half right.** It suppressed the *rail's* Photo/Video/
+  Upload/Note while the Live Panel was open, but left the Live Panel's own "📸 Photos" section
+  rendering unconditionally for every round — so a non-BFE Gathering still had two live capture
+  UIs, just not both on the rail at once (rail hidden, Live Panel showing). Brian: "the photos
+  capabilities are still exposed in the live panel... The vertical rail should replace the Live
+  Panel." Root cause once traced: `livePanelUploadCore` already branches on `isBFEBackedCard` —
+  a BFE round posts to the WCRP memories pipeline (`/bfe/memories/upload`, the rail's `!bfe` gate
+  deliberately excludes this per Dev-80's original intent), but a **non-BFE round's Live Panel
+  capture posts to `/photos/upload`** — the *exact same endpoint* `atCourseQuickCapture` (rail)
+  and `openCardPhotoSheet` (card) already use. That's a genuine duplicate, not a second path.
+  - **Fix:** `buildLivePanel`'s Photos live-section (`photosSection`) is now gated on
+    `isBfeRound` — it doesn't render at all (not even an empty shell) for a non-BFE round; the
+    rail is that round's one capture point, Live Panel open or closed. `livePanelHere` is gone
+    from `renderAtCourseRail()` entirely — Photo/Video/Upload/Note there gate on plain `!bfe`
+    again, same as before Dev-88 touched this. `buildLivePanelPhotoSection` itself is unchanged
+    (still the real BFE capture UI) — only its caller's gating changed.
+  - **Card icon-action-row reframed as "Gaming Mode" icons**, per Brian's framing directly:
+    Photo/Score/Notes now hide for as long as `getLiveEvent()?.id === evt.id` (this event IS the
+    live gamed round) — not just while the Live Panel happens to be expanded (the v4.8.5 gate was
+    `_livePanelOpen && getLiveEvent()?.id === evt.id`). Collapsing the panel on a still-live gamed
+    round no longer brings the card's copies back. A non-gamed ("Non-gaming Mode") event keeps all
+    three on the card exactly as before — Brian: "that's how a myMemory is created for any
+    non-competitive event" — and `atCourseQuickCapture`/rail Photo already reuse the same
+    `_cardPhotoEvt`/`cardPhotoCameraPicked` path the card uses, so a rail capture creates the same
+    per-event myMemory, confirmed by re-reading that code rather than assumed.
+  - New `test_dupe_removal.mjs` (9 checks, structural): the Photos section's `isBfeRound` gate,
+    the card row's gate reading `getLiveEvent()?.id !== evt.id` with no `_livePanelOpen` anywhere
+    in it, and the rail's `livePanelHere` gone in favor of a plain `!bfe` gate (4 buttons).
+    `test_at_course.mjs`'s §9b rewritten to match — capture buttons now stay on the rail whether
+    the Live Panel is open or not, instead of disappearing while it's open.
+- **Radius: 1 mile → ~0.43 mi (1600m → 700m).** Brian: "I'm wondering if one mile is too much...
+  I live 1.2 mile via road and considerably closer as the crow flies." Checked it for real —
+  Blue Shamrock Golf Club's own stored coordinates (`GET /venues`: `40.8134, -75.6208`) are only
+  **1345m / 0.84mi** (haversine) from Brian's home, comfortably inside the old 1600m radius: the
+  rail would have quietly read "at the course" at his house for any BSGC event. `AT_COURSE_RADIUS_M`
+  dropped to 700 — clears that by ~645m while still covering a typical 18-hole footprint from a
+  roughly central point; flagged in the code as an easy number to nudge back up if a real on-course
+  spot ever falls just outside it, since starting tight is the safer failure mode here.
+- Client-side only (`portal.html`) — no `worker.js` changes, no separate Cloudflare deploy step.
+- Full suite: **16 files, 17,254 checks, all green.**
+
