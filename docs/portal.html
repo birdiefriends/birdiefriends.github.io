@@ -10480,6 +10480,7 @@ let _adminVenueGcStatus = {};        // venue id -> { text, kind: 'info'|'warn'|
 let _adminVenueGcQuery = {};         // venue id -> last query typed
 let _adminVenueTees = {};            // venue id -> array of stored tee rows from GET /bfe/venue-tees (Dev-86 multi-tee redesign)
 let _adminVenuesCache = [];          // last-loaded venues list (from loadAdminVenues), so helpers like adminGcSaveTee can look up a venue's name by id without a re-fetch
+let _adminVenueRenaming = {};        // venue id -> bool, whether its header name is showing the inline rename input (Dev-88)
 // venue id -> { cttpHoles, raw } | null (fetched-and-empty) | undefined (not fetched yet).
 // Lazily populated from BFE_API — this data lives in bf-experiences' own
 // bfe_venue_tee_catalog table (shared venue_id space with GATHERINGS_API's
@@ -10920,9 +10921,18 @@ async function loadAdminVenues() {
     listEl.innerHTML = venues.map(v => `
       <div style="padding:7px 0;border-bottom:1px solid var(--border)">
         <div style="display:flex;align-items:center;gap:8px">
-          <div style="flex:1;font-size:0.83rem;color:${v.active ? 'var(--text)' : 'var(--text-muted)'};${v.active ? '' : 'text-decoration:line-through'}">
-            ${v.name}
-          </div>
+          ${_adminVenueRenaming[v.id] ? `
+          <div style="flex:1;display:flex;gap:6px;align-items:center">
+            <input type="text" id="admin-venue-rename-${v.id}" value="${v.name.replace(/"/g, '&quot;')}"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();adminSaveVenueName(${v.id})}if(event.key==='Escape'){adminToggleVenueRename(${v.id})}"
+              style="flex:1;padding:5px 7px;border-radius:6px;border:1px solid var(--border);font-size:0.83rem;font-family:inherit;box-sizing:border-box">
+            <button class="btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" onclick="adminSaveVenueName(${v.id})">Save</button>
+            <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px" onclick="adminToggleVenueRename(${v.id})">Cancel</button>
+          </div>` : `
+          <div style="flex:1;font-size:0.83rem;color:${v.active ? 'var(--text)' : 'var(--text-muted)'};${v.active ? '' : 'text-decoration:line-through'};display:flex;align-items:center;gap:6px">
+            <span>${v.name}</span>
+            <button class="btn btn-ghost btn-sm" title="Rename venue" style="font-size:0.68rem;padding:1px 6px;line-height:1.4" onclick="adminToggleVenueRename(${v.id})">✏️</button>
+          </div>`}
           <span style="font-size:0.72rem;padding:2px 7px;border-radius:10px;font-weight:600;
             ${v.active
               ? 'background:rgba(29,158,117,0.12);color:#1D9E75;border:1px solid rgba(29,158,117,0.25)'
@@ -11112,13 +11122,19 @@ function adminToggleVenueCoordsPanel(id) {
 // isn't resolvable by name through a general geocoding service, and a wrong
 // silent guess would produce confidently-wrong weather (see worker.js
 // comment on PATCH /venues/:id/coords). Brian long-presses the course on
-// Google Maps and pastes the coordinates shown at the bottom of the screen.
+// Google Maps and pastes the coordinates shown at the bottom of the screen —
+// OR (Dev-88) picks the course via 🔎 GC-API Lookup below, whose "Use this
+// course" already fills these two fields for him (adminGcSelectCourse); the
+// "🔎 Try GolfCourseAPI" button here just jumps to that panel, it doesn't
+// call the API itself, so opening this panel never spends any quota.
 function venueCoordsEditorHtml(v) {
   const hasCoords = v.lat != null && v.lng != null;
   return `
     <div style="background:var(--surface);border-radius:10px;padding:10px;margin-top:6px">
       <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
-        Long-press this course on Google Maps, then paste the coordinates shown at the bottom of the screen. Powers the 🌤️ weather chip on My History.
+        Long-press this course on Google Maps, then paste the coordinates shown at the bottom of the screen — or
+        <a href="javascript:void(0)" onclick="adminJumpToGcLookup(${v.id})" style="color:var(--accent, #1D9E75);font-weight:600">try GolfCourseAPI ▾</a>
+        and pick the course; its coordinates fill in here automatically. Powers the 🌤️ weather chip on My History.
       </div>
       <div style="display:flex;gap:6px;margin-bottom:8px">
         <input type="text" id="admin-coord-lat-${v.id}" placeholder="Latitude" inputmode="decimal"
@@ -11210,6 +11226,18 @@ async function adminClearVenueCoords(id, name) {
 function adminToggleVenueGcPanel(id) {
   _adminVenueGcOpen[id] = !_adminVenueGcOpen[id];
   if (_adminVenueGcOpen[id] && !_adminVenueTees[id]) adminLoadVenueTees(id);
+  loadAdminVenues();
+}
+// "🔎 Try GolfCourseAPI" link inside the Weather Location panel (Dev-88) —
+// just opens the GC-API Lookup panel (loading any already-stored tees,
+// which costs nothing) and leaves Weather Location open too so the fields
+// are visible the moment a course is picked. No search fires here; that
+// still only happens when Brian taps Search, so this never touches the
+// 35/day quota on its own.
+function adminJumpToGcLookup(id) {
+  _adminVenueGcOpen[id] = true;
+  _adminVenueCoordsOpen[id] = true;
+  if (!_adminVenueTees[id]) adminLoadVenueTees(id);
   loadAdminVenues();
 }
 async function adminLoadVenueTees(id) {
@@ -11613,6 +11641,43 @@ async function adminToggleVenue(id, newActive, name) {
     showToast(`✅ "${name}" ${newActive ? 'reactivated' : 'deactivated'}`);
     // Reset venue cache so autocomplete picks up the change
     _venues = null;
+    loadAdminVenues();
+  } catch(e) {
+    showToast('Error: ' + e.message, true);
+  }
+}
+function adminToggleVenueRename(id) {
+  _adminVenueRenaming[id] = !_adminVenueRenaming[id];
+  loadAdminVenues();
+}
+// Renames the canonical venue row (Dev-88 — Venue Manager had no rename
+// path before this; a typo like "Woodloch Springs" meant deactivating and
+// re-adding under corrected spelling). Warns before saving: this only
+// changes THIS row's name column, not the free-text venue name already
+// stored on past Gathering/event rows or in Jotform submissions, so
+// anything that matches by name (findVenueByName's abbreviation-tolerant
+// lookup, the weather-history query) can stop resolving for OLD events
+// under the old spelling. Safe for fixing a typo on a venue with no history
+// yet (like a just-added one); riskier for an established venue's canonical
+// name — confirm with Brian if unsure which case this is.
+async function adminSaveVenueName(id) {
+  const input = document.getElementById(`admin-venue-rename-${id}`);
+  const name = (input?.value || '').trim();
+  if (!name) { showToast('Enter a venue name', true); return; }
+  const v = (_adminVenuesCache || []).find(x => x.id === id);
+  if (v && name === v.name) { _adminVenueRenaming[id] = false; loadAdminVenues(); return; }
+  if (!confirm(`Rename "${v ? v.name : 'this venue'}" to "${name}"?\n\nThis only updates the Venue Manager entry — past events already saved under the old name won't be relinked automatically.`)) return;
+  try {
+    const res = await fetch(`${GATHERINGS_API}/venues/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: '7797', name })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Rename failed');
+    showToast(`✅ Renamed to "${name}"`);
+    _adminVenueRenaming[id] = false;
+    _venues = null; // reset cache so autocomplete/matching picks up the new name
     loadAdminVenues();
   } catch(e) {
     showToast('Error: ' + e.message, true);
