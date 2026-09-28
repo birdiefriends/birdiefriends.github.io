@@ -4805,3 +4805,41 @@ source, bf_push v17, tests, docs) matched `origin/main`. The copy ran before por
 **re-run the `INSERT … ON CONFLICT DO NOTHING` once after v4.8.1 is live** to catch any card an old
 portal wrote to the main table in between (the main table showed no new rows as of this check).
 
+**7. Layer 2 — round key + stored config for Gatherings, built (portal v4.8.2).** Per spec §2a.2
+principle 1 ("every consumer reads the config; none re-derive it"): five places in portal.html each
+independently branched on the raw `bfe_gathering_games` row — `games.includes('cttp')`,
+`.cttp_config`, `.birdieball_config` — instead of going through `BFEngine.gatheringConfigFromLegacy`
+(already built in layer 1, unused until now).
+- **New portal-side resolver (not in `bf_engine.js` — it closes over `_gatheringGamesIndex`, so it
+  stays orchestration, not pure engine code):** `gatheringRoundConfig(gatheringId)` (row → Round
+  Config v1 or null), `gatheringIsGamed(config)` ("is this Gathering gamed at all," the strokes/points
+  and seal/Close-eligibility gate), `gatheringAddon(config, id)` (one add-on's resolved settings or
+  null — an add-on only exists when the game is selected AND its own config is actually present,
+  stricter than the old per-site reads).
+- **Repointed:** `gamesSealWatermarkHtml`, `evtScoreMode`, and `buildLivePanel`'s `showCttpSection` /
+  `showBirdieBallSection` / `showCloseSection` / CTP-holes resolution (formerly `_liveGamesConfig` /
+  `_liveGames` locals, now one `_liveConfig` plus the two helpers). `hasLivePanelSupport` was left as
+  its plain `_gatheringGamesIndex.has(...)` existence check — on purpose, it doesn't branch on shape.
+- **No storage change.** `bfe_gathering_games` is unchanged; the resolver synthesizes Round Config v1
+  on read, same as the payout engine already did — Gatherings' own migration to storing a v1 config is
+  explicitly out of scope for v1 (spec §2a.8).
+- **`test_gathering_round_config.mjs` (new, 12,003 checks):** fuzzes 2,000 form-valid rows (shaped the
+  way Host Panel's own save validation actually produces them — a game only appears in `games` together
+  with its config) and requires the resolver-based read to match the old per-site logic exactly on all
+  four checks (isGamed, showCttp, showBirdieBall, CTP-holes selection). Separately fuzzes 2,000
+  malformed rows the live form can never save (a game selected with no config, empty holes, etc.):
+  requires the resolver to never throw and stay well-typed, and counts (doesn't hide) the real,
+  deliberate divergences where it's now stricter than the old checks — 167/306/213 out of 2,000 on
+  cttp/BirdieBall/holes respectively, every one the resolver correctly refusing to show or pay a game
+  whose own config is missing.
+- **`test_score_mode.mjs` updated** (`evtScoreMode` now calls the two new helpers, so its sandbox
+  extracts all three). **`test_engine_wiring.mjs` extended** (15 checks): the helpers exist, no raw
+  `_liveGamesConfig`/`_liveGames` reads survive, both standalone functions and `buildLivePanel` call
+  the resolver.
+- Also loaded the real `docs/portal.html` in Chromium and drove the resolver directly (not through vm
+  extraction) against a form-valid row, a malformed one, and an ungamed one — matched every unit-test
+  expectation, no console errors.
+- Full suite: **13 files, 17,222 checks, all green.**
+
+**Layer 2 done for Gatherings.** Next in Phase A: the Live Panel `hole_half: null` fix (§1a).
+
