@@ -2858,6 +2858,7 @@ async function closeScorecardOnlyRound(round, base, pin, eventName, btn) {
       body: JSON.stringify({
         event_name: roundName, player: p.name, holes: p.sc.holes, total: p.sc.actualPoints,
         venue: round.venue || null,
+        input_type: 'points', round_key: 'bfe:' + roundName,  // Dev-88: holes are Stableford points, not strokes
       })
     }).catch(e => console.warn('scorecard persist failed for', p.name, e))));
     const results = players.map(p => ({
@@ -3001,7 +3002,7 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
     }
     await Promise.allSettled(teams.filter(t => t.sc).map(t => fetch(base + '/scorecards', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_name: roundName, player: t.displayName, holes: t.sc.holes, total: t.sc.actualPoints, venue: round.venue || null })
+      body: JSON.stringify({ event_name: roundName, player: t.displayName, holes: t.sc.holes, total: t.sc.actualPoints, venue: round.venue || null, input_type: 'points', round_key: 'bfe:' + roundName })
     }).catch(e => console.warn('team scorecard persist failed for', t.displayName, e))));
     const engineInput = { teams: teams.map(t => ({ label: t.displayName, actualPoints: t.sc ? t.sc.actualPoints : 0, quotaIn: t.teamQuota, players: t.players })) };
     const scored = scoreRound({ engine: round.engine, engineParams: round.engineParams, influencers: [] }, engineInput, {});
@@ -3166,6 +3167,7 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
       body: JSON.stringify({
         event_name: roundName, player: p.name, holes: p.sc.holes, total: p.sc.actualPoints,
         venue: round.venue || null,
+        input_type: 'points', round_key: 'bfe:' + roundName,  // Dev-88: holes are Stableford points, not strokes
         wb_status: p.sc.wbStatus === 'Yes' ? 'kept' : (p.sc.wbStatus === 'No' ? 'lost' : null),
         wb_hole: p.sc.wbHole, wb_stroke: p.sc.wbStroke,
       })
