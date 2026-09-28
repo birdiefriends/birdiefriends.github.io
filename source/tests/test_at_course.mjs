@@ -27,7 +27,7 @@ function setup({ player = 'Brian Hager', pos = null, geoErr = false, forced = fa
     showToast: () => {}, _livePanelOpen: false, toggleLivePanel: () => { calls.push('toggleLive'); ctx._livePanelOpen = true; },
   };
   vm.createContext(ctx);
-  const consts = ['AT_COURSE_BETA_PLAYERS', 'AT_COURSE_RADIUS_M', 'AT_COURSE_TEST_HOURS'].map(n => src.match(new RegExp(`const ${n} = [^;]+;`))[0]).join('\n');
+  const consts = ['AT_COURSE_RADIUS_M', 'AT_COURSE_TEST_HOURS'].map(n => src.match(new RegExp(`const ${n} = [^;]+;`))[0]).join('\n');
   const fns = ['atCourseExitTest','atCourseLoadPos','atCourseSavePos','atCourseApplyPos','escapeHtml','findMyReg','atCourseEnabled','atCourseForced','haversineM','atCourseMyRoundOk','atCourseCandidates','refreshAtCourse','atCourseOpenGames','toggleAtCourseRail','renderAtCourseRail','atCourseInitOnce','renderAtCourseLocDetail','atCourseToggleLocDetail','atCourseQuickCapture'];
   vm.runInContext(consts + '\nvar _atCourse = null, _atCourseTucked = false, _atCourseInit = false, _atCourseScrollTimer = null, _atCoursePanelPeek = false, _atCourseJustDragged = false, _atCourseLocDetailOpen = false, _cardPhotoEvt = null;\n' + fns.map(n => extractFn(src, n)).join('\n'), ctx);
   // document.addEventListener exists on jsdom document
@@ -53,9 +53,15 @@ ok(r && r.innerHTML.includes('atCourseToggleLocDetail()'), 'distance pill wired 
 c = setup({ pos: home }); await c.refreshAtCourse(); await flush(); ok(!c.rail(), 'no rail 20 mi away');
 // 3. Location denied → no rail, no crash
 c = setup({ geoErr: true }); await c.refreshAtCourse(); await flush(); ok(!c.rail(), 'denied → no rail');
-// 4. Beta gate: other players never see it and are never asked for location
-c = setup({ player: 'Scott Justus', pos: onCourse }); await c.refreshAtCourse(); await flush();
-ok(!c.rail() && !c.calls.includes('geo'), 'non-beta player: no rail, no location request');
+// 4. Dev-88: opened from beta to every signed-in, registered player — a
+// non-Brian player who's registered for today's round sees the rail too;
+// only a signed-out session (no currentPlayer) skips it entirely.
+c = setup({ player: 'Scott Justus', pos: onCourse });
+c.regData.push({ gatheringId: 42, eventName: 'Jefferson Classic', player: 'Scott Justus', status: 'Yes', createdAt: '2026-09-20' });
+await c.refreshAtCourse(); await flush();
+ok(!!c.rail() && c.calls.includes('geo'), 'opened to all players: non-Brian player sees the rail too');
+c = setup({ player: '', pos: onCourse }); await c.refreshAtCourse(); await flush();
+ok(!c.rail() && !c.calls.includes('geo'), 'signed-out (no currentPlayer): no rail, no location request');
 // 5. Not registered (No) → no rail, no location request
 c = setup({ pos: onCourse, regStatus: 'No' }); await c.refreshAtCourse(); await flush();
 ok(!c.rail() && !c.calls.includes('geo'), 'not registered → no location request');
