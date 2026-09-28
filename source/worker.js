@@ -1047,16 +1047,33 @@ export default {
       }
     }
 
-    // PATCH /venues/:id — commissioner toggles active status. PIN-gated.
+    // PATCH /venues/:id — commissioner toggles active status and/or renames
+    // the venue. PIN-gated. `name` is optional (Dev-88 — Venue Manager had no
+    // rename path; adding/deactivating/re-adding under a corrected spelling
+    // was the only prior workaround). Renaming only changes this canonical
+    // row — it does NOT touch the free-text venue name already stored on
+    // past Gathering/event rows, or Jotform's own venue field, so anything
+    // matched by exact/fuzzy name (findVenueByName on the client, the
+    // weather-lookup query below) can stop resolving for OLD events after a
+    // rename. The client warns about this before calling here; this route
+    // itself just does the update.
     const venuePatchMatch = url.pathname.match(/^\/venues\/(\d+)$/);
     if (request.method === 'PATCH' && venuePatchMatch) {
       const venueId = venuePatchMatch[1];
       const body = await request.json();
-      const { pin, active } = body;
+      const { pin, active, name } = body;
       if (pin !== '7797') return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      if (active == null) return new Response(JSON.stringify({ error: 'active is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      if (active == null && name == null) return new Response(JSON.stringify({ error: 'active or name is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      const trimmedName = name != null ? String(name).trim() : null;
+      if (name != null && !trimmedName) return new Response(JSON.stringify({ error: 'name cannot be blank' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       try {
-        await env.DB.prepare(`UPDATE venues SET active = ? WHERE id = ?`).bind(active ? 1 : 0, venueId).run();
+        if (active != null && trimmedName != null) {
+          await env.DB.prepare(`UPDATE venues SET active = ?, name = ? WHERE id = ?`).bind(active ? 1 : 0, trimmedName, venueId).run();
+        } else if (trimmedName != null) {
+          await env.DB.prepare(`UPDATE venues SET name = ? WHERE id = ?`).bind(trimmedName, venueId).run();
+        } else {
+          await env.DB.prepare(`UPDATE venues SET active = ? WHERE id = ?`).bind(active ? 1 : 0, venueId).run();
+        }
         return new Response(JSON.stringify({ ok: true }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
