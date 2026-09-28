@@ -1,3 +1,9 @@
+v4.8.8 · 2026-09-28
+Deployed: 2026-09-28 (A gamed Gathering's event card now has its own 🏆 Games icon -- tap it for a
+read-only breakdown of what's in play (CTP/BirdieBall carve-outs, Skins pot, $/player, confirmed
+headcount) any time, before the round goes live or during it. The "At the course" rail's own Games
+button is gone -- it only ever opened the Live Panel, which the card's own header already does.)
+
 v4.8.7 · 2026-09-28
 Deployed: 2026-09-28 (Real fix for the Live Panel/rail duplication: the Live Panel's own Photo/
 Video/Upload only exist now for a BFE-backed round -- a plain Gathering's capture lives on the
