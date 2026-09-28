@@ -5008,3 +5008,34 @@ problems live, both against the same real 4-player Gathering (Golf More, Work Le
 - Client-side only (`portal.html`) — no `worker.js` changes, no separate Cloudflare deploy step.
 - Full suite: **16 files, 17,254 checks, all green.**
 
+**13. Event-card 🏆 Games icon; rail's own Games button dropped (portal v4.8.8).** Same live
+Gathering, one more round of feedback: Brian — "Add a GAMEing icon to any event card prepped for
+games. Display the details of the game... I'm torn about the GAME icon on the v-rail, currently is
+launches the live panel, which I don't think is necessary. So I think we just drop it... My
+thinking is that the players will want to know the game before heading to the course so the
+details should exist on the event card."
+- **New `🏆 Games` icon on the event card**, gated on `evt.source === 'gathering' &&
+  gatheringIsGamed(gatheringRoundConfig(evt.gatheringId))` — deliberately NOT a Gaming-Mode-only
+  icon like Photo/Score/Notes (§12 above): it has to work in both modes, since the whole point is
+  checking the game *before* the round goes live. Opens a new read-only `game-details-modal` via
+  `openGameDetailsModal(evtId)` → `gatheringGameDetailsBody(evt, config)`, which reuses the exact
+  pot math the Host Panel's live `updateGamesFormPotPreview()` already uses (CTP and BirdieBall
+  carved out of the $/player pot as fixed dollar amounts, Skins gets whatever's left) — just
+  against the SAVED config any registered player can read, not the host's in-progress form state.
+  Shows $/player, confirmed Yes count, total pot, and one row per active game with its own
+  cost breakdown.
+- **Rail's own `🏆 Games` button removed entirely**, and `atCourseOpenGames()` deleted outright
+  (not just unwired) — its only job was `toggleLivePanel()` + scroll-to-top, which the event
+  card's own header tap already does; Brian's call to "drop it to conserve space" on the rail now
+  that the card carries game info directly.
+- **New `test_games_details.mjs` (12 checks):** real execution of `gatheringGameDetailsBody`/
+  `openGameDetailsModal` against a config shaped exactly like Brian's actual live round ($2/player,
+  CTP $2/hole × 4 holes, BirdieBall $2/player, Skins the remainder — clamped to $0 here since the
+  carve-outs exceed the pot, same clamp the Host Panel preview already has) plus structural checks
+  that the card's Games gate never references `getLiveEvent`/`_livePanelOpen` and that
+  `atCourseOpenGames`/the rail's Games button are gone from the source, not just unreferenced.
+  `test_at_course.mjs`'s §9/§9b/§12 updated for the rail change (§12's "Games opens panel" check
+  now drives `toggleLivePanel()` directly, since there's no rail action left to drive it through).
+- Client-side only (`portal.html`) — no `worker.js` changes, no separate Cloudflare deploy step.
+- Full suite: **17 files, 17,265 checks, all green.**
+
