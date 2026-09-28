@@ -4873,3 +4873,41 @@ but quick sidebar fixes:
   it isn't pushed live by `bf_push.bat` alone: Brian still has to paste-deploy it to Cloudflare himself for
   the rename PATCH to actually take effect server-side.
 
+**9. Phase A, layer 4 — Live Panel `hole_half: null` fix (portal v4.8.4).** Spec §1a's flagged
+gap, the last item on the Phase A punch list: "the Live Panel scorecard always sends
+`hole_half: null` ... blocks 9-hole gamed Gatherings." Investigating turned up a bigger problem
+than the spec text alone suggested — it wasn't just that the wrong half's holes 1-9 got recorded,
+the Live Panel's Post-Round Scorecard **unconditionally rendered both `holeGrid(0,9)` and
+`holeGrid(9,18)`** and required `enteredCount === 18` (`allEntered`) to submit at all, regardless
+of `evt.holes`. A 9-hole gamed Gathering couldn't actually complete the Live Panel scorecard
+before this fix — not a misalignment, a hard block.
+- **Fix, mirroring Card Score Sheet's existing `_csHoleHalf`/`csToggleHoleHalf`/`holesToggleRow`
+  pattern** (which already worked correctly for this — the gap was Live Panel-only): new
+  `_scHoleHalf` state (front/back, defaults front, reset alongside `_scHoles` at every existing
+  reset site), a `scToggleHoleHalf()` Front/Back toggle that clears the abandoned half (same
+  belt-and-suspenders reasoning as the Card Score Sheet version), and `scIsNine = evt.holes === 9`
+  gating both `allEntered`/`enteredCount` and which hole grid(s) render — a 9-hole event now shows
+  one 9-hole grid with the toggle above it, an 18-hole event is completely unchanged.
+- **`scSetPts`'s auto-advance** (fires outside `buildLivePanel`'s closure) needed the same
+  boundary awareness — stashed `window._liveScIsNine` so filling hole 9 of a front-9 round stops
+  the picker instead of opening a nonexistent "hole 10."
+- **`submitScorecard`** now sends the real `hole_half` (`_scHoleHalf` for a 9-hole event, `null`
+  for 18-hole — unchanged there) alongside `hole_count`, with the same defensive "wipe the
+  abandoned half right before computing sums" guard Card Score Sheet's save path already has.
+- **Left alone, on purpose:** the Jotform-points submit branch (non-gamed 9-hole Gatherings, e.g.
+  Chooch's CGA league) has no `hole_half` concept to set — out of scope per spec (D1 pipeline
+  only); the dead `openScorecardModal`/`renderScorecardModal`/`submitScorecardModal` trio (no call
+  sites anywhere in the app — confirmed via a clean grep) was left as-is, not fixed, not deleted,
+  since removing genuinely dead code wasn't asked for and wasn't the point of this pass.
+- **`test_live_panel_9hole.mjs` (new, 21 checks):** structural checks on `buildLivePanel`'s
+  extracted source (the `scIsNine`/`window._liveScIsNine`/`allEntered` wiring, the toggle branch),
+  plus the real `scSetPts`/`scToggleHoleHalf`/`submitScorecard` functions run directly — front-9
+  and back-9 auto-advance boundaries, toggle-clears-the-abandoned-half, and the actual POST body
+  sent for a 9-hole-front, 9-hole-back, and unaffected 18-hole round.
+- Full suite: **15 files, 17,258 checks, all green.**
+
+**Phase A (layers 1-4) is now complete for Gatherings** — shared engine (`bf_engine.js`), one D1
+scorecard store, config resolver, and the 9-hole Live Panel fix are all live. Per spec §9, Phase B
+(re-expressing BFE quota rounds on the shared engine) is next, but only on Brian's go-ahead — not
+started.
+
