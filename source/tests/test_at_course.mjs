@@ -77,14 +77,16 @@ c = setup({ forced: true, search: '?atcourse=0', pos: home }); c.atCourseInitOnc
 c = setup({ pos: onCourse, liveId: 'gathering-42' }); await c.refreshAtCourse(); await flush();
 r = c.rail(); ok(r && r.innerHTML.includes('>Games<'), 'Games shown when this round is live');
 c.atCourseOpenGames(); ok(c.calls.includes('toggleLive') && c.calls.includes('scrollTo'), 'Games opens Live Panel');
-// 9b. Once the Live Panel is actually open for THIS event, the rail drops its
-// own Photo/Video/Upload/Note (the panel's own Photos section already has them)
-// but keeps Yardage/Rules/Course/Games, which have no Live Panel equivalent.
+// 9b. Dev-88 second pass: the Live Panel's own Photos section was dropped
+// for non-BFE rounds (it posted to the same event_photos pipeline the rail
+// already covers — a straight duplicate, not an alternative), so the rail
+// is now this round's one capture point whether or not the Live Panel is
+// open. Photo/Video/Upload/Note stay put either way; Yardage/Rules/Course/
+// Games are unaffected as always.
 c._livePanelOpen = true; c.renderAtCourseRail(); r = c.rail();
-ok(r && ['Photo','Video','Upload','Note'].every(l => !r.innerHTML.includes(`>${l}<`)), 'dupes removed once Live Panel is open for this event');
-ok(r && ['Yardage','Rules','Course','Games'].every(l => r.innerHTML.includes(`>${l}<`)), 'non-duplicate tools remain when Live Panel is open');
+ok(r && ['Photo','Video','Upload','Note','Yardage','Rules','Course','Games'].every(l => r.innerHTML.includes(`>${l}<`)), 'capture buttons stay on the rail even with the Live Panel open (its own copy was dropped, not this one)');
 c._livePanelOpen = false; c.renderAtCourseRail(); r = c.rail();
-ok(r && ['Photo','Video','Upload','Note'].every(l => r.innerHTML.includes(`>${l}<`)), 'closing the Live Panel brings the capture buttons back');
+ok(r && ['Photo','Video','Upload','Note'].every(l => r.innerHTML.includes(`>${l}<`)), 'still there once the Live Panel closes too');
 // 10. BFE-backed round hides Photo/Note (capture lives in WCRP/Live Panel there)
 c = setup({ pos: onCourse, bfe: true }); await c.refreshAtCourse(); await flush();
 r = c.rail(); ok(r && !r.innerHTML.includes('>Photo<') && !r.innerHTML.includes('>Note<') && r.innerHTML.includes('>Yardage<'), 'BFE round: no Photo/Note');
