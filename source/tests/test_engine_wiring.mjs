@@ -19,5 +19,20 @@ ok(tagAt > 0 && tagAt < mainAt, 'engine tag comes before the script that uses it
 });
 const docs = HERE('../../docs/bf_engine.js');
 if (fs.existsSync(docs)) ok(fs.readFileSync(docs, 'utf8') === fs.readFileSync(HERE('../bf_engine.js'), 'utf8'), 'docs/ and source/ bf_engine.js identical');
+
+// Dev-88 layer 2 -- every Gatherings UI consumer must go through the round-
+// config resolver, not a raw _gatheringGamesIndex/games.includes(...) read.
+ok(/function gatheringRoundConfig\(/.test(src) && /function gatheringIsGamed\(/.test(src) && /function gatheringAddon\(/.test(src), 'resolver helpers exist');
+const codeOnly = src.replace(/\/\/[^\n]*/g, '');
+ok(!/_liveGamesConfig\.(games|cttp_config|birdieball_config)/.test(codeOnly), 'no leftover direct reads of the raw legacy row');
+ok(!codeOnly.includes('_liveGames.includes'), 'no leftover _liveGames.includes(...) checks');
+[
+  [extractFn(src, 'gamesSealWatermarkHtml'), 'gatheringRoundConfig'],
+  [extractFn(src, 'evtScoreMode'), 'gatheringIsGamed'],
+].forEach(([body, helper]) => ok(body.includes(helper + '('), 'uses ' + helper + '()'));
+ok(/const _liveConfig = evt\.source === 'gathering' \? gatheringRoundConfig\(evt\.gatheringId\) : null;/.test(src), 'buildLivePanel resolves one config via gatheringRoundConfig()');
+ok(/gatheringAddon\(_liveConfig, 'cttp'\)/.test(src) && /gatheringAddon\(_liveConfig, 'birdieball'\)/.test(src), 'buildLivePanel reads addons via gatheringAddon()');
+ok(/return _gatheringGamesIndex\.has\(evt\.gatheringId\);/.test(src), 'hasLivePanelSupport keeps its plain existence check (unchanged on purpose)');
+
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
