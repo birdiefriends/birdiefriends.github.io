@@ -28,7 +28,7 @@ function setup({ player = 'Brian Hager', pos = null, geoErr = false, forced = fa
   };
   vm.createContext(ctx);
   const consts = ['AT_COURSE_RADIUS_M', 'AT_COURSE_TEST_HOURS'].map(n => src.match(new RegExp(`const ${n} = [^;]+;`))[0]).join('\n');
-  const fns = ['atCourseExitTest','atCourseLoadPos','atCourseSavePos','atCourseApplyPos','escapeHtml','findMyReg','atCourseEnabled','atCourseForced','haversineM','atCourseMyRoundOk','atCourseCandidates','refreshAtCourse','atCourseOpenGames','toggleAtCourseRail','renderAtCourseRail','atCourseInitOnce','renderAtCourseLocDetail','atCourseToggleLocDetail','atCourseQuickCapture'];
+  const fns = ['atCourseExitTest','atCourseLoadPos','atCourseSavePos','atCourseApplyPos','escapeHtml','findMyReg','atCourseEnabled','atCourseForced','haversineM','atCourseMyRoundOk','atCourseCandidates','refreshAtCourse','toggleAtCourseRail','renderAtCourseRail','atCourseInitOnce','renderAtCourseLocDetail','atCourseToggleLocDetail','atCourseQuickCapture'];
   vm.runInContext(consts + '\nvar _atCourse = null, _atCourseTucked = false, _atCourseInit = false, _atCourseScrollTimer = null, _atCoursePanelPeek = false, _atCourseJustDragged = false, _atCourseLocDetailOpen = false, _cardPhotoEvt = null;\n' + fns.map(n => extractFn(src, n)).join('\n'), ctx);
   // document.addEventListener exists on jsdom document
   return Object.assign(ctx, { calls, store, clickLog, rail: () => dom.window.document.getElementById('at-course-rail'), locDetail: () => dom.window.document.getElementById('at-course-loc-detail') });
@@ -46,7 +46,7 @@ ok(r && /0\.\d mi/.test(r.innerHTML), 'shows distance in miles');
 ok(r && ['Photo','Video','Upload','Note','Yardage','Rules','Course'].every(l => r.innerHTML.includes(`>${l}<`)), 'core tools present, incl. new Video/Upload');
 ok(r && r.innerHTML.includes("atCourseQuickCapture('gathering-42','video')"), 'Video button wired to quick capture');
 ok(r && r.innerHTML.includes("atCourseQuickCapture('gathering-42','upload')"), 'Upload button wired to quick capture');
-ok(r && !r.innerHTML.includes('>Games<'), 'no Games when not live');
+ok(r && !r.innerHTML.includes('>Games<'), 'Dev-88: no Games button on the rail at all anymore (dropped — see §9)');
 ok(r && r.innerHTML.includes("openVenueViewerModal('gathering-42')"), 'Course opens venue viewer for this round');
 ok(r && r.innerHTML.includes('atCourseToggleLocDetail()'), 'distance pill wired to location detail popover when not forced');
 // 2. Away from the course → no rail
@@ -73,18 +73,20 @@ r = c.rail(); ok(!!r && r.innerHTML.includes('TEST') && !c.calls.includes('geo')
 // 8. URL switch sets and clears the force flag
 c = setup({ search: '?atcourse=1', pos: home }); c.atCourseInitOnce(); ok(Number(c.store.get('bf_atcourse_force')) > 1e12, '?atcourse=1 stores a timestamp');
 c = setup({ forced: true, search: '?atcourse=0', pos: home }); c.atCourseInitOnce(); ok(!c.store.has('bf_atcourse_force'), '?atcourse=0 clears force');
-// 9. Live gamed round → Games button, opens live panel + scrolls
+// 9. Dev-88 (second pass, live during a real round): the rail's own Games
+// button is gone — it only ever opened the Live Panel, which the card's own
+// header already does, and Brian wanted the space back ("I don't think it's
+// necessary... drop it to conserve space"). Live/gamed round or not, the
+// rail never shows a Games button any more.
 c = setup({ pos: onCourse, liveId: 'gathering-42' }); await c.refreshAtCourse(); await flush();
-r = c.rail(); ok(r && r.innerHTML.includes('>Games<'), 'Games shown when this round is live');
-c.atCourseOpenGames(); ok(c.calls.includes('toggleLive') && c.calls.includes('scrollTo'), 'Games opens Live Panel');
-// 9b. Dev-88 second pass: the Live Panel's own Photos section was dropped
-// for non-BFE rounds (it posted to the same event_photos pipeline the rail
-// already covers — a straight duplicate, not an alternative), so the rail
-// is now this round's one capture point whether or not the Live Panel is
-// open. Photo/Video/Upload/Note stay put either way; Yardage/Rules/Course/
-// Games are unaffected as always.
+r = c.rail(); ok(r && !r.innerHTML.includes('>Games<'), 'Games button dropped from the rail even for a live gamed round');
+// 9b. The Live Panel's own Photos section was also dropped for non-BFE
+// rounds (it posted to the same event_photos pipeline the rail already
+// covers — a straight duplicate, not an alternative), so the rail is now
+// this round's one capture point whether or not the Live Panel is open.
+// Photo/Video/Upload/Note stay put either way; Yardage/Rules/Course too.
 c._livePanelOpen = true; c.renderAtCourseRail(); r = c.rail();
-ok(r && ['Photo','Video','Upload','Note','Yardage','Rules','Course','Games'].every(l => r.innerHTML.includes(`>${l}<`)), 'capture buttons stay on the rail even with the Live Panel open (its own copy was dropped, not this one)');
+ok(r && ['Photo','Video','Upload','Note','Yardage','Rules','Course'].every(l => r.innerHTML.includes(`>${l}<`)), 'capture buttons stay on the rail even with the Live Panel open (its own copy was dropped, not this one)');
 c._livePanelOpen = false; c.renderAtCourseRail(); r = c.rail();
 ok(r && ['Photo','Video','Upload','Note'].every(l => r.innerHTML.includes(`>${l}<`)), 'still there once the Live Panel closes too');
 // 10. BFE-backed round hides Photo/Note (capture lives in WCRP/Live Panel there)
@@ -104,7 +106,7 @@ c.toggleAtCourseRail(); ok(c.rail().className === '', 'grip while panel open →
 ok(c._atCourseTucked === false, 'peek does not change the manual tuck state');
 c.toggleAtCourseRail(); ok(c.rail().className === 'tucked', 'grip again → tucked');
 c._livePanelOpen = false; c._atCoursePanelPeek = false; c.renderAtCourseRail(); ok(c.rail().className === '', 'panel closed → rail back');
-c.atCourseOpenGames(); c.renderAtCourseRail(); ok(c._livePanelOpen === true && c.rail().className === 'tucked', 'Games opens panel → rail tucks');
+c.toggleLivePanel(); c.renderAtCourseRail(); ok(c._livePanelOpen === true && c.rail().className === 'tucked', 'opening the Live Panel (from the card, not the rail) still auto-tucks the rail');
 // 13. Test mode can't get stuck: legacy '1' flag and >4h-old flags are ignored + cleared
 c = setup({ forced: 'legacy', pos: home }); await c.refreshAtCourse(); await flush();
 ok(!c.rail() && !c.store.has('bf_atcourse_force'), "legacy '1' flag cleared, real location used");
