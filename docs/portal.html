@@ -273,6 +273,17 @@ body {
 #at-course-rail .acr-btn:active { background: rgba(255,255,255,0.12); }
 #at-course-rail .acr-ico { font-size: 1.3rem; line-height: 1.1; }
 #at-course-rail .acr-lbl { font-size: 0.54rem; font-weight: 800; letter-spacing: 0.02em; opacity: 0.9; }
+/* Dev-88 — tapping the rail's ⛳ distance pill opens this small floating
+   card (position set in JS, anchored beside the rail) instead of doing
+   nothing, per Brian: "it just seems like it should be an action." */
+#at-course-loc-detail { position: fixed; z-index: 151; width: 190px; background: rgba(6,61,50,0.97);
+  border: 1px solid rgba(245,200,66,0.5); border-radius: 12px; padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+#at-course-loc-detail .acld-close { position: absolute; top: 4px; right: 7px; background: none; border: none;
+  color: rgba(255,255,255,0.5); font-size: 0.85rem; cursor: pointer; font-family: inherit; padding: 2px; }
+#at-course-loc-detail .acld-venue { color: #F5C842; font-weight: 800; font-size: 0.8rem; margin: 0 14px 3px 0; line-height: 1.3; }
+#at-course-loc-detail .acld-dist { color: #fff; font-size: 0.74rem; opacity: 0.85; margin-bottom: 9px; }
+#at-course-loc-detail .acld-map { display: block; text-align: center; padding: 7px 0; border-radius: 8px;
+  background: rgba(245,200,66,0.18); color: #F5C842; text-decoration: none; font-size: 0.76rem; font-weight: 800; font-family: inherit; }
 /* Dev-87 — games "competition seal" watermark (see gamesSealWatermarkHtml) */
 .event-card.has-games { isolation: isolate; }
 .games-seal-layer { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; z-index: -1; }
@@ -4876,6 +4887,7 @@ let _atCourseTucked = false;
 let _atCourseInit = false;
 let _atCourseScrollTimer = null;
 let _atCoursePanelPeek = false;   // grip tapped while the Live Panel is open → show anyway (resets when the panel toggles)
+let _atCourseLocDetailOpen = false; // Dev-88 — the ⛳ distance pill's popover, toggled by atCourseToggleLocDetail()
 function atCourseEnabled() { return !!currentPlayer && AT_COURSE_BETA_PLAYERS.includes(currentPlayer); }
 // Test mode is time-limited (v4.7.8): the flag stores when it was switched
 // on and lapses after AT_COURSE_TEST_HOURS, so it can never get stuck on a
@@ -4957,6 +4969,54 @@ function atCourseOpenGames() {
   if (!_livePanelOpen) toggleLivePanel();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+// Dev-88 — Video/Upload quick-capture from the rail. Reuses the card-photo
+// sheet's own handler (cardPhotoCameraPicked) and its already-in-the-DOM
+// hidden inputs rather than opening the sheet first — same upload pipeline
+// (event_photos, not BFE memories), just a one-tap entry point instead of
+// opening the full Photo sheet only to then tap Video or Upload inside it.
+// cardPhotoCameraPicked reads _cardPhotoEvt, normally set by openCardPhotoSheet,
+// so this sets it directly instead.
+function atCourseQuickCapture(id, kind) {
+  const evt = eventData.find(e => String(e.id) === String(id));
+  if (!evt) { showToast('No event selected', true); return; }
+  _cardPhotoEvt = evt;
+  const inputId = kind === 'video' ? 'card-video-camera-input' : 'card-photo-upload-input';
+  document.getElementById(inputId)?.click();
+}
+// Dev-88 — the ⛳ distance pill was previously inert (outside test mode).
+// Brian: "it just seems like it should be an action." Tap opens a small
+// popover with the venue name, a more precise distance, and a Maps link —
+// deliberately not the same thing the rail's own "Course" button opens
+// (the full tee/scorecard viewer), so this isn't just another duplicate.
+function atCourseToggleLocDetail() {
+  _atCourseLocDetailOpen = !_atCourseLocDetailOpen;
+  renderAtCourseLocDetail();
+}
+function renderAtCourseLocDetail() {
+  let panel = document.getElementById('at-course-loc-detail');
+  const railEl = document.getElementById('at-course-rail');
+  if (!_atCourse || _atCourse.forced || !_atCourseLocDetailOpen || !railEl) {
+    if (panel) panel.remove();
+    return;
+  }
+  if (!panel) { panel = document.createElement('div'); panel.id = 'at-course-loc-detail'; document.body.appendChild(panel); }
+  const v = _atCourse.venue;
+  const distMi = _atCourse.distM / 1609.34;
+  const distLabel = distMi < 0.1 ? Math.round(_atCourse.distM * 3.28084) + ' ft' : distMi.toFixed(2) + ' mi';
+  const mapLink = (v && v.lat != null && v.lng != null)
+    ? `<a class="acld-map" href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank" rel="noopener">📍 Open in Maps</a>`
+    : `<div style="font-size:0.7rem;color:rgba(255,255,255,0.5)">No saved coordinates for this venue yet.</div>`;
+  panel.innerHTML = `
+    <button class="acld-close" onclick="atCourseToggleLocDetail()" title="Close">✕</button>
+    <div class="acld-venue">⛳ ${escapeHtml(v ? v.name : _atCourse.evt.name)}</div>
+    <div class="acld-dist">${distLabel} from ${escapeHtml(_atCourse.evt.name)}</div>
+    ${mapLink}`;
+  const rect = railEl.getBoundingClientRect();
+  const onLeft = railEl.classList.contains('left');
+  panel.style.top = Math.max(60, Math.min(window.innerHeight - 140, rect.top)) + 'px';
+  if (onLeft) { panel.style.left = (rect.right + 10) + 'px'; panel.style.right = 'auto'; }
+  else { panel.style.right = (window.innerWidth - rect.left + 10) + 'px'; panel.style.left = 'auto'; }
+}
 // Dev-87 — drag the rail anywhere: grab the gold tab or the ⛳ chip, move it,
 // let go. It snaps to the nearest side (left/right) at the drop height, and
 // the spot is remembered on this device (localStorage — a per-phone
@@ -5014,17 +5074,23 @@ function toggleAtCourseRail() {
   if (_atCourseJustDragged) return;
   if (_livePanelOpen) _atCoursePanelPeek = !_atCoursePanelPeek;
   else _atCourseTucked = !_atCourseTucked;
+  _atCourseLocDetailOpen = false; // tucking/peeking the rail closes any open location popover too
   renderAtCourseRail();
 }
 function renderAtCourseRail() {
   let el = document.getElementById('at-course-rail');
-  if (!_atCourse) { if (el) el.remove(); return; }
+  if (!_atCourse) { if (el) el.remove(); renderAtCourseLocDetail(); return; }
   if (!el) { el = document.createElement('div'); el.id = 'at-course-rail'; document.body.appendChild(el); }
   const evt = _atCourse.evt;
   const id = String(evt.id).replace(/'/g, "\\'");
   const bfe = isBFEBackedCard(evt);
   const live = getLiveEvent();
   const gamesOn = !!(live && live.id === evt.id);
+  // Dev-88 — the Live Panel's own "📸 Photos" section already has Photo/
+  // Video/Upload/Note inline the moment it's open for this event, so the
+  // rail no longer offers its own copies of those four right alongside it
+  // (Yardage/Rules/Course have no Live Panel equivalent, so they stay).
+  const livePanelHere = _livePanelOpen && gamesOn;
   const btn = (icon, label, onclick) => `<button class="acr-btn" onclick="${onclick}"><span class="acr-ico">${icon}</span><span class="acr-lbl">${label}</span></button>`;
   const where = _atCourse.forced ? 'TEST ✕' : `${(_atCourse.distM / 1609.34).toFixed(1)} mi`;
   // While the Live Panel is open the rail tucks itself — the panel already has
@@ -5036,15 +5102,18 @@ function renderAtCourseRail() {
   el.innerHTML = `
     <button class="acr-grip" onclick="toggleAtCourseRail()" onpointerdown="atCourseDragStart(event)" title="Tap: ${tucked ? 'show' : 'tuck away'} · Drag: move">${(el.classList.contains('left') ? !tucked : tucked) ? '‹' : '›'}</button>
     <div class="acr-col">
-      <div class="acr-status" onpointerdown="atCourseDragStart(event)" ${_atCourse.forced ? 'onclick="atCourseExitTest()"' : ''} title="${_atCourse.forced ? 'Test mode — tap to turn off' : escapeHtml(evt.name) + ' · drag to move'}"><span style="font-size:1rem">⛳</span><span>${where}</span></div>
-      ${!bfe ? btn('📷', 'Photo', `openCardPhotoSheet('${id}')`) : ''}
-      ${!bfe ? btn('💬', 'Note', `openCardNoteSheet('${id}')`) : ''}
+      <div class="acr-status" onpointerdown="atCourseDragStart(event)" onclick="${_atCourse.forced ? 'atCourseExitTest()' : 'atCourseToggleLocDetail()'}" title="${_atCourse.forced ? 'Test mode — tap to turn off' : 'Tap for location detail · drag to move'}"><span style="font-size:1rem">⛳</span><span>${where}</span></div>
+      ${(!bfe && !livePanelHere) ? btn('📷', 'Photo', `openCardPhotoSheet('${id}')`) : ''}
+      ${(!bfe && !livePanelHere) ? btn('🎥', 'Video', `atCourseQuickCapture('${id}','video')`) : ''}
+      ${(!bfe && !livePanelHere) ? btn('⬆️', 'Upload', `atCourseQuickCapture('${id}','upload')`) : ''}
+      ${(!bfe && !livePanelHere) ? btn('💬', 'Note', `openCardNoteSheet('${id}')`) : ''}
       ${btn('📏', 'Yardage', 'openYardageModal()')}
       ${btn('📖', 'Rules', 'openRulesModal()')}
       ${btn('🗺️', 'Course', `openVenueViewerModal('${id}')`)}
       ${gamesOn ? btn('🏆', 'Games', 'atCourseOpenGames()') : ''}
     </div>`;
   atCourseApplyPos(el); // again now that the buttons exist, so the height clamp is exact
+  renderAtCourseLocDetail();
 }
 function atCourseInitOnce() {
   if (_atCourseInit) return;
@@ -5739,7 +5808,11 @@ function buildEventCard(evt, isPast) {
       <span style="pointer-events:none;margin-left:auto;font-size:0.82rem;color:rgba(255,255,255,0.5)">Players ›</span>
     </button>
     <div class="icon-action-row" style="justify-content:flex-start;gap:26px;margin:10px 4px 2px">
-      ${!isBFEBackedCard(evt) ? `
+      <!-- Dev-88 — Photos/Notes now also drop out while THIS event's Live
+           Panel is open, same as Score already did: the Live Panel's own
+           "📸 Photos" section has Photo/Video/Upload/Note inline right there,
+           so the card's copies were a straight duplicate, not an alternative. -->
+      ${(!isBFEBackedCard(evt) && !(_livePanelOpen && getLiveEvent()?.id === evt.id)) ? `
       <button class="icon-action-btn" onclick="openCardPhotoSheet('${evt.id}')">
         <span class="icon-action-badge secondary">📷</span>
         <span class="icon-action-label">Photos</span>
@@ -5754,7 +5827,7 @@ function buildEventCard(evt, isPast) {
            not this card's own event_photos/notes thread (spec's whole reason
            for the split: a player capturing mid-round shouldn't be able to
            create a memory that lives outside the WCRP by accident). -->
-      ${!isBFEBackedCard(evt) ? `
+      ${(!isBFEBackedCard(evt) && !(_livePanelOpen && getLiveEvent()?.id === evt.id)) ? `
       <button class="icon-action-btn" onclick="openCardNoteSheet('${evt.id}')">
         <span class="icon-action-badge secondary">💬</span>
         <span class="icon-action-label">Notes</span>
