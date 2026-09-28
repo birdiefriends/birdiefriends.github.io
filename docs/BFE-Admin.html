@@ -140,54 +140,6 @@
     </div>
     <div id="eventsListBody"><p class="subtle">Click Refresh to see what's currently stored.</p></div>
   </section>
-  <!-- ── Membership HCP Sync (Dev-86 — bf_players bulk admin tool) ─────── -->
-  <section class="card">
-    <h2>Membership HCP review &amp; sync <span class="badge">admin tool</span></h2>
-    <p class="hint">One screen to review and fix EVERY member's HCP in <code>bf_players</code> (the central, D1-native HCP record — separate from any single event's roster) — not just whoever GHIN matches. Paste the whole GHIN roster page below (Ctrl+A, Ctrl+C on ghin.com is fine — this searches the whole pasted blob, same matching approach as the per-event GHIN paste in Setup) and click Preview: every active BF member is listed with whatever GHIN match was found AND their current <code>bf_players</code> value/source, side by side. A GHIN match pre-fills the row with <code>ghin_import</code> (gospel — always applied, never flagged, clears any self-report lock). A member with no GHIN profile (someone who tracks their own HCP another way) is listed too, showing their last known D1 value — pick <code>manual</code> or <code>estimated</code> from the row's Source dropdown and enter their number yourself; nothing is written for a row you leave unchecked. Requires the commissioner PIN below (same as other write actions on this page) for every source except player self-report, which isn't available from this admin screen.</p>
-    <div class="row">
-      <div><label for="hcpSyncPin">Host PIN</label><input type="password" id="hcpSyncPin" placeholder="uses the PIN above if left blank" style="width:120px"></div>
-    </div>
-    <textarea id="hcpSyncPasteInput" rows="8" style="width:100%;font-family:monospace;font-size:0.8rem;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="Paste the whole GHIN page here"></textarea>
-    <div class="btnbar">
-      <button type="button" id="hcpSyncPreviewBtn">Preview matches</button>
-    </div>
-    <p class="status" id="hcpSyncStatus"></p>
-    <div id="hcpSyncReviewWrap" style="display:none">
-      <p class="hint">Review before writing anything. Uncheck a row to skip it, fix a name or HCP by editing the field directly, or type an HCP in and pick a Source for a row that didn't match automatically (e.g. a non-GHIN player's self-tracked number). "Current D1" shows what's already stored, for comparison — it's not editable here. Nothing is written to <code>bf_players</code> until you click Submit below.</p>
-      <div class="row" style="align-items:center">
-        <div><label for="hcpSyncFilterSelect">Show</label>
-          <select id="hcpSyncFilterSelect">
-            <option value="all">All players</option>
-            <option value="matched">Matched (GHIN found)</option>
-            <option value="unmatched">Unmatched (no GHIN match)</option>
-          </select>
-        </div>
-        <div><label for="hcpSyncActiveFilterSelect">Status</label>
-          <select id="hcpSyncActiveFilterSelect">
-            <option value="all">All statuses</option>
-            <option value="active">Active only</option>
-            <option value="inactive">Inactive only</option>
-          </select>
-        </div>
-        <p class="subtle" id="hcpSyncReviewCount" style="align-self:flex-end;margin-bottom:8px"></p>
-      </div>
-      <table id="hcpSyncTable">
-        <thead><tr>
-          <th style="width:6%">Include</th>
-          <th style="width:26%">Name</th>
-          <th style="width:12%">HCP</th>
-          <th style="width:13%">Source</th>
-          <th style="width:16%">Current D1</th>
-          <th>Note</th>
-        </tr></thead>
-        <tbody id="hcpSyncBody"></tbody>
-      </table>
-      <div class="btnbar">
-        <button type="button" id="hcpSyncSubmitBtn">Submit checked rows to bf_players</button>
-      </div>
-      <p class="status" id="hcpSyncSubmitStatus"></p>
-    </div>
-  </section>
   <!-- ── Generate test scorecards (Dev-74 — testing tool) ─────────────── -->
   <section class="card">
     <h2>Generate test scorecards <span class="badge">testing tool</span></h2>
@@ -292,15 +244,13 @@
     </div>
     <div id="rosterFetchStatus" class="status"></div>
     <table id="rosterTable">
-      <thead><tr><th style="width:24%">Name</th><th style="width:20%">Email</th><th>HCP</th><th style="width:24%">Last known (on file)</th><th style="width:18%">Withdrew?</th><th></th></tr></thead>
+      <thead><tr><th style="width:32%">Name</th><th style="width:26%">Email</th><th>HCP</th><th style="width:22%">Withdrew?</th><th></th></tr></thead>
       <tbody id="rosterBody"></tbody>
     </table>
     <div class="btnbar">
       <button type="button" class="secondary" id="addPlayerBtn">+ Add player manually</button>
       <button type="button" class="secondary" id="ghinPasteToggleBtn">📋 Paste GHIN list</button>
-      <button type="button" class="secondary" id="refreshLastKnownBtn">🔄 Refresh last known HCP</button>
       <span class="subtle" id="rosterCount"></span>
-      <span class="subtle" id="rosterLastKnownStatus"></span>
     </div>
     <div id="ghinPastePanel" style="display:none;margin-top:10px;padding:10px;border:1.5px dashed var(--line);border-radius:8px;background:var(--bg)">
       <p class="hint" style="margin:0 0 8px">Paste the whole GHIN roster page here (Ctrl+A, Ctrl+C on ghin.com is fine — this searches the whole pasted blob, not specific rows/columns, since the exact plain-text layout varies by browser). Matches each name already entered above and grabs the nearest handicap-looking number after it.</p>
@@ -1380,7 +1330,6 @@ function addPlayerRow(name = '', email = '', hcp = '', withdrawn = false, withdr
     <td><input type="text" class="p-name" value="${name}" placeholder="Player name"></td>
     <td><input type="text" class="p-email" value="${email}" placeholder="Email"></td>
     <td><input type="number" class="p-hcp" value="${hcp}" placeholder="HCP" style="width:90px"></td>
-    <td class="subtle p-lastknown">—</td>
     <td>
       <label style="display:flex;align-items:center;gap:5px;white-space:nowrap">
         <input type="checkbox" class="p-withdrawn" style="width:auto" ${withdrawn ? 'checked' : ''}>
@@ -1414,64 +1363,6 @@ function readRosterInput() {
     return { name, email, hcp, withdrawn, withdrawnNote: withdrawnNote || null };
   }).filter(p => p.name);
 }
-// ── Roster HCP transparency (Dev-86, 2026-09-24) ──────────────────────────
-// Brian's revised design: no player self-report at all. Instead, the Host
-// building THIS event's roster (above) sees the master bf_players record for
-// each invited player — its value, source, and date — right next to the HCP
-// field they're typing into, so a gap (never touched, or deliberately
-// no_hcp) is obvious before the round instead of discovered mid-event. This
-// is read-only against bf_players: the Host's own HCP entry in the roster
-// table stays exactly what it's always been — saved with this event's config
-// only (bfe_event_config), never written back to bf_players. Reuses
-// loadExistingPlayers()/findExistingPlayer() from the Membership HCP sync
-// tool below rather than duplicating that fetch+match logic.
-function formatLastKnownHcp(existingPlayer) {
-  if (!existingPlayer || existingPlayer.hcp_source === null || existingPlayer.hcp_source === undefined) {
-    return { text: 'No HCP on file yet', gap: true };
-  }
-  // no_hcp is a deliberate commissioner call to withhold a number, not an
-  // oversight — still a gap the Host needs to know about before the round,
-  // but worded differently so it doesn't read as "nobody's looked at this."
-  if (existingPlayer.hcp_source === 'no_hcp') {
-    return { text: 'Deliberately no HCP on file', gap: true };
-  }
-  if (existingPlayer.current_hcp === null || existingPlayer.current_hcp === undefined) {
-    return { text: 'No HCP on file yet', gap: true };
-  }
-  // D1 datetime('now') is UTC with no tz suffix — same parse used elsewhere
-  // in this project (portal.html's hcpNudgeIsDue) to avoid local-timezone
-  // misreads.
-  const dateStr = existingPlayer.updated_at
-    ? new Date(existingPlayer.updated_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : null;
-  return {
-    text: `${existingPlayer.current_hcp} (${existingPlayer.hcp_source}${dateStr ? ' — ' + dateStr : ''})`,
-    gap: false
-  };
-}
-function renderRosterLastKnownCell(existingPlayer) {
-  const { text, gap } = formatLastKnownHcp(existingPlayer);
-  return gap ? `⚠️ ${text}` : text;
-}
-async function refreshRosterLastKnownHcp() {
-  const statusEl = document.getElementById('rosterLastKnownStatus');
-  if (statusEl) statusEl.textContent = 'Checking last known HCP…';
-  try {
-    const existing = await loadExistingPlayers();
-    [...rosterBody.querySelectorAll('tr')].forEach(tr => {
-      const cell = tr.querySelector('.p-lastknown');
-      if (!cell) return;
-      const name = tr.querySelector('.p-name').value.trim();
-      if (!name) { cell.innerHTML = '—'; return; }
-      const player = findExistingPlayer(existing, null, name);
-      cell.innerHTML = renderRosterLastKnownCell(player);
-    });
-    if (statusEl) statusEl.textContent = '';
-  } catch (e) {
-    if (statusEl) statusEl.textContent = 'Could not load last known HCP: ' + e.message;
-  }
-}
-document.getElementById('refreshLastKnownBtn').addEventListener('click', refreshRosterLastKnownHcp);
 function bfeGetAnswer(answers, keys) {
   for (const key of keys) {
     for (const ans of Object.values(answers || {})) {
@@ -1569,296 +1460,6 @@ document.getElementById('ghinPasteCancelBtn').addEventListener('click', () => {
   document.getElementById('ghinPastePanel').style.display = 'none';
 });
 document.getElementById('ghinPasteApplyBtn').addEventListener('click', ghinApplyPaste);
-
-// ── Membership HCP Sync (Dev-86) — bulk-refresh bf_players against a
-// fresh GHIN paste, for the whole active membership, not just one event's
-// roster. Reuses the SAME name/GHIN-name matching approach as
-// ghinApplyPaste above (loadGhinNameMap + nearest-number-after-name), but
-// matches against the full Membership list instead of just the current
-// roster rows, and writes each match through to the new bf_players table
-// (POST /bfe/players/resolve then PATCH .../hcp, source: ghin_import)
-// instead of a Setup roster input field. Sequential, not parallel — this
-// is an occasional admin action against ~30 people, not a hot path, and
-// sequential calls are much easier to reason about if one fails partway.
-async function loadAllMembers() {
-  const subs = await jfFetchSubmissions(MEMBER_FORM_ID, JF_FILTER);
-  return subs.map(s => {
-    const a = s.answers || {};
-    const first = bfeGetAnswer(a, ['First Name', 'name', 'firstName']);
-    const last = bfeGetAnswer(a, ['Last Name', 'lastname', 'lastName']);
-    const fullName = [first, last].filter(Boolean).join(' ').trim();
-    const ghinName = bfeGetAnswer(a, ['GHIN Name', 'ghinName', 'ghinname']);
-    // "Active" question on Member Sign Up holds exactly "Active" or
-    // "InActive" (confirmed against the live form) — treat anything else
-    // (blank, a future third value) as inactive rather than assume active,
-    // since the whole point of this flag is to keep stale members out of
-    // bulk HCP writes by default.
-    const active = bfeGetAnswer(a, ['Active']).trim().toLowerCase() === 'active';
-    return { submissionId: s.id, name: fullName, ghinName, active };
-  }).filter(m => m.name);
-}
-// Dev-86 addition (2026-09-23): the original bulkHcpSyncApply() wrote
-// straight from the parsed paste to bf_players with no review step — same
-// gap Brian flagged against this tool specifically ("needs the same player
-// edit UI that exists," referring to the editable name/HCP roster table in
-// section 3 above). Split into two steps: bulkHcpSyncPreview() only parses
-// and matches, rendering an editable table (same addPlayerRow-style
-// name/HCP inputs, plus an Include checkbox per row) — nothing is written
-// yet. bulkHcpSyncSubmit() then writes ONLY the checked rows, using
-// whatever name/HCP is in the field at submit time, so a bad auto-match,
-// a typo'd name, or a wrong nearby number can be fixed or excluded before
-// anything touches D1.
-//
-// Dev-86 addition #2 (2026-09-24): Brian flagged that a non-GHIN player
-// (self-tracked HCP, e.g. Jeremy Burkett) shows up as an empty "not found"
-// row with no way to tell what's already stored, and no way to actually
-// enter their number here (every write was hardcoded to ghin_import). This
-// tool is now the one screen for EVERY member's HCP, not just GHIN matches:
-// each row also loads its current bf_players value ("Current D1" column,
-// display-only) and carries its own Source dropdown (ghin_import / manual /
-// estimated — player_weekly isn't offered here since that's the player's
-// own self-report, not an admin action) so a non-GHIN player's number can
-// be entered as `manual` right alongside everyone else's GHIN refresh.
-const hcpSyncBody = document.getElementById('hcpSyncBody');
-async function loadExistingPlayers() {
-  const res = await fetch(`${jfWorkerBase()}/bfe/players`);
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'could not load bf_players');
-  const bySubmissionId = {}, byName = {};
-  (json.players || []).forEach(p => {
-    if (p.jotform_submission_id) bySubmissionId[p.jotform_submission_id] = p;
-    if (p.name) byName[p.name.trim().toLowerCase()] = p;
-  });
-  return { bySubmissionId, byName };
-}
-function findExistingPlayer(existing, submissionId, name) {
-  return (submissionId && existing.bySubmissionId[submissionId])
-    || existing.byName[(name || '').trim().toLowerCase()]
-    || null;
-}
-function formatCurrentD1(existingPlayer) {
-  if (!existingPlayer || existingPlayer.hcp_source === null || existingPlayer.hcp_source === undefined) {
-    return 'none yet'; // no bf_players row, or one nobody has touched
-  }
-  // no_hcp is a DELIBERATE commissioner decision to withhold a number
-  // (e.g. Chauncey Lutte — one BFSeries event, not enough to estimate),
-  // distinct from "nobody's looked at this player yet" — say so plainly
-  // rather than showing the same "none yet" as a genuinely untouched row.
-  if (existingPlayer.hcp_source === 'no_hcp') return 'No HCP (deliberate)';
-  if (existingPlayer.current_hcp === null || existingPlayer.current_hcp === undefined) return 'none yet';
-  return `${existingPlayer.current_hcp} (${existingPlayer.hcp_source})`;
-}
-// `included` and `matched` are separate on purpose: `included` only drives
-// the checkbox's starting state (checked for an auto-match, unchecked
-// otherwise) and can be freely toggled by Brian afterward; `matched` is a
-// fixed record of whether the GHIN paste actually found this member, used
-// only by the Show filter below, and never changes even if he manually
-// checks an unmatched row back in or unchecks a matched one.
-const HCP_SYNC_SOURCE_OPTIONS = [
-  ['ghin_import', 'GHIN import'],
-  ['manual', 'Manual'],
-  ['estimated', 'Estimated'],
-  ['no_hcp', 'No HCP']
-];
-function addHcpSyncRow(submissionId, name, hcp, included, note, matched, active, source, currentDisplay) {
-  const tr = document.createElement('tr');
-  tr.dataset.submissionId = submissionId || '';
-  tr.dataset.matched = matched ? 'true' : 'false';
-  tr.dataset.active = active ? 'true' : 'false';
-  const sourceOptionsHtml = HCP_SYNC_SOURCE_OPTIONS
-    .map(([val, label]) => `<option value="${val}" ${val === source ? 'selected' : ''}>${label}</option>`)
-    .join('');
-  tr.innerHTML = `
-    <td><input type="checkbox" class="s-include" style="width:auto" ${included ? 'checked' : ''}></td>
-    <td><input type="text" class="s-name" value="${name}">${active ? '' : ' <span class="subtle">(inactive)</span>'}</td>
-    <td><input type="number" class="s-hcp" value="${hcp === undefined || hcp === null ? '' : hcp}" step="0.1" style="width:90px"></td>
-    <td><select class="s-source">${sourceOptionsHtml}</select></td>
-    <td class="subtle">${currentDisplay || ''}</td>
-    <td class="subtle">${note || ''}</td>`;
-  const hcpInput = tr.querySelector('.s-hcp');
-  const sourceSelect = tr.querySelector('.s-source');
-  // No HCP means "deliberately no number" — disable the field so it's
-  // visually obvious it isn't being used, and clear it so a leftover
-  // typed/parsed value can't be confused for one that's actually sent
-  // (submit forces hcp to null for this source regardless, but a stale
-  // number sitting in a disabled field reads as a bug even though it isn't one).
-  const syncHcpFieldToSource = () => {
-    const isNoHcp = sourceSelect.value === 'no_hcp';
-    hcpInput.disabled = isNoHcp;
-    if (isNoHcp) hcpInput.value = '';
-  };
-  sourceSelect.addEventListener('change', syncHcpFieldToSource);
-  syncHcpFieldToSource(); // in case this row was rendered with source already set to no_hcp
-  hcpSyncBody.appendChild(tr);
-}
-async function bulkHcpSyncPreview() {
-  const raw = document.getElementById('hcpSyncPasteInput').value;
-  const statusEl = document.getElementById('hcpSyncStatus');
-  const reviewWrap = document.getElementById('hcpSyncReviewWrap');
-  reviewWrap.style.display = 'none';
-  hcpSyncBody.innerHTML = '';
-  document.getElementById('hcpSyncSubmitStatus').textContent = '';
-  if (!raw || !raw.trim()) { statusEl.className = 'status err'; statusEl.textContent = 'Nothing pasted.'; return; }
-  statusEl.className = 'status info';
-  statusEl.textContent = 'Loading membership…';
-  let members;
-  try {
-    members = await loadAllMembers();
-  } catch (e) {
-    statusEl.className = 'status err';
-    statusEl.textContent = 'Could not load membership: ' + e.message;
-    return;
-  }
-  statusEl.textContent = 'Loading current bf_players values…';
-  // Failing to load current values shouldn't block the whole preview — the
-  // GHIN matching still works, it just won't have a "Current D1" reference
-  // for comparison. Fail soft, not fatal.
-  let existing = { bySubmissionId: {}, byName: {} };
-  let currentValuesLoaded = true;
-  try {
-    existing = await loadExistingPlayers();
-  } catch (e) {
-    currentValuesLoaded = false;
-  }
-  const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  let matchedCount = 0;
-  statusEl.textContent = `Matching ${members.length} members…`;
-  members
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .forEach(m => {
-      const existingPlayer = findExistingPlayer(existing, m.submissionId, m.name);
-      const currentDisplay = formatCurrentD1(existingPlayer);
-      const searchTerms = [m.name];
-      if (m.ghinName) searchTerms.push(m.ghinName);
-      let idx = -1, matchedTerm = m.name;
-      for (const term of searchTerms) {
-        const found = raw.search(new RegExp(escapeRegex(term), 'i'));
-        if (found !== -1) { idx = found; matchedTerm = term; break; }
-      }
-      // For an unmatched row, default the Source to whatever's already true
-      // of this player rather than always guessing 'manual' — a player
-      // already marked no_hcp (e.g. Chauncey Lutte) should stay defaulted
-      // to no_hcp, not get bumped to manual just because this tool doesn't
-      // know their GHIN status yet.
-      const unmatchedDefaultSource = (existingPlayer && existingPlayer.hcp_source === 'no_hcp') ? 'no_hcp' : 'manual';
-      if (idx === -1) {
-        // Not found in the paste — likely a non-GHIN player (or just missed
-        // this paste). Pre-fill the HCP field with their last known D1
-        // value (not blank) so it's visible and ready to edit, and leave
-        // unchecked — nothing changes unless Brian deliberately opts this
-        // row in.
-        addHcpSyncRow(
-          m.submissionId, m.name, existingPlayer ? existingPlayer.current_hcp : '', false,
-          'not found in paste — showing last D1 value; pick a Source and check to update',
-          false, m.active, unmatchedDefaultSource, currentDisplay
-        );
-        return;
-      }
-      const windowText = raw.slice(idx + matchedTerm.length, idx + matchedTerm.length + 300);
-      const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
-      const hcp = numMatches.map(n => parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
-      if (hcp === undefined) {
-        addHcpSyncRow(
-          m.submissionId, m.name, existingPlayer ? existingPlayer.current_hcp : '', false,
-          'name found but no HCP-looking number nearby', false, m.active, unmatchedDefaultSource, currentDisplay
-        );
-        return;
-      }
-      matchedCount++;
-      // Matched AND active auto-checks; matched-but-inactive is still shown
-      // (with its HCP pre-filled, in case Brian wants it) but starts
-      // unchecked — inactive members shouldn't get written by default just
-      // because their old GHIN Name still happens to match the paste.
-      addHcpSyncRow(
-        m.submissionId, m.name, hcp, m.active,
-        m.active ? 'matched' : 'matched — inactive member, unchecked by default',
-        true, m.active, 'ghin_import', currentDisplay
-      );
-    });
-  document.getElementById('hcpSyncReviewCount').textContent =
-    `${matchedCount} of ${members.length} members matched — review below, then submit.`;
-  reviewWrap.style.display = 'block';
-  document.getElementById('hcpSyncFilterSelect').value = 'all';
-  document.getElementById('hcpSyncActiveFilterSelect').value = 'all';
-  applyHcpSyncFilter();
-  statusEl.className = 'status ok';
-  statusEl.textContent = `Matched ${matchedCount} of ${members.length}`
-    + (currentValuesLoaded ? '' : ' (could not load current bf_players values — "Current D1" column is blank)')
-    + ' — nothing written yet, review the table below.';
-}
-function applyHcpSyncFilter() {
-  const mode = document.getElementById('hcpSyncFilterSelect').value;
-  const activeMode = document.getElementById('hcpSyncActiveFilterSelect').value;
-  let shown = 0;
-  hcpSyncBody.querySelectorAll('tr').forEach(tr => {
-    const isMatched = tr.dataset.matched === 'true';
-    const isActive = tr.dataset.active === 'true';
-    const matchOk = mode === 'all' || (mode === 'matched' && isMatched) || (mode === 'unmatched' && !isMatched);
-    const activeOk = activeMode === 'all' || (activeMode === 'active' && isActive) || (activeMode === 'inactive' && !isActive);
-    const show = matchOk && activeOk;
-    tr.style.display = show ? '' : 'none';
-    if (show) shown++;
-  });
-  return shown;
-}
-document.getElementById('hcpSyncFilterSelect').addEventListener('change', applyHcpSyncFilter);
-document.getElementById('hcpSyncActiveFilterSelect').addEventListener('change', applyHcpSyncFilter);
-async function bulkHcpSyncSubmit() {
-  const pin = document.getElementById('hcpSyncPin').value.trim() || hostPinValue();
-  const submitStatusEl = document.getElementById('hcpSyncSubmitStatus');
-  const rows = [...hcpSyncBody.querySelectorAll('tr')].filter(tr => tr.querySelector('.s-include').checked);
-  if (!rows.length) {
-    submitStatusEl.className = 'status err';
-    submitStatusEl.textContent = 'No rows checked — nothing to submit.';
-    return;
-  }
-  let updated = 0, flagged = 0;
-  const skipped = [];
-  const failed = [];
-  submitStatusEl.className = 'status info';
-  for (const tr of rows) {
-    const name = tr.querySelector('.s-name').value.trim();
-    const hcpRaw = tr.querySelector('.s-hcp').value;
-    const source = tr.querySelector('.s-source').value;
-    const submissionId = tr.dataset.submissionId;
-    // no_hcp is the one source where a blank HCP field is correct, not a
-    // mistake — it means "deliberately no number" (the Worker also forces
-    // this to null server-side regardless of what's sent, but sending null
-    // explicitly here keeps the request honest).
-    if (!name) { skipped.push(name || '(blank name)'); continue; }
-    if (hcpRaw === '' && source !== 'no_hcp') { skipped.push(name); continue; }
-    const hcp = source === 'no_hcp' ? null : parseFloat(hcpRaw);
-    submitStatusEl.textContent = `Writing ${name}…`;
-    try {
-      const resolveRes = await fetch(`${jfWorkerBase()}/bfe/players/resolve`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jotform_submission_id: submissionId, name })
-      });
-      const resolveJson = await resolveRes.json();
-      if (!resolveJson.ok) throw new Error(resolveJson.error || 'resolve failed');
-      const playerId = resolveJson.player.id;
-      const hcpRes = await fetch(`${jfWorkerBase()}/bfe/players/${playerId}/hcp`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hcp, source, pin })
-      });
-      const hcpJson = await hcpRes.json();
-      if (!hcpRes.ok) throw new Error(hcpJson.error || `hcp update failed (${hcpRes.status})`);
-      updated++;
-      if (hcpJson.flagged) flagged++;
-    } catch (e) {
-      failed.push(`${name} (${e.message})`);
-    }
-  }
-  const parts = [`✓ ${updated} written to bf_players`];
-  if (skipped.length) parts.push(`⚠ ${skipped.length} skipped (blank name or HCP): ${skipped.join(', ')}`);
-  if (failed.length) parts.push(`✗ ${failed.length} failed to write: ${failed.join('; ')}`);
-  submitStatusEl.textContent = parts.join(' · ');
-  submitStatusEl.className = 'status ' + (failed.length ? 'err' : (skipped.length ? 'info' : 'ok'));
-}
-document.getElementById('hcpSyncPreviewBtn').addEventListener('click', bulkHcpSyncPreview);
-document.getElementById('hcpSyncSubmitBtn').addEventListener('click', bulkHcpSyncSubmit);
-
 function setRosterStatus(msg, kind) {
   const el = document.getElementById('rosterFetchStatus');
   if (!msg) { el.className = 'status'; el.textContent = ''; return; }
@@ -1935,8 +1536,7 @@ document.getElementById('fetchRosterBtn').addEventListener('click', async () => 
       if (!tr.querySelector('.p-name').value.trim() && !tr.querySelector('.p-email').value.trim() && !tr.querySelector('.p-hcp').value.trim()) tr.remove();
     });
     updateRosterCount();
-    setRosterStatus(`Pulled ${fetched.length} registrant(s) — ${added} added, ${updated} matched existing rows. HCP still needs to be set below.`, 'ok');
-    refreshRosterLastKnownHcp(); // fire-and-forget — fills the "Last known" column now that names are in
+    setRosterStatus(`Pulled ${fetched.length} registrant(s) — ${added} added, ${updated} matched existing rows. HCP still needs to be set below in Quick HCP.`, 'ok');
   } catch (e) {
     setRosterStatus('Fetch failed: ' + e.message, 'err');
   }
@@ -2858,7 +2458,6 @@ async function closeScorecardOnlyRound(round, base, pin, eventName, btn) {
       body: JSON.stringify({
         event_name: roundName, player: p.name, holes: p.sc.holes, total: p.sc.actualPoints,
         venue: round.venue || null,
-        input_type: 'points', round_key: 'bfe:' + roundName,  // Dev-88: holes are Stableford points, not strokes
       })
     }).catch(e => console.warn('scorecard persist failed for', p.name, e))));
     const results = players.map(p => ({
@@ -3002,7 +2601,7 @@ async function closeTeamRound(round, base, pin, eventName, btn) {
     }
     await Promise.allSettled(teams.filter(t => t.sc).map(t => fetch(base + '/scorecards', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_name: roundName, player: t.displayName, holes: t.sc.holes, total: t.sc.actualPoints, venue: round.venue || null, input_type: 'points', round_key: 'bfe:' + roundName })
+      body: JSON.stringify({ event_name: roundName, player: t.displayName, holes: t.sc.holes, total: t.sc.actualPoints, venue: round.venue || null })
     }).catch(e => console.warn('team scorecard persist failed for', t.displayName, e))));
     const engineInput = { teams: teams.map(t => ({ label: t.displayName, actualPoints: t.sc ? t.sc.actualPoints : 0, quotaIn: t.teamQuota, players: t.players })) };
     const scored = scoreRound({ engine: round.engine, engineParams: round.engineParams, influencers: [] }, engineInput, {});
@@ -3167,7 +2766,6 @@ document.getElementById('closeRoundBtn').addEventListener('click', async () => {
       body: JSON.stringify({
         event_name: roundName, player: p.name, holes: p.sc.holes, total: p.sc.actualPoints,
         venue: round.venue || null,
-        input_type: 'points', round_key: 'bfe:' + roundName,  // Dev-88: holes are Stableford points, not strokes
         wb_status: p.sc.wbStatus === 'Yes' ? 'kept' : (p.sc.wbStatus === 'No' ? 'lost' : null),
         wb_hole: p.sc.wbHole, wb_stroke: p.sc.wbStroke,
       })
