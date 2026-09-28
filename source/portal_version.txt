@@ -1,3 +1,6 @@
+v4.8.3 · 2026-09-28
+Deployed: 2026-09-28 (Venue Manager: (1) venue names can now be renamed in place -- tap the pencil next to a venue's name, edit, Save. Renaming only updates the Venue Manager entry itself; past events already saved under the old spelling aren't relinked automatically, and the app warns about that before saving. (2) The Weather Location panel now links straight to GC-API Lookup -- pick a course there and its coordinates fill in automatically, instead of only the manual Google-Maps-paste flow. Opening that link never calls GolfCourseAPI by itself; only tapping Search there does.)
+
 v4.8.2 · 2026-09-28
 Deployed: 2026-09-28 (Behind the scenes, no visible change: five places that read a gamed Gathering's own settings — the event-card "competition seal," which scoring mode the Live Panel captures, and the Live Panel's CTP/BirdieBall section switches and CTP holes — now all read through one shared function instead of five separate copies of the same check. Checked against the old behavior on 14,000 simulated Gatherings.)
 
