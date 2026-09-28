@@ -1,3 +1,13 @@
+v4.8.7 · 2026-09-28
+Deployed: 2026-09-28 (Real fix for the Live Panel/rail duplication: the Live Panel's own Photo/
+Video/Upload only exist now for a BFE-backed round -- a plain Gathering's capture lives on the
+"At the course" rail exclusively, whether the Live Panel is open or not. The event card's Photo/
+Score/Notes icons now come and go with whether this event is the live gamed round, not whether the
+Live Panel happens to be expanded -- available for any non-competitive event (that's still how a
+myMemory gets made for one), gone for the duration of a gamed round. Also: the rail's "at the
+course" radius shrank from ~1 mile to ~0.43 mi (700m) -- a mile was close enough to catch some
+players' own homes as "at the course" for any nearby venue.)
+
 v4.8.6 · 2026-09-28
 Deployed: 2026-09-28 (The "At the course" rail is no longer limited to one player -- it's now on for every signed-in, registered player, the same location-based, same-day-round rule as before. Opened up live during a real 4-player Gathering (Skins/CTP/BirdieBall) to bring everyone into the games flow together.)
 
