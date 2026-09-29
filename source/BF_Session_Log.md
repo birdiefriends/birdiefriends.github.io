@@ -5173,3 +5173,74 @@ as a sidebar while v4.8.11 was still publishing. Three changes:
   shape entirely now, covered in the new file instead.
 - Full suite: **19 files, 17,292 checks, all green.**
 - Client-side only (`portal.html`) — no `worker.js` changes.
+
+**18. BFE-Admin.html: 405-line Android AutoPush regression restored, HCP Sync default-include
+fixed, GHIN plus-handicap sign bug fixed in 3 places.** Same session, later that morning. Three
+separate issues found while Brian was hunting for the "complete BF membership HCP screen" from
+memory:
+- **Root cause of "the feature's gone."** Git history showed a commit titled `AutoPush from Android
+  - /storage/emulated/0/Download/BFE-Admin.html` (2026-09-28) had overwritten the live
+  `docs/BFE-Admin.html` with a stale copy from the phone's Download folder, deleting 405 lines in
+  one shot: the entire "Membership HCP review & sync" section (Dev-86, HTML + all its JS — the exact
+  feature Brian was searching for), the "Roster HCP transparency" last-known-HCP display (also
+  Dev-86), and a small Dev-88 scoring fix (`input_type`/`round_key` tagging on Stableford writes).
+  Confirmed via `git show --stat` on the offending commit and a byte-for-byte diff against the
+  commit immediately before it — nothing else in the file was touched. Restored by taking the
+  pre-overwrite commit's content wholesale (verified it's still the direct parent with no
+  intervening legitimate edits to reconcile) and republishing. **This is the second time an
+  Android-side stale AutoPush file has silently clobbered newer work** — flagged to Brian as a
+  standing workflow risk, not just a one-off mistake.
+- **HCP Sync default-include.** Brian: "if it's in the GHIN paste it should be included in the
+  submit" — a matched-but-inactive member previously defaulted unchecked (`m.active ? 'matched' :
+  'matched — inactive member, unchecked by default'`, `included` tied to `m.active`), forcing a
+  manual per-row click for every inactive player each time. Now every GHIN match auto-includes
+  regardless of active status; the `(inactive)` tag and the Status filter still surface it, they just
+  no longer gate what's checked. Unmatched rows (no GHIN hit at all) are unaffected.
+- **GHIN plus-handicap sign bug — Brian's own catch** ("Jeff Fick... +3 hcp... worried we are
+  recording him as 3 over scratch"). Confirmed real: GHIN denotes a plus (better-than-scratch)
+  handicap with a literal `+` prefix (`+3.2`), and all three GHIN-paste parsers in the codebase fed
+  the matched text straight through `parseFloat()`, which treats a leading `+` as a no-op sign —
+  `parseFloat('+3.2')` returns `3.2`, not `-3.2`. Since the quota formula is `36 - hcp*slope/113`, a
+  mis-signed plus player gets a quota well BELOW 36 instead of well above it — exactly backwards.
+  Fixed in all three sites (BFE-Admin.html's Membership HCP Sync and its per-event roster GHIN
+  paste, plus GS's own per-event GHIN paste in `BF_Golf_Scorer_8.html`) with the same one-line
+  pattern: a literal `+` in the matched text now flips the sign before parsing; a bare `-` still
+  parses negative as it always did. Jeff Fick hadn't played anything competitive yet, so no live data
+  needed correcting — but flagged that whatever's already in his `bf_players` row predates this fix
+  and should be re-verified once he does.
+- `BFE-Admin.html` (and `BF_Golf_Scorer_8.html`) sit outside the normal `source/`↔`docs/` mirrored
+  pipeline this project otherwise uses — `BFE-Admin.html` in particular has no `source/` copy at
+  all, historically published straight to `docs/` from Brian's own local copy. Delivered via the
+  same AutoPush→bridge path as everything else, `BFE-Admin.html` mapped flat to `docs/BFE-Admin.html`
+  per `bf_push.ps1`'s own `$FileMap` (confirmed by reading the script directly rather than guessing
+  the convention a second time — an earlier delivery this session had wrongly nested files under an
+  `AutoPush\source\` subfolder the push script never scans, since corrected).
+- Syntax-verified (`new Function()` over each file's extracted `<script>` block); not covered by the
+  automated `run_all.mjs` suite (neither file has a test harness).
+
+**19. Live Panel Post-Round Scorecard silently dropping My History marks (portal v4.8.13).** Same
+session, closing item — Brian: "the MyHistory scorecards have lost their classic per hole styling.
+Circles for Birdies, Squares for Bogey, etc." Traced to real data: queried
+`bf-experiences.birdiefriends01.workers.dev/scorecards?event=gathering:68` directly and found all
+four players' rows for Monday's "More Golf, Less Work Monday" gathering had `marks: null`. Root
+cause was in `submitScorecard()` — the Live Panel's own Post-Round Scorecard entry (what Brian
+actually used on-course, including proxy entry for his group), a separate code path from My
+History's Card Score Sheet (`submitCardScore()`) — which has always hardcoded `marks: null` in its
+strokes-mode POST body, never computing marks from par the way Card Score Sheet does even though the
+identical par-lookup chain (`csResolvePars`/`csMarkFromPar`/`BSGC_PARS`) was sitting right there and
+already working for the other entry surface. Fixed by having `submitScorecard()` resolve pars and
+compute marks the same way before sending, falling back to `null` only when the venue's par truly
+isn't known (unchanged from before). **Not retroactive** — Monday's four already-saved rows still
+have `marks: null` and need a re-save through either entry path to backfill; told Brian directly
+rather than implying this fix reaches back into stored data it doesn't touch.
+- `test_live_panel_9hole.mjs`: existing `submitScorecard` mock context didn't define
+  `csResolvePars`/`csMarkFromPar` (didn't exist as dependencies before this fix), so the existing
+  hole_count/hole_half assertions started throwing before reaching `fetch` — added stub versions
+  returning `null` (the correct behavior for this test's synthetic unrecognized venue) to unblock
+  them, then added a new, separate case running the REAL `csNormalizedVenueName`/`csResolvePars`/
+  `csMarkFromPar` functions (extracted from source, not hand-copied) against a real Blue Shamrock
+  round to prove marks actually populate — asserts par/birdie/double compute correctly per hole from
+  the real `BSGC_PARS` table. 15 → 23 checks in this file.
+- Full suite: **20 files, all green** (exact check count not re-tallied this entry — see
+  `run_all.mjs` output for the live figure).
+- Client-side only (`portal.html`) — no `worker.js` changes.
