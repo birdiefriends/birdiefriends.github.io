@@ -1,3 +1,12 @@
+v4.8.13 · 2026-09-29
+Deployed: 2026-09-29 (Bug fix: the Live Panel's own Post-Round Scorecard -- the entry path actually
+used on-course, including proxy entry for other players -- always sent marks: null, so every round
+scored through it lost My History's classic circle-for-birdie/square-for-bogey styling, even though
+Card Score Sheet's identical par lookup (csResolvePars/csMarkFromPar/BSGC_PARS) already existed and
+worked. Now computes marks the same way Card Score Sheet does, so both entry paths produce identical
+styling. Existing rounds already saved with null marks (e.g. Monday's "More Golf, Less Work Monday")
+aren't retroactively fixed by this -- they need a re-save through either entry path to backfill.)
+
 v4.8.12 · 2026-09-29
 Deployed: 2026-09-29 (Three event-card/rail cleanups: (1) the "At the course" rail now shows which
 round it's tied to -- a truncated name label on the rail itself, full name in its tooltip -- since
