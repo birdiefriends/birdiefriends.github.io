@@ -758,6 +758,15 @@
 
     <div class="row mt1 gap-sm" style="flex-wrap:wrap;align-items:center">
       <span style="font-size:0.8rem;color:var(--text-muted);font-style:italic">Roster fed from Groups tab. Edit HCPs and tee assignments in <a href="#" onclick="showTab('groups');return false" style="color:var(--accent)">1 · Groups</a>.</span>
+      <!-- Re-wired 2026-09-29 — this panel (and loadFromProfiles()/
+           openQuickHCPPanel() below) existed fully intact but had no button
+           calling them anywhere in the file; Brian couldn't find the "update
+           everyone's HCP" tool he remembered because it had genuinely become
+           unreachable, not misplaced. Loads EVERY active profile (not just
+           this event's Groups-tab roster) so it's a real bulk touch-up
+           across all players, morning-of. Confirms first if a roster is
+           already loaded, since it replaces player-list wholesale. -->
+      <button class="btn btn-secondary btn-sm" onclick="openQuickHCPFromButton()">🏌 Quick HCP Update (All Profiles)</button>
       <button class="btn btn-danger btn-sm" onclick="resetAll()" style="margin-left:auto">↺ Clear Event</button>
     </div>
 
@@ -4042,6 +4051,17 @@ function saveCurrentRosterToProfiles() {
   setTimeout(() => fb.remove(), 4000);
 }
 
+// Re-wired 2026-09-29 — the button on the Roster tab calls this, not
+// loadFromProfiles() directly, so it can guard against silently wiping out
+// an already-loaded event roster (Roster is normally fed from the Groups
+// tab per the note above the button). loadFromProfiles() itself is
+// unchanged — still the one that actually replaces player-list with every
+// active profile and opens the Quick HCP panel.
+function openQuickHCPFromButton() {
+  const hasRoster = document.getElementById('player-list').children.length > 0;
+  if (hasRoster && !confirm('This replaces the currently loaded roster with every active player from Profiles, so you can bulk-update HCPs. Continue?')) return;
+  loadFromProfiles();
+}
 function loadFromProfiles() {
   const profiles = getProfiles();
   const active = Object.values(profiles).filter(p => p.active);
