@@ -3576,7 +3576,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.0.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.1.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -5660,7 +5660,7 @@ function showToastWithUndo(message, undoFn) {
 // isolation:isolate card, so it sits above the card gradient but BEHIND all
 // card text/buttons (and the card itself stays overflow-visible for the
 // expanding who's-playing panel).
-const GAMES_SEAL_LABELS = { skins: 'SKINS', cttp: 'CTP', birdieball: 'BIRDIEBALL' };
+const GAMES_SEAL_LABELS = { skins: 'SKINS', cttp: 'CTP', birdieball: 'BIRDIEBALL', birdiepay: 'BIRDIE PAY' };
 function gamesSealSvg(games, uid) {
   const names = (games || []).map(g => GAMES_SEAL_LABELS[g] || String(g).toUpperCase());
   const ringText = `★ GAME ON ★ ${names.join(' · ')} `;
@@ -9192,7 +9192,7 @@ function buildLivePanel(evt) {
     <div class="live-section">
       <div class="live-section-header"><span class="lsh-icon">🏁</span>Host · Close &amp; Calculate</div>
       <div class="live-section-body">
-        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:10px;line-height:1.45">Once everyone's card is in: check scorecards, preview Skins/CTP/BirdieBall payouts, and post results to My History.</div>
+        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:10px;line-height:1.45">Once everyone's card is in: check scorecards, preview Skins/CTP/BirdieBall/Birdie payouts, and post results to My History.</div>
         <button class="sc-submit-btn" onclick="openGatheringCloseSheet(${evt.gatheringId})">🏁 Close &amp; Calculate</button>
       </div>
     </div>` : ''}
@@ -10670,7 +10670,7 @@ let _hostTemplates      = null;      // gathering templates for current host, lo
 // this MUST be populated before the list renders, not lazily on click.
 let _hostGamesByGathering = null;
 let _gamesFormGathering = null;       // gatheringId currently open in showGatheringGamesForm
-let _gamesFormSelected  = new Set();  // subset of ['skins','cttp','birdieball']
+let _gamesFormSelected  = new Set();  // subset of ['skins','cttp','birdieball','birdiepay']
 // Dev-86 round 3 — _gamesFormAllocations/%-allocation UI is retired. Brian:
 // "BirdieBall should also be a $/player payout, the balance going to Skins."
 // CTP and BirdieBall are now both fixed-dollar carve-outs off the same
@@ -10682,6 +10682,8 @@ let _gamesFormSelected  = new Set();  // subset of ['skins','cttp','birdieball']
 // carve-out, and Skins gets whatever is left after both (Brian's explicit
 // call on the funding model, rounds 2 and 3 combined).
 let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
+let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; // Birdie Payouts (Dev-89): flat $ per birdie, taken from the pot before Skins
+let _gamesFormBirdiepayPars = null; // 18 hole pars resolved for the Gathering's venue when the form opened (null = no par data on file)
 let _gamesFormBirdieballConfig = { dollar_per_player: null }; // BirdieBall's OWN per-player rate — distinct from the main $/player pot rate
 let _gamesFormPar3Holes = [];             // hole numbers (1-18) with par===3, from the venue's stored tee data
 let _gamesFormVenueParDataAvailable = false; // false -> no tee data on file, host picks holes manually (any 1-18)
@@ -14747,6 +14749,16 @@ function renderGatheringPayoutHtml(s) {
     else if (b.mode === 'longest') html += `<div style="font-size:0.78rem">Nobody kept it — held longest (#${esc(b.longest_hole)}, stroke ${esc(b.longest_stroke)}): ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)}${b.winners.length > 1 ? ' each' : ''}</div>`;
     else html += `<div style="font-size:0.78rem;color:var(--text-muted)">No answers recorded — ${money(b.given_back_each)} back to each player</div>`;
   }
+  if (s.birdiepay) {
+    const b = s.birdiepay;
+    html += label(`🐤 Birdie Payouts — ${money(b.per_birdie)}/birdie`);
+    if (b.no_par_data) html += `<div style="font-size:0.78rem;color:var(--text-muted)">No par data was saved for this game, so no birdies were counted</div>`;
+    else if (!b.count) html += `<div style="font-size:0.78rem;color:var(--text-muted)">No birdies made</div>`;
+    else {
+      html += b.birdies.map(x => line(`#${x.hole} ${esc(x.player)} <span style="color:var(--text-muted)">(${esc(x.strokes)} on a par ${esc(x.par)})</span>`, money(x.paid))).join('');
+      if (b.capped) html += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${b.count} birdies × ${money(b.per_birdie)} was more than the pot had left, so each paid ${money(b.paid_each)}</div>`;
+    }
+  }
   html += label('💰 Payouts');
   const rows = (s.payouts || []).filter(r => r.total > 0);
   html += rows.length ? rows.map(r => {
@@ -14754,6 +14766,7 @@ function renderGatheringPayoutHtml(s) {
     if (r.skins) parts.push('⛳' + money(r.skins));
     if (r.cttp) parts.push('🎯' + money(r.cttp));
     if (r.birdieball) parts.push('🐦' + money(r.birdieball));
+    if (r.birdiepay) parts.push('🐤' + money(r.birdiepay));
     if (r.given_back) parts.push('↩️' + money(r.given_back));
     return `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--green-light);border-radius:10px;padding:7px 12px;margin-bottom:5px">
       <span style="font-size:0.82rem;font-weight:600;color:var(--green-dark)">${esc(r.player)} <span style="font-weight:400;font-size:0.7rem;opacity:0.8">${parts.join(' ')}</span></span>
@@ -14881,7 +14894,7 @@ async function loadHistoryGameResults(key) {
       el.innerHTML = `
         <div style="background:rgba(255,255,255,0.55);border:1px dashed rgba(0,0,0,0.18);border-radius:10px;padding:10px 12px;margin-bottom:10px">
           <div style="font-size:0.78rem;font-weight:800;margin-bottom:2px">🎮 Games still open</div>
-          <div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:8px">Close to calculate Skins/CTP/BirdieBall payouts and post results here for everyone.</div>
+          <div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:8px">Close to calculate the payouts and post results here for everyone.</div>
           <button class="btn btn-primary btn-sm" style="width:100%" onclick="openGatheringCloseSheet(${Number(gid)})">🏁 Close &amp; Calculate</button>
         </div>`;
       return;
@@ -14983,8 +14996,12 @@ function gatheringGameDetailsBody(evt, config) {
     remaining -= cost;
     rows.push(row('🐦', 'BirdieBall', `$${(bb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot`));
   }
+  const bp = gatheringAddon(config, 'birdiepay');
+  if (bp) {
+    rows.push(row('🐤', 'Birdie Payouts', `$${(bp.dollar_per_birdie || 0).toFixed(2)} for every birdie, paid from the pot before Skins`));
+  }
   if ((config.legacy.games || []).includes('skins')) {
-    rows.push(row('⛳', 'Skins', `Gets what's left: $${Math.max(0, remaining).toFixed(2)} pot`));
+    rows.push(row('⛳', 'Skins', `Gets what's left: $${Math.max(0, remaining).toFixed(2)} pot${bp ? ', minus any birdie payouts' : ''}`));
   }
   return `
     <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px">
@@ -16581,7 +16598,8 @@ async function submitEditGathering(gatheringId) {
 const GATHERING_GAMES_META = {
   skins:      { label: 'Skins',      icon: '⛳' },
   cttp:       { label: 'CTP',        icon: '🎯' },
-  birdieball: { label: 'BirdieBall', icon: '🐦' }
+  birdieball: { label: 'BirdieBall', icon: '🐦' },
+  birdiepay:  { label: 'Birdie Payouts', icon: '🐤' }
 };
 async function showGatheringGamesForm(gatheringId) {
   const g = gatheringData.find(x => x.gatheringId === gatheringId);
@@ -16596,6 +16614,13 @@ async function showGatheringGamesForm(gatheringId) {
   _gamesFormBirdieballConfig = (existing && existing.birdieball_config)
     ? { ...existing.birdieball_config }
     : { dollar_per_player: null };
+  _gamesFormBirdiepayConfig = (existing && existing.birdiepay_config)
+    ? { dollar_per_birdie: existing.birdiepay_config.dollar_per_birdie }
+    : { dollar_per_birdie: null };
+  // Par table for Birdie Payouts — same resolver Card Score Sheet uses (Venue
+  // Manager's stored pars first, BSGC's built-in table as the fallback).
+  // Frozen into the saved config so Close never needs a second venue lookup.
+  _gamesFormBirdiepayPars = csResolvePars(g);
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; renderHostPanelList(); }; }
   const closeBtn = document.getElementById('host-sheet-close-btn');
@@ -16655,6 +16680,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
     </div>
     <div id="games-form-cttp-section">${gatheringGamesCttpSectionHtml()}</div>
     <div id="games-form-birdieball-section">${gatheringGamesBirdieballSectionHtml()}</div>
+    <div id="games-form-birdiepay-section">${gatheringGamesBirdiepaySectionHtml()}</div>
     <button class="host-cta-btn" style="margin-top:16px" id="btn-save-games"
       onclick="submitGatheringGames(${gatheringId})">💾 Save Games</button>
     ${existing ? `
@@ -16683,6 +16709,8 @@ function toggleGamesFormGame(key) {
       _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
     } else if (key === 'birdieball') {
       _gamesFormBirdieballConfig = { dollar_per_player: null };
+    } else if (key === 'birdiepay') {
+      _gamesFormBirdiepayConfig = { dollar_per_birdie: null };
     }
     // skins needs no per-game state at all — it's just whatever's left over.
   } else {
@@ -16704,6 +16732,8 @@ function toggleGamesFormGame(key) {
   if (cttpSection) cttpSection.innerHTML = gatheringGamesCttpSectionHtml();
   const birdieballSection = document.getElementById('games-form-birdieball-section');
   if (birdieballSection) birdieballSection.innerHTML = gatheringGamesBirdieballSectionHtml();
+  const birdiepaySection = document.getElementById('games-form-birdiepay-section');
+  if (birdiepaySection) birdiepaySection.innerHTML = gatheringGamesBirdiepaySectionHtml();
   updateGamesFormPotPreview();
 }
 // CTP section — $/hole rate + hole designation, restricted to Par-3 holes
@@ -16791,6 +16821,36 @@ function setGamesFormBirdieballDollarPerPlayer(val) {
   _gamesFormBirdieballConfig.dollar_per_player = parseFloat(val) || 0;
   updateGamesFormPotPreview();
 }
+// Birdie Payouts section (Dev-89, Brian: "a flat $ amount that gets subtracted
+// from the buy in pot"). One number — $ per birdie. A birdie (or better) pays
+// that flat amount to whoever made it; the total comes off the pot before
+// Skins. Needs the venue's par table to count birdies from gross scorecards,
+// so it warns up front if there isn't one on file.
+function gatheringGamesBirdiepaySectionHtml() {
+  if (!_gamesFormSelected.has('birdiepay')) return '';
+  const haveParData = Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18;
+  return `
+    <div class="host-form-field" id="games-form-birdiepay-field">
+      <label>🐤 Birdie Payouts</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.86rem">$</span>
+        <input type="number" id="games-form-bp-dpb" min="0.01" step="0.01"
+          value="${_gamesFormBirdiepayConfig.dollar_per_birdie || ''}" style="width:90px"
+          oninput="setGamesFormBirdiepayDollarPerBirdie(this.value)">
+        <span style="font-size:0.86rem;color:var(--text-muted)">per birdie</span>
+      </div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px">Birdie or better, counted from each player's scorecard. Paid out of the pot before Skins.</div>
+      ${haveParData ? '' : `
+      <div style="font-size:0.74rem;color:#b8860b;background:rgba(230,168,0,0.1);border:1px solid rgba(230,168,0,0.3);
+        border-radius:8px;padding:8px 10px;margin-top:8px">
+        No par data on file for this venue yet, so birdies can't be counted. Add its pars in Venue Manager (GC-API Lookup fills them) before saving Birdie Payouts.
+      </div>`}
+    </div>`;
+}
+function setGamesFormBirdiepayDollarPerBirdie(val) {
+  _gamesFormBirdiepayConfig.dollar_per_birdie = parseFloat(val) || 0;
+  updateGamesFormPotPreview();
+}
 function updateGamesFormPotPreview(yesCount) {
   if (yesCount !== undefined) _gamesFormYesCount = yesCount;
   yesCount = _gamesFormYesCount;
@@ -16816,8 +16876,16 @@ function updateGamesFormPotPreview(yesCount) {
     remaining -= bbCost;
     lines.push(`🐦 BirdieBall: $${bbCost.toFixed(2)} (${yesCount} × $${_gamesFormBirdieballConfig.dollar_per_player.toFixed(2)}), carved out`);
   }
+  // Birdie Payouts is a variable cost (flat $ × birdies actually made), so it
+  // can't be totalled here — say so instead of showing a made-up number.
+  const bpOn = _gamesFormSelected.has('birdiepay') && _gamesFormBirdiepayConfig.dollar_per_birdie > 0;
+  if (bpOn) {
+    lines.push(`🐤 Birdie Payouts: $${_gamesFormBirdiepayConfig.dollar_per_birdie.toFixed(2)} per birdie, taken from the pot before Skins`);
+  }
   if (_gamesFormSelected.has('skins')) {
-    lines.push(`⛳ Skins gets: $${Math.max(0, remaining).toFixed(2)}`);
+    lines.push(bpOn
+      ? `⛳ Skins gets: $${Math.max(0, remaining).toFixed(2)} minus birdie payouts`
+      : `⛳ Skins gets: $${Math.max(0, remaining).toFixed(2)}`);
   }
   el.innerHTML = lines.join('<br>');
 }
@@ -16843,12 +16911,19 @@ async function submitGatheringGames(gatheringId) {
     if (!(_gamesFormBirdieballConfig.dollar_per_player > 0)) { showToast('BirdieBall: $ per player must be greater than 0', true); return; }
     birdieball_config = { dollar_per_player: _gamesFormBirdieballConfig.dollar_per_player };
   }
+  let birdiepay_config = null;
+  if (games.includes('birdiepay')) {
+    if (!(_gamesFormBirdiepayConfig.dollar_per_birdie > 0)) { showToast('Birdie Payouts: $ per birdie must be greater than 0', true); return; }
+    if (!(Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18)) { showToast('Birdie Payouts needs par data for this venue — add it in Venue Manager first', true); return; }
+    birdiepay_config = { dollar_per_birdie: _gamesFormBirdiepayConfig.dollar_per_birdie, pars: _gamesFormBirdiepayPars.slice() };
+  }
   const btn = document.getElementById('btn-save-games');
   if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); btn.textContent = 'Saving…'; }
   try {
     const payload = { gathering_id: gatheringId, gathering_name: g.name, host_id: currentPlayer, games, dollar_per_player: dpp };
     if (cttp_config) payload.cttp_config = cttp_config;
     if (birdieball_config) payload.birdieball_config = birdieball_config;
+    if (birdiepay_config) payload.birdiepay_config = birdiepay_config;
     const resp = await gatheringsFetchJSON(`${BFE_API}/bfe/gathering-games`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
