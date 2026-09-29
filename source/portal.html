@@ -9866,13 +9866,24 @@ async function submitScorecard(evtName) {
       // Dev-88 — hole_half now carries the real active half for a 9-hole
       // round (was always null, so Skins/CTP/BirdieBall couldn't tell which
       // nine's holes 1-9 actually were); an 18-hole round still sends null.
+      // Dev-89 (2026-09-29) — marks was hardcoded null here, unlike Card
+      // Score Sheet's submitCardScore() which always computes marks from
+      // par. This is the Live Panel's own post-round entry path (what
+      // Brian actually used on-course), so every round entered through it
+      // lost the classic circle/square My History styling even though the
+      // exact same par-lookup (csResolvePars/csMarkFromPar) Card Score
+      // Sheet already uses works identically here — same venue, same
+      // holes array. Falls back to null (no marks) only when the venue's
+      // par truly isn't known, same as Card Score Sheet's own behavior.
+      const scPars = csResolvePars(_scEvt || { name: evtName });
+      const scMarks = scPars ? _scHoles.map((v, i) => csMarkFromPar(v, scPars[i])) : null;
       const res = await fetch(`${SCORECARD_API}/scorecards`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           input_type: 'strokes',
           event_name: evtPhotoKey(_scEvt || { name: evtName }), player: scName,
-          holes: _scHoles, marks: null, tee_box: null,
+          holes: _scHoles, marks: scMarks, tee_box: null,
           front9: front, back9: back, total,
           hole_count: scIsNine ? 9 : 18, hole_half: scIsNine ? _scHoleHalf : null,
           venue: csNormalizedVenueName(_scEvt)
