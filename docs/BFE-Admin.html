@@ -1543,7 +1543,13 @@ async function ghinApplyPaste() {
     if (idx === -1) { notFound.push(name); return; }
     const windowText = raw.slice(idx + matchedTerm.length, idx + matchedTerm.length + 300);
     const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
-    const hcp = numMatches.map(n => parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
+    // Dev-89 (2026-09-29) — a GHIN plus handicap ("+3.2", better than
+    // scratch) was silently flattened to positive 3.2 by parseFloat, which
+    // treats a leading "+" as a no-op sign rather than GHIN's plus-handicap
+    // marker. A plus player needs a NEGATIVE hcp for the quota formula to
+    // give them an above-36 quota, so a literal "+" in the matched text now
+    // flips the sign; a bare "-" still parses negative as before.
+    const hcp = numMatches.map(n => n.trim().startsWith('+') ? -parseFloat(n) : parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
     if (hcp === undefined) { notFound.push(`${name} (no HCP-looking number nearby)`); return; }
     hcpInput.value = hcp;
     matched++;
@@ -1757,7 +1763,13 @@ async function bulkHcpSyncPreview() {
       }
       const windowText = raw.slice(idx + matchedTerm.length, idx + matchedTerm.length + 300);
       const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
-      const hcp = numMatches.map(n => parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
+      // Dev-89 (2026-09-29) — a GHIN plus handicap ("+3.2", better than
+      // scratch) was silently flattened to positive 3.2 by parseFloat, which
+      // treats a leading "+" as a no-op sign rather than GHIN's plus-handicap
+      // marker. A plus player needs a NEGATIVE hcp for the quota formula to
+      // give them an above-36 quota, so a literal "+" in the matched text now
+      // flips the sign; a bare "-" still parses negative as before.
+      const hcp = numMatches.map(n => n.trim().startsWith('+') ? -parseFloat(n) : parseFloat(n)).find(n => !isNaN(n) && n >= -10 && n <= 54);
       if (hcp === undefined) {
         addHcpSyncRow(
           m.submissionId, m.name, existingPlayer ? existingPlayer.current_hcp : '', false,
