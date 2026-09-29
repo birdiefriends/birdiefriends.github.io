@@ -1,3 +1,13 @@
+v4.8.12 · 2026-09-29
+Deployed: 2026-09-29 (Three event-card/rail cleanups: (1) the "At the course" rail now shows which
+round it's tied to -- a truncated name label on the rail itself, full name in its tooltip -- since
+it can now be on well before the moment that's obviously "this round." (2) Yardage, Rules and Venue
+dropped off the event card entirely -- all three are exact duplicates of buttons already on the rail
+(Photo/Notes stayed, since those are a real second capture path, not a pure duplicate). (3) The
+card's Score icon now hides for ANY competitive round -- gamed Gathering or BFE-backed -- not just
+while it's the currently-live one; it's meant purely for posting a scorecard to myHistory when
+there's no Live Panel already capturing it.)
+
 v4.8.11 · 2026-09-29
 Deployed: 2026-09-29 ("At the course" rewritten, cascade v2 -- replaces gating the rail's existence
 on GPS distance + a resolved venue + stored coordinates (any one missing meant it silently never
