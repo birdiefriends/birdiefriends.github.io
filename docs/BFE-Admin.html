@@ -1766,13 +1766,18 @@ async function bulkHcpSyncPreview() {
         return;
       }
       matchedCount++;
-      // Matched AND active auto-checks; matched-but-inactive is still shown
-      // (with its HCP pre-filled, in case Brian wants it) but starts
-      // unchecked — inactive members shouldn't get written by default just
-      // because their old GHIN Name still happens to match the paste.
+      // Dev-89 (2026-09-29): a GHIN match auto-checks regardless of active
+      // status — Brian: "if it's in the GHIN paste it should be included in
+      // the submit," i.e. this tool's job is translating the latest GHIN
+      // paste into bf_players for every player it found, full stop. Active
+      // status is still shown (the "(inactive)" tag next to the name) so
+      // it's visible at a glance, and the Status filter still lets Brian
+      // narrow the table to just active or just inactive rows — it just no
+      // longer changes what's checked by default. Unmatched rows (no GHIN
+      // hit at all, right above) are unaffected and still default unchecked.
       addHcpSyncRow(
-        m.submissionId, m.name, hcp, m.active,
-        m.active ? 'matched' : 'matched — inactive member, unchecked by default',
+        m.submissionId, m.name, hcp, true,
+        'matched',
         true, m.active, 'ghin_import', currentDisplay
       );
     });
