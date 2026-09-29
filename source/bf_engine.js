@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.1.0';
+  const ENGINE_VERSION = '1.2.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -89,12 +89,20 @@
     // Closest to the pin: fixed $ per configured hole to that hole's leader
     // (most-recent claim — the caller passes leaders already resolved).
     // An unclaimed hole's money rolls into the residual game (Skins).
+    // Dev-89: a carve-out can never take more than the pot has left. If the
+    // configured $/hole × holes is more than that (a small field against a
+    // fixed CTP purse), every hole is paid the same reduced amount — floor of
+    // what's left ÷ holes — and the result says `capped`. Uncapped results
+    // keep their exact prior shape (no new keys).
     cttp: {
       id: 'cttp', order: 10, entity: 'individual',
       carve(state, addon, inputs) {
         const L = state.ledger;
-        const perHole = Number(addon.dollar_per_hole) || 0;
+        const configuredPerHole = Number(addon.dollar_per_hole) || 0;
         const holes = (addon.holes || []).slice().sort((a, b) => a - b);
+        const avail = Math.max(0, state.remaining);
+        const capped = holes.length > 0 && configuredPerHole * holes.length > avail;
+        const perHole = capped ? Math.floor(avail / holes.length) : configuredPerHole;
         const leaders = inputs.ctpLeaders;
         let unclaimed = 0;
         const rows = holes.map(h => {
@@ -108,7 +116,10 @@
         });
         state.remaining -= perHole * holes.length;
         state.rollover += unclaimed;
-        return { per_hole: perHole, holes: rows, unclaimed_to_skins: unclaimed };
+        return Object.assign(
+          { per_hole: capped ? configuredPerHole : perHole, holes: rows, unclaimed_to_skins: unclaimed },
+          capped ? { capped: true, paid_per_hole: perHole } : {}
+        );
       }
     },
 
@@ -120,7 +131,10 @@
       id: 'birdieball', order: 20, entity: 'individual',
       carve(state, addon, inputs) {
         const L = state.ledger;
-        const pot = (Number(addon.dollar_per_player) || 0) * L.n;
+        const configuredPot = (Number(addon.dollar_per_player) || 0) * L.n;
+        // Dev-89: never more than the pot has left (after CTP). Only reported when it bites.
+        const pot = Math.min(configuredPot, Math.max(0, state.remaining));
+        const capped = pot < configuredPot;
         state.remaining -= pot;
         const answers = (inputs.bbAnswers || []).filter(a => L.has(a.player_name));
         const kept = answers.filter(a => a.kept);
@@ -153,10 +167,10 @@
         const longest = mode === 'longest'
           ? answers.filter(a => winners.includes(L.canonical.get(norm(a.player_name))))[0]
           : null;
-        return {
+        return Object.assign({
           pot, mode, winners, per_winner: perWinner, given_back_each: givenBackEach,
           longest_hole: longest ? longest.lost_hole : null, longest_stroke: longest ? longest.lost_stroke : null
-        };
+        }, capped ? { capped: true, configured_pot: configuredPot } : {});
       }
     },
 
