@@ -11,7 +11,7 @@ const E = require(HERE('../bf_engine.js'));
 const ctx = {}; vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(HERE('./fixtures/dev87_gathering_payout.js'), 'utf8') + ';this.f=computeGatheringGamesPayout;', ctx);
 const OLD = ctx.f;
-let pass = 0, fail = 0;
+let pass = 0, fail = 0, capped = 0;
 let seed = 88;
 const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
 const pick = a => a[Math.floor(rnd() * a.length)];
@@ -43,6 +43,19 @@ for (let i = 0; i < 5000; i++) {
   try { b = JSON.stringify(E.computeGatheringGamesPayout(...JSON.parse(JSON.stringify(args)))); } catch (e) { eb = String(e); }
   // JSON round-trip on inputs so neither side can mutate the other's copy
   // (NaN/undefined become null/absent identically for both).
+  // Dev-89: the ONE deliberate departure from Dev-87. A CTP purse / BirdieBall that is more than the
+  // pot has left used to pay out more than the pot (the sum of payouts exceeded total_pot); the engine
+  // now caps it (result gets capped:true). Those configs are excluded from exact parity and instead
+  // must conserve the pot; every config that fits its pot must still match Dev-87 byte for byte.
+  if (!ea && !eb) {
+    const nb = JSON.parse(b);
+    if ((nb.cttp && nb.cttp.capped) || (nb.birdieball && nb.birdieball.capped)) {
+      capped++;
+      const paid = nb.payouts.reduce((t, x) => t + x.total, 0);
+      if (Math.abs(paid + nb.unallocated - nb.total_pot) < 1e-9) pass++; else { fail++; if (fail < 4) console.log('FAIL capped case not conserved', i, JSON.stringify(args), b); }
+      continue;
+    }
+  }
   const ok = (ea || eb) ? (ea === eb) : (a === b);
   if (ok) pass++; else { fail++; if (fail < 4) console.log('FAIL case', i, '\n  args', JSON.stringify(args), '\n  old ', ea || a, '\n  new ', eb || b); }
 }
@@ -56,5 +69,6 @@ JSON.stringify(ctx.l(rows)) === JSON.stringify(E.latestScorecardPerPlayer(rows))
 // skinsWon 'high' (Phase B direction) — sanity only, not a parity check.
 const hi = E.skinsWon([{ player: 'A', holes: [3, 2, 0] }, { player: 'B', holes: [2, 2, 1] }], 'high');
 JSON.stringify(hi) === JSON.stringify([{ hole: 1, player: 'A', points: 3 }, { hole: 3, player: 'B', points: 1 }]) ? pass++ : (fail++, console.log('FAIL high', JSON.stringify(hi)));
-console.log(`${pass} passed, ${fail} failed`);
+if (capped < 100) { fail++; console.log('FAIL fuzz barely exercised the capped path:', capped); }
+console.log(`${pass} passed, ${fail} failed (${capped} capped configs checked for conservation instead of parity)`);
 if (fail) process.exit(1);
