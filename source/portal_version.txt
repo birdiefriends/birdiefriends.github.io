@@ -1,3 +1,6 @@
+v4.8.15 · 2026-09-29
+Deployed: 2026-09-29 (New game for Gatherings: Birdie Payouts. In the Host Panel's Games list, tick "Birdie Payouts" and enter one flat $ amount per birdie. Every birdie (or better, an eagle still pays just the one amount) made in the round pays that flat amount to the player who made it, counted automatically from the scorecards against the course's par, and the total comes out of the buy-in pot before Skins. If birdies would cost more than the pot has left, each birdie pays the same reduced amount and the results say so. Needs the course's par data on file (Venue Manager); the form warns and won't save without it. Shows up in the event card's Games details, in the Close & Calculate preview, and in My History's Game Results with each birdie listed. Needs the Worker update and its one-time D1 column (see the Worker header) before it can be saved.)
+
 v4.8.14 · 2026-09-29
 Deployed: 2026-09-29 (Cosmetic: the "At the course" rail's event-name label now runs vertically
 along the rail instead of truncating horizontally -- the rail is a tall, narrow column, so
