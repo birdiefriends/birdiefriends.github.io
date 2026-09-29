@@ -2032,11 +2032,15 @@ body {
       🆕 <span id="new-events-btn-count"></span>
     </span>
   </button>
-  <button onclick="showScreen('about',null)" title="About"
-    style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;
-      cursor:pointer;padding:4px 8px;opacity:0.75;transition:opacity 0.2s;color:#fff"
-    onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.75'">
-    <span style="font-size:1.25rem">ⓘ</span>
+  <!-- Dev-88 cascade v2 — Info moved into Gear (Settings) as its first item,
+       freeing this slot for the "At the course" manual toggle (layer 3 of the
+       existence cascade — promoted from the old hidden ?atcourse=1/0 URL
+       trick to a real, visible control). Hidden entirely when there's no
+       Yes/Sub round today (see renderAtCourseToggle()). -->
+  <button id="at-course-toggle-btn" onclick="atCourseToggleManual()" title="At the course"
+    style="display:none;flex-direction:column;align-items:center;gap:2px;background:none;border:none;
+      cursor:pointer;padding:4px 8px;opacity:0.5;transition:opacity 0.2s;color:#fff">
+    <span style="font-size:1.25rem">⛳</span>
   </button>
   <button id="commissioner-gear" onclick="showScreen('admin',this)" title="Settings"
     style="display:none;flex-direction:column;align-items:center;gap:2px;background:none;border:none;
@@ -2219,8 +2223,20 @@ body {
   </div>
   <!-- ── ADMIN SCREEN (Commissioner only) ── -->
   <div class="bf-screen" id="screen-admin">
+    <!-- Dev-88 cascade v2 — About, moved here from its own header icon (freed
+         that slot for the "At the course" toggle). First item, above My
+         Preferences, per Brian. -->
+    <div class="bf-card" style="margin-bottom:6px;cursor:pointer" onclick="showScreen('about',null)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.1rem">ⓘ</span>
+          <div style="font-size:0.88rem;font-weight:600;color:var(--text)">About BirdieFriends</div>
+        </div>
+        <span style="font-size:0.9rem;color:var(--text-muted)">›</span>
+      </div>
+    </div>
     <!-- My Preferences — visible to all logged-in members, no PIN required (Dev-49) -->
-    <div class="section-label" style="margin-top:0">My Preferences</div>
+    <div class="section-label">My Preferences</div>
     <div class="bf-card" style="margin-bottom:6px">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;gap:12px;cursor:pointer"
         onclick="togglePrefsPanel(event)">
@@ -4890,60 +4906,48 @@ function parseDateFromJF(str) {
 // ════════════════════════════════════════════════════════════════════════
 // Dev-87 — "At the course" rail — opened to all players Dev-88 (previously
 // BETA, gated to AT_COURSE_BETA_PLAYERS only, Brian Hager while it was being
-// shaken out solo). A slim vertical toolbar on the right edge that exists
-// only while your phone is at the venue of a round you're registered for
-// today. The location decides whether it exists, so there's no clock to
-// guess (rain delays, early finishes). Location is checked ON THE PHONE,
-// once per app open / return to foreground, and never sent anywhere — only
-// "at the course: yes/no" is used.
-// Test switch: open portal.html?atcourse=1 to force it on (sticky), ?atcourse=0
-// to turn the force off again.
-// Dev-88 — shrunk from 1600m (~1 mile) after Brian flagged that his own
-// home is close enough to Blue Shamrock Golf Club to fall inside a 1-mile
-// radius: BSGC's stored venue point (40.8134, -75.6208) is only ~1345m/0.84mi
-// from his house as the crow flies (haversine), even though it's 1.2 road
-// miles — so the rail would have quietly gone "at the course" at home for
-// every BSGC event. 700m/~0.43mi was tried first but proved too tight the
-// same day — live at BSGC, the rail didn't show ("guessing geo isn't
-// working"), almost certainly because 700m from that one stored clubhouse
-// point doesn't reach a full 18-hole property. Bumped to 1000m/~0.62mi:
-// still a clear ~345m margin below Brian's own 1345m home distance, while
-// giving real on-course play meaningfully more room. This number is a
-// standing guess, not a measured course boundary — the proper fix (talked
-// through same session) is to stop gating the rail's EXISTENCE on distance
-// at all and make it time+registration gated with geolocation only refining
-// the display, so no single radius number has to be exactly right. Until
-// that's built, nudge this up further if it happens again rather than
-// re-guessing from scratch.
-const AT_COURSE_RADIUS_M = 1000;
-let _atCourse = null;              // { evt, venue, distM, forced }
+// shaken out solo). A slim vertical toolbar on the right edge for a round
+// you're registered (Yes/Sub) for TODAY.
+//
+// Dev-88, cascade v2 (2026-09-29) — rewritten after a live BSGC session
+// exposed the old design's core flaw: existence was gated on GPS distance
+// AND a resolved venue AND stored coordinates, so any one of those missing
+// (bad signal, a course not yet in venueDB, a too-tight/too-loose radius)
+// meant the rail simply didn't exist, silently, with nothing exercised or
+// recorded. Replaced with an OR cascade — any ONE of three independent
+// triggers turns the rail on, and once on it LATCHES (persisted per event
+// in localStorage) until the player explicitly turns it off — no trigger
+// condition ceasing to hold (walking out of GPS radius, the tee-time window
+// passing) turns it back off on its own:
+//   1. Proximity  — real GPS within AT_COURSE_RADIUS_M of a resolved venue
+//      with stored coordinates. Best signal when everything's in place.
+//   2. Tee-time window — AT_COURSE_TEE_WINDOW_MIN before this round's own
+//      tee time, no GPS or venue coordinates required at all. This is the
+//      one that actually kills the "course not in our venueDB" failure
+//      mode — existence no longer depends on venue data being complete.
+//   3. Manual — a header toggle (was a hidden ?atcourse=1/0 URL trick;
+//      promoted to a real, visible control per Brian, 2026-09-29) for
+//      whenever neither of the above has fired yet, or a player wants it
+//      on/off on their own terms regardless of either signal.
+// Closure is manual-only (the same toggle, tapped again) plus the implicit
+// next-day reset (the latch key is scoped to a specific event id, so a new
+// day's different-or-absent "today's round" naturally starts unlatched).
+// Deliberately NOT auto-closed by leaving GPS radius or by elapsed time —
+// discussed and rejected: an accidental miscue there is the same shape of
+// mistake as the swipe-to-No bug (Dev-88, portal v4.8.10) that silently
+// cancelled a real registration mid-round, and a proximity-based close
+// breaks outright for a post-round stop that isn't on the venue's property
+// (Brian: "sometimes the pub isn't on property").
+const AT_COURSE_RADIUS_M = 1000;      // proximity trigger radius (layer 1)
+const AT_COURSE_TEE_WINDOW_MIN = 15;  // tee-time trigger window, minutes before tee time (layer 2)
+let _atCourse = null;              // { evt, venue, distM, reason } — the ON state (reason: 'proximity'|'tee_window'|'latched')
+let _atCoursePick = null;          // today's Yes/Sub round, if any — set even while OFF, since the manual toggle needs it
+let _atCourseUrlForce = null;      // '1'|'0' from a ?atcourse= URL param, applied once _atCoursePick is known (one-shot)
 let _atCourseTucked = false;
 let _atCourseInit = false;
 let _atCourseScrollTimer = null;
-let _atCoursePanelPeek = false;   // grip tapped while the Live Panel is open → show anyway (resets when the panel toggles)
 let _atCourseLocDetailOpen = false; // Dev-88 — the ⛳ distance pill's popover, toggled by atCourseToggleLocDetail()
 function atCourseEnabled() { return !!currentPlayer; } // Dev-88 — opened from beta (was AT_COURSE_BETA_PLAYERS.includes(currentPlayer)) to every signed-in, registered player
-// Test mode is time-limited (v4.7.8): the flag stores when it was switched
-// on and lapses after AT_COURSE_TEST_HOURS, so it can never get stuck on a
-// home-screen app that can't be given ?atcourse=0. The old plain '1' flag
-// (pre-v4.7.8) is treated as expired and cleared.
-const AT_COURSE_TEST_HOURS = 4;
-function atCourseForced() {
-  try {
-    const v = localStorage.getItem('bf_atcourse_force');
-    if (!v) return false;
-    const t = Number(v);
-    if (v !== '1' && t > 1e12 && Date.now() - t < AT_COURSE_TEST_HOURS * 3600000) return true;
-    localStorage.removeItem('bf_atcourse_force');
-    return false;
-  } catch (e) { return false; }
-}
-function atCourseExitTest() {
-  if (_atCourseJustDragged) return;
-  try { localStorage.removeItem('bf_atcourse_force'); } catch (e) {}
-  showToast('Test mode off — using your real location');
-  refreshAtCourse();
-}
 function haversineM(lat1, lng1, lat2, lng2) {
   const R = 6371000, toR = x => x * Math.PI / 180;
   const dLat = toR(lat2 - lat1), dLng = toR(lng2 - lng1);
@@ -4954,50 +4958,79 @@ function atCourseMyRoundOk(e) {
   const r = findMyReg(e.name, e.source === 'gathering' ? e.gatheringId : undefined);
   return !!r && (r.status === 'Yes' || r.status === 'Sub');
 }
-// Today's rounds you said Yes/Sub to, each paired with its venue record.
+// Today's rounds you said Yes/Sub to, each paired with its venue record —
+// venue may be null (unresolved) or coordinate-less; neither excludes a
+// candidate any more, since existence no longer depends on either.
 function atCourseCandidates() {
   const today = new Date().toDateString();
   return eventData
     .filter(e => e.dt instanceof Date && !isNaN(e.dt) && e.dt.toDateString() === today && atCourseMyRoundOk(e))
-    .map(e => ({ evt: e, venue: findVenueByName(csNormalizedVenueName(e)) }))
-    .filter(x => x.venue);
+    .map(e => ({ evt: e, venue: findVenueByName(csNormalizedVenueName(e)) }));
+}
+function atCourseLatchKey(evtId) { return `bf_atcourse_on_${evtId}`; }
+function atCourseIsLatched(evtId) {
+  try { return localStorage.getItem(atCourseLatchKey(evtId)) === '1'; } catch (e) { return false; }
+}
+function atCourseLatch(evtId, on) {
+  try { if (on) localStorage.setItem(atCourseLatchKey(evtId), '1'); else localStorage.removeItem(atCourseLatchKey(evtId)); } catch (e) {}
+}
+// The header toggle — layer 3 (manual), and also the player's off switch
+// regardless of which layer originally turned the rail on. Replaces the old
+// test-only exit button as the one way to close it.
+function atCourseToggleManual() {
+  if (!_atCoursePick) return;
+  const evtId = _atCoursePick.evt.id;
+  const nowOn = atCourseIsLatched(evtId);
+  atCourseLatch(evtId, !nowOn);
+  showToast(nowOn ? 'Rail off' : "At the course — you're in");
+  refreshAtCourse();
 }
 async function refreshAtCourse() {
-  if (!atCourseEnabled()) { _atCourse = null; renderAtCourseRail(); return; }
+  if (!atCourseEnabled()) { _atCourse = null; _atCoursePick = null; renderAtCourseRail(); renderAtCourseToggle(); return; }
   await loadVenues();
-  const cands = atCourseCandidates();
-  if (atCourseForced()) {
-    // Test mode: today's round if any, else your next registered round.
-    let pick = cands[0];
-    if (!pick) {
-      const now = Date.now();
-      const next = eventData
-        .filter(e => e.dt instanceof Date && e.dt.getTime() > now - 12 * 3600000 && atCourseMyRoundOk(e))
-        .sort((a, b) => a.dt - b.dt)
-        .map(e => ({ evt: e, venue: findVenueByName(csNormalizedVenueName(e)) }))
-        .find(x => x.venue);
-      pick = next || null;
-    }
-    _atCourse = pick ? { ...pick, distM: null, forced: true } : null;
-    renderAtCourseRail();
+  const pick = atCourseCandidates()[0] || null; // today's Yes/Sub round — the one candidate the rail/toggle apply to
+  _atCoursePick = pick;
+  if (!pick) { _atCourse = null; renderAtCourseRail(); renderAtCourseToggle(); return; }
+  const evtId = pick.evt.id;
+  if (_atCourseUrlForce != null) { atCourseLatch(evtId, _atCourseUrlForce === '1'); _atCourseUrlForce = null; }
+  // Layer 3 checked first (cheapest, no GPS round-trip) — once latched by
+  // ANY layer it stays on regardless of what triggered it originally.
+  if (atCourseIsLatched(evtId)) {
+    _atCourse = { ...pick, distM: null, reason: 'latched' };
+    renderAtCourseRail(); renderAtCourseToggle();
     return;
   }
-  const withCoords = cands.filter(x => x.venue.lat != null && x.venue.lng != null);
-  if (!withCoords.length || !navigator.geolocation) { _atCourse = null; renderAtCourseRail(); return; }
-  navigator.geolocation.getCurrentPosition(pos => {
-    const { latitude, longitude } = pos.coords;
-    let best = null;
-    withCoords.forEach(x => {
-      const d = haversineM(latitude, longitude, Number(x.venue.lat), Number(x.venue.lng));
-      if (!best || d < best.distM) best = { ...x, distM: d, forced: false };
-    });
-    _atCourse = (best && best.distM <= AT_COURSE_RADIUS_M) ? best : null;
-    renderAtCourseRail();
-  }, err => {
-    console.warn('[AtCourse] location unavailable:', err && err.message);
-    _atCourse = null;
-    renderAtCourseRail();
-  }, { enableHighAccuracy: false, maximumAge: 5 * 60000, timeout: 15000 });
+  // Layer 2 — tee-time window, no GPS/venue-coordinate dependency at all.
+  const now = Date.now();
+  if (now >= pick.evt.dt.getTime() - AT_COURSE_TEE_WINDOW_MIN * 60000) {
+    atCourseLatch(evtId, true);
+    _atCourse = { ...pick, distM: null, reason: 'tee_window' };
+    renderAtCourseRail(); renderAtCourseToggle();
+    return;
+  }
+  // Layer 1 — proximity, only possible when the venue resolved with coordinates.
+  const v = pick.venue;
+  if (v && v.lat != null && v.lng != null && navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { latitude, longitude } = pos.coords;
+      const d = haversineM(latitude, longitude, Number(v.lat), Number(v.lng));
+      if (d <= AT_COURSE_RADIUS_M) {
+        atCourseLatch(evtId, true);
+        _atCourse = { ...pick, distM: d, reason: 'proximity' };
+      } else {
+        _atCourse = null; // no trigger yet — toggle still available for manual
+      }
+      renderAtCourseRail(); renderAtCourseToggle();
+    }, err => {
+      console.warn('[AtCourse] location unavailable:', err && err.message);
+      _atCourse = null;
+      renderAtCourseRail(); renderAtCourseToggle();
+    }, { enableHighAccuracy: false, maximumAge: 5 * 60000, timeout: 15000 });
+    return; // async path renders when the position callback lands
+  }
+  // No trigger fired, nothing left to check — off, but the toggle is there.
+  _atCourse = null;
+  renderAtCourseRail(); renderAtCourseToggle();
 }
 // Dev-88 — Video/Upload quick-capture from the rail. Reuses the card-photo
 // sheet's own handler (cardPhotoCameraPicked) and its already-in-the-DOM
@@ -5025,7 +5058,7 @@ function atCourseToggleLocDetail() {
 function renderAtCourseLocDetail() {
   let panel = document.getElementById('at-course-loc-detail');
   const railEl = document.getElementById('at-course-rail');
-  if (!_atCourse || _atCourse.forced || !_atCourseLocDetailOpen || !railEl) {
+  if (!_atCourse || _atCourse.distM == null || !_atCourseLocDetailOpen || !railEl) {
     if (panel) panel.remove();
     return;
   }
@@ -5102,9 +5135,14 @@ function atCourseDragStart(ev) {
 }
 function toggleAtCourseRail() {
   if (_atCourseJustDragged) return;
-  if (_livePanelOpen) _atCoursePanelPeek = !_atCoursePanelPeek;
-  else _atCourseTucked = !_atCourseTucked;
-  _atCourseLocDetailOpen = false; // tucking/peeking the rail closes any open location popover too
+  // Dev-88 — used to force-tuck whenever the Live Panel opened (peek only on
+  // request); dropped per Brian: "if the Live Panel is open, the rail needs
+  // to be too." Tuck state is now the player's own choice regardless of the
+  // Live Panel — this is deliberately the whole fix, not a placeholder; a
+  // narrower/compact rail specifically while the panel is open is a possible
+  // follow-up but not built here.
+  _atCourseTucked = !_atCourseTucked;
+  _atCourseLocDetailOpen = false; // tucking closes any open location popover too
   renderAtCourseRail();
 }
 function renderAtCourseRail() {
@@ -5123,17 +5161,19 @@ function renderAtCourseRail() {
   // only (a player capturing mid-round shouldn't create a memory that lives
   // outside the WCRP by accident) — that's the sole reason for the `!bfe` gate.
   const btn = (icon, label, onclick) => `<button class="acr-btn" onclick="${onclick}"><span class="acr-ico">${icon}</span><span class="acr-lbl">${label}</span></button>`;
-  const where = _atCourse.forced ? 'TEST ✕' : `${(_atCourse.distM / 1609.34).toFixed(1)} mi`;
-  // While the Live Panel is open the rail tucks itself — the panel still needs
-  // its full width for scoring/games (otherwise it covers holes 9/18 and the
-  // right-hand buttons). The grip still peeks it open.
-  const tucked = _livePanelOpen ? !_atCoursePanelPeek : _atCourseTucked;
+  // Dev-88 cascade v2 — distance only exists for the 'proximity' reason;
+  // tee_window/latched/manual have nothing to measure, so the pill just
+  // reads a generic "On" and taps straight to the off switch instead of the
+  // distance popover.
+  const hasDist = _atCourse.distM != null;
+  const where = hasDist ? `${(_atCourse.distM / 1609.34).toFixed(1)} mi` : 'On';
+  const tucked = _atCourseTucked;
   el.className = tucked ? 'tucked' : '';
   atCourseApplyPos(el); // side + height from the last drag (left class set here, before the markup reads it)
   el.innerHTML = `
     <button class="acr-grip" onclick="toggleAtCourseRail()" onpointerdown="atCourseDragStart(event)" title="Tap: ${tucked ? 'show' : 'tuck away'} · Drag: move">${(el.classList.contains('left') ? !tucked : tucked) ? '‹' : '›'}</button>
     <div class="acr-col">
-      <div class="acr-status" onpointerdown="atCourseDragStart(event)" onclick="${_atCourse.forced ? 'atCourseExitTest()' : 'atCourseToggleLocDetail()'}" title="${_atCourse.forced ? 'Test mode — tap to turn off' : 'Tap for location detail · drag to move'}"><span style="font-size:1rem">⛳</span><span>${where}</span></div>
+      <div class="acr-status" onpointerdown="atCourseDragStart(event)" onclick="${hasDist ? 'atCourseToggleLocDetail()' : 'atCourseToggleManual()'}" title="${hasDist ? 'Tap for location detail · drag to move' : 'Tap to turn off'}"><span style="font-size:1rem">⛳</span><span>${where}</span></div>
       ${!bfe ? btn('📷', 'Photo', `openCardPhotoSheet('${id}')`) : ''}
       ${!bfe ? btn('🎥', 'Video', `atCourseQuickCapture('${id}','video')`) : ''}
       ${!bfe ? btn('⬆️', 'Upload', `atCourseQuickCapture('${id}','upload')`) : ''}
@@ -5145,14 +5185,26 @@ function renderAtCourseRail() {
   atCourseApplyPos(el); // again now that the buttons exist, so the height clamp is exact
   renderAtCourseLocDetail();
 }
+// Dev-88 cascade v2 — the header toggle (layer 3 / manual, replacing the old
+// Info icon's slot — see #at-course-toggle-btn in the sub-bar). Visible only
+// when there's a candidate round today at all; reflects on/off via opacity
+// since it's the same ⛳ icon either way.
+function renderAtCourseToggle() {
+  const btn = document.getElementById('at-course-toggle-btn');
+  if (!btn) return;
+  if (!_atCoursePick) { btn.style.display = 'none'; return; }
+  btn.style.display = 'flex';
+  const on = !!_atCourse;
+  btn.style.opacity = on ? '1' : '0.5';
+  btn.title = on ? 'At the course — tap to turn off' : "Tap if you're at the course";
+}
 function atCourseInitOnce() {
   if (_atCourseInit) return;
   _atCourseInit = true;
   try {
     const q = new URLSearchParams(location.search).get('atcourse');
-    if (q === '1') localStorage.setItem('bf_atcourse_force', String(Date.now()));
-    else if (q === '0') localStorage.removeItem('bf_atcourse_force');
-  } catch (e) { /* storage unavailable — force switch just won't stick */ }
+    if (q === '1' || q === '0') _atCourseUrlForce = q; // applied once _atCoursePick is known, in refreshAtCourse()
+  } catch (e) { /* storage/URL unavailable — manual toggle in the header still works */ }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshAtCourse(); });
   // Slide mostly out of the way while scrolling; back ~1s after it stops.
   window.addEventListener('scroll', () => {
@@ -5173,7 +5225,7 @@ function renderAll() {
   renderTripInfoBanner(); // Dev-80 same day — separate widget, see its own comment
   updateEventControlUI(); // Dev-93 — keeps Gear → Event Day Controls' LIVE/Not live status current
   updateWCRPMemoriesControlUI(); // Dev-93 — same, for the Trip Memories Capture on/off status
-  if (typeof dataLoaded !== 'undefined' && dataLoaded) { atCourseInitOnce(); renderAtCourseRail(); } // Dev-87 beta
+  if (typeof dataLoaded !== 'undefined' && dataLoaded) { atCourseInitOnce(); renderAtCourseRail(); renderAtCourseToggle(); } // Dev-87 beta
 }
 // ── Capacity engine ──────────────────────────────────────────────────────
 // Returns a status object describing the capacity situation for an event.
@@ -5490,12 +5542,20 @@ function initSwipeListeners() {
       card.style.transition = '';
       if (hint) hint.style.opacity = '0';
       if (deltaX < -72) {
-        // Block swipe if player has an active registration — Series Events only.
-        // Gatherings: swipe IS the No action even after a prior Yes (§11 Q13).
+        // Dev-88 — block swipe-to-dismiss for ANY event (Series or Gathering)
+        // the player already has an active Yes/Sub on. Gatherings used to be
+        // exempt from this guard on the theory that "swipe IS the No action"
+        // (§11 Q13, for a cold decline on an event never responded to) — but
+        // that same swipe fires for an ALREADY-CONFIRMED player too, with no
+        // confirmation step, and a stray horizontal drag on a phone (reaching
+        // for another icon, at the course) silently cancels a real Yes. Bit
+        // Brian twice in one round. The cold-decline path (swipe on an event
+        // you've never responded to) is untouched — this only blocks
+        // swiping away a Yes/Sub you already have.
         const swipedEvt = eventData.find(e => e.id === evtId);
         const myReg = currentPlayer && findMyReg(swipedEvt?.name || '', swipedEvt?.source === 'gathering' ? swipedEvt.gatheringId : undefined);
-        const isRegistered = !!(myReg && myReg.status !== 'No');
-        if (isRegistered && swipedEvt?.source !== 'gathering') {
+        const isRegistered = !!(myReg && (myReg.status === 'Yes' || myReg.status === 'Sub'));
+        if (isRegistered) {
           card.style.transform = 'translateX(0)';
           showToast("You're registered — cancel first to park this event", true);
           return;
@@ -8392,7 +8452,8 @@ function renderLiveBanner() {
 }
 function toggleLivePanel() {
   _livePanelOpen = !_livePanelOpen;
-  _atCoursePanelPeek = false; // Dev-87 beta — rail auto-tucks with the panel open, returns when it closes
+  // Dev-88 cascade v2 — no longer force-tucks/peeks the rail here; its tuck
+  // state is independent of the Live Panel now (see toggleAtCourseRail()).
   if (typeof renderAtCourseRail === 'function') setTimeout(renderAtCourseRail, 0);
   if (_livePanelOpen) {
     loadCtpData(getLiveEvent());
@@ -14358,8 +14419,8 @@ function renderRulesContent() {
   const mode = _rulesMode;
   el.innerHTML =
     renderRulesSection(RULES_CONTENT.penalty, RULES_CONTENT.penalty.body) +
-    renderRulesSection(RULES_CONTENT.ob, RULES_CONTENT.obStandard) +
-    renderRulesSection(RULES_CONTENT.lost, RULES_CONTENT.lostStandard) +
+    renderRulesSection(RULES_CONTENT.ob, RULES_CONTENT.ob[mode]) +
+    renderRulesSection(RULES_CONTENT.lost, RULES_CONTENT.lost[mode]) +
     renderRulesSection(RULES_CONTENT.netdouble, RULES_CONTENT.netdouble.body);
 }
 // Dev-69 — accepts either an evtId or a full evt object directly; see
@@ -18255,7 +18316,7 @@ async function loadAdminGatherings() {
               <div style="font-size:0.85rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${g.title}</div>
               <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;line-height:1.5">
                 ${dateStr} · ${timeStr}${teeStatus}<br>
-                ${g.venue || '—'} · ${g.gathering_type || '—'} · $Standard${crewInfo}<br>
+                ${g.venue || '—'} · ${g.gathering_type || '—'} · ${mode}${crewInfo}<br>
                 ${yesLine}
               </div>
             </div>
