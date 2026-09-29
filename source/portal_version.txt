@@ -1,3 +1,9 @@
+v4.8.14 · 2026-09-29
+Deployed: 2026-09-29 (Cosmetic: the "At the course" rail's event-name label now runs vertically
+along the rail instead of truncating horizontally -- the rail is a tall, narrow column, so
+horizontal text had almost no room ("Mosele..." for "Moselem") while the same label reading
+top-to-bottom fits several times more of the real name. CSS-only, no markup or behavior change.)
+
 v4.8.13 · 2026-09-29
 Deployed: 2026-09-29 (Bug fix: the Live Panel's own Post-Round Scorecard -- the entry path actually
 used on-course, including proxy entry for other players -- always sent marks: null, so every round
