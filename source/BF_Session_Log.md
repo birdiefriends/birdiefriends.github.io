@@ -5039,3 +5039,107 @@ details should exist on the event card."
 - Client-side only (`portal.html`) — no `worker.js` changes, no separate Cloudflare deploy step.
 - Full suite: **17 files, 17,265 checks, all green.**
 
+**14. Deploy desync caught, then radius bumped again live at BSGC (portal v4.8.9).** Two follow-ups
+within the hour:
+- **Deploy desync.** Brian confirmed v4.8.8's Games icon working, but a `raw.githubusercontent.com`
+  check turned up a real mismatch first: `portal_version.txt` had landed on GitHub as v4.8.8, but
+  `portal.html` was still v4.8.7's content (`atCourseOpenGames`/rail Games button still present, no
+  `openGameDetailsModal` anywhere) — `bf_push.ps1`'s own per-file verify only deletes a local copy
+  once its OWN push+refetch matches, so this wasn't a script bug, more likely a timing gap between
+  two `bf_push.bat` runs or a race with an in-flight AutoPush delivery. Re-pushed the already-correct
+  local `portal.html`+`portal_version.txt` untouched; Brian re-ran `bf_push.bat`, confirmed working.
+- **Radius, round two.** Brian, live at Blue Shamrock: "at BSGC, no vertical control. Guessing geo
+  isn't working." The 700m radius set earlier the same session (layer 12) turned out too tight for
+  a real round on an 18-hole property measured from one stored clubhouse point. Gave Brian the
+  `?atcourse=1` force-on escape hatch as an immediate unblock, then bumped `AT_COURSE_RADIUS_M`
+  700 → 1000 (~0.62mi) — still a ~345m margin under his own 1345m home distance, more headroom for
+  actual on-course play. Flagged in the comment as a standing guess, not a measured course boundary,
+  and pointed at the real fix already discussed and not yet built: stop gating the rail's existence
+  on distance at all, make it time+registration gated with geolocation only refining the display
+  (§ the cascade design Brian asked to pick up next) — so no single radius number has to be exactly
+  right.
+- No test changes needed (`AT_COURSE_RADIUS_M` is read dynamically from source by
+  `test_at_course.mjs`'s const-extraction, not hardcoded in the test). Full suite: **17 files,
+  17,265 checks, all green.**
+- Client-side only (`portal.html`) — no `worker.js` changes, no separate Cloudflare deploy step.
+
+
+**15. Swipe-to-dismiss silently cancelling a live Yes registration (portal v4.8.10).** Third
+live-fire issue in the same BSGC session. Brian, blocked mid-round: "That hack isn't showing the
+current event card, and I accidentally swiped trying to fix it and am no longer in the event" —
+then it happened again minutes later reaching for the new Games icon.
+- **Root cause.** `initSwipeListeners()`'s `onEnd()` blocked swipe-to-dismiss for a registered
+  Series event, but explicitly carved Gatherings out of that guard ("swipe IS the No action even
+  after a prior Yes — §11 Q13"), on the theory that Crew outreach needs a swipe-to-decline path for
+  a player who's never responded. That same exception fired for a player who *already had an active
+  Yes/Sub* — a stray horizontal drag (touch-scrolling toward an icon, at the course) crossed the
+  -72px dismiss threshold and silently wrote `status: 'no'` to D1 via `writeGatheringRegistration`,
+  no confirmation step. Confirmed against the live gathering (`id 68`, "More Golf, Less Work
+  Monday" @ Blue Shamrock, today): Brian's own registration had flipped to `no` at 14:54, and again
+  after the second swipe.
+- **Immediate unblock (twice).** Fixed Brian's live registration directly against the Worker API —
+  `POST https://birdiefriends-push.birdiefriends01.workers.dev/registrations` with
+  `{gathering_id: 68, player_id: "Brian Hager", status: "yes", confirmed_for: "2026-09-28T10:42:00-04:00"}`
+  — same endpoint the app itself calls, verified via `GET /gatherings/68/registrations` before and
+  after both times.
+- **Root fix.** Dropped the Gathering carve-out entirely: the swipe-block guard now fires for
+  *any* event (Series or Gathering) the player already has an active Yes/Sub on, using
+  `myReg.status === 'Yes' || myReg.status === 'Sub'` in place of the old `status !== 'No'` plus
+  source check. The cold-decline path — swiping an event never responded to — is untouched;
+  `doSwipeDismiss()`'s `writeGatheringRegistration('no', ...)` call still fires exactly as before
+  for that case.
+- **Also found, not yet fixed:** the swipe's "Undo" toast (`showToastWithUndo`) only calls
+  `restoreEvent()` to un-hide the card — it never reverts the `writeGatheringRegistration('no', ...)`
+  write that already fired in the same commit path, so even a same-second Undo tap wouldn't have
+  saved a cancelled Yes. Moot for the fixed case (registered players can no longer trigger the write
+  at all), but still a real gap for the cold-decline path's own Undo. Parked — not urgent now that
+  the actual danger (losing a confirmed Yes) is closed.
+- New `test_swipe_guard.mjs` (9 checks): confirms the Gathering carve-out is gone, the Yes/Sub-only
+  scoping of `isRegistered`, the toast/snap-back/return shape is preserved, and `doSwipeDismiss()`
+  is still only reachable on the unregistered path. Full suite: **18 files, 17,274 checks, all
+  green.**
+- Client-side only (`portal.html`) — no `worker.js` changes. The D1 corrections were live API calls
+  against the existing endpoint, not a schema or Worker change.
+
+**16. "At the course" cascade v2 — existence, manual toggle, rail/Live-Panel coexistence (portal
+v4.8.11).** Design worked through in review with Brian the morning after the swipe/deploy-desync
+session (entries 14–15), before any code — see the conversation for the full back-and-forth. Shipped
+what was agreed:
+- **Existence — OR cascade, not AND.** `atCourseCandidates()` no longer filters out a candidate for
+  missing venue/coordinates — that filter was the root cause of "host adds a course not in our
+  venueDB, nothing gets exercised." `refreshAtCourse()` now checks three independent triggers, any
+  one sufficient: (1) **proximity** — same haversine/`AT_COURSE_RADIUS_M` check as before, only
+  possible when the venue resolved with coordinates; (2) **tee-time window** — new
+  `AT_COURSE_TEE_WINDOW_MIN = 15`, fires purely off the round's own `dt` vs. `Date.now()`, no venue
+  or GPS dependency at all — this is the one that actually closes the venueDB gap; (3) **manual** —
+  a new header toggle (`atCourseToggleManual()`), promoted from the old hidden `?atcourse=1/0` URL
+  trick, which now just flips the same latch the other two triggers use.
+- **Latch, not live-recompute.** Once any trigger fires, `atCourseLatch(evtId, true)` persists
+  `bf_atcourse_on_<eventId>` in localStorage and every later `refreshAtCourse()` checks the latch
+  FIRST (no GPS round-trip needed once on). Deliberately does not auto-clear on leaving GPS radius
+  or a timer expiring — discussed at length with Brian: an automatic close is the same shape of
+  mistake as the swipe-to-No bug (entry 15) that silently cancelled a real registration, and a
+  proximity-based close breaks outright for a post-round stop that isn't on the venue's own property
+  ("sometimes the pub isn't on property"). Closure is the toggle, tapped again — nothing else.
+- **Header toggle.** New `#at-course-toggle-btn` in the sub-bar, replacing the old standalone ⓘ
+  Info button — Info moved into `#screen-admin` (Settings) as its first item, a plain nav row to the
+  existing `about` screen. Toggle is hidden entirely when there's no Yes/Sub round today at all
+  (`renderAtCourseToggle()`), otherwise always visible, opacity showing on/off.
+- **Rail/Live-Panel coexistence.** Brian: "if the Live Panel is open, the rail needs to be too."
+  Dropped the old auto-tuck-when-panel-opens behavior (and the `_atCoursePanelPeek` grip-peek escape
+  hatch it needed) entirely — `_atCourseTucked` is now the only tuck state, fully independent of
+  `_livePanelOpen`. A narrower/compact rail specifically while the panel is open was discussed as a
+  possible follow-up but not built — flagged in-code as deliberately out of scope for this pass.
+- **Distance popover vs. off-switch pill.** The rail's own ⛳ status pill now branches on whether
+  there's a real distance to show (`_atCourse.distM != null`, i.e. reason `'proximity'`) — opens the
+  location-detail popover if so, otherwise (`'tee_window'`/`'latched'`/manual) taps straight to
+  `atCourseToggleManual()` instead of a popover with nothing in it.
+- `test_at_course.mjs` rewritten wholesale (the old file tested the AND-gate and the time-limited
+  force-mode, both gone) — 57 checks covering all three trigger layers independently, the latch
+  surviving a simulated move away from the venue, the venue-less tee-window path specifically (the
+  actual bug this was built to fix), the URL switch now setting the real latch, and the rail staying
+  untucked with the Live Panel open. `test_rail_drag.mjs` had two now-nonexistent seed fields
+  (`forced`, `_atCoursePanelPeek`) cleaned out of its harness — drag mechanics themselves untouched,
+  no behavior change there.
+- Full suite: **18 files, 17,281 checks, all green.**
+- Client-side only (`portal.html`) — no `worker.js` changes.
