@@ -266,6 +266,13 @@ body {
 #at-course-rail .acr-grip { width: 18px; border: none; background: rgba(245,200,66,0.18); color: #F5C842;
   font-size: 0.9rem; font-weight: 800; cursor: pointer; border-radius: 16px 0 0 16px; padding: 0; font-family: inherit; }
 #at-course-rail .acr-col { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 5px 6px 4px; }
+/* Dev-88 — which round the rail is tied to, since cascade v2 can now latch it
+   on well before/after the moment it's obviously "this round" (tee-time
+   window, or a latch surviving a walk to the pub) — Brian: "when it's active
+   it should be clearly articulated what it's tied to." Truncated to fit the
+   ~50px column; the full name is still in the title attribute below. */
+#at-course-rail .acr-name { font-size: 0.58rem; font-weight: 700; color: #fff; opacity: 0.92;
+  max-width: 48px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #at-course-rail .acr-status { display: flex; flex-direction: column; align-items: center; font-size: 0.52rem;
   font-weight: 800; letter-spacing: 0.04em; color: #F5C842; padding: 2px 0 5px; border-bottom: 1px solid rgba(255,255,255,0.15); margin-bottom: 2px; width: 100%; }
 #at-course-rail .acr-btn { width: 50px; display: flex; flex-direction: column; align-items: center; gap: 1px;
@@ -5173,7 +5180,7 @@ function renderAtCourseRail() {
   el.innerHTML = `
     <button class="acr-grip" onclick="toggleAtCourseRail()" onpointerdown="atCourseDragStart(event)" title="Tap: ${tucked ? 'show' : 'tuck away'} · Drag: move">${(el.classList.contains('left') ? !tucked : tucked) ? '‹' : '›'}</button>
     <div class="acr-col">
-      <div class="acr-status" onpointerdown="atCourseDragStart(event)" onclick="${hasDist ? 'atCourseToggleLocDetail()' : 'atCourseToggleManual()'}" title="${hasDist ? 'Tap for location detail · drag to move' : 'Tap to turn off'}"><span style="font-size:1rem">⛳</span><span>${where}</span></div>
+      <div class="acr-status" onpointerdown="atCourseDragStart(event)" onclick="${hasDist ? 'atCourseToggleLocDetail()' : 'atCourseToggleManual()'}" title="${escapeHtml(evt.name)} — ${hasDist ? 'tap for location detail' : 'tap to turn off'} · drag to move"><span class="acr-name">${escapeHtml(evt.name)}</span><span style="font-size:1rem">⛳</span><span>${where}</span></div>
       ${!bfe ? btn('📷', 'Photo', `openCardPhotoSheet('${id}')`) : ''}
       ${!bfe ? btn('🎥', 'Video', `atCourseQuickCapture('${id}','video')`) : ''}
       ${!bfe ? btn('⬆️', 'Upload', `atCourseQuickCapture('${id}','upload')`) : ''}
@@ -5898,30 +5905,39 @@ function buildEventCard(evt, isPast) {
       <span style="pointer-events:none;margin-left:auto;font-size:0.82rem;color:rgba(255,255,255,0.5)">Players ›</span>
     </button>
     <div class="icon-action-row" style="justify-content:flex-start;gap:26px;margin:10px 4px 2px">
-      <!-- Dev-88 — Photo/Score/Notes are "Gaming Mode" only icons: they drop
-           out for as long as THIS event IS the live gamed round (getLiveEvent
+      <!-- Dev-88 — Photo/Notes are "Gaming Mode" only icons: they drop out
+           for as long as THIS event IS the live gamed round (getLiveEvent
            matches it), whether or not the Live Panel happens to be expanded
-           right now — capture and scoring belong to the rail + Live Panel for
-           a gamed round. Non-gamed ("Non-gaming Mode") events keep all three
-           right here, since the card is their only capture path — this is
-           how a myMemory gets created for a non-competitive event. -->
+           right now — capture belongs to the rail + Live Panel for a gamed
+           round. Non-gamed ("Non-gaming Mode") events keep both right here,
+           since the card is their only capture path — this is how a
+           myMemory gets created for a non-competitive event. -->
       ${(!isBFEBackedCard(evt) && getLiveEvent()?.id !== evt.id) ? `
       <button class="icon-action-btn" onclick="openCardPhotoSheet('${evt.id}')">
         <span class="icon-action-badge secondary">📷</span>
         <span class="icon-action-label">Photos</span>
       </button>` : ''}
-      ${getLiveEvent()?.id === evt.id ? '' : `
+      <!-- Dev-88 (2026-09-29) — Score is stricter than Photo/Notes: it isn't
+           gated on "is this event live right now," it's gated on "is this
+           event competitive at all." Brian: "the scorecard icon should only
+           be active in non-competition games — its job is to be there for a
+           player's scoring myHistory when there's not a competitive event
+           that captures the scorecard as part of the live panel process." A
+           gamed Gathering or a BFE-backed round always has its scorecard
+           captured through the Live Panel, live or not yet live — this icon
+           has nothing to do there ever, not just while the round is live. -->
+      ${(isBFEBackedCard(evt) || (evt.source === 'gathering' && gatheringIsGamed(gatheringRoundConfig(evt.gatheringId)))) ? '' : `
       <button class="icon-action-btn" onclick="openCardScoreSheet('${evt.id}')">
         <span class="icon-action-badge secondary">🏌️</span>
         <span class="icon-action-label">Score</span>
       </button>`}
-      <!-- Dev-88 — Games detail is the opposite of the three above: it stays
-           up in BOTH modes, live or not. Brian's reasoning: "players will
-           want to know the game before heading to the course," so this can't
-           wait for the round to go live the way the rail's own Games button
-           did (that button is gone — it only ever opened the Live Panel,
-           which the card itself already does). Read-only pot breakdown, not
-           a capture path, so there's nothing here for Gaming Mode to hide. -->
+      <!-- Dev-88 — Games detail is the opposite of Score: it stays up in
+           BOTH modes, live or not. Brian's reasoning: "players will want to
+           know the game before heading to the course," so this can't wait
+           for the round to go live the way the rail's own Games button did
+           (that button is gone — it only ever opened the Live Panel, which
+           the card itself already does). Read-only pot breakdown, not a
+           capture path, so there's nothing here for Gaming Mode to hide. -->
       ${(evt.source === 'gathering' && gatheringIsGamed(gatheringRoundConfig(evt.gatheringId))) ? `
       <button class="icon-action-btn" onclick="openGameDetailsModal('${evt.id}')">
         <span class="icon-action-badge secondary">🏆</span>
@@ -5937,28 +5953,19 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-badge secondary">💬</span>
         <span class="icon-action-label">Notes</span>
       </button>` : ''}
-      <button class="icon-action-btn" onclick="openYardageModal()">
-        <span class="icon-action-badge secondary">📏</span>
-        <span class="icon-action-label">Yardage</span>
-      </button>
-      ${findVenueByName(csNormalizedVenueName(evt)) ? `
-      <button class="icon-action-btn" onclick="openVenueViewerModal('${evt.id}')">
-        <span class="icon-action-badge secondary">🗺️</span>
-        <span class="icon-action-label">Venue</span>
-      </button>` : ''}
+      <!-- Dev-88 (2026-09-29) — Yardage/Rules/Venue dropped from the card
+           entirely per Brian: "strip duplicate icons from the Event Cards,
+           yardage, rules are 2 examples." All three are also on the "At the
+           course" rail (Yardage, Rules, Course) — genuinely the same
+           function, same modal, not a second capture path like Photo/Notes.
+           Venue wasn't named explicitly but is the same category (identical
+           openVenueViewerModal call as the rail's Course button); removed on
+           the same reasoning — flag if that reads wider than intended. -->
       ${['format-wally','format-scramble'].includes(formatClass(evt.format)) ? `
       <button class="icon-action-btn" onclick="openCardGroupSheet('${evt.id}')">
         <span class="icon-action-badge secondary">👥</span>
         <span class="icon-action-label">Group</span>
       </button>` : ''}
-      <!-- Dev-87 (v4.7.1) — Rules moved last: on a phone the row fits ~5 icons,
-           and Venue (6th) was cut off with no way to reach it. Rules is the
-           least-used here (not event-specific); the In-Play hub redesign may
-           move it off the card entirely. -->
-      <button class="icon-action-btn" onclick="openRulesModal()">
-        <span class="icon-action-badge secondary">📖</span>
-        <span class="icon-action-label">Rules</span>
-      </button>
     </div>
     <div id="${whoId}" style="display:none">
       ${buildPlayerChips(evt)}
