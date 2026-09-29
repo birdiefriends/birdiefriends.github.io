@@ -5244,3 +5244,12 @@ rather than implying this fix reaches back into stored data it doesn't touch.
 - Full suite: **20 files, all green** (exact check count not re-tallied this entry — see
   `run_all.mjs` output for the live figure).
 - Client-side only (`portal.html`) — no `worker.js` changes.
+
+**20. Rail event-name label goes vertical (portal v4.8.14).** Closing cosmetic fix — Brian, looking
+at a live screenshot: "I think we need to have the eventname run vertically on the rail. it's too
+narrow for a horizontal display" (v4.8.12's `.acr-name` truncated to "Mosele..." for "Moselem" at
+the rail's real ~50px width). Switched `.acr-name` to `writing-mode: vertical-rl` running along the
+rail's own long axis instead of fighting its short one — same truncate-with-ellipsis behavior, just
+against `max-height` instead of `max-width` now. CSS-only; markup (`class="acr-name"`, the name
+text, the title-attribute fallback) untouched, so `test_score_competitive_gate.mjs`'s existing rail
+assertions still cover it without changes. Full suite: all green.
