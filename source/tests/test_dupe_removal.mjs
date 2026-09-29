@@ -7,12 +7,15 @@
 // for a BFE-backed round now (its capture posts to the WCRP memories
 // pipeline, which the rail deliberately never touches); a non-BFE round's
 // capture lives on the rail exclusively, whether or not the Live Panel is
-// open. And per the same conversation: the event card's Photo/Score/Notes
-// icons are "Gaming Mode" only icons now — they drop out for as long as this
+// open. And per the same conversation: the event card's Photo/Notes icons
+// are "Gaming Mode" only icons now — they drop out for as long as this
 // event IS the live gamed round (getLiveEvent match), not just while the
 // Live Panel happens to be expanded, and stay available in "Non-gaming
 // Mode" (no games / not the live round) since the card is that event's only
 // capture path — how a myMemory gets created for a non-competitive event.
+// Score's own gate is stricter still, tightened 2026-09-29 (see
+// test_score_competitive_gate.mjs) — not "is this event live right now" but
+// "is this event competitive at all," gamed or BFE, live or not yet live.
 import fs from 'fs'; import { extractFn } from './extract.mjs';
 import { fileURLToPath } from 'url';
 const HERE = (p) => fileURLToPath(new URL(p, import.meta.url));
@@ -31,13 +34,14 @@ ok(!/\$\{isBfeRound \? 'Photos &amp;/.test(buildLivePanelSrc), 'old always-rende
 const photoSectionSrc = extractFn(src, 'buildLivePanelPhotoSection');
 ok(photoSectionSrc.includes('live-photo-camera-input') && photoSectionSrc.includes('live-video-camera-input') && photoSectionSrc.includes('live-photo-upload-input'), 'Photo/Video/Upload inputs still defined for the BFE case that still uses this section');
 
-// 3) Event card icon-action-row: Photo/Score/Notes gate on getLiveEvent
-// matching this event, NOT on whether the Live Panel is expanded.
+// 3) Event card icon-action-row: Photo/Notes gate on getLiveEvent matching
+// this event, NOT on whether the Live Panel is expanded. Score (2026-09-29)
+// is covered separately in test_score_competitive_gate.mjs, since its gate
+// is now a different shape entirely (competitive-ever, not live-right-now).
 const cardRowMatch = src.match(/<div class="icon-action-row" style="justify-content:flex-start;gap:26px;margin:10px 4px 2px">[\s\S]*?<\/div>\s*<div id="\$\{whoId\}"/);
 ok(!!cardRowMatch, 'found the live event card icon-action-row block');
 const cardRow = cardRowMatch ? cardRowMatch[0] : '';
 ok(cardRow.includes("getLiveEvent()?.id !== evt.id") && !cardRow.includes('_livePanelOpen && getLiveEvent()?.id === evt.id'), 'Photo/Notes gate on getLiveEvent alone, not _livePanelOpen');
-ok(/getLiveEvent\(\)\?\.id === evt\.id \? '' : `/.test(cardRow), 'Score gate on getLiveEvent alone too');
 
 // 4) Rail: the livePanelHere gate is gone — Photo/Video/Upload/Note gate on
 // !bfe only, so they stay up regardless of whether the Live Panel is open.
