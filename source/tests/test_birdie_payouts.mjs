@@ -117,7 +117,7 @@ const conserved = r => r.payouts.reduce((s, x) => s + x.total, 0) + r.unallocate
 {
   let seed = 89; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
   const pick = a => a[Math.floor(rnd() * a.length)];
-  let bad = 0, skipped = 0; const N = 3000;
+  let bad = 0; const skipped = 0; const N = 3000;
   for (let i = 0; i < N; i++) {
     const games = ['birdiepay'].concat(['skins', 'cttp', 'birdieball'].filter(() => rnd() < 0.5));
     const cfg = {
@@ -127,20 +127,13 @@ const conserved = r => r.payouts.reduce((s, x) => s + x.total, 0) + r.unallocate
     };
     const n = 1 + Math.floor(rnd() * 8);
     const cards = Array.from({ length: n }, (_, k) => ({ player: 'P' + k, holes: PARS.map(p => rnd() < 0.05 ? null : p + pick([-2, -1, -1, 0, 0, 1, 2])) }));
-    // Only configs whose fixed carve-outs fit inside the pot: CTP/BirdieBall over-commit is a
-    // pre-existing edge (the Host Panel doesn't stop CTP $ + BirdieBall $ exceeding the pot) and
-    // not what this fuzz is checking.
-    const fixed = cfg.games.includes('cttp') ? cfg.cttp_config.dollar_per_hole * 2 : 0;
-    const bbCost = cfg.games.includes('birdieball') ? cfg.birdieball_config.dollar_per_player * n : 0;
-    if (fixed + bbCost > cfg.dollar_per_player * n) { skipped++; continue; }
     const r = E.computeGatheringGamesPayout(cfg, cards, {}, []);
     const paid = r.payouts.reduce((s, x) => s + x.total, 0);
     if (Math.abs(paid + r.unallocated - r.total_pot) > 1e-9) bad++;
     if (r.birdiepay.total_paid > r.total_pot) bad++;
     if (r.birdiepay.paid_each > r.birdiepay.per_birdie) bad++;
   }
-  eq(bad, 0, `J: ${N - skipped} random closes, all conserved, never pays above the flat $ or the pot`);
-  ok(skipped < N / 2, 'J: fuzz still exercised most cases');
+  eq(bad, 0, `J: ${N} random closes (including over-committed CTP/BirdieBall), all conserved, never pays above the flat $ or the pot`);
 }
 
 // ── K: portal — Host Panel form, save payload, renderer, event-card details
@@ -158,7 +151,7 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
   };
   vm.createContext(ctx);
   const fns = ['gatheringGamesChecklistHtml', 'toggleGamesFormGame', 'gatheringGamesCttpSectionHtml', 'gatheringGamesBirdieballSectionHtml',
-    'gatheringGamesBirdiepaySectionHtml', 'setGamesFormBirdiepayDollarPerBirdie', 'updateGamesFormPotPreview', 'submitGatheringGames'];
+    'gatheringGamesBirdiepaySectionHtml', 'setGamesFormBirdiepayDollarPerBirdie', 'gamesFormOverCommit', 'updateGamesFormPotPreview', 'submitGatheringGames'];
   vm.runInContext(`
     const GATHERING_GAMES_META = ${JSON.stringify({ skins: { label: 'Skins', icon: 'x' }, cttp: { label: 'CTP', icon: 'x' }, birdieball: { label: 'BirdieBall', icon: 'x' }, birdiepay: { label: 'Birdie Payouts', icon: 'x' } })};
     let _gamesFormSelected = new Set(); let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
@@ -168,6 +161,7 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
     let _gamesFormBirdiepayPars = ${JSON.stringify(pars)};
     let _gamesFormPar3Holes = []; let _gamesFormVenueParDataAvailable = false;
     ${fns.map(n => extractFn(src, n)).join('\n')}
+    this.updateGamesFormPotPreview = updateGamesFormPotPreview;
     this.api = { toggleGamesFormGame, setGamesFormBirdiepayDollarPerBirdie, submitGatheringGames, gatheringGamesBirdiepaySectionHtml, sel: () => [..._gamesFormSelected] };
   `, ctx);
   return { ctx, posts, toasts, dom };
@@ -227,6 +221,70 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
   vm.runInContext('const regDataStub=1;' + `let regData = [{gatheringId: 7, status: 'Yes'},{gatheringId: 7, status: 'Yes'}];` + extractFn(src, 'gatheringGameDetailsBody') + ';this.f=gatheringGameDetailsBody;', dctx);
   const body = dctx.f({ source: 'gathering', gatheringId: 7 }, E.gatheringConfigFromLegacy(row(['birdiepay', 'skins'])));
   ok(body.includes('Birdie Payouts') && body.includes('$5.00 for every birdie') && body.includes('minus any birdie payouts'), 'K: event-card Games details list Birdie Payouts and tell Skins it shares the pot');
+}
+
+// ── M: over-committed carve-outs (Dev-89) — CTP purse / BirdieBall can never take more than the pot has
+{
+  const cards3 = [card('Ann', { 1: 3 }), card('Bob'), card('Cy')]; // 3 players
+  // CTP: $10 × 2 holes = $20 fixed, but 3 players × $5 = $15 pot → each hole pays floor(15/2) = $7
+  const r = E.computeGatheringGamesPayout({ games: ['cttp', 'skins'], dollar_per_player: 5, cttp_config: { dollar_per_hole: 10, holes: [3, 8] } }, cards3,
+    { 3: { player: 'Bob', dist: 4 }, 8: { player: 'Cy', dist: 9 } }, []);
+  eq([r.cttp.capped, r.cttp.per_hole, r.cttp.paid_per_hole], [true, 10, 7], 'M: CTP capped, reports the set rate and the paid rate');
+  eq(r.cttp.holes.map(h => h.paid), [7, 7], 'M: every hole pays the same reduced amount');
+  eq([who(r, 'Bob').cttp, who(r, 'Cy').cttp], [7, 7], 'M: leaders credited the reduced amount');
+  eq(r.skins.pot, 1, 'M: $15 − $14 = $1 left for Skins');
+  ok(conserved(r), 'M: CTP cap conserves the pot');
+  // unclaimed hole under a cap rolls only what was actually carved
+  const u = E.computeGatheringGamesPayout({ games: ['cttp', 'skins'], dollar_per_player: 5, cttp_config: { dollar_per_hole: 10, holes: [3, 8] } }, cards3, { 3: { player: 'Bob' } }, []);
+  eq([u.cttp.unclaimed_to_skins, u.skins.pot], [7, 8], 'M: unclaimed capped hole ($7) rolls into Skins, not the configured $10');
+  ok(conserved(u), 'M: conserved with an unclaimed capped hole');
+  // a CTP that fits is untouched and carries no cap keys
+  const fits = E.computeGatheringGamesPayout({ games: ['cttp'], dollar_per_player: 20, cttp_config: { dollar_per_hole: 10, holes: [3] } }, cards3, { 3: { player: 'Bob' } }, []);
+  ok(!('capped' in fits.cttp) && !('paid_per_hole' in fits.cttp), 'M: uncapped CTP result has no cap keys');
+  // BirdieBall: set at $4/player × 3 = $12, but CTP takes $10 of a $15 pot → only $5 left
+  const b = E.computeGatheringGamesPayout({ games: ['cttp', 'birdieball'], dollar_per_player: 5, cttp_config: { dollar_per_hole: 10, holes: [3] }, birdieball_config: { dollar_per_player: 4 } },
+    cards3, { 3: { player: 'Bob' } }, [{ player_name: 'Ann', kept: true }]);
+  eq([b.birdieball.capped, b.birdieball.configured_pot, b.birdieball.pot, who(b, 'Ann').birdieball], [true, 12, 5, 5], 'M: BirdieBall pot capped to what CTP left');
+  ok(conserved(b), 'M: BirdieBall cap conserves the pot');
+  // everything over-committed at once, including Birdie Payouts: nobody is paid from money that isn't there
+  const all = E.computeGatheringGamesPayout({ games: ['skins', 'cttp', 'birdieball', 'birdiepay'], dollar_per_player: 4,
+    cttp_config: { dollar_per_hole: 9, holes: [3, 8] }, birdieball_config: { dollar_per_player: 3 }, birdiepay_config: { dollar_per_birdie: 5, pars: PARS } },
+    cards3, { 3: { player: 'Bob' }, 8: { player: 'Cy' } }, [{ player_name: 'Bob', kept: true }]);
+  ok(conserved(all) && all.payouts.every(x => x.total >= 0), 'M: fully over-committed round still conserves the pot');
+  eq(all.payouts.reduce((t, x) => t + x.total, 0) <= all.total_pot, true, 'M: total paid never exceeds the pot');
+  // results explain a cap in plain words
+  const rctx = { escapeHtml: x => String(x), BFEngine: E }; vm.createContext(rctx);
+  vm.runInContext(extractFn(src, 'renderGatheringPayoutHtml') + ';this.f=renderGatheringPayoutHtml;', rctx);
+  const html = rctx.f(r);
+  ok(html.includes('Set at $10/hole') && html.includes('each hole paid $7') && html.includes('CTP — $7/hole'), 'M: CTP cap explained in the results');
+  ok(rctx.f(b).includes('the pot only had $5 left after CTP'), 'M: BirdieBall cap explained in the results');
+}
+// ── N: Host Panel guard (Dev-89) — can't save CTP/BirdieBall that don't fit the pot
+{
+  const g = formSandbox(); const api = g.ctx.api; const doc = g.dom.window.document;
+  // 4 confirmed Yes × $20 = $80 pot. CTP $10 × 2 holes = $20 + BirdieBall $5 × 4 = $20 → $40 fits.
+  const setup = (dpp, ctp, bb) => {
+    doc.getElementById('games-form-dpp').value = String(dpp);
+    vm.runInContext(`_gamesFormSelected = new Set(['cttp','birdieball','skins']); _gamesFormCttpConfig = { dollar_per_hole: ${ctp}, hole_mode: 'custom', holes: [3, 8] }; _gamesFormBirdieballConfig = { dollar_per_player: ${bb} };`, g.ctx);
+  };
+  setup(20, 10, 5);
+  await api.submitGatheringGames(7);
+  eq(g.posts.length, 1, 'N: a config that fits saves');
+  setup(8, 10, 2); // pot 4 × 8 = $32; CTP 20 + BB 8 = $28 fits… bump CTP to overflow
+  vm.runInContext(`_gamesFormCttpConfig.dollar_per_hole = 15;`, g.ctx); // 30 + 8 = 38 > 32
+  await api.submitGatheringGames(7);
+  eq(g.posts.length, 1, 'N: over-committed config is NOT saved');
+  ok(g.toasts.some(([m, e]) => e && /more than the \$32\.00 pot/.test(m)), 'N: toast names the pot and the cost');
+  g.ctx.updateGamesFormPotPreview();
+  ok(doc.getElementById('games-form-pot-preview').innerHTML.includes('⚠️'), 'N: live preview shows the warning while editing');
+  setup(3, 1, 4); // BirdieBall $4/player when each player only puts in $3 — impossible at any headcount
+  await api.submitGatheringGames(7);
+  eq(g.posts.length, 1, 'N: BirdieBall rate above $/player is never saved');
+  ok(g.toasts.some(([m, e]) => e && /more than the whole \$3\.00/.test(m)), 'N: toast explains BirdieBall > $/player');
+  setup(20, 10, 5);
+  vm.runInContext(`_gamesFormYesCount = 0;`, g.ctx); // nobody confirmed yet: only headcount-independent checks apply
+  await api.submitGatheringGames(7);
+  eq(g.posts.length, 2, 'N: with no confirmed players yet, a plausible config still saves');
 }
 // ── L: wiring — checklist meta, seal label, engine version tag, worker accepts the game
 {
