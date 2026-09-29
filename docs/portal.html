@@ -269,10 +269,17 @@ body {
 /* Dev-88 — which round the rail is tied to, since cascade v2 can now latch it
    on well before/after the moment it's obviously "this round" (tee-time
    window, or a latch surviving a walk to the pub) — Brian: "when it's active
-   it should be clearly articulated what it's tied to." Truncated to fit the
-   ~50px column; the full name is still in the title attribute below. */
-#at-course-rail .acr-name { font-size: 0.58rem; font-weight: 700; color: #fff; opacity: 0.92;
-  max-width: 48px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+   it should be clearly articulated what it's tied to." Dev-89 (2026-09-29):
+   Brian flagged the horizontal truncated label as basically unreadable at
+   the rail's real ~50px width ("Mosele..." for "Moselem"), so this now runs
+   vertically (writing-mode) along the rail's own long axis instead of
+   fighting its short one — the rail is already a tall, narrow column, so a
+   vertical label actually gets MORE legible characters than the horizontal
+   version did, not fewer. Truncates with ellipsis past max-height for a
+   genuinely long name; the full name is still in the title attribute below. */
+#at-course-rail .acr-name { writing-mode: vertical-rl; text-orientation: mixed;
+  font-size: 0.6rem; font-weight: 700; color: #fff; opacity: 0.92; letter-spacing: 0.02em;
+  max-height: 92px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-bottom: 2px; }
 #at-course-rail .acr-status { display: flex; flex-direction: column; align-items: center; font-size: 0.52rem;
   font-weight: 800; letter-spacing: 0.04em; color: #F5C842; padding: 2px 0 5px; border-bottom: 1px solid rgba(255,255,255,0.15); margin-bottom: 2px; width: 100%; }
 #at-course-rail .acr-btn { width: 50px; display: flex; flex-direction: column; align-items: center; gap: 1px;
