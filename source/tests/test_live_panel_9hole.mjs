@@ -86,6 +86,12 @@ function submitCtx() {
     BFE_API: 'https://bfe.example/api',
     evtPhotoKey: (evt) => (evt && evt.name) || '',
     csNormalizedVenueName: () => 'Test Venue',
+    // Dev-89 — submitScorecard now resolves marks the same way Card Score
+    // Sheet does (csResolvePars/csMarkFromPar). This synthetic "Test Venue"
+    // has no real par data, so null is the correct, honest answer here —
+    // matches csResolvePars' own real behavior for an unrecognized venue.
+    csResolvePars: () => null,
+    csMarkFromPar: () => null,
     renderLiveBanner: () => {},
     showToast: () => {},
     captureEventWeather: () => {},
@@ -118,5 +124,55 @@ let { ctx: c3, calls: calls3 } = submitCtx();
 c3._scHoles[0] = 4; c3._scHoles[9] = 5;
 await vm.runInContext(`submitScorecard('18-Hole Gathering')`, c3);
 ok(calls3[0].body.hole_count === 18 && calls3[0].body.hole_half === null, '18-hole event: hole_count 18, hole_half null (unchanged behavior)');
+
+// Dev-89 (2026-09-29) — the actual fix: the Live Panel's Post-Round
+// Scorecard (this same submitScorecard function) always sent marks: null,
+// so every round entered live on-course never got My History's classic
+// circle-for-birdie/square-for-bogey styling, even though the exact same
+// par lookup Card Score Sheet already uses (csResolvePars/csMarkFromPar/
+// BSGC_PARS) works identically here. Runs the REAL functions (not stubs)
+// against a Blue Shamrock round to prove marks actually populate now.
+function submitCtxWithRealPars() {
+  const calls = [];
+  const ctx = {
+    Array, String, Number, JSON, Object, Math,
+    _scHoles: new Array(18).fill(null), _scHoleHalf: 'front', _scPicking: null,
+    _scPlayer: 'Jeremy Burkett', _scSubmitting: false,
+    window: { _liveScoreMode: 'strokes', _liveIsTeamRound: false },
+    currentPlayer: 'Jeremy Burkett',
+    eventData: [{ name: 'More Golf, Less Work Monday', holes: 18, location: 'Blue Shamrock Golf Club' }],
+    SCORECARD_API: 'https://bfe.example/api',
+    BFE_API: 'https://bfe.example/api',
+    evtPhotoKey: (evt) => (evt && evt.name) || '',
+    getVenueParsByName: () => null, // no Venue Manager override — forces the BSGC_PARS fallback, same as real prod for an unconfigured venue
+    // Pulled from the real source rather than retyped, so this test breaks
+    // (loudly) if the real par/offset tables ever change instead of silently
+    // testing against a stale copy.
+    BSGC_PARS: eval('(' + src.match(/const BSGC_PARS = (\[[^\]]*\]);/)[1] + ')'),
+    CS_OFFSET_TO_MARK: eval('(' + src.match(/const CS_OFFSET_TO_MARK = (\{[^}]*\});/)[1] + ')'),
+    renderLiveBanner: () => {},
+    showToast: () => {},
+    captureEventWeather: () => {},
+    _bbAnswers: [],
+    fetch: async (url, opts) => { calls.push({ url, body: JSON.parse(opts.body) }); return { json: async () => ({ ok: true }) }; },
+  };
+  vm.createContext(ctx);
+  vm.runInContext([
+    extractFn(src, 'csNormalizedVenueName'),
+    extractFn(src, 'csResolvePars'),
+    extractFn(src, 'csMarkFromPar'),
+    extractFn(src, 'submitScorecard'),
+  ].join('\n'), ctx);
+  return { ctx, calls };
+}
+let { ctx: c4, calls: calls4 } = submitCtxWithRealPars();
+// BSGC_PARS = [4,4,3,4,5,4,5,3,4, 3,5,4,4,4,3,4,5,3] — hole1 par4, hole2 par4, hole3 par3
+c4._scHoles[0] = 4; // hole1: par → mark null
+c4._scHoles[1] = 3; // hole2: birdie
+c4._scHoles[2] = 5; // hole3: double bogey
+await vm.runInContext(`submitScorecard('More Golf, Less Work Monday')`, c4);
+ok(Array.isArray(calls4[0].body.marks), 'marks is a populated array, not null, once a real venue with known par is resolved');
+ok(calls4[0].body.marks[0] === null && calls4[0].body.marks[1] === 'birdie' && calls4[0].body.marks[2] === 'double',
+  'marks computed correctly per hole from BSGC_PARS (par/birdie/double)');
 
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
