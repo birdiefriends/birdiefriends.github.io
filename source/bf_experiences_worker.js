@@ -157,7 +157,8 @@
 //                                             -- name — same identity space as
 //                                             -- gatherings.host_id
 //     games TEXT NOT NULL,                   -- JSON array, subset of
-//                                             -- ['skins','cttp','birdieball']
+//                                             -- ['skins','cttp','birdieball',
+//                                             --  'birdiepay']
 //     dollar_per_player REAL NOT NULL,       -- total pot = this x players
 //                                             -- with a scorecard in at Close
 //                                             -- (Dev-87 — was "confirmed Yes"
@@ -215,6 +216,21 @@
 //                                             -- (that one funds the whole
 //                                             -- pot; this one is just
 //                                             -- BirdieBall's slice of it).
+//     birdiepay_config TEXT,                 -- Dev-89. JSON, only when 'birdiepay'
+//                                             -- is in games: {dollar_per_birdie,
+//                                             -- pars: [18 hole pars]}. A flat $ per
+//                                             -- birdie-or-better, paid from the
+//                                             -- buy-in pot BEFORE Skins (variable
+//                                             -- cost, capped at what's left).
+//                                             -- `pars` is frozen from the venue at
+//                                             -- save time, same reasoning as
+//                                             -- cttp_config.holes. ADDITIVE
+//                                             -- MIGRATION (run once in the D1
+//                                             -- console BEFORE deploying this
+//                                             -- Worker's birdiepay support):
+//                                             --   ALTER TABLE bfe_gathering_games
+//                                             --   ADD COLUMN birdiepay_config TEXT;
+//                                             -- NULL when 'birdiepay' isn't selected.
 //     status TEXT NOT NULL DEFAULT 'open',   -- 'open' (configured, Live Panel
 //                                             -- carve-out active) | 'closed'
 //                                             -- (payout calculated & frozen
@@ -1006,7 +1022,7 @@ export default {
     // the hosting player's own call, same trust level as posting a Note or a
     // Card Score (client-supplied player identity, no server-side ownership
     // re-check against the real gatherings table).
-    const VALID_GAMES = ['skins', 'cttp', 'birdieball'];
+    const VALID_GAMES = ['skins', 'cttp', 'birdieball', 'birdiepay'];
 
     // GET /bfe/gathering-games?gathering_id=X -> single config (or null)
     // GET /bfe/gathering-games?host_id=X      -> every config that host owns
@@ -1027,6 +1043,7 @@ export default {
           allocations: JSON.parse(row.allocations), // deprecated (Dev-86 round 3) — always {} now, kept for shape compat
           cttp_config: row.cttp_config ? JSON.parse(row.cttp_config) : null,
           birdieball_config: row.birdieball_config ? JSON.parse(row.birdieball_config) : null,
+          birdiepay_config: row.birdiepay_config ? JSON.parse(row.birdiepay_config) : null,
           payout_summary: row.payout_summary ? JSON.parse(row.payout_summary) : null
         });
         if (gatheringId) {
@@ -1054,6 +1071,7 @@ export default {
     // Body: { gathering_id, gathering_name, host_id, games: [...], dollar_per_player,
     //         cttp_config: {dollar_per_hole, hole_mode, holes: [n,...]}       -- required iff 'cttp' in games
     //         birdieball_config: {dollar_per_player}                          -- required iff 'birdieball' in games
+    //         birdiepay_config: {dollar_per_birdie, pars: [18 ints]}          -- required iff 'birdiepay' in games (Dev-89)
     //       }
     // Dev-86 round 3 (Brian): "BirdieBall should also be a $/player payout,
     // the balance going to Skins." Both CTP and BirdieBall are now fixed-$
@@ -1066,7 +1084,7 @@ export default {
       try { body = await request.json(); } catch (e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { gathering_id, gathering_name, host_id, games, dollar_per_player, cttp_config, birdieball_config } = body;
+      const { gathering_id, gathering_name, host_id, games, dollar_per_player, cttp_config, birdieball_config, birdiepay_config } = body;
       if (!gathering_id || !host_id) {
         return new Response(JSON.stringify({ error: 'gathering_id and host_id are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -1095,11 +1113,26 @@ export default {
           return new Response(JSON.stringify({ error: 'birdieball_config.dollar_per_player must be a positive number' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
       }
+      if (games.includes('birdiepay')) {
+        if (!birdiepay_config || typeof birdiepay_config !== 'object') {
+          return new Response(JSON.stringify({ error: 'birdiepay_config is required when birdiepay is selected' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (!(Number(birdiepay_config.dollar_per_birdie) > 0)) {
+          return new Response(JSON.stringify({ error: 'birdiepay_config.dollar_per_birdie must be a positive number' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const bp = birdiepay_config.pars;
+        if (!Array.isArray(bp) || bp.length !== 18 || !bp.every(p => Number.isInteger(p) && p >= 3 && p <= 6)) {
+          return new Response(JSON.stringify({ error: 'birdiepay_config.pars must be 18 hole pars (3-6) — this venue needs par data in Venue Manager first' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+      }
       const cttpConfigToStore = games.includes('cttp')
         ? { dollar_per_hole: Number(cttp_config.dollar_per_hole), hole_mode: cttp_config.hole_mode === 'custom' ? 'custom' : 'all_par3', holes: cttp_config.holes.slice().sort((a, b) => a - b) }
         : null;
       const birdieballConfigToStore = games.includes('birdieball')
         ? { dollar_per_player: Number(birdieball_config.dollar_per_player) }
+        : null;
+      const birdiepayConfigToStore = games.includes('birdiepay')
+        ? { dollar_per_birdie: Number(birdiepay_config.dollar_per_birdie), pars: birdiepay_config.pars.slice() }
         : null;
       try {
         const result = await env.DB.prepare(
@@ -1111,6 +1144,21 @@ export default {
              cttp_config = excluded.cttp_config, birdieball_config = excluded.birdieball_config,
              status = 'open', payout_summary = NULL, closed_at = NULL, updated_at = excluded.updated_at`
         ).bind(gathering_id, gathering_name || null, host_id, JSON.stringify(games), Number(dollar_per_player), cttpConfigToStore ? JSON.stringify(cttpConfigToStore) : null, birdieballConfigToStore ? JSON.stringify(birdieballConfigToStore) : null).run();
+        // Dev-89: birdiepay_config is written in its own statement, NOT in the
+        // upsert above, so Skins/CTP/BirdieBall saves keep working even before
+        // the additive migration (see the schema comment) has been run. Only a
+        // save that actually uses Birdie Payouts needs the column; turning it
+        // off clears it best-effort.
+        if (birdiepayConfigToStore) {
+          try {
+            await env.DB.prepare(`UPDATE bfe_gathering_games SET birdiepay_config = ? WHERE gathering_id = ?`)
+              .bind(JSON.stringify(birdiepayConfigToStore), gathering_id).run();
+          } catch (e) {
+            return new Response(JSON.stringify({ error: 'Birdie Payouts needs the birdiepay_config column (run the ALTER TABLE in the Worker schema comment): ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+        } else {
+          try { await env.DB.prepare(`UPDATE bfe_gathering_games SET birdiepay_config = NULL WHERE gathering_id = ?`).bind(gathering_id).run(); } catch (e) { /* column not migrated yet — nothing to clear */ }
+        }
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error saving games config: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
