@@ -1,3 +1,28 @@
+v4.8.11 · 2026-09-29
+Deployed: 2026-09-29 ("At the course" rewritten, cascade v2 -- replaces gating the rail's existence
+on GPS distance + a resolved venue + stored coordinates (any one missing meant it silently never
+showed) with three independent triggers, any one enough: proximity (same as before), a 15-minute
+pre-tee-time window that needs no GPS or venue data at all, or a new manual toggle in the header
+(replacing the old hidden ?atcourse=1/0 URL trick -- Info moved into Settings as its first item to
+make room). Once on for a round it stays on -- no auto-close from wandering out of GPS range or a
+timer running out, only the same toggle turned off again, since a stray auto-close is the same shape
+of mistake as the swipe-to-No bug and doesn't handle a post-round stop that isn't on the venue's own
+property. Also: the rail no longer force-tucks itself while the Live Panel is open -- it stays
+available at the same time now, tuck state fully independent of the panel.)
+
+v4.8.10 · 2026-09-28
+Deployed: 2026-09-28 (Live-fire fix, same day: a left-swipe on Home used to fire the same "No" write
+as tapping No, even for a Gathering you'd already said Yes to -- reaching for another icon (or the
+new Games icon) with a stray horizontal drag could silently cancel a real registration, no confirm
+step. It bit one player twice in one round. Swipe-to-dismiss is now blocked for any event -- Series
+or Gathering -- you already have an active Yes/Sub on, same as Series always worked; you have to
+cancel explicitly instead. Swiping an event you've never responded to still works as a cold No.)
+
+v4.8.9 · 2026-09-28
+Deployed: 2026-09-28 (Quick fix, live at Blue Shamrock: the "At the course" radius dropped to 700m
+earlier today turned out too tight for a real 18-hole round -- bumped to 1000m/~0.62mi, still well
+clear of the home-distance issue that shrank it in the first place.)
+
 v4.8.8 · 2026-09-28
 Deployed: 2026-09-28 (A gamed Gathering's event card now has its own 🏆 Games icon -- tap it for a
 read-only breakdown of what's in play (CTP/BirdieBall carve-outs, Skins pot, $/player, confirmed
