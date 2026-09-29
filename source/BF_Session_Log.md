@@ -5143,3 +5143,33 @@ what was agreed:
   no behavior change there.
 - Full suite: **18 files, 17,281 checks, all green.**
 - Client-side only (`portal.html`) — no `worker.js` changes.
+
+**17. Rail identity + event-card icon cleanup (portal v4.8.12).** Same-morning follow-up, requested
+as a sidebar while v4.8.11 was still publishing. Three changes:
+- **Rail event identity.** Brian: "when it's active it should be clearly articulated what it's tied
+  to" — cascade v2 can latch the rail on from a tee-time window or a stale manual toggle, well before
+  the moment it's obviously "this round." Added `.acr-name` — a truncated event-name label above the
+  ⛳ status pill (rail column is only ~50px wide, so it clips with ellipsis at ~48px); the full name
+  is also in the status pill's `title` attribute as a fallback.
+- **Event-card duplicate icons dropped.** Brian: "strip duplicate icons from the Event Cards,
+  yardage, rules are 2 examples." Removed Yardage and Rules from the card entirely — both are on the
+  rail too (`openYardageModal()`/`openRulesModal()`, same modals, no card-specific behavior). Also
+  dropped Venue, on the same reasoning (identical `openVenueViewerModal()` call as the rail's Course
+  button) even though Brian only named the first two explicitly — flagged in-code as an inference to
+  confirm, not a unilateral scope expansion he didn't ask for. Photo and Notes were deliberately left
+  alone: those are a genuine second capture path (the card is the only way to add a memory before the
+  rail exists at all, days ahead of the round), not a pure duplicate like the reference-tool icons.
+- **Score icon re-gated to "competitive, ever," not "live, right now."** Brian: "the scorecard icon
+  should only be active in non-competition games — its job is to be there for a player's scoring
+  myHistory when there's not a competitive event that captures the scorecard as part of the live
+  panel process." Old gate: `getLiveEvent()?.id === evt.id ? '' : Score button` (hidden only during
+  this specific round's live window). New gate: `(isBFEBackedCard(evt) || (gathering && gatheringIsGamed(...))) ? '' : Score button`
+  — hidden for the round's entire lifetime once it's competitive, whether or not it's live yet.
+  Games' own gate (already "competitive, ever," unchanged from v4.8.8) turned out to be exactly the
+  right model to copy here. Photo/Notes' gates were NOT touched — still live-window-only, since
+  Brian's request named the Score/scorecard icon specifically, not the capture icons.
+- New `test_score_competitive_gate.mjs` (12 checks) covering all three changes; `test_dupe_removal.mjs`
+  had its now-obsolete Score-gate assertion removed (9 → 8 checks) since Score's gate is a different
+  shape entirely now, covered in the new file instead.
+- Full suite: **19 files, 17,292 checks, all green.**
+- Client-side only (`portal.html`) — no `worker.js` changes.
