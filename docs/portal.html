@@ -3576,7 +3576,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.1.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.2.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -14737,7 +14737,8 @@ function renderGatheringPayoutHtml(s) {
     }
   }
   if (s.cttp) {
-    html += label(`🎯 CTP — ${money(s.cttp.per_hole)}/hole`);
+    html += label(`🎯 CTP — ${money(s.cttp.capped ? s.cttp.paid_per_hole : s.cttp.per_hole)}/hole`);
+    if (s.cttp.capped) html += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(s.cttp.per_hole)}/hole, but that was more than the pot had, so each hole paid ${money(s.cttp.paid_per_hole)}</div>`;
     html += s.cttp.holes.map(h => h.player
       ? line(`#${h.hole} ${esc(h.player)}${h.dist ? ` <span style="color:var(--text-muted)">(${h.dist} ft)</span>` : ''}`, money(h.paid))
       : line(`#${h.hole} <span style="color:var(--text-muted)">unclaimed → Skins</span>`, '—')).join('');
@@ -14745,6 +14746,7 @@ function renderGatheringPayoutHtml(s) {
   if (s.birdieball) {
     const b = s.birdieball;
     html += label(`🐦 BirdieBall — ${money(b.pot)}`);
+    if (b.capped) html += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(b.configured_pot)}, but the pot only had ${money(b.pot)} left after CTP</div>`;
     if (b.mode === 'kept') html += `<div style="font-size:0.78rem">Kept it: ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)} each</div>`;
     else if (b.mode === 'longest') html += `<div style="font-size:0.78rem">Nobody kept it — held longest (#${esc(b.longest_hole)}, stroke ${esc(b.longest_stroke)}): ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)}${b.winners.length > 1 ? ' each' : ''}</div>`;
     else html += `<div style="font-size:0.78rem;color:var(--text-muted)">No answers recorded — ${money(b.given_back_each)} back to each player</div>`;
@@ -16851,6 +16853,27 @@ function setGamesFormBirdiepayDollarPerBirdie(val) {
   _gamesFormBirdiepayConfig.dollar_per_birdie = parseFloat(val) || 0;
   updateGamesFormPotPreview();
 }
+// Dev-89 — the fixed carve-outs (CTP purse + BirdieBall) must fit inside the
+// pot. Returns the numbers the preview and the save guard both use, so the
+// two can't disagree. `problem` is a host-readable sentence, or null if fine.
+// BirdieBall's per-player rate above the whole $/player is impossible at ANY
+// headcount; CTP's purse is a fixed total, so whether it fits depends on how
+// many players are in — checked against the confirmed-Yes count when there is one.
+function gamesFormOverCommit(dpp, yesCount) {
+  const cttpCost = (_gamesFormSelected.has('cttp') && _gamesFormCttpConfig.dollar_per_hole > 0)
+    ? _gamesFormCttpConfig.dollar_per_hole * _gamesFormCttpConfig.holes.length : 0;
+  const bbRate = (_gamesFormSelected.has('birdieball') && _gamesFormBirdieballConfig.dollar_per_player > 0)
+    ? _gamesFormBirdieballConfig.dollar_per_player : 0;
+  const fixedCost = cttpCost + bbRate * yesCount;
+  const pot = dpp * yesCount;
+  let problem = null;
+  if (dpp > 0 && bbRate > dpp) {
+    problem = `BirdieBall ($${bbRate.toFixed(2)}/player) is more than the whole $${dpp.toFixed(2)} each player puts in`;
+  } else if (dpp > 0 && yesCount > 0 && fixedCost > pot) {
+    problem = `CTP + BirdieBall come to $${fixedCost.toFixed(2)}, more than the $${pot.toFixed(2)} pot (${yesCount} confirmed × $${dpp.toFixed(2)}) — lower a rate or raise $ per Player`;
+  }
+  return { cttpCost, bbRate, fixedCost, pot, problem };
+}
 function updateGamesFormPotPreview(yesCount) {
   if (yesCount !== undefined) _gamesFormYesCount = yesCount;
   yesCount = _gamesFormYesCount;
@@ -16882,6 +16905,10 @@ function updateGamesFormPotPreview(yesCount) {
   if (bpOn) {
     lines.push(`🐤 Birdie Payouts: $${_gamesFormBirdiepayConfig.dollar_per_birdie.toFixed(2)} per birdie, taken from the pot before Skins`);
   }
+  const overCommit = gamesFormOverCommit(dpp, yesCount);
+  if (overCommit.problem) {
+    lines.push(`<span style="color:#c0392b;font-weight:700">⚠️ ${overCommit.problem}</span>`);
+  }
   if (_gamesFormSelected.has('skins')) {
     lines.push(bpOn
       ? `⛳ Skins gets: $${Math.max(0, remaining).toFixed(2)} minus birdie payouts`
@@ -16911,6 +16938,8 @@ async function submitGatheringGames(gatheringId) {
     if (!(_gamesFormBirdieballConfig.dollar_per_player > 0)) { showToast('BirdieBall: $ per player must be greater than 0', true); return; }
     birdieball_config = { dollar_per_player: _gamesFormBirdieballConfig.dollar_per_player };
   }
+  const overCommit = gamesFormOverCommit(dpp, _gamesFormYesCount);
+  if (overCommit.problem) { showToast(overCommit.problem, true); return; }
   let birdiepay_config = null;
   if (games.includes('birdiepay')) {
     if (!(_gamesFormBirdiepayConfig.dollar_per_birdie > 0)) { showToast('Birdie Payouts: $ per birdie must be greater than 0', true); return; }
