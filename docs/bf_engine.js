@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.0.0';
+  const ENGINE_VERSION = '1.1.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -67,7 +67,8 @@
       if (!(amt > 0)) return;
       const key = canon(name);
       if (!rows.has(key)) rows.set(key, { player: key, skins: 0, cttp: 0, birdieball: 0, given_back: 0 });
-      rows.get(key)[field] += amt;
+      const row = rows.get(key);
+      row[field] = (row[field] || 0) + amt; // birdiepay (Dev-89) is added lazily so pre-existing snapshots keep their exact shape
     };
     const giveBack = pot => {
       if (!(pot > 0) || !n) return { each: 0, unallocated: Math.max(0, pot) };
@@ -159,6 +160,53 @@
       }
     },
 
+    // Birdie Payouts (Dev-89): a flat $ per birdie-or-better, paid to whoever
+    // made it, taken out of the SAME buy-in pot before Skins (Skins gets what
+    // is left). Birdie = gross strokes at least 1 under that hole's par; an
+    // eagle or better is still ONE payout (flat, not scaled). Pars come from
+    // the add-on's own frozen `pars` (18 numbers, saved from the venue when
+    // the host set the game up) — never guessed; no par table → pays nothing
+    // and says so. A 9-hole back-nine card (hole_count 9 + hole_half 'back')
+    // reads pars 10-18. If the birdies would cost more than the pot has left,
+    // every birdie is paid the same reduced amount (floor of what's left ÷
+    // birdies) rather than favoring whoever birdied first; the shortfall is
+    // reported as `capped`. Whatever a cap leaves stays with Skins.
+    birdiepay: {
+      id: 'birdiepay', order: 30, entity: 'individual',
+      carve(state, addon, inputs) {
+        const L = state.ledger;
+        const per = Number(addon.dollar_per_birdie) || 0;
+        const pars = Array.isArray(addon.pars) ? addon.pars : [];
+        const havePars = pars.length === 18 && pars.every(p => Number(p) > 0);
+        const birdies = [];
+        if (havePars) {
+          (inputs.scorecards || []).forEach(c => {
+            const holes = Array.isArray(c.holes) ? c.holes : [];
+            const off = (c.hole_count === 9 && c.hole_half === 'back') ? 9 : 0;
+            holes.forEach((strokes, i) => {
+              const par = Number(pars[off + i]);
+              if (typeof strokes === 'number' && strokes > 0 && par > 0 && strokes <= par - 1) {
+                birdies.push({ hole: off + i + 1, player: L.canon(c.player), strokes, par });
+              }
+            });
+          });
+        }
+        const count = birdies.length;
+        const owed = per * count;
+        const avail = Math.max(0, state.remaining);
+        const capped = owed > avail;
+        const paidEach = !count ? 0 : capped ? Math.floor(avail / count) : per;
+        birdies.forEach(b => { b.paid = paidEach; L.credit(b.player, 'birdiepay', paidEach); });
+        const totalPaid = paidEach * count;
+        state.remaining -= totalPaid;
+        return {
+          per_birdie: per, count, paid_each: paidEach, total_paid: totalPaid,
+          capped, shortfall: capped ? owed - totalPaid : 0,
+          no_par_data: !havePars, birdies
+        };
+      }
+    },
+
     // Skins — the residual game: takes everything not carved out above,
     // plus rollover. $/skin = pot ÷ skins won (round down); zero skins won
     // → pot given back evenly.
@@ -205,6 +253,9 @@
     if (games.includes('birdieball') && row.birdieball_config) {
       addons.push({ id: 'birdieball', entity: 'individual', dollar_per_player: row.birdieball_config.dollar_per_player });
     }
+    if (games.includes('birdiepay') && row.birdiepay_config) {
+      addons.push({ id: 'birdiepay', entity: 'individual', dollar_per_birdie: row.birdiepay_config.dollar_per_birdie, pars: row.birdiepay_config.pars || [] });
+    }
     if (games.includes('skins')) {
       addons.push({ id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' });
     }
@@ -235,7 +286,7 @@
     const dpp = Number(config && config.payout && config.payout.entry_per_player) || 0;
     const totalPot = dpp * ledger.n;
     const state = { ledger, remaining: totalPot, unallocated: 0, rollover: 0 };
-    const results = { cttp: null, birdieball: null, skins: null };
+    const results = { cttp: null, birdieball: null, birdiepay: null, skins: null };
     const addons = ((config && config.addons) || [])
       .filter(a => ADDONS[a.id])
       .slice()
@@ -252,13 +303,16 @@
       if (leftover > 0) state.unallocated += ledger.giveBack(leftover).unallocated;
     }
     const rows = [...ledger.rows.values()]
-      .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + r.given_back }))
+      .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + (r.birdiepay || 0) + r.given_back }))
       .sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
     const games = (config && config.legacy && config.legacy.games) || addons.map(a => a.id);
     return {
       calc_version: 1,
       players_count: ledger.n, players, dollar_per_player: dpp, total_pot: totalPot,
-      games, cttp: results.cttp, birdieball: results.birdieball, skins: results.skins, payouts: rows,
+      games, cttp: results.cttp, birdieball: results.birdieball,
+      // birdiepay only appears in a snapshot when the game was on, so every pre-Dev-89 payout keeps its exact shape
+      ...(results.birdiepay ? { birdiepay: results.birdiepay } : {}),
+      skins: results.skins, payouts: rows,
       unallocated: Math.round(state.unallocated * 100) / 100
     };
   }
