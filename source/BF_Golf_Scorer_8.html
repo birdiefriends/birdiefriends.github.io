@@ -7661,8 +7661,15 @@ async function grpApplyGhinPaste() {
     // newline-separated layouts alike without needing to know which.
     const windowText = raw.slice(idx + matchedTerm.length, idx + matchedTerm.length + 300);
     const numMatches = windowText.match(/[+\-]?\d{1,2}(?:\.\d{1,2})?/g) || [];
+    // Dev-89 (2026-09-29) — a GHIN plus handicap ("+3.2", better than
+    // scratch) was silently flattened to a positive 3.2 by parseFloat,
+    // which treats a leading "+" as a no-op sign rather than the
+    // plus-handicap marker GHIN uses it as. A plus player needs a NEGATIVE
+    // hcp here (36 - hcp*slope/113 must come out ABOVE 36 for them), so a
+    // literal "+" in the matched text now flips the sign; a bare "-" still
+    // parses negative as before (parseFloat already handles that correctly).
     const hcp = numMatches
-      .map(n => parseFloat(n))
+      .map(n => n.trim().startsWith('+') ? -parseFloat(n) : parseFloat(n))
       .find(n => !isNaN(n) && n >= -10 && n <= 54);
 
     if (hcp === undefined) { notFound.push(`${p.name} (no HCP-looking number nearby)`); return; }
