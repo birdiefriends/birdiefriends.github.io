@@ -143,6 +143,17 @@ v17 (Dev-88): ANY file named bftest_<name> is now picked up automatically
 so a new test file no longer needs its own $FileMap line. The explicit
 bftest_ entries below still work and take precedence.
 
+v18 (2026-09-30, Brian): EITHER/OR publishing guard. Publishing is now DIRECT
+(Claude pushes to main from a cloud session) by default, and this tool must
+never run by accident -- it pushes whatever is in this folder straight to main,
+so a stale file here would overwrite live content. The tool now refuses to do
+anything unless a marker file named AUTOPUSH_OK.txt sits next to it. The marker
+is ONE-SHOT: it is deleted the moment this run accepts it, so every AutoPush
+run needs a fresh, deliberate AUTOPUSH_OK.txt (create an empty file with that
+name; any name starting with AUTOPUSH_OK also counts, to survive Windows adding
+a hidden extra .txt). No marker -> prints why and exits before reading, listing
+or pushing anything. The marker is never in $FileMap and is never pushed.
+
 Run this by double-clicking bf_push.bat in the same folder. Drop any of the
 recognized files below into this same folder and it will push them to
 GitHub via the PIN-gated Worker /deploy route, verify each one landed
@@ -247,6 +258,25 @@ function ConvertTo-JsonStringLiteral {
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+# v18: either/or publishing guard -- see the v18 note in the header. Runs BEFORE
+# anything else (no scanning, no listing, no pushing) unless the one-shot marker exists.
+$Marker = @(Get-ChildItem -LiteralPath $ScriptDir -File -Filter "AUTOPUSH_OK*" -ErrorAction SilentlyContinue)
+if ($Marker.Count -eq 0) {
+    Write-Host "BirdieFriends publish tool (v18)" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "STOPPED -- nothing was read or pushed." -ForegroundColor Red
+    Write-Host "Publishing is DIRECT by default (Claude pushes to main from its own session)."
+    Write-Host "This tool pushes whatever is in this folder straight to main, so it only runs"
+    Write-Host "when you deliberately override direct mode by creating an empty file named:"
+    Write-Host "    AUTOPUSH_OK.txt"
+    Write-Host "in this folder. The file is used up (deleted) by the run, so each run needs a new one."
+    Read-Host "`nPress Enter to close"
+    exit
+}
+# Consume the marker immediately (one run only), even if the run below fails or is cancelled.
+foreach ($m in $Marker) { Remove-Item -LiteralPath $m.FullName -Force -ErrorAction SilentlyContinue }
+Write-Host "AUTOPUSH override accepted (marker consumed for this run only)." -ForegroundColor Yellow
+
 # v17 (Dev-88): auto-map any bftest_<name> file not already listed above.
 Get-ChildItem -LiteralPath $ScriptDir -File -Filter "bftest_*" | ForEach-Object {
     $n = $_.Name
@@ -262,7 +292,7 @@ foreach ($name in $FileMap.Keys) {
     if (Test-Path (Join-Path $ScriptDir $name)) { $Found += $name }
 }
 
-Write-Host "BirdieFriends publish tool (v17)" -ForegroundColor Cyan
+Write-Host "BirdieFriends publish tool (v18)" -ForegroundColor Cyan
 Write-Host "Folder: $ScriptDir"
 Write-Host ""
 
