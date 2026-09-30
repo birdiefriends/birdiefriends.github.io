@@ -1,5 +1,7 @@
 # BF_Session_Bootstrap.md — Start Here for a New BirdieFriends Session
-**Status:** **Dev-89 — live on-course support day: swipe-bug fix, "At the course" cascade v2, rail/event-card cleanup, BFE-Admin.html Android-overwrite recovery, GHIN plus-handicap sign fix, Live Panel scorecard marks fix (2026-09-29). Complete — start the next session as Dev-90.** Portal is now **v4.8.14**. Full detail in `BF_Session_Log.md` entries #15–20 and `BF_Dev89_Session_Starter.md` (read that file first if you have it — it's the concise version of everything below). Highlights: (1) a left-swipe on Home was silently firing the same No-write as tapping No even for an active Yes/Sub registration — fixed at the root in `initSwipeListeners()`, after twice cancelling Brian's own live registration on-course (`test_swipe_guard.mjs`). (2) "At the course" rail existence rebuilt as cascade v2 — three independent OR triggers (proximity, a 15-min pre-tee-time window, a manual header toggle) replacing an AND-chain where any one missing gate meant the rail silently never showed; closure is manual-only now, no auto-close (`test_at_course.mjs` rewritten, 57 checks). (3) rail got a vertical event-name label (`.acr-name`, `writing-mode: vertical-rl`) and the event card had Yardage/Rules/Venue removed (pure rail duplicates) and its Score icon re-gated to "competitive, ever" not "live, right now" (`test_score_competitive_gate.mjs`). (4) `BFE-Admin.html` — outside the normal source/docs mirror, no `source/` copy at all — had 405 lines silently deleted by a stale Android AutoPush the day before (the whole Membership HCP Sync section, Dev-86); restored wholesale, HCP Sync's row-include now defaults on for every GHIN match regardless of active status, and a real sign bug was fixed in all three GHIN-paste sites (`parseFloat('+3.2')` was dropping GHIN's plus-handicap marker, inverting the quota for any better-than-scratch player). (5) the Live Panel's own Post-Round Scorecard (`submitScorecard()`, the path actually used on-course — separate from My History's `submitCardScore()`) had always hardcoded `marks: null`, losing My History's circle/square styling for every live-entered round; now computes marks from par the same way Card Score Sheet does (`test_live_panel_9hole.mjs`, 15 → 23 checks) — **not retroactive**, rounds already saved with null marks need a re-save to backfill (Brian: not worth doing for the one test round it currently affects). Full suite: 20 files, all green.
+**Status:** **Dev-89 — Birdie Payouts game, pot over-commit guard, and GitHub publishing restored (2026-09-29 – 09-30). Complete — start the next session as Dev-90.** Portal is now **v4.8.18**, `bf_engine.js` **1.2.0**. (1) New Gatherings game **Birdie Payouts** (portal v4.8.15): a flat $ per birdie-or-better, counted from gross scorecards against the venue's par, paid out of the buy-in pot after CTP/BirdieBall and before Skins (§2a). Needs the Worker's new `birdiepay_config` column — Brian deployed the Worker; **confirm the one-time D1 `ALTER TABLE bfe_gathering_games ADD COLUMN birdiepay_config TEXT;` was run by saving a Birdie Payouts config once** (the Worker returns a clear error naming the column if not). (2) **Pot over-commit fix** (v4.8.16, engine 1.2.0): CTP and BirdieBall can no longer pay out more than the pot holds — the Host Panel form refuses to save an over-committed config, and Close & Calculate caps CTP/BirdieBall to what the pot has (same reduced amount per hole; results explain it). Rounds that fit the pot are byte-identical to Dev-87 (`test_engine_parity.mjs`). (3) **GitHub publishing is back** — see §0; Claude pushed to `main` twice at Brian's explicit go-ahead (v4.8.17, v4.8.18: comment-only publish tests, commits `c5f836d`, `379e467`). (4) **Session numbering corrected (Brian, 2026-09-30):** the session this doc previously called "Dev-89" (the 9/29 live on-course support day, Log entries #15–20) was really the tail of **Dev-88** — the Log has always had ONE Dev-88 entry for it — so the older blocks below that say "Dev-89" for that work, the `BF_Dev89_Session_Starter.md` filename, and some code comments mean Dev-88. This session is Dev-89. Open from this session: a Games work list in §5 (streamline adding games; "Suggest amounts" recommendation), GitHub's `test_at_course.mjs` is stale (§5), and the first brand-new phone/iPad session has not yet run the §0 check.
+
+**Dev-88 (continued, 2026-09-29) — live on-course support day: swipe-bug fix, "At the course" cascade v2, rail/event-card cleanup, BFE-Admin.html Android-overwrite recovery, GHIN plus-handicap sign fix, Live Panel scorecard marks fix (2026-09-29). Complete.** Portal was then **v4.8.14**. Full detail in `BF_Session_Log.md` entries #15–20 and `BF_Dev89_Session_Starter.md` (read that file first if you have it — it's the concise version of everything below). Highlights: (1) a left-swipe on Home was silently firing the same No-write as tapping No even for an active Yes/Sub registration — fixed at the root in `initSwipeListeners()`, after twice cancelling Brian's own live registration on-course (`test_swipe_guard.mjs`). (2) "At the course" rail existence rebuilt as cascade v2 — three independent OR triggers (proximity, a 15-min pre-tee-time window, a manual header toggle) replacing an AND-chain where any one missing gate meant the rail silently never showed; closure is manual-only now, no auto-close (`test_at_course.mjs` rewritten, 57 checks). (3) rail got a vertical event-name label (`.acr-name`, `writing-mode: vertical-rl`) and the event card had Yardage/Rules/Venue removed (pure rail duplicates) and its Score icon re-gated to "competitive, ever" not "live, right now" (`test_score_competitive_gate.mjs`). (4) `BFE-Admin.html` — outside the normal source/docs mirror, no `source/` copy at all — had 405 lines silently deleted by a stale Android AutoPush the day before (the whole Membership HCP Sync section, Dev-86); restored wholesale, HCP Sync's row-include now defaults on for every GHIN match regardless of active status, and a real sign bug was fixed in all three GHIN-paste sites (`parseFloat('+3.2')` was dropping GHIN's plus-handicap marker, inverting the quota for any better-than-scratch player). (5) the Live Panel's own Post-Round Scorecard (`submitScorecard()`, the path actually used on-course — separate from My History's `submitCardScore()`) had always hardcoded `marks: null`, losing My History's circle/square styling for every live-entered round; now computes marks from par the same way Card Score Sheet does (`test_live_panel_9hole.mjs`, 15 → 23 checks) — **not retroactive**, rounds already saved with null marks need a re-save to backfill (Brian: not worth doing for the one test round it currently affects). Full suite: 20 files, all green.
 
 **Dev-88 — engine unification §9 Phase A, complete for Gatherings (2026-09-28).** Shipped `bf_engine.js` (shared engine, layer 1) + portal v4.8.0; one-D1-scorecard-store (layer 3) as v4.8.1; round-key + stored config for Gatherings (layer 2, `gatheringRoundConfig()`/`gatheringIsGamed()`/`gatheringAddon()`) as v4.8.2; the Live Panel `hole_half: null` fix (layer 4, spec §1a) as v4.8.4. **Phase A done — see the Dev-88 log entry for all four layers.** Phase B (re-express BFE quota rounds on the shared engine) not started, only on Brian's go-ahead. `bf_push` v17 (auto-maps `bftest_*`). Sidebar work same window, not Phase A: v4.8.3 (Venue Manager rename, GC-API Lookup link from Weather Location — `worker.js`'s rename PATCH still needs Brian's own Cloudflare paste-deploy step, `bf_push.bat` only archives it to GitHub); v4.8.5–v4.8.9, a live 4-player Gathering used as a real-world shakedown for the whole "At the course" rail (dupe-capture-icon cleanup, BETA→everyone, a Games pot-breakdown icon on the card, two live radius corrections after Brian's own house turned out to be inside the gate, and a caught-and-fixed deploy desync). Full detail in the Dev-88 log entry.
 
@@ -25,7 +27,7 @@ specifically. `BF_BFE_NextGen_Spec.md` is the new living design-notes doc for th
 rearchitecture (venue data, game engine, handicap, scoring, live scoring, build sequence) —
 read it before starting any Dev-87+ work on that rearchitecture; it is still design notes,
 not yet a build plan with tickets. **There is no real session numbering beyond Dev-89
-(2026-09-29, confirmed by Brian at close) — don't invent or reuse "Dev-NNN" labels for individual
+(2026-09-30, this session) — don't invent or reuse "Dev-NNN" labels for individual
 fixes. This has now happened
 twice (briefly in Dev-82, then again all through Dev-83's own code comments, climbing from
 wherever Dev-82 left off through "Dev-108") despite Dev-82 believing it had corrected the
@@ -43,6 +45,33 @@ What matters for every later session:
 3. bf_push.ps1 is now **v17** (Dev-88): v14 test suite, v15 `.json` verify fix, v16 `bf_engine.js` first in `$FileMap`, v17 auto-maps any `bftest_*` file.
 4. Brian's Trip Memories cutoffs are confirmed to live only in his BFE-Admin browser's
    localStorage.
+---
+## 0. Session start check — GitHub publish connection (do this FIRST, before any work)
+Added 2026-09-30. Claude can publish straight to this repo from a cloud session (proven 2026-09-30: a real
+push to `main`, commit `c5f836d`, at Brian's explicit go-ahead) — **but only while the Claude GitHub App is
+installed on the repo and this session has the repo attached.** The refusals that preceded that day said
+"link your GitHub account" / "push refused" and are easy to mistake for something else, so check
+up front, don't discover it at delivery time:
+1. Call `add_repo` with owner `birdiefriends`, repo `birdiefriends.github.io`, `access: "push"`. Read the
+   result, not just whether it returned: a `push_check: "refused"` field, or a note that pushes will be
+   refused, means the connection is NOT good. "already attached" alone is not proof either.
+2. Prove push works without publishing anything: a clone of the repo, then
+   `git push --dry-run origin HEAD:refs/heads/claude-push-check` (contacts GitHub and needs write access;
+   creates nothing). If it is refused, treat the connection as down.
+3. **If it is down: tell Brian in your first message, before any other work, with the fix** — install the
+   Claude GitHub App on the `birdiefriends` account for the `birdiefriends.github.io` repo only
+   (https://github.com/apps/claude/installations/select_target), or re-link GitHub at
+   https://claude.ai/customize/connectors?auth_start=github&auth_start_force=1 (Settings → Connectors should
+   show "GitHub Integration" connected and, under it, the Claude GitHub App installed). Retry once after he's
+   done it; don't loop. If it stays down, fall back to the AutoPush delivery path in §4 and say so plainly.
+4. Say the result in one line at the top of the session ("GitHub publish: OK" / "GitHub publish: DOWN — …").
+Rules while it's up: **publish to `main` only on Brian's explicit go-ahead in that conversation**; otherwise
+push to a `claude-staging-*` branch (Pages serves only `main`, so nothing goes live) and he merges. Always
+`git fetch origin` and confirm nothing newer is on `main` before pushing, run the test suite first, and report
+exactly what went out. **After any direct push, refresh Brian's AutoPush copies of the same files** (`SendUserFile` + `device_commit_files`) — otherwise his local `bf_push` can later overwrite `main` with a stale copy. A push does NOT deploy a Worker — Cloudflare paste-deploys stay Brian's. This is the
+working rule for now; it supersedes "I never do this myself" in §1 for GitHub pushes only, pending Brian's own
+final wording. The connection is account-level, so it should work from any device's Claude UI — **confirmed
+2026-09-30 from the laptop, and from a phone request inside the same cloud session; a brand-new phone/iPad chat running this §0 check has not happened yet — log its result here when it does.**
 ---
 ## 1. What this project is
 BirdieFriends (birdiefriends.com) is a golf league management platform. Brian is the sole
@@ -96,7 +125,7 @@ apps and two Cloudflare Workers:
   §5). `BFE-Admin.html`'s own copy of this key was moved server-side into the BFE Worker in
   Dev-83b — BFE-Admin no longer calls Jotform directly at all; it proxies through
   `/bfe/jotform/submissions` on `bf-experiences.birdiefriends01.workers.dev`.
-**Deployment — I never do this myself.** Brian runs his own local `bf_push.bat`/
+**Deployment — I never do this myself.** *(For GitHub pushes this is superseded in part by §0, 2026-09-30: with the connection up and Brian's explicit go-ahead, Claude may push to `main`. Cloudflare Worker deploys are unchanged and stay Brian's.)* Brian runs his own local `bf_push.bat`/
 `bf_push.ps1` against a folder called AutoPush, then does his own Cloudflare
 paste-and-deploy step for Worker changes. My job is to prepare and verify files, then
 deliver them: `SendUserFile` first, then (when linked to Brian's computer)
@@ -373,6 +402,26 @@ Panel adapts around whatever's turned on. Backend: `bfe_gathering_games` (host c
   In-Play hub direction Brian is weighing. It auto-tucks while the Live Panel is open (v4.7.3), and it
   can be dragged to either side at any height, remembered per device (v4.7.7). **Location check verified live
   at Moselem (Dev-87).** Test mode (`?atcourse=1`) lapses after 4 h, and a tap on TEST ✕ turns it off (v4.7.8).
+- **Birdie Payouts (Dev-89, portal v4.8.15, engine 1.1.0).** A fourth Gatherings game. Host sets one number,
+  **$ per birdie**; every hole a player scores gross ≤ par − 1 pays that flat amount to that player (an eagle
+  or better is still ONE payout, not scaled). Comes out of the same $/player pot **after** CTP (order 10) and
+  BirdieBall (20), at order 30, **before** Skins (90, residual), so Skins gets what's left. Par comes from a
+  table **frozen into the saved config at setup** (`birdiepay_config: {dollar_per_birdie, pars:[18]}`, from
+  `csResolvePars`) — never guessed at close; no par table → the form warns and refuses to save, and a config
+  saved without one pays nothing and says "No par data was saved". 9-hole back-nine cards read pars 10–18.
+  If birdies would cost more than the pot has left, every birdie pays the same reduced amount
+  (`floor(left ÷ birdies)`, order-independent) and the results say so. Shows on the event card's Games
+  details, the Close preview, and My History Game Results (each birdie listed, 🐤 chip). Worker: `VALID_GAMES`
+  includes `birdiepay`; its config is written in its **own** `UPDATE` so Skins/CTP/BirdieBall saves survive an
+  un-migrated column. Tests: `test_birdie_payouts.mjs` (78 checks incl. a 3,000-round conservation fuzz).
+- **Pot over-commit guard (Dev-89, v4.8.16, engine 1.2.0).** Before this, a CTP purse + BirdieBall larger than
+  the pot silently paid out more than was collected. Now: the Host Panel's Games form warns live and refuses
+  to save when CTP + BirdieBall exceed the pot (confirmed-Yes × $/player) or BirdieBall's rate exceeds the
+  whole $/player; and `bf_engine.js` caps CTP (uniform reduced $/hole, result gets `capped`/`paid_per_hole`)
+  and BirdieBall (`capped`/`configured_pot`) to what the pot has left. **The one deliberate departure from
+  Dev-87's output**, and only for over-committed configs; rounds that fit are byte-identical and
+  already-saved snapshots are frozen and untouched. `test_engine_parity.mjs` now checks fits for exact parity
+  and over-committed ones for conservation.
 Full build detail, including the exact bug chases and test coverage, is in
 `BF_Session_Log.md`'s Dev-86 entry.
 ## 3. Dev-88 focus — engine unification, Phase A (prove it on Gatherings)
@@ -411,7 +460,7 @@ the shared engine)** — not started, only on Brian's go-ahead.
 **Resolved since Dev-87:** Close & Calculate and Gathering CTP on D1 — live-verified across several
 real gamed Gatherings through Dev-88/89, correct Skins/CTP/BirdieBall payouts confirmed by Brian. The
 "at the course" rail is no longer beta — opened to every signed-in registered player in Dev-88
-(v4.8.6) and rebuilt as a three-trigger cascade (proximity/tee-time-window/manual toggle) in Dev-89
+(v4.8.6) and rebuilt as a three-trigger cascade (proximity/tee-time-window/manual toggle) late in Dev-88 (2026-09-29; this doc once called it Dev-89)
 (v4.8.11), so the original "location-permission moment" design question is moot — existence no longer
 depends on a first-run GPS permission prompt at all. **Still open:** the In-Play hub decision is still
 Brian's to make.
@@ -614,6 +663,44 @@ live data, what Brian confirmed).
   regression run clean without losing the file in case anything in it is worth salvaging
   later.
 ## 5. Known backlog (not urgent, parked)
+- **`test_at_course.mjs` on GitHub is stale and fails against the current portal (found Dev-89).** The copy in
+  `source/tests/` (148 lines) still expects constants (`AT_COURSE_TEST_HOURS`) that Dev-88's rail cascade v2
+  removed; Brian's AutoPush folder has the rewritten 57-check version (see the Dev-88 status block) but it isn't named with the
+  `bftest_` prefix, so `bf_push` never pushed it. Fix: rename to `bftest_test_at_course.mjs` and push, or have
+  Claude stage it from AutoPush and commit it. Until then the full suite shows one expected failure here.
+  (AutoPush also held local `test_dupe_removal.mjs`, `test_rail_drag.mjs`, `test_score_competitive_gate.mjs` at
+  the same time — check those against `source/tests/` too.)
+- **WORK LIST — Games (added 2026-09-29, Brian).** Two linked items, in this order:
+  1. **Streamline adding a new game (do first — it makes item 2 and every later game cheaper).**
+     Adding Birdie Payouts (portal v4.8.15) touched ~6 places in 3 files plus a D1 migration:
+     `bf_engine.js` (an `ADDONS` entry, `gatheringConfigFromLegacy`, and hand-listed result/ledger/total
+     lines in `computeRoundPayout`); `portal.html` (`GATHERING_GAMES_META`, `GAMES_SEAL_LABELS`, a
+     `_gamesForm…Config` state var + section HTML + setter + toggle-reset, the pot preview, the
+     `submitGatheringGames` validation/payload, `renderGatheringPayoutHtml`'s section + payout chip,
+     `gatheringGameDetailsBody`'s row, and copy strings that name the games); the Worker (`VALID_GAMES`,
+     per-game validation, a per-game config column, GET parse, INSERT/UPDATE, schema comment) and a
+     one-time D1 `ALTER TABLE`. It worked, and the engine half was genuinely one registry entry — but the
+     rest is the same game described five times, and each copy can drift. Direction: ONE game definition
+     (id, label, icon, seal label, config fields + validation, carve function, result renderer, details
+     row, fixed-cost hook for the pot-fit guard) that the form, results, details card and Worker
+     validation are all driven from; store per-game config as one generic JSON column keyed by game id
+     so a new game never needs a migration; generalize `gamesFormOverCommit` so each game declares its
+     own fixed cost instead of the guard hard-coding CTP + BirdieBall. Keep the frozen `payout_summary`
+     shape and `test_engine_parity.mjs` green (Dev-87 output must stay byte-identical for rounds that fit
+     the pot). Own session; do it before the next new game, not after.
+  2. **"Suggest amounts" $ payout recommendation ("we figure it out for the host").** A pure engine
+     function taking $/player, expected headcount, games ticked and the venue's par-3 count, returning a
+     suggested CTP $/hole, BirdieBall $/player and Birdie Payouts $/birdie; a "Suggest amounts" button on
+     the Host Panel Games form fills the fields, the host can still edit, and the live pot preview +
+     over-commit guard (v4.8.16) check the result. Stored config stays in dollars (Dev-86 decision) — any
+     percentages only choose the starting dollars. Show the headcount it assumed and let the host re-run
+     it (CTP is a fixed purse, BirdieBall scales with players, so a suggestion made at 8 players is off at
+     5). **Open decisions for Brian before building:** the split rule (a starting proposal: Skins keeps at
+     least ~half; CTP ~10–15% across the par 3s; BirdieBall ~$1–2/player; birdie payouts sized so a typical
+     field's birdies use ~15% — the birdie share should be conservative since how many birdies a group makes
+     is a guess, though the engine's cap means a wrong guess can't overpay); whether the host picks
+     Skins' share and we fill in the rest, or one button applies the default split; and whether the birdie
+     estimate should use the group's handicaps (Membership has them; leave out of the first version).
 - **Course layouts + manual tee editor + 9-hole games (designed Dev-87, not built)** — full plan in
   `BF_BFE_NextGen_Spec.md` §1a. The prerequisite bug to fix first: the Live Panel scorecard always sends
   `hole_half: null`, so a 9-hole gamed Gathering on the back nine would misalign every hole.

@@ -4695,7 +4695,7 @@ the detail isn't duplicated. It's closed and fully live.
   Scoring Breakdown + Download Archive.
 
 ---
-## Dev-88 · 2026-09-27 — Engine Unification Phase A begins: bf_engine.js extracted, scorecard store decided, bf_push v15/v16 *(in progress — logged incrementally)*
+## Dev-88 · 2026-09-27 – 2026-09-29 — Engine Unification Phase A (bf_engine.js, D1 scorecard store, round config, hole_half fix), live on-course support day (items #15–20) *(Brian, 2026-09-30: this ONE session runs through 9/29; the bootstrap briefly and wrongly called its 9/29 portion "Dev-89")*
 
 **Start of session.** Fetched the bootstrap with WebFetch, then pulled the library docs with curl. The
 GitHub bootstrap was one step stale: Dev-87's close-out files (spec §9 rewrite, bootstrap, log,
@@ -5253,3 +5253,68 @@ rail's own long axis instead of fighting its short one — same truncate-with-el
 against `max-height` instead of `max-width` now. CSS-only; markup (`class="acr-name"`, the name
 text, the title-attribute fallback) untouched, so `test_score_competitive_gate.mjs`'s existing rail
 assertions still cover it without changes. Full suite: all green.
+
+## Dev-89 · 2026-09-29 – 2026-09-30 — Birdie Payouts game, pot over-commit guard, GitHub publishing restored
+
+**Session numbering.** Brian corrected the numbering at the start of this session: the previous session (the
+9/29 live on-course support day, items #15–20 above) was Dev-88, not "Dev-89"; this is Dev-89. The Log already
+had one Dev-88 entry covering it — only the bootstrap's status block had split it. Bootstrap status/§0 and the
+Dev-88 heading corrected; older code comments that say "Dev-89" for that work were left as they are.
+
+**1. Birdie Payouts — a fourth Gatherings game (portal v4.8.15, `bf_engine.js` 1.1.0, Worker + D1 column).**
+Brian: "add a new game type: Birdie Payouts … a flat $ amount that gets subtracted from the buy-in pot." Built as
+a flat **$ per birdie** (birdie-or-better, gross, vs par; an eagle is one payout, not scaled) paid to the player
+who made it, carved out of the $/player pot after CTP/BirdieBall and before Skins (registry entry `birdiepay`,
+order 30). Par table is frozen into the saved config at setup (from `csResolvePars`), so Close never re-looks
+up the venue; 9-hole back-nine cards read pars 10–18; the Host Panel form warns and refuses to save with no par
+data. Over-budget birdies pay an equal reduced amount (order-independent), reported as `capped`. Surfaces: event
+card Games details, Close preview, My History Game Results (each birdie listed). Worker: `VALID_GAMES`,
+validation (18 integer pars 3–6), GET parse, and `birdiepay_config` written in its OWN `UPDATE` so the other
+games' saves survive a missing column; migration `ALTER TABLE bfe_gathering_games ADD COLUMN birdiepay_config
+TEXT;` documented in the Worker schema comment. Brian deployed the Worker; **whether the D1 migration ran was not
+stated — verify by saving a Birdie Payouts config once.** New `test_birdie_payouts.mjs` (78 checks incl. a
+3,000-round conservation fuzz). Existing payout parity test untouched and green at that point.
+
+**2. Pot over-commit guard (v4.8.16, engine 1.2.0).** Brian asked to fix the quirk flagged in item 1 (CTP purse +
+BirdieBall could exceed the pot — the old engine paid out more than was collected). Two layers: Host Panel form
+(live warning + refuses to save when CTP + BirdieBall exceed confirmed-Yes × $/player, or BirdieBall's rate
+exceeds the whole $/player) and the engine (CTP gets a uniform reduced $/hole, BirdieBall is capped to what CTP
+left; both report `capped`; an unclaimed capped hole rolls only what was carved into Skins). **The one deliberate
+departure from Dev-87 output**, only for over-committed configs; `test_engine_parity.mjs` updated — configs that
+fit still match byte for byte (≈4,500 of 5,000 random rounds), the ≈500 over-committed ones are checked for
+conservation instead. Saved snapshots are frozen and unchanged.
+
+**3. Design findings → work list.** Adding Birdie Payouts touched ~6 places across 3 files plus a migration
+(engine entry, `gatheringConfigFromLegacy`, result/total lines in `computeRoundPayout`; portal meta/seal/form
+state/section/preview/save/render/details; Worker list/validation/column/parse/store). Logged as a Bootstrap §5
+work list (Brian: "we need this streamlined"): (1) one game definition driving form/results/details/Worker
+validation + generic JSON config storage (no per-game migrations) + per-game fixed-cost hook for the pot guard;
+(2) a "Suggest amounts" recommendation button (open decisions: the split rule; host picks Skins' share vs one
+default button; whether to use handicaps). Neither started.
+
+**4. GitHub publishing restored — the incident and the fix.** `add_repo` (push) was refused twice with "link your
+GitHub account", then attached but reported `push_check: refused` ("Claude doesn't have GitHub access … for your
+organization"). Brian followed the Claude GitHub App install page, which showed the app already installed on
+`birdiefriends` (personal, "Cloud sessions only"); after that a real push worked. **Root cause is not proven** —
+it may have been the missing App grant, a per-session attach, or a device switch (this conversation had been used
+from phone and laptop); the evidence only shows the state before and after. Older logs are consistent with the
+same wall (Dev-71: no first-party GitHub connector; Dev-83: GitHub API gated behind an explicit `add_repo`
+grant). Proof of the restored path: a staging branch (`claude-staging-test`), then two direct pushes to `main`
+at Brian's explicit go-ahead — portal v4.8.17 (`c5f836d`, comment-only) and v4.8.18 (`379e467`, comment-only,
+requested from Brian's phone; same cloud session, so a brand-new phone chat is still unproven). Claude's pushes
+carry the Co-Authored-By trailer. Two stop-hook "commit and push" prompts were answered by pushing to
+`claude-staging-bootstrap` (not `main`) until Brian authorized `main`. **Bootstrap §0 added: a session-start
+check (attach the repo, read `push_check`, prove write access with `git push --dry-run`, report "GitHub publish:
+OK/DOWN" in the first line) plus the working rules** — `main` only on Brian's explicit go-ahead in that
+conversation, staging branches otherwise, fetch first, tests first, refresh AutoPush copies after any direct
+push (so a later `bf_push` can't overwrite `main` with stale files), Worker deploys stay Brian's.
+
+**5. Found, not fixed.** GitHub's `source/tests/test_at_course.mjs` is stale (148 lines; expects constants the
+rail cascade v2 removed) — Brian's AutoPush folder has the rewritten version but it lacks the `bftest_` prefix
+so `bf_push` never pushed it; the full suite shows that one failure (18 of 19 files green). Also noted that
+AutoPush held three other un-prefixed local test files. Added to Bootstrap §5.
+
+**State at close.** Portal **v4.8.18**, engine **1.2.0**, Worker includes `birdiepay`. `main` = `379e467` plus
+this docs commit. Branches left on GitHub: `claude-staging-test` (obsolete) and `claude-staging-bootstrap`
+(superseded by the docs commit). Next: Dev-90 — run the §0 check from a brand-new chat (ideally on the phone),
+then the §5 Games work list.
