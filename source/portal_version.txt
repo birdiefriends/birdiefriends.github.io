@@ -1,3 +1,6 @@
+v4.8.19 · 2026-09-30
+Deployed: 2026-09-30 (No visible change: third publishing test, run from a session where the repo had to be attached by hand. Nothing in the app behaves differently.)
+
 v4.8.18 · 2026-09-30
 Deployed: 2026-09-30 (No visible change: second publishing test, this one requested from the phone. Nothing in the app behaves differently.)
 
