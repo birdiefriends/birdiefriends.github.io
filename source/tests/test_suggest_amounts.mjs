@@ -32,5 +32,5 @@ ctx._gamesFormTouched.add('birdieball'); ctx._gamesFormBirdieballConfig.dollar_p
 ok(ctx._gamesFormBirdieballConfig.dollar_per_player === 5 && ctx._gamesFormBirdiepayConfig.dollar_per_birdie === 6, 'typed amount is kept, others follow the new buy-in');
 ctx.go(true);
 ok(ctx._gamesFormBirdieballConfig.dollar_per_player === 4, 'Re-suggest overrides typed amounts');
-ok(/bf_engine\.js\?v=1\.3\.2/.test(src) && E.ENGINE_VERSION === '1.3.2', 'engine version bumped with the script tag');
+ok(src.includes("bf_engine.js?v=" + E.ENGINE_VERSION), "engine version bumped with the script tag");
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

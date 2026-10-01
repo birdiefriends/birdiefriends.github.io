@@ -3035,6 +3035,18 @@ body {
     <div id="gathering-close-body" style="max-height:62vh;overflow-y:auto"></div>
   </div>
 </div>
+<div class="bf-modal-overlay" id="stroke-card-modal" onclick="closeModalOnOverlay(event,'stroke-card-modal')" style="z-index:9000">
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="bf-modal-title" style="margin-bottom:0">⚖️ Strokes</div>
+      <button onclick="closeModal('stroke-card-modal')" title="Close"
+        style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
+          color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div id="stroke-card-body" style="max-height:66vh;overflow-y:auto"></div>
+  </div>
+</div>
 <div class="bf-modal-overlay" id="card-score-modal" onclick="closeModalOnOverlay(event,'card-score-modal')" style="z-index:9000">
   <!-- z-index explicit — same stacking bug class as score-detail-modal/photo-lightbox
        (Dev-67): now also opened from inside My History's detail view (8950) via the
@@ -3600,7 +3612,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.3.2"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.4.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -5219,6 +5231,7 @@ function renderAtCourseRail() {
       ${btn('📏', 'Yardage', 'openYardageModal()')}
       ${btn('📖', 'Rules', 'openRulesModal()')}
       ${btn('🗺️', 'Course', `openVenueViewerModal('${id}')`)}
+      ${atCourseHasNetStrokes(evt) ? btn('⚖️', 'Strokes', 'openStrokeCard()') : ''}
     </div>
     <div class="acr-namecol" onpointerdown="atCourseDragStart(event)" onclick="${hasDist ? 'atCourseToggleLocDetail()' : 'atCourseToggleManual()'}" title="${escapeHtml(evt.name)}"><span class="acr-name">${escapeHtml(evt.name)}</span></div>`;
   atCourseApplyPos(el); // again now that the buttons exist, so the height clamp is exact
@@ -10746,6 +10759,10 @@ let _gamesFormSelected  = new Set();  // subset of ['skins','cttp','birdieball',
 // call on the funding model, rounds 2 and 3 combined).
 let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
 let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; // Birdie Payouts (Dev-89): flat $ per birdie, taken from the pot before Skins
+// Dev-91 — net/gross setup, frozen into the saved config at Save. kind per player: 'index' (typed Index → USGA playing handicap),
+// 'given' (host types strokes), 'gross' (no strokes). Each net player needs a tee: slope/rating/par and the HOLE stroke index come from it.
+let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} };
+let _gamesFormTees = []; // the venue's stored tees that carry full 18-hole data (slope, rating, par_total, holes[{par,handicap}])
 let _gamesFormBirdiepayPars = null; // 18 hole pars resolved for the Gathering's venue when the form opened (null = no par data on file)
 let _gamesFormBirdieballConfig = { dollar_per_player: null }; // BirdieBall's OWN per-player rate — distinct from the main $/player pot rate
 let _gamesFormPar3Holes = [];             // hole numbers (1-18) with par===3, from the venue's stored tee data
@@ -15068,6 +15085,42 @@ function scorecardMissingHoles(card, holeCount) {
   if (typeof BFEngine === 'undefined') throw new Error('bf_engine.js did not load — reload the app');
   return BFEngine.scorecardMissingHoles(card, holeCount);
 }
+// ── Dev-91: the stroke card — each player's "blows", read-only ────────────
+// Strokes are decided in the host's Games config before the first tee; this
+// just shows them. Reads the frozen handicap block of the round config.
+function atCourseHasNetStrokes(evt) {
+  try { const rc = evtGamesConfig(evt); return !!(rc && rc.handicap && rc.handicap.mode === 'net'); } catch (e) { return false; }
+}
+function renderStrokeCardHtml(rc) {
+  const hc = rc && rc.handicap;
+  if (!hc || hc.mode !== 'net') return `<div style="font-size:0.84rem;color:var(--text-muted);padding:12px 0">This round is scored gross. No strokes are given.</div>`;
+  const esc = v => escapeHtml(String(v ?? ''));
+  const basisOf = id => { const a = (rc.addons || []).find(x => x.id === id); return a ? (a.basis === 'net' ? 'Net' : 'Gross') : null; };
+  const modes = [['⛳ Skins', basisOf('skins')], ['🐤 Birdie Payouts', basisOf('birdiepay')]].filter(m => m[1]).map(m => `${m[0]}: <b>${m[1]}</b>`).join(' · ');
+  const cell = (n, k) => `<div style="flex:1;text-align:center;font-size:0.62rem;line-height:1.5;border-radius:4px;${k ? 'background:var(--green);color:#fff;font-weight:800' : 'color:var(--text-hint)'}">${k > 1 ? n + '<br>••' : k ? n + '<br>•' : n + '<br>&nbsp;'}</div>`;
+  const players = Object.entries(hc.players || {}).map(([name, sp]) => {
+    const per = Array.from({ length: 18 }, (_, i) => (sp.stroke_index ? BFEngine.strokesOnHole(sp.strokes, sp.stroke_index[i], 18) : 0));
+    const total = sp.strokes;
+    const grid = sp.stroke_index
+      ? [0, 9].map(o => `<div style="display:flex;gap:2px;margin-top:3px">${per.slice(o, o + 9).map((k, i) => cell(o + i + 1, k)).join('')}</div>`).join('')
+      : '';
+    const how = sp.kind === 'index' ? `Index ${esc(sp.index)} → course hcp ${esc(sp.course_hcp)} × ${esc(hc.allowance)}%`
+      : sp.kind === 'given' ? 'Strokes given' : 'No strokes';
+    return `<div style="padding:10px 0;border-top:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <span style="font-weight:800;font-size:0.92rem">${esc(name)}</span>
+        <span style="font-weight:800;color:var(--green-dark)">${total} stroke${Math.abs(total) === 1 ? '' : 's'}</span></div>
+      <div style="font-size:0.72rem;color:var(--text-muted)">${sp.tee ? esc(sp.tee) + ' tees · ' : ''}${how}</div>${grid}</div>`;
+  }).join('');
+  return `<div style="font-size:0.8rem;color:var(--text-muted);line-height:1.5;margin-bottom:6px">${modes}<br>A green hole = the player gets a stroke there (•• = two), set by that tee's hole handicap. Decided before the first tee.</div>${players}`;
+}
+function openStrokeCard() {
+  const evt = _atCourse && _atCourse.evt;
+  const body = document.getElementById('stroke-card-body');
+  if (!body) return;
+  body.innerHTML = renderStrokeCardHtml(evt ? evtGamesConfig(evt) : null);
+  openModal('stroke-card-modal');
+}
 // Shared renderer for a computed/saved payout snapshot — used by the Close
 // preview AND the My History detail, so what the host confirmed is exactly
 // what players see.
@@ -15078,11 +15131,16 @@ function renderGatheringPayoutHtml(s) {
   const label = t => `<div style="font-size:0.7rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 4px">${t}</div>`;
   const line = (l, r) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:0.8rem;padding:2px 0"><span>${l}</span><span style="font-weight:700">${r}</span></div>`;
   let html = `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:4px">${s.players_count} player${s.players_count === 1 ? '' : 's'} × ${money(s.dollar_per_player)} = <b style="color:var(--text)">${money(s.total_pot)} pot</b></div>`;
+  if (s.handicap) {
+    html += label(`⚖️ Strokes (${esc(s.handicap.allowance)}% allowance)`);
+    html += (s.handicap.players || []).map(p => line(`${esc(p.player)}${p.tee ? ` <span style="color:var(--text-muted)">(${esc(p.tee)})</span>` : ''}`, `${esc(p.strokes)}`)).join('');
+    if ((s.handicap.missing || []).length) html += `<div style="font-size:0.72rem;color:#b8860b;margin-top:2px">No strokes were set for ${s.handicap.missing.map(esc).join(', ')}, so they played scratch</div>`;
+  }
   if (s.skins) {
     html += label(`⛳ Skins (${s.skins.basis || 'gross'}) — ${money(s.skins.pot)}`);
     if (s.skins.won.length) {
       html += `<div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:2px">${s.skins.won.length} skin${s.skins.won.length === 1 ? '' : 's'} × ${money(s.skins.per_skin)}</div>`;
-      html += s.skins.won.map(w => line(`#${w.hole} ${esc(w.player)} <span style="color:var(--text-muted)">(${w.strokes})</span>`, money(s.skins.per_skin))).join('');
+      html += s.skins.won.map(w => line(`#${w.hole} ${esc(w.player)} <span style="color:var(--text-muted)">(${w.net != null && w.gross != null ? `net ${w.net} · gross ${w.gross}` : w.strokes})</span>`, money(s.skins.per_skin))).join('');
     } else {
       html += `<div style="font-size:0.78rem;color:var(--text-muted)">No skins won — ${money(s.skins.given_back_each)} back to each player</div>`;
     }
@@ -15104,11 +15162,11 @@ function renderGatheringPayoutHtml(s) {
   }
   if (s.birdiepay) {
     const b = s.birdiepay;
-    html += label(`🐤 Birdie Payouts — ${money(b.per_birdie)}/birdie`);
+    html += label(`🐤 Birdie Payouts (${b.basis || 'gross'}) — ${money(b.per_birdie)}/birdie`);
     if (b.no_par_data) html += `<div style="font-size:0.78rem;color:var(--text-muted)">No par data was saved for this game, so no birdies were counted</div>`;
     else if (!b.count) html += `<div style="font-size:0.78rem;color:var(--text-muted)">No birdies made</div>`;
     else {
-      html += b.birdies.map(x => line(`#${x.hole} ${esc(x.player)} <span style="color:var(--text-muted)">(${esc(x.strokes)} on a par ${esc(x.par)})</span>`, money(x.paid))).join('');
+      html += b.birdies.map(x => line(`#${x.hole} ${esc(x.player)} <span style="color:var(--text-muted)">(${x.net != null ? `net ${esc(x.net)} · gross ${esc(x.strokes)}` : esc(x.strokes)} on a par ${esc(x.par)})</span>`, money(x.paid))).join('');
       if (b.capped) html += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${b.count} birdies × ${money(b.per_birdie)} was more than the pot had left, so each paid ${money(b.paid_each)}</div>`;
     }
   }
@@ -17164,6 +17222,11 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
   // Manager's stored pars first, BSGC's built-in table as the fallback).
   // Frozen into the saved config so Close never needs a second venue lookup.
   _gamesFormBirdiepayPars = csResolvePars(g);
+  { const hc = existing && existing.handicap_config; // Dev-91
+    _gamesFormHcp = hc
+      ? { skins_basis: hc.skins_basis === 'net' ? 'net' : 'gross', birdiepay_basis: hc.birdiepay_basis === 'net' ? 'net' : 'gross',
+          allowance: hc.allowance == null ? 95 : hc.allowance, players: JSON.parse(JSON.stringify(hc.players || {})) }
+      : { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; }
   _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay'] : []); // an existing config is the host's own numbers
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; if (_gamesFormCard) closeGamesCardDialog(); else renderHostPanelList(); }; }
@@ -17179,6 +17242,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
 }
 async function loadGamesFormPar3Holes(g) {
   _gamesFormPar3Holes = [];
+  _gamesFormTees = [];
   _gamesFormVenueParDataAvailable = false;
   try {
     const venue = findVenueByName(csNormalizedVenueName(g));
@@ -17186,6 +17250,7 @@ async function loadGamesFormPar3Holes(g) {
     const res = await fetch(`${BFE_API}/bfe/venue-tees?venue_id=${venue.id}`);
     const data = await res.json();
     const tees = data.ok ? (data.tees || []) : [];
+    _gamesFormTees = tees.filter(t => Array.isArray(t.holes) && t.holes.length === 18);
     // Par should be consistent across a venue's tees even though yardage and
     // hole handicap rank vary (Brian, Dev-85) — any one tee with full hole
     // data tells us which holes are Par 3s.
@@ -17229,6 +17294,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
     <div id="games-form-cttp-section">${gatheringGamesCttpSectionHtml()}</div>
     <div id="games-form-birdieball-section">${gatheringGamesBirdieballSectionHtml()}</div>
     <div id="games-form-birdiepay-section">${gatheringGamesBirdiepaySectionHtml()}</div>
+    <div id="games-form-hcp-section">${gatheringGamesHcpSectionHtml()}</div>
     <button class="host-cta-btn" style="margin-top:16px" id="btn-save-games"
       onclick="submitGatheringGames(${gatheringId})">💾 Save Games</button>
     ${existing ? `
@@ -17318,6 +17384,9 @@ function toggleGamesFormGame(key) {
   if (birdieballSection) birdieballSection.innerHTML = gatheringGamesBirdieballSectionHtml();
   const birdiepaySection = document.getElementById('games-form-birdiepay-section');
   if (birdiepaySection) birdiepaySection.innerHTML = gatheringGamesBirdiepaySectionHtml();
+  if (!_gamesFormSelected.has('skins')) _gamesFormHcp.skins_basis = 'gross';
+  if (!_gamesFormSelected.has('birdiepay')) _gamesFormHcp.birdiepay_basis = 'gross';
+  refreshGamesFormHcpSection();
   updateGamesFormPotPreview();
   applyGamesSuggestion(false);
 }
@@ -17439,6 +17508,120 @@ function setGamesFormBirdiepayDollarPerBirdie(val) {
   _gamesFormTouched.add('birdiepay');
   updateGamesFormPotPreview();
 }
+// ── Dev-91: Net / Gross + handicap strokes ─────────────────────────────────
+// Skins and Birdie Payouts each get a Gross | Net switch (Gross default — what
+// every earlier round used). Net needs a per-player stroke count, resolved
+// HERE and frozen into the saved config (tee, kind, strokes, that tee's hole
+// stroke index) so a round closed later can't move if a venue or index is edited.
+function gamesFormPlayerNames() {
+  const g = _gamesFormG || {};
+  const rows = g.eventShadow
+    ? regData.filter(r => r.eventName === g.eventName && r.status === 'Yes')
+    : gatheringRegData.filter(r => r.gatheringId === _gamesFormGathering && r.status === 'Yes');
+  const names = [...new Set(rows.map(r => r.player).filter(Boolean))];
+  Object.keys(_gamesFormHcp.players).forEach(n => { if (!names.some(x => String(x).trim().toLowerCase() === String(n).trim().toLowerCase())) names.push(n); });
+  return names;
+}
+function gamesFormHcpIsNet() { return _gamesFormHcp.skins_basis === 'net' || _gamesFormHcp.birdiepay_basis === 'net'; }
+// One player's resolved handicap, or { problem } if the host still owes a field.
+function gamesFormResolvePlayerHcp(name) {
+  const e = _gamesFormHcp.players[name] || {};
+  const kind = e.kind || 'index';
+  if (kind === 'gross') return { kind, strokes: 0, tee: e.tee || null, stroke_index: null };
+  const tee = _gamesFormTees.find(t => String(t.id) === String(e.teeId));
+  if (!tee) return { kind, problem: 'pick a tee' };
+  const si = tee.holes.map(h => Number(h.handicap));
+  if (si.length !== 18 || si.some(v => !(v >= 1 && v <= 18)) || new Set(si).size !== 18) return { kind, problem: 'that tee has no valid hole handicap data' };
+  if (kind === 'given') {
+    if (e.strokes === '' || e.strokes == null || !Number.isFinite(Number(e.strokes))) return { kind, problem: 'enter strokes given' };
+    return { kind, strokes: Math.trunc(Number(e.strokes)), tee: tee.tee_name, stroke_index: si };
+  }
+  const idx = e.index === '' || e.index == null ? NaN : Number(e.index);
+  if (!Number.isFinite(idx)) return { kind, problem: 'enter a handicap index' };
+  if (!(Number(tee.slope_rating) > 0) || !(Number(tee.course_rating) > 0)) return { kind, problem: 'that tee has no slope/rating on file' };
+  const par = Number(tee.par_total) || tee.holes.reduce((a, h) => a + Number(h.par || 0), 0);
+  const ph = BFEngine.playingHandicap({ index: idx, slope: Number(tee.slope_rating), rating: Number(tee.course_rating), par }, _gamesFormHcp.allowance);
+  return { kind, strokes: ph.strokes, course_hcp: ph.course_hcp, index: idx, tee: tee.tee_name, stroke_index: si };
+}
+function gatheringGamesHcpSectionHtml() {
+  const hasSkins = _gamesFormSelected.has('skins'), hasBp = _gamesFormSelected.has('birdiepay');
+  if (!hasSkins && !hasBp) return '';
+  const seg = (key, label) => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span style="flex:1;font-size:0.9rem;font-weight:600">${label}</span>
+      <div class="seg-toggle" style="margin:0">
+        <button type="button" class="seg-btn${_gamesFormHcp[key] !== 'net' ? ' seg-btn-active' : ''}" onclick="setGamesFormBasis('${key}','gross')">Gross</button>
+        <button type="button" class="seg-btn${_gamesFormHcp[key] === 'net' ? ' seg-btn-active' : ''}" onclick="setGamesFormBasis('${key}','net')">Net</button>
+      </div></div>`;
+  const net = gamesFormHcpIsNet();
+  let rows = '';
+  if (net) {
+    if (!_gamesFormTees.length) {
+      rows = `<div style="font-size:0.74rem;color:#b8860b;background:rgba(230,168,0,0.1);border:1px solid rgba(230,168,0,0.3);border-radius:8px;padding:8px 10px;margin-top:6px">No tee data with hole handicaps on file for this venue, so Net can't be set up. Add it in Venue Manager (GC-API Lookup) first.</div>`;
+    } else {
+      rows = gamesFormPlayerNames().map(n => {
+        const e = _gamesFormHcp.players[n] || {};
+        const kind = e.kind || 'index';
+        const r = gamesFormResolvePlayerHcp(n);
+        const q = JSON.stringify(n).replace(/"/g, '&quot;');
+        const teeSel = `<select onchange="setGamesFormPlayerHcp(${q},'teeId',this.value)" style="height:34px;border-radius:8px;border:1.5px solid var(--border);font-family:inherit;font-size:0.8rem;max-width:150px">
+          <option value="">Tee…</option>${_gamesFormTees.map(t => `<option value="${t.id}" ${String(t.id) === String(e.teeId) ? 'selected' : ''}>${escapeHtml(t.tee_name)}</option>`).join('')}</select>`;
+        const kindSel = `<select onchange="setGamesFormPlayerHcp(${q},'kind',this.value)" style="height:34px;border-radius:8px;border:1.5px solid var(--border);font-family:inherit;font-size:0.8rem">
+          ${[['index', 'Index'], ['given', 'Strokes given'], ['gross', 'No strokes']].map(([v, l]) => `<option value="${v}" ${kind === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+        const val = kind === 'gross' ? '' : `<input type="number" step="${kind === 'index' ? '0.1' : '1'}" value="${kind === 'index' ? (e.index ?? '') : (e.strokes ?? '')}"
+          placeholder="${kind === 'index' ? 'Index' : 'Strokes'}" oninput="setGamesFormPlayerHcp(${q},'${kind === 'index' ? 'index' : 'strokes'}',this.value,true)" style="width:78px;height:34px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;font-size:0.84rem">`;
+        const out = r.problem ? `<span style="color:#b8860b">${r.problem}</span>`
+          : `<b>${r.strokes} stroke${Math.abs(r.strokes) === 1 ? '' : 's'}</b>${r.kind === 'index' ? ` (course hcp ${r.course_hcp})` : ''}`;
+        return `<div style="padding:9px 0;border-top:1px solid var(--border)">
+          <div style="font-weight:700;font-size:0.88rem;margin-bottom:6px">${escapeHtml(n)}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${kind === 'gross' ? '' : teeSel}${kindSel}${val}</div>
+          <div id="gf-hcp-out-${escapeHtml(n).replace(/\W/g, '_')}" style="font-size:0.76rem;color:var(--text-muted);margin-top:5px">${out}</div></div>`;
+      }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No confirmed players yet. Players appear here as they register Yes.</div>`;
+      rows = `<div style="display:flex;align-items:center;gap:8px;margin:10px 0 4px">
+          <span style="font-size:0.86rem;font-weight:600">Allowance</span>
+          <input type="number" min="50" max="100" step="1" value="${_gamesFormHcp.allowance}" oninput="setGamesFormAllowance(this.value)" style="width:64px;height:34px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit">
+          <span style="font-size:0.86rem">%</span>
+          <span style="font-size:0.72rem;color:var(--text-muted)">of course handicap (USGA: 95% for individual play). Strokes given are used as typed.</span></div>${rows}`;
+    }
+  }
+  return `<div class="host-form-field" id="games-form-hcp-field">
+      <label>⚖️ Gross or Net</label>
+      ${hasSkins ? seg('skins_basis', '⛳ Skins') : ''}${hasBp ? seg('birdiepay_basis', '🐤 Birdie Payouts') : ''}
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Net = gross score minus the strokes a player receives on that hole (by the tee's hole handicap). Settled here, before the first tee.</div>
+      ${rows}</div>`;
+}
+function refreshGamesFormHcpSection() {
+  const el = document.getElementById('games-form-hcp-section');
+  if (el) el.innerHTML = gatheringGamesHcpSectionHtml();
+}
+function setGamesFormBasis(key, val) { _gamesFormHcp[key] = val === 'net' ? 'net' : 'gross'; refreshGamesFormHcpSection(); }
+function setGamesFormAllowance(v) {
+  const n = parseFloat(v);
+  _gamesFormHcp.allowance = Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 95;
+  gamesFormPlayerNames().forEach(nm => setGamesFormPlayerHcp(nm, 'kind', (_gamesFormHcp.players[nm] || {}).kind || 'index', true)); // re-run each result line, keep input focus
+}
+function setGamesFormPlayerHcp(name, field, val, typing) {
+  const e = _gamesFormHcp.players[name] = _gamesFormHcp.players[name] || { kind: 'index' };
+  e[field] = val;
+  if (typing) { // re-render only the result line so the input keeps focus
+    const r = gamesFormResolvePlayerHcp(name);
+    const out = document.getElementById('gf-hcp-out-' + escapeHtml(name).replace(/\W/g, '_'));
+    if (out) out.innerHTML = r.problem ? `<span style="color:#b8860b">${r.problem}</span>`
+      : `<b>${r.strokes} stroke${Math.abs(r.strokes) === 1 ? '' : 's'}</b>${r.kind === 'index' ? ` (course hcp ${r.course_hcp})` : ''}`;
+  } else refreshGamesFormHcpSection();
+}
+// The frozen config the Worker stores and BFEngine reads (null = all gross).
+// problem = a sentence for the host; the save is refused until it's fixed.
+function gamesFormBuildHandicapConfig() {
+  if (!gamesFormHcpIsNet()) return { config: null, problem: null };
+  const players = {};
+  for (const n of gamesFormPlayerNames()) {
+    const r = gamesFormResolvePlayerHcp(n);
+    if (r.problem) return { config: null, problem: `Net: ${n} — ${r.problem}` };
+    players[n] = { kind: r.kind, tee: r.tee, strokes: r.strokes, ...(r.index != null ? { index: r.index, course_hcp: r.course_hcp } : {}), stroke_index: r.stroke_index };
+  }
+  if (!Object.keys(players).length) return { config: null, problem: 'Net: no confirmed players to set strokes for yet' };
+  return { config: { allowance: _gamesFormHcp.allowance, skins_basis: _gamesFormHcp.skins_basis, birdiepay_basis: _gamesFormHcp.birdiepay_basis, players }, problem: null };
+}
 // Dev-89 — the fixed carve-outs (CTP purse + BirdieBall) must fit inside the
 // pot. Returns the numbers the preview and the save guard both use, so the
 // two can't disagree. `problem` is a host-readable sentence, or null if fine.
@@ -17536,10 +17719,13 @@ async function submitGatheringGames(gatheringId) {
     if (!(Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18)) { showToast('Birdie Payouts needs par data for this venue — add it in Venue Manager first', true); return; }
     birdiepay_config = { dollar_per_birdie: _gamesFormBirdiepayConfig.dollar_per_birdie, pars: _gamesFormBirdiepayPars.slice() };
   }
+  const hcb = gamesFormBuildHandicapConfig();
+  if (hcb.problem) { showToast(hcb.problem, true); return; }
   const btn = document.getElementById('btn-save-games');
   if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); btn.textContent = 'Saving…'; }
   try {
     const payload = { gathering_id: gatheringId, gathering_name: g.name, host_id: currentPlayer, games, dollar_per_player: dpp };
+    if (hcb.config) payload.handicap_config = hcb.config;
     if (cttp_config) payload.cttp_config = cttp_config;
     if (birdieball_config) payload.birdieball_config = birdieball_config;
     if (birdiepay_config) payload.birdiepay_config = birdiepay_config;

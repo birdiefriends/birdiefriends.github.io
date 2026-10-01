@@ -231,6 +231,17 @@
 //                                             --   ALTER TABLE bfe_gathering_games
 //                                             --   ADD COLUMN birdiepay_config TEXT;
 //                                             -- NULL when 'birdiepay' isn't selected.
+//     handicap_config TEXT,                  -- Dev-91. JSON, only when Skins and/or
+//                                             -- Birdie Payouts is set to NET:
+//                                             -- {allowance, skins_basis, birdiepay_basis,
+//                                             --  players: {name: {kind:'index'|'given'|'gross',
+//                                             --  tee, strokes, index?, course_hcp?, stroke_index:[18]}}}.
+//                                             -- Everything is resolved and FROZEN at save
+//                                             -- time. NULL = all gross (every pre-Dev-91
+//                                             -- row). ADDITIVE MIGRATION (run once in the
+//                                             -- D1 console BEFORE deploying):
+//                                             --   ALTER TABLE bfe_gathering_games
+//                                             --   ADD COLUMN handicap_config TEXT;
 //     status TEXT NOT NULL DEFAULT 'open',   -- 'open' (configured, Live Panel
 //                                             -- carve-out active) | 'closed'
 //                                             -- (payout calculated & frozen
@@ -1103,6 +1114,7 @@ export default {
           cttp_config: row.cttp_config ? JSON.parse(row.cttp_config) : null,
           birdieball_config: row.birdieball_config ? JSON.parse(row.birdieball_config) : null,
           birdiepay_config: row.birdiepay_config ? JSON.parse(row.birdiepay_config) : null,
+          handicap_config: row.handicap_config ? JSON.parse(row.handicap_config) : null, // Dev-91 net/gross setup (frozen at save)
           payout_summary: row.payout_summary ? JSON.parse(row.payout_summary) : null
         });
         if (gatheringId) {
@@ -1136,6 +1148,7 @@ export default {
     //         cttp_config: {dollar_per_hole, hole_mode, holes: [n,...]}       -- required iff 'cttp' in games
     //         birdieball_config: {dollar_per_player}                          -- required iff 'birdieball' in games
     //         birdiepay_config: {dollar_per_birdie, pars: [18 ints]}          -- required iff 'birdiepay' in games (Dev-89)
+    //         handicap_config: {allowance, skins_basis, birdiepay_basis, players}  -- optional; only stored when a basis is 'net' (Dev-91)
     //       }
     // Dev-86 round 3 (Brian): "BirdieBall should also be a $/player payout,
     // the balance going to Skins." Both CTP and BirdieBall are now fixed-$
@@ -1148,7 +1161,7 @@ export default {
       try { body = await request.json(); } catch (e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { gathering_id, gathering_name, host_id, games, dollar_per_player, cttp_config, birdieball_config, birdiepay_config } = body;
+      const { gathering_id, gathering_name, host_id, games, dollar_per_player, cttp_config, birdieball_config, birdiepay_config, handicap_config } = body;
       if (!gathering_id || !host_id) {
         return new Response(JSON.stringify({ error: 'gathering_id and host_id are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -1231,6 +1244,31 @@ export default {
           }
         } else {
           try { await env.DB.prepare(`UPDATE bfe_gathering_games SET birdiepay_config = NULL WHERE gathering_id = ?`).bind(gathering_id).run(); } catch (e) { /* column not migrated yet — nothing to clear */ }
+        }
+        // Dev-91: handicap_config (net/gross setup) — same own-statement pattern, so
+        // gross-only saves never depend on the column. Only a save that actually
+        // asks for Net needs it; anything else clears it best-effort.
+        const hcc = (handicap_config && typeof handicap_config === 'object') ? handicap_config : null;
+        const hcPlayers = hcc && hcc.players && typeof hcc.players === 'object' ? hcc.players : null;
+        const hcNet = hcc && (hcc.skins_basis === 'net' || hcc.birdiepay_basis === 'net');
+        if (hcNet) {
+          const bad = !hcPlayers || !Object.keys(hcPlayers).length || Object.values(hcPlayers).some(p =>
+            !p || !['index', 'given', 'gross'].includes(p.kind) || !Number.isFinite(Number(p.strokes)) ||
+            (p.kind !== 'gross' && !(Array.isArray(p.stroke_index) && p.stroke_index.length === 18)));
+          if (bad) return new Response(JSON.stringify({ error: 'handicap_config needs every player to have a kind, strokes and (unless no-strokes) an 18-hole stroke_index' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          const clean = {
+            allowance: Number.isFinite(Number(hcc.allowance)) ? Number(hcc.allowance) : 95,
+            skins_basis: hcc.skins_basis === 'net' ? 'net' : 'gross',
+            birdiepay_basis: hcc.birdiepay_basis === 'net' ? 'net' : 'gross',
+            players: hcPlayers
+          };
+          try {
+            await env.DB.prepare(`UPDATE bfe_gathering_games SET handicap_config = ? WHERE gathering_id = ?`).bind(JSON.stringify(clean), gathering_id).run();
+          } catch (e) {
+            return new Response(JSON.stringify({ error: 'Net play needs the handicap_config column (run the ALTER TABLE in the Worker schema comment): ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+        } else {
+          try { await env.DB.prepare(`UPDATE bfe_gathering_games SET handicap_config = NULL WHERE gathering_id = ?`).bind(gathering_id).run(); } catch (e) { /* column not migrated yet — nothing to clear */ }
         }
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {

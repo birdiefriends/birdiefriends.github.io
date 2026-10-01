@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.3.2';
+  const ENGINE_VERSION = '1.4.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -36,15 +36,19 @@
   // on a hole: a tie at the best = no skin, no carryover. A hole needs ≥2
   // entered scores to be a contest (blank/incomplete cards beat nobody).
   // cards: [{player, holes:[number|null, …]}]
-  function skinsWon(cards, compare) {
+  // opts.net (Dev-91): scores are NET, which can legitimately be 0 or below
+  // (a gross 1 on a par 3 with a stroke is a net 0); only blanks (null) are
+  // excluded. Gross keeps its original "> 0" rule byte-for-byte.
+  function skinsWon(cards, compare, opts) {
     const dir = compare === 'high' ? 'high' : 'low';
+    const netScores = !!(opts && opts.net);
     const list = (cards || []).filter(c => c && c.player);
     const holeCount = Math.max(0, ...list.map(c => Array.isArray(c.holes) ? c.holes.length : 0));
     const won = [];
     for (let h = 0; h < holeCount; h++) {
       const entries = list
         .map(c => ({ player: c.player, s: Array.isArray(c.holes) ? c.holes[h] : null }))
-        .filter(e => typeof e.s === 'number' && (dir === 'low' ? e.s > 0 : e.s >= 0));
+        .filter(e => typeof e.s === 'number' && (netScores || (dir === 'low' ? e.s > 0 : e.s >= 0)));
       if (entries.length < 2) continue;
       const best = dir === 'low' ? Math.min(...entries.map(e => e.s)) : Math.max(...entries.map(e => e.s));
       const at = entries.filter(e => e.s === best);
@@ -53,6 +57,66 @@
         : { hole: h + 1, player: at[0].player, points: best });
     }
     return won;
+  }
+
+
+  // ── Handicap strokes (Dev-91) — the shared net/gross foundation ────────
+  // Every net game reads strokes through these four functions, so a new net
+  // game never re-derives them. Pure: slope/rating/par/stroke-index come in.
+  //
+  // USGA Course Handicap = Index × (Slope ÷ 113) + (Rating − Par). The
+  // Playing Handicap applies the format's allowance (95% for individual
+  // stroke play) to the UNROUNDED course handicap and rounds once at the end.
+  // A plus handicap is a negative Index. Nine-hole rounds use half.
+  function courseHandicap(index, slope, rating, par) {
+    return Number(index) * (Number(slope) / 113) + (Number(rating) - Number(par));
+  }
+  function playingHandicap(spec, allowancePct, holeCount) {
+    const a = (allowancePct == null || allowancePct === '' ? 95 : Number(allowancePct)) / 100;
+    const raw = courseHandicap(spec.index, spec.slope, spec.rating, spec.par);
+    const per = holeCount === 9 ? 0.5 : 1;
+    return {
+      course_hcp: Math.round(raw * per * 10) / 10,
+      strokes: Math.round(raw * a * per)
+    };
+  }
+  // Strokes a player receives on a hole with stroke index `si` (1 = hardest)
+  // out of `n` holes. 18+ wraps: 20 strokes = one everywhere + a second on
+  // SI 1-2. Negative (plus handicap) strokes are GIVEN BACK on the easiest
+  // holes, mirror image.
+  function strokesOnHole(strokes, si, n) {
+    n = n || 18;
+    const s = Math.trunc(Number(strokes)) || 0;
+    const r = Math.trunc(Number(si));
+    if (!(r >= 1 && r <= n)) return 0;
+    if (s >= 0) return Math.floor(s / n) + (r <= s % n ? 1 : 0);
+    const g = -s;
+    return -(Math.floor(g / n) + (r > n - (g % n) ? 1 : 0));
+  }
+  // Re-rank a nine's stroke indexes (e.g. 7,1,13,…) to 1-9 for 9-hole play.
+  function rankWithin(si) {
+    const order = si.map((v, i) => [Number(v), i]).sort((a, b) => a[0] - b[0]);
+    const out = new Array(si.length);
+    order.forEach(([, i], rank) => { out[i] = rank + 1; });
+    return out;
+  }
+  // Gross card → net card for one player. `spec` = frozen per-player entry
+  // { strokes, stroke_index:[18] }; `fallbackSI` is the round-level table.
+  // Blank holes stay null. Returns { holes (net), received, gross, strokes }.
+  function netCard(card, spec, fallbackSI) {
+    const holes = Array.isArray(card.holes) ? card.holes : [];
+    const half = (card.hole_count === 9 && card.hole_half === 'back') ? 9 : 0;
+    const si18 = (spec && Array.isArray(spec.stroke_index) && spec.stroke_index.length === 18) ? spec.stroke_index
+      : (Array.isArray(fallbackSI) && fallbackSI.length === 18 ? fallbackSI : null);
+    const strokes = spec && Number.isFinite(Number(spec.strokes)) ? Math.trunc(Number(spec.strokes)) : 0;
+    const n = holes.length === 9 ? 9 : 18;
+    let si = null;
+    if (si18) si = n === 9 ? rankWithin(si18.slice(half, half + 9)) : si18.slice();
+    const received = holes.map((_, i) => (si ? strokesOnHole(strokes, si[i], n) : 0));
+    return {
+      holes: holes.map((g, i) => (typeof g === 'number' && g > 0 ? g - received[i] : null)),
+      received, gross: holes.slice(), strokes, missing_si: !si && strokes !== 0
+    };
   }
 
   // ── Payout ledger shared by every add-on in one close ──────────────────
@@ -192,15 +256,24 @@
         const per = Number(addon.dollar_per_birdie) || 0;
         const pars = Array.isArray(addon.pars) ? addon.pars : [];
         const havePars = pars.length === 18 && pars.every(p => Number(p) > 0);
+        const net = addon.basis === 'net';
         const birdies = [];
         if (havePars) {
           (inputs.scorecards || []).forEach(c => {
             const holes = Array.isArray(c.holes) ? c.holes : [];
             const off = (c.hole_count === 9 && c.hole_half === 'back') ? 9 : 0;
+            // Dev-91: basis 'net' judges the birdie on gross − strokes received
+            // (a par with a stroke is a net birdie; eagles are still ONE payout).
+            const nc = net && inputs.netByPlayer ? inputs.netByPlayer.get(norm(c.player)) : null;
             holes.forEach((strokes, i) => {
               const par = Number(pars[off + i]);
-              if (typeof strokes === 'number' && strokes > 0 && par > 0 && strokes <= par - 1) {
-                birdies.push({ hole: off + i + 1, player: L.canon(c.player), strokes, par });
+              if (!(typeof strokes === 'number' && strokes > 0 && par > 0)) return;
+              if (!net) {
+                if (strokes <= par - 1) birdies.push({ hole: off + i + 1, player: L.canon(c.player), strokes, par });
+              } else {
+                const received = nc ? nc.received[i] : 0;
+                const netScore = strokes - received;
+                if (netScore <= par - 1) birdies.push({ hole: off + i + 1, player: L.canon(c.player), strokes, par, net: netScore, received });
               }
             });
           });
@@ -216,7 +289,8 @@
         return {
           per_birdie: per, count, paid_each: paidEach, total_paid: totalPaid,
           capped, shortfall: capped ? owed - totalPaid : 0,
-          no_par_data: !havePars, birdies
+          no_par_data: !havePars, birdies,
+          ...(net ? { basis: 'net' } : {})
         };
       }
     },
@@ -230,7 +304,22 @@
         const L = state.ledger;
         const pot = Math.max(0, state.remaining) + state.rollover;
         state.remaining = 0; state.rollover = 0;
-        const won = skinsWon(inputs.scorecards, addon.compare || 'low');
+        const net = addon.basis === 'net' && inputs.netByPlayer;
+        let won;
+        if (net) {
+          // Dev-91: lowest NET outright. A tie at the best net is no skin.
+          const grossBy = new Map(inputs.scorecards.map(c => [norm(c.player), c]));
+          const netCards = inputs.scorecards.map(c => ({ player: c.player, holes: (inputs.netByPlayer.get(norm(c.player)) || { holes: c.holes }).holes }));
+          won = skinsWon(netCards, 'low', { net: true }).map(w => {
+            const nc = inputs.netByPlayer.get(norm(w.player));
+            const g = grossBy.get(norm(w.player));
+            return { hole: w.hole, player: w.player, strokes: w.strokes, net: w.strokes,
+              gross: g && Array.isArray(g.holes) ? g.holes[w.hole - 1] : null,
+              received: nc ? nc.received[w.hole - 1] : 0 };
+          });
+        } else {
+          won = skinsWon(inputs.scorecards, addon.compare || 'low');
+        }
         let perSkin = 0, givenBackEach = 0, unalloc = 0;
         if (won.length) {
           perSkin = Math.floor(pot / won.length);
@@ -241,7 +330,7 @@
           givenBackEach = gb.each; unalloc = gb.unallocated;
         }
         state.unallocated += unalloc;
-        return { pot, won, per_skin: perSkin, given_back_each: givenBackEach, basis: addon.basis || 'gross' };
+        return { pot, won, per_skin: perSkin, given_back_each: givenBackEach, basis: net ? 'net' : (addon.basis || 'gross') };
       }
     }
   };
@@ -267,19 +356,30 @@
     if (games.includes('birdieball') && row.birdieball_config) {
       addons.push({ id: 'birdieball', entity: 'individual', dollar_per_player: row.birdieball_config.dollar_per_player });
     }
+    // Dev-91: optional net setup frozen at game setup —
+    //   handicap_config: { allowance, skins_basis, birdiepay_basis, stroke_index:[18],
+    //                      players: { name: {tee, kind:'index'|'given'|'gross', strokes, stroke_index?} } }
+    // No handicap_config (every pre-Dev-91 row) = gross everywhere, byte-identical.
+    const hcc = row && row.handicap_config && typeof row.handicap_config === 'object' ? row.handicap_config : null;
+    const basisOf = k => (hcc && hcc[k] === 'net' ? 'net' : 'gross');
     if (games.includes('birdiepay') && row.birdiepay_config) {
-      addons.push({ id: 'birdiepay', entity: 'individual', dollar_per_birdie: row.birdiepay_config.dollar_per_birdie, pars: row.birdiepay_config.pars || [] });
+      const b = { id: 'birdiepay', entity: 'individual', dollar_per_birdie: row.birdiepay_config.dollar_per_birdie, pars: row.birdiepay_config.pars || [] };
+      if (basisOf('birdiepay_basis') === 'net') b.basis = 'net';
+      addons.push(b);
     }
     if (games.includes('skins')) {
-      addons.push({ id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' });
+      addons.push({ id: 'skins', entity: 'individual', basis: basisOf('skins_basis'), compare: 'low' });
     }
+    const anyNet = addons.some(a => a.basis === 'net');
     return {
       v: 1,
       base: { game: 'scorecard_only', params: {} },
       entity: { level: 'individual', unit: 'player', derive: null },
       input: 'strokes',
       compare: 'low',
-      handicap: { mode: 'scratch' },
+      handicap: anyNet
+        ? { mode: 'net', allowance: hcc.allowance == null ? 95 : Number(hcc.allowance), stroke_index: hcc.stroke_index || null, players: hcc.players || {} }
+        : { mode: 'scratch' },
       holes: { layout: null, half: row && row.hole_half ? row.hole_half : null },
       addons,
       payout: { entry_per_player: Number(row && row.dollar_per_player) || 0 },
@@ -305,7 +405,19 @@
       .filter(a => ADDONS[a.id])
       .slice()
       .sort((a, b) => ADDONS[a.id].order - ADDONS[b.id].order);
-    const withCards = Object.assign({}, inputs, { scorecards: cards });
+    // Dev-91: net cards, built once and shared by every net-basis add-on.
+    const hc = config && config.handicap;
+    const netByPlayer = new Map();
+    const missingStrokes = [];
+    if (hc && hc.mode === 'net') {
+      const specs = new Map(Object.entries(hc.players || {}).map(([k, v]) => [norm(k), v]));
+      cards.forEach(c => {
+        const spec = specs.get(norm(c.player));
+        if (!spec) missingStrokes.push(c.player);
+        netByPlayer.set(norm(c.player), netCard(c, spec, hc.stroke_index));
+      });
+    }
+    const withCards = Object.assign({}, inputs, { scorecards: cards }, netByPlayer.size ? { netByPlayer } : {});
     let residualRan = false;
     addons.forEach(a => {
       results[a.id] = ADDONS[a.id].carve(state, a, withCards);
@@ -327,6 +439,15 @@
       // birdiepay only appears in a snapshot when the game was on, so every pre-Dev-89 payout keeps its exact shape
       ...(results.birdiepay ? { birdiepay: results.birdiepay } : {}),
       skins: results.skins, payouts: rows,
+      // handicap summary only appears when a net game ran — gross snapshots keep their exact shape
+      ...(netByPlayer.size ? { handicap: {
+        allowance: hc.allowance,
+        players: cards.map(c => {
+          const spec = (hc.players || {})[Object.keys(hc.players || {}).find(k => norm(k) === norm(c.player))] || {};
+          return { player: c.player, tee: spec.tee || null, kind: spec.kind || null, strokes: netByPlayer.get(norm(c.player)).strokes };
+        }),
+        missing: missingStrokes
+      } } : {}),
       unallocated: Math.round(state.unallocated * 100) / 100
     };
   }
@@ -394,6 +515,7 @@
     ENGINE_VERSION,
     BASE_GAMES, ADDONS,
     skinsWon,
+    courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,
     computeRoundPayout,
     computeGatheringGamesPayout,
