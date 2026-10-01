@@ -20,9 +20,9 @@ const tees = [
 ];
 const ctx = { BFEngine: E, _gamesFormG: { eventShadow: false }, _gamesFormGathering: 7, _gamesFormTees: tees,
   gatheringRegData: ['Brian Hager', 'Lee Chasen', 'Tony Hager', 'Muna Aliya'].map(p => ({ gatheringId: 7, player: p, status: 'Yes' })).concat([{ gatheringId: 7, player: 'Bailed', status: 'No' }]),
-  regData: [], _gamesFormHcp: null };
+  regData: [], _gamesFormHcp: null, _gamesFormMembers: new Map() };
 vm.createContext(ctx);
-vm.runInContext(['gamesFormPlayerNames', 'gamesFormHcpIsNet', 'gamesFormResolvePlayerHcp', 'gamesFormBuildHandicapConfig'].map(n => extractFn(src, n)).join('\n'), ctx);
+vm.runInContext(['gamesFormEntry', 'gamesFormPlayerNames', 'gamesFormHcpIsNet', 'gamesFormResolvePlayerHcp', 'gamesFormBuildHandicapConfig'].map(n => extractFn(src, n)).join('\n'), ctx);
 const set = hcp => { ctx._gamesFormHcp = hcp; };
 
 // A: gross → no config at all
@@ -70,6 +70,26 @@ ok(r.skins.basis === 'net' && r.birdiepay.basis === 'net', 'E: both games net');
 ok(r.payouts.reduce((s, x) => s + x.total, 0) + r.unallocated === r.total_pot, 'E: pot conserved');
 // Brian's SI-2 hole (#12): he has 8 strokes so he gets one there; a gross bogey 5 is a net par 4.
 eq(E.netCard(card('Brian Hager', { 12: 5 }), cfg.players['Brian Hager']).holes[11], 4, 'E: Brian\'s bogey on #12 becomes a net par');
+
+// F: Membership prefill — real HCP -> Index (editable); NoHCP -> ask for strokes; unknown -> blank index
+ctx._gamesFormMembers = new Map([
+  ['brian hager', { hcp: 8, source: 'ghin_import' }],
+  ['tony hager', { hcp: null, source: 'no_hcp' }],
+  ['lee chasen', { hcp: 22, source: 'no_hcp' }],      // a number on file but flagged NoHCP: still ask for strokes
+  ['muna aliya', { hcp: null, source: null }]]);
+set({ skins_basis: 'net', birdiepay_basis: 'net', allowance: 95, players: {} });
+const eb = ctx.gamesFormEntry('Brian Hager');
+eq([eb.kind, eb.index], ['index', 8], 'F: member with an HCP prefills Index');
+eq(ctx.gamesFormEntry('Tony Hager').kind, 'given', 'F: NoHCP asks for strokes');
+eq(ctx.gamesFormEntry('Lee Chasen').kind, 'given', 'F: no_hcp source wins over a stale number');
+eq(ctx.gamesFormEntry('Muna Aliya').kind, 'given', 'F: no number on file asks for strokes');
+eq(ctx.gamesFormEntry('Stranger').kind, 'index', 'F: not in Membership starts as blank Index');
+ok(/Not found in Membership/.test(ctx.gamesFormEntry('Stranger').note), 'F: says so');
+ctx._gamesFormHcp.players['Brian Hager'].teeId = '1';
+eq(ctx.gamesFormResolvePlayerHcp('Brian Hager').strokes, 8, 'F: prefilled Index resolves through the tee: 8 strokes');
+ok(/enter strokes given/.test(ctx.gamesFormResolvePlayerHcp('Tony Hager').problem) || /pick a tee/.test(ctx.gamesFormResolvePlayerHcp('Tony Hager').problem), 'F: NoHCP player is not silently scratch');
+ctx._gamesFormHcp.players['Brian Hager'].index = 12; // host override sticks
+eq(ctx.gamesFormEntry('Brian Hager').index, 12, 'F: host edit is kept');
 
 console.log(`test_net_form: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -1,3 +1,6 @@
+v4.10.1 · 2026-10-01
+Deployed: 2026-10-01 (Net setup now reads Membership: a player with an HCP gets their Index prefilled for the chosen tee (still editable); a NoHCP player, or one with no number on file, is asked for Strokes Given instead.)
+
 v4.10.0 · 2026-10-01
 Deployed: 2026-10-01 (Net play: Skins and Birdie Payouts can each be scored Gross (default) or Net. The host sets each player's tee and either a handicap index (USGA course handicap x a 95% allowance) or Strokes Given before the first tee; strokes land on each tee's hardest holes. A new Strokes card on the At-the-course rail shows everyone's strokes, and results show gross and net side by side. Needs bf_engine.js 1.4.0 and the BFE Worker with the new handicap_config column.)
 

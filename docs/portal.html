@@ -10762,6 +10762,7 @@ let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; // Birdie Payouts (
 // Dev-91 — net/gross setup, frozen into the saved config at Save. kind per player: 'index' (typed Index → USGA playing handicap),
 // 'given' (host types strokes), 'gross' (no strokes). Each net player needs a tee: slope/rating/par and the HOLE stroke index come from it.
 let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} };
+let _gamesFormMembers = new Map(); // Membership HCPs (bf_players) by lower-cased name: { hcp, source } — Index prefill, NoHCP -> ask for strokes
 let _gamesFormTees = []; // the venue's stored tees that carry full 18-hole data (slope, rating, par_total, holes[{par,handicap}])
 let _gamesFormBirdiepayPars = null; // 18 hole pars resolved for the Gathering's venue when the form opened (null = no par data on file)
 let _gamesFormBirdieballConfig = { dollar_per_player: null }; // BirdieBall's OWN per-player rate — distinct from the main $/player pot rate
@@ -17237,7 +17238,11 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
   // Par-3 holes drive the CTP hole picker — fetched from the venue's stored
   // tee data (bfe_venue_tees) before the form paints, same "gather the
   // material first" ordering as showEditGatheringForm's crew pre-load.
-  await loadGamesFormPar3Holes(g);
+  await Promise.all([loadGamesFormPar3Holes(g), loadGamesFormMembers()]);
+  // Re-opening a saved net config: its players carry the tee NAME; the form works by tee id.
+  Object.values(_gamesFormHcp.players).forEach(e => {
+    if (e && e.tee && e.teeId == null) { const t = _gamesFormTees.find(x => x.tee_name === e.tee); if (t) e.teeId = String(t.id); }
+  });
   renderGatheringGamesForm(gatheringId, g, existing);
 }
 async function loadGamesFormPar3Holes(g) {
@@ -17508,6 +17513,36 @@ function setGamesFormBirdiepayDollarPerBirdie(val) {
   _gamesFormTouched.add('birdiepay');
   updateGamesFormPotPreview();
 }
+// Dev-91 — Membership HCPs for the net setup. Same bf_players table BFE-Admin's
+// HCP Sync maintains; a failed read just means everyone starts blank (host types).
+async function loadGamesFormMembers() {
+  _gamesFormMembers = new Map();
+  try {
+    const res = await fetch(`${BFE_API}/bfe/players`);
+    const data = await res.json();
+    (data.ok ? data.players || [] : []).forEach(pl => {
+      if (!pl.name) return;
+      _gamesFormMembers.set(String(pl.name).trim().toLowerCase(), {
+        hcp: pl.current_hcp == null || pl.current_hcp === '' ? null : Number(pl.current_hcp),
+        source: pl.hcp_source || null
+      });
+    });
+  } catch (e) { _gamesFormMembers = new Map(); }
+}
+// A player's setup row. Starts from Membership: a real HCP -> 'index' prefilled
+// (editable); NoHCP (or no number on file) -> 'given', asking the host for
+// strokes; not found in Membership -> 'index', blank. Created once, then the
+// host's edits stick.
+function gamesFormEntry(name) {
+  let e = _gamesFormHcp.players[name];
+  if (e) return e;
+  const m = _gamesFormMembers.get(String(name).trim().toLowerCase());
+  if (!m) e = { kind: 'index', note: 'Not found in Membership: enter an index or strokes' };
+  else if (m.source === 'no_hcp' || m.hcp == null || !Number.isFinite(m.hcp)) e = { kind: 'given', note: 'No HCP on file: enter strokes given' };
+  else e = { kind: 'index', index: m.hcp, note: `Index ${m.hcp} from Membership` };
+  _gamesFormHcp.players[name] = e;
+  return e;
+}
 // ── Dev-91: Net / Gross + handicap strokes ─────────────────────────────────
 // Skins and Birdie Payouts each get a Gross | Net switch (Gross default — what
 // every earlier round used). Net needs a per-player stroke count, resolved
@@ -17525,7 +17560,7 @@ function gamesFormPlayerNames() {
 function gamesFormHcpIsNet() { return _gamesFormHcp.skins_basis === 'net' || _gamesFormHcp.birdiepay_basis === 'net'; }
 // One player's resolved handicap, or { problem } if the host still owes a field.
 function gamesFormResolvePlayerHcp(name) {
-  const e = _gamesFormHcp.players[name] || {};
+  const e = gamesFormEntry(name);
   const kind = e.kind || 'index';
   if (kind === 'gross') return { kind, strokes: 0, tee: e.tee || null, stroke_index: null };
   const tee = _gamesFormTees.find(t => String(t.id) === String(e.teeId));
@@ -17559,7 +17594,7 @@ function gatheringGamesHcpSectionHtml() {
       rows = `<div style="font-size:0.74rem;color:#b8860b;background:rgba(230,168,0,0.1);border:1px solid rgba(230,168,0,0.3);border-radius:8px;padding:8px 10px;margin-top:6px">No tee data with hole handicaps on file for this venue, so Net can't be set up. Add it in Venue Manager (GC-API Lookup) first.</div>`;
     } else {
       rows = gamesFormPlayerNames().map(n => {
-        const e = _gamesFormHcp.players[n] || {};
+        const e = gamesFormEntry(n);
         const kind = e.kind || 'index';
         const r = gamesFormResolvePlayerHcp(n);
         const q = JSON.stringify(n).replace(/"/g, '&quot;');
@@ -17572,7 +17607,7 @@ function gatheringGamesHcpSectionHtml() {
         const out = r.problem ? `<span style="color:#b8860b">${r.problem}</span>`
           : `<b>${r.strokes} stroke${Math.abs(r.strokes) === 1 ? '' : 's'}</b>${r.kind === 'index' ? ` (course hcp ${r.course_hcp})` : ''}`;
         return `<div style="padding:9px 0;border-top:1px solid var(--border)">
-          <div style="font-weight:700;font-size:0.88rem;margin-bottom:6px">${escapeHtml(n)}</div>
+          <div style="font-weight:700;font-size:0.88rem;margin-bottom:${e.note ? '1px' : '6px'}">${escapeHtml(n)}</div>${e.note ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px">${escapeHtml(e.note)}</div>` : ''}
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${kind === 'gross' ? '' : teeSel}${kindSel}${val}</div>
           <div id="gf-hcp-out-${escapeHtml(n).replace(/\W/g, '_')}" style="font-size:0.76rem;color:var(--text-muted);margin-top:5px">${out}</div></div>`;
       }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No confirmed players yet. Players appear here as they register Yes.</div>`;
@@ -17597,11 +17632,12 @@ function setGamesFormBasis(key, val) { _gamesFormHcp[key] = val === 'net' ? 'net
 function setGamesFormAllowance(v) {
   const n = parseFloat(v);
   _gamesFormHcp.allowance = Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 95;
-  gamesFormPlayerNames().forEach(nm => setGamesFormPlayerHcp(nm, 'kind', (_gamesFormHcp.players[nm] || {}).kind || 'index', true)); // re-run each result line, keep input focus
+  gamesFormPlayerNames().forEach(nm => setGamesFormPlayerHcp(nm, 'kind', gamesFormEntry(nm).kind || 'index', true)); // re-run each result line, keep input focus
 }
 function setGamesFormPlayerHcp(name, field, val, typing) {
-  const e = _gamesFormHcp.players[name] = _gamesFormHcp.players[name] || { kind: 'index' };
+  const e = gamesFormEntry(name);
   e[field] = val;
+  if (field === 'kind') delete e.note; // the Membership hint only describes the default
   if (typing) { // re-render only the result line so the input keeps focus
     const r = gamesFormResolvePlayerHcp(name);
     const out = document.getElementById('gf-hcp-out-' + escapeHtml(name).replace(/\W/g, '_'));
