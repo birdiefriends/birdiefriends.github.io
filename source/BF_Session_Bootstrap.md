@@ -139,8 +139,9 @@ deliver them: `SendUserFile` first, then (when linked to Brian's computer)
 `mcp__remote-devices__device_commit_files` into
 `C:\Users\16177\Downloads\GolfScorer\AutoPush`. I do not run deploy commands or push to
 Cloudflare/GitHub myself. **Since Dev-80, one exception:** changes to `bf_push.ps1` itself
-get committed DIRECTLY to the live file at that AutoPush path (not just delivered as the
-`bf_push_library.ps1` archival snapshot) — see §4 for the full rule.
+get written DIRECTLY to the live file at that AutoPush path, and the same content is pushed to
+`source/bf_push.ps1` on `main` (the `bf_push_library.ps1` snapshot route is retired, 2026-09-30) —
+see §4 for the full rule.
 ## 2. Where the 2026 Wally Cup stands
 **Event wrapped — confirmed by Brian, Dev-87.** Everything below is history for reference; the
 Dev-84 "status unknown" note and every Rd3/Overall carry-forward are resolved.
@@ -312,8 +313,9 @@ this is the largest single body of work behind this bootstrap.** In build order:
    widget all 16 will see it when opening the APP"). Gated only on roster membership plus
    a new independent `bfe_events.trip_info_url` column (nullable, additive migration).
 6. **A standing tooling rule change:** Brian asked that changes to `bf_push.ps1` itself be
-   committed directly to the live file going forward, not delivered only as the
-   `bf_push_library.ps1` archival snapshot for manual copy-over — see §4.
+   committed directly to the live file going forward, not left for manual copy-over
+   (as of 2026-09-30 the repo archive copy goes straight to `main`, not via a
+   `bf_push_library.ps1` snapshot) — see §4.
 Full detail on all of the above (including the deviations from the original design draft)
 is in `BF_WCRP_Memories_Spec.md`'s "What actually shipped (Dev-80)" addendum — read that
 before touching any memories/Trip-Info code, not just this summary.
@@ -525,15 +527,20 @@ live data, what Brian confirmed).
   silently didn't get found by the push tool. Always finish with `device_commit_files`
   targeting `C:\Users\16177\Downloads\GolfScorer\AutoPush\<filename>` directly for
   anything Brian will push.
-- **`bf_push.ps1` itself now gets committed directly to the live file (Dev-80 rule
-  change).** Brian's explicit instruction: "update the .ps1 directly. That should always
-  be the case rather than me risk a manually edit mistake." So any change to the push tool
-  itself goes straight to `C:\Users\16177\Downloads\GolfScorer\AutoPush\bf_push.ps1` via
-  `device_commit_files`, in addition to (not instead of) delivering the same content as
-  `bf_push_library.ps1` — that second file's own normal `$FileMap` entry
-  (`bf_push_library.ps1 → source/bf_push.ps1`) still archives a copy into the GitHub repo
-  through the tool's own regular push-and-verify path, since the live script can't safely
-  push-and-delete itself. Both copies should stay byte-identical after a change.
+- **`bf_push.ps1` itself — how a change to the push tool is delivered (Dev-80 rule, revised
+  2026-09-30).** Brian's explicit instruction (Dev-80): "update the .ps1 directly. That should
+  always be the case rather than me risk a manually edit mistake." So when Brian asks for a change
+  to the push tool, Claude (1) writes it straight to the live
+  `C:\Users\16177\Downloads\GolfScorer\AutoPush\bf_push.ps1` via `device_commit_files` (guard the
+  write with the file's `expectedMtimeMs`), and (2) puts the **same bytes** at `source/bf_push.ps1`
+  on `main` through the normal direct-publish path (staging branch, then `main` on Brian's go-ahead).
+  The old `bf_push_library.ps1` snapshot is **retired**: do not drop it in AutoPush — under the
+  either/or publishing rule (§0 mode box) AutoPush is not used to publish, and the snapshot would
+  only sit there as one more file a stray run could push. (Its `$FileMap` line is harmless and can
+  stay.) This live-script write is the one thing Claude puts in AutoPush in DIRECT mode, and only
+  when Brian has asked for a tool change; v18 refuses to push anything without a one-shot
+  `AUTOPUSH_OK.txt` marker, so the script itself can't publish anything by accident. Both copies
+  must stay byte-identical (check with a diff after delivering).
 - **Bump `portal_version.txt` with every `portal.html` change**, not just at session close
   — this drifted stale for multiple real deploys in the past (Dev-76) before that rule was
   adopted.
