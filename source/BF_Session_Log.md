@@ -5379,3 +5379,6 @@ mirror (bf_push normally writes both), leaving them one comment apart; resynced 
 
 ### Dev-90 addendum — v4.9.10 (BirdieBall: alert vs scorecard)
 - Brian: Live Panel BirdieBall = lost-ball alert only (no keep); scorecard is the source of truth either way. Live card: hole + stroke + "I lost it" (always kept:false). Scorecard block always asks Kept/Lost, pre-filled from any saved alert (`scBbMaterialize`), submit overwrites the row. Still no push on lost ball (the alert is the in-panel board).
+
+### Dev-90 addendum — v4.9.11 (BirdieBall lost push)
+- Live "I lost it" now pushes "🐦💔 <player> lost the BirdieBall — Hole #N" (bf_type 'birdieball', feed card added) to the round's other registered players (not league-wide; test mode = commissioner only). Scorecard confirmations send no push.

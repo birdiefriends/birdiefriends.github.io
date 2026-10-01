@@ -1,3 +1,6 @@
+v4.9.11 · 2026-10-01
+Deployed: 2026-10-01 (BirdieBall: when a player taps "I lost it" on the Live Panel, everyone else registered for the round gets a push saying who lost it and where.)
+
 v4.9.10 · 2026-10-01
 Deployed: 2026-10-01 (Live Panel BirdieBall is now a lost-ball alert only (no "kept it"). The scorecard always asks Kept it / Lost it, pre-filled from any alert, and is the source of truth.)
 

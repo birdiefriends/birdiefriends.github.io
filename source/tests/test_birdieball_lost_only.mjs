@@ -5,6 +5,9 @@ ok(!/bbSetKept\(/.test(src.replace(/function bbSetKept[\s\S]*?\n}\n/, '')), 'liv
 ok(/💔 I lost it/.test(src), 'live card is a lost-ball alert');
 ok(/_bbKept = false; \/\/ v4\.9\.10/.test(src), 'live submit always sends kept:false');
 ok(/const bbConfirmNeedsAsk = showBirdieBallSection;/.test(src), 'scorecard always asks, even after an alert');
+ok(/lost the BirdieBall`;/.test(src) && /'birdieball'\)/.test(src), 'lost alert sends a push of type birdieball');
+ok(/filter\(n => n !== player\)/.test(src), 'push goes to the round\'s other players, not a league blast');
+ok(/case 'birdieball':/.test(src), 'feed knows the birdieball type');
 // materialize: first touch copies the saved lost alert, then edits build on it
 const ctx = { _scBbKept: null, _scBbLostHole: null, _scBbLostStroke: null, scPlayerSel: 'Dave', bbAnswerFor: () => ({ kept: false, lost_hole: 7, lost_stroke: 5 }), renderLiveBanner() {} };
 vm.createContext(ctx);

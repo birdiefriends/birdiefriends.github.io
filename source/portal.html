@@ -8114,6 +8114,7 @@ function buildAnnouncementsHTML(notifications, loading) {
     switch(bf_type) {
       case 'birdie':         return { icon:'🦅', label:'Birdie Alert',     accent:'rgba(245,200,66,0.15)',  border:'rgba(245,200,66,0.35)',  text:'#9a7a00' };
       case 'cttp':           return { icon:'🎯', label:'Closest to Pin',   accent:'rgba(29,158,117,0.12)', border:'rgba(29,158,117,0.3)',   text:'#0d6b54' };
+      case 'birdieball':     return { icon:'🐦', label:'BirdieBall',       accent:'rgba(192,57,43,0.08)',   border:'rgba(192,57,43,0.2)',    text:'#922b21' };
       case 'gathering_invite':      return { icon:'⛳', label:'Gathering Invite', accent:'rgba(41,128,185,0.10)',  border:'rgba(41,128,185,0.25)',  text:'#1a5276' };
       case 'gathering_open_invite': return { icon:'📢', label:'Open Gathering',   accent:'rgba(41,128,185,0.10)',  border:'rgba(41,128,185,0.25)',  text:'#1a5276' };
       case 'gathering_date_changed':return { icon:'📅', label:'Date Changed',     accent:'rgba(230,168,0,0.12)',   border:'rgba(230,168,0,0.3)',    text:'#7a5800' };
@@ -10143,7 +10144,20 @@ async function submitBirdieBall() {
     const idx = _bbAnswers.findIndex(a => (a.player_name || '').trim().toLowerCase() === player.trim().toLowerCase());
     if (idx === -1) _bbAnswers.push(payload); else _bbAnswers[idx] = payload;
     _bbSubmitting = false;
-    showToast(_bbKept ? `🐦 Recorded — ${player} kept it` : `Recorded — ${player} lost it on #${_bbLostHole}`);
+    // v4.9.10 — tell the group who lost it (Brian: "it'll entertain people").
+    // Goes to this round's registered players only (not a league-wide blast),
+    // everyone but the loser; test mode sends to the commissioner only.
+    // Best-effort: a failed push never undoes the saved alert.
+    {
+      const heading = `🐦💔 ${player} lost the BirdieBall`;
+      const msg = `Hole #${_bbLostHole} — ${_bbLostStroke} stroke${Number(_bbLostStroke) === 1 ? '' : 's'}`;
+      const others = (window._liveEvtIndividualPlayers || []).filter(n => n !== player);
+      const sendP = LIVE_EVENT_TEST_MODE
+        ? osSendToPlayers([currentPlayer], `[TEST] ${heading}`, msg, 'https://birdiefriends.com/portal.html', 'birdieball')
+        : (others.length ? osSendToPlayers(others, heading, msg, 'https://birdiefriends.com/portal.html', 'birdieball') : null);
+      if (sendP) sendP.catch(e => console.warn('[BirdieBall] push failed:', e.message));
+    }
+    showToast(`Recorded — ${player} lost it on #${_bbLostHole}`);
     renderLiveBanner();
   } catch(e) {
     _bbSubmitting = false;
