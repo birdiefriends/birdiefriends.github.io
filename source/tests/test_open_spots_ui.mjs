@@ -12,11 +12,11 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 const fns = ['escapeHtml','evtPhotoKey','computeGatheringGamesPayout','latestScorecardPerPlayer','scorecardMissingHoles','renderGatheringPayoutHtml',
   'openGatheringCloseSheet','confirmGatheringClose','openModal','closeModal',
   'isOpenSpotName','loadHostSpots','hostSpotsHtml','hostAddOpenSpot','refreshAfterSpotChange','openFillSpotSheet','renderFillSpotSheet',
-  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','hostAutoOpenSpots','updateHostSpotsPreview','setHostAddGames'];
+  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','hostAutoOpenSpots','updateHostSpotsPreview','updateHostPlayersRow','hostSwitchHtml','hostSwitchSet','hostRowHtml','hostSetRowValue','bumpHostCapacity','hostGamesListHtml','filterHostGamesSheet','toggleHostGame','updateHostGamesRow','pickHostOption','setHostHoles','closeHostSheet','openHostSheet'];
 function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillOk = true } = {}) {
   const dom = new JSDOM(`<body><div id="gathering-close-modal"><div id="gathering-close-body"></div></div>
     <div id="gathering-spot-modal"><div id="gathering-spot-title"></div><div id="gathering-spot-body"></div></div>
-    <div id="host-sheet-body"></div><div id="history-game-results"></div><input id="host-new-size" value="4"><div id="host-spots-preview"></div><div id="host-games-row"></div><span id="host-games-check"></span></body>`);
+    <div id="host-sheet-body"></div><div id="history-game-results"></div><input id="host-new-size" value="4"><button id="host-players-row"><span class="host-row-val">You</span></button><button id="host-games-row"><span class="host-row-val">None yet</span></button><button id="host-holes-row"><span class="host-row-val">18</span></button><button id="host-format-row"><span class="host-row-val">x</span></button><button id="host-playing-switch" role="switch"><span></span></button><select id="host-new-type"><option value="Individual Play">Individual Play</option><option value="Best Ball">Best Ball</option></select><input id="host-games-search"><div id="host-games-list"></div></body>`);
   const posts = []; const toasts = []; const calls = [];
   const h = o => Array(18).fill(5).map((v, i) => o[i + 1] ?? v);
   const ctx = {
@@ -50,7 +50,7 @@ function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillO
   ctx.posts = posts; ctx.toasts = toasts; ctx.calls = calls;
   vm.createContext(ctx);
   vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') +
-    '\nvar _spotsByGathering = new Map(); var _hostAddGames = false; var _hostMode = "crew"; var _hostPlaying = true; var currentPlayer = "Brian Hager"; var _hostCrewPicked = new Set(); var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null;', ctx);
+    '\nvar _spotsByGathering = new Map(); var _hostGamesPick = new Set(); var _hostHoles = 18; var GATHERING_GAMES_META = {skins:{label:"Skins",icon:"S"},cttp:{label:"CTP",icon:"C"},birdieball:{label:"BirdieBall",icon:"B"}}; var _hostMode = "crew"; var _hostPlaying = true; var currentPlayer = "Brian Hager"; var _hostCrewPicked = new Set(); var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null;', ctx);
   return ctx;
 }
 
@@ -133,19 +133,31 @@ c._hostCrewPicked = new Set(['A','B','C','D','E']); ok(c.hostAutoOpenSpots() ===
 c._hostMode = 'open'; ok(c.hostAutoOpenSpots() === 0, 'open mode never creates spots'); c._hostMode = 'crew';
 sz(''); ok(c.hostAutoOpenSpots() === 0, 'blank size -> 0');
 c._hostPlaying = true; c._hostCrewPicked = new Set(); sz(4); c.updateHostSpotsPreview();
-const pv = c.document.getElementById('host-spots-preview'); ok(pv.style.display === 'block' && /3 open spots/.test(pv.textContent), 'preview shows 3');
-sz(12); c.updateHostSpotsPreview(); ok(/max 8/.test(pv.textContent), 'preview warns above 8');
-sz(1); c.updateHostSpotsPreview(); ok(pv.style.display === 'none', 'preview hidden at 0');
-c.setHostAddGames(true); ok(c._hostAddGames === true && c.document.getElementById('host-games-check').textContent === '☑', 'games toggle on');
-c.setHostAddGames(false); ok(c._hostAddGames === false && c.document.getElementById('host-games-check').textContent === '☐', 'games toggle off');
+const prow = () => c.document.querySelector('#host-players-row .host-row-val').textContent;
+ok(prow() === 'You · 3 open', 'Players row: host only of 4 -> "You · 3 open"');
+c._hostCrewPicked = new Set(['Mike Scanlan', 'Jim Bingham']); c.updateHostSpotsPreview(); ok(prow() === 'You + 2 · 1 open', 'Players row: host + 2, 1 open');
+sz(3); c.updateHostSpotsPreview(); ok(prow() === 'You + 2', 'Players row: full -> no open note');
+c._hostPlaying = false; sz(4); c.updateHostSpotsPreview(); ok(prow() === '2 invited · 2 open', 'Players row: host not playing');
+c._hostMode = 'open'; c.updateHostSpotsPreview(); ok(prow() === 'Open to members', 'Players row: open mode'); c._hostMode = 'crew'; c._hostPlaying = true;
+c.bumpHostCapacity(1); ok(c.document.getElementById('host-new-size').value === '5', 'capacity +'); sz(1); c.bumpHostCapacity(-1); ok(c.document.getElementById('host-new-size').value === '1', 'capacity floors at 1'); sz(32); c.bumpHostCapacity(1); ok(c.document.getElementById('host-new-size').value === '32', 'capacity caps at 32');
+c.hostSwitchSet('host-playing-switch', true); ok(c.document.getElementById('host-playing-switch').getAttribute('aria-checked') === 'true', 'switch on');
+c.hostSwitchSet('host-playing-switch', false); ok(c.document.getElementById('host-playing-switch').getAttribute('aria-checked') === 'false', 'switch off');
+ok(/role="switch"/.test(c.hostSwitchHtml('x', true, 'f()', 'L', 'S')), 'switch markup has role=switch');
+c.toggleHostGame('skins'); c.toggleHostGame('cttp'); ok(c._hostGamesPick.size === 2 && c.document.querySelector('#host-games-row .host-row-val').textContent === 'Skins, CTP', 'games row summarizes picks');
+c.toggleHostGame('skins'); ok(c._hostGamesPick.size === 1, 'game toggles off');
+ok(/Added/.test(c.hostGamesListHtml('')) && !/BirdieBall/.test(c.hostGamesListHtml('ctp')), 'games list filters by search');
+c.pickHostOption('format', 'Best Ball'); ok(c.document.getElementById('host-new-type').value === 'Best Ball' && c.document.querySelector('#host-format-row .host-row-val').textContent === 'Best Ball', 'format pick');
+c.pickHostOption('holes', '9'); ok(c._hostHoles === 9 && c.document.querySelector('#host-holes-row .host-row-val').textContent === '9', 'holes pick');
 ok(/const autoSpots = hostAutoOpenSpots\(\);/.test(src) && /count: autoSpots/.test(src), 'create uses the automatic count');
 ok(!/_hostOpenSpots/.test(src), 'manual stepper state is gone');
-ok(/if \(_hostAddGames && _createdG\) await showGatheringGamesForm\(gathData\.id\)/.test(src), 'Create opens the Games setup when toggled');
+ok(/if \(_wantGames && _createdG\) await showGatheringGamesForm\(gathData\.id, \[\.\.\._hostGamesPick\]\)/.test(src), 'Create opens the stakes form with the picked games');
 ok(/Promise\.allSettled\(_regJobs\)/.test(src), 'registrations settle before the Games form counts players');
-ok(/oninput="updateHostSpotsPreview\(\)"/.test(src), 'size input updates the preview');
+ok(/id="host-new-size"[^>]*oninput="updateHostSpotsPreview\(\)"/.test(src), 'size input updates the Players row');
+ok(src.indexOf("hostRowHtml('host-holes-row'") < src.indexOf("hostRowHtml('host-format-row'"), 'Holes sits above Format');
+ok(/_gamesFormSelected = new Set\(existing \? existing\.games : \(preselect \|\| \[\]\)\)/.test(src), 'games form accepts a preselection');
 const iAdd = src.indexOf('/bfe/gathering-spots/${gathData.id}/add'), iHost = src.indexOf('// Auto-register the host themselves');
 ok(iAdd > 0 && iHost > iAdd, 'spots are created BEFORE the host/crew registrations');
-ok(/_hostAddGames = false;\s*\n\s*_pendingCrewName = null;/.test(src), 'form resets the games toggle each time it opens');
+ok(/_hostGamesPick = new Set\(\);\s*\n\s*_pendingCrewName = null;/.test(src), 'form resets the game picks each time it opens');
 ok(src.includes("Promise.all([loadHostTemplates(), loadHostGamesConfigs(), loadHostSpots()])"), 'Host Panel warms the spots cache');
 ok((src.match(/hostSpotsHtml\(g, (true|false)\)/g) || []).length === 2, 'both the upcoming and archive cards render the block');
 ok((src.match(/isOpenSpotName\(r\.player\) \? '🪑 ' \+ r\.player/g) || []).length === 2, 'placeholders are labelled in both response lists');

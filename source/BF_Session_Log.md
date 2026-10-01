@@ -5362,3 +5362,8 @@ mirror (bf_push normally writes both), leaving them one comment apart; resynced 
 ### Dev-90 addendum — v4.9.1 (New Gathering setup)
 - Open spots are now automatic: capacity − host (if playing) − invitees, held as "Open Spot N" (max 8), with a live preview under the player picker. Manual stepper removed.
 - New "🎮 Games — Set up games now" toggle in New Gathering: after Create, opens the Games setup for the new Gathering (host/crew registrations settle first so the form counts players).
+
+### Dev-90 addendum — v4.9.2 (New Gathering redesign)
+- Create form rebuilt as tap-to-open rows + switches (mock approved in-session). Players row opens the existing crew/individual/open controls in a full-screen sheet (same ids/handlers); open-spot count shows in the row (the v4.9.1 note is gone).
+- Holes above Format, Format defaults to Individual Play. "Add Games" = searchable sheet; picks pre-select the existing stakes form, which opens after Create (stakes still need the Gathering id).
+- The Edit Gathering form is NOT redesigned yet (still the old layout); next candidate.

@@ -11081,7 +11081,7 @@ async function loadHostGamesConfigs() {
 // placeholder everywhere (registrations, scorecard, CTP, BirdieBall, closed
 // result) in one atomic step when the host fills it. Host-only controls.
 let _spotsByGathering = new Map();   // gatheringId -> ['Open Spot 1', ...]
-let _hostAddGames = false;           // New Gathering form: open Games setup right after Create (v4.9.1)
+let _hostGamesPick = new Set();      // New Gathering form: games chosen up front; the stakes form opens right after Create (v4.9.2)
 let _hostPanelView = 'list';         // 'list' | 'archive' — which Host Panel view is showing
 let _fillSpot = null;                // { gatheringId, spot, member, candidates }
 function isOpenSpotName(n) { return /^Open Spot \d+$/i.test(String(n || '').trim()); }
@@ -11218,23 +11218,146 @@ function hostAutoOpenSpots() {
   const invitees = [..._hostCrewPicked].filter(n => n !== currentPlayer).length;
   return Math.max(0, size - (_hostPlaying ? 1 : 0) - invitees);
 }
-function updateHostSpotsPreview() {
-  const el = document.getElementById('host-spots-preview');
+// v4.9.2 — New Gathering setup UI helpers: switch rows, tappable value rows,
+// and the little sheets they open. Pure presentation; state stays in the
+// existing _host* variables.
+function hostSwitchHtml(id, on, handler, label, sub, subId) {
+  const bg = on ? 'var(--green)' : '#b9c4bc';
+  return `<div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 14px;background:#fff">
+    <div style="flex:1"><div style="font-size:0.94rem;font-weight:600;color:var(--text)">${label}</div>
+    <div ${subId ? `id="${subId}" ` : ''}style="font-size:0.74rem;color:var(--text-muted);margin-top:1px;line-height:1.35">${sub}</div></div>
+    <button type="button" role="switch" id="${id}" aria-label="${label}" aria-checked="${on ? 'true' : 'false'}" onclick="${handler}"
+      style="width:46px;height:26px;border-radius:13px;border:0;padding:0;position:relative;flex:none;cursor:pointer;background:${bg}">
+      <span style="position:absolute;top:2px;left:${on ? '22px' : '2px'};width:22px;height:22px;border-radius:11px;background:#fff;transition:left 0.15s"></span></button></div>`;
+}
+function hostSwitchSet(id, on) {
+  const el = document.getElementById(id);
   if (!el) return;
-  const n = hostAutoOpenSpots();
-  if (n <= 0) { el.style.display = 'none'; el.textContent = ''; return; }
-  el.style.display = 'block';
-  el.textContent = n > 8
-    ? `⚠️ ${n} seats unfilled — add more players or lower the capacity (max 8 open spots)`
-    : `🪑 ${n} open spot${n === 1 ? '' : 's'} will be held for players you add later. Each must be filled with a real member before the round can close.`;
+  el.setAttribute('aria-checked', on ? 'true' : 'false');
+  el.style.background = on ? 'var(--green)' : '#b9c4bc';
+  const knob = el.firstElementChild;
+  if (knob) knob.style.left = on ? '22px' : '2px';
 }
-function setHostAddGames(on) {
-  _hostAddGames = !!on;
-  const row = document.getElementById('host-games-row');
-  const chk = document.getElementById('host-games-check');
-  if (row) { row.style.borderColor = _hostAddGames ? 'var(--green)' : 'var(--border)'; row.style.background = _hostAddGames ? 'rgba(46,125,50,0.07)' : '#fff'; }
-  if (chk) chk.textContent = _hostAddGames ? '☑' : '☐';
+function hostRowHtml(id, label, value, handler, last) {
+  return `<button type="button" id="${id}" onclick="${handler}" style="display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:8px 14px;background:#fff;border:0;${last ? '' : 'border-bottom:1px solid var(--border);'}text-align:left;cursor:pointer;font-family:inherit;color:var(--text)">
+    <span style="flex:1;font-size:0.94rem;font-weight:600">${label}</span>
+    <span class="host-row-val" style="font-size:0.92rem;color:var(--text-muted)">${value}</span>
+    <span aria-hidden="true" style="color:#8a9a90;font-size:1.1rem">›</span></button>`;
 }
+function hostSetRowValue(id, text) {
+  const el = document.getElementById(id);
+  const v = el && el.querySelector('.host-row-val');
+  if (v) v.textContent = text;
+}
+function updateHostPlayersRow() {
+  if (!document.getElementById('host-players-row')) return;
+  if (_hostMode !== 'crew') { hostSetRowValue('host-players-row', 'Open to members'); return; }
+  const invitees = [..._hostCrewPicked].filter(n => n !== currentPlayer).length;
+  const spots = hostAutoOpenSpots();
+  const who = _hostPlaying ? (invitees ? 'You + ' + invitees : 'You') : (invitees ? invitees + ' invited' : 'No one yet');
+  hostSetRowValue('host-players-row', who + (spots > 0 ? ' · ' + spots + ' open' : ''));
+}
+// Kept under its v4.9.1 name: every caller that used to refresh the open-spots
+// note now refreshes the Players row, which carries the count.
+function updateHostSpotsPreview() { updateHostPlayersRow(); }
+function bumpHostCapacity(d) {
+  const el = document.getElementById('host-new-size');
+  if (!el) return;
+  el.value = String(Math.max(1, Math.min(32, (parseInt(el.value, 10) || 0) + d)));
+  updateHostSpotsPreview();
+}
+function toggleHostMore() {
+  const b = document.getElementById('host-more-body');
+  if (b) b.style.display = b.style.display === 'none' ? 'block' : 'none';
+}
+function openHostPlayersSheet() {
+  const panel = document.getElementById('host-players-panel');
+  if (!panel) return;
+  panel.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+}
+function closeHostPlayersSheet() {
+  const panel = document.getElementById('host-players-panel');
+  if (panel) panel.style.display = 'none';
+  document.body.style.overflow = '';
+  updateHostSpotsPreview();
+}
+// Bottom sheet used by Holes, Format and Add Games.
+function openHostSheet(title, bodyHtml, doneHandler) {
+  closeHostSheet();
+  const ov = document.createElement('div');
+  ov.id = 'host-sheet-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9200;background:rgba(20,30,25,0.45);display:flex;align-items:flex-end;justify-content:center';
+  ov.onclick = e => { if (e.target === ov) closeHostSheet(); };
+  ov.innerHTML = `<div style="width:100%;max-width:560px;max-height:85vh;overflow:auto;background:#fff;border-radius:18px 18px 0 0;padding-bottom:16px">
+    <div style="width:40px;height:4px;border-radius:2px;background:var(--border);margin:10px auto 6px"></div>
+    <div style="padding:6px 18px 12px;font-size:1.1rem;font-weight:700">${title}</div>
+    <div id="host-sheet-content">${bodyHtml}</div>
+    <div style="padding:12px 16px 0"><button type="button" class="host-cta-btn" style="margin:0" onclick="${doneHandler || 'closeHostSheet()'}">${doneHandler ? 'Done' : 'Cancel'}</button></div></div>`;
+  document.body.appendChild(ov);
+}
+function closeHostSheet() {
+  const ov = document.getElementById('host-sheet-overlay');
+  if (ov) ov.remove();
+}
+function hostOptionRowsHtml(kind, opts, current) {
+  return opts.map(o => `<button type="button" onclick="pickHostOption('${kind}', '${String(o).replace(/'/g, "\\'")}')"
+    style="display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:8px 18px;background:#fff;border:0;border-bottom:1px solid var(--border);text-align:left;font-family:inherit;font-size:1rem;font-weight:600;color:var(--text);cursor:pointer">
+    <span style="flex:1">${o}</span>${String(o) === String(current) ? '<span style="color:var(--green);font-weight:800">✓</span>' : ''}</button>`).join('');
+}
+function openHostOptionSheet(kind) {
+  if (kind === 'holes') {
+    openHostSheet('Holes', hostOptionRowsHtml('holes', ['18', '9'], String(_hostHoles)));
+  } else {
+    const sel = document.getElementById('host-new-type');
+    const opts = sel ? [...sel.options].map(o => o.value) : [];
+    openHostSheet('Golf format', hostOptionRowsHtml('format', opts, sel ? sel.value : ''));
+  }
+}
+function pickHostOption(kind, value) {
+  if (kind === 'holes') {
+    setHostHoles(parseInt(value, 10) === 9 ? 9 : 18);
+    hostSetRowValue('host-holes-row', String(_hostHoles));
+  } else {
+    const sel = document.getElementById('host-new-type');
+    if (sel) sel.value = value;
+    hostSetRowValue('host-format-row', value);
+  }
+  closeHostSheet();
+}
+function updateHostGamesRow() {
+  const names = [..._hostGamesPick].map(k => (GATHERING_GAMES_META[k] || {}).label || k);
+  hostSetRowValue('host-games-row', names.length ? names.join(', ') : 'None yet');
+}
+function hostGamesListHtml(query) {
+  const q = (query || '').trim().toLowerCase();
+  const rows = Object.keys(GATHERING_GAMES_META).filter(k => !q || GATHERING_GAMES_META[k].label.toLowerCase().includes(q));
+  if (!rows.length) return '<div style="padding:16px 18px;font-size:0.84rem;color:var(--text-muted)">No games match.</div>';
+  return rows.map(k => {
+    const on = _hostGamesPick.has(k);
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border)">
+      <div style="flex:1;font-size:1rem;font-weight:700">${GATHERING_GAMES_META[k].icon} ${GATHERING_GAMES_META[k].label}</div>
+      <button type="button" onclick="toggleHostGame('${k}')" style="height:36px;padding:0 16px;border-radius:18px;font-family:inherit;font-size:0.86rem;font-weight:700;cursor:pointer;${on ? 'border:0;background:var(--green);color:#fff' : 'border:1.5px solid var(--green);background:#fff;color:var(--green)'}">${on ? 'Added' : 'Add'}</button></div>`;
+  }).join('');
+}
+function openHostGamesSheet() {
+  openHostSheet('Add games',
+    `<div style="padding:0 18px 10px"><input type="search" id="host-games-search" placeholder="Search games" oninput="filterHostGamesSheet()" style="width:100%;box-sizing:border-box;height:42px;border-radius:10px;border:1px solid var(--border);padding:0 12px;font-size:0.9rem;font-family:inherit"></div>
+     <div id="host-games-list">${hostGamesListHtml('')}</div>
+     <div style="padding:12px 18px 0;font-size:0.76rem;color:var(--text-muted);line-height:1.45">Stakes for each game are set on the next screen, right after you tap Create.</div>`,
+    'closeHostGamesSheet()');
+}
+function filterHostGamesSheet() {
+  const q = document.getElementById('host-games-search');
+  const list = document.getElementById('host-games-list');
+  if (list) list.innerHTML = hostGamesListHtml(q ? q.value : '');
+}
+function toggleHostGame(key) {
+  if (_hostGamesPick.has(key)) _hostGamesPick.delete(key); else _hostGamesPick.add(key);
+  filterHostGamesSheet();
+  updateHostGamesRow();
+}
+function closeHostGamesSheet() { closeHostSheet(); updateHostGamesRow(); }
 function showTemplatePicker() {
   const templates = _hostTemplates || [];
   if (templates.length === 0) { showToast('No saved templates yet'); return; }
@@ -16796,13 +16919,13 @@ const GATHERING_GAMES_META = {
   birdieball: { label: 'BirdieBall', icon: '🐦' },
   birdiepay:  { label: 'Birdie Payouts', icon: '🐤' }
 };
-async function showGatheringGamesForm(gatheringId) {
+async function showGatheringGamesForm(gatheringId, preselect) {
   const g = gatheringData.find(x => x.gatheringId === gatheringId);
   if (!g) { showToast('Could not find Gathering', true); return; }
   clearHostActionBar();
   const existing = (_hostGamesByGathering && _hostGamesByGathering.get(gatheringId)) || null;
   _gamesFormGathering = gatheringId;
-  _gamesFormSelected = new Set(existing ? existing.games : []);
+  _gamesFormSelected = new Set(existing ? existing.games : (preselect || []));
   _gamesFormCttpConfig = (existing && existing.cttp_config)
     ? { ...existing.cttp_config, holes: [...existing.cttp_config.holes] }
     : { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
@@ -17180,7 +17303,7 @@ async function showNewGatheringForm() {
   _hostSelectedCrewId = null;
   _hostSelectedCrewName = null;
   _hostPlaying = true;
-  _hostAddGames = false;
+  _hostGamesPick = new Set();
   _pendingCrewName = null;
   _hostMode = 'crew';
   _hostRegisterAllCrew = false;
@@ -17235,60 +17358,53 @@ async function showNewGatheringForm() {
           outline:none;cursor:pointer;box-sizing:border-box">
       </div>
     </div>
-    <!-- Tee time status — segmented toggle (Dev-49) -->
-    <div class="seg-toggle" style="margin-bottom:10px">
-      <button id="host-tts-suggested" type="button" onclick="setTeeTimeStatus('suggested')" class="seg-btn">
-        📅 Suggested<span class="seg-sub">Still working it out</span>
-      </button>
-      <button id="host-tts-confirmed" type="button" onclick="setTeeTimeStatus('confirmed')" class="seg-btn seg-btn-active">
-        Confirmed<span class="seg-sub">Tee time is locked</span>
-      </button>
+    <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-top:4px">
+      ${hostSwitchHtml('host-tts-switch', true, "setTeeTimeStatus(_hostTeeTimeStatus === 'confirmed' ? 'suggested' : 'confirmed')", 'Tee time confirmed', 'Tee time is locked', 'host-tts-sub')}
     </div>
-    <div class="host-form-field">
-      <label>Tee Time Capacity <span style="color:#c0392b">*</span></label>
-      <input type="number" id="host-new-size" value="4" min="1" max="32"
-        style="width:80px" oninput="updateHostSpotsPreview()">
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:3px">Total players across all tee times</div>
-    </div>
-    <div class="host-form-field">
-      <label>Golf Format</label>
-      <select id="host-new-type" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;color:var(--text);font-size:0.9rem;font-family:inherit">
-        <option value="Individual Play" selected>Individual Play</option>
-        <option value="4 Man Scramble">4 Man Scramble</option>
-        <option value="2 Man Scramble">2 Man Scramble</option>
-        <option value="1 Man Scramble">1 Man Scramble</option>
-        <option value="Best Ball">Best Ball</option>
-        <option value="Match Play">Match Play</option>
-        <option value="Stroke Play">Stroke Play</option>
-      </select>
-    </div>
-    <div class="host-form-field">
-      <label>Holes</label>
-      <div class="seg-toggle" style="margin-bottom:0">
-        <button id="host-holes-18" type="button" onclick="setHostHoles(18)" class="seg-btn seg-btn-active">18 Holes</button>
-        <button id="host-holes-9" type="button" onclick="setHostHoles(9)" class="seg-btn">9 Holes</button>
+    <div class="section-label">👥 Who</div>
+    <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">
+      ${hostRowHtml('host-players-row', 'Players', 'You', 'openHostPlayersSheet()')}
+      ${hostSwitchHtml('host-playing-switch', true, 'setHostPlaying(!_hostPlaying)', "I'm playing", 'Counts as one of the seats')}
+      <div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 14px">
+        <div style="flex:1"><div style="font-size:0.94rem;font-weight:600">Capacity</div><div style="font-size:0.74rem;color:var(--text-muted);margin-top:1px">Total players, all tee times</div></div>
+        <button type="button" aria-label="Fewer" onclick="bumpHostCapacity(-1)" style="width:40px;height:40px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:1.25rem;font-weight:600;cursor:pointer;color:var(--text)">−</button>
+        <input type="number" id="host-new-size" value="4" min="1" max="32" oninput="updateHostSpotsPreview()" style="width:52px;text-align:center;font-size:1.05rem;font-weight:700;border:0;background:transparent;padding:0;-moz-appearance:textfield">
+        <button type="button" aria-label="More" onclick="bumpHostCapacity(1)" style="width:40px;height:40px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:1.25rem;font-weight:600;cursor:pointer;color:var(--text)">+</button>
       </div>
     </div>
-    <div class="host-form-field">
-      <label>Description <span style="font-size:0.75rem;font-weight:400;opacity:0.6">(optional)</span></label>
-      <textarea id="host-new-desc" placeholder="Share something interesting with the crew."
-        style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);
-        background:#fff;font-size:0.88rem;font-family:inherit;color:var(--text);
-        resize:vertical;min-height:72px;line-height:1.5;box-sizing:border-box"></textarea>
+    <div class="section-label">⛳ Game</div>
+    <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">
+      ${hostRowHtml('host-holes-row', 'Holes', '18', "openHostOptionSheet('holes')")}
+      ${hostRowHtml('host-format-row', 'Format', 'Individual Play', "openHostOptionSheet('format')")}
+      ${hostRowHtml('host-games-row', 'Add Games', 'None yet', 'openHostGamesSheet()', true)}
     </div>
-    <div class="section-label">🙋 Are You Playing?</div>
-    <button type="button" id="host-playing-yes"
-      style="width:100%;padding:11px 14px;border-radius:10px;font-size:0.9rem;font-weight:700;
-      cursor:pointer;font-family:inherit;transition:all 0.18s;margin-bottom:6px;
-      background:var(--green);color:#fff;border:2px solid var(--green)"
-      onclick="setHostPlaying(!_hostPlaying)">✅ Yes, I'm playing</button>
-    <div class="section-label">🎮 Games <span style="font-size:0.75rem;font-weight:400;opacity:0.6">(optional)</span></div>
-    <div id="host-games-row" onclick="setHostAddGames(!_hostAddGames)"
-      style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;border:2px solid var(--border);background:#fff;cursor:pointer;margin-bottom:14px">
-      <span id="host-games-check" style="font-size:1.2rem">☐</span>
-      <span style="font-size:0.85rem;line-height:1.4"><b>Set up games now</b><br><span style="font-size:0.76rem;color:var(--text-muted)">Skins, CTP, BirdieBall — opens right after you create the Gathering</span></span>
+    <select id="host-new-type" style="display:none">
+      <option value="Individual Play" selected>Individual Play</option>
+      <option value="4 Man Scramble">4 Man Scramble</option>
+      <option value="2 Man Scramble">2 Man Scramble</option>
+      <option value="1 Man Scramble">1 Man Scramble</option>
+      <option value="Best Ball">Best Ball</option>
+      <option value="Match Play">Match Play</option>
+      <option value="Stroke Play">Stroke Play</option>
+    </select>
+    <div class="section-label">More</div>
+    <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">
+      ${hostRowHtml('host-more-row', 'More options', 'Note, repeat weekly', 'toggleHostMore()')}
+      <div id="host-more-body" style="display:none;border-top:1px solid var(--border)">
+        <div style="padding:10px 14px"><label style="display:block;font-size:0.72rem;font-weight:600;color:var(--text-muted);margin-bottom:4px">Note to the crew</label>
+          <textarea id="host-new-desc" placeholder="Share something interesting with the crew."
+            style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);
+            background:#fff;font-size:0.88rem;font-family:inherit;color:var(--text);
+            resize:vertical;min-height:72px;line-height:1.5;box-sizing:border-box"></textarea></div>
+        <div id="host-auto-repeat-row" style="border-top:1px solid var(--border)">
+          ${hostSwitchHtml('host-auto-repeat-switch', false, 'setHostAutoRepeat(!_hostAutoRepeat)', 'Repeat weekly', "Creates next week's Gathering after this tee time passes, same crew. Turn off here, or cancel the Gathering, to stop.")}
+        </div>
+      </div>
     </div>
-    <div class="section-label">👥 Who's Coming</div>
+    <!-- v4.9.2 — "Who's coming" lives in a full-screen sheet opened by the Players row.
+         The crew/individual/open controls keep their original ids and handlers. -->
+    <div id="host-players-panel" style="display:none;position:fixed;inset:0;z-index:9200;background:#f4f6f3;overflow:auto;padding:16px 16px 90px;box-sizing:border-box">
+      <div style="display:flex;align-items:center;margin-bottom:12px"><div style="flex:1;font-size:1.1rem;font-weight:700">Who's coming</div></div>
     <!-- Mode selector — segmented toggle (Dev-49) -->
     <div class="seg-toggle" style="margin-bottom:16px">
       <button id="host-mode-crew" type="button" onclick="setHostMode('crew')" class="seg-btn seg-btn-active">
@@ -17319,39 +17435,8 @@ async function showNewGatheringForm() {
       <span id="host-crew-select-icon">👥</span><span id="host-crew-select-label">Select players…</span>
     </button>
     <div id="host-crew-summary" style="margin-top:10px"></div>
-    <!-- Dev-69 — "Register all crew" toggle. Only shown once ≥1 crew member
-         is picked (meaningless with zero); registers the whole picked crew
-         as Yes at creation time instead of leaving it to individual RSVP —
-         the use case being a host who already knows everyone's playing. -->
-    <div id="host-register-all-crew-row" onclick="setHostRegisterAllCrew(!_hostRegisterAllCrew)"
-      style="display:none;margin-top:12px;padding:11px 14px;background:rgba(255,255,255,0.5);
-      border:1.5px solid var(--border-med);border-radius:10px;align-items:flex-start;gap:10px;
-      cursor:pointer">
-      <span id="host-register-all-crew-check" style="font-size:1.1rem;line-height:1.3">☐</span>
-      <div>
-        <div style="font-size:0.86rem;font-weight:700;color:var(--text)">Register all crew as Yes</div>
-        <div style="font-size:0.76rem;color:var(--text-muted);line-height:1.4">
-          Skip individual RSVP — use this when you already know everyone's playing. They'll still get notified, just as confirmed rather than invited.
-        </div>
-      </div>
-    </div>
-    <div id="host-spots-preview" style="display:none;font-size:0.78rem;color:var(--text-muted);line-height:1.5;margin:8px 0 14px;padding:9px 12px;border-radius:10px;background:rgba(0,0,0,0.04)"></div>
-    <!-- Dev-70 — "Auto-repeat weekly." Crew-mode only (see worker.js
-         spawnAutoRepeatGatherings for why). Shared with the edit form —
-         unchecking here is one of the two ways to stop the chain, the
-         other being Cancel Gathering. -->
-    <div id="host-auto-repeat-row" onclick="setHostAutoRepeat(!_hostAutoRepeat)"
-      style="margin-top:10px;padding:11px 14px;background:rgba(255,255,255,0.5);
-      border:1.5px solid var(--border-med);border-radius:10px;display:flex;align-items:flex-start;gap:10px;
-      cursor:pointer">
-      <span id="host-auto-repeat-check" style="font-size:1.1rem;line-height:1.3">☐</span>
-      <div>
-        <div style="font-size:0.86rem;font-weight:700;color:var(--text)">🔁 Auto-repeat weekly</div>
-        <div style="font-size:0.76rem;color:var(--text-muted);line-height:1.4">
-          Automatically creates next week's Gathering — same time, same crew — once this one's tee time passes. Uncheck here, or cancel the Gathering, to stop.
-        </div>
-      </div>
-    </div>
+    <div id="host-register-all-crew-row" style="display:none;margin-top:12px;border-radius:12px;overflow:hidden;border:1px solid var(--border)">${hostSwitchHtml('host-register-all-crew-switch', false, 'setHostRegisterAllCrew(!_hostRegisterAllCrew)', 'Register invited players as Yes', 'Skips their RSVP; they are still notified')}</div>
+
     </div><!-- end host-crew-section -->
     <!-- Open mode explanation — shown when Open to Members is selected -->
     <div id="host-open-section" style="display:none;padding:14px;background:rgba(255,255,255,0.5);
@@ -17362,12 +17447,15 @@ async function showNewGatheringForm() {
         Anyone can respond Yes, No, or Sub — and they'll show up as your crew.
       </div>
     </div>
+      <div style="position:fixed;left:0;right:0;bottom:0;padding:12px 16px 20px;background:#fff;border-top:1px solid var(--border)"><button type="button" class="host-cta-btn" style="margin:0" onclick="closeHostPlayersSheet()">Done</button></div>
+    </div>
     <button class="host-cta-btn" style="margin-top:16px" onclick="submitNewGathering()" id="btn-submit-gathering">⛳ Create Gathering</button>
   `;
   renderHostCrewSummary();
 }
 function setHostPlaying(playing) {
   _hostPlaying = playing;
+  hostSwitchSet('host-playing-switch', playing);
   updateHostSpotsPreview();
   const btn = document.getElementById('host-playing-yes');
   if (!btn) return;
@@ -17379,6 +17467,9 @@ function setHostPlaying(playing) {
 // Toggle tee time status — segmented control (Dev-49)
 function setTeeTimeStatus(status) {
   _hostTeeTimeStatus = status;
+  hostSwitchSet('host-tts-switch', status === 'confirmed');
+  const _ttsSub = document.getElementById('host-tts-sub');
+  if (_ttsSub) _ttsSub.textContent = status === 'confirmed' ? 'Tee time is locked' : 'Suggested: still working it out';
   const sugBtn = document.getElementById('host-tts-suggested');
   const conBtn = document.getElementById('host-tts-confirmed');
   if (!sugBtn || !conBtn) return;
@@ -17433,6 +17524,8 @@ function setHostMode(mode) {
   // Dev-70 — Auto-repeat is crew-mode only (Open's notify audience needs the
   // live Jotform roster, which the Worker can't reach) — same reset logic.
   if (mode === 'open' && _hostAutoRepeat) setHostAutoRepeat(false);
+  const _arRow = document.getElementById('host-auto-repeat-row');
+  if (_arRow && document.getElementById('host-more-body')) _arRow.style.display = mode === 'open' ? 'none' : 'block';
 }
 function renderHostCrewSummary() {
   const el         = document.getElementById('host-crew-summary');
@@ -17466,7 +17559,7 @@ function renderHostCrewSummary() {
   el.innerHTML = [..._hostCrewPicked].map(name =>
     `<span class="host-crew-summary-chip">${name}<button type="button" onclick="removeCrewMember('${name.replace(/'/g, "\\\\'")}')">✕</button></span>`
   ).join('');
-  if (registerAllRow) registerAllRow.style.display = 'flex';
+  if (registerAllRow) registerAllRow.style.display = 'block';
 }
 // Dev-69 — the create form's "Register all crew" toggle. Kept as its own
 // setter (rather than inlining the DOM writes at each call site) since it's
@@ -17474,6 +17567,7 @@ function renderHostCrewSummary() {
 // crew empties out or the host switches to Open mode).
 function setHostRegisterAllCrew(val) {
   _hostRegisterAllCrew = val;
+  hostSwitchSet('host-register-all-crew-switch', val);
   const check = document.getElementById('host-register-all-crew-check');
   const row   = document.getElementById('host-register-all-crew-row');
   if (check) check.textContent = val ? '☑️' : '☐';
@@ -17482,6 +17576,7 @@ function setHostRegisterAllCrew(val) {
 // Dev-70 — shared by both the create and edit forms (see _hostAutoRepeat).
 function setHostAutoRepeat(val) {
   _hostAutoRepeat = val;
+  hostSwitchSet('host-auto-repeat-switch', val);
   const check = document.getElementById('host-auto-repeat-check');
   const row   = document.getElementById('host-auto-repeat-row');
   if (check) check.textContent = val ? '☑️' : '☐';
@@ -17849,12 +17944,13 @@ async function submitNewGathering() {
       osSendToPlayers(notifyNames, notifTitle, notifBody, 'https://birdiefriends.com/portal.html', notifType, notifMeta)
         .catch(e => console.warn('Invite notify failed:', e));
     }
-    showToast(_hostAddGames ? '✅ Gathering created — now set up the games' : '✅ Gathering created');
-    if (_hostAddGames) await Promise.allSettled(_regJobs); // Games form counts Yes registrations
+    const _wantGames = _hostGamesPick.size > 0;
+    showToast(_wantGames ? '✅ Gathering created — now set the game stakes' : '✅ Gathering created');
+    if (_wantGames) await Promise.allSettled(_regJobs); // Games form counts Yes registrations
     await refreshGatherings();
     await loadHostSpots();
     const _createdG = gatheringData.find(x => x.gatheringId === gathData.id);
-    if (_hostAddGames && _createdG) await showGatheringGamesForm(gathData.id);
+    if (_wantGames && _createdG) await showGatheringGamesForm(gathData.id, [..._hostGamesPick]);
     else renderHostPanelList();
     // Offer "Save as Template?" after successful create
     promptSaveAsTemplate({
