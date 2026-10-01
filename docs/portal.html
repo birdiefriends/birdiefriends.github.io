@@ -1085,6 +1085,8 @@ body {
 }
 .icon-action-badge.primary { background: var(--gold-bright); }
 .icon-action-badge.secondary { background: rgba(255,255,255,0.10); border: 1.5px solid rgba(255,255,255,0.32); }
+/* v4.9.7 — the "+ Games" call to action: a light disc so the controller pops against the dark card */
+.icon-action-badge.games-add { background: rgba(255,255,255,0.92); border: 1.5px solid #fff; box-shadow: 0 0 0 3px rgba(245,200,66,0.35); }
 .icon-action-label {
   font-size: 0.66rem; font-weight: 700; letter-spacing: 0.02em;
   color: rgba(255,255,255,0.92); white-space: nowrap;
@@ -5935,6 +5937,19 @@ function buildEventCard(evt, isPast) {
       <span style="pointer-events:none;margin-left:auto;font-size:0.82rem;color:rgba(255,255,255,0.5)">Players ›</span>
     </button>
     <div class="icon-action-row" style="justify-content:flex-start;gap:26px;margin:10px 4px 2px">
+      <!-- v4.9.7 — Games / + Games lead the row (far left) so the call to action is the first thing seen. -->
+      <!-- Dev-88 — Games detail is the opposite of Score: it stays up in
+           BOTH modes, live or not. Brian's reasoning: "players will want to
+           know the game before heading to the course," so this can't wait
+           for the round to go live the way the rail's own Games button did
+           (that button is gone — it only ever opened the Live Panel, which
+           the card itself already does). Read-only pot breakdown, not a
+           capture path, so there's nothing here for Gaming Mode to hide. -->
+      ${gatheringIsGamed(evtGamesConfig(evt)) ? `
+      <button class="icon-action-btn" onclick="openGameDetailsModal('${evt.id}')">
+        <span class="icon-action-badge secondary">🏆</span>
+        <span class="icon-action-label">Games</span>
+      </button>` : eventAddGamesBtnHtml(evt, isCanceled)}
       <!-- Dev-88 — Photo/Notes are "Gaming Mode" only icons: they drop out
            for as long as THIS event IS the live gamed round (getLiveEvent
            matches it), whether or not the Live Panel happens to be expanded
@@ -5961,18 +5976,6 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-badge secondary">🏌️</span>
         <span class="icon-action-label">Score</span>
       </button>`}
-      <!-- Dev-88 — Games detail is the opposite of Score: it stays up in
-           BOTH modes, live or not. Brian's reasoning: "players will want to
-           know the game before heading to the course," so this can't wait
-           for the round to go live the way the rail's own Games button did
-           (that button is gone — it only ever opened the Live Panel, which
-           the card itself already does). Read-only pot breakdown, not a
-           capture path, so there's nothing here for Gaming Mode to hide. -->
-      ${gatheringIsGamed(evtGamesConfig(evt)) ? `
-      <button class="icon-action-btn" onclick="openGameDetailsModal('${evt.id}')">
-        <span class="icon-action-badge secondary">🏆</span>
-        <span class="icon-action-label">Games</span>
-      </button>` : eventAddGamesBtnHtml(evt, isCanceled)}
       <!-- Dev-80 (spec §5 / Step 6): a BFE-backed round card omits Photos/Notes
            entirely — that capture belongs to the WCRP widget/Live Panel now,
            not this card's own event_photos/notes thread (spec's whole reason
@@ -15357,7 +15360,7 @@ function eventAddGamesBtnHtml(evt, isCanceled) {
   const _gid = gamesGidFor(evt);
   if (_gid != null && _closedGamesGids.has(Number(_gid))) return ''; // closed results are reopened from My History, never overwritten from here
   return `<button class="icon-action-btn" onclick="openGamesFromCard('${evt.id}')">
-        <span class="icon-action-badge secondary">🎮</span>
+        <span class="icon-action-badge games-add">🎮</span>
         <span class="icon-action-label">+ Games</span>
       </button>`;
 }

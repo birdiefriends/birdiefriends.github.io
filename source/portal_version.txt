@@ -1,3 +1,6 @@
+v4.9.7 · 2026-10-01
+Deployed: 2026-10-01 (Event Cards: "+ Games" (and the Games button once games exist) now leads the icon row at the far left, and the + Games controller sits on a light disc so it stands out.)
+
 v4.9.6 · 2026-10-01
 Deployed: 2026-10-01 (Weekend Times and other non-Gathering events: a player registered Yes can now tap "+ Games" any time before the event, not just on the day.)
 
