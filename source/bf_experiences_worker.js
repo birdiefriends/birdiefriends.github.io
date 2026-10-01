@@ -1024,6 +1024,65 @@ export default {
     // re-check against the real gatherings table).
     const VALID_GAMES = ['skins', 'cttp', 'birdieball', 'birdiepay'];
 
+    // ── Event games (v4.9.4) ────────────────────────────────────────────────
+    // A non-Gathering event (a "BF Weekend Times" card, which lives in Jotform
+    // and has no Gathering row) can still run games: the first Yes player to
+    // add games creates a hidden "shadow" row in the shared `gatherings` table
+    // and becomes the games host. Everything downstream (config, scorecards
+    // keyed 'gathering:<id>', close, payout, My History) then works unchanged.
+    // The shadow row has status='event_shadow', so the main Worker's lists,
+    // reminders, nudges and auto-repeat (all filtered on status='active') never
+    // see it. ONE-TIME MIGRATION (Brian runs it in the D1 console; the routes
+    // below say so plainly until it exists):
+    //   ALTER TABLE gatherings ADD COLUMN event_ref TEXT;
+    //   CREATE UNIQUE INDEX idx_gatherings_event_ref ON gatherings(event_ref);
+    // Routes:
+    //   GET  /bfe/event-games/shadows
+    //        -> { shadows: [{ gathering_id, event_ref, host_id }] }
+    //   POST /bfe/event-games/shadow { event_ref, title, event_time, venue, host_id }
+    //        -> idempotent get-or-create: { ok, gathering_id, host_id, created }.
+    //           First caller wins and is the games host; a later caller gets the
+    //           existing row back (and its host_id) instead of a second shadow.
+    if (url.pathname === '/bfe/event-games/shadows' || url.pathname === '/bfe/event-games/shadow') {
+      const jr = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      const MIGRATE_MSG = 'Event games need a one-time database step first: ALTER TABLE gatherings ADD COLUMN event_ref TEXT; then CREATE UNIQUE INDEX idx_gatherings_event_ref ON gatherings(event_ref);';
+      if (request.method === 'GET' && url.pathname === '/bfe/event-games/shadows') {
+        try {
+          const { results } = await env.DB.prepare(
+            `SELECT id AS gathering_id, event_ref, host_id FROM gatherings WHERE event_ref IS NOT NULL AND status = 'event_shadow'`
+          ).all();
+          return jr({ ok: true, shadows: results || [] });
+        } catch (e) {
+          return jr({ ok: true, shadows: [] }); // column not migrated yet — no shadows exist
+        }
+      }
+      if (request.method === 'POST' && url.pathname === '/bfe/event-games/shadow') {
+        let b;
+        try { b = await request.json(); } catch (e) { return jr({ error: 'Invalid JSON' }, 400); }
+        const eventRef = String(b.event_ref || '').trim();
+        const hostId = String(b.host_id || '').trim();
+        const title = String(b.title || '').trim();
+        const eventTime = String(b.event_time || '').trim();
+        if (!eventRef || !hostId || !title || !eventTime) return jr({ error: 'event_ref, host_id, title and event_time are required' }, 400);
+        try {
+          const existing = await env.DB.prepare(`SELECT id, host_id FROM gatherings WHERE event_ref = ?`).bind(eventRef).first();
+          if (existing) return jr({ ok: true, gathering_id: existing.id, host_id: existing.host_id, created: false });
+          await env.DB.prepare(
+            `INSERT OR IGNORE INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, holes, event_ref)
+             VALUES (?, ?, ?, ?, NULL, NULL, 0, 'event_shadow', 18, ?)`
+          ).bind(hostId, title, b.venue ? String(b.venue) : null, eventTime, eventRef).run();
+          // Re-read: if two players raced, the unique index let only one insert win.
+          const row = await env.DB.prepare(`SELECT id, host_id FROM gatherings WHERE event_ref = ?`).bind(eventRef).first();
+          if (!row) return jr({ error: 'Could not create the event games record' }, 500);
+          return jr({ ok: true, gathering_id: row.id, host_id: row.host_id, created: row.host_id === hostId });
+        } catch (e) {
+          const msg = String(e.message || e);
+          if (/event_ref/i.test(msg)) return jr({ error: MIGRATE_MSG }, 409);
+          return jr({ error: 'Shadow error: ' + msg }, 500);
+        }
+      }
+    }
+
     // GET /bfe/gathering-games?gathering_id=X -> single config (or null)
     // GET /bfe/gathering-games?host_id=X      -> every config that host owns
     // GET /bfe/gathering-games?status=open    -> every OPEN config, any host
@@ -1055,6 +1114,11 @@ export default {
           const { results } = await env.DB.prepare(`SELECT * FROM bfe_gathering_games WHERE host_id = ?`).bind(hostId).all();
           const configs = (results || []).map(parseConfigRow);
           return new Response(JSON.stringify({ ok: true, configs }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        if (status && url.searchParams.get('slim') === '1') {
+          // v4.9.4 — ids only (no payout snapshots): lets every card know which games exist/closed cheaply.
+          const { results } = await env.DB.prepare(`SELECT gathering_id, host_id, status FROM bfe_gathering_games WHERE status = ?`).bind(status).all();
+          return new Response(JSON.stringify({ ok: true, configs: results || [] }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         if (status) {
           const { results } = await env.DB.prepare(`SELECT * FROM bfe_gathering_games WHERE status = ?`).bind(status).all();
@@ -1134,6 +1198,15 @@ export default {
       const birdiepayConfigToStore = games.includes('birdiepay')
         ? { dollar_per_birdie: Number(birdiepay_config.dollar_per_birdie), pars: birdiepay_config.pars.slice() }
         : null;
+      // v4.9.4 — first writer owns the games. A different player's save must not
+      // take over (or reset) another host's config; this matters most for event
+      // games, where many Yes players could tap Add Games on the course.
+      try {
+        const owner = await env.DB.prepare(`SELECT host_id FROM bfe_gathering_games WHERE gathering_id = ?`).bind(gathering_id).first();
+        if (owner && owner.host_id && owner.host_id !== host_id) {
+          return new Response(JSON.stringify({ error: `Only ${owner.host_id} can change these games` }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+      } catch (e) { /* ownership lookup failing must not block a first-time save */ }
       try {
         const result = await env.DB.prepare(
           `INSERT INTO bfe_gathering_games (gathering_id, gathering_name, host_id, games, dollar_per_player, allocations, cttp_config, birdieball_config, status, updated_at)
@@ -1338,6 +1411,14 @@ export default {
     const gatheringGamesDeleteMatch = url.pathname.match(/^\/bfe\/gathering-games\/(\d+)$/);
     if (request.method === 'DELETE' && gatheringGamesDeleteMatch) {
       try {
+        // v4.9.4 — when the caller names itself (?host_id=), it must own the config.
+        const claimant = url.searchParams.get('host_id');
+        if (claimant) {
+          const owner = await env.DB.prepare(`SELECT host_id FROM bfe_gathering_games WHERE gathering_id = ?`).bind(gatheringGamesDeleteMatch[1]).first();
+          if (owner && owner.host_id && owner.host_id !== claimant) {
+            return new Response(JSON.stringify({ error: `Only ${owner.host_id} can turn off these games` }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+        }
         await env.DB.prepare(`DELETE FROM bfe_gathering_games WHERE gathering_id = ?`).bind(gatheringGamesDeleteMatch[1]).run();
         return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {

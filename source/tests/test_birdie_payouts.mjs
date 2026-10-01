@@ -154,7 +154,7 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
     'gatheringGamesBirdiepaySectionHtml', 'setGamesFormBirdiepayDollarPerBirdie', 'gamesFormOverCommit', 'updateGamesFormPotPreview', 'submitGatheringGames'];
   vm.runInContext(`
     const GATHERING_GAMES_META = ${JSON.stringify({ skins: { label: 'Skins', icon: 'x' }, cttp: { label: 'CTP', icon: 'x' }, birdieball: { label: 'BirdieBall', icon: 'x' }, birdiepay: { label: 'Birdie Payouts', icon: 'x' } })};
-    let _gamesFormSelected = new Set(); let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
+    let _gamesFormSelected = new Set(); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
     let _gamesFormBirdieballConfig = { dollar_per_player: null };
     let _gamesFormBirdiepayConfig = { dollar_per_birdie: null };

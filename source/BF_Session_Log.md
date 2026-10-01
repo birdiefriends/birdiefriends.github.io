@@ -5367,3 +5367,8 @@ mirror (bf_push normally writes both), leaving them one comment apart; resynced 
 - Create form rebuilt as tap-to-open rows + switches (mock approved in-session). Players row opens the existing crew/individual/open controls in a full-screen sheet (same ids/handlers); open-spot count shows in the row (the v4.9.1 note is gone).
 - Holes above Format, Format defaults to Individual Play. "Add Games" = searchable sheet; picks pre-select the existing stakes form, which opens after Create (stakes still need the Gathering id).
 - The Edit Gathering form is NOT redesigned yet (still the old layout); next candidate.
+
+### Dev-90 addendum — v4.9.4 (Event games)
+- Brian's design calls: option A (hidden shadow Gathering) for BF Weekend Times; every Yes player who creates a scorecard is in the game; first come = game host; terms viewable via the card's Games button; results end up in My History. Also "+ Games" for hosts on a hosted event without games (decide on the course).
+- Built: BFE Worker shadow routes + games ownership guard + slim closed list; portal helpers (`gamesGidFor`, `gamesScoreKeyForGid`, `eventGamesAllowed`, `openGamesFromCard`), games form reusable as a card dialog, close sheet + My History alias. Scorecards deliberately NOT re-keyed.
+- Research (Explore agent) found: no per-id GET for gatherings, `GET /gatherings` is status='active' only, `HCP nudge` cron pushes Brian for active non-Brian hosts (why the shadow isn't 'active'), `purge-all` orphans shadows' BFE rows.

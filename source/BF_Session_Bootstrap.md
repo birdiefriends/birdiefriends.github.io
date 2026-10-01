@@ -441,6 +441,19 @@ Panel adapts around whatever's turned on. Backend: `bfe_gathering_games` (host c
   members only, Close sheet disabled until filled. Main Worker untouched. Tests: `test_open_spots.mjs` (real
   SQLite), `test_open_spots_ui.mjs`. Not renamed: photo/note player tags. Deploy order: D1 step, then the Worker
   paste-deploy, then the portal.
+- **Event games — games on a non-Gathering event, + Games from the card (Dev-90, portal v4.9.4 + BFE Worker).** A Yes
+  player on a BF Weekend Times (any non-Gathering, non-BF-Series, non-BFE-backed) card can tap "+ Games" **on the day**; the
+  first to SAVE games owns them ("game host"). Under the hood a hidden **shadow Gathering** row (`gatherings.status =
+  'event_shadow'`, `event_ref = '<event name>|<YYYY-MM-DD>'`, size NULL) is created by BFE Worker `POST /bfe/event-games/shadow`
+  (idempotent, unique index) so config/close/payout/My History work unchanged; the main Worker never lists it (all its
+  queries filter `status='active'`). Scorecards stay under the **event's own name** (the Score icon already saves them
+  there); the Close sheet reads them via `gamesScoreKeyForGid()`, and the result shows on the event's My History group.
+  Only Skins + Birdie Payouts are offered (CTP/BirdieBall need Live Panel entry screens Weekend events don't have). Hosts
+  can also "+ Games" a hosted card with no games (today or later). Closed results are never overwritten from the card
+  (`_closedGamesGids`). Worker also got first-writer-wins on `POST /bfe/gathering-games` and `DELETE ...?host_id=`.
+  **Deploy order: D1 (`ALTER TABLE gatherings ADD COLUMN event_ref TEXT;` then `CREATE UNIQUE INDEX idx_gatherings_event_ref
+  ON gatherings(event_ref);`), then paste-deploy `bf_experiences_worker.js`, then the portal.** Known gap: `purge-all` in the
+  main Worker deletes a host's shadows without removing their BFE rows. Tests: `test_event_games.mjs`.
 Full build detail, including the exact bug chases and test coverage, is in
 `BF_Session_Log.md`'s Dev-86 entry.
 ## 3. Dev-88 focus — engine unification, Phase A (prove it on Gatherings)

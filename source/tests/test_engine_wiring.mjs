@@ -27,7 +27,7 @@ const codeOnly = src.replace(/\/\/[^\n]*/g, '');
 ok(!/_liveGamesConfig\.(games|cttp_config|birdieball_config)/.test(codeOnly), 'no leftover direct reads of the raw legacy row');
 ok(!codeOnly.includes('_liveGames.includes'), 'no leftover _liveGames.includes(...) checks');
 [
-  [extractFn(src, 'gamesSealWatermarkHtml'), 'gatheringRoundConfig'],
+  [extractFn(src, 'gamesSealWatermarkHtml'), 'evtGamesConfig'],
   [extractFn(src, 'evtScoreMode'), 'gatheringIsGamed'],
 ].forEach(([body, helper]) => ok(body.includes(helper + '('), 'uses ' + helper + '()'));
 ok(/const _liveConfig = evt\.source === 'gathering' \? gatheringRoundConfig\(evt\.gatheringId\) : null;/.test(src), 'buildLivePanel resolves one config via gatheringRoundConfig()');

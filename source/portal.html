@@ -5715,10 +5715,10 @@ function gamesSealSvg(games, uid) {
   </svg>`;
 }
 function gamesSealWatermarkHtml(evt) {
-  if (!evt || evt.source !== 'gathering') return '';
-  const config = gatheringRoundConfig(evt.gatheringId);  // Dev-88: was a raw _gatheringGamesIndex read
+  if (!evt) return '';
+  const config = evtGamesConfig(evt);  // Dev-88: was a raw _gatheringGamesIndex read; v4.9.4: also event shadows
   if (!gatheringIsGamed(config)) return '';
-  const uid = String(evt.gatheringId).replace(/[^\w-]/g, '');
+  const uid = String(gamesGidFor(evt)).replace(/[^\w-]/g, '');
   return `<div class="games-seal-layer" aria-hidden="true"><div class="games-seal">${gamesSealSvg(config.legacy.games, uid)}</div></div>`;
 }
 function buildEventCard(evt, isPast) {
@@ -5960,11 +5960,11 @@ function buildEventCard(evt, isPast) {
            (that button is gone — it only ever opened the Live Panel, which
            the card itself already does). Read-only pot breakdown, not a
            capture path, so there's nothing here for Gaming Mode to hide. -->
-      ${(evt.source === 'gathering' && gatheringIsGamed(gatheringRoundConfig(evt.gatheringId))) ? `
+      ${gatheringIsGamed(evtGamesConfig(evt)) ? `
       <button class="icon-action-btn" onclick="openGameDetailsModal('${evt.id}')">
         <span class="icon-action-badge secondary">🏆</span>
         <span class="icon-action-label">Games</span>
-      </button>` : ''}
+      </button>` : eventAddGamesBtnHtml(evt, isCanceled)}
       <!-- Dev-80 (spec §5 / Step 6): a BFE-backed round card omits Photos/Notes
            entirely — that capture belongs to the WCRP widget/Live Panel now,
            not this card's own event_photos/notes thread (spec's whole reason
@@ -11037,6 +11037,8 @@ function renderHostEntryPoint() {
 }
 function openHostPanel() {
   document.getElementById('host-sheet-overlay').classList.add('open');
+  const _hpTitle = document.querySelector('#host-sheet-overlay .host-sheet-title');
+  if (_hpTitle) _hpTitle.textContent = '🏌️ My Gatherings';
   const eyebrow = document.getElementById('host-sheet-eyebrow');
   if (eyebrow) eyebrow.textContent = `Hosting as ${currentPlayer}`;
   loadVenues();  // warm the cache so first venue keystroke is instant
@@ -12907,7 +12909,7 @@ function openHistoryDetail(idx) {
         ${crewLine}
       </div>
       ${resultsClippingLink(groupEvt)}
-      ${key.startsWith('gathering:') ? '<div id="history-game-results"></div>' : ''}
+      ${(key.startsWith('gathering:') || historyShadowGid(groupEvt)) ? '<div id="history-game-results"></div>' : ''}
       ${scoreBlock}
       ${photoBlock}
       ${notesBlock}
@@ -12915,7 +12917,7 @@ function openHistoryDetail(idx) {
     </div>`;
   document.getElementById('my-history-detail-view').style.display = 'flex';
   loadResultsClippingPodium(groupEvt); // Dev-67 — fire-and-forget, fills in the winner once fetched
-  loadHistoryGameResults(key);         // Dev-87 — closed Gathering games payout, fire-and-forget
+  loadHistoryGameResults(key, groupEvt); // Dev-87 — closed Gathering games payout, fire-and-forget
 }
 function renderHistoryNoteCompose(idx, evt, key) {
   if (!evt || !isPlayerEligibleForNotes(evt)) return '';
@@ -15088,7 +15090,8 @@ async function openGatheringCloseSheet(gatheringId) {
   body.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:20px 0">Checking scorecards…</div>`;
   openModal('gathering-close-modal');
   try {
-    const key = evtPhotoKey({ source: 'gathering', gatheringId });
+    const key = gamesScoreKeyForGid(gatheringId); // v4.9.4 — event shadows score under the event's own name
+    const _shadowRef = _eventShadowByGid.get(Number(gatheringId)) || null;
     const [cfgRes, scRes, bbRes, spotsData] = await Promise.all([
       fetch(`${BFE_API}/bfe/gathering-games?gathering_id=${gatheringId}`),
       fetch(`${SCORECARD_API}/scorecards?event=${encodeURIComponent(key)}&input=strokes`),
@@ -15121,7 +15124,9 @@ async function openGatheringCloseSheet(gatheringId) {
     const holeCount = (g && g.holes === 9) ? 9 : 18;
     const norm = s => String(s || '').trim().toLowerCase();
     const cardNames = new Set(cards.map(c => norm(c.player)));
-    const registered = gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes').map(r => r.player);
+    const registered = (_shadowRef
+      ? regData.filter(r => r.eventName === eventNameFromRef(_shadowRef) && r.status === 'Yes')
+      : gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes')).map(r => r.player);
     const missingCards = registered.filter(p => !cardNames.has(norm(p)));
     const incomplete = cards.map(c => ({ player: c.player, holes: scorecardMissingHoles(c, holeCount) })).filter(x => x.holes.length);
     const summary = computeGatheringGamesPayout(config, cards, ctpLeaders, bbData.ok ? (bbData.answers || []) : []);
@@ -15189,10 +15194,16 @@ async function confirmGatheringClose() {
 // games were closed. Fire-and-forget, same pattern as
 // loadResultsClippingPodium. The host also gets a Reopen control for a
 // late fix (puts the Live Panel back; closing again replaces the result).
-async function loadHistoryGameResults(key) {
+// v4.9.4 — an event-games shadow's results show on the event's own History group.
+function historyShadowGid(groupEvt) {
+  const sh = eventShadowFor(groupEvt);
+  return sh ? sh.gathering_id : null;
+}
+async function loadHistoryGameResults(key, groupEvt) {
   const el = document.getElementById('history-game-results');
-  if (!el || !key || !key.startsWith('gathering:')) return;
-  const gid = key.slice('gathering:'.length);
+  if (!el || !key) return;
+  const gid = key.startsWith('gathering:') ? key.slice('gathering:'.length) : historyShadowGid(groupEvt);
+  if (gid == null || gid === '') return;
   try {
     const res = await fetch(`${BFE_API}/bfe/gathering-games?gathering_id=${encodeURIComponent(gid)}`);
     const data = await res.json();
@@ -15244,6 +15255,7 @@ async function refreshGatheringGamesIndex() {
     const data = await res.json();
     const configs = data.ok ? (data.configs || []) : [];
     _gatheringGamesIndex = new Map(configs.map(c => [c.gathering_id, c]));
+    await refreshEventShadows(true); // v4.9.4 — hidden event-games records + closed ids, before the render below
     if (typeof dataLoaded !== 'undefined' && dataLoaded) renderAll();
   } catch (e) {
     console.warn('[BFE] gathering-games index load failed:', e.message);
@@ -15259,6 +15271,128 @@ async function refreshGatheringGamesIndex() {
 function gatheringRoundConfig(gatheringId) {
   const row = _gatheringGamesIndex.get(gatheringId);
   return row ? BFEngine.gatheringConfigFromLegacy(row) : null;
+}
+// ── Event games (v4.9.4) ─────────────────────────────────────────────────
+// A non-Gathering event (a BF Weekend Times card — Jotform, no Gathering row)
+// can run games: the first Yes player to add them creates a hidden "shadow"
+// Gathering row (status 'event_shadow', never listed anywhere) and becomes the
+// games host. Scorecards stay under the event's own name, exactly as the Score
+// icon already saves them, so My History and the close sheet read them by that
+// name. Only games computed from scorecards are offered (Skins, Birdie
+// Payouts): CTP and BirdieBall need entry screens that live in the Live Panel,
+// which Weekend events don't have. BF Series keeps its own format and is excluded.
+let _closedGamesGids = new Set();   // gathering ids whose games are already closed (so a card never offers +Games over a closed result)
+let _eventShadows = new Map();      // event ref -> { gathering_id, host_id }
+let _eventShadowByGid = new Map();  // gathering_id -> event ref
+let _gamesFormShadow = false;       // the open games form is for an event shadow
+let _gamesFormCard = false;         // the games form was opened from an Event Card (dialog), not the Host Panel
+let _gamesFormG = null;             // the event/gathering object the open form is for
+function eventLocalDay(dt) {
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+function eventGamesRef(evt) {
+  return `${evt.name}|${eventLocalDay(evt.dt)}`;
+}
+function eventNameFromRef(ref) {
+  const i = String(ref || '').lastIndexOf('|');
+  return i < 0 ? String(ref || '') : String(ref).slice(0, i);
+}
+async function refreshEventShadows(skipRender) {
+  try {
+    const res = await fetch(`${BFE_API}/bfe/event-games/shadows`);
+    const data = await res.json();
+    const rows = data.ok ? (data.shadows || []) : [];
+    _eventShadows = new Map(rows.map(r => [r.event_ref, { gathering_id: r.gathering_id, host_id: r.host_id }]));
+    _eventShadowByGid = new Map(rows.map(r => [r.gathering_id, r.event_ref]));
+    const cres = await fetch(`${BFE_API}/bfe/gathering-games?status=closed&slim=1`);
+    const cdata = await cres.json();
+    _closedGamesGids = new Set((cdata.ok ? (cdata.configs || []) : []).map(c => Number(c.gathering_id)));
+    if (!skipRender && rows.length && typeof dataLoaded !== 'undefined' && dataLoaded) renderAll();
+  } catch (e) {
+    console.warn('[BFE] event-games shadows load failed:', e.message);
+  }
+}
+function eventShadowFor(evt) {
+  if (!evt || evt.source === 'gathering' || !(evt.dt instanceof Date) || isNaN(evt.dt)) return null;
+  return _eventShadows.get(eventGamesRef(evt)) || null;
+}
+// The gathering id whose games config belongs to this card (its own id for a
+// Gathering, the shadow's for an event that has games, else null).
+function gamesGidFor(evt) {
+  if (!evt) return null;
+  if (evt.source === 'gathering') return evt.gatheringId;
+  const sh = eventShadowFor(evt);
+  return sh ? sh.gathering_id : null;
+}
+function evtGamesConfig(evt) {
+  const gid = gamesGidFor(evt);
+  return gid == null ? null : gatheringRoundConfig(gid);
+}
+// Scorecards for a games config live under 'gathering:<id>' for a real
+// Gathering, under the event's own name for an event shadow.
+function gamesScoreKeyForGid(gid) {
+  const ref = _eventShadowByGid.get(Number(gid));
+  return ref ? eventNameFromRef(ref) : `gathering:${gid}`;
+}
+function eventGamesAllowed(evt) {
+  if (!evt || !currentPlayer || isGuest() || !(evt.dt instanceof Date) || isNaN(evt.dt)) return false;
+  const today = eventLocalDay(new Date());
+  const day = eventLocalDay(evt.dt);
+  if (evt.source === 'gathering') return String(evt.hostId) === String(currentPlayer) && day >= today;
+  if (formatBadge(evt.format) === 'BF Series' || isBFEBackedCard(evt)) return false;
+  if (day !== today) return false; // on the course: games are added the day of the event
+  const reg = findMyReg(evt.name);
+  return !!reg && reg.status === 'Yes';
+}
+function eventAddGamesBtnHtml(evt, isCanceled) {
+  if (isCanceled || gatheringIsGamed(evtGamesConfig(evt)) || !eventGamesAllowed(evt)) return '';
+  const _gid = gamesGidFor(evt);
+  if (_gid != null && _closedGamesGids.has(Number(_gid))) return ''; // closed results are reopened from My History, never overwritten from here
+  return `<button class="icon-action-btn" onclick="openGamesFromCard('${evt.id}')">
+        <span class="icon-action-badge secondary">🎮</span>
+        <span class="icon-action-label">+ Games</span>
+      </button>`;
+}
+// Opens the games form in the sheet dialog straight from an Event Card.
+async function openGamesFromCard(evtId) {
+  const evt = eventData.find(e => String(e.id) === String(evtId));
+  if (!evt) return;
+  if (!eventGamesAllowed(evt)) { showToast('Games can be added by a Yes player on the day, or by the host', true); return; }
+  let gid, g;
+  if (evt.source === 'gathering') {
+    gid = evt.gatheringId; g = evt;
+  } else {
+    try {
+      const ref = eventGamesRef(evt);
+      let sh = _eventShadows.get(ref);
+      if (!sh) {
+        const resp = await gatheringsFetchJSON(`${BFE_API}/bfe/event-games/shadow`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event_ref: ref, host_id: currentPlayer, title: evt.name,
+            event_time: evt.dt.toISOString(), venue: evt.location || null })
+        });
+        if (!resp.ok) throw new Error(resp.error || 'Could not start games for this event');
+        sh = { gathering_id: resp.gathering_id, host_id: resp.host_id };
+        _eventShadows.set(ref, sh); _eventShadowByGid.set(sh.gathering_id, ref);
+      }
+      gid = sh.gathering_id;
+    } catch (e) { showToast('❌ ' + e.message, true); return; }
+    g = { gatheringId: gid, name: evt.name, location: evt.location, dt: evt.dt, holes: evt.holes || 18, eventName: evt.name, eventShadow: true };
+  }
+  document.getElementById('host-sheet-overlay').classList.add('open');
+  const title = document.querySelector('#host-sheet-overlay .host-sheet-title');
+  if (title) title.textContent = '🎮 Games';
+  const eyebrow = document.getElementById('host-sheet-eyebrow');
+  if (eyebrow) eyebrow.textContent = evt.name;
+  await loadHostGamesConfigs();
+  await showGatheringGamesForm(gid, undefined, { g, card: true, shadow: !!g.eventShadow });
+}
+function closeGamesCardDialog() {
+  const ov = document.getElementById('host-sheet-overlay');
+  if (ov) ov.classList.remove('open');
+  const backBtn = document.getElementById('host-sheet-back');
+  if (backBtn) backBtn.style.display = 'none';
+  _gamesFormCard = false;
 }
 // Whether ANY game is configured — "is this Gathering gamed at all," the gate
 // used for strokes-vs-points capture (evtScoreMode), the event-card seal, and
@@ -15327,7 +15461,7 @@ function gatheringGameDetailsBody(evt, config) {
 function openGameDetailsModal(evtOrId) {
   const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => String(e.id) === String(evtOrId));
   if (!evt) return;
-  const config = evt.source === 'gathering' ? gatheringRoundConfig(evt.gatheringId) : null;
+  const config = evtGamesConfig(evt);
   if (!gatheringIsGamed(config)) return; // guard — the calling icon is already gated on this
   const titleEl = document.getElementById('game-details-title');
   if (titleEl) titleEl.textContent = `🏆 ${evt.name}`;
@@ -16919,8 +17053,11 @@ const GATHERING_GAMES_META = {
   birdieball: { label: 'BirdieBall', icon: '🐦' },
   birdiepay:  { label: 'Birdie Payouts', icon: '🐤' }
 };
-async function showGatheringGamesForm(gatheringId, preselect) {
-  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+async function showGatheringGamesForm(gatheringId, preselect, opts) {
+  const g = (opts && opts.g) || gatheringData.find(x => x.gatheringId === gatheringId);
+  _gamesFormG = g || null;
+  _gamesFormShadow = !!(opts && opts.shadow);
+  _gamesFormCard = !!(opts && opts.card);
   if (!g) { showToast('Could not find Gathering', true); return; }
   clearHostActionBar();
   const existing = (_hostGamesByGathering && _hostGamesByGathering.get(gatheringId)) || null;
@@ -16940,7 +17077,7 @@ async function showGatheringGamesForm(gatheringId, preselect) {
   // Frozen into the saved config so Close never needs a second venue lookup.
   _gamesFormBirdiepayPars = csResolvePars(g);
   const backBtn = document.getElementById('host-sheet-back');
-  if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; renderHostPanelList(); }; }
+  if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; if (_gamesFormCard) closeGamesCardDialog(); else renderHostPanelList(); }; }
   const closeBtn = document.getElementById('host-sheet-close-btn');
   if (closeBtn) { closeBtn.textContent = 'Cancel'; closeBtn.style.color = '#fff'; closeBtn.style.background = 'rgba(192,57,43,0.35)'; closeBtn.style.border = '1px solid rgba(224,82,82,0.4)'; }
   const body = document.getElementById('host-sheet-body');
@@ -16976,7 +17113,9 @@ async function loadGamesFormPar3Holes(g) {
   }
 }
 function renderGatheringGamesForm(gatheringId, g, existing) {
-  _gamesFormYesCount = gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes').length;
+  _gamesFormYesCount = (g && g.eventShadow)
+    ? regData.filter(r => r.eventName === g.eventName && r.status === 'Yes').length
+    : gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes').length;
   const body = document.getElementById('host-sheet-body');
   body.innerHTML = `
     <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;
@@ -17008,7 +17147,8 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
   updateGamesFormPotPreview();
 }
 function gatheringGamesChecklistHtml() {
-  return Object.keys(GATHERING_GAMES_META).map(key => {
+  const EVENT_GAMES_OK = ['skins', 'birdiepay']; // v4.9.4 — event shadows: only games computed from scorecards
+  return Object.keys(GATHERING_GAMES_META).filter(k => !_gamesFormShadow || EVENT_GAMES_OK.includes(k)).map(key => {
     const meta = GATHERING_GAMES_META[key];
     const checked = _gamesFormSelected.has(key);
     return `<div onclick="toggleGamesFormGame('${key}')"
@@ -17233,7 +17373,7 @@ function updateGamesFormPotPreview(yesCount) {
   el.innerHTML = lines.join('<br>');
 }
 async function submitGatheringGames(gatheringId) {
-  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  const g = (_gamesFormG && _gamesFormG.gatheringId === gatheringId) ? _gamesFormG : gatheringData.find(x => x.gatheringId === gatheringId);
   if (!g) { showToast('Gathering not found', true); return; }
   const games = [..._gamesFormSelected];
   if (!games.length) { showToast('Select at least one game', true); return; }
@@ -17277,7 +17417,7 @@ async function submitGatheringGames(gatheringId) {
     if (!resp.ok) throw new Error(resp.error || 'Save failed');
     await loadHostGamesConfigs();
     showToast('✅ Games configured');
-    renderHostPanelList();
+    if (_gamesFormCard) { closeGamesCardDialog(); await refreshGatheringGamesIndex(); } else renderHostPanelList();
   } catch(e) {
     showToast('❌ ' + e.message, true);
     console.error('submitGatheringGames error:', e);
@@ -17288,11 +17428,11 @@ async function submitGatheringGames(gatheringId) {
 async function deleteGatheringGames(gatheringId, name) {
   if (!confirm(`Turn off games for "${name}"? This clears the current config.`)) return;
   try {
-    const resp = await gatheringsFetchJSON(`${BFE_API}/bfe/gathering-games/${gatheringId}`, { method: 'DELETE' });
+    const resp = await gatheringsFetchJSON(`${BFE_API}/bfe/gathering-games/${gatheringId}?host_id=${encodeURIComponent(currentPlayer)}`, { method: 'DELETE' });
     if (!resp.ok) throw new Error(resp.error || 'Failed to turn off games');
     await loadHostGamesConfigs();
     showToast('✅ Games turned off');
-    renderHostPanelList();
+    if (_gamesFormCard) { closeGamesCardDialog(); await refreshGatheringGamesIndex(); } else renderHostPanelList();
   } catch(e) {
     showToast('❌ ' + e.message, true);
     console.error('deleteGatheringGames error:', e);

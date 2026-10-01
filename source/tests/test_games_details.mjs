@@ -29,8 +29,8 @@ ok(!railSrc.includes('Games') && !railSrc.includes('atCourseOpenGames'), 'rail m
 const cardRowMatch = src.match(/<div class="icon-action-row" style="justify-content:flex-start;gap:26px;margin:10px 4px 2px">[\s\S]*?<div id="\$\{whoId\}"/);
 ok(!!cardRowMatch, 'found the live event card icon-action-row block');
 const cardRow = cardRowMatch ? cardRowMatch[0] : '';
-const gamesIconMatch = cardRow.match(/\$\{\(evt\.source === 'gathering' && gatheringIsGamed\(gatheringRoundConfig\(evt\.gatheringId\)\)\) \? `[\s\S]*?openGameDetailsModal\('\$\{evt\.id\}'\)[\s\S]*?`\s*:\s*''\}/);
-ok(!!gamesIconMatch, 'Games icon present, gated on gatheringIsGamed(gatheringRoundConfig(...)) alone');
+const gamesIconMatch = cardRow.match(/\$\{gatheringIsGamed\(evtGamesConfig\(evt\)\) \? `[\s\S]*?openGameDetailsModal\('\$\{evt\.id\}'\)[\s\S]*?`\s*:\s*eventAddGamesBtnHtml\(evt, isCanceled\)\}/);
+ok(!!gamesIconMatch, 'Games icon present, gated on gatheringIsGamed(evtGamesConfig(evt)) alone');
 ok(gamesIconMatch && !gamesIconMatch[0].includes('getLiveEvent') && !gamesIconMatch[0].includes('_livePanelOpen'), 'Games icon gate does NOT reference getLiveEvent/_livePanelOpen — stays up whether or not this is the live round');
 
 // 3) Real execution — gatheringGameDetailsBody / openGameDetailsModal against
@@ -62,8 +62,8 @@ function setup() {
     openModal: (id) => opened.push(id),
   };
   vm.createContext(ctx);
-  const fns = ['gatheringRoundConfig', 'gatheringIsGamed', 'gatheringAddon', 'gatheringGameDetailsBody', 'openGameDetailsModal'];
-  vm.runInContext(fns.map(n => extractFn(src, n)).join('\n'), ctx);
+  const fns = ['gatheringRoundConfig', 'evtGamesConfig', 'gamesGidFor', 'eventShadowFor', 'eventLocalDay', 'eventGamesRef', 'gatheringIsGamed', 'gatheringAddon', 'gatheringGameDetailsBody', 'openGameDetailsModal'];
+  vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') + '\nvar _eventShadows = new Map();', ctx);
   return Object.assign(ctx, { opened, evt });
 }
 

@@ -12,7 +12,7 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 const fns = ['escapeHtml','evtPhotoKey','computeGatheringGamesPayout','latestScorecardPerPlayer','scorecardMissingHoles','renderGatheringPayoutHtml',
   'openGatheringCloseSheet','confirmGatheringClose','openModal','closeModal',
   'isOpenSpotName','loadHostSpots','hostSpotsHtml','hostAddOpenSpot','refreshAfterSpotChange','openFillSpotSheet','renderFillSpotSheet',
-  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','hostAutoOpenSpots','updateHostSpotsPreview','updateHostPlayersRow','hostSwitchHtml','hostSwitchSet','hostRowHtml','hostSetRowValue','bumpHostCapacity','hostGamesListHtml','filterHostGamesSheet','toggleHostGame','updateHostGamesRow','pickHostOption','setHostHoles','closeHostSheet','openHostSheet'];
+  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','gamesScoreKeyForGid','eventNameFromRef','hostAutoOpenSpots','updateHostSpotsPreview','updateHostPlayersRow','hostSwitchHtml','hostSwitchSet','hostRowHtml','hostSetRowValue','bumpHostCapacity','hostGamesListHtml','filterHostGamesSheet','toggleHostGame','updateHostGamesRow','pickHostOption','setHostHoles','closeHostSheet','openHostSheet'];
 function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillOk = true } = {}) {
   const dom = new JSDOM(`<body><div id="gathering-close-modal"><div id="gathering-close-body"></div></div>
     <div id="gathering-spot-modal"><div id="gathering-spot-title"></div><div id="gathering-spot-body"></div></div>
@@ -50,7 +50,7 @@ function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillO
   ctx.posts = posts; ctx.toasts = toasts; ctx.calls = calls;
   vm.createContext(ctx);
   vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') +
-    '\nvar _spotsByGathering = new Map(); var _hostGamesPick = new Set(); var _hostHoles = 18; var GATHERING_GAMES_META = {skins:{label:"Skins",icon:"S"},cttp:{label:"CTP",icon:"C"},birdieball:{label:"BirdieBall",icon:"B"}}; var _hostMode = "crew"; var _hostPlaying = true; var currentPlayer = "Brian Hager"; var _hostCrewPicked = new Set(); var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null;', ctx);
+    '\nvar _spotsByGathering = new Map(); var _eventShadowByGid = new Map(); var _hostGamesPick = new Set(); var _hostHoles = 18; var GATHERING_GAMES_META = {skins:{label:"Skins",icon:"S"},cttp:{label:"CTP",icon:"C"},birdieball:{label:"BirdieBall",icon:"B"}}; var _hostMode = "crew"; var _hostPlaying = true; var currentPlayer = "Brian Hager"; var _hostCrewPicked = new Set(); var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null;', ctx);
   return ctx;
 }
 

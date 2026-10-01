@@ -1,3 +1,6 @@
+v4.9.4 · 2026-10-01
+Deployed: 2026-10-01 (Games from the Event Card. Hosts can tap "+ Games" on a hosted event that has none, so you can spice it up on the course without editing the Gathering. On a BF Weekend Times card, any player registered Yes can tap "+ Games" on the day: the first player to save the games runs them, everyone with a scorecard is in, the terms show on the card's Games button, and the results land in My History. Weekend games offer Skins and Birdie Payouts. Also included: deeper amber fall tone in My History.)
+
 v4.9.3 · 2026-10-01
 Deployed: 2026-10-01 (My History: the fall (Sep–Nov) card tone is now a deeper amber with a rust border, so it reads like autumn leaves instead of pale cream.)
 
