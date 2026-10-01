@@ -1,3 +1,6 @@
+v4.9.16 · 2026-10-01
+Deployed: 2026-10-01 (Suggested game amounts retuned to give less-skilled players a real shot at a return: for a $10 buy-in and four players it now suggests CTP $3 a hole, BirdieBall $2 a player and $3 a birdie.)
+
 v4.9.15 · 2026-10-01
 Deployed: 2026-10-01 (Suggested amounts: CTP now gets about 20% of the pot (was 15%), so a course with five par 3s suggests $2 a hole instead of $1. The Skins line now also shows what Skins is typically left with after birdie payouts.)
 

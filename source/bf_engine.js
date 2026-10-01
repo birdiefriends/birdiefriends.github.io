@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.3.1';
+  const ENGINE_VERSION = '1.3.2';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -364,9 +364,8 @@
   // Pure: a buy-in, a headcount and the games ticked -> whole-dollar starting
   // amounts for the per-game fields. Brian's model: Skins is the residual and
   // aims for ~half the pot; BirdieBall ~20% of the buy-in per player; CTP's
-  // purse ~15% of the pot spread over its holes; Birdie Payouts ~20% of the
-  // buy-in per birdie (a ~15% budget at roughly 0.75 birdies a player, which
-  // makes the per-birdie figure independent of headcount). Everything rounds
+  // purse ~30% of the pot spread over its holes; Birdie Payouts ~30% of the
+  // buy-in per birdie (it also double-dips with skins, so it stays modest). Everything rounds
   // to the nearest whole dollar with a $1 floor ("players don't have change").
   // The guard that caps payouts at the pot still applies at close, so a wrong
   // guess can move money to Skins but never overpay. Designed for 4-8 players;
@@ -381,13 +380,13 @@
     if (has('birdieball')) out.birdieball = { dollar_per_player: dollars(0.2 * B) };
     if (has('cttp')) {
       const holes = Math.max(1, Math.floor(Number(cttpHoles) || 3));
-      let per = dollars((0.2 * B * n) / holes);
+      let per = dollars((0.3 * B * n) / holes);
       // a purse that (with BirdieBall) would eat more than half the pot comes down, never below $1/hole
       const bbCost = out.birdieball ? out.birdieball.dollar_per_player * n : 0;
       while (per > 1 && per * holes + bbCost > 0.5 * B * n) per -= 1;
       out.cttp = { dollar_per_hole: per, holes };
     }
-    if (has('birdiepay')) out.birdiepay = { dollar_per_birdie: dollars(0.2 * B) };
+    if (has('birdiepay')) out.birdiepay = { dollar_per_birdie: dollars(0.3 * B) };
     return out;
   }
 

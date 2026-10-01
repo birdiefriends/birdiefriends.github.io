@@ -5393,3 +5393,6 @@ mirror (bf_push normally writes both), leaving them one comment apart; resynced 
 
 ### Dev-90 addendum — v4.9.15 / engine 1.3.1 (suggestion tuning)
 - Brian (screenshot, $10 x 4, 5 par 3s): CTP looked undervalued ($1/hole) and Skins looked >50%. Cause: 15% CTP rounded down to $1 on 5 holes, and the preview showed Skins BEFORE birdie payouts ($27 = 67%). Fix: CTP purse 20% of pot ($2/hole there); preview now adds "a typical round pays ~$X of birdies, leaving ~$Y". Typical: Skins 55-60% before birdies, ~45% after ~0.75 birdies/player.
+
+### Dev-90 addendum — v4.9.16 / engine 1.3.2 (middle option)
+- Brian chose the "middle option" for foursomes: $10 -> CTP $3/hole (4 holes), BirdieBall $2/player, birdie $3. Rationale: the side games are the equalizers for less-skilled players (CTP and BirdieBall are skill-light; gross skins and birdies favor the better players). Engine: CTP purse 30% of pot, birdie 30% of buy-in, BirdieBall 20% of buy-in per player. Lever for later if less-skilled players still get too little: net (handicap) skins as its own game option.
