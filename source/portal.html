@@ -17578,6 +17578,15 @@ function gamesFormResolvePlayerHcp(name) {
   const ph = BFEngine.playingHandicap({ index: idx, slope: Number(tee.slope_rating), rating: Number(tee.course_rating), par }, _gamesFormHcp.allowance);
   return { kind, strokes: ph.strokes, course_hcp: ph.course_hcp, index: idx, tee: tee.tee_name, stroke_index: si };
 }
+function gamesFormHcpOutHtml(r) {
+  if (r.problem) return `<span style="color:#b8860b">${r.problem}</span>`;
+  return `<b style="color:var(--green-dark)">${r.strokes} stroke${Math.abs(r.strokes) === 1 ? '' : 's'}</b>${r.kind === 'index' ? ` <span style="color:var(--text-muted)">· CH ${r.course_hcp}</span>` : ''}`;
+}
+function gamesFormSetAllTees(teeId) {
+  if (!teeId) return;
+  gamesFormPlayerNames().forEach(n => { const e = gamesFormEntry(n); if (e.kind !== 'gross') e.teeId = String(teeId); });
+  refreshGamesFormHcpSection();
+}
 function gatheringGamesHcpSectionHtml() {
   const hasSkins = _gamesFormSelected.has('skins'), hasBp = _gamesFormSelected.has('birdiepay');
   if (!hasSkins && !hasBp) return '';
@@ -17598,24 +17607,28 @@ function gatheringGamesHcpSectionHtml() {
         const kind = e.kind || 'index';
         const r = gamesFormResolvePlayerHcp(n);
         const q = JSON.stringify(n).replace(/"/g, '&quot;');
-        const teeSel = `<select onchange="setGamesFormPlayerHcp(${q},'teeId',this.value)" style="height:34px;border-radius:8px;border:1.5px solid var(--border);font-family:inherit;font-size:0.8rem;max-width:150px">
+        const ctl = 'width:100%;min-width:0;height:38px;border-radius:8px;border:1.5px solid var(--border);font-family:inherit;font-size:0.84rem;background:#fff;box-sizing:border-box';
+        const teeSel = `<select onchange="setGamesFormPlayerHcp(${q},'teeId',this.value)" style="${ctl};padding:0 6px">
           <option value="">Tee…</option>${_gamesFormTees.map(t => `<option value="${t.id}" ${String(t.id) === String(e.teeId) ? 'selected' : ''}>${escapeHtml(t.tee_name)}</option>`).join('')}</select>`;
-        const kindSel = `<select onchange="setGamesFormPlayerHcp(${q},'kind',this.value)" style="height:34px;border-radius:8px;border:1.5px solid var(--border);font-family:inherit;font-size:0.8rem">
-          ${[['index', 'Index'], ['given', 'Strokes given'], ['gross', 'No strokes']].map(([v, l]) => `<option value="${v}" ${kind === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-        const val = kind === 'gross' ? '' : `<input type="number" step="${kind === 'index' ? '0.1' : '1'}" value="${kind === 'index' ? (e.index ?? '') : (e.strokes ?? '')}"
-          placeholder="${kind === 'index' ? 'Index' : 'Strokes'}" oninput="setGamesFormPlayerHcp(${q},'${kind === 'index' ? 'index' : 'strokes'}',this.value,true)" style="width:78px;height:34px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;font-size:0.84rem">`;
-        const out = r.problem ? `<span style="color:#b8860b">${r.problem}</span>`
-          : `<b>${r.strokes} stroke${Math.abs(r.strokes) === 1 ? '' : 's'}</b>${r.kind === 'index' ? ` (course hcp ${r.course_hcp})` : ''}`;
+        const kindSel = `<select onchange="setGamesFormPlayerHcp(${q},'kind',this.value)" style="${ctl};padding:0 6px">
+          ${[['index', 'Index'], ['given', 'Given'], ['gross', 'None']].map(([v, l]) => `<option value="${v}" ${kind === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+        const val = kind === 'gross' ? '' : `<input type="number" step="${kind === 'index' ? '0.1' : '1'}" inputmode="decimal" value="${kind === 'index' ? (e.index ?? '') : (e.strokes ?? '')}"
+          placeholder="${kind === 'index' ? 'Index' : 'Strokes'}" oninput="setGamesFormPlayerHcp(${q},'${kind === 'index' ? 'index' : 'strokes'}',this.value,true)" style="${ctl};padding:0 8px">`;
         return `<div style="padding:9px 0;border-top:1px solid var(--border)">
-          <div style="font-weight:700;font-size:0.88rem;margin-bottom:${e.note ? '1px' : '6px'}">${escapeHtml(n)}</div>${e.note ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px">${escapeHtml(e.note)}</div>` : ''}
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${kind === 'gross' ? '' : teeSel}${kindSel}${val}</div>
-          <div id="gf-hcp-out-${escapeHtml(n).replace(/\W/g, '_')}" style="font-size:0.76rem;color:var(--text-muted);margin-top:5px">${out}</div></div>`;
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+            <span style="font-weight:700;font-size:0.9rem;min-width:0;overflow-wrap:anywhere">${escapeHtml(n)}</span>
+            <span id="gf-hcp-out-${escapeHtml(n).replace(/\W/g, '_')}" style="font-size:0.78rem;white-space:nowrap">${gamesFormHcpOutHtml(r)}</span></div>
+          ${e.note ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:1px">${escapeHtml(e.note)}</div>` : ''}
+          <div style="display:grid;grid-template-columns:${kind === 'gross' ? '1fr' : '1.2fr 1fr 0.85fr'};gap:6px;margin-top:6px">${kind === 'gross' ? '' : teeSel}${kindSel}${val}</div></div>`;
       }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No confirmed players yet. Players appear here as they register Yes.</div>`;
-      rows = `<div style="display:flex;align-items:center;gap:8px;margin:10px 0 4px">
+      rows = `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 6px">
           <span style="font-size:0.86rem;font-weight:600">Allowance</span>
           <input type="number" min="50" max="100" step="1" value="${_gamesFormHcp.allowance}" oninput="setGamesFormAllowance(this.value)" style="width:64px;height:34px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit">
           <span style="font-size:0.86rem">%</span>
-          <span style="font-size:0.72rem;color:var(--text-muted)">of course handicap (USGA: 95% for individual play). Strokes given are used as typed.</span></div>${rows}`;
+          <span style="font-size:0.72rem;color:var(--text-muted);flex-basis:100%">of course handicap (USGA: 95% for individual play). Strokes given are used as typed.</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin:2px 0 6px">
+          <span style="font-size:0.78rem;color:var(--text-muted)">Same tee for everyone</span>
+          <select onchange="gamesFormSetAllTees(this.value)" style="height:32px;border-radius:8px;border:1.5px solid var(--border);font-family:inherit;font-size:0.8rem;padding:0 6px;background:#fff"><option value="">Pick…</option>${_gamesFormTees.map(t => `<option value="${t.id}">${escapeHtml(t.tee_name)}</option>`).join('')}</select></div>${rows}`;
     }
   }
   return `<div class="host-form-field" id="games-form-hcp-field">
@@ -17641,8 +17654,7 @@ function setGamesFormPlayerHcp(name, field, val, typing) {
   if (typing) { // re-render only the result line so the input keeps focus
     const r = gamesFormResolvePlayerHcp(name);
     const out = document.getElementById('gf-hcp-out-' + escapeHtml(name).replace(/\W/g, '_'));
-    if (out) out.innerHTML = r.problem ? `<span style="color:#b8860b">${r.problem}</span>`
-      : `<b>${r.strokes} stroke${Math.abs(r.strokes) === 1 ? '' : 's'}</b>${r.kind === 'index' ? ` (course hcp ${r.course_hcp})` : ''}`;
+    if (out) out.innerHTML = gamesFormHcpOutHtml(r);
   } else refreshGamesFormHcpSection();
 }
 // The frozen config the Worker stores and BFEngine reads (null = all gross).

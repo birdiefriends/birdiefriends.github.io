@@ -5415,3 +5415,6 @@ mirror (bf_push normally writes both), leaving them one comment apart; resynced 
 
 ### Dev-91 addendum — v4.10.1 (net setup reads Membership)
 - Brian updated Membership HCPs and added Tony, Lee and Muna as NoHCP. The Games form now loads `GET /bfe/players` (bf_players) when it opens: a real `current_hcp` prefills Index (editable, USGA formula at the chosen tee); `hcp_source = 'no_hcp'` or no number defaults the player to Strokes Given (host must enter it); a name not found starts as a blank Index with a note. Host edits stick; re-opening a saved config maps its tee name back to the tee. Name match is exact (case-insensitive) against bf_players.name. Tests: `test_net_form.mjs` 25 checks.
+
+### Dev-91 addendum — v4.10.2 (compact net setup)
+- Brian's phone screenshot: each player took ~430px (tee, mode and value wrapped to three stacked controls, result line below). Now one row per player: name + live "N strokes · CH x" on one line, then a 3-column grid (tee / Index-Given-None / value), a small Membership note only when there is one, and a "Same tee for everyone" picker. Roughly 110px per player. `test_net_form.mjs` 31 checks.

@@ -1,3 +1,6 @@
+v4.10.2 · 2026-10-01
+Deployed: 2026-10-01 (Net setup is more compact: each player is one row (tee, Index/Given/None, value) with their strokes shown next to the name, plus a Same tee for everyone picker.)
+
 v4.10.1 · 2026-10-01
 Deployed: 2026-10-01 (Net setup now reads Membership: a player with an HCP gets their Index prefilled for the chosen tee (still editable); a NoHCP player, or one with no number on file, is asked for Strokes Given instead.)
 

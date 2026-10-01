@@ -20,9 +20,9 @@ const tees = [
 ];
 const ctx = { BFEngine: E, _gamesFormG: { eventShadow: false }, _gamesFormGathering: 7, _gamesFormTees: tees,
   gatheringRegData: ['Brian Hager', 'Lee Chasen', 'Tony Hager', 'Muna Aliya'].map(p => ({ gatheringId: 7, player: p, status: 'Yes' })).concat([{ gatheringId: 7, player: 'Bailed', status: 'No' }]),
-  regData: [], _gamesFormHcp: null, _gamesFormMembers: new Map() };
+  regData: [], _gamesFormHcp: null, _gamesFormMembers: new Map(), _gamesFormSelected: new Set(['skins', 'birdiepay']), escapeHtml: v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;') };
 vm.createContext(ctx);
-vm.runInContext(['gamesFormEntry', 'gamesFormPlayerNames', 'gamesFormHcpIsNet', 'gamesFormResolvePlayerHcp', 'gamesFormBuildHandicapConfig'].map(n => extractFn(src, n)).join('\n'), ctx);
+vm.runInContext(['gamesFormHcpOutHtml', 'gatheringGamesHcpSectionHtml', 'gamesFormEntry', 'gamesFormPlayerNames', 'gamesFormHcpIsNet', 'gamesFormResolvePlayerHcp', 'gamesFormBuildHandicapConfig'].map(n => extractFn(src, n)).join('\n'), ctx);
 const set = hcp => { ctx._gamesFormHcp = hcp; };
 
 // A: gross → no config at all
@@ -90,6 +90,18 @@ eq(ctx.gamesFormResolvePlayerHcp('Brian Hager').strokes, 8, 'F: prefilled Index 
 ok(/enter strokes given/.test(ctx.gamesFormResolvePlayerHcp('Tony Hager').problem) || /pick a tee/.test(ctx.gamesFormResolvePlayerHcp('Tony Hager').problem), 'F: NoHCP player is not silently scratch');
 ctx._gamesFormHcp.players['Brian Hager'].index = 12; // host override sticks
 eq(ctx.gamesFormEntry('Brian Hager').index, 12, 'F: host edit is kept');
+
+// G: compact layout — one grid row per player, result on the name line, tee-for-everyone
+set({ skins_basis: 'net', birdiepay_basis: 'net', allowance: 95, players: {} });
+ctx._gamesFormMembers = new Map([['brian hager', { hcp: 6.8, source: 'ghin_import' }]]);
+const html = ctx.gatheringGamesHcpSectionHtml();
+ok((html.match(/grid-template-columns:1\.2fr 1fr 0\.85fr/g) || []).length === 4, 'G: each of the 4 players is ONE three-column row (tee, mode, value)');
+ok(/Same tee for everyone/.test(html), 'G: bulk tee control present');
+ok((html.match(/gf-hcp-out-/g) || []).length === 4, 'G: result line on each name line');
+ok(/>None</.test(html) && /Given</.test(html) && !/Strokes given<\/option>/.test(html), 'G: short mode labels');
+ctx._gamesFormHcp.players['Lee Chasen'].kind = 'gross';
+ok(/grid-template-columns:1fr;/.test(ctx.gatheringGamesHcpSectionHtml()), 'G: a no-strokes player collapses to one control');
+ok(/pick a tee/.test(ctx.gamesFormHcpOutHtml(ctx.gamesFormResolvePlayerHcp('Brian Hager'))), 'G: missing tee shown on the result line');
 
 console.log(`test_net_form: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
