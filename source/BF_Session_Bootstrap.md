@@ -431,6 +431,16 @@ Panel adapts around whatever's turned on. Backend: `bfe_gathering_games` (host c
   Dev-87's output**, and only for over-committed configs; rounds that fit are byte-identical and
   already-saved snapshots are frozen and untouched. `test_engine_parity.mjs` now checks fits for exact parity
   and over-committed ones for conservation.
+- **Open spots — placeholder players (Dev-90, portal v4.9.0 + BFE Worker).** A seat held for someone the host
+  can't name yet: a `registrations` row named "Open Spot N" with `is_placeholder = 1` (needs the one-time
+  `ALTER TABLE registrations ADD COLUMN is_placeholder INTEGER NOT NULL DEFAULT 0;`). **Every spot must be resolved
+  to a real member** — BFE Worker `POST /bfe/gathering-spots/:id/fill` renames it in registrations, bfe_scorecards,
+  bfe_cttp_entries, bfe_birdieball_answers and the closed payout_summary in ONE atomic D1 batch (both Workers share
+  the one D1 database), and `POST .../close` returns 409 while any spot is open. Host-only UI: "Open Spots" stepper
+  in New Gathering, "➕ Open spot" + Fill on Host Panel cards (Upcoming and Archive), Fill picker lists real active
+  members only, Close sheet disabled until filled. Main Worker untouched. Tests: `test_open_spots.mjs` (real
+  SQLite), `test_open_spots_ui.mjs`. Not renamed: photo/note player tags. Deploy order: D1 step, then the Worker
+  paste-deploy, then the portal.
 Full build detail, including the exact bug chases and test coverage, is in
 `BF_Session_Log.md`'s Dev-86 entry.
 ## 3. Dev-88 focus — engine unification, Phase A (prove it on Gatherings)

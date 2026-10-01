@@ -5318,3 +5318,43 @@ AutoPush held three other un-prefixed local test files. Added to Bootstrap §5.
 this docs commit. Branches left on GitHub: `claude-staging-test` (obsolete) and `claude-staging-bootstrap`
 (superseded by the docs commit). Next: Dev-90 — run the §0 check from a brand-new chat (ideally on the phone),
 then the §5 Games work list.
+
+## Dev-90 · 2026-10-01 — Publishing made either/or (AutoPush guard), open spots (placeholder players), Moselem 09/29 cleanup
+
+**1. Publishing is either/or (Brian, 2026-09-30/10-01).** Direct-to-`main` from the cloud session is the default;
+AutoPush is only used when Brian explicitly overrides. Reason: `bf_push` pushes whatever sits in AutoPush straight
+to `main`, so a stale file there plus an accidental run overwrites live content (this had already happened once
+while syncing AutoPush between laptop and phone). `bf_push.ps1` **v18** refuses to do anything unless a one-shot
+`AUTOPUSH_OK.txt` marker is beside it (consumed on acceptance). Brian confirmed it stops correctly with no marker.
+Bootstrap §0 mode box + §1/§4 wording updated; the `bf_push_library.ps1` snapshot route is retired (repo copy goes
+to `main` directly). Brian cleared the stale AutoPush files himself. `claude-staging-*` branches can't be deleted
+from the session (HTTP 403) — Brian deletes them in the GitHub UI.
+
+**2. Open spots — placeholder players (new feature, portal v4.9.0 + BFE Worker).** Trigger: Gathering 69 (Moselem
+09/29) was created with a placeholder player ("TBD 1") because the 4th was unknown; the crew was later corrected to
+Jim Bingham but the *registration* kept the placeholder, so his scorecard, BirdieBall answer and the closed result all
+carried "TBD 1". Root cause: a player is identified by display name in ~7 tables, and the crew list and the
+registrations are separate. Decisions (Brian): a real flag column (not a name prefix), and every spot must resolve to
+a real member. Built: `registrations.is_placeholder`; BFE Worker `GET /bfe/gathering-spots`, `POST
+/bfe/gathering-spots/:id/add`, `POST .../fill` (ONE atomic D1 batch renames registrations, bfe_scorecards,
+bfe_cttp_entries, bfe_birdieball_answers and the closed payout_summary — both Workers share one D1 database, which
+is what makes it atomic), and a **Close guard** (the close route returns 409 while any spot is open). Portal: an "Open
+Spots" stepper in New Gathering (counts toward capacity, created before the host/crew registrations), "➕ Open spot"
+and Fill on Host Panel cards (Upcoming and Archive), a member-only Fill picker, and a Close & Calculate sheet that
+lists unfilled spots and disables Close. The main Worker is untouched. Tests: `test_open_spots.mjs` (35, REAL SQLite
+via node:sqlite incl. rollback), `test_open_spots_ui.mjs` (35); `test_gathering_close_ui.mjs` sandbox updated for the
+new spots fetch. Full suite green except the known stale `test_at_course.mjs`.
+**Deploy order matters:** (a) one-time D1 step `ALTER TABLE registrations ADD COLUMN is_placeholder INTEGER NOT NULL
+DEFAULT 0;` (b) Brian paste-deploys `bf_experiences_worker.js` (c) then portal v4.9.0. Before (a)/(b) the portal
+degrades quietly (no spots listed; the stepper's add call toasts a clear error naming the SQL).
+**Known limits:** the fill rename covers the stores above — photo/note tags that name a player are not renamed;
+a member who already has a scorecard/BirdieBall answer in that Gathering can't be merged automatically (409);
+non-hosts only see the plain "Open Spot N" name.
+
+**3. Moselem 09/29 (Gathering 69) data cleanup.** "TBD 1" lived in: registrations, bfe_scorecards id 748,
+bfe_birdieball_answers id 8, and the closed payout_summary (players, skins, birdie payouts, BirdieBall winners,
+payouts). Crew 44 was already correct. Fix = four UPDATEs (or, once item 2 is deployed, flag the registration as a
+placeholder and use Fill). Brian runs it in the D1 console.
+
+**4. Mistake caught.** The v4.8.19 comment-only publish test changed `docs/portal.html` but not its `source/`
+mirror (bf_push normally writes both), leaving them one comment apart; resynced in this session's commit.

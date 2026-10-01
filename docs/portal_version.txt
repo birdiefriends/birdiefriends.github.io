@@ -1,3 +1,6 @@
+v4.9.0 · 2026-10-01
+Deployed: 2026-10-01 (Open spots: a Gathering can now hold seats for players you can't name yet. In the New Gathering form, "Open Spots" adds that many seats ("Open Spot 1", "Open Spot 2"...); on any of your Gathering cards, "➕ Open spot" adds one more. Each spot has to be turned into a real BirdieFriends member with "Fill" before the round can close: Close & Calculate shows the unfilled spots and stays disabled until they're named. Filling a spot moves that seat's scorecard, CTP and BirdieBall entries, and even an already-closed payout, over to the real player in one step, so it works for past Gatherings too (Host Panel, Archive). Needs the BFE Worker update and a one-time database step first (see the Worker's open-spots comment); until then nothing changes.)
+
 v4.8.19 · 2026-09-30
 Deployed: 2026-09-30 (No visible change: third publishing test, run from a session where the repo had to be attached by hand. Nothing in the app behaves differently.)
 

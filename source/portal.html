@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- v4.8.19 publish test 2026-09-30: comment-only, no behavior change. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2994,6 +2995,20 @@ body {
     </div>
     <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px;line-height:1.5">Read-only — full hole-by-hole entry.</div>
     <div id="score-detail-body" style="max-height:60vh;overflow-y:auto"></div>
+  </div>
+</div>
+<!-- Dev-90 — Fill an Open Spot: pick the real BirdieFriends member who took a
+     placeholder seat. Stacks above the Close & Calculate sheet it can open from. -->
+<div class="bf-modal-overlay" id="gathering-spot-modal" onclick="closeModalOnOverlay(event,'gathering-spot-modal')" style="z-index:9100">
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="bf-modal-title" style="margin-bottom:0" id="gathering-spot-title">🪑 Fill Open Spot</div>
+      <button onclick="closeModal('gathering-spot-modal')" title="Close"
+        style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
+          color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div id="gathering-spot-body" style="max-height:64vh;overflow-y:auto"></div>
   </div>
 </div>
 <!-- Dev-87 — Gatherings Close & Calculate (host-only, opened from the Live
@@ -11029,7 +11044,7 @@ function openHostPanel() {
   // very first renderHostPanelList() paint, so both are awaited before it
   // renders (unlike the Home-screen _venues fix, this panel doesn't need to
   // paint anything until this data is ready anyway).
-  Promise.all([loadHostTemplates(), loadHostGamesConfigs()]).then(() => renderHostPanelList());
+  Promise.all([loadHostTemplates(), loadHostGamesConfigs(), loadHostSpots()]).then(() => renderHostPanelList());
 }
 function closeHostPanel(e) {
   if (e && e.target !== document.getElementById('host-sheet-overlay')) return;
@@ -11058,6 +11073,144 @@ async function loadHostGamesConfigs() {
     _hostGamesByGathering = new Map();
   }
   return _hostGamesByGathering;
+}
+// ── Open spots (Dev-90) ──────────────────────────────────────────────────────
+// An OPEN SPOT is a seat held for someone the host can't name yet ("Open Spot 1").
+// Every spot must be resolved to a real BirdieFriends member before the round
+// closes — the BFE Worker refuses to close while any is open, and renames the
+// placeholder everywhere (registrations, scorecard, CTP, BirdieBall, closed
+// result) in one atomic step when the host fills it. Host-only controls.
+let _spotsByGathering = new Map();   // gatheringId -> ['Open Spot 1', ...]
+let _hostOpenSpots = 0;              // New Gathering form: how many to create with it
+let _hostPanelView = 'list';         // 'list' | 'archive' — which Host Panel view is showing
+let _fillSpot = null;                // { gatheringId, spot, member, candidates }
+function isOpenSpotName(n) { return /^Open Spot \d+$/i.test(String(n || '').trim()); }
+async function loadHostSpots() {
+  try {
+    const res = await fetch(`${BFE_API}/bfe/gathering-spots?host_id=${encodeURIComponent(currentPlayer)}`);
+    const data = await res.json();
+    const m = new Map();
+    (data.ok ? (data.spots || []) : []).forEach(r => {
+      if (!m.has(r.gathering_id)) m.set(r.gathering_id, []);
+      m.get(r.gathering_id).push(r.player_id);
+    });
+    _spotsByGathering = m;
+  } catch (e) {
+    _spotsByGathering = new Map();
+  }
+  return _spotsByGathering;
+}
+function hostSpotsHtml(g, canAdd) {
+  const spots = _spotsByGathering.get(g.gatheringId) || [];
+  if (!spots.length && !canAdd) return '';
+  const rows = spots.map((n, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0">
+      <span style="font-size:0.84rem;font-weight:700">🪑 ${escapeHtml(n)}</span>
+      <button class="btn btn-primary btn-sm" style="padding:4px 12px" onclick="openFillSpotSheet(${g.gatheringId}, ${i})">Fill</button>
+    </div>`).join('');
+  return `<div style="margin:8px 0;padding:8px 12px;border-radius:10px;${spots.length ? 'background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4)' : 'background:rgba(0,0,0,0.03);border:1px dashed rgba(0,0,0,0.15)'}">
+    ${spots.length ? `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:2px">Open spots — name each one before the round closes</div>${rows}` : ''}
+    ${canAdd ? `<button class="btn btn-ghost btn-sm" style="${spots.length ? 'margin-top:4px;' : ''}color:var(--text-muted)" onclick="hostAddOpenSpot(${g.gatheringId})">➕ Open spot</button>` : ''}
+  </div>`;
+}
+async function hostAddOpenSpot(gatheringId) {
+  try {
+    const res = await fetch(`${BFE_API}/bfe/gathering-spots/${gatheringId}/add`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: currentPlayer, count: 1 })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Could not add the spot');
+    showToast('🪑 Open spot added');
+    await refreshAfterSpotChange(gatheringId);
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
+async function refreshAfterSpotChange(gatheringId) {
+  await refreshGatherings();
+  await loadHostSpots();
+  const hostBody = document.getElementById('host-sheet-body');
+  if (hostBody && hostBody.offsetParent !== null) (_hostPanelView === 'archive' ? renderHostArchiveList : renderHostPanelList)();
+  const closeModalEl = document.getElementById('gathering-close-modal');
+  if (closeModalEl && closeModalEl.classList.contains('open')) openGatheringCloseSheet(gatheringId);
+  if (document.getElementById('history-game-results')) loadHistoryGameResults(`gathering:${gatheringId}`);
+}
+function openFillSpotSheet(gatheringId, spotIndex) {
+  const spot = (_spotsByGathering.get(gatheringId) || [])[spotIndex];
+  if (!spot) { showToast('That spot is already filled', true); return; }
+  const norm = s => String(s || '').trim().toLowerCase();
+  const taken = new Set(gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status !== 'No').map(r => norm(r.player)));
+  const candidates = (memberData || [])
+    .filter(m => m.display && m.active !== 'InActive' && !isOpenSpotName(m.display) && !taken.has(norm(m.display)))
+    .map(m => m.display)
+    .sort((a, b) => a.localeCompare(b));
+  _fillSpot = { gatheringId, spot, member: null, candidates };
+  document.getElementById('gathering-spot-title').textContent = '🪑 Fill ' + spot;
+  renderFillSpotSheet();
+  openModal('gathering-spot-modal');
+}
+function renderFillSpotSheet() {
+  const body = document.getElementById('gathering-spot-body');
+  if (!_fillSpot || !body) return;
+  const { spot, member, candidates } = _fillSpot;
+  if (member) {
+    body.innerHTML = `
+      <div style="font-size:0.88rem;line-height:1.5;margin:6px 0 12px">Make <b>${escapeHtml(member)}</b> the player for <b>${escapeHtml(spot)}</b>?
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px">Their scorecard, CTP and BirdieBall entries, and any closed payout all move to ${escapeHtml(member)}. This can't be undone from the app.</div></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="pickFillSpotMember(-1)">← Back</button>
+        <button class="btn btn-primary btn-sm" style="flex:2" id="btn-fill-spot-confirm" onclick="confirmFillSpot()">✅ Confirm</button>
+      </div>`;
+    return;
+  }
+  body.innerHTML = `
+    <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Pick the BirdieFriends member who played this seat. Not listed? They need to join BirdieFriends first, then come back here.</div>
+    <input type="text" id="fill-spot-search" placeholder="Search members…" oninput="filterFillSpotList()"
+      style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;font-size:0.9rem;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
+    <div id="fill-spot-list">${fillSpotListHtml('')}</div>`;
+}
+function fillSpotListHtml(q) {
+  const f = String(q || '').trim().toLowerCase();
+  const rows = _fillSpot.candidates.map((n, i) => ({ n, i })).filter(x => !f || x.n.toLowerCase().includes(f));
+  if (!rows.length) return `<div style="font-size:0.82rem;color:var(--text-muted);padding:10px 0">No matching members.</div>`;
+  return rows.map(x => `<button type="button" class="player-picker-btn" style="width:100%;text-align:left;margin-bottom:5px" onclick="pickFillSpotMember(${x.i})">${escapeHtml(x.n)}</button>`).join('');
+}
+function filterFillSpotList() {
+  const el = document.getElementById('fill-spot-list');
+  const inp = document.getElementById('fill-spot-search');
+  if (el && inp && _fillSpot) el.innerHTML = fillSpotListHtml(inp.value);
+}
+function pickFillSpotMember(i) {
+  if (!_fillSpot) return;
+  _fillSpot.member = i >= 0 ? (_fillSpot.candidates[i] || null) : null;
+  renderFillSpotSheet();
+}
+async function confirmFillSpot() {
+  if (!_fillSpot || !_fillSpot.member) return;
+  const { gatheringId, spot, member } = _fillSpot;
+  const btn = document.getElementById('btn-fill-spot-confirm');
+  if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); btn.textContent = 'Saving…'; }
+  try {
+    const res = await fetch(`${BFE_API}/bfe/gathering-spots/${gatheringId}/fill`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: currentPlayer, spot, member })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Could not fill the spot');
+    closeModal('gathering-spot-modal');
+    showToast('✅ ' + member + ' is in');
+    _fillSpot = null;
+    await refreshAfterSpotChange(gatheringId);
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+    if (btn) { btn.disabled = false; btn.classList.remove('btn-loading'); btn.textContent = '✅ Confirm'; }
+  }
+}
+function setHostOpenSpots(n) {
+  _hostOpenSpots = Math.max(0, Math.min(8, Math.floor(Number(n) || 0)));
+  const el = document.getElementById('host-open-spots-n');
+  if (el) el.textContent = String(_hostOpenSpots);
 }
 function showTemplatePicker() {
   const templates = _hostTemplates || [];
@@ -14790,11 +14943,16 @@ async function openGatheringCloseSheet(gatheringId) {
   openModal('gathering-close-modal');
   try {
     const key = evtPhotoKey({ source: 'gathering', gatheringId });
-    const [cfgRes, scRes, bbRes] = await Promise.all([
+    const [cfgRes, scRes, bbRes, spotsData] = await Promise.all([
       fetch(`${BFE_API}/bfe/gathering-games?gathering_id=${gatheringId}`),
       fetch(`${SCORECARD_API}/scorecards?event=${encodeURIComponent(key)}&input=strokes`),
-      fetch(`${BFE_API}/bfe/birdieball-answers?gathering_id=${gatheringId}`)
+      fetch(`${BFE_API}/bfe/birdieball-answers?gathering_id=${gatheringId}`),
+      // Open spots (Dev-90): the server refuses to close while any exist; this
+      // lets the sheet say so up front. A failed lookup never blocks the sheet.
+      fetch(`${BFE_API}/bfe/gathering-spots?gathering_id=${gatheringId}`).then(r => r.json()).catch(() => ({ spots: [] }))
     ]);
+    const openSpots = ((spotsData && spotsData.spots) || []).map(x => x.player_id);
+    _spotsByGathering.set(gatheringId, openSpots);
     const cfgData = await cfgRes.json();
     const scData = await scRes.json();
     const bbData = await bbRes.json();
@@ -14838,14 +14996,20 @@ async function openGatheringCloseSheet(gatheringId) {
           <span style="color:var(--text-muted)">A blank hole can't win or tie a skin. Fix it in the Card Score Sheet, then Refresh.</span></div>`
       : '';
     const alreadyClosed = config.status === 'closed';
+    const spotsHtml = openSpots.length
+      ? `<div style="background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
+          🪑 Name every open spot before closing — the results need real players.
+          ${openSpots.map((n, i) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><b>${esc(n)}</b>
+            <button class="btn btn-primary btn-sm" style="padding:4px 12px" onclick="openFillSpotSheet(${gatheringId}, ${i})">Fill</button></div>`).join('')}</div>`
+      : '';
     body.innerHTML = `
-      ${statusLine}${missingHtml}${incompleteHtml}
+      ${statusLine}${spotsHtml}${missingHtml}${incompleteHtml}
       ${alreadyClosed ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Already closed — saving again replaces the earlier result.</div>` : ''}
       <div style="border-top:1px solid var(--border);padding-top:6px">${renderGatheringPayoutHtml(summary)}</div>
       <div style="display:flex;gap:8px;margin-top:14px">
         <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openGatheringCloseSheet(${gatheringId})">🔄 Refresh</button>
-        <button class="btn btn-primary btn-sm" id="btn-gathering-close-confirm" style="flex:2" ${cards.length ? '' : 'disabled'}
-          onclick="confirmGatheringClose()">🏁 Close with ${cards.length} player${cards.length === 1 ? '' : 's'}</button>
+        <button class="btn btn-primary btn-sm" id="btn-gathering-close-confirm" style="flex:2" ${cards.length && !openSpots.length ? '' : 'disabled'}
+          onclick="confirmGatheringClose()">${openSpots.length ? '🪑 Fill open spots first' : `🏁 Close with ${cards.length} player${cards.length === 1 ? '' : 's'}`}</button>
       </div>`;
   } catch (e) {
     body.innerHTML = `<div style="font-size:0.85rem;color:var(--danger, #c0392b);padding:12px 0">Couldn't load: ${escapeHtml(e.message)}</div>
@@ -15894,6 +16058,7 @@ function clearHostActionBar() {
   if (bar) bar.innerHTML = '';
 }
 function renderHostPanelList() {
+  _hostPanelView = 'list';
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) backBtn.style.display = 'none';
   const closeBtn = document.getElementById('host-sheet-close-btn');
@@ -15935,7 +16100,7 @@ function renderHostPanelList() {
       const detailId = `gd-${g.gatheringId}`;
       // Pre-build inline response detail (hidden until toggled)
       const byStatus = { Yes: [], Sub: [], No: [] };
-      regs.forEach(r => { (byStatus[r.status] || byStatus.No).push(r.player); });
+      regs.forEach(r => { (byStatus[r.status] || byStatus.No).push(isOpenSpotName(r.player) ? '🪑 ' + r.player : r.player); });
       const rsection = (emoji, names) => names.length
         ? `<div style="margin-bottom:4px">
             <span style="font-size:0.75rem;font-weight:700;color:var(--text-muted)">${emoji}</span>
@@ -15968,6 +16133,7 @@ function renderHostPanelList() {
           background:#fff;border-radius:8px;border:1px solid rgba(0,0,0,0.08)">
           ${detailHtml}
         </div>
+        ${hostSpotsHtml(g, true)}
         ${g.teeTimeStatus === 'suggested' ? `
         <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:8px;
           background:rgba(230,168,0,0.1);border-color:rgba(230,168,0,0.4);color:#b8860b;font-weight:700"
@@ -16062,6 +16228,7 @@ function showRepeatPicker() {
 // Dev-54: no longer purely view-only — 🔁 Repeat lets the host spin up the
 // next occurrence directly from an archived card (see repeatGathering()).
 function renderHostArchiveList() {
+  _hostPanelView = 'archive';
   clearHostActionBar();
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'block'; backBtn.onclick = () => renderHostPanelList(); }
@@ -16085,7 +16252,7 @@ function renderHostArchiveList() {
       const timeStr = g.dt ? formatTime(g.dt) : '';
       const detailId = `gd-${g.gatheringId}`;
       const byStatus = { Yes: [], Sub: [], No: [] };
-      regs.forEach(r => { (byStatus[r.status] || byStatus.No).push(r.player); });
+      regs.forEach(r => { (byStatus[r.status] || byStatus.No).push(isOpenSpotName(r.player) ? '🪑 ' + r.player : r.player); });
       const rsection = (emoji, names) => names.length
         ? `<div style="margin-bottom:4px">
             <span style="font-size:0.75rem;font-weight:700;color:var(--text-muted)">${emoji}</span>
@@ -16113,6 +16280,7 @@ function renderHostArchiveList() {
           background:#fff;border-radius:8px;border:1px solid rgba(0,0,0,0.08)">
           ${detailHtml}
         </div>
+        ${hostSpotsHtml(g, false)}
         <div class="host-gathering-actions">
           <button class="btn btn-secondary btn-sm"
             onclick="repeatGathering(${g.gatheringId})">🔁 Repeat</button>
@@ -16989,6 +17157,7 @@ async function showNewGatheringForm() {
   _hostSelectedCrewId = null;
   _hostSelectedCrewName = null;
   _hostPlaying = true;
+  _hostOpenSpots = 0;
   _pendingCrewName = null;
   _hostMode = 'crew';
   _hostRegisterAllCrew = false;
@@ -17090,6 +17259,13 @@ async function showNewGatheringForm() {
       cursor:pointer;font-family:inherit;transition:all 0.18s;margin-bottom:6px;
       background:var(--green);color:#fff;border:2px solid var(--green)"
       onclick="setHostPlaying(!_hostPlaying)">✅ Yes, I'm playing</button>
+    <div class="section-label">🪑 Open Spots <span style="font-size:0.75rem;font-weight:400;opacity:0.6">(optional)</span></div>
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Seats for players you can't name yet. Each one has to be filled with a real BirdieFriends member before the round can close.</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <button type="button" class="seg-btn" style="width:44px" onclick="setHostOpenSpots(_hostOpenSpots - 1)">−</button>
+      <span id="host-open-spots-n" style="font-weight:800;font-size:1.05rem;min-width:24px;text-align:center">0</span>
+      <button type="button" class="seg-btn" style="width:44px" onclick="setHostOpenSpots(_hostOpenSpots + 1)">+</button>
+    </div>
     <div class="section-label">👥 Who's Coming</div>
     <!-- Mode selector — segmented toggle (Dev-49) -->
     <div class="seg-toggle" style="margin-bottom:16px">
@@ -17530,7 +17706,7 @@ async function submitNewGathering() {
   }
   // Capacity check only applies in crew mode (open mode — anyone can join, host sets a cap but can't pre-validate)
   if (_hostMode === 'crew' && size) {
-    const totalWithHost = _hostCrewPicked.size + (_hostPlaying ? 1 : 0);
+    const totalWithHost = _hostCrewPicked.size + (_hostPlaying ? 1 : 0) + _hostOpenSpots;
     if (totalWithHost < size) {
       showToast(`Add more players — ${totalWithHost} selected but capacity is ${size}`, true);
       return;
@@ -17588,6 +17764,21 @@ async function submitNewGathering() {
       })
     });
     if (!gathData.ok) throw new Error(gathData.error || 'Gathering creation failed');
+    // Open spots (Dev-90): created BEFORE the host/crew registrations below so
+    // the seats they hold are counted when capacity is checked. A failure here
+    // doesn't undo the Gathering — the host can add spots from the Host Panel.
+    if (_hostOpenSpots > 0) {
+      try {
+        const spotRes = await fetch(`${BFE_API}/bfe/gathering-spots/${gathData.id}/add`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ host_id: currentPlayer, count: _hostOpenSpots })
+        });
+        const spotData = await spotRes.json();
+        if (!spotData.ok) throw new Error(spotData.error || 'failed');
+      } catch (e) {
+        showToast('⚠️ Gathering created, but the open spots weren\'t added (' + e.message + ') — add them from the Host Panel', true);
+      }
+    }
     // Auto-register the host themselves, per the "Are you playing?" toggle
     // (default Yes — most Hosts also play, Dev-45). Best-effort: a failure
     // here shouldn't undo the Gathering itself, just surface a warning.
@@ -17635,6 +17826,7 @@ async function submitNewGathering() {
     }
     showToast('✅ Gathering created');
     await refreshGatherings();
+    await loadHostSpots();
     renderHostPanelList();
     // Offer "Save as Template?" after successful create
     promptSaveAsTemplate({

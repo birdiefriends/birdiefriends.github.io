@@ -26,13 +26,14 @@ function setup({ player = 'Brian Hager', status = 'open', hostId = 'Brian Hager'
       if (url.includes('/scorecards?event=')) { ctx._scUrl = url; return { json: async () => ({ ok: true, scorecards: [
         { player: 'Brian Hager', holes: h({ 1: 4 }) }, { player: 'Brian Hager', holes: h({ 1: 3 }) }, // newer (4) first — older 3 must be ignored
         { player: 'Scott Justus', holes: h({ 2: 3 }) }, { player: 'Tony Choy', holes: Object.assign(h({}), { 4: null }) } ] }) }; }
+      if (url.includes('/bfe/gathering-spots?gathering_id=')) return { json: async () => ({ ok: true, spots: [] }) };   // Dev-90: open spots (none here; see test_open_spots_ui.mjs)
       if (url.includes('/birdieball-answers')) return { json: async () => ({ ok: true, answers: [{ player_name: 'Tony Choy', kept: true }] }) };
       throw new Error('unexpected ' + url);
     }
   };
   ctx._cfg = cfg; ctx.posts = posts; ctx.toasts = toasts;
   vm.createContext(ctx);
-  vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') + '\nvar _gcClose = null;', ctx);
+  vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') + '\nvar _gcClose = null; var _spotsByGathering = new Map();', ctx);
   return ctx;
 }
 // 1. Host opens sheet: scorecard check, missing/incomplete warnings, preview

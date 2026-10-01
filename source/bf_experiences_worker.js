@@ -1204,6 +1204,17 @@ export default {
           return new Response(JSON.stringify({ error: 'Only the host can ' + action + ' this Gathering\'s games' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
         if (action === 'close') {
+          // Open spots (Dev-90): every spot must be resolved to a real member
+          // before a round can close — a placeholder name must never land in a
+          // frozen result. Enforced here, not just in the portal.
+          let openSpots = 0;
+          try {
+            const r = await env.DB.prepare(`SELECT COUNT(*) AS n FROM registrations WHERE gathering_id = ? AND is_placeholder = 1`).bind(gid).first();
+            openSpots = (r && r.n) || 0;
+          } catch (e) { /* is_placeholder column not migrated yet, so no spot can exist */ }
+          if (openSpots > 0) {
+            return new Response(JSON.stringify({ error: openSpots + ' open spot' + (openSpots === 1 ? '' : 's') + ' still need a real player — fill them first', open_spots: openSpots }), { status: 409, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
           await env.DB.prepare(
             `UPDATE bfe_gathering_games SET status = 'closed', payout_summary = ?, closed_at = datetime('now'), updated_at = datetime('now') WHERE gathering_id = ?`
           ).bind(JSON.stringify(payout_summary), gid).run();
@@ -1215,6 +1226,109 @@ export default {
         return new Response(JSON.stringify({ ok: true, status: action === 'close' ? 'closed' : 'open' }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    // ── Open spots (Dev-90) ─────────────────────────────────────────────────
+    // A host often knows a seat exists before they know who sits in it. An
+    // OPEN SPOT is a seat held by a placeholder registration ("Open Spot 1",
+    // is_placeholder = 1) that MUST later be resolved to a real BF member.
+    // Everything in the Gatherings system keys a player by display name, so
+    // resolving is a rename across every table that holds that name — done
+    // here in ONE D1 batch (atomic: either every table is renamed or none is).
+    // That is why this lives in this Worker: both Workers bind the same D1
+    // database, so one route can reach registrations (main Worker's table) and
+    // the bfe_* tables together. It only touches the rows of the one placeholder.
+    // ONE-TIME MIGRATION (Brian runs it in the D1 console; both routes below
+    // degrade gracefully until it exists — GET returns no spots, add/fill say
+    // so plainly, the close guard simply sees zero):
+    //   ALTER TABLE registrations ADD COLUMN is_placeholder INTEGER NOT NULL DEFAULT 0;
+    // Routes (host_id is checked against the shared `gatherings` row, same
+    // trust model as the games routes):
+    //   GET  /bfe/gathering-spots?gathering_id=X | ?host_id=Y   -> { spots: [{gathering_id, player_id}] }
+    //   POST /bfe/gathering-spots/:id/add   { host_id, count }  -> adds "Open Spot N" registrations (Yes)
+    //   POST /bfe/gathering-spots/:id/fill  { host_id, spot, member }
+    //        -> renames the placeholder to a real member in registrations,
+    //           bfe_scorecards, bfe_cttp_entries, bfe_birdieball_answers and
+    //           the closed result snapshot (bfe_gathering_games.payout_summary).
+    if (url.pathname === '/bfe/gathering-spots' || /^\/bfe\/gathering-spots\/\d+\/(add|fill)$/.test(url.pathname)) {
+      const jr = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      const MIGRATE_MSG = 'Open spots need a one-time database step first: ALTER TABLE registrations ADD COLUMN is_placeholder INTEGER NOT NULL DEFAULT 0;';
+      const norm = v => String(v == null ? '' : v).trim().toLowerCase();
+      if (request.method === 'GET' && url.pathname === '/bfe/gathering-spots') {
+        const gidQ = url.searchParams.get('gathering_id');
+        const hostQ = url.searchParams.get('host_id');
+        if (!gidQ && !hostQ) return jr({ error: 'gathering_id or host_id is required' }, 400);
+        try {
+          const rs = gidQ
+            ? await env.DB.prepare(`SELECT gathering_id, player_id FROM registrations WHERE gathering_id = ? AND is_placeholder = 1 ORDER BY player_id`).bind(gidQ).all()
+            : await env.DB.prepare(`SELECT r.gathering_id AS gathering_id, r.player_id AS player_id FROM registrations r JOIN gatherings g ON g.id = r.gathering_id WHERE r.is_placeholder = 1 AND g.host_id = ? COLLATE NOCASE ORDER BY r.gathering_id, r.player_id`).bind(hostQ).all();
+          return jr({ ok: true, spots: rs.results || [] });
+        } catch (e) {
+          if (/is_placeholder/.test(String(e.message || e))) return jr({ ok: true, spots: [], migrated: false });
+          return jr({ error: 'Database error: ' + String(e.message || e) }, 500);
+        }
+      }
+      const spotMatch = url.pathname.match(/^\/bfe\/gathering-spots\/(\d+)\/(add|fill)$/);
+      if (request.method === 'POST' && spotMatch) {
+        let body;
+        try { body = await request.json(); } catch (e) { return jr({ error: 'Invalid JSON' }, 400); }
+        const gid = Number(spotMatch[1]);
+        const action = spotMatch[2];
+        const host_id = body && body.host_id;
+        if (!host_id) return jr({ error: 'host_id is required' }, 400);
+        try {
+          const g = await env.DB.prepare(`SELECT host_id, size FROM gatherings WHERE id = ?`).bind(gid).first();
+          if (!g) return jr({ error: 'Gathering not found' }, 404);
+          if (norm(g.host_id) !== norm(host_id)) return jr({ error: 'Only the host can ' + action + ' open spots' }, 403);
+          const { results: regs } = await env.DB.prepare(`SELECT player_id, status, is_placeholder FROM registrations WHERE gathering_id = ?`).bind(gid).all();
+          const rows = regs || [];
+          if (action === 'add') {
+            const count = Math.floor(Number(body.count));
+            if (!(count >= 1 && count <= 8)) return jr({ error: 'count must be 1 to 8' }, 400);
+            const yes = rows.filter(r => r.status === 'yes').length;
+            if (g.size && yes + count > g.size) return jr({ error: 'Not enough room: ' + yes + ' of ' + g.size + ' seats are already taken' }, 409);
+            let next = 1;
+            rows.forEach(r => { const m = /^Open Spot (\d+)$/i.exec(String(r.player_id)); if (m) next = Math.max(next, Number(m[1]) + 1); });
+            const names = [];
+            const stmts = [];
+            for (let i = 0; i < count; i++) {
+              const name = 'Open Spot ' + (next + i);
+              names.push(name);
+              stmts.push(env.DB.prepare(`INSERT INTO registrations (gathering_id, player_id, status, registered_at, is_placeholder) VALUES (?, ?, 'yes', datetime('now'), 1)`).bind(gid, name));
+            }
+            await env.DB.batch(stmts);
+            return jr({ ok: true, spots: names });
+          }
+          // fill
+          const spot = String(body.spot || '').trim();
+          const member = String(body.member || '').trim();
+          if (!spot || !member) return jr({ error: 'spot and member are required' }, 400);
+          if (/^open spot \d+$/i.test(member)) return jr({ error: 'Pick a real BirdieFriends member, not another open spot' }, 400);
+          const spotRow = rows.find(r => r.player_id === spot);
+          if (!spotRow || !spotRow.is_placeholder) return jr({ error: '"' + spot + '" is not an open spot on this Gathering' }, 404);
+          const existing = rows.find(r => norm(r.player_id) === norm(member));
+          if (existing && existing.status !== 'no') return jr({ error: member + ' is already in this Gathering' }, 409);
+          const key = 'gathering:' + gid;
+          const clash1 = await env.DB.prepare(`SELECT 1 AS x FROM bfe_scorecards WHERE event_name = ? AND player = ? COLLATE NOCASE`).bind(key, member).first();
+          const clash2 = await env.DB.prepare(`SELECT 1 AS x FROM bfe_birdieball_answers WHERE gathering_id = ? AND player_name = ? COLLATE NOCASE`).bind(gid, member).first();
+          if (clash1 || clash2) return jr({ error: member + ' already has scores or answers saved for this Gathering — they can\'t be merged automatically' }, 409);
+          const stmts = [];
+          if (existing) stmts.push(env.DB.prepare(`DELETE FROM registrations WHERE gathering_id = ? AND player_id = ?`).bind(gid, existing.player_id)); // a stale "No" row
+          stmts.push(
+            env.DB.prepare(`UPDATE registrations SET player_id = ?, is_placeholder = 0 WHERE gathering_id = ? AND player_id = ? AND is_placeholder = 1`).bind(member, gid, spot),
+            env.DB.prepare(`UPDATE bfe_scorecards SET player = ? WHERE event_name = ? AND player = ?`).bind(member, key, spot),
+            env.DB.prepare(`UPDATE bfe_cttp_entries SET player = ? WHERE event_name = ? AND player = ?`).bind(member, key, spot),
+            env.DB.prepare(`UPDATE bfe_birdieball_answers SET player_name = ? WHERE gathering_id = ? AND player_name = ?`).bind(member, gid, spot),
+            env.DB.prepare(`UPDATE bfe_gathering_games SET payout_summary = REPLACE(payout_summary, ?, ?) WHERE gathering_id = ? AND payout_summary IS NOT NULL`).bind(JSON.stringify(spot), JSON.stringify(member), gid)
+          );
+          await env.DB.batch(stmts);
+          return jr({ ok: true, spot, member });
+        } catch (e) {
+          const msg = String(e.message || e);
+          if (/is_placeholder/.test(msg)) return jr({ error: MIGRATE_MSG }, 500);
+          return jr({ error: 'Database error: ' + msg }, 500);
+        }
       }
     }
 
