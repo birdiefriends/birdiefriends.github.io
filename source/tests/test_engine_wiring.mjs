@@ -30,7 +30,7 @@ ok(!codeOnly.includes('_liveGames.includes'), 'no leftover _liveGames.includes(.
   [extractFn(src, 'gamesSealWatermarkHtml'), 'evtGamesConfig'],
   [extractFn(src, 'evtScoreMode'), 'gatheringIsGamed'],
 ].forEach(([body, helper]) => ok(body.includes(helper + '('), 'uses ' + helper + '()'));
-ok(/const _liveConfig = evt\.source === 'gathering' \? gatheringRoundConfig\(evt\.gatheringId\) : null;/.test(src), 'buildLivePanel resolves one config via gatheringRoundConfig()');
+ok(/const _liveConfig = _panelGid != null \? gatheringRoundConfig\(_panelGid\) : null;/.test(src), 'buildLivePanel resolves one config via gatheringRoundConfig()');
 ok(/gatheringAddon\(_liveConfig, 'cttp'\)/.test(src) && /gatheringAddon\(_liveConfig, 'birdieball'\)/.test(src), 'buildLivePanel reads addons via gatheringAddon()');
 ok(/return _gatheringGamesIndex\.has\(evt\.gatheringId\);/.test(src), 'hasLivePanelSupport keeps its plain existence check (unchanged on purpose)');
 

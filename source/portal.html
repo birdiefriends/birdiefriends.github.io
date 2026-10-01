@@ -6625,6 +6625,11 @@ function hasLivePanelSupport(evt) {
     // warm-up bug already taught this session.
     return _gatheringGamesIndex.has(evt.gatheringId);
   }
+  // v4.9.9 — a non-Gathering event (BF Weekend Times, ParTee…) whose players
+  // opened games from the card has a hidden shadow config: it gets the same
+  // carve-out. BF Series never qualifies (its own format/Live Panel), so the
+  // Series path below is untouched.
+  if (eventShadowGamed(evt)) return true;
   // Dev-92 (Scorecard Engine) — a BFE round explicitly running the
   // scorecard_only engine (Practice / fun round — no competitive calc)
   // gets Live Panel access regardless of its format string, checked BEFORE
@@ -6671,6 +6676,7 @@ function evtScoreMode(evt) {
     // _gatheringGamesIndex read.
     if (gatheringIsGamed(gatheringRoundConfig(evt.gatheringId))) return 'strokes';
   }
+  if (eventShadowGamed(evt)) return 'strokes'; // v4.9.9 — event games capture gross strokes like a gamed Gathering
   return 'points';
 }
 // ══════════════════════════════════════════════════════════════════
@@ -8642,12 +8648,14 @@ function buildLivePanel(evt) {
   // Dev-88: ONE resolved config for this panel, via gatheringRoundConfig() —
   // was a raw _gatheringGamesIndex read plus per-call re-derivation of games
   // array/cttp_config/birdieball_config at each site below.
-  const _liveConfig = evt.source === 'gathering' ? gatheringRoundConfig(evt.gatheringId) : null;
-  const showCttpSection = evt.source !== 'gathering' || !!gatheringAddon(_liveConfig, 'cttp');
+  const _panelGid = panelGamesGid(evt);
+  const _liveConfig = _panelGid != null ? gatheringRoundConfig(_panelGid) : null;
+  const showCttpSection = _panelGid == null || !!gatheringAddon(_liveConfig, 'cttp');
   const showBirdieBallSection = !!gatheringAddon(_liveConfig, 'birdieball');
   // Dev-87 — host-only Close & Calculate. Only a gamed Gathering (open
   // config in the index) reaching this panel, and only its own host.
-  const showCloseSection = evt.source === 'gathering' && !!_liveConfig && evt.hostId === currentPlayer;
+  const _liveHostId = evt.source === 'gathering' ? evt.hostId : ((_gatheringGamesIndex.get(_panelGid) || {}).host_id);
+  const showCloseSection = _panelGid != null && !!_liveConfig && String(_liveHostId) === String(currentPlayer);
   // ── SECTION 1: Birdie Alert ──────────────────────────────────────────────
   // Team rounds never default to currentPlayer (not a valid team) — the
   // submitter must explicitly tap "Select your team" (Dev-80).
@@ -9219,7 +9227,7 @@ function buildLivePanel(evt) {
       <div class="live-section-header"><span class="lsh-icon">🏁</span>Host · Close &amp; Calculate</div>
       <div class="live-section-body">
         <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:10px;line-height:1.45">Once everyone's card is in: check scorecards, preview Skins/CTP/BirdieBall/Birdie payouts, and post results to My History.</div>
-        <button class="sc-submit-btn" onclick="openGatheringCloseSheet(${evt.gatheringId})">🏁 Close &amp; Calculate</button>
+        <button class="sc-submit-btn" onclick="openGatheringCloseSheet(${_panelGid})">🏁 Close &amp; Calculate</button>
       </div>
     </div>` : ''}
   </div>`;
@@ -9732,7 +9740,7 @@ function ctpSelectHole(h) {
 // evtPhotoKey = 'gathering:<id>', same key as their scorecards), so the whole
 // Gatherings games flow is off Jotform. Series / Wally Cup rounds stay on the
 // Jotform CTP form: GS and BFE-Admin's Close Round both read CTP from there.
-function ctpUsesD1(evt) { return !!(evt && evt.source === 'gathering'); }
+function ctpUsesD1(evt) { return !!(evt && (evt.source === 'gathering' || evt.source === 'event_shadow' || eventShadowGamed(evt))); }
 async function loadCtpData(evt) {
   if (!evt) return;
   if (ctpUsesD1(evt)) {
@@ -9848,12 +9856,13 @@ async function loadSkinBoardData() {
 // same cache without a fetch each. No-ops for a non-Gathering evt — there's
 // no such thing as a BirdieBall config outside a gamed Gathering.
 async function loadBirdieBallAnswers(evt) {
-  if (!evt || evt.source !== 'gathering') { _bbAnswers = []; _bbAnswersForGathering = null; return; }
+  const _bbGid = panelGamesGid(evt);
+  if (_bbGid == null) { _bbAnswers = []; _bbAnswersForGathering = null; return; }
   try {
-    const res = await fetch(`${BFE_API}/bfe/birdieball-answers?gathering_id=${evt.gatheringId}`);
+    const res = await fetch(`${BFE_API}/bfe/birdieball-answers?gathering_id=${_bbGid}`);
     const data = await res.json();
     _bbAnswers = data.ok ? (data.answers || []) : [];
-    _bbAnswersForGathering = evt.gatheringId;
+    _bbAnswersForGathering = _bbGid;
     renderLiveBanner();
   } catch(e) {
     console.warn('[BirdieBall] loadBirdieBallAnswers error:', e.message);
@@ -9954,16 +9963,17 @@ async function submitScorecard(evtName) {
     // already have an answer on file when the panel last rendered, so this
     // never overwrites something the live alert already recorded. Best-effort
     // — a failure here doesn't undo the scorecard save that already succeeded.
-    if (window._liveBbConfirmPending && _scEvt && _scEvt.source === 'gathering') {
+    if (window._liveBbConfirmPending && _scEvt && panelGamesGid(_scEvt) != null) {
+      const _bbG = panelGamesGid(_scEvt);
       const bbPending = window._liveBbConfirmPending;
       fetch(`${BFE_API}/bfe/birdieball-answers`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gathering_id: _scEvt.gatheringId, player_name: scName, ...bbPending })
+        body: JSON.stringify({ gathering_id: _bbG, player_name: scName, ...bbPending })
       }).then(async (res) => {
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Save failed');
         const idx = _bbAnswers.findIndex(a => (a.player_name || '').trim().toLowerCase() === scName.trim().toLowerCase());
-        const row = { gathering_id: _scEvt.gatheringId, player_name: scName, ...bbPending };
+        const row = { gathering_id: _bbG, player_name: scName, ...bbPending };
         if (idx === -1) _bbAnswers.push(row); else _bbAnswers[idx] = row;
         renderLiveBanner();
       }).catch(e => console.warn('[BirdieBall] scorecard-confirmation save failed:', e.message));
@@ -10110,14 +10120,15 @@ function bbSetStroke(s) {
 async function submitBirdieBall() {
   if (_bbSubmitting) return;
   const evt = getLiveEvent();
-  if (!evt || evt.source !== 'gathering') return;
+  const _bbGid = panelGamesGid(evt);
+  if (_bbGid == null) return;
   const player = _bbPlayer || currentPlayer;
   if (!player || _bbKept === null) return;
   if (_bbKept === false && !(_bbLostHole && _bbLostStroke)) { showToast('Pick which hole and how many strokes', true); return; }
   _bbSubmitting = true;
   renderLiveBanner();
   try {
-    const payload = { gathering_id: evt.gatheringId, player_name: player, kept: _bbKept,
+    const payload = { gathering_id: _bbGid, player_name: player, kept: _bbKept,
       lost_hole: _bbKept ? null : _bbLostHole, lost_stroke: _bbKept ? null : _bbLostStroke };
     const res = await fetch(`${BFE_API}/bfe/birdieball-answers`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
@@ -15126,7 +15137,8 @@ async function openGatheringCloseSheet(gatheringId) {
     // players saw live.
     let ctpLeaders = {};
     if ((config.games || []).includes('cttp')) {
-      const liveEvt = eventData.find(e => e.source === 'gathering' && e.gatheringId === gatheringId)
+      const liveEvt = _shadowRef ? { source: 'event_shadow', gatheringId, name: eventNameFromRef(_shadowRef) }
+        : eventData.find(e => e.source === 'gathering' && e.gatheringId === gatheringId)
         || g || { source: 'gathering', gatheringId, name: config.gathering_name || '' };
       await loadCtpData(liveEvt);
       ctpLeaders = { ..._ctpData };
@@ -15289,9 +15301,10 @@ function gatheringRoundConfig(gatheringId) {
 // Gathering row (status 'event_shadow', never listed anywhere) and becomes the
 // games host. Scorecards stay under the event's own name, exactly as the Score
 // icon already saves them, so My History and the close sheet read them by that
-// name. Only games computed from scorecards are offered (Skins, Birdie
-// Payouts): CTP and BirdieBall need entry screens that live in the Live Panel,
-// which Weekend events don't have. BF Series keeps its own format and is excluded.
+// name. All four games are offered (v4.9.9): an event with an open shadow
+// config gets the Live Panel (hasLivePanelSupport -> eventShadowGamed) so CTP
+// and BirdieBall have their entry screens. BF Series keeps its own format and
+// Live Panel and is excluded.
 let _closedGamesGids = new Set();   // gathering ids whose games are already closed (so a card never offers +Games over a closed result)
 let _eventShadows = new Map();      // event ref -> { gathering_id, host_id }
 let _eventShadowByGid = new Map();  // gathering_id -> event ref
@@ -15334,6 +15347,20 @@ function gamesGidFor(evt) {
   if (evt.source === 'gathering') return evt.gatheringId;
   const sh = eventShadowFor(evt);
   return sh ? sh.gathering_id : null;
+}
+// v4.9.9 — a non-Gathering, non-Series event that has an open shadow games
+// config: the Live Panel carve-out and every panel branch key off this.
+function eventShadowGamed(evt) {
+  if (!evt || evt.source === 'gathering') return false;
+  if (formatBadge(evt.format) === 'BF Series') return false;
+  return gatheringIsGamed(evtGamesConfig(evt));
+}
+// gathering_id that BirdieBall answers / the Close button use for a panel
+// event (own id for a Gathering, the shadow's for a gamed event, else null).
+function panelGamesGid(evt) {
+  if (!evt) return null;
+  if (evt.source === 'gathering') return evt.gatheringId;
+  return eventShadowGamed(evt) ? gamesGidFor(evt) : null;
 }
 function evtGamesConfig(evt) {
   const gid = gamesGidFor(evt);
@@ -17158,8 +17185,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
   updateGamesFormPotPreview();
 }
 function gatheringGamesChecklistHtml() {
-  const EVENT_GAMES_OK = ['skins', 'birdiepay']; // v4.9.4 — event shadows: only games computed from scorecards
-  return Object.keys(GATHERING_GAMES_META).filter(k => !_gamesFormShadow || EVENT_GAMES_OK.includes(k)).map(key => {
+  return Object.keys(GATHERING_GAMES_META).filter(k => true).map(key => {
     const meta = GATHERING_GAMES_META[key];
     const checked = _gamesFormSelected.has(key);
     return `<div onclick="toggleGamesFormGame('${key}')"

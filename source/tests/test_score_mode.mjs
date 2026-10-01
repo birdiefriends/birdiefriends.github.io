@@ -2,7 +2,7 @@ import fs from 'fs'; import vm from 'vm'; import { extractFn, loadEngine } from 
 import { fileURLToPath } from 'url';
 const HERE = (p) => fileURLToPath(new URL(p, import.meta.url));
 const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
-const ctx = { Array, BFEngine: loadEngine(), _gatheringGamesIndex: new Map([[1, { games: ['skins'] }], [2, { games: ['cttp'] }], [3, { games: ['birdieball'] }], [4, { games: [] }]]) };
+const ctx = { eventShadowGamed: () => false, Array, BFEngine: loadEngine(), _gatheringGamesIndex: new Map([[1, { games: ['skins'] }], [2, { games: ['cttp'] }], [3, { games: ['birdieball'] }], [4, { games: [] }]]) };
 vm.createContext(ctx);
 // Dev-88: evtScoreMode now calls gatheringRoundConfig()/gatheringIsGamed() -- extract all three.
 vm.runInContext(['gatheringRoundConfig', 'gatheringIsGamed', 'evtScoreMode'].map(n => extractFn(src, n)).join('\n') + ';this.f=evtScoreMode;', ctx);

@@ -58,7 +58,7 @@ db.prepare("UPDATE bfe_gathering_games SET status='closed' WHERE gathering_id=7"
 
 // ── Portal helpers ──
 const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
-const fns = ['eventLocalDay','eventGamesRef','eventNameFromRef','eventShadowFor','gamesGidFor','evtGamesConfig','gamesScoreKeyForGid','eventGamesAllowed','eventAddGamesBtnHtml','gatheringGamesChecklistHtml','historyShadowGid'];
+const fns = ['eventLocalDay','eventGamesRef','eventNameFromRef','eventShadowFor','gamesGidFor','evtGamesConfig','eventShadowGamed','panelGamesGid','gamesScoreKeyForGid','eventGamesAllowed','eventAddGamesBtnHtml','gatheringGamesChecklistHtml','historyShadowGid'];
 const mkCtx = (over = {}) => {
   const ctx = { Number, String, Map, Set, Date, isNaN, Object, currentPlayer: 'Brian Hager', isGuest: () => false, formatBadge: f => f || '', isBFEBackedCard: () => false,
     findMyReg: () => ({ status: 'Yes' }), gatheringRoundConfig: gid => (ctx._cfgs || {})[gid] || null, gatheringIsGamed: c => !!c,
@@ -94,8 +94,31 @@ c._cfgs = { 5: { x: 1 } }; ok(c.eventAddGamesBtnHtml(g(), false) === '', 'hidden
 c = mkCtx(); c._closedGamesGids.add(5); ok(c.eventAddGamesBtnHtml(g(), false) === '', 'hidden when the games are closed (never overwrite a result)');
 // checklist
 c = mkCtx(); c._gamesFormShadow = true; const html = c.gatheringGamesChecklistHtml();
-ok(/Skins/.test(html) && /BP/.test(html) && !/CTP/.test(html) && !/>.*BB/.test(html.replace(/BP/g, '')), 'event games offer only Skins + Birdie Payouts');
+ok(/Skins/.test(html) && /BP/.test(html) && /CTP/.test(html) && /BB/.test(html), 'event games offer all four games (v4.9.9)');
 c._gamesFormShadow = false; ok(/CTP/.test(c.gatheringGamesChecklistHtml()), 'Gathering games still offer everything');
+// v4.9.9 Live Panel carve-out
+c = mkCtx(); c._eventShadows.set(c.eventGamesRef(evt()), { gathering_id: 21, host_id: 'Mike Scanlan' }); c._cfgs = { 21: { games: ['skins'] } };
+ok(c.eventShadowGamed(evt()) && c.panelGamesGid(evt()) === 21, 'Weekend with an open shadow config -> panel gid is the shadow');
+ok(!c.eventShadowGamed(evt({ dt: tomorrow })), 'another date has no shadow');
+ok(!c.eventShadowGamed(evt({ format: 'BF Series' })) && c.panelGamesGid(evt({ format: 'BF Series' })) === null, 'BF Series never takes the shadow path');
+c._cfgs = {}; ok(!c.eventShadowGamed(evt()) && c.panelGamesGid(evt()) === null, 'no config -> plain Weekend stays without a Live Panel');
+ok(c.panelGamesGid(g()) === 5, 'a Gathering keeps its own id');
+ok(/if \(eventShadowGamed\(evt\)\) return true;\n  \/\/ Dev-92/.test(src), 'hasLivePanelSupport checks the shadow carve-out before the format ladder');
+ok(/if \(eventShadowGamed\(evt\)\) return 'strokes'/.test(src), 'event games capture strokes');
+ok(/openGatheringCloseSheet\(\$\{_panelGid\}\)/.test(src), 'Close button uses the panel gid');
+ok(/gathering_id: _bbGid, player_name: player/.test(src), 'BirdieBall submit uses the panel gid');
+{ // hasLivePanelSupport end to end: Weekend gains the panel only with a shadow config; Series/plain Weekend unchanged
+  const hc = mkCtx({ _bfeBackedIndex: new Map(), _gatheringGamesIndex: new Map(),
+    formatClass: f => /series/i.test(f) ? 'format-series' : /weekend/i.test(f) ? 'format-weekend' : '' });
+  vm.runInContext(extractFn(src, 'hasLivePanelSupport') + ';this.h=hasLivePanelSupport;', hc);
+  const wk = evt(), sr = evt({ name: 'BSGC Series #9', format: 'BF Series' });
+  ok(hc.h(sr) === true, 'BF Series Live Panel unchanged');
+  ok(hc.h(wk) === false, 'plain Weekend still has no Live Panel');
+  hc._eventShadows.set(hc.eventGamesRef(wk), { gathering_id: 21, host_id: 'X' }); hc._cfgs = { 21: { games: ['cttp'] } };
+  ok(hc.h(wk) === true, 'Weekend with games gets the Live Panel');
+  hc._eventShadows.set(hc.eventGamesRef(sr), { gathering_id: 22, host_id: 'X' }); hc._cfgs[22] = { games: ['cttp'] };
+  ok(hc.h(sr) === true && !hc.eventShadowGamed(sr), 'Series result is the same with a stray shadow');
+}
 // wiring
 ok(/const key = gamesScoreKeyForGid\(gatheringId\)/.test(src), 'close sheet reads the shadow-aware score key');
 ok(/loadHistoryGameResults\(key, groupEvt\)/.test(src), 'My History passes the event group');

@@ -7,7 +7,7 @@ const G = { source: 'gathering', gatheringId: 42, name: 'Jefferson Event' }, S =
 function setup(live, { d1Ok = true } = {}) {
   const calls = []; const pushes = []; let undoFn = null; const toasts = [];
   const ctx = { console, JSON, Math, Number, String, Object, Array, parseInt, parseFloat, isNaN, encodeURIComponent, URLSearchParams,
-    BFE_API: 'https://bfe', JF_API: 'https://jf', JOTFORM_API_KEY: 'K', CTP_FORM_ID: 'F', CTP_QID: { hole: 'h', player: 'p', event: 'e', dist: 'd' },
+    eventShadowGamed: () => false, BFE_API: 'https://bfe', JF_API: 'https://jf', JOTFORM_API_KEY: 'K', CTP_FORM_ID: 'F', CTP_QID: { hole: 'h', player: 'p', event: 'e', dist: 'd' },
     LIVE_EVENT_TEST_MODE: false, currentPlayer: 'Brian Hager', eventData: [G, S], getLiveEvent: () => live,
     renderLiveBanner: () => {}, showToast: (m, e) => toasts.push([m, !!e]), showUndoToast: (m, fn) => { toasts.push([m, false]); undoFn = fn; },
     sendCtpNotification: (h, b) => pushes.push(h), osSendToPlayers: async () => {}, document: { getElementById: () => ({ value: '8.5' }) },

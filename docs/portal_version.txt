@@ -1,3 +1,6 @@
+v4.9.9 · 2026-10-01
+Deployed: 2026-10-01 (Weekend Times and other non-Gathering events: once players add games, the Live Panel opens for that event with all four games (Skins, CTP, BirdieBall, Birdie Payouts). BF Series is unchanged.)
+
 v4.9.8 · 2026-10-01
 Deployed: 2026-10-01 (Event Cards: the + Games disc is now a lighter green in the card's own tone instead of white.)
 
