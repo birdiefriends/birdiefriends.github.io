@@ -90,4 +90,22 @@ c.eventData.push({ id: 'evt-ungamed', name: 'Casual Nine', source: 'gathering', 
 c.openGameDetailsModal('evt-ungamed');
 ok(c.opened.length === 0, 'no-op for an ungamed event — modal never opens');
 
+// 4) Dev-91 — Gross/Net shown on the card's Games details
+{
+  const n = setup(); n.escapeHtml = v => String(v);
+  const SI = [7,11,15,1,5,9,3,17,13, 12,6,2,10,4,18,8,14,16];
+  const base = { games: ['skins', 'birdiepay'], dollar_per_player: 10, birdiepay_config: { dollar_per_birdie: 2, pars: [4,4,3,4,5,4,5,3,4,3,5,4,4,4,3,4,5,3] } };
+  const modal = row => { n._gatheringGamesIndex.set(77, row); n.openGameDetailsModal(n.evt); return n.document.getElementById('game-details-body').innerHTML; };
+  const gross = modal(base);
+  ok(/Skins · Gross/.test(gross) && /Birdie Payouts · Gross/.test(gross), 'gross games are labelled Gross');
+  ok(!/Handicap strokes/.test(gross), 'no strokes row on a gross round');
+  const net = modal({ ...base, handicap_config: { allowance: 95, skins_basis: 'net', birdiepay_basis: 'gross', stroke_index: SI,
+    players: { 'Brian Hager': { kind: 'index', strokes: 8, stroke_index: SI }, 'Muna Aliya': { kind: 'given', strokes: 20, stroke_index: SI } } } });
+  ok(/Skins · Net/.test(net) && /Lowest net score wins/.test(net), 'Skins labelled Net');
+  ok(/Birdie Payouts · Gross/.test(net), 'Birdie Payouts can stay Gross while Skins is Net');
+  ok(/Handicap strokes/.test(net) && /95% allowance/.test(net) && /Brian Hager <b>8<\/b>/.test(net) && /Muna Aliya <b>20<\/b>/.test(net), 'strokes row lists every player and the allowance');
+  const both = modal({ ...base, handicap_config: { allowance: 95, skins_basis: 'net', birdiepay_basis: 'net', stroke_index: SI, players: { A: { kind: 'given', strokes: 18, stroke_index: SI } } } });
+  ok(/Birdie Payouts · Net/.test(both) && /every net birdie/.test(both), 'Birdie Payouts labelled Net with net wording');
+}
+
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

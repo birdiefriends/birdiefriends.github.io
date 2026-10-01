@@ -1,3 +1,6 @@
+v4.10.3 · 2026-10-01
+Deployed: 2026-10-01 (Event card Games details now say whether Skins and Birdie Payouts are Gross or Net, and list every player's strokes and the allowance on a net round. The (i) texts explain Net.)
+
 v4.10.2 · 2026-10-01
 Deployed: 2026-10-01 (Net setup is more compact: each player is one row (tee, Index/Given/None, value) with their strokes shown next to the name, plus a Same tee for everyone picker.)
 

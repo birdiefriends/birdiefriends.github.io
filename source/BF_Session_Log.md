@@ -5418,3 +5418,6 @@ mirror (bf_push normally writes both), leaving them one comment apart; resynced 
 
 ### Dev-91 addendum — v4.10.2 (compact net setup)
 - Brian's phone screenshot: each player took ~430px (tee, mode and value wrapped to three stacked controls, result line below). Now one row per player: name + live "N strokes · CH x" on one line, then a 3-column grid (tee / Index-Given-None / value), a small Membership note only when there is one, and a "Same tee for everyone" picker. Roughly 110px per player. `test_net_form.mjs` 31 checks.
+
+### Dev-91 addendum — v4.10.3 (Gross/Net on the event card)
+- The card's 🏆 Games details (`gatheringGameDetailsBody`) labels Skins and Birdie Payouts "· Gross" or "· Net" (Skins also says "Lowest net score wins"), and on a net round adds a "⚖️ Handicap strokes" row: allowance + every player's strokes, with a new `GAME_INFO.net` (i) explaining Net. The Skins and Birdie Payouts (i) texts mention the Net option. `test_games_details.mjs` 18 checks.
