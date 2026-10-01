@@ -14638,6 +14638,8 @@ function openRulesModal() {
 // Read-only, no PIN — GET /bfe/venue-tees is a public route.
 let _venueViewerVenue = null;
 let _venueViewerTees = [];
+let _venueViewerEvt = null;        // Dev-91: the event the viewer was opened for (net strokes come from its games config)
+let _venueViewerStrokePlayer = null; // whose strokes are shaded (defaults to the viewer)
 let _venueViewerTeeSel = {}; // venue_id -> selected tee id (session memory: reopening a venue keeps your tee)
 async function openVenueViewerModal(evtOrId) {
   const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => e.id === evtOrId);
@@ -14645,6 +14647,8 @@ async function openVenueViewerModal(evtOrId) {
   const venue = findVenueByName(csNormalizedVenueName(evt));
   if (!venue) return;
   _venueViewerVenue = venue;
+  _venueViewerEvt = evt;
+  _venueViewerStrokePlayer = null;
   _venueViewerTees = [];
   const titleEl = document.getElementById('venue-viewer-title');
   if (titleEl) titleEl.textContent = `⛳ ${venue.name}`;
@@ -14658,6 +14662,34 @@ async function openVenueViewerModal(evtOrId) {
   } catch (e) {
     _venueViewerTees = [];
   }
+  venueViewerSyncTee();
+  renderVenueViewer();
+}
+// Dev-91 — on a NET round the viewer shades one player's stroke holes (not the
+// six hardest). Defaults to whoever is looking, if they have strokes; the
+// strokes were set against THEIR tee, so the viewer switches to that tee.
+function venueViewerStrokeInfo(evt, pickedPlayer) {
+  let rc = null;
+  try { rc = evt ? evtGamesConfig(evt) : null; } catch (e) { rc = null; }
+  const hc = rc && rc.handicap;
+  if (!hc || hc.mode !== 'net') return null;
+  const names = Object.keys(hc.players || {});
+  if (!names.length) return null;
+  const lc = v => String(v || '').trim().toLowerCase();
+  const sel = names.find(n => lc(n) === lc(pickedPlayer)) || names.find(n => lc(n) === lc(currentPlayer)) || names[0];
+  const sp = hc.players[sel];
+  const strokes = Array.from({ length: 18 }, (_, i) => (sp.stroke_index ? BFEngine.strokesOnHole(sp.strokes, sp.stroke_index[i], 18) : 0));
+  return { names, player: sel, strokes, total: Number(sp.strokes) || 0, teeName: sp.tee || null, kind: sp.kind || null };
+}
+function venueViewerSyncTee() {
+  const info = venueViewerStrokeInfo(_venueViewerEvt, _venueViewerStrokePlayer);
+  if (!info || !info.teeName || !_venueViewerVenue) return;
+  const t = _venueViewerTees.find(x => x.tee_name === info.teeName);
+  if (t) _venueViewerTeeSel[_venueViewerVenue.id] = t.id;
+}
+function selectVenueViewerStrokePlayer(name) {
+  _venueViewerStrokePlayer = name;
+  venueViewerSyncTee();
   renderVenueViewer();
 }
 // Dev-87 — tee colour swatch from the tee's own name ("Blue", "Blue/White",
@@ -14684,7 +14716,10 @@ function venueViewerDefaultTee(tees) {
 }
 // Dense scorecard grid: Hole / Yds / Par / HCP, Out + In + Tot. Hardest
 // holes (HCP 1–6) shaded darker so they pop; par row is the bold one.
-function venueScorecardHtml(t) {
+// Dev-91: `strokes` (optional, 18 numbers) = the strokes one player receives on
+// each hole in a NET round. When given, those holes are shaded green with dots
+// in place of the six-hardest shading, and a STK row is added.
+function venueScorecardHtml(t, strokes) {
   const holes = Array.isArray(t.holes) ? t.holes : [];
   if (!holes.length) return '<div style="font-size:0.78rem;color:var(--text-muted);padding:8px 0">No hole-by-hole data stored for this tee.</div>';
   const head = teeHeaderColor(t.tee_name);
@@ -14692,6 +14727,9 @@ function venueScorecardHtml(t) {
   const td = 'padding:5px 0;text-align:center;border-right:1px solid var(--border)';
   const lbl = 'padding:5px 6px;text-align:left;font-size:0.62rem;font-weight:800;letter-spacing:0.04em;border-right:1px solid var(--border);white-space:nowrap';
   const hcpShade = n => (n >= 1 && n <= 6) ? `background:rgba(192,57,43,${(0.30 - (n - 1) * 0.04).toFixed(2)});font-weight:800` : '';
+  const hasStk = Array.isArray(strokes) && strokes.length >= holes.length;
+  const stkAt = i => (hasStk ? Number(strokes[i]) || 0 : 0);
+  const stkShade = k => (k > 0 ? 'background:var(--green);color:#fff;font-weight:800' : '');
   const half = (set, offset, extra) => {
     const tot = (k, x) => x.map(([lab, v]) => `<td style="${td};font-weight:800;background:rgba(0,0,0,0.05)">${v(k)}</td>`).join('');
     return `<table class="venue-sc" style="border-collapse:collapse;width:100%;table-layout:fixed;font-size:0.72rem;margin-bottom:6px;border:1px solid var(--border)">
@@ -14713,9 +14751,14 @@ function venueScorecardHtml(t) {
       </tr>
       <tr style="border-top:1px solid var(--border)">
         <td style="${lbl};color:#8e2b20">HCP</td>
-        ${set.map(h => `<td style="${td};${hcpShade(Number(h.handicap))}">${h.handicap ?? '—'}</td>`).join('')}
+        ${set.map((h, i) => `<td style="${td};${hasStk ? '' : hcpShade(Number(h.handicap))}">${h.handicap ?? '—'}</td>`).join('')}
         ${extra.map(() => `<td style="${td};background:rgba(0,0,0,0.05)"></td>`).join('')}
       </tr>
+      ${hasStk ? `<tr style="border-top:1px solid var(--border)">
+        <td style="${lbl};color:var(--green-dark)">STK</td>
+        ${set.map((h, i) => { const k = stkAt(offset + i); return `<td style="${td};${stkShade(k)}">${k > 1 ? '••' : k > 0 ? '•' : '&nbsp;'}</td>`; }).join('')}
+        ${extra.map(() => `<td style="${td};background:rgba(0,0,0,0.05)"></td>`).join('')}
+      </tr>` : ''}
     </table>`;
   };
   const front = holes.slice(0, 9), back = holes.slice(9, 18);
@@ -14727,15 +14770,19 @@ function venueScorecardHtml(t) {
   const spacer = ['', () => ''];
   return half(front, 0, back.length ? [outCol, spacer] : [outCol])
     + (back.length ? half(back, 9, [inCol, totCol]) : '')
-    + `<div style="display:flex;gap:10px;font-size:0.64rem;color:var(--text-muted);margin-top:-2px">
+    + (hasStk
+      ? `<div style="display:flex;gap:10px;font-size:0.64rem;color:var(--text-muted);margin-top:-2px">
+        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--green);vertical-align:-1px"></span> stroke hole (•• = two)</span>
+        <span>HCP = hole handicap (stroke index)</span></div>`
+      : `<div style="display:flex;gap:10px;font-size:0.64rem;color:var(--text-muted);margin-top:-2px">
         <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:rgba(192,57,43,0.3);vertical-align:-1px"></span> HCP 1–6 · hardest holes</span>
-        <span>HCP = hole handicap (stroke index)</span></div>`;
+        <span>HCP = hole handicap (stroke index)</span></div>`);
 }
 // Dev-87 — shared tee summary: dropdown + stat strip + scorecard grid. Used by
 // the player venue viewer AND the admin Venue Manager's stored-tees list so
 // the two never drift. Callers supply their own select id/handler and an
 // optional side control (Maps button / Delete) and footer.
-function venueTeeSummaryHtml({ tees, sel, selectId, onchange, sideHtml = '', footHtml = '', selectBg = 'var(--surface)' }) {
+function venueTeeSummaryHtml({ tees, sel, selectId, onchange, sideHtml = '', footHtml = '', selectBg = 'var(--surface)', strokes = null, strokeBarHtml = '' }) {
   const t = tees.find(x => x.id === sel) || tees[0];
   const g = x => /^m/i.test(x.gender || '') ? 'M' : (/^(f|w)/i.test(x.gender || '') ? 'W' : '');
   const optLabel = x => `${x.tee_name}${g(x) ? ` (${g(x)})` : ''}${x.total_yards != null ? ` — ${Number(x.total_yards).toLocaleString()} yds` : ''}${x.locked ? ' 🔒' : ''}`;
@@ -14758,7 +14805,8 @@ function venueTeeSummaryHtml({ tees, sel, selectId, onchange, sideHtml = '', foo
     <div style="display:flex;border:1px solid var(--border);border-top:3px solid ${teeHeaderColor(t.tee_name)};border-radius:8px;overflow:hidden;margin-bottom:8px;background:#fff">
       ${stat('PAR', t.par_total)}${stat('YARDS', t.total_yards != null ? Number(t.total_yards).toLocaleString() : null)}${stat('RATING', t.course_rating)}${stat('SLOPE', t.slope_rating, true)}
     </div>
-    <div style="background:#fff">${venueScorecardHtml(t)}</div>
+    ${strokeBarHtml}
+    <div style="background:#fff">${venueScorecardHtml(t, strokes)}</div>
     ${footHtml}`;
 }
 function renderVenueViewer() {
@@ -14776,8 +14824,15 @@ function renderVenueViewer() {
   }
   let t = _venueViewerTees.find(x => x.id === _venueViewerTeeSel[v.id]);
   if (!t) { t = venueViewerDefaultTee(_venueViewerTees); _venueViewerTeeSel[v.id] = t.id; }
+  const info = venueViewerStrokeInfo(_venueViewerEvt, _venueViewerStrokePlayer);
+  const strokeBar = info ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.8rem">
+      <span style="color:var(--text-muted)">⚖️ Strokes for</span>
+      <select onchange="selectVenueViewerStrokePlayer(this.value)" style="height:34px;border-radius:8px;border:1.5px solid var(--border);font-family:inherit;font-size:0.82rem;font-weight:700;padding:0 6px;background:#fff;min-width:0">
+        ${info.names.map(n => `<option value="${escapeHtml(n)}" ${n === info.player ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('')}</select>
+      <b style="color:var(--green-dark);white-space:nowrap">${info.total} stroke${Math.abs(info.total) === 1 ? '' : 's'}</b></div>
+    ${info.teeName && t.tee_name !== info.teeName ? `<div style="font-size:0.72rem;color:#b8860b;margin-bottom:6px">These strokes were set on the ${escapeHtml(info.teeName)} tees; you're viewing ${escapeHtml(t.tee_name)}.</div>` : ''}` : '';
   bodyEl.innerHTML = venueTeeSummaryHtml({ tees: _venueViewerTees, sel: t.id, selectId: 'venue-viewer-tee',
-    onchange: 'selectVenueViewerTee(this.value)', sideHtml: mapBtn });
+    onchange: 'selectVenueViewerTee(this.value)', sideHtml: mapBtn, strokes: info ? info.strokes : null, strokeBarHtml: strokeBar });
 }
 function selectVenueViewerTee(teeId) {
   if (_venueViewerVenue) _venueViewerTeeSel[_venueViewerVenue.id] = Number(teeId);
@@ -15092,7 +15147,7 @@ function scorecardMissingHoles(card, holeCount) {
 function atCourseHasNetStrokes(evt) {
   try { const rc = evtGamesConfig(evt); return !!(rc && rc.handicap && rc.handicap.mode === 'net'); } catch (e) { return false; }
 }
-function renderStrokeCardHtml(rc) {
+function renderStrokeCardHtml(rc, me) {
   const hc = rc && rc.handicap;
   if (!hc || hc.mode !== 'net') return `<div style="font-size:0.84rem;color:var(--text-muted);padding:12px 0">This round is scored gross. No strokes are given.</div>`;
   const esc = v => escapeHtml(String(v ?? ''));
@@ -15107,19 +15162,20 @@ function renderStrokeCardHtml(rc) {
       : '';
     const how = sp.kind === 'index' ? `Index ${esc(sp.index)} → course hcp ${esc(sp.course_hcp)} × ${esc(hc.allowance)}%`
       : sp.kind === 'given' ? 'Strokes given' : 'No strokes';
-    return `<div style="padding:10px 0;border-top:1px solid var(--border)">
+    const mine = !!me && String(name).trim().toLowerCase() === String(me).trim().toLowerCase();
+    return `<div style="padding:10px ${mine ? '10px' : '0'};border-top:1px solid var(--border);${mine ? 'background:var(--green-light);border-radius:10px;margin-top:4px' : ''}">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-        <span style="font-weight:800;font-size:0.92rem">${esc(name)}</span>
+        <span style="font-weight:800;font-size:0.92rem">${esc(name)}${mine ? ' <span style="font-size:0.66rem;font-weight:700;color:var(--green-dark)">(you)</span>' : ''}</span>
         <span style="font-weight:800;color:var(--green-dark)">${total} stroke${Math.abs(total) === 1 ? '' : 's'}</span></div>
       <div style="font-size:0.72rem;color:var(--text-muted)">${sp.tee ? esc(sp.tee) + ' tees · ' : ''}${how}</div>${grid}</div>`;
   }).join('');
   return `<div style="font-size:0.8rem;color:var(--text-muted);line-height:1.5;margin-bottom:6px">${modes}<br>A green hole = the player gets a stroke there (•• = two), set by that tee's hole handicap. Decided before the first tee.</div>${players}`;
 }
-function openStrokeCard() {
-  const evt = _atCourse && _atCourse.evt;
+function openStrokeCard(evtId) {
+  const evt = evtId ? eventData.find(e => String(e.id) === String(evtId)) : (_atCourse && _atCourse.evt);
   const body = document.getElementById('stroke-card-body');
   if (!body) return;
-  body.innerHTML = renderStrokeCardHtml(evt ? evtGamesConfig(evt) : null);
+  body.innerHTML = renderStrokeCardHtml(evt ? evtGamesConfig(evt) : null, currentPlayer);
   openModal('stroke-card-modal');
 }
 // Shared renderer for a computed/saved payout snapshot — used by the Close
@@ -15545,13 +15601,13 @@ function gatheringGameDetailsBody(evt, config) {
   const dpp = (config.payout && config.payout.entry_per_player) || 0;
   const totalPot = dpp * yesCount;
   let remaining = totalPot;
-  const row = (icon, label, detail, key) => `
+  const row = (icon, label, detail, key, extra) => `
     <div style="padding:10px 12px;border-radius:10px;background:var(--surface)">
     <div style="display:flex;align-items:center;gap:10px">
       <span style="font-size:1.3rem;flex-shrink:0">${icon}</span>
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:0.88rem">${label}</div>
-        <div style="font-size:0.78rem;color:var(--text-muted)">${detail}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted)">${detail}</div>${extra || ''}
       </div>
       ${gameInfoBtnHtml('card', key)}
     </div>${gameInfoPanelHtml('card', key)}</div>`;
@@ -15583,7 +15639,12 @@ function gatheringGameDetailsBody(evt, config) {
   const hc = config.handicap;
   if (hc && hc.mode === 'net') {
     const per = Object.entries(hc.players || {}).map(([n, p]) => `${escapeHtml(n)} <b>${Number(p.strokes) || 0}</b>`).join(' · ');
-    rows.push(row('⚖️', 'Handicap strokes', `${hc.allowance}% allowance · ${per || 'no players set'}`, 'net'));
+    const evq = String(evt.id).replace(/'/g, "\\'");
+    const pill = 'height:32px;padding:0 12px;border-radius:16px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.78rem;cursor:pointer';
+    const btns = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+      <button type="button" style="${pill}" onclick="openStrokeCard('${evq}')">Strokes by hole</button>
+      <button type="button" style="${pill}" onclick="closeModal('game-details-modal');openVenueViewerModal('${evq}')">Course with strokes</button></div>`;
+    rows.push(row('⚖️', 'Handicap strokes', `${hc.allowance}% allowance · ${per || 'no players set'}`, 'net', btns));
   }
   return `
     <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px">

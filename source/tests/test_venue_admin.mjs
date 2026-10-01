@@ -8,8 +8,8 @@ const dom = new JSDOM('<div id="admin-gc-stored-3"></div><div id="venue-viewer-b
 const ctx = { document: dom.window.document, Math, Number, String, Array, JSON, Object };
 vm.createContext(ctx);
 const consts = src.match(/const TEE_COLORS = \{[\s\S]*?\};/)[0];
-vm.runInContext(consts + '\n' + ['escapeHtml','teeSwatchCss','teeHeaderColor','venueViewerDefaultTee','venueScorecardHtml','venueTeeSummaryHtml','storedVenueTeesHtml','adminSelectVenueTee','renderVenueViewer','selectVenueViewerTee'].map(n => extractFn(src, n)).join('\n') +
-  `\nvar _adminVenueTees = {}, _adminVenueTeeSel = {}, _venueViewerVenue = { id: 3, name: 'Moselem', lat: 40.5, lng: -75.8 }, _venueViewerTees = [], _venueViewerTeeSel = {};`, ctx);
+vm.runInContext(consts + '\n' + ['escapeHtml','teeSwatchCss','teeHeaderColor','venueViewerDefaultTee','venueScorecardHtml','venueTeeSummaryHtml','storedVenueTeesHtml','adminSelectVenueTee','renderVenueViewer','selectVenueViewerTee','venueViewerStrokeInfo'].map(n => extractFn(src, n)).join('\n') +
+  `\nvar _adminVenueTees = {}, _adminVenueTeeSel = {}, _venueViewerVenue = { id: 3, name: 'Moselem', lat: 40.5, lng: -75.8 }, _venueViewerTees = [], _venueViewerTeeSel = {}, _venueViewerEvt = null, _venueViewerStrokePlayer = null, evtGamesConfig = () => null, currentPlayer = 'Brian Hager'; // Dev-91: net strokes hooks (gross = null)`, ctx);
 const run = (code) => vm.runInContext(code, ctx);
 ok(run(`storedVenueTeesHtml({id:3})`).includes('Loading stored tees'), 'loading state');
 run(`_adminVenueTees[3] = []`); ok(run(`storedVenueTeesHtml({id:3})`).includes('No tees stored'), 'empty state');

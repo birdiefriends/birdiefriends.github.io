@@ -103,6 +103,7 @@ ok(c.opened.length === 0, 'no-op for an ungamed event — modal never opens');
     players: { 'Brian Hager': { kind: 'index', strokes: 8, stroke_index: SI }, 'Muna Aliya': { kind: 'given', strokes: 20, stroke_index: SI } } } });
   ok(/Skins · Net/.test(net) && /Lowest net score wins/.test(net), 'Skins labelled Net');
   ok(/Birdie Payouts · Gross/.test(net), 'Birdie Payouts can stay Gross while Skins is Net');
+  ok(/openStrokeCard\('gathering-77'\)/.test(net) && /Course with strokes/.test(net) && /openVenueViewerModal\('gathering-77'\)/.test(net), 'strokes row offers Strokes by hole + Course with strokes');
   ok(/Handicap strokes/.test(net) && /95% allowance/.test(net) && /Brian Hager <b>8<\/b>/.test(net) && /Muna Aliya <b>20<\/b>/.test(net), 'strokes row lists every player and the allowance');
   const both = modal({ ...base, handicap_config: { allowance: 95, skins_basis: 'net', birdiepay_basis: 'net', stroke_index: SI, players: { A: { kind: 'given', strokes: 18, stroke_index: SI } } } });
   ok(/Birdie Payouts · Net/.test(both) && /every net birdie/.test(both), 'Birdie Payouts labelled Net with net wording');

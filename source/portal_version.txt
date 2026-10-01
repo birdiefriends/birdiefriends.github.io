@@ -1,3 +1,6 @@
+v4.10.4 · 2026-10-01
+Deployed: 2026-10-01 (Strokes before game day: the card's Games details now has "Strokes by hole" (everyone's strokes, yours highlighted) and "Course with strokes", which opens the Course viewer with a player's stroke holes shaded in place of the six hardest, with a picker to see anyone else's. The rail's Course button does the same on net rounds.)
+
 v4.10.3 · 2026-10-01
 Deployed: 2026-10-01 (Event card Games details now say whether Skins and Birdie Payouts are Gross or Net, and list every player's strokes and the allowance on a net round. The (i) texts explain Net.)
 

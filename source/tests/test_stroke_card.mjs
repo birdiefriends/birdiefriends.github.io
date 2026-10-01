@@ -8,9 +8,9 @@ const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine();
 const SI = [7,11,15,1,5,9,3,17,13, 12,6,2,10,4,18,8,14,16];
 const PARS = [4,4,3,4,5,4,5,3,4, 3,5,4,4,4,3,4,5,3];
-const ctx = { BFEngine: E, escapeHtml: v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;'), evtGamesConfig: e => e.rc };
+const ctx = { BFEngine: E, currentPlayer: 'Brian Hager', teeHeaderColor: () => '#1f8a4c', escapeHtml: v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;'), evtGamesConfig: e => e.rc };
 vm.createContext(ctx);
-vm.runInContext(['atCourseHasNetStrokes', 'renderStrokeCardHtml', 'renderGatheringPayoutHtml'].map(n => extractFn(src, n)).join('\n'), ctx);
+vm.runInContext(['atCourseHasNetStrokes', 'renderStrokeCardHtml', 'renderGatheringPayoutHtml', 'venueScorecardHtml', 'venueViewerStrokeInfo'].map(n => extractFn(src, n)).join('\n'), ctx);
 
 const row = { games: ['skins', 'birdiepay'], dollar_per_player: 10, birdiepay_config: { dollar_per_birdie: 2, pars: PARS },
   handicap_config: { allowance: 95, skins_basis: 'net', birdiepay_basis: 'gross', players: {
@@ -37,6 +37,25 @@ ok(/Birdie Payouts \(gross\)/.test(html), 'birdie payouts labelled gross');
 const grossSnap = E.computeGatheringGamesPayout({ games: ['skins'], dollar_per_player: 10 }, [card('A'), card('B', { 1: 3 })], {}, []);
 ok(!/Strokes \(/.test(ctx.renderGatheringPayoutHtml(grossSnap)), 'gross snapshot has no strokes block');
 ok(/\(3\)/.test(ctx.renderGatheringPayoutHtml(grossSnap)), 'gross skin line unchanged: plain score');
+
+// Dev-91 — "me" highlight on the card, and the stroke-aware Course viewer
+ok(/\(you\)/.test(ctx.renderStrokeCardHtml(rc, 'brian hager')), 'card marks the viewer\'s own row (case-insensitive)');
+ok(!/\(you\)/.test(ctx.renderStrokeCardHtml(rc, 'Somebody Else')), 'no (you) for a non-player');
+const evtN = { rc };
+const info = ctx.venueViewerStrokeInfo(evtN, null);
+ok(info && info.player === 'Brian Hager' && info.total === 8 && info.teeName === 'Green', 'viewer defaults to the person looking');
+ok(info.strokes.filter(Boolean).length === 8 && info.strokes.every((k, i) => k === E.strokesOnHole(8, SI[i], 18)), 'stroke holes follow the frozen stroke index');
+const muna = ctx.venueViewerStrokeInfo(evtN, 'muna aliya');
+ok(muna.player === 'Muna Aliya' && muna.total === 20 && muna.teeName === 'Gold' && muna.strokes.filter(k => k === 2).length === 2, 'picker switches to Muna: 20 strokes, Gold tee, two doubles');
+const other = Object.assign({}, ctx, {}); ctx.currentPlayer = 'Nobody';
+ok(ctx.venueViewerStrokeInfo(evtN, null).player === 'Muna Aliya' || ctx.venueViewerStrokeInfo(evtN, null).player === 'Brian Hager', 'a viewer with no strokes falls back to the first player');
+ok(ctx.venueViewerStrokeInfo({ rc: E.gatheringConfigFromLegacy({ games: ['skins'], dollar_per_player: 10 }) }, null) === null, 'gross round: no stroke info, viewer unchanged');
+const tee = { tee_name: 'Green', holes: PARS.map((p, i) => ({ par: p, handicap: SI[i], yardage: 350 })) };
+const gridNet = ctx.venueScorecardHtml(tee, muna.strokes);
+ok(/>STK</.test(gridNet) && (gridNet.match(/>••</g) || []).length === 2 && /stroke hole/.test(gridNet), 'grid with strokes: STK row, two doubles, stroke legend');
+ok(!/HCP 1–6 · hardest holes/.test(gridNet), 'stroke legend replaces the six-hardest legend');
+const gridGross = ctx.venueScorecardHtml(tee);
+ok(!/>STK</.test(gridGross) && /HCP 1–6 · hardest holes/.test(gridGross), 'gross grid unchanged (hardest-6 shading, no STK row)');
 
 console.log(`test_stroke_card: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
