@@ -1,3 +1,6 @@
+v4.9.3 · 2026-10-01
+Deployed: 2026-10-01 (My History: the fall (Sep–Nov) card tone is now a deeper amber with a rust border, so it reads like autumn leaves instead of pale cream.)
+
 v4.9.2 · 2026-10-01
 Deployed: 2026-10-01 (New Gathering setup redesign: the form is now short and tap-to-open. Tee time confirmed, I'm playing, Register invited players and Repeat weekly are on/off switches. Players opens a Who's-coming sheet (saved crews, individual picks, or open to members) and the row shows the count, including any open spots. Capacity has − / + buttons. Holes and Format are pick-from-a-list rows (Holes now above Format; Format defaults to Individual Play). "Add Games" opens its own searchable dialog; the games you add open their stakes form right after you tap Create. Note and Repeat weekly moved under More options.)
 
