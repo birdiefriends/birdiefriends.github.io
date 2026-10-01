@@ -3600,7 +3600,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.2.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.3.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -10750,6 +10750,7 @@ let _gamesFormBirdiepayPars = null; // 18 hole pars resolved for the Gathering's
 let _gamesFormBirdieballConfig = { dollar_per_player: null }; // BirdieBall's OWN per-player rate — distinct from the main $/player pot rate
 let _gamesFormPar3Holes = [];             // hole numbers (1-18) with par===3, from the venue's stored tee data
 let _gamesFormVenueParDataAvailable = false; // false -> no tee data on file, host picks holes manually (any 1-18)
+let _gamesFormTouched = new Set();         // v4.9.14 — game amounts the host typed by hand (suggestions never overwrite these)
 let _gamesFormYesCount = 0;               // cached so CTP-only handlers can refresh the pot preview without re-reading the DOM
 // ── Text formatting utilities ────────────────────────────────────────────────
 // Applied on form submit — never on keystroke (would be jarring while typing).
@@ -17163,6 +17164,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
   // Manager's stored pars first, BSGC's built-in table as the fallback).
   // Frozen into the saved config so Close never needs a second venue lookup.
   _gamesFormBirdiepayPars = csResolvePars(g);
+  _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay'] : []); // an existing config is the host's own numbers
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; if (_gamesFormCard) closeGamesCardDialog(); else renderHostPanelList(); }; }
   const closeBtn = document.getElementById('host-sheet-close-btn');
@@ -17219,7 +17221,9 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
       <label>$ per Player <span style="color:#c0392b">*</span></label>
       <input type="number" id="games-form-dpp" min="0.01" step="0.01"
         value="${existing ? existing.dollar_per_player : ''}" style="width:100px"
-        oninput="updateGamesFormPotPreview()">
+        oninput="onGamesFormDppInput()">
+      <div style="display:flex;gap:8px;margin-top:8px">${[5, 10, 20].map(v => `<button type="button" onclick="setGamesFormDpp(${v})" style="height:34px;padding:0 16px;border-radius:17px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.86rem;cursor:pointer">$${v}</button>`).join('')}</div>
+      <div id="games-form-suggest-note" style="font-size:0.74rem;color:var(--text-muted);margin-top:8px;line-height:1.5"></div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px" id="games-form-pot-preview"></div>
     </div>
     <div id="games-form-cttp-section">${gatheringGamesCttpSectionHtml()}</div>
@@ -17231,6 +17235,40 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
     <button class="btn btn-secondary-danger btn-sm" style="width:100%;margin-top:10px"
       onclick="deleteGatheringGames(${gatheringId},'${g.name.replace(/'/g,"\\'")}')">Turn Off Games</button>` : ''}
   `;
+  updateGamesFormPotPreview();
+  applyGamesSuggestion(false);
+}
+// v4.9.14 — "we figure it out for the host": the buy-in is the one decision;
+// each ticked game's amount is filled by BFEngine.suggestGameAmounts (whole
+// dollars, designed for 4-8 players). Anything the host typed stays put until
+// they tap Re-suggest.
+function onGamesFormDppInput() {
+  applyGamesSuggestion(false);
+  updateGamesFormPotPreview();
+}
+function setGamesFormDpp(v) {
+  const input = document.getElementById('games-form-dpp');
+  if (input) input.value = v;
+  onGamesFormDppInput();
+}
+function applyGamesSuggestion(force) {
+  const input = document.getElementById('games-form-dpp');
+  const note = document.getElementById('games-form-suggest-note');
+  if (!input) return;
+  const dpp = parseFloat(input.value) || 0;
+  const anyAmountGame = ['cttp', 'birdieball', 'birdiepay'].some(k => _gamesFormSelected.has(k));
+  if (!(dpp > 0) || !anyAmountGame) { if (note) note.innerHTML = anyAmountGame ? 'Pick a buy-in and amounts for each game are suggested for you.' : ''; return; }
+  if (force) _gamesFormTouched.clear();
+  const n = Math.max(4, _gamesFormYesCount);
+  const holes = (_gamesFormCttpConfig.holes || []).length || _gamesFormPar3Holes.length || 3;
+  const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: n, games: [..._gamesFormSelected], cttpHoles: holes });
+  if (sug.cttp && !_gamesFormTouched.has('cttp')) _gamesFormCttpConfig.dollar_per_hole = sug.cttp.dollar_per_hole;
+  if (sug.birdieball && !_gamesFormTouched.has('birdieball')) _gamesFormBirdieballConfig.dollar_per_player = sug.birdieball.dollar_per_player;
+  if (sug.birdiepay && !_gamesFormTouched.has('birdiepay')) _gamesFormBirdiepayConfig.dollar_per_birdie = sug.birdiepay.dollar_per_birdie;
+  const cs = document.getElementById('games-form-cttp-section'); if (cs) cs.innerHTML = gatheringGamesCttpSectionHtml();
+  const bs = document.getElementById('games-form-birdieball-section'); if (bs) bs.innerHTML = gatheringGamesBirdieballSectionHtml();
+  const ps = document.getElementById('games-form-birdiepay-section'); if (ps) ps.innerHTML = gatheringGamesBirdiepaySectionHtml();
+  if (note) note.innerHTML = `✨ Amounts suggested for ${n} players${_gamesFormYesCount < 4 ? ' (fewer than 4 confirmed so far)' : ''}. Change any you like. <button type="button" onclick="applyGamesSuggestion(true)" style="border:0;background:transparent;color:var(--green);font-family:inherit;font-weight:700;font-size:0.74rem;cursor:pointer;padding:0;text-decoration:underline">Re-suggest</button>`;
   updateGamesFormPotPreview();
 }
 function gatheringGamesChecklistHtml() {
@@ -17250,6 +17288,7 @@ function gatheringGamesChecklistHtml() {
 function toggleGamesFormGame(key) {
   if (_gamesFormSelected.has(key)) {
     _gamesFormSelected.delete(key);
+    _gamesFormTouched.delete(key);
     if (key === 'cttp') {
       _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
     } else if (key === 'birdieball') {
@@ -17280,6 +17319,7 @@ function toggleGamesFormGame(key) {
   const birdiepaySection = document.getElementById('games-form-birdiepay-section');
   if (birdiepaySection) birdiepaySection.innerHTML = gatheringGamesBirdiepaySectionHtml();
   updateGamesFormPotPreview();
+  applyGamesSuggestion(false);
 }
 // CTP section — $/hole rate + hole designation, restricted to Par-3 holes
 // when the venue's par data is on file ("all Par 3 holes or select Par 3
@@ -17326,6 +17366,7 @@ function gatheringGamesCttpSectionHtml() {
 }
 function setGamesFormCttpDollarPerHole(val) {
   _gamesFormCttpConfig.dollar_per_hole = parseFloat(val) || 0;
+  _gamesFormTouched.add('cttp');
   updateGamesFormPotPreview();
 }
 function setGamesFormCttpHoleMode(mode) {
@@ -17364,6 +17405,7 @@ function gatheringGamesBirdieballSectionHtml() {
 }
 function setGamesFormBirdieballDollarPerPlayer(val) {
   _gamesFormBirdieballConfig.dollar_per_player = parseFloat(val) || 0;
+  _gamesFormTouched.add('birdieball');
   updateGamesFormPotPreview();
 }
 // Birdie Payouts section (Dev-89, Brian: "a flat $ amount that gets subtracted
@@ -17394,6 +17436,7 @@ function gatheringGamesBirdiepaySectionHtml() {
 }
 function setGamesFormBirdiepayDollarPerBirdie(val) {
   _gamesFormBirdiepayConfig.dollar_per_birdie = parseFloat(val) || 0;
+  _gamesFormTouched.add('birdiepay');
   updateGamesFormPotPreview();
 }
 // Dev-89 — the fixed carve-outs (CTP purse + BirdieBall) must fit inside the

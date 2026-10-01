@@ -1,3 +1,6 @@
+v4.9.14 · 2026-10-01
+Deployed: 2026-10-01 (Games setup: pick the buy-in ($5 / $10 / $20 or type it) and the amounts for CTP, BirdieBall and Birdie Payouts are suggested for you in whole dollars, sized for 4-8 players. Edit any of them, or tap Re-suggest.)
+
 v4.9.13 · 2026-10-01
 Deployed: 2026-10-01 (BirdieBall (i) wording made clearer: everyone starts with one ball; keep it and win, or be the last one standing.)
 

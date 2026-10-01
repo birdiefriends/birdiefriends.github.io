@@ -733,7 +733,7 @@ live data, what Brian confirmed).
      own fixed cost instead of the guard hard-coding CTP + BirdieBall. Keep the frozen `payout_summary`
      shape and `test_engine_parity.mjs` green (Dev-87 output must stay byte-identical for rounds that fit
      the pot). Own session; do it before the next new game, not after.
-  2. **"Suggest amounts" $ payout recommendation ("we figure it out for the host").** A pure engine
+  2. **[BUILT v4.9.14 / engine 1.3.0 — `BFEngine.suggestGameAmounts`, portal `applyGamesSuggestion`; the text below is the original brief]** **"Suggest amounts" $ payout recommendation ("we figure it out for the host").** A pure engine
      function taking $/player, expected headcount, games ticked and the venue's par-3 count, returning a
      suggested CTP $/hole, BirdieBall $/player and Birdie Payouts $/birdie; a "Suggest amounts" button on
      the Host Panel Games form fills the fields, the host can still edit, and the live pot preview +

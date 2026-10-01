@@ -5385,3 +5385,8 @@ mirror (bf_push normally writes both), leaving them one comment apart; resynced 
 
 ### Dev-90 addendum — v4.9.12 (game (i) descriptors)
 - `GAME_INFO` + `gameInfoBtnHtml/gameInfoPanelHtml/toggleGameInfo`: discreet (i) that expands a short how-it-plays/pays note, in the games form checklist, the New Gathering "Add games" sheet, and the Event Card Games details rows. Text mirrors bf_engine rules (skins outright low gross, no carryover; CTP unclaimed rolls to skins; BirdieBall keepers split, else longest holder; birdie pay flat per birdie). New `test_game_info.mjs`.
+
+### Dev-90 addendum — v4.9.14 / engine 1.3.0 (Suggested amounts)
+- Brian's model: Skins = residual (~50%), BirdieBall ~20-25% of buy-in, CTP + birdies the rest; whole dollars (no change problem); design for 4-8 players. Studied his two test foursomes ($10 x 4: Moselem 50/15/20/15, Blue Shamrock 60/20/20/0).
+- `BFEngine.suggestGameAmounts({dollarPerPlayer, players, games, cttpHoles})`: BirdieBall = 20% of buy-in per player; Birdie = 20% of buy-in per birdie (headcount-independent); CTP purse = 15% of pot over its holes, reduced if CTP+BirdieBall would pass half the pot; all rounded, $1 floor. $10 x 4 / 4 par 3s reproduces Moselem ($2/$2/$2). Headcount used = max(4, confirmed Yes).
+- Games form: $5/$10/$20 chips + typed buy-in; ticking a game or changing the buy-in fills untouched amounts; typed amounts are kept (`_gamesFormTouched`); existing configs count as touched; "Re-suggest" overrides. Skins carryover deliberately NOT built (Brian: a different game from a skin pot; would be its own game).

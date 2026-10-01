@@ -149,12 +149,12 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
     gatheringsFetchJSON: async (url, opts) => { posts.push(JSON.parse(opts.body)); return { ok: true }; },
     loadHostGamesConfigs: async () => {}, renderHostPanelList: () => {}
   };
-  vm.createContext(ctx); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
-  const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','gatheringGamesChecklistHtml', 'toggleGamesFormGame', 'gatheringGamesCttpSectionHtml', 'gatheringGamesBirdieballSectionHtml',
+  vm.createContext(ctx); ctx.BFEngine = E; ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
+  const fns = ['applyGamesSuggestion','gameInfoBtnHtml','gameInfoPanelHtml','gatheringGamesChecklistHtml', 'toggleGamesFormGame', 'gatheringGamesCttpSectionHtml', 'gatheringGamesBirdieballSectionHtml',
     'gatheringGamesBirdiepaySectionHtml', 'setGamesFormBirdiepayDollarPerBirdie', 'gamesFormOverCommit', 'updateGamesFormPotPreview', 'submitGatheringGames'];
   vm.runInContext(`
     const GATHERING_GAMES_META = ${JSON.stringify({ skins: { label: 'Skins', icon: 'x' }, cttp: { label: 'CTP', icon: 'x' }, birdieball: { label: 'BirdieBall', icon: 'x' }, birdiepay: { label: 'Birdie Payouts', icon: 'x' } })};
-    let _gamesFormSelected = new Set(); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
+    let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
     let _gamesFormBirdieballConfig = { dollar_per_player: null };
     let _gamesFormBirdiepayConfig = { dollar_per_birdie: null };
@@ -197,6 +197,7 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
   ok(t.toasts.some(([m, e]) => e && /par data/i.test(m)), 'K: toast explains why');
   const z = formSandbox();
   z.ctx.api.toggleGamesFormGame('birdiepay');
+  z.ctx.api.setGamesFormBirdiepayDollarPerBirdie(''); // v4.9.14: toggling now suggests an amount; the host clears it
   await z.ctx.api.submitGatheringGames(7);
   eq(z.posts.length, 0, 'K: save blocked without a $ per birdie');
 }
