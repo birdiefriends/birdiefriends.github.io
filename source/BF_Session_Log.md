@@ -5396,3 +5396,9 @@ mirror (bf_push normally writes both), leaving them one comment apart; resynced 
 
 ### Dev-90 addendum — v4.9.16 / engine 1.3.2 (middle option)
 - Brian chose the "middle option" for foursomes: $10 -> CTP $3/hole (4 holes), BirdieBall $2/player, birdie $3. Rationale: the side games are the equalizers for less-skilled players (CTP and BirdieBall are skill-light; gross skins and birdies favor the better players). Engine: CTP purse 30% of pot, birdie 30% of buy-in, BirdieBall 20% of buy-in per player. Lever for later if less-skilled players still get too little: net (handicap) skins as its own game option.
+
+### Dev-90 close-out — "Open spots, the New Gathering redesign, and games everywhere" (2026-10-01)
+- **Shipped (portal v4.9.0 → v4.9.16, engine 1.2.0 → 1.3.2, BFE Worker 2,582 lines):** open spots; New Gathering redesign; fall My History tone; event games for Weekend/non-Gathering events and hosted "+ Games"; rail event-name strip; Weekend Live Panel with all four games; BirdieBall lost-alert-only card + always-asked scorecard + lost push; (i) game descriptors; suggested amounts ($10 foursome: CTP $3/hole, BirdieBall $2, birdie $3).
+- **Decisions (Brian):** option A shadow Gathering for Weekend events, first saver is game host, every Yes player with a scorecard is in; BirdieBall alert = lost only, scorecard = truth; skin pot and carryover skins are different games (carryover not built); whole-dollar suggestions designed for 4-8 players; "middle option" balance so less-skilled players keep a real shot (CTP and BirdieBall are the equalizers).
+- **Process:** single reusable `claude-staging` branch (branch deletion from the session returns 403); `--force-with-lease` is rejected, plain `--force` on that branch only; every merge was a fast-forward of `main` on Brian's "merge it". Deploys Brian ran: D1 `event_ref` column + unique index, BFE Worker paste-deploy.
+- **Carry-forward:** see Bootstrap §5 "Dev-91 start list".
