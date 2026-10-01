@@ -1,3 +1,6 @@
+v4.9.6 · 2026-10-01
+Deployed: 2026-10-01 (Weekend Times and other non-Gathering events: a player registered Yes can now tap "+ Games" any time before the event, not just on the day.)
+
 v4.9.5 · 2026-10-01
 Deployed: 2026-10-01 (At-the-course rail: the event name now runs down the rail's outer edge, alongside the buttons and the full height of the rail, instead of sitting in a block above them.)
 

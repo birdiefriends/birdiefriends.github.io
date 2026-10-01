@@ -15348,7 +15348,7 @@ function eventGamesAllowed(evt) {
   const day = eventLocalDay(evt.dt);
   if (evt.source === 'gathering') return String(evt.hostId) === String(currentPlayer) && day >= today;
   if (formatBadge(evt.format) === 'BF Series' || isBFEBackedCard(evt)) return false;
-  if (day !== today) return false; // on the course: games are added the day of the event
+  if (day < today) return false; // v4.9.6 — any time up to the event day (Brian: fine if someone sets it up early); never for a past event
   const reg = findMyReg(evt.name);
   return !!reg && reg.status === 'Yes';
 }

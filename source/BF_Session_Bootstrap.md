@@ -449,7 +449,7 @@ Panel adapts around whatever's turned on. Backend: `bfe_gathering_games` (host c
   SQLite), `test_open_spots_ui.mjs`. Not renamed: photo/note player tags. Deploy order: D1 step, then the Worker
   paste-deploy, then the portal.
 - **Event games — games on a non-Gathering event, + Games from the card (Dev-90, portal v4.9.4 + BFE Worker).** A Yes
-  player on a BF Weekend Times (any non-Gathering, non-BF-Series, non-BFE-backed) card can tap "+ Games" **on the day**; the
+  player on a BF Weekend Times (any non-Gathering, non-BF-Series, non-BFE-backed) card can tap "+ Games" **any time up to the event day** (v4.9.6; originally day-of only — Brian OK'd early setup); the
   first to SAVE games owns them ("game host"). Under the hood a hidden **shadow Gathering** row (`gatherings.status =
   'event_shadow'`, `event_ref = '<event name>|<YYYY-MM-DD>'`, size NULL) is created by BFE Worker `POST /bfe/event-games/shadow`
   (idempotent, unique index) so config/close/payout/My History work unchanged; the main Worker never lists it (all its

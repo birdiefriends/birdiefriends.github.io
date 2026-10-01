@@ -73,7 +73,7 @@ let c = mkCtx();
 ok(c.eventNameFromRef(c.eventGamesRef(evt({ name: 'A|B' }))) === 'A|B', 'ref round-trips names containing |');
 ok(c.eventGamesAllowed(evt()), 'Weekend: a Yes player, event day -> allowed');
 ok(!mkCtx({ findMyReg: () => ({ status: 'Sub' }) }).eventGamesAllowed(evt()) && !mkCtx({ findMyReg: () => null }).eventGamesAllowed(evt()), 'Weekend: Sub / unregistered -> not allowed');
-ok(!c.eventGamesAllowed(evt({ dt: tomorrow })) && !c.eventGamesAllowed(evt({ dt: yesterday })), 'Weekend: only on the day');
+ok(c.eventGamesAllowed(evt({ dt: tomorrow })) && !c.eventGamesAllowed(evt({ dt: yesterday })), 'Weekend: today or any future day, never a past event');
 ok(!c.eventGamesAllowed(evt({ format: 'BF Series' })), 'BF Series is excluded (own format)');
 ok(!mkCtx({ isBFEBackedCard: () => true }).eventGamesAllowed(evt()), 'BFE-backed rounds excluded');
 ok(!mkCtx({ isGuest: () => true }).eventGamesAllowed(evt()), 'guests excluded');
