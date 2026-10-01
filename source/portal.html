@@ -3600,7 +3600,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.3.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.3.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -17496,8 +17496,12 @@ function updateGamesFormPotPreview(yesCount) {
     lines.push(`<span style="color:#c0392b;font-weight:700">⚠️ ${overCommit.problem}</span>`);
   }
   if (_gamesFormSelected.has('skins')) {
+    // v4.9.15 — with Birdie Payouts on, say what Skins is likely left with
+    // after a typical round of birdies (~0.75 a player), not just the
+    // before-birdies figure, which reads like more than the real share.
+    const typicalBirdies = Math.round(0.75 * Math.max(4, yesCount)) * (bpOn ? _gamesFormBirdiepayConfig.dollar_per_birdie : 0);
     lines.push(bpOn
-      ? `⛳ Skins gets: $${Math.max(0, remaining).toFixed(2)} minus birdie payouts`
+      ? `⛳ Skins gets: $${Math.max(0, remaining).toFixed(2)} before birdie payouts (a typical round pays ~$${typicalBirdies.toFixed(0)}, leaving ~$${Math.max(0, remaining - typicalBirdies).toFixed(0)})`
       : `⛳ Skins gets: $${Math.max(0, remaining).toFixed(2)}`);
   }
   el.innerHTML = lines.join('<br>');

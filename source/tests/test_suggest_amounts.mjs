@@ -6,7 +6,9 @@ const E = loadEngine(); const f = E.suggestGameAmounts; const ALL = ['skins', 'c
 let r = f({ dollarPerPlayer: 10, players: 4, games: ALL, cttpHoles: 4 });
 ok(r.cttp.dollar_per_hole === 2 && r.birdieball.dollar_per_player === 2 && r.birdiepay.dollar_per_birdie === 2, '$10 foursome -> $2 CTP/hole, $2 BirdieBall, $2 birdie');
 r = f({ dollarPerPlayer: 10, players: 8, games: ALL, cttpHoles: 4 });
-ok(r.cttp.dollar_per_hole === 3 && r.birdieball.dollar_per_player === 2, '$10 x 8 -> CTP scales with the pot, BirdieBall stays per-player');
+ok(r.cttp.dollar_per_hole === 4 && r.birdieball.dollar_per_player === 2, '$10 x 8 -> CTP scales with the pot, BirdieBall stays per-player');
+r = f({ dollarPerPlayer: 10, players: 4, games: ALL, cttpHoles: 5 });
+ok(r.cttp.dollar_per_hole === 2, '$10 foursome, 5 par 3s -> $2/hole (was $1, undervalued)');
 for (const B of [1, 2, 5, 10, 20, 50]) for (const n of [4, 5, 6, 7, 8]) for (const h of [1, 2, 3, 4, 5]) {
   const x = f({ dollarPerPlayer: B, players: n, games: ALL, cttpHoles: h });
   const all = [x.cttp.dollar_per_hole, x.birdieball.dollar_per_player, x.birdiepay.dollar_per_birdie];
@@ -30,5 +32,5 @@ ctx._gamesFormTouched.add('birdieball'); ctx._gamesFormBirdieballConfig.dollar_p
 ok(ctx._gamesFormBirdieballConfig.dollar_per_player === 5 && ctx._gamesFormBirdiepayConfig.dollar_per_birdie === 4, 'typed amount is kept, others follow the new buy-in');
 ctx.go(true);
 ok(ctx._gamesFormBirdieballConfig.dollar_per_player === 4, 'Re-suggest overrides typed amounts');
-ok(/bf_engine\.js\?v=1\.3\.0/.test(src) && E.ENGINE_VERSION === '1.3.0', 'engine version bumped with the script tag');
+ok(/bf_engine\.js\?v=1\.3\.1/.test(src) && E.ENGINE_VERSION === '1.3.1', 'engine version bumped with the script tag');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

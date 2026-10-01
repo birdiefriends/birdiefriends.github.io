@@ -1,3 +1,6 @@
+v4.9.15 · 2026-10-01
+Deployed: 2026-10-01 (Suggested amounts: CTP now gets about 20% of the pot (was 15%), so a course with five par 3s suggests $2 a hole instead of $1. The Skins line now also shows what Skins is typically left with after birdie payouts.)
+
 v4.9.14 · 2026-10-01
 Deployed: 2026-10-01 (Games setup: pick the buy-in ($5 / $10 / $20 or type it) and the amounts for CTP, BirdieBall and Birdie Payouts are suggested for you in whole dollars, sized for 4-8 players. Edit any of them, or tap Re-suggest.)
 

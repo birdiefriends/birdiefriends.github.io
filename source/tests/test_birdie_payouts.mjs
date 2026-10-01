@@ -177,7 +177,7 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
   api.toggleGamesFormGame('skins');
   api.setGamesFormBirdiepayDollarPerBirdie('2.5');
   const prev = t.dom.window.document.getElementById('games-form-pot-preview').innerHTML;
-  ok(/Pot preview: \$80\.00/.test(prev) && prev.includes('$2.50 per birdie') && prev.includes('Skins gets: $80.00 minus birdie payouts'), 'K: preview shows the per-birdie rate and Skins "minus birdie payouts"');
+  ok(/Pot preview: \$80\.00/.test(prev) && prev.includes('$2.50 per birdie') && prev.includes('Skins gets: $80.00 before birdie payouts'), 'K: preview shows the per-birdie rate and Skins "before birdie payouts"');
   await api.submitGatheringGames(7);
   eq(t.posts.length, 1, 'K: saved');
   eq(t.posts[0].games.slice().sort(), ['birdiepay', 'skins'], 'K: payload games');

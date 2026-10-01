@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.3.0';
+  const ENGINE_VERSION = '1.3.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -381,7 +381,7 @@
     if (has('birdieball')) out.birdieball = { dollar_per_player: dollars(0.2 * B) };
     if (has('cttp')) {
       const holes = Math.max(1, Math.floor(Number(cttpHoles) || 3));
-      let per = dollars((0.15 * B * n) / holes);
+      let per = dollars((0.2 * B * n) / holes);
       // a purse that (with BirdieBall) would eat more than half the pot comes down, never below $1/hole
       const bbCost = out.birdieball ? out.birdieball.dollar_per_player * n : 0;
       while (per > 1 && per * holes + bbCost > 0.5 * B * n) per -= 1;
