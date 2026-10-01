@@ -1,3 +1,6 @@
+v4.9.10 · 2026-10-01
+Deployed: 2026-10-01 (Live Panel BirdieBall is now a lost-ball alert only (no "kept it"). The scorecard always asks Kept it / Lost it, pre-filled from any alert, and is the source of truth.)
+
 v4.9.9 · 2026-10-01
 Deployed: 2026-10-01 (Weekend Times and other non-Gathering events: once players add games, the Live Panel opens for that event with all four games (Skins, CTP, BirdieBall, Birdie Payouts). BF Series is unchanged.)
 

@@ -8861,12 +8861,11 @@ function buildLivePanel(evt) {
     // (or blank, if they haven't answered at all) rather than carrying
     // over whatever was mid-edit for the previous player.
     const bbFresh    = _bbTouchedPlayer !== bbPlayerSel;
-    const bbKeptSel  = bbFresh ? (bbSaved ? bbSaved.kept : null)       : _bbKept;
+    const bbKeptSel  = false; // v4.9.10 — the live card is a lost-ball ALERT only; "kept" is answered on the scorecard
     const bbHoleSel  = bbFresh ? (bbSaved ? bbSaved.lost_hole : null)  : _bbLostHole;
     const bbStrokeSel = bbFresh ? (bbSaved ? bbSaved.lost_stroke : null) : _bbLostStroke;
-    const bbCanSubmit = bbKeptSel === true || (bbKeptSel === false && bbHoleSel && bbStrokeSel);
-    const bbUnchanged = bbSaved && bbSaved.kept === bbKeptSel &&
-      (bbKeptSel === true || (bbSaved.lost_hole === bbHoleSel && bbSaved.lost_stroke === bbStrokeSel));
+    const bbCanSubmit = !!(bbHoleSel && bbStrokeSel);
+    const bbUnchanged = bbSaved && bbSaved.kept === false && bbSaved.lost_hole === bbHoleSel && bbSaved.lost_stroke === bbStrokeSel;
     const bbPlayerEsc = bbPlayerSel.replace(/'/g, "\\'");
     const bbDetailGrid = bbKeptSel === false ? `
       <div style="margin-top:10px">
@@ -8895,21 +8894,12 @@ function buildLivePanel(evt) {
         <span>👤</span><span style="flex:1">${bbPlayerSel || ''}</span>
         <span style="color:rgba(255,255,255,0.4);font-size:0.75rem">Change ›</span>
       </button>
-      <div style="display:flex;gap:8px;margin-bottom:8px">
-        <button onclick="bbSetKept(true)" style="flex:1;padding:9px 6px;border-radius:8px;font-family:inherit;
-          cursor:pointer;font-size:0.85rem;font-weight:600;text-align:center;color:#fff;
-          background:${bbKeptSel===true?'rgba(29,158,117,0.35)':'rgba(255,255,255,0.08)'};
-          border:1px solid ${bbKeptSel===true?'rgba(29,158,117,0.6)':'rgba(255,255,255,0.2)'}">🐦 Kept it</button>
-        <button onclick="bbSetKept(false)" style="flex:1;padding:9px 6px;border-radius:8px;font-family:inherit;
-          cursor:pointer;font-size:0.85rem;font-weight:600;text-align:center;color:#fff;
-          background:${bbKeptSel===false?'rgba(220,80,80,0.35)':'rgba(255,255,255,0.08)'};
-          border:1px solid ${bbKeptSel===false?'rgba(220,80,80,0.6)':'rgba(255,255,255,0.2)'}">Lost it</button>
-      </div>
+      <div style="font-size:0.8rem;color:rgba(255,255,255,0.65);margin-bottom:8px;line-height:1.4">Lost the BirdieBall? Tell the group now. Your scorecard confirms it either way.</div>
       ${bbDetailGrid}
       <button class="sc-submit-btn" style="background:#c9892a"
         ${bbCanSubmit && !_bbSubmitting ? '' : 'disabled'}
         onclick="submitBirdieBall()">
-        ${_bbSubmitting ? '⏳ Sending…' : bbUnchanged ? '✅ Recorded' : bbKeptSel === null ? 'Pick kept it or lost it above' : '🐦 Confirm'}
+        ${_bbSubmitting ? '⏳ Sending…' : (bbSaved && bbSaved.kept === false && bbUnchanged) ? '✅ Alert sent' : '💔 I lost it'}
       </button>
       ${bbBoard}`;
   }
@@ -9062,26 +9052,27 @@ function buildLivePanel(evt) {
   // touchpoint — the alert and this confirmation both write the exact same
   // upsert, so whichever happens first satisfies both and this collapses
   // to a read-only "already recorded" line instead of asking twice.
+  // v4.9.10 (Brian: "the live panel becomes a lost ball alert only, and the
+  // scorecard is the source of truth either way") — the scorecard ALWAYS asks
+  // (Kept it / Lost it), pre-filled from any live "lost it" alert already on
+  // file for this player; the answer submitted here overwrites the alert.
   const bbConfirmSaved = showBirdieBallSection ? bbAnswerFor(scPlayerSel) : null;
-  const bbConfirmNeedsAsk = showBirdieBallSection && !bbConfirmSaved;
-  const bbConfirmAnswered = !bbConfirmNeedsAsk || (_scBbKept !== null && (_scBbKept === true || (_scBbLostHole && _scBbLostStroke)));
-  const bbConfirmYesActive = _scBbKept === true;
-  const bbConfirmNoActive  = _scBbKept === false;
+  const _scBbSeed = _scBbKept === null && bbConfirmSaved;   // nothing touched yet -> show the saved answer
+  const bbEffKept   = _scBbSeed ? bbConfirmSaved.kept : _scBbKept;
+  const bbEffHole   = _scBbSeed ? bbConfirmSaved.lost_hole : _scBbLostHole;
+  const bbEffStroke = _scBbSeed ? bbConfirmSaved.lost_stroke : _scBbLostStroke;
+  const bbConfirmNeedsAsk = showBirdieBallSection;
+  const bbConfirmAnswered = !showBirdieBallSection || (bbEffKept !== null && (bbEffKept === true || !!(bbEffHole && bbEffStroke)));
+  const bbConfirmYesActive = bbEffKept === true;
+  const bbConfirmNoActive  = bbEffKept === false;
   const bbConfirmDetail = bbConfirmNoActive ? '' +
     '<div style="margin-top:10px">' +
       '<div class="sc-section-label" style="margin-bottom:4px">Which hole did you lose it?</div>' +
-      bbHoleGridHtml(_scBbLostHole, 'scBbSetHole') +
+      bbHoleGridHtml(bbEffHole, 'scBbSetHole') +
       '<div class="sc-section-label" style="margin:6px 0 4px">Strokes</div>' +
-      bbStrokeGridHtml(_scBbLostStroke, 'scBbSetStroke') +
+      bbStrokeGridHtml(bbEffStroke, 'scBbSetStroke') +
     '</div>' : '';
-  const bbConfirmSection = !showBirdieBallSection ? '' : bbConfirmSaved ? '' +
-    '<div style="margin:12px 0;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);' +
-      'border-radius:10px;padding:10px 12px">' +
-      '<div class="sc-section-label" style="margin-bottom:2px;color:rgba(255,255,255,0.5)">\u{1F426} BirdieBall</div>' +
-      '<div style="color:rgba(255,255,255,0.75);font-size:0.85rem">' +
-        (bbConfirmSaved.kept ? 'Recorded — you kept it.' : 'Recorded — lost it on #' + bbConfirmSaved.lost_hole + '.') +
-      '</div>' +
-    '</div>' : '' +
+  const bbConfirmSection = !showBirdieBallSection ? '' : '' +
     '<div style="margin:12px 0;background:rgba(0,0,0,0.15);border-radius:10px;padding:10px 12px">' +
       '<div class="sc-section-label" style="margin-bottom:6px">\u{1F426} Did you keep the BirdieBall?</div>' +
       '<div style="display:flex;gap:8px">' +
@@ -9100,8 +9091,8 @@ function buildLivePanel(evt) {
   // never touched the live-alert widget still ends up with a real answer
   // on record. Null when there's nothing new to persist (no BirdieBall on
   // this Gathering, or this player already has an answer on file).
-  window._liveBbConfirmPending = (showBirdieBallSection && bbConfirmNeedsAsk && _scBbKept !== null)
-    ? { kept: _scBbKept, lost_hole: _scBbKept ? null : _scBbLostHole, lost_stroke: _scBbKept ? null : _scBbLostStroke }
+  window._liveBbConfirmPending = (showBirdieBallSection && bbConfirmAnswered)
+    ? { kept: bbEffKept, lost_hole: bbEffKept ? null : bbEffHole, lost_stroke: bbEffKept ? null : bbEffStroke }
     : null;
   // Pre-compute confirm vs submit UI to avoid nested template literals
   const scActionHtml = _scSubmitDone
@@ -10109,11 +10100,21 @@ function bbSetKept(kept) {
   _bbKept = kept;
   renderLiveBanner();
 }
+function bbTouchLost() { // v4.9.10 — first edit hydrates from the saved lost answer (if any) for this player
+  const player = _bbPlayer || currentPlayer;
+  if (_bbTouchedPlayer === player) return;
+  const saved = bbAnswerFor(player);
+  _bbTouchedPlayer = player;
+  _bbLostHole = saved && saved.kept === false ? saved.lost_hole : null;
+  _bbLostStroke = saved && saved.kept === false ? saved.lost_stroke : null;
+}
 function bbSetHole(h) {
+  bbTouchLost();
   _bbLostHole = h;
   renderLiveBanner();
 }
 function bbSetStroke(s) {
+  bbTouchLost();
   _bbLostStroke = s;
   renderLiveBanner();
 }
@@ -10123,7 +10124,8 @@ async function submitBirdieBall() {
   const _bbGid = panelGamesGid(evt);
   if (_bbGid == null) return;
   const player = _bbPlayer || currentPlayer;
-  if (!player || _bbKept === null) return;
+  if (!player) return;
+  _bbKept = false; // v4.9.10 — the live card only ever reports a lost ball
   if (_bbKept === false && !(_bbLostHole && _bbLostStroke)) { showToast('Pick which hole and how many strokes', true); return; }
   _bbSubmitting = true;
   renderLiveBanner();
@@ -10154,16 +10156,26 @@ async function submitBirdieBall() {
 // state from the live-alert widget above, scoped to whoever's scorecard is
 // currently being filled (scPlayerSel), same convention as Wally Ball's own
 // wbSetStatus/wbSetHole/wbSetStroke just below.
+// v4.9.10 — first touch copies the player's saved answer (e.g. a live "lost
+// it" alert) into local state so editing hole/stroke starts from it.
+function scBbMaterialize() {
+  if (_scBbKept !== null) return;
+  const saved = (typeof scPlayerSel !== 'undefined' && scPlayerSel) ? bbAnswerFor(scPlayerSel) : null;
+  if (saved) { _scBbKept = saved.kept; _scBbLostHole = saved.lost_hole; _scBbLostStroke = saved.lost_stroke; }
+}
 function scBbSetStatus(kept) {
+  scBbMaterialize();
   _scBbKept = kept;
   if (!kept) { /* keep any hole/stroke already picked */ } else { _scBbLostHole = null; _scBbLostStroke = null; }
   renderLiveBanner();
 }
 function scBbSetHole(h) {
+  scBbMaterialize();
   _scBbLostHole = h;
   renderLiveBanner();
 }
 function scBbSetStroke(s) {
+  scBbMaterialize();
   _scBbLostStroke = s;
   renderLiveBanner();
 }
