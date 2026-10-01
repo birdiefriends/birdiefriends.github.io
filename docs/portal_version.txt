@@ -1,3 +1,6 @@
+v4.9.13 · 2026-10-01
+Deployed: 2026-10-01 (BirdieBall (i) wording made clearer: everyone starts with one ball; keep it and win, or be the last one standing.)
+
 v4.9.12 · 2026-10-01
 Deployed: 2026-10-01 (Games: a small (i) next to each game, when adding games and in the Event Card Games details, explains what the game is and how it pays.)
 
