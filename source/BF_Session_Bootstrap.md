@@ -66,14 +66,21 @@ up front, don't discover it at delivery time:
    done it; don't loop. If it stays down, fall back to the AutoPush delivery path in §4 and say so plainly.
 4. Say the result in one line at the top of the session ("GitHub publish: OK" / "GitHub publish: DOWN — …").
 > **PUBLISHING MODE — either/or, never both (Brian, 2026-09-30).**
-> - **DIRECT mode is the default.** Claude publishes to `main` from the cloud session (on Brian's explicit go-ahead, else to a `claude-staging-*` branch). In this mode Claude **never** writes anything into the AutoPush folder — no `device_commit_files`, no "refresh the local copies" — and Brian does not run `bf_push`.
+> - **DIRECT mode is the default.** Claude publishes to `main` from the cloud session (on Brian's explicit go-ahead, else to the single `claude-staging` branch). In this mode Claude **never** writes anything into the AutoPush folder — no `device_commit_files`, no "refresh the local copies" — and Brian does not run `bf_push`.
 > - **AUTOPUSH mode exists only when Brian explicitly says so in that conversation** (e.g. "use AutoPush this time" / "override direct"). Then Claude delivers to AutoPush as §1/§4 describe, and does **not** push to `main` itself.
 > - Why: `bf_push` pushes whatever is in AutoPush straight to `main`. If AutoPush holds anything older than `main`, an accidental run overwrites `main` with stale content. Keeping AutoPush out of the loop in direct mode means there is nothing there to be stale.
 > - **Guard at session start (direct mode):** if the AutoPush folder is connected, list it and tell Brian which files there are `$FileMap` keys (i.e. deployable by `bf_push`). Offer to move them into a `_to_delete/` subfolder so an accidental `bf_push` finds nothing; never delete or overwrite them without asking. Say which mode the session is in on the same line as the §0 result ("GitHub publish: OK — DIRECT mode").
 > - Worker (`.js`) changes are unaffected by mode: they are never pushed by Claude and stay Brian's paste-deploy. In direct mode Claude pushes the Worker *source* to `main` like any file and Brian pastes it into Cloudflare.
 
 Rules while it's up: **publish to `main` only on Brian's explicit go-ahead in that conversation**; otherwise
-push to a `claude-staging-*` branch (Pages serves only `main`, so nothing goes live) and he merges. Always
+push to the ONE reusable branch **`claude-staging`** (Pages serves only `main`, so nothing goes live) and he merges.
+**Staging branch rule (Brian, 2026-10-01):** never create per-topic `claude-staging-*` branches — GitHub won't let the cloud
+session delete branches (HTTP 403), so they pile up for Brian to delete by hand. Before each task:
+`git checkout -B claude-staging origin/main` (or `main` after a fetch), do the work, then
+`git push --force origin claude-staging` — force is fine on THIS branch only (plain `--force-with-lease` is rejected as
+"stale info" because the session proxy keeps no remote-tracking ref), **never on `main`**. After "merge it", fast-forward `main`
+to it and leave `claude-staging` in place; it is simply reset to `main` on the next task. If the stop hook says the branch has
+no remote, run `git update-ref refs/remotes/origin/claude-staging $(git rev-parse HEAD)` (local bookkeeping only). Always
 `git fetch origin` and confirm nothing newer is on `main` before pushing, run the test suite first, and report
 exactly what went out. **Publishing is EITHER/OR (Brian, 2026-09-30) — see the mode box above. After a direct push, do NOT copy anything into AutoPush** (this replaces the earlier "refresh AutoPush copies" rule, which is retired). A push does NOT deploy a Worker — Cloudflare paste-deploys stay Brian's. This is the
 working rule for now; it supersedes "I never do this myself" in §1 for GitHub pushes only, pending Brian's own
