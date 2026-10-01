@@ -278,9 +278,16 @@ body {
    vertical label actually gets MORE legible characters than the horizontal
    version did, not fewer. Truncates with ellipsis past max-height for a
    genuinely long name; the full name is still in the title attribute below. */
-#at-course-rail .acr-name { writing-mode: vertical-rl; text-orientation: mixed;
-  font-size: 0.6rem; font-weight: 700; color: #fff; opacity: 0.92; letter-spacing: 0.02em;
-  max-height: 92px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-bottom: 2px; }
+/* v4.9.5 — Brian: the name belongs ALONGSIDE the buttons, a slim vertical strip on the
+   rail's outer edge spanning the rail's whole height (not stacked above them). The strip's
+   text is absolutely positioned inside it so a long name can never make the rail taller —
+   it ellipsizes at the rail's own height instead. */
+#at-course-rail .acr-namecol { position: relative; width: 18px; flex: none; border-left: 1px solid rgba(255,255,255,0.15); touch-action: none; cursor: grab; }
+#at-course-rail.left .acr-namecol { border-left: none; border-right: 1px solid rgba(255,255,255,0.15); }
+#at-course-rail .acr-name { position: absolute; inset: 0; box-sizing: border-box; padding: 8px 0;
+  writing-mode: vertical-rl; text-orientation: mixed; text-align: center; line-height: 18px;
+  font-size: 0.64rem; font-weight: 700; color: #fff; opacity: 0.92; letter-spacing: 0.03em;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #at-course-rail .acr-status { display: flex; flex-direction: column; align-items: center; font-size: 0.52rem;
   font-weight: 800; letter-spacing: 0.04em; color: #F5C842; padding: 2px 0 5px; border-bottom: 1px solid rgba(255,255,255,0.15); margin-bottom: 2px; width: 100%; }
 #at-course-rail .acr-btn { width: 50px; display: flex; flex-direction: column; align-items: center; gap: 1px;
@@ -5202,7 +5209,7 @@ function renderAtCourseRail() {
   el.innerHTML = `
     <button class="acr-grip" onclick="toggleAtCourseRail()" onpointerdown="atCourseDragStart(event)" title="Tap: ${tucked ? 'show' : 'tuck away'} · Drag: move">${(el.classList.contains('left') ? !tucked : tucked) ? '‹' : '›'}</button>
     <div class="acr-col">
-      <div class="acr-status" onpointerdown="atCourseDragStart(event)" onclick="${hasDist ? 'atCourseToggleLocDetail()' : 'atCourseToggleManual()'}" title="${escapeHtml(evt.name)} — ${hasDist ? 'tap for location detail' : 'tap to turn off'} · drag to move"><span class="acr-name">${escapeHtml(evt.name)}</span><span style="font-size:1rem">⛳</span><span>${where}</span></div>
+      <div class="acr-status" onpointerdown="atCourseDragStart(event)" onclick="${hasDist ? 'atCourseToggleLocDetail()' : 'atCourseToggleManual()'}" title="${escapeHtml(evt.name)} — ${hasDist ? 'tap for location detail' : 'tap to turn off'} · drag to move"><span style="font-size:1rem">⛳</span><span>${where}</span></div>
       ${!bfe ? btn('📷', 'Photo', `openCardPhotoSheet('${id}')`) : ''}
       ${!bfe ? btn('🎥', 'Video', `atCourseQuickCapture('${id}','video')`) : ''}
       ${!bfe ? btn('⬆️', 'Upload', `atCourseQuickCapture('${id}','upload')`) : ''}
@@ -5210,7 +5217,8 @@ function renderAtCourseRail() {
       ${btn('📏', 'Yardage', 'openYardageModal()')}
       ${btn('📖', 'Rules', 'openRulesModal()')}
       ${btn('🗺️', 'Course', `openVenueViewerModal('${id}')`)}
-    </div>`;
+    </div>
+    <div class="acr-namecol" onpointerdown="atCourseDragStart(event)" onclick="${hasDist ? 'atCourseToggleLocDetail()' : 'atCourseToggleManual()'}" title="${escapeHtml(evt.name)}"><span class="acr-name">${escapeHtml(evt.name)}</span></div>`;
   atCourseApplyPos(el); // again now that the buttons exist, so the height clamp is exact
   renderAtCourseLocDetail();
 }
