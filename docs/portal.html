@@ -11081,7 +11081,7 @@ async function loadHostGamesConfigs() {
 // placeholder everywhere (registrations, scorecard, CTP, BirdieBall, closed
 // result) in one atomic step when the host fills it. Host-only controls.
 let _spotsByGathering = new Map();   // gatheringId -> ['Open Spot 1', ...]
-let _hostOpenSpots = 0;              // New Gathering form: how many to create with it
+let _hostAddGames = false;           // New Gathering form: open Games setup right after Create (v4.9.1)
 let _hostPanelView = 'list';         // 'list' | 'archive' — which Host Panel view is showing
 let _fillSpot = null;                // { gatheringId, spot, member, candidates }
 function isOpenSpotName(n) { return /^Open Spot \d+$/i.test(String(n || '').trim()); }
@@ -11207,10 +11207,33 @@ async function confirmFillSpot() {
     if (btn) { btn.disabled = false; btn.classList.remove('btn-loading'); btn.textContent = '✅ Confirm'; }
   }
 }
-function setHostOpenSpots(n) {
-  _hostOpenSpots = Math.max(0, Math.min(8, Math.floor(Number(n) || 0)));
-  const el = document.getElementById('host-open-spots-n');
-  if (el) el.textContent = String(_hostOpenSpots);
+// v4.9.1 — open spots are automatic: capacity minus the host (if playing)
+// minus the invited players. Whatever is left becomes "Open Spot N" seats the
+// host fills with real members later. No manual stepper.
+function hostAutoOpenSpots() {
+  if (_hostMode !== 'crew') return 0;
+  const sizeEl = document.getElementById('host-new-size');
+  const size = parseInt(sizeEl ? sizeEl.value : '', 10) || 0;
+  if (!size) return 0;
+  const invitees = [..._hostCrewPicked].filter(n => n !== currentPlayer).length;
+  return Math.max(0, size - (_hostPlaying ? 1 : 0) - invitees);
+}
+function updateHostSpotsPreview() {
+  const el = document.getElementById('host-spots-preview');
+  if (!el) return;
+  const n = hostAutoOpenSpots();
+  if (n <= 0) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.style.display = 'block';
+  el.textContent = n > 8
+    ? `⚠️ ${n} seats unfilled — add more players or lower the capacity (max 8 open spots)`
+    : `🪑 ${n} open spot${n === 1 ? '' : 's'} will be held for players you add later. Each must be filled with a real member before the round can close.`;
+}
+function setHostAddGames(on) {
+  _hostAddGames = !!on;
+  const row = document.getElementById('host-games-row');
+  const chk = document.getElementById('host-games-check');
+  if (row) { row.style.borderColor = _hostAddGames ? 'var(--green)' : 'var(--border)'; row.style.background = _hostAddGames ? 'rgba(46,125,50,0.07)' : '#fff'; }
+  if (chk) chk.textContent = _hostAddGames ? '☑' : '☐';
 }
 function showTemplatePicker() {
   const templates = _hostTemplates || [];
@@ -17157,7 +17180,7 @@ async function showNewGatheringForm() {
   _hostSelectedCrewId = null;
   _hostSelectedCrewName = null;
   _hostPlaying = true;
-  _hostOpenSpots = 0;
+  _hostAddGames = false;
   _pendingCrewName = null;
   _hostMode = 'crew';
   _hostRegisterAllCrew = false;
@@ -17224,7 +17247,7 @@ async function showNewGatheringForm() {
     <div class="host-form-field">
       <label>Tee Time Capacity <span style="color:#c0392b">*</span></label>
       <input type="number" id="host-new-size" value="4" min="1" max="32"
-        style="width:80px">
+        style="width:80px" oninput="updateHostSpotsPreview()">
       <div style="font-size:0.72rem;color:var(--text-muted);margin-top:3px">Total players across all tee times</div>
     </div>
     <div class="host-form-field">
@@ -17259,12 +17282,11 @@ async function showNewGatheringForm() {
       cursor:pointer;font-family:inherit;transition:all 0.18s;margin-bottom:6px;
       background:var(--green);color:#fff;border:2px solid var(--green)"
       onclick="setHostPlaying(!_hostPlaying)">✅ Yes, I'm playing</button>
-    <div class="section-label">🪑 Open Spots <span style="font-size:0.75rem;font-weight:400;opacity:0.6">(optional)</span></div>
-    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Seats for players you can't name yet. Each one has to be filled with a real BirdieFriends member before the round can close.</div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-      <button type="button" class="seg-btn" style="width:44px" onclick="setHostOpenSpots(_hostOpenSpots - 1)">−</button>
-      <span id="host-open-spots-n" style="font-weight:800;font-size:1.05rem;min-width:24px;text-align:center">0</span>
-      <button type="button" class="seg-btn" style="width:44px" onclick="setHostOpenSpots(_hostOpenSpots + 1)">+</button>
+    <div class="section-label">🎮 Games <span style="font-size:0.75rem;font-weight:400;opacity:0.6">(optional)</span></div>
+    <div id="host-games-row" onclick="setHostAddGames(!_hostAddGames)"
+      style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;border:2px solid var(--border);background:#fff;cursor:pointer;margin-bottom:14px">
+      <span id="host-games-check" style="font-size:1.2rem">☐</span>
+      <span style="font-size:0.85rem;line-height:1.4"><b>Set up games now</b><br><span style="font-size:0.76rem;color:var(--text-muted)">Skins, CTP, BirdieBall — opens right after you create the Gathering</span></span>
     </div>
     <div class="section-label">👥 Who's Coming</div>
     <!-- Mode selector — segmented toggle (Dev-49) -->
@@ -17313,6 +17335,7 @@ async function showNewGatheringForm() {
         </div>
       </div>
     </div>
+    <div id="host-spots-preview" style="display:none;font-size:0.78rem;color:var(--text-muted);line-height:1.5;margin:8px 0 14px;padding:9px 12px;border-radius:10px;background:rgba(0,0,0,0.04)"></div>
     <!-- Dev-70 — "Auto-repeat weekly." Crew-mode only (see worker.js
          spawnAutoRepeatGatherings for why). Shared with the edit form —
          unchecking here is one of the two ways to stop the chain, the
@@ -17345,6 +17368,7 @@ async function showNewGatheringForm() {
 }
 function setHostPlaying(playing) {
   _hostPlaying = playing;
+  updateHostSpotsPreview();
   const btn = document.getElementById('host-playing-yes');
   if (!btn) return;
   btn.style.background = playing ? 'var(--green)' : '#fff';
@@ -17392,6 +17416,7 @@ function setEditHostHoles(n) {
 }
 function setHostMode(mode) {
   _hostMode = mode;
+  updateHostSpotsPreview();
   const crewBtn = document.getElementById('host-mode-crew');
   const openBtn = document.getElementById('host-mode-open');
   const crewSec = document.getElementById('host-crew-section');
@@ -17415,6 +17440,7 @@ function renderHostCrewSummary() {
   const iconEl     = document.getElementById('host-crew-select-icon');
   const indivLabel = document.getElementById('who-coming-individual-label');
   const registerAllRow = document.getElementById('host-register-all-crew-row'); // Dev-69 — only present on the create form; null (no-op) elsewhere
+  updateHostSpotsPreview();
   if (!el) return;
   if (_hostCrewPicked.size === 0) {
     el.innerHTML = '';
@@ -17704,13 +17730,11 @@ async function submitNewGathering() {
   if (_hostMode === 'crew' && !_hostSelectedCrewId && _hostCrewPicked.size === 0) {
     showToast('Pick a Crew or select at least one player', true); return;
   }
-  // Capacity check only applies in crew mode (open mode — anyone can join, host sets a cap but can't pre-validate)
-  if (_hostMode === 'crew' && size) {
-    const totalWithHost = _hostCrewPicked.size + (_hostPlaying ? 1 : 0) + _hostOpenSpots;
-    if (totalWithHost < size) {
-      showToast(`Add more players — ${totalWithHost} selected but capacity is ${size}`, true);
-      return;
-    }
+  // v4.9.1 — seats not covered by host + invitees become open spots automatically.
+  const autoSpots = hostAutoOpenSpots();
+  if (autoSpots > 8) {
+    showToast(`${autoSpots} seats unfilled — add more players or lower the capacity (max 8 open spots)`, true);
+    return;
   }
   // Build local ISO string (no UTC shift) — same pattern as submitEditGathering
   const _etRaw = new Date(`${dateVal}T${timeVal}:00`);
@@ -17767,11 +17791,11 @@ async function submitNewGathering() {
     // Open spots (Dev-90): created BEFORE the host/crew registrations below so
     // the seats they hold are counted when capacity is checked. A failure here
     // doesn't undo the Gathering — the host can add spots from the Host Panel.
-    if (_hostOpenSpots > 0) {
+    if (autoSpots > 0) {
       try {
         const spotRes = await fetch(`${BFE_API}/bfe/gathering-spots/${gathData.id}/add`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ host_id: currentPlayer, count: _hostOpenSpots })
+          body: JSON.stringify({ host_id: currentPlayer, count: autoSpots })
         });
         const spotData = await spotRes.json();
         if (!spotData.ok) throw new Error(spotData.error || 'failed');
@@ -17782,14 +17806,15 @@ async function submitNewGathering() {
     // Auto-register the host themselves, per the "Are you playing?" toggle
     // (default Yes — most Hosts also play, Dev-45). Best-effort: a failure
     // here shouldn't undo the Gathering itself, just surface a warning.
+    const _regJobs = [];
     if (_hostPlaying) {
-      gatheringsFetchJSON(`${GATHERINGS_API}/registrations`, {
+      _regJobs.push(gatheringsFetchJSON(`${GATHERINGS_API}/registrations`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gathering_id: gathData.id, player_id: currentPlayer, status: 'yes' })
       }).catch(e => {
         console.warn('Host self-registration failed:', e);
         showToast('⚠️ Gathering created, but auto-registering you failed — register manually from the card', true);
-      });
+      }));
     }
     // Dev-69 — "Register all crew" toggle: host already knows everyone's
     // playing, so register the whole picked crew as Yes right away instead
@@ -17800,7 +17825,7 @@ async function submitNewGathering() {
     // player_id per call — no bulk endpoint, and adding one for what's at
     // most a dozen-ish parallel requests isn't worth a Worker change.
     if (_hostMode === 'crew' && _hostRegisterAllCrew && notifyNames.length) {
-      Promise.all(notifyNames.map(name =>
+      _regJobs.push(Promise.all(notifyNames.map(name =>
         gatheringsFetchJSON(`${GATHERINGS_API}/registrations`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ gathering_id: gathData.id, player_id: name, status: 'yes' })
@@ -17808,7 +17833,7 @@ async function submitNewGathering() {
       )).catch(e => {
         console.warn('Register-all-crew failed:', e);
         showToast('⚠️ Gathering created, but auto-registering some of the crew failed — they can still register individually', true);
-      });
+      }));
     }
     if (notifyNames.length) {
       const notifType = fillListEnabled ? 'gathering_open_invite' : 'gathering_invite';
@@ -17824,10 +17849,13 @@ async function submitNewGathering() {
       osSendToPlayers(notifyNames, notifTitle, notifBody, 'https://birdiefriends.com/portal.html', notifType, notifMeta)
         .catch(e => console.warn('Invite notify failed:', e));
     }
-    showToast('✅ Gathering created');
+    showToast(_hostAddGames ? '✅ Gathering created — now set up the games' : '✅ Gathering created');
+    if (_hostAddGames) await Promise.allSettled(_regJobs); // Games form counts Yes registrations
     await refreshGatherings();
     await loadHostSpots();
-    renderHostPanelList();
+    const _createdG = gatheringData.find(x => x.gatheringId === gathData.id);
+    if (_hostAddGames && _createdG) await showGatheringGamesForm(gathData.id);
+    else renderHostPanelList();
     // Offer "Save as Template?" after successful create
     promptSaveAsTemplate({
       title, venue, capacity: size, gathering_type: gatheringType, description,

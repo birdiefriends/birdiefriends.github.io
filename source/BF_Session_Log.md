@@ -5358,3 +5358,7 @@ placeholder and use Fill). Brian runs it in the D1 console.
 
 **4. Mistake caught.** The v4.8.19 comment-only publish test changed `docs/portal.html` but not its `source/`
 mirror (bf_push normally writes both), leaving them one comment apart; resynced in this session's commit.
+
+### Dev-90 addendum — v4.9.1 (New Gathering setup)
+- Open spots are now automatic: capacity − host (if playing) − invitees, held as "Open Spot N" (max 8), with a live preview under the player picker. Manual stepper removed.
+- New "🎮 Games — Set up games now" toggle in New Gathering: after Create, opens the Games setup for the new Gathering (host/crew registrations settle first so the form counts players).

@@ -12,11 +12,11 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 const fns = ['escapeHtml','evtPhotoKey','computeGatheringGamesPayout','latestScorecardPerPlayer','scorecardMissingHoles','renderGatheringPayoutHtml',
   'openGatheringCloseSheet','confirmGatheringClose','openModal','closeModal',
   'isOpenSpotName','loadHostSpots','hostSpotsHtml','hostAddOpenSpot','refreshAfterSpotChange','openFillSpotSheet','renderFillSpotSheet',
-  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','setHostOpenSpots'];
+  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','hostAutoOpenSpots','updateHostSpotsPreview','setHostAddGames'];
 function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillOk = true } = {}) {
   const dom = new JSDOM(`<body><div id="gathering-close-modal"><div id="gathering-close-body"></div></div>
     <div id="gathering-spot-modal"><div id="gathering-spot-title"></div><div id="gathering-spot-body"></div></div>
-    <div id="host-sheet-body"></div><div id="history-game-results"></div><span id="host-open-spots-n"></span></body>`);
+    <div id="host-sheet-body"></div><div id="history-game-results"></div><input id="host-new-size" value="4"><div id="host-spots-preview"></div><div id="host-games-row"></div><span id="host-games-check"></span></body>`);
   const posts = []; const toasts = []; const calls = [];
   const h = o => Array(18).fill(5).map((v, i) => o[i + 1] ?? v);
   const ctx = {
@@ -50,7 +50,7 @@ function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillO
   ctx.posts = posts; ctx.toasts = toasts; ctx.calls = calls;
   vm.createContext(ctx);
   vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') +
-    '\nvar _spotsByGathering = new Map(); var _hostOpenSpots = 0; var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null;', ctx);
+    '\nvar _spotsByGathering = new Map(); var _hostAddGames = false; var _hostMode = "crew"; var _hostPlaying = true; var currentPlayer = "Brian Hager"; var _hostCrewPicked = new Set(); var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null;', ctx);
   return ctx;
 }
 
@@ -124,12 +124,28 @@ await c.openGatheringCloseSheet(69);
 ok(!c.document.getElementById('btn-gathering-close-confirm').disabled, 'spots lookup failure does not block the sheet');
 
 // 8. New Gathering form wiring
-c = setup(); c.setHostOpenSpots(3); ok(c._hostOpenSpots === 3 && c.document.getElementById('host-open-spots-n').textContent === '3', 'stepper up');
-c.setHostOpenSpots(-5); ok(c._hostOpenSpots === 0, 'floor 0'); c.setHostOpenSpots(99); ok(c._hostOpenSpots === 8, 'cap 8'); c.setHostOpenSpots('abc'); ok(c._hostOpenSpots === 0, 'junk -> 0');
-ok(/_hostCrewPicked\.size \+ \(_hostPlaying \? 1 : 0\) \+ _hostOpenSpots/.test(src), 'spots count toward capacity in the create check');
+c = setup(); const sz = v => { c.document.getElementById('host-new-size').value = String(v); };
+ok(c.hostAutoOpenSpots() === 3, 'size 4, host only -> 3 open spots');
+c._hostCrewPicked = new Set(['Mike Scanlan', 'Jim Bingham']); ok(c.hostAutoOpenSpots() === 1, 'host + 2 invitees of 4 -> 1 spot');
+c._hostCrewPicked = new Set(['Mike Scanlan', 'Jim Bingham', 'Brian Hager']); ok(c.hostAutoOpenSpots() === 1, 'host in the crew is not double counted');
+c._hostPlaying = false; c._hostCrewPicked = new Set(['A', 'B']); ok(c.hostAutoOpenSpots() === 2, 'host not playing -> 2 spots');
+c._hostCrewPicked = new Set(['A','B','C','D','E']); ok(c.hostAutoOpenSpots() === 0, 'over capacity floors at 0');
+c._hostMode = 'open'; ok(c.hostAutoOpenSpots() === 0, 'open mode never creates spots'); c._hostMode = 'crew';
+sz(''); ok(c.hostAutoOpenSpots() === 0, 'blank size -> 0');
+c._hostPlaying = true; c._hostCrewPicked = new Set(); sz(4); c.updateHostSpotsPreview();
+const pv = c.document.getElementById('host-spots-preview'); ok(pv.style.display === 'block' && /3 open spots/.test(pv.textContent), 'preview shows 3');
+sz(12); c.updateHostSpotsPreview(); ok(/max 8/.test(pv.textContent), 'preview warns above 8');
+sz(1); c.updateHostSpotsPreview(); ok(pv.style.display === 'none', 'preview hidden at 0');
+c.setHostAddGames(true); ok(c._hostAddGames === true && c.document.getElementById('host-games-check').textContent === '☑', 'games toggle on');
+c.setHostAddGames(false); ok(c._hostAddGames === false && c.document.getElementById('host-games-check').textContent === '☐', 'games toggle off');
+ok(/const autoSpots = hostAutoOpenSpots\(\);/.test(src) && /count: autoSpots/.test(src), 'create uses the automatic count');
+ok(!/_hostOpenSpots/.test(src), 'manual stepper state is gone');
+ok(/if \(_hostAddGames && _createdG\) await showGatheringGamesForm\(gathData\.id\)/.test(src), 'Create opens the Games setup when toggled');
+ok(/Promise\.allSettled\(_regJobs\)/.test(src), 'registrations settle before the Games form counts players');
+ok(/oninput="updateHostSpotsPreview\(\)"/.test(src), 'size input updates the preview');
 const iAdd = src.indexOf('/bfe/gathering-spots/${gathData.id}/add'), iHost = src.indexOf('// Auto-register the host themselves');
 ok(iAdd > 0 && iHost > iAdd, 'spots are created BEFORE the host/crew registrations');
-ok(/_hostOpenSpots = 0;\s*\n\s*_pendingCrewName = null;/.test(src), 'form resets the stepper each time it opens');
+ok(/_hostAddGames = false;\s*\n\s*_pendingCrewName = null;/.test(src), 'form resets the games toggle each time it opens');
 ok(src.includes("Promise.all([loadHostTemplates(), loadHostGamesConfigs(), loadHostSpots()])"), 'Host Panel warms the spots cache');
 ok((src.match(/hostSpotsHtml\(g, (true|false)\)/g) || []).length === 2, 'both the upcoming and archive cards render the block');
 ok((src.match(/isOpenSpotName\(r\.player\) \? '🪑 ' \+ r\.player/g) || []).length === 2, 'placeholders are labelled in both response lists');
