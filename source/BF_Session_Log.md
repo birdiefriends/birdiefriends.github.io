@@ -5382,3 +5382,6 @@ mirror (bf_push normally writes both), leaving them one comment apart; resynced 
 
 ### Dev-90 addendum — v4.9.11 (BirdieBall lost push)
 - Live "I lost it" now pushes "🐦💔 <player> lost the BirdieBall — Hole #N" (bf_type 'birdieball', feed card added) to the round's other registered players (not league-wide; test mode = commissioner only). Scorecard confirmations send no push.
+
+### Dev-90 addendum — v4.9.12 (game (i) descriptors)
+- `GAME_INFO` + `gameInfoBtnHtml/gameInfoPanelHtml/toggleGameInfo`: discreet (i) that expands a short how-it-plays/pays note, in the games form checklist, the New Gathering "Add games" sheet, and the Event Card Games details rows. Text mirrors bf_engine rules (skins outright low gross, no carryover; CTP unclaimed rolls to skins; BirdieBall keepers split, else longest holder; birdie pay flat per birdie). New `test_game_info.mjs`.

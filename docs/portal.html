@@ -11385,9 +11385,10 @@ function hostGamesListHtml(query) {
   if (!rows.length) return '<div style="padding:16px 18px;font-size:0.84rem;color:var(--text-muted)">No games match.</div>';
   return rows.map(k => {
     const on = _hostGamesPick.has(k);
-    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border)">
+    return `<div style="padding:12px 18px;border-bottom:1px solid var(--border)"><div style="display:flex;align-items:center;gap:12px">
       <div style="flex:1;font-size:1rem;font-weight:700">${GATHERING_GAMES_META[k].icon} ${GATHERING_GAMES_META[k].label}</div>
-      <button type="button" onclick="toggleHostGame('${k}')" style="height:36px;padding:0 16px;border-radius:18px;font-family:inherit;font-size:0.86rem;font-weight:700;cursor:pointer;${on ? 'border:0;background:var(--green);color:#fff' : 'border:1.5px solid var(--green);background:#fff;color:var(--green)'}">${on ? 'Added' : 'Add'}</button></div>`;
+      ${gameInfoBtnHtml('host', k)}
+      <button type="button" onclick="toggleHostGame('${k}')" style="height:36px;padding:0 16px;border-radius:18px;font-family:inherit;font-size:0.86rem;font-weight:700;cursor:pointer;${on ? 'border:0;background:var(--green);color:#fff' : 'border:1.5px solid var(--green);background:#fff;color:var(--green)'}">${on ? 'Added' : 'Add'}</button></div>${gameInfoPanelHtml('host', k)}</div>`;
   }).join('');
 }
 function openHostGamesSheet() {
@@ -15484,34 +15485,36 @@ function gatheringGameDetailsBody(evt, config) {
   const dpp = (config.payout && config.payout.entry_per_player) || 0;
   const totalPot = dpp * yesCount;
   let remaining = totalPot;
-  const row = (icon, label, detail) => `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--surface)">
+  const row = (icon, label, detail, key) => `
+    <div style="padding:10px 12px;border-radius:10px;background:var(--surface)">
+    <div style="display:flex;align-items:center;gap:10px">
       <span style="font-size:1.3rem;flex-shrink:0">${icon}</span>
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:0.88rem">${label}</div>
         <div style="font-size:0.78rem;color:var(--text-muted)">${detail}</div>
       </div>
-    </div>`;
+      ${gameInfoBtnHtml('card', key)}
+    </div>${gameInfoPanelHtml('card', key)}</div>`;
   const rows = [];
   const cttp = gatheringAddon(config, 'cttp');
   if (cttp) {
     const holes = cttp.holes || [];
     const cost = (cttp.dollar_per_hole || 0) * holes.length;
     remaining -= cost;
-    rows.push(row('🎯', 'Closest to the Pin', `${holes.length} hole${holes.length === 1 ? '' : 's'} · $${(cttp.dollar_per_hole || 0).toFixed(2)}/hole · $${cost.toFixed(2)} pot`));
+    rows.push(row('🎯', 'Closest to the Pin', `${holes.length} hole${holes.length === 1 ? '' : 's'} · $${(cttp.dollar_per_hole || 0).toFixed(2)}/hole · $${cost.toFixed(2)} pot`, 'cttp'));
   }
   const bb = gatheringAddon(config, 'birdieball');
   if (bb) {
     const cost = (bb.dollar_per_player || 0) * yesCount;
     remaining -= cost;
-    rows.push(row('🐦', 'BirdieBall', `$${(bb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot`));
+    rows.push(row('🐦', 'BirdieBall', `$${(bb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot`, 'birdieball'));
   }
   const bp = gatheringAddon(config, 'birdiepay');
   if (bp) {
-    rows.push(row('🐤', 'Birdie Payouts', `$${(bp.dollar_per_birdie || 0).toFixed(2)} for every birdie, paid from the pot before Skins`));
+    rows.push(row('🐤', 'Birdie Payouts', `$${(bp.dollar_per_birdie || 0).toFixed(2)} for every birdie, paid from the pot before Skins`, 'birdiepay'));
   }
   if ((config.legacy.games || []).includes('skins')) {
-    rows.push(row('⛳', 'Skins', `Gets what's left: $${Math.max(0, remaining).toFixed(2)} pot${bp ? ', minus any birdie payouts' : ''}`));
+    rows.push(row('⛳', 'Skins', `Gets what's left: $${Math.max(0, remaining).toFixed(2)} pot${bp ? ', minus any birdie payouts' : ''}`, 'skins'));
   }
   return `
     <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px">
@@ -17117,6 +17120,26 @@ const GATHERING_GAMES_META = {
   birdieball: { label: 'BirdieBall', icon: '🐦' },
   birdiepay:  { label: 'Birdie Payouts', icon: '🐤' }
 };
+// v4.9.11+ — discreet (i) descriptors: what each game is and how it pays.
+const GAME_INFO = {
+  skins:      'Every hole is its own prize. The lowest gross score on a hole, outright, wins that skin; a tie wins nothing. Skins split whatever is left of the pot after CTP, BirdieBall and Birdie Payouts, shared by the skins won.',
+  cttp:       'Closest to the Pin on the chosen holes (usually the par 3s). Whoever is closest on a hole wins that hole\'s fixed $ prize, taken from the pot. Claim it in the Live Panel; the newest claim leads. An unclaimed hole\'s money rolls into Skins.',
+  birdieball: 'Keep one ball all round. Everyone who still has it at the end splits the BirdieBall pot. If nobody kept it, whoever held on longest wins. Lose yours? Tap "I lost it" in the Live Panel so the group knows, and confirm on your scorecard.',
+  birdiepay:  'A flat $ for every birdie or better, paid to whoever made it, from the same pot before Skins. An eagle still pays one birdie. Nothing to enter: it\'s worked out from the scorecards when the round closes.'
+};
+function gameInfoBtnHtml(ctx, key) {
+  if (!GAME_INFO[key]) return '';
+  return `<button type="button" aria-label="About this game" onclick="event.stopPropagation();toggleGameInfo('${ctx}','${key}')"
+    style="width:22px;height:22px;flex-shrink:0;border-radius:50%;border:1.5px solid var(--text-hint,#9aa3a0);background:transparent;color:var(--text-muted);font-family:Georgia,serif;font-style:italic;font-weight:700;font-size:0.8rem;line-height:1;padding:0;cursor:pointer">i</button>`;
+}
+function gameInfoPanelHtml(ctx, key) {
+  if (!GAME_INFO[key]) return '';
+  return `<div id="gi-${ctx}-${key}" style="display:none;margin:6px 4px 2px;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,0.05);font-size:0.78rem;line-height:1.5;color:var(--text-muted)">${GAME_INFO[key]}</div>`;
+}
+function toggleGameInfo(ctx, key) {
+  const el = document.getElementById(`gi-${ctx}-${key}`);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
 async function showGatheringGamesForm(gatheringId, preselect, opts) {
   const g = (opts && opts.g) || gatheringData.find(x => x.gatheringId === gatheringId);
   _gamesFormG = g || null;
@@ -17214,13 +17237,14 @@ function gatheringGamesChecklistHtml() {
   return Object.keys(GATHERING_GAMES_META).filter(k => true).map(key => {
     const meta = GATHERING_GAMES_META[key];
     const checked = _gamesFormSelected.has(key);
-    return `<div onclick="toggleGamesFormGame('${key}')"
-      style="padding:11px 14px;margin-bottom:8px;background:${checked ? 'var(--green-light)' : 'rgba(255,255,255,0.5)'};
+    return `<div style="margin-bottom:8px"><div onclick="toggleGamesFormGame('${key}')"
+      style="padding:11px 14px;background:${checked ? 'var(--green-light)' : 'rgba(255,255,255,0.5)'};
       border:1.5px solid ${checked ? 'var(--green)' : 'var(--border-med)'};border-radius:10px;
       display:flex;align-items:center;gap:10px;cursor:pointer">
       <span style="font-size:1.1rem">${checked ? '☑' : '☐'}</span>
-      <span style="font-weight:600;color:${checked ? 'var(--green-dark)' : 'var(--text)'}">${meta.icon} ${meta.label}</span>
-    </div>`;
+      <span style="font-weight:600;flex:1;color:${checked ? 'var(--green-dark)' : 'var(--text)'}">${meta.icon} ${meta.label}</span>
+      ${gameInfoBtnHtml('form', key)}
+    </div>${gameInfoPanelHtml('form', key)}</div>`;
   }).join('');
 }
 function toggleGamesFormGame(key) {

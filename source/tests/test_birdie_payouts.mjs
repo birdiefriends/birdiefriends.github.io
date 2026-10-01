@@ -149,8 +149,8 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
     gatheringsFetchJSON: async (url, opts) => { posts.push(JSON.parse(opts.body)); return { ok: true }; },
     loadHostGamesConfigs: async () => {}, renderHostPanelList: () => {}
   };
-  vm.createContext(ctx);
-  const fns = ['gatheringGamesChecklistHtml', 'toggleGamesFormGame', 'gatheringGamesCttpSectionHtml', 'gatheringGamesBirdieballSectionHtml',
+  vm.createContext(ctx); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
+  const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','gatheringGamesChecklistHtml', 'toggleGamesFormGame', 'gatheringGamesCttpSectionHtml', 'gatheringGamesBirdieballSectionHtml',
     'gatheringGamesBirdiepaySectionHtml', 'setGamesFormBirdiepayDollarPerBirdie', 'gamesFormOverCommit', 'updateGamesFormPotPreview', 'submitGatheringGames'];
   vm.runInContext(`
     const GATHERING_GAMES_META = ${JSON.stringify({ skins: { label: 'Skins', icon: 'x' }, cttp: { label: 'CTP', icon: 'x' }, birdieball: { label: 'BirdieBall', icon: 'x' }, birdiepay: { label: 'Birdie Payouts', icon: 'x' } })};
@@ -217,8 +217,8 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
   const old = rctx.f(E.computeGatheringGamesPayout({ games: ['skins'], dollar_per_player: 10 }, [card('A'), card('B')], {}, []));
   ok(!old.includes('Birdie Payouts'), 'K: old snapshots show no Birdie Payouts block');
 
-  const dctx = { regData: [], gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null }; vm.createContext(dctx);
-  vm.runInContext('const regDataStub=1;' + `let regData = [{gatheringId: 7, status: 'Yes'},{gatheringId: 7, status: 'Yes'}];` + extractFn(src, 'gatheringGameDetailsBody') + ';this.f=gatheringGameDetailsBody;', dctx);
+  const dctx = { regData: [], gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null }; vm.createContext(dctx); dctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' };
+  vm.runInContext('const regDataStub=1;' + `let regData = [{gatheringId: 7, status: 'Yes'},{gatheringId: 7, status: 'Yes'}];` + extractFn(src, 'gameInfoBtnHtml') + extractFn(src, 'gameInfoPanelHtml') + extractFn(src, 'gatheringGameDetailsBody') + ';this.f=gatheringGameDetailsBody;', dctx);
   const body = dctx.f({ source: 'gathering', gatheringId: 7 }, E.gatheringConfigFromLegacy(row(['birdiepay', 'skins'])));
   ok(body.includes('Birdie Payouts') && body.includes('$5.00 for every birdie') && body.includes('minus any birdie payouts'), 'K: event-card Games details list Birdie Payouts and tell Skins it shares the pot');
 }

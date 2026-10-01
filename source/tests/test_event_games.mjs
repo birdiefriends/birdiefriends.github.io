@@ -58,12 +58,12 @@ db.prepare("UPDATE bfe_gathering_games SET status='closed' WHERE gathering_id=7"
 
 // ── Portal helpers ──
 const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
-const fns = ['eventLocalDay','eventGamesRef','eventNameFromRef','eventShadowFor','gamesGidFor','evtGamesConfig','eventShadowGamed','panelGamesGid','gamesScoreKeyForGid','eventGamesAllowed','eventAddGamesBtnHtml','gatheringGamesChecklistHtml','historyShadowGid'];
+const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','eventLocalDay','eventGamesRef','eventNameFromRef','eventShadowFor','gamesGidFor','evtGamesConfig','eventShadowGamed','panelGamesGid','gamesScoreKeyForGid','eventGamesAllowed','eventAddGamesBtnHtml','gatheringGamesChecklistHtml','historyShadowGid'];
 const mkCtx = (over = {}) => {
   const ctx = { Number, String, Map, Set, Date, isNaN, Object, currentPlayer: 'Brian Hager', isGuest: () => false, formatBadge: f => f || '', isBFEBackedCard: () => false,
     findMyReg: () => ({ status: 'Yes' }), gatheringRoundConfig: gid => (ctx._cfgs || {})[gid] || null, gatheringIsGamed: c => !!c,
     GATHERING_GAMES_META: { skins: { label: 'Skins', icon: 'S' }, cttp: { label: 'CTP', icon: 'C' }, birdieball: { label: 'BB', icon: 'B' }, birdiepay: { label: 'BP', icon: 'P' } }, ...over };
-  vm.createContext(ctx);
+  vm.createContext(ctx); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
   vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') + '\nvar _eventShadows = new Map(), _eventShadowByGid = new Map(), _closedGamesGids = new Set(), _gamesFormShadow = false, _gamesFormSelected = new Set();', ctx);
   return ctx;
 };

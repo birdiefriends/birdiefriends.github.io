@@ -61,8 +61,8 @@ function setup() {
     _gatheringGamesIndex: new Map([[gatheringId, row]]),
     openModal: (id) => opened.push(id),
   };
-  vm.createContext(ctx);
-  const fns = ['gatheringRoundConfig', 'evtGamesConfig', 'gamesGidFor', 'eventShadowFor', 'eventLocalDay', 'eventGamesRef', 'gatheringIsGamed', 'gatheringAddon', 'gatheringGameDetailsBody', 'openGameDetailsModal'];
+  vm.createContext(ctx); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
+  const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','gatheringRoundConfig', 'evtGamesConfig', 'gamesGidFor', 'eventShadowFor', 'eventLocalDay', 'eventGamesRef', 'gatheringIsGamed', 'gatheringAddon', 'gatheringGameDetailsBody', 'openGameDetailsModal'];
   vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') + '\nvar _eventShadows = new Map();', ctx);
   return Object.assign(ctx, { opened, evt });
 }
