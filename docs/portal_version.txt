@@ -1,3 +1,6 @@
+v4.9.8 · 2026-10-01
+Deployed: 2026-10-01 (Event Cards: the + Games disc is now a lighter green in the card's own tone instead of white.)
+
 v4.9.7 · 2026-10-01
 Deployed: 2026-10-01 (Event Cards: "+ Games" (and the Games button once games exist) now leads the icon row at the far left, and the + Games controller sits on a light disc so it stands out.)
 
