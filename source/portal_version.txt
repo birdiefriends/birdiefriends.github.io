@@ -1,3 +1,6 @@
+v4.10.8 · 2026-10-02
+Deployed: 2026-10-02 (Host Panel: Gatherings that are already Open now have a 📣 Announce to all members button, for games that were opened without an announcement.)
+
 v4.10.7 · 2026-10-02
 Deployed: 2026-10-02 (New Gathering: when seats are left after your invites, the form now asks what happens to them. Hold some for guests you'll name (not announced), and for the rest choose Open to all members now (everyone gets an announcement, first Yes takes a seat) or Not yet, invite-only (open it later from the Host Panel). Create waits until you choose. No Worker change.)
 

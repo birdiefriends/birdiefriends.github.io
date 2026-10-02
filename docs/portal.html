@@ -16691,7 +16691,8 @@ function renderHostPanelList() {
           <button class="btn btn-secondary btn-sm"
             onclick="hostInviteOthers(${g.gatheringId})">➕ Invite Others</button>
           ${!g.fillListEnabled ? `<button class="btn btn-primary btn-sm"
-            onclick="hostOpenToAllMembers(${g.gatheringId})">📢 Open to all members</button>` : ''}
+            onclick="hostOpenToAllMembers(${g.gatheringId})">📢 Open to all members</button>` : `<button class="btn btn-primary btn-sm"
+            onclick="hostAnnounceOpen(${g.gatheringId})">📣 Announce to all members</button>`}
           <button class="btn btn-secondary btn-sm"
             onclick="repeatGathering(${g.gatheringId})">🔁 Repeat</button>
           <button class="btn btn-secondary btn-sm"
@@ -16974,6 +16975,15 @@ async function hostBroadcastOpen(g) {
   osSendToPlayers(names, '📢 Open Gathering', body, 'https://birdiefriends.com/portal.html', 'gathering_open_invite', { gathering_id: g.gatheringId })
     .catch(e => console.warn('Open announcement failed:', e));
   return names.length;
+}
+// v4.10.8 — an Open Gathering that was never announced (e.g. switched to Open from
+// Edit before 4.10.6) can be announced from the Host Panel at any time.
+async function hostAnnounceOpen(gatheringId) {
+  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  if (!g || !g.fillListEnabled) return;
+  if (!confirm(`Announce "${g.name}" to all members?\n\nEveryone with Gathering Alerts on who is not already registered gets a message. Send this once.`)) return;
+  const n = await hostBroadcastOpen(g);
+  showToast(n ? `📣 Announced to ${n} member${n === 1 ? '' : 's'}` : 'Nobody left to notify', !n);
 }
 async function hostOpenToAllMembers(gatheringId) {
   const g = gatheringData.find(x => x.gatheringId === gatheringId);
