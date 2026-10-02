@@ -899,3 +899,76 @@ while polling, Edit Gathering.
   `handicap_config` on fill would remove that step.
 
 **Not in scope:** guests/hold-seats flow, partial crew, tee-time booking, anything on the Edit form.
+
+---
+
+## 12. Intercept at the failure point — sorting out who really played (design note, 2026-10-02; NOT built)
+
+**Principle (Brian, 2026-10-02).** A host's setup is a prediction; the round is the truth. Registration stays permissive
+until tee time. Never block a player from entering anything (CTP, Birdie, BirdieBall, scorecard); block only the **money**
+(Close & Calculate) until the record matches what happened. Resolve each mismatch at the FIRST point reality exposes it,
+once, so everything after it just works.
+
+**What the code does today (verified 2026-10-02).** Close & Calculate builds the pot from scorecards turned in, so the
+card is already the truth for who played. But the Live Panel pickers (Birdie Alert, CTP, BirdieBall, and the player sheet
+they share) list only registered players (status not No) from `gatheringRegData`; Birdie Alert defaults to the logged-in
+player. A BF member who never RSVP'd can submit under their own name but isn't on the roster; a person with no BF account
+can't be picked at all, so nobody can enter their card. Close checks cards vs confirmed Yes, blank holes and open spots;
+a net player with no strokes is only a quiet "played scratch" line in the results after closing.
+
+**Failure points, in the order reality exposes them**
+
+| Point | What fails | Intercept |
+|---|---|---|
+| Setup | host guesses wrong or leaves things blank | stay permissive; prefill from Membership; block nothing (loosen the Games save rule) |
+| First CTP / Birdie / BirdieBall / scorecard entry | player not on the roster | "Not on the list?" in the player sheet: add a player in seconds |
+| Net game, new player | no index or strokes | ask once, optional, right then; skipping is fine |
+| Open Spot | held seat has no name | whoever shows up takes the next open spot (existing rename), else a new row; host confirms at Close |
+| Close | anything still unresolved | one reconcile screen (below) |
+
+**Brian's rulings**
+1. **Anyone in the group may add the missing player** (usually the overseer/scorekeeper): by the time anyone notices, the
+   player is already on the course, so the host can't be the only one who can. Minimum is **First, Last, Cell**, with
+   **Cell optional**: capture it, but never let it stop the process (people skip required fields when it is in the way).
+2. **Every added player becomes a Membership record**, not an anonymous name: "we need membership basics for any BF
+   player." Same record the existing Join BirdieFriends form creates (`submitJoinBF`: first, last, cell, member date,
+   Active), so they show up in Membership, can be a handicap source, and can claim the profile later.
+3. **No push to the host at join time.** The host is probably playing; the host confirms everything once, at Close.
+
+**Add-a-player flow (design)**
+- Entry: a "➕ Not on the list?" row in the Live Panel player sheet (all pickers). Works for a member and a non-member.
+- Step 1: type a name. Match against existing members first ("Mike" suggests Mike Nagle) so a duplicate is never made.
+  A match = pick them; no match = New player.
+- New player: First, Last, Cell (optional, with a one-line "so we can reach them"). Creates the Membership record.
+  **Open check:** the Join form sets field 20 to "Yes" (commented as a broadcast opt-in, `bfw: 'Yes'` locally). Someone
+  added by a friend has not consented to alerts, so an on-course add should leave that off until they claim the profile.
+  Confirm what field 20 controls before building.
+- Then: registered Yes for this game, tagged as added on the course (who added, when). On-course joins skip the Sub
+  downgrade: capacity is a target, and they are physically there (main Worker Dev-70 would otherwise make them Sub).
+- If the game has Open Spots, the join takes the lowest-numbered one (existing fill/rename) instead of adding a row.
+- If a net game is on, one optional line: "Handicap index (or skip)". Membership index is used automatically if on file.
+- Storage: needs a mark on the registration saying it was added on the course (`added_by`, `added_at`) so Close can list
+  it. That is a D1 `ALTER TABLE registrations` plus the main Worker accepting the fields (Brian's paste-deploy); an
+  alternative is deriving "joined on course" from the registration time vs tee time, which needs no migration but is a guess.
+
+**Close & Calculate becomes the reconcile screen.** Blockers (Close stays disabled; each has a one-tap fix):
+open spots still unfilled; a net player with no strokes (inline tee + index row, prefilled from Membership);
+a card under a name that is not a registered player ("Is this Mike Nagle?" with a suggested match, or merge/remove).
+Warnings the host acknowledges: signed up but no card (one tap marks them "didn't play"); blank holes; a player with a
+card but no BirdieBall answer; players who joined on the course (confirm, or merge a duplicate). The pot rule is unchanged
+(scorecards in).
+
+**Loosen setup to match.** The Games form should stop refusing to save until every player's tee and index are filled
+(the hurdle lazy hosts will never clear): pick Gross or Net, one tee for everyone, and the allowance; Membership indexes
+fill in automatically; missing ones are resolved at the first on-course add or at Close. Trade-off: strokes are not
+visible before game day for anyone without a Membership handicap.
+
+**Build order (each slice tested and shippable alone).** (1) Add-a-player in the Live Panel pickers (member match + new
+Membership record + Yes registration). (2) Open Spot take-over. (3) The Close reconcile screen. (4) Loosen the Games save
+rule. Open questions: field 20 meaning; registration storage (ALTER vs derive); how the duplicate match should behave for
+common first names; whether a Membership record created on the course is flagged until the person claims it.
+
+**Findings log additions (2026-10-02)**
+- Unregistered players are first exposed at the first CTP/Birdie/BirdieBall/scorecard entry, not at Close; a person with no
+  BF account cannot be picked at all today.
+- A net player with no strokes is silent until after Close.
