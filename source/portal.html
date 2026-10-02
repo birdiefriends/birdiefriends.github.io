@@ -5762,8 +5762,11 @@ function buildEventCard(evt, isPast) {
   const regMatchesEvt = r => (evt.source === 'gathering')
     ? r.gatheringId === evt.gatheringId
     : r.eventName === evt.name;
-  const yesCount  = regData.filter(r => regMatchesEvt(r) && r.status === 'Yes').length;
-  const regCount  = regData.filter(r => regMatchesEvt(r) && r.status !== 'No').length;
+  // v4.10.5 — Open Spots are held seats (placeholder "Yes" rows), not registered
+  // players: the headcount shows real players only, with the held seats called out.
+  const openSpotCount = regData.filter(r => regMatchesEvt(r) && r.status === 'Yes' && isOpenSpotName(r.player)).length;
+  const yesCount  = regData.filter(r => regMatchesEvt(r) && r.status === 'Yes').length - openSpotCount;
+  const regCount  = regData.filter(r => regMatchesEvt(r) && r.status !== 'No' && !isOpenSpotName(r.player)).length;
   const myReg     = currentPlayer ? findMyReg(evt.name, evt.source === 'gathering' ? evt.gatheringId : undefined) : null;
   const capStatus = getCapacityStatus(evt);
   const myCapDisp = myReg ? getMyCapacityDisplay(evt, myReg, capStatus) : null;
@@ -5823,8 +5826,8 @@ function buildEventCard(evt, isPast) {
   const subCount  = regData.filter(r => regMatchesEvt(r) && r.status === 'Sub').length;
   const dispCap    = capStatus.restricted ? capStatus.cap : evt.capacity;
   const countLabel = dispCap
-    ? `${yesCount}/${dispCap}${subCount ? ` + ${subCount} sub` : ''}`
-    : `${regCount} registered`;
+    ? `${yesCount}/${dispCap}${openSpotCount ? ` · ${openSpotCount} open` : ''}${subCount ? ` + ${subCount} sub` : ''}`
+    : `${regCount} registered${openSpotCount ? ` · ${openSpotCount} open` : ''}`;
   const whoId = `who-${evt.id}`;
   // Top-right corner mark
   let markHtml = '';
@@ -6046,6 +6049,7 @@ function buildPlayerChips(evt) {
   }
   return `<div class="player-chips">` +
     players.map(p => {
+      if (isOpenSpotName(p.player)) return `<span class="player-chip" style="background:transparent;border:1px dashed rgba(255,255,255,0.4);opacity:0.75">🪑 ${p.player}</span>`;
       const cls    = p.id === pendingId ? 'pending' : (p.status === 'Sub' ? 'sub' : '');
       const suffix = p.id === pendingId ? ' ⏳' : (p.status === 'Sub' ? ' (Sub)' : '');
       return `<span class="player-chip${cls ? ' '+cls : ''}">${p.player}${suffix}</span>`;
@@ -7707,7 +7711,7 @@ function openCommissionerPush(evtId, evtName) {
     const regMatchesEvt = r => (_pushEventContext.source === 'gathering')
       ? r.gatheringId === _pushEventContext.gatheringId
       : r.eventName === _pushEventContext.name;
-    const players = regData.filter(r => regMatchesEvt(r) && r.status !== 'No');
+    const players = regData.filter(r => regMatchesEvt(r) && r.status !== 'No' && !isOpenSpotName(r.player));
     const count = players.length;
     targetLabel = `${count} registered player${count !== 1 ? 's' : ''} for ${evtName}`;
   }
