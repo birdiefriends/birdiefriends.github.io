@@ -4497,7 +4497,9 @@ async function loadGatherings() {
     const filters = (_memberPrefs && _memberPrefs.gatheringFilters) || [];
     if (filters.length) {
       gatheringData = gatheringData.filter(g =>
-        !g.fillListEnabled || gatheringMatchesFilters(g, filters)
+        !g.fillListEnabled || g.hostId === currentPlayer
+          || gatheringRegData.some(r => r.gatheringId === g.gatheringId && r.player === currentPlayer && r.status !== 'No')
+          || gatheringMatchesFilters(g, filters)
       );
     }
   } catch(e) {
@@ -7758,7 +7760,7 @@ async function sendCommissionerPush() {
       ? r.gatheringId === _pushEventContext.gatheringId
       : r.eventName === _pushEventContext.name;
     const players = regData
-      .filter(r => regMatchesEvt(r) && r.status !== 'No')
+      .filter(r => regMatchesEvt(r) && r.status !== 'No' && !isOpenSpotName(r.player))
       .map(r => r.player.trim());
     if (!players.length) {
       showToast('No registered players to notify', true);
@@ -11194,7 +11196,7 @@ function hostSpotsHtml(g, canAdd) {
       <button class="btn btn-primary btn-sm" style="padding:4px 12px" onclick="openFillSpotSheet(${g.gatheringId}, ${i})">Fill</button>
     </div>`).join('');
   return `<div style="margin:8px 0;padding:8px 12px;border-radius:10px;${spots.length ? 'background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4)' : 'background:rgba(0,0,0,0.03);border:1px dashed rgba(0,0,0,0.15)'}">
-    ${spots.length ? `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:2px">Open spots — name each one before the round closes</div>${rows}` : ''}
+    ${spots.length ? `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:2px">Open spots — name each one before the round closes${g.fillListEnabled ? '' : '. Not announced to other members yet: tap 📢 Open to all members to let anyone take them'}</div>${rows}` : ''}
     ${canAdd ? `<button class="btn btn-ghost btn-sm" style="${spots.length ? 'margin-top:4px;' : ''}color:var(--text-muted)" onclick="hostAddOpenSpot(${g.gatheringId})">➕ Open spot</button>` : ''}
   </div>`;
 }
@@ -16638,6 +16640,8 @@ function renderHostPanelList() {
             onclick="showEditGatheringForm(${g.gatheringId})">✏️ Edit</button>
           <button class="btn btn-secondary btn-sm"
             onclick="hostInviteOthers(${g.gatheringId})">➕ Invite Others</button>
+          ${!g.fillListEnabled ? `<button class="btn btn-primary btn-sm"
+            onclick="hostOpenToAllMembers(${g.gatheringId})">📢 Open to all members</button>` : ''}
           <button class="btn btn-secondary btn-sm"
             onclick="repeatGathering(${g.gatheringId})">🔁 Repeat</button>
           <button class="btn btn-secondary btn-sm"
@@ -16901,6 +16905,48 @@ function toggleGatheringDesc(cardId) {
 // Wrapper called from the card button — looks up crewId and existing
 // players by gatheringId at call time, avoiding inline JSON escaping
 // issues in onclick attributes. Dev-46.
+// v4.10.6 — Open an invite-only Gathering to every member. One tap from the Host
+// Panel (or switching Edit → Open): flips fill_list_enabled and announces it to
+// members with Gathering Alerts on, skipping the host and anyone already invited
+// or registered. Held Open Spots stay and become claimable (a real Yes takes one).
+async function hostBroadcastOpen(g) {
+  const reg = new Set(gatheringRegData.filter(r => r.gatheringId === g.gatheringId).map(r => String(r.player).trim().toLowerCase()));
+  let crew = [];
+  if (g.crewId) {
+    try { const d = await gatheringsFetchJSON(`${GATHERINGS_API}/crews/${g.crewId}/members`); crew = d.ok ? (d.player_ids || []) : []; } catch (e) { /* announce to crew too if lookup fails */ }
+  }
+  crew.forEach(n => reg.add(String(n).trim().toLowerCase()));
+  const names = memberData
+    .filter(m => m.gatheringAlerts === 'Yes' && m.active !== 'InActive' && m.display !== currentPlayer && !reg.has(String(m.display).trim().toLowerCase()))
+    .map(m => m.display);
+  if (!names.length) return 0;
+  const body = `${currentPlayer} is hosting "${g.name}" — ${formatDate(g.dt)} at ${formatTime(g.dt)}. Open to all members.`;
+  osSendToPlayers(names, '📢 Open Gathering', body, 'https://birdiefriends.com/portal.html', 'gathering_open_invite', { gathering_id: g.gatheringId })
+    .catch(e => console.warn('Open announcement failed:', e));
+  return names.length;
+}
+async function hostOpenToAllMembers(gatheringId) {
+  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  if (!g || g.fillListEnabled) return;
+  const held = (_spotsByGathering.get(gatheringId) || []).length;
+  const msg = `Open "${g.name}" to ALL members?\n\nEveryone with Gathering Alerts on gets an announcement, and anyone can join until it's full.` +
+    (held ? `\n\nThe ${held} held open spot${held === 1 ? '' : 's'} become first-come: each new Yes takes one.` : '');
+  if (!confirm(msg)) return;
+  try {
+    const resp = await gatheringsFetchJSON(`${GATHERINGS_API}/gatherings/${gatheringId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: currentPlayer, fill_list_enabled: true, auto_repeat: false })
+    });
+    if (!resp.ok) throw new Error(resp.error || 'Could not open the Gathering');
+    const n = await hostBroadcastOpen(g);
+    showToast(`📢 Open to all members${n ? ` — announced to ${n}` : ''}`);
+    await refreshGatherings();
+    await loadHostSpots();
+    renderHostPanelList();
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
 async function hostInviteOthers(gatheringId) {
   const g = gatheringData.find(x => x.gatheringId === gatheringId);
   if (!g) return;
@@ -17235,7 +17281,8 @@ async function submitEditGathering(gatheringId) {
     if (resp.dateChanged) {
       showToast('📅 Date updated — crew notified to re-confirm');
     } else if (fillListEnabled && !g.fillListEnabled) {
-      showToast('✅ Gathering is now Open to all members');
+      const _n = await hostBroadcastOpen({ ...g, name: title, dt: newEventTime || g.dt });
+      showToast(`✅ Gathering is now Open to all members${_n ? ` — announced to ${_n}` : ''}`);
     } else if (!fillListEnabled && g.fillListEnabled) {
       showToast('✅ Gathering switched to Invite a Crew');
     } else {
