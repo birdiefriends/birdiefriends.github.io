@@ -17052,6 +17052,26 @@ async function cancelGatheringFromPanel(gatheringId, title) {
 // Crew changes are out of scope — use Invite Others to expand.
 // Date/time change: auto-notifies crew, flags existing responses as stale.
 // Capacity reduction below Yes count: soft warning, Host confirms.
+// v4.10.8 — plain-language status at the top of Edit → Who's Coming, so the host
+// can see how the game is set up before touching the Crew/Open toggle.
+function editSeatSummaryHtml(g) {
+  const regs = gatheringRegData.filter(r => r.gatheringId === g.gatheringId);
+  const held = regs.filter(r => r.status === 'Yes' && isOpenSpotName(r.player)).length;
+  const yes = regs.filter(r => r.status === 'Yes' && !isOpenSpotName(r.player)).length;
+  const cap = g.capacity || 0;
+  const free = cap ? Math.max(0, cap - yes - held) : 0;
+  const state = g.fillListEnabled
+    ? '📢 <b>Open to all members.</b> Anyone can join until it is full.'
+    : '🔒 <b>Invite-only.</b> Only your invited players can see it.';
+  const parts = [`${yes} playing`];
+  if (held) parts.push(`${held} held for guests you will name`);
+  if (cap) parts.push(`${free} seat${free === 1 ? '' : 's'} unclaimed`);
+  return `<div style="margin-bottom:12px;padding:10px 12px;border-radius:10px;background:rgba(0,0,0,0.04);font-size:0.82rem;line-height:1.5">
+    <div>${state}</div>
+    <div style="color:var(--text-muted);margin-top:2px">${parts.join(' · ')}</div>
+    ${!g.fillListEnabled && (free > 0 || held > 0) ? `<div style="color:#8a6a00;margin-top:4px">Seats not taken are not announced. Choosing Open to Members below announces the game to everyone when you save.</div>` : ''}
+  </div>`;
+}
 async function showEditGatheringForm(gatheringId) {
   const g = gatheringData.find(x => x.gatheringId === gatheringId);
   if (!g) { showToast('Could not find Gathering', true); return; }
@@ -17163,13 +17183,14 @@ async function showEditGatheringForm(gatheringId) {
         resize:vertical;min-height:72px;line-height:1.5;box-sizing:border-box">${(g.description || '').replace(/</g,'&lt;')}</textarea>
     </div>
     <div class="section-label">👥 Who's Coming</div>
+    ${editSeatSummaryHtml(g)}
     <!-- Mode selector — same toggle as create (Dev-49), now editable post-create (Dev-68) -->
     <div class="seg-toggle" style="margin-bottom:16px">
       <button id="host-mode-crew" type="button" onclick="setHostMode('crew')" class="seg-btn">
         👥 Invite a Crew<span class="seg-sub">Pick specific people</span>
       </button>
       <button id="host-mode-open" type="button" onclick="setHostMode('open')" class="seg-btn">
-        📢 Open to Members<span class="seg-sub">Anyone available can join</span>
+        📢 Open to Members<span class="seg-sub">${g.fillListEnabled ? 'Anyone available can join' : 'Announced to everyone on Save'}</span>
       </button>
     </div>
     <div id="host-crew-section">
@@ -17273,6 +17294,9 @@ async function submitEditGathering(gatheringId) {
       if (!proceed) return;
     }
   }
+  // v4.10.8 — switching an invite-only game to Open announces it to every member, so confirm first.
+  if (_hostMode === 'open' && !g.fillListEnabled &&
+      !confirm(`Open "${title}" to all members?\n\nEveryone with Gathering Alerts on gets an announcement when you save, and anyone can join until it is full.`)) return;
   const btn = document.getElementById('btn-edit-gathering');
   if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); btn.textContent = 'Saving…'; }
   try {

@@ -1,3 +1,6 @@
+v4.10.9 · 2026-10-02
+Deployed: 2026-10-02 (Edit Gathering: Who's Coming now opens with a plain status line (invite-only or open to all members, players, held guest seats, unclaimed seats). The Open to Members choice says it announces on Save, and asks you to confirm before it does.)
+
 v4.10.8 · 2026-10-02
 Deployed: 2026-10-02 (Host Panel: Gatherings that are already Open now have a 📣 Announce to all members button, for games that were opened without an announcement.)
 

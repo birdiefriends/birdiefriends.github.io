@@ -178,5 +178,11 @@ ok(/const _crewOpensToAll = _hostMode === 'crew' && hostUnheldSeats\(\) > 0 && _
 ok(/if \(_crewOpensToAll\) \{/.test(src) && /'gathering_open_invite', \{ gathering_id: gathData\.id \}/.test(src), 'everyone else gets the open announcement');
 ok(/_hostHoldN = 0;\s*\n\s*_hostLeftAnnounce = null;/.test(src), 'form resets hold + choice each time it opens');
 
+// 10. v4.10.9 — Edit form status + confirm before announcing
+ok(/function editSeatSummaryHtml\(g\)/.test(src) && /\$\{editSeatSummaryHtml\(g\)\}/.test(src), 'Edit form shows the seat/status summary');
+ok(/Invite-only\.<\/b> Only your invited players can see it/.test(src) && /Open to all members\.<\/b>/.test(src), 'summary names invite-only vs open');
+ok(/Announced to everyone on Save/.test(src), 'Open toggle says it announces on Save');
+ok(/_hostMode === 'open' && !g\.fillListEnabled &&\s*\n\s*!confirm\(/.test(src), 'flip to Open asks for confirmation before saving');
+
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
