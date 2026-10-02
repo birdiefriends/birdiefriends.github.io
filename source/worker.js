@@ -921,7 +921,7 @@ export default {
             // Exclude this player's own existing row — re-confirming an
             // already-held Yes slot shouldn't count against itself.
             const row = await env.DB.prepare(
-              `SELECT COUNT(*) as cnt FROM registrations WHERE gathering_id = ? AND status = 'yes' AND player_id != ?`
+              `SELECT COUNT(*) as cnt FROM registrations WHERE gathering_id = ? AND status = 'yes' AND player_id != ? AND COALESCE(is_placeholder,0) = 0`
             ).bind(gathering_id, player_id).first();
             if (row && row.cnt >= gInfo.size) {
               finalStatus = 'sub';
@@ -942,6 +942,23 @@ export default {
              confirmed_for = excluded.confirmed_for,
              host_note = excluded.host_note`
         ).bind(gathering_id, player_id, finalStatus, confirmed_for || null, host_note || null).run();
+
+        // v4.10.5 — Open Spots are held seats, not players: they never count
+        // against capacity, and a real Yes takes one of them (the highest-numbered
+        // placeholder is released) so the total never runs past the stated size.
+        if (finalStatus === 'yes' && gInfo && gInfo.size) {
+          const tot = await env.DB.prepare(
+            `SELECT COUNT(*) as cnt FROM registrations WHERE gathering_id = ? AND status = 'yes'`
+          ).bind(gathering_id).first();
+          const over = (tot ? tot.cnt : 0) - gInfo.size;
+          if (over > 0) {
+            await env.DB.prepare(
+              `DELETE FROM registrations WHERE rowid IN (
+                 SELECT rowid FROM registrations WHERE gathering_id = ? AND COALESCE(is_placeholder,0) = 1
+                 ORDER BY player_id DESC LIMIT ?)`
+            ).bind(gathering_id, over).run();
+          }
+        }
 
         if (downgraded && gInfo.host_id && gInfo.host_id !== player_id) {
           ctx.waitUntil((async () => {

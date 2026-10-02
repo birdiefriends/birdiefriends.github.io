@@ -1,5 +1,5 @@
 v4.10.5 · 2026-10-02
-Deployed: 2026-10-02 (Open Spots no longer count as registered players: the event card headcount shows real players only (e.g. 3/8 · 5 open), and open spots show as dashed 🪑 chips in the Players list.)
+Deployed: 2026-10-02 (Open Spots no longer count as registered players or fill capacity: the card shows e.g. 3/8 · 5 open, open spots are dashed 🪑 chips, and a real Yes takes an open spot instead of being moved to Sub. Needs the main Worker redeployed.)
 
 v4.10.4 · 2026-10-01
 Deployed: 2026-10-01 (Strokes before game day: the card's Games details now has "Strokes by hole" (everyone's strokes, yours highlighted) and "Course with strokes", which opens the Course viewer with a player's stroke holes shaded in place of the six hardest, with a picker to see anyone else's. The rail's Course button does the same on net rounds.)

@@ -5360,7 +5360,9 @@ function getSimpleCapacityStatus(evt) {
   const regMatchesEvt = r => (evt.source === 'gathering')
     ? r.gatheringId === evt.gatheringId
     : r.eventName === evt.name;
-  const yesRegs  = regData.filter(r => regMatchesEvt(r) && r.status === 'Yes');
+  // v4.10.5 — Open Spots are held seats, not players: they never fill capacity
+  // (a real Yes takes one of them; the Worker releases the placeholder).
+  const yesRegs  = regData.filter(r => regMatchesEvt(r) && r.status === 'Yes' && !isOpenSpotName(r.player));
   const subRegs  = regData.filter(r => regMatchesEvt(r) && r.status === 'Sub');
   const yesCount = yesRegs.length;
   const cap      = evt.capacity;
@@ -5384,7 +5386,7 @@ function getMyCapacityDisplay(evt, myReg, capStatus) {
   if (evt.source === 'gathering') {
     if (myReg.status === 'Sub') return { icon: '🔄', label: 'Registered — Sub', sub4man: true };
     if (capStatus.isWaitlist) {
-      const yesRegs = regData.filter(r => r.gatheringId === evt.gatheringId && r.status === 'Yes');
+      const yesRegs = regData.filter(r => r.gatheringId === evt.gatheringId && r.status === 'Yes' && !isOpenSpotName(r.player));
       const myPosition = yesRegs.findIndex(r => r.id === myReg.id);
       if (myPosition >= (capStatus.cap || evt.capacity)) {
         return { icon: '⏳', label: 'Registered — Waitlist', waitlist: true };
@@ -7259,6 +7261,16 @@ async function submitGatheringRegistration(evt, choice, submitBtn) {
         player: currentPlayer, status: choice, createdAt: new Date(),
         confirmedFor: evt.rawEventTime || null
       });
+    }
+    // v4.10.5 — a real Yes takes an Open Spot (the Worker released the placeholder); mirror it locally.
+    if (choice === 'Yes' && evt.capacity) {
+      const yesAll = () => regData.filter(r => r.gatheringId === evt.gatheringId && r.status === 'Yes');
+      let over = yesAll().length - evt.capacity;
+      while (over-- > 0) {
+        const ph = yesAll().filter(r => isOpenSpotName(r.player)).sort((x, y) => String(y.player).localeCompare(String(x.player), undefined, { numeric: true }))[0];
+        if (!ph) break;
+        [regData, gatheringRegData].forEach(arr => { const k = arr.findIndex(r => r.gatheringId === ph.gatheringId && r.player === ph.player); if (k >= 0) arr.splice(k, 1); });
+      }
     }
     delete _pendingChoice[evt.id];
     markEventSeen(evt.id);
