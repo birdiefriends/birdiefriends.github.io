@@ -6592,6 +6592,22 @@ function toLocalISOString(d) {
 // same time-of-day. Always strictly future — if today happens to share the
 // weekday, rolls a full week ahead rather than "later today" (Dev-54: Repeat
 // is for weekly-cadence Gatherings, not same-day reruns).
+// v4.10.11 — hosts type the date into a game's title ("Sham Tuesday 8/18"), and
+// Repeat used to copy it word for word, so next week's game kept last week's date.
+// Strips date-looking text (8/18, 8-18-26, Aug 18, August 18th) and any empty
+// brackets or dangling separators it leaves. Weekday words are kept on purpose:
+// Repeat always lands on the same weekday. Falls back to the original title if
+// stripping would leave nothing.
+function cleanRepeatTitle(title) {
+  const orig = String(title || '').trim();
+  let t = orig
+    .replace(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{4})?\b/gi, ' ')
+    .replace(/\b\d{1,2}[\/.\-]\d{1,2}(?:[\/.\-]\d{2,4})?\b/g, ' ')
+    .replace(/\(\s*\)|\[\s*\]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[\s\-\u2013\u2014,:|]+|[\s\-\u2013\u2014,:|]+$/g, '');
+  return t || orig;
+}
 function nextOccurrenceOfWeekday(sourceDate) {
   const now = new Date();
   const targetDow = sourceDate.getDay();
@@ -16757,8 +16773,11 @@ function showRepeatPicker() {
   const mine = gatheringData.filter(g => g.hostId === currentPlayer && g.dt);
   const byTitle = new Map();
   mine.forEach(g => {
-    const existing = byTitle.get(g.name);
-    if (!existing || g.dt > existing.dt) byTitle.set(g.name, g);
+    // v4.10.11 — group on the title with its date stripped, so "Sham Tuesday 8/18"
+    // and "Sham Tuesday 8/25" are one recurring game, not two.
+    const key = cleanRepeatTitle(g.name).toLowerCase();
+    const existing = byTitle.get(key);
+    if (!existing || g.dt > existing.dt) byTitle.set(key, g);
   });
   const series = Array.from(byTitle.values()).sort((a, b) => b.dt - a.dt);
   if (series.length === 0) { showToast('No Gatherings yet to repeat'); return; }
@@ -16775,7 +16794,7 @@ function showRepeatPicker() {
     const whenLabel = g.dt < now ? 'Last' : 'Upcoming';
     const metaParts = [g.location, g.crewName].filter(Boolean);
     return `<div class="host-gathering-card" style="cursor:pointer" onclick="repeatGathering(${g.gatheringId})">
-      <div style="font-size:0.95rem;font-weight:700;color:var(--text);margin-bottom:4px">${g.name}</div>
+      <div style="font-size:0.95rem;font-weight:700;color:var(--text);margin-bottom:4px">${escapeHtml(cleanRepeatTitle(g.name))}</div>
       <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:${metaParts.length ? '8px' : '10px'}">${whenLabel}: ${dateStr} at ${timeStr}</div>
       ${metaParts.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
         ${metaParts.map(p => `<span style="font-size:0.75rem;font-weight:600;color:var(--green-dark);background:var(--green-light);border-radius:20px;padding:2px 10px;white-space:nowrap">${p}</span>`).join('')}
@@ -18788,16 +18807,20 @@ async function repeatGathering(gatheringId) {
   const audienceLabel = g.fillListEnabled
     ? `all members with Gathering Alerts on (${notifyNames.length})`
     : `${g.crewName || 'the crew'} (${notifyNames.length} player${notifyNames.length === 1 ? '' : 's'})`;
-  const confirmed = confirm(
-    `Repeat "${g.name}"?\n\n${dateLabel} at ${timeLabel}\nNotify: ${audienceLabel}`
+  // v4.10.11 — one dialog: shows the date and audience, and lets the host edit the
+  // title, pre-filled with the old title minus any date in it. Cancel = no game.
+  const titleAnswer = window.prompt(
+    `Repeat "${g.name}"?\n\n${dateLabel} at ${timeLabel}\nNotify: ${audienceLabel}\n\nTitle for the new game (edit if needed):`,
+    cleanRepeatTitle(g.name)
   );
-  if (!confirmed) return;
+  if (titleAnswer === null) return;
+  const newTitle = String(titleAnswer).trim() || cleanRepeatTitle(g.name);
   try {
     const gathData = await gatheringsFetchJSON(`${GATHERINGS_API}/gatherings`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         host_id: currentPlayer,
-        title: g.name,
+        title: newTitle,
         venue: g.location || null,
         event_time: toLocalISOString(nextDate),
         size: g.capacity || null,
@@ -18832,8 +18855,8 @@ async function repeatGathering(gatheringId) {
       const notifType  = g.fillListEnabled ? 'gathering_open_invite' : 'gathering_invite';
       const notifTitle = g.fillListEnabled ? '📢 Open Gathering' : 'New Gathering';
       const notifBody  = g.fillListEnabled
-        ? `${currentPlayer} is hosting "${g.name}" — ${dateLabel} at ${timeLabel}. Open to all members.`
-        : `${currentPlayer} invited you to "${g.name}" — ${dateLabel} at ${timeLabel}.`;
+        ? `${currentPlayer} is hosting "${newTitle}" — ${dateLabel} at ${timeLabel}. Open to all members.`
+        : `${currentPlayer} invited you to "${newTitle}" — ${dateLabel} at ${timeLabel}.`;
       const notifMeta  = g.fillListEnabled
         ? { gathering_id: gathData.id }
         : { gathering_id: gathData.id, invited: notifyNames };

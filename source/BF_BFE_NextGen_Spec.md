@@ -877,4 +877,8 @@ venue/size/type/crew; "Same as last time" should sit in front of step 1 and pref
 - 2026-10-02: Scott Justus / Moselem (private course): host runs a hierarchy of asks outside BF and opens the game as
   people decline. Served by invite-only now, open later; no hold-seats step.
 
+- 2026-10-02, shipped to staging as portal v4.10.11: Repeat now strips a typed date from the title, lets the host edit the
+  title in its one dialog, and the Repeat picker groups dated titles as one series. Still open: Repeat has no audience step,
+  and the Worker's auto-repeat engine (`worker.js` ~line 207) copies the title as-is.
+
 **Not in scope:** guests/hold-seats flow, partial crew, tee-time booking, anything on the Edit form.

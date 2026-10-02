@@ -1,3 +1,6 @@
+v4.10.11 · 2026-10-02
+Deployed: 2026-10-02 (Repeat: the date typed into a game's title (like "Sham Tuesday 8/18") is stripped from the new game, and the Repeat dialog lets you edit the title before it sends. The Repeat list now treats dated titles as one recurring game.)
+
 v4.10.10 · 2026-10-02
 Deployed: 2026-10-02 (Host Panel: a Release button next to each held Open Spot, for guests who aren't coming (refused if scores or entries are saved under that seat). Players you invited to a game that is also open to members are never hidden by their game filters. Needs both Workers redeployed.)
 
