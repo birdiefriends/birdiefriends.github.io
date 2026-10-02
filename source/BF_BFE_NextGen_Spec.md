@@ -790,3 +790,63 @@ not before it; live-scoring resilience (§7) builds on layer 3.
   done from the beginning") but unscoped — where it lives, exactly what "any GHIN import
   updates it" means mechanically, and the design of the "quick revise" screen are all
   open.
+
+---
+
+## 11. New Gathering — a guided flow for hosts (design note, Dev-92 window, 2026-10-02; NOT built)
+
+**Why.** The Dev-90/91 New Gathering form tries to expose every case at once (Crew vs Open, held seats,
+leftover-seat announce, Players sheet, games). Average hosts fumble. The Dev-91 root cause was a symptom of
+the same thing: Crew mode silently turned every leftover seat into a held, unannounced Open Spot. Direction
+(Brian, 2026-10-02): a light guided flow that asks in the host's own terms and hides everything else.
+
+**Brian's rulings that shape it**
+1. **Capacity is a target, not a fact.** The host books the tee sheet outside BirdieFriends, and is either
+   certain or polling. So the number is optional ("hoping for N" / "polling, not sure yet"), editable any time.
+   Polling = `size` NULL (the Worker already skips capacity enforcement when `size` is unset).
+2. **Over target is not a warning.** Existing behaviour is the answer: a Yes past `size` is saved as **Sub** and
+   the host is notified (main Worker `POST /registrations`, Dev-70; push `bf_type 'gathering_capacity'`).
+3. **Crew is an audience, never a roster, and it is all-or-nothing.** Never partial crew; a standing crew
+   (e.g. Chooch's CGA) is always invited. "Pick people" is its own path, with no crew shortcut inside it.
+4. **Crew does not make anyone a player.** Only people the host is certain about are confirmed Yes
+   (Walli, 10/02: Mike and Adam were in, then he opened it to a wider audience).
+5. **"Hold seats for guests" is not a flow step.** Scott Justus at Moselem (private course) ran a hierarchy of
+   asks outside BF and opened the game as people declined. That is already served by *start invite-only, open
+   later* (Host Panel "Open to all members" / "Announce to all members", v4.10.5-4.10.10). Open Spots,
+   Fill and Release stay in the Host Panel / Advanced; the new flow never mentions them.
+
+**The flow (one question per screen, big tap choices, back always works)**
+1. **Basics:** name, venue, date + tee time, "How many are you hoping for?" (number | "Not sure yet, polling").
+2. **Who's already in?** Names the host is sure of (or skip). Saved as confirmed Yes.
+3. **Who should we ask about the rest?** `My crew` | `Pick people` | `All BirdieFriends` | `Nobody yet (invite-only)`.
+4. **Playing for anything?** Default No. Yes opens the existing games setup (Gross/Net etc. only appears once a
+   game is on).
+5. **Plain-English summary, then Create.** e.g. "Mike and Adam confirmed. Open to all BirdieFriends, announced
+   now. Hoping for 4. No games." Each line taps back to its step. An "Advanced" link holds rare controls.
+
+**Decision table (answers -> stored state; no new Worker concepts needed)**
+
+| Q2 who's in | Q3 ask the rest | Result |
+|---|---|---|
+| names | My crew | confirmed Yes for names; whole crew invited; invite-only |
+| names | Pick people | confirmed Yes for names; picked people invited; invite-only |
+| names | All BirdieFriends | confirmed Yes; open to all (`fillListEnabled`) + announcement |
+| names | Nobody yet | confirmed Yes; invite-only, nobody else asked; host can open later |
+| none | any | same as above with zero confirmed |
+
+No leftover-seat question exists: an unanswered seat is simply a seat nobody has said Yes to yet. `_hostHoldN`,
+`_hostLeftAnnounce`, `hostLeftoverSeats()` and `hostAutoOpenSpots()` are not used by the new flow (kept for the
+Host Panel).
+
+**Reuse, not rebuild.** `gathering_templates` (main Worker, `/gathering-templates`) already saves a host's
+venue/size/type/crew; "Same as last time" should sit in front of step 1 and prefill from it. Edit Gathering
+(still the pre-redesign layout) should get the same summary-with-tap-to-edit treatment later.
+
+**Open questions**
+- Polling: should the event card show "N Yes so far" vs "N of 4" depending on whether a target is set? (Proposed: yes.)
+- Does "My crew" pick which crew when a host has several, or is one default crew implied? (Today a host can pick a crew.)
+- Does confirming a named player send them a notice, or is that silent? (Proposed: a "you're in" push, since they are
+  committed.)
+- Where the existing Create-form pieces (Players sheet, Add-games dialog) are reused inside the new steps.
+
+**Not in scope:** guests/hold-seats flow, partial crew, tee-time booking, anything on the Edit form.
