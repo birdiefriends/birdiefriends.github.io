@@ -15802,13 +15802,29 @@ async function confirmGatheringClose(ignoreSpots) {
   const btn = document.getElementById('btn-gathering-close-confirm');
   if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); btn.textContent = 'Saving…'; }
   try {
+    // v4.12.4 — "close anyway": drop the unused held seats first with the release route that is
+    // already live (a seat with a card or entries is refused there and is left alone), so this
+    // works even before the newer Worker's own ignore_open_spots flag is deployed.
+    if (ignoreSpots === true) {
+      for (const sp of (_spotsByGathering.get(gatheringId) || [])) {
+        try {
+          await fetch(`${BFE_API}/bfe/gathering-spots/${gatheringId}/release`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host_id: currentPlayer, spot: sp })
+          });
+        } catch (e) { /* the close below reports anything still open */ }
+      }
+    }
     const payout_summary = { ...summary, ...meta, gathering_name: gatheringName, closed_by: currentPlayer, closed_at_client: new Date().toISOString() };
     const res = await fetch(`${BFE_API}/bfe/gathering-games/${gatheringId}/close`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ host_id: currentPlayer, payout_summary, ...(ignoreSpots === true ? { ignore_open_spots: true } : {}) })
     });
     const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Close failed');
+    if (!data.ok) {
+      if (data.open_spots) throw new Error(`${data.open_spots} open seat${data.open_spots === 1 ? ' has' : 's have'} a scorecard or entries saved, so ${data.open_spots === 1 ? 'it' : 'they'} can't be ignored yet. Fill ${data.open_spots === 1 ? 'it' : 'them'} with the real player, or deploy the updated Worker.`);
+      throw new Error(data.error || 'Close failed');
+    }
     closeModal('gathering-close-modal');
     showToast('🏁 Closed — results are in My History');
     _gcClose = null;

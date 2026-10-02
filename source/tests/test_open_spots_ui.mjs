@@ -114,6 +114,10 @@ b = c.document.getElementById('gathering-close-body').innerHTML;
 ok(b.includes('Open spot') && b.includes('openFillSpotSheet(69, 0)') && b.includes('hostReleaseSpot(69, 0)'), 'close sheet lists the open spot with Fill and Release');
 const btn = c.document.getElementById('btn-gathering-close-confirm');
 ok(btn.disabled && btn.textContent.includes('Open spots left') && /confirmGatheringClose\(true\)/.test(b), 'main Close is disabled while a spot is open, but a close-anyway button is offered');
+// close anyway: the unused seat is released through the already-live route BEFORE the close request
+c.posts.length = 0; await c.confirmGatheringClose(true);
+ok(c.posts.length === 2 && /gathering-spots\/69\/release$/.test(c.posts[0][0]) && c.posts[0][1].spot === 'Open Spot 1' && /gathering-games\/69\/close$/.test(c.posts[1][0]) && c.posts[1][1].ignore_open_spots === true,
+  'close anyway releases the open seat first, then closes (works without a new Worker deploy)');
 c = setup({ spots: [] }); await c.openGatheringCloseSheet(69);
 const btn2 = c.document.getElementById('btn-gathering-close-confirm');
 ok(!btn2.disabled && btn2.textContent.includes('Close with'), 'no spots: Close works as before');
