@@ -928,8 +928,12 @@ a net player with no strokes is only a quiet "played scratch" line in the result
 
 **Brian's rulings**
 1. **Anyone in the group may add the missing player** (usually the overseer/scorekeeper): by the time anyone notices, the
-   player is already on the course, so the host can't be the only one who can. Minimum is **First, Last, Cell**, with
-   **Cell optional**: capture it, but never let it stop the process (people skip required fields when it is in the way).
+   player is already on the course, so the host can't be the only one who can. Minimum is **First, Last, Cell, and Cell is
+   MANDATORY** (Brian, revised 2026-10-02: an optional field just gets skipped; a required one makes the overseer ask the
+   player, who is standing in the group). The only remaining risk is a made-up number, so the form checks it: a real
+   10-digit number (formatted as typed), not an obvious fake (all one digit, 1234567890, 555-0000), and a number that already
+   belongs to a member shows "That number is Mike Nagle's. Is this him?" instead of creating a second record, which also
+   makes the cell the strongest duplicate check. This matches the Join BirdieFriends form, where Cell is already required.
 2. **Every added player becomes a Membership record**, not an anonymous name: "we need membership basics for any BF
    player." Same record the existing Join BirdieFriends form creates (`submitJoinBF`: first, last, cell, member date,
    Active), so they show up in Membership, can be a handicap source, and can claim the profile later.
@@ -939,7 +943,7 @@ a net player with no strokes is only a quiet "played scratch" line in the result
 - Entry: a "➕ Not on the list?" row in the Live Panel player sheet (all pickers). Works for a member and a non-member.
 - Step 1: type a name. Match against existing members first ("Mike" suggests Mike Nagle) so a duplicate is never made.
   A match = pick them; no match = New player.
-- New player: First, Last, Cell (optional, with a one-line "so we can reach them"). Creates the Membership record.
+- New player: First, Last, Cell (required, one line: "ask them, it's so we can reach them"). Creates the Membership record.
   **Open check:** the Join form sets field 20 to "Yes" (commented as a broadcast opt-in, `bfw: 'Yes'` locally). Someone
   added by a friend has not consented to alerts, so an on-course add should leave that off until they claim the profile.
   Confirm what field 20 controls before building.
@@ -965,8 +969,8 @@ visible before game day for anyone without a Membership handicap.
 
 **Build order (each slice tested and shippable alone).** (1) Add-a-player in the Live Panel pickers (member match + new
 Membership record + Yes registration). (2) Open Spot take-over. (3) The Close reconcile screen. (4) Loosen the Games save
-rule. Open questions: field 20 meaning; registration storage (ALTER vs derive); how the duplicate match should behave for
-common first names; whether a Membership record created on the course is flagged until the person claims it.
+rule. Open questions: field 20 meaning; registration storage (ALTER vs derive); whether a Membership record created on
+the course is flagged until the person claims it. (Duplicates: match on cell number first, then on name.)
 
 **Findings log additions (2026-10-02)**
 - Unregistered players are first exposed at the first CTP/Birdie/BirdieBall/scorecard entry, not at Close; a person with no
