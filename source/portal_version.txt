@@ -1,3 +1,6 @@
+v4.11.1 · 2026-10-02
+Deployed: 2026-10-02 (Games, Gross or Net: the player list is now A to Z and leaves out Open Spots, which have no handicap to set and used to block saving. A line under the list says how many seats are still open; fill them, then reopen Games to set that player's handicap.)
+
 v4.11.0 · 2026-10-02
 Deployed: 2026-10-02 (New Gathering is now a short guided flow: name, venue, date and time, and how many you're hoping for (or "polling"); who's already in; who to ask about the rest (your crew, people you pick, all BirdieFriends, or nobody yet); games; then a plain-English summary before it creates. People you confirm are signed up as Yes and told so. The full form is still there under "Use the full form instead".)
 

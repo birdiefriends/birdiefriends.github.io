@@ -891,4 +891,11 @@ the shared player picker and the existing "save this as a crew?" prompt; (6) the
 not used. Not in this slice: "Start from a past game" (Repeat/Templates still separate), the event card's "N Yes so far"
 while polling, Edit Gathering.
 
+- 2026-10-02, Brian testing: the +Games Gross/Net list showed Open Spots first, unsorted. Root cause: spots are placeholder
+  registrations, and a handicap typed for "Open Spot 1" is lost when the spot is filled (the fill renames the player in
+  registrations, scorecards, CTP, BirdieBall and the closed result, but not `handicap_config`); unset spot rows also blocked
+  the save. Fixed in v4.11.1: spots left out, real players A to Z, a note counts the open seats. Known follow-up: after a
+  spot is filled the host must reopen Games to set that player's handicap; a Worker change to rename the key in
+  `handicap_config` on fill would remove that step.
+
 **Not in scope:** guests/hold-seats flow, partial crew, tee-time booking, anything on the Edit form.

@@ -20,9 +20,9 @@ const tees = [
 ];
 const ctx = { BFEngine: E, _gamesFormG: { eventShadow: false }, _gamesFormGathering: 7, _gamesFormTees: tees,
   gatheringRegData: ['Brian Hager', 'Lee Chasen', 'Tony Hager', 'Muna Aliya'].map(p => ({ gatheringId: 7, player: p, status: 'Yes' })).concat([{ gatheringId: 7, player: 'Bailed', status: 'No' }]),
-  regData: [], _gamesFormHcp: null, _gamesFormMembers: new Map(), _gamesFormSelected: new Set(['skins', 'birdiepay']), escapeHtml: v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;') };
+  regData: [], _gamesFormHcp: null, _gamesFormMembers: new Map(), _gamesFormSelected: new Set(['skins', 'birdiepay']), escapeHtml: v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;'), isOpenSpotName: n => /^Open Spot \d+$/i.test(String(n || '').trim()) };
 vm.createContext(ctx);
-vm.runInContext(['gamesFormHcpOutHtml', 'gatheringGamesHcpSectionHtml', 'gamesFormEntry', 'gamesFormPlayerNames', 'gamesFormHcpIsNet', 'gamesFormResolvePlayerHcp', 'gamesFormBuildHandicapConfig'].map(n => extractFn(src, n)).join('\n'), ctx);
+vm.runInContext(['gamesFormHcpOutHtml', 'gatheringGamesHcpSectionHtml', 'gamesFormEntry', 'gamesFormPlayerNames', 'gamesFormOpenSpotCount', 'gamesFormHcpIsNet', 'gamesFormResolvePlayerHcp', 'gamesFormBuildHandicapConfig'].map(n => extractFn(src, n)).join('\n'), ctx);
 const set = hcp => { ctx._gamesFormHcp = hcp; };
 
 // A: gross → no config at all

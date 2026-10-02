@@ -17811,9 +17811,20 @@ function gamesFormPlayerNames() {
   const rows = g.eventShadow
     ? regData.filter(r => r.eventName === g.eventName && r.status === 'Yes')
     : gatheringRegData.filter(r => r.gatheringId === _gamesFormGathering && r.status === 'Yes');
-  const names = [...new Set(rows.map(r => r.player).filter(Boolean))];
-  Object.keys(_gamesFormHcp.players).forEach(n => { if (!names.some(x => String(x).trim().toLowerCase() === String(n).trim().toLowerCase())) names.push(n); });
-  return names;
+  // v4.11.1 — an Open Spot is a seat, not a player: it has no handicap to set, and any strokes
+  // typed against "Open Spot 1" were lost when the spot was filled (the fill renames the player
+  // everywhere but the frozen handicap config). So spots are left out, and the real players are A to Z.
+  const names = [...new Set(rows.map(r => r.player).filter(p => p && !isOpenSpotName(p)))];
+  Object.keys(_gamesFormHcp.players).forEach(n => { if (!isOpenSpotName(n) && !names.some(x => String(x).trim().toLowerCase() === String(n).trim().toLowerCase())) names.push(n); });
+  return names.sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }));
+}
+// How many held seats are still unnamed on this game (they join the list once filled).
+function gamesFormOpenSpotCount() {
+  const g = _gamesFormG || {};
+  const rows = g.eventShadow
+    ? regData.filter(r => r.eventName === g.eventName && r.status === 'Yes')
+    : gatheringRegData.filter(r => r.gatheringId === _gamesFormGathering && r.status === 'Yes');
+  return rows.filter(r => isOpenSpotName(r.player)).length;
 }
 function gamesFormHcpIsNet() { return _gamesFormHcp.skins_basis === 'net' || _gamesFormHcp.birdiepay_basis === 'net'; }
 // One player's resolved handicap, or { problem } if the host still owes a field.
@@ -17879,6 +17890,8 @@ function gatheringGamesHcpSectionHtml() {
           ${e.note ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:1px">${escapeHtml(e.note)}</div>` : ''}
           <div style="display:grid;grid-template-columns:${kind === 'gross' ? '1fr' : '1.2fr 1fr 0.85fr'};gap:6px;margin-top:6px">${kind === 'gross' ? '' : teeSel}${kindSel}${val}</div></div>`;
       }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No confirmed players yet. Players appear here as they register Yes.</div>`;
+      const _spots = gamesFormOpenSpotCount();
+      if (_spots > 0) rows += `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:8px;line-height:1.4">🪑 ${_spots} open spot${_spots === 1 ? ' is' : 's are'} not listed. Once you fill one, reopen Games and set that player's handicap here.</div>`;
       rows = `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 6px">
           <span style="font-size:0.86rem;font-weight:600">Allowance</span>
           <input type="number" min="50" max="100" step="1" value="${_gamesFormHcp.allowance}" oninput="setGamesFormAllowance(this.value)" style="width:64px;height:34px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit">
