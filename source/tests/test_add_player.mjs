@@ -71,4 +71,14 @@ ok(d.ok && d.status === 'yes', 'saves before ALTER');
 g = await get(db);
 ok(g.ok && g.registrations.some(r => r.player_id === 'Bob Roy'), 'GET falls back before ALTER');
 
+// ── Open Spot take-over: the chooser only lists this game's held seats ──
+import vm from 'vm';
+const vctx = { gatheringRegData: [
+  { gatheringId: 1, player: 'Open Spot 2', status: 'Yes' }, { gatheringId: 1, player: 'Open Spot 1', status: 'Yes' },
+  { gatheringId: 1, player: 'Ann Lee', status: 'Yes' }, { gatheringId: 2, player: 'Open Spot 1', status: 'Yes' }, { gatheringId: 1, player: 'Open Spot 3', status: 'No' }],
+  _addP: { opt: { gatheringId: 1 } }, isOpenSpotName: n => /^Open Spot \d+$/i.test(n) };
+vm.createContext(vctx);
+vm.runInContext(extractFn(src, 'apOpenSpots') + '; this.out = apOpenSpots();', vctx);
+ok(JSON.stringify(vctx.out) === '["Open Spot 1","Open Spot 2"]', 'chooser lists only this game\'s non-No held seats, sorted');
+
 console.log(`add_player: ${pass} pass, ${fail} fail`); process.exit(fail ? 1 : 0);

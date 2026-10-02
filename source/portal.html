@@ -9927,6 +9927,20 @@ async function submitScorecard(evtName) {
   if (_scSubmitting) return;
   const scName = window._liveIsTeamRound ? _scPlayer : (_scPlayer || currentPlayer);
   if (!scName) return; // button is disabled in this state, but guard anyway (Dev-80)
+  // v4.12.0 — a card must belong to someone on this game's list. If the name isn't
+  // there (the overseer scoring themselves, or a player nobody registered), stop and
+  // add them now, while they can still be asked for a cell, instead of finding an
+  // unnamed card at Close. Holes already entered are kept.
+  if (!window._liveIsTeamRound && window._liveAddOpts) {
+    const _nn = v => String(v || '').trim().toLowerCase();
+    if (!(window._liveEvtPlayers || []).some(p => _nn(p) === _nn(scName))) {
+      const _parts = String(scName).trim().split(/\s+/);
+      showToast(`${scName} isn't on this game's list — add them first`, true);
+      openAddPlayerDialog({ first: _parts[0] || '', last: _parts.slice(1).join(' ') }, window._liveAddOpts.addPlayer,
+        function (n) { _scPlayer = n; renderLiveBanner(); });
+      return;
+    }
+  }
   // Dev-74 fix: real venue instead of hardcoded 'BSGC'
   const _scEvt = eventData.find(e => e.name === evtName);
   const scIsNine = _scEvt && _scEvt.holes === 9;
@@ -10491,9 +10505,10 @@ function selectSheetPlayer(name) {
 }
 
 let _addP = null;  // { first, last, cell, busy }
-function openAddPlayerDialog() {
-  if (!_sheetOpts || !_sheetOpts.addPlayer) return;
-  _addP = { busy: false };
+function openAddPlayerDialog(prefill, optIn, cbIn) {
+  const opt = optIn || (_sheetOpts && _sheetOpts.addPlayer);
+  if (!opt) return;
+  _addP = { busy: false, opt, cb: cbIn || _sheetCallback };
   let ov = document.getElementById('add-player-overlay');
   if (!ov) {
     ov = document.createElement('div');
@@ -10502,7 +10517,7 @@ function openAddPlayerDialog() {
     document.body.appendChild(ov);
   }
   ov.style.display = 'flex';
-  renderAddPlayerForm('');
+  renderAddPlayerForm('', prefill || null);
 }
 function renderAddPlayerForm(msg, vals) {
   const ov = document.getElementById('add-player-overlay'); if (!ov) return;
@@ -10553,14 +10568,39 @@ function submitAddPlayer(confirmedMember) {
       </div></div>`;
     return;
   }
+  // v4.12.0 — if the game still holds Open Spots, ask whether this person is
+  // taking one (so the seat is used, not left to be released at Close).
+  const spots = apOpenSpots();
+  if (spots.length && !_addP.spotAsked) {
+    _addP.plan = plan;
+    const ov = document.getElementById('add-player-overlay');
+    const who = escapeHtmlAttr(plan.action === 'create' ? plan.display : (plan.member.display || plan.member.fullName));
+    ov.innerHTML = `<div style="background:#0b3d2e;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:18px 16px 24px;box-sizing:border-box" onclick="event.stopPropagation()">
+      <div style="color:#fff;font-size:1rem;margin-bottom:6px">Is <b>${who}</b> taking a held seat?</div>
+      <div style="font-size:0.78rem;color:rgba(255,255,255,0.6);margin-bottom:12px">Pick the Open Spot they're replacing so any scores already entered under it move to them.</div>
+      ${spots.map((n, i) => `<button class="btn" style="width:100%;margin-bottom:8px" onclick="apChooseSpot(${i})">🪑 ${escapeHtmlAttr(n)}</button>`).join('')}
+      <button class="btn" style="width:100%;background:rgba(255,255,255,0.12);color:#fff" onclick="apChooseSpot(-1)">No, just add them</button></div>`;
+    return;
+  }
   runAddPlayer(plan);
+}
+// The Open Spot seats this game still holds (placeholder rows are Yes registrations named "Open Spot N").
+function apOpenSpots() {
+  const opt = _addP && _addP.opt; if (!opt) return [];
+  return gatheringRegData.filter(r => r.gatheringId === opt.gatheringId && r.status !== 'No' && isOpenSpotName(r.player)).map(r => r.player).sort();
+}
+function apChooseSpot(i) {
+  if (!_addP || !_addP.plan) return;
+  _addP.spotAsked = true;
+  _addP.spot = i >= 0 ? apOpenSpots()[i] : null;
+  runAddPlayer(_addP.plan);
 }
 function apNotThem() {
   const v = (_addP && _addP.vals) || {};
   renderAddPlayerForm('That cell or name already belongs to a member. Check the spelling — if it\'s a different person with the same name, add a middle initial to the last name.', v);
 }
 async function runAddPlayer(plan) {
-  const opt = _sheetOpts && _sheetOpts.addPlayer; if (!opt || !_addP) return;
+  const opt = _addP && _addP.opt; if (!opt) return;
   _addP.busy = true;
   const go = document.getElementById('ap-go'); if (go) { go.textContent = 'Adding…'; go.disabled = true; }
   try {
@@ -10588,27 +10628,44 @@ async function runAddPlayer(plan) {
     }
     // Register Yes, marked as added on the course. No host push — the host
     // confirms at Close & Calculate.
-    const r = await fetch(`${GATHERINGS_API}/registrations`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gathering_id: opt.gatheringId, player_id: display, status: 'yes', added_by: currentPlayer || 'unknown' })
-    });
-    const rd = await r.json();
-    if (!rd.ok) throw new Error(rd.error || 'Registration failed');
+    const spot = _addP.spot || null;
+    if (spot) {
+      // Take over a held seat: the Worker renames the Open Spot to this member everywhere
+      // (registration, scorecard, CTP, BirdieBall) — any group member may do it.
+      const r = await fetch(`${BFE_API}/bfe/gathering-spots/${opt.gatheringId}/fill`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ by: currentPlayer || 'unknown', spot, member: display })
+      });
+      const rd = await r.json();
+      if (!rd.ok) throw new Error(rd.error || 'Could not take the seat');
+      gatheringRegData = gatheringRegData.filter(x => !(x.gatheringId === opt.gatheringId && x.player === spot));
+      regData = regData.filter(x => !(x.gatheringId === opt.gatheringId && x.player === spot));
+    } else {
+      const r = await fetch(`${GATHERINGS_API}/registrations`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gathering_id: opt.gatheringId, player_id: display, status: 'yes', added_by: currentPlayer || 'unknown' })
+      });
+      const rd = await r.json();
+      if (!rd.ok) throw new Error(rd.error || 'Registration failed');
+    }
     const row = { id: `gr-${opt.gatheringId}-${display}`, eventName: opt.eventName, gatheringId: opt.gatheringId, player: display,
       status: 'Yes', createdAt: new Date(), confirmedFor: null, hostNote: null, addedBy: currentPlayer || 'unknown', addedAt: new Date().toISOString() };
     const gi = gatheringRegData.findIndex(x => x.gatheringId === opt.gatheringId && x.player === display);
     if (gi >= 0) gatheringRegData[gi] = { ...gatheringRegData[gi], ...row }; else gatheringRegData.push(row);
     const ri = regData.findIndex(x => x.gatheringId === opt.gatheringId && x.player === display);
     if (ri >= 0) regData[ri] = { ...regData[ri], status: 'Yes' }; else regData.push({ ...row });
+    const _doneCb = _addP && _addP.cb;
     closeAddPlayerDialog();
     closePlayerSheet();
     showToast(`${display} added to this game ✓`);
-    if (_sheetCallback) _sheetCallback(display);
-    else renderLiveBanner();
+    _addP = { cb: _doneCb };
+    const cb = _addP && _addP.cb;
+    _addP = null;
+    if (cb) cb(display); else renderLiveBanner();
   } catch (e) {
     console.error('runAddPlayer error:', e);
-    if (_addP) _addP.busy = false;
-    renderAddPlayerForm('Couldn\'t add the player — check your connection and try again.', _addP && _addP.vals);
+    if (_addP) { _addP.busy = false; _addP.spotAsked = false; _addP.spot = null; }
+    renderAddPlayerForm((e && e.message && !/Failed to fetch|NetworkError/i.test(e.message) ? e.message : 'Couldn\'t add the player — check your connection and try again.'), _addP && _addP.vals);
   }
 }
 // ── Scorecard Modal ─────────────────────────────────────────────────────────
@@ -15533,6 +15590,59 @@ function renderGatheringPayoutHtml(s) {
   return html;
 }
 let _gcClose = null; // { gatheringId, summary, meta } — the preview the host is looking at
+// v4.12.0 — Close & Calculate as the final reconcile (spec §12). Pure: what must the host
+// settle before the numbers can be trusted? `blocking` stops the Close button.
+//  - noHandicap: a card from a player the Net setup has no handicap for (they'd silently play scratch)
+//  - added: players put on the game from the course (host confirms; informational)
+//  - unregisteredCards: a card under a name nobody registered
+function gcReconcile(o) {
+  const norm = v => String(v || '').trim().toLowerCase();
+  const config = o.config || {};
+  const hc = config.handicap_config || null;
+  const isNet = !!hc && (hc.skins_basis === 'net' || hc.birdiepay_basis === 'net');
+  const have = new Set(Object.keys((hc && hc.players) || {}).map(norm));
+  const acked = o.acked || new Set();
+  const cardPlayers = o.cardPlayers || [];
+  const reg = o.registeredRows || [];
+  const regNames = new Set(reg.map(r => norm(r.player)));
+  const cardNames = new Set(cardPlayers.map(norm));
+  const noHandicap = isNet ? cardPlayers.filter(n => !have.has(norm(n)) && !acked.has(norm(n))) : [];
+  const scratch = isNet ? cardPlayers.filter(n => !have.has(norm(n)) && acked.has(norm(n))) : [];
+  const added = reg.filter(r => r.addedBy).map(r => ({ player: r.player, addedBy: r.addedBy, hasCard: cardNames.has(norm(r.player)) }));
+  const unregisteredCards = reg.length ? cardPlayers.filter(n => !regNames.has(norm(n))) : [];
+  const openSpots = (o.openSpots || []).slice();
+  return { noHandicap, scratch, added, unregisteredCards, openSpots,
+    blocking: openSpots.length > 0 || noHandicap.length > 0 };
+}
+const _gcScratchAck = new Map(); // gatheringId -> Set(normalized names the host chose to play scratch)
+function gcPlayScratch(gid, name) {
+  const set = _gcScratchAck.get(gid) || new Set();
+  set.add(String(name || '').trim().toLowerCase());
+  _gcScratchAck.set(gid, set);
+  openGatheringCloseSheet(gid);
+}
+async function gcSetHandicaps(gid) {
+  const g = gatheringData.find(x => x.gatheringId === gid);
+  if (!g) { showToast('Open +Games on the game card to set handicaps', true); return; }
+  closeModal('gathering-close-modal');
+  document.getElementById('host-sheet-overlay').classList.add('open');
+  const title = document.querySelector('#host-sheet-overlay .host-sheet-title');
+  if (title) title.textContent = '🎮 Games';
+  const eyebrow = document.getElementById('host-sheet-eyebrow');
+  if (eyebrow) eyebrow.textContent = g.name;
+  await loadHostGamesConfigs();
+  await showGatheringGamesForm(gid, undefined, { g, card: true });
+}
+async function gcRemoveAdded(gid, player) {
+  if (!confirm(`Take ${player} off this game? They have no scorecard.`)) return;
+  try {
+    const r = await fetch(`${GATHERINGS_API}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gathering_id: gid, player_id: player, status: 'no' }) });
+    const d = await r.json(); if (!d.ok) throw new Error(d.error || 'Failed');
+    gatheringRegData.forEach(x => { if (x.gatheringId === gid && x.player === player) x.status = 'No'; });
+    openGatheringCloseSheet(gid);
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
 async function openGatheringCloseSheet(gatheringId) {
   // Dev-87 (v4.6.2) — also opened from My History (after the Live Panel's
   // 8-hour window), where the Gathering may have aged out of gatheringData:
@@ -15579,9 +15689,12 @@ async function openGatheringCloseSheet(gatheringId) {
     const holeCount = (g && g.holes === 9) ? 9 : 18;
     const norm = s => String(s || '').trim().toLowerCase();
     const cardNames = new Set(cards.map(c => norm(c.player)));
-    const registered = (_shadowRef
+    const registeredRows = (_shadowRef
       ? regData.filter(r => r.eventName === eventNameFromRef(_shadowRef) && r.status === 'Yes')
-      : gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes')).map(r => r.player);
+      : gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes'));
+    const registered = registeredRows.map(r => r.player);
+    const recon = gcReconcile({ config, cardPlayers: cards.map(c => c.player), registeredRows,
+      openSpots, acked: _gcScratchAck.get(gatheringId) });
     const missingCards = registered.filter(p => !cardNames.has(norm(p)));
     const incomplete = cards.map(c => ({ player: c.player, holes: scorecardMissingHoles(c, holeCount) })).filter(x => x.holes.length);
     const summary = computeGatheringGamesPayout(config, cards, ctpLeaders, bbData.ok ? (bbData.answers || []) : []);
@@ -15608,14 +15721,34 @@ async function openGatheringCloseSheet(gatheringId) {
           ${openSpots.map((n, i) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><b>${esc(n)}</b>
             <button class="btn btn-primary btn-sm" style="padding:4px 12px" onclick="openFillSpotSheet(${gatheringId}, ${i})">Fill</button></div>`).join('')}</div>`
       : '';
+    const hcHtml = recon.noHandicap.length
+      ? `<div style="background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
+          ⚖️ Net play is on, but these players have no handicap set — without one they'd count as scratch:
+          ${recon.noHandicap.map(n => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><b>${esc(n)}</b>
+            <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcPlayScratch(${gatheringId}, ${esc(JSON.stringify(n))})">Play scratch</button></div>`).join('')}
+          <button class="btn btn-primary btn-sm" style="width:100%;margin-top:6px" onclick="gcSetHandicaps(${gatheringId})">⚖️ Set handicaps in Games</button></div>`
+      : '';
+    const scratchHtml = recon.scratch.length
+      ? `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:8px">⚖️ Playing scratch (no strokes): ${recon.scratch.map(esc).join(', ')}</div>` : '';
+    const addedHtml = recon.added.length
+      ? `<div style="background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
+          ➕ Added on the course — please confirm they belong:
+          ${recon.added.map(a => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><span><b>${esc(a.player)}</b> <span style="color:var(--text-muted)">(added by ${esc(a.addedBy)})</span></span>
+            ${a.hasCard ? '' : `<button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcRemoveAdded(${gatheringId}, ${esc(JSON.stringify(a.player))})">Remove</button>`}</div>`).join('')}</div>`
+      : '';
+    const strayHtml = recon.unregisteredCards.length
+      ? `<div style="background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
+          ❓ A scorecard is under a name nobody registered: <b>${recon.unregisteredCards.map(esc).join(', ')}</b></div>`
+      : '';
+    const closeBlocked = !cards.length || recon.blocking;
     body.innerHTML = `
-      ${statusLine}${spotsHtml}${missingHtml}${incompleteHtml}
+      ${statusLine}${spotsHtml}${hcHtml}${scratchHtml}${addedHtml}${strayHtml}${missingHtml}${incompleteHtml}
       ${alreadyClosed ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Already closed — saving again replaces the earlier result.</div>` : ''}
       <div style="border-top:1px solid var(--border);padding-top:6px">${renderGatheringPayoutHtml(summary)}</div>
       <div style="display:flex;gap:8px;margin-top:14px">
         <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openGatheringCloseSheet(${gatheringId})">🔄 Refresh</button>
-        <button class="btn btn-primary btn-sm" id="btn-gathering-close-confirm" style="flex:2" ${cards.length && !openSpots.length ? '' : 'disabled'}
-          onclick="confirmGatheringClose()">${openSpots.length ? '🪑 Fill open spots first' : `🏁 Close with ${cards.length} player${cards.length === 1 ? '' : 's'}`}</button>
+        <button class="btn btn-primary btn-sm" id="btn-gathering-close-confirm" style="flex:2" ${closeBlocked ? 'disabled' : ''}
+          onclick="confirmGatheringClose()">${openSpots.length ? '🪑 Fill open spots first' : recon.noHandicap.length ? '⚖️ Settle handicaps first' : `🏁 Close with ${cards.length} player${cards.length === 1 ? '' : 's'}`}</button>
       </div>`;
   } catch (e) {
     body.innerHTML = `<div style="font-size:0.85rem;color:var(--danger, #c0392b);padding:12px 0">Couldn't load: ${escapeHtml(e.message)}</div>
@@ -18116,14 +18249,16 @@ function setGamesFormPlayerHcp(name, field, val, typing) {
 // problem = a sentence for the host; the save is refused until it's fixed.
 function gamesFormBuildHandicapConfig() {
   if (!gamesFormHcpIsNet()) return { config: null, problem: null };
+  // v4.12.0 — a player whose handicap isn't settled yet no longer blocks the save: they are
+  // left out and listed in `pending`; Close & Calculate flags them (set it then, or play scratch).
   const players = {};
+  const pending = [];
   for (const n of gamesFormPlayerNames()) {
     const r = gamesFormResolvePlayerHcp(n);
-    if (r.problem) return { config: null, problem: `Net: ${n} — ${r.problem}` };
+    if (r.problem) { pending.push(n); continue; }
     players[n] = { kind: r.kind, tee: r.tee, strokes: r.strokes, ...(r.index != null ? { index: r.index, course_hcp: r.course_hcp } : {}), stroke_index: r.stroke_index };
   }
-  if (!Object.keys(players).length) return { config: null, problem: 'Net: no confirmed players to set strokes for yet' };
-  return { config: { allowance: _gamesFormHcp.allowance, skins_basis: _gamesFormHcp.skins_basis, birdiepay_basis: _gamesFormHcp.birdiepay_basis, players }, problem: null };
+  return { config: { allowance: _gamesFormHcp.allowance, skins_basis: _gamesFormHcp.skins_basis, birdiepay_basis: _gamesFormHcp.birdiepay_basis, players }, problem: null, pending };
 }
 // Dev-89 — the fixed carve-outs (CTP purse + BirdieBall) must fit inside the
 // pot. Returns the numbers the preview and the save guard both use, so the
@@ -18239,7 +18374,9 @@ async function submitGatheringGames(gatheringId) {
     });
     if (!resp.ok) throw new Error(resp.error || 'Save failed');
     await loadHostGamesConfigs();
-    showToast('✅ Games configured');
+    showToast(hcb.pending && hcb.pending.length
+      ? `✅ Games saved. Still need a handicap: ${hcb.pending.join(', ')} — set it here later or at Close.`
+      : '✅ Games configured');
     if (_gamesFormCard) { closeGamesCardDialog(); await refreshGatheringGamesIndex(); } else renderHostPanelList();
   } catch(e) {
     showToast('❌ ' + e.message, true);

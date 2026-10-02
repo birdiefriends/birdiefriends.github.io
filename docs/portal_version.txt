@@ -1,3 +1,6 @@
+v4.12.0 · 2026-10-02
+Deployed: 2026-10-02 (Close & Calculate is now a checklist: net players with no handicap block closing until you set it in Games or mark them to play scratch; players added on the course are listed for you to confirm or remove; a card under an unregistered name is flagged. Games with Net now saves even if some handicaps aren't set yet (they're listed and settled at Close). Anyone in the group can take over a held Open Spot when adding a player, so scores entered under it move to them. A scorecard can't be submitted under a name that isn't on the game's list: you're asked to add them first. Needs both Workers redeployed.)
+
 v4.11.2 · 2026-10-02
 Deployed: 2026-10-02 (Live Panel player pickers (Birdie Alert, CTP, BirdieBall, Scorecard) now end with "Not on the list?" for a Gathering: anyone in the group can add a player who is playing but isn't registered. First, last and a real cell number are required; a matching member (by cell, then name) is offered instead of making a duplicate. The player becomes a BirdieFriends member (no alerts until they use the app) and a Yes for this game, marked as added on the course. Host is not pinged; confirms at Close. Needs the main Worker redeployed, plus ALTER TABLE registrations ADD COLUMN added_by TEXT; ALTER TABLE registrations ADD COLUMN added_at TEXT;)
 

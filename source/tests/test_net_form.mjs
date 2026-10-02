@@ -44,13 +44,17 @@ eq(b.config.players['Tony Hager'].tee, 'Gold', 'B: tee name frozen');
 ok(b.config.players['Lee Chasen'].stroke_index.length === 18, 'B: tee stroke index frozen');
 ok(!('Bailed' in b.config.players), 'B: a No registration is not a player');
 
-// C: the host owes a field → save refused with a sentence
+// C: an unsettled handicap no longer blocks the save (v4.12.0): the player is left out and listed as pending
 set({ skins_basis: 'net', birdiepay_basis: 'gross', allowance: 95, players: { 'Brian Hager': { kind: 'index', teeId: '1' } } });
-ok(/Brian Hager — enter a handicap index/.test(ctx.gamesFormBuildHandicapConfig().problem), 'C: missing index named');
+let c1 = ctx.gamesFormBuildHandicapConfig();
+ok(c1.problem === null && c1.pending.includes('Brian Hager') && !('Brian Hager' in c1.config.players), 'C: missing index -> pending, not blocked');
 set({ skins_basis: 'net', birdiepay_basis: 'gross', allowance: 95, players: { 'Brian Hager': { kind: 'index', index: 8 } } });
-ok(/pick a tee/.test(ctx.gamesFormBuildHandicapConfig().problem), 'C: missing tee named');
+ok(ctx.gamesFormBuildHandicapConfig().pending.includes('Brian Hager'), 'C: missing tee -> pending');
 set({ skins_basis: 'net', birdiepay_basis: 'gross', allowance: 95, players: { 'Brian Hager': { kind: 'given', strokes: 4, teeId: '3' } } });
-ok(/no valid hole handicap/.test(ctx.gamesFormBuildHandicapConfig().problem), 'C: bad stroke-index data refused');
+ok(ctx.gamesFormBuildHandicapConfig().pending.includes('Brian Hager'), 'C: bad stroke-index data -> pending');
+set({ skins_basis: 'net', birdiepay_basis: 'gross', allowance: 95, players: { 'Brian Hager': { kind: 'index', index: 8, teeId: '1' }, 'Lee Chasen': { kind: 'index' } } });
+const c2 = ctx.gamesFormBuildHandicapConfig();
+ok(c2.config.players['Brian Hager'] && c2.pending.includes('Lee Chasen') && c2.pending.length >= 1, 'C: settled players still saved alongside pending ones');
 set({ skins_basis: 'net', birdiepay_basis: 'gross', allowance: 95, players: { 'Brian Hager': { kind: 'gross' }, 'Lee Chasen': { kind: 'gross' }, 'Tony Hager': { kind: 'gross' }, 'Muna Aliya': { kind: 'gross' } } });
 ok(ctx.gamesFormBuildHandicapConfig().config.players['Lee Chasen'].strokes === 0, 'C: no-strokes player resolves to 0 without a tee');
 

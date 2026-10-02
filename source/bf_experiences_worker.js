@@ -1252,7 +1252,9 @@ export default {
         const hcPlayers = hcc && hcc.players && typeof hcc.players === 'object' ? hcc.players : null;
         const hcNet = hcc && (hcc.skins_basis === 'net' || hcc.birdiepay_basis === 'net');
         if (hcNet) {
-          const bad = !hcPlayers || !Object.keys(hcPlayers).length || Object.values(hcPlayers).some(p =>
+          // v4.12.0 — an empty player list is allowed: players whose handicap isn't settled yet are
+          // left out and flagged at Close & Calculate (the engine plays a missing net player scratch).
+          const bad = !hcPlayers || Object.values(hcPlayers).some(p =>
             !p || !['index', 'given', 'gross'].includes(p.kind) || !Number.isFinite(Number(p.strokes)) ||
             (p.kind !== 'gross' && !(Array.isArray(p.stroke_index) && p.stroke_index.length === 18)));
           if (bad) return new Response(JSON.stringify({ error: 'handicap_config needs every player to have a kind, strokes and (unless no-strokes) an 18-hole stroke_index' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -1388,11 +1390,14 @@ export default {
         const gid = Number(spotMatch[1]);
         const action = spotMatch[2];
         const host_id = body && body.host_id;
-        if (!host_id) return jr({ error: 'host_id is required' }, 400);
+        // v4.12.0 — taking over an Open Spot is open to anyone in the group (`by`), same as
+        // adding a missing player on the course; add/release stay host-only.
+        const by = action === 'fill' && !host_id && body && body.by ? String(body.by).trim().slice(0, 80) : '';
+        if (!host_id && !by) return jr({ error: 'host_id is required' }, 400);
         try {
           const g = await env.DB.prepare(`SELECT host_id, size FROM gatherings WHERE id = ?`).bind(gid).first();
           if (!g) return jr({ error: 'Gathering not found' }, 404);
-          if (norm(g.host_id) !== norm(host_id)) return jr({ error: 'Only the host can ' + action + ' open spots' }, 403);
+          if (!by && norm(g.host_id) !== norm(host_id)) return jr({ error: 'Only the host can ' + action + ' open spots' }, 403);
           const { results: regs } = await env.DB.prepare(`SELECT player_id, status, is_placeholder FROM registrations WHERE gathering_id = ?`).bind(gid).all();
           const rows = regs || [];
           if (action === 'add') {
@@ -1450,7 +1455,22 @@ export default {
             env.DB.prepare(`UPDATE bfe_birdieball_answers SET player_name = ? WHERE gathering_id = ? AND player_name = ?`).bind(member, gid, spot),
             env.DB.prepare(`UPDATE bfe_gathering_games SET payout_summary = REPLACE(payout_summary, ?, ?) WHERE gathering_id = ? AND payout_summary IS NOT NULL`).bind(JSON.stringify(spot), JSON.stringify(member), gid)
           );
+          // v4.12.0 — a handicap entered under the spot's name moves with the player
+          // (handicap_config is frozen at save, so a rename elsewhere used to orphan it).
+          try {
+            const gg = await env.DB.prepare(`SELECT handicap_config FROM bfe_gathering_games WHERE gathering_id = ?`).bind(gid).first();
+            const hc = gg && gg.handicap_config ? JSON.parse(gg.handicap_config) : null;
+            if (hc && hc.players && Object.prototype.hasOwnProperty.call(hc.players, spot) && !Object.prototype.hasOwnProperty.call(hc.players, member)) {
+              hc.players[member] = hc.players[spot];
+              delete hc.players[spot];
+              stmts.push(env.DB.prepare(`UPDATE bfe_gathering_games SET handicap_config = ? WHERE gathering_id = ?`).bind(JSON.stringify(hc), gid));
+            }
+          } catch (hcErr) { /* column not migrated, or no config — nothing to rename */ }
           await env.DB.batch(stmts);
+          // Mark an on-course take-over like an added player (own statement: needs the added_by columns).
+          if (by) {
+            try { await env.DB.prepare(`UPDATE registrations SET added_by = ?, added_at = datetime('now') WHERE gathering_id = ? AND player_id = ?`).bind(by, gid, member).run(); } catch (e) { /* columns not migrated yet */ }
+          }
           return jr({ ok: true, spot, member });
         } catch (e) {
           const msg = String(e.message || e);
