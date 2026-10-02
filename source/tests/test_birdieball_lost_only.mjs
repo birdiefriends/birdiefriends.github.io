@@ -9,7 +9,7 @@ ok(/lost the MiserBall`;/.test(src) && /'birdieball'\)/.test(src), 'lost alert s
 ok(/filter\(n => n !== player\)/.test(src), 'push goes to the round\'s other players, not a league blast');
 ok(/case 'birdieball':/.test(src), 'feed knows the birdieball type');
 // materialize: first touch copies the saved lost alert, then edits build on it
-const ctx = { _scBbKept: null, _scBbLostHole: null, _scBbLostStroke: null, scPlayerSel: 'Dave', bbAnswerFor: () => ({ kept: false, lost_hole: 7, lost_stroke: 5 }), renderLiveBanner() {} };
+const ctx = { _scBbKept: null, _scBbLostHole: null, _scBbLostStroke: null, window: { _liveIsTeamRound: false }, _scPlayer: null, currentPlayer: 'Dave', bbAnswerFor: () => ({ kept: false, lost_hole: 7, lost_stroke: 5 }), renderLiveBanner() {} };
 vm.createContext(ctx);
 vm.runInContext(['scBbMaterialize', 'scBbSetStroke'].map(n => extractFn(src, n)).join('\n') + ';this.set=scBbSetStroke', ctx);
 ctx.set(6);
