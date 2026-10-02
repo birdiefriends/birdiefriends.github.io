@@ -976,3 +976,5 @@ the course is flagged until the person claims it. (Duplicates: match on cell num
 - Unregistered players are first exposed at the first CTP/Birdie/BirdieBall/scorecard entry, not at Close; a person with no
   BF account cannot be picked at all today.
 - A net player with no strokes is silent until after Close.
+
+**Built (v4.11.2) — add-a-player slice of §12.** "Not on the list?" row at the end of the Live Panel player sheet (Gatherings, individual rounds). Cell mandatory with plausibility check (`bfCleanCell`), duplicate match by cell then name (`bfFindMemberMatch`, confirm prompt), Membership record created WITHOUT the alerts field (20), Yes registration with `added_by`/`added_at`, no downgrade to Sub, no host push. Main Worker: `POST /registrations` accepts `added_by`; GET falls back if columns are absent. **Brian to run:** `ALTER TABLE registrations ADD COLUMN added_by TEXT; ALTER TABLE registrations ADD COLUMN added_at TEXT;` and paste-deploy `source/worker.js`. Not yet: Open Spot take-over, Close reconcile screen, loosening the Games save rule.

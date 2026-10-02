@@ -901,7 +901,7 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { gathering_id, player_id, status, confirmed_for, host_note } = body;
+      const { gathering_id, player_id, status, confirmed_for, host_note, added_by } = body;
       if (!gathering_id || !player_id || !['yes','no','sub'].includes(status)) {
         return new Response(JSON.stringify({ error: 'gathering_id, player_id, and status (yes/no/sub) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -919,7 +919,10 @@ export default {
         let gInfo = null;
         if (status === 'yes') {
           gInfo = await env.DB.prepare(`SELECT size, host_id, title FROM gatherings WHERE id = ?`).bind(gathering_id).first();
-          if (gInfo && gInfo.size) {
+          // v4.11.2 — a player added on the course by someone in the group is
+          // already playing: never downgrade them to Sub (the host reconciles
+          // at Close & Calculate).
+          if (gInfo && gInfo.size && !added_by) {
             // Exclude this player's own existing row — re-confirming an
             // already-held Yes slot shouldn't count against itself.
             const row = await env.DB.prepare(
@@ -959,6 +962,21 @@ export default {
                  SELECT rowid FROM registrations WHERE gathering_id = ? AND COALESCE(is_placeholder,0) = 1
                  ORDER BY player_id DESC LIMIT ?)`
             ).bind(gathering_id, over).run();
+          }
+        }
+
+        // v4.11.2 — mark on-course adds. Its own statement in try/catch so a
+        // Worker deployed BEFORE the D1 ALTER (added_by / added_at columns)
+        // still saves the registration:
+        //   ALTER TABLE registrations ADD COLUMN added_by TEXT;
+        //   ALTER TABLE registrations ADD COLUMN added_at TEXT;
+        if (added_by) {
+          try {
+            await env.DB.prepare(
+              `UPDATE registrations SET added_by = ?, added_at = datetime('now') WHERE gathering_id = ? AND player_id = ?`
+            ).bind(String(added_by).slice(0, 80), gathering_id, player_id).run();
+          } catch (markErr) {
+            console.warn('added_by columns missing — run the ALTER:', markErr);
           }
         }
 
@@ -1005,9 +1023,17 @@ export default {
     if (request.method === 'GET' && /^\/gatherings\/\d+\/registrations$/.test(url.pathname)) {
       const gatheringId = url.pathname.split('/')[2];
       try {
-        const { results } = await env.DB.prepare(
-          `SELECT player_id, status, registered_at, confirmed_for, host_note FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
-        ).bind(gatheringId).all();
+        let results;
+        try {
+          ({ results } = await env.DB.prepare(
+            `SELECT player_id, status, registered_at, confirmed_for, host_note, added_by, added_at FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
+          ).bind(gatheringId).all());
+        } catch (colErr) {
+          // added_by / added_at not migrated yet — fall back to the original columns
+          ({ results } = await env.DB.prepare(
+            `SELECT player_id, status, registered_at, confirmed_for, host_note FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
+          ).bind(gatheringId).all());
+        }
         return new Response(JSON.stringify({ ok: true, registrations: results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });

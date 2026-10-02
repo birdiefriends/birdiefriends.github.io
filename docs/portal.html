@@ -4489,7 +4489,9 @@ async function loadGatherings() {
           status: statusMap[r.status] || 'No',
           createdAt: r.registered_at ? new Date(r.registered_at) : new Date(),
           confirmedFor: r.confirmed_for || null,  // Dev-48: stale-response detection
-          hostNote: r.host_note || null            // Dev-49: crew → host note
+          hostNote: r.host_note || null,           // Dev-49: crew → host note
+          addedBy: r.added_by || null,             // v4.11.2: added on the course by someone in the group
+          addedAt: r.added_at || null
         });
       });
     });
@@ -8684,6 +8686,9 @@ function buildLivePanel(evt) {
   window._liveEvtPlayers = evtPlayers;  // accessible from inline onclick attrs
   window._liveEvtIndividualPlayers = evtIndividualPlayers;  // CttP picker — always individuals
   window._liveIsTeamRound = isTeamRound;
+  // v4.11.2 — "Not on the list?" in the pickers: Gatherings, individual rounds only
+  window._liveAddOpts = (evt.source === 'gathering' && !isTeamRound && evt.gatheringId)
+    ? { addPlayer: { gatheringId: evt.gatheringId, eventName: evt.name } } : null;
   window._liveTeamSubLabels = isTeamRound ? _liveRoundTeams.subLabels : {};
   // Dev-86 round 3 follow-up (Brian: "Live panel sections should turn
   // on/off based on the host's gaming config" — clarity + real estate).
@@ -8741,7 +8746,7 @@ function buildLivePanel(evt) {
     return html;
   };
   const birdieSection = `
-    <button onclick="openPlayerSheet(window._liveEvtPlayers,'${birdiePlayerSel.replace(/'/g,"\'")}',function(n){_birdiePlayer=n;renderLiveBanner()},window._liveTeamSubLabels)"
+    <button onclick="openPlayerSheet(window._liveEvtPlayers,'${birdiePlayerSel.replace(/'/g,"\'")}',function(n){_birdiePlayer=n;renderLiveBanner()},window._liveTeamSubLabels,window._liveAddOpts)"
       style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);
         border-radius:8px;padding:9px 14px;color:#fff;font-size:0.85rem;font-family:inherit;
         text-align:left;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:8px">
@@ -8877,7 +8882,7 @@ function buildLivePanel(evt) {
   }).join('');
   const ctpPlayerEsc = ctpPlayerSel.replace(/'/g, "\\'");
   const ctpSection = `
-    <button onclick="openPlayerSheet(window._liveEvtIndividualPlayers,'${ctpPlayerEsc}',function(n){_ctpPlayer=n;renderLiveBanner()})"
+    <button onclick="openPlayerSheet(window._liveEvtIndividualPlayers,'${ctpPlayerEsc}',function(n){_ctpPlayer=n;renderLiveBanner()},undefined,window._liveAddOpts)"
       style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);
         border-radius:8px;padding:9px 14px;color:#fff;font-size:0.85rem;font-family:inherit;
         text-align:left;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:8px">
@@ -8936,7 +8941,7 @@ function buildLivePanel(evt) {
         </div>`).join('')}
       </div>` : '';
     bbSection = `
-      <button onclick="openPlayerSheet(window._liveEvtIndividualPlayers,'${bbPlayerEsc}',function(n){bbSelectPlayer(n)})"
+      <button onclick="openPlayerSheet(window._liveEvtIndividualPlayers,'${bbPlayerEsc}',function(n){bbSelectPlayer(n)},undefined,window._liveAddOpts)"
         style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);
           border-radius:8px;padding:9px 14px;color:#fff;font-size:0.85rem;font-family:inherit;
           text-align:left;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:8px">
@@ -9170,7 +9175,7 @@ function buildLivePanel(evt) {
       '</button>';
   const scSection = _scExpanded
     ? '' +
-      '<button onclick="openPlayerSheet(window._liveEvtPlayers,\'' + scPlayerSel.replace(/'/g,"\'") + '\',function(n){scChangePlayer(n)},window._liveTeamSubLabels)" ' +
+      '<button onclick="openPlayerSheet(window._liveEvtPlayers,\'' + scPlayerSel.replace(/'/g,"\'") + '\',function(n){scChangePlayer(n)},window._liveTeamSubLabels,window._liveAddOpts)" ' +
         'style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);' +
         'border-radius:8px;padding:10px 14px;color:#fff;font-size:0.88rem;font-family:inherit;' +
         'text-align:left;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:8px">' +
@@ -10347,14 +10352,62 @@ async function submitBirdieAlert(evtName) {
 }
 // ── Player Picker Sheet ─────────────────────────────────────────────────────
 let _sheetPlayers  = [];   // full sorted player list
+// ── v4.11.2 — Add a player on the course (spec §12) ─────────────────────────
+// Pure helpers first (extracted by tests), UI after.
+// Cell is MANDATORY: a real 10-digit US number, not an obvious fake.
+function bfCleanCell(raw) {
+  let d = String(raw == null ? '' : raw).replace(/\D/g, '');
+  if (d.length === 11 && d[0] === '1') d = d.slice(1);
+  if (!d) return { ok: false, digits: '', display: '', problem: 'Cell number is required — ask the player for theirs.' };
+  if (d.length !== 10) return { ok: false, digits: d, display: '', problem: 'That doesn\'t look like a full 10-digit cell number.' };
+  const fake = /^(\d)\1{9}$/.test(d) || '01234567890123456789'.includes(d) || '98765432109876543210'.includes(d) ||
+               /^(\d{2})\1{4}$/.test(d) || /^(\d{5})\1$/.test(d);
+  if (fake || /^[01]/.test(d) || /^\d{3}[01]/.test(d)) {
+    return { ok: false, digits: d, display: '', problem: 'That doesn\'t look like a real cell number — please ask the player.' };
+  }
+  return { ok: true, digits: d, display: d.slice(0,3) + '-' + d.slice(3,6) + '-' + d.slice(6), problem: '' };
+}
+// Match an existing member by cell first, then by exact name (case-insensitive).
+function bfFindMemberMatch(members, first, last, cellDigits) {
+  const norm = v => String(v || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+  if (cellDigits) {
+    const byCell = (members || []).find(m => norm(m.cell) === cellDigits);
+    if (byCell) return { kind: 'cell', member: byCell };
+  }
+  const f = String(first || '').trim().toLowerCase(), l = String(last || '').trim().toLowerCase();
+  if (f && l) {
+    const byName = (members || []).find(m =>
+      String(m.firstName || '').trim().toLowerCase() === f && String(m.lastName || '').trim().toLowerCase() === l);
+    if (byName) return { kind: 'name', member: byName };
+  }
+  return { kind: null, member: null };
+}
+function bfTidyName(v) {
+  v = String(v || '').trim().replace(/\s+/g, ' ');
+  if (v && (v === v.toLowerCase() || v === v.toUpperCase())) v = v.replace(/\b([a-z])([a-z']*)/gi, (m, a, b) => a.toUpperCase() + b.toLowerCase());
+  return v;
+}
+// What the add does, as a pure plan: reuse an existing member or create one.
+function bfAddPlayerPlan(members, first, last, cellRaw, confirmedMember) {
+  const f = bfTidyName(first), l = bfTidyName(last);
+  if (!f || !l) return { action: 'error', problem: 'First and last name are required.' };
+  const c = bfCleanCell(cellRaw);
+  if (!c.ok) return { action: 'error', problem: c.problem };
+  if (confirmedMember) return { action: 'use', member: confirmedMember };
+  const m = bfFindMemberMatch(members, f, l, c.digits);
+  if (m.kind) return { action: 'confirm', kind: m.kind, member: m.member };
+  return { action: 'create', first: f, last: l, cell: c.display, display: f + ' ' + l };
+}
 let _sheetCallback = null; // fn(playerName) called on selection
 let _sheetSelected = null; // currently selected player name
+let _sheetOpts = null;     // v4.11.2 — { addPlayer: {gatheringId, eventName} } shows the "Not on the list?" row
 let _sheetSubLabels = null; // { name: 'Real Name A & Real Name B' } — 2Man team nicknames (Dev-80)
 // `subLabels` is optional — { teamDisplayName: 'Real A & Real B' } — shown
 // as a second line under a team's nickname so a submitter can confirm
 // they're picking the right team, not just a name they typed. Undefined/
 // null for the ordinary individual-roster picker.
-function openPlayerSheet(players, selectedPlayer, callback, subLabels) {
+function openPlayerSheet(players, selectedPlayer, callback, subLabels, opts) {
+  _sheetOpts = opts || null;
   _sheetPlayers  = [...players].sort((a,b) => a.localeCompare(b));
   _sheetCallback = callback;
   _sheetSelected = selectedPlayer;
@@ -10419,6 +10472,15 @@ function renderPlayerSheetList(players) {
     azHTML += `<div class="player-sheet-az-letter"
       onclick="document.getElementById('ps-letter-${letter}').scrollIntoView({behavior:'smooth'})">${letter}</div>`;
   });
+  if (_sheetOpts && _sheetOpts.addPlayer) {
+    listHTML += `<div class="player-sheet-item" onclick="openAddPlayerDialog()" style="border-top:1px solid rgba(255,255,255,0.12);margin-top:8px">
+        <div class="player-sheet-avatar" style="background:#c9a227;color:#0b3d2e">+</div>
+        <div style="flex:1;min-width:0">
+          <div class="player-sheet-item-name">Not on the list?</div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.55);margin-top:1px">Add a player who is playing but isn't registered</div>
+        </div>
+      </div>`;
+  }
   list.innerHTML = listHTML || '<div style="padding:20px;text-align:center;color:var(--text-muted)">No players found</div>';
   az.innerHTML   = azHTML;
 }
@@ -10426,6 +10488,128 @@ function selectSheetPlayer(name) {
   _sheetSelected = name;
   if (_sheetCallback) _sheetCallback(name);
   closePlayerSheet();
+}
+
+let _addP = null;  // { first, last, cell, busy }
+function openAddPlayerDialog() {
+  if (!_sheetOpts || !_sheetOpts.addPlayer) return;
+  _addP = { busy: false };
+  let ov = document.getElementById('add-player-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'add-player-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,0.7);display:flex;align-items:flex-end;justify-content:center';
+    document.body.appendChild(ov);
+  }
+  ov.style.display = 'flex';
+  renderAddPlayerForm('');
+}
+function renderAddPlayerForm(msg, vals) {
+  const ov = document.getElementById('add-player-overlay'); if (!ov) return;
+  const v = vals || {};
+  const inp = 'width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:1rem;margin-bottom:10px';
+  ov.innerHTML = `<div style="background:#0b3d2e;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:18px 16px 24px;box-sizing:border-box" onclick="event.stopPropagation()">
+    <div style="font-weight:700;font-size:1.05rem;color:#fff;margin-bottom:4px">Add a player</div>
+    <div style="font-size:0.8rem;color:rgba(255,255,255,0.6);margin-bottom:12px">Someone playing who isn't registered. Ask them for their cell — it's how BirdieFriends knows who they are.</div>
+    <input id="ap-first" style="${inp}" placeholder="First name" autocomplete="off" value="${escapeHtmlAttr(v.first)}">
+    <input id="ap-last"  style="${inp}" placeholder="Last name" autocomplete="off" value="${escapeHtmlAttr(v.last)}">
+    <input id="ap-cell"  style="${inp}" placeholder="Cell number" inputmode="tel" autocomplete="off" value="${escapeHtmlAttr(v.cell)}">
+    <div id="ap-msg" style="color:#ffb4a8;font-size:0.82rem;min-height:1.1em;margin-bottom:8px">${msg ? escapeHtmlAttr(msg) : ''}</div>
+    <div style="display:flex;gap:10px">
+      <button class="btn" style="flex:1;background:rgba(255,255,255,0.12);color:#fff" onclick="closeAddPlayerDialog()">Cancel</button>
+      <button class="btn" id="ap-go" style="flex:2" onclick="submitAddPlayer()">Add to this game</button>
+    </div></div>`;
+  ov.onclick = closeAddPlayerDialog;
+}
+function escapeHtmlAttr(x) { return String(x == null ? '' : x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function closeAddPlayerDialog() {
+  const ov = document.getElementById('add-player-overlay');
+  if (ov) { ov.style.display = 'none'; ov.innerHTML = ''; }
+  _addP = null;
+}
+function _apVals() {
+  const g = id => (document.getElementById(id) || {}).value || '';
+  return { first: g('ap-first'), last: g('ap-last'), cell: g('ap-cell') };
+}
+function submitAddPlayer(confirmedMember) {
+  if (!_addP || _addP.busy) return;
+  const vals = _apVals();
+  if (confirmedMember && _addP.vals) Object.assign(vals, _addP.vals);  // confirm screen has no inputs
+  const plan = bfAddPlayerPlan(memberData, vals.first, vals.last, vals.cell, confirmedMember && confirmedMember.display ? confirmedMember : null);
+  if (plan.action === 'error') { renderAddPlayerForm(plan.problem, vals); return; }
+  _addP.vals = vals;
+  if (plan.action === 'confirm') {
+    _addP.pending = plan.member;
+    const ov = document.getElementById('add-player-overlay');
+    const who = escapeHtmlAttr(plan.member.display || plan.member.fullName);
+    const q = plan.kind === 'cell'
+      ? `That number is <b>${who}</b>'s. Is this them?`
+      : `We already have a member named <b>${who}</b>. Is this them?`;
+    ov.innerHTML = `<div style="background:#0b3d2e;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:18px 16px 24px;box-sizing:border-box" onclick="event.stopPropagation()">
+      <div style="color:#fff;font-size:1rem;margin-bottom:14px">${q}</div>
+      <div style="display:flex;gap:10px">
+        <button class="btn" style="flex:1;background:rgba(255,255,255,0.12);color:#fff" onclick="apNotThem()">No</button>
+        <button class="btn" style="flex:2" onclick="submitAddPlayer(_addP.pending)">Yes, add ${who}</button>
+      </div></div>`;
+    return;
+  }
+  runAddPlayer(plan);
+}
+function apNotThem() {
+  const v = (_addP && _addP.vals) || {};
+  renderAddPlayerForm('That cell or name already belongs to a member. Check the spelling — if it\'s a different person with the same name, add a middle initial to the last name.', v);
+}
+async function runAddPlayer(plan) {
+  const opt = _sheetOpts && _sheetOpts.addPlayer; if (!opt || !_addP) return;
+  _addP.busy = true;
+  const go = document.getElementById('ap-go'); if (go) { go.textContent = 'Adding…'; go.disabled = true; }
+  try {
+    let display;
+    if (plan.action === 'create') {
+      const now = new Date();
+      const memberDate = [String(now.getMonth()+1).padStart(2,'0'), String(now.getDate()).padStart(2,'0'), now.getFullYear()].join('-');
+      // Same Membership record the Join form makes. Field 20 (alerts/broadcast
+      // opt-in) is deliberately NOT set — alerts start only when the player
+      // uses the app and goes through the app's own opt-in.
+      const body = new URLSearchParams({
+        'submission[3]': plan.first, 'submission[6]': plan.last, 'submission[8]': plan.cell,
+        'submission[10]': memberDate, 'submission[22]': 'Active'
+      });
+      const resp = await fetch(`${JF_API}/form/${MEMBER_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`,
+        { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() });
+      const data = await resp.json();
+      if (data.responseCode !== 200 && data.responseCode !== 201) throw new Error(data.message || 'Member save failed');
+      display = plan.display;
+      memberData.push({ id: (data.content && data.content.submissionID) || 'new', firstName: plan.first, lastName: plan.last,
+        nickName: '', display, fullName: display, cell: plan.cell, active: 'Active', bfw: '', pushId: '' });
+      memberData.sort((a,b) => a.display.localeCompare(b.display));
+    } else {
+      display = plan.member.display || plan.member.fullName;
+    }
+    // Register Yes, marked as added on the course. No host push — the host
+    // confirms at Close & Calculate.
+    const r = await fetch(`${GATHERINGS_API}/registrations`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gathering_id: opt.gatheringId, player_id: display, status: 'yes', added_by: currentPlayer || 'unknown' })
+    });
+    const rd = await r.json();
+    if (!rd.ok) throw new Error(rd.error || 'Registration failed');
+    const row = { id: `gr-${opt.gatheringId}-${display}`, eventName: opt.eventName, gatheringId: opt.gatheringId, player: display,
+      status: 'Yes', createdAt: new Date(), confirmedFor: null, hostNote: null, addedBy: currentPlayer || 'unknown', addedAt: new Date().toISOString() };
+    const gi = gatheringRegData.findIndex(x => x.gatheringId === opt.gatheringId && x.player === display);
+    if (gi >= 0) gatheringRegData[gi] = { ...gatheringRegData[gi], ...row }; else gatheringRegData.push(row);
+    const ri = regData.findIndex(x => x.gatheringId === opt.gatheringId && x.player === display);
+    if (ri >= 0) regData[ri] = { ...regData[ri], status: 'Yes' }; else regData.push({ ...row });
+    closeAddPlayerDialog();
+    closePlayerSheet();
+    showToast(`${display} added to this game ✓`);
+    if (_sheetCallback) _sheetCallback(display);
+    else renderLiveBanner();
+  } catch (e) {
+    console.error('runAddPlayer error:', e);
+    if (_addP) _addP.busy = false;
+    renderAddPlayerForm('Couldn\'t add the player — check your connection and try again.', _addP && _addP.vals);
+  }
 }
 // ── Scorecard Modal ─────────────────────────────────────────────────────────
 let _scModalEvtName = null;

@@ -1,3 +1,6 @@
+v4.11.2 · 2026-10-02
+Deployed: 2026-10-02 (Live Panel player pickers (Birdie Alert, CTP, BirdieBall, Scorecard) now end with "Not on the list?" for a Gathering: anyone in the group can add a player who is playing but isn't registered. First, last and a real cell number are required; a matching member (by cell, then name) is offered instead of making a duplicate. The player becomes a BirdieFriends member (no alerts until they use the app) and a Yes for this game, marked as added on the course. Host is not pinged; confirms at Close. Needs the main Worker redeployed, plus ALTER TABLE registrations ADD COLUMN added_by TEXT; ALTER TABLE registrations ADD COLUMN added_at TEXT;)
+
 v4.11.1 · 2026-10-02
 Deployed: 2026-10-02 (Games, Gross or Net: the player list is now A to Z and leaves out Open Spots, which have no handicap to set and used to block saving. A line under the list says how many seats are still open; fill them, then reopen Games to set that player's handicap.)
 
