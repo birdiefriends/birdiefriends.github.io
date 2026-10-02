@@ -1,3 +1,6 @@
+v4.12.3 · 2026-10-02
+Deployed: 2026-10-02 (MiserBall: the scorecard now really starts from a player's "lost it" alert (before, editing just the hole dropped the alert's stroke and Lost status). Close & Calculate shows who lost it from alerts and scorecards, and lists carded players with no MiserBall answer with a one-tap "Kept it".)
+
 v4.12.2 · 2026-10-02
 Deployed: 2026-10-02 (Live Panel Birdie and CTP alerts for a Gathering now go only to that game's players (everyone registered, not No), not to every BirdieFriends member. Series and Wally Cup rounds still alert the whole league.)
 

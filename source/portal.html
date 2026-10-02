@@ -10242,7 +10242,11 @@ async function submitBirdieBall() {
 // it" alert) into local state so editing hole/stroke starts from it.
 function scBbMaterialize() {
   if (_scBbKept !== null) return;
-  const saved = (typeof scPlayerSel !== 'undefined' && scPlayerSel) ? bbAnswerFor(scPlayerSel) : null;
+  // v4.12.3 — scPlayerSel is local to buildLivePanel, so the old `typeof scPlayerSel` check was always
+  // 'undefined' here and a live "lost it" alert was never copied in on first touch: editing just the hole
+  // dropped the alert's stroke (and its Lost status). Resolve the player the same way the card does.
+  const _bbWho = window._liveIsTeamRound ? _scPlayer : (_scPlayer || currentPlayer);
+  const saved = _bbWho ? bbAnswerFor(_bbWho) : null;
   if (saved) { _scBbKept = saved.kept; _scBbLostHole = saved.lost_hole; _scBbLostStroke = saved.lost_stroke; }
 }
 function scBbSetStatus(kept) {
@@ -15621,7 +15625,14 @@ function gcReconcile(o) {
   const added = reg.filter(r => r.addedBy).map(r => ({ player: r.player, addedBy: r.addedBy, hasCard: cardNames.has(norm(r.player)) }));
   const unregisteredCards = reg.length ? cardPlayers.filter(n => !regNames.has(norm(n))) : [];
   const openSpots = (o.openSpots || []).slice();
-  return { noHandicap, scratch, added, unregisteredCards, openSpots,
+  // MiserBall: the lost-it alerts are the starting answers; a carded player with no answer at all
+  // can't win it (kept) or place (lost), so list them for a one-tap "Kept it".
+  const bbOn = Array.isArray(config.games) && config.games.includes('birdieball');
+  const answers = o.bbAnswers || [];
+  const ansNames = new Set(answers.map(a => norm(a.player_name)));
+  const bbLost = bbOn ? answers.filter(a => !a.kept && cardNames.has(norm(a.player_name))).map(a => ({ player: a.player_name, hole: a.lost_hole, stroke: a.lost_stroke })) : [];
+  const bbMissing = bbOn ? cardPlayers.filter(n => !ansNames.has(norm(n))) : [];
+  return { noHandicap, scratch, added, unregisteredCards, openSpots, bbLost, bbMissing,
     blocking: openSpots.length > 0 || noHandicap.length > 0 };
 }
 const _gcScratchAck = new Map(); // gatheringId -> Set(normalized names the host chose to play scratch)
@@ -15642,6 +15653,14 @@ async function gcSetHandicaps(gid) {
   if (eyebrow) eyebrow.textContent = g.name;
   await loadHostGamesConfigs();
   await showGatheringGamesForm(gid, undefined, { g, card: true });
+}
+async function gcBbKept(gid, player) {
+  try {
+    const r = await fetch(`${BFE_API}/bfe/birdieball-answers`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gathering_id: gid, player_name: player, kept: true }) });
+    const d = await r.json(); if (!d.ok) throw new Error(d.error || 'Save failed');
+    openGatheringCloseSheet(gid);
+  } catch (e) { showToast('❌ ' + e.message, true); }
 }
 async function gcRemoveAdded(gid, player) {
   if (!confirm(`Take ${player} off this game? They have no scorecard.`)) return;
@@ -15704,7 +15723,7 @@ async function openGatheringCloseSheet(gatheringId) {
       : gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes'));
     const registered = registeredRows.map(r => r.player);
     const recon = gcReconcile({ config, cardPlayers: cards.map(c => c.player), registeredRows,
-      openSpots, acked: _gcScratchAck.get(gatheringId) });
+      openSpots, acked: _gcScratchAck.get(gatheringId), bbAnswers: bbData.ok ? (bbData.answers || []) : [] });
     const missingCards = registered.filter(p => !cardNames.has(norm(p)));
     const incomplete = cards.map(c => ({ player: c.player, holes: scorecardMissingHoles(c, holeCount) })).filter(x => x.holes.length);
     const summary = computeGatheringGamesPayout(config, cards, ctpLeaders, bbData.ok ? (bbData.answers || []) : []);
@@ -15738,6 +15757,14 @@ async function openGatheringCloseSheet(gatheringId) {
             <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcPlayScratch(${gatheringId}, ${esc(JSON.stringify(n))})">Play scratch</button></div>`).join('')}
           <button class="btn btn-primary btn-sm" style="width:100%;margin-top:6px" onclick="gcSetHandicaps(${gatheringId})">⚖️ Set handicaps in Games</button></div>`
       : '';
+    const bbHtml = (recon.bbLost.length || recon.bbMissing.length)
+      ? `<div style="background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
+          🐦 MiserBall
+          ${recon.bbLost.length ? `<div style="color:var(--text-muted);padding:2px 0">Lost it (from alerts / scorecards): ${recon.bbLost.map(a => `<b>${esc(a.player)}</b>${a.hole ? ` #${esc(a.hole)}` : ''}`).join(', ')}</div>` : ''}
+          ${recon.bbMissing.length ? `<div style="padding:2px 0">No answer yet — they can't win it until you say they kept it:</div>
+            ${recon.bbMissing.map(n => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0"><b>${esc(n)}</b>
+              <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcBbKept(${gatheringId}, ${esc(JSON.stringify(n))})">Kept it</button></div>`).join('')}` : ''}</div>`
+      : '';
     const scratchHtml = recon.scratch.length
       ? `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:8px">⚖️ Playing scratch (no strokes): ${recon.scratch.map(esc).join(', ')}</div>` : '';
     const addedHtml = recon.added.length
@@ -15752,7 +15779,7 @@ async function openGatheringCloseSheet(gatheringId) {
       : '';
     const closeBlocked = !cards.length || recon.blocking;
     body.innerHTML = `
-      ${statusLine}${spotsHtml}${hcHtml}${scratchHtml}${addedHtml}${strayHtml}${missingHtml}${incompleteHtml}
+      ${statusLine}${spotsHtml}${hcHtml}${bbHtml}${scratchHtml}${addedHtml}${strayHtml}${missingHtml}${incompleteHtml}
       ${alreadyClosed ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Already closed — saving again replaces the earlier result.</div>` : ''}
       <div style="border-top:1px solid var(--border);padding-top:6px">${renderGatheringPayoutHtml(summary)}</div>
       <div style="display:flex;gap:8px;margin-top:14px">

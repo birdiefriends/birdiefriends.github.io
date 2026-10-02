@@ -24,6 +24,21 @@ ok(!r.noHandicap.length, 'name match is case-insensitive');
 r = gcReconcile({ config: { handicap_config: net }, cardPlayers: ['Ann Lee'], registeredRows: [{ player: 'Ann Lee', addedBy: 'Host' }, { player: 'Dee', addedBy: 'Host' }], openSpots: [] });
 ok(r.added.find(a => a.player === 'Dee' && !a.hasCard), 'added player with no card can be removed');
 
+// MiserBall: alert answers are the starting data; carded players with no answer are listed
+r = gcReconcile({ config: { games: ['skins', 'birdieball'] }, cardPlayers: ['Ann Lee', 'Bob Roy', 'Cy Young'], registeredRows: [{ player: 'Ann Lee' }, { player: 'Bob Roy' }, { player: 'Cy Young' }], openSpots: [],
+  bbAnswers: [{ player_name: 'Ann Lee', kept: false, lost_hole: 7, lost_stroke: 2 }, { player_name: 'bob roy', kept: true }] });
+ok(r.bbLost.length === 1 && r.bbLost[0].player === 'Ann Lee' && r.bbLost[0].hole === 7, 'lost-alert data surfaced');
+ok(r.bbMissing.join() === 'Cy Young', 'carded player with no MiserBall answer listed');
+ok(!r.blocking, 'MiserBall gaps do not block closing');
+r = gcReconcile({ config: { games: ['skins'] }, cardPlayers: ['Ann Lee'], registeredRows: [{ player: 'Ann Lee' }], openSpots: [], bbAnswers: [] });
+ok(!r.bbMissing.length, 'no MiserBall game, nothing to ask');
+// scorecard prefill: first touch copies the player's alert answer in (v4.12.3 fix)
+{ const vm = (await import('vm')).default;
+  const c = { window: { _liveIsTeamRound: false }, _scPlayer: null, currentPlayer: 'Ann Lee', _scBbKept: null, _scBbLostHole: null, _scBbLostStroke: null,
+    bbAnswerFor: n => (n === 'Ann Lee' ? { kept: false, lost_hole: 7, lost_stroke: 2 } : null) };
+  vm.createContext(c); vm.runInContext(extractFn(src, 'scBbMaterialize') + '; scBbMaterialize();', c);
+  ok(c._scBbKept === false && c._scBbLostHole === 7 && c._scBbLostStroke === 2, 'first touch copies the lost-alert answer into the scorecard'); }
+
 // ── BFE Worker ──
 function makeD1(db) {
   const wrap = (sql) => { const st = { binds: [], bind(...b) { st.binds = b; return st; },
