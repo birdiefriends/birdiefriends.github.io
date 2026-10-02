@@ -25,6 +25,13 @@ ok(!('rankings' in g), 'all-gross round: no rankings block, snapshot shape uncha
 const m = E.computeGatheringGamesPayout(cfg({ 'Ann Lee': spec(18) }), [card('Ann Lee', 5), card('Cy Young', 4)], {}, []);
 ok(m.rankings.net.find(x => x.player === 'Cy Young').total === 72, 'unset player ranks as scratch');
 
+// ranking-only: games stay gross, rankings still produced
+const ro = E.computeGatheringGamesPayout({ games: ['skins'], dollar_per_player: 10, handicap_config: { allowance: 95, skins_basis: 'gross', birdiepay_basis: 'gross', ranking: true, players: { 'Ann Lee': spec(18), 'Cy Young': spec(0) } } },
+  [card('Ann Lee', 5), card('Cy Young', 4)], {}, []);
+ok(ro.rankings && ro.rankings.net[0].player === 'Ann Lee' && ro.skins.basis === 'gross', 'ranking-only config: rankings appear, Skins stays gross');
+const same = E.computeGatheringGamesPayout({ games: ['skins'], dollar_per_player: 10 }, [card('Ann Lee', 5), card('Cy Young', 4)], {}, []);
+ok(JSON.stringify(ro.payouts) === JSON.stringify(same.payouts), 'ranking-only changes no payout');
+
 // rendering
 const render = new Function('escapeHtml', extractFn(src, 'renderGatheringPayoutHtml') + '; return renderGatheringPayoutHtml;')(s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
 const html = render(r);

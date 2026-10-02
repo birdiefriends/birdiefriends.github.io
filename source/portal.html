@@ -17863,7 +17863,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
   { const hc = existing && existing.handicap_config; // Dev-91
     _gamesFormHcp = hc
       ? { skins_basis: hc.skins_basis === 'net' ? 'net' : 'gross', birdiepay_basis: hc.birdiepay_basis === 'net' ? 'net' : 'gross',
-          allowance: hc.allowance == null ? 95 : hc.allowance, players: JSON.parse(JSON.stringify(hc.players || {})) }
+          ranking: hc.ranking === true, allowance: hc.allowance == null ? 95 : hc.allowance, players: JSON.parse(JSON.stringify(hc.players || {})) }
       : { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; }
   _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay'] : []); // an existing config is the host's own numbers
   const backBtn = document.getElementById('host-sheet-back');
@@ -18205,7 +18205,8 @@ function gamesFormOpenSpotCount() {
     : gatheringRegData.filter(r => r.gatheringId === _gamesFormGathering && r.status === 'Yes');
   return rows.filter(r => isOpenSpotName(r.player)).length;
 }
-function gamesFormHcpIsNet() { return _gamesFormHcp.skins_basis === 'net' || _gamesFormHcp.birdiepay_basis === 'net'; }
+function gamesFormHcpIsNet() { return _gamesFormHcp.skins_basis === 'net' || _gamesFormHcp.birdiepay_basis === 'net' || _gamesFormHcp.ranking === true; }
+function setGamesFormRanking(on) { _gamesFormHcp.ranking = !!on; refreshGamesFormHcpSection(); }
 // One player's resolved handicap, or { problem } if the host still owes a field.
 function gamesFormResolvePlayerHcp(name) {
   const e = gamesFormEntry(name);
@@ -18237,7 +18238,7 @@ function gamesFormSetAllTees(teeId) {
 }
 function gatheringGamesHcpSectionHtml() {
   const hasSkins = _gamesFormSelected.has('skins'), hasBp = _gamesFormSelected.has('birdiepay');
-  if (!hasSkins && !hasBp) return '';
+  if (!_gamesFormSelected.size) return '';
   const seg = (key, label) => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
       <span style="flex:1;font-size:0.9rem;font-weight:600">${label}</span>
       <div class="seg-toggle" style="margin:0">
@@ -18284,6 +18285,8 @@ function gatheringGamesHcpSectionHtml() {
   return `<div class="host-form-field" id="games-form-hcp-field">
       <label>⚖️ Gross or Net</label>
       ${hasSkins ? seg('skins_basis', '⛳ Skins') : ''}${hasBp ? seg('birdiepay_basis', '🐤 Birdie Payouts') : ''}
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;margin:2px 0 8px;cursor:pointer"><input type="checkbox" ${_gamesFormHcp.ranking === true ? 'checked' : ''} onchange="setGamesFormRanking(this.checked)">
+        <span>📊 Also show a Net ranking (for fun, no money) <span style="color:var(--text-muted)">— games stay as set above</span></span></label>
       <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Net = gross score minus the strokes a player receives on that hole (by the tee's hole handicap). Settled here, before the first tee.</div>
       ${rows}</div>`;
 }
@@ -18320,7 +18323,7 @@ function gamesFormBuildHandicapConfig() {
     if (r.problem) { pending.push(n); continue; }
     players[n] = { kind: r.kind, tee: r.tee, strokes: r.strokes, ...(r.index != null ? { index: r.index, course_hcp: r.course_hcp } : {}), stroke_index: r.stroke_index };
   }
-  return { config: { allowance: _gamesFormHcp.allowance, skins_basis: _gamesFormHcp.skins_basis, birdiepay_basis: _gamesFormHcp.birdiepay_basis, players }, problem: null, pending };
+  return { config: { allowance: _gamesFormHcp.allowance, skins_basis: _gamesFormHcp.skins_basis, birdiepay_basis: _gamesFormHcp.birdiepay_basis, ...(_gamesFormHcp.ranking === true ? { ranking: true } : {}), players }, problem: null, pending };
 }
 // Dev-89 — the fixed carve-outs (CTP purse + MiserBall) must fit inside the
 // pot. Returns the numbers the preview and the save guard both use, so the

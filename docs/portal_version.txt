@@ -1,3 +1,6 @@
+v4.13.1 · 2026-10-02
+Deployed: 2026-10-02 (Games: a new "Also show a Net ranking (for fun, no money)" checkbox in the Gross or Net section. Tick it, set each player's handicap, and the results show Net and Gross rankings while every game stays gross. (Before, rankings only appeared if Skins or Birdie Payouts was set to Net.) Needs the BFE Worker redeployed.)
+
 v4.13.0 · 2026-10-02
 Deployed: 2026-10-02 (Net games now show a Net ranking and a Gross ranking, for fun and with no money on them, in Close & Calculate and in the posted results in My History. Only completed cards rank; ties share a place. Takes effect on rounds calculated from now on.)
 

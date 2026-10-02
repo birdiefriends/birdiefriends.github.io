@@ -88,4 +88,10 @@ db.exec(`DELETE FROM bfe_gathering_games`);
 [st, d] = await call(db, 'POST', '/bfe/gathering-games', { gathering_id: 7, gathering_name: 'G', host_id: 'Host', games: ['skins'], dollar_per_player: 5,
   handicap_config: { allowance: 95, skins_basis: 'net', birdiepay_basis: 'gross', players: {} } });
 ok(st === 200 && d.ok, 'net with no settled players saves (empty players)');
+// ranking-only handicap_config is stored (no net game needed)
+db = mk(); db.exec(`DELETE FROM bfe_gathering_games`);
+[st, d] = await call(db, 'POST', '/bfe/gathering-games', { gathering_id: 7, gathering_name: 'G', host_id: 'Host', games: ['skins'], dollar_per_player: 5,
+  handicap_config: { allowance: 95, skins_basis: 'gross', birdiepay_basis: 'gross', ranking: true, players: { 'Host': { kind: 'gross', strokes: 0 } } } });
+const stored = db.prepare(`SELECT handicap_config FROM bfe_gathering_games WHERE gathering_id=7`).get();
+ok(st === 200 && stored.handicap_config && JSON.parse(stored.handicap_config).ranking === true, 'ranking-only handicap_config stored');
 console.log(`close_reconcile: ${pass} pass, ${fail} fail`); process.exit(fail ? 1 : 0);

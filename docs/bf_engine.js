@@ -394,7 +394,9 @@
     if (games.includes('skins')) {
       addons.push({ id: 'skins', entity: 'individual', basis: basisOf('skins_basis'), compare: 'low' });
     }
-    const anyNet = addons.some(a => a.basis === 'net');
+    // v4.13.0 — `ranking: true` keeps the per-player strokes without making any game net, so the
+    // Net/Gross ranking can be shown (for fun) while every game stays gross.
+    const anyNet = addons.some(a => a.basis === 'net') || !!(hcc && hcc.ranking === true && hcc.players);
     return {
       v: 1,
       base: { game: 'scorecard_only', params: {} },

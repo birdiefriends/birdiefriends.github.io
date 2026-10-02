@@ -1250,7 +1250,8 @@ export default {
         // asks for Net needs it; anything else clears it best-effort.
         const hcc = (handicap_config && typeof handicap_config === 'object') ? handicap_config : null;
         const hcPlayers = hcc && hcc.players && typeof hcc.players === 'object' ? hcc.players : null;
-        const hcNet = hcc && (hcc.skins_basis === 'net' || hcc.birdiepay_basis === 'net');
+        // v4.13.0 — `ranking: true` stores the strokes too (Net/Gross ranking for fun, games stay gross).
+        const hcNet = hcc && (hcc.skins_basis === 'net' || hcc.birdiepay_basis === 'net' || hcc.ranking === true);
         if (hcNet) {
           // v4.12.0 — an empty player list is allowed: players whose handicap isn't settled yet are
           // left out and flagged at Close & Calculate (the engine plays a missing net player scratch).
@@ -1262,6 +1263,7 @@ export default {
             allowance: Number.isFinite(Number(hcc.allowance)) ? Number(hcc.allowance) : 95,
             skins_basis: hcc.skins_basis === 'net' ? 'net' : 'gross',
             birdiepay_basis: hcc.birdiepay_basis === 'net' ? 'net' : 'gross',
+            ...(hcc.ranking === true ? { ranking: true } : {}),
             players: hcPlayers
           };
           try {
