@@ -1,3 +1,6 @@
+v4.11.0 · 2026-10-02
+Deployed: 2026-10-02 (New Gathering is now a short guided flow: name, venue, date and time, and how many you're hoping for (or "polling"); who's already in; who to ask about the rest (your crew, people you pick, all BirdieFriends, or nobody yet); games; then a plain-English summary before it creates. People you confirm are signed up as Yes and told so. The full form is still there under "Use the full form instead".)
+
 v4.10.11 · 2026-10-02
 Deployed: 2026-10-02 (Repeat: the date typed into a game's title (like "Sham Tuesday 8/18") is stripped from the new game, and the Repeat dialog lets you edit the title before it sends. The Repeat list now treats dated titles as one recurring game.)
 

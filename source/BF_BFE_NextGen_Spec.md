@@ -881,4 +881,14 @@ venue/size/type/crew; "Same as last time" should sit in front of step 1 and pref
   title in its one dialog, and the Repeat picker groups dated titles as one series. Still open: Repeat has no audience step,
   and the Worker's auto-repeat engine (`worker.js` ~line 207) copies the title as-is.
 
+**Built (portal v4.11.0, 2026-10-02) — first slice.** Host Panel "New" opens `showGuidedGathering()`; the full form stays behind
+"Use the full form instead" on every step (it carries the typed name/venue/date over). Answers become a plan
+(`gfBuildPlan`, pure, 65 checks in `test_guided_gathering.mjs`); `gfCreate` runs the same calls the full form does.
+Decisions taken while building: (1) several saved crews -> chips to choose which, one crew is pre-picked; (2) polling sets
+`size` NULL and tee time "suggested", a number sets tee time "confirmed"; (3) confirmed names get a "you're signed up" push;
+(4) a saved crew is never changed to fit one game: confirmed names outside it get a one-off crew; (5) "Pick people" reuses
+the shared player picker and the existing "save this as a crew?" prompt; (6) the old leftover-seat and held-seat state is
+not used. Not in this slice: "Start from a past game" (Repeat/Templates still separate), the event card's "N Yes so far"
+while polling, Edit Gathering.
+
 **Not in scope:** guests/hold-seats flow, partial crew, tee-time booking, anything on the Edit form.

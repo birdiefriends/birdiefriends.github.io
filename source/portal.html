@@ -10770,7 +10770,7 @@ let _hostAutoRepeat = false;         // Dev-70 — "Auto-repeat weekly" toggle, 
                                       // (only one of the two sheets is ever open at once).
 let _hostSelectedCrewName = null;
 let _hostPlaying        = true;      // "Are you playing?" toggle on the create form — defaults Yes
-let _crewPickerMode     = 'create';  // 'create' | 'invite' — controls Done button behavior
+let _crewPickerMode     = 'create';  // 'create' | 'invite' | 'guided-in' | 'guided-ask' — controls Done button behavior
 let _pendingCrewName    = null;      // set by save-crew dialog; read by submitNewGathering
 let _venues             = null;      // D1 confirmed venues, loaded once per session
 let _hostTemplates      = null;      // gathering templates for current host, loaded on panel open
@@ -16655,7 +16655,7 @@ function renderHostPanelList() {
   const actionBar = document.getElementById('host-action-bar');
   if (actionBar) {
     actionBar.innerHTML = `
-      <button class="host-action-btn" onclick="showNewGatheringForm()">
+      <button class="host-action-btn" onclick="showGuidedGathering()">
         <span class="host-action-icon">⛳</span><span class="host-action-label">New</span>
       </button>
       <button class="host-action-btn" ${(_hostTemplates && _hostTemplates.length > 0) ? '' : 'disabled'}
@@ -18451,6 +18451,15 @@ function closeCrewPicker(e) {
     submitInviteMore();
     return;
   }
+  if (_crewPickerMode === 'guided-in' || _crewPickerMode === 'guided-ask') {
+    // v4.11.0 — the guided New Gathering flow borrows this picker; hand the selection back to it
+    const _gk = _crewPickerMode === 'guided-in' ? 'in' : 'ask';
+    document.getElementById('crew-picker-overlay').style.display = 'none';
+    document.body.style.overflow = '';
+    _crewPickerMode = 'create';
+    gfPickerDone(_gk);
+    return;
+  }
   document.getElementById('crew-picker-overlay').style.display = 'none';
   document.body.style.overflow = '';
   renderHostCrewSummary();
@@ -18497,6 +18506,12 @@ function dismissCrewSaveDialog(save) {
   _pendingCrewName = save ? (toTitleCase((inp?.value || '').trim()) || null) : null;
   const dialog = document.getElementById('crew-save-dialog');
   if (dialog) dialog.remove();
+  if (typeof _gf !== 'undefined' && _gf && _gf.awaitingName) {
+    // v4.11.0 — guided flow asked for the crew name; take it and carry on
+    _gf.awaitingName = false; _gf.pickName = _pendingCrewName; _pendingCrewName = null;
+    gfRender();
+    return;
+  }
   renderHostCrewSummary();
 }
 // Called when Done is tapped in invite-more mode. Adds new members to the
@@ -18576,6 +18591,393 @@ function toggleCrewPickerSelection(name) {
   else _hostCrewPicked.add(name);
   // Re-render with current filter still applied
   filterCrewPicker(document.getElementById('crew-picker-search').value);
+}
+// ── Guided New Gathering (v4.11.0) ───────────────────────────────────────────
+// A short question flow in place of the all-in-one form (spec §11, Brian
+// 2026-10-02). Answers become a PLAN (gfBuildPlan: pure, tested), and gfCreate
+// runs the same API calls submitNewGathering does. The full form stays behind
+// "Use the full form instead" on every step. Rules from Brian:
+//   - capacity is a target, or "polling" (no size set; tee time marked suggested)
+//   - confirmed names are registered Yes; a Yes past a set size becomes a Sub
+//     and the host is told (main Worker, Dev-70) — nothing to build here
+//   - a crew is an audience, always all of it, never part of it
+//   - no leftover-seat / held-seat step: an unanswered seat is just unanswered
+let _gf = null;
+function gfFresh() {
+  return { step: 0, title: '', venue: '', date: '', time: '08:00', polling: false, target: 4,
+    playing: true, confirmed: new Set(), ask: null, crewId: null, crewName: null, crewMembers: null,
+    pickSet: new Set(), pickName: null, games: new Set(), awaitingName: false, busy: false };
+}
+// answers -> what to create. Pure: no DOM, no network.
+// ctx = { host, crewMembers: [names of the chosen saved crew], members: memberData rows }
+function gfBuildPlan(st, ctx) {
+  const host = ctx.host;
+  const notHost = n => n !== host;
+  const confirmed = [...st.confirmed].filter(notHost);
+  const registerYes = (st.playing ? [host] : []).concat(confirmed);
+  const plan = {
+    size: st.polling ? null : (st.target || null),
+    teeTimeStatus: st.polling ? 'suggested' : 'confirmed',
+    fillListEnabled: st.ask === 'all',
+    crew: { kind: 'none' }, saveCrew: null,
+    confirmed, registerYes, invitees: [], openAnnounce: [],
+    games: [...st.games], errors: []
+  };
+  const union = base => [...new Set(base.concat(confirmed))];
+  const subset = (a, b) => a.every(x => b.includes(x));
+  if (st.ask === 'crew') {
+    const base = (ctx.crewMembers || []).filter(notHost);
+    if (!st.crewId || !base.length) plan.errors.push('Choose which crew to ask');
+    else {
+      plan.invitees = base.filter(n => !confirmed.includes(n));
+      // A saved crew is never changed to fit one game: extra confirmed names get a one-off crew.
+      plan.crew = subset(confirmed, base) ? { kind: 'saved', id: st.crewId } : { kind: 'new', name: null, players: union(base) };
+    }
+  } else if (st.ask === 'pick') {
+    const base = [...st.pickSet].filter(notHost);
+    if (!base.length) plan.errors.push('Pick at least one person to ask');
+    else {
+      plan.invitees = base.filter(n => !confirmed.includes(n));
+      if (st.pickName && subset(confirmed, base)) plan.crew = { kind: 'new', name: st.pickName, players: base };
+      else {
+        plan.crew = { kind: 'new', name: null, players: union(base) };
+        if (st.pickName) plan.saveCrew = { name: st.pickName, players: base };
+      }
+    }
+  } else if (st.ask === 'all') {
+    plan.openAnnounce = (ctx.members || [])
+      .filter(m => m.gatheringAlerts === 'Yes' && m.active !== 'InActive' && m.display !== host && !confirmed.includes(m.display))
+      .map(m => m.display);
+  } else if (st.ask === 'none') {
+    // invite-only; the confirmed players still need to be able to see the game
+    if (confirmed.length) plan.crew = { kind: 'new', name: null, players: confirmed };
+  } else {
+    plan.errors.push('Choose who to ask about the rest');
+  }
+  if (plan.size && registerYes.length > plan.size) {
+    plan.errors.push(`${registerYes.length} are confirmed but you're hoping for ${plan.size}. Raise the number, or take someone off the confirmed list.`);
+  }
+  return plan;
+}
+// The plain-English recap on the last step. Each line says which step fixes it.
+function gfSummaryLines(st, ctx) {
+  const plan = gfBuildPlan(st, ctx);
+  const lines = [];
+  let when = '';
+  if (st.date && st.time) { const d = new Date(`${st.date}T${st.time}:00`); if (!isNaN(d.getTime())) when = `${formatDate(d)} at ${formatTime(d)}`; }
+  lines.push({ step: 0, text: [st.title, st.venue, when].filter(Boolean).join(' · ') });
+  lines.push({ step: 0, text: st.polling
+    ? 'Polling for a head count (tee time marked as suggested)'
+    : `Hoping for ${st.target} (tee time marked as confirmed)` });
+  const inNames = (st.playing ? ['you'] : []).concat(plan.confirmed);
+  lines.push({ step: 1, text: inNames.length ? `In: ${inNames.join(', ')}` : 'In: nobody yet' });
+  if (st.ask === 'crew') lines.push({ step: 2, text: `Asking ${st.crewName || 'your crew'} (${(ctx.crewMembers || []).filter(n => n !== ctx.host).length} people)` });
+  else if (st.ask === 'pick') lines.push({ step: 2, text: `Asking ${[...st.pickSet].filter(n => n !== ctx.host).length} people you picked${st.pickName ? ` (saved as "${st.pickName}")` : ''}` });
+  else if (st.ask === 'all') lines.push({ step: 2, text: 'Open to all BirdieFriends, announced as soon as you create it' });
+  else if (st.ask === 'none') lines.push({ step: 2, text: 'Invite-only. Nobody else is asked yet; you can open it later from the Host Panel' });
+  else lines.push({ step: 2, text: 'Who to ask: not chosen yet' });
+  lines.push({ step: 3, text: plan.games.length
+    ? `Games: ${plan.games.map(k => (GATHERING_GAMES_META[k] || {}).label || k).join(', ')} (you set the stakes next)`
+    : 'No games' });
+  return lines;
+}
+function gfCtx() {
+  return { host: currentPlayer, crewMembers: _gf ? (_gf.crewMembers || []) : [], members: memberData };
+}
+async function showGuidedGathering() {
+  _hostCrewPicked.clear();
+  _hostSelectedCrewId = null; _hostSelectedCrewName = null; _pendingCrewName = null;
+  _gf = gfFresh();
+  clearHostActionBar();
+  try {
+    const data = await gatheringsFetchJSON(`${GATHERINGS_API}/crews?host_id=${encodeURIComponent(currentPlayer)}`);
+    _hostSavedCrews = data.ok ? (data.crews || []) : [];
+  } catch (e) { _hostSavedCrews = []; }
+  const backBtn = document.getElementById('host-sheet-back');
+  if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = gfBack; }
+  const closeBtn = document.getElementById('host-sheet-close-btn');
+  if (closeBtn) { closeBtn.textContent = 'Cancel'; closeBtn.style.color = '#fff'; closeBtn.style.background = 'rgba(192,57,43,0.35)'; closeBtn.style.border = '1px solid rgba(224,82,82,0.4)'; }
+  gfRender();
+}
+function gfChoiceHtml(on, handler, icon, title, sub) {
+  return `<button type="button" onclick="${handler}" style="display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;padding:13px 14px;margin-bottom:10px;border-radius:12px;cursor:pointer;font-family:inherit;background:${on ? 'var(--green-light)' : '#fff'};border:2px solid ${on ? 'var(--green)' : 'var(--border)'}">
+    <span style="font-size:1.3rem;line-height:1.2">${icon}</span>
+    <span style="flex:1"><span style="display:block;font-size:0.95rem;font-weight:700;color:var(--text)">${title}</span>
+    <span style="display:block;font-size:0.78rem;color:var(--text-muted);margin-top:2px;line-height:1.4">${sub}</span></span></button>`;
+}
+function gfChipsHtml(names, removeFn) {
+  return names.map((n, i) => `<span class="host-crew-summary-chip">${escapeHtml(n)}<button type="button" onclick="${removeFn}(${i})">✕</button></span>`).join('');
+}
+function gfFooterHtml(nextLabel, nextHandler) {
+  return `<button class="host-cta-btn" style="margin-top:18px" id="gf-next" onclick="${nextHandler}">${nextLabel}</button>
+    <div style="text-align:center;margin-top:12px"><button type="button" class="btn btn-ghost btn-sm" style="color:var(--text-muted)" onclick="gfUseFullForm()">Use the full form instead</button></div>`;
+}
+function gfRender() {
+  const st = _gf; if (!st) return;
+  const body = document.getElementById('host-sheet-body'); if (!body) return;
+  const stepLabel = n => `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px">Step ${n} of 5</div>`;
+  if (st.step === 0) {
+    body.innerHTML = `${stepLabel(1)}
+      <div class="section-label" style="margin-top:0">⛳ The basics</div>
+      <div class="host-form-field"><label>Name <span style="color:#c0392b">*</span></label>
+        <input type="text" id="gf-title" value="${escapeHtml(st.title)}" placeholder="e.g. Saturday Skins">
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px">Just the name. The card shows the date, so leave it out of the title.</div></div>
+      <div class="host-form-field"><label>Venue <span style="color:#c0392b">*</span></label>
+        <div style="position:relative">
+          <input type="text" id="gf-venue" value="${escapeHtml(st.venue)}" placeholder="Search for a course…" autocomplete="off"
+            oninput="venueInputHandler('gf-venue', 'gf-venue-suggestions')" onfocus="venueInputHandler('gf-venue', 'gf-venue-suggestions')">
+          <div id="gf-venue-suggestions" style="display:none;position:absolute;z-index:999;left:0;right:0;top:100%;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,0.12);max-height:260px;overflow:auto"></div>
+        </div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px">Can't find your course? Just type the name and continue.</div></div>
+      <div style="display:flex;gap:8px">
+        <div class="host-form-field" style="flex:1.4"><label>Date <span style="color:#c0392b">*</span></label>
+          <input type="date" id="gf-date" value="${escapeHtml(st.date)}" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;font-size:0.9rem;font-family:inherit;color:var(--text);box-sizing:border-box"></div>
+        <div class="host-form-field" style="flex:1.2"><label>Time <span style="color:#c0392b">*</span></label>
+          <input type="time" id="gf-time" value="${escapeHtml(st.time)}" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;font-size:0.9rem;font-family:inherit;color:var(--text);box-sizing:border-box"></div>
+      </div>
+      <div class="section-label">👥 How many are you hoping for?</div>
+      <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">
+        ${st.polling ? '' : `<div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 14px;border-bottom:1px solid var(--border)">
+          <div style="flex:1"><div style="font-size:0.94rem;font-weight:600">Players</div><div style="font-size:0.74rem;color:var(--text-muted);margin-top:1px">Your target, including you. Book the tee time with the course.</div></div>
+          <button type="button" aria-label="Fewer" onclick="gfBump(-1)" style="width:40px;height:40px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:1.25rem;font-weight:600;cursor:pointer">−</button>
+          <div id="gf-target" style="min-width:34px;text-align:center;font-size:1.05rem;font-weight:700">${st.target}</div>
+          <button type="button" aria-label="More" onclick="gfBump(1)" style="width:40px;height:40px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:1.25rem;font-weight:600;cursor:pointer">+</button></div>`}
+        ${hostSwitchHtml('gf-poll-switch', st.polling, 'gfTogglePolling()', "Not sure yet, I'm polling", 'No seat count for now. The tee time shows as suggested until you know.')}
+      </div>
+      ${gfFooterHtml('Next', 'gfNext()')}`;
+  } else if (st.step === 1) {
+    const names = [...st.confirmed];
+    body.innerHTML = `${stepLabel(2)}
+      <div class="section-label" style="margin-top:0">✅ Who's already in?</div>
+      <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:10px;line-height:1.5">Only people you know are playing. They're signed up as Yes right away. Everyone else you ask next.</div>
+      <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-bottom:12px">
+        ${hostSwitchHtml('gf-playing-switch', st.playing, 'gfTogglePlaying()', "I'm playing", 'Counts as one of your players')}
+      </div>
+      <button type="button" class="host-crew-select-btn" onclick="gfOpenPicker('in')"><span>➕</span><span>${names.length ? 'Add or change players…' : 'Add players who are definitely in…'}</span></button>
+      <div style="margin-top:10px">${gfChipsHtml(names, 'gfRemoveConfirmed')}</div>
+      ${gfFooterHtml(names.length ? 'Next' : 'Next (nobody else yet)', 'gfNext()')}`;
+  } else if (st.step === 2) {
+    const crews = _hostSavedCrews || [];
+    const crewPicked = st.ask === 'crew' && st.crewId;
+    const pickNames = [...st.pickSet];
+    body.innerHTML = `${stepLabel(3)}
+      <div class="section-label" style="margin-top:0">📣 Who should we ask about the rest?</div>
+      ${gfChoiceHtml(st.ask === 'crew', 'gfChooseAsk(\'crew\')', '👥', 'My crew', crews.length ? 'Everyone in the crew gets asked.' : 'You have no saved crew yet. Pick people and save them as one.')}
+      ${st.ask === 'crew' && crews.length ? `<div style="margin:-2px 0 12px 4px">${crews.map(c => `<span class="host-crew-chip${st.crewId === c.id ? ' selected' : ''}" onclick="gfPickCrew(${c.id})">📋 ${escapeHtml(c.name)}</span>`).join('')}</div>` : ''}
+      ${gfChoiceHtml(st.ask === 'pick', 'gfChooseAsk(\'pick\')', '🙋', 'Pick people', pickNames.length ? `${pickNames.length} picked. Tap to change.` : 'Choose exactly who gets asked.')}
+      ${st.ask === 'pick' && pickNames.length ? `<div style="margin:-2px 0 12px 4px">${gfChipsHtml(pickNames, 'gfRemovePick')}</div>` : ''}
+      ${gfChoiceHtml(st.ask === 'all', 'gfChooseAsk(\'all\')', '📢', 'All BirdieFriends', 'Open to every member, announced as soon as you create it.')}
+      ${gfChoiceHtml(st.ask === 'none', 'gfChooseAsk(\'none\')', '🔒', 'Nobody yet', 'Invite-only for now. You can open it up later from the Host Panel.')}
+      ${gfFooterHtml('Next', 'gfNext()')}`;
+  } else if (st.step === 3) {
+    body.innerHTML = `${stepLabel(4)}
+      <div class="section-label" style="margin-top:0">🎮 Playing for anything?</div>
+      ${gfChoiceHtml(st.games.size === 0, 'gfClearGames()', '🚫', 'No games', 'Just a round of golf.')}
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin:6px 0">Or pick the games. You set the stakes on the next screen.</div>
+      ${Object.keys(GATHERING_GAMES_META).map(k => gfChoiceHtml(st.games.has(k), `gfToggleGame('${k}')`, GATHERING_GAMES_META[k].icon, GATHERING_GAMES_META[k].label, escapeHtml(((GAME_INFO[k] || '').split('.')[0] || '') + '.'))).join('')}
+      ${gfFooterHtml('Next', 'gfNext()')}`;
+  } else {
+    const ctx = gfCtx();
+    const lines = gfSummaryLines(st, ctx);
+    const plan = gfBuildPlan(st, ctx);
+    body.innerHTML = `${stepLabel(5)}
+      <div class="section-label" style="margin-top:0">📝 Here's what will happen</div>
+      <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff;margin-bottom:12px">
+        ${lines.map((l, i) => `<button type="button" onclick="gfJump(${l.step})" style="display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 14px;background:#fff;border:0;${i < lines.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}text-align:left;cursor:pointer;font-family:inherit">
+          <span style="flex:1;font-size:0.9rem;color:var(--text);line-height:1.4">${escapeHtml(l.text)}</span><span style="font-size:0.74rem;color:var(--green-dark);font-weight:700">Change</span></button>`).join('')}
+      </div>
+      ${plan.errors.length ? `<div style="font-size:0.82rem;color:#c0392b;margin-bottom:10px;line-height:1.4">${escapeHtml(plan.errors[0])}</div>` : ''}
+      <button class="host-cta-btn" id="gf-next" onclick="gfCreate()" ${st.busy ? 'disabled' : ''}>⛳ Create Gathering</button>
+      <div style="text-align:center;margin-top:12px"><button type="button" class="btn btn-ghost btn-sm" style="color:var(--text-muted)" onclick="gfUseFullForm()">Use the full form instead</button></div>`;
+  }
+}
+// copy whatever is typed on step 1 into the state (null-safe on other steps)
+function gfReadBasics() {
+  const st = _gf; if (!st) return;
+  const v = id => { const el = document.getElementById(id); return el ? el.value : null; };
+  const t = v('gf-title'), ve = v('gf-venue'), d = v('gf-date'), ti = v('gf-time');
+  if (t !== null) st.title = t.trim();
+  if (ve !== null) st.venue = ve.trim();
+  if (d !== null) st.date = d;
+  if (ti !== null) st.time = ti;
+}
+function gfBasicsError(st) {
+  if (!st.title) return 'Give it a name';
+  if (!st.venue) return 'Pick a venue';
+  if (!st.date || !st.time) return 'Pick a date and time';
+  if (new Date(`${st.date}T${st.time}:00`) <= new Date()) return 'The date and time must be in the future';
+  return null;
+}
+function gfBump(d) {
+  gfReadBasics();
+  _gf.target = Math.max(1, Math.min(32, (_gf.target || 4) + d));
+  const el = document.getElementById('gf-target'); if (el) el.textContent = String(_gf.target);
+}
+function gfTogglePolling() { gfReadBasics(); _gf.polling = !_gf.polling; gfRender(); }
+function gfTogglePlaying() { _gf.playing = !_gf.playing; hostSwitchSet('gf-playing-switch', _gf.playing); }
+function gfRemoveConfirmed(i) { _gf.confirmed.delete([..._gf.confirmed][i]); gfRender(); }
+function gfRemovePick(i) { _gf.pickSet.delete([..._gf.pickSet][i]); if (!_gf.pickSet.size) _gf.pickName = null; gfRender(); }
+function gfClearGames() { _gf.games = new Set(); gfRender(); }
+function gfToggleGame(k) { if (_gf.games.has(k)) _gf.games.delete(k); else _gf.games.add(k); gfRender(); }
+async function gfPickCrew(id) {
+  const c = (_hostSavedCrews || []).find(x => x.id === id); if (!c) return;
+  _gf.crewId = id; _gf.crewName = c.name; _gf.crewMembers = null;
+  try {
+    const data = await gatheringsFetchJSON(`${GATHERINGS_API}/crews/${id}/members`);
+    _gf.crewMembers = data.ok ? (data.player_ids || []) : [];
+  } catch (e) { _gf.crewMembers = []; showToast('⚠️ Could not load that crew: ' + e.message, true); }
+  gfRender();
+}
+function gfChooseAsk(kind) {
+  const st = _gf;
+  if (kind === 'pick') { gfOpenPicker('ask'); return; }
+  st.ask = kind;
+  if (kind === 'crew' && !st.crewId && (_hostSavedCrews || []).length === 1) { gfPickCrew(_hostSavedCrews[0].id); return; }
+  if (kind === 'crew' && !(_hostSavedCrews || []).length) { st.ask = null; showToast('No saved crew yet. Use "Pick people" and save them as a crew.'); }
+  gfRender();
+}
+// The shared player picker, borrowed. Mode tells closeCrewPicker to hand control back here.
+function gfOpenPicker(kind) {
+  _hostSelectedCrewId = null; _hostSelectedCrewName = null;
+  _hostCrewPicked = new Set(kind === 'in' ? _gf.confirmed : _gf.pickSet);
+  openCrewPicker();
+  _crewPickerMode = 'guided-' + kind;
+  if (kind === 'ask') _crewPickerPlayers = _crewPickerPlayers.filter(n => !_gf.confirmed.has(n));
+  const header = document.getElementById('crew-picker-header-label');
+  if (header) header.textContent = kind === 'in' ? 'Who is definitely playing?' : 'Who should we ask?';
+  renderCrewPickerList(_crewPickerPlayers);
+}
+function gfPickerDone(kind) {
+  const st = _gf; if (!st) return;
+  const picked = new Set(_hostCrewPicked);
+  _hostCrewPicked = new Set();
+  if (kind === 'in') {
+    st.confirmed = picked;
+    st.pickSet = new Set([...st.pickSet].filter(n => !picked.has(n)));
+    gfRender();
+    return;
+  }
+  st.pickSet = picked;
+  if (!picked.size) { if (st.ask === 'pick') st.ask = null; st.pickName = null; gfRender(); return; }
+  st.ask = 'pick';
+  st.pickName = null;
+  st.awaitingName = true;
+  showCrewSaveDialog(); // same "save these as a crew?" prompt as the full form; dismissCrewSaveDialog hands back here
+}
+function gfBack() {
+  const st = _gf;
+  if (!st) { renderHostPanelList(); return; }
+  gfReadBasics();
+  if (st.step === 0) { const b = document.getElementById('host-sheet-back'); if (b) b.style.display = 'none'; _gf = null; renderHostPanelList(); return; }
+  st.step -= 1; gfRender();
+}
+function gfJump(n) { gfReadBasics(); _gf.step = n; gfRender(); }
+function gfNext() {
+  const st = _gf; if (!st) return;
+  gfReadBasics();
+  if (st.step === 0) { const e = gfBasicsError(st); if (e) { showToast(e, true); return; } }
+  if (st.step === 2) {
+    if (!st.ask) { showToast('Choose who to ask about the rest', true); return; }
+    if (st.ask === 'crew' && !st.crewId) { showToast('Tap the crew you want to ask', true); return; }
+    if (st.ask === 'pick' && !st.pickSet.size) { showToast('Pick at least one person', true); return; }
+  }
+  st.step += 1; gfRender();
+}
+// Hand what's been answered to the full form, so no typing is lost.
+async function gfUseFullForm() {
+  const st = _gf; if (st) gfReadBasics();
+  await showNewGatheringForm();
+  if (!st) return;
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+  set('host-new-title', st.title); set('host-new-venue', st.venue);
+  set('host-new-date', st.date); set('host-new-time', st.time);
+  if (!st.polling) set('host-new-size', String(st.target));
+  _gf = null;
+}
+async function gfPostCrew(name, players) {
+  const crewData = await gatheringsFetchJSON(`${GATHERINGS_API}/crews`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ host_id: currentPlayer, name: name || null, player_ids: players })
+  });
+  if (!crewData.ok) throw new Error(crewData.error || 'Crew creation failed');
+  return crewData.id;
+}
+async function gfCreate() {
+  const st = _gf; if (!st || st.busy) return;
+  gfReadBasics();
+  const bErr = gfBasicsError(st); if (bErr) { showToast(bErr, true); return; }
+  if (st.ask === 'crew' && st.crewId && !st.crewMembers) await gfPickCrew(st.crewId);
+  const plan = gfBuildPlan(st, gfCtx());
+  if (plan.errors.length) { showToast(plan.errors[0], true); return; }
+  const title = toTitleCase(st.title);
+  const eventDate = new Date(`${st.date}T${st.time}:00`);
+  const eventTime = toLocalISOString(eventDate);
+  st.busy = true;
+  const btn = document.getElementById('gf-next'); if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); }
+  try {
+    let crewId = null;
+    if (plan.crew.kind === 'saved') crewId = plan.crew.id;
+    else if (plan.crew.kind === 'new') crewId = await gfPostCrew(plan.crew.name, plan.crew.players);
+    if (plan.saveCrew) gfPostCrew(plan.saveCrew.name, plan.saveCrew.players).catch(e => console.warn('Saving the crew failed:', e));
+    const gathData = await gatheringsFetchJSON(`${GATHERINGS_API}/gatherings`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        host_id: currentPlayer, title, venue: st.venue || null, event_time: eventTime,
+        size: plan.size, crew_id: crewId, fill_list_enabled: plan.fillListEnabled,
+        gathering_type: 'Individual Play', description: null,
+        tee_time_status: plan.teeTimeStatus, holes: 18, auto_repeat: false
+      })
+    });
+    if (!gathData.ok) throw new Error(gathData.error || 'Gathering creation failed');
+    // Yes registrations: the host (if playing) and everyone the host said is definitely in.
+    const regJobs = plan.registerYes.map(name =>
+      gatheringsFetchJSON(`${GATHERINGS_API}/registrations`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gathering_id: gathData.id, player_id: name, status: 'yes' })
+      }).catch(e => {
+        console.warn('Registration failed for', name, e);
+        showToast(`⚠️ Gathering created, but signing up ${name} failed. They can still register from the card.`, true);
+      }));
+    const when = `${formatDate(eventDate)} at ${formatTime(eventDate)}`;
+    const push = (names, ptitle, text, type, meta) => {
+      if (!names.length) return;
+      osSendToPlayers(names, ptitle, text, 'https://birdiefriends.com/portal.html', type, meta)
+        .catch(e => console.warn('Notify failed:', e));
+    };
+    push(plan.confirmed, 'New Gathering',
+      `${currentPlayer} added you to "${title}" — ${when}. You're signed up as playing, no RSVP needed.`,
+      'gathering_invite', { gathering_id: gathData.id, invited: plan.confirmed });
+    push(plan.invitees, 'New Gathering',
+      `${currentPlayer} invited you to "${title}" — ${when}.`,
+      'gathering_invite', { gathering_id: gathData.id, invited: plan.invitees });
+    push(plan.openAnnounce, '📢 Open Gathering',
+      `${currentPlayer} is hosting "${title}" — ${when}. Open to all members.`,
+      'gathering_open_invite', { gathering_id: gathData.id });
+    const wantGames = plan.games.length > 0;
+    showToast(wantGames ? '✅ Gathering created. Now set the game stakes.' : '✅ Gathering created');
+    if (wantGames) await Promise.allSettled(regJobs);
+    await refreshGatherings();
+    await loadHostSpots();
+    _gf = null;
+    const created = gatheringData.find(x => x.gatheringId === gathData.id);
+    if (wantGames && created) await showGatheringGamesForm(gathData.id, plan.games);
+    else renderHostPanelList();
+    // First successful Gathering marks the member as a host (best effort, as in the full form).
+    if (HOST_QID) {
+      const me = memberData.find(m => m.display === currentPlayer);
+      if (me && me.id && me.host !== 'Yes') {
+        const hb = new URLSearchParams({ [`submission[${HOST_QID}]`]: 'Yes' });
+        fetch(`${JF_API}/submission/${me.id}?apiKey=${JOTFORM_API_KEY}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: hb.toString() }
+        ).then(() => { me.host = 'Yes'; }).catch(e => console.warn('Host promotion failed (non-blocking):', e));
+      }
+    }
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+    console.error('gfCreate error:', e);
+    st.busy = false;
+    const b2 = document.getElementById('gf-next'); if (b2) { b2.disabled = false; b2.classList.remove('btn-loading'); }
+  }
 }
 async function submitNewGathering() {
   const title = toTitleCase((document.getElementById('host-new-title').value || '').trim());
