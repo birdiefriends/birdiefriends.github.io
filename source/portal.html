@@ -8686,6 +8686,7 @@ function buildLivePanel(evt) {
   window._liveEvtPlayers = evtPlayers;  // accessible from inline onclick attrs
   window._liveEvtIndividualPlayers = evtIndividualPlayers;  // CttP picker — always individuals
   window._liveIsTeamRound = isTeamRound;
+  window._liveAlertAudience = evt.source === 'gathering' ? evtIndividualPlayers.filter(n => !isOpenSpotName(n)) : null;
   // v4.11.2 — "Not on the list?" in the pickers: Gatherings, individual rounds only
   window._liveAddOpts = (evt.source === 'gathering' && !isTeamRound && evt.gatheringId)
     ? { addPlayer: { gatheringId: evt.gatheringId, eventName: evt.name } } : null;
@@ -10334,7 +10335,7 @@ async function submitBirdieAlert(evtName) {
       result = await osSendToPlayers([currentPlayer], `[TEST] ${heading}`, msg, 'https://birdiefriends.com/portal.html', 'birdie', bfMeta);
       if (!result || !result.ok) console.warn('[Birdie] test push failed:', result && result.error);
     } else {
-      result = await osSendAll(heading, msg, 'https://birdiefriends.com/portal.html', 'birdie', bfMeta);
+      result = await liveAlertSend(heading, msg, 'birdie', bfMeta);
     }
     feedKey = result && result.feedKey;
     loadSkinBoardData(); // refresh shared Skin Status board
@@ -10852,10 +10853,19 @@ function wbSetStroke(v) {
   _wbStroke = v ? parseInt(v, 10) : null;
   renderLiveBanner();
 }
+// v4.12.2 — Live Panel alerts (Birdie, CTP) go to THIS game's players only when it's a Gathering
+// (everyone registered but not No, Open Spots excluded), not the whole league. Series / Wally Cup
+// rounds keep the league-wide send. _liveAlertAudience is set in buildLivePanel (null = league).
+async function liveAlertSend(heading, body, bfType, bfMeta) {
+  const aud = window._liveAlertAudience;
+  const url = 'https://birdiefriends.com/portal.html';
+  if (Array.isArray(aud)) return osSendToPlayers(aud, heading, body, url, bfType, bfMeta);
+  return osSendAll(heading, body, url, bfType, bfMeta);
+}
 // Send CttP push notification via Cloudflare Worker
 async function sendCtpNotification(heading, body) {
   try {
-    await osSendAll(heading, body, 'https://birdiefriends.com/portal.html', 'cttp');
+    await liveAlertSend(heading, body, 'cttp');
   } catch(e) {
     console.warn('[CttP] push notification failed:', e.message);
   }

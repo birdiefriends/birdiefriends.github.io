@@ -1,0 +1,20 @@
+// v4.12.2 — Live Panel Birdie/CTP alerts: Gathering -> this game's players only; otherwise league-wide.
+import fs from 'fs'; import vm from 'vm'; import { extractFn } from './extract.mjs';
+const src = fs.readFileSync(new URL('../portal.html', import.meta.url), 'utf8');
+let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
+const calls = [];
+const ctx = { window: {}, osSendToPlayers: async (...a) => { calls.push(['players', ...a]); return { ok: true }; }, osSendAll: async (...a) => { calls.push(['all', ...a]); return { ok: true }; } };
+vm.createContext(ctx);
+vm.runInContext(extractFn(src, 'liveAlertSend'), ctx);
+ctx.window._liveAlertAudience = ['Ann Lee', 'Bob Roy'];
+await ctx.liveAlertSend('h', 'b', 'birdie', { hole: 3 });
+ok(calls[0][0] === 'players' && calls[0][1].join() === 'Ann Lee,Bob Roy' && calls[0][5] === 'birdie', 'gathering: only its players');
+ctx.window._liveAlertAudience = [];
+await ctx.liveAlertSend('h', 'b', 'cttp');
+ok(calls[1][0] === 'players' && calls[1][1].length === 0, 'gathering with nobody: still not league-wide');
+ctx.window._liveAlertAudience = null;
+await ctx.liveAlertSend('h', 'b', 'birdie');
+ok(calls[2][0] === 'all', 'non-gathering round keeps the league send');
+ok(/window\._liveAlertAudience = evt\.source === 'gathering'/.test(src), 'buildLivePanel sets the audience for Gatherings');
+ok(!/osSendAll\(heading, msg, 'https:\/\/birdiefriends\.com\/portal\.html', 'birdie'/.test(src), 'birdie alert no longer calls osSendAll directly');
+console.log(`live alert audience: ${pass} pass, ${fail} fail`); process.exit(fail ? 1 : 0);

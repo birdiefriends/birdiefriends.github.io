@@ -1,3 +1,6 @@
+v4.12.2 · 2026-10-02
+Deployed: 2026-10-02 (Live Panel Birdie and CTP alerts for a Gathering now go only to that game's players (everyone registered, not No), not to every BirdieFriends member. Series and Wally Cup rounds still alert the whole league.)
+
 v4.12.1 · 2026-10-02
 Deployed: 2026-10-02 (BirdieBall is now MiserBall everywhere you see it: Games, Live Panel, scorecard question, lost alert, results.)
 
