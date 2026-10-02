@@ -119,6 +119,30 @@
     };
   }
 
+  // v4.13.0 — Gross and Net rankings for a round that has a Net setup: for fun, not a game (no
+  // money moves). Only completed cards rank (every hole in); ties share a place. Lowest wins.
+  function buildRankings(cards, netByPlayer) {
+    const rows = [];
+    (cards || []).forEach(c => {
+      const nb = netByPlayer.get(norm(c.player));
+      if (!nb) return;
+      const expected = c.hole_count === 9 ? 9 : 18;
+      const grossHoles = nb.gross.filter(g => typeof g === 'number' && g > 0);
+      const netHoles = nb.holes.filter(v => v != null);
+      if (grossHoles.length !== expected || netHoles.length !== expected) return;
+      rows.push({ player: c.player, gross: grossHoles.reduce((a, b) => a + b, 0), net: netHoles.reduce((a, b) => a + b, 0), strokes: nb.strokes });
+    });
+    const place = (list, key) => {
+      const sorted = list.slice().sort((a, b) => a[key] - b[key] || a.player.localeCompare(b.player));
+      return sorted.map((r, i) => {
+        const firstSame = sorted.findIndex(x => x[key] === r[key]);
+        const tied = sorted.filter(x => x[key] === r[key]).length > 1;
+        return { player: r.player, place: firstSame + 1, tied, total: r[key], gross: r.gross, strokes: r.strokes };
+      });
+    };
+    return { gross: place(rows, 'gross'), net: place(rows, 'net') };
+  }
+
   // ── Payout ledger shared by every add-on in one close ──────────────────
   // Rounds DOWN to whole dollars on every split; the remainder is reported
   // as unallocated, never silently redistributed (Brian, Dev-87).
@@ -440,6 +464,7 @@
       ...(results.birdiepay ? { birdiepay: results.birdiepay } : {}),
       skins: results.skins, payouts: rows,
       // handicap summary only appears when a net game ran — gross snapshots keep their exact shape
+      ...(netByPlayer.size ? { rankings: buildRankings(cards, netByPlayer) } : {}),
       ...(netByPlayer.size ? { handicap: {
         allowance: hc.allowance,
         players: cards.map(c => {

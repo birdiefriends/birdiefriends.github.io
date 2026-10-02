@@ -15553,6 +15553,11 @@ function renderGatheringPayoutHtml(s) {
     html += (s.handicap.players || []).map(p => line(`${esc(p.player)}${p.tee ? ` <span style="color:var(--text-muted)">(${esc(p.tee)})</span>` : ''}`, `${esc(p.strokes)}`)).join('');
     if ((s.handicap.missing || []).length) html += `<div style="font-size:0.72rem;color:#b8860b;margin-top:2px">No strokes were set for ${s.handicap.missing.map(esc).join(', ')}, so they played scratch</div>`;
   }
+  if (s.rankings && ((s.rankings.net || []).length || (s.rankings.gross || []).length)) {
+    const rk = (list, netMode) => list.map(r => line(`${r.tied ? 'T' : ''}${r.place}. ${esc(r.player)}${netMode ? ` <span style="color:var(--text-muted)">(gross ${esc(r.gross)} − ${esc(r.strokes)})</span>` : ''}`, esc(r.total))).join('');
+    html += label('📊 Net ranking <span style="text-transform:none;font-weight:400">· just for fun, no money</span>') + rk(s.rankings.net || [], true);
+    html += label('📊 Gross ranking') + rk(s.rankings.gross || [], false);
+  }
   if (s.skins) {
     html += label(`⛳ Skins (${s.skins.basis || 'gross'}) — ${money(s.skins.pot)}`);
     if (s.skins.won.length) {

@@ -1,3 +1,6 @@
+v4.13.0 · 2026-10-02
+Deployed: 2026-10-02 (Net games now show a Net ranking and a Gross ranking, for fun and with no money on them, in Close & Calculate and in the posted results in My History. Only completed cards rank; ties share a place. Takes effect on rounds calculated from now on.)
+
 v4.12.4 · 2026-10-02
 Deployed: 2026-10-02 (Close & Calculate: open spots no longer trap you. Each spot has Fill or Release, and a "Close anyway — ignore open spots" button closes without them (unused seats are dropped; a seat that already has a card keeps its name). Works with the Worker already deployed; the newer Worker adds one more safeguard.)
 
