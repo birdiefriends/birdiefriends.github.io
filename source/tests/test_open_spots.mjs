@@ -139,6 +139,15 @@ await call(db, 'POST', '/bfe/gathering-spots/69/fill', { host_id: 'Brian Hager',
 [st, j] = await call(db, 'POST', '/bfe/gathering-games/69/close', { host_id: 'Brian Hager', payout_summary: { x: 1 } });
 ok(st === 200 && j.status === 'closed', 'Close allowed once every spot is a real player: ' + st);
 
+// close anyway: ignore_open_spots closes; unused seats are dropped, a seat with a card keeps its name
+db = seed();
+await call(db, 'POST', '/bfe/gathering-spots/69/add', { host_id: 'Brian Hager', count: 1 }); // Open Spot 2: unused
+[st, j] = await call(db, 'POST', '/bfe/gathering-games/69/close', { host_id: 'Brian Hager', payout_summary: { x: 1 } });
+ok(st === 409, 'still refused without the flag');
+[st, j] = await call(db, 'POST', '/bfe/gathering-games/69/close', { host_id: 'Brian Hager', payout_summary: { x: 1 }, ignore_open_spots: true });
+ok(st === 200 && j.status === 'closed', 'close anyway ignores open spots: ' + st);
+ok(names(db, `SELECT player_id FROM registrations WHERE is_placeholder = 1`).join() === 'Open Spot 1', 'unused spot dropped, the one with a card kept');
+
 // ── before the one-time migration ──
 db = seed(false);
 [st, j] = await call(db, 'GET', '/bfe/gathering-spots?gathering_id=69');

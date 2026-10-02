@@ -1325,6 +1325,21 @@ export default {
             const r = await env.DB.prepare(`SELECT COUNT(*) AS n FROM registrations WHERE gathering_id = ? AND is_placeholder = 1`).bind(gid).first();
             openSpots = (r && r.n) || 0;
           } catch (e) { /* is_placeholder column not migrated yet, so no spot can exist */ }
+          // v4.12.4 — the host can choose to close anyway (ignore_open_spots): held seats that nobody
+          // used are dropped; a seat that already has a card or entries keeps its name in the result.
+          if (openSpots > 0 && body && body.ignore_open_spots === true) {
+            try {
+              const key = 'gathering:' + gid;
+              const { results: spots } = await env.DB.prepare(`SELECT player_id FROM registrations WHERE gathering_id = ? AND is_placeholder = 1`).bind(gid).all();
+              for (const sp of (spots || [])) {
+                const u1 = await env.DB.prepare(`SELECT 1 AS x FROM bfe_scorecards WHERE event_name = ? AND player = ?`).bind(key, sp.player_id).first();
+                const u2 = await env.DB.prepare(`SELECT 1 AS x FROM bfe_cttp_entries WHERE event_name = ? AND player = ?`).bind(key, sp.player_id).first();
+                const u3 = await env.DB.prepare(`SELECT 1 AS x FROM bfe_birdieball_answers WHERE gathering_id = ? AND player_name = ?`).bind(gid, sp.player_id).first();
+                if (!u1 && !u2 && !u3) await env.DB.prepare(`DELETE FROM registrations WHERE gathering_id = ? AND player_id = ? AND is_placeholder = 1`).bind(gid, sp.player_id).run();
+              }
+            } catch (e) { /* best effort: the close itself still goes ahead */ }
+            openSpots = 0;
+          }
           if (openSpots > 0) {
             return new Response(JSON.stringify({ error: openSpots + ' open spot' + (openSpots === 1 ? '' : 's') + ' still need a real player — fill them first', open_spots: openSpots }), { status: 409, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
           }

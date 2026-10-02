@@ -15746,9 +15746,11 @@ async function openGatheringCloseSheet(gatheringId) {
     const alreadyClosed = config.status === 'closed';
     const spotsHtml = openSpots.length
       ? `<div style="background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
-          🪑 Name every open spot before closing — the results need real players.
+          🪑 Open spot${openSpots.length === 1 ? '' : 's'} — fill with a real player, release, or close anyway.
           ${openSpots.map((n, i) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><b>${esc(n)}</b>
-            <button class="btn btn-primary btn-sm" style="padding:4px 12px" onclick="openFillSpotSheet(${gatheringId}, ${i})">Fill</button></div>`).join('')}</div>`
+            <span style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="hostReleaseSpot(${gatheringId}, ${i})">Release</button>
+            <button class="btn btn-primary btn-sm" style="padding:4px 12px" onclick="openFillSpotSheet(${gatheringId}, ${i})">Fill</button></span></div>`).join('')}
+          <div style="color:var(--text-muted);margin-top:4px">Not coming? Release the seat, or close anyway below and the open spots are ignored.</div></div>`
       : '';
     const hcHtml = recon.noHandicap.length
       ? `<div style="background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
@@ -15785,14 +15787,16 @@ async function openGatheringCloseSheet(gatheringId) {
       <div style="display:flex;gap:8px;margin-top:14px">
         <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openGatheringCloseSheet(${gatheringId})">🔄 Refresh</button>
         <button class="btn btn-primary btn-sm" id="btn-gathering-close-confirm" style="flex:2" ${closeBlocked ? 'disabled' : ''}
-          onclick="confirmGatheringClose()">${openSpots.length ? '🪑 Fill open spots first' : recon.noHandicap.length ? '⚖️ Settle handicaps first' : `🏁 Close with ${cards.length} player${cards.length === 1 ? '' : 's'}`}</button>
-      </div>`;
+          onclick="confirmGatheringClose()">${openSpots.length ? '🪑 Open spots left' : recon.noHandicap.length ? '⚖️ Settle handicaps first' : `🏁 Close with ${cards.length} player${cards.length === 1 ? '' : 's'}`}</button>
+      </div>
+      ${openSpots.length && cards.length && !recon.noHandicap.length
+        ? `<button class="btn btn-secondary btn-sm" id="btn-gathering-close-ignore" style="width:100%;margin-top:8px" onclick="confirmGatheringClose(true)">🏁 Close anyway — ignore ${openSpots.length} open spot${openSpots.length === 1 ? '' : 's'}</button>` : ''}`;
   } catch (e) {
     body.innerHTML = `<div style="font-size:0.85rem;color:var(--danger, #c0392b);padding:12px 0">Couldn't load: ${escapeHtml(e.message)}</div>
       <button class="btn btn-secondary btn-sm" style="width:100%" onclick="openGatheringCloseSheet(${gatheringId})">🔄 Try again</button>`;
   }
 }
-async function confirmGatheringClose() {
+async function confirmGatheringClose(ignoreSpots) {
   if (!_gcClose) return;
   const { gatheringId, summary, meta, gatheringName } = _gcClose;
   const btn = document.getElementById('btn-gathering-close-confirm');
@@ -15801,7 +15805,7 @@ async function confirmGatheringClose() {
     const payout_summary = { ...summary, ...meta, gathering_name: gatheringName, closed_by: currentPlayer, closed_at_client: new Date().toISOString() };
     const res = await fetch(`${BFE_API}/bfe/gathering-games/${gatheringId}/close`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ host_id: currentPlayer, payout_summary })
+      body: JSON.stringify({ host_id: currentPlayer, payout_summary, ...(ignoreSpots === true ? { ignore_open_spots: true } : {}) })
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Close failed');

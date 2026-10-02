@@ -111,9 +111,9 @@ ok(c.posts[0][0] === 'https://bfe/bfe/gathering-spots/69/add' && JSON.stringify(
 // 7. Close & Calculate: blocked while a spot is open, normal once none
 c = setup(); await c.openGatheringCloseSheet(69);
 b = c.document.getElementById('gathering-close-body').innerHTML;
-ok(b.includes('Name every open spot') && b.includes('openFillSpotSheet(69, 0)'), 'close sheet lists the open spot with Fill');
+ok(b.includes('Open spot') && b.includes('openFillSpotSheet(69, 0)') && b.includes('hostReleaseSpot(69, 0)'), 'close sheet lists the open spot with Fill and Release');
 const btn = c.document.getElementById('btn-gathering-close-confirm');
-ok(btn.disabled && btn.textContent.includes('Fill open spots first'), 'Close is disabled until the spot is filled');
+ok(btn.disabled && btn.textContent.includes('Open spots left') && /confirmGatheringClose\(true\)/.test(b), 'main Close is disabled while a spot is open, but a close-anyway button is offered');
 c = setup({ spots: [] }); await c.openGatheringCloseSheet(69);
 const btn2 = c.document.getElementById('btn-gathering-close-confirm');
 ok(!btn2.disabled && btn2.textContent.includes('Close with'), 'no spots: Close works as before');
