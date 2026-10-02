@@ -184,5 +184,12 @@ ok(/Invite-only\.<\/b> Only your invited players can see it/.test(src) && /Open 
 ok(/Announced to everyone on Save/.test(src), 'Open toggle says it announces on Save');
 ok(/_hostMode === 'open' && !g\.fillListEnabled &&\s*\n\s*!confirm\(/.test(src), 'flip to Open asks for confirmation before saving');
 
+// 11. v4.10.10 — Release + invited exemption
+await (async () => { c = setup(); await c.loadHostSpots();
+  const h = c.hostSpotsHtml({ gatheringId: 69 }, true);
+  ok(/hostReleaseSpot\(69, 0\)/.test(h) && /openFillSpotSheet\(69, 0\)/.test(h), 'each held spot has Release and Fill'); })();
+ok(/\/bfe\/gathering-spots\/\$\{gatheringId\}\/release/.test(src) && /async function hostReleaseSpot/.test(src), 'portal calls the release route');
+ok(/invited: g\.invited === 1/.test(src) && /g\.hostId === currentPlayer \|\| g\.invited/.test(src), 'invitees are exempt from member game filters');
+
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

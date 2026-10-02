@@ -1,3 +1,6 @@
+v4.10.10 · 2026-10-02
+Deployed: 2026-10-02 (Host Panel: a Release button next to each held Open Spot, for guests who aren't coming (refused if scores or entries are saved under that seat). Players you invited to a game that is also open to members are never hidden by their game filters. Needs both Workers redeployed.)
+
 v4.10.9 · 2026-10-02
 Deployed: 2026-10-02 (Edit Gathering: Who's Coming now opens with a plain status line (invite-only or open to all members, players, held guest seats, unclaimed seats). The Open to Members choice says it announces on Save, and asks you to confirm before it does.)
 

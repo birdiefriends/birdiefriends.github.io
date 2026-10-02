@@ -1358,11 +1358,12 @@ export default {
     // trust model as the games routes):
     //   GET  /bfe/gathering-spots?gathering_id=X | ?host_id=Y   -> { spots: [{gathering_id, player_id}] }
     //   POST /bfe/gathering-spots/:id/add   { host_id, count }  -> adds "Open Spot N" registrations (Yes)
+    //   POST /bfe/gathering-spots/:id/release { host_id, spot } -> deletes an unused placeholder (refused if scores/entries exist)
     //   POST /bfe/gathering-spots/:id/fill  { host_id, spot, member }
     //        -> renames the placeholder to a real member in registrations,
     //           bfe_scorecards, bfe_cttp_entries, bfe_birdieball_answers and
     //           the closed result snapshot (bfe_gathering_games.payout_summary).
-    if (url.pathname === '/bfe/gathering-spots' || /^\/bfe\/gathering-spots\/\d+\/(add|fill)$/.test(url.pathname)) {
+    if (url.pathname === '/bfe/gathering-spots' || /^\/bfe\/gathering-spots\/\d+\/(add|fill|release)$/.test(url.pathname)) {
       const jr = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       const MIGRATE_MSG = 'Open spots need a one-time database step first: ALTER TABLE registrations ADD COLUMN is_placeholder INTEGER NOT NULL DEFAULT 0;';
       const norm = v => String(v == null ? '' : v).trim().toLowerCase();
@@ -1380,7 +1381,7 @@ export default {
           return jr({ error: 'Database error: ' + String(e.message || e) }, 500);
         }
       }
-      const spotMatch = url.pathname.match(/^\/bfe\/gathering-spots\/(\d+)\/(add|fill)$/);
+      const spotMatch = url.pathname.match(/^\/bfe\/gathering-spots\/(\d+)\/(add|fill|release)$/);
       if (request.method === 'POST' && spotMatch) {
         let body;
         try { body = await request.json(); } catch (e) { return jr({ error: 'Invalid JSON' }, 400); }
@@ -1410,6 +1411,22 @@ export default {
             }
             await env.DB.batch(stmts);
             return jr({ ok: true, spots: names });
+          }
+          // release — give a held seat back when the guest never shows. Refused if
+          // anything is saved under that name (scores, CTP, BirdieBall, closed result):
+          // that seat has to be filled with the real player instead.
+          if (action === 'release') {
+            const rspot = String(body.spot || '').trim();
+            const rrow = rows.find(r => r.player_id === rspot);
+            if (!rrow || !rrow.is_placeholder) return jr({ error: '"' + rspot + '" is not an open spot on this Gathering' }, 404);
+            const rkey = 'gathering:' + gid;
+            const used1 = await env.DB.prepare(`SELECT 1 AS x FROM bfe_scorecards WHERE event_name = ? AND player = ?`).bind(rkey, rspot).first();
+            const used2 = await env.DB.prepare(`SELECT 1 AS x FROM bfe_cttp_entries WHERE event_name = ? AND player = ?`).bind(rkey, rspot).first();
+            const used3 = await env.DB.prepare(`SELECT 1 AS x FROM bfe_birdieball_answers WHERE gathering_id = ? AND player_name = ?`).bind(gid, rspot).first();
+            const used4 = await env.DB.prepare(`SELECT 1 AS x FROM bfe_gathering_games WHERE gathering_id = ? AND payout_summary LIKE ?`).bind(gid, '%' + JSON.stringify(rspot) + '%').first();
+            if (used1 || used2 || used3 || used4) return jr({ error: rspot + ' already has scores or game entries saved. Fill it with the real player instead of releasing it.' }, 409);
+            await env.DB.prepare(`DELETE FROM registrations WHERE gathering_id = ? AND player_id = ? AND is_placeholder = 1`).bind(gid, rspot).run();
+            return jr({ ok: true, released: rspot });
           }
           // fill
           const spot = String(body.spot || '').trim();

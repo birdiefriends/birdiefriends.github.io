@@ -777,7 +777,9 @@ export default {
         // gathering_alerts=true → also return fill_list_enabled gatherings (open broadcast)
         const gatheringAlerts = url.searchParams.get('gathering_alerts') === 'true';
         const sql = gatheringAlerts
-          ? `SELECT DISTINCT g.*, c.name AS crew_name FROM gatherings g
+          ? `SELECT DISTINCT g.*, c.name AS crew_name,
+               EXISTS(SELECT 1 FROM crew_members x WHERE x.crew_id = g.crew_id AND x.player_id = ?) AS invited
+             FROM gatherings g
              LEFT JOIN crew_members cm ON cm.crew_id = g.crew_id
              LEFT JOIN crews c ON c.id = g.crew_id
              WHERE g.status = 'active' AND (g.host_id = ? OR cm.player_id = ? OR g.fill_list_enabled = 1)
@@ -787,7 +789,7 @@ export default {
              LEFT JOIN crews c ON c.id = g.crew_id
              WHERE g.status = 'active' AND (g.host_id = ? OR cm.player_id = ?)
              ORDER BY g.event_time ASC`;
-        const { results } = await env.DB.prepare(sql).bind(playerId, playerId).all();
+        const { results } = await env.DB.prepare(sql).bind(...(gatheringAlerts ? [playerId, playerId, playerId] : [playerId, playerId])).all();
         // Dev-70 — Auto-Repeat Gatherings. Non-blocking, same pattern as
         // pruneAnnouncementFeed: runs after the response is queued, never
         // adds latency to a real page load.

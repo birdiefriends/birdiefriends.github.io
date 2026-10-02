@@ -148,5 +148,23 @@ ok(st === 200, 'Close is not blocked before the migration: ' + st);
 [st, j] = await call(db, 'POST', '/bfe/gathering-spots/69/add', { host_id: 'Brian Hager', count: 1 });
 ok(st === 500 && /ALTER TABLE registrations ADD COLUMN is_placeholder/.test(j.error), 'add names the missing migration');
 
+// ── release (v4.10.10): give back a held seat nobody used ──
+db = seed();
+[st, j] = await call(db, 'POST', '/bfe/gathering-spots/69/release', { host_id: 'Brian Hager', spot: 'Open Spot 1' });
+ok(st === 409 && /already has scores/.test(j.error), 'release refused while the seat has scores/entries: ' + st);
+ok(names(db, `SELECT player_id FROM registrations WHERE is_placeholder = 1`).length === 1, 'refused release leaves the seat in place');
+db = seed();
+['bfe_scorecards', 'bfe_cttp_entries', 'bfe_birdieball_answers'].forEach(tb => db.prepare(`DELETE FROM ${tb} WHERE ${tb === 'bfe_birdieball_answers' ? 'player_name' : 'player'} = 'Open Spot 1'`).run());
+db.prepare(`DELETE FROM bfe_gathering_games`).run();
+[st, j] = await call(db, 'POST', '/bfe/gathering-spots/69/release', { host_id: 'Mike Scanlan', spot: 'Open Spot 1' });
+ok(st === 403, 'only the host can release: ' + st);
+[st, j] = await call(db, 'POST', '/bfe/gathering-spots/69/release', { host_id: 'Brian Hager', spot: 'Mike Scanlan' });
+ok(st === 404, 'a real player is not releasable: ' + st);
+[st, j] = await call(db, 'POST', '/bfe/gathering-spots/69/release', { host_id: 'Brian Hager', spot: 'Open Spot 1' });
+ok(st === 200 && j.released === 'Open Spot 1', 'unused seat releases: ' + st);
+ok(names(db, `SELECT player_id FROM registrations ORDER BY player_id`).join('|') === 'Brian Hager|Mike Scanlan|Scott Justus', 'only the placeholder row was removed');
+[st, j] = await call(db, 'GET', '/bfe/gathering-spots?gathering_id=69');
+ok(j.spots.length === 0, 'no spots left, so the close guard clears');
+
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

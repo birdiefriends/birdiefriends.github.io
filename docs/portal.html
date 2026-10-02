@@ -4460,6 +4460,7 @@ async function loadGatherings() {
       crewId: g.crew_id || null,
       crewName: g.crew_name || null,
       fillListEnabled: g.fill_list_enabled === 1 || g.fill_list_enabled === true,
+      invited: g.invited === 1 || g.invited === true, // v4.10.10 — viewer is in this game's crew (Worker field)
       teeTimeStatus: g.tee_time_status || 'confirmed',
       autoRepeat: g.auto_repeat === 1 || g.auto_repeat === true,
       capacity: g.size || null,
@@ -4497,7 +4498,7 @@ async function loadGatherings() {
     const filters = (_memberPrefs && _memberPrefs.gatheringFilters) || [];
     if (filters.length) {
       gatheringData = gatheringData.filter(g =>
-        !g.fillListEnabled || g.hostId === currentPlayer
+        !g.fillListEnabled || g.hostId === currentPlayer || g.invited
           || gatheringRegData.some(r => r.gatheringId === g.gatheringId && r.player === currentPlayer && r.status !== 'No')
           || gatheringMatchesFilters(g, filters)
       );
@@ -11193,7 +11194,8 @@ function hostSpotsHtml(g, canAdd) {
   const rows = spots.map((n, i) => `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0">
       <span style="font-size:0.84rem;font-weight:700">🪑 ${escapeHtml(n)}</span>
-      <button class="btn btn-primary btn-sm" style="padding:4px 12px" onclick="openFillSpotSheet(${g.gatheringId}, ${i})">Fill</button>
+      <span style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" style="padding:4px 10px;color:var(--text-muted)" onclick="hostReleaseSpot(${g.gatheringId}, ${i})">Release</button>
+      <button class="btn btn-primary btn-sm" style="padding:4px 12px" onclick="openFillSpotSheet(${g.gatheringId}, ${i})">Fill</button></span>
     </div>`).join('');
   return `<div style="margin:8px 0;padding:8px 12px;border-radius:10px;${spots.length ? 'background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4)' : 'background:rgba(0,0,0,0.03);border:1px dashed rgba(0,0,0,0.15)'}">
     ${spots.length ? `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:2px">Open spots — name each one before the round closes${g.fillListEnabled ? '' : '. Not announced to other members yet: tap 📢 Open to all members to let anyone take them'}</div>${rows}` : ''}
@@ -11209,6 +11211,25 @@ async function hostAddOpenSpot(gatheringId) {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Could not add the spot');
     showToast('🪑 Open spot added');
+    await refreshAfterSpotChange(gatheringId);
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
+}
+// v4.10.10 — give a held seat back when the guest isn't coming. The Worker refuses
+// if anything is saved under that name; then the seat has to be filled instead.
+async function hostReleaseSpot(gatheringId, spotIndex) {
+  const spot = (_spotsByGathering.get(gatheringId) || [])[spotIndex];
+  if (!spot) { showToast('That spot is already gone', true); return; }
+  if (!confirm(`Release ${spot}?\n\nThe seat is no longer held and the headcount drops by one. This can't be undone, but you can add an open spot again.`)) return;
+  try {
+    const res = await fetch(`${BFE_API}/bfe/gathering-spots/${gatheringId}/release`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host_id: currentPlayer, spot })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Could not release the spot');
+    showToast('🪑 ' + spot + ' released');
     await refreshAfterSpotChange(gatheringId);
   } catch (e) {
     showToast('❌ ' + e.message, true);
