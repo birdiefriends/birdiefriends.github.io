@@ -849,4 +849,32 @@ venue/size/type/crew; "Same as last time" should sit in front of step 1 and pref
   committed.)
 - Where the existing Create-form pieces (Players sheet, Add-games dialog) are reused inside the new steps.
 
+**Reuse: Templates, Repeat, and titles (added 2026-10-02 from the Walli case)**
+- Today there are two reuse paths. **Templates** (`gathering_templates`) store title, venue, size, type, description and
+  crew list, leave the date blank, and always load in crew mode; they do not store audience choice, games, or confirmed
+  players. **Repeat** (`repeatGathering`) creates the next same-weekday game immediately, behind one confirm dialog that
+  shows the date and audience count, and notifies the whole old crew. It copies the audience, size and auto-repeat flag,
+  but not games, and registers nobody as Yes.
+- Both copy the title verbatim. Hosts type the date into titles by habit (Walli: "Sham Tuesday 8/18",
+  "Shamalamadingdong Friday 8/14", "Shammy 8/7"), so a repeated game keeps a stale date until the host edits it. Dated
+  titles also split the Repeat picker, which groups series by exact title, and defeat the template duplicate check
+  (name-based), which is unconfirmed as a pile-up cause.
+- **Design:** one entry, "Start from a past game". Repeat becomes a prefill into the guided flow; the summary screen
+  replaces today's confirm dialog, with a "Send as is" button so a weekly crew game stays one tap. Reuse prefills name,
+  venue, target, audience and "same games as last time" (re-freeze net handicap/tee for the new date); it never copies
+  confirmed players, and the date is always asked. Strip date-like text from a reused title (e.g. "8/18") and show the
+  cleaned title for the host to confirm; weekday words ("Tuesday") are flagged, not auto-removed. Group the Repeat picker
+  by cleaned title. Keep Templates for now; revisit once the new flow has real use.
+- **Narrowing the audience on a repeated game** is not possible in Repeat today; the only way is Edit -> Who's Coming
+  after the full crew was already notified. The new summary screen fixes this by letting the host change "who to ask"
+  and "who's already in" before anything sends.
+
+**Findings log (strike as we experience them)**
+- 2026-10-02, Walli's 10/02 game: Crew mode turned leftover seats into held, unannounced Open Spots (fixed v4.10.5-10).
+- 2026-10-02, Walli's game: he repeated an older game without changing the title, so an old date stayed in the name
+  (Brian fixed it by hand). Root causes above.
+- 2026-10-02: Repeat has no audience step; narrowing to specific people is only possible afterward via Edit.
+- 2026-10-02: Scott Justus / Moselem (private course): host runs a hierarchy of asks outside BF and opens the game as
+  people decline. Served by invite-only now, open later; no hold-seats step.
+
 **Not in scope:** guests/hold-seats flow, partial crew, tee-time booking, anything on the Edit form.
