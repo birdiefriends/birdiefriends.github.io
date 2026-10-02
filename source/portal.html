@@ -6700,8 +6700,8 @@ function hasLivePanelSupport(evt) {
 // by default (feeds the Wally Cup quota engine via SCORECARD_FORM_ID), but
 // a gamed Gathering running Skins needs raw GROSS STROKES instead — Skins
 // math can't be done from points. Only Skins needs strokes; CTP and
-// BirdieBall already have their own separate capture (CTP's own Jotform
-// flow, BirdieBall's "kept it" Yes/No via bfe_birdieball_answers) and don't
+// MiserBall already have their own separate capture (CTP's own Jotform
+// flow, MiserBall's "kept it" Yes/No via bfe_birdieball_answers) and don't
 // touch this at all. Kept as its own single-purpose lookup, not folded into
 // hasLivePanelSupport, since "is scoring even shown" and "which shape does
 // it capture" are two different questions with two different answers.
@@ -6709,7 +6709,7 @@ function evtScoreMode(evt) {
   if (evt && evt.source === 'gathering') {
     // Dev-87 (v4.6.2) — ANY gamed Gathering captures gross strokes to D1, not
     // just Skins ones: Close & Calculate counts players (the pot) from D1
-    // scorecards, so a CTP-/BirdieBall-only Gathering on the old Jotform
+    // scorecards, so a CTP-/MiserBall-only Gathering on the old Jotform
     // points path closed with 0 players — and dropped its cards into the
     // Wally Cup's Jotform scorecard form.
     // Dev-88: reads via gatheringRoundConfig()/gatheringIsGamed(), was a raw
@@ -8164,7 +8164,7 @@ function buildAnnouncementsHTML(notifications, loading) {
     switch(bf_type) {
       case 'birdie':         return { icon:'🦅', label:'Birdie Alert',     accent:'rgba(245,200,66,0.15)',  border:'rgba(245,200,66,0.35)',  text:'#9a7a00' };
       case 'cttp':           return { icon:'🎯', label:'Closest to Pin',   accent:'rgba(29,158,117,0.12)', border:'rgba(29,158,117,0.3)',   text:'#0d6b54' };
-      case 'birdieball':     return { icon:'🐦', label:'BirdieBall',       accent:'rgba(192,57,43,0.08)',   border:'rgba(192,57,43,0.2)',    text:'#922b21' };
+      case 'birdieball':     return { icon:'🐦', label:'MiserBall',       accent:'rgba(192,57,43,0.08)',   border:'rgba(192,57,43,0.2)',    text:'#922b21' };
       case 'gathering_invite':      return { icon:'⛳', label:'Gathering Invite', accent:'rgba(41,128,185,0.10)',  border:'rgba(41,128,185,0.25)',  text:'#1a5276' };
       case 'gathering_open_invite': return { icon:'📢', label:'Open Gathering',   accent:'rgba(41,128,185,0.10)',  border:'rgba(41,128,185,0.25)',  text:'#1a5276' };
       case 'gathering_date_changed':return { icon:'📅', label:'Date Changed',     accent:'rgba(230,168,0,0.12)',   border:'rgba(230,168,0,0.3)',    text:'#7a5800' };
@@ -8252,7 +8252,7 @@ let _ctpPlayer    = null;   // player selected for CttP entry (overseer proxy)
 let _ctpData      = {};     // { holeNum: { player, dist } } — live leaders
 let _ctpHistory   = {};     // { holeNum: [{player, dist}, ...] } — chronological progression, oldest first
 let _ctpExpanded  = {};     // { holeNum: true } — which CttP progression trails are tap-expanded
-// BirdieBall — Dev-86 round 3 follow-up (Brian: "let's add the skins-type
+// MiserBall — Dev-86 round 3 follow-up (Brian: "let's add the skins-type
 // alert now"). Two separate touchpoints share this same backend
 // (bfe_birdieball_answers, an upsert keyed on gathering_id+player_name):
 // (1) a standalone live-alert widget (own player picker, like Birdie
@@ -8633,9 +8633,9 @@ function populateLiveTestEventSelect() {
   // to showing "Next upcoming" selected rather than a blank/mismatched menu.
   if (current && !eligible.some(e => e.name === current)) sel.value = '';
 }
-// Shared hole/stroke tap-grids for BirdieBall's "which hole did you lose it
+// Shared hole/stroke tap-grids for MiserBall's "which hole did you lose it
 // on" detail — same visual pattern as Wally Ball's own wbHoleGrid/wbStrokeGrid
-// closures, just factored out as standalone functions since BirdieBall needs
+// closures, just factored out as standalone functions since MiserBall needs
 // the identical grid wired to two different setters (the live-alert widget's
 // bbSetHole/bbSetStroke vs. the scorecard confirmation's scBbSetHole/
 // scBbSetStroke) rather than one fixed pair.
@@ -8696,7 +8696,7 @@ function buildLivePanel(evt) {
   // to know which games (if any) this round is actually running. A
   // non-Gathering (Series/Wally Cup) round has no games config at all —
   // those keep showing CTP exactly as they always have; only a gamed
-  // Gathering's sections turn on/off, and only CTP/BirdieBall have a
+  // Gathering's sections turn on/off, and only CTP/MiserBall have a
   // dedicated on/off section (Birdie Alert and the Scorecard are general —
   // every Live Panel round needs those regardless of which games are on).
   // Dev-88: ONE resolved config for this panel, via gatheringRoundConfig() —
@@ -8898,12 +8898,12 @@ function buildLivePanel(evt) {
       </div>
       ${ctpLeaderboard}
     </div>`;
-  // ── SECTION 2.5: BirdieBall ──────────────────────────────────────────────
+  // ── SECTION 2.5: MiserBall ──────────────────────────────────────────────
   // Dev-86 round 3 follow-up (Brian: "let's add the skins-type alert now,
   // it's simple enough") — same lightweight, explicit-tap UX pattern as
   // Birdie Alert (player picker → pick a status → tap to send), but a
   // straight upsert against bfe_birdieball_answers rather than the
-  // feed/skin-frontrunner machinery Birdie Alert uses — BirdieBall is a
+  // feed/skin-frontrunner machinery Birdie Alert uses — MiserBall is a
   // simple kept-it/lost-it fact per player, not a competitive "who's
   // ahead right now" story. Only built when showBirdieBallSection is true.
   let bbSection = '';
@@ -8933,7 +8933,7 @@ function buildLivePanel(evt) {
       <div style="margin-top:12px;background:rgba(0,0,0,0.15);border-radius:10px;padding:4px 12px">
         <div style="font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;
           color:rgba(255,255,255,0.35);padding:6px 0 4px;font-family:'DM Mono',monospace">
-          Lost the BirdieBall
+          Lost the MiserBall
         </div>
         ${bbLossRows.map(a => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;
           border-bottom:0.5px solid rgba(255,255,255,0.08);font-size:0.82rem;color:#fff">
@@ -8948,7 +8948,7 @@ function buildLivePanel(evt) {
         <span>👤</span><span style="flex:1">${bbPlayerSel || ''}</span>
         <span style="color:rgba(255,255,255,0.4);font-size:0.75rem">Change ›</span>
       </button>
-      <div style="font-size:0.8rem;color:rgba(255,255,255,0.65);margin-bottom:8px;line-height:1.4">Lost the BirdieBall? Tell the group now. Your scorecard confirms it either way.</div>
+      <div style="font-size:0.8rem;color:rgba(255,255,255,0.65);margin-bottom:8px;line-height:1.4">Lost the MiserBall? Tell the group now. Your scorecard confirms it either way.</div>
       ${bbDetailGrid}
       <button class="sc-submit-btn" style="background:#c9892a"
         ${bbCanSubmit && !_bbSubmitting ? '' : 'disabled'}
@@ -9096,7 +9096,7 @@ function buildLivePanel(evt) {
       '</div>' +
       wbDetail +
     '</div>';
-  // BirdieBall confirmation — Dev-86 round 3 follow-up (Brian: "I am
+  // MiserBall confirmation — Dev-86 round 3 follow-up (Brian: "I am
   // wondering about a confirmation on the scorecard, in case someone
   // forgets to issue an alert"). Scoped to scPlayerSel (whoever's card is
   // being filled) via its own local state (_scBbKept et al.), separate from
@@ -9128,7 +9128,7 @@ function buildLivePanel(evt) {
     '</div>' : '';
   const bbConfirmSection = !showBirdieBallSection ? '' : '' +
     '<div style="margin:12px 0;background:rgba(0,0,0,0.15);border-radius:10px;padding:10px 12px">' +
-      '<div class="sc-section-label" style="margin-bottom:6px">\u{1F426} Did you keep the BirdieBall?</div>' +
+      '<div class="sc-section-label" style="margin-bottom:6px">\u{1F426} Did you keep the MiserBall?</div>' +
       '<div style="display:flex;gap:8px">' +
         '<button onclick="scBbSetStatus(true)" style="flex:1;padding:8px;border-radius:8px;font-family:inherit;' +
           'cursor:pointer;color:#fff;background:' + (bbConfirmYesActive?'rgba(29,158,117,0.35)':'rgba(255,255,255,0.08)') +
@@ -9143,7 +9143,7 @@ function buildLivePanel(evt) {
   // closure) can persist this same answer to bfe_birdieball_answers right
   // alongside the scorecard save — one submit covers both, so a player who
   // never touched the live-alert widget still ends up with a real answer
-  // on record. Null when there's nothing new to persist (no BirdieBall on
+  // on record. Null when there's nothing new to persist (no MiserBall on
   // this Gathering, or this player already has an answer on file).
   window._liveBbConfirmPending = (showBirdieBallSection && bbConfirmAnswered)
     ? { kept: bbEffKept, lost_hole: bbEffKept ? null : bbEffHole, lost_stroke: bbEffKept ? null : bbEffStroke }
@@ -9169,7 +9169,7 @@ function buildLivePanel(evt) {
         (_scSubmitting ? '\u23f3 Submitting\u2026'
           : !allEntered ? 'Enter all ' + (scIsNine ? 9 : 18) + ' holes (' + enteredCount + '/' + (scIsNine ? 9 : 18) + ')'
           : !wbAnswered ? 'Answer Wally Ball above \u2191'
-          : !bbConfirmAnswered ? 'Confirm BirdieBall above \u2191'
+          : !bbConfirmAnswered ? 'Confirm MiserBall above \u2191'
           : !scPlayerSel ? 'Select your team above \u2191'
           : '\u2705 Submit Scorecard') +
       '</button>';
@@ -9260,7 +9260,7 @@ function buildLivePanel(evt) {
     </div>` : ''}
     ${showBirdieBallSection ? `
     <div class="live-section">
-      <div class="live-section-header"><span class="lsh-icon">🐦</span>BirdieBall</div>
+      <div class="live-section-header"><span class="lsh-icon">🐦</span>MiserBall</div>
       <div class="live-section-body">${bbSection}</div>
     </div>` : ''}
     <div class="live-section">
@@ -9271,7 +9271,7 @@ function buildLivePanel(evt) {
     <div class="live-section">
       <div class="live-section-header"><span class="lsh-icon">🏁</span>Host · Close &amp; Calculate</div>
       <div class="live-section-body">
-        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:10px;line-height:1.45">Once everyone's card is in: check scorecards, preview Skins/CTP/BirdieBall/Birdie payouts, and post results to My History.</div>
+        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:10px;line-height:1.45">Once everyone's card is in: check scorecards, preview Skins/CTP/MiserBall/Birdie payouts, and post results to My History.</div>
         <button class="sc-submit-btn" onclick="openGatheringCloseSheet(${_panelGid})">🏁 Close &amp; Calculate</button>
       </div>
     </div>` : ''}
@@ -9895,11 +9895,11 @@ async function loadSkinBoardData() {
     console.warn('[SkinBoard] loadSkinBoardData error:', e.message);
   }
 }
-// BirdieBall answers — Dev-86 round 3 follow-up. Loads the whole gathering's
+// MiserBall answers — Dev-86 round 3 follow-up. Loads the whole gathering's
 // answer set in one call (same shape as loadSkinBoardData/loadCtpData) so
 // both the live-alert widget and the scorecard confirmation can read the
 // same cache without a fetch each. No-ops for a non-Gathering evt — there's
-// no such thing as a BirdieBall config outside a gamed Gathering.
+// no such thing as a MiserBall config outside a gamed Gathering.
 async function loadBirdieBallAnswers(evt) {
   const _bbGid = panelGamesGid(evt);
   if (_bbGid == null) { _bbAnswers = []; _bbAnswersForGathering = null; return; }
@@ -9910,7 +9910,7 @@ async function loadBirdieBallAnswers(evt) {
     _bbAnswersForGathering = _bbGid;
     renderLiveBanner();
   } catch(e) {
-    console.warn('[BirdieBall] loadBirdieBallAnswers error:', e.message);
+    console.warn('[MiserBall] loadBirdieBallAnswers error:', e.message);
   }
 }
 function bbAnswerFor(playerName) {
@@ -9965,7 +9965,7 @@ async function submitScorecard(evtName) {
       // Sheet's submitCardScore() already uses, so Skins math reads one
       // consistent source regardless of which surface entered the round.
       // Dev-88 — hole_half now carries the real active half for a 9-hole
-      // round (was always null, so Skins/CTP/BirdieBall couldn't tell which
+      // round (was always null, so Skins/CTP/MiserBall couldn't tell which
       // nine's holes 1-9 actually were); an 18-hole round still sends null.
       // Dev-89 (2026-09-29) — marks was hardcoded null here, unlike Card
       // Score Sheet's submitCardScore() which always computes marks from
@@ -10014,11 +10014,11 @@ async function submitScorecard(evtName) {
       await fetch(`${JF_API}/form/${SCORECARD_FORM_ID}/submissions?apiKey=${JOTFORM_API_KEY}`,
         { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() });
     }
-    // BirdieBall safety-net confirmation (Brian: "a confirmation on the
+    // MiserBall safety-net confirmation (Brian: "a confirmation on the
     // scorecard, in case someone forgets to issue an alert") — piggybacks
     // on the same submit tap, writing to the exact same bfe_birdieball_answers
     // upsert the live-alert widget uses. window._liveBbConfirmPending is only
-    // non-null when this Gathering runs BirdieBall AND this player didn't
+    // non-null when this Gathering runs MiserBall AND this player didn't
     // already have an answer on file when the panel last rendered, so this
     // never overwrites something the live alert already recorded. Best-effort
     // — a failure here doesn't undo the scorecard save that already succeeded.
@@ -10035,7 +10035,7 @@ async function submitScorecard(evtName) {
         const row = { gathering_id: _bbG, player_name: scName, ...bbPending };
         if (idx === -1) _bbAnswers.push(row); else _bbAnswers[idx] = row;
         renderLiveBanner();
-      }).catch(e => console.warn('[BirdieBall] scorecard-confirmation save failed:', e.message));
+      }).catch(e => console.warn('[MiserBall] scorecard-confirmation save failed:', e.message));
     }
     _scSubmitDone = true;
     _scSubmitting = false;
@@ -10147,7 +10147,7 @@ async function submitCttp(evtName) {
     renderLiveBanner();
   }
 }
-// BirdieBall live-alert widget (Dev-86 round 3 follow-up, Brian: "let's add
+// MiserBall live-alert widget (Dev-86 round 3 follow-up, Brian: "let's add
 // the skins-type alert now") — switching the picked player hydrates the
 // local edit state FROM that player's saved answer (if any), so the picker
 // always shows a real current status rather than carrying over whatever was
@@ -10216,13 +10216,13 @@ async function submitBirdieBall() {
     // everyone but the loser; test mode sends to the commissioner only.
     // Best-effort: a failed push never undoes the saved alert.
     {
-      const heading = `🐦💔 ${player} lost the BirdieBall`;
+      const heading = `🐦💔 ${player} lost the MiserBall`;
       const msg = `Hole #${_bbLostHole} — ${_bbLostStroke} stroke${Number(_bbLostStroke) === 1 ? '' : 's'}`;
       const others = (window._liveEvtIndividualPlayers || []).filter(n => n !== player);
       const sendP = LIVE_EVENT_TEST_MODE
         ? osSendToPlayers([currentPlayer], `[TEST] ${heading}`, msg, 'https://birdiefriends.com/portal.html', 'birdieball')
         : (others.length ? osSendToPlayers(others, heading, msg, 'https://birdiefriends.com/portal.html', 'birdieball') : null);
-      if (sendP) sendP.catch(e => console.warn('[BirdieBall] push failed:', e.message));
+      if (sendP) sendP.catch(e => console.warn('[MiserBall] push failed:', e.message));
     }
     showToast(`Recorded — ${player} lost it on #${_bbLostHole}`);
     renderLiveBanner();
@@ -10232,7 +10232,7 @@ async function submitBirdieBall() {
     renderLiveBanner();
   }
 }
-// BirdieBall scorecard confirmation (Brian: "a confirmation on the
+// MiserBall scorecard confirmation (Brian: "a confirmation on the
 // scorecard, in case someone forgets to issue an alert") — separate local
 // state from the live-alert widget above, scoped to whoever's scorecard is
 // currently being filled (scPlayerSel), same convention as Wally Ball's own
@@ -10631,7 +10631,7 @@ async function runAddPlayer(plan) {
     const spot = _addP.spot || null;
     if (spot) {
       // Take over a held seat: the Worker renames the Open Spot to this member everywhere
-      // (registration, scorecard, CTP, BirdieBall) — any group member may do it.
+      // (registration, scorecard, CTP, MiserBall) — any group member may do it.
       const r = await fetch(`${BFE_API}/bfe/gathering-spots/${opt.gatheringId}/fill`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ by: currentPlayer || 'unknown', spot, member: display })
@@ -11024,13 +11024,13 @@ let _hostGamesByGathering = null;
 let _gamesFormGathering = null;       // gatheringId currently open in showGatheringGamesForm
 let _gamesFormSelected  = new Set();  // subset of ['skins','cttp','birdieball','birdiepay']
 // Dev-86 round 3 — _gamesFormAllocations/%-allocation UI is retired. Brian:
-// "BirdieBall should also be a $/player payout, the balance going to Skins."
-// CTP and BirdieBall are now both fixed-dollar carve-outs off the same
+// "MiserBall should also be a $/player payout, the balance going to Skins."
+// CTP and MiserBall are now both fixed-dollar carve-outs off the same
 // $/player pot; Skins takes 100% of whatever remains — no host input at all.
 // Dev-86 round 2 — Brian: "the CttP $payout needs to be per hole rather
 // than %. Which means we need to also designate all holes or selected
 // holes [...] all Par 3 holes or select Par 3 holes." CTP is carved out of
-// the same $/player pot as a fixed dollar amount BEFORE BirdieBall's own
+// the same $/player pot as a fixed dollar amount BEFORE MiserBall's own
 // carve-out, and Skins gets whatever is left after both (Brian's explicit
 // call on the funding model, rounds 2 and 3 combined).
 let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
@@ -11041,7 +11041,7 @@ let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance:
 let _gamesFormMembers = new Map(); // Membership HCPs (bf_players) by lower-cased name: { hcp, source } — Index prefill, NoHCP -> ask for strokes
 let _gamesFormTees = []; // the venue's stored tees that carry full 18-hole data (slope, rating, par_total, holes[{par,handicap}])
 let _gamesFormBirdiepayPars = null; // 18 hole pars resolved for the Gathering's venue when the form opened (null = no par data on file)
-let _gamesFormBirdieballConfig = { dollar_per_player: null }; // BirdieBall's OWN per-player rate — distinct from the main $/player pot rate
+let _gamesFormBirdieballConfig = { dollar_per_player: null }; // MiserBall's OWN per-player rate — distinct from the main $/player pot rate
 let _gamesFormPar3Holes = [];             // hole numbers (1-18) with par===3, from the venue's stored tee data
 let _gamesFormVenueParDataAvailable = false; // false -> no tee data on file, host picks holes manually (any 1-18)
 let _gamesFormTouched = new Set();         // v4.9.14 — game amounts the host typed by hand (suggestions never overwrite these)
@@ -11423,7 +11423,7 @@ async function loadHostGamesConfigs() {
 // An OPEN SPOT is a seat held for someone the host can't name yet ("Open Spot 1").
 // Every spot must be resolved to a real BirdieFriends member before the round
 // closes — the BFE Worker refuses to close while any is open, and renames the
-// placeholder everywhere (registrations, scorecard, CTP, BirdieBall, closed
+// placeholder everywhere (registrations, scorecard, CTP, MiserBall, closed
 // result) in one atomic step when the host fills it. Host-only controls.
 let _spotsByGathering = new Map();   // gatheringId -> ['Open Spot 1', ...]
 let _hostGamesPick = new Set();      // New Gathering form: games chosen up front; the stakes form opens right after Create (v4.9.2)
@@ -11522,7 +11522,7 @@ function renderFillSpotSheet() {
   if (member) {
     body.innerHTML = `
       <div style="font-size:0.88rem;line-height:1.5;margin:6px 0 12px">Make <b>${escapeHtml(member)}</b> the player for <b>${escapeHtml(spot)}</b>?
-        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px">Their scorecard, CTP and BirdieBall entries, and any closed payout all move to ${escapeHtml(member)}. This can't be undone from the app.</div></div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px">Their scorecard, CTP and MiserBall entries, and any closed payout all move to ${escapeHtml(member)}. This can't be undone from the app.</div></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-secondary btn-sm" style="flex:1" onclick="pickFillSpotMember(-1)">← Back</button>
         <button class="btn btn-primary btn-sm" style="flex:2" id="btn-fill-spot-confirm" onclick="confirmFillSpot()">✅ Confirm</button>
@@ -15471,7 +15471,7 @@ function bfeEventNameCandidates(name) {
 // Dev-87 — Gatherings Close & Calculate payout engine. MOVED Dev-88 into the
 // shared engine module bf_engine.js (BFEngine.computeGatheringGamesPayout,
 // engine-unification Phase A). The rules (pot = $/player × cards in; CTP
-// $/hole to each leader, unclaimed → Skins; BirdieBall kept-split / held
+// $/hole to each leader, unclaimed → Skins; MiserBall kept-split / held
 // longest / give-back; gross outright Skins, tie = no skin; round DOWN,
 // remainder reported as unallocated) live there now, with their tests.
 // These three names stay as thin delegates so every caller is unchanged.
@@ -15557,7 +15557,7 @@ function renderGatheringPayoutHtml(s) {
   }
   if (s.birdieball) {
     const b = s.birdieball;
-    html += label(`🐦 BirdieBall — ${money(b.pot)}`);
+    html += label(`🐦 MiserBall — ${money(b.pot)}`);
     if (b.capped) html += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(b.configured_pot)}, but the pot only had ${money(b.pot)} left after CTP</div>`;
     if (b.mode === 'kept') html += `<div style="font-size:0.78rem">Kept it: ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)} each</div>`;
     else if (b.mode === 'longest') html += `<div style="font-size:0.78rem">Nobody kept it — held longest (#${esc(b.longest_hole)}, stroke ${esc(b.longest_stroke)}): ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)}${b.winners.length > 1 ? ' each' : ''}</div>`;
@@ -15868,7 +15868,7 @@ function gatheringRoundConfig(gatheringId) {
 // icon already saves them, so My History and the close sheet read them by that
 // name. All four games are offered (v4.9.9): an event with an open shadow
 // config gets the Live Panel (hasLivePanelSupport -> eventShadowGamed) so CTP
-// and BirdieBall have their entry screens. BF Series keeps its own format and
+// and MiserBall have their entry screens. BF Series keeps its own format and
 // Live Panel and is excluded.
 let _closedGamesGids = new Set();   // gathering ids whose games are already closed (so a card never offers +Games over a closed result)
 let _eventShadows = new Map();      // event ref -> { gathering_id, host_id }
@@ -15920,7 +15920,7 @@ function eventShadowGamed(evt) {
   if (formatBadge(evt.format) === 'BF Series') return false;
   return gatheringIsGamed(evtGamesConfig(evt));
 }
-// gathering_id that BirdieBall answers / the Close button use for a panel
+// gathering_id that MiserBall answers / the Close button use for a panel
 // event (own id for a Gathering, the shadow's for a gamed event, else null).
 function panelGamesGid(evt) {
   if (!evt) return null;
@@ -16014,7 +16014,7 @@ function gatheringAddon(config, id) {
 // Dev-88 — read-only "what's the game" summary for the event card's new
 // 🏆 Games icon (Brian: "players will want to know the game before heading
 // to the course"). Same pot math as the Host Panel's live updateGamesFormPotPreview
-// (CTP and BirdieBall carved out of the $/player pot as fixed dollar amounts,
+// (CTP and MiserBall carved out of the $/player pot as fixed dollar amounts,
 // Skins gets whatever's left), just against the SAVED config any registered
 // player can read, not the host's in-progress form state.
 function gatheringGameDetailsBody(evt, config) {
@@ -16045,7 +16045,7 @@ function gatheringGameDetailsBody(evt, config) {
   if (bb) {
     const cost = (bb.dollar_per_player || 0) * yesCount;
     remaining -= cost;
-    rows.push(row('🐦', 'BirdieBall', `$${(bb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot`, 'birdieball'));
+    rows.push(row('🐦', 'MiserBall', `$${(bb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot`, 'birdieball'));
   }
   const bp = gatheringAddon(config, 'birdiepay');
   if (bp) {
@@ -17751,15 +17751,15 @@ async function submitEditGathering(gatheringId) {
 const GATHERING_GAMES_META = {
   skins:      { label: 'Skins',      icon: '⛳' },
   cttp:       { label: 'CTP',        icon: '🎯' },
-  birdieball: { label: 'BirdieBall', icon: '🐦' },
+  birdieball: { label: 'MiserBall', icon: '🐦' },
   birdiepay:  { label: 'Birdie Payouts', icon: '🐤' }
 };
 // v4.9.11+ — discreet (i) descriptors: what each game is and how it pays.
 const GAME_INFO = {
   net:        'Net means your handicap strokes come off first. Each player gets a number of strokes, set by the host before the first tee, and takes one off their score on that many of the course\'s hardest holes (by the tee\'s hole handicap). A bogey on a hole where you get a stroke counts as a par. Gross means the score you actually shot.',
-  skins:      'Every hole is its own prize. The lowest score on a hole, outright, wins that skin (gross unless the host set it to Net); a tie wins nothing. Skins split whatever is left of the pot after CTP, BirdieBall and Birdie Payouts, shared by the skins won.',
+  skins:      'Every hole is its own prize. The lowest score on a hole, outright, wins that skin (gross unless the host set it to Net); a tie wins nothing. Skins split whatever is left of the pot after CTP, MiserBall and Birdie Payouts, shared by the skins won.',
   cttp:       'Closest to the Pin on the chosen holes (usually the par 3s). Whoever is closest on a hole wins that hole\'s fixed $ prize, taken from the pot. Claim it in the Live Panel; the newest claim leads. An unclaimed hole\'s money rolls into Skins.',
-  birdieball: 'Everyone starts with one ball. Keep it all round and you win: everyone who still has theirs at the end splits the pot. If everybody loses theirs, the last BirdieBall standing (the one lost latest) wins. Lose yours? Tap "I lost it" in the Live Panel so the group knows, and confirm on your scorecard.',
+  birdieball: 'Everyone starts with one ball. Keep it all round and you win: everyone who still has theirs at the end splits the pot. If everybody loses theirs, the last MiserBall standing (the one lost latest) wins. Lose yours? Tap "I lost it" in the Live Panel so the group knows, and confirm on your scorecard.',
   birdiepay:  'A flat $ for every birdie or better, paid to whoever made it, from the same pot before Skins (gross unless the host set it to Net, where a par with a stroke counts). An eagle still pays one birdie. Nothing to enter: it\'s worked out from the scorecards when the round closes.'
 };
 function gameInfoBtnHtml(ctx, key) {
@@ -18034,15 +18034,15 @@ function toggleGamesFormCttpHole(hole) {
   if (cttpSection) cttpSection.innerHTML = gatheringGamesCttpSectionHtml();
   updateGamesFormPotPreview();
 }
-// BirdieBall section — its OWN $/player rate (Dev-86 round 3, Brian:
-// "BirdieBall should also be a $/player payout, the balance going to
+// MiserBall section — its OWN $/player rate (Dev-86 round 3, Brian:
+// "MiserBall should also be a $/player payout, the balance going to
 // Skins"). Same carve-out shape as CTP, just per-player instead of
 // per-hole, and no hole picker needed.
 function gatheringGamesBirdieballSectionHtml() {
   if (!_gamesFormSelected.has('birdieball')) return '';
   return `
     <div class="host-form-field" id="games-form-birdieball-field">
-      <label>🐦 BirdieBall</label>
+      <label>🐦 MiserBall</label>
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.86rem">$</span>
         <input type="number" id="games-form-bb-dpp" min="0.01" step="0.01"
@@ -18260,10 +18260,10 @@ function gamesFormBuildHandicapConfig() {
   }
   return { config: { allowance: _gamesFormHcp.allowance, skins_basis: _gamesFormHcp.skins_basis, birdiepay_basis: _gamesFormHcp.birdiepay_basis, players }, problem: null, pending };
 }
-// Dev-89 — the fixed carve-outs (CTP purse + BirdieBall) must fit inside the
+// Dev-89 — the fixed carve-outs (CTP purse + MiserBall) must fit inside the
 // pot. Returns the numbers the preview and the save guard both use, so the
 // two can't disagree. `problem` is a host-readable sentence, or null if fine.
-// BirdieBall's per-player rate above the whole $/player is impossible at ANY
+// MiserBall's per-player rate above the whole $/player is impossible at ANY
 // headcount; CTP's purse is a fixed total, so whether it fits depends on how
 // many players are in — checked against the confirmed-Yes count when there is one.
 function gamesFormOverCommit(dpp, yesCount) {
@@ -18275,9 +18275,9 @@ function gamesFormOverCommit(dpp, yesCount) {
   const pot = dpp * yesCount;
   let problem = null;
   if (dpp > 0 && bbRate > dpp) {
-    problem = `BirdieBall ($${bbRate.toFixed(2)}/player) is more than the whole $${dpp.toFixed(2)} each player puts in`;
+    problem = `MiserBall ($${bbRate.toFixed(2)}/player) is more than the whole $${dpp.toFixed(2)} each player puts in`;
   } else if (dpp > 0 && yesCount > 0 && fixedCost > pot) {
-    problem = `CTP + BirdieBall come to $${fixedCost.toFixed(2)}, more than the $${pot.toFixed(2)} pot (${yesCount} confirmed × $${dpp.toFixed(2)}) — lower a rate or raise $ per Player`;
+    problem = `CTP + MiserBall come to $${fixedCost.toFixed(2)}, more than the $${pot.toFixed(2)} pot (${yesCount} confirmed × $${dpp.toFixed(2)}) — lower a rate or raise $ per Player`;
   }
   return { cttpCost, bbRate, fixedCost, pot, problem };
 }
@@ -18291,7 +18291,7 @@ function updateGamesFormPotPreview(yesCount) {
   if (!(dpp > 0)) { el.textContent = `${yesCount} confirmed Yes so far`; return; }
   const totalPot = dpp * yesCount;
   const lines = [`Pot preview: $${totalPot.toFixed(2)} total (${yesCount} confirmed Yes × $${dpp.toFixed(2)})`];
-  // CTP and BirdieBall are both carved out of this SAME pot as fixed dollar
+  // CTP and MiserBall are both carved out of this SAME pot as fixed dollar
   // amounts; Skins gets whatever's left after both (Dev-86 round 3, Brian's
   // explicit call on the funding model). Informational only — this preview
   // will move as players register/drop before the round closes.
@@ -18304,7 +18304,7 @@ function updateGamesFormPotPreview(yesCount) {
   if (_gamesFormSelected.has('birdieball') && _gamesFormBirdieballConfig.dollar_per_player > 0) {
     const bbCost = _gamesFormBirdieballConfig.dollar_per_player * yesCount;
     remaining -= bbCost;
-    lines.push(`🐦 BirdieBall: $${bbCost.toFixed(2)} (${yesCount} × $${_gamesFormBirdieballConfig.dollar_per_player.toFixed(2)}), carved out`);
+    lines.push(`🐦 MiserBall: $${bbCost.toFixed(2)} (${yesCount} × $${_gamesFormBirdieballConfig.dollar_per_player.toFixed(2)}), carved out`);
   }
   // Birdie Payouts is a variable cost (flat $ × birdies actually made), so it
   // can't be totalled here — say so instead of showing a made-up number.
@@ -18346,7 +18346,7 @@ async function submitGatheringGames(gatheringId) {
   }
   let birdieball_config = null;
   if (games.includes('birdieball')) {
-    if (!(_gamesFormBirdieballConfig.dollar_per_player > 0)) { showToast('BirdieBall: $ per player must be greater than 0', true); return; }
+    if (!(_gamesFormBirdieballConfig.dollar_per_player > 0)) { showToast('MiserBall: $ per player must be greater than 0', true); return; }
     birdieball_config = { dollar_per_player: _gamesFormBirdieballConfig.dollar_per_player };
   }
   const overCommit = gamesFormOverCommit(dpp, _gamesFormYesCount);
