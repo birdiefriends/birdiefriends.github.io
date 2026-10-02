@@ -12,11 +12,11 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','escapeHtml','evtPhotoKey','computeGatheringGamesPayout','latestScorecardPerPlayer','scorecardMissingHoles','renderGatheringPayoutHtml',
   'openGatheringCloseSheet','confirmGatheringClose','openModal','closeModal',
   'isOpenSpotName','loadHostSpots','hostSpotsHtml','hostAddOpenSpot','refreshAfterSpotChange','openFillSpotSheet','renderFillSpotSheet',
-  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','gamesScoreKeyForGid','eventNameFromRef','hostAutoOpenSpots','updateHostSpotsPreview','updateHostPlayersRow','hostSwitchHtml','hostSwitchSet','hostRowHtml','hostSetRowValue','bumpHostCapacity','hostGamesListHtml','filterHostGamesSheet','toggleHostGame','updateHostGamesRow','pickHostOption','setHostHoles','closeHostSheet','openHostSheet'];
+  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','gamesScoreKeyForGid','eventNameFromRef','hostAutoOpenSpots','hostLeftoverSeats','hostUnheldSeats','hostBumpHold','hostSetLeftAnnounce','renderHostLeftover','updateHostSpotsPreview','updateHostPlayersRow','hostSwitchHtml','hostSwitchSet','hostRowHtml','hostSetRowValue','bumpHostCapacity','hostGamesListHtml','filterHostGamesSheet','toggleHostGame','updateHostGamesRow','pickHostOption','setHostHoles','closeHostSheet','openHostSheet'];
 function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillOk = true } = {}) {
   const dom = new JSDOM(`<body><div id="gathering-close-modal"><div id="gathering-close-body"></div></div>
     <div id="gathering-spot-modal"><div id="gathering-spot-title"></div><div id="gathering-spot-body"></div></div>
-    <div id="host-sheet-body"></div><div id="history-game-results"></div><input id="host-new-size" value="4"><button id="host-players-row"><span class="host-row-val">You</span></button><button id="host-games-row"><span class="host-row-val">None yet</span></button><button id="host-holes-row"><span class="host-row-val">18</span></button><button id="host-format-row"><span class="host-row-val">x</span></button><button id="host-playing-switch" role="switch"><span></span></button><select id="host-new-type"><option value="Individual Play">Individual Play</option><option value="Best Ball">Best Ball</option></select><input id="host-games-search"><div id="host-games-list"></div></body>`);
+    <div id="host-sheet-body"></div><div id="history-game-results"></div><div id="host-leftover"></div><input id="host-new-size" value="4"><button id="host-players-row"><span class="host-row-val">You</span></button><button id="host-games-row"><span class="host-row-val">None yet</span></button><button id="host-holes-row"><span class="host-row-val">18</span></button><button id="host-format-row"><span class="host-row-val">x</span></button><button id="host-playing-switch" role="switch"><span></span></button><select id="host-new-type"><option value="Individual Play">Individual Play</option><option value="Best Ball">Best Ball</option></select><input id="host-games-search"><div id="host-games-list"></div></body>`);
   const posts = []; const toasts = []; const calls = [];
   const h = o => Array(18).fill(5).map((v, i) => o[i + 1] ?? v);
   const ctx = {
@@ -50,7 +50,7 @@ function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillO
   ctx.posts = posts; ctx.toasts = toasts; ctx.calls = calls;
   vm.createContext(ctx); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
   vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') +
-    '\nvar _spotsByGathering = new Map(); var _eventShadowByGid = new Map(); var _hostGamesPick = new Set(); var _hostHoles = 18; var GATHERING_GAMES_META = {skins:{label:"Skins",icon:"S"},cttp:{label:"CTP",icon:"C"},birdieball:{label:"BirdieBall",icon:"B"}}; var _hostMode = "crew"; var _hostPlaying = true; var currentPlayer = "Brian Hager"; var _hostCrewPicked = new Set(); var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null;', ctx);
+    '\nvar _spotsByGathering = new Map(); var _eventShadowByGid = new Map(); var _hostGamesPick = new Set(); var _hostHoles = 18; var GATHERING_GAMES_META = {skins:{label:"Skins",icon:"S"},cttp:{label:"CTP",icon:"C"},birdieball:{label:"BirdieBall",icon:"B"}}; var _hostHoldN = 0; var _hostLeftAnnounce = null; var _hostMode = "crew"; var _hostPlaying = true; var currentPlayer = "Brian Hager"; var _hostCrewPicked = new Set(); var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null;', ctx);
   return ctx;
 }
 
@@ -125,19 +125,19 @@ ok(!c.document.getElementById('btn-gathering-close-confirm').disabled, 'spots lo
 
 // 8. New Gathering form wiring
 c = setup(); const sz = v => { c.document.getElementById('host-new-size').value = String(v); };
-ok(c.hostAutoOpenSpots() === 3, 'size 4, host only -> 3 open spots');
-c._hostCrewPicked = new Set(['Mike Scanlan', 'Jim Bingham']); ok(c.hostAutoOpenSpots() === 1, 'host + 2 invitees of 4 -> 1 spot');
-c._hostCrewPicked = new Set(['Mike Scanlan', 'Jim Bingham', 'Brian Hager']); ok(c.hostAutoOpenSpots() === 1, 'host in the crew is not double counted');
-c._hostPlaying = false; c._hostCrewPicked = new Set(['A', 'B']); ok(c.hostAutoOpenSpots() === 2, 'host not playing -> 2 spots');
-c._hostCrewPicked = new Set(['A','B','C','D','E']); ok(c.hostAutoOpenSpots() === 0, 'over capacity floors at 0');
-c._hostMode = 'open'; ok(c.hostAutoOpenSpots() === 0, 'open mode never creates spots'); c._hostMode = 'crew';
-sz(''); ok(c.hostAutoOpenSpots() === 0, 'blank size -> 0');
+ok(c.hostLeftoverSeats() === 3, 'size 4, host only -> 3 leftover seats');
+c._hostCrewPicked = new Set(['Mike Scanlan', 'Jim Bingham']); ok(c.hostLeftoverSeats() === 1, 'host + 2 invitees of 4 -> 1 spot');
+c._hostCrewPicked = new Set(['Mike Scanlan', 'Jim Bingham', 'Brian Hager']); ok(c.hostLeftoverSeats() === 1, 'host in the crew is not double counted');
+c._hostPlaying = false; c._hostCrewPicked = new Set(['A', 'B']); ok(c.hostLeftoverSeats() === 2, 'host not playing -> 2 spots');
+c._hostCrewPicked = new Set(['A','B','C','D','E']); ok(c.hostLeftoverSeats() === 0, 'over capacity floors at 0');
+c._hostMode = 'open'; ok(c.hostLeftoverSeats() === 0, 'open mode never creates spots'); c._hostMode = 'crew';
+sz(''); ok(c.hostLeftoverSeats() === 0, 'blank size -> 0');
 c._hostPlaying = true; c._hostCrewPicked = new Set(); sz(4); c.updateHostSpotsPreview();
 const prow = () => c.document.querySelector('#host-players-row .host-row-val').textContent;
-ok(prow() === 'You · 3 open', 'Players row: host only of 4 -> "You · 3 open"');
-c._hostCrewPicked = new Set(['Mike Scanlan', 'Jim Bingham']); c.updateHostSpotsPreview(); ok(prow() === 'You + 2 · 1 open', 'Players row: host + 2, 1 open');
+ok(prow() === 'You · 3 seats left', 'Players row: host only of 4 -> "You · 3 seats left"');
+c._hostCrewPicked = new Set(['Mike Scanlan', 'Jim Bingham']); c.updateHostSpotsPreview(); ok(prow() === 'You + 2 · 1 seat left', 'Players row: host + 2, 1 seat left');
 sz(3); c.updateHostSpotsPreview(); ok(prow() === 'You + 2', 'Players row: full -> no open note');
-c._hostPlaying = false; sz(4); c.updateHostSpotsPreview(); ok(prow() === '2 invited · 2 open', 'Players row: host not playing');
+c._hostPlaying = false; sz(4); c.updateHostSpotsPreview(); ok(prow() === '2 invited · 2 seats left', 'Players row: host not playing');
 c._hostMode = 'open'; c.updateHostSpotsPreview(); ok(prow() === 'Open to members', 'Players row: open mode'); c._hostMode = 'crew'; c._hostPlaying = true;
 c.bumpHostCapacity(1); ok(c.document.getElementById('host-new-size').value === '5', 'capacity +'); sz(1); c.bumpHostCapacity(-1); ok(c.document.getElementById('host-new-size').value === '1', 'capacity floors at 1'); sz(32); c.bumpHostCapacity(1); ok(c.document.getElementById('host-new-size').value === '32', 'capacity caps at 32');
 c.hostSwitchSet('host-playing-switch', true); ok(c.document.getElementById('host-playing-switch').getAttribute('aria-checked') === 'true', 'switch on');
@@ -161,6 +161,22 @@ ok(/_hostGamesPick = new Set\(\);\s*\n\s*_pendingCrewName = null;/.test(src), 'f
 ok(src.includes("Promise.all([loadHostTemplates(), loadHostGamesConfigs(), loadHostSpots()])"), 'Host Panel warms the spots cache');
 ok((src.match(/hostSpotsHtml\(g, (true|false)\)/g) || []).length === 2, 'both the upcoming and archive cards render the block');
 ok((src.match(/isOpenSpotName\(r\.player\) \? '🪑 ' \+ r\.player/g) || []).length === 2, 'placeholders are labelled in both response lists');
+
+// 9. v4.10.7 — leftover seats: explicit hold + announce choice, with a guard
+c = setup(); c._hostPlaying = true; c._hostCrewPicked = new Set(['Mike Scanlan', 'Jim Bingham']); c.document.getElementById('host-new-size').value = '8';
+ok(c.hostLeftoverSeats() === 5 && c.hostAutoOpenSpots() === 0 && c.hostUnheldSeats() === 5, 'size 8, host + 2: 5 leftover, nothing held by default');
+c.updateHostSpotsPreview(); const lo = () => c.document.getElementById('host-leftover');
+ok(lo().style.display === 'block' && /5 seats still unfilled/.test(lo().innerHTML) && /choose one/.test(lo().innerHTML) && /Open to all members now/.test(lo().innerHTML) && /Not yet/.test(lo().innerHTML), 'leftover block asks the announce question');
+c.hostBumpHold(1); c.hostBumpHold(1); ok(c.hostAutoOpenSpots() === 2 && c.hostUnheldSeats() === 3, 'hold stepper: 2 held, 3 unheld');
+c.hostBumpHold(10); ok(c.hostAutoOpenSpots() === 5 && c.hostUnheldSeats() === 0 && !/choose one/.test(lo().innerHTML), 'hold caps at leftover; all held needs no announce choice');
+c.hostBumpHold(-10); ok(c.hostAutoOpenSpots() === 0, 'hold floors at 0');
+c.hostSetLeftAnnounce('open'); ok(c._hostLeftAnnounce === 'open' && !/choose one/.test(lo().innerHTML) && /aria-pressed="true"/.test(lo().innerHTML), 'choice recorded and shown');
+c._hostCrewPicked = new Set(['A','B','C','D','E','F','G']); c.updateHostSpotsPreview(); ok(lo().style.display === 'none', 'no leftover seats: block hidden');
+c._hostCrewPicked = new Set(['A']); c._hostMode = 'open'; c.updateHostSpotsPreview(); ok(lo().style.display === 'none', 'open mode: block hidden'); c._hostMode = 'crew';
+ok(/_hostMode === 'crew' && hostUnheldSeats\(\) > 0 && !_hostLeftAnnounce/.test(src), 'Create guard blocks until the announce choice is made');
+ok(/const _crewOpensToAll = _hostMode === 'crew' && hostUnheldSeats\(\) > 0 && _hostLeftAnnounce === 'open'/.test(src) && /fillListEnabled = _crewOpensToAll/.test(src), 'crew + open sets fill_list_enabled');
+ok(/if \(_crewOpensToAll\) \{/.test(src) && /'gathering_open_invite', \{ gathering_id: gathData\.id \}/.test(src), 'everyone else gets the open announcement');
+ok(/_hostHoldN = 0;\s*\n\s*_hostLeftAnnounce = null;/.test(src), 'form resets hold + choice each time it opens');
 
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

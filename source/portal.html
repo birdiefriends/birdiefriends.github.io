@@ -11297,13 +11297,61 @@ async function confirmFillSpot() {
 // v4.9.1 — open spots are automatic: capacity minus the host (if playing)
 // minus the invited players. Whatever is left becomes "Open Spot N" seats the
 // host fills with real members later. No manual stepper.
-function hostAutoOpenSpots() {
+// v4.10.7 — what happens to those leftover seats is the host's explicit choice:
+// hold some for guests they'll name (Open Spots), and announce the rest to all
+// members now or leave the game invite-only for the moment. hostAutoOpenSpots()
+// is now the HELD count; hostLeftoverSeats() is every seat not covered.
+let _hostHoldN = 0;            // seats held for named guests (0..leftover)
+let _hostLeftAnnounce = null;  // 'open' | 'later' | null (not chosen yet) — for the seats that are not held
+function hostLeftoverSeats() {
   if (_hostMode !== 'crew') return 0;
   const sizeEl = document.getElementById('host-new-size');
   const size = parseInt(sizeEl ? sizeEl.value : '', 10) || 0;
   if (!size) return 0;
   const invitees = [..._hostCrewPicked].filter(n => n !== currentPlayer).length;
   return Math.max(0, size - (_hostPlaying ? 1 : 0) - invitees);
+}
+function hostAutoOpenSpots() {
+  return Math.min(Math.max(0, _hostHoldN | 0), hostLeftoverSeats());
+}
+// Seats that are neither taken nor held: these need the announce-or-not choice.
+function hostUnheldSeats() { return hostLeftoverSeats() - hostAutoOpenSpots(); }
+function hostBumpHold(d) {
+  _hostHoldN = Math.min(Math.max(0, hostAutoOpenSpots() + d), hostLeftoverSeats());
+  updateHostPlayersRow();
+}
+function hostSetLeftAnnounce(v) { _hostLeftAnnounce = v; updateHostPlayersRow(); }
+function renderHostLeftover() {
+  const el = document.getElementById('host-leftover');
+  if (!el) return;
+  const left = hostLeftoverSeats();
+  if (_hostMode !== 'crew' || left <= 0) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const held = hostAutoOpenSpots();
+  const rest = left - held;
+  const plural = (n) => n + ' seat' + (n === 1 ? '' : 's');
+  const opt = (v, title, sub) => {
+    const on = _hostLeftAnnounce === v;
+    return `<button type="button" onclick="hostSetLeftAnnounce('${v}')" aria-pressed="${on}" style="display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:10px;cursor:pointer;font-family:inherit;color:var(--text);background:${on ? 'rgba(29,158,117,0.12)' : '#fff'};border:${on ? '2px solid var(--green)' : '1px solid var(--border)'}">
+      <span style="font-size:1.05rem;line-height:1.2">${on ? '◉' : '○'}</span>
+      <span style="flex:1"><span style="display:block;font-size:0.9rem;font-weight:700">${title}</span><span style="display:block;font-size:0.76rem;color:var(--text-muted);margin-top:2px;line-height:1.4">${sub}</span></span></button>`;
+  };
+  el.style.display = 'block';
+  el.innerHTML = `<div style="padding:12px 14px;background:rgba(212,160,23,0.10);border-top:1px solid var(--border)">
+    <div style="font-size:0.9rem;font-weight:700">${plural(left)} still unfilled</div>
+    <div style="font-size:0.76rem;color:var(--text-muted);margin:2px 0 10px;line-height:1.4">Only the players you picked know about this game. Decide what happens to the other seats.</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:${rest > 0 ? '10' : '0'}px">
+      <div style="flex:1"><div style="font-size:0.88rem;font-weight:600">Hold for guests I'll name</div>
+        <div style="font-size:0.74rem;color:var(--text-muted);margin-top:1px;line-height:1.35">For people who aren't members yet. Not announced. Name each one before the round closes.</div></div>
+      <button type="button" aria-label="Hold fewer" onclick="hostBumpHold(-1)" style="width:36px;height:36px;border-radius:18px;border:1px solid var(--border);background:#fff;font-size:1.1rem;font-weight:600;cursor:pointer;color:var(--text)">−</button>
+      <span style="min-width:22px;text-align:center;font-weight:700">${held}</span>
+      <button type="button" aria-label="Hold more" onclick="hostBumpHold(1)" style="width:36px;height:36px;border-radius:18px;border:1px solid var(--border);background:#fff;font-size:1.1rem;font-weight:600;cursor:pointer;color:var(--text)">+</button>
+    </div>
+    ${rest > 0 ? `<div style="font-size:0.8rem;font-weight:700;margin-bottom:6px">The other ${plural(rest)}${_hostLeftAnnounce ? '' : ' <span style="color:#b8860b">· choose one</span>'}</div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${opt('open', '📢 Open to all members now', 'Everyone with Gathering Alerts on gets an announcement. First Yes takes a seat.')}
+      ${opt('later', '🔒 Not yet — invite-only', 'Only your picked players see it. Tap Open to all members in the Host Panel whenever you are ready.')}
+    </div>` : ''}
+  </div>`;
 }
 // v4.9.2 — New Gathering setup UI helpers: switch rows, tappable value rows,
 // and the little sheets they open. Pure presentation; state stays in the
@@ -11338,11 +11386,13 @@ function hostSetRowValue(id, text) {
 }
 function updateHostPlayersRow() {
   if (!document.getElementById('host-players-row')) return;
-  if (_hostMode !== 'crew') { hostSetRowValue('host-players-row', 'Open to members'); return; }
+  if (_hostMode !== 'crew') { hostSetRowValue('host-players-row', 'Open to members'); renderHostLeftover(); return; }
   const invitees = [..._hostCrewPicked].filter(n => n !== currentPlayer).length;
   const spots = hostAutoOpenSpots();
   const who = _hostPlaying ? (invitees ? 'You + ' + invitees : 'You') : (invitees ? invitees + ' invited' : 'No one yet');
-  hostSetRowValue('host-players-row', who + (spots > 0 ? ' · ' + spots + ' open' : ''));
+  const left = hostLeftoverSeats();
+  hostSetRowValue('host-players-row', who + (left > 0 ? ' · ' + left + ' seat' + (left === 1 ? '' : 's') + ' left' : ''));
+  renderHostLeftover();
 }
 // Kept under its v4.9.1 name: every caller that used to refresh the open-spots
 // note now refreshes the Players row, which carries the count.
@@ -17945,6 +17995,8 @@ async function showNewGatheringForm() {
   _hostSelectedCrewId = null;
   _hostSelectedCrewName = null;
   _hostPlaying = true;
+  _hostHoldN = 0;
+  _hostLeftAnnounce = null;
   _hostGamesPick = new Set();
   _pendingCrewName = null;
   _hostMode = 'crew';
@@ -18013,6 +18065,7 @@ async function showNewGatheringForm() {
         <input type="number" id="host-new-size" value="4" min="1" max="32" oninput="updateHostSpotsPreview()" style="width:52px;text-align:center;font-size:1.05rem;font-weight:700;border:0;background:transparent;padding:0;-moz-appearance:textfield">
         <button type="button" aria-label="More" onclick="bumpHostCapacity(1)" style="width:40px;height:40px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:1.25rem;font-weight:600;cursor:pointer;color:var(--text)">+</button>
       </div>
+      <div id="host-leftover" style="display:none"></div>
     </div>
     <div class="section-label">⛳ Game</div>
     <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">
@@ -18469,6 +18522,14 @@ async function submitNewGathering() {
   }
   // v4.9.1 — seats not covered by host + invitees become open spots automatically.
   const autoSpots = hostAutoOpenSpots();
+  // v4.10.7 — guard: seats that are neither taken nor held need an explicit
+  // announce-or-not choice, so a partial invite list can't silently strand them.
+  if (_hostMode === 'crew' && hostUnheldSeats() > 0 && !_hostLeftAnnounce) {
+    showToast(`${hostUnheldSeats()} seat${hostUnheldSeats() === 1 ? '' : 's'} left: choose Open to all members or Not yet`, true);
+    const lo = document.getElementById('host-leftover');
+    if (lo) lo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
   if (autoSpots > 8) {
     showToast(`${autoSpots} seats unfilled — add more players or lower the capacity (max 8 open spots)`, true);
     return;
@@ -18487,6 +18548,7 @@ async function submitNewGathering() {
     let crewId = null;
     let notifyNames = [];
     let fillListEnabled = false;
+    const _crewOpensToAll = _hostMode === 'crew' && hostUnheldSeats() > 0 && _hostLeftAnnounce === 'open';
     if (_hostMode === 'open') {
       // Open broadcast — no Crew created; notify all members with gatheringAlerts=Yes
       fillListEnabled = true;
@@ -18495,6 +18557,7 @@ async function submitNewGathering() {
         .map(m => m.display);
     } else {
       // Crew mode — create or reuse a named Crew
+      fillListEnabled = _crewOpensToAll; // v4.10.7 — crew + open: the game is also visible to every member
       if (_hostSelectedCrewId) {
         crewId = _hostSelectedCrewId;
         const memData = await gatheringsFetchJSON(`${GATHERINGS_API}/crews/${crewId}/members`);
@@ -18573,18 +18636,32 @@ async function submitNewGathering() {
       }));
     }
     if (notifyNames.length) {
-      const notifType = fillListEnabled ? 'gathering_open_invite' : 'gathering_invite';
-      const notifTitle = fillListEnabled ? '📢 Open Gathering' : 'New Gathering';
-      const notifBody  = fillListEnabled
+      const _openWording = fillListEnabled && !_crewOpensToAll; // crew invitees keep the personal invite wording
+      const notifType = _openWording ? 'gathering_open_invite' : 'gathering_invite';
+      const notifTitle = _openWording ? '📢 Open Gathering' : 'New Gathering';
+      const notifBody  = _openWording
         ? `${currentPlayer} is hosting "${title}" — ${formatDate(eventTimeDate)} at ${formatTime(eventTimeDate)}. Open to all members.`
         : (_hostRegisterAllCrew
             ? `${currentPlayer} added you to "${title}" — ${formatDate(eventTimeDate)} at ${formatTime(eventTimeDate)}. You're registered as playing — no RSVP needed.`
             : `${currentPlayer} invited you to "${title}" — ${formatDate(eventTimeDate)} at ${formatTime(eventTimeDate)}.`);
-      const notifMeta  = fillListEnabled
+      const notifMeta  = _openWording
         ? { gathering_id: gathData.id }
         : { gathering_id: gathData.id, invited: notifyNames };
       osSendToPlayers(notifyNames, notifTitle, notifBody, 'https://birdiefriends.com/portal.html', notifType, notifMeta)
         .catch(e => console.warn('Invite notify failed:', e));
+    }
+    // v4.10.7 — Crew + Open: everyone else with Gathering Alerts on hears about the remaining seats.
+    if (_crewOpensToAll) {
+      const _skip = new Set([currentPlayer, ...notifyNames].map(n => String(n).trim().toLowerCase()));
+      const _others = memberData
+        .filter(m => m.gatheringAlerts === 'Yes' && m.active !== 'InActive' && !_skip.has(String(m.display).trim().toLowerCase()))
+        .map(m => m.display);
+      if (_others.length) {
+        osSendToPlayers(_others, '📢 Open Gathering',
+          `${currentPlayer} is hosting "${title}" — ${formatDate(eventTimeDate)} at ${formatTime(eventTimeDate)}. Open to all members.`,
+          'https://birdiefriends.com/portal.html', 'gathering_open_invite', { gathering_id: gathData.id })
+          .catch(e => console.warn('Open announcement failed:', e));
+      }
     }
     const _wantGames = _hostGamesPick.size > 0;
     showToast(_wantGames ? '✅ Gathering created — now set the game stakes' : '✅ Gathering created');

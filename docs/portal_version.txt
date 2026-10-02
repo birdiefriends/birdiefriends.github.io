@@ -1,3 +1,6 @@
+v4.10.7 · 2026-10-02
+Deployed: 2026-10-02 (New Gathering: when seats are left after your invites, the form now asks what happens to them. Hold some for guests you'll name (not announced), and for the rest choose Open to all members now (everyone gets an announcement, first Yes takes a seat) or Not yet, invite-only (open it later from the Host Panel). Create waits until you choose. No Worker change.)
+
 v4.10.6 · 2026-10-02
 Deployed: 2026-10-02 (Host Panel: new 📢 Open to all members button on invite-only Gatherings. One tap opens the game to every member, announces it to everyone with Gathering Alerts on (skipping the crew and anyone already registered), and makes any held open spots first-come. Switching a game to Open from Edit now sends the same announcement. Open spots no longer get push messages. No Worker change.)
 
