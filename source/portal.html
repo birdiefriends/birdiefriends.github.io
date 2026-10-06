@@ -15572,16 +15572,24 @@ function renderGatheringPayoutHtml(s) {
     const arr = people.slice().sort((a, b) => f(a) - f(b) || a.player.localeCompare(b.player));
     return arr.map(p => { const v = f(p); const same = arr.filter(x => f(x) === v).length > 1; return { p, place: v === Infinity ? '' : (arr.findIndex(x => f(x) === v) + 1), tied: same }; });
   };
-  const cols = `1.6rem minmax(0,1fr) ${hasRank ? '2.6rem ' : ''}${games.map(() => '2.3rem').join(' ')}${games.length ? ' ' : ''}2.9rem`;
+  // Two-line names: first name (bold) over last name (small). The last word is the last name, a trailing Jr/Sr/II/III stays with it.
+  const splitName = full => {
+    const parts = String(full || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length < 2) return [parts[0] || '', ''];
+    let n = 1;
+    if (parts.length > 2 && /^(jr\.?|sr\.?|ii|iii|iv)$/i.test(parts[parts.length - 1])) n = 2;
+    return [parts.slice(0, parts.length - n).join(' '), parts.slice(parts.length - n).join(' ')];
+  };
+  const cols = `1.4rem minmax(0,1fr) ${hasRank ? '2.3rem ' : ''}${games.map(() => '2.1rem').join(' ')}${games.length ? ' ' : ''}2.7rem`;
   const cell = (v, bold) => `<span style="text-align:right;${bold ? 'font-weight:800;' : ''}">${v}</span>`;
   const head = scoreLabel => `<div style="display:grid;grid-template-columns:${cols};gap:4px;font-size:0.68rem;color:var(--text-hint);padding:2px 0 4px;border-bottom:1px solid var(--border)">
       <span></span><span>Player</span>${hasRank ? cell(scoreLabel) : ''}${games.map(g => cell(g[1])).join('')}${cell('Total')}</div>`;
   const matrix = (mode, scoreKey) => head(scoreKey === 'gross' ? 'Gross' : 'Net') + sortedBy(mode).map(({ p, place, tied }) => {
     const sc = hasRank ? cell(p[scoreKey] == null ? '—' : esc(p[scoreKey])) : '';
     const gm = games.map(g => cell(p[g[0]] ? money(p[g[0]]) : '<span style="color:var(--text-hint)">·</span>')).join('');
-    return `<div style="display:grid;grid-template-columns:${cols};gap:4px;align-items:baseline;font-size:0.82rem;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06)">
+    return `<div style="display:grid;grid-template-columns:${cols};gap:4px;align-items:center;font-size:0.82rem;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06)">
       <span style="color:var(--text-muted);font-size:0.74rem">${place === '' ? '' : (tied ? 'T' : '') + place}</span>
-      <span style="font-weight:600;min-width:0;overflow-wrap:anywhere">${esc(p.player)}</span>${sc}${gm}${cell(p.total ? money(p.total) : '·', true)}</div>`;
+      <span style="min-width:0;line-height:1.15" title="${esc(p.player)}">${(([f, l]) => `<span style="display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f)}</span>${l ? `<span style="display:block;font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l)}</span>` : ''}`)(splitName(p.player))}</span>${sc}${gm}${cell(p.total ? money(p.total) : '·', true)}</div>`;
   }).join('');
   const modes = hasRank ? [['net', 'Net'], ['gross', 'Gross'], ['money', '$']] : [['money', '$']];
   const defMode = hasRank ? 'net' : 'money';

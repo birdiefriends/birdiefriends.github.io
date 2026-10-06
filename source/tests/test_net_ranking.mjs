@@ -42,4 +42,12 @@ ok(netPanel.indexOf('Ann Lee') < netPanel.indexOf('Cy Young') && netPanel.indexO
 ok(/data-gp-tab="sum"/.test(html) && /data-gp-tab="skins"/.test(html) && /data-gp-tab="str"/.test(html), 'tabs: summary, skins, strokes');
 const gh = render(g);
 ok(!/Rank by/.test(gh) && /data-gp-sort="money"/.test(gh), 'gross round: summary ranked by $, no score toggle');
+// two-line names: first over last, long last names intact, suffixes kept
+const nm = render(E.computeGatheringGamesPayout({ games: ['skins'], dollar_per_player: 10 }, [card('Jordan Knappenberger', 4), card('Mary Ann Smith', 5), card('Tom Lee Jr', 6), card('Cher', 7)], {}, []));
+ok(/>Jordan<\/span><span[^>]*>Knappenberger</.test(nm), 'first name over a long last name, whole');
+ok(/>Mary Ann<\/span><span[^>]*>Smith</.test(nm), 'middle names stay with the first name');
+ok(/>Tom<\/span><span[^>]*>Lee Jr</.test(nm), 'Jr stays with the last name');
+ok(/>Cher<\/span>(?!<span[^>]*>[A-Za-z])/.test(nm), 'single-word name has no second line');
+ok(!/overflow-wrap:anywhere/.test(nm.split('data-gp-sort')[1] || ''), 'names no longer break mid-word');
+
 console.log(`net ranking: ${pass} pass, ${fail} fail`); process.exit(fail ? 1 : 0);
