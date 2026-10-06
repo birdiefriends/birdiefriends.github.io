@@ -1,3 +1,6 @@
+v4.14.4 · 2026-10-06
+Deployed: 2026-10-06 (Host panel: a Gathering that has started no longer drops into Archive right away. It stays in your working list, with Edit, Games, Spots and a new Add a player button, until its games are closed (or 48 hours; 12 hours if no games were set up).)
+
 v4.14.3 · 2026-10-06
 Deployed: 2026-10-06 (Add a player: if the cell number already belongs to a member (a spouse or family sharing one phone), you can now say "No, someone else" and add the new person on that same number. Before, that was a dead end.)
 

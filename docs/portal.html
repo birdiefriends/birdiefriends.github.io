@@ -17089,6 +17089,22 @@ function clearHostActionBar() {
   const bar = document.getElementById('host-action-bar');
   if (bar) bar.innerHTML = '';
 }
+// v4.14.4 — a Gathering that has started but isn't wrapped up stays in the host's working list
+// (Edit / Games / Spots / Add a player) instead of dropping into Archive the minute it tees off.
+// Wrapped up = its games are Closed; otherwise it stays 48h with games set up, 12h without.
+function hostGatheringStillOpen(g, now) {
+  if (!g || !g.dt) return false;
+  now = now || new Date();
+  if (g.dt >= now) return false;
+  const c = _hostGamesByGathering && _hostGamesByGathering.get ? _hostGamesByGathering.get(g.gatheringId) : null;
+  const ageH = (now - g.dt) / 3600000;
+  if (c) return c.status !== 'closed' && ageH < 48;
+  return ageH < 12;
+}
+function hostAddPlayer(gid) {
+  const g = gatheringData.find(x => x.gatheringId === gid); if (!g) return;
+  openAddPlayerDialog(null, { gatheringId: gid, eventName: g.name }, () => { try { renderHostPanelList(); } catch (_) {} });
+}
 function renderHostPanelList() {
   _hostPanelView = 'list';
   const backBtn = document.getElementById('host-sheet-back');
@@ -17098,9 +17114,9 @@ function renderHostPanelList() {
   const body = document.getElementById('host-sheet-body');
   const now = new Date();
   const allMine = gatheringData.filter(g => g.hostId === currentPlayer);
-  const mine = allMine.filter(g => !(g.dt && g.dt < now))
+  const mine = allMine.filter(g => !(g.dt && g.dt < now) || hostGatheringStillOpen(g, now))
     .sort((a, b) => a.dt - b.dt);
-  const archived = allMine.filter(g => g.dt && g.dt < now)
+  const archived = allMine.filter(g => g.dt && g.dt < now && !hostGatheringStillOpen(g, now))
     .sort((a, b) => b.dt - a.dt);
   const actionBar = document.getElementById('host-action-bar');
   if (actionBar) {
@@ -17175,6 +17191,8 @@ function renderHostPanelList() {
         <div class="host-gathering-actions">
           <button class="btn btn-secondary btn-sm"
             onclick="showEditGatheringForm(${g.gatheringId})">✏️ Edit</button>
+          ${(g.dt && g.dt < now) ? `<button class="btn btn-primary btn-sm"
+            onclick="hostAddPlayer(${g.gatheringId})">➕ Add a player</button>` : ''}
           <button class="btn btn-secondary btn-sm"
             onclick="hostInviteOthers(${g.gatheringId})">➕ Invite Others</button>
           ${!g.fillListEnabled ? `<button class="btn btn-primary btn-sm"
@@ -17195,7 +17213,7 @@ function renderHostPanelList() {
     }).join('');
   }
   body.innerHTML = `
-    ${mine.length > 0 ? `<div class="section-label">Upcoming (${mine.length})</div>` : ''}
+    ${mine.length > 0 ? `<div class="section-label">Upcoming &amp; in progress (${mine.length})</div>` : ''}
     ${listHtml}
     ${archived.length > 0 ? `
     <div style="text-align:center;margin-top:14px">
@@ -17274,7 +17292,7 @@ function renderHostArchiveList() {
   if (closeBtn) { closeBtn.textContent = 'Done'; }
   const body = document.getElementById('host-sheet-body');
   const now = new Date();
-  const archived = gatheringData.filter(g => g.hostId === currentPlayer && g.dt && g.dt < now)
+  const archived = gatheringData.filter(g => g.hostId === currentPlayer && g.dt && g.dt < now && !hostGatheringStillOpen(g, now))
     .sort((a, b) => b.dt - a.dt);
   let listHtml = '';
   if (archived.length === 0) {

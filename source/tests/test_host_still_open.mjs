@@ -1,0 +1,21 @@
+// v4.14.4: a started Gathering stays in the host's working list until wrapped up.
+import fs from 'fs';
+import { extractFn } from './extract.mjs';
+const src = fs.readFileSync(new URL('../portal.html', import.meta.url), 'utf8');
+let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
+const mk = (games) => new Function('_hostGamesByGathering', extractFn(src, 'hostGatheringStillOpen') + '; return hostGatheringStillOpen;')(games);
+const now = new Date('2026-10-06T18:00:00Z'), h = n => new Date(now - n * 3600000);
+const g = (hrsAgo, id = 1) => ({ gatheringId: id, dt: hrsAgo === null ? null : (hrsAgo < 0 ? new Date(+now - hrsAgo * 3600000) : h(hrsAgo)) });
+let f = mk(new Map([[1, { status: 'open' }]]));
+ok(f(g(2), now), 'started 2h ago, games open -> still open');
+ok(f(g(47), now), '47h, games open -> still open');
+ok(!f(g(49), now), '49h -> archive');
+ok(!f(g(-3), now), 'future is not "past-open" (already upcoming)');
+ok(!f({ gatheringId: 1, dt: null }, now), 'no date');
+f = mk(new Map([[1, { status: 'closed' }]]));
+ok(!f(g(2), now), 'games closed -> archive');
+f = mk(new Map());
+ok(f(g(5, 2), now) && !f(g(13, 2), now), 'no games: 12h window');
+f = mk(null);
+ok(f(g(1), now), 'configs not loaded: falls back to 12h window');
+console.log(`host_still_open: ${pass} pass, ${fail} fail`); process.exit(fail ? 1 : 0);
