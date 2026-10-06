@@ -1,3 +1,6 @@
+v4.14.5 · 2026-10-06
+Deployed: 2026-10-06 (Edit Gathering: Save now works on a game that has already started, as long as you have not changed its date or time. Before, it always failed with "Edit can't move it into the future".)
+
 v4.14.4 · 2026-10-06
 Deployed: 2026-10-06 (Host panel: a Gathering that has started no longer drops into Archive right away. It stays in your working list, with Edit, Games, Spots and a new Add a player button, until its games are closed (or 48 hours; 12 hours if no games were set up).)
 
