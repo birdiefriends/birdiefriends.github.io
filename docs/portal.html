@@ -10407,13 +10407,15 @@ function bfTidyName(v) {
   return v;
 }
 // What the add does, as a pure plan: reuse an existing member or create one.
-function bfAddPlayerPlan(members, first, last, cellRaw, confirmedMember) {
+function bfAddPlayerPlan(members, first, last, cellRaw, confirmedMember, sharedCellOk) {
   const f = bfTidyName(first), l = bfTidyName(last);
   if (!f || !l) return { action: 'error', problem: 'First and last name are required.' };
   const c = bfCleanCell(cellRaw);
   if (!c.ok) return { action: 'error', problem: c.problem };
   if (confirmedMember) return { action: 'use', member: confirmedMember };
-  const m = bfFindMemberMatch(members, f, l, c.digits);
+  // A cell that already belongs to a member is often a household phone (family sharing one number):
+  // once the user says "different person" (sharedCellOk) only the NAME can still block the add.
+  const m = bfFindMemberMatch(members, f, l, sharedCellOk ? '' : c.digits);
   if (m.kind) return { action: 'confirm', kind: m.kind, member: m.member };
   return { action: 'create', first: f, last: l, cell: c.display, display: f + ' ' + l };
 }
@@ -10555,11 +10557,12 @@ function submitAddPlayer(confirmedMember) {
   if (!_addP || _addP.busy) return;
   const vals = _apVals();
   if (confirmedMember && _addP.vals) Object.assign(vals, _addP.vals);  // confirm screen has no inputs
-  const plan = bfAddPlayerPlan(memberData, vals.first, vals.last, vals.cell, confirmedMember && confirmedMember.display ? confirmedMember : null);
+  const plan = bfAddPlayerPlan(memberData, vals.first, vals.last, vals.cell, confirmedMember && confirmedMember.display ? confirmedMember : null, !!_addP.sharedCell);
   if (plan.action === 'error') { renderAddPlayerForm(plan.problem, vals); return; }
   _addP.vals = vals;
   if (plan.action === 'confirm') {
     _addP.pending = plan.member;
+    _addP.pendingKind = plan.kind;
     const ov = document.getElementById('add-player-overlay');
     const who = escapeHtmlAttr(plan.member.display || plan.member.fullName);
     const q = plan.kind === 'cell'
@@ -10568,7 +10571,7 @@ function submitAddPlayer(confirmedMember) {
     ov.innerHTML = `<div style="background:#0b3d2e;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:18px 16px 24px;box-sizing:border-box" onclick="event.stopPropagation()">
       <div style="color:#fff;font-size:1rem;margin-bottom:14px">${q}</div>
       <div style="display:flex;gap:10px">
-        <button class="btn" style="flex:1;background:rgba(255,255,255,0.12);color:#fff" onclick="apNotThem()">No</button>
+        <button class="btn" style="flex:1;background:rgba(255,255,255,0.12);color:#fff" onclick="apNotThem()">${plan.kind === 'cell' ? 'No, someone else' : 'No'}</button>
         <button class="btn" style="flex:2" onclick="submitAddPlayer(_addP.pending)">Yes, add ${who}</button>
       </div></div>`;
     return;
@@ -10602,6 +10605,8 @@ function apChooseSpot(i) {
 }
 function apNotThem() {
   const v = (_addP && _addP.vals) || {};
+  // Shared number (family / household): a different person may use it — carry on, the name still has to be unique.
+  if (_addP && _addP.pending && _addP.pendingKind === 'cell') { _addP.sharedCell = true; _addP.pending = null; submitAddPlayer(); return; }
   renderAddPlayerForm('That cell or name already belongs to a member. Check the spelling — if it\'s a different person with the same name, add a middle initial to the last name.', v);
 }
 async function runAddPlayer(plan) {

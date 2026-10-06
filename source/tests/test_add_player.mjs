@@ -30,6 +30,11 @@ const cr = bfAddPlayerPlan(members, 'bob', 'ROY', '617 555 9999');
 ok(cr.action === 'create' && cr.display === 'Bob Roy' && cr.cell === '617-555-9999', 'create tidy');
 ok(bfAddPlayerPlan(members, 'Mikey', 'N', '6175552468').action === 'confirm', 'confirm on cell');
 ok(bfAddPlayerPlan(members, 'Mikey', 'N', '6175552468', members[0]).action === 'use', 'confirmed -> use');
+// shared household cell: "someone else" lets a different person use the same number
+const sh = bfAddPlayerPlan(members, 'Casey', 'Nagle', '6175552468', null, true);
+ok(sh.action === 'create' && sh.display === 'Casey Nagle' && sh.cell === '617-555-2468', 'shared cell + new name -> create');
+ok(bfAddPlayerPlan(members, 'Casey', 'Nagle', '6175552468').action === 'confirm', 'shared cell still asks first');
+ok(bfAddPlayerPlan(members, 'Ann', 'Lee', '6175552468', null, true).kind === 'name', 'shared cell cannot duplicate a name');
 
 // ── Worker against real SQLite ──
 function makeD1(db) {

@@ -1,3 +1,6 @@
+v4.14.3 · 2026-10-06
+Deployed: 2026-10-06 (Add a player: if the cell number already belongs to a member (a spouse or family sharing one phone), you can now say "No, someone else" and add the new person on that same number. Before, that was a dead end.)
+
 v4.14.2 · 2026-10-06
 Deployed: 2026-10-06 (A player added on the course now shows on the event card right away — the cards re-draw after Add a player.)
 
