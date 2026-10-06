@@ -10,7 +10,7 @@ const SI = [7,11,15,1,5,9,3,17,13, 12,6,2,10,4,18,8,14,16];
 const PARS = [4,4,3,4,5,4,5,3,4, 3,5,4,4,4,3,4,5,3];
 const ctx = { BFEngine: E, currentPlayer: 'Brian Hager', teeHeaderColor: () => '#1f8a4c', escapeHtml: v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;'), evtGamesConfig: e => e.rc };
 vm.createContext(ctx);
-vm.runInContext(['atCourseHasNetStrokes', 'renderStrokeCardHtml', 'renderGatheringPayoutHtml', 'venueScorecardHtml', 'venueViewerStrokeInfo'].map(n => extractFn(src, n)).join('\n'), ctx);
+vm.runInContext(['atCourseHasNetStrokes', 'renderStrokeCardHtml', 'renderGatheringPayoutHtml','gpTabStyle','gpBtnStyle', 'venueScorecardHtml', 'venueViewerStrokeInfo'].map(n => extractFn(src, n)).join('\n'), ctx);
 
 const row = { games: ['skins', 'birdiepay'], dollar_per_player: 10, birdiepay_config: { dollar_per_birdie: 2, pars: PARS },
   handicap_config: { allowance: 95, skins_basis: 'net', birdiepay_basis: 'gross', players: {
@@ -36,7 +36,7 @@ ok(/Skins \(net\)/.test(html), 'skins labelled net');
 ok(/Birdie Payouts \(gross\)/.test(html), 'birdie payouts labelled gross');
 const grossSnap = E.computeGatheringGamesPayout({ games: ['skins'], dollar_per_player: 10 }, [card('A'), card('B', { 1: 3 })], {}, []);
 ok(!/Strokes \(/.test(ctx.renderGatheringPayoutHtml(grossSnap)), 'gross snapshot has no strokes block');
-ok(/\(3\)/.test(ctx.renderGatheringPayoutHtml(grossSnap)), 'gross skin line unchanged: plain score');
+ok(/#1 \(3\)/.test(ctx.renderGatheringPayoutHtml(grossSnap)), 'gross skin line unchanged: plain score');
 
 // Dev-91 — "me" highlight on the card, and the stroke-aware Course viewer
 ok(/\(you\)/.test(ctx.renderStrokeCardHtml(rc, 'brian hager')), 'card marks the viewer\'s own row (case-insensitive)');

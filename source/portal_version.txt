@@ -1,3 +1,6 @@
+v4.14.0 · 2026-10-06
+Deployed: 2026-10-06 (Game results are now tabs. The Summary tab is a table of every player: score (toggle Net / Gross / $ to re-rank), what each game paid, and the total. Then a tab per game for detail: Skins (grouped by player), CTP, MiserBall, Birdie, and Strokes. Shows in Close & Calculate and in My History.)
+
 v4.13.1 · 2026-10-02
 Deployed: 2026-10-02 (Games: a new "Also show a Net ranking (for fun, no money)" checkbox in the Gross or Net section. Tick it, set each player's handicap, and the results show Net and Gross rankings while every game stays gross. (Before, rankings only appeared if Skins or Birdie Payouts was set to Net.) Needs the BFE Worker redeployed.)
 

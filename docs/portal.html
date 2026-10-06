@@ -15545,68 +15545,125 @@ function renderGatheringPayoutHtml(s) {
   if (!s) return '';
   const esc = v => escapeHtml(String(v ?? ''));
   const money = v => '$' + (Number(v) || 0).toFixed(Number.isInteger(Number(v)) ? 0 : 2);
+  const norm = v => String(v == null ? '' : v).trim().toLowerCase();
   const label = t => `<div style="font-size:0.7rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 4px">${t}</div>`;
   const line = (l, r) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:0.8rem;padding:2px 0"><span>${l}</span><span style="font-weight:700">${r}</span></div>`;
-  let html = `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:4px">${s.players_count} player${s.players_count === 1 ? '' : 's'} × ${money(s.dollar_per_player)} = <b style="color:var(--text)">${money(s.total_pot)} pot</b></div>`;
-  if (s.handicap) {
-    html += label(`⚖️ Strokes (${esc(s.handicap.allowance)}% allowance)`);
-    html += (s.handicap.players || []).map(p => line(`${esc(p.player)}${p.tee ? ` <span style="color:var(--text-muted)">(${esc(p.tee)})</span>` : ''}`, `${esc(p.strokes)}`)).join('');
-    if ((s.handicap.missing || []).length) html += `<div style="font-size:0.72rem;color:#b8860b;margin-top:2px">No strokes were set for ${s.handicap.missing.map(esc).join(', ')}, so they played scratch</div>`;
+  const uid = 'gp' + (renderGatheringPayoutHtml._n = (renderGatheringPayoutHtml._n || 0) + 1);
+  const panels = []; // { key, tab, html }
+
+  // ── Summary: one row per player — score (Net/Gross toggle), what each game paid, total ──
+  const rk = s.rankings || null;
+  const hasRank = !!(rk && ((rk.net || []).length || (rk.gross || []).length));
+  const games = [];
+  if (s.skins) games.push(['skins', '⛳']);
+  if (s.cttp) games.push(['cttp', '🎯']);
+  if (s.birdieball) games.push(['birdieball', '🐦']);
+  if (s.birdiepay) games.push(['birdiepay', '🐤']);
+  const byName = new Map();
+  (s.payouts || []).forEach(r => byName.set(norm(r.player), { player: r.player, total: Number(r.total) || 0, skins: r.skins, cttp: r.cttp, birdieball: r.birdieball, birdiepay: r.birdiepay, given_back: r.given_back }));
+  if (hasRank) {
+    (rk.gross || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.gross = r.total; e.strokes = r.strokes; byName.set(norm(r.player), e); });
+    (rk.net || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.net = r.total; byName.set(norm(r.player), e); });
   }
-  if (s.rankings && ((s.rankings.net || []).length || (s.rankings.gross || []).length)) {
-    const rk = (list, netMode) => list.map(r => line(`${r.tied ? 'T' : ''}${r.place}. ${esc(r.player)}${netMode ? ` <span style="color:var(--text-muted)">(gross ${esc(r.gross)} − ${esc(r.strokes)})</span>` : ''}`, esc(r.total))).join('');
-    html += label('📊 Net ranking <span style="text-transform:none;font-weight:400">· just for fun, no money</span>') + rk(s.rankings.net || [], true);
-    html += label('📊 Gross ranking') + rk(s.rankings.gross || [], false);
-  }
+  const people = [...byName.values()];
+  const metric = { money: p => -p.total, net: p => (p.net == null ? Infinity : p.net), gross: p => (p.gross == null ? Infinity : p.gross) };
+  const sortedBy = mode => {
+    const f = metric[mode];
+    const arr = people.slice().sort((a, b) => f(a) - f(b) || a.player.localeCompare(b.player));
+    return arr.map(p => { const v = f(p); const same = arr.filter(x => f(x) === v).length > 1; return { p, place: v === Infinity ? '' : (arr.findIndex(x => f(x) === v) + 1), tied: same }; });
+  };
+  const cols = `1.6rem minmax(0,1fr) ${hasRank ? '2.6rem ' : ''}${games.map(() => '2.3rem').join(' ')}${games.length ? ' ' : ''}2.9rem`;
+  const cell = (v, bold) => `<span style="text-align:right;${bold ? 'font-weight:800;' : ''}">${v}</span>`;
+  const head = scoreLabel => `<div style="display:grid;grid-template-columns:${cols};gap:4px;font-size:0.68rem;color:var(--text-hint);padding:2px 0 4px;border-bottom:1px solid var(--border)">
+      <span></span><span>Player</span>${hasRank ? cell(scoreLabel) : ''}${games.map(g => cell(g[1])).join('')}${cell('Total')}</div>`;
+  const matrix = (mode, scoreKey) => head(scoreKey === 'gross' ? 'Gross' : 'Net') + sortedBy(mode).map(({ p, place, tied }) => {
+    const sc = hasRank ? cell(p[scoreKey] == null ? '—' : esc(p[scoreKey])) : '';
+    const gm = games.map(g => cell(p[g[0]] ? money(p[g[0]]) : '<span style="color:var(--text-hint)">·</span>')).join('');
+    return `<div style="display:grid;grid-template-columns:${cols};gap:4px;align-items:baseline;font-size:0.82rem;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06)">
+      <span style="color:var(--text-muted);font-size:0.74rem">${place === '' ? '' : (tied ? 'T' : '') + place}</span>
+      <span style="font-weight:600;min-width:0;overflow-wrap:anywhere">${esc(p.player)}</span>${sc}${gm}${cell(p.total ? money(p.total) : '·', true)}</div>`;
+  }).join('');
+  const modes = hasRank ? [['net', 'Net'], ['gross', 'Gross'], ['money', '$']] : [['money', '$']];
+  const defMode = hasRank ? 'net' : 'money';
+  const modeBtn = (m, lab) => `<button type="button" data-gp-btn="${m}" onclick="gpSort('${uid}','${m}')" style="${gpBtnStyle(m === defMode)}">${lab}</button>`;
+  let sum = `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">${s.players_count} player${s.players_count === 1 ? '' : 's'} × ${money(s.dollar_per_player)} = <b style="color:var(--text)">${money(s.total_pot)} pot</b></div>`;
+  if (modes.length > 1) sum += `<div style="display:flex;align-items:center;gap:6px;margin:4px 0 6px"><span style="font-size:0.72rem;color:var(--text-muted)">Rank by</span>${modes.map(([m, l]) => modeBtn(m, l)).join('')}<span style="font-size:0.68rem;color:var(--text-hint)">scores are for fun</span></div>`;
+  sum += modes.map(([m]) => `<div data-gp-sort="${m}" style="${m === defMode ? '' : 'display:none'}">${matrix(m, m === 'gross' ? 'gross' : 'net')}</div>`).join('');
+  if (s.unallocated > 0) sum += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Rounding (whole dollars): ${money(s.unallocated)} stays with the host</div>`;
+  panels.push({ key: 'sum', tab: '📋 Summary', html: sum });
+
+  // ── Skins: grouped by player ──
   if (s.skins) {
-    html += label(`⛳ Skins (${s.skins.basis || 'gross'}) — ${money(s.skins.pot)}`);
+    let h = label(`⛳ Skins (${s.skins.basis || 'gross'}) — ${money(s.skins.pot)}`);
     if (s.skins.won.length) {
-      html += `<div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:2px">${s.skins.won.length} skin${s.skins.won.length === 1 ? '' : 's'} × ${money(s.skins.per_skin)}</div>`;
-      html += s.skins.won.map(w => line(`#${w.hole} ${esc(w.player)} <span style="color:var(--text-muted)">(${w.net != null && w.gross != null ? `net ${w.net} · gross ${w.gross}` : w.strokes})</span>`, money(s.skins.per_skin))).join('');
+      h += `<div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:4px">${s.skins.won.length} skin${s.skins.won.length === 1 ? '' : 's'} × ${money(s.skins.per_skin)}</div>`;
+      const groups = new Map();
+      s.skins.won.forEach(w => { const k = norm(w.player); if (!groups.has(k)) groups.set(k, { player: w.player, won: [] }); groups.get(k).won.push(w); });
+      h += [...groups.values()].sort((a, b) => b.won.length - a.won.length || a.player.localeCompare(b.player)).map(g =>
+        `<div style="padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.06)">${line(`<b>${esc(g.player)}</b> <span style="color:var(--text-muted)">${g.won.length} skin${g.won.length === 1 ? '' : 's'}</span>`, money(g.won.length * (Number(s.skins.per_skin) || 0)))}
+          <div style="font-size:0.74rem;color:var(--text-muted)">${g.won.map(w => `#${esc(w.hole)} (${w.net != null ? `net ${esc(w.net)}` : esc(w.strokes)})`).join(' &nbsp;·&nbsp; ')}</div></div>`).join('');
     } else {
-      html += `<div style="font-size:0.78rem;color:var(--text-muted)">No skins won — ${money(s.skins.given_back_each)} back to each player</div>`;
+      h += `<div style="font-size:0.78rem;color:var(--text-muted)">No skins won — ${money(s.skins.given_back_each)} back to each player</div>`;
     }
+    panels.push({ key: 'skins', tab: '⛳ Skins', html: h });
   }
+  // ── CTP ──
   if (s.cttp) {
-    html += label(`🎯 CTP — ${money(s.cttp.capped ? s.cttp.paid_per_hole : s.cttp.per_hole)}/hole`);
-    if (s.cttp.capped) html += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(s.cttp.per_hole)}/hole, but that was more than the pot had, so each hole paid ${money(s.cttp.paid_per_hole)}</div>`;
-    html += s.cttp.holes.map(h => h.player
-      ? line(`#${h.hole} ${esc(h.player)}${h.dist ? ` <span style="color:var(--text-muted)">(${h.dist} ft)</span>` : ''}`, money(h.paid))
-      : line(`#${h.hole} <span style="color:var(--text-muted)">unclaimed → Skins</span>`, '—')).join('');
+    let h = label(`🎯 CTP — ${money(s.cttp.capped ? s.cttp.paid_per_hole : s.cttp.per_hole)}/hole`);
+    if (s.cttp.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(s.cttp.per_hole)}/hole, but that was more than the pot had, so each hole paid ${money(s.cttp.paid_per_hole)}</div>`;
+    h += s.cttp.holes.map(x => x.player
+      ? line(`#${x.hole} ${esc(x.player)}${x.dist ? ` <span style="color:var(--text-muted)">(${x.dist} ft)</span>` : ''}`, money(x.paid))
+      : line(`#${x.hole} <span style="color:var(--text-muted)">unclaimed → Skins</span>`, '—')).join('');
+    panels.push({ key: 'cttp', tab: '🎯 CTP', html: h });
   }
+  // ── MiserBall ──
   if (s.birdieball) {
     const b = s.birdieball;
-    html += label(`🐦 MiserBall — ${money(b.pot)}`);
-    if (b.capped) html += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(b.configured_pot)}, but the pot only had ${money(b.pot)} left after CTP</div>`;
-    if (b.mode === 'kept') html += `<div style="font-size:0.78rem">Kept it: ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)} each</div>`;
-    else if (b.mode === 'longest') html += `<div style="font-size:0.78rem">Nobody kept it — held longest (#${esc(b.longest_hole)}, stroke ${esc(b.longest_stroke)}): ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)}${b.winners.length > 1 ? ' each' : ''}</div>`;
-    else html += `<div style="font-size:0.78rem;color:var(--text-muted)">No answers recorded — ${money(b.given_back_each)} back to each player</div>`;
+    let h = label(`🐦 MiserBall — ${money(b.pot)}`);
+    if (b.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(b.configured_pot)}, but the pot only had ${money(b.pot)} left after CTP</div>`;
+    if (b.mode === 'kept') h += `<div style="font-size:0.78rem">Kept it: ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)} each</div>`;
+    else if (b.mode === 'longest') h += `<div style="font-size:0.78rem">Nobody kept it — held longest (#${esc(b.longest_hole)}, stroke ${esc(b.longest_stroke)}): ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)}${b.winners.length > 1 ? ' each' : ''}</div>`;
+    else h += `<div style="font-size:0.78rem;color:var(--text-muted)">No answers recorded — ${money(b.given_back_each)} back to each player</div>`;
+    panels.push({ key: 'bb', tab: '🐦 Miser', html: h });
   }
+  // ── Birdie Payouts ──
   if (s.birdiepay) {
     const b = s.birdiepay;
-    html += label(`🐤 Birdie Payouts (${b.basis || 'gross'}) — ${money(b.per_birdie)}/birdie`);
-    if (b.no_par_data) html += `<div style="font-size:0.78rem;color:var(--text-muted)">No par data was saved for this game, so no birdies were counted</div>`;
-    else if (!b.count) html += `<div style="font-size:0.78rem;color:var(--text-muted)">No birdies made</div>`;
+    let h = label(`🐤 Birdie Payouts (${b.basis || 'gross'}) — ${money(b.per_birdie)}/birdie`);
+    if (b.no_par_data) h += `<div style="font-size:0.78rem;color:var(--text-muted)">No par data was saved for this game, so no birdies were counted</div>`;
+    else if (!b.count) h += `<div style="font-size:0.78rem;color:var(--text-muted)">No birdies made</div>`;
     else {
-      html += b.birdies.map(x => line(`#${x.hole} ${esc(x.player)} <span style="color:var(--text-muted)">(${x.net != null ? `net ${esc(x.net)} · gross ${esc(x.strokes)}` : esc(x.strokes)} on a par ${esc(x.par)})</span>`, money(x.paid))).join('');
-      if (b.capped) html += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${b.count} birdies × ${money(b.per_birdie)} was more than the pot had left, so each paid ${money(b.paid_each)}</div>`;
+      h += b.birdies.map(x => line(`#${x.hole} ${esc(x.player)} <span style="color:var(--text-muted)">(${x.net != null ? `net ${esc(x.net)} · gross ${esc(x.strokes)}` : esc(x.strokes)} on a par ${esc(x.par)})</span>`, money(x.paid))).join('');
+      if (b.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${b.count} birdies × ${money(b.per_birdie)} was more than the pot had left, so each paid ${money(b.paid_each)}</div>`;
     }
+    panels.push({ key: 'bp', tab: '🐤 Birdie', html: h });
   }
-  html += label('💰 Payouts');
-  const rows = (s.payouts || []).filter(r => r.total > 0);
-  html += rows.length ? rows.map(r => {
-    const parts = [];
-    if (r.skins) parts.push('⛳' + money(r.skins));
-    if (r.cttp) parts.push('🎯' + money(r.cttp));
-    if (r.birdieball) parts.push('🐦' + money(r.birdieball));
-    if (r.birdiepay) parts.push('🐤' + money(r.birdiepay));
-    if (r.given_back) parts.push('↩️' + money(r.given_back));
-    return `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--green-light);border-radius:10px;padding:7px 12px;margin-bottom:5px">
-      <span style="font-size:0.82rem;font-weight:600;color:var(--green-dark)">${esc(r.player)} <span style="font-weight:400;font-size:0.7rem;opacity:0.8">${parts.join(' ')}</span></span>
-      <span style="font-size:0.95rem;font-weight:800;color:var(--green-dark)">${money(r.total)}</span></div>`;
-  }).join('') : `<div style="font-size:0.78rem;color:var(--text-muted)">No payouts</div>`;
-  if (s.unallocated > 0) html += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px">Rounding (whole dollars): ${money(s.unallocated)} stays with the host</div>`;
-  return html;
+  // ── Strokes ──
+  if (s.handicap) {
+    let h = label(`⚖️ Strokes (${esc(s.handicap.allowance)}% allowance)`);
+    h += (s.handicap.players || []).map(p => line(`${esc(p.player)}${p.tee ? ` <span style="color:var(--text-muted)">(${esc(p.tee)})</span>` : ''}`, `${esc(p.strokes)}`)).join('');
+    if ((s.handicap.missing || []).length) h += `<div style="font-size:0.72rem;color:#b8860b;margin-top:2px">No strokes were set for ${s.handicap.missing.map(esc).join(', ')}, so they played scratch</div>`;
+    panels.push({ key: 'str', tab: '⚖️ Strokes', html: h });
+  }
+
+  const tabBar = panels.length > 1
+    ? `<div style="display:flex;gap:4px;overflow-x:auto;white-space:nowrap;border-bottom:1px solid var(--border);margin-bottom:8px;-webkit-overflow-scrolling:touch">${panels.map((p, i) =>
+        `<button type="button" data-gp-tab="${p.key}" onclick="gpTab('${uid}','${p.key}')" style="${gpTabStyle(i === 0)}">${p.tab}</button>`).join('')}</div>`
+    : '';
+  return `<div id="${uid}" style="max-width:34rem;margin:0 auto">${tabBar}${panels.map((p, i) => `<div data-gp-panel="${p.key}" style="${i === 0 ? '' : 'display:none'}">${p.html}</div>`).join('')}</div>`;
+}
+function gpTabStyle(on) { return `flex:0 0 auto;border:0;background:none;font:inherit;font-size:0.8rem;padding:6px 10px;cursor:pointer;color:${on ? 'var(--green-dark)' : 'var(--text-muted)'};font-weight:${on ? 800 : 500};border-bottom:2px solid ${on ? 'var(--green-dark)' : 'transparent'}`; }
+function gpBtnStyle(on) { return `border:1px solid var(--border);border-radius:999px;font:inherit;font-size:0.74rem;padding:3px 10px;cursor:pointer;background:${on ? 'var(--green-dark)' : 'transparent'};color:${on ? '#fff' : 'var(--text)'}`; }
+// Result-card interactions (no re-render): show one tab's panel, or one ranking order of the summary.
+function gpTab(uid, key) {
+  const root = document.getElementById(uid); if (!root) return;
+  root.querySelectorAll('[data-gp-panel]').forEach(el => { el.style.display = el.getAttribute('data-gp-panel') === key ? '' : 'none'; });
+  root.querySelectorAll('[data-gp-tab]').forEach(el => { el.setAttribute('style', gpTabStyle(el.getAttribute('data-gp-tab') === key)); });
+}
+function gpSort(uid, mode) {
+  const root = document.getElementById(uid); if (!root) return;
+  root.querySelectorAll('[data-gp-sort]').forEach(el => { el.style.display = el.getAttribute('data-gp-sort') === mode ? '' : 'none'; });
+  root.querySelectorAll('[data-gp-btn]').forEach(el => { el.setAttribute('style', gpBtnStyle(el.getAttribute('data-gp-btn') === mode)); });
 }
 let _gcClose = null; // { gatheringId, summary, meta } — the preview the host is looking at
 // v4.12.0 — Close & Calculate as the final reconcile (spec §12). Pure: what must the host

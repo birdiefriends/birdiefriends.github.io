@@ -4,7 +4,7 @@ const HERE = (p) => fileURLToPath(new URL(p, import.meta.url));
 const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
 let pass = 0, fail = 0;
 const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
-const fns = ['escapeHtml','evtPhotoKey','computeGatheringGamesPayout','latestScorecardPerPlayer','scorecardMissingHoles','renderGatheringPayoutHtml','openGatheringCloseSheet','gcReconcile','confirmGatheringClose','loadHistoryGameResults','reopenGatheringGames','openModal','closeModal','gamesScoreKeyForGid','eventNameFromRef','historyShadowGid','eventShadowFor','eventGamesRef','eventLocalDay'];
+const fns = ['escapeHtml','evtPhotoKey','computeGatheringGamesPayout','latestScorecardPerPlayer','scorecardMissingHoles','renderGatheringPayoutHtml','gpTabStyle','gpBtnStyle','openGatheringCloseSheet','gcReconcile','confirmGatheringClose','loadHistoryGameResults','reopenGatheringGames','openModal','closeModal','gamesScoreKeyForGid','eventNameFromRef','historyShadowGid','eventShadowFor','eventGamesRef','eventLocalDay'];
 function setup({ player = 'Brian Hager', status = 'open', hostId = 'Brian Hager', agedOut = false } = {}) {
   const dom = new JSDOM(`<body><div id="gathering-close-modal"><div id="gathering-close-body"></div></div><div id="history-game-results"></div></body>`);
   const posts = []; const toasts = [];

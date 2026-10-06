@@ -33,8 +33,13 @@ const same = E.computeGatheringGamesPayout({ games: ['skins'], dollar_per_player
 ok(JSON.stringify(ro.payouts) === JSON.stringify(same.payouts), 'ranking-only changes no payout');
 
 // rendering
-const render = new Function('escapeHtml', extractFn(src, 'renderGatheringPayoutHtml') + '; return renderGatheringPayoutHtml;')(s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+const render = new Function('escapeHtml', ['renderGatheringPayoutHtml','gpTabStyle','gpBtnStyle'].map(n => extractFn(src, n)).join('\n') + '; return renderGatheringPayoutHtml;')(s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
 const html = render(r);
-ok(/Net ranking/.test(html) && /just for fun/.test(html) && /Gross ranking/.test(html) && /T1\. Ann Lee/.test(html) && /gross 90 − 18/.test(html), 'summary shows both rankings');
-ok(!/Net ranking/.test(render(g)), 'no rankings for a gross round');
+ok(/Rank by/.test(html) && /data-gp-btn="net"/.test(html) && /data-gp-btn="gross"/.test(html) && /data-gp-btn="money"/.test(html), 'summary has the Net / Gross / $ ranking toggle');
+ok(/data-gp-sort="net"/.test(html) && /data-gp-sort="gross"/.test(html) && />T1</.test(html) && />90</.test(html), 'summary rows carry net and gross scores with shared places');
+const netPanel = html.split('data-gp-sort="net"')[1].split('data-gp-sort="gross"')[0];
+ok(netPanel.indexOf('Ann Lee') < netPanel.indexOf('Cy Young') && netPanel.indexOf('Cy Young') < netPanel.indexOf('Bob Roy'), 'net order: Ann/Cy tie at 72, Bob 80 last');
+ok(/data-gp-tab="sum"/.test(html) && /data-gp-tab="skins"/.test(html) && /data-gp-tab="str"/.test(html), 'tabs: summary, skins, strokes');
+const gh = render(g);
+ok(!/Rank by/.test(gh) && /data-gp-sort="money"/.test(gh), 'gross round: summary ranked by $, no score toggle');
 console.log(`net ranking: ${pass} pass, ${fail} fail`); process.exit(fail ? 1 : 0);
