@@ -10666,6 +10666,7 @@ async function runAddPlayer(plan) {
     _addP = { cb: _doneCb };
     const cb = _addP && _addP.cb;
     _addP = null;
+    try { if (typeof dataLoaded !== 'undefined' && dataLoaded) renderAll(); } catch (_) {}
     if (cb) cb(display); else renderLiveBanner();
   } catch (e) {
     console.error('runAddPlayer error:', e);

@@ -1,3 +1,6 @@
+v4.14.2 · 2026-10-06
+Deployed: 2026-10-06 (A player added on the course now shows on the event card right away — the cards re-draw after Add a player.)
+
 v4.14.1 · 2026-10-06
 Deployed: 2026-10-06 (Results Summary: names are two lines, first name over last name, so long names like Knappenberger fit and nothing breaks mid-word.)
 
