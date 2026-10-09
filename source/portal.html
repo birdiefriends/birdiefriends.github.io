@@ -6025,9 +6025,16 @@ function buildEventCard(evt, isPast) {
     </div>
     <div id="${whoId}" style="display:none">
       ${buildPlayerChips(evt)}
+      ${buildAddPlayerBtn(evt)}
       ${isCommissioner() ? buildTextAllBtn(evt, false) : ''}
     </div>
   </div>`;
+}
+// v4.15.0 — anyone who is the host, invited, or already playing can add the missing player right from the card.
+function buildAddPlayerBtn(evt) {
+  if (!evt || evt.source !== 'gathering') return '';
+  if (!gatheringCanAddPlayers(evt, currentPlayer, gatheringRegData)) return '';
+  return `<div style="padding:6px 16px 8px"><button class="btn btn-secondary btn-sm" style="font-size:0.82rem" onclick="hostAddPlayer(${evt.gatheringId})">➕ Add a player</button></div>`;
 }
 function buildPlayerChips(evt) {
   // Match by unique gatheringId for Gathering-sourced events, not title — same
@@ -10401,6 +10408,61 @@ function bfFindMemberMatch(members, first, last, cellDigits) {
   }
   return { kind: null, member: null };
 }
+// v4.15.0 — "Fill a seat": members who can be added to this game (not already Yes/Sub in it), filtered by a search string.
+function bfAddPickList(members, regs, gatheringId, query) {
+  const inGame = new Set((regs || []).filter(r => r.gatheringId === gatheringId && (r.status === 'Yes' || r.status === 'Sub'))
+    .map(r => String(r.player).trim().toLowerCase()));
+  const q = String(query || '').trim().toLowerCase();
+  return (members || [])
+    .filter(m => m && m.display && !/^open spot \d+$/i.test(m.display) && !inGame.has(String(m.display).trim().toLowerCase()))
+    .filter(m => !q || String(m.display).toLowerCase().includes(q))
+    .map(m => ({ display: m.display, inactive: m.active === 'InActive' }))
+    .sort((a, b) => a.display.localeCompare(b.display));
+}
+// Who may add a player to a game: its host, anyone invited to it, anyone already playing in it.
+function gatheringCanAddPlayers(g, viewer, regs) {
+  if (!g || !viewer || g.gatheringId == null) return false;
+  if (g.hostId === viewer || g.invited === true) return true;
+  return (regs || []).some(r => r.gatheringId === g.gatheringId && r.player === viewer && (r.status === 'Yes' || r.status === 'Sub'));
+}
+// Edit Gathering: picked players with no registration row yet (host + Open Spots excluded) are registered as playing on Save.
+function editNewPlayers(picked, regs, gatheringId, host) {
+  const has = new Set((regs || []).filter(r => r.gatheringId === gatheringId).map(r => String(r.player).trim().toLowerCase()));
+  return [...(picked || [])].filter(n => n && n !== host && !/^open spot \d+$/i.test(n) && !has.has(String(n).trim().toLowerCase()));
+}
+// Re-read a game's registrations from the server and make them the local truth. Resolves { ok, rows } or { ok:false } when
+// the server can't be reached (caller decides); rows is [] when the game has none.
+async function gatheringReadBack(gatheringId) {
+  try {
+    const data = await gatheringsFetchJSON(`${GATHERINGS_API}/gatherings/${gatheringId}/registrations`, {}, 8000);
+    if (!data || !Array.isArray(data.registrations)) return { ok: false };
+    const g = gatheringData.find(x => x.gatheringId === gatheringId);
+    const sm = { yes: 'Yes', no: 'No', sub: 'Sub' };
+    const rows = data.registrations.map(r => ({
+      id: `gr-${gatheringId}-${r.player_id}`, eventName: g ? g.name : '', gatheringId, player: r.player_id,
+      status: sm[r.status] || 'No', createdAt: r.registered_at ? new Date(r.registered_at) : new Date(),
+      confirmedFor: r.confirmed_for || null, hostNote: r.host_note || null, addedBy: r.added_by || null, addedAt: r.added_at || null }));
+    gatheringRegData = gatheringRegData.filter(x => x.gatheringId !== gatheringId).concat(rows);
+    regData = regData.filter(x => x.gatheringId !== gatheringId).concat(rows.map(r => ({ ...r })));
+    return { ok: true, rows };
+  } catch (e) { return { ok: false }; }
+}
+// "7/8" style count for a game (real players only).
+function gatheringCountText(rows, capacity) {
+  const yes = (rows || []).filter(r => r.status === 'Yes' && !/^open spot \d+$/i.test(r.player)).length;
+  return capacity ? `${yes}/${capacity}` : `${yes} playing`;
+}
+// A member put into a game becomes Active again (the daily inactivity check marks anyone with no registration InActive).
+async function activateMemberByName(display) {
+  const m = (memberData || []).find(x => x.display === display);
+  if (!m || m.active !== 'InActive' || !m.id || m.id === 'new') return;
+  try {
+    const resp = await fetch(`${JF_API}/submission/${m.id}?apiKey=${JOTFORM_API_KEY}`,
+      { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({ 'submission[22]': 'Active' }).toString() });
+    const d = await resp.json();
+    if (d.responseCode === 200) m.active = 'Active';
+  } catch (e) { console.warn('activateMemberByName failed (non-blocking):', e); }
+}
 function bfTidyName(v) {
   v = String(v || '').trim().replace(/\s+/g, ' ');
   if (v && (v === v.toLowerCase() || v === v.toUpperCase())) v = v.replace(/\b([a-z])([a-z']*)/gi, (m, a, b) => a.toUpperCase() + b.toLowerCase());
@@ -10518,7 +10580,7 @@ let _addP = null;  // { first, last, cell, busy }
 function openAddPlayerDialog(prefill, optIn, cbIn) {
   const opt = optIn || (_sheetOpts && _sheetOpts.addPlayer);
   if (!opt) return;
-  _addP = { busy: false, opt, cb: cbIn || _sheetCallback };
+  _addP = { busy: false, opt, cb: cbIn || _sheetCallback, view: prefill ? 'new' : 'pick', q: '' };
   let ov = document.getElementById('add-player-overlay');
   if (!ov) {
     ov = document.createElement('div');
@@ -10529,7 +10591,39 @@ function openAddPlayerDialog(prefill, optIn, cbIn) {
   ov.style.display = 'flex';
   renderAddPlayerForm('', prefill || null);
 }
+function renderAddPlayerPick(msg) {
+  const ov = document.getElementById('add-player-overlay'); if (!ov || !_addP) return;
+  ov.innerHTML = `<div style="background:#0b3d2e;width:100%;max-width:480px;max-height:88vh;display:flex;flex-direction:column;border-radius:18px 18px 0 0;padding:18px 16px 16px;box-sizing:border-box" onclick="event.stopPropagation()">
+    <div style="font-weight:700;font-size:1.05rem;color:#fff;margin-bottom:2px">Add a player</div>
+    <div style="font-size:0.8rem;color:rgba(255,255,255,0.6);margin-bottom:10px">Pick who is playing. Not a member yet? Choose "New person" below.</div>
+    <input id="ap-search" style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:1rem;margin-bottom:8px" placeholder="Search members" autocomplete="off" oninput="apPickFilter(this.value)" value="${escapeHtmlAttr(_addP.q)}">
+    <div id="ap-msg" style="color:#ffb4a8;font-size:0.82rem;min-height:1.1em;margin-bottom:6px">${msg ? escapeHtmlAttr(msg) : ''}</div>
+    <div id="ap-list" style="overflow-y:auto;flex:1;min-height:120px;margin-bottom:10px"></div>
+    <button class="btn" style="width:100%;margin-bottom:8px" onclick="apShowNew()">＋ New person (not a member yet)</button>
+    <button class="btn" style="width:100%;background:rgba(255,255,255,0.12);color:#fff" onclick="closeAddPlayerDialog()">Cancel</button>
+  </div>`;
+  ov.onclick = closeAddPlayerDialog;
+  apPickRender();
+}
+function apPickRender() {
+  const el = document.getElementById('ap-list'); if (!el || !_addP || !_addP.opt) return;
+  const list = bfAddPickList(memberData, gatheringRegData, _addP.opt.gatheringId, _addP.q);
+  _addP.pickList = list.map(x => x.display);
+  el.innerHTML = list.length ? list.map((x, i) => `<div onclick="apPickMember(${i})" style="padding:11px 8px;border-bottom:1px solid rgba(255,255,255,0.08);color:#fff;font-size:0.98rem;cursor:pointer;display:flex;justify-content:space-between;gap:8px">
+      <span>${escapeHtmlAttr(x.display)}</span>${x.inactive ? '<span style="font-size:0.72rem;color:#d4a017">inactive</span>' : ''}</div>`).join('')
+    : `<div style="padding:16px 8px;color:rgba(255,255,255,0.6);font-size:0.9rem">No matching members. Use "New person" below.</div>`;
+}
+function apPickFilter(q) { if (!_addP) return; _addP.q = q; apPickRender(); }
+function apShowNew() { if (!_addP) return; _addP.view = 'new'; renderAddPlayerForm('', _addP.vals || null); }
+function apPickMember(i) {
+  if (!_addP || _addP.busy) return;
+  const name = (_addP.pickList || [])[i]; if (!name) return;
+  const member = (memberData || []).find(m => m.display === name); if (!member) return;
+  _addP.vals = null;
+  apProceed({ action: 'use', member });
+}
 function renderAddPlayerForm(msg, vals) {
+  if (_addP && _addP.view !== 'new') { renderAddPlayerPick(msg); return; }
   const ov = document.getElementById('add-player-overlay'); if (!ov) return;
   const v = vals || {};
   const inp = 'width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:1rem;margin-bottom:10px';
@@ -10580,6 +10674,11 @@ function submitAddPlayer(confirmedMember) {
       </div></div>`;
     return;
   }
+  apProceed(plan);
+}
+// v4.15.0 — shared tail for "new person" and "pick a member": held-seat question, then the add.
+function apProceed(plan) {
+  if (!_addP) return;
   // v4.12.0 — if the game still holds Open Spots, ask whether this person is
   // taking one (so the seat is used, not left to be released at Close).
   const spots = apOpenSpots();
@@ -10645,6 +10744,7 @@ async function runAddPlayer(plan) {
       memberData.sort((a,b) => a.display.localeCompare(b.display));
     } else {
       display = plan.member.display || plan.member.fullName;
+      await activateMemberByName(display);
     }
     // Register Yes, marked as added on the course. No host push — the host
     // confirms at Close & Calculate.
@@ -10668,6 +10768,11 @@ async function runAddPlayer(plan) {
       const rd = await r.json();
       if (!rd.ok) throw new Error(rd.error || 'Registration failed');
     }
+    // v4.15.0 — never trust the POST alone: read the roster back and make sure the player is on it.
+    const rb = await gatheringReadBack(opt.gatheringId);
+    if (rb.ok && !rb.rows.some(r => r.player === display && (r.status === 'Yes' || r.status === 'Sub'))) {
+      throw new Error(`${display} did not save to the game. Please try again.`);
+    }
     const row = { id: `gr-${opt.gatheringId}-${display}`, eventName: opt.eventName, gatheringId: opt.gatheringId, player: display,
       status: 'Yes', createdAt: new Date(), confirmedFor: null, hostNote: null, addedBy: currentPlayer || 'unknown', addedAt: new Date().toISOString() };
     const gi = gatheringRegData.findIndex(x => x.gatheringId === opt.gatheringId && x.player === display);
@@ -10677,7 +10782,8 @@ async function runAddPlayer(plan) {
     const _doneCb = _addP && _addP.cb;
     closeAddPlayerDialog();
     closePlayerSheet();
-    showToast(`${display} added to this game ✓`);
+    const _gInfo = gatheringData.find(x => x.gatheringId === opt.gatheringId);
+    showToast(`${display} added — ${gatheringCountText(rb.ok ? rb.rows : gatheringRegData.filter(x => x.gatheringId === opt.gatheringId), _gInfo && _gInfo.capacity)} ✓`);
     _addP = { cb: _doneCb };
     const cb = _addP && _addP.cb;
     _addP = null;
@@ -17759,7 +17865,8 @@ async function showEditGatheringForm(gatheringId) {
         Anyone can respond Yes, No, or Sub — and they'll show up as your crew.
       </div>
     </div>
-    <button class="host-cta-btn" style="margin-top:16px" id="btn-edit-gathering"
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-top:14px;line-height:1.5">Players you pick here are added to the game as playing when you save.</div>
+    <button class="host-cta-btn" style="margin-top:10px" id="btn-edit-gathering"
       onclick="submitEditGathering(${gatheringId})">💾 Save Changes</button>
   `;
   setHostAutoRepeat(_hostAutoRepeat);
@@ -17878,6 +17985,20 @@ async function submitEditGathering(gatheringId) {
       body: JSON.stringify(patchBody)
     });
     if (!resp.ok) throw new Error(resp.error || 'Edit failed');
+    // v4.15.0 — players picked here are registered as playing (like Create does), not just invited.
+    let _regAdded = 0, _regFailed = [];
+    if (!fillListEnabled) {
+      const toReg = editNewPlayers([..._hostCrewPicked], gatheringRegData, gatheringId, currentPlayer);
+      const results = await Promise.all(toReg.map(async n => {
+        try {
+          await activateMemberByName(n);
+          const rr = await fetch(`${GATHERINGS_API}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gathering_id: gatheringId, player_id: n, status: 'yes', added_by: currentPlayer }) });
+          const rd = await rr.json(); return rd.ok ? null : n;
+        } catch (e) { return n; }
+      }));
+      results.forEach(n => { if (n) _regFailed.push(n); else _regAdded++; });
+    }
     if (newCrewNotifyNames.length) {
       osSendToPlayers(newCrewNotifyNames, 'New Gathering',
         `${currentPlayer} invited you to "${title}" — ${formatDate(newEventTime)} at ${formatTime(newEventTime)}.`,
@@ -17897,6 +18018,8 @@ async function submitEditGathering(gatheringId) {
     }
     await refreshGatherings();
     renderHostPanelList();
+    if (_regFailed.length) showToast(`⚠️ Saved, but could not add: ${_regFailed.join(', ')}. Use ➕ Add a player.`, true);
+    else if (_regAdded) showToast(`✅ Saved — ${_regAdded} player${_regAdded === 1 ? '' : 's'} added to the game`);
   } catch(e) {
     showToast('❌ ' + e.message, true);
     console.error('submitEditGathering error:', e);
