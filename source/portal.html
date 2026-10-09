@@ -17103,7 +17103,7 @@ function hostGatheringStillOpen(g, now) {
 }
 function hostAddPlayer(gid) {
   const g = gatheringData.find(x => x.gatheringId === gid); if (!g) return;
-  openAddPlayerDialog(null, { gatheringId: gid, eventName: g.name }, () => { try { renderHostPanelList(); } catch (_) {} });
+  openAddPlayerDialog(null, { gatheringId: gid, eventName: g.name }, () => { try { (_hostPanelView === 'archive' ? renderHostArchiveList : renderHostPanelList)(); } catch (_) {} });
 }
 function renderHostPanelList() {
   _hostPanelView = 'list';
@@ -17336,8 +17336,10 @@ function renderHostArchiveList() {
           background:#fff;border-radius:8px;border:1px solid rgba(0,0,0,0.08)">
           ${detailHtml}
         </div>
-        ${hostSpotsHtml(g, false)}
+        ${hostSpotsHtml(g, true)}
         <div class="host-gathering-actions">
+          <button class="btn btn-primary btn-sm"
+            onclick="hostAddPlayer(${g.gatheringId})">➕ Add a player</button>
           <button class="btn btn-secondary btn-sm"
             onclick="repeatGathering(${g.gatheringId})">🔁 Repeat</button>
           <button class="btn btn-secondary btn-sm"
@@ -17349,7 +17351,7 @@ function renderHostArchiveList() {
   body.innerHTML = `
     <div class="section-label">Past (${archived.length})</div>
     <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-      Tap Responses to see who was in, or 🔁 Repeat to set up the next one.
+      Tap Responses to see who was in, ➕ Add a player to fix the roster, or 🔁 Repeat to set up the next one.
     </div>
     ${listHtml}
   `;
