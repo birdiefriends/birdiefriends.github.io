@@ -5411,7 +5411,8 @@ function getMyCapacityDisplay(evt, myReg, capStatus) {
       if (yesCount >= 6) {
         return { icon: '✅', label: 'Registered — Confirmed', confirmed: true };
       }
-      return { icon: '⏳', label: 'Tentatively confirmed — check back before heading out', pending: true };
+      // subPending (NOT `pending`): the "You're the 5th player" banner is only for the 5th YES player.
+      return { icon: '⏳', label: 'Tentatively confirmed — check back before heading out', subPending: true };
     }
   }
   // Yes status — warn 5th player: last registrant by createdAt on 5-player 8-man event
@@ -5423,7 +5424,7 @@ function getMyCapacityDisplay(evt, myReg, capStatus) {
     });
     const lastReg = sorted[sorted.length-1];
     if (lastReg && lastReg.id === myReg.id) {
-      return { icon: '⏳', label: 'Spot not yet confirmed', pending: true };
+      return { icon: '⏳', label: 'Spot not yet confirmed', pending: true, fifth: true };
     }
   }
   // Waitlist (at or beyond capacity)

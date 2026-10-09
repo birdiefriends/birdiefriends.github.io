@@ -1,3 +1,6 @@
+v4.15.1 · 2026-10-09
+Deployed: 2026-10-09 (BF Weekend Times: a Sub on an 8-player event no longer sees the "You're the 5th player — spot not yet confirmed" banner. That warning is only for the 5th Yes player.)
+
 v4.15.0 · 2026-10-09
 Deployed: 2026-10-09 (Add a player, rebuilt: one sheet everywhere — pick an existing member (search, inactive ones included and re-activated) or add a new person. The event card gets an Add a player button for the host, invited and playing players. After every add the app re-reads the game and tells you "Casey added — 4/4", or says plainly it did not save. Edit Gathering now registers players you pick as playing, like Create does.)
 
