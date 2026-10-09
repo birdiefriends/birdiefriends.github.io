@@ -643,7 +643,6 @@
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button class="btn btn-secondary btn-sm" onclick="grpAddGroup()">+ Add Group</button>
       <button class="btn btn-secondary btn-sm" onclick="grpSortByFlight()">&#x1F3CC; Sort Pool by Rank</button>
       <button class="btn btn-secondary btn-sm" onclick="grpPublish()" id="grp-publish-btn" style="background:linear-gradient(135deg,#e8f0ff,#f0f8ff);border-color:#4a6fbd;color:#1a3d7a;font-weight:600">&#x1F310; Publish Groupings</button>
       <button class="btn btn-primary" onclick="grpKickOffEvent()" id="grp-kickoff-btn">&#x26F3; Kick Off Event</button>
@@ -715,11 +714,14 @@
 
     <!-- Groups area — fills remaining height -->
     <div id="grp-groups-area" style="display:flex;flex-direction:column;min-height:0">
-      <div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;flex-shrink:0">Groups</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-shrink:0">
+        <div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase">Groups</div>
+        <button class="btn btn-primary btn-sm" onclick="grpAddGroup()">+ Add Group</button>
+      </div>
       <div id="grp-groups-container"
         style="min-height:200px;padding-right:4px"></div>
-      <div id="grp-groups-empty" style="font-size:0.8rem;color:var(--text-muted);padding:20px;text-align:center;border:1.5px dashed var(--border);border-radius:8px;display:none">
-        Add a group to start building
+      <div id="grp-groups-empty" ondragover="event.preventDefault()" ondrop="grpDropToEmpty(event)" style="font-size:0.9rem;color:var(--text-muted);padding:36px 20px;text-align:center;border:1.5px dashed var(--border);border-radius:8px;display:none">
+        No groups yet. Drag a player here to start Group 1, or tap <b>+ Add Group</b>.
       </div>
     </div>
 
@@ -7969,6 +7971,14 @@ function grpDropToGroup(event, gid) {
   grpSaveData();
 }
 
+// Dropping a player on the empty Groups area starts Group 1 (no groups = no other drop target).
+function grpDropToEmpty(event) {
+  event.preventDefault();
+  const gid = 'g' + Date.now();
+  grpGroups.push({ id: gid, players: [] });
+  grpDropToGroup(event, gid);
+}
+
 function grpDropToPool(event) {
   event.preventDefault();
   const id = event.dataTransfer.getData('text/plain') || grpDragId;
@@ -8605,7 +8615,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.57 · 2026-08-11';
+const GS_VERSION = 'v8.58 · 2026-10-09';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
