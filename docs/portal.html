@@ -5412,7 +5412,7 @@ function getMyCapacityDisplay(evt, myReg, capStatus) {
         return { icon: '✅', label: 'Registered — Confirmed', confirmed: true };
       }
       // subPending (NOT `pending`): the "You're the 5th player" banner is only for the 5th YES player.
-      return { icon: '⏳', label: 'Tentatively confirmed — check back before heading out', subPending: true };
+      return { icon: '⏳', label: 'Registered as Sub — committed players have priority', subPending: true };
     }
   }
   // Yes status — warn 5th player: last registrant by createdAt on 5-player 8-man event

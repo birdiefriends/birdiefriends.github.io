@@ -11,7 +11,7 @@ const scott = { id: 's1', eventName: evt.name, status: 'Sub', createdAt: new Dat
 // Scott: 1 Yes + him as Sub on an 8-man (the reported case)
 let d = mk([...yes(1), scott])(evt, scott, { cap: 8, is4man: false });
 ok(d && !d.pending, 'Sub on 8-man, 1/8: NOT pending (no 5th-player banner)');
-ok(d && d.subPending === true && /Tentatively/.test(d.label), 'Sub keeps its own status line');
+ok(d && d.subPending === true && /Registered as Sub — committed players have priority/.test(d.label), 'Sub keeps its own status line');
 // 5th Yes player still gets the banner
 const regs5 = yes(5); const fifth = regs5[4];
 d = mk(regs5)(evt, fifth, { cap: 8, is4man: false, fivePending: true });
