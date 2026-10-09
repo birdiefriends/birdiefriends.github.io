@@ -10377,7 +10377,7 @@ let _sheetPlayers  = [];   // full sorted player list
 function bfCleanCell(raw) {
   let d = String(raw == null ? '' : raw).replace(/\D/g, '');
   if (d.length === 11 && d[0] === '1') d = d.slice(1);
-  if (!d) return { ok: false, digits: '', display: '', problem: 'Cell number is required — ask the player for theirs.' };
+  if (!d) return { ok: false, blank: true, digits: '', display: '', problem: 'Cell number is required — ask the player for theirs.' };
   if (d.length !== 10) return { ok: false, digits: d, display: '', problem: 'That doesn\'t look like a full 10-digit cell number.' };
   const fake = /^(\d)\1{9}$/.test(d) || '01234567890123456789'.includes(d) || '98765432109876543210'.includes(d) ||
                /^(\d{2})\1{4}$/.test(d) || /^(\d{5})\1$/.test(d);
@@ -10407,11 +10407,14 @@ function bfTidyName(v) {
   return v;
 }
 // What the add does, as a pure plan: reuse an existing member or create one.
-function bfAddPlayerPlan(members, first, last, cellRaw, confirmedMember, sharedCellOk) {
+function bfAddPlayerPlan(members, first, last, cellRaw, confirmedMember, sharedCellOk, tbdOk) {
   const f = bfTidyName(first), l = bfTidyName(last);
   if (!f || !l) return { action: 'error', problem: 'First and last name are required.' };
-  const c = bfCleanCell(cellRaw);
-  if (!c.ok) return { action: 'error', problem: c.problem };
+  let c = bfCleanCell(cellRaw);
+  // Cell is asked for first; only after that has been tried may a BLANK cell be saved as "TBD"
+  // (a typed-but-wrong number is still rejected). The host fixes the number later.
+  if (!c.ok && c.blank && tbdOk) c = { ok: true, digits: '', display: 'TBD', problem: '', tbd: true };
+  if (!c.ok) return { action: 'error', problem: c.problem, needCell: !!c.blank };
   if (confirmedMember) return { action: 'use', member: confirmedMember };
   // A cell that already belongs to a member is often a household phone (family sharing one number):
   // once the user says "different person" (sharedCellOk) only the NAME can still block the add.
@@ -10537,6 +10540,7 @@ function renderAddPlayerForm(msg, vals) {
     <input id="ap-last"  style="${inp}" placeholder="Last name" autocomplete="off" value="${escapeHtmlAttr(v.last)}">
     <input id="ap-cell"  style="${inp}" placeholder="Cell number" inputmode="tel" autocomplete="off" value="${escapeHtmlAttr(v.cell)}">
     <div id="ap-msg" style="color:#ffb4a8;font-size:0.82rem;min-height:1.1em;margin-bottom:8px">${msg ? escapeHtmlAttr(msg) : ''}</div>
+    ${(_addP && _addP.cellAsked) ? `<button class="btn" style="width:100%;margin-bottom:10px;background:rgba(255,255,255,0.12);color:#fff" onclick="apCellTbd()">Can't get it now — add with cell TBD</button>` : ''}
     <div style="display:flex;gap:10px">
       <button class="btn" style="flex:1;background:rgba(255,255,255,0.12);color:#fff" onclick="closeAddPlayerDialog()">Cancel</button>
       <button class="btn" id="ap-go" style="flex:2" onclick="submitAddPlayer()">Add to this game</button>
@@ -10557,8 +10561,8 @@ function submitAddPlayer(confirmedMember) {
   if (!_addP || _addP.busy) return;
   const vals = _apVals();
   if (confirmedMember && _addP.vals) Object.assign(vals, _addP.vals);  // confirm screen has no inputs
-  const plan = bfAddPlayerPlan(memberData, vals.first, vals.last, vals.cell, confirmedMember && confirmedMember.display ? confirmedMember : null, !!_addP.sharedCell);
-  if (plan.action === 'error') { renderAddPlayerForm(plan.problem, vals); return; }
+  const plan = bfAddPlayerPlan(memberData, vals.first, vals.last, vals.cell, confirmedMember && confirmedMember.display ? confirmedMember : null, !!_addP.sharedCell, !!_addP.cellAsked && !!_addP.tbd);
+  if (plan.action === 'error') { if (plan.needCell) _addP.cellAsked = true; renderAddPlayerForm(plan.problem, vals); return; }
   _addP.vals = vals;
   if (plan.action === 'confirm') {
     _addP.pending = plan.member;
@@ -10602,6 +10606,12 @@ function apChooseSpot(i) {
   _addP.spotAsked = true;
   _addP.spot = i >= 0 ? apOpenSpots()[i] : null;
   runAddPlayer(_addP.plan);
+}
+// Couldn't capture a cell at the course: add the player with cell "TBD" (fix the number later).
+function apCellTbd() {
+  if (!_addP) return;
+  _addP.tbd = true;
+  submitAddPlayer();
 }
 function apNotThem() {
   const v = (_addP && _addP.vals) || {};

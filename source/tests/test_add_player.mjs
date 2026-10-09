@@ -30,6 +30,14 @@ const cr = bfAddPlayerPlan(members, 'bob', 'ROY', '617 555 9999');
 ok(cr.action === 'create' && cr.display === 'Bob Roy' && cr.cell === '617-555-9999', 'create tidy');
 ok(bfAddPlayerPlan(members, 'Mikey', 'N', '6175552468').action === 'confirm', 'confirm on cell');
 ok(bfAddPlayerPlan(members, 'Mikey', 'N', '6175552468', members[0]).action === 'use', 'confirmed -> use');
+// cell TBD: blank cell is refused first (needCell), then allowed only when TBD was chosen
+const nc = bfAddPlayerPlan(members, 'Casey', 'Nagle', '');
+ok(nc.action === 'error' && nc.needCell === true, 'blank cell: error + needCell flag (so the TBD button can appear)');
+const tb = bfAddPlayerPlan(members, 'Casey', 'Nagle', '', null, false, true);
+ok(tb.action === 'create' && tb.cell === 'TBD' && tb.display === 'Casey Nagle', 'blank cell + TBD chosen -> create with cell TBD');
+ok(bfAddPlayerPlan(members, 'Casey', 'Nagle', '555', null, false, true).action === 'error', 'a typed-but-wrong number is still rejected even with TBD');
+ok(bfAddPlayerPlan(members, 'Ann', 'Lee', '', null, false, true).kind === 'name', 'TBD still cannot duplicate an existing name');
+ok(bfAddPlayerPlan(members, 'Bob', 'Roy', '', null, false, false).action === 'error', 'TBD not chosen -> still mandatory');
 // shared household cell: "someone else" lets a different person use the same number
 const sh = bfAddPlayerPlan(members, 'Casey', 'Nagle', '6175552468', null, true);
 ok(sh.action === 'create' && sh.display === 'Casey Nagle' && sh.cell === '617-555-2468', 'shared cell + new name -> create');

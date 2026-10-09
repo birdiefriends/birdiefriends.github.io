@@ -1,3 +1,6 @@
+v4.14.7 · 2026-10-09
+Deployed: 2026-10-09 (Add a player: the cell number is still asked for first. If it is left blank, a "Can't get it now — add with cell TBD" button appears, so a player is never held up on the course. The host fills in the real number later.)
+
 v4.14.6 · 2026-10-09
 Deployed: 2026-10-09 (Host panel Archive: past Gatherings now have Add a player and Open spot / Fill, so a host can fix the roster at any time, not only while the game is still in progress.)
 
