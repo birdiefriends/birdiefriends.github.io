@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.9.0';
+  const ENGINE_VERSION = '1.10.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -597,6 +597,31 @@
     }]
   });
 
+  // ── Pair recommender (Dev-93) ──────────────────────────────────────────
+  // Suggests partners for Fourball from known handicap data. Balanced: the strongest player is
+  // paired with the weakest, the next strongest with the next weakest, so every pair's combined
+  // handicap lands close together (the usual fair way to make teams). players = [{name, hcp}],
+  // hcp = a handicap Index or strokes (lower = better) or null/undefined when unknown. A player
+  // with no handicap is treated as the group's average and listed in `guessed` (with no data at
+  // all, players are paired in alphabetical order). An odd player out is left in `unpaired`
+  // (the middle of the ranking, so no pair is lopsided). Deterministic: ties break on name.
+  function recommendPairs(players) {
+    const list = (players || []).filter(p => p && p.name).map(p => ({ name: String(p.name), hcp: Number.isFinite(Number(p.hcp)) && p.hcp !== null && p.hcp !== '' ? Number(p.hcp) : null }));
+    const known = list.filter(p => p.hcp !== null);
+    const avg = known.length ? known.reduce((a, p) => a + p.hcp, 0) / known.length : 0;
+    const guessed = list.filter(p => p.hcp === null).map(p => p.name).sort((a, b) => a.localeCompare(b));
+    const ranked = list.map(p => ({ name: p.name, hcp: p.hcp === null ? avg : p.hcp, guessed: p.hcp === null }))
+      .sort((a, b) => a.hcp - b.hcp || a.name.localeCompare(b.name));
+    const unpaired = [];
+    if (ranked.length % 2 === 1) unpaired.push(ranked.splice(Math.floor(ranked.length / 2), 1)[0].name);
+    const pairs = [], spreads = [];
+    for (let i = 0, j = ranked.length - 1; i < j; i++, j--) {
+      pairs.push([ranked[i].name, ranked[j].name]);
+      spreads.push(Math.round((ranked[i].hcp + ranked[j].hcp) * 10) / 10);
+    }
+    return { pairs, unpaired, guessed, combined: spreads, usedHandicaps: known.length > 0 };
+  }
+
   // ── Registry helpers — what every other file calls instead of re-describing a game ──
   const KIND_ORDER = ['addon', 'base'];
   function getGame(id) { return ADDONS[id] || BASE_GAMES[id] || null; }
@@ -921,7 +946,7 @@
   return {
     ENGINE_VERSION,
     BASE_GAMES, ADDONS,
-    getGame, listGames, gamesInUiOrder, gamesUiMeta, gamesInfo, gamesSealLabels, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
+    getGame, listGames, recommendPairs, gamesInUiOrder, gamesUiMeta, gamesInfo, gamesSealLabels, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
     skinsWon, betterBallHoles,
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,

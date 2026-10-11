@@ -3612,7 +3612,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.9.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.10.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -11179,6 +11179,7 @@ let _gamesFormMembers = new Map(); // Membership HCPs (bf_players) by lower-case
 let _gamesFormTees = []; // the venue's stored tees that carry full 18-hole data (slope, rating, par_total, holes[{par,handicap}])
 let _gamesFormBirdiepayPars = null; // 18 hole pars resolved for the Gathering's venue when the form opened (null = no par data on file)
 let _gamesFormBirdieballConfig = { dollar_per_player: null }; // MiserBall's OWN per-player rate — distinct from the main $/player pot rate
+let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [] }; // Fourball (Dev-93)
 let _gamesFormPar3Holes = [];             // hole numbers (1-18) with par===3, from the venue's stored tee data
 let _gamesFormVenueParDataAvailable = false; // false -> no tee data on file, host picks holes manually (any 1-18)
 let _gamesFormTouched = new Set();         // v4.9.14 — game amounts the host typed by hand (suggestions never overwrite these)
@@ -18076,6 +18077,11 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
   _gamesFormBirdiepayConfig = (existing && existing.birdiepay_config)
     ? { dollar_per_birdie: existing.birdiepay_config.dollar_per_birdie }
     : { dollar_per_birdie: null };
+  { const fb = existing && existing.game_configs && existing.game_configs.fourball; // Dev-93: Fourball rides the generic game_configs column
+    _gamesFormFourballConfig = fb
+      ? { dollar_per_player: fb.dollar_per_player, basis: fb.basis === 'net' ? 'net' : 'gross', net_mode: fb.net_mode === 'low' ? 'low' : 'own', pairs: (fb.pairs || []).map(pr => pr.slice()) }
+      : { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [] };
+    _gamesFormFourballNote = ''; }
   // Par table for Birdie Payouts — same resolver Card Score Sheet uses (Venue
   // Manager's stored pars first, BSGC's built-in table as the fallback).
   // Frozen into the saved config so Close never needs a second venue lookup.
@@ -18085,7 +18091,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
       ? { skins_basis: hc.skins_basis === 'net' ? 'net' : 'gross', birdiepay_basis: hc.birdiepay_basis === 'net' ? 'net' : 'gross',
           ranking: hc.ranking === true, allowance: hc.allowance == null ? 95 : hc.allowance, players: JSON.parse(JSON.stringify(hc.players || {})) }
       : { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; }
-  _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay'] : []); // an existing config is the host's own numbers
+  _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay', 'fourball'] : []); // an existing config is the host's own numbers
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; if (_gamesFormCard) closeGamesCardDialog(); else renderHostPanelList(); }; }
   const closeBtn = document.getElementById('host-sheet-close-btn');
@@ -18156,6 +18162,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
     <div id="games-form-cttp-section">${gatheringGamesCttpSectionHtml()}</div>
     <div id="games-form-birdieball-section">${gatheringGamesBirdieballSectionHtml()}</div>
     <div id="games-form-birdiepay-section">${gatheringGamesBirdiepaySectionHtml()}</div>
+    <div id="games-form-fourball-section">${gatheringGamesFourballSectionHtml()}</div>
     <div id="games-form-hcp-section">${gatheringGamesHcpSectionHtml()}</div>
     <button class="host-cta-btn" style="margin-top:16px" id="btn-save-games"
       onclick="submitGatheringGames(${gatheringId})">💾 Save Games</button>
@@ -18223,6 +18230,9 @@ function toggleGamesFormGame(key) {
       _gamesFormBirdieballConfig = { dollar_per_player: null };
     } else if (key === 'birdiepay') {
       _gamesFormBirdiepayConfig = { dollar_per_birdie: null };
+    } else if (key === 'fourball') {
+      _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [] };
+      _gamesFormFourballNote = '';
     }
     // skins needs no per-game state at all — it's just whatever's left over.
   } else {
@@ -18246,6 +18256,8 @@ function toggleGamesFormGame(key) {
   if (birdieballSection) birdieballSection.innerHTML = gatheringGamesBirdieballSectionHtml();
   const birdiepaySection = document.getElementById('games-form-birdiepay-section');
   if (birdiepaySection) birdiepaySection.innerHTML = gatheringGamesBirdiepaySectionHtml();
+  const fourballSection = document.getElementById('games-form-fourball-section');
+  if (fourballSection) fourballSection.innerHTML = gatheringGamesFourballSectionHtml();
   if (!_gamesFormSelected.has('skins')) _gamesFormHcp.skins_basis = 'gross';
   if (!_gamesFormSelected.has('birdiepay')) _gamesFormHcp.birdiepay_basis = 'gross';
   refreshGamesFormHcpSection();
@@ -18370,6 +18382,124 @@ function setGamesFormBirdiepayDollarPerBirdie(val) {
   _gamesFormTouched.add('birdiepay');
   updateGamesFormPotPreview();
 }
+// ── Fourball (Dev-93): standalone better-ball-of-partners game ────────────────
+// Config lives in _gamesFormFourballConfig: { dollar_per_player (the Fourball carve), basis, net_mode, pairs }.
+// pairs is the editor state: [[nameA, nameB], ...] where '' means "not picked yet". Saved to the Worker
+// through the generic game_configs column (no legacy column), validated by the same engine schema.
+let _gamesFormFourballNote = '';
+function gamesFormFourballNames() {
+  const names = gamesFormPlayerNames().slice();
+  _gamesFormFourballConfig.pairs.forEach(pr => pr.forEach(n => {
+    if (n && !names.some(x => String(x).trim().toLowerCase() === String(n).trim().toLowerCase())) names.push(n);
+  }));
+  return names;
+}
+function gatheringGamesFourballSectionHtml() {
+  if (!_gamesFormSelected.has('fourball')) return '';
+  const c = _gamesFormFourballConfig;
+  const names = gamesFormFourballNames();
+  const low = n => String(n || '').trim().toLowerCase();
+  const picker = (pi, si) => {
+    const cur = c.pairs[pi][si];
+    const taken = new Set();
+    c.pairs.forEach((pr, i) => pr.forEach((n, j) => { if (n && !(i === pi && j === si)) taken.add(low(n)); }));
+    const opts = names.filter(n => n === cur || !taken.has(low(n)));
+    return `<select onchange="setGamesFormFourballMember(${pi},${si},this.value)" style="flex:1;min-width:0;height:38px;border-radius:8px;border:1.5px solid var(--border);font-family:inherit;font-size:0.86rem;background:#fff;padding:0 6px">
+      <option value="">Pick player…</option>${opts.map(n => `<option value="${escapeHtmlAttr(n)}" ${n === cur ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('')}</select>`;
+  };
+  const pairRows = c.pairs.map((pr, pi) => `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <span style="font-size:0.72rem;font-weight:700;color:var(--text-muted);width:46px">Pair ${pi + 1}</span>${picker(pi, 0)}<span style="color:var(--text-muted)">&amp;</span>${picker(pi, 1)}
+      <button type="button" aria-label="Remove pair" onclick="removeGamesFormFourballPair(${pi})" style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border-med);background:transparent;color:var(--text-muted);cursor:pointer;flex-shrink:0">✕</button></div>`).join('');
+  const inPair = new Set(); c.pairs.forEach(pr => pr.forEach(n => { if (n) inPair.add(low(n)); }));
+  const unpaired = names.filter(n => !inPair.has(low(n)));
+  const seg = (items, cur, fn) => `<div class="seg-toggle" style="margin:0">${items.map(([v, l]) => `<button type="button" class="seg-btn${cur === v ? ' seg-btn-active' : ''}" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
+  const btn = 'height:34px;padding:0 14px;border-radius:17px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.82rem;cursor:pointer';
+  return `
+    <div class="host-form-field" id="games-form-fourball-field">
+      <label>🤝 Fourball</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.86rem">$</span>
+        <input type="number" id="games-form-fb-dpp" min="0.01" step="0.01" value="${c.dollar_per_player || ''}" style="width:90px"
+          oninput="setGamesFormFourballDollarPerPlayer(this.value)">
+        <span style="font-size:0.86rem;color:var(--text-muted)">per player</span>
+      </div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">Each pair counts its better score on every hole. The lowest total wins this prize; tied pairs split it.</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="flex:1;font-size:0.9rem;font-weight:600">Gross or Net</span>${seg([['gross', 'Gross'], ['net', 'Net']], c.basis, 'setGamesFormFourballBasis')}</div>
+      ${c.basis === 'net' ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <span style="flex:1;font-size:0.9rem;font-weight:600">Net strokes</span>${seg([['own', 'Own strokes'], ['low', 'Off the low']], c.net_mode, 'setGamesFormFourballNetMode')}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.net_mode === 'low' ? 'Strokes come off the lowest handicap among the paired players, so the best player plays to scratch.' : 'Everyone plays off their own strokes, as set in Gross or Net below.'}</div>` : ''}
+      <div style="font-size:0.78rem;font-weight:700;margin:6px 0">Pairs</div>
+      ${pairRows || `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">No pairs yet. Add them one at a time, or let us suggest balanced pairs.</div>`}
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+        <button type="button" style="${btn}" onclick="suggestGamesFormFourballPairs()">✨ Suggest pairs</button>
+        <button type="button" style="${btn}" onclick="addGamesFormFourballPair()">+ Add pair</button>
+        ${c.pairs.length ? `<button type="button" style="${btn};border-color:var(--border-med);color:var(--text-muted)" onclick="clearGamesFormFourballPairs()">Clear</button>` : ''}
+      </div>
+      ${_gamesFormFourballNote ? `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:8px;line-height:1.5">${_gamesFormFourballNote}</div>` : ''}
+      <div id="games-form-fb-status" style="font-size:0.74rem;margin-top:8px;color:${unpaired.length ? '#b8860b' : 'var(--green-dark)'}">${
+        !names.length ? 'No confirmed players yet. Players appear here as they register Yes.'
+        : unpaired.length ? `Not in a pair yet: ${unpaired.map(escapeHtml).join(', ')}`
+        : c.pairs.length ? `✓ ${c.pairs.length} pair${c.pairs.length === 1 ? '' : 's'}, everyone paired` : ''}</div>
+    </div>`;
+}
+function refreshGamesFormFourballSection() {
+  const el = document.getElementById('games-form-fourball-section');
+  if (el) el.innerHTML = gatheringGamesFourballSectionHtml();
+}
+function setGamesFormFourballDollarPerPlayer(val) {
+  _gamesFormFourballConfig.dollar_per_player = parseFloat(val) || 0;
+  _gamesFormTouched.add('fourball');
+  updateGamesFormPotPreview();
+}
+function setGamesFormFourballBasis(v) {
+  _gamesFormFourballConfig.basis = v === 'net' ? 'net' : 'gross';
+  refreshGamesFormFourballSection();
+  refreshGamesFormHcpSection(); // Net needs each player's strokes set up below
+}
+function setGamesFormFourballNetMode(v) {
+  _gamesFormFourballConfig.net_mode = v === 'low' ? 'low' : 'own';
+  refreshGamesFormFourballSection();
+}
+function setGamesFormFourballMember(pi, si, name) {
+  _gamesFormFourballConfig.pairs[pi][si] = name || '';
+  refreshGamesFormFourballSection();
+}
+function addGamesFormFourballPair() {
+  _gamesFormFourballConfig.pairs.push(['', '']);
+  refreshGamesFormFourballSection();
+}
+function removeGamesFormFourballPair(pi) {
+  _gamesFormFourballConfig.pairs.splice(pi, 1);
+  refreshGamesFormFourballSection();
+}
+function clearGamesFormFourballPairs() {
+  _gamesFormFourballConfig.pairs = [];
+  _gamesFormFourballNote = '';
+  refreshGamesFormFourballSection();
+}
+// "✨ Suggest pairs": balanced by the handicap data we already hold (the host's own Index/strokes
+// entries first, then Membership). Anyone without a handicap is treated as average and named.
+function suggestGamesFormFourballPairs() {
+  const players = gamesFormFourballNames().map(n => {
+    const key = String(n).trim().toLowerCase();
+    const e = _gamesFormHcp.players[n];
+    const m = _gamesFormMembers.get(key);
+    let hcp = null;
+    if (e && e.kind === 'index' && e.index !== '' && e.index != null && Number.isFinite(Number(e.index))) hcp = Number(e.index);
+    else if (e && e.kind === 'given' && e.strokes !== '' && e.strokes != null && Number.isFinite(Number(e.strokes))) hcp = Number(e.strokes);
+    else if (m && m.source !== 'no_hcp' && m.hcp != null && Number.isFinite(m.hcp)) hcp = m.hcp;
+    return { name: n, hcp };
+  });
+  if (players.length < 4) { showToast('Fourball needs at least 4 players for two pairs', true); return; }
+  const rec = BFEngine.recommendPairs(players);
+  _gamesFormFourballConfig.pairs = rec.pairs.map(p => p.slice());
+  const bits = [rec.usedHandicaps ? 'Balanced by handicap: strongest with weakest, so the pairs are evenly matched.' : 'No handicaps on file, so these are in name order. Change any pair you like.'];
+  if (rec.usedHandicaps && rec.guessed.length) bits.push(`No handicap on file for ${rec.guessed.map(escapeHtml).join(', ')} (treated as average).`);
+  if (rec.unpaired.length) bits.push(`${rec.unpaired.map(escapeHtml).join(', ')} is left without a partner (odd number of players).`);
+  _gamesFormFourballNote = '✨ ' + bits.join(' ');
+  refreshGamesFormFourballSection();
+}
 // Dev-91 — Membership HCPs for the net setup. Same bf_players table BFE-Admin's
 // HCP Sync maintains; a failed read just means everyone starts blank (host types).
 async function loadGamesFormMembers() {
@@ -18425,7 +18555,7 @@ function gamesFormOpenSpotCount() {
     : gatheringRegData.filter(r => r.gatheringId === _gamesFormGathering && r.status === 'Yes');
   return rows.filter(r => isOpenSpotName(r.player)).length;
 }
-function gamesFormHcpIsNet() { return _gamesFormHcp.skins_basis === 'net' || _gamesFormHcp.birdiepay_basis === 'net' || _gamesFormHcp.ranking === true; }
+function gamesFormHcpIsNet() { return _gamesFormHcp.skins_basis === 'net' || _gamesFormHcp.birdiepay_basis === 'net' || _gamesFormHcp.ranking === true || (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.basis === 'net'); }
 function setGamesFormRanking(on) { _gamesFormHcp.ranking = !!on; refreshGamesFormHcpSection(); }
 // One player's resolved handicap, or { problem } if the host still owes a field.
 function gamesFormResolvePlayerHcp(name) {
@@ -18556,6 +18686,7 @@ function gamesFormOverCommit(dpp, yesCount) {
   const configs = {};
   if (_gamesFormSelected.has('cttp') && _gamesFormCttpConfig.dollar_per_hole > 0) configs.cttp = _gamesFormCttpConfig;
   if (_gamesFormSelected.has('birdieball') && _gamesFormBirdieballConfig.dollar_per_player > 0) configs.birdieball = _gamesFormBirdieballConfig;
+  if (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.dollar_per_player > 0) configs.fourball = _gamesFormFourballConfig;
   const pf = BFEngine.potFit(configs, dpp, yesCount);
   const cost = id => (pf.parts.find(p => p.id === id) || {}).cost || 0;
   return { cttpCost: cost('cttp'), bbRate: configs.birdieball ? configs.birdieball.dollar_per_player : 0,
@@ -18585,6 +18716,11 @@ function updateGamesFormPotPreview(yesCount) {
     const bbCost = _gamesFormBirdieballConfig.dollar_per_player * yesCount;
     remaining -= bbCost;
     lines.push(`🐦 MiserBall: $${bbCost.toFixed(2)} (${yesCount} × $${_gamesFormBirdieballConfig.dollar_per_player.toFixed(2)}), carved out`);
+  }
+  if (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.dollar_per_player > 0) {
+    const fbCost = _gamesFormFourballConfig.dollar_per_player * yesCount;
+    remaining -= fbCost;
+    lines.push(`🤝 Fourball: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), the winning pair splits it`);
   }
   // Birdie Payouts is a variable cost (flat $ × birdies actually made), so it
   // can't be totalled here — say so instead of showing a made-up number.
@@ -18637,6 +18773,16 @@ async function submitGatheringGames(gatheringId) {
     if (!(Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18)) { showToast('Birdie Payouts needs par data for this venue — add it in Venue Manager first', true); return; }
     birdiepay_config = { dollar_per_birdie: _gamesFormBirdiepayConfig.dollar_per_birdie, pars: _gamesFormBirdiepayPars.slice() };
   }
+  let game_configs = null;
+  if (games.includes('fourball')) {
+    const c = _gamesFormFourballConfig;
+    const rows = c.pairs.filter(pr => pr[0] || pr[1]);
+    if (rows.some(pr => !pr[0] || !pr[1])) { showToast('Fourball: finish or remove the incomplete pair', true); return; }
+    const fb = { dollar_per_player: c.dollar_per_player, basis: c.basis === 'net' ? 'net' : 'gross', net_mode: c.net_mode === 'low' ? 'low' : 'own', pairs: rows.map(pr => [pr[0], pr[1]]) };
+    const v = BFEngine.validateGameConfig('fourball', fb);
+    if (!v.ok) { showToast('Fourball: ' + v.errors[0], true); return; }
+    game_configs = { fourball: fb };
+  }
   const hcb = gamesFormBuildHandicapConfig();
   if (hcb.problem) { showToast(hcb.problem, true); return; }
   const btn = document.getElementById('btn-save-games');
@@ -18647,6 +18793,7 @@ async function submitGatheringGames(gatheringId) {
     if (cttp_config) payload.cttp_config = cttp_config;
     if (birdieball_config) payload.birdieball_config = birdieball_config;
     if (birdiepay_config) payload.birdiepay_config = birdiepay_config;
+    if (game_configs) payload.game_configs = game_configs;
     const resp = await gatheringsFetchJSON(`${BFE_API}/bfe/gathering-games`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
