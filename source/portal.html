@@ -3612,7 +3612,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.10.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.11.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -15683,8 +15683,9 @@ function renderGatheringPayoutHtml(s) {
   if (s.cttp) games.push(['cttp', '🎯']);
   if (s.birdieball) games.push(['birdieball', '🐦']);
   if (s.birdiepay) games.push(['birdiepay', '🐤']);
+  if (s.fourball) games.push(['fourball', '🤝']);
   const byName = new Map();
-  (s.payouts || []).forEach(r => byName.set(norm(r.player), { player: r.player, total: Number(r.total) || 0, skins: r.skins, cttp: r.cttp, birdieball: r.birdieball, birdiepay: r.birdiepay, given_back: r.given_back }));
+  (s.payouts || []).forEach(r => byName.set(norm(r.player), { player: r.player, total: Number(r.total) || 0, skins: r.skins, cttp: r.cttp, birdieball: r.birdieball, birdiepay: r.birdiepay, fourball: r.fourball, given_back: r.given_back }));
   if (hasRank) {
     (rk.gross || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.gross = r.total; e.strokes = r.strokes; byName.set(norm(r.player), e); });
     (rk.net || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.net = r.total; byName.set(norm(r.player), e); });
@@ -15770,6 +15771,25 @@ function renderGatheringPayoutHtml(s) {
     }
     panels.push({ key: 'bp', tab: '🐤 Birdie', html: h });
   }
+  // ── Fourball (Dev-93): better ball of each pair, lowest total wins, winners split the carve ──
+  if (s.fourball) {
+    const f = s.fourball;
+    const basisTxt = f.basis === 'net' ? (f.net_mode === 'low' ? 'net, off the low' : 'net, own strokes') : 'gross';
+    let h = label(`🤝 Fourball (${basisTxt}) — ${money(f.pot)}`);
+    if (f.net_missing) h += `<div style="font-size:0.72rem;color:#b8860b;margin-bottom:2px">Net was chosen but no strokes were on file, so this played gross</div>`;
+    if (f.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(f.configured_pot)}, but the pot only had ${money(f.pot)} left</div>`;
+    const wk = new Set((f.winners || []).map(w => w.map(norm).sort().join('|')));
+    h += (f.standings || []).map(r => {
+      const key = r.pair.map(norm).sort().join('|');
+      const won = wk.has(key);
+      const place = r.complete ? `${r.tied ? 'T' : ''}${r.place}` : '—';
+      const holes = (r.holes || []).filter(x => x.score != null);
+      return `<div style="padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.06)">${line(`<span style="color:var(--text-muted);display:inline-block;min-width:1.4rem">${place}</span><b>${r.pair.map(esc).join(' &amp; ')}</b>${r.complete ? '' : ` <span style="color:var(--text-muted)">(${r.played} holes in)</span>`}`, r.complete ? `${esc(r.total)}${won && f.per_player ? ` · ${money(f.per_player)} each` : ''}` : '—')}
+        ${holes.length ? `<details><summary style="font-size:0.72rem;color:var(--text-muted);cursor:pointer">Hole by hole</summary><div style="font-size:0.74rem;color:var(--text-muted);line-height:1.6">${holes.map(x => `#${esc(x.hole)} ${esc(x.score)}${x.by && x.by.length === 1 ? ` (${esc(x.by[0].split(' ')[0])})` : ''}`).join(' &nbsp;·&nbsp; ')}</div></details>` : ''}</div>`;
+    }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No pairs were set up</div>`;
+    if (!(f.winners || []).length) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">No pair finished all its holes — ${money(f.given_back_each)} back to each player</div>`;
+    panels.push({ key: 'fb', tab: '🤝 Fourball', html: h });
+  }
   // ── Strokes ──
   if (s.handicap) {
     let h = label(`⚖️ Strokes (${esc(s.handicap.allowance)}% allowance)`);
@@ -15807,7 +15827,8 @@ function gcReconcile(o) {
   const norm = v => String(v || '').trim().toLowerCase();
   const config = o.config || {};
   const hc = config.handicap_config || null;
-  const isNet = !!hc && (hc.skins_basis === 'net' || hc.birdiepay_basis === 'net');
+  const fbNet = !!(config.game_configs && config.game_configs.fourball && config.game_configs.fourball.basis === 'net' && (config.games || []).includes('fourball'));
+  const isNet = !!hc && (hc.skins_basis === 'net' || hc.birdiepay_basis === 'net' || fbNet);
   const have = new Set(Object.keys((hc && hc.players) || {}).map(norm));
   const acked = o.acked || new Set();
   const cardPlayers = o.cardPlayers || [];
@@ -16302,6 +16323,14 @@ function gatheringGameDetailsBody(evt, config) {
   if (bp) {
     const bpNet = bp.basis === 'net';
     rows.push(row('🐤', `Birdie Payouts · ${bpNet ? 'Net' : 'Gross'}`, `$${(bp.dollar_per_birdie || 0).toFixed(2)} for every ${bpNet ? 'net ' : ''}birdie, paid from the pot before Skins`, 'birdiepay'));
+  }
+  const fb = gatheringAddon(config, 'fourball');
+  if (fb) {
+    const cost = (fb.dollar_per_player || 0) * yesCount;
+    remaining -= cost;
+    const fbNet = fb.basis === 'net';
+    const prs = (fb.pairs || []).map(pr => `${escapeHtml(pr[0])} &amp; ${escapeHtml(pr[1])}`).join(' · ');
+    rows.push(row('🤝', `Fourball · ${fbNet ? (fb.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `Better ball of each pair · $${(fb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, winning pair splits it${prs ? `<br><b>Pairs:</b> ${prs}` : ''}`, 'fourball'));
   }
   if ((config.legacy.games || []).includes('skins')) {
     const sk = gatheringAddon(config, 'skins');

@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.10.0';
+  const ENGINE_VERSION = '1.11.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -523,7 +523,7 @@
   const _SPLIT = (a, b) => Array.from({ length: 18 }, (_, i) => (i < 9 ? a : b));
   defineGame('fourball', {
     kind: 'addon', input: 'strokes', net: true, entity: 'pair',
-    released: false,   // hidden from the live Games picker until its form is built (Dev-93 step by step)
+    released: true,
     meta: { label: 'Fourball', icon: '🤝', seal: 'FOURBALL', uiOrder: 5,
       info: 'Played in pairs. Everyone plays their own ball and the pair counts the better of its two scores on each hole (gross unless the host set it to Net). The pair with the lowest total wins and splits the Fourball pot; tied pairs split it. If a partner picks up, the other\'s score counts alone.' },
     config: [
