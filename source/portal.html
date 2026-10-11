@@ -3612,7 +3612,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.12.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.12.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -3729,6 +3729,8 @@ let DRAFT_CALC_ROUND = null;
 // same identity buildEventCard/findMyReg already use for non-gathering
 // events, so no new event-matching logic is needed.
 let CANCELED_EVENTS = {};
+// Dev-93 — one place to ask "is this event canceled?" (the card overlay, the At-the-course rail and the Live Panel all use it).
+function isEventCanceled(evt) { return !!evt && Object.prototype.hasOwnProperty.call(CANCELED_EVENTS, evt.name); }
 let groupingsMeta        = null;  // {eventName, status, visibility, publishedAt}
 // Dev-81 — which event getLiveEvent() should treat as "live" while Live Test
 // Mode / manual override is on, instead of always the next upcoming eligible
@@ -5019,12 +5021,21 @@ function atCourseMyRoundOk(e) {
 function atCourseCandidates() {
   const today = new Date().toDateString();
   return eventData
-    .filter(e => e.dt instanceof Date && !isNaN(e.dt) && e.dt.toDateString() === today && atCourseMyRoundOk(e))
+    .filter(e => e.dt instanceof Date && !isNaN(e.dt) && e.dt.toDateString() === today && !isEventCanceled(e) && atCourseMyRoundOk(e))
     .map(e => ({ evt: e, venue: findVenueByName(csNormalizedVenueName(e)) }));
 }
 function atCourseLatchKey(evtId) { return `bf_atcourse_on_${evtId}`; }
 function atCourseIsLatched(evtId) {
   try { return localStorage.getItem(atCourseLatchKey(evtId)) === '1'; } catch (e) { return false; }
+}
+// The off switch must stick: tapping it records a per-event "dismissed" flag that the tee-time and GPS triggers respect
+// (before this, the tee-window trigger re-latched the rail the instant it was turned off once the round had started).
+function atCourseDismissKey(evtId) { return `bf_atcourse_off_${evtId}`; }
+function atCourseIsDismissed(evtId) {
+  try { return localStorage.getItem(atCourseDismissKey(evtId)) === '1'; } catch (e) { return false; }
+}
+function atCourseDismiss(evtId, off) {
+  try { if (off) localStorage.setItem(atCourseDismissKey(evtId), '1'); else localStorage.removeItem(atCourseDismissKey(evtId)); } catch (e) {}
 }
 function atCourseLatch(evtId, on) {
   try { if (on) localStorage.setItem(atCourseLatchKey(evtId), '1'); else localStorage.removeItem(atCourseLatchKey(evtId)); } catch (e) {}
@@ -5035,8 +5046,9 @@ function atCourseLatch(evtId, on) {
 function atCourseToggleManual() {
   if (!_atCoursePick) return;
   const evtId = _atCoursePick.evt.id;
-  const nowOn = atCourseIsLatched(evtId);
+  const nowOn = !!_atCourse; // what the player is looking at, not just the stored latch
   atCourseLatch(evtId, !nowOn);
+  atCourseDismiss(evtId, nowOn);
   showToast(nowOn ? 'Rail off' : "At the course — you're in");
   refreshAtCourse();
 }
@@ -5047,7 +5059,9 @@ async function refreshAtCourse() {
   _atCoursePick = pick;
   if (!pick) { _atCourse = null; renderAtCourseRail(); renderAtCourseToggle(); return; }
   const evtId = pick.evt.id;
-  if (_atCourseUrlForce != null) { atCourseLatch(evtId, _atCourseUrlForce === '1'); _atCourseUrlForce = null; }
+  if (_atCourseUrlForce != null) { atCourseLatch(evtId, _atCourseUrlForce === '1'); atCourseDismiss(evtId, _atCourseUrlForce !== '1'); _atCourseUrlForce = null; }
+  // The player turned it off: stays off (all triggers) until they tap it on again.
+  if (atCourseIsDismissed(evtId)) { atCourseLatch(evtId, false); _atCourse = null; renderAtCourseRail(); renderAtCourseToggle(); return; }
   // Layer 3 checked first (cheapest, no GPS round-trip) — once latched by
   // ANY layer it stays on regardless of what triggered it originally.
   if (atCourseIsLatched(evtId)) {
@@ -8407,10 +8421,10 @@ function getLiveEvent() {
   // (event renamed/removed since it was picked).
   if (LIVE_OVERRIDE || LIVE_EVENT_TEST_MODE) {
     if (LIVE_TEST_EVENT_OVERRIDE) {
-      const picked = eventData.find(e => e.name === LIVE_TEST_EVENT_OVERRIDE && hasLivePanelSupport(e));
+      const picked = eventData.find(e => e.name === LIVE_TEST_EVENT_OVERRIDE && hasLivePanelSupport(e)); // an explicitly picked test round may be canceled; the default picks below may not
       if (picked) return picked;
     }
-    const picked = eventData.find(e => e.dt && hasLivePanelSupport(e)
+    const picked = eventData.find(e => e.dt && hasLivePanelSupport(e) && !isEventCanceled(e)
       && e.dt >= now - LIVE_EVENT_HOURS * 3600000) || null;
     // Dev-93 — manual stop wins even over a forced-on override, EXCEPT while
     // Live Test Mode itself is on: that's an explicit dry-run tool, and a
@@ -8421,6 +8435,7 @@ function getLiveEvent() {
   return eventData.find(e => {
     if (!e.dt) return false;
     if (!hasLivePanelSupport(e)) return false;
+    if (isEventCanceled(e)) return false;             // a canceled round never goes live
     if (e.name === LIVE_STOPPED_ROUND) return false;  // Dev-93 manual stop
     const msSinceTee = now - e.dt;
     if (msSinceTee < -LIVE_PRESTART_MINUTES * 60000) return false;  // opens 15 min before tee time
@@ -8449,7 +8464,7 @@ function _candidateLiveRoundByWindow() {
   const now = new Date();
   return eventData.find(e => {
     if (!e.dt) return false;
-    if (!hasLivePanelSupport(e)) return false;
+    if (!hasLivePanelSupport(e) || isEventCanceled(e)) return false;
     const msSinceTee = now - e.dt;
     return msSinceTee >= -LIVE_PRESTART_MINUTES * 60000 && msSinceTee <= LIVE_EVENT_HOURS * 3600000;
   }) || null;
@@ -18220,7 +18235,7 @@ function applyGamesSuggestion(force) {
   const note = document.getElementById('games-form-suggest-note');
   if (!input) return;
   const dpp = parseFloat(input.value) || 0;
-  const anyAmountGame = ['cttp', 'birdieball', 'birdiepay'].some(k => _gamesFormSelected.has(k));
+  const anyAmountGame = ['cttp', 'birdieball', 'birdiepay', 'fourball'].some(k => _gamesFormSelected.has(k));
   if (!(dpp > 0) || !anyAmountGame) { if (note) note.innerHTML = anyAmountGame ? 'Pick a buy-in and amounts for each game are suggested for you.' : ''; return; }
   if (force) _gamesFormTouched.clear();
   const n = Math.max(4, _gamesFormYesCount);
@@ -18229,6 +18244,8 @@ function applyGamesSuggestion(force) {
   if (sug.cttp && !_gamesFormTouched.has('cttp')) _gamesFormCttpConfig.dollar_per_hole = sug.cttp.dollar_per_hole;
   if (sug.birdieball && !_gamesFormTouched.has('birdieball')) _gamesFormBirdieballConfig.dollar_per_player = sug.birdieball.dollar_per_player;
   if (sug.birdiepay && !_gamesFormTouched.has('birdiepay')) _gamesFormBirdiepayConfig.dollar_per_birdie = sug.birdiepay.dollar_per_birdie;
+  if (sug.fourball && !_gamesFormTouched.has('fourball')) _gamesFormFourballConfig.dollar_per_player = sug.fourball.dollar_per_player;
+  const fs = document.getElementById('games-form-fourball-section'); if (fs) fs.innerHTML = gatheringGamesFourballSectionHtml();
   const cs = document.getElementById('games-form-cttp-section'); if (cs) cs.innerHTML = gatheringGamesCttpSectionHtml();
   const bs = document.getElementById('games-form-birdieball-section'); if (bs) bs.innerHTML = gatheringGamesBirdieballSectionHtml();
   const ps = document.getElementById('games-form-birdiepay-section'); if (ps) ps.innerHTML = gatheringGamesBirdiepaySectionHtml();

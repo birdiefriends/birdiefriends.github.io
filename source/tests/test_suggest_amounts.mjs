@@ -22,7 +22,7 @@ const els = { 'games-form-dpp': { value: '10' }, 'games-form-suggest-note': { in
 const ctx = { BFEngine: E, parseFloat, Math, Array, Set, document: { getElementById: id => els[id] || null },
   _gamesFormSelected: new Set(ALL), _gamesFormTouched: new Set(), _gamesFormYesCount: 0, _gamesFormPar3Holes: [3, 8, 11, 16],
   _gamesFormCttpConfig: { dollar_per_hole: null, hole_mode: 'all_par3', holes: [3, 8, 11, 16] }, _gamesFormBirdieballConfig: { dollar_per_player: null }, _gamesFormBirdiepayConfig: { dollar_per_birdie: null },
-  gatheringGamesCttpSectionHtml: () => '', gatheringGamesBirdieballSectionHtml: () => '', gatheringGamesBirdiepaySectionHtml: () => '', updateGamesFormPotPreview: () => {} };
+  gatheringGamesCttpSectionHtml: () => '', gatheringGamesBirdieballSectionHtml: () => '', gatheringGamesBirdiepaySectionHtml: () => '', gatheringGamesFourballSectionHtml: () => '', _gamesFormFourballConfig: { dollar_per_player: null }, updateGamesFormPotPreview: () => {} };
 vm.createContext(ctx);
 vm.runInContext(extractFn(src, 'applyGamesSuggestion') + ';this.go=applyGamesSuggestion;', ctx);
 ctx.go(false);
@@ -33,4 +33,10 @@ ok(ctx._gamesFormBirdieballConfig.dollar_per_player === 5 && ctx._gamesFormBirdi
 ctx.go(true);
 ok(ctx._gamesFormBirdieballConfig.dollar_per_player === 4, 'Re-suggest overrides typed amounts');
 ok(src.includes("bf_engine.js?v=" + E.ENGINE_VERSION), "engine version bumped with the script tag");
+// Fourball (Dev-93): whole pot alone, half the buy-in alongside other games
+ok(f({ dollarPerPlayer: 10, players: 4, games: ['fourball'] }).fourball.dollar_per_player === 10, 'Fourball alone -> the whole buy-in goes to the winning pair');
+ok(f({ dollarPerPlayer: 10, players: 4, games: ['fourball', 'skins'] }).fourball.dollar_per_player === 5, 'Fourball + Skins -> half the buy-in');
+ok(f({ dollarPerPlayer: 10, players: 4, games: ['skins'] }).fourball === null, 'not ticked -> no Fourball amount');
+{ const x = f({ dollarPerPlayer: 10, players: 4, games: ['fourball', 'cttp', 'birdieball'], cttpHoles: 4 }); ok(x.fourball.dollar_per_player === 5 && x.fourball.dollar_per_player * 4 + x.birdieball.dollar_per_player * 4 + x.cttp.dollar_per_hole * 4 <= 40, 'Fourball + side games still fit the pot'); }
+{ els['games-form-dpp'].value = '10'; const c2 = { ...ctx, _gamesFormSelected: new Set(['fourball']), _gamesFormTouched: new Set(), _gamesFormFourballConfig: { dollar_per_player: null } }; vm.createContext(c2); vm.runInContext(extractFn(src, 'applyGamesSuggestion') + ';this.go=applyGamesSuggestion;', c2); c2.go(false); ok(c2._gamesFormFourballConfig.dollar_per_player === 10, 'form fills the Fourball amount from the buy-in'); c2._gamesFormFourballConfig.dollar_per_player = 3; c2._gamesFormTouched.add('fourball'); c2.go(false); ok(c2._gamesFormFourballConfig.dollar_per_player === 3, 'a typed Fourball amount is kept'); c2.go(true); ok(c2._gamesFormFourballConfig.dollar_per_player === 10, 'Re-suggest overrides it'); }
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

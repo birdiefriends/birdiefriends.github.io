@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.12.0';
+  const ENGINE_VERSION = '1.12.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -933,7 +933,7 @@
     const n = Math.max(1, Math.floor(Number(players) || 0));
     const has = g => (games || []).includes(g);
     const dollars = x => Math.max(1, Math.round(x));
-    const out = { players: n, pot: B * n, cttp: null, birdieball: null, birdiepay: null };
+    const out = { players: n, pot: B * n, cttp: null, birdieball: null, birdiepay: null, fourball: null };
     if (!(B > 0)) return out;
     if (has('birdieball')) out.birdieball = { dollar_per_player: dollars(0.2 * B) };
     if (has('cttp')) {
@@ -945,6 +945,9 @@
       out.cttp = { dollar_per_hole: per, holes };
     }
     if (has('birdiepay')) out.birdiepay = { dollar_per_birdie: dollars(0.3 * B) };
+    // Fourball is the main event: on its own the winning pair takes the whole pot; with side games ticked it
+    // takes half and they share the rest (Skins gets whatever is left).
+    if (has('fourball')) out.fourball = { dollar_per_player: ['cttp', 'birdieball', 'birdiepay', 'skins'].some(has) ? dollars(0.5 * B) : dollars(B) };
     return out;
   }
 

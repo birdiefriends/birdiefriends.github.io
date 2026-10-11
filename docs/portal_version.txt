@@ -1,5 +1,5 @@
 v4.15.2 · 2026-10-11
-Deployed: 2026-10-11 (Games picker now groups games: Format (Fourball) above Side games (Skins, CTP, MiserBall, Birdie Payouts). Nothing changes in any payout.)
+Deployed: 2026-10-11 (Fixes: the At-the-course rail now stays off when you turn it off, even after tee time; a canceled event no longer launches the rail or the Live Panel. Games form: Fourball gets a suggested $ per player like the other games.)
 
 v4.15.1 · 2026-10-09
 Deployed: 2026-10-09 (BF Weekend Times: a Sub on an 8-player event no longer sees the "You're the 5th player — spot not yet confirmed" banner. That warning is only for the 5th Yes player. A Sub now reads: Registered as Sub — committed players have priority.)
