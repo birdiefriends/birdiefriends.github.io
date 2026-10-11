@@ -1,5 +1,5 @@
 v4.15.2 · 2026-10-11
-Deployed: 2026-10-11 (New game: Fourball. Pairs of players count their better score on every hole, gross or net, and the lowest pair total wins its own prize. Hosts pick the pairs (or tap Suggest pairs) when setting up Games, and results show in the Close sheet, My History and the event card.)
+Deployed: 2026-10-11 (Games picker now groups games: Format (Fourball) above Side games (Skins, CTP, MiserBall, Birdie Payouts). Nothing changes in any payout.)
 
 v4.15.1 · 2026-10-09
 Deployed: 2026-10-09 (BF Weekend Times: a Sub on an 8-player event no longer sees the "You're the 5th player — spot not yet confirmed" banner. That warning is only for the 5th Yes player. A Sub now reads: Registered as Sub — committed players have priority.)

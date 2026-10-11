@@ -3612,7 +3612,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.11.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.12.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -18236,7 +18236,7 @@ function applyGamesSuggestion(force) {
   updateGamesFormPotPreview();
 }
 function gatheringGamesChecklistHtml() {
-  return Object.keys(GATHERING_GAMES_META).filter(k => true).map(key => {
+  const item = key => {
     const meta = GATHERING_GAMES_META[key];
     const checked = _gamesFormSelected.has(key);
     return `<div style="margin-bottom:8px"><div onclick="toggleGamesFormGame('${key}')"
@@ -18247,7 +18247,11 @@ function gatheringGamesChecklistHtml() {
       <span style="font-weight:600;flex:1;color:${checked ? 'var(--green-dark)' : 'var(--text)'}">${meta.icon} ${meta.label}</span>
       ${gameInfoBtnHtml('form', key)}
     </div>${gameInfoPanelHtml('form', key)}</div>`;
-  }).join('');
+  };
+  // Dev-93: Format (how the round is scored) above Side games (bets on any scorecards); the registry says which is which.
+  const keys = Object.keys(GATHERING_GAMES_META);
+  const groups = BFEngine.GAME_GROUPS.map(([g, label]) => [label, keys.filter(k => (GATHERING_GAMES_META[k].group || 'side') === g)]).filter(([, ks]) => ks.length);
+  return groups.map(([label, ks]) => `<div style="font-size:0.72rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:12px 0 6px">${label}</div>${ks.map(item).join('')}`).join('');
 }
 function toggleGamesFormGame(key) {
   if (_gamesFormSelected.has(key)) {

@@ -82,7 +82,7 @@ for (let t = 0; t < 400; t++) {
   ok(Math.abs(paid + r.unallocated - r.total_pot) < 1e-9, 'fuzz ' + t + ': conservation (' + chosen.join(',') + ')');
 }
 // 7. UI helpers: stable host-facing order, unique uiOrder, text lives only in the definition
-ok(E.gamesInUiOrder().join() === 'skins,cttp,birdieball,birdiepay,fourball', 'UI order: the four existing games keep their place, Fourball is last');
+ok(E.gamesInUiOrder().join() === 'fourball,skins,cttp,birdieball,birdiepay', 'UI order: Format group first (Fourball), then the side games in their old order');
 ok(new Set(addons.map(id => E.getGame(id).meta.uiOrder)).size === addons.length, 'uiOrder is unique per game');
 ok(E.gamesInUiOrder().includes('fourball') && E.gamesUiMeta().fourball && E.gamesInfo().fourball, 'released Fourball shows in the portal tables');
 ok((() => { const g = E.getGame('fourball'); g.released = false; const hidden = !E.gamesInUiOrder().includes('fourball') && !E.gamesUiMeta().fourball; g.released = true; return hidden; })(), 'the released flag still hides a game when off');
@@ -180,5 +180,13 @@ ok(/function gamesFormOverCommit[\s\S]{0,900}BFEngine\.potFit\(/.test(psrc), 'po
   ok(r.payouts.every(p => p.total === 10) && r.handicap && r.handicap.missing.length === 4, 'net with no handicap_config: no crash, plays everyone at 0 strokes (a gross tie split) and lists all four as missing, same rule as Skins');
   // a games list without fourball ignores a stray game_configs.fourball
   ok(E.gatheringConfigFromLegacy(Object.assign({}, row, { games: ['skins'] })).addons.every(a => a.id !== 'fourball'), 'fourball config is ignored unless the game is ticked');
+}
+// Dev-93: picker groups — Format above Side games, driven by the registry
+{
+  const m = E.gamesUiMeta();
+  ok(m.fourball.group === 'format' && ['skins','cttp','birdieball','birdiepay'].every(k => m[k].group === 'side'), 'groups: Fourball is a format, the rest are side games');
+  ok(E.GAME_GROUPS.map(g => g[1]).join() === 'Format,Side games', 'groups: headings Format / Side games');
+  const order = E.gamesInUiOrder(); const lastFormat = Math.max(...order.map((k, i) => m[k].group === 'format' ? i : -1)); const firstSide = order.findIndex(k => m[k].group === 'side');
+  ok(lastFormat < firstSide, 'groups: every format sorts before every side game');
 }
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

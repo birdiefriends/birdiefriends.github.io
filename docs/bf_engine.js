@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.11.0';
+  const ENGINE_VERSION = '1.12.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -524,7 +524,7 @@
   defineGame('fourball', {
     kind: 'addon', input: 'strokes', net: true, entity: 'pair',
     released: true,
-    meta: { label: 'Fourball', icon: '🤝', seal: 'FOURBALL', uiOrder: 5,
+    meta: { label: 'Fourball', icon: '🤝', seal: 'FOURBALL', uiOrder: 5, group: 'format',
       info: 'Played in pairs. Everyone plays their own ball and the pair counts the better of its two scores on each hole (gross unless the host set it to Net). The pair with the lowest total wins and splits the Fourball pot; tied pairs split it. If a partner picks up, the other\'s score counts alone.' },
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
@@ -632,11 +632,16 @@
   // UI helpers: the portal builds its pickers, (i) panels and event-card seal from these, so a game's
   // label/icon/rules text/seal live ONLY in its definition. Order is the order hosts see them.
   function gamesInUiOrder() {
-    return listGames('addon').filter(id => ADDONS[id].released !== false).sort((x, y) => (ADDONS[x].meta.uiOrder || 99) - (ADDONS[y].meta.uiOrder || 99));
+    return listGames('addon').filter(id => ADDONS[id].released !== false).sort((x, y) => groupRank(x) - groupRank(y) || (ADDONS[x].meta.uiOrder || 99) - (ADDONS[y].meta.uiOrder || 99));
   }
+  // Dev-93: the picker groups games — 'format' (how the round is scored: Fourball, later Foursomes / Match Play)
+  // above 'side' (side bets that work on any scorecards: Skins, CTP, MiserBall, Birdie Payouts). Default is 'side'.
+  const GAME_GROUPS = [['format', 'Format'], ['side', 'Side games']];
+  function gameGroup(id) { return ADDONS[id] && ADDONS[id].meta && ADDONS[id].meta.group === 'format' ? 'format' : 'side'; }
+  function groupRank(id) { return gameGroup(id) === 'format' ? 0 : 1; }
   function gamesUiMeta() {
     const out = {};
-    gamesInUiOrder().forEach(id => { out[id] = { label: ADDONS[id].meta.label, icon: ADDONS[id].meta.icon }; });
+    gamesInUiOrder().forEach(id => { out[id] = { label: ADDONS[id].meta.label, icon: ADDONS[id].meta.icon, group: gameGroup(id) }; });
     return out;
   }
   function gamesInfo() {
@@ -946,7 +951,7 @@
   return {
     ENGINE_VERSION,
     BASE_GAMES, ADDONS,
-    getGame, listGames, recommendPairs, gamesInUiOrder, gamesUiMeta, gamesInfo, gamesSealLabels, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
+    getGame, listGames, recommendPairs, GAME_GROUPS, gamesInUiOrder, gamesUiMeta, gamesInfo, gamesSealLabels, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
     skinsWon, betterBallHoles,
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,

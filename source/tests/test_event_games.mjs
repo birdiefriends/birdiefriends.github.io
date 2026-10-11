@@ -4,7 +4,7 @@
 // routing, closed-result protection, the games checklist for shadows.
 import fs from 'fs'; import vm from 'node:vm'; import { fileURLToPath, pathToFileURL } from 'url';
 import { DatabaseSync } from 'node:sqlite';
-import { extractFn } from './extract.mjs';
+import { extractFn, loadEngine } from './extract.mjs';
 const HERE = (p) => fileURLToPath(new URL(p, import.meta.url));
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const W = (await import(pathToFileURL(HERE('../bf_experiences_worker.js')).href)).default;
@@ -63,7 +63,7 @@ const mkCtx = (over = {}) => {
   const ctx = { Number, String, Map, Set, Date, isNaN, Object, currentPlayer: 'Brian Hager', isGuest: () => false, formatBadge: f => f || '', isBFEBackedCard: () => false,
     findMyReg: () => ({ status: 'Yes' }), gatheringRoundConfig: gid => (ctx._cfgs || {})[gid] || null, gatheringIsGamed: c => !!c,
     GATHERING_GAMES_META: { skins: { label: 'Skins', icon: 'S' }, cttp: { label: 'CTP', icon: 'C' }, birdieball: { label: 'BB', icon: 'B' }, birdiepay: { label: 'BP', icon: 'P' } }, ...over };
-  vm.createContext(ctx); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
+  vm.createContext(ctx); ctx.BFEngine = loadEngine(); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
   vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') + '\nvar _eventShadows = new Map(), _eventShadowByGid = new Map(), _closedGamesGids = new Set(), _gamesFormShadow = false, _gamesFormSelected = new Set();', ctx);
   return ctx;
 };
