@@ -994,3 +994,69 @@ the course is flagged until the person claims it. (Duplicates: match on cell num
 **Not built (Release 2, agreed but not started):** (1) an inactivity **grace rule**: the daily check (`runInactivityCheck`) flips any member with no Yes/Sub registration in 60 days to InActive, including a brand-new member or one with a pending invite; they should be exempt for a window (suggest 30 days since the Membership submission date, or an upcoming invite). (2) The event card lists registrations only, so **invited-but-not-answered players are invisible**; show them dimmed, apart from the registered players. (3) The Edit form's player list should read as invitations vs playing.
 
 **Sub rules (v4.15.1, policy open):** the BF Weekend Times capacity engine (`getWeekendCapacityStatus`) locks Yes inside 48 hours when fewer than 6 Yes are in; a Sub on an 8-player event reads "Registered as Sub — committed players have priority" (6+ Yes: "Registered — Confirmed"). Brian described a finer rule (3 Yes with 48 h to go: the Sub is still valid; 4: out of luck; 5: the deciding vote on two threesomes) and a dislike of waffling, but chose to leave the rules alone for now. If he wants it, write it as a table keyed on Yes count and hours to tee, then build a state-aware status line.
+
+---
+
+## 13. Game registry — one definition per game, and the BF Cup games on top of it (design note, Dev-93, 2026-10-11; NOT built — awaiting Brian's sign-off)
+
+**Why now.** Brian (Dev-93): add Foursomes, Fourball and Match Play for the 2026 BF Cup (11/7–8, set up in BFE-A), and first change the engine design so adding a game is cheap. §2/§2a/§9 already fix the *contract* (Round Config v1; base game + add-ons; `roundConfig()`; every consumer reads, none re-derive). This section fixes what is still open: **the shape of one game definition**, the **conformance test**, and a **build order that lands before 11/7**.
+
+### 13.1 What "adding a game" costs today (measured, Dev-89/91)
+A new add-on (Birdie Payouts) touched ~17 portal functions, ~28 Worker places, ~14 engine places, plus a D1 `ALTER`. The *carve logic* was one registry entry; the other ~55 places are the same game described again (label, icon, seal text, (i) text, config fields, validation, form section, pot-fit cost, suggestion rule, details row, result renderer, Worker `VALID_GAMES`/column). BFE-Admin adds ~35 `engine ===` checks and a separate `ENGINES`/`INFLUENCERS` registry. A match-play game needs more than any add-on did (sides, pairings, a different result shape), so doing it on the current pattern would multiply that.
+
+### 13.2 One definition, two kinds
+```js
+GAMES[id] = {
+  kind: 'base' | 'addon',
+  meta: { label, icon, sealLabel, info },          // all UI copy lives here, nowhere else
+  entity: 'individual' | 'pair' | 'side',          // what the game scores (spec §6)
+  input:  'strokes' | 'hole_result',               // what must be captured (spec §5)
+  config: [ { key, type:'int|money|holes|enum|bool', label, default, min, max, when? } ],
+                                                    // ONE schema drives: the form, the saved shape, and Worker validation
+  formats: { fourball:{unit:'pair', derive:'best_ball'}, ... },   // base games only
+  compute(cfg, inputs) -> result,                  // pure, in bf_engine.js, Node-testable
+  fixedCost(cfg, ctx) -> $,                        // add-ons: lets the pot-fit guard be generic
+  suggest(ctx) -> cfg,                             // optional "Suggest amounts"
+  result: { sections: [ {title, rows, chips} ] },  // declarative result layout; custom renderer only if needed
+  live: null | 'ctp_widget' | 'birdieball_widget' | 'match_tap',  // names a live-input UI that stays hand-built
+  fixtures: [ { cfg, inputs, expect } ]            // conformance cases (13.5)
+}
+```
+- **Base games** (one per round): `scorecard_only`, `stableford`, `scramble_pair`, `points_by_score_type` (Phase B), **`match_play`** (new). **Add-ons** (many per round): `cttp`, `birdieball`, `birdiepay`, `skins`, later `podium`, `bf_ball`, carryover skins.
+- **Formats are data, not code.** `match_play` is ONE base game; Singles / Fourball / Foursomes are three `formats` entries that differ only in `unit` and `derive` (`player` own ball / `pair` best ball / `pair` shared ball). So "add Foursomes and Fourball" = two small entries, and a future Greensomes/Chapman is one more.
+- **What stays custom per game:** the compute function, any live-input widget, and anything team-structural (pairings/sides, 13.4). Everything else is declared.
+- **Storage:** one generic JSON per game id (Gatherings: a single `game_configs TEXT` column on `bfe_gathering_games`; BFE-A: `bfe_event_rounds.config`, spec §2a.6). Legacy columns keep being read through the existing `…ConfigFromLegacy()` adapters; closed `payout_summary` snapshots stay frozen. One ALTER, then no more per-game migrations.
+
+### 13.3 The BF Cup games, expressed on it
+| Piece | Definition |
+|---|---|
+| `match_play` base game | `entity: 'side'`, `input: 'hole_result' \| 'strokes'` (spec §2a.9 Q4), `compute` = §2a.4 `matchState()` per match, then points per `rollup.points`, then side totals |
+| Singles | `unit:'player'`, `derive:null` — each player's own score; low wins the hole |
+| Fourball | `unit:'pair'`, `derive:'best_ball'` — lower of the two scores per side per hole |
+| Foursomes | `unit:'pair'`, `derive:'shared_ball'` — one score per side per hole (alternate shot; the app only records the number) |
+| Skins / CTP on BF Cup | existing add-ons, `entity:'individual'`; **Skins needs per-player strokes** → favors `input:'strokes'` (Q4) |
+| Handicap | `scratch` for 2026 (no strokes given) — §4 not on the critical path |
+
+### 13.4 The only genuinely new structural piece: sides and matches
+Everything above is a registry entry; this part is *data and UI*, and it is the real deadline risk:
+- **Event:** `sides` (name, color, assignment), `sideTarget`, plus the round list with each round's `base.game='match_play'`, `format`, `rollup`.
+- **Groupings:** a match is a playing group made of two sides' players (`side_key` on `bfe_round_groups`, `match_key` when one group carries two matches). Reuses the 2Man draft UI for captains' picks.
+- **Capture:** hole-by-hole per match (`/bfe/match-holes` upsert or existing `/scorecards`), last write per hole wins.
+- **Results:** `bfe_round_matches`, side totals, a results section.
+These are §2a.6/§2a.10 as already drafted; this note does not change them.
+
+### 13.5 Conformance test (what makes adding a game safe)
+`test_game_registry.mjs` loops over every registered id and, with no per-game test code: (1) required members present; (2) every `config` field has a default and the defaults validate; (3) each `fixtures` case reproduces `expect` exactly; (4) **conservation fuzz** — add-ons never pay out more than the pot and the ledger sums to the pot; (5) gross and net paths for net-capable games; (6) the generic Worker validator accepts exactly what the form can produce. `test_engine_parity.mjs` keeps pinning the Dev-87 Gatherings output byte-for-byte. A new game is "done" when it adds fixtures and the loop passes.
+
+### 13.6 Build order, sized against 11/7 (27 days from this note)
+Brian's standing rule is small shippable slices and never a big-bang rewrite. The full registry (portal form/preview/details/results all looping over it, plus the BFE-Admin `engine ===` retirement) is larger than the BF Cup need. Proposal — **"registry-lite first, loops second":**
+1. **R1 — engine registry shape (no behavior change).** Re-express `cttp`, `birdieball`, `birdiepay`, `skins` and `scorecard_only` as definitions (meta + config schema + compute + fixtures); `computeRoundPayout` reads the registry; the conformance test and parity suite stay green.
+2. **R2 — `match_play` + formats, test-first** as pure functions with fixtures (singles/fourball/foursomes, early close "3&2", dormie, halved, points). Nothing wired yet.
+3. **R3 — config schema drives the Worker validation** (generic `game_configs`, one deploy).
+4. **R4 — BFE-A: sides, side-aware Groupings, match capture, Close Round for `match_play`, results section** (spec §2a.10 slices 3–5). This is the BF Cup critical path.
+5. **R5 — go/no-go checkpoint ~10/24.** If R4 isn't solid, BF Cup runs on the Jotform/manual fallback already agreed (§9) and R4 continues for later events.
+6. **After BF Cup:** portal Games form/preview/details/results loop over the registry (so the next add-on is declarative), BFE-Admin `engine ===` retirement (Phase B).
+
+### 13.7 Decisions needed from Brian
+**Registry (this note):** (a) approve "registry-lite first, loops second" (13.6), or want the full portal loop before BF Cup; (b) first proof game after BF Cup (carryover skins was the earlier candidate).
+**BF Cup (spec §2a.9, still unanswered — these gate R4):** sessions and formats per day (e.g. Sat fourball + foursomes, Sun singles), field size; points per win/half/loss, points to clinch, tie rule; side selection (captains' draft / assigned / random); live capture (hole results vs strokes — Skins needs strokes); keep recording after a match closes early?; money; venue(s).
