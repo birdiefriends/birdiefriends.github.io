@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.4.0';
+  const ENGINE_VERSION = '1.5.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -359,6 +359,174 @@
     }
   };
 
+  // ── Game definitions (Dev-93, spec §13) ────────────────────────────────
+  // ONE definition per game. The carve/compute logic above is untouched; this
+  // layer attaches everything ELSE a game needs so no other file has to
+  // describe it again:
+  //   kind     'addon' (many per round, carved from the pot) | 'base' (one per round)
+  //   meta     { label, icon, seal, info } — all UI copy (portal reads it from here)
+  //   input    what must be captured: 'strokes' | 'hole_result' | 'none'
+  //   net      true when the game can be played Net (reads strokes via netCard)
+  //   config   field schema — drives the form, the saved shape and Worker validation:
+  //            { key, type:'money'|'int'|'holes'|'pars'|'enum', label, default,
+  //              min?, positive?, values?, required? }
+  //   fixedCost(cfg, ctx{players}) -> $ this game sets aside before the residual game
+  //   fixtures [{ name, round:{dollar_per_player, addons, handicap?}, inputs, expect }]
+  //            run automatically by test_game_registry.mjs
+  // A new game is "done" when it has a definition, fixtures, and the loop passes.
+  function defineGame(id, def) {
+    const target = ADDONS[id] || BASE_GAMES[id];
+    if (!target) throw new Error('defineGame: unknown game ' + id);
+    Object.assign(target, def);
+    return target;
+  }
+  const _P = (name, holes, extra) => Object.assign({ player: name, holes }, extra || {});
+  const _H = (...v) => { const a = v.slice(); while (a.length < 18) a.push(null); return a; };
+
+  defineGame('cttp', {
+    kind: 'addon', input: 'none', net: false,
+    meta: { label: 'CTP', icon: '🎯', seal: 'CTP',
+      info: 'Closest to the Pin on the chosen holes (usually the par 3s). Whoever is closest on a hole wins that hole\'s fixed $ prize, taken from the pot. Claim it in the Live Panel; the newest claim leads. An unclaimed hole\'s money rolls into Skins.' },
+    config: [
+      { key: 'dollar_per_hole', type: 'money', label: '$ per hole', default: 0, positive: true },
+      { key: 'holes', type: 'holes', label: 'Holes', default: [], required: true }
+    ],
+    fixedCost: cfg => (Number(cfg.dollar_per_hole) || 0) * ((cfg.holes || []).length),
+    fixtures: [{
+      name: 'two holes, one claimed, one unclaimed rolls to skins',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'cttp', entity: 'individual', dollar_per_hole: 3, holes: [3, 7] },
+        { id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
+      inputs: { scorecards: [_P('Ann', _H(4, 4, 3)), _P('Bob', _H(5, 4, 4)), _P('Cy', _H(5, 5, 5)), _P('Di', _H(6, 5, 5))],
+        ctpLeaders: { 3: { player: 'Ann', dist: 6 } } },
+      // pot 40: CTP set-aside 6, skins pot 34 + 3 unclaimed = 37 over 2 skins = 18 each, $1 left over
+      expect: { payouts: { Ann: 3 + 36, Bob: 0, Cy: 0, Di: 0 }, unallocated: 1, results: { cttp: { unclaimed_to_skins: 3 }, skins: { per_skin: 18 } } }
+    }]
+  });
+
+  defineGame('birdieball', {
+    kind: 'addon', input: 'none', net: false,
+    meta: { label: 'MiserBall', icon: '🐦', seal: 'BIRDIEBALL',
+      info: 'Everyone starts with one ball. Keep it all round and you win: everyone who still has theirs at the end splits the pot. If everybody loses theirs, the last MiserBall standing (the one lost latest) wins. Lose yours? Tap "I lost it" in the Live Panel so the group knows, and confirm on your scorecard.' },
+    config: [{ key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true }],
+    fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
+    // A per-player rate above the whole buy-in is impossible at any headcount.
+    maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
+    fixtures: [{
+      name: 'two keepers split the ball pot',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'birdieball', entity: 'individual', dollar_per_player: 2 },
+        { id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
+      inputs: { scorecards: [_P('Ann', _H(4, 4)), _P('Bob', _H(5, 4)), _P('Cy', _H(5, 5)), _P('Di', _H(6, 5))],
+        bbAnswers: [{ player_name: 'Ann', kept: true }, { player_name: 'Bob', kept: true },
+          { player_name: 'Cy', kept: false, lost_hole: 4, lost_stroke: 1 }, { player_name: 'Di', kept: false, lost_hole: 9, lost_stroke: 2 }] },
+      // pot 40: ball pot 8 split by 2 keepers = 4 each; skins 32 to Ann (1 skin)
+      expect: { payouts: { Ann: 36, Bob: 4, Cy: 0, Di: 0 }, unallocated: 0, results: { birdieball: { mode: 'kept', per_winner: 4 }, skins: { per_skin: 32 } } }
+    }]
+  });
+
+  defineGame('birdiepay', {
+    kind: 'addon', input: 'strokes', net: true,
+    meta: { label: 'Birdie Payouts', icon: '🐤', seal: 'BIRDIE PAY',
+      info: 'A flat $ for every birdie or better, paid to whoever made it, from the same pot before Skins (gross unless the host set it to Net, where a par with a stroke counts). An eagle still pays one birdie. Nothing to enter: it\'s worked out from the scorecards when the round closes.' },
+    config: [
+      { key: 'dollar_per_birdie', type: 'money', label: '$ per birdie', default: 0, positive: true },
+      { key: 'pars', type: 'pars', label: 'Par by hole', default: [], required: true }
+    ],
+    fixedCost: () => 0,   // sized by birdies made, capped to the pot at close — never a fixed set-aside
+    fixtures: [{
+      name: 'one birdie and one eagle each pay the flat amount',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'birdiepay', entity: 'individual', dollar_per_birdie: 3, pars: [4, 4, 3, 5, 4, 4, 3, 5, 4, 4, 4, 3, 5, 4, 4, 3, 5, 4] },
+        { id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
+      inputs: { scorecards: [_P('Ann', _H(3, 4, 3)), _P('Bob', _H(4, 4, 1)), _P('Cy', _H(5, 5, 4)), _P('Di', _H(5, 6, 4))] },
+      // Ann birdies #1, Bob aces the par-3 #3 (still ONE payout): 2 x $3 = 6; skins 34 over 2 skins = 17 each
+      expect: { payouts: { Ann: 20, Bob: 20, Cy: 0, Di: 0 }, unallocated: 0, results: { birdiepay: { count: 2, paid_each: 3, total_paid: 6 }, skins: { per_skin: 17 } } }
+    }]
+  });
+
+  defineGame('skins', {
+    kind: 'addon', input: 'strokes', net: true, residual: true,
+    meta: { label: 'Skins', icon: '⛳', seal: 'SKINS',
+      info: 'Every hole is its own prize. The lowest score on a hole, outright, wins that skin (gross unless the host set it to Net); a tie wins nothing. Skins split whatever is left of the pot after CTP, MiserBall and Birdie Payouts, shared by the skins won.' },
+    config: [{ key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' }],
+    fixedCost: () => 0,   // the residual game: takes whatever the others leave
+    fixtures: [{
+      name: 'outright low wins, a tie wins nothing',
+      round: { dollar_per_player: 10, addons: [{ id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
+      inputs: { scorecards: [_P('Ann', _H(3, 4, 5)), _P('Bob', _H(4, 4, 5)), _P('Cy', _H(5, 5, 6)), _P('Di', _H(6, 6, 6))] },
+      // pot 40, one outright skin (#1; #2 and #3 tie) takes it all
+      expect: { payouts: { Ann: 40, Bob: 0, Cy: 0, Di: 0 }, unallocated: 0, results: { skins: { per_skin: 40 } } }
+    }]
+  });
+
+  // ── Registry helpers — what every other file calls instead of re-describing a game ──
+  const KIND_ORDER = ['addon', 'base'];
+  function getGame(id) { return ADDONS[id] || BASE_GAMES[id] || null; }
+  function listGames(kind) {
+    const src = kind === 'base' ? BASE_GAMES : ADDONS;
+    return Object.keys(src).filter(id => src[id].meta).sort((a, b) => (src[a].order || 0) - (src[b].order || 0));
+  }
+  function defaultConfig(id) {
+    const g = getGame(id);
+    const out = {};
+    ((g && g.config) || []).forEach(f => { out[f.key] = Array.isArray(f.default) ? f.default.slice() : f.default; });
+    return out;
+  }
+  // Validates one game's config against its declared schema. Pure; the Worker
+  // runs the same function so form and server can't disagree.
+  function validateGameConfig(id, cfg) {
+    const g = getGame(id);
+    const errors = [];
+    if (!g) return { ok: false, errors: ['unknown game ' + id] };
+    cfg = cfg || {};
+    (g.config || []).forEach(f => {
+      const v = cfg[f.key];
+      const missing = v === undefined || v === null;
+      if (missing) { if (f.required) errors.push(f.label + ' is required'); return; }
+      if (f.type === 'money' || f.type === 'int') {
+        const n = Number(v);
+        if (!Number.isFinite(n)) errors.push(f.label + ' must be a number');
+        else if (f.type === 'int' && !Number.isInteger(n)) errors.push(f.label + ' must be a whole number');
+        else if (f.positive && !(n > 0)) errors.push(f.label + ' must be more than 0');
+        else if (f.min != null && n < f.min) errors.push(f.label + ' must be at least ' + f.min);
+      } else if (f.type === 'holes') {
+        if (!Array.isArray(v) || !v.length) errors.push(f.label + ': pick at least one hole');
+        else if (!v.every(h => Number.isInteger(h) && h >= 1 && h <= 18) || new Set(v).size !== v.length) errors.push(f.label + ' must be unique holes 1-18');
+      } else if (f.type === 'pars') {
+        if (!Array.isArray(v) || v.length !== 18 || !v.every(p => Number(p) > 0)) errors.push(f.label + ' needs 18 par values');
+      } else if (f.type === 'enum') {
+        if (!(f.values || []).includes(v)) errors.push(f.label + ' must be one of ' + (f.values || []).join('/'));
+      }
+    });
+    return { ok: errors.length === 0, errors };
+  }
+  // Generic pot-fit guard: every selected game declares its own fixed set-aside,
+  // so the guard never hard-codes CTP + MiserBall. configs = { gameId: cfg }.
+  // problem wording matches the Dev-89 portal text exactly.
+  function potFit(configs, dollarPerPlayer, players) {
+    const dpp = Number(dollarPerPlayer) || 0;
+    const n = Math.max(0, Math.floor(Number(players) || 0));
+    const parts = [];
+    let problem = null;
+    listGames('addon').forEach(id => {
+      const g = ADDONS[id];
+      if (!configs || !configs[id] || !g.fixedCost) return;
+      const cost = g.fixedCost(configs[id], { players: n }) || 0;
+      if (cost > 0) parts.push({ id, label: g.meta.label, cost });
+      const rate = g.maxPerPlayer ? g.maxPerPlayer(configs[id]) : 0;
+      if (!problem && dpp > 0 && rate > dpp) {
+        problem = `${g.meta.label} ($${rate.toFixed(2)}/player) is more than the whole $${dpp.toFixed(2)} each player puts in`;
+      }
+    });
+    const fixedCost = parts.reduce((a, p) => a + p.cost, 0);
+    const pot = dpp * n;
+    if (!problem && dpp > 0 && n > 0 && fixedCost > pot) {
+      problem = `${parts.map(p => p.label).join(' + ')} come to $${fixedCost.toFixed(2)}, more than the $${pot.toFixed(2)} pot (${n} confirmed × $${dpp.toFixed(2)}) — lower a rate or raise $ per Player`;
+    }
+    return { parts, fixedCost, pot, problem };
+  }
+
   // ── Base-game registry (Phase A: only what Gatherings uses) ─────────────
   // scorecard_only: no competition of its own — the round exists to carry
   // cards; any money comes from add-ons. Phase B registers stableford,
@@ -366,6 +534,11 @@
   const BASE_GAMES = {
     scorecard_only: { id: 'scorecard_only' }
   };
+  defineGame('scorecard_only', {
+    kind: 'base', input: 'strokes', net: false, entity: 'individual', order: 0,
+    meta: { label: 'Scorecards only', icon: '📋', seal: '', info: 'No competition of its own: the round carries scorecards, and any money comes from the add-on games.' },
+    config: [], fixtures: []
+  });
 
   // ── Round Config v1 from a Gathering's bfe_gathering_games row ─────────
   // (spec §2a.5). Legacy rows are adapted, never migrated. An add-on is
@@ -541,6 +714,7 @@
   return {
     ENGINE_VERSION,
     BASE_GAMES, ADDONS,
+    getGame, listGames, defaultConfig, validateGameConfig, potFit,
     skinsWon,
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,

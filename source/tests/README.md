@@ -14,6 +14,7 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_gathering_payout.mjs` | `computeGatheringGamesPayout`: Skins (gross, outright, ≥2 scores), CTP (unclaimed → Skins), BirdieBall (kept / held longest / give-back), round-down, conservation |
 | `test_gathering_close_ui.mjs` | Close & Calculate sheet, save payload, host gate, My History results + Reopen, aged-out Gatherings |
 | `test_birdie_payouts.mjs` | Birdie Payouts add-on: birdie-or-better count vs par, flat $ from the pot before Skins, cap, 9-hole back nine, no-par-data, conservation fuzz, old snapshots unchanged, Host Panel form/save payload, results + event-card details, Worker wiring |
+| `test_game_registry.mjs` | Dev-93 conformance loop over every registered game: required members, config schema, fixtures reproduce exact payouts, validator, generic pot-fit guard wording, 400-round conservation fuzz |
 | `test_score_mode.mjs` | `evtScoreMode`: any gamed Gathering captures strokes |
 | `test_ctp_d1.mjs` | Gathering CTP on D1 (load/submit/undo) vs Series on Jotform |
 | `test_at_course.mjs` | At-the-course rail: location gate, beta gate, test mode (expiry, tap-off), auto-tuck with Live Panel |
