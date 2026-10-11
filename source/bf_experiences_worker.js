@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.8.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.9.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -652,7 +652,8 @@ const GAME_SCHEMAS = {
         "type": "money",
         "label": "$ per hole",
         "default": 0,
-        "positive": true
+        "positive": true,
+        "required": true
       },
       {
         "key": "hole_mode",
@@ -682,7 +683,8 @@ const GAME_SCHEMAS = {
         "type": "money",
         "label": "$ per player",
         "default": 0,
-        "positive": true
+        "positive": true,
+        "required": true
       }
     ]
   },
@@ -694,7 +696,8 @@ const GAME_SCHEMAS = {
         "type": "money",
         "label": "$ per player",
         "default": 0,
-        "positive": true
+        "positive": true,
+        "required": true
       },
       {
         "key": "basis",
@@ -733,7 +736,8 @@ const GAME_SCHEMAS = {
         "type": "money",
         "label": "$ per birdie",
         "default": 0,
-        "positive": true
+        "positive": true,
+        "required": true
       },
       {
         "key": "pars",
@@ -1430,7 +1434,7 @@ export default {
         const hcc = (handicap_config && typeof handicap_config === 'object') ? handicap_config : null;
         const hcPlayers = hcc && hcc.players && typeof hcc.players === 'object' ? hcc.players : null;
         // v4.13.0 — `ranking: true` stores the strokes too (Net/Gross ranking for fun, games stay gross).
-        const hcNet = hcc && (hcc.skins_basis === 'net' || hcc.birdiepay_basis === 'net' || hcc.ranking === true);
+        const hcNet = hcc && (hcc.skins_basis === 'net' || hcc.birdiepay_basis === 'net' || hcc.ranking === true || (cleanCfgs.fourball && cleanCfgs.fourball.basis === 'net')); // Dev-93: Fourball Net needs the per-player strokes too
         if (hcNet) {
           // v4.12.0 — an empty player list is allowed: players whose handicap isn't settled yet are
           // left out and flagged at Close & Calculate (the engine plays a missing net player scratch).

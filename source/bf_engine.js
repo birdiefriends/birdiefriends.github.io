@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.8.0';
+  const ENGINE_VERSION = '1.9.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -481,7 +481,7 @@
     meta: { label: 'CTP', uiOrder: 2, icon: '🎯', seal: 'CTP',
       info: 'Closest to the Pin on the chosen holes (usually the par 3s). Whoever is closest on a hole wins that hole\'s fixed $ prize, taken from the pot. Claim it in the Live Panel; the newest claim leads. An unclaimed hole\'s money rolls into Skins.' },
     config: [
-      { key: 'dollar_per_hole', type: 'money', label: '$ per hole', default: 0, positive: true },
+      { key: 'dollar_per_hole', type: 'money', label: '$ per hole', default: 0, positive: true, required: true },
       { key: 'hole_mode', type: 'enum', label: 'Hole mode', values: ['all_par3', 'custom'], default: 'all_par3', lenient: true },  // lenient = an unknown value is cleaned to the default, not rejected (the Worker always did this)
       { key: 'holes', type: 'holes', label: 'Holes', default: [], required: true }
     ],
@@ -502,7 +502,7 @@
     kind: 'addon', input: 'none', net: false,
     meta: { label: 'MiserBall', uiOrder: 3, icon: '🐦', seal: 'BIRDIEBALL',
       info: 'Everyone starts with one ball. Keep it all round and you win: everyone who still has theirs at the end splits the pot. If everybody loses theirs, the last MiserBall standing (the one lost latest) wins. Lose yours? Tap "I lost it" in the Live Panel so the group knows, and confirm on your scorecard.' },
-    config: [{ key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true }],
+    config: [{ key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true }],
     fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
     // A per-player rate above the whole buy-in is impossible at any headcount.
     maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
@@ -527,7 +527,7 @@
     meta: { label: 'Fourball', icon: '🤝', seal: 'FOURBALL', uiOrder: 5,
       info: 'Played in pairs. Everyone plays their own ball and the pair counts the better of its two scores on each hole (gross unless the host set it to Net). The pair with the lowest total wins and splits the Fourball pot; tied pairs split it. If a partner picks up, the other\'s score counts alone.' },
     config: [
-      { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true },
+      { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
       { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
       { key: 'net_mode', type: 'enum', label: 'Net strokes', values: ['own', 'low'], default: 'own' },
       { key: 'pairs', type: 'pairs', label: 'Pairs', default: [], required: true }
@@ -567,7 +567,7 @@
     meta: { label: 'Birdie Payouts', uiOrder: 4, icon: '🐤', seal: 'BIRDIE PAY',
       info: 'A flat $ for every birdie or better, paid to whoever made it, from the same pot before Skins (gross unless the host set it to Net, where a par with a stroke counts). An eagle still pays one birdie. Nothing to enter: it\'s worked out from the scorecards when the round closes.' },
     config: [
-      { key: 'dollar_per_birdie', type: 'money', label: '$ per birdie', default: 0, positive: true },
+      { key: 'dollar_per_birdie', type: 'money', label: '$ per birdie', default: 0, positive: true, required: true },
       { key: 'pars', type: 'pars', label: 'Par by hole', default: [], required: true, min: 3, max: 6, integer: true }
     ],
     fixedCost: () => 0,   // sized by birdies made, capped to the pot at close — never a fixed set-aside
@@ -762,6 +762,12 @@
       if (basisOf('birdiepay_basis') === 'net') b.basis = 'net';
       addons.push(b);
     }
+    // Dev-93: Fourball arrives through the generic game_configs column (no legacy column of its own).
+    const fbc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.fourball : null;
+    if (games.includes('fourball') && fbc) {
+      addons.push({ id: 'fourball', entity: 'pair', dollar_per_player: fbc.dollar_per_player, basis: fbc.basis === 'net' ? 'net' : 'gross',
+        net_mode: fbc.net_mode === 'low' ? 'low' : 'own', pairs: Array.isArray(fbc.pairs) ? fbc.pairs : [] });
+    }
     if (games.includes('skins')) {
       addons.push({ id: 'skins', entity: 'individual', basis: basisOf('skins_basis'), compare: 'low' });
     }
@@ -775,7 +781,7 @@
       input: 'strokes',
       compare: 'low',
       handicap: anyNet
-        ? { mode: 'net', allowance: hcc.allowance == null ? 95 : Number(hcc.allowance), stroke_index: hcc.stroke_index || null, players: hcc.players || {} }
+        ? { mode: 'net', allowance: !hcc || hcc.allowance == null ? 95 : Number(hcc.allowance), stroke_index: (hcc && hcc.stroke_index) || null, players: (hcc && hcc.players) || {} }
         : { mode: 'scratch' },
       holes: { layout: null, half: row && row.hole_half ? row.hole_half : null },
       addons,

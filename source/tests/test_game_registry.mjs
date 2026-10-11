@@ -162,4 +162,22 @@ ok(/function gamesFormOverCommit[\s\S]{0,900}BFEngine\.potFit\(/.test(psrc), 'po
   // generic pot-fit sees it
   ok(E.potFit({ fourball: { dollar_per_player: 5, pairs: PAIRS } }, 10, 4).fixedCost === 20, 'potFit counts the Fourball carve');
 }
+// 11. Fourball through the Gathering adapter: the row shape the Worker returns -> payout
+{
+  const full = v => Array.from({ length: 18 }, () => v);
+  const SI = Array.from({ length: 18 }, (_, i) => i + 1);
+  const FB = { dollar_per_player: 10, basis: 'net', net_mode: 'own', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] };
+  const cards = [{ player: 'Ann', holes: full(6) }, { player: 'Bob', holes: full(5) }, { player: 'Cy', holes: full(5) }, { player: 'Di', holes: full(6) }];
+  const row = { games: ['fourball'], dollar_per_player: 10, cttp_config: null, birdieball_config: null, birdiepay_config: null,
+    game_configs: { fourball: FB }, handicap_config: { allowance: 95, skins_basis: 'gross', stroke_index: SI, players: { Ann: { kind: 'given', strokes: 0 }, Bob: { kind: 'given', strokes: 9 }, Cy: { kind: 'given', strokes: 0 }, Di: { kind: 'given', strokes: 0 } } } };
+  const cfg = E.gatheringConfigFromLegacy(row);
+  ok(cfg.addons.length === 1 && cfg.addons[0].id === 'fourball' && cfg.addons[0].basis === 'net' && cfg.handicap.mode === 'net', 'adapter builds a net fourball round config');
+  let r = E.computeGatheringGamesPayout(row, cards, null, []);
+  ok(r.payouts.find(p => p.player === 'Ann').total === 20 && r.payouts.find(p => p.player === 'Bob').total === 20 && r.payouts.find(p => p.player === 'Cy').total === 0 && r.fourball.net_mode === 'own', 'Worker-shaped row pays the net winners (Ann/Bob $20 each)');
+  // basis net but no handicap_config at all must not throw; plays gross and says so
+  r = E.computeGatheringGamesPayout(Object.assign({}, row, { handicap_config: null }), cards, null, []);
+  ok(r.payouts.every(p => p.total === 10) && r.handicap && r.handicap.missing.length === 4, 'net with no handicap_config: no crash, plays everyone at 0 strokes (a gross tie split) and lists all four as missing, same rule as Skins');
+  // a games list without fourball ignores a stray game_configs.fourball
+  ok(E.gatheringConfigFromLegacy(Object.assign({}, row, { games: ['skins'] })).addons.every(a => a.id !== 'fourball'), 'fourball config is ignored unless the game is ticked');
+}
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

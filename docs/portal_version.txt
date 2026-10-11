@@ -1,5 +1,5 @@
 v4.15.2 · 2026-10-11
-Deployed: 2026-10-11 (Behind the scenes: the shared game engine (1.8.0) now describes each game in one place — label, icon, rules text, settings and a self-check. The Games picker, rules text, event-card seal and the pot-fit warning now read from those definitions. Nothing changes on screen or in any payout.)
+Deployed: 2026-10-11 (Behind the scenes: the shared game engine (1.9.0) now describes each game in one place — label, icon, rules text, settings and a self-check. The Games picker, rules text, event-card seal and the pot-fit warning now read from those definitions. Nothing changes on screen or in any payout.)
 
 v4.15.1 · 2026-10-09
 Deployed: 2026-10-09 (BF Weekend Times: a Sub on an 8-player event no longer sees the "You're the 5th player — spot not yet confirmed" banner. That warning is only for the 5th Yes player. A Sub now reads: Registered as Sub — committed players have priority.)

@@ -58,6 +58,29 @@ await bad('no games', { games: [] });
 await bad('$0 buy-in', { games: ['skins'], dollar_per_player: 0 });
 await bad('config not an object', { games: ['cttp'], cttp_config: 'x' });
 
+await bad('birdieball with no config at all', { games: ['birdieball'] });
+await bad('birdiepay with no $ amount', { games: ['birdiepay'], birdiepay_config: { pars: PARS } });
+await bad('cttp with no $ amount', { games: ['cttp'], cttp_config: { holes: [3] } });
+
+// 3b. Fourball (Dev-93): arrives only through game_configs, validated by the same schema
+const FB = { dollar_per_player: 5, basis: 'gross', net_mode: 'own', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] };
+db = mk(true);
+[st, j] = await call(db, 'POST', '/bfe/gathering-games', base({ games: ['fourball', 'skins'], game_configs: { fourball: FB } }));
+ok(st === 200 && j.ok, 'fourball saves via game_configs: ' + JSON.stringify(j));
+[st, j] = await call(db, 'GET', '/bfe/gathering-games?gathering_id=7');
+ok(j.config.game_configs.fourball.pairs.length === 2 && j.config.game_configs.fourball.dollar_per_player === 5 && j.config.handicap_config === null, 'GET returns the fourball config; a gross game stores no handicap_config');
+await bad('fourball with one pair', { games: ['fourball'], game_configs: { fourball: { ...FB, pairs: [['Ann', 'Bob']] } } });
+await bad('fourball player in two pairs', { games: ['fourball'], game_configs: { fourball: { ...FB, pairs: [['Ann', 'Bob'], ['Ann', 'Di']] } } });
+await bad('fourball with no config', { games: ['fourball'] });
+await bad('fourball bad net mode', { games: ['fourball'], game_configs: { fourball: { ...FB, net_mode: 'weird' } } });
+// Fourball Net must store the per-player handicap setup even when Skins/Birdie Pay are gross
+const SI = Array.from({ length: 18 }, (_, i) => i + 1);
+db = mk(true);
+[st, j] = await call(db, 'POST', '/bfe/gathering-games', base({ games: ['fourball'], game_configs: { fourball: { ...FB, basis: 'net' } },
+  handicap_config: { allowance: 95, players: { Bob: { kind: 'given', strokes: 9, stroke_index: SI } } } }));
+row = db.prepare('SELECT * FROM bfe_gathering_games WHERE gathering_id = 7').get();
+ok(st === 200 && row.handicap_config && JSON.parse(row.handicap_config).players.Bob.strokes === 9, 'fourball Net stores handicap_config: ' + row.handicap_config);
+
 // 4. generic path: game_configs wins over the legacy field, and validates the same
 [st, j] = await call(mk(true), 'POST', '/bfe/gathering-games', base({ games: ['cttp'], game_configs: { cttp: { dollar_per_hole: 5, holes: [3, 7] } } }));
 ok(st === 200, 'game_configs alone is enough for a game');
