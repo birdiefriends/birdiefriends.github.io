@@ -294,7 +294,8 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
   ok(/birdiepay:\s+\{ label: 'Birdie Payouts'/.test(src), 'L: game is in GATHERING_GAMES_META');
   ok(/birdiepay: 'BIRDIE PAY'/.test(src), 'L: event-card seal has a label for it');
   const w = fs.readFileSync(HERE('../bf_experiences_worker.js'), 'utf8');
-  ok(w.includes("const VALID_GAMES = ['skins', 'cttp', 'birdieball', 'birdiepay'];"), 'L: Worker VALID_GAMES includes birdiepay');
+  // Dev-93: VALID_GAMES is now derived from the generated GAME_SCHEMAS table (one definition per game in bf_engine.js).
+  ok(w.includes('const VALID_GAMES = Object.keys(GAME_SCHEMAS);') && /"birdiepay": \{/.test(w), 'L: Worker VALID_GAMES (from GAME_SCHEMAS) includes birdiepay');
   ok(w.includes('ALTER TABLE bfe_gathering_games') && w.includes('ADD COLUMN birdiepay_config TEXT'), 'L: the migration is documented in the Worker schema comment');
   ok(/UPDATE bfe_gathering_games SET birdiepay_config = \?/.test(w), 'L: Worker writes birdiepay_config in its own statement (other saves survive a missing column)');
   ok(!/INSERT INTO bfe_gathering_games[^`]*birdiepay/.test(w), 'L: the main upsert does not reference the new column');

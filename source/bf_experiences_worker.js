@@ -231,6 +231,12 @@
 //                                             --   ALTER TABLE bfe_gathering_games
 //                                             --   ADD COLUMN birdiepay_config TEXT;
 //                                             -- NULL when 'birdiepay' isn't selected.
+//     game_configs TEXT,                     -- Dev-93. JSON keyed by game id ({"cttp":{...},"skins":{...}}),
+//                                             -- every selected game, cleaned by the schema in bf_engine.js.
+//                                             -- The ONE column a new game needs (no per-game ALTER). ADDITIVE
+//                                             -- MIGRATION, Brian runs it once in the D1 console:
+//                                             --   ALTER TABLE bfe_gathering_games ADD COLUMN game_configs TEXT;
+//                                             -- Legacy games still write their own columns too, so saves work before it.
 //     handicap_config TEXT,                  -- Dev-91. JSON, only when Skins and/or
 //                                             -- Birdie Payouts is set to NET:
 //                                             -- {allowance, skins_basis, birdiepay_basis,
@@ -636,6 +642,130 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.6.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+const GAME_SCHEMAS = {
+  "cttp": {
+    "label": "CTP",
+    "config": [
+      {
+        "key": "dollar_per_hole",
+        "type": "money",
+        "label": "$ per hole",
+        "default": 0,
+        "positive": true
+      },
+      {
+        "key": "hole_mode",
+        "type": "enum",
+        "label": "Hole mode",
+        "values": [
+          "all_par3",
+          "custom"
+        ],
+        "default": "all_par3",
+        "lenient": true
+      },
+      {
+        "key": "holes",
+        "type": "holes",
+        "label": "Holes",
+        "default": [],
+        "required": true
+      }
+    ]
+  },
+  "birdieball": {
+    "label": "MiserBall",
+    "config": [
+      {
+        "key": "dollar_per_player",
+        "type": "money",
+        "label": "$ per player",
+        "default": 0,
+        "positive": true
+      }
+    ]
+  },
+  "birdiepay": {
+    "label": "Birdie Payouts",
+    "config": [
+      {
+        "key": "dollar_per_birdie",
+        "type": "money",
+        "label": "$ per birdie",
+        "default": 0,
+        "positive": true
+      },
+      {
+        "key": "pars",
+        "type": "pars",
+        "label": "Par by hole",
+        "default": [],
+        "required": true,
+        "min": 3,
+        "max": 6,
+        "integer": true
+      }
+    ]
+  },
+  "skins": {
+    "label": "Skins",
+    "config": [
+      {
+        "key": "basis",
+        "type": "enum",
+        "label": "Gross or Net",
+        "values": [
+          "gross",
+          "net"
+        ],
+        "default": "gross"
+      }
+    ]
+  }
+};
+function validateFields(fields, cfg) {
+    const errors = [];
+    cfg = cfg || {};
+    (fields || []).forEach(f => {
+      const v = cfg[f.key];
+      if (v === undefined || v === null) { if (f.required) errors.push(f.label + ' is required'); return; }
+      if (f.type === 'money' || f.type === 'int') {
+        const n = Number(v);
+        if (!Number.isFinite(n)) errors.push(f.label + ' must be a number');
+        else if (f.type === 'int' && !Number.isInteger(n)) errors.push(f.label + ' must be a whole number');
+        else if (f.positive && !(n > 0)) errors.push(f.label + ' must be more than 0');
+        else if (f.min != null && n < f.min) errors.push(f.label + ' must be at least ' + f.min);
+      } else if (f.type === 'holes') {
+        if (!Array.isArray(v) || !v.length) errors.push(f.label + ': pick at least one hole');
+        else if (!v.every(h => Number.isInteger(h) && h >= 1 && h <= 18) || new Set(v).size !== v.length) errors.push(f.label + ' must be unique holes 1-18');
+      } else if (f.type === 'pars') {
+        const lo = f.min != null ? f.min : 1, hi = f.max != null ? f.max : Infinity;
+        if (!Array.isArray(v) || v.length !== 18 || !v.every(p => Number(p) >= lo && Number(p) <= hi && (!f.integer || Number.isInteger(Number(p))))) {
+          errors.push(f.label + ' needs 18 par values' + (f.min != null ? ' (' + lo + '-' + hi + ')' : ''));
+        }
+      } else if (f.type === 'enum') {
+        if (!f.lenient && !(f.values || []).includes(v)) errors.push(f.label + ' must be one of ' + (f.values || []).join('/'));
+      }
+    });
+    return { ok: errors.length === 0, errors };
+  }
+function cleanFields(fields, cfg) {
+    const out = {};
+    cfg = cfg || {};
+    (fields || []).forEach(f => {
+      const v = cfg[f.key];
+      if (v === undefined || v === null) return;
+      if (f.type === 'money' || f.type === 'int') out[f.key] = Number(v);
+      else if (f.type === 'holes') out[f.key] = v.slice().sort((a, b) => a - b);
+      else if (f.type === 'pars') out[f.key] = v.map(Number);
+      else if (f.type === 'enum') out[f.key] = (f.values || []).includes(v) ? v : f.default;
+      else out[f.key] = v;
+    });
+    return out;
+  }
+// <GAME_SCHEMAS:end>
+
 export default {
   async fetch(request, env, ctx) {
 
@@ -1033,7 +1163,10 @@ export default {
     // the hosting player's own call, same trust level as posting a Note or a
     // Card Score (client-supplied player identity, no server-side ownership
     // re-check against the real gatherings table).
-    const VALID_GAMES = ['skins', 'cttp', 'birdieball', 'birdiepay'];
+    // Dev-93: derived from the generated schema table (one definition per game in bf_engine.js).
+    // Legacy games also keep their own columns (cttp_config etc.); every game is ALSO stored in
+    // game_configs, the one generic column a future game needs — no per-game ALTER.
+    const VALID_GAMES = Object.keys(GAME_SCHEMAS);
 
     // ── Event games (v4.9.4) ────────────────────────────────────────────────
     // A non-Gathering event (a "BF Weekend Times" card, which lives in Jotform
@@ -1115,6 +1248,7 @@ export default {
           birdieball_config: row.birdieball_config ? JSON.parse(row.birdieball_config) : null,
           birdiepay_config: row.birdiepay_config ? JSON.parse(row.birdiepay_config) : null,
           handicap_config: row.handicap_config ? JSON.parse(row.handicap_config) : null, // Dev-91 net/gross setup (frozen at save)
+          game_configs: row.game_configs ? JSON.parse(row.game_configs) : null, // Dev-93 generic per-game config, keyed by game id
           payout_summary: row.payout_summary ? JSON.parse(row.payout_summary) : null
         });
         if (gatheringId) {
@@ -1171,46 +1305,31 @@ export default {
       if (!(Number(dollar_per_player) > 0)) {
         return new Response(JSON.stringify({ error: 'dollar_per_player must be a positive number' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      if (games.includes('cttp')) {
-        if (!cttp_config || typeof cttp_config !== 'object') {
-          return new Response(JSON.stringify({ error: 'cttp_config is required when cttp is selected' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      // Dev-93: every selected game is validated and cleaned by the SAME schema-driven functions the
+      // engine uses (generated block above). The effective config of a game is `game_configs[id]` when
+      // the client sends it (the generic path, how any new game arrives), else the legacy field the
+      // portal still sends (cttp_config, birdieball_config, birdiepay_config; Skins' basis rides on
+      // handicap_config.skins_basis).
+      const legacyCfg = {
+        cttp: cttp_config, birdieball: birdieball_config, birdiepay: birdiepay_config,
+        skins: { basis: handicap_config && handicap_config.skins_basis === 'net' ? 'net' : 'gross' }
+      };
+      const sentCfgs = (body.game_configs && typeof body.game_configs === 'object') ? body.game_configs : {};
+      const cleanCfgs = {};
+      for (const g of games) {
+        const raw = sentCfgs[g] !== undefined ? sentCfgs[g] : legacyCfg[g];
+        if (raw !== undefined && raw !== null && typeof raw !== 'object') {
+          return new Response(JSON.stringify({ error: `${GAME_SCHEMAS[g].label} settings must be an object` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        if (!(Number(cttp_config.dollar_per_hole) > 0)) {
-          return new Response(JSON.stringify({ error: 'cttp_config.dollar_per_hole must be a positive number' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        const v = validateFields(GAME_SCHEMAS[g].config, raw || {});
+        if (!v.ok) {
+          return new Response(JSON.stringify({ error: `${GAME_SCHEMAS[g].label}: ${v.errors.join('; ')}` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        if (!Array.isArray(cttp_config.holes) || !cttp_config.holes.length || !cttp_config.holes.every(h => Number.isInteger(h) && h >= 1 && h <= 18)) {
-          return new Response(JSON.stringify({ error: 'cttp_config.holes must be a non-empty array of hole numbers (1-18)' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-        }
+        cleanCfgs[g] = cleanFields(GAME_SCHEMAS[g].config, raw || {});
       }
-      if (games.includes('birdieball')) {
-        if (!birdieball_config || typeof birdieball_config !== 'object') {
-          return new Response(JSON.stringify({ error: 'birdieball_config is required when birdieball is selected' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-        }
-        if (!(Number(birdieball_config.dollar_per_player) > 0)) {
-          return new Response(JSON.stringify({ error: 'birdieball_config.dollar_per_player must be a positive number' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-        }
-      }
-      if (games.includes('birdiepay')) {
-        if (!birdiepay_config || typeof birdiepay_config !== 'object') {
-          return new Response(JSON.stringify({ error: 'birdiepay_config is required when birdiepay is selected' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-        }
-        if (!(Number(birdiepay_config.dollar_per_birdie) > 0)) {
-          return new Response(JSON.stringify({ error: 'birdiepay_config.dollar_per_birdie must be a positive number' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-        }
-        const bp = birdiepay_config.pars;
-        if (!Array.isArray(bp) || bp.length !== 18 || !bp.every(p => Number.isInteger(p) && p >= 3 && p <= 6)) {
-          return new Response(JSON.stringify({ error: 'birdiepay_config.pars must be 18 hole pars (3-6) — this venue needs par data in Venue Manager first' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-        }
-      }
-      const cttpConfigToStore = games.includes('cttp')
-        ? { dollar_per_hole: Number(cttp_config.dollar_per_hole), hole_mode: cttp_config.hole_mode === 'custom' ? 'custom' : 'all_par3', holes: cttp_config.holes.slice().sort((a, b) => a - b) }
-        : null;
-      const birdieballConfigToStore = games.includes('birdieball')
-        ? { dollar_per_player: Number(birdieball_config.dollar_per_player) }
-        : null;
-      const birdiepayConfigToStore = games.includes('birdiepay')
-        ? { dollar_per_birdie: Number(birdiepay_config.dollar_per_birdie), pars: birdiepay_config.pars.slice() }
-        : null;
+      const cttpConfigToStore = games.includes('cttp') ? cleanCfgs.cttp : null;
+      const birdieballConfigToStore = games.includes('birdieball') ? cleanCfgs.birdieball : null;
+      const birdiepayConfigToStore = games.includes('birdiepay') ? cleanCfgs.birdiepay : null;
       // v4.9.4 — first writer owns the games. A different player's save must not
       // take over (or reset) another host's config; this matters most for event
       // games, where many Yes players could tap Add Games on the course.
@@ -1244,6 +1363,18 @@ export default {
           }
         } else {
           try { await env.DB.prepare(`UPDATE bfe_gathering_games SET birdiepay_config = NULL WHERE gathering_id = ?`).bind(gathering_id).run(); } catch (e) { /* column not migrated yet — nothing to clear */ }
+        }
+        // Dev-93: game_configs — the one generic column (JSON keyed by game id). Own statement, like
+        // birdiepay_config, so existing saves keep working before the one-time migration; a game with
+        // no legacy column of its own (anything added after Dev-93) REQUIRES it and says so plainly.
+        const LEGACY_COLUMN_GAMES = ['cttp', 'birdieball', 'birdiepay', 'skins'];
+        try {
+          await env.DB.prepare(`UPDATE bfe_gathering_games SET game_configs = ? WHERE gathering_id = ?`)
+            .bind(JSON.stringify(cleanCfgs), gathering_id).run();
+        } catch (e) {
+          if (games.some(g => !LEGACY_COLUMN_GAMES.includes(g))) {
+            return new Response(JSON.stringify({ error: 'These games need the game_configs column (run the ALTER TABLE in the Worker schema comment): ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
         }
         // Dev-91: handicap_config (net/gross setup) — same own-statement pattern, so
         // gross-only saves never depend on the column. Only a save that actually
