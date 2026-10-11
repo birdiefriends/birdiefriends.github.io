@@ -4,7 +4,7 @@ import { createRequire } from 'module'; import { fileURLToPath } from 'url';
 const require = createRequire(import.meta.url);
 const E = require(fileURLToPath(new URL('../bf_engine.js', import.meta.url)));
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
-const TYPES = ['money', 'int', 'holes', 'pars', 'enum'];
+const TYPES = ['money', 'int', 'holes', 'pars', 'enum', 'pairs'];
 const addons = E.listGames('addon'), bases = E.listGames('base');
 ok(addons.length >= 4 && bases.length >= 1, 'registry lists add-ons and base games');
 
@@ -74,6 +74,7 @@ for (let t = 0; t < 400; t++) {
   const cfgs = chosen.map(id => id === 'cttp' ? { id, dollar_per_hole: 1 + Math.floor(rnd() * 8), holes: [3, 7, 12, 16].slice(0, 1 + Math.floor(rnd() * 4)) }
     : id === 'birdieball' ? { id, dollar_per_player: 1 + Math.floor(rnd() * 5) }
     : id === 'birdiepay' ? { id, dollar_per_birdie: 1 + Math.floor(rnd() * 6), pars }
+    : id === 'fourball' ? { id, entity: 'pair', dollar_per_player: 1 + Math.floor(rnd() * 6), basis: 'gross', pairs: Array.from({ length: Math.floor(n / 2) }, (_, k) => ['P' + 2 * k, 'P' + (2 * k + 1)]) }
     : { id, basis: 'gross', compare: 'low' });
   const dpp = 5 + Math.floor(rnd() * 20);
   const r = E.computeRoundPayout({ v: 1, payout: { entry_per_player: dpp }, addons: cfgs }, { scorecards: cards, ctpLeaders: { 3: { player: 'P0', dist: 5 } }, bbAnswers: cards.map((c, i) => ({ player_name: c.player, kept: i % 2 === 0, lost_hole: 5, lost_stroke: 1 })) });
@@ -82,7 +83,8 @@ for (let t = 0; t < 400; t++) {
 }
 // 7. UI helpers: stable host-facing order, unique uiOrder, text lives only in the definition
 ok(E.gamesInUiOrder().join() === 'skins,cttp,birdieball,birdiepay', 'UI order is the order hosts see today');
-ok(new Set(E.gamesInUiOrder().map(id => E.getGame(id).meta.uiOrder)).size === addons.length, 'uiOrder is unique per game');
+ok(new Set(addons.map(id => E.getGame(id).meta.uiOrder)).size === addons.length, 'uiOrder is unique per game');
+ok(!E.gamesInUiOrder().includes('fourball') && !E.gamesUiMeta().fourball && !E.gamesInfo().fourball, 'an unreleased game (fourball) stays out of the portal tables');
 ok(E.gamesInfo().skins === E.getGame('skins').meta.info && E.gamesSealLabels().birdiepay === 'BIRDIE PAY' && E.gamesUiMeta().birdieball.label === 'MiserBall', 'helpers read the definitions');
 
 // 8. THE POINT OF THE REGISTRY: a brand-new game appears in the UI tables, validation and the pot-fit guard
@@ -104,4 +106,60 @@ ok(!/GAMES_SEAL_LABELS = \{/.test(psrc), 'portal: no hand-written seal table');
 ok(!/const GATHERING_GAMES_META = \{/.test(psrc), 'portal: no hand-written game meta table');
 ok(!/(?:^|\n)\s+(skins|cttp|birdieball|birdiepay):\s+'(?:Every hole|Closest|Everyone|A flat)/.test(psrc), 'portal: no hand-written (i) text for a game');
 ok(/function gamesFormOverCommit[\s\S]{0,900}BFEngine\.potFit\(/.test(psrc), 'portal: over-commit guard uses BFEngine.potFit');
+// 10. Fourball specifics
+{
+  const full = v => Array.from({ length: 18 }, () => v);
+  const card = (player, holes, extra) => Object.assign({ player, holes }, extra || {});
+  const run = (addon, cards, opts) => E.computeRoundPayout(Object.assign({ v: 1, payout: { entry_per_player: 10 }, addons: [Object.assign({ id: 'fourball', entity: 'pair', basis: 'gross' }, addon)] }, opts || {}), { scorecards: cards });
+  const PAIRS = [['Ann', 'Bob'], ['Cy', 'Di']];
+  // better-ball helper
+  const bb = E.betterBallHoles([[4, 6, null], [5, 3, null]], 3);
+  ok(bb[0].score === 4 && bb[0].by.join() === '0' && bb[1].score === 3 && bb[1].by.join() === '1' && bb[2] === null, 'betterBallHoles: lower of the two, null when neither scored');
+  // a pickup: Bob has no scores at all; Ann's alone count (pair still complete)
+  let r = run({ dollar_per_player: 10, pairs: PAIRS }, [card('Ann', full(4)), card('Bob', full(null)), card('Cy', full(5)), card('Di', full(5))]);
+  ok(r.fourball.standings[0].total === 72 && r.fourball.winners.length === 1 && r.fourball.winners[0].join() === 'Ann,Bob', 'a partner with no scores: the other\'s stand alone');
+  // an incomplete pair (a hole nobody scored) is listed, cannot win
+  const gap = full(4); gap[5] = null;
+  r = run({ dollar_per_player: 10, pairs: PAIRS }, [card('Ann', gap), card('Bob', gap), card('Cy', full(5)), card('Di', full(6))]);
+  ok(r.fourball.winners[0].join() === 'Cy,Di' && r.fourball.standings.find(s => s.pair[0] === 'Ann').complete === false, 'an incomplete pair cannot win even with a lower score');
+  // nobody complete: the carve is given back
+  r = run({ dollar_per_player: 10, pairs: PAIRS }, [card('Ann', gap), card('Bob', gap), card('Cy', gap), card('Di', gap)]);
+  ok(r.fourball.winners.length === 0 && r.fourball.given_back_each === 10 && r.payouts.every(p => p.total === 10), 'no complete pair: whole carve given back');
+  // a $2/player carve is $8 for the pair ($4 each); with no Skins the rest of the $40 pot is given back evenly ($8 each)
+  r = run({ dollar_per_player: 2, pairs: PAIRS }, [card('Ann', full(4)), card('Bob', full(5)), card('Cy', full(5)), card('Di', full(5))]);
+  const tot2 = n => r.payouts.find(p => p.player === n).total;
+  ok(r.fourball.per_pair === 8 && r.fourball.per_player === 4 && tot2('Ann') === 12 && tot2('Bob') === 12 && tot2('Cy') === 8 && tot2('Di') === 8 && r.unallocated === 0, 'carve $8 -> $4 each; leftover $32 given back $8 each (no Skins to absorb it)');
+  // an odd split: a $1/player carve = $4 pot, pair share $4, $2 each
+  r = run({ dollar_per_player: 1, pairs: PAIRS }, [card('Ann', full(4)), card('Bob', full(5)), card('Cy', full(5)), card('Di', full(5))]);
+  ok(r.fourball.per_pair === 4 && r.fourball.per_player === 2, 'small carve splits cleanly between partners');
+  // cap: carve rate above the pot is capped to what the pot has left
+  r = run({ dollar_per_player: 50, pairs: PAIRS }, [card('Ann', full(4)), card('Bob', full(5)), card('Cy', full(5)), card('Di', full(5))]);
+  ok(r.fourball.capped === true && r.fourball.pot === 40 && r.fourball.configured_pot === 200, 'a carve bigger than the pot is capped');
+  // Net: own vs low
+  const hc = (strokes) => ({ handicap: { mode: 'net', allowance: 95, stroke_index: Array.from({ length: 18 }, (_, i) => i + 1), players: Object.fromEntries(Object.entries(strokes).map(([k, v]) => [k, { kind: 'given', strokes: v }])) } });
+  const fives = [card('Ann', full(5)), card('Bob', full(5)), card('Cy', full(5)), card('Di', full(5))];
+  const strokes = { Ann: 9, Bob: 9, Cy: 18, Di: 18 };
+  const own = run({ dollar_per_player: 10, basis: 'net', net_mode: 'own', pairs: PAIRS }, fives, hc(strokes));
+  const low = run({ dollar_per_player: 10, basis: 'net', net_mode: 'low', pairs: PAIRS }, fives, hc(strokes));
+  const tot = (res, n) => res.fourball.standings.find(s => s.pair[0] === n).total;
+  ok(tot(own, 'Ann') === 81 && tot(own, 'Cy') === 72, 'net own: Ann pair 81, Cy pair 72 (each plays off their own strokes)');
+  ok(tot(low, 'Ann') === 90 && tot(low, 'Cy') === 81, 'net low: strokes come off the low handicap (9): Ann pair 90, Cy pair 81');
+  ok(own.fourball.net_mode === 'own' && low.fourball.net_mode === 'low' && low.fourball.basis === 'net', 'result reports basis and net mode');
+  // net asked for but no handicap setup: plays gross and says so
+  r = run({ dollar_per_player: 10, basis: 'net', pairs: PAIRS }, fives);
+  ok(r.fourball.net_missing === true && r.fourball.basis === 'gross', 'net with no handicap setup falls back to gross and flags it');
+  // pair validation
+  const V = p => E.validateGameConfig('fourball', Object.assign({ dollar_per_player: 5, pairs: PAIRS }, p));
+  ok(V({}).ok, 'valid fourball config');
+  ok(!V({ pairs: [['Ann', 'Bob']] }).ok, 'one pair is not enough');
+  ok(!V({ pairs: [['Ann', 'Ann'], ['Cy', 'Di']] }).ok, 'a pair of the same player is rejected');
+  ok(!V({ pairs: [['Ann', 'Bob'], ['bob', 'Di']] }).ok, 'a player in two pairs is rejected (case-insensitive)');
+  ok(!V({ pairs: [['Ann', 'Bob'], ['Cy']] }).ok, 'a pair needs two players');
+  ok(!V({ net_mode: 'weird' }).ok && !V({ dollar_per_player: 0 }).ok, 'bad net_mode / $0 rejected');
+  // old snapshots keep their shape: no fourball key unless the game ran
+  const plain = E.computeRoundPayout({ v: 1, payout: { entry_per_player: 10 }, addons: [{ id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] }, { scorecards: fives });
+  ok(!('fourball' in plain) && !plain.payouts.some(p => 'fourball' in p), 'snapshots without Fourball keep their exact shape');
+  // generic pot-fit sees it
+  ok(E.potFit({ fourball: { dollar_per_player: 5, pairs: PAIRS } }, 10, 4).fixedCost === 20, 'potFit counts the Fourball carve');
+}
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

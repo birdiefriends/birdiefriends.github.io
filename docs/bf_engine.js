@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.7.0';
+  const ENGINE_VERSION = '1.8.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -359,6 +359,99 @@
     }
   };
 
+  // ── Fourball (Dev-93): better ball of partners ─────────────────────────
+  // Each partner plays their own ball; a pair's score on a hole is the LOWER of its two scores.
+  // This is the base mechanic only — the same per-pair hole scores later feed the Cup's
+  // head-to-head layer (1 / ½ / 0 points). cards = one array of per-hole scores per partner
+  // (number | null, already gross or net). Returns [{score, by:[partner index]} | null] per hole.
+  function betterBallHoles(cards, holeCount) {
+    const out = [];
+    for (let h = 0; h < holeCount; h++) {
+      const vals = cards.map((c, i) => ({ v: Array.isArray(c) ? c[h] : null, i })).filter(e => typeof e.v === 'number');
+      if (!vals.length) { out.push(null); continue; }
+      const best = Math.min(...vals.map(e => e.v));
+      out.push({ score: best, by: vals.filter(e => e.v === best).map(e => e.i) });
+    }
+    return out;
+  }
+  // Fourball standalone: pairs are ranked on their better-ball total (lowest wins); the winning
+  // pair(s) split a $/player carve, ties split, whole dollars rounded down, remainder reported.
+  //   addon: { dollar_per_player, basis:'gross'|'net', net_mode:'own'|'low', pairs:[[a,b],…] }
+  // net 'own'  = every player's own allowance-adjusted strokes (same rule as Skins Net);
+  // net 'low'  = strokes come off the lowest handicap among the paired players.
+  // A pair is ranked once every hole has at least one partner score (a pickup lets the other
+  // partner's score stand alone); an incomplete pair is listed but cannot win. Like MiserBall it
+  // can never take more than the pot has left (reported as `capped`).
+  ADDONS.fourball = {
+    id: 'fourball', order: 25, entity: 'pair',
+    carve(state, addon, inputs) {
+      const L = state.ledger;
+      const cardBy = new Map((inputs.scorecards || []).map(c => [norm(c.player), c]));
+      const pairsCfg = (addon.pairs || []).filter(p => Array.isArray(p) && p.length === 2);
+      const wantNet = addon.basis === 'net';
+      const mode = addon.net_mode === 'low' ? 'low' : 'own';
+      const netOk = wantNet && !!inputs.netByPlayer && !!inputs.hcSpecs;
+      const strokesOf = nm => { const sp = netOk ? inputs.hcSpecs.get(norm(nm)) : null; return sp && Number.isFinite(Number(sp.strokes)) ? Math.trunc(Number(sp.strokes)) : 0; };
+      let lowStrokes = 0;
+      if (netOk && mode === 'low') {
+        const ss = [];
+        pairsCfg.forEach(p => p.forEach(nm => { if (cardBy.has(norm(nm))) ss.push(strokesOf(nm)); }));
+        lowStrokes = ss.length ? Math.min(...ss) : 0;
+      }
+      const gross = c => (Array.isArray(c.holes) ? c.holes : []).map(v => (typeof v === 'number' && v > 0 ? v : null));
+      const holesFor = nm => {
+        const c = cardBy.get(norm(nm));
+        if (!c) return null;
+        if (!netOk) return gross(c);
+        if (mode === 'own') { const nb = inputs.netByPlayer.get(norm(nm)); return nb ? nb.holes : gross(c); }
+        const sp = inputs.hcSpecs.get(norm(nm)) || {};
+        return netCard(c, Object.assign({}, sp, { strokes: strokesOf(nm) - lowStrokes }), inputs.hcSI).holes;
+      };
+      const rows = pairsCfg.map(pr => {
+        const names = pr.map(nm => L.canon(nm));
+        const arrs = pr.map(holesFor).filter(a => a);
+        const cards = pr.map(nm => cardBy.get(norm(nm))).filter(Boolean);
+        const expected = cards.some(c => c.hole_count === 9) ? 9 : 18;
+        const off = cards.some(c => c.hole_count === 9 && c.hole_half === 'back') ? 9 : 0;
+        const bb = arrs.length ? betterBallHoles(arrs, expected) : [];
+        const played = bb.filter(Boolean).length;
+        const complete = arrs.length > 0 && played === expected;
+        return {
+          pair: names, complete, played,
+          total: complete ? bb.reduce((a, h) => a + h.score, 0) : null,
+          holes: bb.map((h, i) => ({ hole: off + i + 1, score: h ? h.score : null, by: h ? h.by.map(ix => names[ix]) : [] }))
+        };
+      });
+      const ranked = rows.filter(r => r.complete).sort((a, b) => a.total - b.total);
+      ranked.forEach(r => {
+        r.place = ranked.findIndex(x => x.total === r.total) + 1;
+        r.tied = ranked.filter(x => x.total === r.total).length > 1;
+      });
+      const winners = ranked.filter(r => r.place === 1);
+      const configuredPot = (Number(addon.dollar_per_player) || 0) * L.n;
+      const pot = Math.min(configuredPot, Math.max(0, state.remaining));
+      const capped = pot < configuredPot;
+      state.remaining -= pot;
+      let perPair = 0, perPlayer = 0, givenBackEach = 0, unalloc = 0;
+      if (winners.length) {
+        perPair = Math.floor(pot / winners.length);
+        perPlayer = Math.floor(perPair / 2);
+        winners.forEach(w => w.pair.forEach(nm => L.credit(nm, 'fourball', perPlayer)));
+        unalloc = pot - perPlayer * 2 * winners.length;
+      } else {
+        const gb = L.giveBack(pot);
+        givenBackEach = gb.each; unalloc = gb.unallocated;
+      }
+      state.unallocated += unalloc;
+      return Object.assign({
+        pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode } : {}),
+        ...(wantNet && !netOk ? { net_missing: true } : {}),
+        standings: rows.slice().sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
+        winners: winners.map(w => w.pair), per_pair: perPair, per_player: perPlayer, given_back_each: givenBackEach
+      }, capped ? { capped: true, configured_pot: configuredPot } : {});
+    }
+  };
+
   // ── Game definitions (Dev-93, spec §13) ────────────────────────────────
   // ONE definition per game. The carve/compute logic above is untouched; this
   // layer attaches everything ELSE a game needs so no other file has to
@@ -426,6 +519,49 @@
     }]
   });
 
+  const _ALL = v => Array.from({ length: 18 }, () => v);
+  const _SPLIT = (a, b) => Array.from({ length: 18 }, (_, i) => (i < 9 ? a : b));
+  defineGame('fourball', {
+    kind: 'addon', input: 'strokes', net: true, entity: 'pair',
+    released: false,   // hidden from the live Games picker until its form is built (Dev-93 step by step)
+    meta: { label: 'Fourball', icon: '🤝', seal: 'FOURBALL', uiOrder: 5,
+      info: 'Played in pairs. Everyone plays their own ball and the pair counts the better of its two scores on each hole (gross unless the host set it to Net). The pair with the lowest total wins and splits the Fourball pot; tied pairs split it. If a partner picks up, the other\'s score counts alone.' },
+    config: [
+      { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true },
+      { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
+      { key: 'net_mode', type: 'enum', label: 'Net strokes', values: ['own', 'low'], default: 'own' },
+      { key: 'pairs', type: 'pairs', label: 'Pairs', default: [], required: true }
+    ],
+    fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
+    maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
+    fixtures: [{
+      name: 'gross: the pair with the lower better-ball total wins the carve; Skins gets the rest',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'fourball', entity: 'pair', dollar_per_player: 5, basis: 'gross', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] },
+        { id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
+      // Ann 4s, Bob 5s -> better ball 4 x18 = 72. Cy 5s, Di 4 on 1-9 then 6 -> 4 x9 + 5 x9 = 81. Pair 1 wins the $20 carve ($10 each).
+      // Skins pot 20: #1-9 Ann 4 ties Di 4 (no skin); #10-18 Ann 4 is outright low (9 skins) -> $2 each = $18, $2 left over.
+      inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5)), _P('Di', _SPLIT(4, 6))] },
+      expect: { payouts: { Ann: 28, Bob: 10, Cy: 0, Di: 0 }, unallocated: 2, results: { fourball: { per_pair: 20, per_player: 10 }, skins: { per_skin: 2 } } }
+    }, {
+      name: 'gross tie: tied pairs split the carve',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'fourball', entity: 'pair', dollar_per_player: 10, basis: 'gross', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+      // Ann 6s / Bob 5s -> 5 x18 = 90. Cy 5s / Di 6s -> 90. Tied: the $40 pot splits $20 a pair, $10 a player.
+      inputs: { scorecards: [_P('Ann', _ALL(6)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5)), _P('Di', _ALL(6))] },
+      expect: { payouts: { Ann: 10, Bob: 10, Cy: 10, Di: 10 }, unallocated: 0, results: { fourball: { per_pair: 20, per_player: 10 } } }
+    }, {
+      name: 'net (own strokes): Bob\'s 9 strokes turn the same gross tie into a win for pair 1',
+      round: { dollar_per_player: 10, handicap: { mode: 'net', allowance: 95, stroke_index: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+          players: { Ann: { kind: 'given', strokes: 0 }, Bob: { kind: 'given', strokes: 9 }, Cy: { kind: 'given', strokes: 0 }, Di: { kind: 'given', strokes: 0 } } },
+        addons: [{ id: 'fourball', entity: 'pair', dollar_per_player: 10, basis: 'net', net_mode: 'own', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+      // Bob gets a stroke on holes 1-9: net 4 there, 5 elsewhere. Pair 1 better ball = 4 x9 + 5 x9 = 81 (Ann's 6s never count). Pair 2 = 90.
+      // Pair 1 takes the whole $40 carve: $20 each.
+      inputs: { scorecards: [_P('Ann', _ALL(6)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5)), _P('Di', _ALL(6))] },
+      expect: { payouts: { Ann: 20, Bob: 20, Cy: 0, Di: 0 }, unallocated: 0, results: { fourball: { per_pair: 40, per_player: 20 } } }
+    }]
+  });
+
   defineGame('birdiepay', {
     kind: 'addon', input: 'strokes', net: true,
     meta: { label: 'Birdie Payouts', uiOrder: 4, icon: '🐤', seal: 'BIRDIE PAY',
@@ -471,7 +607,7 @@
   // UI helpers: the portal builds its pickers, (i) panels and event-card seal from these, so a game's
   // label/icon/rules text/seal live ONLY in its definition. Order is the order hosts see them.
   function gamesInUiOrder() {
-    return listGames('addon').sort((x, y) => (ADDONS[x].meta.uiOrder || 99) - (ADDONS[y].meta.uiOrder || 99));
+    return listGames('addon').filter(id => ADDONS[id].released !== false).sort((x, y) => (ADDONS[x].meta.uiOrder || 99) - (ADDONS[y].meta.uiOrder || 99));
   }
   function gamesUiMeta() {
     const out = {};
@@ -517,6 +653,14 @@
         if (!Array.isArray(v) || v.length !== 18 || !v.every(p => Number(p) >= lo && Number(p) <= hi && (!f.integer || Number.isInteger(Number(p))))) {
           errors.push(f.label + ' needs 18 par values' + (f.min != null ? ' (' + lo + '-' + hi + ')' : ''));
         }
+      } else if (f.type === 'pairs') {
+        // [[nameA, nameB], ...]: at least two pairs, two different names each, nobody in two pairs
+        const names = [];
+        const wellFormed = Array.isArray(v) && v.length >= 2 && v.every(pr => Array.isArray(pr) && pr.length === 2 &&
+          pr.every(n => typeof n === 'string' && n.trim()) && pr[0].trim().toLowerCase() !== pr[1].trim().toLowerCase());
+        if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
+        if (!wellFormed) errors.push(f.label + ' needs at least two pairs of two different players');
+        else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be in one pair');
       } else if (f.type === 'enum') {
         if (!f.lenient && !(f.values || []).includes(v)) errors.push(f.label + ' must be one of ' + (f.values || []).join('/'));
       }
@@ -534,6 +678,7 @@
       if (f.type === 'money' || f.type === 'int') out[f.key] = Number(v);
       else if (f.type === 'holes') out[f.key] = v.slice().sort((a, b) => a - b);
       else if (f.type === 'pars') out[f.key] = v.map(Number);
+      else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
       else if (f.type === 'enum') out[f.key] = (f.values || []).includes(v) ? v : f.default;
       else out[f.key] = v;
     });
@@ -652,7 +797,7 @@
     const dpp = Number(config && config.payout && config.payout.entry_per_player) || 0;
     const totalPot = dpp * ledger.n;
     const state = { ledger, remaining: totalPot, unallocated: 0, rollover: 0 };
-    const results = { cttp: null, birdieball: null, birdiepay: null, skins: null };
+    const results = { cttp: null, birdieball: null, birdiepay: null, fourball: null, skins: null };
     const addons = ((config && config.addons) || [])
       .filter(a => ADDONS[a.id])
       .slice()
@@ -661,15 +806,17 @@
     const hc = config && config.handicap;
     const netByPlayer = new Map();
     const missingStrokes = [];
+    let hcSpecs = null;
     if (hc && hc.mode === 'net') {
       const specs = new Map(Object.entries(hc.players || {}).map(([k, v]) => [norm(k), v]));
+      hcSpecs = specs;
       cards.forEach(c => {
         const spec = specs.get(norm(c.player));
         if (!spec) missingStrokes.push(c.player);
         netByPlayer.set(norm(c.player), netCard(c, spec, hc.stroke_index));
       });
     }
-    const withCards = Object.assign({}, inputs, { scorecards: cards }, netByPlayer.size ? { netByPlayer } : {});
+    const withCards = Object.assign({}, inputs, { scorecards: cards }, netByPlayer.size ? { netByPlayer, hcSpecs, hcSI: hc.stroke_index || null } : {});
     let residualRan = false;
     addons.forEach(a => {
       results[a.id] = ADDONS[a.id].carve(state, a, withCards);
@@ -681,7 +828,7 @@
       if (leftover > 0) state.unallocated += ledger.giveBack(leftover).unallocated;
     }
     const rows = [...ledger.rows.values()]
-      .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + (r.birdiepay || 0) + r.given_back }))
+      .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + (r.birdiepay || 0) + (r.fourball || 0) + r.given_back }))
       .sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
     const games = (config && config.legacy && config.legacy.games) || addons.map(a => a.id);
     return {
@@ -690,6 +837,7 @@
       games, cttp: results.cttp, birdieball: results.birdieball,
       // birdiepay only appears in a snapshot when the game was on, so every pre-Dev-89 payout keeps its exact shape
       ...(results.birdiepay ? { birdiepay: results.birdiepay } : {}),
+      ...(results.fourball ? { fourball: results.fourball } : {}),
       skins: results.skins, payouts: rows,
       // handicap summary only appears when a net game ran — gross snapshots keep their exact shape
       ...(netByPlayer.size ? { rankings: buildRankings(cards, netByPlayer) } : {}),
@@ -768,7 +916,7 @@
     ENGINE_VERSION,
     BASE_GAMES, ADDONS,
     getGame, listGames, gamesInUiOrder, gamesUiMeta, gamesInfo, gamesSealLabels, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
-    skinsWon,
+    skinsWon, betterBallHoles,
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,
     computeRoundPayout,

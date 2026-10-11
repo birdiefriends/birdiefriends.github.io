@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.7.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.8.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -683,6 +683,45 @@ const GAME_SCHEMAS = {
         "label": "$ per player",
         "default": 0,
         "positive": true
+      }
+    ]
+  },
+  "fourball": {
+    "label": "Fourball",
+    "config": [
+      {
+        "key": "dollar_per_player",
+        "type": "money",
+        "label": "$ per player",
+        "default": 0,
+        "positive": true
+      },
+      {
+        "key": "basis",
+        "type": "enum",
+        "label": "Gross or Net",
+        "values": [
+          "gross",
+          "net"
+        ],
+        "default": "gross"
+      },
+      {
+        "key": "net_mode",
+        "type": "enum",
+        "label": "Net strokes",
+        "values": [
+          "own",
+          "low"
+        ],
+        "default": "own"
+      },
+      {
+        "key": "pairs",
+        "type": "pairs",
+        "label": "Pairs",
+        "default": [],
+        "required": true
       }
     ]
   },
@@ -744,6 +783,14 @@ function validateFields(fields, cfg) {
         if (!Array.isArray(v) || v.length !== 18 || !v.every(p => Number(p) >= lo && Number(p) <= hi && (!f.integer || Number.isInteger(Number(p))))) {
           errors.push(f.label + ' needs 18 par values' + (f.min != null ? ' (' + lo + '-' + hi + ')' : ''));
         }
+      } else if (f.type === 'pairs') {
+        // [[nameA, nameB], ...]: at least two pairs, two different names each, nobody in two pairs
+        const names = [];
+        const wellFormed = Array.isArray(v) && v.length >= 2 && v.every(pr => Array.isArray(pr) && pr.length === 2 &&
+          pr.every(n => typeof n === 'string' && n.trim()) && pr[0].trim().toLowerCase() !== pr[1].trim().toLowerCase());
+        if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
+        if (!wellFormed) errors.push(f.label + ' needs at least two pairs of two different players');
+        else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be in one pair');
       } else if (f.type === 'enum') {
         if (!f.lenient && !(f.values || []).includes(v)) errors.push(f.label + ' must be one of ' + (f.values || []).join('/'));
       }
@@ -759,6 +806,7 @@ function cleanFields(fields, cfg) {
       if (f.type === 'money' || f.type === 'int') out[f.key] = Number(v);
       else if (f.type === 'holes') out[f.key] = v.slice().sort((a, b) => a - b);
       else if (f.type === 'pars') out[f.key] = v.map(Number);
+      else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
       else if (f.type === 'enum') out[f.key] = (f.values || []).includes(v) ? v : f.default;
       else out[f.key] = v;
     });
