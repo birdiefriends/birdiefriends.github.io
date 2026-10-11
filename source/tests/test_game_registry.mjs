@@ -80,4 +80,28 @@ for (let t = 0; t < 400; t++) {
   const paid = r.payouts.reduce((a, p) => a + p.total, 0);
   ok(Math.abs(paid + r.unallocated - r.total_pot) < 1e-9, 'fuzz ' + t + ': conservation (' + chosen.join(',') + ')');
 }
+// 7. UI helpers: stable host-facing order, unique uiOrder, text lives only in the definition
+ok(E.gamesInUiOrder().join() === 'skins,cttp,birdieball,birdiepay', 'UI order is the order hosts see today');
+ok(new Set(E.gamesInUiOrder().map(id => E.getGame(id).meta.uiOrder)).size === addons.length, 'uiOrder is unique per game');
+ok(E.gamesInfo().skins === E.getGame('skins').meta.info && E.gamesSealLabels().birdiepay === 'BIRDIE PAY' && E.gamesUiMeta().birdieball.label === 'MiserBall', 'helpers read the definitions');
+
+// 8. THE POINT OF THE REGISTRY: a brand-new game appears in the UI tables, validation and the pot-fit guard
+//    with no other code. (Registered at runtime here, then removed.)
+E.ADDONS.demo = { id: 'demo', kind: 'addon', order: 50, entity: 'individual', input: 'none', net: false,
+  meta: { label: 'Demo Game', icon: '🧪', seal: 'DEMO', info: 'A test game.', uiOrder: 9 },
+  config: [{ key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true }],
+  fixedCost: (cfg, ctx) => cfg.dollar_per_player * ctx.players, fixtures: [], carve() { return {}; } };
+ok(E.gamesUiMeta().demo.label === 'Demo Game' && E.gamesSealLabels().demo === 'DEMO' && E.gamesInfo().demo === 'A test game.', 'new game shows up in the portal tables');
+ok(E.gameSchemas().demo.config.length === 1 && E.validateGameConfig('demo', { dollar_per_player: 0 }).ok === false, 'new game is validated and exported to the Worker schema table');
+ok(E.potFit({ demo: { dollar_per_player: 4 } }, 10, 4).fixedCost === 16, 'new game counts in the pot-fit guard');
+delete E.ADDONS.demo;
+ok(!E.gamesUiMeta().demo, 'demo game removed again');
+
+// 9. the portal must not hand-list games again
+import fs from 'fs';
+const psrc = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
+ok(!/GAMES_SEAL_LABELS = \{/.test(psrc), 'portal: no hand-written seal table');
+ok(!/const GATHERING_GAMES_META = \{/.test(psrc), 'portal: no hand-written game meta table');
+ok(!/(?:^|\n)\s+(skins|cttp|birdieball|birdiepay):\s+'(?:Every hole|Closest|Everyone|A flat)/.test(psrc), 'portal: no hand-written (i) text for a game');
+ok(/function gamesFormOverCommit[\s\S]{0,900}BFEngine\.potFit\(/.test(psrc), 'portal: over-commit guard uses BFEngine.potFit');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

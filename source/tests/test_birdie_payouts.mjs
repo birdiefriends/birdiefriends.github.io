@@ -291,8 +291,9 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
 }
 // ── L: wiring — checklist meta, seal label, engine version tag, worker accepts the game
 {
-  ok(/birdiepay:\s+\{ label: 'Birdie Payouts'/.test(src), 'L: game is in GATHERING_GAMES_META');
-  ok(/birdiepay: 'BIRDIE PAY'/.test(src), 'L: event-card seal has a label for it');
+  // Dev-93: label/icon/seal come from the game definition in bf_engine.js; the portal builds its tables from the registry.
+  ok(E.gamesUiMeta().birdiepay.label === 'Birdie Payouts' && /const GATHERING_GAMES_META = BFEngine\.gamesUiMeta\(\);/.test(src), 'L: game is in GATHERING_GAMES_META (from the registry)');
+  ok(E.gamesSealLabels().birdiepay === 'BIRDIE PAY' && /const GAMES_SEAL_LABELS = BFEngine\.gamesSealLabels\(\);/.test(src), 'L: event-card seal has a label for it (from the registry)');
   const w = fs.readFileSync(HERE('../bf_experiences_worker.js'), 'utf8');
   // Dev-93: VALID_GAMES is now derived from the generated GAME_SCHEMAS table (one definition per game in bf_engine.js).
   ok(w.includes('const VALID_GAMES = Object.keys(GAME_SCHEMAS);') && /"birdiepay": \{/.test(w), 'L: Worker VALID_GAMES (from GAME_SCHEMAS) includes birdiepay');

@@ -1,9 +1,11 @@
-import fs from 'fs'; import vm from 'vm'; import { extractFn } from './extract.mjs'; import { fileURLToPath } from 'url';
+import fs from 'fs'; import vm from 'vm'; import { extractFn, loadEngine } from './extract.mjs'; import { fileURLToPath } from 'url';
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
-const infoSrc = src.match(/const GAME_INFO = \{[\s\S]*?\n\};/)[0];
+// Dev-93: GAME_INFO is built from the engine's game definitions (plus the `net` concept) — run the real declaration.
+const E = loadEngine();
+const infoSrc = src.match(/const GAME_INFO = Object\.assign\(\{[\s\S]*?\}, BFEngine\.gamesInfo\(\)\);/)[0];
 const els = {};
-const ctx = { document: { getElementById: id => els[id] || null }, _gamesFormSelected: new Set(['skins']), _hostGamesPick: new Set(),
+const ctx = { BFEngine: E, document: { getElementById: id => els[id] || null }, _gamesFormSelected: new Set(['skins']), _hostGamesPick: new Set(),
   GATHERING_GAMES_META: { skins: { label: 'Skins', icon: 'S' }, cttp: { label: 'CTP', icon: 'C' }, birdieball: { label: 'BB', icon: 'B' }, birdiepay: { label: 'BP', icon: 'P' } } };
 vm.createContext(ctx);
 vm.runInContext(infoSrc + '\n' + ['gameInfoBtnHtml', 'gameInfoPanelHtml', 'toggleGameInfo', 'gatheringGamesChecklistHtml', 'hostGamesListHtml'].map(n => extractFn(src, n)).join('\n') + ';this.G=GAME_INFO', ctx);

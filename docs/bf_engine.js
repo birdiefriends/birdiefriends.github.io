@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.6.0';
+  const ENGINE_VERSION = '1.7.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -385,7 +385,7 @@
 
   defineGame('cttp', {
     kind: 'addon', input: 'none', net: false,
-    meta: { label: 'CTP', icon: '🎯', seal: 'CTP',
+    meta: { label: 'CTP', uiOrder: 2, icon: '🎯', seal: 'CTP',
       info: 'Closest to the Pin on the chosen holes (usually the par 3s). Whoever is closest on a hole wins that hole\'s fixed $ prize, taken from the pot. Claim it in the Live Panel; the newest claim leads. An unclaimed hole\'s money rolls into Skins.' },
     config: [
       { key: 'dollar_per_hole', type: 'money', label: '$ per hole', default: 0, positive: true },
@@ -407,7 +407,7 @@
 
   defineGame('birdieball', {
     kind: 'addon', input: 'none', net: false,
-    meta: { label: 'MiserBall', icon: '🐦', seal: 'BIRDIEBALL',
+    meta: { label: 'MiserBall', uiOrder: 3, icon: '🐦', seal: 'BIRDIEBALL',
       info: 'Everyone starts with one ball. Keep it all round and you win: everyone who still has theirs at the end splits the pot. If everybody loses theirs, the last MiserBall standing (the one lost latest) wins. Lose yours? Tap "I lost it" in the Live Panel so the group knows, and confirm on your scorecard.' },
     config: [{ key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true }],
     fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
@@ -428,7 +428,7 @@
 
   defineGame('birdiepay', {
     kind: 'addon', input: 'strokes', net: true,
-    meta: { label: 'Birdie Payouts', icon: '🐤', seal: 'BIRDIE PAY',
+    meta: { label: 'Birdie Payouts', uiOrder: 4, icon: '🐤', seal: 'BIRDIE PAY',
       info: 'A flat $ for every birdie or better, paid to whoever made it, from the same pot before Skins (gross unless the host set it to Net, where a par with a stroke counts). An eagle still pays one birdie. Nothing to enter: it\'s worked out from the scorecards when the round closes.' },
     config: [
       { key: 'dollar_per_birdie', type: 'money', label: '$ per birdie', default: 0, positive: true },
@@ -448,7 +448,7 @@
 
   defineGame('skins', {
     kind: 'addon', input: 'strokes', net: true, residual: true,
-    meta: { label: 'Skins', icon: '⛳', seal: 'SKINS',
+    meta: { label: 'Skins', uiOrder: 1, icon: '⛳', seal: 'SKINS',
       info: 'Every hole is its own prize. The lowest score on a hole, outright, wins that skin (gross unless the host set it to Net); a tie wins nothing. Skins split whatever is left of the pot after CTP, MiserBall and Birdie Payouts, shared by the skins won.' },
     config: [{ key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' }],
     fixedCost: () => 0,   // the residual game: takes whatever the others leave
@@ -467,6 +467,26 @@
   function listGames(kind) {
     const src = kind === 'base' ? BASE_GAMES : ADDONS;
     return Object.keys(src).filter(id => src[id].meta).sort((a, b) => (src[a].order || 0) - (src[b].order || 0));
+  }
+  // UI helpers: the portal builds its pickers, (i) panels and event-card seal from these, so a game's
+  // label/icon/rules text/seal live ONLY in its definition. Order is the order hosts see them.
+  function gamesInUiOrder() {
+    return listGames('addon').sort((x, y) => (ADDONS[x].meta.uiOrder || 99) - (ADDONS[y].meta.uiOrder || 99));
+  }
+  function gamesUiMeta() {
+    const out = {};
+    gamesInUiOrder().forEach(id => { out[id] = { label: ADDONS[id].meta.label, icon: ADDONS[id].meta.icon }; });
+    return out;
+  }
+  function gamesInfo() {
+    const out = {};
+    gamesInUiOrder().forEach(id => { out[id] = ADDONS[id].meta.info; });
+    return out;
+  }
+  function gamesSealLabels() {
+    const out = {};
+    gamesInUiOrder().forEach(id => { out[id] = ADDONS[id].meta.seal; });
+    return out;
   }
   function defaultConfig(id) {
     const g = getGame(id);
@@ -747,7 +767,7 @@
   return {
     ENGINE_VERSION,
     BASE_GAMES, ADDONS,
-    getGame, listGames, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
+    getGame, listGames, gamesInUiOrder, gamesUiMeta, gamesInfo, gamesSealLabels, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
     skinsWon,
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,
