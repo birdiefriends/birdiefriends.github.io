@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.12.1';
+  const ENGINE_VERSION = '1.13.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -894,6 +894,39 @@
     return computeRoundPayout(gatheringConfigFromLegacy(row), { scorecards, ctpLeaders, bbAnswers });
   }
 
+  // ── Fourball live board (Dev-93) ───────────────────────────────────────
+  // Where every pair stands RIGHT NOW from whatever scores are saved (partial cards welcome), using the
+  // same better-ball / net logic the payout uses, so the live view can never disagree with the close.
+  // pars (optional, 18) lets pairs on different holes be ranked fairly by score to par.
+  // Returns null when the game has no Fourball.
+  function fourballBoard(row, scorecards, pars) {
+    const snap = computeGatheringGamesPayout(row, (scorecards || []).filter(c => c && c.player), {}, []);
+    const f = snap && snap.fourball;
+    if (!f) return null;
+    const parAt = h => (Array.isArray(pars) && Number.isFinite(Number(pars[h - 1])) ? Number(pars[h - 1]) : null);
+    const rows = (f.standings || []).map(r => {
+      const done = (r.holes || []).filter(x => x.score != null);
+      const total = done.reduce((a, x) => a + x.score, 0);
+      const parsOk = done.length > 0 && done.every(x => parAt(x.hole) != null);
+      return {
+        pair: r.pair, played: done.length, thru: done.length ? Math.max(...done.map(x => x.hole)) : 0,
+        total, to_par: parsOk ? total - done.reduce((a, x) => a + parAt(x.hole), 0) : (done.length ? null : 0), complete: !!r.complete
+      };
+    });
+    const useParLive = rows.every(r => r.to_par !== null);
+    rows.sort((a, b) => useParLive
+      ? (a.played === 0) - (b.played === 0) || a.to_par - b.to_par || b.played - a.played
+      : (a.played === 0) - (b.played === 0) || a.total - b.total || b.played - a.played);
+    let place = 0, prev = null;
+    rows.forEach((r, i) => {
+      const key = r.played === 0 ? 'none' : (useParLive ? r.to_par : r.total) + '|' + (useParLive ? '' : r.played);
+      if (key !== prev) { place = i + 1; prev = key; }
+      r.place = r.played === 0 ? null : place;
+    });
+    rows.forEach(r => { r.tied = r.place != null && rows.filter(x => x.place === r.place).length > 1; });
+    return { basis: f.basis, net_mode: f.net_mode || null, net_missing: !!f.net_missing, ranked_by: useParLive ? 'to_par' : 'total', rows };
+  }
+
   // ── Scorecard helpers ──────────────────────────────────────────────────
   // One latest card per player. Rows must arrive newest-first (GET
   // /scorecards orders captured_at DESC), so the first seen per player wins.
@@ -959,7 +992,7 @@
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,
     computeRoundPayout,
-    computeGatheringGamesPayout,
+    computeGatheringGamesPayout, fourballBoard,
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     suggestGameAmounts

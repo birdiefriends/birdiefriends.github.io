@@ -3614,7 +3614,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.12.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.13.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -8582,6 +8582,7 @@ function toggleLivePanel() {
     loadVenueCttpHoles(getLiveEvent()).then(renderLiveBanner); // which holes to show — resolved once per panel-open, not every refresh tick
     loadSkinBoardData();
     loadBirdieBallAnswers(getLiveEvent()); // Dev-86 round 3 follow-up — no-op for a non-Gathering evt
+    loadFourballLive(getLiveEvent());
     loadLiveRoundTeams(getLiveEvent()); // resolved once per panel-open (Dev-80) — decides team vs individual pickers below
     startCtpRefresh();
   } else {
@@ -8597,6 +8598,7 @@ function startCtpRefresh() {
     loadCtpData(evt);
     loadSkinBoardData();
     loadBirdieBallAnswers(evt); // Dev-86 round 3 follow-up — keeps the "who's lost it" board and the already-answered check both live
+    loadFourballLive(evt);
   }, 60000);  // refresh every 60 seconds
 }
 function stopCtpRefresh() {
@@ -8732,6 +8734,7 @@ function buildLivePanel(evt) {
   const _liveConfig = _panelGid != null ? gatheringRoundConfig(_panelGid) : null;
   const showCttpSection = _panelGid == null || !!gatheringAddon(_liveConfig, 'cttp');
   const showBirdieBallSection = !!gatheringAddon(_liveConfig, 'birdieball');
+  const showFourballSection = !!gatheringAddon(_liveConfig, 'fourball'); // Dev-93: live pair standings
   // Dev-87 — host-only Close & Calculate. Only a gamed Gathering (open
   // config in the index) reaching this panel, and only its own host.
   const _liveHostId = evt.source === 'gathering' ? evt.hostId : ((_gatheringGamesIndex.get(_panelGid) || {}).host_id);
@@ -9272,6 +9275,8 @@ function buildLivePanel(evt) {
       <div class="live-section-header"><span class="lsh-icon">📸</span>Photos &amp; Notes</div>
       <div class="live-section-body">${buildLivePanelPhotoSection(evt)}</div>
     </div>` : '';
+  // ── SECTION 2.7: Fourball (Dev-93) — live pair standings from the scores saved so far ──
+  const fbSection = showFourballSection ? fourballLiveSectionHtml(_liveConfig) : '';
   return `<div class="live-panel">
     ${groupingsLink}
     ${photosSection}
@@ -9288,6 +9293,11 @@ function buildLivePanel(evt) {
     <div class="live-section">
       <div class="live-section-header"><span class="lsh-icon">🐦</span>MiserBall</div>
       <div class="live-section-body">${bbSection}</div>
+    </div>` : ''}
+    ${showFourballSection ? `
+    <div class="live-section">
+      <div class="live-section-header"><span class="lsh-icon">🤝</span>Fourball</div>
+      <div class="live-section-body">${fbSection}</div>
     </div>` : ''}
     <div class="live-section">
       <div class="live-section-header"><span class="lsh-icon">📋</span>Post-Round Scorecard</div>
@@ -9926,6 +9936,50 @@ async function loadSkinBoardData() {
 // both the live-alert widget and the scorecard confirmation can read the
 // same cache without a fetch each. No-ops for a non-Gathering evt — there's
 // no such thing as a MiserBall config outside a gamed Gathering.
+// ── Fourball live standings (Dev-93) ──────────────────────────────────────
+// Reads the scorecards saved so far (partial cards count) and asks the SAME engine the payout uses
+// (BFEngine.fourballBoard), so what players see mid-round can't disagree with what Close pays.
+let _fbLive = null; // { gid, board, at }
+async function loadFourballLive(evt) {
+  const gid = panelGamesGid(evt);
+  const row = gid == null ? null : _gatheringGamesIndex.get(gid);
+  if (!row || !(row.games || []).includes('fourball')) { _fbLive = null; return; }
+  try {
+    const key = gamesScoreKeyForGid(gid);
+    const res = await fetch(`${SCORECARD_API}/scorecards?event=${encodeURIComponent(key)}&input=strokes`);
+    const data = await res.json();
+    const cards = latestScorecardPerPlayer(data.scorecards || []);
+    const pars = csResolvePars(evt);
+    _fbLive = { gid, board: BFEngine.fourballBoard(row, cards, Array.isArray(pars) && pars.length === 18 ? pars : null), at: Date.now() };
+    renderLiveBanner();
+  } catch (e) {
+    console.warn('[Fourball] live standings error:', e.message);
+  }
+}
+function fourballLiveSectionHtml(cfg) {
+  const fb = gatheringAddon(cfg, 'fourball');
+  const b = _fbLive && _fbLive.board;
+  const net = fb && fb.basis === 'net';
+  const head = `<div style="font-size:0.8rem;color:rgba(255,255,255,0.65);margin-bottom:8px;line-height:1.4">Better ball of each pair, ${net ? (fb.net_mode === 'low' ? 'net, off the low' : 'net, own strokes') : 'gross'}. Lowest total wins. Updates as scores are saved.</div>`;
+  if (!b) return head + `<div style="font-size:0.82rem;color:rgba(255,255,255,0.5)">${_fbLive ? 'No scores saved yet.' : 'Loading standings…'}</div>`;
+  const me = String(currentPlayer || '').trim().toLowerCase();
+  const fmt = v => v === 0 ? 'E' : (v > 0 ? '+' + v : String(v));
+  const rows = b.rows.map(r => {
+    const mine = r.pair.some(n => String(n).trim().toLowerCase() === me);
+    const score = r.played === 0 ? '—' : (b.ranked_by === 'to_par' ? fmt(r.to_par) : String(r.total));
+    const thru = r.complete ? 'F' : (r.played ? `thru ${r.thru}` : '');
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid rgba(255,255,255,0.08);font-size:0.84rem;color:#fff;${mine ? 'font-weight:700' : ''}">
+      <span style="width:1.6rem;color:rgba(255,255,255,0.5);font-size:0.74rem">${r.place == null ? '' : (r.tied ? 'T' : '') + r.place}</span>
+      <span style="flex:1;min-width:0">${r.pair.map(escapeHtml).join(' &amp; ')}${mine ? ' ⭐' : ''}</span>
+      <span style="color:rgba(255,255,255,0.5);font-size:0.74rem">${thru}</span>
+      <span style="min-width:2.2rem;text-align:right">${score}</span></div>`;
+  }).join('');
+  const note = [];
+  if (net && b.net_missing) note.push('Net was chosen but no strokes were saved, so this is gross.');
+  if (b.rows.length && b.ranked_by !== 'to_par' && b.rows.some(r => r.played !== b.rows[0].played)) note.push('Pairs are on different holes, so compare after the round.');
+  return head + (rows || `<div style="font-size:0.82rem;color:rgba(255,255,255,0.5)">No pairs set up.</div>`)
+    + (note.length ? `<div style="font-size:0.72rem;color:rgba(255,255,255,0.45);margin-top:6px;line-height:1.4">${note.join(' ')}</div>` : '');
+}
 async function loadBirdieBallAnswers(evt) {
   const _bbGid = panelGamesGid(evt);
   if (_bbGid == null) { _bbAnswers = []; _bbAnswersForGathering = null; return; }

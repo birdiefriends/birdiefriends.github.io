@@ -1,5 +1,5 @@
 v4.15.2 · 2026-10-11
-Deployed: 2026-10-11 (Games form tidy-up: the Fourball scoring toggles no longer wrap, and the Gross/Net wording is no longer repeated. Also fixes the oversized "Net ranking" checkbox.)
+Deployed: 2026-10-11 (Live Panel: a Fourball game now shows live pair standings, from the scores saved so far, ranked to par and refreshed every minute. Same scoring as the final result.)
 
 v4.15.1 · 2026-10-09
 Deployed: 2026-10-09 (BF Weekend Times: a Sub on an 8-player event no longer sees the "You're the 5th player — spot not yet confirmed" banner. That warning is only for the 5th Yes player. A Sub now reads: Registered as Sub — committed players have priority.)
