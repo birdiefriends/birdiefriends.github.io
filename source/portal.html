@@ -8684,6 +8684,16 @@ function bbStrokeGridHtml(selectedStroke, setFnName) {
   return html + '</div>';
 }
 // Build the expanded scorecard + CttP panel
+// Dev-93 — which game sections the Live Panel shows, from the round's own games (pure, tested).
+//   panelGid == null  -> no games config at all (BF Series, Wally Cup, any non-gamed round): the classic panel,
+//                        Birdie Alert + CTP exactly as before, nothing game-specific added.
+//   a gamed round     -> only what its games use: CTP when CTP is on, MiserBall when on, Fourball when on, and
+//                        Birdie Alert only when Skins or Birdie Payouts are in play (they are what it feeds).
+function livePanelSections(config, panelGid) {
+  if (panelGid == null || !config) return { birdieAlert: true, cttp: true, birdieball: false, fourball: false };
+  const has = id => !!gatheringAddon(config, id);
+  return { birdieAlert: has('skins') || has('birdiepay'), cttp: has('cttp'), birdieball: has('birdieball'), fourball: has('fourball') };
+}
 function buildLivePanel(evt) {
   // 2Man (scramble_pair) rounds pick from that round's saved teams instead
   // of the individual roster — Dev-80. isTeam is set even before any teams
@@ -8732,9 +8742,13 @@ function buildLivePanel(evt) {
   // array/cttp_config/birdieball_config at each site below.
   const _panelGid = panelGamesGid(evt);
   const _liveConfig = _panelGid != null ? gatheringRoundConfig(_panelGid) : null;
-  const showCttpSection = _panelGid == null || !!gatheringAddon(_liveConfig, 'cttp');
-  const showBirdieBallSection = !!gatheringAddon(_liveConfig, 'birdieball');
-  const showFourballSection = !!gatheringAddon(_liveConfig, 'fourball'); // Dev-93: live pair standings
+  // Dev-93: the panel configures itself from the games on THIS round (see livePanelSections). A round with no
+  // games config (BF Series, Wally Cup, any non-gamed event) gets exactly what it always had.
+  const _lps = livePanelSections(_liveConfig, _panelGid);
+  const showCttpSection = _lps.cttp;
+  const showBirdieBallSection = _lps.birdieball;
+  const showFourballSection = _lps.fourball; // live pair standings
+  const showBirdieAlertSection = _lps.birdieAlert;
   // Dev-87 — host-only Close & Calculate. Only a gamed Gathering (open
   // config in the index) reaching this panel, and only its own host.
   const _liveHostId = evt.source === 'gathering' ? evt.hostId : ((_gatheringGamesIndex.get(_panelGid) || {}).host_id);
@@ -9280,10 +9294,11 @@ function buildLivePanel(evt) {
   return `<div class="live-panel">
     ${groupingsLink}
     ${photosSection}
+    ${showBirdieAlertSection ? `
     <div class="live-section">
       <div class="live-section-header"><span class="lsh-icon">🦅</span>Birdie Alert</div>
       <div class="live-section-body">${birdieSection}</div>
-    </div>
+    </div>` : ''}
     ${showCttpSection ? `
     <div class="live-section">
       <div class="live-section-header"><span class="lsh-icon">🎯</span>Closest to the Pin</div>
