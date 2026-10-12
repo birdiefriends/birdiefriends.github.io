@@ -18974,7 +18974,7 @@ function setGamesFormBirdiepayDollarPerBirdie(val) {
 }
 // ── Scoring periods: the picker and the plain-English money line, shared by every game that uses them ──
 function gamesPeriodPickerHtml(cur, fn) {
-  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${BFEngine.periodList().map(o => `<button type="button" onclick="${fn}('${o.key}')" style="min-height:52px;text-align:left;border-radius:10px;padding:8px 10px;cursor:pointer;font-family:inherit;${cur === o.key ? 'background:var(--green);color:#fff;border:2px solid var(--green)' : 'background:#fff;color:var(--text);border:1.5px solid var(--border)'}"><span style="font-size:0.86rem;font-weight:700;display:block">${escapeHtml(o.label)}</span><span style="font-size:0.7rem;opacity:0.8;display:block;margin-top:2px">${o.segments > 1 ? o.segments + ' pots' : 'One pot'}</span></button>`).join('')}</div>`;
+  return `<select onchange="${fn}(this.value)" aria-label="Scoring period" style="width:100%;height:42px;border-radius:10px;border:1.5px solid var(--border);font-family:inherit;font-size:0.9rem;background:#fff;padding:0 10px">${BFEngine.periodList().map(o => `<option value="${o.key}" ${cur === o.key ? 'selected' : ''}>${escapeHtml(o.label)} — ${o.segments > 1 ? o.segments + ' pots' : 'one pot'}</option>`).join('')}</select>`;
 }
 // roundText: what the whole-round pot does for this game (it differs by game). Periods always read the same.
 function periodExplainHtml(pk, totalAnte, texts) {
