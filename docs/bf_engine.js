@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.13.0';
+  const ENGINE_VERSION = '1.14.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -951,6 +951,54 @@
     return missing;
   }
 
+
+  // ── Live scoring helpers (Dev-93) ───────────────────────────────────────
+  // A foursome is two pairs head to head. The host's Fourball pairs are taken two at a time in the order
+  // they were set: pairs 1+2 are group 1, pairs 3+4 are group 2, and so on. A last odd pair is its own group.
+  function fourballGroups(pairs) {
+    const ps = (pairs || []).filter(p => Array.isArray(p) && p.length === 2);
+    const out = [];
+    for (let i = 0; i < ps.length; i += 2) {
+      const gp = ps.slice(i, i + 2);
+      out.push({ n: out.length + 1, pairs: gp, players: gp.reduce((a, p) => a.concat(p), []) });
+    }
+    return out;
+  }
+  // Short unique initials for a list of names: "Brian Hager" -> BH. A clash gets more letters, then a number.
+  function playerInitials(names) {
+    const base = n => {
+      const w = String(n || '').trim().split(/\s+/).filter(Boolean);
+      if (!w.length) return '?';
+      return w.length === 1 ? w[0].slice(0, 2).toUpperCase() : (w[0][0] + w[w.length - 1][0]).toUpperCase();
+    };
+    const out = [], used = new Set();
+    (names || []).forEach(n => {
+      let v = base(n);
+      if (used.has(v)) {
+        const w = String(n || '').trim().split(/\s+/).filter(Boolean);
+        const longer = (w[0].slice(0, 2) + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase();
+        if (!used.has(longer)) v = longer;
+      }
+      let k = 2; const root = v;
+      while (used.has(v)) v = root + (k++);
+      used.add(v); out.push(v);
+    });
+    return out;
+  }
+  // Merge what the server has with what this phone holds. A hole this phone changed and has not yet saved
+  // (dirty) keeps the local value; every other hole takes the server's value when the server has one.
+  function mergeHoleScores(local, remote, dirty) {
+    const out = [];
+    for (let i = 0; i < 18; i++) {
+      const l = Array.isArray(local) ? local[i] : null, r = Array.isArray(remote) ? remote[i] : null;
+      const isNum = v => typeof v === 'number' && v > 0;
+      if (dirty && dirty[i + 1] != null) out.push(dirty[i + 1] === 0 ? null : dirty[i + 1]);
+      else if (isNum(r)) out.push(r);
+      else out.push(isNum(l) ? l : null);
+    }
+    return out;
+  }
+
   // ── Suggested amounts (v4.9.14, Brian: "we figure it out for the host") ──
   // Pure: a buy-in, a headcount and the games ticked -> whole-dollar starting
   // amounts for the per-game fields. Brian's model: Skins is the residual and
@@ -995,6 +1043,7 @@
     computeGatheringGamesPayout, fourballBoard,
     latestScorecardPerPlayer,
     scorecardMissingHoles,
+    fourballGroups, playerInitials, mergeHoleScores,
     suggestGameAmounts
   };
 });

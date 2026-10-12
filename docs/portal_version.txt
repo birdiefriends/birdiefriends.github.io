@@ -1,5 +1,5 @@
-v4.15.2 · 2026-10-11
-Deployed: 2026-10-12 (Live Panel now shows only the sections a round needs: a Fourball-only game no longer shows Birdie Alert or CTP. BF Series and other non-game rounds keep the same panel as before.)
+v4.16.0 · 2026-10-12
+Deployed: 2026-10-12 (Fourball now has live scoring: the Live Panel opens on a Score view with the four players' initials, hole arrows and a number row, and each score saves as you tap. A Score | Games switch brings back everything else. Close & Calculate uses these saved scores. BF Series and other non-Fourball rounds are unchanged.)
 
 v4.15.1 · 2026-10-09
 Deployed: 2026-10-09 (BF Weekend Times: a Sub on an 8-player event no longer sees the "You're the 5th player — spot not yet confirmed" banner. That warning is only for the 5th Yes player. A Sub now reads: Registered as Sub — committed players have priority.)

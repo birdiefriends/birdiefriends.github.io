@@ -1,0 +1,115 @@
+// Dev-93 — live scoring (Score mode): foursome groups, initials, merge rules, tap-to-save, wiring, BF Series untouched.
+import fs from 'fs'; import vm from 'vm';
+import { extractFn, loadEngine } from './extract.mjs';
+import { fileURLToPath } from 'url';
+const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
+let pass = 0, fail = 0;
+const eq = (a, b, m) => { const ok = JSON.stringify(a) === JSON.stringify(b); ok ? pass++ : fail++; if (!ok) console.log('FAIL', m, '\n  got', JSON.stringify(a), '\n  exp', JSON.stringify(b)); };
+const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
+const E = loadEngine();
+const PARS = [4,4,3,4,5,4,5,3,4, 3,5,4,4,4,3,4,5,3];
+
+// ── engine helpers
+eq(E.fourballGroups([['A','B'],['C','D'],['E','F'],['G','H']]).map(g => g.players), [['A','B','C','D'],['E','F','G','H']], 'groups: pairs taken two at a time');
+eq(E.fourballGroups([['A','B'],['C','D'],['E','F']]).map(g => g.pairs.length), [2, 1], 'groups: a last odd pair is its own group');
+eq(E.fourballGroups(null), [], 'groups: none');
+eq(E.playerInitials(['Brian Hager', 'Tom Marsh', 'Mike', 'Dave Vance']), ['BH', 'TM', 'MI', 'DV'], 'initials: first+last, single name two letters');
+eq(E.playerInitials(['Tom Marsh', 'Tim Maher']), ['TM', 'TIM'], 'initials: a clash gets more letters');
+eq(new Set(E.playerInitials(['Al Bo', 'Alan Bo', 'Alex Bo', 'Al Bo'])).size, 4, 'initials: always unique');
+const L = [4,null,3], R = [5,4,null];
+eq(E.mergeHoleScores(L, R, null).slice(0, 3), [5, 4, 3], 'merge: server wins where it has a score, local fills the rest');
+eq(E.mergeHoleScores(L, R, { 1: 4 }).slice(0, 3), [4, 4, 3], 'merge: a hole not yet saved from this phone keeps the local value');
+eq(E.mergeHoleScores([4], [4], { 1: 0 })[0], null, 'merge: an unsaved clear stays cleared');
+eq(E.mergeHoleScores(null, null, null).length, 18, 'merge: always 18 holes');
+
+// ── portal logic in a sandbox
+const cfgRow = { games: ['fourball'], dollar_per_player: 20, game_configs: { fourball: { dollar_per_player: 20, basis: 'gross', net_mode: 'own',
+  pairs: [['Brian Hager','Tom Marsh'],['Mike Kay','Dave Vance'],['Sam Lee','Pat Roe'],['Lee Jo','Jo Wu']] } } };
+const config = E.gatheringConfigFromLegacy(cfgRow);
+const posts = [];
+const store = {};
+const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date, Promise, BFEngine: E, SCORECARD_API: 'https://sc', currentPlayer: 'Mike Kay',
+  escapeHtml: s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])),
+  localStorage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } },
+  panelGamesGid: e => e.gatheringId, gamesScoreKeyForGid: g => 'gathering:' + g, csResolvePars: () => PARS,
+  csMarkFromPar: (v, p) => (v == null ? null : v < p ? 'c' : v > p ? 's' : null), csNormalizedVenueName: () => 'BSGC',
+  renderLiveBanner: () => { ctx.rendered++; }, rendered: 0, window: { addEventListener() {} },
+  gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null, failNext: false,
+  fetch: async (url, opt) => { if (ctx.failNext) throw new Error('offline'); posts.push(JSON.parse(opt.body)); return { json: async () => ({ ok: true }) }; } };
+vm.createContext(ctx);
+const names = ['liveScoringOn','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skCardOf','skMergeRemote','skGoFirstOpen','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml','skCardHtml'];
+vm.runInContext('let _sk = null; const _skChain = {};\n' + names.map(n => extractFn(src, n)).join('\n') + '\nthis.api={' + names.join(',') + ',get:()=>_sk};', ctx);
+const A = ctx.api;
+const evt = { gatheringId: 7, name: 'Sat Fourball', holes: 18 };
+const tick = () => new Promise(r => setTimeout(r, 5));
+
+ok(A.liveScoringOn(config, 7) && !A.liveScoringOn(config, null) && !A.liveScoringOn(null, 7), 'on only for a Fourball round with a panel gid');
+ok(!A.liveScoringOn(E.gatheringConfigFromLegacy({ games: ['skins'], dollar_per_player: 10 }), 7), 'a Skins-only round has no live scoring');
+A.skEnsure(evt, config);
+eq(A.skGroups().length, 2, 'two foursomes');
+A.skMergeRemote([]);
+eq(A.get().groupIdx, 0, 'viewer in pair 2 -> group 1');
+eq(A.skGroup().players, ['Brian Hager','Tom Marsh','Mike Kay','Dave Vance'], 'group has 2 pairs');
+eq([A.get().hole, A.get().sel], [1, 0], 'starts at hole 1, first player');
+
+// tap four scores
+[4,3,4,5].forEach(v => A.skTap(v)); await tick(); await tick();
+const c1 = A.get().cards;
+eq([c1['Brian Hager'][0], c1['Tom Marsh'][0], c1['Mike Kay'][0], c1['Dave Vance'][0]], [4,3,4,5], 'four taps fill four players for hole 1');
+eq(posts.length, 4, 'each score saved as it was tapped (one post per tap)');
+const last = posts.find(p => p.player === 'Dave Vance');
+ok(last.input_type === 'strokes' && last.event_name === 'gathering:7' && last.holes.length === 18 && last.holes[0] === 5 && last.holes[1] === null, 'post: gross strokes, 18 slots, only hole 1 filled');
+eq([last.total, last.front9, last.hole_count, last.venue], [5, 5, 18, 'BSGC'], 'post: totals, 18 holes, venue');
+eq(last.marks[0], 's', 'post: marks computed from par (5 on a par 4)');
+eq(Object.keys(A.get().dirty), [], 'nothing left waiting after saves');
+eq(A.get().sel, 3, 'after the fourth score the selection stays on the last tile (all in)');
+
+// next hole + selection jumps to first empty
+A.skNav(1);
+eq([A.get().hole, A.get().sel], [2, 0], 'next hole starts at the first player');
+A.skTap(4); A.skTap(4);
+eq(A.get().sel, 2, 'selection moves to the next player without a score');
+A.skPick(0); A.skTap(5); await tick(); await tick();
+eq(A.get().cards['Brian Hager'][1], 5, 'tapping a tile then a number replaces that score');
+A.skPick(0); A.skClear(); await tick(); await tick();
+eq(A.get().cards['Brian Hager'][1], null, 'clear removes the score');
+const lastBrian = posts.filter(p => p.player === 'Brian Hager').pop();
+eq(lastBrian.holes[1], null, 'clear is saved too');
+
+// offline: stays dirty, retried
+ctx.failNext = true;
+A.skPick(1); A.skTap(6); await tick(); await tick();
+ok(A.get().err === true && A.get().dirty['Tom Marsh'] && A.get().dirty['Tom Marsh'][2 - 1] === 6 || (A.get().dirty['Tom Marsh'] || {})[2] === 6, 'offline: score kept as waiting, error flagged');
+ok(JSON.parse(store['bf_sk_gathering:7'])['Tom Marsh'], 'offline: waiting score is also kept on the phone');
+const before = posts.length;
+ctx.failNext = false; A.skFlush(); await tick(); await tick();
+ok(posts.length === before + 1, 'online again: the waiting score is sent');
+eq(Object.keys(A.get().dirty), [], 'online again: nothing waiting');
+ok(A.get().err === false, 'online again: error cleared');
+
+// a second phone saved hole 3 for the group: merge takes it, keeps nothing stale
+A.skMergeRemote([{ player: 'Mike Kay', holes: [4, 4, 3, ...Array(15).fill(null)] }]);
+eq(A.get().cards['Mike Kay'][2], 3, 'merge: another phone\'s hole appears');
+
+// outlier hint and nine/odd rendering
+A.skNav(1); A.skPick(0); A.skTap(7);
+ok(/Right\?/.test(A.liveScoreModeHtml()), 'quiet check: par 3 shows 7 -> asks "Right?" but does not block');
+ok(A.liveScoreModeHtml().includes('Hole 3') && A.liveScoreModeHtml().includes('Par 3'), 'score view shows hole and par');
+ok(/Group 1/.test(A.liveScoreModeHtml()) && /Group 2/.test(A.liveScoreModeHtml()), 'two foursomes -> group chips');
+A.skSetGroup(1);
+eq(A.skGroup().players, ['Sam Lee','Pat Roe','Lee Jo','Jo Wu'], 'any group can be scored from the chips');
+ok(!/standings|Better ball/i.test(A.liveScoreModeHtml()), 'Score mode shows no standings');
+A.skJump(0, 1); eq([A.get().hole, A.get().mode], [1, 'score'], 'tap in the card jumps to Score mode on that hole');
+const gridHtml = A.skCardHtml(); ok(gridHtml.includes('Best') && gridHtml.includes('Back'), 'card view: best-ball rows and both nines');
+eq(A.livePanelModeToggleHtml('score').includes("setLiveScoreMode('games')"), true, 'toggle switches to Games');
+
+// ── wiring: the panel, BF Series safety
+ok(/const _skOn = liveScoringOn\(_liveConfig, _panelGid\);/.test(src), 'panel decides live scoring from the round\'s config');
+ok(/if \(skMode\(\) === 'score'\) return `<div class="live-panel">/.test(src), 'Score mode returns only the scoring entry');
+ok(/_skOn \? livePanelModeToggleHtml\('games'\)/.test(src), 'Games mode carries the toggle');
+ok(/Scores are saved live while you play/.test(src), 'Post-Round section says nothing to enter');
+ok(/liveScoringForEvt\(evt\)\) \{ _skAutoOpened\.add/.test(src), 'panel opens itself once for a live-scoring round');
+ok(/skMergeRemote\(cards\); skFlush\(\)/.test(src), 'every standings refresh also merges scores and retries waiting saves');
+const gateFn = extractFn(src, 'liveScoringOn'); ok(/gid != null/.test(gateFn), 'no gamed gid (BF Series) -> never live scoring');
+ok(!/liveScoringForEvt\(evt\)[^;]*hasLivePanelSupport/.test(src), 'BF Series gating not altered');
+console.log(`live scoring: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

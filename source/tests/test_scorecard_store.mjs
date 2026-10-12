@@ -12,14 +12,14 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 // (a) portal
 ok(/const SCORECARD_API = BFE_API;/.test(portal), 'SCORECARD_API points at the BFE Worker');
 const calls = [...portal.matchAll(/fetch\(`\$\{(\w+)\}\/scorecards([^`]*)`/g)];
-ok(calls.length === 8, 'expected 8 scorecard fetches (Dev-93 added the Fourball live board), found ' + calls.length);
+ok(calls.length === 9, 'expected 9 scorecard fetches (Dev-93 added the Fourball live board and live scoring), found ' + calls.length);
 calls.forEach(([whole, api, rest]) => {
   const isCompletionCheck = api === 'BFE_API' && rest.startsWith('?event=');   // Wally Cup Live Panel "all cards in" check — any input type
   ok(api === 'SCORECARD_API' || isCompletionCheck, 'goes through SCORECARD_API: ' + whole);
   if (api === 'SCORECARD_API' && rest.startsWith('?')) ok(rest.includes('input=strokes'), 'reader asks for strokes only: ' + whole);
 });
 const posts = [...portal.matchAll(/fetch\(`\$\{SCORECARD_API\}\/scorecards`, \{[\s\S]{0,200}?body: JSON\.stringify\(\{([\s\S]{0,120})/g)];
-ok(posts.length === 2, 'two portal writers (Live Panel, Card Score Sheet), found ' + posts.length);
+ok(posts.length === 3, 'three portal writers (Live Panel post-round, Card Score Sheet, Dev-93 live scoring), found ' + posts.length);
 posts.forEach(p => ok(p[1].includes("input_type: 'strokes'"), 'writer declares strokes'));
 ok(!/GATHERINGS_API\}\/scorecards/.test(portal), 'no live calls left to the main Worker scorecards table');
 

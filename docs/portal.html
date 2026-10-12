@@ -3614,7 +3614,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.13.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.14.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -8558,6 +8558,8 @@ function renderLiveBanner() {
     el.innerHTML = '';
     return;
   }
+  // Dev-93: a round with live scoring opens its panel once, so whoever opens the app lands on Score mode.
+  if (!_livePanelOpen && !_skAutoOpened.has(evt.name) && liveScoringForEvt(evt)) { _skAutoOpened.add(evt.name); toggleLivePanel(); return; }
   const teeStr = evt.dt.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
   const isSeriesEvt = hasLivePanelSupport(evt);
   el.innerHTML = `<div class="live-banner${isSeriesEvt ? ' live-series' : ''}">
@@ -8749,6 +8751,14 @@ function buildLivePanel(evt) {
   const showBirdieBallSection = _lps.birdieball;
   const showFourballSection = _lps.fourball; // live pair standings
   const showBirdieAlertSection = _lps.birdieAlert;
+  // Dev-93: a round with Fourball has live scoring. Score mode is the default view and shows only the scoring
+  // entry; Games mode is everything else. Other rounds (BF Series included) never reach this branch.
+  const _skOn = liveScoringOn(_liveConfig, _panelGid);
+  if (_skOn) {
+    skEnsure(evt, _liveConfig);
+    if (!_sk.loaded && !_sk.loading && Date.now() - (_sk.tried || 0) > 8000) { _sk.loading = true; _sk.tried = Date.now(); loadFourballLive(evt).finally(() => { if (_sk) _sk.loading = false; }); }
+    if (skMode() === 'score') return `<div class="live-panel">${livePanelModeToggleHtml('score')}${liveScoreModeHtml()}</div>`;
+  }
   // Dev-87 — host-only Close & Calculate. Only a gamed Gathering (open
   // config in the index) reaching this panel, and only its own host.
   const _liveHostId = evt.source === 'gathering' ? evt.hostId : ((_gatheringGamesIndex.get(_panelGid) || {}).host_id);
@@ -9290,8 +9300,9 @@ function buildLivePanel(evt) {
       <div class="live-section-body">${buildLivePanelPhotoSection(evt)}</div>
     </div>` : '';
   // ── SECTION 2.7: Fourball (Dev-93) — live pair standings from the scores saved so far ──
-  const fbSection = showFourballSection ? fourballLiveSectionHtml(_liveConfig) : '';
+  const fbSection = showFourballSection ? fourballLiveSectionHtml(_liveConfig) + (_skOn ? skCardHtml() : '') : '';
   return `<div class="live-panel">
+    ${_skOn ? livePanelModeToggleHtml('games') : ''}
     ${groupingsLink}
     ${photosSection}
     ${showBirdieAlertSection ? `
@@ -9316,7 +9327,7 @@ function buildLivePanel(evt) {
     </div>` : ''}
     <div class="live-section">
       <div class="live-section-header"><span class="lsh-icon">📋</span>Post-Round Scorecard</div>
-      <div class="live-section-body">${scSection}</div>
+      <div class="live-section-body">${_skOn ? `<div style="font-size:0.82rem;color:rgba(255,255,255,0.75);line-height:1.45;margin-bottom:8px">Scores are saved live while you play, so there is nothing to enter after the round.</div><details><summary style="font-size:0.78rem;color:rgba(255,255,255,0.6);cursor:pointer;padding:8px 0">Enter a full card instead</summary>${scSection}</details>` : scSection}</div>
     </div>
     ${showCloseSection ? `
     <div class="live-section">
@@ -9955,6 +9966,206 @@ async function loadSkinBoardData() {
 // Reads the scorecards saved so far (partial cards count) and asks the SAME engine the payout uses
 // (BFEngine.fourballBoard), so what players see mid-round can't disagree with what Close pays.
 let _fbLive = null; // { gid, board, at }
+// ── Dev-93: live scoring (Score mode) ──────────────────────────────────────
+// One scorekeeper at a time is not enforced: anyone in the Yes crew can enter scores for a foursome, gross strokes
+// only. Every tap saves that player's card (the server keeps ONE row per player, so saving each hole never piles
+// up rows). A hole this phone changed but has not saved yet is remembered on the phone and kept until it saves.
+// Only a round with Fourball in its games gets Score mode; every other round (BF Series included) is untouched.
+let _sk = null;                 // { key, gid, groupIdx, hole, sel, cards, dirty, pending, err, savedAt, mode, loaded }
+const _skAutoOpened = new Set();
+const _skChain = {};
+function liveScoringOn(config, gid) { return gid != null && !!config && !!gatheringAddon(config, 'fourball'); }
+function liveScoringForEvt(evt) {
+  try { const gid = panelGamesGid(evt); return gid != null && liveScoringOn(gatheringRoundConfig(gid), gid); } catch (e) { return false; }
+}
+function skStoreKey(key) { return 'bf_sk_' + key; }
+function skPersist() {
+  if (!_sk) return;
+  try { localStorage.setItem(skStoreKey(_sk.key), JSON.stringify(_sk.dirty)); } catch (e) {}
+}
+function skEnsure(evt, config) {
+  const gid = panelGamesGid(evt);
+  const key = gamesScoreKeyForGid(gid);
+  if (_sk && _sk.key === key) { _sk.evt = evt; _sk.config = config; return _sk; }
+  let dirty = {};
+  try { dirty = JSON.parse(localStorage.getItem(skStoreKey(key)) || '{}') || {}; } catch (e) { dirty = {}; }
+  _sk = { key, gid, evt, config, groupIdx: 0, hole: 1, sel: 0, cards: {}, dirty, pending: 0, err: false, savedAt: null, mode: null, loaded: false, groupSet: false };
+  Object.keys(dirty).forEach(n => { _sk.cards[n] = BFEngine.mergeHoleScores(null, null, dirty[n]); });
+  return _sk;
+}
+function skGroups() {
+  const fb = _sk && gatheringAddon(_sk.config, 'fourball');
+  return BFEngine.fourballGroups(fb && fb.pairs);
+}
+function skGroup() { const gs = skGroups(); return gs[Math.min(_sk.groupIdx, Math.max(0, gs.length - 1))] || { n: 1, pairs: [], players: [] }; }
+function skMaxHole() { return _sk && _sk.evt && _sk.evt.holes === 9 ? 9 : 18; }
+function skPars() { const p = csResolvePars(_sk.evt); return Array.isArray(p) && p.length === 18 ? p : null; }
+function skMode() { return (_sk && _sk.mode) || 'score'; }
+function setLiveScoreMode(m) { if (!_sk) return; _sk.mode = m === 'games' ? 'games' : 'score'; renderLiveBanner(); }
+function skCardOf(name) { return _sk.cards[name] || (_sk.cards[name] = new Array(18).fill(null)); }
+// Take the server's cards in: a hole not waiting to be saved from this phone follows the server.
+function skMergeRemote(rows) {
+  if (!_sk) return;
+  const norm = s => String(s || '').trim().toLowerCase();
+  const by = new Map((rows || []).map(r => [norm(r.player), r]));
+  const names = new Set(); skGroups().forEach(g => g.players.forEach(n => names.add(n)));
+  names.forEach(n => {
+    const r = by.get(norm(n));
+    _sk.cards[n] = BFEngine.mergeHoleScores(_sk.cards[n], r && r.holes, _sk.dirty[n]);
+  });
+  if (!_sk.groupSet) {
+    const me = norm(currentPlayer);
+    const gs = skGroups();
+    const idx = gs.findIndex(g => g.players.some(n => norm(n) === me));
+    _sk.groupIdx = idx >= 0 ? idx : 0; _sk.groupSet = true;
+  }
+  if (!_sk.loaded) { _sk.loaded = true; skGoFirstOpen(); }
+}
+function skGoFirstOpen() {
+  const g = skGroup(), max = skMaxHole();
+  for (let h = 1; h <= max; h++) {
+    if (g.players.some(n => !(skCardOf(n)[h - 1] > 0))) { _sk.hole = h; _sk.sel = Math.max(0, g.players.findIndex(n => !(skCardOf(n)[h - 1] > 0))); return; }
+  }
+  _sk.hole = max; _sk.sel = 0;
+}
+function skFirstEmptyPlayer(h, from) {
+  const g = skGroup(); const n = g.players.length;
+  for (let i = 1; i <= n; i++) { const k = (from + i) % n; if (!(skCardOf(g.players[k])[h - 1] > 0)) return k; }
+  return from;
+}
+function skTap(v) {
+  if (!_sk) return;
+  const g = skGroup(), name = g.players[_sk.sel];
+  if (!name) return;
+  skSetScore(name, _sk.hole, v);
+  _sk.sel = skFirstEmptyPlayer(_sk.hole, _sk.sel);
+  renderLiveBanner();
+}
+function skClear() {
+  if (!_sk) return;
+  const name = skGroup().players[_sk.sel]; if (!name) return;
+  skSetScore(name, _sk.hole, 0);
+  renderLiveBanner();
+}
+function skSetScore(name, hole, v) {
+  const card = skCardOf(name);
+  card[hole - 1] = v > 0 ? v : null;
+  (_sk.dirty[name] = _sk.dirty[name] || {})[hole] = v > 0 ? v : 0;
+  skPersist();
+  skQueueSave(name);
+}
+function skPick(k) { if (_sk) { _sk.sel = k; renderLiveBanner(); } }
+function skNav(d) {
+  if (!_sk) return;
+  const h = Math.min(skMaxHole(), Math.max(1, _sk.hole + d));
+  _sk.hole = h; _sk.sel = Math.max(0, skGroup().players.findIndex(n => !(skCardOf(n)[h - 1] > 0)));
+  renderLiveBanner();
+}
+function skSetGroup(i) { if (_sk) { _sk.groupIdx = i; skGoFirstOpen(); renderLiveBanner(); } }
+function skJump(pi, hole) { if (!_sk) return; _sk.sel = pi; _sk.hole = hole; _sk.mode = 'score'; renderLiveBanner(); }
+function skQueueSave(name) {
+  _sk.pending++;
+  _skChain[name] = (_skChain[name] || Promise.resolve()).then(() => skPost(name)).catch(() => {}).then(() => { if (_sk) { _sk.pending = Math.max(0, _sk.pending - 1); renderLiveBanner(); } });
+}
+async function skPost(name) {
+  if (!_sk) return;
+  const sentDirty = Object.assign({}, _sk.dirty[name] || {});
+  const holes = BFEngine.mergeHoleScores(skCardOf(name), null, sentDirty);
+  const nine = _sk.evt && _sk.evt.holes === 9;
+  const pars = skPars();
+  const marks = pars ? holes.map((v, i) => csMarkFromPar(v, pars[i])) : null;
+  const sum = (a, b) => holes.slice(a, b).reduce((s, v) => s + (v || 0), 0);
+  try {
+    const res = await fetch(`${SCORECARD_API}/scorecards`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input_type: 'strokes', event_name: _sk.key, player: name, holes, marks, tee_box: null,
+        front9: sum(0, 9), back9: sum(9, 18), total: sum(0, 18), hole_count: nine ? 9 : 18, hole_half: nine ? 'front' : null,
+        venue: csNormalizedVenueName(_sk.evt) })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    const cur = _sk.dirty[name] || {};
+    Object.keys(sentDirty).forEach(h => { if (cur[h] === sentDirty[h]) delete cur[h]; });
+    if (!Object.keys(cur).length) delete _sk.dirty[name];
+    skPersist();
+    _sk.err = false; _sk.savedAt = Date.now();
+  } catch (e) {
+    _sk.err = true;
+    console.warn('[Score] save failed, will retry:', e.message);
+  }
+}
+// Retry anything still waiting (called on every refresh tick and when the phone comes back online).
+function skFlush() {
+  if (!_sk) return;
+  Object.keys(_sk.dirty).forEach(n => { if (Object.keys(_sk.dirty[n]).length && !_sk.pending) skQueueSave(n); });
+}
+window.addEventListener('online', () => { try { skFlush(); } catch (e) {} });
+function livePanelModeToggleHtml(mode) {
+  const b = (id, label) => `<button type="button" onclick="setLiveScoreMode('${id}')" style="flex:1;min-height:44px;border:0;border-radius:10px;font-family:inherit;font-size:0.9rem;font-weight:700;cursor:pointer;${mode === id ? 'background:#fff;color:#085041' : 'background:transparent;color:rgba(255,255,255,0.8)'}">${label}</button>`;
+  return `<div style="display:flex;gap:3px;background:rgba(0,0,0,0.3);border-radius:12px;padding:3px;margin-bottom:10px">${b('score', 'Score')}${b('games', 'Games')}</div>`;
+}
+function liveScoreModeHtml() {
+  const g = skGroup(), gs = skGroups(), hole = _sk.hole, max = skMaxHole();
+  if (!g.players.length) return `<div style="font-size:0.85rem;color:rgba(255,255,255,0.7);padding:8px 0">No pairs are set up for this Fourball yet.</div>`;
+  const pars = skPars(), par = pars ? pars[hole - 1] : null;
+  const inits = BFEngine.playerInitials(g.players);
+  const rowVals = g.players.map(n => { const v = skCardOf(n)[hole - 1]; return v > 0 ? v : null; });
+  const done = rowVals.every(v => v != null);
+  const navBtn = (d, svg, hot) => `<button type="button" aria-label="${d < 0 ? 'Previous hole' : 'Next hole'}" onclick="skNav(${d})" style="width:52px;height:52px;border-radius:12px;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;${hot ? 'border:0;background:#1D9E75' : 'border:1.5px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.08)'}">${svg}</button>`;
+  const chevL = '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>';
+  const chevR = '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>';
+  const tiles = g.players.map((n, k) => {
+    const v = rowVals[k], on = k === _sk.sel && !done, d = v == null || par == null ? 0 : v - par;
+    const col = v == null ? 'rgba(255,255,255,0.35)' : d < 0 ? '#5DCAA5' : d > 0 ? '#e0b44c' : '#fff';
+    return `<button type="button" onclick="skPick(${k})" title="${escapeHtml(n)}" style="min-height:84px;border-radius:12px;color:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;box-sizing:border-box;font-family:inherit;${on ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.2)' : 'border:1.5px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.2)'}">
+      <span style="font-size:0.9rem;font-weight:700;letter-spacing:0.04em">${escapeHtml(inits[k])}</span>
+      <span style="font-family:'DM Mono',monospace;font-size:2rem;font-weight:700;line-height:1.1;color:${col}">${v == null ? '·' : v}</span></button>`;
+  }).join('');
+  const nums = [1,2,3,4,5,6,7,8,9,10].map(n => `<button type="button" onclick="skTap(${n})" style="height:56px;border-radius:12px;font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:600;color:#fff;cursor:pointer;box-sizing:border-box;${n === par ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.18)' : 'border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08)'}">${n}</button>`).join('');
+  const hi = par == null ? -1 : rowVals.findIndex(v => v != null && v >= par + 3);
+  const hint = hi >= 0 ? `${escapeHtml(inits[hi])} shows ${rowVals[hi]} on a par ${par}. Right? Tap the tile to change it.`
+    : done ? 'All four are in. Tap any tile to change a score, or go to the next hole.'
+    : `Enter ${escapeHtml(inits[_sk.sel])}'s score. It saves as you tap and moves to the next player.`;
+  const status = _sk.err ? 'Not saved yet, will retry' : _sk.pending ? 'Saving…' : _sk.savedAt ? 'Saved' : '';
+  const statusCol = _sk.err ? '#e0b44c' : '#5DCAA5';
+  const chips = gs.length > 1 ? `<div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">${gs.map((x, i) => `<button type="button" onclick="skSetGroup(${i})" style="min-height:36px;padding:0 12px;border-radius:18px;font-family:inherit;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;${i === _sk.groupIdx ? 'background:#5DCAA5;color:#04342a;border:0' : 'background:transparent;color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.3)'}">Group ${x.n}</button>`).join('')}</div>` : '';
+  return `${chips}
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+      ${navBtn(-1, chevL, false)}
+      <div style="flex:1;text-align:center"><div style="font-family:'DM Mono',monospace;font-size:2.1rem;font-weight:700;line-height:1;color:#fff">Hole ${hole}</div>
+        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-top:3px">${par != null ? 'Par ' + par : '&nbsp;'}<span style="margin-left:10px;color:${statusCol}">${status}</span></div></div>
+      ${navBtn(1, chevR, done && hole < max)}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(${g.players.length},minmax(0,1fr));gap:8px;margin-bottom:12px">${tiles}</div>
+    <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px">${nums}</div>
+    <div style="margin-top:12px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:36px">${hint}</div>
+    <div style="text-align:center"><button type="button" onclick="skClear()" style="background:none;border:0;color:rgba(255,255,255,0.6);font-family:inherit;font-size:0.78rem;cursor:pointer;min-height:36px;padding:0 12px">Clear this score</button></div>`;
+}
+// The group's card, front and back, with each pair's better ball. Shown under Games; a tap jumps back to Score.
+function skCardHtml() {
+  const g = skGroup(); if (!g.players.length) return '';
+  const pars = skPars(), inits = BFEngine.playerInitials(g.players);
+  const cell = (v, i) => {
+    if (!(v > 0)) return `<div style="height:24px;border:1px dashed rgba(255,255,255,0.15);border-radius:5px"></div>`;
+    const d = pars ? v - pars[i] : 0;
+    return `<div style="height:24px;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:0.76rem;box-sizing:border-box;${d < 0 ? 'border:1.5px solid #5DCAA5;border-radius:50%;color:#5DCAA5' : d > 0 ? 'border:1.5px solid #e0b44c;border-radius:3px;color:#e0b44c' : 'color:#fff'}">${v}</div>`;
+  };
+  const nine = off => {
+    const idx = [0,1,2,3,4,5,6,7,8].map(k => k + off);
+    const row = (label, vals, tap, shade) => `<div style="display:grid;grid-template-columns:34px repeat(9,minmax(0,1fr));gap:2px;align-items:center;margin-bottom:2px;border-radius:6px;${shade ? 'background:rgba(93,202,165,0.16)' : ''}"><div style="font-size:0.68rem;font-weight:700;padding-left:3px;${shade ? 'color:#5DCAA5' : ''}">${label}</div>${idx.map((i, c) => `<div ${tap != null ? `onclick="skJump(${tap},${i + 1})"` : ''} style="cursor:${tap != null ? 'pointer' : 'default'}">${cell(vals[i], i)}</div>`).join('')}</div>`;
+    const best = (a, b) => idx.reduce((o, i) => { const x = skCardOf(g.players[a])[i], y = skCardOf(g.players[b])[i]; const ok = v => v > 0; o[i] = ok(x) && ok(y) ? Math.min(x, y) : ok(x) ? x : ok(y) ? y : null; return o; }, {});
+    const head = `<div style="display:grid;grid-template-columns:34px repeat(9,minmax(0,1fr));gap:2px;margin-bottom:2px;font-family:'DM Mono',monospace;font-size:0.62rem;color:rgba(255,255,255,0.5)"><div>${off ? 'Back' : 'Front'}</div>${idx.map(i => `<div style="text-align:center">${i + 1}</div>`).join('')}</div>`
+      + (pars ? `<div style="display:grid;grid-template-columns:34px repeat(9,minmax(0,1fr));gap:2px;margin-bottom:3px;font-family:'DM Mono',monospace;font-size:0.66rem;color:rgba(255,255,255,0.6)"><div>Par</div>${idx.map(i => `<div style="text-align:center">${pars[i]}</div>`).join('')}</div>` : '');
+    let body = '';
+    g.players.forEach((n, k) => {
+      body += row(escapeHtml(inits[k]), skCardOf(n), k, false);
+      if (k % 2 === 1) body += row('Best', best(k - 1, k), null, true);
+    });
+    return `<div style="margin-bottom:10px">${head}${body}</div>`;
+  };
+  const max = skMaxHole();
+  return `<div style="margin-top:12px"><div style="font-size:0.72rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-bottom:6px">Your group's card · tap a score to fix it</div>${nine(0)}${max > 9 ? nine(9) : ''}</div>`;
+}
 async function loadFourballLive(evt) {
   const gid = panelGamesGid(evt);
   const row = gid == null ? null : _gatheringGamesIndex.get(gid);
@@ -9965,6 +10176,7 @@ async function loadFourballLive(evt) {
     const data = await res.json();
     const cards = latestScorecardPerPlayer(data.scorecards || []);
     const pars = csResolvePars(evt);
+    try { if (_sk && _sk.key === key) { skMergeRemote(cards); skFlush(); } } catch (e) { console.warn('[Score] merge error:', e.message); }
     _fbLive = { gid, board: BFEngine.fourballBoard(row, cards, Array.isArray(pars) && pars.length === 18 ? pars : null), at: Date.now() };
     renderLiveBanner();
   } catch (e) {
@@ -16009,7 +16221,7 @@ async function openGatheringCloseSheet(gatheringId) {
     const incompleteHtml = incomplete.length
       ? `<div style="background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
           ⚠️ Blank holes: ${incomplete.map(x => `<b>${esc(x.player)}</b> (#${x.holes.slice(0, 6).join(', #')}${x.holes.length > 6 ? '…' : ''})`).join('; ')}<br>
-          <span style="color:var(--text-muted)">A blank hole can't win or tie a skin. Fix it in the Card Score Sheet, then Refresh.</span></div>`
+          <span style="color:var(--text-muted)">A blank hole can't win or tie a skin. Finish them in Score mode (or the Card Score Sheet), then Refresh.</span></div>`
       : '';
     const alreadyClosed = config.status === 'closed';
     const spotsHtml = openSpots.length
