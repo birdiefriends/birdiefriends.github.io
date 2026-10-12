@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.15.1';
+  const ENGINE_VERSION = '1.16.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -374,23 +374,39 @@
     }
     return out;
   }
-  // ── Fourball pot variants (Dev-93) ────────────────────────────────────────
-  // The Fourball pot can be played as ONE contest over 18 holes ('total', the original game) or cut into
-  // segments chosen at setup: 'fbt' = Front 9 / Back 9 / Total 18, 'sixes' = holes 1-6 / 7-12 / 13-18.
-  // Each segment is its own pot (the ante is split evenly across the segments). A segment is won
-  // 'strokes' (lower better-ball total) or 'holes' (more holes won head to head). Holes-won only makes sense
-  // between two pairs who played each other, so it forces scope 'group' (each foursome its own match);
-  // strokes can also run across the whole 'field'. A tied segment is a push: everyone's ante comes back.
-  const FOURBALL_SEGMENTS = {
-    fbt: [{ key: 'front', label: 'Front 9', a: 0, b: 9 }, { key: 'back', label: 'Back 9', a: 9, b: 18 }, { key: 'total', label: 'Total', a: 0, b: 18 }],
-    sixes: [{ key: 's1', label: 'Holes 1-6', a: 0, b: 6 }, { key: 's2', label: 'Holes 7-12', a: 6, b: 12 }, { key: 's3', label: 'Holes 13-18', a: 12, b: 18 }]
+  // ── Scoring periods (Dev-93) ──────────────────────────────────────────────
+  // A game's pot can be played as ONE contest over the whole round ('round') or cut into periods chosen at setup:
+  // 'front_back' = Front 9 / Back 9, 'fbt' = Front 9 / Back 9 / Total 18, 'sixes' = holes 1-6 / 7-12 / 13-18.
+  // Each period is its own pot (the per-player ante is split evenly across the periods). A period is won on
+  // 'strokes' (lower total) or 'holes' (more holes won head to head, which needs two sides who played each other,
+  // so it forces scope 'group'). A tied period is a push: everyone's ante comes back.
+  // To offer another period (3 x 6, a back-9-only game, ...) add one entry here and one name to PERIOD_ORDER:
+  // the picker, the plan, the pot split and the results text all read this table.
+  const _SEG = {
+    front: { key: 'front', label: 'Front 9', a: 0, b: 9 }, back: { key: 'back', label: 'Back 9', a: 9, b: 18 }, total: { key: 'total', label: 'Total', a: 0, b: 18 },
+    s1: { key: 's1', label: 'Holes 1-6', a: 0, b: 6 }, s2: { key: 's2', label: 'Holes 7-12', a: 6, b: 12 }, s3: { key: 's3', label: 'Holes 13-18', a: 12, b: 18 }
   };
+  const PERIODS = {
+    round: { label: 'Entire round', summary: 'One pot for the whole round', phrase: 'one pot over the whole round', segs: [] },
+    front_back: { label: 'Front / Back', summary: 'Front 9 and Back 9, each its own pot', phrase: 'Front 9 and Back 9', segs: [_SEG.front, _SEG.back] },
+    fbt: { label: 'Front / Back / Total', summary: 'Front 9, Back 9 and Total, each its own pot', phrase: 'Front 9, Back 9 and Total', segs: [_SEG.front, _SEG.back, _SEG.total] },
+    sixes: { label: '6 / 6 / 6', summary: 'Holes 1-6, 7-12 and 13-18, each its own pot', phrase: 'Holes 1-6, 7-12 and 13-18', segs: [_SEG.s1, _SEG.s2, _SEG.s3] }
+  };
+  const PERIOD_ORDER = ['round', 'front_back', 'fbt', 'sixes'];
+  // The period a config asks for. Reads the new `period` field, falling back to the older `segments` field
+  // ('total' was the old name for the whole round). Anything unknown plays as the whole round.
+  function periodKey(cfg) {
+    const raw = cfg && (cfg.period != null ? cfg.period : cfg.segments);
+    const k = raw === 'total' ? 'round' : raw;
+    return PERIODS[k] ? k : 'round';
+  }
+  function periodList() { return PERIOD_ORDER.map(k => ({ key: k, label: PERIODS[k].label, summary: PERIODS[k].summary, segments: PERIODS[k].segs.length })); }
   function fourballSegmentPlan(addon) {
     const a = addon || {};
-    const mode = a.segments === 'fbt' || a.segments === 'sixes' ? a.segments : 'total';
+    const pk = periodKey(a);
     const win_by = a.win_by === 'holes' ? 'holes' : 'strokes';
     const scope = win_by === 'holes' || a.scope === 'group' ? 'group' : 'field';
-    return { mode, win_by, scope, segs: mode === 'total' ? [] : FOURBALL_SEGMENTS[mode] };
+    return { period: pk, mode: pk === 'round' ? 'total' : pk, win_by, scope, segs: PERIODS[pk].segs };
   }
   // One segment between pairs. scoreArrs = one 18-slot better-ball array per pair (null = not played).
   function fourballSegmentResult(scoreArrs, seg, winBy) {
@@ -558,6 +574,90 @@
     }
   };
 
+  // ── Low Score (Dev-93): an individual game over a scoring period ─────────────────────
+  // Every player plays their own ball. In each scoring period the lowest total (gross, or net on own strokes)
+  // wins that period's pot. 'round' = one contest over the whole round: the lowest total wins, tied players split.
+  // With a period (Front / Back, Front / Back / Total, 6 / 6 / 6) the per-player ante is split across the periods;
+  // a period's pot is that share x every player in the game, won outright by the lowest total, and a tied period
+  // is a push (everyone's share of the ante comes back). A player who has not finished a period cannot win it.
+  //   addon: { dollar_per_player, basis:'gross'|'net', period }
+  // Like Fourball it can never take more than the pot has left (reported as `capped`).
+  ADDONS.lowscore = {
+    id: 'lowscore', order: 26, entity: 'individual',
+    carve(state, addon, inputs) {
+      const L = state.ledger;
+      const cardBy = new Map((inputs.scorecards || []).map(c => [norm(c.player), c]));
+      const wantNet = addon.basis === 'net';
+      const netOk = wantNet && !!inputs.netByPlayer;
+      const gross = c => (Array.isArray(c.holes) ? c.holes : []).map(v => (typeof v === 'number' && v > 0 ? v : null));
+      const pk = periodKey(addon);
+      const nineRound = [...cardBy.values()].some(c => c.hole_count === 9);
+      const plan = nineRound ? { period: 'round', segs: [] } : { period: pk, segs: PERIODS[pk].segs };
+      const expected = nineRound ? 9 : 18;
+      const rows = L.players.filter(nm => cardBy.has(norm(nm))).map(nm => {
+        const c = cardBy.get(norm(nm));
+        const arr = netOk ? (inputs.netByPlayer.get(norm(nm)) || { holes: gross(c) }).holes : gross(c);
+        const off = c.hole_count === 9 && c.hole_half === 'back' ? 9 : 0;
+        const slots = new Array(18).fill(null);
+        arr.slice(0, expected).forEach((v, i) => { if (typeof v === 'number') slots[off + i] = v; });
+        const played = arr.slice(0, expected).filter(v => typeof v === 'number').length;
+        const complete = played === expected;
+        return { player: L.canon(nm), slots, played, complete, total: complete ? arr.slice(0, expected).reduce((a, v) => a + v, 0) : null,
+          holes: arr.slice(0, expected).map((v, i) => ({ hole: off + i + 1, score: typeof v === 'number' ? v : null })) };
+      });
+      const dpp = Number(addon.dollar_per_player) || 0;
+      const configuredPot = dpp * L.n;
+      const pot = Math.min(configuredPot, Math.max(0, state.remaining));
+      const capped = pot < configuredPot;
+      const ratio = configuredPot > 0 ? pot / configuredPot : 0;
+      state.remaining -= pot;
+      const head = { pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: 'own' } : {}), ...(wantNet && !netOk ? { net_missing: true } : {}), period: plan.period };
+      const tail = capped ? { capped: true, configured_pot: configuredPot } : {};
+      const strip = r => ({ player: r.player, complete: r.complete, played: r.played, total: r.total, holes: r.holes });
+      if (plan.period === 'round' || rows.length < 2) {
+        const ranked = rows.filter(r => r.complete).sort((a, b) => a.total - b.total);
+        ranked.forEach(r => { r.place = ranked.findIndex(x => x.total === r.total) + 1; r.tied = ranked.filter(x => x.total === r.total).length > 1; });
+        const winners = ranked.filter(r => r.place === 1);
+        let perPlayer = 0, givenBackEach = 0, unalloc = 0;
+        if (winners.length) {
+          perPlayer = Math.floor(pot / winners.length);
+          winners.forEach(w => L.credit(w.player, 'lowscore', perPlayer));
+          unalloc = pot - perPlayer * winners.length;
+        } else { const gb = L.giveBack(pot); givenBackEach = gb.each; unalloc = gb.unallocated; }
+        state.unallocated += unalloc;
+        return Object.assign({ ...head,
+          standings: rows.map(r => Object.assign(strip(r), { place: r.place == null ? null : r.place, tied: !!r.tied })).sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
+          winners: winners.map(w => w.player), per_player: perPlayer, given_back_each: givenBackEach }, tail);
+      }
+      const perSeg = (dpp / plan.segs.length) * ratio;
+      const segPot = Math.floor(perSeg * L.n);
+      let unalloc = Math.max(0, pot - segPot * plan.segs.length);
+      const everyone = L.players.slice();
+      const segsOut = plan.segs.map(sg => {
+        const res = fourballSegmentResult(rows.map(r => r.slots), sg, 'strokes');
+        const seg = { key: sg.key, label: sg.label, from: sg.a + 1, to: sg.b, pot: segPot, status: res.status, winner: null,
+          totals: res.info.map(x => (x.complete ? x.total : null)) };
+        if (res.status === 'won') {
+          seg.winner = [rows[res.winner].player];
+          L.credit(rows[res.winner].player, 'lowscore', segPot);
+          seg.per_player = segPot;
+        } else {
+          const back = everyone.length ? Math.floor(segPot / everyone.length) : 0;
+          everyone.forEach(nm => L.credit(nm, 'given_back', back));
+          unalloc += segPot - back * everyone.length;
+          seg.given_back_each = back;
+        }
+        return seg;
+      });
+      state.unallocated += unalloc;
+      const winners = [...new Set(segsOut.filter(x => x.winner).map(x => x.winner[0]))];
+      return Object.assign({ ...head,
+        standings: rows.map(strip).sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
+        segments: { mode: plan.period, win_by: 'strokes', scope: 'field', per_segment: perSeg, segments: segsOut },
+        winners, per_player: null, given_back_each: 0 }, tail);
+    }
+  };
+
   // ── Game definitions (Dev-93, spec §13) ────────────────────────────────
   // ONE definition per game. The carve/compute logic above is untouched; this
   // layer attaches everything ELSE a game needs so no other file has to
@@ -636,7 +736,8 @@
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
       { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
       { key: 'net_mode', type: 'enum', label: 'Net strokes', values: ['own', 'low'], default: 'own' },
-      { key: 'segments', type: 'enum', label: 'Pot split', values: ['total', 'fbt', 'sixes'], default: 'total' },
+      { key: 'period', type: 'enum', label: 'Scoring period', values: PERIOD_ORDER.slice(), default: 'round' },
+      { key: 'segments', type: 'enum', label: 'Pot split (older name for the period)', values: ['total', 'fbt', 'sixes'], default: 'total' },
       { key: 'win_by', type: 'enum', label: 'Segment won by', values: ['strokes', 'holes'], default: 'strokes' },
       { key: 'scope', type: 'enum', label: 'Who competes', values: ['field', 'group'], default: 'field' },
       { key: 'pairs', type: 'pairs', label: 'Pairs', default: [], required: true }
@@ -687,6 +788,14 @@
         _P('Ed', _ALL(5)), _P('Flo', _ALL(5)), _P('Gus', _ALL(5)), _P('Hal', _ALL(5))] },
       expect: { payouts: { Ann: 24, Bob: 24, Cy: 0, Di: 0, Ed: 12, Flo: 12, Gus: 12, Hal: 12 }, unallocated: 0 }
     }, {
+      name: 'period Front / Back (strokes): two pots, each pair wins one',
+      round: { dollar_per_player: 20, addons: [
+        { id: 'fourball', entity: 'pair', dollar_per_player: 20, basis: 'gross', period: 'front_back', win_by: 'strokes', scope: 'group', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+      // The $20 ante is $10 a segment; each segment pot is $10 x 4 players = $40, split by the winning pair ($20 a player).
+      // Front: Ann&Bob better ball 4s (36) vs Cy&Di 5s (45). Back: Cy&Di 4s (36) vs Ann&Bob 5s (45).
+      inputs: { scorecards: [_P('Ann', _SPLIT(4, 5)), _P('Bob', _ALL(6)), _P('Cy', _SPLIT(5, 4)), _P('Di', _ALL(6))] },
+      expect: { payouts: { Ann: 20, Bob: 20, Cy: 20, Di: 20 }, unallocated: 0 }
+    }, {
       name: 'segments across the whole field (strokes): the best pair in the field takes the segment',
       round: { dollar_per_player: 6, addons: [
         { id: 'fourball', entity: 'pair', dollar_per_player: 6, basis: 'gross', segments: 'fbt', win_by: 'strokes', scope: 'field',
@@ -695,6 +804,42 @@
       inputs: { scorecards: [_P('Ann', _ALL(5)), _P('Bob', _ALL(5)), _P('Cy', _ALL(4)), _P('Di', _ALL(4)),
         _P('Ed', _ALL(3)), _P('Flo', _ALL(3)), _P('Gus', _ALL(5)), _P('Hal', _ALL(5))] },
       expect: { payouts: { Ann: 0, Bob: 0, Cy: 0, Di: 0, Ed: 24, Flo: 24, Gus: 0, Hal: 0 }, unallocated: 0 }
+    }]
+  });
+
+  defineGame('lowscore', {
+    kind: 'addon', input: 'strokes', net: true, entity: 'individual',
+    released: true,
+    meta: { label: 'Low Score', icon: '🎯', seal: 'LOW SCORE', uiOrder: 6, group: 'format',
+      info: 'Everyone plays their own ball and the lowest score wins. Choose the scoring period: the whole round, Front and Back, Front, Back and Total, or 6 / 6 / 6. Each period is its own pot, the ante is split across them, and the lowest total in a period takes that pot. In a periods game a tied period is a push and the antes come back; in the whole-round game tied players split the pot. Gross unless the host set it to Net.' },
+    config: [
+      { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
+      { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
+      { key: 'period', type: 'enum', label: 'Scoring period', values: PERIOD_ORDER.slice(), default: 'round' }
+    ],
+    fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
+    maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
+    fixtures: [{
+      name: 'whole round (gross): the lowest total takes the pot, Skins gets the rest',
+      round: { dollar_per_player: 12, addons: [
+        { id: 'lowscore', entity: 'individual', dollar_per_player: 5, basis: 'gross' },
+        { id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
+      // Ann 4s = 72, Bob 5s = 90, Cy 5s = 90. Ann takes the $15 Low Score pot ($5 x 3). Skins gets the $21 left: Ann wins all 18 holes, $1 each = $18, $3 left over.
+      inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5))] },
+      expect: { payouts: { Ann: 33, Bob: 0, Cy: 0 }, unallocated: 3, results: { lowscore: { per_player: 15 } } }
+    }, {
+      name: 'whole round tie: tied players split the pot',
+      round: { dollar_per_player: 10, addons: [{ id: 'lowscore', entity: 'individual', dollar_per_player: 10, basis: 'gross' }] },
+      // Ann and Bob both 72, Cy 90. The $30 pot splits $15 each.
+      inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(4)), _P('Cy', _ALL(5))] },
+      expect: { payouts: { Ann: 15, Bob: 15, Cy: 0 }, unallocated: 0, results: { lowscore: { per_player: 15 } } }
+    }, {
+      name: 'period Front / Back / Total: three pots, a tied Total is a push',
+      round: { dollar_per_player: 15, addons: [{ id: 'lowscore', entity: 'individual', dollar_per_player: 15, basis: 'gross', period: 'fbt' }] },
+      // $5 a period, each pot $5 x 3 players = $15. Ann 4 on the front / 6 on the back (90), Bob 6 front / 4 back (90), Cy 5s (90).
+      // Front: Ann 36 wins $15. Back: Bob 36 wins $15. Total: all three on 90, a push: each gets the $5 back.
+      inputs: { scorecards: [_P('Ann', _SPLIT(4, 6)), _P('Bob', _SPLIT(6, 4)), _P('Cy', _ALL(5))] },
+      expect: { payouts: { Ann: 20, Bob: 20, Cy: 5 }, unallocated: 0 }
     }]
   });
 
@@ -933,7 +1078,12 @@
     if (games.includes('fourball') && fbc) {
       addons.push({ id: 'fourball', entity: 'pair', dollar_per_player: fbc.dollar_per_player, basis: fbc.basis === 'net' ? 'net' : 'gross',
         net_mode: fbc.net_mode === 'low' ? 'low' : 'own', pairs: Array.isArray(fbc.pairs) ? fbc.pairs : [],
-        ...(fbc.segments === 'fbt' || fbc.segments === 'sixes' ? { segments: fbc.segments, win_by: fbc.win_by === 'holes' ? 'holes' : 'strokes', scope: fbc.win_by === 'holes' || fbc.scope === 'group' ? 'group' : 'field' } : {}) });
+        ...(periodKey(fbc) !== 'round' ? { period: periodKey(fbc), win_by: fbc.win_by === 'holes' ? 'holes' : 'strokes', scope: fbc.win_by === 'holes' || fbc.scope === 'group' ? 'group' : 'field' } : {}) });
+    }
+    const lsc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.lowscore : null;
+    if (games.includes('lowscore') && lsc) {
+      addons.push({ id: 'lowscore', entity: 'individual', dollar_per_player: lsc.dollar_per_player, basis: lsc.basis === 'net' ? 'net' : 'gross',
+        ...(periodKey(lsc) !== 'round' ? { period: periodKey(lsc) } : {}) });
     }
     if (games.includes('skins')) {
       addons.push({ id: 'skins', entity: 'individual', basis: basisOf('skins_basis'), compare: 'low' });
@@ -970,7 +1120,7 @@
     const dpp = Number(config && config.payout && config.payout.entry_per_player) || 0;
     const totalPot = dpp * ledger.n;
     const state = { ledger, remaining: totalPot, unallocated: 0, rollover: 0 };
-    const results = { cttp: null, birdieball: null, birdiepay: null, fourball: null, skins: null };
+    const results = { cttp: null, birdieball: null, birdiepay: null, fourball: null, lowscore: null, skins: null };
     const addons = ((config && config.addons) || [])
       .filter(a => ADDONS[a.id])
       .slice()
@@ -1001,7 +1151,7 @@
       if (leftover > 0) state.unallocated += ledger.giveBack(leftover).unallocated;
     }
     const rows = [...ledger.rows.values()]
-      .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + (r.birdiepay || 0) + (r.fourball || 0) + r.given_back }))
+      .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + (r.birdiepay || 0) + (r.fourball || 0) + (r.lowscore || 0) + r.given_back }))
       .sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
     const games = (config && config.legacy && config.legacy.games) || addons.map(a => a.id);
     return {
@@ -1011,6 +1161,7 @@
       // birdiepay only appears in a snapshot when the game was on, so every pre-Dev-89 payout keeps its exact shape
       ...(results.birdiepay ? { birdiepay: results.birdiepay } : {}),
       ...(results.fourball ? { fourball: results.fourball } : {}),
+      ...(results.lowscore ? { lowscore: results.lowscore } : {}),
       skins: results.skins, payouts: rows,
       // handicap summary only appears when a net game ran — gross snapshots keep their exact shape
       ...(netByPlayer.size ? { rankings: buildRankings(cards, netByPlayer) } : {}),
@@ -1071,7 +1222,7 @@
   function fourballMatchView(fb, addon) {
     if (!fb) return null;
     const plan = fourballSegmentPlan(addon);
-    const viewSegs = plan.mode === 'sixes' ? FOURBALL_SEGMENTS.sixes : FOURBALL_SEGMENTS.fbt;
+    const viewSegs = plan.mode === 'total' ? PERIODS.fbt.segs : plan.segs; // the one-pot game still shows Front and Back
     const byKey = new Map((fb.standings || []).map(r => [r.pair.map(norm).join('|'), r]));
     const scoresOf = pr => {
       const out = new Array(18).fill(null);
@@ -1215,7 +1366,7 @@
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,
     computeRoundPayout,
-    computeGatheringGamesPayout, fourballBoard, fourballMatchView, fourballSegmentPlan,
+    computeGatheringGamesPayout, fourballBoard, fourballMatchView, fourballSegmentPlan, PERIODS, PERIOD_ORDER, periodKey, periodList,
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, mergeHoleScores,

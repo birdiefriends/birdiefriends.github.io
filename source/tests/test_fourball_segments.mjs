@@ -12,11 +12,38 @@ const pay = (row, cards) => E.computeGatheringGamesPayout(row, cards, {}, []);
 const tot = r => r.payouts.reduce((a, p) => a + p.total, 0) + r.unallocated;
 
 // plan resolution
-eq(E.fourballSegmentPlan({}), { mode: 'total', win_by: 'strokes', scope: 'field', segs: [] }, 'plan: default is the original single contest');
+eq(E.fourballSegmentPlan({}), { period: 'round', mode: 'total', win_by: 'strokes', scope: 'field', segs: [] }, 'plan: default is the original single contest');
 eq(E.fourballSegmentPlan({ segments: 'fbt', win_by: 'holes', scope: 'field' }).scope, 'group', 'plan: holes won forces foursome scope');
 eq(E.fourballSegmentPlan({ segments: 'sixes' }).segs.map(s => s.label), ['Holes 1-6', 'Holes 7-12', 'Holes 13-18'], 'plan: sixes labels');
 eq(E.fourballSegmentPlan({ segments: 'fbt' }).segs.map(s => [s.a, s.b]), [[0, 9], [9, 18], [0, 18]], 'plan: Front/Back/Total ranges');
 eq(E.fourballSegmentPlan({ segments: 'bogus' }).mode, 'total', 'plan: unknown mode falls back to total');
+
+// scoring periods: the new `period` field, the older `segments` name, and Front / Back
+eq(E.periodKey({ period: 'front_back' }), 'front_back', 'period: new field read');
+eq(E.periodKey({ segments: 'fbt' }), 'fbt', 'period: older segments field still read');
+eq(E.periodKey({ segments: 'total' }), 'round', 'period: older "total" means the whole round');
+eq(E.periodKey({ period: 'round', segments: 'fbt' }), 'round', 'period: the new field wins');
+eq(E.periodKey({ period: 'nope' }), 'round', 'period: unknown plays as the whole round');
+eq(E.periodList().map(x => x.key), ['round', 'front_back', 'fbt', 'sixes'], 'period: the picker list');
+eq(E.fourballSegmentPlan({ period: 'front_back' }).segs.map(x => x.label), ['Front 9', 'Back 9'], 'plan: Front / Back is two periods');
+{
+  // Front / Back: two pots, the ante is split in two. Ann&Bob win the front on strokes, Cy&Di win the back.
+  const r = pay(cfg({ period: 'front_back', win_by: 'strokes', scope: 'group' }, 20), [
+    card('Ann', A(i => i < 9 ? 4 : 5)), card('Bob', A(() => 6)), card('Cy', A(i => i < 9 ? 5 : 4)), card('Di', A(() => 6))]);
+  eq(r.fourball.segments.groups[0].segments.map(x => x.key), ['front', 'back'], 'front/back: two segments, no Total');
+  eq(r.fourball.segments.per_segment, 10, 'front/back: $20 ante is $10 per segment');
+  eq(r.fourball.segments.groups[0].segments.map(x => x.pot), [40, 40], 'front/back: each pot is $10 x 4 players');
+  eq(r.payouts.map(p => [p.player, p.total]), [['Ann', 20], ['Bob', 20], ['Cy', 20], ['Di', 20]], 'front/back: each pair wins one pot, $20 a player');
+  const t = r.payouts.reduce((a, p) => a + p.total, 0) + r.unallocated; eq(t, 80, 'front/back: every dollar accounted for');
+  const mv = E.fourballMatchView(r.fourball, { pairs: [['Ann', 'Bob'], ['Cy', 'Di']], period: 'front_back', win_by: 'strokes', scope: 'group' });
+  eq(mv.groups[0].segs.map(x => x.key), ['front', 'back'], 'front/back: the match view carries the same two periods');
+}
+// the same game saved under the older field name plays exactly the same
+{
+  const cards = [card('Ann', A(i => i < 9 ? 4 : 5)), card('Bob', A(() => 6)), card('Cy', A(i => i < 9 ? 5 : 4)), card('Di', A(() => 6))];
+  const a = pay(cfg({ segments: 'fbt', win_by: 'holes', scope: 'group' }), cards), b = pay(cfg({ period: 'fbt', win_by: 'holes', scope: 'group' }), cards);
+  eq(a.payouts, b.payouts, 'older `segments` and new `period` pay identically');
+}
 
 // the original game is untouched
 const base = pay(cfg({}), [card('Ann', A(() => 4)), card('Bob', A(() => 5)), card('Cy', A(() => 5)), card('Di', A(() => 5))]);

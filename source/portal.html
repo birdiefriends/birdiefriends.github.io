@@ -3614,7 +3614,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.15.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.16.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -5772,7 +5772,8 @@ function gamesSealWatermarkHtml(evt) {
 // "Individual Play" whatever games were set up.
 function fbVariantText(fb) {
   if (!fb) return '';
-  const seg = fb.segments === 'fbt' ? 'Front/Back/Total' : fb.segments === 'sixes' ? '6/6/6' : '';
+  const pk = BFEngine.periodKey(fb);
+  const seg = pk === 'round' ? '' : BFEngine.PERIODS[pk].label.replace(/ \/ /g, '/');
   return seg ? `${seg}, ${fb.win_by === 'holes' ? 'holes won' : 'strokes'}` : 'one pot';
 }
 function evtPlayLabel(evt) {
@@ -10271,7 +10272,7 @@ function fourballActionsHtml(cfg) {
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><div style="flex:1"><div style="font-size:1.05rem;font-weight:700">Hole ${sel}</div><div style="font-size:0.74rem;color:rgba(255,255,255,0.6)">${par ? `Par ${par}` : ''}</div></div>${stepBtn(-1, '‹')}${stepBtn(1, '›')}<button type="button" onclick="fbCloseHole()" aria-label="Close" style="width:44px;height:44px;border-radius:10px;border:0;background:transparent;color:rgba(255,255,255,0.7);font-size:1.2rem;cursor:pointer">✕</button></div>
       ${rowHtml(pa, TEAL, iA, hd.a, hd.res === 'A', '#04342a')}${rowHtml(pb, AMB, iB, hd.b, hd.res === 'B', '#3a2a00')}
       <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">${hd.res === 'T' ? `Halved. Both pairs counted ${hd.a}. ` : ''}Tap a name for that player's full card.</div></div>` : '';
-  const how = m.mode === 'total' ? 'One pot, lowest total wins.' : `${m.mode === 'fbt' ? 'Front, Back and Total' : 'Holes 1-6, 7-12 and 13-18'}, ${holesMode ? 'won on holes' : 'won on strokes'}. A tie is a push.`;
+  const how = m.mode === 'total' ? 'One pot, lowest total wins.' : `${BFEngine.PERIODS[m.mode] ? BFEngine.PERIODS[m.mode].phrase : ''}, ${holesMode ? 'won on holes' : 'won on strokes'}. A tie is a push.`;
   const cardRows = skGroup().players.map((n, k) => {
     const c = skCardOf(n), d = c.filter(v => v > 0);
     return `<button type="button" onclick="fbDrill(${k})" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;margin-bottom:6px;background:rgba(0,0,0,0.2);border:0;border-radius:10px;min-height:44px;box-sizing:border-box;color:#fff;font-family:inherit;cursor:pointer;text-align:left"><span style="flex:1;font-size:0.9rem;font-weight:600">${escapeHtml(n)}</span><span style="font-size:0.74rem;color:rgba(255,255,255,0.6)">thru ${d.length}</span><span style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:700;min-width:28px;text-align:right">${d.reduce((a, v) => a + v, 0) || '·'}</span><span style="color:rgba(255,255,255,0.5)">›</span></button>`;
@@ -16226,8 +16227,8 @@ function renderGatheringPayoutHtml(s, fbCfg) {
       const net = f.basis === 'net' ? (f.net_mode === 'low' ? 'net, off the low' : 'net, own strokes') : 'gross';
       const rules = [];
       if (sg) {
-        const ante = (Number(sg.per_segment) || 0) * (sg.mode === 'sixes' ? 3 : 3);
-        rules.push(`<b>${sg.mode === 'fbt' ? 'Front 9, Back 9 and Total' : 'Holes 1-6, 7-12 and 13-18'}</b>, ${sg.win_by === 'holes' ? 'a segment goes to the pair that wins more holes' : 'a segment goes to the pair with the lower better-ball total'} (${net}).`);
+        const ante = (Number(sg.per_segment) || 0) * ((BFEngine.PERIODS[sg.mode] && BFEngine.PERIODS[sg.mode].segs.length) || 3);
+        rules.push(`<b>${(BFEngine.PERIODS[sg.mode] || BFEngine.PERIODS.fbt).phrase}</b>, ${sg.win_by === 'holes' ? 'a segment goes to the pair that wins more holes' : 'a segment goes to the pair with the lower better-ball total'} (${net}).`);
         rules.push(`${sg.scope === 'group' ? 'Each foursome is its own match' : 'All pairs in the field compete for each segment'}. Each player antes ${money(ante)} (${money(sg.per_segment)} per segment).`);
         rules.push(`A segment's pot is ${money(sg.per_segment)} × the players in the match${sg.scope === 'group' ? ' (4)' : ` (${nPl})`}; the winning pair splits it. A tied segment is a push and the antes go back.`);
       } else {
@@ -16799,7 +16800,7 @@ function gatheringGameDetailsBody(evt, config) {
     remaining -= cost;
     const fbNet = fb.basis === 'net';
     const prs = (fb.pairs || []).map(pr => `${escapeHtml(pr[0])} &amp; ${escapeHtml(pr[1])}`).join(' · ');
-    rows.push(row('🤝', `Fourball · ${fbNet ? (fb.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `Better ball of each pair · $${(fb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, ${fb.segments === 'fbt' || fb.segments === 'sixes' ? `${fb.segments === 'fbt' ? 'Front, Back and Total' : 'holes 1-6, 7-12 and 13-18'} are separate pots won on ${fb.win_by === 'holes' ? 'holes won' : 'strokes'} (${fb.win_by === 'holes' || fb.scope === 'group' ? 'each foursome plays its own match' : 'whole field'}), a tie is a push` : 'winning pair splits it'}${prs ? `<br><b>Pairs:</b> ${prs}` : ''}`, 'fourball'));
+    rows.push(row('🤝', `Fourball · ${fbNet ? (fb.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `Better ball of each pair · $${(fb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, ${BFEngine.periodKey(fb) !== 'round' ? `${BFEngine.PERIODS[BFEngine.periodKey(fb)].phrase} are separate pots won on ${fb.win_by === 'holes' ? 'holes won' : 'strokes'} (${fb.win_by === 'holes' || fb.scope === 'group' ? 'each foursome plays its own match' : 'whole field'}), a tie is a push` : 'winning pair splits it'}${prs ? `<br><b>Pairs:</b> ${prs}` : ''}`, 'fourball'));
   }
   if ((config.legacy.games || []).includes('skins')) {
     const sk = gatheringAddon(config, 'skins');

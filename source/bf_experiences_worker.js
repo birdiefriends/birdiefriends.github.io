@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.15.1 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.16.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -720,9 +720,21 @@ const GAME_SCHEMAS = {
         "default": "own"
       },
       {
+        "key": "period",
+        "type": "enum",
+        "label": "Scoring period",
+        "values": [
+          "round",
+          "front_back",
+          "fbt",
+          "sixes"
+        ],
+        "default": "round"
+      },
+      {
         "key": "segments",
         "type": "enum",
-        "label": "Pot split",
+        "label": "Pot split (older name for the period)",
         "values": [
           "total",
           "fbt",
@@ -756,6 +768,41 @@ const GAME_SCHEMAS = {
         "label": "Pairs",
         "default": [],
         "required": true
+      }
+    ]
+  },
+  "lowscore": {
+    "label": "Low Score",
+    "config": [
+      {
+        "key": "dollar_per_player",
+        "type": "money",
+        "label": "$ per player",
+        "default": 0,
+        "positive": true,
+        "required": true
+      },
+      {
+        "key": "basis",
+        "type": "enum",
+        "label": "Gross or Net",
+        "values": [
+          "gross",
+          "net"
+        ],
+        "default": "gross"
+      },
+      {
+        "key": "period",
+        "type": "enum",
+        "label": "Scoring period",
+        "values": [
+          "round",
+          "front_back",
+          "fbt",
+          "sixes"
+        ],
+        "default": "round"
       }
     ]
   },

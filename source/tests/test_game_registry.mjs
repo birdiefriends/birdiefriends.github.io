@@ -82,7 +82,7 @@ for (let t = 0; t < 400; t++) {
   ok(Math.abs(paid + r.unallocated - r.total_pot) < 1e-9, 'fuzz ' + t + ': conservation (' + chosen.join(',') + ')');
 }
 // 7. UI helpers: stable host-facing order, unique uiOrder, text lives only in the definition
-ok(E.gamesInUiOrder().join() === 'fourball,skins,cttp,birdieball,birdiepay', 'UI order: Format group first (Fourball), then the side games in their old order');
+ok(E.gamesInUiOrder().join() === 'fourball,lowscore,skins,cttp,birdieball,birdiepay', 'UI order: Format group first (Fourball, Low Score), then the side games in their old order');
 ok(new Set(addons.map(id => E.getGame(id).meta.uiOrder)).size === addons.length, 'uiOrder is unique per game');
 ok(E.gamesInUiOrder().includes('fourball') && E.gamesUiMeta().fourball && E.gamesInfo().fourball, 'released Fourball shows in the portal tables');
 ok((() => { const g = E.getGame('fourball'); g.released = false; const hidden = !E.gamesInUiOrder().includes('fourball') && !E.gamesUiMeta().fourball; g.released = true; return hidden; })(), 'the released flag still hides a game when off');
