@@ -1,3 +1,6 @@
+v4.17.4 · 2026-10-12
+Deployed: 2026-10-12 (Two clarity fixes. 1) The event card and My History now say what was played: the games, with Fourball's variant (for example "Fourball (Front/Back/Total, holes won) + Skins"), instead of the Format dropdown's default "Individual Play". In Host > Create, the Format row reads "Set by your games" once Games is switched on. 2) Fourball results now spell out the rules and the money: the variant, how a segment is won (holes or strokes), the ante and how each pot is built, and, for the one-pot game, that holes won are shown for the story while total strokes decided the pay.)
+
 v4.17.3 · 2026-10-12
 Deployed: 2026-10-12 (Fourball results: the cramped Hole by hole text is replaced by the heat map. Each foursome gets a strip with the winning pair's initials in every hole box (a dash if halved), cut into Front/Back/Total or 6/6/6 with the tally when the game was played that way. Tap a hole for both pairs' counted scores and who counted. Works on rounds already closed.)
 

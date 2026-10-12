@@ -5768,6 +5768,25 @@ function gamesSealWatermarkHtml(evt) {
   const uid = String(gamesGidFor(evt)).replace(/[^\w-]/g, '');
   return `<div class="games-seal-layer" aria-hidden="true"><div class="games-seal">${gamesSealSvg(config.legacy.games, uid)}</div></div>`;
 }
+// What was played, in words: the games (with Fourball's variant), not just the Format dropdown, which defaults to
+// "Individual Play" whatever games were set up.
+function fbVariantText(fb) {
+  if (!fb) return '';
+  const seg = fb.segments === 'fbt' ? 'Front/Back/Total' : fb.segments === 'sixes' ? '6/6/6' : '';
+  return seg ? `${seg}, ${fb.win_by === 'holes' ? 'holes won' : 'strokes'}` : 'one pot';
+}
+function evtPlayLabel(evt) {
+  const type = (evt && evt.gatheringType) || '';
+  let config = null;
+  try { config = evtGamesConfig(evt); } catch (e) { config = null; }
+  if (!config || !gatheringIsGamed(config) || typeof BFEngine === 'undefined') return type;
+  const meta = BFEngine.gamesUiMeta();
+  const names = (config.legacy.games || []).map(id => {
+    const lbl = (meta[id] && meta[id].label) || id;
+    return id === 'fourball' ? `${lbl} (${fbVariantText(gatheringAddon(config, 'fourball'))})` : lbl;
+  });
+  return (type && type !== 'Individual Play' ? type + ' · ' : '') + names.join(' + ');
+}
 function buildEventCard(evt, isPast) {
   // Dev-94 — canceled overlay check, done first: a canceled event still
   // renders (date/players/etc. all computed normally below) but the
@@ -5904,7 +5923,7 @@ function buildEventCard(evt, isPast) {
           ${evt.source === 'gathering'
             ? `<span style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;font-size:0.82rem;color:rgba(255,255,255,0.65)">
                 📍 ${locStr}
-                ${evt.gatheringType ? `<span style="opacity:0.5">·</span> ⛳ ${evt.gatheringType}` : ''}
+                ${evtPlayLabel(evt) ? `<span style="opacity:0.5">·</span> ⛳ ${escapeHtml(evtPlayLabel(evt))}` : ''}
                 ${evt.crewName && !evt.fillListEnabled ? `<span style="opacity:0.5">·</span> <span style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted" onclick="event.stopPropagation();showCrewMembers(${evt.crewId},'${evt.crewName.replace(/'/g,"\\'")}')">👥 ${evt.crewName}</span>` : ''}
                 ${gatheringTextHost ? `<span style="opacity:0.5">·</span> ${gatheringTextHost}` : ''}
               </span>`
@@ -12275,7 +12294,12 @@ function pickHostOption(kind, value) {
   }
   closeHostSheet();
 }
-function setHostWantGames(val) { _hostWantGames = !!val; hostSwitchSet('host-games-switch', _hostWantGames); }
+function setHostWantGames(val) {
+  _hostWantGames = !!val; hostSwitchSet('host-games-switch', _hostWantGames);
+  // The Format list is just a label; once games are on, the games say what is played, so the row says so.
+  const sel = document.getElementById('host-new-type');
+  hostSetRowValue('host-format-row', _hostWantGames ? 'Set by your games' : (sel && sel.value) || 'Individual Play');
+}
 function showTemplatePicker() {
   const templates = _hostTemplates || [];
   if (templates.length === 0) { showToast('No saved templates yet'); return; }
@@ -13618,8 +13642,8 @@ function historyEventDetailLine(evt) {
   if (evt.dt instanceof Date && !isNaN(evt.dt)) {
     parts.push(`🕐 ${evt.dt.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`);
   }
-  const typeLabel = evt.source === 'gathering' ? evt.gatheringType : evt.format;
-  if (typeLabel) parts.push(`🏌️ ${typeLabel}`);
+  const typeLabel = evt.source === 'gathering' ? evtPlayLabel(evt) : evt.format;
+  if (typeLabel) parts.push(`🏌️ ${escapeHtml(typeLabel)}`);
   if (evt.crewName) parts.push(`👥 ${evt.crewName} crew`);
   // Weather (Dev-67) moved to its own postmark badge (weatherPostmarkBadge)
   // in buildMyHistoryList — a stamp reads more like a keepsake than a
@@ -16052,11 +16076,13 @@ function fourballResultsHeatHtml(f, fbCfg) {
     };
     const grid = hs => `<div style="display:grid;gap:4px;grid-template-columns:repeat(${hs.length === 6 ? 6 : 9},minmax(0,1fr))">${hs.map(cell).join('')}</div>`;
     const rows = (seg ? g.segs : [{ label: 'Front 9', from: 1, to: 9 }, { label: 'Back 9', from: 10, to: 18 }]).map(sg => {
-      const hs = g.holes.slice(sg.from - 1, sg.to), tally = seg && sg.played ? (sg.lead === 0 ? 'All square' : `${sg.lead > 0 ? iA : iB} ${Math.abs(sg.lead)} ${holesMode ? (Math.abs(sg.lead) === 1 ? 'hole' : 'holes') : (Math.abs(sg.lead) === 1 ? 'stroke' : 'strokes')} up`) : '';
-      return `<div style="margin-bottom:6px"><div style="display:flex;gap:8px;font-size:0.72rem;margin-bottom:3px"><span style="flex:1;font-weight:600;color:var(--text-muted)">${escapeHtml(sg.label)}</span><span style="font-weight:700">${escapeHtml(tally)}</span></div>${grid(hs)}</div>`;
+      const hs = g.holes.slice(sg.from - 1, sg.to), whole = sg.to - sg.from + 1 === 18, tally = seg && sg.played ? (sg.lead === 0 ? 'All square' : `${sg.lead > 0 ? iA : iB} ${Math.abs(sg.lead)} ${holesMode ? (Math.abs(sg.lead) === 1 ? 'hole' : 'holes') : (Math.abs(sg.lead) === 1 ? 'stroke' : 'strokes')} up`) : '';
+      return `<div style="margin-bottom:6px"><div style="display:flex;gap:8px;font-size:0.72rem;margin-bottom:3px"><span style="flex:1;font-weight:600;color:var(--text-muted)">${escapeHtml(sg.label)}</span><span style="font-weight:700">${escapeHtml(tally)}</span></div>${whole ? '' : grid(hs)}</div>`;
     }).join('');
+    const wA = g.holes.filter(h => h.res === 'A').length, wB = g.holes.filter(h => h.res === 'B').length, wT = g.holes.filter(h => h.res === 'T').length;
+    const story = seg ? '' : `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">Holes won: ${escapeHtml(iA)} ${wA}, ${escapeHtml(iB)} ${wB}${wT ? `, ${wT} halved` : ''}. Pay was by total strokes, not holes.</div>`;
     const chip = (c, fg, t) => `<span style="background:${c};color:${fg};font-weight:700;font-size:0.72rem;border-radius:6px;padding:2px 6px">${escapeHtml(t)}</span>`;
-    return `<div style="padding:8px 0;border-top:1px solid rgba(0,0,0,0.06)"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:0.76rem;margin-bottom:6px">${mv.groups.length > 1 ? `<b>Group ${g.n}</b>` : ''}${chip(TEAL, '#04342a', iA)} ${fbShort(pa.names)} <span style="color:var(--text-muted)">vs</span> ${chip(AMB, '#3a2a00', iB)} ${fbShort(pb.names)}</div>${rows}</div>`;
+    return `<div style="padding:8px 0;border-top:1px solid rgba(0,0,0,0.06)"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:0.76rem;margin-bottom:6px">${mv.groups.length > 1 ? `<b>Group ${g.n}</b>` : ''}${chip(TEAL, '#04342a', iA)} ${fbShort(pa.names)} <span style="color:var(--text-muted)">vs</span> ${chip(AMB, '#3a2a00', iB)} ${fbShort(pb.names)}</div>${rows}${story}</div>`;
   }).join('');
   return `<div style="font-size:0.7rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:12px 0 2px">Hole by hole</div><div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Who won each hole. Tap a hole for the scores.</div><div data-fbres-wrap>${blocks}</div>`;
 }
@@ -16193,12 +16219,29 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     let h = label(`🤝 Fourball (${basisTxt}) — ${money(f.pot)}`);
     if (f.net_missing) h += `<div style="font-size:0.72rem;color:#b8860b;margin-bottom:2px">Net was chosen but no strokes were on file, so this played gross</div>`;
     if (f.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(f.configured_pot)}, but the pot only had ${money(f.pot)} left</div>`;
+    {
+      const nPl = (f.pairs || []).length * 2 || (f.standings || []).length * 2;
+      const sg = f.segments;
+      const net = f.basis === 'net' ? (f.net_mode === 'low' ? 'net, off the low' : 'net, own strokes') : 'gross';
+      const rules = [];
+      if (sg) {
+        const ante = (Number(sg.per_segment) || 0) * (sg.mode === 'sixes' ? 3 : 3);
+        rules.push(`<b>${sg.mode === 'fbt' ? 'Front 9, Back 9 and Total' : 'Holes 1-6, 7-12 and 13-18'}</b>, ${sg.win_by === 'holes' ? 'a segment goes to the pair that wins more holes' : 'a segment goes to the pair with the lower better-ball total'} (${net}).`);
+        rules.push(`${sg.scope === 'group' ? 'Each foursome is its own match' : 'All pairs in the field compete for each segment'}. Each player antes ${money(ante)} (${money(sg.per_segment)} per segment).`);
+        rules.push(`A segment's pot is ${money(sg.per_segment)} × the players in the match${sg.scope === 'group' ? ' (4)' : ` (${nPl})`}; the winning pair splits it. A tied segment is a push and the antes go back.`);
+      } else {
+        const ante = nPl ? (Number(f.capped ? f.configured_pot : f.pot) || 0) / nPl : 0;
+        rules.push(`<b>One pot</b>: the pair with the lowest better-ball total over the round wins (${net}).`);
+        rules.push(`Each player antes ${money(ante)}${nPl ? `, ${nPl} players, ${money(f.capped ? f.configured_pot : f.pot)}` : ''}${f.capped ? `, ${money(f.pot)} after the other games` : ''}. The winning pair splits the pot.`);
+        rules.push(`Holes won (below) are for the story only. In this game the strokes decide the money.`);
+      }
+      h += `<div style="font-size:0.74rem;color:var(--text-muted);margin:2px 0 8px;line-height:1.5">${rules.join(' ')}</div>`;
+    }
     if (f.segments) {
       const sg = f.segments;
-      h += `<div style="font-size:0.74rem;color:var(--text-muted);margin:2px 0 6px">${sg.mode === 'fbt' ? 'Front, Back and Total' : 'Holes 1-6, 7-12 and 13-18'}: ${money(sg.per_segment)} per player per segment, won on ${sg.win_by === 'holes' ? 'holes won' : 'strokes'}${sg.scope === 'group' ? ', each foursome its own match' : ', whole field'}. A tie is a push.</div>`;
       h += (sg.groups || []).map(g => `<div style="padding:4px 0 6px;border-bottom:1px solid rgba(0,0,0,0.06)">
         ${sg.scope === 'group' ? `<div style="font-size:0.74rem;font-weight:700;margin-bottom:2px">Group ${esc(g.group)}: ${g.pairs.map(pr => pr.map(esc).join(' &amp; ')).join(' vs ')}</div>` : ''}
-        ${g.segments.map(x => line(`${esc(x.label)} <span style="color:var(--text-muted)">${money(x.pot)}${x.holes_won ? ` · holes ${esc(x.holes_won[0])}-${esc(x.holes_won[1])}` : ''}</span>`,
+        ${g.segments.map(x => line(`${esc(x.label)} <span style="color:var(--text-muted)">${money(x.pot)}${x.holes_won ? ` · holes ${esc(x.holes_won[0])}-${esc(x.holes_won[1])}${x.halved ? `, ${esc(x.halved)} halved` : ''}` : (Array.isArray(x.totals) && x.totals.every(v => v != null) ? ` · ${x.totals.map(esc).join(' vs ')} strokes` : '')}</span>`,
           x.status === 'won' ? `<b>${x.winner.map(esc).join(' &amp; ')}</b> ${money(x.per_player)} each` : (x.status === 'push' ? `<span style="color:var(--text-muted)">Push, ante back</span>` : `<span style="color:#b8860b">Not finished, ante back</span>`))).join('')}</div>`).join('');
     }
     const heat = fourballResultsHeatHtml(f, fbCfg);

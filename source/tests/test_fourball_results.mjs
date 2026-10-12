@@ -26,6 +26,8 @@ ok(html.includes('🤝 Fourball'), 'tab present');
 ok(html.includes('Ann &amp; Bob') && html.includes('Cy &amp; Dee'), 'pairs listed');
 ok(/\$10 each/.test(html), 'winning pair paid per player');
 ok(html.includes('Hole by hole') && html.includes('data-fbres=') && html.includes('fbResOpen'), 'hole-by-hole heat map (tappable boxes)');
+ok(/One pot<\/b>: the pair with the lowest better-ball total/.test(html) && /antes \$5, 4 players, \$20/.test(html), 'one pot: says the rule and how the pot is built');
+ok(/Pay was by total strokes, not holes/.test(html) && /Holes won: AB \d/.test(html), 'one pot: holes won is shown as story, not pay');
 ok(!html.includes('<details>'), 'the cramped text list is gone when the heat map shows');
 ok(/>AB</.test(html) && /aria-label="Hole 1, AB won"/.test(html) && /aria-label="Hole 2, CD won"/.test(html) || /aria-label="Hole 2, Halved"|Hole 2, AB won/.test(html), 'boxes carry the winner initials');
 { const old = { ...snap, fourball: { ...snap.fourball } }; delete old.fourball.pairs; const h2 = ctx.f.renderGatheringPayoutHtml(old, row.game_configs.fourball); ok(h2.includes('data-fbres='), 'older closed games: pairs come from the saved game config'); const h3 = ctx.f.renderGatheringPayoutHtml(old); ok(!h3.includes('data-fbres=') && h3.includes('Ann &amp; Bob'), 'no pairs anywhere: results still render without the strip'); }
@@ -47,7 +49,9 @@ const netRow = { ...row, game_configs: { fourball: { ...row.game_configs.fourbal
   ok(h.includes('Front 9') && h.includes('Back 9') && h.includes('Total'), 'segments: three segment lines');
   ok(/holes 1-0/.test(h) && h.includes('Ann &amp; Bob'), 'segments: holes-won tally and the winner');
   ok(/Push, ante back/.test(h), 'segments: a tied segment says push');
-  ok(/each foursome its own match/.test(h), 'segments: says how it was decided');
+  ok(/Front 9, Back 9 and Total<\/b>, a segment goes to the pair that wins more holes/.test(h) && /antes \$15 \(\$5 per segment\)/.test(h) && /Each foursome is its own match/.test(h), 'segments: variant, win-by, ante and scope spelled out');
+  ok(/pot is \$5 × the players in the match/.test(h), 'segments: says how a segment pot is built');
+  ok(/each foursome is its own match/i.test(h), 'segments: says how it was decided');
 }
 // reconcile: Fourball net with a card lacking strokes blocks, like Skins net
 const hc = { allowance: 95, skins_basis: 'gross', birdiepay_basis: 'gross', players: { Ann: { strokes: 4 } } };
@@ -61,4 +65,16 @@ const body = ctx.f.gatheringGameDetailsBody({ source: 'gathering', gatheringId: 
 ok(body.includes('Fourball') && body.includes('$5.00/player') && body.includes('$20.00 pot'), 'details: fourball row + pot');
 ok(body.includes('Ann &amp; Bob') && body.includes('Cy &amp; Dee'), 'details: pairs shown');
 ok(/Skins · Gross[\s\S]*Gets what's left: \$60\.00/.test(body), 'details: skins remaining after fourball carve');
+// the card says what was played, not just the Format dropdown
+{
+  const cfg = E.gatheringConfigFromLegacy({ games: ['fourball', 'skins'], dollar_per_player: 20, game_configs: { fourball: { dollar_per_player: 5, basis: 'gross', net_mode: 'own', segments: 'fbt', win_by: 'holes', scope: 'group', pairs: [['Ann','Bob'],['Cy','Dee']] } } });
+  const c2 = { console, BFEngine: E, escapeHtml: ctx.escapeHtml, gatheringIsGamed: () => true, evtGamesConfig: () => cfg, gatheringAddon: ctx.gatheringAddon };
+  vm.createContext(c2);
+  vm.runInContext(['fbVariantText','evtPlayLabel'].map(n => extractFn(src, n)).join('\n') + '\nthis.L=evtPlayLabel;', c2);
+  const lbl = c2.L({ gatheringType: 'Individual Play' });
+  ok(/Fourball \(Front\/Back\/Total, holes won\)/.test(lbl) && /Skins/.test(lbl) && !/Individual Play/.test(lbl), 'card label: games with the Fourball variant, not "Individual Play"');
+  ok(/^Best Ball · /.test(c2.L({ gatheringType: 'Best Ball' })), 'card label: a non-default Format is kept');
+  c2.gatheringIsGamed = () => false;
+  eq(c2.L({ gatheringType: 'Individual Play' }), 'Individual Play', 'card label: no games, the Format as before');
+}
 console.log(`fourball results: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
