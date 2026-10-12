@@ -1265,6 +1265,8 @@ body {
   border-radius: 10px; border: 1px solid var(--border);
   font-size: 0.9rem; font-family: inherit; background: #fff; color: var(--text);
 }
+/* checkboxes and radios keep their natural size inside a field (the rule above made them full width and squeezed their label to a sliver) */
+.host-form-field input[type="checkbox"], .host-form-field input[type="radio"] { width: auto; padding: 0; flex: none; margin: 0; }
 /* ── Segmented toggle (tee time status, who's coming) ── */
 .seg-toggle {
   display: flex; border-radius: 12px; overflow: hidden;

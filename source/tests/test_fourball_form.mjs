@@ -111,4 +111,6 @@ const sec = t => t.dom.window.document.getElementById('games-form-fourball-secti
   const u = sandbox(); u.api.setSel([]); u.api.setGamesFormFourballDollarPerPlayer('5');
   ok(u.api.gatheringGamesFourballSectionHtml() === '', 'U: no section until ticked');
 }
+// the Net ranking checkbox must not inherit the full-width text-input rule (it rendered huge and squeezed its label)
+ok(/\.host-form-field input\[type="checkbox"\][^{]*\{[^}]*width:\s*auto/.test(src), 'checkbox/radio inside a form field keep their natural width');
 console.log(`fourball form: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
