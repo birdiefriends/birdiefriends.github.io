@@ -10026,12 +10026,13 @@ function skGoFirstOpen() {
   for (let h = 1; h <= max; h++) {
     if (g.players.some(n => !(skCardOf(n)[h - 1] > 0))) { _sk.hole = h; _sk.sel = Math.max(0, g.players.findIndex(n => !(skCardOf(n)[h - 1] > 0))); return; }
   }
-  _sk.hole = max; _sk.sel = 0;
+  _sk.hole = max; _sk.sel = -1;
 }
+// The next name down with no score on this hole (wrapping), or -1 when the hole is full.
 function skFirstEmptyPlayer(h, from) {
   const g = skGroup(); const n = g.players.length;
   for (let i = 1; i <= n; i++) { const k = (from + i) % n; if (!(skCardOf(g.players[k])[h - 1] > 0)) return k; }
-  return from;
+  return -1;
 }
 function skTap(v) {
   if (!_sk) return;
@@ -10045,6 +10046,7 @@ function skClear() {
   if (!_sk) return;
   const name = skGroup().players[_sk.sel]; if (!name) return;
   skSetScore(name, _sk.hole, 0);
+  _sk.sel = skGroup().players.indexOf(name);
   renderLiveBanner();
 }
 function skSetScore(name, hole, v) {
@@ -10054,11 +10056,11 @@ function skSetScore(name, hole, v) {
   skPersist();
   skQueueSave(name);
 }
-function skPick(k) { if (_sk) { _sk.sel = k; renderLiveBanner(); } }
+function skPick(k) { if (_sk) { _sk.sel = _sk.sel === k ? -1 : k; renderLiveBanner(); } }
 function skNav(d) {
   if (!_sk) return;
   const h = Math.min(skMaxHole(), Math.max(1, _sk.hole + d));
-  _sk.hole = h; _sk.sel = Math.max(0, skGroup().players.findIndex(n => !(skCardOf(n)[h - 1] > 0)));
+  _sk.hole = h; _sk.sel = skGroup().players.findIndex(n => !(skCardOf(n)[h - 1] > 0));
   renderLiveBanner();
 }
 function skSetGroup(i) { if (_sk) { _sk.groupIdx = i; skGoFirstOpen(); if (typeof _fbUi !== 'undefined') _fbUi.drill = null; renderLiveBanner(); } }
@@ -10108,38 +10110,40 @@ function liveScoreModeHtml() {
   const g = skGroup(), gs = skGroups(), hole = _sk.hole, max = skMaxHole();
   if (!g.players.length) return `<div style="font-size:0.85rem;color:rgba(255,255,255,0.7);padding:8px 0">No pairs are set up for this Fourball yet.</div>`;
   const pars = skPars(), par = pars ? pars[hole - 1] : null;
-  const inits = BFEngine.playerInitials(g.players);
-  const rowVals = g.players.map(n => { const v = skCardOf(n)[hole - 1]; return v > 0 ? v : null; });
-  const done = rowVals.every(v => v != null);
+  const vals = g.players.map(n => { const v = skCardOf(n)[hole - 1]; return v > 0 ? v : null; });
+  const done = vals.every(v => v != null);
+  const first = n => String(n).trim().split(/\s+/)[0];
   const navBtn = (d, svg, hot) => `<button type="button" aria-label="${d < 0 ? 'Previous hole' : 'Next hole'}" onclick="skNav(${d})" style="width:52px;height:52px;border-radius:12px;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;${hot ? 'border:0;background:#1D9E75' : 'border:1.5px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.08)'}">${svg}</button>`;
   const chevL = '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>';
   const chevR = '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>';
-  const tiles = g.players.map((n, k) => {
-    const v = rowVals[k], on = k === _sk.sel && !done, d = v == null || par == null ? 0 : v - par;
+  const keyStyle = on => `height:52px;border-radius:12px;font-family:'DM Mono',monospace;font-size:1.4rem;font-weight:600;color:#fff;cursor:pointer;box-sizing:border-box;${on ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.2)' : 'border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.1)'}`;
+  const pad = `<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:2px 0 10px">${[1,2,3,4,5,6,7,8,9].map(n => `<button type="button" onclick="skTap(${n})" style="${keyStyle(n === par)}">${n}</button>`).join('')}<button type="button" aria-label="Clear this score" onclick="skClear()" style="height:52px;border-radius:12px;font-size:1.1rem;color:rgba(255,255,255,0.7);cursor:pointer;box-sizing:border-box;border:1.5px dashed rgba(255,255,255,0.3);background:transparent">✕</button></div>`;
+  const rows = g.players.map((n, k) => {
+    const v = vals[k], active = k === _sk.sel, d = v == null || par == null ? 0 : v - par;
     const col = v == null ? 'rgba(255,255,255,0.35)' : d < 0 ? '#5DCAA5' : d > 0 ? '#e0b44c' : '#fff';
-    return `<button type="button" onclick="skPick(${k})" title="${escapeHtml(n)}" style="min-height:84px;border-radius:12px;color:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;box-sizing:border-box;font-family:inherit;${on ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.2)' : 'border:1.5px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.2)'}">
-      <span style="font-size:0.9rem;font-weight:700;letter-spacing:0.04em">${escapeHtml(inits[k])}</span>
-      <span style="font-family:'DM Mono',monospace;font-size:2rem;font-weight:700;line-height:1.1;color:${col}">${v == null ? '·' : v}</span></button>`;
+    const pr = g.pairs[Math.floor(k / 2)];
+    const label = k % 2 === 0 && pr ? `<div style="font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:10px 2px 4px;font-family:'DM Mono',monospace">${pr.map(x => escapeHtml(first(x))).join(' &amp; ')}</div>` : '';
+    return `${label}<button type="button" onclick="skPick(${k})" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:12px;min-height:56px;box-sizing:border-box;cursor:pointer;margin-bottom:6px;color:#fff;font-family:inherit;text-align:left;${active ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.18)' : 'border:1.5px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.2)'}">
+      <span style="flex:1;min-width:0;font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(n)}</span>
+      <span style="min-width:44px;text-align:right;font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:700;color:${col}">${v == null ? '–' : v}</span></button>${active ? pad : ''}`;
   }).join('');
-  const nums = [1,2,3,4,5,6,7,8,9,10].map(n => `<button type="button" onclick="skTap(${n})" style="height:56px;border-radius:12px;font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:600;color:#fff;cursor:pointer;box-sizing:border-box;${n === par ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.18)' : 'border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08)'}">${n}</button>`).join('');
-  const hi = par == null ? -1 : rowVals.findIndex(v => v != null && v >= par + 3);
-  const hint = hi >= 0 ? `${escapeHtml(inits[hi])} shows ${rowVals[hi]} on a par ${par}. Right? Tap the tile to change it.`
-    : done ? 'All four are in. Tap any tile to change a score, or go to the next hole.'
-    : `Enter ${escapeHtml(inits[_sk.sel])}'s score. It saves as you tap and moves to the next player.`;
+  const hi = par == null ? -1 : vals.findIndex(v => v != null && v >= par + 3);
+  const hint = hi >= 0 ? `${escapeHtml(first(g.players[hi]))} shows ${vals[hi]} on a par ${par}. Right? Tap the name to change it.`
+    : done ? 'All four are in. Tap a name to change a score, or go to the next hole.'
+    : _sk.sel >= 0 ? `Tap ${escapeHtml(first(g.players[_sk.sel]))}'s score. It saves and moves to the next name.`
+    : 'Tap a name to enter a score.';
   const status = _sk.err ? 'Not saved yet, will retry' : _sk.pending ? 'Saving…' : _sk.savedAt ? 'Saved' : '';
   const statusCol = _sk.err ? '#e0b44c' : '#5DCAA5';
   const chips = gs.length > 1 ? `<div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">${gs.map((x, i) => `<button type="button" onclick="skSetGroup(${i})" style="min-height:36px;padding:0 12px;border-radius:18px;font-family:inherit;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;${i === _sk.groupIdx ? 'background:#5DCAA5;color:#04342a;border:0' : 'background:transparent;color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.3)'}">Group ${x.n}</button>`).join('')}</div>` : '';
   return `${chips}
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
       ${navBtn(-1, chevL, false)}
-      <div style="flex:1;text-align:center"><div style="font-family:'DM Mono',monospace;font-size:2.1rem;font-weight:700;line-height:1;color:#fff">Hole ${hole}</div>
+      <div style="flex:1;text-align:center"><div style="font-family:'DM Mono',monospace;font-size:1.9rem;font-weight:700;line-height:1;color:#fff">Hole ${hole}</div>
         <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-top:3px">${par != null ? 'Par ' + par : '&nbsp;'}<span style="margin-left:10px;color:${statusCol}">${status}</span></div></div>
       ${navBtn(1, chevR, done && hole < max)}
     </div>
-    <div style="display:grid;grid-template-columns:repeat(${g.players.length},minmax(0,1fr));gap:8px;margin-bottom:12px">${tiles}</div>
-    <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px">${nums}</div>
-    <div style="margin-top:12px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:36px">${hint}</div>
-    <div style="text-align:center"><button type="button" onclick="skClear()" style="background:none;border:0;color:rgba(255,255,255,0.6);font-family:inherit;font-size:0.78rem;cursor:pointer;min-height:36px;padding:0 12px">Clear this score</button></div>`;
+    ${rows}
+    <div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:34px">${hint}</div>`;
 }
 // ── Live Actions: the Fourball game view (Dev-93) ─────────────────────────────────────────
 // Two jobs kept apart: (1) how the game stands, (2) each player's card, drilled into from the game view.

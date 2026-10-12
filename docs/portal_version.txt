@@ -1,5 +1,5 @@
-v4.17.0 · 2026-10-12
-Deployed: 2026-10-12 (Fourball pot variants: split the pot into Front/Back/Total or 6/6/6 segments, won on strokes or holes won, each foursome or the whole field, ties push. Live Actions replaces the grid with My group / Field, a per-hole strip and tappable scorecards. Tabs renamed Live Score and Live Actions.)
+v4.17.1 · 2026-10-12
+Deployed: 2026-10-12 (Live Score now lists the four players top to bottom with full names and a pair label; tap a name and a 1-9 pad pops under it, then drops to the next name and goes away when the hole is full. Tap the name again to close it; the X clears a score.)
 
 v4.15.1 · 2026-10-09
 Deployed: 2026-10-09 (BF Weekend Times: a Sub on an 8-player event no longer sees the "You're the 5th player — spot not yet confirmed" banner. That warning is only for the 5th Yes player. A Sub now reads: Registered as Sub — committed players have priority.)

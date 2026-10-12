@@ -62,7 +62,8 @@ ok(last.input_type === 'strokes' && last.event_name === 'gathering:7' && last.ho
 eq([last.total, last.front9, last.hole_count, last.venue], [5, 5, 18, 'BSGC'], 'post: totals, 18 holes, venue');
 eq(last.marks[0], 's', 'post: marks computed from par (5 on a par 4)');
 eq(Object.keys(A.get().dirty), [], 'nothing left waiting after saves');
-eq(A.get().sel, 3, 'after the fourth score the selection stays on the last tile (all in)');
+eq(A.get().sel, -1, 'after the fourth score the pad goes away (hole is full)');
+ok(!/skTap\(/.test(A.liveScoreModeHtml()), 'full hole: no pad on screen');
 
 // next hole + selection jumps to first empty
 A.skNav(1);
@@ -92,9 +93,16 @@ A.skMergeRemote([{ player: 'Mike Kay', holes: [4, 4, 3, ...Array(15).fill(null)]
 eq(A.get().cards['Mike Kay'][2], 3, 'merge: another phone\'s hole appears');
 
 // outlier hint and nine/odd rendering
-A.skNav(1); A.skPick(0); A.skTap(7);
+A.skNav(1); A.skTap(7);
 ok(/Right\?/.test(A.liveScoreModeHtml()), 'quiet check: par 3 shows 7 -> asks "Right?" but does not block');
 ok(A.liveScoreModeHtml().includes('Hole 3') && A.liveScoreModeHtml().includes('Par 3'), 'score view shows hole and par');
+{ const h = A.liveScoreModeHtml();
+  ok(['Brian Hager','Tom Marsh','Mike Kay','Dave Vance'].every(n => h.includes(n)), 'rows carry full names, top to bottom');
+  ok(h.includes('Brian &amp; Tom') && h.includes('Mike &amp; Dave'), 'a pair label sits above each two-row pair');
+  eq((h.match(/onclick="skTap\(\d\)"/g) || []).length, 9, 'pad has keys 1 to 9');
+  ok(!/skTap\(10\)/.test(h) && !/>P</.test(h), 'no 10 key and no pickup key');
+  A.get().sel = -1; A.skPick(1); eq((A.liveScoreModeHtml().match(/onclick="skTap\(/g) || []).length, 9, 'pad shows once, under the picked name');
+  A.skPick(1); ok(!/skTap\(/.test(A.liveScoreModeHtml()), 'tapping the picked name again closes the pad'); }
 ok(/Group 1/.test(A.liveScoreModeHtml()) && /Group 2/.test(A.liveScoreModeHtml()), 'two foursomes -> group chips');
 A.skSetGroup(1);
 eq(A.skGroup().players, ['Sam Lee','Pat Roe','Lee Jo','Jo Wu'], 'any group can be scored from the chips');
