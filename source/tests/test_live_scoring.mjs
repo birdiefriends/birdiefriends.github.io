@@ -118,7 +118,7 @@ eq(A.livePanelModeToggleHtml('score').includes("setLiveScoreMode('games')"), tru
   const serverCards = [mk('Brian Hager', [4,4,3,5,4,4,5]), mk('Tom Marsh', [4,3,4,4,5,5,6]), mk('Mike Kay', [5,4,3,4,5,5,5]), mk('Dave Vance', [4,5,4,4,6,6,6])];
   const c2 = { ...ctx, _fbLive: null, _fbUi: null, skMaxHole: undefined };
   const ctx2 = Object.assign(ctx, { BFEngine: E });
-  vm.runInContext('let _fbLive = null; let _fbUi = { view: "group", hole: null, drill: null };\n' + ['fbOverlayCards','fbLiveCompute','fbSetView','fbPickHole','fbDrill','fbShort','fourballPlayerCardHtml','fourballActionsHtml','fourballLiveSectionHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.live={fbSetView,fbDrill,fbPickHole,fourballPlayerCardHtml,fourballActionsHtml,fbLiveCompute,set:v=>{_fbLive=v},ui:()=>_fbUi};', ctx);
+  vm.runInContext('let _fbLive = null; let _fbUi = { view: "group", hole: null, drill: null };\n' + ['fbOverlayCards','fbLiveCompute','fbSetView','fbPickHole','fbCloseHole','fbStepHole','fbDrill','fbDrillName','fbIni','fbShort','fourballPlayerCardHtml','fourballActionsHtml','fourballLiveSectionHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.live={fbSetView,fbDrill,fbDrillName,fbPickHole,fbCloseHole,fbStepHole,fourballPlayerCardHtml,fourballActionsHtml,fbLiveCompute,set:v=>{_fbLive=v},ui:()=>_fbUi};', ctx);
   ctx.gatheringAddon = (c, id) => (c && c.addons.find(a => a.id === id)) || null;
   const L2 = ctx.live;
   await tick(); await tick(); // let the earlier test's last save finish so nothing is left waiting
@@ -131,11 +131,15 @@ eq(A.livePanelModeToggleHtml('score').includes("setLiveScoreMode('games')"), tru
   ok(h.includes('Brian &amp; Tom') && h.includes('Mike &amp; Dave'), 'actions: the two pairs of my group');
   ok(/Front 9/.test(h) && /Back 9/.test(h) && /Total/.test(h), 'actions: Front / Back / Total rows');
   ok(/3 - 0, 4 halved/.test(h), 'actions: front tally 3-0 with 4 halved (holes won)');
-  ok(/Brian 3 up|Brian &amp; Tom/.test(h) && /3 up/.test(h), 'actions: the leader and the margin in words');
+  ok(/BT 3 holes up/.test(h) && /BT<\/span>/.test(h), 'actions: initials chips name the pairs and the lead is in the game\'s unit');
+  ok(/Tap a hole for the details/.test(h) && !/role="dialog"/.test(h), 'actions: no details until a hole is tapped');
+  ok(/>BT</.test(h) && />–</.test(h), 'actions: hole boxes carry the winner\'s initials, a dash for halved');
   ok(/Scorecards/.test(h) && /thru 7/.test(h), 'actions: scorecards rows with holes played');
-  ok(/Hole 7/.test(h) && /Halved/.test(h), 'actions: hole detail opens on the last played hole');
+  L2.fbPickHole(7); h = L2.fourballActionsHtml(cfg2);
+  ok(/role="dialog"/.test(h) && /Hole 7/.test(h) && /Halved/.test(h), 'actions: tapping a hole opens the details sheet');
   L2.fbPickHole(5); h = L2.fourballActionsHtml(cfg2);
-  ok(/Hole 5 · par 5/.test(h) && /win the hole with a 4/.test(h), 'actions: tapping a hole shows both pairs and who counted');
+  ok(/Hole 5/.test(h) && /Par 5/.test(h) && /won the hole/.test(h) && /fbDrillName/.test(h), 'actions: sheet shows both pairs, who won, and names that drill');
+  L2.fbStepHole(1); eq(L2.ui().hole, 6, 'sheet: next hole'); L2.fbCloseHole(); eq(L2.ui().hole, null, 'sheet: closes');
   // this phone's unsaved tap shows at once
   A.skMergeRemote(serverCards); A.skSetGroup(0);
   A.skSetScore('Brian Hager', 8, 3); A.skSetScore('Tom Marsh', 8, 4); A.skSetScore('Mike Kay', 8, 3); A.skSetScore('Dave Vance', 8, 3);

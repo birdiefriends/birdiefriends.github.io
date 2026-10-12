@@ -10166,7 +10166,16 @@ function fbLiveCompute() {
 }
 function fbSetView(v) { _fbUi.view = v === 'field' ? 'field' : 'group'; _fbUi.drill = null; renderLiveBanner(); }
 function fbPickHole(h) { _fbUi.hole = h; renderLiveBanner(); }
-function fbDrill(k) { _fbUi.drill = k; renderLiveBanner(); }
+function fbCloseHole() { _fbUi.hole = null; renderLiveBanner(); }
+function fbStepHole(d) { const m = _fbUi.hole ? _fbUi.hole + d : 0; if (m >= 1 && m <= 18) { _fbUi.hole = m; renderLiveBanner(); } }
+function fbDrill(k) { _fbUi.drill = k; _fbUi.hole = null; renderLiveBanner(); }
+function fbDrillName(n) { const nm = x => String(x || '').trim().toLowerCase(); fbDrill(skGroup().players.findIndex(p => nm(p) === nm(n))); }
+// Pair initials for the hole boxes: first letter of each first name; longer when the two pairs would match.
+function fbIni(pair, other) {
+  const f = (p, n) => p.map(x => { const t = String(x).trim(); return t.charAt(0).toUpperCase() + t.slice(1, n).toLowerCase(); }).join('');
+  const a = f(pair, 1);
+  return other && a === f(other, 1) ? f(pair, 2) : a;
+}
 function fbShort(pair) { return pair.map(n => String(n).trim().split(/\s+/)[0]).join(' &amp; '); }
 function fourballPlayerCardHtml(k) {
   const g = skGroup(), name = g.players[k], pars = skPars();
@@ -10214,19 +10223,20 @@ function fourballActionsHtml(cfg) {
   const [pa, pb] = g.pairs;
   const holesMode = m.win_by === 'holes';
   const played = g.holes.filter(h => h.res).length;
-  const sl = g.strokes_lead;
+  const tl = holesMode ? g.holes.reduce((a, h) => a + (h.res === 'A' ? 1 : h.res === 'B' ? -1 : 0), 0) : g.strokes_lead;
   const lastPlayed = played ? g.holes.filter(h => h.res).slice(-1)[0].hole : null;
-  const sel = _fbUi.hole && g.holes[_fbUi.hole - 1] && g.holes[_fbUi.hole - 1].res ? _fbUi.hole : lastPlayed;
+  const sel = _fbUi.hole && g.holes[_fbUi.hole - 1] && g.holes[_fbUi.hole - 1].res ? _fbUi.hole : null;
+  const iA = fbIni(pa.names, pb.names), iB = fbIni(pb.names, pa.names);
   const cell = h => {
     const done = !!h.res, on = h.hole === sel;
-    const bg = !done ? 'transparent' : h.res === 'A' ? 'rgba(93,202,165,0.85)' : h.res === 'B' ? 'rgba(224,180,76,0.85)' : 'rgba(255,255,255,0.18)';
-    const col = !done ? 'rgba(255,255,255,0.4)' : h.res === 'T' ? '#fff' : '#04342a';
-    return `<button type="button" ${done ? `onclick="fbPickHole(${h.hole})"` : 'disabled'} style="height:40px;border-radius:7px;font-family:'DM Mono',monospace;font-size:0.82rem;font-weight:600;padding:3px 0;box-sizing:border-box;cursor:${done ? 'pointer' : 'default'};background:${bg};color:${col};border:${on ? '2px solid #fff' : done ? '0' : '1px dashed rgba(255,255,255,0.22)'}"><span style="font-size:0.56rem;opacity:0.75;display:block;line-height:1">${h.hole}</span>${done ? (h.res === 'B' ? h.b : h.a) : ''}</button>`;
+    const bg = !done ? 'transparent' : h.res === 'A' ? TEAL : h.res === 'B' ? AMB : 'rgba(255,255,255,0.14)';
+    const col = !done ? 'rgba(255,255,255,0.4)' : h.res === 'A' ? '#04342a' : h.res === 'B' ? '#3a2a00' : 'rgba(255,255,255,0.85)';
+    return `<button type="button" ${done ? `onclick="fbPickHole(${h.hole})" aria-label="Hole ${h.hole}, ${h.res === 'T' ? 'halved' : escapeHtml(h.res === 'A' ? iA : iB) + ' won'}"` : 'disabled'} style="height:44px;border-radius:7px;font-family:'DM Mono',monospace;font-size:0.76rem;font-weight:700;padding:4px 0;box-sizing:border-box;cursor:${done ? 'pointer' : 'default'};background:${bg};color:${col};border:${on ? '2px solid #fff' : done ? '0' : '1px dashed rgba(255,255,255,0.22)'}"><span style="font-size:0.56rem;opacity:0.7;display:block;line-height:1;font-weight:500">${h.hole}</span>${done ? (h.res === 'T' ? '–' : escapeHtml(h.res === 'A' ? iA : iB)) : ''}</button>`;
   };
   const segHtml = g.segs.map(sg => {
     const hs = g.holes.slice(sg.from - 1, sg.to);
     const lead = sg.lead;
-    const tally = sg.played === 0 ? '' : lead === 0 ? 'All square' : `${fbShort(lead > 0 ? pa.names : pb.names)} ${Math.abs(lead)} ${holesMode ? 'up' : (Math.abs(lead) === 1 ? 'stroke up' : 'strokes up')}`;
+    const tally = sg.played === 0 ? '' : lead === 0 ? 'All square' : `${lead > 0 ? iA : iB} ${Math.abs(lead)} ${holesMode ? (Math.abs(lead) === 1 ? 'hole up' : 'holes up') : (Math.abs(lead) === 1 ? 'stroke up' : 'strokes up')}`;
     const detail = sg.played === 0 ? 'not started' : holesMode ? `${sg.holes_won[0]} - ${sg.holes_won[1]}, ${sg.halved} halved` : `${sg.strokes[0]} vs ${sg.strokes[1]}`;
     const cols = sg.to - sg.from + 1 === 9 || sg.to - sg.from + 1 === 18 ? 9 : 6;
     const grid = sg.to - sg.from + 1 === 18 ? '' : `<div style="display:grid;gap:4px;grid-template-columns:repeat(${cols},minmax(0,1fr))">${hs.map(cell).join('')}</div>`;
@@ -10235,21 +10245,24 @@ function fourballActionsHtml(cfg) {
   const hd = sel ? g.holes[sel - 1] : null;
   const par = hd && skPars() ? skPars()[sel - 1] : null;
   const pScores = pr => pr.names.map(n => { const v = skCardOf(n)[sel - 1]; return v > 0 ? v : '·'; }).join(', ');
-  const detail = hd ? `<div style="background:rgba(0,0,0,0.22);border-radius:12px;padding:10px 12px;margin-top:10px">
-      <div style="font-size:0.76rem;font-weight:600;color:rgba(255,255,255,0.75);margin-bottom:6px">Hole ${sel}${par ? ` · par ${par}` : ''}</div>
-      ${[[pa, TEAL, hd.a], [pb, AMB, hd.b]].map(([pr, c, bb]) => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:0.5px solid rgba(255,255,255,0.1)"><div style="flex:1;font-size:0.86rem;font-weight:600;color:${c}">${fbShort(pr.names)}</div><div style="font-size:0.8rem;color:rgba(255,255,255,0.75)">${pScores(pr)}</div><div style="font-family:'DM Mono',monospace;font-size:0.92rem;font-weight:700;min-width:26px;text-align:center;padding:2px 6px;border-radius:6px;background:${c === TEAL ? 'rgba(93,202,165,0.25)' : 'rgba(224,180,76,0.25)'};color:${c}">${bb}</div></div>`).join('')}
-      <div style="font-size:0.76rem;color:rgba(255,255,255,0.65);margin-top:4px">${hd.res === 'T' ? `Halved. Both pairs counted ${hd.a}.` : hd.res === 'A' ? `${fbShort(pa.names)} win the hole with a ${hd.a}.` : `${fbShort(pb.names)} win the hole with a ${hd.b}.`}</div></div>` : '';
+  const rowHtml = (pr, c, ini, bb, won, chipFg) => `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:10px;background:${won ? (c === TEAL ? 'rgba(93,202,165,0.18)' : 'rgba(224,180,76,0.18)') : 'rgba(255,255,255,0.05)'};border:1px solid ${won ? c : 'transparent'}"><span style="background:${c};color:${chipFg};font-weight:700;font-size:0.76rem;border-radius:7px;padding:4px 7px">${escapeHtml(ini)}</span><div style="flex:1;min-width:0">${pr.names.map(n => { const v = skCardOf(n)[sel - 1]; return `<button type="button" onclick="fbDrillName(${escapeHtml(JSON.stringify(n)).replace(/"/g, '&quot;')})" style="display:block;width:100%;text-align:left;background:none;border:0;color:#fff;font-family:inherit;font-size:0.88rem;font-weight:600;padding:5px 0;min-height:32px;cursor:pointer">${escapeHtml(String(n).trim().split(/\s+/)[0])} <span style="font-family:'DM Mono',monospace;color:rgba(255,255,255,0.85)">${v > 0 ? v : '·'}</span></button>`; }).join('')}</div><div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.25rem;font-weight:700">${bb}</div><div style="font-size:0.68rem;color:rgba(255,255,255,0.6)">${won ? 'won the hole' : hd.res === 'T' ? 'halved' : 'lost'}</div></div></div>`;
+  const stepBtn = (d, t) => `<button type="button" onclick="fbStepHole(${d})" aria-label="${d < 0 ? 'Previous' : 'Next'} hole" style="width:44px;height:44px;border-radius:10px;border:0;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;cursor:pointer">${t}</button>`;
+  const detail = hd ? `<div onclick="fbCloseHole()" style="position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9990"></div>
+    <div role="dialog" aria-label="Hole ${sel} details" style="position:fixed;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:#0b3b31;color:#fff;border-radius:18px 18px 0 0;padding:16px 16px 24px;z-index:9991;box-shadow:0 -8px 30px rgba(0,0,0,0.4)">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><div style="flex:1"><div style="font-size:1.05rem;font-weight:700">Hole ${sel}</div><div style="font-size:0.74rem;color:rgba(255,255,255,0.6)">${par ? `Par ${par}` : ''}</div></div>${stepBtn(-1, '‹')}${stepBtn(1, '›')}<button type="button" onclick="fbCloseHole()" aria-label="Close" style="width:44px;height:44px;border-radius:10px;border:0;background:transparent;color:rgba(255,255,255,0.7);font-size:1.2rem;cursor:pointer">✕</button></div>
+      ${rowHtml(pa, TEAL, iA, hd.a, hd.res === 'A', '#04342a')}${rowHtml(pb, AMB, iB, hd.b, hd.res === 'B', '#3a2a00')}
+      <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">${hd.res === 'T' ? `Halved. Both pairs counted ${hd.a}. ` : ''}Tap a name for that player's full card.</div></div>` : '';
   const how = m.mode === 'total' ? 'One pot, lowest total wins.' : `${m.mode === 'fbt' ? 'Front, Back and Total' : 'Holes 1-6, 7-12 and 13-18'}, ${holesMode ? 'won on holes' : 'won on strokes'}. A tie is a push.`;
   const cardRows = skGroup().players.map((n, k) => {
     const c = skCardOf(n), d = c.filter(v => v > 0);
     return `<button type="button" onclick="fbDrill(${k})" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;margin-bottom:6px;background:rgba(0,0,0,0.2);border:0;border-radius:10px;min-height:44px;box-sizing:border-box;color:#fff;font-family:inherit;cursor:pointer;text-align:left"><span style="flex:1;font-size:0.9rem;font-weight:600">${escapeHtml(n)}</span><span style="font-size:0.74rem;color:rgba(255,255,255,0.6)">thru ${d.length}</span><span style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:700;min-width:28px;text-align:right">${d.reduce((a, v) => a + v, 0) || '·'}</span><span style="color:rgba(255,255,255,0.5)">›</span></button>`;
   }).join('');
   return `${toggle}${chips}
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="flex:1;min-width:0"><div style="font-size:0.95rem;font-weight:700"><span style="color:${TEAL}">${fbShort(pa.names)}</span> <span style="color:rgba(255,255,255,0.5);font-weight:500">vs</span> <span style="color:${AMB}">${fbShort(pb.names)}</span></div>
-      <div style="font-size:0.74rem;color:rgba(255,255,255,0.65);margin-top:2px">${played ? `Through ${played} hole${played === 1 ? '' : 's'}` : 'Not started'}</div></div>
-      ${played ? `<div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.3rem;font-weight:700;color:${sl === 0 ? '#fff' : sl > 0 ? TEAL : AMB}">${sl === 0 ? 'E' : (sl > 0 ? '-' : '+') + Math.abs(sl)}</div><div style="font-size:0.66rem;color:rgba(255,255,255,0.6)">${sl === 0 ? 'all square' : sl > 0 ? fbShort(pa.names).split(' ')[0] + ' ahead' : fbShort(pb.names).split(' ')[0] + ' ahead'}</div></div>` : ''}</div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="background:${TEAL};color:#04342a;font-weight:700;font-size:0.8rem;border-radius:7px;padding:4px 8px">${escapeHtml(iA)}</span><span style="font-size:0.84rem;font-weight:600">${fbShort(pa.names)}</span></div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="background:${AMB};color:#3a2a00;font-weight:700;font-size:0.8rem;border-radius:7px;padding:4px 8px">${escapeHtml(iB)}</span><span style="font-size:0.84rem;font-weight:600">${fbShort(pb.names)}</span><span style="flex:1"></span><span style="font-size:0.74rem;color:rgba(255,255,255,0.6)">${played ? `Through ${played} hole${played === 1 ? "" : "s"}` : 'Not started'}</span></div>
+    ${played ? `<div style="background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px"><div style="flex:1;font-size:0.76rem;color:rgba(255,255,255,0.7)">${holesMode ? 'Game: most holes won.' : 'Game: fewest strokes, better ball.'}</div><div style="font-size:0.9rem;font-weight:700;text-align:right;color:${tl === 0 ? '#fff' : tl > 0 ? TEAL : AMB}">${tl === 0 ? 'All square' : `${tl > 0 ? escapeHtml(iA) : escapeHtml(iB)} ${Math.abs(tl)} ${holesMode ? (Math.abs(tl) === 1 ? 'hole' : 'holes') : (Math.abs(tl) === 1 ? 'stroke' : 'strokes')} up`}</div></div>` : ''}
     <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-bottom:10px">${how}</div>
-    ${segHtml}${detail}
+    <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-bottom:8px">Tap a hole for the details.</div>${segHtml}${detail}
     <div style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:14px 0 6px;font-family:'DM Mono',monospace">Scorecards</div>${cardRows}`;
 }
 async function loadFourballLive(evt) {

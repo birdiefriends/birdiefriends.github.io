@@ -1,3 +1,6 @@
+v4.17.2 · 2026-10-12
+Deployed: 2026-10-12 (Live Actions, My group, redesigned: each hole box shows the initials of the pair that won it (a dash if halved), and the two pairs are named once at the top. The lead is stated one way, in the game's own unit (holes or strokes), in the header and in every segment. Tap a hole and a sheet opens with both pairs' scores and who won; tap a player's name in it for their full card.)
+
 v4.17.1 · 2026-10-12
 Deployed: 2026-10-12 (Live Score now lists the four players top to bottom with full names and a pair label; tap a name and a 1-9 pad pops under it, then drops to the next name and goes away when the hole is full. Tap the name again to close it; the X clears a score.)
 
