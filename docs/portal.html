@@ -2725,7 +2725,10 @@ body {
               itself once every expected scorecard is in (checked every 90 sec), or 8 hrs after tee time
               as a fallback if a scorecard never lands. <strong>Start Live Now</strong> forces it open early
               (for more than 15 min out). <strong>Close Event</strong> stops whatever's live right now,
-              however it went live — the auto window or a forced start — good for wrapping a round early.
+              however it went live — the auto window or a forced start — good for wrapping a round early,
+              but it keeps that round off the Live Panel for good. <strong>Reset to automatic</strong> clears every
+              override: forced start, Live Test Mode and any manual stop. Nothing is closed or calculated, and each
+              round opens itself again at its own tee time.
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <button class="btn btn-register" id="btn-event-start"
@@ -2734,6 +2737,9 @@ body {
               <button class="btn btn-secondary" id="btn-event-close"
                 onclick="eventControl('close')"
                 style="font-size:0.85rem;padding:8px 16px;opacity:0.4" disabled>⏹️ Close Event</button>
+              <button class="btn btn-secondary" id="btn-event-reset"
+                onclick="eventControl('reset')"
+                style="font-size:0.85rem;padding:8px 16px">↩️ Reset to automatic</button>
               <span id="event-control-status" style="font-size:0.82rem;color:var(--text-hint);font-weight:600">⚪ Not live</span>
             </div>
           </div>
@@ -20782,6 +20788,17 @@ async function eventControl(action) {
       LIVE_STOPPED_ROUND = null;
       updateEventControlUI();
       showToast('⛳ Live event started — banner active for all players');
+      setTimeout(() => location.reload(), 800);
+      return;
+    }
+    if (action === 'reset') {
+      // Back to fully automatic: no forced start, no Live Test Mode, and no leftover manual stop, so a round
+      // opens itself 15 min before ITS tee time again. (Close Event keeps a stop on the round for good.)
+      await Promise.all([postFlag('live_override', false), postFlag('live_stopped_round', null), postFlag('live_test', false)]);
+      LIVE_OVERRIDE = false; LIVE_OVERRIDE_SINCE = null; LIVE_STOPPED_ROUND = null; LIVE_EVENT_TEST_MODE = false; LIVE_TEST_EVENT_OVERRIDE = null;
+      try { localStorage.removeItem(LIVE_TEST_EVENT_KEY); } catch (e) {}
+      updateEventControlUI();
+      showToast('↩️ Live Panel is automatic again');
       setTimeout(() => location.reload(), 800);
       return;
     }
