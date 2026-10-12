@@ -10102,7 +10102,7 @@ function skFlush() {
 window.addEventListener('online', () => { try { skFlush(); } catch (e) {} });
 function livePanelModeToggleHtml(mode) {
   const b = (id, label) => `<button type="button" onclick="setLiveScoreMode('${id}')" style="flex:1;min-height:44px;border:0;border-radius:10px;font-family:inherit;font-size:0.9rem;font-weight:700;cursor:pointer;${mode === id ? 'background:#fff;color:#085041' : 'background:transparent;color:rgba(255,255,255,0.8)'}">${label}</button>`;
-  return `<div style="display:flex;gap:3px;background:rgba(0,0,0,0.3);border-radius:12px;padding:3px;margin-bottom:10px">${b('score', 'Score')}${b('games', 'Games')}</div>`;
+  return `<div style="display:flex;gap:3px;background:rgba(0,0,0,0.3);border-radius:12px;padding:3px;margin-bottom:10px">${b('score', 'Live Score')}${b('games', 'Games')}</div>`;
 }
 function liveScoreModeHtml() {
   const g = skGroup(), gs = skGroups(), hole = _sk.hole, max = skMaxHole();
