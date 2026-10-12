@@ -5,15 +5,14 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 const E = loadEngine();
 const infoSrc = src.match(/const GAME_INFO = Object\.assign\(\{[\s\S]*?\}, BFEngine\.gamesInfo\(\)\);/)[0];
 const els = {};
-const ctx = { BFEngine: E, document: { getElementById: id => els[id] || null }, _gamesFormSelected: new Set(['skins']), _hostGamesPick: new Set(),
+const ctx = { BFEngine: E, document: { getElementById: id => els[id] || null }, _gamesFormSelected: new Set(['skins']), 
   GATHERING_GAMES_META: { skins: { label: 'Skins', icon: 'S' }, cttp: { label: 'CTP', icon: 'C' }, birdieball: { label: 'BB', icon: 'B' }, birdiepay: { label: 'BP', icon: 'P' } } };
 vm.createContext(ctx);
-vm.runInContext(infoSrc + '\n' + ['gameInfoBtnHtml', 'gameInfoPanelHtml', 'toggleGameInfo', 'gatheringGamesChecklistHtml', 'hostGamesListHtml'].map(n => extractFn(src, n)).join('\n') + ';this.G=GAME_INFO', ctx);
+vm.runInContext(infoSrc + '\n' + ['gameInfoBtnHtml', 'gameInfoPanelHtml', 'toggleGameInfo', 'gatheringGamesChecklistHtml'].map(n => extractFn(src, n)).join('\n') + ';this.G=GAME_INFO', ctx);
 ok(['skins', 'cttp', 'birdieball', 'birdiepay'].every(k => ctx.G[k] && ctx.G[k].length > 40), 'every game has a descriptor');
-const form = ctx.gatheringGamesChecklistHtml(), host = ctx.hostGamesListHtml('');
+const form = ctx.gatheringGamesChecklistHtml();
 for (const k of ['skins', 'cttp', 'birdieball', 'birdiepay']) {
   ok(form.includes(`toggleGameInfo('form','${k}')`) && form.includes(`id="gi-form-${k}"`), `setup checklist has (i) for ${k}`);
-  ok(host.includes(`toggleGameInfo('host','${k}')`) && host.includes(`id="gi-host-${k}"`), `Add games sheet has (i) for ${k}`);
 }
 ok(/event\.stopPropagation\(\);toggleGameInfo/.test(form), '(i) tap does not toggle the game');
 ok(/, 'skins'\)\);/.test(src) && /, 'cttp'\)\);/.test(src) && /, 'birdieball'\)\);/.test(src) && /, 'birdiepay'\)\);/.test(src), 'event card details rows pass their game key');

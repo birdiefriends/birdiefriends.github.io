@@ -12,7 +12,7 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','escapeHtml','evtPhotoKey','computeGatheringGamesPayout','latestScorecardPerPlayer','scorecardMissingHoles','renderGatheringPayoutHtml','gpTabStyle','gpBtnStyle',
   'openGatheringCloseSheet','gcReconcile','confirmGatheringClose','openModal','closeModal',
   'isOpenSpotName','loadHostSpots','hostSpotsHtml','hostAddOpenSpot','refreshAfterSpotChange','openFillSpotSheet','renderFillSpotSheet',
-  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','gamesScoreKeyForGid','eventNameFromRef','hostAutoOpenSpots','hostLeftoverSeats','hostUnheldSeats','hostBumpHold','hostSetLeftAnnounce','renderHostLeftover','updateHostSpotsPreview','updateHostPlayersRow','hostSwitchHtml','hostSwitchSet','hostRowHtml','hostSetRowValue','bumpHostCapacity','hostGamesListHtml','filterHostGamesSheet','toggleHostGame','updateHostGamesRow','pickHostOption','setHostHoles','closeHostSheet','openHostSheet'];
+  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','gamesScoreKeyForGid','eventNameFromRef','hostAutoOpenSpots','hostLeftoverSeats','hostUnheldSeats','hostBumpHold','hostSetLeftAnnounce','renderHostLeftover','updateHostSpotsPreview','updateHostPlayersRow','hostSwitchHtml','hostSwitchSet','hostRowHtml','hostSetRowValue','bumpHostCapacity','setHostWantGames','pickHostOption','setHostHoles','closeHostSheet','openHostSheet'];
 function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillOk = true } = {}) {
   const dom = new JSDOM(`<body><div id="gathering-close-modal"><div id="gathering-close-body"></div></div>
     <div id="gathering-spot-modal"><div id="gathering-spot-title"></div><div id="gathering-spot-body"></div></div>
@@ -50,7 +50,7 @@ function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillO
   ctx.posts = posts; ctx.toasts = toasts; ctx.calls = calls;
   vm.createContext(ctx); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
   vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') +
-    '\nvar _spotsByGathering = new Map(); var _eventShadowByGid = new Map(); var _hostGamesPick = new Set(); var _hostHoles = 18; var GATHERING_GAMES_META = {skins:{label:"Skins",icon:"S"},cttp:{label:"CTP",icon:"C"},birdieball:{label:"BirdieBall",icon:"B"}}; var _hostHoldN = 0; var _hostLeftAnnounce = null; var _hostMode = "crew"; var _hostPlaying = true; var currentPlayer = "Brian Hager"; var _hostCrewPicked = new Set(); var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null; var _gcScratchAck = new Map();', ctx);
+    '\nvar _spotsByGathering = new Map(); var _eventShadowByGid = new Map(); var _hostWantGames = false; var _hostHoles = 18; var GATHERING_GAMES_META = {skins:{label:"Skins",icon:"S"},cttp:{label:"CTP",icon:"C"},birdieball:{label:"BirdieBall",icon:"B"}}; var _hostHoldN = 0; var _hostLeftAnnounce = null; var _hostMode = "crew"; var _hostPlaying = true; var currentPlayer = "Brian Hager"; var _hostCrewPicked = new Set(); var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null; var _gcScratchAck = new Map();', ctx);
   return ctx;
 }
 
@@ -147,21 +147,21 @@ c.bumpHostCapacity(1); ok(c.document.getElementById('host-new-size').value === '
 c.hostSwitchSet('host-playing-switch', true); ok(c.document.getElementById('host-playing-switch').getAttribute('aria-checked') === 'true', 'switch on');
 c.hostSwitchSet('host-playing-switch', false); ok(c.document.getElementById('host-playing-switch').getAttribute('aria-checked') === 'false', 'switch off');
 ok(/role="switch"/.test(c.hostSwitchHtml('x', true, 'f()', 'L', 'S')), 'switch markup has role=switch');
-c.toggleHostGame('skins'); c.toggleHostGame('cttp'); ok(c._hostGamesPick.size === 2 && c.document.querySelector('#host-games-row .host-row-val').textContent === 'Skins, CTP', 'games row summarizes picks');
-c.toggleHostGame('skins'); ok(c._hostGamesPick.size === 1, 'game toggles off');
-ok(/Added/.test(c.hostGamesListHtml('')) && !/BirdieBall/.test(c.hostGamesListHtml('ctp')), 'games list filters by search');
+ok(!/hostGamesListHtml|openHostGamesSheet|_hostGamesPick/.test(src), 'the second game picker is gone from the full form');
+ok(/hostSwitchHtml\('host-games-switch'/.test(src) && /function setHostWantGames/.test(src), 'full form has one Set up games switch');
+c.setHostWantGames(true); ok(c._hostWantGames === true, 'switch turns the Games hand-off on'); c.setHostWantGames(false); ok(c._hostWantGames === false, 'and off');
 c.pickHostOption('format', 'Best Ball'); ok(c.document.getElementById('host-new-type').value === 'Best Ball' && c.document.querySelector('#host-format-row .host-row-val').textContent === 'Best Ball', 'format pick');
 c.pickHostOption('holes', '9'); ok(c._hostHoles === 9 && c.document.querySelector('#host-holes-row .host-row-val').textContent === '9', 'holes pick');
 ok(/const autoSpots = hostAutoOpenSpots\(\);/.test(src) && /count: autoSpots/.test(src), 'create uses the automatic count');
 ok(!/_hostOpenSpots/.test(src), 'manual stepper state is gone');
-ok(/if \(_wantGames && _createdG\) await showGatheringGamesForm\(gathData\.id, \[\.\.\._hostGamesPick\]\)/.test(src), 'Create opens the stakes form with the picked games');
+ok(/if \(_wantGames && _createdG\) await showGatheringGamesForm\(gathData\.id\)/.test(src) && /const _wantGames = _hostWantGames;/.test(src), 'Create opens the one Games screen when the switch is on');
 ok(/Promise\.allSettled\(_regJobs\)/.test(src), 'registrations settle before the Games form counts players');
 ok(/id="host-new-size"[^>]*oninput="updateHostSpotsPreview\(\)"/.test(src), 'size input updates the Players row');
 ok(src.indexOf("hostRowHtml('host-holes-row'") < src.indexOf("hostRowHtml('host-format-row'"), 'Holes sits above Format');
 ok(/_gamesFormSelected = new Set\(existing \? existing\.games : \(preselect \|\| \[\]\)\)/.test(src), 'games form accepts a preselection');
 const iAdd = src.indexOf('/bfe/gathering-spots/${gathData.id}/add'), iHost = src.indexOf('// Auto-register the host themselves');
 ok(iAdd > 0 && iHost > iAdd, 'spots are created BEFORE the host/crew registrations');
-ok(/_hostGamesPick = new Set\(\);\s*\n\s*_pendingCrewName = null;/.test(src), 'form resets the game picks each time it opens');
+ok(/_hostWantGames = false;\s*\n\s*_pendingCrewName = null;/.test(src), 'form resets the games switch each time it opens');
 ok(src.includes("Promise.all([loadHostTemplates(), loadHostGamesConfigs(), loadHostSpots()])"), 'Host Panel warms the spots cache');
 ok((src.match(/hostSpotsHtml\(g, (true|false)\)/g) || []).length === 2, 'both the upcoming and archive cards render the block');
 ok((src.match(/isOpenSpotName\(r\.player\) \? '🪑 ' \+ r\.player/g) || []).length === 2, 'placeholders are labelled in both response lists');

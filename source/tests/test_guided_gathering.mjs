@@ -46,7 +46,7 @@ function world(over = {}) {
 const future = () => { const d = new Date(Date.now() + 5 * 864e5); return d.toISOString().slice(0, 10); };
 function state(api, o = {}) {
   const st = Object.assign(api.gfFresh(), { title: 'Sham Saturday', venue: 'Blue Shamrock Golf Club', date: future(), time: '08:00' }, o);
-  for (const k of ['confirmed', 'pickSet', 'games']) if (Array.isArray(st[k])) st[k] = new Set(st[k]);
+  for (const k of ['confirmed', 'pickSet']) if (Array.isArray(st[k])) st[k] = new Set(st[k]);
   return st;
 }
 const ctx = (over = {}) => Object.assign({ host: 'Walli', crewMembers: [], members: [] }, over);
@@ -103,10 +103,10 @@ eq(W.gfBasicsError(state(W, { date: '2020-01-01' })), 'The date and time must be
 eq(W.gfBasicsError(state(W)), null, 'a good basics step passes');
 
 // ── the summary ──
-let lines = W.gfSummaryLines(state(W, { ask: 'all', confirmed: ['Mike', 'Adam'], games: ['skins'] }), ctx());
+let lines = W.gfSummaryLines(state(W, { ask: 'all', confirmed: ['Mike', 'Adam'], wantGames: true }), ctx());
 ok(lines.length === 5 && lines.every(l => typeof l.step === 'number'), 'five summary lines, each with a step to jump to');
 ok(/In: you, Mike, Adam/.test(lines[2].text), 'summary: who is in'); ok(/Open to all BirdieFriends/.test(lines[3].text), 'summary: open to all');
-ok(/Games: Skins/.test(lines[4].text), 'summary: games');
+ok(/Games: you set them up next/.test(lines[4].text), 'summary: games are set up next (one Games screen, no second picker)');
 lines = W.gfSummaryLines(state(W, { ask: 'none', polling: true }), ctx());
 ok(/Polling/.test(lines[1].text) && /Invite-only/.test(lines[3].text) && lines[4].text === 'No games', 'summary: polling, invite-only, no games');
 
@@ -146,11 +146,12 @@ ok(/Polling/.test(lines[1].text) && /Invite-only/.test(lines[3].text) && lines[4
 }
 // ── pick people, named: crew saved, games hand-off ──
 {
-  const w = world(); w.api.set(state(w.api, { ask: 'pick', pickSet: ['Tom', 'Jeff'], pickName: 'Tuesday Four', confirmed: ['Mike'], games: ['skins', 'cttp'] }));
+  const w = world(); w.api.set(state(w.api, { ask: 'pick', pickSet: ['Tom', 'Jeff'], pickName: 'Tuesday Four', confirmed: ['Mike'], wantGames: true }));
   await w.api.gfCreate();
   const crews = w.calls.filter(c => c.url === '/crews');
   eq(crews.map(c => [c.body.name, c.body.player_ids]), [[null, ['Tom', 'Jeff', 'Mike']], ['Tuesday Four', ['Tom', 'Jeff']]], 'one-off crew for the game, plus the named crew saved with only the picks');
-  eq(w.games, [{ id: 99, picks: ['skins', 'cttp'] }], 'games go to the stakes screen for the new game');
+  eq(w.games, [{ id: 99, picks: undefined }], 'Yes to games opens the one Games screen for the new game (no preselection)');
+  const n = world(); n.api.set(state(n.api, { ask: 'none' })); await n.api.gfCreate(); eq(n.games, [], 'No games: the Games screen does not open');
 }
 // ── validation blocks the create ──
 {

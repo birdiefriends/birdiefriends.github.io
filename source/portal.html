@@ -11579,7 +11579,7 @@ async function loadHostGamesConfigs() {
 // placeholder everywhere (registrations, scorecard, CTP, MiserBall, closed
 // result) in one atomic step when the host fills it. Host-only controls.
 let _spotsByGathering = new Map();   // gatheringId -> ['Open Spot 1', ...]
-let _hostGamesPick = new Set();      // New Gathering form: games chosen up front; the stakes form opens right after Create (v4.9.2)
+let _hostWantGames = false;      // New Gathering form: open the one Games screen right after Create (Dev-93; was a second game picker)
 let _hostPanelView = 'list';         // 'list' | 'archive' — which Host Panel view is showing
 let _fillSpot = null;                // { gatheringId, spot, member, candidates }
 function isOpenSpotName(n) { return /^Open Spot \d+$/i.test(String(n || '').trim()); }
@@ -11893,40 +11893,7 @@ function pickHostOption(kind, value) {
   }
   closeHostSheet();
 }
-function updateHostGamesRow() {
-  const names = [..._hostGamesPick].map(k => (GATHERING_GAMES_META[k] || {}).label || k);
-  hostSetRowValue('host-games-row', names.length ? names.join(', ') : 'None yet');
-}
-function hostGamesListHtml(query) {
-  const q = (query || '').trim().toLowerCase();
-  const rows = Object.keys(GATHERING_GAMES_META).filter(k => !q || GATHERING_GAMES_META[k].label.toLowerCase().includes(q));
-  if (!rows.length) return '<div style="padding:16px 18px;font-size:0.84rem;color:var(--text-muted)">No games match.</div>';
-  return rows.map(k => {
-    const on = _hostGamesPick.has(k);
-    return `<div style="padding:12px 18px;border-bottom:1px solid var(--border)"><div style="display:flex;align-items:center;gap:12px">
-      <div style="flex:1;font-size:1rem;font-weight:700">${GATHERING_GAMES_META[k].icon} ${GATHERING_GAMES_META[k].label}</div>
-      ${gameInfoBtnHtml('host', k)}
-      <button type="button" onclick="toggleHostGame('${k}')" style="height:36px;padding:0 16px;border-radius:18px;font-family:inherit;font-size:0.86rem;font-weight:700;cursor:pointer;${on ? 'border:0;background:var(--green);color:#fff' : 'border:1.5px solid var(--green);background:#fff;color:var(--green)'}">${on ? 'Added' : 'Add'}</button></div>${gameInfoPanelHtml('host', k)}</div>`;
-  }).join('');
-}
-function openHostGamesSheet() {
-  openHostSheet('Add games',
-    `<div style="padding:0 18px 10px"><input type="search" id="host-games-search" placeholder="Search games" oninput="filterHostGamesSheet()" style="width:100%;box-sizing:border-box;height:42px;border-radius:10px;border:1px solid var(--border);padding:0 12px;font-size:0.9rem;font-family:inherit"></div>
-     <div id="host-games-list">${hostGamesListHtml('')}</div>
-     <div style="padding:12px 18px 0;font-size:0.76rem;color:var(--text-muted);line-height:1.45">Stakes for each game are set on the next screen, right after you tap Create.</div>`,
-    'closeHostGamesSheet()');
-}
-function filterHostGamesSheet() {
-  const q = document.getElementById('host-games-search');
-  const list = document.getElementById('host-games-list');
-  if (list) list.innerHTML = hostGamesListHtml(q ? q.value : '');
-}
-function toggleHostGame(key) {
-  if (_hostGamesPick.has(key)) _hostGamesPick.delete(key); else _hostGamesPick.add(key);
-  filterHostGamesSheet();
-  updateHostGamesRow();
-}
-function closeHostGamesSheet() { closeHostSheet(); updateHostGamesRow(); }
+function setHostWantGames(val) { _hostWantGames = !!val; hostSwitchSet('host-games-switch', _hostWantGames); }
 function showTemplatePicker() {
   const templates = _hostTemplates || [];
   if (templates.length === 0) { showToast('No saved templates yet'); return; }
@@ -18882,7 +18849,7 @@ async function showNewGatheringForm() {
   _hostPlaying = true;
   _hostHoldN = 0;
   _hostLeftAnnounce = null;
-  _hostGamesPick = new Set();
+  _hostWantGames = false;
   _pendingCrewName = null;
   _hostMode = 'crew';
   _hostRegisterAllCrew = false;
@@ -18956,7 +18923,7 @@ async function showNewGatheringForm() {
     <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">
       ${hostRowHtml('host-holes-row', 'Holes', '18', "openHostOptionSheet('holes')")}
       ${hostRowHtml('host-format-row', 'Format', 'Individual Play', "openHostOptionSheet('format')")}
-      ${hostRowHtml('host-games-row', 'Add Games', 'None yet', 'openHostGamesSheet()', true)}
+      ${hostSwitchHtml('host-games-switch', false, 'setHostWantGames(!_hostWantGames)', 'Set up games', 'The Games screen opens right after you tap Create: pick the game, format and stakes there.')}
     </div>
     <select id="host-new-type" style="display:none">
       <option value="Individual Play" selected>Individual Play</option>
@@ -19417,7 +19384,7 @@ let _gf = null;
 function gfFresh() {
   return { step: 0, title: '', venue: '', date: '', time: '08:00', polling: false, target: 4,
     playing: true, confirmed: new Set(), ask: null, crewId: null, crewName: null, crewMembers: null,
-    pickSet: new Set(), pickName: null, games: new Set(), awaitingName: false, busy: false };
+    pickSet: new Set(), pickName: null, wantGames: false, awaitingName: false, busy: false };
 }
 // answers -> what to create. Pure: no DOM, no network.
 // ctx = { host, crewMembers: [names of the chosen saved crew], members: memberData rows }
@@ -19432,7 +19399,7 @@ function gfBuildPlan(st, ctx) {
     fillListEnabled: st.ask === 'all',
     crew: { kind: 'none' }, saveCrew: null,
     confirmed, registerYes, invitees: [], openAnnounce: [],
-    games: [...st.games], errors: []
+    wantGames: st.wantGames === true, errors: []
   };
   const union = base => [...new Set(base.concat(confirmed))];
   const subset = (a, b) => a.every(x => b.includes(x));
@@ -19487,9 +19454,7 @@ function gfSummaryLines(st, ctx) {
   else if (st.ask === 'all') lines.push({ step: 2, text: 'Open to all BirdieFriends, announced as soon as you create it' });
   else if (st.ask === 'none') lines.push({ step: 2, text: 'Invite-only. Nobody else is asked yet; you can open it later from the Host Panel' });
   else lines.push({ step: 2, text: 'Who to ask: not chosen yet' });
-  lines.push({ step: 3, text: plan.games.length
-    ? `Games: ${plan.games.map(k => (GATHERING_GAMES_META[k] || {}).label || k).join(', ')} (you set the stakes next)`
-    : 'No games' });
+  lines.push({ step: 3, text: plan.wantGames ? 'Games: you set them up next, right after it is created' : 'No games' });
   return lines;
 }
 function gfCtx() {
@@ -19583,9 +19548,8 @@ function gfRender() {
   } else if (st.step === 3) {
     body.innerHTML = `${stepLabel(4)}
       <div class="section-label" style="margin-top:0">🎮 Playing for anything?</div>
-      ${gfChoiceHtml(st.games.size === 0, 'gfClearGames()', '🚫', 'No games', 'Just a round of golf.')}
-      <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin:6px 0">Or pick the games. You set the stakes on the next screen.</div>
-      ${Object.keys(GATHERING_GAMES_META).map(k => gfChoiceHtml(st.games.has(k), `gfToggleGame('${k}')`, GATHERING_GAMES_META[k].icon, GATHERING_GAMES_META[k].label, escapeHtml(((GAME_INFO[k] || '').split('.')[0] || '') + '.'))).join('')}
+      ${gfChoiceHtml(!st.wantGames, 'gfSetWantGames(false)', '🚫', 'No games', 'Just a round of golf.')}
+      ${gfChoiceHtml(st.wantGames, 'gfSetWantGames(true)', '🎮', 'Set up games', 'Pick the game, the format and the stakes on one screen, right after the Gathering is created.')}
       ${gfFooterHtml('Next', 'gfNext()')}`;
   } else {
     const ctx = gfCtx();
@@ -19628,8 +19592,7 @@ function gfTogglePolling() { gfReadBasics(); _gf.polling = !_gf.polling; gfRende
 function gfTogglePlaying() { _gf.playing = !_gf.playing; hostSwitchSet('gf-playing-switch', _gf.playing); }
 function gfRemoveConfirmed(i) { _gf.confirmed.delete([..._gf.confirmed][i]); gfRender(); }
 function gfRemovePick(i) { _gf.pickSet.delete([..._gf.pickSet][i]); if (!_gf.pickSet.size) _gf.pickName = null; gfRender(); }
-function gfClearGames() { _gf.games = new Set(); gfRender(); }
-function gfToggleGame(k) { if (_gf.games.has(k)) _gf.games.delete(k); else _gf.games.add(k); gfRender(); }
+function gfSetWantGames(on) { _gf.wantGames = !!on; gfRender(); }
 async function gfPickCrew(id) {
   const c = (_hostSavedCrews || []).find(x => x.id === id); if (!c) return;
   _gf.crewId = id; _gf.crewName = c.name; _gf.crewMembers = null;
@@ -19764,14 +19727,14 @@ async function gfCreate() {
     push(plan.openAnnounce, '📢 Open Gathering',
       `${currentPlayer} is hosting "${title}" — ${when}. Open to all members.`,
       'gathering_open_invite', { gathering_id: gathData.id });
-    const wantGames = plan.games.length > 0;
-    showToast(wantGames ? '✅ Gathering created. Now set the game stakes.' : '✅ Gathering created');
+    const wantGames = plan.wantGames === true;
+    showToast(wantGames ? '✅ Gathering created. Now set up the games.' : '✅ Gathering created');
     if (wantGames) await Promise.allSettled(regJobs);
     await refreshGatherings();
     await loadHostSpots();
     _gf = null;
     const created = gatheringData.find(x => x.gatheringId === gathData.id);
-    if (wantGames && created) await showGatheringGamesForm(gathData.id, plan.games);
+    if (wantGames && created) await showGatheringGamesForm(gathData.id);
     else renderHostPanelList();
     // First successful Gathering marks the member as a host (best effort, as in the full form).
     if (HOST_QID) {
@@ -19950,13 +19913,13 @@ async function submitNewGathering() {
           .catch(e => console.warn('Open announcement failed:', e));
       }
     }
-    const _wantGames = _hostGamesPick.size > 0;
+    const _wantGames = _hostWantGames;
     showToast(_wantGames ? '✅ Gathering created — now set the game stakes' : '✅ Gathering created');
     if (_wantGames) await Promise.allSettled(_regJobs); // Games form counts Yes registrations
     await refreshGatherings();
     await loadHostSpots();
     const _createdG = gatheringData.find(x => x.gatheringId === gathData.id);
-    if (_wantGames && _createdG) await showGatheringGamesForm(gathData.id, [..._hostGamesPick]);
+    if (_wantGames && _createdG) await showGatheringGamesForm(gathData.id);
     else renderHostPanelList();
     // Offer "Save as Template?" after successful create
     promptSaveAsTemplate({
