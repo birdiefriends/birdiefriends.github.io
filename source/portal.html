@@ -18431,7 +18431,7 @@ function gatheringGamesFourballSectionHtml() {
       <button type="button" aria-label="Remove pair" onclick="removeGamesFormFourballPair(${pi})" style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border-med);background:transparent;color:var(--text-muted);cursor:pointer;flex-shrink:0">✕</button></div>`).join('');
   const inPair = new Set(); c.pairs.forEach(pr => pr.forEach(n => { if (n) inPair.add(low(n)); }));
   const unpaired = names.filter(n => !inPair.has(low(n)));
-  const seg = (items, cur, fn) => `<div class="seg-toggle" style="margin:0">${items.map(([v, l]) => `<button type="button" class="seg-btn${cur === v ? ' seg-btn-active' : ''}" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
+  const seg = (items, cur, fn) => `<div class="seg-toggle" style="margin:0">${items.map(([v, l]) => `<button type="button" class="seg-btn${cur === v ? ' seg-btn-active' : ''}" style="white-space:nowrap;padding:9px 14px" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
   const btn = 'height:34px;padding:0 14px;border-radius:17px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.82rem;cursor:pointer';
   return `
     <div class="host-form-field" id="games-form-fourball-field">
@@ -18444,10 +18444,10 @@ function gatheringGamesFourballSectionHtml() {
       </div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">Each pair counts its better score on every hole. The lowest total wins this prize; tied pairs split it.</div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <span style="flex:1;font-size:0.9rem;font-weight:600">Gross or Net</span>${seg([['gross', 'Gross'], ['net', 'Net']], c.basis, 'setGamesFormFourballBasis')}</div>
+        <span style="flex:1;font-size:0.9rem;font-weight:600">Fourball scoring</span>${seg([['gross', 'Gross'], ['net', 'Net']], c.basis, 'setGamesFormFourballBasis')}</div>
       ${c.basis === 'net' ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Net strokes</span>${seg([['own', 'Own strokes'], ['low', 'Off the low']], c.net_mode, 'setGamesFormFourballNetMode')}</div>
-        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.net_mode === 'low' ? 'Strokes come off the lowest handicap among the paired players, so the best player plays to scratch.' : 'Everyone plays off their own strokes, as set in Gross or Net below.'}</div>` : ''}
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.net_mode === 'low' ? 'Strokes come off the lowest handicap among the paired players, so the best player plays to scratch.' : 'Everyone plays off their own strokes, entered in the strokes list below.'}</div>` : ''}
       <div style="font-size:0.78rem;font-weight:700;margin:6px 0">Pairs</div>
       ${pairRows || `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">No pairs yet. Add them one at a time, or let us suggest balanced pairs.</div>`}
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
