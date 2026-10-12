@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.16.0';
+  const ENGINE_VERSION = '1.16.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -512,7 +512,8 @@
             const res = fourballSegmentResult(gi.map(i => arrs[i]), sg, plan.win_by);
             const seg = { key: sg.key, label: sg.label, from: sg.a + 1, to: sg.b, pot, status: res.status, winner: null,
               ...(res.won ? { holes_won: res.won, halved: res.halved } : {}),
-              totals: res.info.map(x => (x.complete ? x.total : null)) };
+              totals: res.info.map(x => (x.complete ? x.total : null)),
+          by: rows.map((r, i) => ({ player: r.player, total: res.info[i] && res.info[i].complete ? res.info[i].total : null })).sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total) };
             used += pot;
             if (res.status === 'won') {
               const wr = rows[gi[res.winner]];
@@ -576,10 +577,12 @@
 
   // ── Low Score (Dev-93): an individual game over a scoring period ─────────────────────
   // Every player plays their own ball. In each scoring period the lowest total (gross, or net on own strokes)
-  // wins that period's pot. 'round' = one contest over the whole round: the lowest total wins, tied players split.
+  // wins that period's pot. 'round' = one contest over the whole round: the lowest total wins, a tie is a push.
   // With a period (Front / Back, Front / Back / Total, 6 / 6 / 6) the per-player ante is split across the periods;
   // a period's pot is that share x every player in the game, won outright by the lowest total, and a tied period
   // is a push (everyone's share of the ante comes back). A player who has not finished a period cannot win it.
+  // Ties are "no blood" by default: a tie for low in the whole-round game is a push too and every ante comes back.
+  // (A shared pool or a split can be offered later as a tie rule; nothing else here needs to change.)
   //   addon: { dollar_per_player, basis:'gross'|'net', period }
   // Like Fourball it can never take more than the pot has left (reported as `capped`).
   ADDONS.lowscore = {
@@ -617,17 +620,17 @@
       if (plan.period === 'round' || rows.length < 2) {
         const ranked = rows.filter(r => r.complete).sort((a, b) => a.total - b.total);
         ranked.forEach(r => { r.place = ranked.findIndex(x => x.total === r.total) + 1; r.tied = ranked.filter(x => x.total === r.total).length > 1; });
-        const winners = ranked.filter(r => r.place === 1);
+        const lead = ranked.filter(r => r.place === 1);
+        const winners = lead.length === 1 ? lead : []; // no blood: a tie for low is a push
         let perPlayer = 0, givenBackEach = 0, unalloc = 0;
         if (winners.length) {
-          perPlayer = Math.floor(pot / winners.length);
-          winners.forEach(w => L.credit(w.player, 'lowscore', perPlayer));
-          unalloc = pot - perPlayer * winners.length;
+          perPlayer = pot;
+          L.credit(winners[0].player, 'lowscore', perPlayer);
         } else { const gb = L.giveBack(pot); givenBackEach = gb.each; unalloc = gb.unallocated; }
         state.unallocated += unalloc;
         return Object.assign({ ...head,
           standings: rows.map(r => Object.assign(strip(r), { place: r.place == null ? null : r.place, tied: !!r.tied })).sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
-          winners: winners.map(w => w.player), per_player: perPlayer, given_back_each: givenBackEach }, tail);
+          winners: winners.map(w => w.player), ...(lead.length > 1 ? { push: true } : {}), per_player: perPlayer, given_back_each: givenBackEach }, tail);
       }
       const perSeg = (dpp / plan.segs.length) * ratio;
       const segPot = Math.floor(perSeg * L.n);
@@ -636,7 +639,8 @@
       const segsOut = plan.segs.map(sg => {
         const res = fourballSegmentResult(rows.map(r => r.slots), sg, 'strokes');
         const seg = { key: sg.key, label: sg.label, from: sg.a + 1, to: sg.b, pot: segPot, status: res.status, winner: null,
-          totals: res.info.map(x => (x.complete ? x.total : null)) };
+          totals: res.info.map(x => (x.complete ? x.total : null)),
+          by: rows.map((r, i) => ({ player: r.player, total: res.info[i] && res.info[i].complete ? res.info[i].total : null })).sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total) };
         if (res.status === 'won') {
           seg.winner = [rows[res.winner].player];
           L.credit(rows[res.winner].player, 'lowscore', segPot);
@@ -811,7 +815,7 @@
     kind: 'addon', input: 'strokes', net: true, entity: 'individual',
     released: true,
     meta: { label: 'Low Score', icon: '🎯', seal: 'LOW SCORE', uiOrder: 6, group: 'format',
-      info: 'Everyone plays their own ball and the lowest score wins. Choose the scoring period: the whole round, Front and Back, Front, Back and Total, or 6 / 6 / 6. Each period is its own pot, the ante is split across them, and the lowest total in a period takes that pot. In a periods game a tied period is a push and the antes come back; in the whole-round game tied players split the pot. Gross unless the host set it to Net.' },
+      info: 'Everyone plays their own ball and the lowest score wins. Choose the scoring period: the whole round, Front and Back, Front, Back and Total, or 6 / 6 / 6. Each period is its own pot, the ante is split across them, and the lowest total in a period takes that pot. A tie for low is a push and the antes come back. Gross unless the host set it to Net.' },
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
       { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
@@ -828,11 +832,11 @@
       inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5))] },
       expect: { payouts: { Ann: 33, Bob: 0, Cy: 0 }, unallocated: 3, results: { lowscore: { per_player: 15 } } }
     }, {
-      name: 'whole round tie: tied players split the pot',
+      name: 'whole round tie: no blood, a tie for low is a push and every ante comes back',
       round: { dollar_per_player: 10, addons: [{ id: 'lowscore', entity: 'individual', dollar_per_player: 10, basis: 'gross' }] },
-      // Ann and Bob both 72, Cy 90. The $30 pot splits $15 each.
+      // Ann and Bob both 72, Cy 90. Nobody wins outright: each player gets the $10 ante back.
       inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(4)), _P('Cy', _ALL(5))] },
-      expect: { payouts: { Ann: 15, Bob: 15, Cy: 0 }, unallocated: 0, results: { lowscore: { per_player: 15 } } }
+      expect: { payouts: { Ann: 10, Bob: 10, Cy: 10 }, unallocated: 0 }
     }, {
       name: 'period Front / Back / Total: three pots, a tied Total is a push',
       round: { dollar_per_player: 15, addons: [{ id: 'lowscore', entity: 'individual', dollar_per_player: 15, basis: 'gross', period: 'fbt' }] },
@@ -1340,7 +1344,7 @@
     const n = Math.max(1, Math.floor(Number(players) || 0));
     const has = g => (games || []).includes(g);
     const dollars = x => Math.max(1, Math.round(x));
-    const out = { players: n, pot: B * n, cttp: null, birdieball: null, birdiepay: null, fourball: null };
+    const out = { players: n, pot: B * n, cttp: null, birdieball: null, birdiepay: null, fourball: null, lowscore: null };
     if (!(B > 0)) return out;
     if (has('birdieball')) out.birdieball = { dollar_per_player: dollars(0.2 * B) };
     if (has('cttp')) {
@@ -1354,7 +1358,12 @@
     if (has('birdiepay')) out.birdiepay = { dollar_per_birdie: dollars(0.3 * B) };
     // Fourball is the main event: on its own the winning pair takes the whole pot; with side games ticked it
     // takes half and they share the rest (Skins gets whatever is left).
-    if (has('fourball')) out.fourball = { dollar_per_player: ['cttp', 'birdieball', 'birdiepay', 'skins'].some(has) ? dollars(0.5 * B) : dollars(B) };
+    // Low Score is a main event too; when both are ticked they share the main portion equally.
+    const mains = ['fourball', 'lowscore'].filter(has);
+    if (mains.length) {
+      const main = ['cttp', 'birdieball', 'birdiepay', 'skins'].some(has) ? 0.5 * B : B;
+      mains.forEach(g => { out[g] = { dollar_per_player: dollars(main / mains.length) }; });
+    }
     return out;
   }
 

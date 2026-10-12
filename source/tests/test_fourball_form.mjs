@@ -36,15 +36,15 @@ function sandbox({ names = ['Ann','Bob','Cy','Dee'], members = [] } = {}) {
     isOpenSpotName: () => false, regData: [], gatheringRegData: names.map(p => ({ gatheringId: 7, player: p, status: 'Yes' })) };
   vm.createContext(ctx); ctx.BFEngine = E;
   E.getGame('fourball').released = true;
-  const fns = ['fourballSegCount','fourballSnapToSegments','setGamesFormFourballSegments','setGamesFormFourballWinBy','setGamesFormFourballScope','gamesFormFourballNames','gatheringGamesFourballSectionHtml','refreshGamesFormFourballSection','setGamesFormFourballDollarPerPlayer','setGamesFormFourballBasis','setGamesFormFourballNetMode','setGamesFormFourballMember','addGamesFormFourballPair','removeGamesFormFourballPair','clearGamesFormFourballPairs','suggestGamesFormFourballPairs','gamesFormPlayerNames','gamesFormOverCommit','updateGamesFormPotPreview','submitGatheringGames','gamesFormHcpIsNet','gamesFormEntry','gamesFormResolvePlayerHcp','gamesFormBuildHandicapConfig','refreshGamesFormHcpSection'];
+  const fns = ['gamesPeriodPickerHtml','periodExplainHtml','periodSegCount','lowscoreSegCount','snapToPeriods','fourballSegCount','fourballSnapToSegments','setGamesFormFourballPeriod','setGamesFormFourballWinBy','setGamesFormFourballScope','gamesFormFourballNames','gatheringGamesFourballSectionHtml','refreshGamesFormFourballSection','setGamesFormFourballDollarPerPlayer','setGamesFormFourballBasis','setGamesFormFourballNetMode','setGamesFormFourballMember','addGamesFormFourballPair','removeGamesFormFourballPair','clearGamesFormFourballPairs','suggestGamesFormFourballPairs','gamesFormPlayerNames','gamesFormOverCommit','updateGamesFormPotPreview','submitGatheringGames','gamesFormHcpIsNet','gamesFormEntry','gamesFormResolvePlayerHcp','gamesFormBuildHandicapConfig','refreshGamesFormHcpSection'];
   vm.runInContext(`
     let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(['fourball']); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = ${names.length};
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] }; let _gamesFormBirdieballConfig = { dollar_per_player: null }; let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; let _gamesFormBirdiepayPars = null;
-    let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [] }; let _gamesFormFourballNote = '';
+    let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [] }; let _gamesFormFourballNote = ''; let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' };
     let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; let _gamesFormTees = []; let _gamesFormMembers = new Map(${JSON.stringify(members)}); let _gamesFormPar3Holes = []; let _gamesFormVenueParDataAvailable = false;
     function refreshGamesFormHcpSection() {}
     ${fns.filter(n => n !== 'refreshGamesFormHcpSection').map(n => extractFn(src, n)).join('\n')}
-    this.api = { ...{ setGamesFormFourballSegments, setGamesFormFourballWinBy, setGamesFormFourballScope, fourballSnapToSegments, gatheringGamesFourballSectionHtml, setGamesFormFourballDollarPerPlayer, setGamesFormFourballBasis, setGamesFormFourballNetMode, setGamesFormFourballMember, addGamesFormFourballPair, removeGamesFormFourballPair, clearGamesFormFourballPairs, suggestGamesFormFourballPairs, submitGatheringGames, gamesFormOverCommit, updateGamesFormPotPreview }, cfg: () => _gamesFormFourballConfig, setSel: s => { _gamesFormSelected = new Set(s); }, setHcp: (n, e) => { _gamesFormHcp.players[n] = e; } };
+    this.api = { ...{ setGamesFormFourballPeriod, setGamesFormFourballWinBy, setGamesFormFourballScope, fourballSnapToSegments, gatheringGamesFourballSectionHtml, setGamesFormFourballDollarPerPlayer, setGamesFormFourballBasis, setGamesFormFourballNetMode, setGamesFormFourballMember, addGamesFormFourballPair, removeGamesFormFourballPair, clearGamesFormFourballPairs, suggestGamesFormFourballPairs, submitGatheringGames, gamesFormOverCommit, updateGamesFormPotPreview }, cfg: () => _gamesFormFourballConfig, setSel: s => { _gamesFormSelected = new Set(s); }, setHcp: (n, e) => { _gamesFormHcp.players[n] = e; } };
   `, ctx);
   return { ctx, api: ctx.api, posts, toasts, dom };
 }
@@ -115,27 +115,27 @@ const sec = t => t.dom.window.document.getElementById('games-form-fourball-secti
   const t = sandbox(); const a = t.api;
   a.suggestGamesFormFourballPairs();
   a.setGamesFormFourballDollarPerPlayer('5');
-  a.setGamesFormFourballSegments('fbt');
+  a.setGamesFormFourballPeriod('fbt');
   eq(a.cfg().dollar_per_player, 6, 'S: total snaps to a multiple of 3 ($5 -> $6, $2 a segment)');
   a.setGamesFormFourballDollarPerPlayer('5');
   eq(a.cfg().dollar_per_player, 15, 'S: with segments the box is per segment: $5 x 3 = $15 in all');
   let html = a.gatheringGamesFourballSectionHtml();
-  ok(/Segment won by/.test(html) && /Who competes/.test(html), 'S: win-by and scope appear once a split is chosen');
-  ok(/\$15\.00 in all/.test(html) && /\$5\.00 for each of the 3 segments/.test(html), 'S: says $15 in all, $5 each');
+  ok(/Period won by/.test(html) && /Who competes/.test(html), 'S: win-by and scope appear once a split is chosen');
+  ok(/\$15\.00 in all/.test(html) && /\$5\.00 for each of the 3 periods/.test(html), 'S: says $15 in all, $5 each');
   a.setGamesFormFourballWinBy('holes');
   eq([a.cfg().win_by, a.cfg().scope], ['holes', 'group'], 'S: holes won forces each foursome');
   ok(!/Who competes/.test(a.gatheringGamesFourballSectionHtml()), 'S: scope choice hidden when holes won');
   a.setGamesFormFourballWinBy('strokes'); a.setGamesFormFourballScope('field');
   eq(a.cfg().scope, 'field', 'S: strokes can run across the field');
-  a.setGamesFormFourballSegments('total');
-  eq([a.cfg().segments, a.cfg().win_by, a.cfg().scope], ['total', 'strokes', 'field'], 'S: back to one pot resets the variant');
-  a.setGamesFormFourballSegments('sixes'); a.setGamesFormFourballWinBy('holes'); a.setGamesFormFourballDollarPerPlayer('4');
+  a.setGamesFormFourballPeriod('round');
+  eq([a.cfg().period, a.cfg().win_by, a.cfg().scope], ['round', 'strokes', 'field'], 'S: back to one pot resets the variant');
+  a.setGamesFormFourballPeriod('sixes'); a.setGamesFormFourballWinBy('holes'); a.setGamesFormFourballDollarPerPlayer('4');
   const prev = t.dom.window.document.getElementById('games-form-pot-preview').innerHTML;
   ok(/3 segment pots/.test(prev), 'S: pot preview says it is cut into 3 segment pots');
   await a.submitGatheringGames(7);
-  eq(t.posts[0].game_configs.fourball, { dollar_per_player: 12, basis: 'gross', net_mode: 'own', pairs: [['Ann','Dee'],['Bob','Cy']], segments: 'sixes', win_by: 'holes', scope: 'group' }, 'S: payload carries the variant, total ante = $4 x 3');
+  eq(t.posts[0].game_configs.fourball, { dollar_per_player: 12, basis: 'gross', net_mode: 'own', pairs: [['Ann','Dee'],['Bob','Cy']], period: 'sixes', win_by: 'holes', scope: 'group' }, 'S: payload carries the variant, total ante = $4 x 3');
   const o = sandbox(); o.api.suggestGamesFormFourballPairs(); o.api.setGamesFormFourballDollarPerPlayer('5'); await o.api.submitGatheringGames(7);
-  ok(!('segments' in o.posts[0].game_configs.fourball), 'S: one pot saves exactly the old shape');
+  ok(!('period' in o.posts[0].game_configs.fourball), 'S: one pot saves exactly the old shape');
 }
 // the Net ranking checkbox must not inherit the full-width text-input rule (it rendered huge and squeezed its label)
 ok(/\.host-form-field input\[type="checkbox"\][^{]*\{[^}]*width:\s*auto/.test(src), 'checkbox/radio inside a form field keep their natural width');

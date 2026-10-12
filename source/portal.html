@@ -3614,7 +3614,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.16.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.16.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -5774,7 +5774,7 @@ function fbVariantText(fb) {
   if (!fb) return '';
   const pk = BFEngine.periodKey(fb);
   const seg = pk === 'round' ? '' : BFEngine.PERIODS[pk].label.replace(/ \/ /g, '/');
-  return seg ? `${seg}, ${fb.win_by === 'holes' ? 'holes won' : 'strokes'}` : 'one pot';
+  return seg ? (fb.win_by === undefined ? seg : `${seg}, ${fb.win_by === 'holes' ? 'holes won' : 'strokes'}`) : 'one pot';
 }
 function evtPlayLabel(evt) {
   const type = (evt && evt.gatheringType) || '';
@@ -5784,7 +5784,7 @@ function evtPlayLabel(evt) {
   const meta = BFEngine.gamesUiMeta();
   const names = (config.legacy.games || []).map(id => {
     const lbl = (meta[id] && meta[id].label) || id;
-    return id === 'fourball' ? `${lbl} (${fbVariantText(gatheringAddon(config, 'fourball'))})` : lbl;
+    return (id === 'fourball' || id === 'lowscore') ? `${lbl} (${fbVariantText(gatheringAddon(config, id))})` : lbl;
   });
   return (type && type !== 'Individual Play' ? type + ' · ' : '') + names.join(' + ');
 }
@@ -11596,7 +11596,8 @@ let _gamesFormMembers = new Map(); // Membership HCPs (bf_players) by lower-case
 let _gamesFormTees = []; // the venue's stored tees that carry full 18-hole data (slope, rating, par_total, holes[{par,handicap}])
 let _gamesFormBirdiepayPars = null; // 18 hole pars resolved for the Gathering's venue when the form opened (null = no par data on file)
 let _gamesFormBirdieballConfig = { dollar_per_player: null }; // MiserBall's OWN per-player rate — distinct from the main $/player pot rate
-let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], segments: 'total', win_by: 'strokes', scope: 'field' }; // Fourball (Dev-93)
+let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round', win_by: 'strokes', scope: 'field' }; // Fourball (Dev-93)
+let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' }; // Low Score (Dev-93)
 let _gamesFormPar3Holes = [];             // hole numbers (1-18) with par===3, from the venue's stored tee data
 let _gamesFormVenueParDataAvailable = false; // false -> no tee data on file, host picks holes manually (any 1-18)
 let _gamesFormTouched = new Set();         // v4.9.14 — game amounts the host typed by hand (suggestions never overwrite these)
@@ -16127,8 +16128,9 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   if (s.birdieball) games.push(['birdieball', '🐦']);
   if (s.birdiepay) games.push(['birdiepay', '🐤']);
   if (s.fourball) games.push(['fourball', '🤝']);
+  if (s.lowscore) games.push(['lowscore', '🎯']);
   const byName = new Map();
-  (s.payouts || []).forEach(r => byName.set(norm(r.player), { player: r.player, total: Number(r.total) || 0, skins: r.skins, cttp: r.cttp, birdieball: r.birdieball, birdiepay: r.birdiepay, fourball: r.fourball, given_back: r.given_back }));
+  (s.payouts || []).forEach(r => byName.set(norm(r.player), { player: r.player, total: Number(r.total) || 0, skins: r.skins, cttp: r.cttp, birdieball: r.birdieball, birdiepay: r.birdiepay, fourball: r.fourball, lowscore: r.lowscore, given_back: r.given_back }));
   if (hasRank) {
     (rk.gross || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.gross = r.total; e.strokes = r.strokes; byName.set(norm(r.player), e); });
     (rk.net || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.net = r.total; byName.set(norm(r.player), e); });
@@ -16259,6 +16261,43 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     h += heat;
     if (!f.segments && !(f.winners || []).length) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">No pair finished all its holes — ${money(f.given_back_each)} back to each player</div>`;
     panels.push({ key: 'fb', tab: '🤝 Fourball', html: h });
+  }
+  // ── Low Score: lowest individual total in each scoring period; a tie is a push (no blood) ──
+  if (s.lowscore) {
+    const f = s.lowscore;
+    const pk = f.period || (f.segments && f.segments.mode) || 'round';
+    const P = BFEngine.PERIODS[pk] || BFEngine.PERIODS.round;
+    const net = f.basis === 'net' ? 'net' : 'gross';
+    const nPl = (f.standings || []).length;
+    let h = label(`🎯 Low Score (${net}) — ${money(f.pot)}`);
+    if (f.net_missing) h += `<div style="font-size:0.72rem;color:#b8860b;margin-bottom:2px">Net was chosen but no strokes were on file, so this played gross</div>`;
+    if (f.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(f.configured_pot)}, but the pot only had ${money(f.pot)} left</div>`;
+    const rules = [];
+    if (f.segments) {
+      const sg = f.segments, n = sg.segments.length;
+      rules.push(`<b>${esc(P.phrase)}</b>: the lowest ${net} score in each period wins that period's pot.`);
+      rules.push(`Each player antes ${money(sg.per_segment * n)} (${money(sg.per_segment)} per period). A period's pot is ${money(sg.per_segment)} × ${nPl} players = ${money(sg.segments[0] ? sg.segments[0].pot : sg.per_segment * nPl)}.`);
+      rules.push(`A tie for low in a period is a push and the antes go back.`);
+    } else {
+      rules.push(`<b>One pot</b>: the lowest ${net} total for the round wins it all.`);
+      rules.push(`${nPl} players, ${money(f.pot)} in the pot. A tie for low is a push and the antes go back.`);
+    }
+    h += `<div style="font-size:0.74rem;color:var(--text-muted);margin:2px 0 8px;line-height:1.5">${rules.join(' ')}</div>`;
+    if (f.segments) {
+      h += f.segments.segments.map(x => line(`${esc(x.label)} <span style="color:var(--text-muted)">${money(x.pot)}${(x.by || []).some(b => b.total != null) ? ` · low ${esc(x.by[0].total)}` : ''}</span>`,
+        x.status === 'won' ? `<b>${x.winner.map(esc).join(' &amp; ')}</b> ${money(x.per_player)}` : (x.status === 'push' ? `<span style="color:var(--text-muted)">Push, ante back</span>` : `<span style="color:#b8860b">Not finished, ante back</span>`))).join('');
+      h += `<div style="font-size:0.78rem;font-weight:700;margin:8px 0 2px">Scores by period</div>`;
+      h += (f.standings || []).map(r => line(`<b>${esc(r.player)}</b> <span style="color:var(--text-muted)">${f.segments.segments.map(x => { const b = (x.by || []).find(y => norm(y.player) === norm(r.player)); return `${esc(x.label.split(' ')[0])} ${b && b.total != null ? esc(b.total) : '—'}`; }).join(' · ')}</span>`, r.complete ? esc(r.total) : '—')).join('');
+    } else {
+      h += (f.standings || []).map(r => {
+        const won = (f.winners || []).some(w => norm(w) === norm(r.player));
+        const place = r.complete ? (r.place != null ? `${r.tied ? 'T' : ''}${r.place}` : '') : '—';
+        return line(`<span style="color:var(--text-muted);display:inline-block;min-width:1.4rem">${place}</span><b>${esc(r.player)}</b>${r.complete ? '' : ` <span style="color:var(--text-muted)">(${r.played} holes in)</span>`}`, r.complete ? `${esc(r.total)}${won ? ` · ${money(f.per_player)}` : ''}` : '—');
+      }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No cards were turned in</div>`;
+      if (f.push) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">Tied for low, so it's a push — ${money(f.given_back_each)} back to each player</div>`;
+      else if (!(f.winners || []).length) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">No one finished all their holes — ${money(f.given_back_each)} back to each player</div>`;
+    }
+    panels.push({ key: 'ls', tab: '🎯 Low Score', html: h });
   }
   // ── Strokes ──
   if (s.handicap) {
@@ -16801,6 +16840,13 @@ function gatheringGameDetailsBody(evt, config) {
     const fbNet = fb.basis === 'net';
     const prs = (fb.pairs || []).map(pr => `${escapeHtml(pr[0])} &amp; ${escapeHtml(pr[1])}`).join(' · ');
     rows.push(row('🤝', `Fourball · ${fbNet ? (fb.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `Better ball of each pair · $${(fb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, ${BFEngine.periodKey(fb) !== 'round' ? `${BFEngine.PERIODS[BFEngine.periodKey(fb)].phrase} are separate pots won on ${fb.win_by === 'holes' ? 'holes won' : 'strokes'} (${fb.win_by === 'holes' || fb.scope === 'group' ? 'each foursome plays its own match' : 'whole field'}), a tie is a push` : 'winning pair splits it'}${prs ? `<br><b>Pairs:</b> ${prs}` : ''}`, 'fourball'));
+  }
+  const ls = gatheringAddon(config, 'lowscore');
+  if (ls) {
+    const cost = (ls.dollar_per_player || 0) * yesCount;
+    remaining -= cost;
+    const lk = BFEngine.periodKey(ls);
+    rows.push(row('🎯', `Low Score · ${ls.basis === 'net' ? 'Net' : 'Gross'}`, `Lowest individual score · $${(ls.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, ${lk !== 'round' ? `${BFEngine.PERIODS[lk].phrase} are separate pots; a tie in a period is a push` : 'one pot for the lowest total; a tie is a push'}`, 'lowscore'));
   }
   if ((config.legacy.games || []).includes('skins')) {
     const sk = gatheringAddon(config, 'skins');
@@ -18608,9 +18654,11 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
   { const fb = existing && existing.game_configs && existing.game_configs.fourball; // Dev-93: Fourball rides the generic game_configs column
     _gamesFormFourballConfig = fb
       ? { dollar_per_player: fb.dollar_per_player, basis: fb.basis === 'net' ? 'net' : 'gross', net_mode: fb.net_mode === 'low' ? 'low' : 'own', pairs: (fb.pairs || []).map(pr => pr.slice()),
-          segments: fb.segments === 'fbt' || fb.segments === 'sixes' ? fb.segments : 'total', win_by: fb.win_by === 'holes' ? 'holes' : 'strokes', scope: fb.win_by === 'holes' || fb.scope === 'group' ? 'group' : 'field' }
-      : { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], segments: 'total', win_by: 'strokes', scope: 'field' };
-    _gamesFormFourballNote = ''; }
+          period: BFEngine.periodKey(fb), win_by: fb.win_by === 'holes' ? 'holes' : 'strokes', scope: fb.win_by === 'holes' || fb.scope === 'group' ? 'group' : 'field' }
+      : { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round', win_by: 'strokes', scope: 'field' };
+    _gamesFormFourballNote = '';
+    const ls = existing && existing.game_configs && existing.game_configs.lowscore;
+    _gamesFormLowscoreConfig = ls ? { dollar_per_player: ls.dollar_per_player, basis: ls.basis === 'net' ? 'net' : 'gross', period: BFEngine.periodKey(ls) } : { dollar_per_player: null, basis: 'gross', period: 'round' }; }
   // Par table for Birdie Payouts — same resolver Card Score Sheet uses (Venue
   // Manager's stored pars first, BSGC's built-in table as the fallback).
   // Frozen into the saved config so Close never needs a second venue lookup.
@@ -18620,7 +18668,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
       ? { skins_basis: hc.skins_basis === 'net' ? 'net' : 'gross', birdiepay_basis: hc.birdiepay_basis === 'net' ? 'net' : 'gross',
           ranking: hc.ranking === true, allowance: hc.allowance == null ? 95 : hc.allowance, players: JSON.parse(JSON.stringify(hc.players || {})) }
       : { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; }
-  _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay', 'fourball'] : []); // an existing config is the host's own numbers
+  _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay', 'fourball', 'lowscore'] : []); // an existing config is the host's own numbers
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; if (_gamesFormCard) closeGamesCardDialog(); else renderHostPanelList(); }; }
   const closeBtn = document.getElementById('host-sheet-close-btn');
@@ -18692,6 +18740,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
     <div id="games-form-birdieball-section">${gatheringGamesBirdieballSectionHtml()}</div>
     <div id="games-form-birdiepay-section">${gatheringGamesBirdiepaySectionHtml()}</div>
     <div id="games-form-fourball-section">${gatheringGamesFourballSectionHtml()}</div>
+    <div id="games-form-lowscore-section">${gatheringGamesLowscoreSectionHtml()}</div>
     <div id="games-form-hcp-section">${gatheringGamesHcpSectionHtml()}</div>
     <button class="host-cta-btn" style="margin-top:16px" id="btn-save-games"
       onclick="submitGatheringGames(${gatheringId})">💾 Save Games</button>
@@ -18720,7 +18769,7 @@ function applyGamesSuggestion(force) {
   const note = document.getElementById('games-form-suggest-note');
   if (!input) return;
   const dpp = parseFloat(input.value) || 0;
-  const anyAmountGame = ['cttp', 'birdieball', 'birdiepay', 'fourball'].some(k => _gamesFormSelected.has(k));
+  const anyAmountGame = ['cttp', 'birdieball', 'birdiepay', 'fourball', 'lowscore'].some(k => _gamesFormSelected.has(k));
   if (!(dpp > 0) || !anyAmountGame) { if (note) note.innerHTML = anyAmountGame ? 'Pick a buy-in and amounts for each game are suggested for you.' : ''; return; }
   if (force) _gamesFormTouched.clear();
   const n = Math.max(4, _gamesFormYesCount);
@@ -18730,6 +18779,8 @@ function applyGamesSuggestion(force) {
   if (sug.birdieball && !_gamesFormTouched.has('birdieball')) _gamesFormBirdieballConfig.dollar_per_player = sug.birdieball.dollar_per_player;
   if (sug.birdiepay && !_gamesFormTouched.has('birdiepay')) _gamesFormBirdiepayConfig.dollar_per_birdie = sug.birdiepay.dollar_per_birdie;
   if (sug.fourball && !_gamesFormTouched.has('fourball')) _gamesFormFourballConfig.dollar_per_player = fourballSnapToSegments(sug.fourball.dollar_per_player);
+  if (sug.lowscore && !_gamesFormTouched.has('lowscore')) _gamesFormLowscoreConfig.dollar_per_player = snapToPeriods(sug.lowscore.dollar_per_player, lowscoreSegCount(_gamesFormLowscoreConfig));
+  const ls2 = document.getElementById('games-form-lowscore-section'); if (ls2) ls2.innerHTML = gatheringGamesLowscoreSectionHtml();
   const fs = document.getElementById('games-form-fourball-section'); if (fs) fs.innerHTML = gatheringGamesFourballSectionHtml();
   const cs = document.getElementById('games-form-cttp-section'); if (cs) cs.innerHTML = gatheringGamesCttpSectionHtml();
   const bs = document.getElementById('games-form-birdieball-section'); if (bs) bs.innerHTML = gatheringGamesBirdieballSectionHtml();
@@ -18766,8 +18817,10 @@ function toggleGamesFormGame(key) {
     } else if (key === 'birdiepay') {
       _gamesFormBirdiepayConfig = { dollar_per_birdie: null };
     } else if (key === 'fourball') {
-      _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], segments: 'total', win_by: 'strokes', scope: 'field' };
+      _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round', win_by: 'strokes', scope: 'field' };
       _gamesFormFourballNote = '';
+    } else if (key === 'lowscore') {
+      _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' };
     }
     // skins needs no per-game state at all — it's just whatever's left over.
   } else {
@@ -18793,6 +18846,8 @@ function toggleGamesFormGame(key) {
   if (birdiepaySection) birdiepaySection.innerHTML = gatheringGamesBirdiepaySectionHtml();
   const fourballSection = document.getElementById('games-form-fourball-section');
   if (fourballSection) fourballSection.innerHTML = gatheringGamesFourballSectionHtml();
+  const lowscoreSection = document.getElementById('games-form-lowscore-section');
+  if (lowscoreSection) lowscoreSection.innerHTML = gatheringGamesLowscoreSectionHtml();
   if (!_gamesFormSelected.has('skins')) _gamesFormHcp.skins_basis = 'gross';
   if (!_gamesFormSelected.has('birdiepay')) _gamesFormHcp.birdiepay_basis = 'gross';
   refreshGamesFormHcpSection();
@@ -18917,6 +18972,61 @@ function setGamesFormBirdiepayDollarPerBirdie(val) {
   _gamesFormTouched.add('birdiepay');
   updateGamesFormPotPreview();
 }
+// ── Scoring periods: the picker and the plain-English money line, shared by every game that uses them ──
+function gamesPeriodPickerHtml(cur, fn) {
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${BFEngine.periodList().map(o => `<button type="button" onclick="${fn}('${o.key}')" style="min-height:52px;text-align:left;border-radius:10px;padding:8px 10px;cursor:pointer;font-family:inherit;${cur === o.key ? 'background:var(--green);color:#fff;border:2px solid var(--green)' : 'background:#fff;color:var(--text);border:1.5px solid var(--border)'}"><span style="font-size:0.86rem;font-weight:700;display:block">${escapeHtml(o.label)}</span><span style="font-size:0.7rem;opacity:0.8;display:block;margin-top:2px">${o.segments > 1 ? o.segments + ' pots' : 'One pot'}</span></button>`).join('')}</div>`;
+}
+// roundText: what the whole-round pot does for this game (it differs by game). Periods always read the same.
+function periodExplainHtml(pk, totalAnte, texts) {
+  const P = BFEngine.PERIODS[pk] || BFEngine.PERIODS.round, n = P.segs.length;
+  const ante = Number(totalAnte) || 0;
+  const lead = `<b>How the money works</b><br>`;
+  if (!n) return lead + escapeHtml((texts && texts.round) || 'One pot for the whole round.');
+  const per = Math.round(ante / n * 100) / 100;
+  return lead + `${n} pots: ${escapeHtml(P.phrase)}. The ante is split ${n} ways. The best in each period wins that pot. A tie is a push and the antes go back.${ante > 0 ? `<br><span style="color:var(--text-muted)">$${ante.toFixed(2)} ante = $${per.toFixed(2)} a period.</span>` : ''}`;
+}
+function gatheringGamesLowscoreSectionHtml() {
+  if (!_gamesFormSelected.has('lowscore')) return '';
+  const c = _gamesFormLowscoreConfig, n = lowscoreSegCount(c), pk = BFEngine.periodKey(c);
+  const seg = (items, cur, fn) => `<div class="seg-toggle" style="margin:0">${items.map(([v, l]) => `<button type="button" class="seg-btn${cur === v ? ' seg-btn-active' : ''}" style="white-space:nowrap;padding:9px 14px" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
+  return `
+    <div class="host-form-field" id="games-form-lowscore-field">
+      <label>🎯 Low Score</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.86rem">$</span>
+        <input type="number" id="games-form-ls-dpp" min="0.01" step="0.01" value="${n > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / n * 100) / 100 : '') : (c.dollar_per_player || '')}" style="width:90px"
+          oninput="setGamesFormLowscoreDollarPerPlayer(this.value)">
+        <span style="font-size:0.86rem;color:var(--text-muted)">${n > 1 ? 'per player, per period' : 'per player'}</span>
+      </div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">${n > 1 ? `Each player puts in $${(c.dollar_per_player || 0).toFixed(2)} in all ($${(Math.round((c.dollar_per_player || 0) / n * 100) / 100).toFixed(2)} for each of the ${n} periods).` : 'Everyone plays their own ball. The lowest total takes the pot. A tie is a push and the antes go back.'}</div>
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:2px">Scoring period</div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px">How the round is cut up. Each period is its own pot.</div>
+      ${gamesPeriodPickerHtml(pk, 'setGamesFormLowscorePeriod')}
+      <div style="margin:10px 0 12px;background:var(--green-light);border-radius:10px;padding:10px 12px;font-size:0.8rem;line-height:1.45">${periodExplainHtml(pk, c.dollar_per_player, { round: 'The lowest total over the whole round wins one pot. A tie for low is a push and every ante comes back.' })}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <span style="flex:1;font-size:0.9rem;font-weight:600">Low Score scoring</span>${seg([['gross', 'Gross'], ['net', 'Net']], c.basis, 'setGamesFormLowscoreBasis')}</div>
+      ${c.basis === 'net' ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px">Everyone plays off their own strokes, entered in the strokes list below.</div>` : ''}
+    </div>`;
+}
+function refreshGamesFormLowscoreSection() { const el = document.getElementById('games-form-lowscore-section'); if (el) el.innerHTML = gatheringGamesLowscoreSectionHtml(); }
+function setGamesFormLowscorePeriod(v) {
+  const c = _gamesFormLowscoreConfig;
+  c.period = BFEngine.periodKey({ period: v });
+  if (lowscoreSegCount(c) > 1 && c.dollar_per_player > 0) c.dollar_per_player = lowscoreSnapToPeriods(c.dollar_per_player);
+  _gamesFormTouched.add('lowscore');
+  refreshGamesFormLowscoreSection();
+  updateGamesFormPotPreview();
+}
+function setGamesFormLowscoreDollarPerPlayer(val) {
+  _gamesFormLowscoreConfig.dollar_per_player = Math.round((parseFloat(val) || 0) * lowscoreSegCount(_gamesFormLowscoreConfig) * 100) / 100;
+  _gamesFormTouched.add('lowscore');
+  updateGamesFormPotPreview();
+}
+function setGamesFormLowscoreBasis(v) {
+  _gamesFormLowscoreConfig.basis = v === 'net' ? 'net' : 'gross';
+  refreshGamesFormLowscoreSection();
+  refreshGamesFormHcpSection();
+}
 // ── Fourball (Dev-93): standalone better-ball-of-partners game ────────────────
 // Config lives in _gamesFormFourballConfig: { dollar_per_player (the Fourball carve), basis, net_mode, pairs }.
 // pairs is the editor state: [[nameA, nameB], ...] where '' means "not picked yet". Saved to the Worker
@@ -18935,6 +19045,7 @@ function gatheringGamesFourballSectionHtml() {
   const names = gamesFormFourballNames();
   const low = n => String(n || '').trim().toLowerCase();
   const segN = fourballSegCount(c);
+  const pk = BFEngine.periodKey(c);
   const picker = (pi, si) => {
     const cur = c.pairs[pi][si];
     const taken = new Set();
@@ -18957,16 +19068,18 @@ function gatheringGamesFourballSectionHtml() {
         <span style="font-size:0.86rem">$</span>
         <input type="number" id="games-form-fb-dpp" min="0.01" step="0.01" value="${segN > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / segN * 100) / 100 : '') : (c.dollar_per_player || '')}" style="width:90px"
           oninput="setGamesFormFourballDollarPerPlayer(this.value)">
-        <span style="font-size:0.86rem;color:var(--text-muted)">${segN > 1 ? 'per player, per segment' : 'per player'}</span>
+        <span style="font-size:0.86rem;color:var(--text-muted)">${segN > 1 ? 'per player, per period' : 'per player'}</span>
       </div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">${segN > 1
-        ? `Each player puts in $${(c.dollar_per_player || 0).toFixed(2)} in all ($${(Math.round((c.dollar_per_player || 0) / segN * 100) / 100).toFixed(2)} for each of the ${segN} segments). Each segment is its own pot. A tied segment is a push: everyone's ante comes back.`
+        ? `Each player puts in $${(c.dollar_per_player || 0).toFixed(2)} in all ($${(Math.round((c.dollar_per_player || 0) / segN * 100) / 100).toFixed(2)} for each of the ${segN} periods).`
         : 'Each pair counts its better score on every hole. The lowest total wins this prize; tied pairs split it.'}</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <span style="flex:1;font-size:0.9rem;font-weight:600">Pot split</span>${seg([['total', 'One pot'], ['fbt', 'Front·Back·Total'], ['sixes', '6·6·6']], c.segments, 'setGamesFormFourballSegments')}</div>
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:2px">Scoring period</div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px">How the round is cut up. Each period is its own pot.</div>
+      ${gamesPeriodPickerHtml(pk, 'setGamesFormFourballPeriod')}
+      <div style="margin:10px 0 12px;background:var(--green-light);border-radius:10px;padding:10px 12px;font-size:0.8rem;line-height:1.45">${periodExplainHtml(pk, c.dollar_per_player, { round: 'The pair with the lowest better-ball total wins one pot. Tied pairs split it.' })}</div>
       ${segN > 1 ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <span style="flex:1;font-size:0.9rem;font-weight:600">Segment won by</span>${seg([['strokes', 'Strokes'], ['holes', 'Holes won']], c.win_by, 'setGamesFormFourballWinBy')}</div>
-        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.win_by === 'holes' ? 'The pair that wins more holes wins the segment. One bad hole costs one hole, not the segment.' : 'The pair with the lower better-ball total wins the segment. One big number can swing it.'}</div>
+        <span style="flex:1;font-size:0.9rem;font-weight:600">Period won by</span>${seg([['strokes', 'Strokes'], ['holes', 'Holes won']], c.win_by, 'setGamesFormFourballWinBy')}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.win_by === 'holes' ? 'The pair that wins more holes wins the period. One bad hole costs one hole, not the period.' : 'The pair with the lower better-ball total wins the period. One big number can swing it.'}</div>
         ${c.win_by === 'holes' ? '' : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <span style="flex:1;font-size:0.9rem;font-weight:600">Who competes</span>${seg([['group', 'Each foursome'], ['field', 'Whole field']], c.scope, 'setGamesFormFourballScope')}</div>`}
         ${(c.win_by === 'holes' || c.scope === 'group') && c.pairs.length % 2 === 1 ? `<div style="font-size:0.74rem;color:#b8860b;margin-bottom:8px">Foursomes need an even number of pairs. The last pair has no opponent, so its pot is returned.</div>` : ''}` : ''}
@@ -18993,17 +19106,19 @@ function refreshGamesFormFourballSection() {
   const el = document.getElementById('games-form-fourball-section');
   if (el) el.innerHTML = gatheringGamesFourballSectionHtml();
 }
-function fourballSegCount(c) { return c && (c.segments === 'fbt' || c.segments === 'sixes') ? 3 : 1; }
-// With segments the host types the ante per segment; what is stored is the player's total across all of them.
-function fourballSnapToSegments(total) {
-  const n = fourballSegCount(_gamesFormFourballConfig), t = Number(total) || 0;
-  return n > 1 && t > 0 ? Math.max(n, Math.round(t / n) * n) : t;
-}
-function setGamesFormFourballSegments(v) {
+function periodSegCount(c) { const k = BFEngine.periodKey(c || {}); return BFEngine.PERIODS[k].segs.length || 1; }
+function fourballSegCount(c) { return periodSegCount(c); }
+function lowscoreSegCount(c) { return periodSegCount(c); }
+// With periods the host types the ante per period; what is stored is the player's total across all of them.
+function snapToPeriods(total, n) { const t = Number(total) || 0; return n > 1 && t > 0 ? Math.max(n, Math.round(t / n) * n) : t; }
+function fourballSnapToSegments(total) { return snapToPeriods(total, fourballSegCount(_gamesFormFourballConfig)); }
+function lowscoreSnapToPeriods(total) { return snapToPeriods(total, lowscoreSegCount(_gamesFormLowscoreConfig)); }
+function lowscoreSnapToPeriods(total) { return snapToPeriods(total, lowscoreSegCount(_gamesFormLowscoreConfig)); }
+function setGamesFormFourballPeriod(v) {
   const c = _gamesFormFourballConfig;
-  c.segments = v === 'fbt' || v === 'sixes' ? v : 'total';
+  c.period = BFEngine.periodKey({ period: v });
   if (fourballSegCount(c) > 1 && c.dollar_per_player > 0) c.dollar_per_player = fourballSnapToSegments(c.dollar_per_player);
-  if (c.segments === 'total') { c.win_by = 'strokes'; c.scope = 'field'; }
+  if (c.period === 'round') { c.win_by = 'strokes'; c.scope = 'field'; }
   _gamesFormTouched.add('fourball');
   refreshGamesFormFourballSection();
   updateGamesFormPotPreview();
@@ -19125,7 +19240,7 @@ function gamesFormOpenSpotCount() {
     : gatheringRegData.filter(r => r.gatheringId === _gamesFormGathering && r.status === 'Yes');
   return rows.filter(r => isOpenSpotName(r.player)).length;
 }
-function gamesFormHcpIsNet() { return _gamesFormHcp.skins_basis === 'net' || _gamesFormHcp.birdiepay_basis === 'net' || _gamesFormHcp.ranking === true || (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.basis === 'net'); }
+function gamesFormHcpIsNet() { return _gamesFormHcp.skins_basis === 'net' || _gamesFormHcp.birdiepay_basis === 'net' || _gamesFormHcp.ranking === true || (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.basis === 'net') || (_gamesFormSelected.has('lowscore') && _gamesFormLowscoreConfig.basis === 'net'); }
 function setGamesFormRanking(on) { _gamesFormHcp.ranking = !!on; refreshGamesFormHcpSection(); }
 // One player's resolved handicap, or { problem } if the host still owes a field.
 function gamesFormResolvePlayerHcp(name) {
@@ -19257,6 +19372,7 @@ function gamesFormOverCommit(dpp, yesCount) {
   if (_gamesFormSelected.has('cttp') && _gamesFormCttpConfig.dollar_per_hole > 0) configs.cttp = _gamesFormCttpConfig;
   if (_gamesFormSelected.has('birdieball') && _gamesFormBirdieballConfig.dollar_per_player > 0) configs.birdieball = _gamesFormBirdieballConfig;
   if (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.dollar_per_player > 0) configs.fourball = _gamesFormFourballConfig;
+  if (_gamesFormSelected.has('lowscore') && _gamesFormLowscoreConfig.dollar_per_player > 0) configs.lowscore = _gamesFormLowscoreConfig;
   const pf = BFEngine.potFit(configs, dpp, yesCount);
   const cost = id => (pf.parts.find(p => p.id === id) || {}).cost || 0;
   return { cttpCost: cost('cttp'), bbRate: configs.birdieball ? configs.birdieball.dollar_per_player : 0,
@@ -19291,6 +19407,11 @@ function updateGamesFormPotPreview(yesCount) {
     const fbCost = _gamesFormFourballConfig.dollar_per_player * yesCount;
     remaining -= fbCost;
     lines.push(fourballSegCount(_gamesFormFourballConfig) > 1 ? `🤝 Fourball: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), cut into ${fourballSegCount(_gamesFormFourballConfig)} segment pots` : `🤝 Fourball: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), the winning pair splits it`);
+  }
+  if (_gamesFormSelected.has('lowscore') && _gamesFormLowscoreConfig.dollar_per_player > 0) {
+    const lsCost = _gamesFormLowscoreConfig.dollar_per_player * yesCount, lsN = lowscoreSegCount(_gamesFormLowscoreConfig);
+    remaining -= lsCost;
+    lines.push(lsN > 1 ? `🎯 Low Score: $${lsCost.toFixed(2)} (${yesCount} × $${_gamesFormLowscoreConfig.dollar_per_player.toFixed(2)}), cut into ${lsN} period pots` : `🎯 Low Score: $${lsCost.toFixed(2)} (${yesCount} × $${_gamesFormLowscoreConfig.dollar_per_player.toFixed(2)}), the lowest score takes it`);
   }
   // Birdie Payouts is a variable cost (flat $ × birdies actually made), so it
   // can't be totalled here — say so instead of showing a made-up number.
@@ -19349,10 +19470,18 @@ async function submitGatheringGames(gatheringId) {
     const rows = c.pairs.filter(pr => pr[0] || pr[1]);
     if (rows.some(pr => !pr[0] || !pr[1])) { showToast('Fourball: finish or remove the incomplete pair', true); return; }
     const fb = { dollar_per_player: c.dollar_per_player, basis: c.basis === 'net' ? 'net' : 'gross', net_mode: c.net_mode === 'low' ? 'low' : 'own', pairs: rows.map(pr => [pr[0], pr[1]]),
-      ...(fourballSegCount(c) > 1 ? { segments: c.segments, win_by: c.win_by === 'holes' ? 'holes' : 'strokes', scope: c.win_by === 'holes' || c.scope === 'group' ? 'group' : 'field' } : {}) };
+      ...(fourballSegCount(c) > 1 ? { period: c.period, win_by: c.win_by === 'holes' ? 'holes' : 'strokes', scope: c.win_by === 'holes' || c.scope === 'group' ? 'group' : 'field' } : {}) };
     const v = BFEngine.validateGameConfig('fourball', fb);
     if (!v.ok) { showToast('Fourball: ' + v.errors[0], true); return; }
-    game_configs = { fourball: fb };
+    game_configs = Object.assign(game_configs || {}, { fourball: fb });
+  }
+  if (games.includes('lowscore')) {
+    const c = _gamesFormLowscoreConfig;
+    if (!(c.dollar_per_player > 0)) { showToast('Low Score: $ per player must be greater than 0', true); return; }
+    const ls = { dollar_per_player: c.dollar_per_player, basis: c.basis === 'net' ? 'net' : 'gross', ...(lowscoreSegCount(c) > 1 ? { period: c.period } : {}) };
+    const v = BFEngine.validateGameConfig('lowscore', ls);
+    if (!v.ok) { showToast('Low Score: ' + v.errors[0], true); return; }
+    game_configs = Object.assign(game_configs || {}, { lowscore: ls });
   }
   const hcb = gamesFormBuildHandicapConfig();
   if (hcb.problem) { showToast(hcb.problem, true); return; }
