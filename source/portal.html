@@ -18738,6 +18738,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
     </div>
     <div id="games-form-cttp-section">${gatheringGamesCttpSectionHtml()}</div>
     <div id="games-form-birdieball-section">${gatheringGamesBirdieballSectionHtml()}</div>
+    <div id="games-form-skins-section">${gatheringGamesSkinsSectionHtml()}</div>
     <div id="games-form-birdiepay-section">${gatheringGamesBirdiepaySectionHtml()}</div>
     <div id="games-form-fourball-section">${gatheringGamesFourballSectionHtml()}</div>
     <div id="games-form-lowscore-section">${gatheringGamesLowscoreSectionHtml()}</div>
@@ -18842,6 +18843,7 @@ function toggleGamesFormGame(key) {
   if (cttpSection) cttpSection.innerHTML = gatheringGamesCttpSectionHtml();
   const birdieballSection = document.getElementById('games-form-birdieball-section');
   if (birdieballSection) birdieballSection.innerHTML = gatheringGamesBirdieballSectionHtml();
+  refreshGamesFormSkinsSection();
   const birdiepaySection = document.getElementById('games-form-birdiepay-section');
   if (birdiepaySection) birdiepaySection.innerHTML = gatheringGamesBirdiepaySectionHtml();
   const fourballSection = document.getElementById('games-form-fourball-section');
@@ -18946,6 +18948,16 @@ function setGamesFormBirdieballDollarPerPlayer(val) {
 // that flat amount to whoever made it; the total comes off the pot before
 // Skins. Needs the venue's par table to count birdies from gross scorecards,
 // so it warns up front if there isn't one on file.
+function gatheringGamesSkinsSectionHtml() {
+  if (!_gamesFormSelected.has('skins')) return '';
+  return `<div class="host-form-field" id="games-form-skins-field">
+      <label>⛳ Skins <span style="font-weight:400;color:var(--text-muted)">· gets what is left</span></label>
+      <div style="width:50%;padding-right:4px;box-sizing:border-box"><div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:3px">Scored on</div>${gamesBasisSelectHtml(_gamesFormHcp.skins_basis, "setGamesFormSkinsBasis")}</div>
+    </div>`;
+}
+function refreshGamesFormSkinsSection() { const el = document.getElementById('games-form-skins-section'); if (el) el.innerHTML = gatheringGamesSkinsSectionHtml(); }
+function setGamesFormSkinsBasis(v) { setGamesFormBasis('skins_basis', v); }
+function setGamesFormBirdiepayBasis(v) { setGamesFormBasis('birdiepay_basis', v); }
 function gatheringGamesBirdiepaySectionHtml() {
   if (!_gamesFormSelected.has('birdiepay')) return '';
   const haveParData = Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18;
@@ -18959,7 +18971,8 @@ function gatheringGamesBirdiepaySectionHtml() {
           oninput="setGamesFormBirdiepayDollarPerBirdie(this.value)">
         <span style="font-size:0.86rem;color:var(--text-muted)">per birdie</span>
       </div>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px">Birdie or better, counted from each player's scorecard. Paid out of the pot before Skins.</div>
+      <div style="width:50%;padding-right:4px;box-sizing:border-box;margin-top:10px"><div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:3px">Scored on</div>${gamesBasisSelectHtml(_gamesFormHcp.birdiepay_basis, "setGamesFormBirdiepayBasis")}</div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Birdie or better, counted from each player's scorecard. Paid out of the pot before Skins.</div>
       ${haveParData ? '' : `
       <div style="font-size:0.74rem;color:#b8860b;background:rgba(230,168,0,0.1);border:1px solid rgba(230,168,0,0.3);
         border-radius:8px;padding:8px 10px;margin-top:8px">
@@ -18973,6 +18986,14 @@ function setGamesFormBirdiepayDollarPerBirdie(val) {
   updateGamesFormPotPreview();
 }
 // ── Scoring periods: the picker and the plain-English money line, shared by every game that uses them ──
+function gamesBasisSelectHtml(cur, fn) {
+  return `<select onchange="${fn}(this.value)" aria-label="Scored on" style="width:100%;height:42px;border-radius:10px;border:1.5px solid var(--border);font-family:inherit;font-size:0.9rem;background:#fff;padding:0 10px"><option value="gross" ${cur !== 'net' ? 'selected' : ''}>Gross</option><option value="net" ${cur === 'net' ? 'selected' : ''}>Net</option></select>`;
+}
+// "Scored on" (Gross/Net) sits beside "Period" in every game card (Dev-93).
+function gamesScoredPeriodRowHtml(basis, basisFn, pk, periodFn) {
+  const lab = t => `<div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:3px">${t}</div>`;
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><div>${lab('Scored on')}${gamesBasisSelectHtml(basis, basisFn)}</div><div>${lab('Period')}${gamesPeriodPickerHtml(pk, periodFn)}</div></div>`;
+}
 function gamesPeriodPickerHtml(cur, fn) {
   return `<select onchange="${fn}(this.value)" aria-label="Scoring period" style="width:100%;height:42px;border-radius:10px;border:1.5px solid var(--border);font-family:inherit;font-size:0.9rem;background:#fff;padding:0 10px">${BFEngine.periodList().map(o => `<option value="${o.key}" ${cur === o.key ? 'selected' : ''}>${escapeHtml(o.label)} — ${o.segments > 1 ? o.segments + ' pots' : 'one pot'}</option>`).join('')}</select>`;
 }
@@ -18988,7 +19009,6 @@ function periodExplainHtml(pk, totalAnte, texts) {
 function gatheringGamesLowscoreSectionHtml() {
   if (!_gamesFormSelected.has('lowscore')) return '';
   const c = _gamesFormLowscoreConfig, n = lowscoreSegCount(c), pk = BFEngine.periodKey(c);
-  const seg = (items, cur, fn) => `<div class="seg-toggle" style="margin:0">${items.map(([v, l]) => `<button type="button" class="seg-btn${cur === v ? ' seg-btn-active' : ''}" style="white-space:nowrap;padding:9px 14px" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
   return `
     <div class="host-form-field" id="games-form-lowscore-field">
       <label>🎯 Low Score</label>
@@ -18999,13 +19019,8 @@ function gatheringGamesLowscoreSectionHtml() {
         <span style="font-size:0.86rem;color:var(--text-muted)">${n > 1 ? 'per player, per period' : 'per player'}</span>
       </div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">${n > 1 ? `Each player puts in $${(c.dollar_per_player || 0).toFixed(2)} in all ($${(Math.round((c.dollar_per_player || 0) / n * 100) / 100).toFixed(2)} for each of the ${n} periods).` : 'Everyone plays their own ball. The lowest total takes the pot. A tie is a push and the antes go back.'}</div>
-      <div style="font-size:0.9rem;font-weight:600;margin-bottom:2px">Scoring period</div>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px">How the round is cut up. Each period is its own pot.</div>
-      ${gamesPeriodPickerHtml(pk, 'setGamesFormLowscorePeriod')}
+      ${gamesScoredPeriodRowHtml(c.basis, 'setGamesFormLowscoreBasis', pk, 'setGamesFormLowscorePeriod')}
       <div style="margin:10px 0 12px;background:var(--green-light);border-radius:10px;padding:10px 12px;font-size:0.8rem;line-height:1.45">${periodExplainHtml(pk, c.dollar_per_player, { round: 'The lowest total over the whole round wins one pot. A tie for low is a push and every ante comes back.' })}</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-        <span style="flex:1;font-size:0.9rem;font-weight:600">Low Score scoring</span>${seg([['gross', 'Gross'], ['net', 'Net']], c.basis, 'setGamesFormLowscoreBasis')}</div>
-      ${c.basis === 'net' ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px">Everyone plays off their own strokes, entered in the strokes list below.</div>` : ''}
     </div>`;
 }
 function refreshGamesFormLowscoreSection() { const el = document.getElementById('games-form-lowscore-section'); if (el) el.innerHTML = gatheringGamesLowscoreSectionHtml(); }
@@ -19073,9 +19088,7 @@ function gatheringGamesFourballSectionHtml() {
       <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">${segN > 1
         ? `Each player puts in $${(c.dollar_per_player || 0).toFixed(2)} in all ($${(Math.round((c.dollar_per_player || 0) / segN * 100) / 100).toFixed(2)} for each of the ${segN} periods).`
         : 'Each pair counts its better score on every hole. The lowest total wins this prize; tied pairs split it.'}</div>
-      <div style="font-size:0.9rem;font-weight:600;margin-bottom:2px">Scoring period</div>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px">How the round is cut up. Each period is its own pot.</div>
-      ${gamesPeriodPickerHtml(pk, 'setGamesFormFourballPeriod')}
+      ${gamesScoredPeriodRowHtml(c.basis, 'setGamesFormFourballBasis', pk, 'setGamesFormFourballPeriod')}
       <div style="margin:10px 0 12px;background:var(--green-light);border-radius:10px;padding:10px 12px;font-size:0.8rem;line-height:1.45">${periodExplainHtml(pk, c.dollar_per_player, { round: 'The pair with the lowest better-ball total wins one pot. Tied pairs split it.' })}</div>
       ${segN > 1 ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Period won by</span>${seg([['strokes', 'Strokes'], ['holes', 'Holes won']], c.win_by, 'setGamesFormFourballWinBy')}</div>
@@ -19083,11 +19096,6 @@ function gatheringGamesFourballSectionHtml() {
         ${c.win_by === 'holes' ? '' : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <span style="flex:1;font-size:0.9rem;font-weight:600">Who competes</span>${seg([['group', 'Each foursome'], ['field', 'Whole field']], c.scope, 'setGamesFormFourballScope')}</div>`}
         ${(c.win_by === 'holes' || c.scope === 'group') && c.pairs.length % 2 === 1 ? `<div style="font-size:0.74rem;color:#b8860b;margin-bottom:8px">Foursomes need an even number of pairs. The last pair has no opponent, so its pot is returned.</div>` : ''}` : ''}
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <span style="flex:1;font-size:0.9rem;font-weight:600">Fourball scoring</span>${seg([['gross', 'Gross'], ['net', 'Net']], c.basis, 'setGamesFormFourballBasis')}</div>
-      ${c.basis === 'net' ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-        <span style="flex:1;font-size:0.9rem;font-weight:600">Net strokes</span>${seg([['own', 'Own strokes'], ['low', 'Off the low']], c.net_mode, 'setGamesFormFourballNetMode')}</div>
-        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.net_mode === 'low' ? 'Strokes come off the lowest handicap among the paired players, so the best player plays to scratch.' : 'Everyone plays off their own strokes, entered in the strokes list below.'}</div>` : ''}
       <div style="font-size:0.78rem;font-weight:700;margin:6px 0">Pairs</div>
       ${pairRows || `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">No pairs yet. Add them one at a time, or let us suggest balanced pairs.</div>`}
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
@@ -19145,6 +19153,7 @@ function setGamesFormFourballBasis(v) {
 function setGamesFormFourballNetMode(v) {
   _gamesFormFourballConfig.net_mode = v === 'low' ? 'low' : 'own';
   refreshGamesFormFourballSection();
+  refreshGamesFormHcpSection();
 }
 function setGamesFormFourballMember(pi, si, name) {
   _gamesFormFourballConfig.pairs[pi][si] = name || '';
@@ -19307,29 +19316,38 @@ function gatheringGamesHcpSectionHtml() {
       }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No confirmed players yet. Players appear here as they register Yes.</div>`;
       const _spots = gamesFormOpenSpotCount();
       if (_spots > 0) rows += `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:8px;line-height:1.4">🪑 ${_spots} open spot${_spots === 1 ? ' is' : 's are'} not listed. Once you fill one, reopen Games and set that player's handicap here.</div>`;
-      rows = `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 6px">
-          <span style="font-size:0.86rem;font-weight:600">Allowance</span>
-          <input type="number" min="50" max="100" step="1" value="${_gamesFormHcp.allowance}" oninput="setGamesFormAllowance(this.value)" style="width:64px;height:34px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit">
-          <span style="font-size:0.86rem">%</span>
-          <span style="font-size:0.72rem;color:var(--text-muted);flex-basis:100%">of course handicap (USGA: 95% for individual play). Strokes given are used as typed.</span></div>
-        <div style="display:flex;align-items:center;gap:8px;margin:2px 0 6px">
-          <span style="font-size:0.78rem;color:var(--text-muted)">Same tee for everyone</span>
-          <select onchange="gamesFormSetAllTees(this.value)" style="height:32px;border-radius:8px;border:1.5px solid var(--border);font-family:inherit;font-size:0.8rem;padding:0 6px;background:#fff"><option value="">Pick…</option>${_gamesFormTees.map(t => `<option value="${t.id}">${escapeHtml(t.tee_name)}</option>`).join('')}</select></div>${rows}`;
+      rows = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 4px">
+          <div><div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:3px">Allowance</div>
+            <div style="display:flex;align-items:center;gap:6px"><input type="number" min="50" max="100" step="1" value="${_gamesFormHcp.allowance}" oninput="setGamesFormAllowance(this.value)" style="width:100%;height:42px;border-radius:10px;border:1.5px solid var(--border);padding:0 10px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.86rem">%</span></div></div>
+          <div><div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:3px">Tee for everyone</div>
+            <select onchange="gamesFormSetAllTees(this.value)" style="width:100%;height:42px;border-radius:10px;border:1.5px solid var(--border);font-family:inherit;font-size:0.9rem;padding:0 10px;background:#fff"><option value="">Pick…</option>${_gamesFormTees.map(t => `<option value="${t.id}">${escapeHtml(t.tee_name)}</option>`).join('')}</select></div></div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin:0 0 6px">Allowance is a share of course handicap (USGA: 95% for individual play). Strokes given are used as typed.</div>${rows}`;
     }
   }
+  const rankingRow = `<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;margin:8px 0 8px;cursor:pointer"><input type="checkbox" ${_gamesFormHcp.ranking === true ? 'checked' : ''} onchange="setGamesFormRanking(this.checked)">
+        <span>📊 Also show a Net ranking <span style="color:var(--text-muted)">(for fun, no money)</span></span></label>`;
+  if (!net) return `<div class="host-form-field" id="games-form-hcp-field">${rankingRow}<div style="font-size:0.72rem;color:var(--text-muted)">Every game is Gross. Set a game to Net above and a Handicap strokes card appears here.</div></div>`;
+  const netNames = [];
+  if (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.basis === 'net') netNames.push('Fourball');
+  if (_gamesFormSelected.has('lowscore') && _gamesFormLowscoreConfig.basis === 'net') netNames.push('Low Score');
+  if (hasSkins && _gamesFormHcp.skins_basis === 'net') netNames.push('Skins');
+  if (hasBp && _gamesFormHcp.birdiepay_basis === 'net') netNames.push('Birdie Payouts');
+  if (_gamesFormHcp.ranking === true) netNames.push('the Net ranking');
+  const fbNet = _gamesFormSelected.has('fourball') && _gamesFormFourballConfig.basis === 'net';
+  const modeBlock = fbNet ? `<div style="margin-bottom:8px"><div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:3px">Fourball strokes</div>
+      <select onchange="setGamesFormFourballNetMode(this.value)" style="width:100%;height:42px;border-radius:10px;border:1.5px solid var(--border);font-family:inherit;font-size:0.9rem;background:#fff;padding:0 10px"><option value="own" ${_gamesFormFourballConfig.net_mode !== 'low' ? 'selected' : ''}>Own strokes</option><option value="low" ${_gamesFormFourballConfig.net_mode === 'low' ? 'selected' : ''}>Off the low</option></select>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;line-height:1.45">${_gamesFormFourballConfig.net_mode === 'low' ? 'Strokes come off the lowest handicap among the paired players, so the best player plays to scratch.' : 'Everyone plays off their own strokes, from the list below.'}</div></div>` : '';
   return `<div class="host-form-field" id="games-form-hcp-field">
-      <label>⚖️ Gross or Net</label>
-      ${hasSkins ? seg('skins_basis', '⛳ Skins') : ''}${hasBp ? seg('birdiepay_basis', '🐤 Birdie Payouts') : ''}
-      <label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;margin:2px 0 8px;cursor:pointer"><input type="checkbox" ${_gamesFormHcp.ranking === true ? 'checked' : ''} onchange="setGamesFormRanking(this.checked)">
-        <span>📊 Also show a Net ranking (for fun, no money) <span style="color:var(--text-muted)">— games stay as set above</span></span></label>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Net = gross score minus the strokes a player receives on that hole (by the tee's hole handicap). Settled here, before the first tee.</div>
+      <label>⚖️ Handicap strokes</label>
+      <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:6px">Applies to: ${netNames.map(escapeHtml).join(', ')}. Net is the gross score minus the strokes a player gets on that hole, settled here before the first tee.</div>
+      ${modeBlock}${rankingRow}
       ${rows}</div>`;
 }
 function refreshGamesFormHcpSection() {
   const el = document.getElementById('games-form-hcp-section');
   if (el) el.innerHTML = gatheringGamesHcpSectionHtml();
 }
-function setGamesFormBasis(key, val) { _gamesFormHcp[key] = val === 'net' ? 'net' : 'gross'; refreshGamesFormHcpSection(); }
+function setGamesFormBasis(key, val) { _gamesFormHcp[key] = val === 'net' ? 'net' : 'gross'; refreshGamesFormSkinsSection(); const bp = document.getElementById('games-form-birdiepay-section'); if (bp) bp.innerHTML = gatheringGamesBirdiepaySectionHtml(); refreshGamesFormHcpSection(); }
 function setGamesFormAllowance(v) {
   const n = parseFloat(v);
   _gamesFormHcp.allowance = Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 95;

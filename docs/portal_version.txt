@@ -1,3 +1,6 @@
+v4.19.1 · 2026-10-12
+Deployed: 2026-10-12 (Games setup is cleaner. Each game card now has the same layout: a Scored on box (Gross or Net) and, for period games, a Period box, side by side, both dropdowns. Skins and Birdie Payouts get their own Scored on box. Everything about strokes now lives in one Handicap strokes card that only appears when a game is Net: allowance, tee for everyone, Fourball's own strokes or off the low, the Net ranking checkbox and the player list. No Worker change.)
+
 v4.19.0 · 2026-10-12
 Deployed: 2026-10-12 (Scoring periods, and a new game. Every period game now asks how the round is cut up: whole round, Front/Back, Front/Back/Total or 6/6/6, each period its own pot with the ante split evenly. Fourball uses the same picker and gains Front/Back. New game: Low Score, the lowest individual gross or net score in each period wins that pot. A tie for low is a push and the antes go back (no blood). Low Score has its own results tab, summary column and event-card row. Needs the BFE Worker updated.)
 

@@ -36,7 +36,7 @@ function sandbox({ names = ['Ann','Bob','Cy','Dee'], members = [] } = {}) {
     isOpenSpotName: () => false, regData: [], gatheringRegData: names.map(p => ({ gatheringId: 7, player: p, status: 'Yes' })) };
   vm.createContext(ctx); ctx.BFEngine = E;
   E.getGame('fourball').released = true;
-  const fns = ['gamesPeriodPickerHtml','periodExplainHtml','periodSegCount','lowscoreSegCount','snapToPeriods','fourballSegCount','fourballSnapToSegments','setGamesFormFourballPeriod','setGamesFormFourballWinBy','setGamesFormFourballScope','gamesFormFourballNames','gatheringGamesFourballSectionHtml','refreshGamesFormFourballSection','setGamesFormFourballDollarPerPlayer','setGamesFormFourballBasis','setGamesFormFourballNetMode','setGamesFormFourballMember','addGamesFormFourballPair','removeGamesFormFourballPair','clearGamesFormFourballPairs','suggestGamesFormFourballPairs','gamesFormPlayerNames','gamesFormOverCommit','updateGamesFormPotPreview','submitGatheringGames','gamesFormHcpIsNet','gamesFormEntry','gamesFormResolvePlayerHcp','gamesFormBuildHandicapConfig','refreshGamesFormHcpSection'];
+  const fns = ['gamesBasisSelectHtml','gamesScoredPeriodRowHtml','gamesPeriodPickerHtml','periodExplainHtml','periodSegCount','lowscoreSegCount','snapToPeriods','fourballSegCount','fourballSnapToSegments','setGamesFormFourballPeriod','setGamesFormFourballWinBy','setGamesFormFourballScope','gamesFormFourballNames','gatheringGamesFourballSectionHtml','refreshGamesFormFourballSection','setGamesFormFourballDollarPerPlayer','setGamesFormFourballBasis','setGamesFormFourballNetMode','setGamesFormFourballMember','addGamesFormFourballPair','removeGamesFormFourballPair','clearGamesFormFourballPairs','suggestGamesFormFourballPairs','gamesFormPlayerNames','gamesFormOverCommit','updateGamesFormPotPreview','submitGatheringGames','gamesFormHcpIsNet','gamesFormEntry','gamesFormResolvePlayerHcp','gamesFormBuildHandicapConfig','refreshGamesFormHcpSection'];
   vm.runInContext(`
     let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(['fourball']); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = ${names.length};
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] }; let _gamesFormBirdieballConfig = { dollar_per_player: null }; let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; let _gamesFormBirdiepayPars = null;
@@ -62,7 +62,7 @@ const sec = t => t.dom.window.document.getElementById('games-form-fourball-secti
   ok(!/Net strokes/.test(html), 'F: net-mode toggle hidden on gross');
   a.setGamesFormFourballBasis('net'); a.setGamesFormFourballNetMode('low');
   eq([a.cfg().basis, a.cfg().net_mode], ['net', 'low'], 'F: net + low set');
-  ok(/Off the low/.test(a.gatheringGamesFourballSectionHtml()), 'F: net-mode toggle shown on net');
+  ok(/<option value="net" selected>/.test(a.gatheringGamesFourballSectionHtml()) && !/Off the low/.test(a.gatheringGamesFourballSectionHtml()), 'F: Scored on shows Net; the strokes mode lives in the Handicap strokes card');
   a.setGamesFormFourballBasis('gross');
   // taken players are not offered in other pickers
   a.removeGamesFormFourballPair(1); a.addGamesFormFourballPair();
