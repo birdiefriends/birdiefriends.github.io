@@ -1,3 +1,6 @@
+v4.20.0 · 2026-10-12
+Deployed: 2026-10-12 (Net results now show where handicap strokes landed. In the hole-by-hole map, a small dot under a hole means a player got a stroke there (teal for the first pair, amber for the second); tap the hole to see who got one and that its scores are already net. The Summary lists each player's strokes under their name, and Low Score lists each player's strokes and holes. Strokes follow Off the low when that is chosen. Rounds closed before this update show no dots. Also: the pot preview says period pots. Worker needs no change, only its version tag differs.)
+
 v4.19.3 · 2026-10-12
 Deployed: 2026-10-12 (Results now say how the game was played. The Summary tab has a How it was played box for Fourball and Low Score: the scoring period (for example 6 / 6 / 6, holes 1-6, 7-12 and 13-18, 3 pots), how each pot is won, and Gross or Net. The Fourball and Low Score tab titles carry the period too. Also: when Games is saved, the portal now checks that the server kept the scoring period and warns if an older Worker dropped it. No Worker change.)
 

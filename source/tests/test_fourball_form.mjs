@@ -131,7 +131,7 @@ const sec = t => t.dom.window.document.getElementById('games-form-fourball-secti
   eq([a.cfg().period, a.cfg().win_by, a.cfg().scope], ['round', 'strokes', 'field'], 'S: back to one pot resets the variant');
   a.setGamesFormFourballPeriod('sixes'); a.setGamesFormFourballWinBy('holes'); a.setGamesFormFourballDollarPerPlayer('4');
   const prev = t.dom.window.document.getElementById('games-form-pot-preview').innerHTML;
-  ok(/3 segment pots/.test(prev), 'S: pot preview says it is cut into 3 segment pots');
+  ok(/3 period pots/.test(prev), 'S: pot preview says it is cut into 3 period pots');
   await a.submitGatheringGames(7);
   eq(t.posts[0].game_configs.fourball, { dollar_per_player: 12, basis: 'gross', net_mode: 'own', pairs: [['Ann','Dee'],['Bob','Cy']], period: 'sixes', win_by: 'holes', scope: 'group' }, 'S: payload carries the variant, total ante = $4 x 3');
   const o = sandbox(); o.api.suggestGamesFormFourballPairs(); o.api.setGamesFormFourballDollarPerPlayer('5'); await o.api.submitGatheringGames(7);

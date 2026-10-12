@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.16.1';
+  const ENGINE_VERSION = '1.16.2';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -474,6 +474,16 @@
         const sp = inputs.hcSpecs.get(norm(nm)) || {};
         return netCard(c, Object.assign({}, sp, { strokes: strokesOf(nm) - lowStrokes }), inputs.hcSI).holes;
       };
+      // Which holes each player got a stroke on (after Off the low), so results can show who benefited and where.
+      const marksFor = nm => {
+        const c = cardBy.get(norm(nm)); if (!c) return null;
+        const eff = strokesOf(nm) - (mode === 'low' ? lowStrokes : 0);
+        const nc = netCard(c, Object.assign({}, inputs.hcSpecs.get(norm(nm)) || {}, { strokes: eff }), inputs.hcSI);
+        const off = c.hole_count === 9 && c.hole_half === 'back' ? 9 : 0;
+        const got = {}; nc.received.forEach((k, i) => { if (k) got[off + i + 1] = k; });
+        return { player: L.canon(nm), strokes: eff, got };
+      };
+      const stroke_marks = netOk ? [...new Set(pairsCfg.flat().map(norm))].map(k => pairsCfg.flat().find(n => norm(n) === k)).map(marksFor).filter(Boolean) : null;
       const rows = pairsCfg.map(pr => {
         const names = pr.map(nm => L.canon(nm));
         const arrs = pr.map(holesFor).filter(a => a);
@@ -537,7 +547,7 @@
         unalloc2 += Math.max(0, pot2 - used);
         state.unallocated += unalloc2;
         return Object.assign({
-          pairs: rows.map(r => r.pair), pot: pot2, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode } : {}),
+          pairs: rows.map(r => r.pair), pot: pot2, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode, stroke_marks } : {}),
           ...(wantNet && !netOk ? { net_missing: true } : {}),
           standings: rows.map((r, i) => Object.assign({}, r, { scores: arrs[i], total: r.complete ? r.total : null }))
             .sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
@@ -567,7 +577,7 @@
       }
       state.unallocated += unalloc;
       return Object.assign({
-        pairs: rows.map(r => r.pair), pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode } : {}),
+        pairs: rows.map(r => r.pair), pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode, stroke_marks } : {}),
         ...(wantNet && !netOk ? { net_missing: true } : {}),
         standings: rows.slice().sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
         winners: winners.map(w => w.pair), per_pair: perPair, per_player: perPlayer, given_back_each: givenBackEach
@@ -614,7 +624,13 @@
       const capped = pot < configuredPot;
       const ratio = configuredPot > 0 ? pot / configuredPot : 0;
       state.remaining -= pot;
-      const head = { pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: 'own' } : {}), ...(wantNet && !netOk ? { net_missing: true } : {}), period: plan.period };
+      const stroke_marks = netOk ? rows.map(r => {
+        const c = cardBy.get(norm(r.player)); const nb = c && netCard(c, inputs.hcSpecs && inputs.hcSpecs.get(norm(r.player)), inputs.hcSI);
+        const off = c && c.hole_count === 9 && c.hole_half === 'back' ? 9 : 0; const got = {};
+        if (nb) nb.received.forEach((k, i) => { if (k) got[off + i + 1] = k; });
+        return { player: r.player, strokes: nb ? nb.strokes : 0, got };
+      }) : null;
+      const head = { pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: 'own', stroke_marks } : {}), ...(wantNet && !netOk ? { net_missing: true } : {}), period: plan.period };
       const tail = capped ? { capped: true, configured_pot: configuredPot } : {};
       const strip = r => ({ player: r.player, complete: r.complete, played: r.played, total: r.total, holes: r.holes });
       if (plan.period === 'round' || rows.length < 2) {

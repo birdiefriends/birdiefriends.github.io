@@ -3620,7 +3620,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.16.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.16.2"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -16072,16 +16072,25 @@ function fourballResultsHeatHtml(f, fbCfg) {
   if (!mv || !mv.groups.some(g => !g.solo && g.holes.some(h => h.res))) return '';
   const TEAL = '#5DCAA5', AMB = '#e0b44c', nm = x => String(x).trim().toLowerCase();
   const holesMode = mv.win_by === 'holes', seg = mv.mode !== 'total';
+  const marks = new Map((f.stroke_marks || []).map(m => [nm(m.player), m]));
+  const gotOf = (names, hole) => names.map(n => { const m = marks.get(nm(n)); const k = m && m.got ? Number(m.got[hole]) || 0 : 0; return k ? { n: String(n).trim().split(/\s+/)[0], k } : null; }).filter(Boolean);
+  const anyMarks = [...marks.values()].some(m => m.got && Object.keys(m.got).length);
   const byOf = (pair, hole) => { const r = (f.standings || []).find(x => x.pair.map(nm).join('|') === pair.map(nm).join('|')); const x = r && (r.holes || []).find(y => y.hole === hole); return x && x.by ? x.by.map(n => String(n).trim().split(/\s+/)[0]) : []; };
+  const dotsHtml = (a, ca, b, cb) => {
+    if (!anyMarks) return '';
+    const dot = c => `<span style="width:5px;height:5px;border-radius:50%;background:${c};display:inline-block"></span>`;
+    const n = x => (x || []).reduce((t, y) => t + y.k, 0);
+    return `<span style="display:flex;justify-content:center;gap:2px;height:6px;margin-top:2px" aria-hidden="true">${Array.from({ length: n(a) }, () => dot(ca)).join('')}${Array.from({ length: n(b) }, () => dot(cb)).join('')}</span>`;
+  };
   const blocks = mv.groups.filter(g => !g.solo && g.holes.some(h => h.res)).map(g => {
     const [pa, pb] = g.pairs, iA = fbIni(pa.names, pb.names), iB = fbIni(pb.names, pa.names);
     const cell = h => {
-      if (!h.res) return `<span style="height:40px;border-radius:7px;border:1px dashed rgba(0,0,0,0.18);box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:0.56rem;color:var(--text-muted);font-family:'DM Mono',monospace;line-height:1">${h.hole}</span>`;
+      if (!h.res) return `<span style="height:${anyMarks ? 46 : 40}px;border-radius:7px;border:1px dashed rgba(0,0,0,0.18);box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:0.56rem;color:var(--text-muted);font-family:'DM Mono',monospace;line-height:1">${h.hole}</span>`;
       const won = h.res === 'T' ? 'Halved' : (h.res === 'A' ? iA : iB) + ' won';
-      const d = { hole: h.hole, ia: iA, ib: iB, na: pa.names.map(n => String(n).trim().split(/\s+/)[0]).join(' & '), nb: pb.names.map(n => String(n).trim().split(/\s+/)[0]).join(' & '), a: h.a, b: h.b, res: h.res, bya: byOf(pa.names, h.hole), byb: byOf(pb.names, h.hole) };
+      const d = { hole: h.hole, ia: iA, ib: iB, na: pa.names.map(n => String(n).trim().split(/\s+/)[0]).join(' & '), nb: pb.names.map(n => String(n).trim().split(/\s+/)[0]).join(' & '), a: h.a, b: h.b, res: h.res, bya: byOf(pa.names, h.hole), byb: byOf(pb.names, h.hole), sa: gotOf(pa.names, h.hole), sb: gotOf(pb.names, h.hole) };
       const bg = h.res === 'A' ? TEAL : h.res === 'B' ? AMB : 'rgba(0,0,0,0.1)';
       const col = h.res === 'A' ? '#04342a' : h.res === 'B' ? '#3a2a00' : 'var(--text-muted)';
-      return `<button type="button" data-fbres="${escapeHtml(JSON.stringify(d))}" onclick="fbResOpen(this)" aria-label="Hole ${h.hole}, ${escapeHtml(won)}" style="height:40px;border-radius:7px;border:0;padding:3px 0;box-sizing:border-box;cursor:pointer;background:${bg};color:${col};font-family:'DM Mono',monospace;font-size:0.72rem;font-weight:700;width:100%"><span style="font-size:0.54rem;opacity:0.7;display:block;line-height:1;font-weight:500">${h.hole}</span>${h.res === 'T' ? '–' : escapeHtml(h.res === 'A' ? iA : iB)}</button>`;
+      return `<button type="button" data-fbres="${escapeHtml(JSON.stringify(d))}" onclick="fbResOpen(this)" aria-label="Hole ${h.hole}, ${escapeHtml(won)}${gotOf(pa.names.concat(pb.names), h.hole).length ? ', strokes: ' + gotOf(pa.names.concat(pb.names), h.hole).map(x => x.n + (x.k > 1 ? ' x' + x.k : '')).join(', ') : ''}" style="height:${anyMarks ? 46 : 40}px;border-radius:7px;border:0;padding:3px 0;box-sizing:border-box;cursor:pointer;background:${bg};color:${col};font-family:'DM Mono',monospace;font-size:0.72rem;font-weight:700;width:100%"><span style="font-size:0.54rem;opacity:0.7;display:block;line-height:1;font-weight:500">${h.hole}</span>${h.res === 'T' ? '–' : escapeHtml(h.res === 'A' ? iA : iB)}${dotsHtml(d.sa, '#0a5c47', d.sb, '#7a5200')}</button>`;
     };
     const grid = hs => `<div style="display:grid;gap:4px;grid-template-columns:repeat(${hs.length === 6 ? 6 : 9},minmax(0,1fr))">${hs.map(cell).join('')}</div>`;
     const rows = (seg ? g.segs : [{ label: 'Front 9', from: 1, to: 9 }, { label: 'Back 9', from: 10, to: 18 }]).map(sg => {
@@ -16093,7 +16102,7 @@ function fourballResultsHeatHtml(f, fbCfg) {
     const chip = (c, fg, t) => `<span style="background:${c};color:${fg};font-weight:700;font-size:0.72rem;border-radius:6px;padding:2px 6px">${escapeHtml(t)}</span>`;
     return `<div style="padding:8px 0;border-top:1px solid rgba(0,0,0,0.06)"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:0.76rem;margin-bottom:6px">${mv.groups.length > 1 ? `<b>Group ${g.n}</b>` : ''}${chip(TEAL, '#04342a', iA)} ${fbShort(pa.names)} <span style="color:var(--text-muted)">vs</span> ${chip(AMB, '#3a2a00', iB)} ${fbShort(pb.names)}</div>${rows}${story}</div>`;
   }).join('');
-  return `<div style="font-size:0.7rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:12px 0 2px">Hole by hole</div><div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Who won each hole. Tap a hole for the scores.</div><div data-fbres-wrap>${blocks}</div>`;
+  return `<div style="font-size:0.7rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:12px 0 2px">Hole by hole</div><div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Who won each hole. Tap a hole for the scores.${anyMarks ? ' A dot is a handicap stroke someone got on that hole: teal for the first pair, amber for the second.' : ''}</div><div data-fbres-wrap>${blocks}</div>`;
 }
 function fbResOpen(btn) {
   const all = [...btn.closest('[data-fbres-wrap]').querySelectorAll('button[data-fbres]')];
@@ -16104,13 +16113,13 @@ function fbResOpen(btn) {
   const prev = all[i - 1] && JSON.parse(all[i - 1].getAttribute('data-fbres')), next = all[i + 1] && JSON.parse(all[i + 1].getAttribute('data-fbres'));
   const same = x => x && x.na === d.na && x.nb === d.nb;
   const E = escapeHtml, TEAL = '#5DCAA5', AMB = '#e0b44c';
-  const row = (ini, c, fg, names, bb, won, by) => `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:10px;background:${won ? (c === TEAL ? 'rgba(93,202,165,0.18)' : 'rgba(224,180,76,0.18)') : 'rgba(255,255,255,0.05)'};border:1px solid ${won ? c : 'transparent'}"><span style="background:${c};color:${fg};font-weight:700;font-size:0.76rem;border-radius:7px;padding:4px 7px">${E(ini)}</span><div style="flex:1;min-width:0"><div style="font-size:0.88rem;font-weight:600">${E(names)}</div>${by.length ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.6)">counted: ${by.map(E).join(' &amp; ')}</div>` : ''}</div><div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.25rem;font-weight:700">${bb}</div><div style="font-size:0.68rem;color:rgba(255,255,255,0.6)">${won ? 'won the hole' : d.res === 'T' ? 'halved' : 'lost'}</div></div></div>`;
+  const row = (ini, c, fg, names, bb, won, by, st) => `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:10px;background:${won ? (c === TEAL ? 'rgba(93,202,165,0.18)' : 'rgba(224,180,76,0.18)') : 'rgba(255,255,255,0.05)'};border:1px solid ${won ? c : 'transparent'}"><span style="background:${c};color:${fg};font-weight:700;font-size:0.76rem;border-radius:7px;padding:4px 7px">${E(ini)}</span><div style="flex:1;min-width:0"><div style="font-size:0.88rem;font-weight:600">${E(names)}</div>${by.length ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.6)">counted: ${by.map(E).join(' &amp; ')}</div>` : ''}${(st || []).length ? `<div style="font-size:0.7rem;color:#ffe08a">${st.map(x => `${E(x.n)} got ${x.k > 1 ? x.k + ' strokes' : 'a stroke'} ${'●'.repeat(x.k)}`).join(' · ')}</div>` : ''}</div><div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.25rem;font-weight:700">${bb}</div><div style="font-size:0.68rem;color:rgba(255,255,255,0.6)">${won ? 'won the hole' : d.res === 'T' ? 'halved' : 'lost'}</div></div></div>`;
   const step = (j, t, ok) => `<button type="button" ${ok ? `onclick="fbResStep(${j})"` : 'disabled'} aria-label="${t === '‹' ? 'Previous' : 'Next'} hole" style="width:44px;height:44px;border-radius:10px;border:0;background:rgba(255,255,255,${ok ? 0.1 : 0.04});color:#fff;font-size:1.1rem;cursor:pointer">${t}</button>`;
   ov.innerHTML = `<div onclick="fbResClose()" style="position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9990"></div>
     <div role="dialog" aria-label="Hole ${d.hole} details" style="position:fixed;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:#0b3b31;color:#fff;border-radius:18px 18px 0 0;padding:16px 16px 24px;z-index:9991;box-shadow:0 -8px 30px rgba(0,0,0,0.4)">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><div style="flex:1;font-size:1.05rem;font-weight:700">Hole ${d.hole}</div>${step(i - 1, '‹', same(prev))}${step(i + 1, '›', same(next))}<button type="button" onclick="fbResClose()" aria-label="Close" style="width:44px;height:44px;border-radius:10px;border:0;background:transparent;color:rgba(255,255,255,0.7);font-size:1.2rem;cursor:pointer">✕</button></div>
-      ${row(d.ia, TEAL, '#04342a', d.na, d.a, d.res === 'A', d.bya)}${row(d.ib, AMB, '#3a2a00', d.nb, d.b, d.res === 'B', d.byb)}
-      <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">Each pair's better ball${d.res === 'T' ? '. Halved, so neither pair gains' : ''}.</div></div>`;
+      ${row(d.ia, TEAL, '#04342a', d.na, d.a, d.res === 'A', d.bya, d.sa)}${row(d.ib, AMB, '#3a2a00', d.nb, d.b, d.res === 'B', d.byb, d.sb)}
+      <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">Each pair's better ball${((d.sa || []).length + (d.sb || []).length) ? ' (net: the stroke is already taken off)' : ''}${d.res === 'T' ? '. Halved, so neither pair gains' : ''}.</div></div>`;
   fbResOpen._all = all; fbResOpen._i = i;
 }
 function fbResStep(j) { const a = fbResOpen._all; if (a && a[j]) fbResOpen(a[j]); }
@@ -16141,6 +16150,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     (rk.gross || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.gross = r.total; e.strokes = r.strokes; byName.set(norm(r.player), e); });
     (rk.net || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.net = r.total; byName.set(norm(r.player), e); });
   }
+  const strokesBy = new Map(((s.handicap && s.handicap.players) || []).map(p => [norm(p.player), Number(p.strokes) || 0]));
   const people = [...byName.values()];
   const metric = { money: p => -p.total, net: p => (p.net == null ? Infinity : p.net), gross: p => (p.gross == null ? Infinity : p.gross) };
   const sortedBy = mode => {
@@ -16165,7 +16175,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     const gm = games.map(g => cell(p[g[0]] ? money(p[g[0]]) : '<span style="color:var(--text-hint)">·</span>')).join('');
     return `<div style="display:grid;grid-template-columns:${cols};gap:4px;align-items:center;font-size:0.82rem;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06)">
       <span style="color:var(--text-muted);font-size:0.74rem">${place === '' ? '' : (tied ? 'T' : '') + place}</span>
-      <span style="min-width:0;line-height:1.15" title="${esc(p.player)}">${(([f, l]) => `<span style="display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f)}</span>${l ? `<span style="display:block;font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l)}</span>` : ''}`)(splitName(p.player))}</span>${sc}${gm}${cell(p.total ? money(p.total) : '·', true)}</div>`;
+      <span style="min-width:0;line-height:1.15" title="${esc(p.player)}">${(([f, l]) => `<span style="display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f)}</span>${l || strokesBy.has(norm(p.player)) ? `<span style="display:block;font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l)}${strokesBy.has(norm(p.player)) ? `${l ? ' · ' : ''}${strokesBy.get(norm(p.player))} stroke${Math.abs(strokesBy.get(norm(p.player))) === 1 ? '' : 's'}` : ''}</span>` : ''}`)(splitName(p.player))}</span>${sc}${gm}${cell(p.total ? money(p.total) : '·', true)}</div>`;
   }).join('');
   const modes = hasRank ? [['net', 'Net'], ['gross', 'Gross'], ['money', '$']] : [['money', '$']];
   const defMode = hasRank ? 'net' : 'money';
@@ -16313,7 +16323,8 @@ function renderGatheringPayoutHtml(s, fbCfg) {
       h += (f.standings || []).map(r => {
         const won = (f.winners || []).some(w => norm(w) === norm(r.player));
         const place = r.complete ? (r.place != null ? `${r.tied ? 'T' : ''}${r.place}` : '') : '—';
-        return line(`<span style="color:var(--text-muted);display:inline-block;min-width:1.4rem">${place}</span><b>${esc(r.player)}</b>${r.complete ? '' : ` <span style="color:var(--text-muted)">(${r.played} holes in)</span>`}`, r.complete ? `${esc(r.total)}${won ? ` · ${money(f.per_player)}` : ''}` : '—');
+        const lm = (f.stroke_marks || []).find(m => norm(m.player) === norm(r.player));
+        return line(`<span style="color:var(--text-muted);display:inline-block;min-width:1.4rem">${place}</span><b>${esc(r.player)}</b>${lm && lm.strokes ? ` <span style="color:var(--text-muted)">(${lm.strokes} stroke${Math.abs(lm.strokes) === 1 ? '' : 's'}: holes ${Object.keys(lm.got).join(', ') || 'none'})</span>` : ''}${r.complete ? '' : ` <span style="color:var(--text-muted)">(${r.played} holes in)</span>`}`, r.complete ? `${esc(r.total)}${won ? ` · ${money(f.per_player)}` : ''}` : '—');
       }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No cards were turned in</div>`;
       if (f.push) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">Tied for low, so it's a push — ${money(f.given_back_each)} back to each player</div>`;
       else if (!(f.winners || []).length) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">No one finished all their holes — ${money(f.given_back_each)} back to each player</div>`;
@@ -19445,7 +19456,7 @@ function updateGamesFormPotPreview(yesCount) {
   if (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.dollar_per_player > 0) {
     const fbCost = _gamesFormFourballConfig.dollar_per_player * yesCount;
     remaining -= fbCost;
-    lines.push(fourballSegCount(_gamesFormFourballConfig) > 1 ? `🤝 Fourball: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), cut into ${fourballSegCount(_gamesFormFourballConfig)} segment pots` : `🤝 Fourball: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), the winning pair splits it`);
+    lines.push(fourballSegCount(_gamesFormFourballConfig) > 1 ? `🤝 Fourball: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), cut into ${fourballSegCount(_gamesFormFourballConfig)} period pots` : `🤝 Fourball: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), the winning pair splits it`);
   }
   if (_gamesFormSelected.has('lowscore') && _gamesFormLowscoreConfig.dollar_per_player > 0) {
     const lsCost = _gamesFormLowscoreConfig.dollar_per_player * yesCount, lsN = lowscoreSegCount(_gamesFormLowscoreConfig);
