@@ -15,7 +15,7 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, pars
   regData: [{ gatheringId: 7, status: 'Yes' }, { gatheringId: 7, status: 'Yes' }, { gatheringId: 7, status: 'Yes' }, { gatheringId: 7, status: 'Yes' }],
   gameInfoBtnHtml: () => '', gameInfoPanelHtml: () => '' };
 vm.createContext(ctx);
-vm.runInContext(['gpTabStyle','gpBtnStyle','renderGatheringPayoutHtml','gcReconcile','gatheringAddon','gatheringGameDetailsBody'].map(n => extractFn(src, n)).join('\n') + '\nthis.f={renderGatheringPayoutHtml,gcReconcile,gatheringGameDetailsBody};', ctx);
+vm.runInContext(['gpTabStyle','gpBtnStyle','fbShort','fbIni','fourballResultsHeatHtml','renderGatheringPayoutHtml','gcReconcile','gatheringAddon','gatheringGameDetailsBody'].map(n => extractFn(src, n)).join('\n') + '\nthis.f={renderGatheringPayoutHtml,gcReconcile,gatheringGameDetailsBody};', ctx);
 
 const row = { games: ['fourball', 'skins'], dollar_per_player: 20, game_configs: { fourball: { dollar_per_player: 5, basis: 'gross', net_mode: 'own', pairs: [['Ann','Bob'],['Cy','Dee']] } } };
 const cards = [card('Ann', { 1: 3 }), card('Bob'), card('Cy'), card('Dee', { 2: 5 })];
@@ -25,7 +25,10 @@ const html = ctx.f.renderGatheringPayoutHtml(snap);
 ok(html.includes('🤝 Fourball'), 'tab present');
 ok(html.includes('Ann &amp; Bob') && html.includes('Cy &amp; Dee'), 'pairs listed');
 ok(/\$10 each/.test(html), 'winning pair paid per player');
-ok(html.includes('Hole by hole'), 'hole-by-hole detail');
+ok(html.includes('Hole by hole') && html.includes('data-fbres=') && html.includes('fbResOpen'), 'hole-by-hole heat map (tappable boxes)');
+ok(!html.includes('<details>'), 'the cramped text list is gone when the heat map shows');
+ok(/>AB</.test(html) && /aria-label="Hole 1, AB won"/.test(html) && /aria-label="Hole 2, CD won"/.test(html) || /aria-label="Hole 2, Halved"|Hole 2, AB won/.test(html), 'boxes carry the winner initials');
+{ const old = { ...snap, fourball: { ...snap.fourball } }; delete old.fourball.pairs; const h2 = ctx.f.renderGatheringPayoutHtml(old, row.game_configs.fourball); ok(h2.includes('data-fbres='), 'older closed games: pairs come from the saved game config'); const h3 = ctx.f.renderGatheringPayoutHtml(old); ok(!h3.includes('data-fbres=') && h3.includes('Ann &amp; Bob'), 'no pairs anywhere: results still render without the strip'); }
 ok(html.includes('grid-template-columns') && html.includes('🤝</span>'), 'summary column for fourball');
 ok(!ctx.f.renderGatheringPayoutHtml(E.computeGatheringGamesPayout({ games: ['skins'], dollar_per_player: 20 }, cards, {}, [])).includes('Fourball'), 'no panel when game not played');
 // incomplete pair + net missing + all-incomplete give-back

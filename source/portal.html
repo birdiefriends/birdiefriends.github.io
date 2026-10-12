@@ -3614,7 +3614,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.15.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.15.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -16029,7 +16029,58 @@ function openStrokeCard(evtId) {
 // Shared renderer for a computed/saved payout snapshot — used by the Close
 // preview AND the My History detail, so what the host confirmed is exactly
 // what players see.
-function renderGatheringPayoutHtml(s) {
+// Hole-by-hole heat map for the Fourball results (the keepsake of the round): one strip per foursome,
+// each box carries the initials of the pair that won the hole. Built from the saved result, so it works on closed games.
+function fourballResultsHeatHtml(f, fbCfg) {
+  const pairs = f.pairs || (fbCfg && fbCfg.pairs);
+  if (!pairs || !pairs.length || typeof BFEngine === 'undefined') return '';
+  let mv;
+  try { mv = BFEngine.fourballMatchView(f, { pairs, segments: f.segments && f.segments.mode, win_by: f.segments && f.segments.win_by, scope: f.segments && f.segments.scope }); } catch (e) { return ''; }
+  if (!mv || !mv.groups.some(g => !g.solo && g.holes.some(h => h.res))) return '';
+  const TEAL = '#5DCAA5', AMB = '#e0b44c', nm = x => String(x).trim().toLowerCase();
+  const holesMode = mv.win_by === 'holes', seg = mv.mode !== 'total';
+  const byOf = (pair, hole) => { const r = (f.standings || []).find(x => x.pair.map(nm).join('|') === pair.map(nm).join('|')); const x = r && (r.holes || []).find(y => y.hole === hole); return x && x.by ? x.by.map(n => String(n).trim().split(/\s+/)[0]) : []; };
+  const blocks = mv.groups.filter(g => !g.solo && g.holes.some(h => h.res)).map(g => {
+    const [pa, pb] = g.pairs, iA = fbIni(pa.names, pb.names), iB = fbIni(pb.names, pa.names);
+    const cell = h => {
+      if (!h.res) return `<span style="height:40px;border-radius:7px;border:1px dashed rgba(0,0,0,0.18);box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:0.56rem;color:var(--text-muted);font-family:'DM Mono',monospace;line-height:1">${h.hole}</span>`;
+      const won = h.res === 'T' ? 'Halved' : (h.res === 'A' ? iA : iB) + ' won';
+      const d = { hole: h.hole, ia: iA, ib: iB, na: pa.names.map(n => String(n).trim().split(/\s+/)[0]).join(' & '), nb: pb.names.map(n => String(n).trim().split(/\s+/)[0]).join(' & '), a: h.a, b: h.b, res: h.res, bya: byOf(pa.names, h.hole), byb: byOf(pb.names, h.hole) };
+      const bg = h.res === 'A' ? TEAL : h.res === 'B' ? AMB : 'rgba(0,0,0,0.1)';
+      const col = h.res === 'A' ? '#04342a' : h.res === 'B' ? '#3a2a00' : 'var(--text-muted)';
+      return `<button type="button" data-fbres="${escapeHtml(JSON.stringify(d))}" onclick="fbResOpen(this)" aria-label="Hole ${h.hole}, ${escapeHtml(won)}" style="height:40px;border-radius:7px;border:0;padding:3px 0;box-sizing:border-box;cursor:pointer;background:${bg};color:${col};font-family:'DM Mono',monospace;font-size:0.72rem;font-weight:700;width:100%"><span style="font-size:0.54rem;opacity:0.7;display:block;line-height:1;font-weight:500">${h.hole}</span>${h.res === 'T' ? '–' : escapeHtml(h.res === 'A' ? iA : iB)}</button>`;
+    };
+    const grid = hs => `<div style="display:grid;gap:4px;grid-template-columns:repeat(${hs.length === 6 ? 6 : 9},minmax(0,1fr))">${hs.map(cell).join('')}</div>`;
+    const rows = (seg ? g.segs : [{ label: 'Front 9', from: 1, to: 9 }, { label: 'Back 9', from: 10, to: 18 }]).map(sg => {
+      const hs = g.holes.slice(sg.from - 1, sg.to), tally = seg && sg.played ? (sg.lead === 0 ? 'All square' : `${sg.lead > 0 ? iA : iB} ${Math.abs(sg.lead)} ${holesMode ? (Math.abs(sg.lead) === 1 ? 'hole' : 'holes') : (Math.abs(sg.lead) === 1 ? 'stroke' : 'strokes')} up`) : '';
+      return `<div style="margin-bottom:6px"><div style="display:flex;gap:8px;font-size:0.72rem;margin-bottom:3px"><span style="flex:1;font-weight:600;color:var(--text-muted)">${escapeHtml(sg.label)}</span><span style="font-weight:700">${escapeHtml(tally)}</span></div>${grid(hs)}</div>`;
+    }).join('');
+    const chip = (c, fg, t) => `<span style="background:${c};color:${fg};font-weight:700;font-size:0.72rem;border-radius:6px;padding:2px 6px">${escapeHtml(t)}</span>`;
+    return `<div style="padding:8px 0;border-top:1px solid rgba(0,0,0,0.06)"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:0.76rem;margin-bottom:6px">${mv.groups.length > 1 ? `<b>Group ${g.n}</b>` : ''}${chip(TEAL, '#04342a', iA)} ${fbShort(pa.names)} <span style="color:var(--text-muted)">vs</span> ${chip(AMB, '#3a2a00', iB)} ${fbShort(pb.names)}</div>${rows}</div>`;
+  }).join('');
+  return `<div style="font-size:0.7rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:12px 0 2px">Hole by hole</div><div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Who won each hole. Tap a hole for the scores.</div><div data-fbres-wrap>${blocks}</div>`;
+}
+function fbResOpen(btn) {
+  const all = [...btn.closest('[data-fbres-wrap]').querySelectorAll('button[data-fbres]')];
+  const i = all.indexOf(btn);
+  let ov = document.getElementById('fbres-sheet');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'fbres-sheet'; document.body.appendChild(ov); }
+  const d = JSON.parse(btn.getAttribute('data-fbres'));
+  const prev = all[i - 1] && JSON.parse(all[i - 1].getAttribute('data-fbres')), next = all[i + 1] && JSON.parse(all[i + 1].getAttribute('data-fbres'));
+  const same = x => x && x.na === d.na && x.nb === d.nb;
+  const E = escapeHtml, TEAL = '#5DCAA5', AMB = '#e0b44c';
+  const row = (ini, c, fg, names, bb, won, by) => `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:10px;background:${won ? (c === TEAL ? 'rgba(93,202,165,0.18)' : 'rgba(224,180,76,0.18)') : 'rgba(255,255,255,0.05)'};border:1px solid ${won ? c : 'transparent'}"><span style="background:${c};color:${fg};font-weight:700;font-size:0.76rem;border-radius:7px;padding:4px 7px">${E(ini)}</span><div style="flex:1;min-width:0"><div style="font-size:0.88rem;font-weight:600">${E(names)}</div>${by.length ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.6)">counted: ${by.map(E).join(' &amp; ')}</div>` : ''}</div><div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.25rem;font-weight:700">${bb}</div><div style="font-size:0.68rem;color:rgba(255,255,255,0.6)">${won ? 'won the hole' : d.res === 'T' ? 'halved' : 'lost'}</div></div></div>`;
+  const step = (j, t, ok) => `<button type="button" ${ok ? `onclick="fbResStep(${j})"` : 'disabled'} aria-label="${t === '‹' ? 'Previous' : 'Next'} hole" style="width:44px;height:44px;border-radius:10px;border:0;background:rgba(255,255,255,${ok ? 0.1 : 0.04});color:#fff;font-size:1.1rem;cursor:pointer">${t}</button>`;
+  ov.innerHTML = `<div onclick="fbResClose()" style="position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9990"></div>
+    <div role="dialog" aria-label="Hole ${d.hole} details" style="position:fixed;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:#0b3b31;color:#fff;border-radius:18px 18px 0 0;padding:16px 16px 24px;z-index:9991;box-shadow:0 -8px 30px rgba(0,0,0,0.4)">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><div style="flex:1;font-size:1.05rem;font-weight:700">Hole ${d.hole}</div>${step(i - 1, '‹', same(prev))}${step(i + 1, '›', same(next))}<button type="button" onclick="fbResClose()" aria-label="Close" style="width:44px;height:44px;border-radius:10px;border:0;background:transparent;color:rgba(255,255,255,0.7);font-size:1.2rem;cursor:pointer">✕</button></div>
+      ${row(d.ia, TEAL, '#04342a', d.na, d.a, d.res === 'A', d.bya)}${row(d.ib, AMB, '#3a2a00', d.nb, d.b, d.res === 'B', d.byb)}
+      <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">Each pair's better ball${d.res === 'T' ? '. Halved, so neither pair gains' : ''}.</div></div>`;
+  fbResOpen._all = all; fbResOpen._i = i;
+}
+function fbResStep(j) { const a = fbResOpen._all; if (a && a[j]) fbResOpen(a[j]); }
+function fbResClose() { const ov = document.getElementById('fbres-sheet'); if (ov) ov.remove(); }
+function renderGatheringPayoutHtml(s, fbCfg) {
   if (!s) return '';
   const esc = v => escapeHtml(String(v ?? ''));
   const money = v => '$' + (Number(v) || 0).toFixed(Number.isInteger(Number(v)) ? 0 : 2);
@@ -16150,15 +16201,17 @@ function renderGatheringPayoutHtml(s) {
         ${g.segments.map(x => line(`${esc(x.label)} <span style="color:var(--text-muted)">${money(x.pot)}${x.holes_won ? ` · holes ${esc(x.holes_won[0])}-${esc(x.holes_won[1])}` : ''}</span>`,
           x.status === 'won' ? `<b>${x.winner.map(esc).join(' &amp; ')}</b> ${money(x.per_player)} each` : (x.status === 'push' ? `<span style="color:var(--text-muted)">Push, ante back</span>` : `<span style="color:#b8860b">Not finished, ante back</span>`))).join('')}</div>`).join('');
     }
+    const heat = fourballResultsHeatHtml(f, fbCfg);
     const wk = new Set((f.winners || []).map(w => w.map(norm).sort().join('|')));
     h += (f.standings || []).map(r => {
       const key = r.pair.map(norm).sort().join('|');
       const won = wk.has(key);
       const place = r.complete ? (r.place != null ? `${r.tied ? 'T' : ''}${r.place}` : '') : '—';
-      const holes = (r.holes || []).filter(x => x.score != null);
+      const holes = heat ? [] : (r.holes || []).filter(x => x.score != null);
       return `<div style="padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.06)">${line(`<span style="color:var(--text-muted);display:inline-block;min-width:1.4rem">${place}</span><b>${r.pair.map(esc).join(' &amp; ')}</b>${r.complete ? '' : ` <span style="color:var(--text-muted)">(${r.played} holes in)</span>`}`, r.complete ? `${esc(r.total)}${won && f.per_player ? ` · ${money(f.per_player)} each` : ''}` : '—')}
         ${holes.length ? `<details><summary style="font-size:0.72rem;color:var(--text-muted);cursor:pointer">Hole by hole</summary><div style="font-size:0.74rem;color:var(--text-muted);line-height:1.6">${holes.map(x => `#${esc(x.hole)} ${esc(x.score)}${x.by && x.by.length === 1 ? ` (${esc(x.by[0].split(' ')[0])})` : ''}`).join(' &nbsp;·&nbsp; ')}</div></details>` : ''}</div>`;
     }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No pairs were set up</div>`;
+    h += heat;
     if (!f.segments && !(f.winners || []).length) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">No pair finished all its holes — ${money(f.given_back_each)} back to each player</div>`;
     panels.push({ key: 'fb', tab: '🤝 Fourball', html: h });
   }
@@ -16458,7 +16511,7 @@ async function loadHistoryGameResults(key, groupEvt) {
     el.innerHTML = `
       <div style="background:rgba(255,255,255,0.55);border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:10px 12px;margin-bottom:10px">
         <div style="font-size:0.78rem;font-weight:800;margin-bottom:2px">🏆 Game Results</div>
-        ${renderGatheringPayoutHtml(cfg.payout_summary)}
+        ${renderGatheringPayoutHtml(cfg.payout_summary, (cfg.game_configs || {}).fourball)}
         ${isHost ? `<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;color:var(--text-muted)" onclick="reopenGatheringGames(${Number(gid)})">↩️ Reopen to fix &amp; re-close</button>` : ''}
       </div>`;
   } catch (e) {

@@ -1,3 +1,6 @@
+v4.17.3 · 2026-10-12
+Deployed: 2026-10-12 (Fourball results: the cramped Hole by hole text is replaced by the heat map. Each foursome gets a strip with the winning pair's initials in every hole box (a dash if halved), cut into Front/Back/Total or 6/6/6 with the tally when the game was played that way. Tap a hole for both pairs' counted scores and who counted. Works on rounds already closed.)
+
 v4.17.2 · 2026-10-12
 Deployed: 2026-10-12 (Live Actions, My group, redesigned: each hole box shows the initials of the pair that won it (a dash if halved), and the two pairs are named once at the top. The lead is stated one way, in the game's own unit (holes or strokes), in the header and in every segment. Tap a hole and a sheet opens with both pairs' scores and who won; tap a player's name in it for their full card.)
 

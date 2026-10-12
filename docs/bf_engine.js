@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.15.0';
+  const ENGINE_VERSION = '1.15.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -520,7 +520,7 @@
         unalloc2 += Math.max(0, pot2 - used);
         state.unallocated += unalloc2;
         return Object.assign({
-          pot: pot2, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode } : {}),
+          pairs: rows.map(r => r.pair), pot: pot2, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode } : {}),
           ...(wantNet && !netOk ? { net_missing: true } : {}),
           standings: rows.map((r, i) => Object.assign({}, r, { scores: arrs[i], total: r.complete ? r.total : null }))
             .sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
@@ -550,7 +550,7 @@
       }
       state.unallocated += unalloc;
       return Object.assign({
-        pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode } : {}),
+        pairs: rows.map(r => r.pair), pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode } : {}),
         ...(wantNet && !netOk ? { net_missing: true } : {}),
         standings: rows.slice().sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
         winners: winners.map(w => w.pair), per_pair: perPair, per_player: perPlayer, given_back_each: givenBackEach
