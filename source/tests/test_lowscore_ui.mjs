@@ -12,7 +12,7 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, pars
   escapeHtml: s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])),
   regData: [1,2,3].map(() => ({ gatheringId: 7, status: 'Yes' })), gameInfoBtnHtml: () => '', gameInfoPanelHtml: () => '' };
 vm.createContext(ctx);
-vm.runInContext(['gpTabStyle','gpBtnStyle','fbShort','fbIni','fourballResultsHeatHtml','renderGatheringPayoutHtml','gatheringAddon','gatheringGameDetailsBody','fbVariantText'].map(n => extractFn(src, n)).join('\n') + '\nthis.f={renderGatheringPayoutHtml,gatheringGameDetailsBody,fbVariantText};', ctx);
+vm.runInContext(['gpTabStyle','gpBtnStyle','fbShort','fbIni','fourballResultsHeatHtml','renderGatheringPayoutHtml','gatheringAddon','gatheringGameDetailsBody','fbVariantText','droppedGameSettings'].map(n => extractFn(src, n)).join('\n') + '\nthis.f={renderGatheringPayoutHtml,gatheringGameDetailsBody,fbVariantText,droppedGameSettings};', ctx);
 const cards = [card('Ann', { 1: 3, 12: 3 }), card('Bob', { 15: 2 }), card('Cy', { 4: 5, 5: 6 })];
 const run = (ls) => { const row = { games: ['lowscore'], dollar_per_player: 15, game_configs: { lowscore: { dollar_per_player: 15, basis: 'gross', ...ls } } }; return E.computeGatheringGamesPayout(row, cards, {}, []); };
 let h = ctx.f.renderGatheringPayoutHtml(run({}));
@@ -38,4 +38,20 @@ ok(f({ games: ['lowscore', 'skins'] }).lowscore.dollar_per_player === 5, 'with s
   ok(a.cfg().period === 'fbt' && a.cfg().dollar_per_player === 6, 'form: choosing a period snaps the ante to a multiple of the periods');
   ok(/Low Score/.test(a.html()) && /Scoring period/.test(a.html()), 'form: section renders with the picker');
 }
+// Summary says how it was played, tab titles carry the period
+{ const frow = { games: ['fourball'], dollar_per_player: 6, game_configs: { fourball: { dollar_per_player: 12, basis: 'net', net_mode: 'low', period: 'sixes', win_by: 'strokes', scope: 'group', pairs: [['Ann','Bob'],['Cy','Dee']] } } };
+  const four = [card('Ann'), card('Bob'), card('Cy'), card('Dee')];
+  const hh = ctx.f.renderGatheringPayoutHtml(E.computeGatheringGamesPayout(frow, four, {}, []));
+  ok(/How it was played/.test(hh) && /6 \/ 6 \/ 6/.test(hh) && /3 pots/.test(hh) && /won on strokes/.test(hh), 'summary spells out the period, pots and how each is won');
+  ok(/Fourball \(net, off the low · 6 \/ 6 \/ 6\)/.test(hh.replace(/<[^>]*>/g, '')) || /Fourball \(net, off the low · 6 \/ 6 \/ 6\)/.test(hh), 'Fourball tab title carries the period');
+  const one = ctx.f.renderGatheringPayoutHtml(E.computeGatheringGamesPayout({ ...frow, game_configs: { fourball: { ...frow.game_configs.fourball, period: undefined, win_by: undefined, scope: undefined } } }, four, {}, []));
+  ok(/one pot for the whole round/.test(one), 'one pot says so too');
+  const lh = ctx.f.renderGatheringPayoutHtml(run({ period: 'fbt' }));
+  ok(/How it was played/.test(lh) && /Front \/ Back \/ Total/.test(lh), 'Low Score summary names its period');
+}
+// the save check notices a server that drops the period
+ok(ctx.f.droppedGameSettings({ fourball: { period: 'sixes' } }, { fourball: {} }).join() === 'Fourball scoring period', 'dropped period is caught');
+ok(ctx.f.droppedGameSettings({ fourball: { period: 'sixes' } }, { fourball: { period: 'sixes' } }).length === 0, 'kept period passes');
+ok(ctx.f.droppedGameSettings({ lowscore: { period: 'round' } }, '{"lowscore":{}}').length === 0, 'whole round needs no period; JSON string accepted');
+ok(ctx.f.droppedGameSettings({ lowscore: { period: 'fbt' } }, null).join() === 'Low Score (whole game)', 'a missing game is caught');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

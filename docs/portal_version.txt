@@ -1,3 +1,6 @@
+v4.19.3 · 2026-10-12
+Deployed: 2026-10-12 (Results now say how the game was played. The Summary tab has a How it was played box for Fourball and Low Score: the scoring period (for example 6 / 6 / 6, holes 1-6, 7-12 and 13-18, 3 pots), how each pot is won, and Gross or Net. The Fourball and Low Score tab titles carry the period too. Also: when Games is saved, the portal now checks that the server kept the scoring period and warns if an older Worker dropped it. No Worker change.)
+
 v4.19.2 · 2026-10-12
 Deployed: 2026-10-12 (Event Day panel: new Reset to automatic button. It clears a forced Live start, Live Test Mode and any manual stop in one tap, so every round goes back to opening itself 15 minutes before its own tee time. Nothing is closed or calculated. Close Event is unchanged but its note now says it keeps that round off the Live Panel for good. No Worker change.)
 

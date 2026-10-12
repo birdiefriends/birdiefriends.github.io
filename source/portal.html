@@ -16171,6 +16171,20 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   const defMode = hasRank ? 'net' : 'money';
   const modeBtn = (m, lab) => `<button type="button" data-gp-btn="${m}" onclick="gpSort('${uid}','${m}')" style="${gpBtnStyle(m === defMode)}">${lab}</button>`;
   let sum = `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">${s.players_count} player${s.players_count === 1 ? '' : 's'} × ${money(s.dollar_per_player)} = <b style="color:var(--text)">${money(s.total_pot)} pot</b></div>`;
+  {
+    const lines = [];
+    const addLine = (icon, name, g, winBy) => {
+      if (!g) return;
+      const pk = g.segments ? g.segments.mode : (g.period || 'round');
+      const P = BFEngine.PERIODS[pk] || BFEngine.PERIODS.round;
+      const basis = g.basis === 'net' ? (g.net_mode === 'low' ? 'net, off the low' : 'net') : 'gross';
+      const how = pk === 'round' ? 'one pot for the whole round' : `<b>${esc(P.label)}</b>: ${esc(P.phrase)}, ${P.segs.length} pots${winBy ? `, each won on ${winBy === 'holes' ? 'holes won' : 'strokes'}` : ''}`;
+      lines.push(`<div style="padding:3px 0">${icon} <b>${name}</b> <span style="color:var(--text-muted)">(${basis})</span> · ${how}</div>`);
+    };
+    addLine('🤝', 'Fourball', s.fourball, s.fourball && s.fourball.segments ? s.fourball.segments.win_by : null);
+    addLine('🎯', 'Low Score', s.lowscore, null);
+    if (lines.length) sum += `<div style="font-size:0.78rem;line-height:1.45;background:rgba(255,255,255,0.45);border-radius:10px;padding:6px 10px;margin:2px 0 8px"><div style="font-size:0.68rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-hint);margin-bottom:2px">How it was played</div>${lines.join('')}</div>`;
+  }
   if (modes.length > 1) sum += `<div style="display:flex;align-items:center;gap:6px;margin:4px 0 6px"><span style="font-size:0.72rem;color:var(--text-muted)">Rank by</span>${modes.map(([m, l]) => modeBtn(m, l)).join('')}<span style="font-size:0.68rem;color:var(--text-hint)">scores are for fun</span></div>`;
   sum += modes.map(([m]) => `<div data-gp-sort="${m}" style="${m === defMode ? '' : 'display:none'}">${matrix(m, m === 'gross' ? 'gross' : 'net')}</div>`).join('');
   if (s.unallocated > 0) sum += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Rounding (whole dollars): ${money(s.unallocated)} stays with the host</div>`;
@@ -16226,7 +16240,8 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   if (s.fourball) {
     const f = s.fourball;
     const basisTxt = f.basis === 'net' ? (f.net_mode === 'low' ? 'net, off the low' : 'net, own strokes') : 'gross';
-    let h = label(`🤝 Fourball (${basisTxt}) — ${money(f.pot)}`);
+    const fpk = f.segments ? f.segments.mode : 'round';
+    let h = label(`🤝 Fourball (${basisTxt}${fpk === 'round' ? '' : ' · ' + (BFEngine.PERIODS[fpk] || BFEngine.PERIODS.round).label}) — ${money(f.pot)}`);
     if (f.net_missing) h += `<div style="font-size:0.72rem;color:#b8860b;margin-bottom:2px">Net was chosen but no strokes were on file, so this played gross</div>`;
     if (f.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(f.configured_pot)}, but the pot only had ${money(f.pot)} left</div>`;
     {
@@ -16275,7 +16290,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     const P = BFEngine.PERIODS[pk] || BFEngine.PERIODS.round;
     const net = f.basis === 'net' ? 'net' : 'gross';
     const nPl = (f.standings || []).length;
-    let h = label(`🎯 Low Score (${net}) — ${money(f.pot)}`);
+    let h = label(`🎯 Low Score (${net}${pk === 'round' ? '' : ' · ' + P.label}) — ${money(f.pot)}`);
     if (f.net_missing) h += `<div style="font-size:0.72rem;color:#b8860b;margin-bottom:2px">Net was chosen but no strokes were on file, so this played gross</div>`;
     if (f.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(f.configured_pot)}, but the pot only had ${money(f.pot)} left</div>`;
     const rules = [];
@@ -19458,6 +19473,20 @@ function updateGamesFormPotPreview(yesCount) {
   }
   el.innerHTML = lines.join('<br>');
 }
+// Settings the host sent that the saved config does not carry (an older Worker silently drops fields it has no schema for).
+function droppedGameSettings(sent, saved) {
+  const out = [];
+  let sv = saved;
+  if (typeof sv === 'string') { try { sv = JSON.parse(sv); } catch (e) { sv = null; } }
+  sv = sv || {};
+  for (const id of Object.keys(sent || {})) {
+    const a = sent[id] || {}, b = sv[id];
+    const name = id === 'lowscore' ? 'Low Score' : id === 'fourball' ? 'Fourball' : id;
+    if (!b) { out.push(`${name} (whole game)`); continue; }
+    if (a.period && a.period !== 'round' && b.period !== a.period) out.push(`${name} scoring period`);
+  }
+  return out;
+}
 async function submitGatheringGames(gatheringId) {
   const g = (_gamesFormG && _gamesFormG.gatheringId === gatheringId) ? _gamesFormG : gatheringData.find(x => x.gatheringId === gatheringId);
   if (!g) { showToast('Gathering not found', true); return; }
@@ -19525,7 +19554,10 @@ async function submitGatheringGames(gatheringId) {
     });
     if (!resp.ok) throw new Error(resp.error || 'Save failed');
     await loadHostGamesConfigs();
-    showToast(hcb.pending && hcb.pending.length
+    const savedRow = _hostGamesByGathering.get(gatheringId);
+    const dropped = savedRow ? droppedGameSettings(game_configs, savedRow.game_configs) : [];
+    if (dropped.length) { showToast(`⚠️ Saved, but the server ignored: ${dropped.join(', ')}. The BFE Worker needs the latest update before those settings take effect.`, true); console.warn('dropped game settings', dropped); }
+    else showToast(hcb.pending && hcb.pending.length
       ? `✅ Games saved. Still need a handicap: ${hcb.pending.join(', ')} — set it here later or at Close.`
       : '✅ Games configured');
     if (_gamesFormCard) { closeGamesCardDialog(); await refreshGatheringGamesIndex(); } else renderHostPanelList();
