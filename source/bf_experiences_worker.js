@@ -1732,6 +1732,57 @@ export default {
       }
     }
 
+    // POST /bfe/gathering-destroy — commissioner-only hard delete of ONE Gathering and everything that hangs off it
+    // (test rounds, mostly). Body: { pin, gathering_id, confirm_title }. The title must be typed back exactly
+    // (case aside) so a stray tap cannot delete a real round. Removes: scorecards, CTP entries, MiserBall answers,
+    // the games config and closed payout snapshot, notes, weather, groupings, registration intents, registrations,
+    // and the Gathering itself. Never removes the Crew (it may serve other Gatherings) or a BF Series event shadow.
+    // Refuses while photos exist (their image files live in R2 behind the main Worker's photo delete, so deleting
+    // the rows here would orphan the files): delete the photos in the round first.
+    if (request.method === 'POST' && url.pathname === '/bfe/gathering-destroy') {
+      const jr = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      let body;
+      try { body = await request.json(); } catch (e) { return jr({ error: 'Invalid JSON' }, 400); }
+      if (String(body.pin) !== '7797') return jr({ error: 'Invalid PIN' }, 403);
+      const gid = Number(body.gathering_id);
+      if (!Number.isInteger(gid) || gid <= 0) return jr({ error: 'gathering_id is required' }, 400);
+      try {
+        const g = await env.DB.prepare(`SELECT id, title, status, event_ref FROM gatherings WHERE id = ?`).bind(gid).first();
+        if (!g) return jr({ error: 'No such Gathering' }, 404);
+        if (g.event_ref || g.status === 'event_shadow') return jr({ error: 'This is the games record of a BF Series event, not a Gathering. It cannot be deleted here.' }, 409);
+        const norm = v => String(v == null ? '' : v).trim().toLowerCase();
+        if (!norm(body.confirm_title) || norm(body.confirm_title) !== norm(g.title)) return jr({ error: 'The title typed does not match, nothing was deleted.' }, 400);
+        const key = 'gathering:' + gid;
+        let photos = 0;
+        try { const r = await env.DB.prepare(`SELECT COUNT(*) AS n FROM event_photos WHERE event_name = ?`).bind(key).first(); photos = (r && r.n) || 0; } catch (e) { photos = 0; }
+        if (photos) return jr({ error: `This round has ${photos} photo${photos === 1 ? '' : 's'}. Delete ${photos === 1 ? 'it' : 'them'} from the round first, then delete the round.`, photos }, 409);
+        const counts = {};
+        // optional stores: tables that may not exist on every deployment, so each is best effort
+        for (const [name, sql] of [
+          ['notes', `DELETE FROM event_notes WHERE event_name = ?`],
+          ['weather', `DELETE FROM event_weather WHERE event_name = ?`],
+          ['groupings', `DELETE FROM event_groupings WHERE event_name = ?`],
+          ['intents', `DELETE FROM registration_intent WHERE event_name = ?`]
+        ]) {
+          try { const r = await env.DB.prepare(sql).bind(key).run(); counts[name] = (r.meta && r.meta.changes) || 0; } catch (e) { counts[name] = 0; }
+        }
+        // the core stores, in one atomic batch, registrations before the Gathering (foreign key)
+        const stmts = [
+          ['scorecards', env.DB.prepare(`DELETE FROM bfe_scorecards WHERE event_name = ?`).bind(key)],
+          ['ctp', env.DB.prepare(`DELETE FROM bfe_cttp_entries WHERE event_name = ?`).bind(key)],
+          ['miserball', env.DB.prepare(`DELETE FROM bfe_birdieball_answers WHERE gathering_id = ?`).bind(gid)],
+          ['games', env.DB.prepare(`DELETE FROM bfe_gathering_games WHERE gathering_id = ?`).bind(gid)],
+          ['registrations', env.DB.prepare(`DELETE FROM registrations WHERE gathering_id = ?`).bind(gid)],
+          ['gathering', env.DB.prepare(`DELETE FROM gatherings WHERE id = ?`).bind(gid)]
+        ];
+        const out = await env.DB.batch(stmts.map(x => x[1]));
+        stmts.forEach((x, i) => { counts[x[0]] = (out[i] && out[i].meta && out[i].meta.changes) || 0; });
+        return jr({ ok: true, title: g.title, deleted: counts });
+      } catch (e) {
+        return jr({ error: 'Delete error: ' + String(e.message || e) }, 500);
+      }
+    }
+
     // ── BirdieBall answers (Dev-86) — "kept it or lost it," scoped to one
     // gathering, self-reported. See the bfe_birdieball_answers schema
     // comment above for why this doesn't reuse Wally Ball's own fields.

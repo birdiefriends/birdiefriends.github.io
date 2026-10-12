@@ -13854,6 +13854,7 @@ function openHistoryDetail(idx) {
       ${photoBlock}
       ${notesBlock}
       ${historyIconActionRow(key)}
+      ${destroyRoundButtonHtml(key.startsWith('gathering:') ? Number(key.slice(10)) : null, (groupEvt && groupEvt.name) || '', 'history')}
     </div>`;
   document.getElementById('my-history-detail-view').style.display = 'flex';
   loadResultsClippingPodium(groupEvt); // Dev-67 — fire-and-forget, fills in the winner once fetched
@@ -17820,6 +17821,7 @@ function renderHostPanelList() {
           <button class="btn btn-secondary-danger btn-sm"
             onclick="cancelGatheringFromPanel(${g.gatheringId},'${g.name.replace(/'/g, "\\'")}')">Cancel Gathering</button>
         </div>
+        ${destroyRoundButtonHtml(g.gatheringId, g.name, 'host')}
         <div class="host-gathering-actions">
           <button class="btn btn-secondary btn-sm" style="flex:1;${(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId)) ? 'background:rgba(29,158,117,0.12);border-color:rgba(29,158,117,0.35);color:#1D9E75;font-weight:700' : ''}"
             onclick="showGatheringGamesForm(${g.gatheringId})">🎮 Games${(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId)) ? ' ✓' : ''}</button>
@@ -18152,6 +18154,34 @@ async function hostInviteOthers(gatheringId) {
   }
   if (!existing.includes(currentPlayer)) existing = [...existing, currentPlayer];
   openCrewPickerForInvite(gatheringId, g.crewId, g.name, existing);
+}
+// ── Commissioner: delete a round for good (test rounds, mostly) ─────────────────────────────
+// Removes the Gathering, its players, scorecards, games and results, CTP and MiserBall entries, notes and weather.
+// You must type the round's title. The Crew is kept. Rounds with photos must have the photos deleted first.
+function destroyRoundButtonHtml(gid, title, where) {
+  if (!isCommissioner() || !(gid > 0) || !title) return '';
+  const t = String(title).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  return `<div style="${where === 'history' ? 'margin-top:12px;padding-top:10px;border-top:1px dashed rgba(0,0,0,0.15)' : 'margin-top:8px'}"><button type="button" class="btn btn-secondary-danger btn-sm" style="width:100%" onclick="destroyRound(${Number(gid)},'${t}')">🗑 Delete this round for good (commissioner)</button></div>`;
+}
+async function destroyRound(gid, title) {
+  if (!isCommissioner()) return;
+  const typed = prompt(`Delete "${title}" for good?\n\nThis removes the round, its players, scores, games and results, CTP and MiserBall entries, and notes. It cannot be undone. The Crew is kept.\n\nType the round's title to confirm:`);
+  if (typed == null) return;
+  if (String(typed).trim().toLowerCase() !== String(title).trim().toLowerCase()) { showToast('Title did not match, nothing deleted', true); return; }
+  try {
+    const res = await fetch(`${BFE_API}/bfe/gathering-destroy`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: COMMISSIONER_PIN, gathering_id: gid, confirm_title: typed }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Delete failed');
+    const d = data.deleted || {};
+    showToast(`🗑 "${data.title}" deleted (${d.registrations || 0} players, ${d.scorecards || 0} scorecards)`);
+    try { closeHistoryDetailView(); } catch (e) {}
+    try { if (typeof closeHostSheet === 'function') closeHostSheet(); } catch (e) {}
+    await refreshGatherings();
+    try { await loadMyHistory(); } catch (e) {}
+  } catch (e) {
+    showToast('❌ ' + e.message, true);
+  }
 }
 async function cancelGatheringFromPanel(gatheringId, title) {
   if (!confirm(`Cancel "${title}"? Crew members will be notified.`)) return;

@@ -1,3 +1,6 @@
+v4.18.0 · 2026-10-12
+Deployed: 2026-10-12 (Commissioner: Delete this round for good. A button at the bottom of a round in My History (and on its Host panel card) removes the round, its players, scorecards, games and results, CTP and MiserBall entries and notes. You type the round's title to confirm. The Crew is kept, a BF Series event is never touched, and a round with photos asks you to delete the photos first. Needs the BFE Worker updated.)
+
 v4.17.4 · 2026-10-12
 Deployed: 2026-10-12 (Two clarity fixes. 1) The event card and My History now say what was played: the games, with Fourball's variant (for example "Fourball (Front/Back/Total, holes won) + Skins"), instead of the Format dropdown's default "Individual Play". In Host > Create, the Format row reads "Set by your games" once Games is switched on. 2) Fourball results now spell out the rules and the money: the variant, how a segment is won (holes or strokes), the ante and how each pot is built, and, for the one-pot game, that holes won are shown for the story while total strokes decided the pay.)
 
