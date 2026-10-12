@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.14.0';
+  const ENGINE_VERSION = '1.15.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -374,6 +374,57 @@
     }
     return out;
   }
+  // ── Fourball pot variants (Dev-93) ────────────────────────────────────────
+  // The Fourball pot can be played as ONE contest over 18 holes ('total', the original game) or cut into
+  // segments chosen at setup: 'fbt' = Front 9 / Back 9 / Total 18, 'sixes' = holes 1-6 / 7-12 / 13-18.
+  // Each segment is its own pot (the ante is split evenly across the segments). A segment is won
+  // 'strokes' (lower better-ball total) or 'holes' (more holes won head to head). Holes-won only makes sense
+  // between two pairs who played each other, so it forces scope 'group' (each foursome its own match);
+  // strokes can also run across the whole 'field'. A tied segment is a push: everyone's ante comes back.
+  const FOURBALL_SEGMENTS = {
+    fbt: [{ key: 'front', label: 'Front 9', a: 0, b: 9 }, { key: 'back', label: 'Back 9', a: 9, b: 18 }, { key: 'total', label: 'Total', a: 0, b: 18 }],
+    sixes: [{ key: 's1', label: 'Holes 1-6', a: 0, b: 6 }, { key: 's2', label: 'Holes 7-12', a: 6, b: 12 }, { key: 's3', label: 'Holes 13-18', a: 12, b: 18 }]
+  };
+  function fourballSegmentPlan(addon) {
+    const a = addon || {};
+    const mode = a.segments === 'fbt' || a.segments === 'sixes' ? a.segments : 'total';
+    const win_by = a.win_by === 'holes' ? 'holes' : 'strokes';
+    const scope = win_by === 'holes' || a.scope === 'group' ? 'group' : 'field';
+    return { mode, win_by, scope, segs: mode === 'total' ? [] : FOURBALL_SEGMENTS[mode] };
+  }
+  // One segment between pairs. scoreArrs = one 18-slot better-ball array per pair (null = not played).
+  function fourballSegmentResult(scoreArrs, seg, winBy) {
+    const n = seg.b - seg.a;
+    const info = scoreArrs.map(arr => {
+      let played = 0, total = 0;
+      for (let i = seg.a; i < seg.b; i++) if (typeof arr[i] === 'number') { played++; total += arr[i]; }
+      return { played, total, complete: played === n };
+    });
+    const out = { info, status: 'pending', winner: null, won: null, halved: null };
+    if (scoreArrs.length === 2) {
+      let w0 = 0, w1 = 0, h = 0;
+      for (let i = seg.a; i < seg.b; i++) {
+        const x = scoreArrs[0][i], y = scoreArrs[1][i];
+        if (typeof x !== 'number' || typeof y !== 'number') continue;
+        if (x < y) w0++; else if (x > y) w1++; else h++;
+      }
+      out.won = [w0, w1]; out.halved = h;
+    }
+    if (winBy === 'holes') {
+      if (scoreArrs.length !== 2 || !info.every(x => x.complete)) return out;
+      if (out.won[0] === out.won[1]) out.status = 'push';
+      else { out.status = 'won'; out.winner = out.won[0] > out.won[1] ? 0 : 1; }
+      return out;
+    }
+    const elig = info.map((x, i) => ({ i, t: x.total })).filter(e => info[e.i].complete);
+    if (elig.length < 2) return out;
+    const low = Math.min(...elig.map(e => e.t));
+    const best = elig.filter(e => e.t === low);
+    if (best.length > 1) out.status = 'push';
+    else { out.status = 'won'; out.winner = best[0].i; }
+    return out;
+  }
+
   // Fourball standalone: pairs are ranked on their better-ball total (lowest wins); the winning
   // pair(s) split a $/player carve, ties split, whole dollars rounded down, remainder reported.
   //   addon: { dollar_per_player, basis:'gross'|'net', net_mode:'own'|'low', pairs:[[a,b],…] }
@@ -422,6 +473,61 @@
           holes: bb.map((h, i) => ({ hole: off + i + 1, score: h ? h.score : null, by: h ? h.by.map(ix => names[ix]) : [] }))
         };
       });
+      const plan = fourballSegmentPlan(addon);
+      const nineRound = pairsCfg.some(pr => pr.some(nm => { const c = cardBy.get(norm(nm)); return c && c.hole_count === 9; }));
+      if (plan.mode !== 'total' && !nineRound && rows.length >= 2) {
+        const scoresOf = r => { const a = new Array(18).fill(null); r.holes.forEach(h => { if (h.score != null) a[h.hole - 1] = h.score; }); return a; };
+        const arrs = rows.map(scoresOf);
+        const idxs = rows.map((_, i) => i);
+        const groupIdx = plan.scope === 'group' ? idxs.reduce((acc, i) => { (i % 2 === 0 ? acc.push([i]) : acc[acc.length - 1].push(i)); return acc; }, []) : [idxs];
+        const configuredPot2 = (Number(addon.dollar_per_player) || 0) * L.n;
+        const pot2 = Math.min(configuredPot2, Math.max(0, state.remaining));
+        const capped2 = pot2 < configuredPot2;
+        const ratio = configuredPot2 > 0 ? pot2 / configuredPot2 : 0;
+        const perSeg = ((Number(addon.dollar_per_player) || 0) / plan.segs.length) * ratio;
+        state.remaining -= pot2;
+        let used = 0, unalloc2 = 0;
+        const wonBy = new Map();
+        const groups = groupIdx.map((gi, gn) => {
+          const gPlayers = plan.scope === 'group' ? gi.length * 2 : L.n;
+          const gNames = plan.scope === 'group' ? gi.reduce((a, i) => a.concat(rows[i].pair), []) : L.players.slice();
+          const segsOut = plan.segs.map(sg => {
+            const pot = Math.floor(perSeg * gPlayers);
+            const res = fourballSegmentResult(gi.map(i => arrs[i]), sg, plan.win_by);
+            const seg = { key: sg.key, label: sg.label, from: sg.a + 1, to: sg.b, pot, status: res.status, winner: null,
+              ...(res.won ? { holes_won: res.won, halved: res.halved } : {}),
+              totals: res.info.map(x => (x.complete ? x.total : null)) };
+            used += pot;
+            if (res.status === 'won') {
+              const wr = rows[gi[res.winner]];
+              seg.winner = wr.pair;
+              const each = Math.floor(pot / 2);
+              wr.pair.forEach(nm => L.credit(nm, 'fourball', each));
+              unalloc2 += pot - each * 2;
+              seg.per_player = each;
+              const k = wr.pair.join('|'); wonBy.set(k, (wonBy.get(k) || { pair: wr.pair, n: 0 })); wonBy.get(k).n++;
+            } else {
+              // push (tie) or not finishable yet: every player in the contest gets this segment's ante back
+              const back = gNames.length ? Math.floor(pot / gNames.length) : 0;
+              gNames.forEach(nm => L.credit(nm, 'given_back', back));
+              unalloc2 += pot - back * gNames.length;
+              seg.given_back_each = back;
+            }
+            return seg;
+          });
+          return { group: gn + 1, pairs: gi.map(i => rows[i].pair), segments: segsOut };
+        });
+        unalloc2 += Math.max(0, pot2 - used);
+        state.unallocated += unalloc2;
+        return Object.assign({
+          pot: pot2, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode } : {}),
+          ...(wantNet && !netOk ? { net_missing: true } : {}),
+          standings: rows.map((r, i) => Object.assign({}, r, { scores: arrs[i], total: r.complete ? r.total : null }))
+            .sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
+          segments: { mode: plan.mode, win_by: plan.win_by, scope: plan.scope, per_segment: perSeg, groups },
+          winners: [...wonBy.values()].map(w => w.pair), per_pair: null, per_player: null, given_back_each: 0
+        }, capped2 ? { capped: true, configured_pot: configuredPot2 } : {});
+      }
       const ranked = rows.filter(r => r.complete).sort((a, b) => a.total - b.total);
       ranked.forEach(r => {
         r.place = ranked.findIndex(x => x.total === r.total) + 1;
@@ -525,11 +631,14 @@
     kind: 'addon', input: 'strokes', net: true, entity: 'pair',
     released: true,
     meta: { label: 'Fourball', icon: '🤝', seal: 'FOURBALL', uiOrder: 5, group: 'format',
-      info: 'Played in pairs. Everyone plays their own ball and the pair counts the better of its two scores on each hole (gross unless the host set it to Net). The pair with the lowest total wins and splits the Fourball pot; tied pairs split it. If a partner picks up, the other\'s score counts alone.' },
+      info: 'Played in pairs. Everyone plays their own ball and the pair counts the better of its two scores on each hole (gross unless the host set it to Net). The pair with the lowest total wins and splits the Fourball pot; tied pairs split it. If a partner picks up, the other\'s score counts alone. The pot can also be split into segments (Front 9, Back 9 and Total, or holes 1-6, 7-12 and 13-18), each its own pot won on strokes or holes won; a tied segment is a push.' },
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
       { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
       { key: 'net_mode', type: 'enum', label: 'Net strokes', values: ['own', 'low'], default: 'own' },
+      { key: 'segments', type: 'enum', label: 'Pot split', values: ['total', 'fbt', 'sixes'], default: 'total' },
+      { key: 'win_by', type: 'enum', label: 'Segment won by', values: ['strokes', 'holes'], default: 'strokes' },
+      { key: 'scope', type: 'enum', label: 'Who competes', values: ['field', 'group'], default: 'field' },
       { key: 'pairs', type: 'pairs', label: 'Pairs', default: [], required: true }
     ],
     fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
@@ -559,6 +668,33 @@
       // Pair 1 takes the whole $40 carve: $20 each.
       inputs: { scorecards: [_P('Ann', _ALL(6)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5)), _P('Di', _ALL(6))] },
       expect: { payouts: { Ann: 20, Bob: 20, Cy: 0, Di: 0 }, unallocated: 0, results: { fourball: { per_pair: 40, per_player: 20 } } }
+    }, {
+      name: 'segments (Front/Back/Total, strokes): each segment is its own pot, a tied Total is a push',
+      round: { dollar_per_player: 15, addons: [
+        { id: 'fourball', entity: 'pair', dollar_per_player: 15, basis: 'gross', segments: 'fbt', win_by: 'strokes', scope: 'group', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+      // Ann/Bob better ball 4 on the front, 5 on the back (81). Cy/Di 5 on the front, 4 on the back (81).
+      // Front: Ann&Bob 36 vs 45 -> win $20 ($10 each). Back: Cy&Di 36 vs 45 -> win $20. Total 81 vs 81: push, everyone gets the $5 ante back.
+      inputs: { scorecards: [_P('Ann', _SPLIT(4, 5)), _P('Bob', _ALL(6)), _P('Cy', _SPLIT(5, 4)), _P('Di', _ALL(6))] },
+      expect: { payouts: { Ann: 15, Bob: 15, Cy: 15, Di: 15 }, unallocated: 0 }
+    }, {
+      name: 'segments (6/6/6, holes won): two foursomes are separate matches with their own pots',
+      round: { dollar_per_player: 12, addons: [
+        { id: 'fourball', entity: 'pair', dollar_per_player: 12, basis: 'gross', segments: 'sixes', win_by: 'holes', scope: 'group',
+          pairs: [['Ann', 'Bob'], ['Cy', 'Di'], ['Ed', 'Flo'], ['Gus', 'Hal']] }] },
+      // Group 1: Ann/Bob 4s vs Cy/Di 5s -> Ann&Bob win every segment: $4 ante x 4 players = $16 pot each, $8 a player, 3 segments = $24 each.
+      // Group 2: all 5s -> every segment is halved, a push: everyone gets the $12 back.
+      inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(6)), _P('Cy', _ALL(5)), _P('Di', _ALL(6)),
+        _P('Ed', _ALL(5)), _P('Flo', _ALL(5)), _P('Gus', _ALL(5)), _P('Hal', _ALL(5))] },
+      expect: { payouts: { Ann: 24, Bob: 24, Cy: 0, Di: 0, Ed: 12, Flo: 12, Gus: 12, Hal: 12 }, unallocated: 0 }
+    }, {
+      name: 'segments across the whole field (strokes): the best pair in the field takes the segment',
+      round: { dollar_per_player: 6, addons: [
+        { id: 'fourball', entity: 'pair', dollar_per_player: 6, basis: 'gross', segments: 'fbt', win_by: 'strokes', scope: 'field',
+          pairs: [['Ann', 'Bob'], ['Cy', 'Di'], ['Ed', 'Flo'], ['Gus', 'Hal']] }] },
+      // Each segment's pot is $2 x 8 players = $16. Ed/Flo (3s) are best everywhere: they win all three segments, $8 a player x 3 = $24 each.
+      inputs: { scorecards: [_P('Ann', _ALL(5)), _P('Bob', _ALL(5)), _P('Cy', _ALL(4)), _P('Di', _ALL(4)),
+        _P('Ed', _ALL(3)), _P('Flo', _ALL(3)), _P('Gus', _ALL(5)), _P('Hal', _ALL(5))] },
+      expect: { payouts: { Ann: 0, Bob: 0, Cy: 0, Di: 0, Ed: 24, Flo: 24, Gus: 0, Hal: 0 }, unallocated: 0 }
     }]
   });
 
@@ -796,7 +932,8 @@
     const fbc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.fourball : null;
     if (games.includes('fourball') && fbc) {
       addons.push({ id: 'fourball', entity: 'pair', dollar_per_player: fbc.dollar_per_player, basis: fbc.basis === 'net' ? 'net' : 'gross',
-        net_mode: fbc.net_mode === 'low' ? 'low' : 'own', pairs: Array.isArray(fbc.pairs) ? fbc.pairs : [] });
+        net_mode: fbc.net_mode === 'low' ? 'low' : 'own', pairs: Array.isArray(fbc.pairs) ? fbc.pairs : [],
+        ...(fbc.segments === 'fbt' || fbc.segments === 'sixes' ? { segments: fbc.segments, win_by: fbc.win_by === 'holes' ? 'holes' : 'strokes', scope: fbc.win_by === 'holes' || fbc.scope === 'group' ? 'group' : 'field' } : {}) });
     }
     if (games.includes('skins')) {
       addons.push({ id: 'skins', entity: 'individual', basis: basisOf('skins_basis'), compare: 'low' });
@@ -927,6 +1064,44 @@
     return { basis: f.basis, net_mode: f.net_mode || null, net_missing: !!f.net_missing, ranked_by: useParLive ? 'to_par' : 'total', rows };
   }
 
+  // ── Fourball match view (Dev-93) ────────────────────────────────────────
+  // For the Live Actions screen: each foursome (two pairs head to head) hole by hole, with the running tally of
+  // every segment. Read from the same payout result Close uses (so it cannot disagree), partial cards welcome.
+  // In the original 'total' pot there are no segments to pay, but the strip still shows Front and Back.
+  function fourballMatchView(fb, addon) {
+    if (!fb) return null;
+    const plan = fourballSegmentPlan(addon);
+    const viewSegs = plan.mode === 'sixes' ? FOURBALL_SEGMENTS.sixes : FOURBALL_SEGMENTS.fbt;
+    const byKey = new Map((fb.standings || []).map(r => [r.pair.map(norm).join('|'), r]));
+    const scoresOf = pr => {
+      const out = new Array(18).fill(null);
+      const r = byKey.get(pr.map(norm).join('|'));
+      if (r) (r.holes || []).forEach(h => { if (h.score != null) out[h.hole - 1] = h.score; });
+      return out;
+    };
+    const money = (fb.segments && fb.segments.groups) || [];
+    const groups = fourballGroups(addon && addon.pairs).map((g, gi) => {
+      const pairs = g.pairs.map(pr => ({ names: pr, scores: scoresOf(pr) }));
+      if (pairs.length < 2) return { n: g.n, pairs, solo: true };
+      const A = pairs[0].scores, B = pairs[1].scores;
+      const holes = A.map((a, i) => ({ hole: i + 1, a, b: B[i], res: a == null || B[i] == null ? null : a < B[i] ? 'A' : a > B[i] ? 'B' : 'T' }));
+      const segs = viewSegs.map(sg => {
+        const r = fourballSegmentResult([A, B], sg, plan.win_by);
+        const both = holes.slice(sg.a, sg.b).filter(h => h.res).length;
+        let sa = 0, sb = 0;
+        holes.slice(sg.a, sg.b).forEach(h => { if (h.res) { sa += h.a; sb += h.b; } });
+        const lead = plan.win_by === 'holes' ? r.won[0] - r.won[1] : sb - sa; // positive = pair A ahead
+        const paid = ((money[gi] || {}).segments || []).find(x => x.key === sg.key) || null;
+        return { key: sg.key, label: sg.label, from: sg.a + 1, to: sg.b, played: both, holes_won: r.won, halved: r.halved,
+          strokes: [sa, sb], lead, leader: lead === 0 ? null : (lead > 0 ? 0 : 1), final: r.status !== 'pending',
+          status: both === 0 ? 'not_started' : (r.status === 'pending' ? 'in_progress' : 'final'), pot: paid ? paid.pot : null };
+      });
+      let ta = 0, tb = 0; holes.forEach(h => { if (h.res) { ta += h.a; tb += h.b; } });
+      return { n: g.n, pairs, holes, segs, strokes_lead: tb - ta };
+    });
+    return { mode: plan.mode, win_by: plan.win_by, scope: plan.scope, groups };
+  }
+
   // ── Scorecard helpers ──────────────────────────────────────────────────
   // One latest card per player. Rows must arrive newest-first (GET
   // /scorecards orders captured_at DESC), so the first seen per player wins.
@@ -1040,7 +1215,7 @@
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,
     computeRoundPayout,
-    computeGatheringGamesPayout, fourballBoard,
+    computeGatheringGamesPayout, fourballBoard, fourballMatchView, fourballSegmentPlan,
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, mergeHoleScores,

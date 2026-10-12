@@ -36,6 +36,16 @@ ok(/back to each player/.test(ctx.f.renderGatheringPayoutHtml(none)), 'no finish
 const netRow = { ...row, game_configs: { fourball: { ...row.game_configs.fourball, basis: 'net', net_mode: 'low' } } };
 { const h = ctx.f.renderGatheringPayoutHtml(E.computeGatheringGamesPayout(netRow, cards, {}, [])); ok(h.includes('net, off the low') && /played scratch/.test(h), 'net with no strokes on file: labelled net, Strokes tab says they played scratch'); }
 
+// pot variants render: segment lines, winners, pushes
+{
+  const segRow = { games: ['fourball'], dollar_per_player: 15, game_configs: { fourball: { dollar_per_player: 15, basis: 'gross', net_mode: 'own', segments: 'fbt', win_by: 'holes', scope: 'group', pairs: [['Ann','Bob'],['Cy','Dee']] } } };
+  const sc = [card('Ann', { 1: 3 }), card('Bob'), card('Cy'), card('Dee')];
+  const h = ctx.f.renderGatheringPayoutHtml(E.computeGatheringGamesPayout(segRow, sc, {}, []));
+  ok(h.includes('Front 9') && h.includes('Back 9') && h.includes('Total'), 'segments: three segment lines');
+  ok(/holes 1-0/.test(h) && h.includes('Ann &amp; Bob'), 'segments: holes-won tally and the winner');
+  ok(/Push, ante back/.test(h), 'segments: a tied segment says push');
+  ok(/each foursome its own match/.test(h), 'segments: says how it was decided');
+}
 // reconcile: Fourball net with a card lacking strokes blocks, like Skins net
 const hc = { allowance: 95, skins_basis: 'gross', birdiepay_basis: 'gross', players: { Ann: { strokes: 4 } } };
 const rec = ctx.f.gcReconcile({ config: { games: ['fourball'], handicap_config: hc, game_configs: netRow.game_configs }, cardPlayers: ['Ann', 'Bob'] });

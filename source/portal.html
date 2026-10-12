@@ -3614,7 +3614,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.14.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.15.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -9300,7 +9300,7 @@ function buildLivePanel(evt) {
       <div class="live-section-body">${buildLivePanelPhotoSection(evt)}</div>
     </div>` : '';
   // ── SECTION 2.7: Fourball (Dev-93) — live pair standings from the scores saved so far ──
-  const fbSection = showFourballSection ? fourballLiveSectionHtml(_liveConfig) + (_skOn ? skCardHtml() : '') : '';
+  const fbSection = showFourballSection ? (_skOn ? fourballActionsHtml(_liveConfig) : fourballLiveSectionHtml(_liveConfig)) : '';
   return `<div class="live-panel">
     ${_skOn ? livePanelModeToggleHtml('games') : ''}
     ${groupingsLink}
@@ -10061,8 +10061,8 @@ function skNav(d) {
   _sk.hole = h; _sk.sel = Math.max(0, skGroup().players.findIndex(n => !(skCardOf(n)[h - 1] > 0)));
   renderLiveBanner();
 }
-function skSetGroup(i) { if (_sk) { _sk.groupIdx = i; skGoFirstOpen(); renderLiveBanner(); } }
-function skJump(pi, hole) { if (!_sk) return; _sk.sel = pi; _sk.hole = hole; _sk.mode = 'score'; renderLiveBanner(); }
+function skSetGroup(i) { if (_sk) { _sk.groupIdx = i; skGoFirstOpen(); if (typeof _fbUi !== 'undefined') _fbUi.drill = null; renderLiveBanner(); } }
+function skJump(pi, hole) { if (!_sk) return; _sk.sel = pi; _sk.hole = hole; _sk.mode = 'score'; if (typeof _fbUi !== 'undefined') _fbUi.drill = null; renderLiveBanner(); }
 function skQueueSave(name) {
   _sk.pending++;
   _skChain[name] = (_skChain[name] || Promise.resolve()).then(() => skPost(name)).catch(() => {}).then(() => { if (_sk) { _sk.pending = Math.max(0, _sk.pending - 1); renderLiveBanner(); } });
@@ -10141,30 +10141,112 @@ function liveScoreModeHtml() {
     <div style="margin-top:12px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:36px">${hint}</div>
     <div style="text-align:center"><button type="button" onclick="skClear()" style="background:none;border:0;color:rgba(255,255,255,0.6);font-family:inherit;font-size:0.78rem;cursor:pointer;min-height:36px;padding:0 12px">Clear this score</button></div>`;
 }
-// The group's card, front and back, with each pair's better ball. Shown under Games; a tap jumps back to Score.
-function skCardHtml() {
-  const g = skGroup(); if (!g.players.length) return '';
-  const pars = skPars(), inits = BFEngine.playerInitials(g.players);
-  const cell = (v, i) => {
-    if (!(v > 0)) return `<div style="height:24px;border:1px dashed rgba(255,255,255,0.15);border-radius:5px"></div>`;
-    const d = pars ? v - pars[i] : 0;
-    return `<div style="height:24px;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:0.76rem;box-sizing:border-box;${d < 0 ? 'border:1.5px solid #5DCAA5;border-radius:50%;color:#5DCAA5' : d > 0 ? 'border:1.5px solid #e0b44c;border-radius:3px;color:#e0b44c' : 'color:#fff'}">${v}</div>`;
-  };
+// ── Live Actions: the Fourball game view (Dev-93) ─────────────────────────────────────────
+// Two jobs kept apart: (1) how the game stands, (2) each player's card, drilled into from the game view.
+// Scores shown here are this phone's merged scores laid over the last server read, so a tap shows at once.
+let _fbUi = { view: 'group', hole: null, drill: null };
+function fbOverlayCards() {
+  const base = (_fbLive && _fbLive.cards) || [];
+  if (typeof _sk === 'undefined' || !_sk) return base;
+  const nm = x => String(x || '').trim().toLowerCase();
+  const by = new Map(base.map(c => [nm(c.player), c]));
+  Object.keys(_sk.cards).forEach(n => { const c = by.get(nm(n)); by.set(nm(n), c ? Object.assign({}, c, { holes: _sk.cards[n] }) : { player: n, holes: _sk.cards[n] }); });
+  return [...by.values()];
+}
+function fbLiveCompute() {
+  if (!_fbLive || !_fbLive.row) return null;
+  const cards = fbOverlayCards();
+  const fbCfg = (_fbLive.row.game_configs || {}).fourball;
+  const pay = BFEngine.computeGatheringGamesPayout(_fbLive.row, cards, {}, []);
+  return { board: BFEngine.fourballBoard(_fbLive.row, cards, _fbLive.pars), match: BFEngine.fourballMatchView(pay.fourball, fbCfg) };
+}
+function fbSetView(v) { _fbUi.view = v === 'field' ? 'field' : 'group'; _fbUi.drill = null; renderLiveBanner(); }
+function fbPickHole(h) { _fbUi.hole = h; renderLiveBanner(); }
+function fbDrill(k) { _fbUi.drill = k; renderLiveBanner(); }
+function fbShort(pair) { return pair.map(n => String(n).trim().split(/\s+/)[0]).join(' &amp; '); }
+function fourballPlayerCardHtml(k) {
+  const g = skGroup(), name = g.players[k], pars = skPars();
+  if (!name) return '';
+  const card = skCardOf(name);
   const nine = off => {
-    const idx = [0,1,2,3,4,5,6,7,8].map(k => k + off);
-    const row = (label, vals, tap, shade) => `<div style="display:grid;grid-template-columns:34px repeat(9,minmax(0,1fr));gap:2px;align-items:center;margin-bottom:2px;border-radius:6px;${shade ? 'background:rgba(93,202,165,0.16)' : ''}"><div style="font-size:0.68rem;font-weight:700;padding-left:3px;${shade ? 'color:#5DCAA5' : ''}">${label}</div>${idx.map((i, c) => `<div ${tap != null ? `onclick="skJump(${tap},${i + 1})"` : ''} style="cursor:${tap != null ? 'pointer' : 'default'}">${cell(vals[i], i)}</div>`).join('')}</div>`;
-    const best = (a, b) => idx.reduce((o, i) => { const x = skCardOf(g.players[a])[i], y = skCardOf(g.players[b])[i]; const ok = v => v > 0; o[i] = ok(x) && ok(y) ? Math.min(x, y) : ok(x) ? x : ok(y) ? y : null; return o; }, {});
-    const head = `<div style="display:grid;grid-template-columns:34px repeat(9,minmax(0,1fr));gap:2px;margin-bottom:2px;font-family:'DM Mono',monospace;font-size:0.62rem;color:rgba(255,255,255,0.5)"><div>${off ? 'Back' : 'Front'}</div>${idx.map(i => `<div style="text-align:center">${i + 1}</div>`).join('')}</div>`
-      + (pars ? `<div style="display:grid;grid-template-columns:34px repeat(9,minmax(0,1fr));gap:2px;margin-bottom:3px;font-family:'DM Mono',monospace;font-size:0.66rem;color:rgba(255,255,255,0.6)"><div>Par</div>${idx.map(i => `<div style="text-align:center">${pars[i]}</div>`).join('')}</div>` : '');
-    let body = '';
-    g.players.forEach((n, k) => {
-      body += row(escapeHtml(inits[k]), skCardOf(n), k, false);
-      if (k % 2 === 1) body += row('Best', best(k - 1, k), null, true);
-    });
-    return `<div style="margin-bottom:10px">${head}${body}</div>`;
+    const idx = [0,1,2,3,4,5,6,7,8].map(x => x + off);
+    const grid = 'display:grid;grid-template-columns:repeat(9,minmax(0,1fr)) 38px;gap:3px;align-items:center';
+    const cells = idx.map(i => {
+      const v = card[i], d = v > 0 && pars ? v - pars[i] : 0;
+      const st = 'height:32px;width:100%;display:flex;align-items:center;justify-content:center;font-family:\'DM Mono\',monospace;font-size:0.88rem;box-sizing:border-box;background:none;color:#fff;padding:0;cursor:pointer;';
+      if (!(v > 0)) return `<button type="button" onclick="skJump(${k},${i + 1})" style="${st}border:1px dashed rgba(255,255,255,0.18);border-radius:6px"></button>`;
+      return `<button type="button" onclick="skJump(${k},${i + 1})" style="${st}${d < 0 ? 'border:1.5px solid #5DCAA5;border-radius:50%;color:#5DCAA5' : d > 0 ? 'border:1.5px solid #e0b44c;border-radius:3px;color:#e0b44c' : 'border:0'}">${v}</button>`;
+    }).join('');
+    const played = idx.filter(i => card[i] > 0);
+    return `<div style="margin-bottom:14px">
+      <div style="${grid};font-family:'DM Mono',monospace;font-size:0.62rem;color:rgba(255,255,255,0.5);margin-bottom:2px">${idx.map(i => `<div style="text-align:center">${i + 1}</div>`).join('')}<div style="text-align:center">${off ? 'In' : 'Out'}</div></div>
+      ${pars ? `<div style="${grid};font-family:'DM Mono',monospace;font-size:0.72rem;color:rgba(255,255,255,0.65);margin-bottom:4px">${idx.map(i => `<div style="text-align:center">${pars[i]}</div>`).join('')}<div style="text-align:center">${idx.reduce((a, i) => a + pars[i], 0)}</div></div>` : ''}
+      <div style="${grid}">${cells}<div style="text-align:center;font-family:'DM Mono',monospace;font-size:0.95rem;font-weight:700">${played.length ? played.reduce((a, i) => a + card[i], 0) : ''}</div></div></div>`;
   };
-  const max = skMaxHole();
-  return `<div style="margin-top:12px"><div style="font-size:0.72rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-bottom:6px">Your group's card · tap a score to fix it</div>${nine(0)}${max > 9 ? nine(9) : ''}</div>`;
+  const done = card.filter(v => v > 0), tot = done.reduce((a, v) => a + v, 0);
+  const toPar = pars && done.length ? tot - card.reduce((a, v, i) => a + (v > 0 ? pars[i] : 0), 0) : null;
+  return `<button type="button" onclick="fbDrill(null)" style="background:none;border:0;color:#5DCAA5;font-family:inherit;font-size:0.84rem;font-weight:700;cursor:pointer;min-height:40px;padding:0;margin-bottom:6px">‹ Back to the game</button>
+    <div style="font-size:1rem;font-weight:700;margin-bottom:2px">${escapeHtml(name)}</div>
+    <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-bottom:10px">Gross · thru ${done.length} · tap a hole to fix it</div>
+    ${nine(0)}${skMaxHole() > 9 ? nine(9) : ''}
+    <div style="display:flex;align-items:center;border-top:1px solid rgba(255,255,255,0.15);padding-top:10px"><div style="flex:1;font-size:0.82rem;color:rgba(255,255,255,0.7)">Total through ${done.length} hole${done.length === 1 ? '' : 's'}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:700">${tot || '·'}</div>
+      ${toPar != null ? `<div style="font-family:'DM Mono',monospace;font-size:0.9rem;margin-left:8px;color:${toPar < 0 ? '#5DCAA5' : toPar > 0 ? '#e0b44c' : '#fff'}">${toPar === 0 ? 'E' : toPar > 0 ? '+' + toPar : toPar}</div>` : ''}</div>`;
+}
+function fourballActionsHtml(cfg) {
+  const fb = gatheringAddon(cfg, 'fourball');
+  const tog = (id, label) => `<button type="button" onclick="fbSetView('${id}')" style="flex:1;min-height:40px;border:0;border-radius:8px;font-family:inherit;font-size:0.84rem;font-weight:700;cursor:pointer;${_fbUi.view === id ? 'background:#fff;color:#085041' : 'background:transparent;color:rgba(255,255,255,0.8)'}">${label}</button>`;
+  const toggle = `<div style="display:flex;gap:3px;background:rgba(0,0,0,0.3);border-radius:10px;padding:3px;margin-bottom:12px">${tog('group', 'My group')}${tog('field', 'Field')}</div>`;
+  if (_fbUi.view === 'field') return toggle + fourballLiveSectionHtml(cfg);
+  if (_fbUi.drill != null) return fourballPlayerCardHtml(_fbUi.drill);
+  const live = fbLiveCompute();
+  if (!live || !live.match) return toggle + `<div style="font-size:0.82rem;color:rgba(255,255,255,0.5)">${_fbLive ? 'No pairs set up.' : 'Loading…'}</div>`;
+  const m = live.match, gs = skGroups();
+  const gi = Math.min(_sk.groupIdx, Math.max(0, m.groups.length - 1));
+  const g = m.groups[gi];
+  const chips = m.groups.length > 1 ? `<div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">${m.groups.map((x, i) => `<button type="button" onclick="skSetGroup(${i})" style="min-height:34px;padding:0 12px;border-radius:17px;font-family:inherit;font-size:0.76rem;font-weight:600;cursor:pointer;white-space:nowrap;${i === gi ? 'background:#5DCAA5;color:#04342a;border:0' : 'background:transparent;color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.3)'}">Group ${x.n}</button>`).join('')}</div>` : '';
+  if (!g || g.solo) return toggle + chips + `<div style="font-size:0.82rem;color:rgba(255,255,255,0.65);line-height:1.45">${g ? `${g.pairs[0].names.map(escapeHtml).join(' &amp; ')} has no opposing pair in this group.` : 'No pairs set up.'}</div>`;
+  const TEAL = '#5DCAA5', AMB = '#e0b44c';
+  const [pa, pb] = g.pairs;
+  const holesMode = m.win_by === 'holes';
+  const played = g.holes.filter(h => h.res).length;
+  const sl = g.strokes_lead;
+  const lastPlayed = played ? g.holes.filter(h => h.res).slice(-1)[0].hole : null;
+  const sel = _fbUi.hole && g.holes[_fbUi.hole - 1] && g.holes[_fbUi.hole - 1].res ? _fbUi.hole : lastPlayed;
+  const cell = h => {
+    const done = !!h.res, on = h.hole === sel;
+    const bg = !done ? 'transparent' : h.res === 'A' ? 'rgba(93,202,165,0.85)' : h.res === 'B' ? 'rgba(224,180,76,0.85)' : 'rgba(255,255,255,0.18)';
+    const col = !done ? 'rgba(255,255,255,0.4)' : h.res === 'T' ? '#fff' : '#04342a';
+    return `<button type="button" ${done ? `onclick="fbPickHole(${h.hole})"` : 'disabled'} style="height:40px;border-radius:7px;font-family:'DM Mono',monospace;font-size:0.82rem;font-weight:600;padding:3px 0;box-sizing:border-box;cursor:${done ? 'pointer' : 'default'};background:${bg};color:${col};border:${on ? '2px solid #fff' : done ? '0' : '1px dashed rgba(255,255,255,0.22)'}"><span style="font-size:0.56rem;opacity:0.75;display:block;line-height:1">${h.hole}</span>${done ? (h.res === 'B' ? h.b : h.a) : ''}</button>`;
+  };
+  const segHtml = g.segs.map(sg => {
+    const hs = g.holes.slice(sg.from - 1, sg.to);
+    const lead = sg.lead;
+    const tally = sg.played === 0 ? '' : lead === 0 ? 'All square' : `${fbShort(lead > 0 ? pa.names : pb.names)} ${Math.abs(lead)} ${holesMode ? 'up' : (Math.abs(lead) === 1 ? 'stroke up' : 'strokes up')}`;
+    const detail = sg.played === 0 ? 'not started' : holesMode ? `${sg.holes_won[0]} - ${sg.holes_won[1]}, ${sg.halved} halved` : `${sg.strokes[0]} vs ${sg.strokes[1]}`;
+    const cols = sg.to - sg.from + 1 === 9 || sg.to - sg.from + 1 === 18 ? 9 : 6;
+    const grid = sg.to - sg.from + 1 === 18 ? '' : `<div style="display:grid;gap:4px;grid-template-columns:repeat(${cols},minmax(0,1fr))">${hs.map(cell).join('')}</div>`;
+    return `<div style="margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px"><div style="flex:1;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.8)">${escapeHtml(sg.label)}${sg.pot ? ` <span style="font-weight:500;color:rgba(255,255,255,0.5)">· $${sg.pot}</span>` : ''}</div><div style="font-size:0.74rem;color:rgba(255,255,255,0.6)">${detail}</div>${tally ? `<div style="font-size:0.76rem;font-weight:700;color:${lead === 0 ? '#fff' : lead > 0 ? TEAL : AMB}">${tally}</div>` : ''}</div>${grid}</div>`;
+  }).join('');
+  const hd = sel ? g.holes[sel - 1] : null;
+  const par = hd && skPars() ? skPars()[sel - 1] : null;
+  const pScores = pr => pr.names.map(n => { const v = skCardOf(n)[sel - 1]; return v > 0 ? v : '·'; }).join(', ');
+  const detail = hd ? `<div style="background:rgba(0,0,0,0.22);border-radius:12px;padding:10px 12px;margin-top:10px">
+      <div style="font-size:0.76rem;font-weight:600;color:rgba(255,255,255,0.75);margin-bottom:6px">Hole ${sel}${par ? ` · par ${par}` : ''}</div>
+      ${[[pa, TEAL, hd.a], [pb, AMB, hd.b]].map(([pr, c, bb]) => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:0.5px solid rgba(255,255,255,0.1)"><div style="flex:1;font-size:0.86rem;font-weight:600;color:${c}">${fbShort(pr.names)}</div><div style="font-size:0.8rem;color:rgba(255,255,255,0.75)">${pScores(pr)}</div><div style="font-family:'DM Mono',monospace;font-size:0.92rem;font-weight:700;min-width:26px;text-align:center;padding:2px 6px;border-radius:6px;background:${c === TEAL ? 'rgba(93,202,165,0.25)' : 'rgba(224,180,76,0.25)'};color:${c}">${bb}</div></div>`).join('')}
+      <div style="font-size:0.76rem;color:rgba(255,255,255,0.65);margin-top:4px">${hd.res === 'T' ? `Halved. Both pairs counted ${hd.a}.` : hd.res === 'A' ? `${fbShort(pa.names)} win the hole with a ${hd.a}.` : `${fbShort(pb.names)} win the hole with a ${hd.b}.`}</div></div>` : '';
+  const how = m.mode === 'total' ? 'One pot, lowest total wins.' : `${m.mode === 'fbt' ? 'Front, Back and Total' : 'Holes 1-6, 7-12 and 13-18'}, ${holesMode ? 'won on holes' : 'won on strokes'}. A tie is a push.`;
+  const cardRows = skGroup().players.map((n, k) => {
+    const c = skCardOf(n), d = c.filter(v => v > 0);
+    return `<button type="button" onclick="fbDrill(${k})" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;margin-bottom:6px;background:rgba(0,0,0,0.2);border:0;border-radius:10px;min-height:44px;box-sizing:border-box;color:#fff;font-family:inherit;cursor:pointer;text-align:left"><span style="flex:1;font-size:0.9rem;font-weight:600">${escapeHtml(n)}</span><span style="font-size:0.74rem;color:rgba(255,255,255,0.6)">thru ${d.length}</span><span style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:700;min-width:28px;text-align:right">${d.reduce((a, v) => a + v, 0) || '·'}</span><span style="color:rgba(255,255,255,0.5)">›</span></button>`;
+  }).join('');
+  return `${toggle}${chips}
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="flex:1;min-width:0"><div style="font-size:0.95rem;font-weight:700"><span style="color:${TEAL}">${fbShort(pa.names)}</span> <span style="color:rgba(255,255,255,0.5);font-weight:500">vs</span> <span style="color:${AMB}">${fbShort(pb.names)}</span></div>
+      <div style="font-size:0.74rem;color:rgba(255,255,255,0.65);margin-top:2px">${played ? `Through ${played} hole${played === 1 ? '' : 's'}` : 'Not started'}</div></div>
+      ${played ? `<div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.3rem;font-weight:700;color:${sl === 0 ? '#fff' : sl > 0 ? TEAL : AMB}">${sl === 0 ? 'E' : (sl > 0 ? '-' : '+') + Math.abs(sl)}</div><div style="font-size:0.66rem;color:rgba(255,255,255,0.6)">${sl === 0 ? 'all square' : sl > 0 ? fbShort(pa.names).split(' ')[0] + ' ahead' : fbShort(pb.names).split(' ')[0] + ' ahead'}</div></div>` : ''}</div>
+    <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-bottom:10px">${how}</div>
+    ${segHtml}${detail}
+    <div style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:14px 0 6px;font-family:'DM Mono',monospace">Scorecards</div>${cardRows}`;
 }
 async function loadFourballLive(evt) {
   const gid = panelGamesGid(evt);
@@ -10177,7 +10259,7 @@ async function loadFourballLive(evt) {
     const cards = latestScorecardPerPlayer(data.scorecards || []);
     const pars = csResolvePars(evt);
     try { if (_sk && _sk.key === key) { skMergeRemote(cards); skFlush(); } } catch (e) { console.warn('[Score] merge error:', e.message); }
-    _fbLive = { gid, board: BFEngine.fourballBoard(row, cards, Array.isArray(pars) && pars.length === 18 ? pars : null), at: Date.now() };
+    _fbLive = { gid, row, cards, pars: Array.isArray(pars) && pars.length === 18 ? pars : null, board: BFEngine.fourballBoard(row, cards, Array.isArray(pars) && pars.length === 18 ? pars : null), at: Date.now() };
     renderLiveBanner();
   } catch (e) {
     console.warn('[Fourball] live standings error:', e.message);
@@ -11477,7 +11559,7 @@ let _gamesFormMembers = new Map(); // Membership HCPs (bf_players) by lower-case
 let _gamesFormTees = []; // the venue's stored tees that carry full 18-hole data (slope, rating, par_total, holes[{par,handicap}])
 let _gamesFormBirdiepayPars = null; // 18 hole pars resolved for the Gathering's venue when the form opened (null = no par data on file)
 let _gamesFormBirdieballConfig = { dollar_per_player: null }; // MiserBall's OWN per-player rate — distinct from the main $/player pot rate
-let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [] }; // Fourball (Dev-93)
+let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], segments: 'total', win_by: 'strokes', scope: 'field' }; // Fourball (Dev-93)
 let _gamesFormPar3Holes = [];             // hole numbers (1-18) with par===3, from the venue's stored tee data
 let _gamesFormVenueParDataAvailable = false; // false -> no tee data on file, host picks holes manually (any 1-18)
 let _gamesFormTouched = new Set();         // v4.9.14 — game amounts the host typed by hand (suggestions never overwrite these)
@@ -16043,16 +16125,24 @@ function renderGatheringPayoutHtml(s) {
     let h = label(`🤝 Fourball (${basisTxt}) — ${money(f.pot)}`);
     if (f.net_missing) h += `<div style="font-size:0.72rem;color:#b8860b;margin-bottom:2px">Net was chosen but no strokes were on file, so this played gross</div>`;
     if (f.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(f.configured_pot)}, but the pot only had ${money(f.pot)} left</div>`;
+    if (f.segments) {
+      const sg = f.segments;
+      h += `<div style="font-size:0.74rem;color:var(--text-muted);margin:2px 0 6px">${sg.mode === 'fbt' ? 'Front, Back and Total' : 'Holes 1-6, 7-12 and 13-18'}: ${money(sg.per_segment)} per player per segment, won on ${sg.win_by === 'holes' ? 'holes won' : 'strokes'}${sg.scope === 'group' ? ', each foursome its own match' : ', whole field'}. A tie is a push.</div>`;
+      h += (sg.groups || []).map(g => `<div style="padding:4px 0 6px;border-bottom:1px solid rgba(0,0,0,0.06)">
+        ${sg.scope === 'group' ? `<div style="font-size:0.74rem;font-weight:700;margin-bottom:2px">Group ${esc(g.group)}: ${g.pairs.map(pr => pr.map(esc).join(' &amp; ')).join(' vs ')}</div>` : ''}
+        ${g.segments.map(x => line(`${esc(x.label)} <span style="color:var(--text-muted)">${money(x.pot)}${x.holes_won ? ` · holes ${esc(x.holes_won[0])}-${esc(x.holes_won[1])}` : ''}</span>`,
+          x.status === 'won' ? `<b>${x.winner.map(esc).join(' &amp; ')}</b> ${money(x.per_player)} each` : (x.status === 'push' ? `<span style="color:var(--text-muted)">Push, ante back</span>` : `<span style="color:#b8860b">Not finished, ante back</span>`))).join('')}</div>`).join('');
+    }
     const wk = new Set((f.winners || []).map(w => w.map(norm).sort().join('|')));
     h += (f.standings || []).map(r => {
       const key = r.pair.map(norm).sort().join('|');
       const won = wk.has(key);
-      const place = r.complete ? `${r.tied ? 'T' : ''}${r.place}` : '—';
+      const place = r.complete ? (r.place != null ? `${r.tied ? 'T' : ''}${r.place}` : '') : '—';
       const holes = (r.holes || []).filter(x => x.score != null);
       return `<div style="padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.06)">${line(`<span style="color:var(--text-muted);display:inline-block;min-width:1.4rem">${place}</span><b>${r.pair.map(esc).join(' &amp; ')}</b>${r.complete ? '' : ` <span style="color:var(--text-muted)">(${r.played} holes in)</span>`}`, r.complete ? `${esc(r.total)}${won && f.per_player ? ` · ${money(f.per_player)} each` : ''}` : '—')}
         ${holes.length ? `<details><summary style="font-size:0.72rem;color:var(--text-muted);cursor:pointer">Hole by hole</summary><div style="font-size:0.74rem;color:var(--text-muted);line-height:1.6">${holes.map(x => `#${esc(x.hole)} ${esc(x.score)}${x.by && x.by.length === 1 ? ` (${esc(x.by[0].split(' ')[0])})` : ''}`).join(' &nbsp;·&nbsp; ')}</div></details>` : ''}</div>`;
     }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No pairs were set up</div>`;
-    if (!(f.winners || []).length) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">No pair finished all its holes — ${money(f.given_back_each)} back to each player</div>`;
+    if (!f.segments && !(f.winners || []).length) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">No pair finished all its holes — ${money(f.given_back_each)} back to each player</div>`;
     panels.push({ key: 'fb', tab: '🤝 Fourball', html: h });
   }
   // ── Strokes ──
@@ -16595,7 +16685,7 @@ function gatheringGameDetailsBody(evt, config) {
     remaining -= cost;
     const fbNet = fb.basis === 'net';
     const prs = (fb.pairs || []).map(pr => `${escapeHtml(pr[0])} &amp; ${escapeHtml(pr[1])}`).join(' · ');
-    rows.push(row('🤝', `Fourball · ${fbNet ? (fb.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `Better ball of each pair · $${(fb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, winning pair splits it${prs ? `<br><b>Pairs:</b> ${prs}` : ''}`, 'fourball'));
+    rows.push(row('🤝', `Fourball · ${fbNet ? (fb.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `Better ball of each pair · $${(fb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, ${fb.segments === 'fbt' || fb.segments === 'sixes' ? `${fb.segments === 'fbt' ? 'Front, Back and Total' : 'holes 1-6, 7-12 and 13-18'} are separate pots won on ${fb.win_by === 'holes' ? 'holes won' : 'strokes'} (${fb.win_by === 'holes' || fb.scope === 'group' ? 'each foursome plays its own match' : 'whole field'}), a tie is a push` : 'winning pair splits it'}${prs ? `<br><b>Pairs:</b> ${prs}` : ''}`, 'fourball'));
   }
   if ((config.legacy.games || []).includes('skins')) {
     const sk = gatheringAddon(config, 'skins');
@@ -18373,8 +18463,9 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
     : { dollar_per_birdie: null };
   { const fb = existing && existing.game_configs && existing.game_configs.fourball; // Dev-93: Fourball rides the generic game_configs column
     _gamesFormFourballConfig = fb
-      ? { dollar_per_player: fb.dollar_per_player, basis: fb.basis === 'net' ? 'net' : 'gross', net_mode: fb.net_mode === 'low' ? 'low' : 'own', pairs: (fb.pairs || []).map(pr => pr.slice()) }
-      : { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [] };
+      ? { dollar_per_player: fb.dollar_per_player, basis: fb.basis === 'net' ? 'net' : 'gross', net_mode: fb.net_mode === 'low' ? 'low' : 'own', pairs: (fb.pairs || []).map(pr => pr.slice()),
+          segments: fb.segments === 'fbt' || fb.segments === 'sixes' ? fb.segments : 'total', win_by: fb.win_by === 'holes' ? 'holes' : 'strokes', scope: fb.win_by === 'holes' || fb.scope === 'group' ? 'group' : 'field' }
+      : { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], segments: 'total', win_by: 'strokes', scope: 'field' };
     _gamesFormFourballNote = ''; }
   // Par table for Birdie Payouts — same resolver Card Score Sheet uses (Venue
   // Manager's stored pars first, BSGC's built-in table as the fallback).
@@ -18494,7 +18585,7 @@ function applyGamesSuggestion(force) {
   if (sug.cttp && !_gamesFormTouched.has('cttp')) _gamesFormCttpConfig.dollar_per_hole = sug.cttp.dollar_per_hole;
   if (sug.birdieball && !_gamesFormTouched.has('birdieball')) _gamesFormBirdieballConfig.dollar_per_player = sug.birdieball.dollar_per_player;
   if (sug.birdiepay && !_gamesFormTouched.has('birdiepay')) _gamesFormBirdiepayConfig.dollar_per_birdie = sug.birdiepay.dollar_per_birdie;
-  if (sug.fourball && !_gamesFormTouched.has('fourball')) _gamesFormFourballConfig.dollar_per_player = sug.fourball.dollar_per_player;
+  if (sug.fourball && !_gamesFormTouched.has('fourball')) _gamesFormFourballConfig.dollar_per_player = fourballSnapToSegments(sug.fourball.dollar_per_player);
   const fs = document.getElementById('games-form-fourball-section'); if (fs) fs.innerHTML = gatheringGamesFourballSectionHtml();
   const cs = document.getElementById('games-form-cttp-section'); if (cs) cs.innerHTML = gatheringGamesCttpSectionHtml();
   const bs = document.getElementById('games-form-birdieball-section'); if (bs) bs.innerHTML = gatheringGamesBirdieballSectionHtml();
@@ -18531,7 +18622,7 @@ function toggleGamesFormGame(key) {
     } else if (key === 'birdiepay') {
       _gamesFormBirdiepayConfig = { dollar_per_birdie: null };
     } else if (key === 'fourball') {
-      _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [] };
+      _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], segments: 'total', win_by: 'strokes', scope: 'field' };
       _gamesFormFourballNote = '';
     }
     // skins needs no per-game state at all — it's just whatever's left over.
@@ -18699,6 +18790,7 @@ function gatheringGamesFourballSectionHtml() {
   const c = _gamesFormFourballConfig;
   const names = gamesFormFourballNames();
   const low = n => String(n || '').trim().toLowerCase();
+  const segN = fourballSegCount(c);
   const picker = (pi, si) => {
     const cur = c.pairs[pi][si];
     const taken = new Set();
@@ -18719,11 +18811,21 @@ function gatheringGamesFourballSectionHtml() {
       <label>🤝 Fourball</label>
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.86rem">$</span>
-        <input type="number" id="games-form-fb-dpp" min="0.01" step="0.01" value="${c.dollar_per_player || ''}" style="width:90px"
+        <input type="number" id="games-form-fb-dpp" min="0.01" step="0.01" value="${segN > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / segN * 100) / 100 : '') : (c.dollar_per_player || '')}" style="width:90px"
           oninput="setGamesFormFourballDollarPerPlayer(this.value)">
-        <span style="font-size:0.86rem;color:var(--text-muted)">per player</span>
+        <span style="font-size:0.86rem;color:var(--text-muted)">${segN > 1 ? 'per player, per segment' : 'per player'}</span>
       </div>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">Each pair counts its better score on every hole. The lowest total wins this prize; tied pairs split it.</div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">${segN > 1
+        ? `Each player puts in $${(c.dollar_per_player || 0).toFixed(2)} in all ($${(Math.round((c.dollar_per_player || 0) / segN * 100) / 100).toFixed(2)} for each of the ${segN} segments). Each segment is its own pot. A tied segment is a push: everyone's ante comes back.`
+        : 'Each pair counts its better score on every hole. The lowest total wins this prize; tied pairs split it.'}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="flex:1;font-size:0.9rem;font-weight:600">Pot split</span>${seg([['total', 'One pot'], ['fbt', 'Front·Back·Total'], ['sixes', '6·6·6']], c.segments, 'setGamesFormFourballSegments')}</div>
+      ${segN > 1 ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="flex:1;font-size:0.9rem;font-weight:600">Segment won by</span>${seg([['strokes', 'Strokes'], ['holes', 'Holes won']], c.win_by, 'setGamesFormFourballWinBy')}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.win_by === 'holes' ? 'The pair that wins more holes wins the segment. One bad hole costs one hole, not the segment.' : 'The pair with the lower better-ball total wins the segment. One big number can swing it.'}</div>
+        ${c.win_by === 'holes' ? '' : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="flex:1;font-size:0.9rem;font-weight:600">Who competes</span>${seg([['group', 'Each foursome'], ['field', 'Whole field']], c.scope, 'setGamesFormFourballScope')}</div>`}
+        ${(c.win_by === 'holes' || c.scope === 'group') && c.pairs.length % 2 === 1 ? `<div style="font-size:0.74rem;color:#b8860b;margin-bottom:8px">Foursomes need an even number of pairs. The last pair has no opponent, so its pot is returned.</div>` : ''}` : ''}
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Fourball scoring</span>${seg([['gross', 'Gross'], ['net', 'Net']], c.basis, 'setGamesFormFourballBasis')}</div>
       ${c.basis === 'net' ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
@@ -18747,8 +18849,32 @@ function refreshGamesFormFourballSection() {
   const el = document.getElementById('games-form-fourball-section');
   if (el) el.innerHTML = gatheringGamesFourballSectionHtml();
 }
+function fourballSegCount(c) { return c && (c.segments === 'fbt' || c.segments === 'sixes') ? 3 : 1; }
+// With segments the host types the ante per segment; what is stored is the player's total across all of them.
+function fourballSnapToSegments(total) {
+  const n = fourballSegCount(_gamesFormFourballConfig), t = Number(total) || 0;
+  return n > 1 && t > 0 ? Math.max(n, Math.round(t / n) * n) : t;
+}
+function setGamesFormFourballSegments(v) {
+  const c = _gamesFormFourballConfig;
+  c.segments = v === 'fbt' || v === 'sixes' ? v : 'total';
+  if (fourballSegCount(c) > 1 && c.dollar_per_player > 0) c.dollar_per_player = fourballSnapToSegments(c.dollar_per_player);
+  if (c.segments === 'total') { c.win_by = 'strokes'; c.scope = 'field'; }
+  _gamesFormTouched.add('fourball');
+  refreshGamesFormFourballSection();
+  updateGamesFormPotPreview();
+}
+function setGamesFormFourballWinBy(v) {
+  _gamesFormFourballConfig.win_by = v === 'holes' ? 'holes' : 'strokes';
+  if (_gamesFormFourballConfig.win_by === 'holes') _gamesFormFourballConfig.scope = 'group'; // holes won needs two pairs who played each other
+  refreshGamesFormFourballSection();
+}
+function setGamesFormFourballScope(v) {
+  _gamesFormFourballConfig.scope = v === 'group' ? 'group' : 'field';
+  refreshGamesFormFourballSection();
+}
 function setGamesFormFourballDollarPerPlayer(val) {
-  _gamesFormFourballConfig.dollar_per_player = parseFloat(val) || 0;
+  _gamesFormFourballConfig.dollar_per_player = Math.round((parseFloat(val) || 0) * fourballSegCount(_gamesFormFourballConfig) * 100) / 100;
   _gamesFormTouched.add('fourball');
   updateGamesFormPotPreview();
 }
@@ -19020,7 +19146,7 @@ function updateGamesFormPotPreview(yesCount) {
   if (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.dollar_per_player > 0) {
     const fbCost = _gamesFormFourballConfig.dollar_per_player * yesCount;
     remaining -= fbCost;
-    lines.push(`🤝 Fourball: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), the winning pair splits it`);
+    lines.push(fourballSegCount(_gamesFormFourballConfig) > 1 ? `🤝 Fourball: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), cut into ${fourballSegCount(_gamesFormFourballConfig)} segment pots` : `🤝 Fourball: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), the winning pair splits it`);
   }
   // Birdie Payouts is a variable cost (flat $ × birdies actually made), so it
   // can't be totalled here — say so instead of showing a made-up number.
@@ -19078,7 +19204,8 @@ async function submitGatheringGames(gatheringId) {
     const c = _gamesFormFourballConfig;
     const rows = c.pairs.filter(pr => pr[0] || pr[1]);
     if (rows.some(pr => !pr[0] || !pr[1])) { showToast('Fourball: finish or remove the incomplete pair', true); return; }
-    const fb = { dollar_per_player: c.dollar_per_player, basis: c.basis === 'net' ? 'net' : 'gross', net_mode: c.net_mode === 'low' ? 'low' : 'own', pairs: rows.map(pr => [pr[0], pr[1]]) };
+    const fb = { dollar_per_player: c.dollar_per_player, basis: c.basis === 'net' ? 'net' : 'gross', net_mode: c.net_mode === 'low' ? 'low' : 'own', pairs: rows.map(pr => [pr[0], pr[1]]),
+      ...(fourballSegCount(c) > 1 ? { segments: c.segments, win_by: c.win_by === 'holes' ? 'holes' : 'strokes', scope: c.win_by === 'holes' || c.scope === 'group' ? 'group' : 'field' } : {}) };
     const v = BFEngine.validateGameConfig('fourball', fb);
     if (!v.ok) { showToast('Fourball: ' + v.errors[0], true); return; }
     game_configs = { fourball: fb };

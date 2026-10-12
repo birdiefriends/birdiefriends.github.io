@@ -37,7 +37,7 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date
   gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null, failNext: false,
   fetch: async (url, opt) => { if (ctx.failNext) throw new Error('offline'); posts.push(JSON.parse(opt.body)); return { json: async () => ({ ok: true }) }; } };
 vm.createContext(ctx);
-const names = ['liveScoringOn','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skCardOf','skMergeRemote','skGoFirstOpen','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml','skCardHtml'];
+const names = ['liveScoringOn','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skCardOf','skMergeRemote','skGoFirstOpen','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml'];
 vm.runInContext('let _sk = null; const _skChain = {};\n' + names.map(n => extractFn(src, n)).join('\n') + '\nthis.api={' + names.join(',') + ',get:()=>_sk};', ctx);
 const A = ctx.api;
 const evt = { gatheringId: 7, name: 'Sat Fourball', holes: 18 };
@@ -100,8 +100,46 @@ A.skSetGroup(1);
 eq(A.skGroup().players, ['Sam Lee','Pat Roe','Lee Jo','Jo Wu'], 'any group can be scored from the chips');
 ok(!/standings|Better ball/i.test(A.liveScoreModeHtml()), 'Score mode shows no standings');
 A.skJump(0, 1); eq([A.get().hole, A.get().mode], [1, 'score'], 'tap in the card jumps to Score mode on that hole');
-const gridHtml = A.skCardHtml(); ok(gridHtml.includes('Best') && gridHtml.includes('Back'), 'card view: best-ball rows and both nines');
 eq(A.livePanelModeToggleHtml('score').includes("setLiveScoreMode('games')"), true, 'toggle switches to Games');
+
+// ── Live Actions: game view, field view, player card drill
+{
+  const pairs4 = [['Brian Hager','Tom Marsh'],['Mike Kay','Dave Vance'],['Sam Lee','Pat Roe'],['Lee Jo','Jo Wu']];
+  const fbRow = { games: ['fourball'], dollar_per_player: 15, game_configs: { fourball: { dollar_per_player: 15, basis: 'gross', net_mode: 'own', segments: 'fbt', win_by: 'holes', scope: 'group', pairs: pairs4 } } };
+  const mk = (n, h) => ({ player: n, holes: [...h, ...Array(18 - h.length).fill(null)] });
+  const serverCards = [mk('Brian Hager', [4,4,3,5,4,4,5]), mk('Tom Marsh', [4,3,4,4,5,5,6]), mk('Mike Kay', [5,4,3,4,5,5,5]), mk('Dave Vance', [4,5,4,4,6,6,6])];
+  const c2 = { ...ctx, _fbLive: null, _fbUi: null, skMaxHole: undefined };
+  const ctx2 = Object.assign(ctx, { BFEngine: E });
+  vm.runInContext('let _fbLive = null; let _fbUi = { view: "group", hole: null, drill: null };\n' + ['fbOverlayCards','fbLiveCompute','fbSetView','fbPickHole','fbDrill','fbShort','fourballPlayerCardHtml','fourballActionsHtml','fourballLiveSectionHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.live={fbSetView,fbDrill,fbPickHole,fourballPlayerCardHtml,fourballActionsHtml,fbLiveCompute,set:v=>{_fbLive=v},ui:()=>_fbUi};', ctx);
+  ctx.gatheringAddon = (c, id) => (c && c.addons.find(a => a.id === id)) || null;
+  const L2 = ctx.live;
+  await tick(); await tick(); // let the earlier test's last save finish so nothing is left waiting
+  A.skSetGroup(0); A.skMergeRemote(serverCards);
+  const cfg2 = E.gatheringConfigFromLegacy(fbRow);
+  ok(/Loading/.test(L2.fourballActionsHtml(cfg2)), 'actions: loading before the first read');
+  L2.set({ gid: 7, row: fbRow, cards: serverCards, pars: PARS });
+  let h = L2.fourballActionsHtml(cfg2);
+  ok(h.includes('My group') && h.includes('Field'), 'actions: My group / Field switch');
+  ok(h.includes('Brian &amp; Tom') && h.includes('Mike &amp; Dave'), 'actions: the two pairs of my group');
+  ok(/Front 9/.test(h) && /Back 9/.test(h) && /Total/.test(h), 'actions: Front / Back / Total rows');
+  ok(/3 - 0, 4 halved/.test(h), 'actions: front tally 3-0 with 4 halved (holes won)');
+  ok(/Brian 3 up|Brian &amp; Tom/.test(h) && /3 up/.test(h), 'actions: the leader and the margin in words');
+  ok(/Scorecards/.test(h) && /thru 7/.test(h), 'actions: scorecards rows with holes played');
+  ok(/Hole 7/.test(h) && /Halved/.test(h), 'actions: hole detail opens on the last played hole');
+  L2.fbPickHole(5); h = L2.fourballActionsHtml(cfg2);
+  ok(/Hole 5 · par 5/.test(h) && /win the hole with a 4/.test(h), 'actions: tapping a hole shows both pairs and who counted');
+  // this phone's unsaved tap shows at once
+  A.skMergeRemote(serverCards); A.skSetGroup(0);
+  A.skSetScore('Brian Hager', 8, 3); A.skSetScore('Tom Marsh', 8, 4); A.skSetScore('Mike Kay', 8, 3); A.skSetScore('Dave Vance', 8, 3);
+  h = L2.fourballActionsHtml(cfg2);
+  ok(/Through 8 holes/.test(h), 'actions: scores tapped on this phone count before the server read');
+  L2.fbDrill(0); h = L2.fourballActionsHtml(cfg2);
+  ok(/Back to the game/.test(h) && /Brian Hager/.test(h) && /Total through 8 holes/.test(h) && />Out</.test(h), 'drill: one player\'s card with Out/In and total');
+  ok(/skJump\(0,1\)/.test(h), 'drill: tapping a hole jumps to Live Score to fix it');
+  L2.fbSetView('field'); h = L2.fourballActionsHtml(cfg2);
+  ok(/Better ball of each pair/.test(h) || /Loading standings|No scores saved/.test(h), 'field view: shows the whole-field standings');
+  eq(L2.ui().drill, null, 'switching view leaves any card drill');
+}
 
 // ── wiring: the panel, BF Series safety
 ok(/const _skOn = liveScoringOn\(_liveConfig, _panelGid\);/.test(src), 'panel decides live scoring from the round\'s config');

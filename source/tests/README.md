@@ -19,6 +19,7 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_fourball_form.mjs` | Dev-93 Fourball step 3: Games-form section (pair editor, Gross/Net + Own/Off-the-low, ✨ Suggest pairs, pot preview, over-commit, save payload incl. `game_configs.fourball`) and `recommendPairs` unit tests |
 | `test_rail_cancel.mjs` | Dev-93: At-the-course rail off switch sticks past tee time; cancelled events never launch the rail or the Live Panel (test rounds excepted) |
 | `test_fourball_live.mjs` | Dev-93: Fourball live board (partial cards, to-par ranking, net, agrees with the Close winner) and the Live Panel section |
+| `test_fourball_segments.mjs` | Dev-93: Fourball pot variants: segments, strokes vs holes won, foursome vs field, pushes, match view |
 | `test_live_scoring.mjs` | Dev-93: live scoring (Score mode): foursome groups, initials, merge, save per tap, offline retry, BF Series untouched |
 | `test_live_panel_sections.mjs` | Dev-93: Live Panel sections follow the round's games; a non-gamed round (BF Series) keeps the classic panel |
 | `test_score_mode.mjs` | `evtScoreMode`: any gamed Gathering captures strokes |
