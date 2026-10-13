@@ -64,4 +64,19 @@ const label = d => d.window.document.getElementById('gw-step-label').textContent
   ok(/Turn Off Games/.test(doc.window.document.getElementById('gw-pane-review').innerHTML), 'turn off lives on the review step');
   a.gwGoTo('skins'); a.gwNext(); eq(vis(doc), ['review'], 'Next from the last game goes to review');
 }
+{
+  const t = world(), a = t.api, doc = t.dom, d = doc.window.document;
+  a.renderGatheringGamesForm(7, { gatheringId: 7, name: 'T' }, null);
+  a.toggleGamesFormGame('birdieball'); a.toggleGamesFormGame('fourball'); a.gwNext();
+  const dpp = d.getElementById('games-form-dpp'); dpp.value = '10'; dpp.dispatchEvent(new doc.window.Event('input')); t.ctx.onGamesFormDppInput();
+  const bb = d.getElementById('gw-split-bb');
+  ok(!!bb && !!d.getElementById('gw-split-fb'), 'the buy-in screen has a box for every game amount');
+  ok(Number(bb.value) > 0, 'suggested MiserBall amount is filled in');
+  bb.value = '3'; t.ctx.setGamesFormBirdieballDollarPerPlayer('3');
+  t.ctx.onGamesFormDppInput();
+  eq(d.getElementById('gw-split-bb').value, '3', 'a typed MiserBall $3 survives the buy-in changing');
+  a.gwNext(); a.gwNext(); a.gwNext();
+  eq(vis(doc), ['birdieball'], 'on the MiserBall screen');
+  eq(d.getElementById('games-form-bb-dpp').value, '3', 'its own box shows the amount typed on the buy-in screen');
+}
 console.log(`games wizard: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

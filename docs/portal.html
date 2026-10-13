@@ -18837,6 +18837,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
             oninput="onGamesFormDppInput()">
           <div style="display:flex;gap:8px;margin-top:8px">${[5, 10, 20].map(v => `<button type="button" onclick="setGamesFormDpp(${v})" style="height:34px;padding:0 16px;border-radius:17px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.86rem;cursor:pointer">$${v}</button>`).join('')}</div>
           <div id="games-form-suggest-note" style="font-size:0.74rem;color:var(--text-muted);margin-top:8px;line-height:1.5"></div>
+          <div id="games-form-split">${gamesFormSplitHtml()}</div>
           <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px" id="games-form-pot-preview"></div>
         </div>
       </div>
@@ -18861,6 +18862,28 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
   updateGamesFormPotPreview();
   applyGamesSuggestion(false);
   gwRender();
+}
+// The suggested split, as boxes you can type over: any amount is yours to change right here, not only on the game's own screen.
+function gamesFormSplitHtml() {
+  const sel = _gamesFormSelected, rows = [];
+  const inp = (id, val, fn, unit) => `<span style="font-size:0.86rem">$</span><input type="number" id="${id}" min="0.01" step="0.01" value="${val || ''}" inputmode="decimal" oninput="${fn}(this.value)" style="width:78px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.78rem;color:var(--text-muted)">${unit}</span>`;
+  const row = (icon, name, ctl) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border)"><span style="flex:1;font-size:0.9rem;font-weight:600">${icon} ${name}</span>${ctl}</div>`;
+  const per = (c, n) => n > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / n * 100) / 100 : '') : (c.dollar_per_player || '');
+  if (sel.has('fourball')) { const n = fourballSegCount(_gamesFormFourballConfig); rows.push(row('🤝', 'Fourball', inp('gw-split-fb', per(_gamesFormFourballConfig, n), 'setGamesFormFourballDollarPerPlayer', n > 1 ? 'per player, per period' : 'per player'))); }
+  if (sel.has('lowscore')) { const n = lowscoreSegCount(_gamesFormLowscoreConfig); rows.push(row('🎯', 'Low Score', inp('gw-split-ls', per(_gamesFormLowscoreConfig, n), 'setGamesFormLowscoreDollarPerPlayer', n > 1 ? 'per player, per period' : 'per player'))); }
+  if (sel.has('cttp')) rows.push(row('🎯', 'CTP', inp('gw-split-cttp', _gamesFormCttpConfig.dollar_per_hole, 'setGamesFormCttpDollarPerHole', 'a hole')));
+  if (sel.has('birdieball')) rows.push(row('🐦', 'MiserBall', inp('gw-split-bb', _gamesFormBirdieballConfig.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer', 'per player')));
+  if (sel.has('birdiepay')) rows.push(row('🐤', 'Birdie Payouts', inp('gw-split-bp', _gamesFormBirdiepayConfig.dollar_per_birdie, 'setGamesFormBirdiepayDollarPerBirdie', 'a birdie')));
+  if (sel.has('skins')) rows.push(row('⛳', 'Skins', '<span style="font-size:0.8rem;color:var(--text-muted)">gets what is left</span>'));
+  if (!rows.length) return '';
+  return `<div style="font-size:0.8rem;font-weight:700;margin:12px 0 2px">How it splits <span style="font-weight:400;color:var(--text-muted)">· type over any amount</span></div>${rows.join('')}`;
+}
+function refreshGamesFormSplit() {
+  const el = document.getElementById('games-form-split');
+  if (!el) return;
+  const a = document.activeElement;
+  if (a && el.contains(a)) return; // never rebuild a box while it is being typed in
+  el.innerHTML = gamesFormSplitHtml();
 }
 // ── Games setup wizard: one question per screen ──────────────────────────────
 let _gw = { step: 'games' };
@@ -18927,6 +18950,13 @@ function gwRender() {
   if (!steps.includes(_gw.step)) _gw.step = steps.includes('review') && _gw.step !== 'games' ? 'review' : 'games';
   const cur = _gw.step, i = steps.indexOf(cur), moved = _gw.shown !== cur;
   _gw.shown = cur;
+  if (moved) { // a screen can hold stale numbers if an amount was typed on the buy-in screen: rebuild it as it opens
+    const redo = { fourball: gatheringGamesFourballSectionHtml, fbpairs: gatheringGamesFourballSectionHtml, lowscore: gatheringGamesLowscoreSectionHtml, cttp: gatheringGamesCttpSectionHtml, birdieball: gatheringGamesBirdieballSectionHtml, birdiepay: gatheringGamesBirdiepaySectionHtml }[cur];
+    const box = { fourball: 'fourball', fbpairs: 'fourball', lowscore: 'lowscore', cttp: 'cttp', birdieball: 'birdieball', birdiepay: 'birdiepay' }[cur];
+    const el = box && document.getElementById('games-form-' + box + '-section');
+    if (redo && el) el.innerHTML = redo();
+    if (cur === 'buyin') refreshGamesFormSplit();
+  }
   const pane = cur === 'fbpairs' ? 'fourball' : cur;
   wiz.dataset.sub = cur === 'fbpairs' ? 'pairs' : 'setup';
   wiz.querySelectorAll('.gw-pane').forEach(el => { el.style.display = el.id === 'gw-pane-' + pane ? 'block' : 'none'; });
@@ -19592,6 +19622,7 @@ function gamesFormOverCommit(dpp, yesCount) {
 }
 function updateGamesFormPotPreview(yesCount) {
   if (yesCount !== undefined) _gamesFormYesCount = yesCount;
+  if (typeof refreshGamesFormSplit === 'function') refreshGamesFormSplit();
   yesCount = _gamesFormYesCount;
   const el = document.getElementById('games-form-pot-preview');
   const input = document.getElementById('games-form-dpp');
