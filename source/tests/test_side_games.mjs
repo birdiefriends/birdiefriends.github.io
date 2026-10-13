@@ -85,5 +85,17 @@ ok(/Match Play/.test(h1) && /Ann/.test(h1) && /10&amp;|UP|&amp;/.test(h1), 'Matc
 ok(/Alternate Shot/.test(h2) && /A-S/.test(h2), 'Alternate Shot tab');
 ok(/bragging rights/.test(h0), '$0 match says no money');
 
+// A-S live: rows are teams, strokes belong to the pair
+{
+  const asCfg = { addons: [{ id: 'altshot', pairs: [['Ann', 'Bob'], ['Cy', 'Di']], basis: 'net', net_mode: 'own', allowance: 50 }],
+    handicap: { mode: 'net', allowance: 95, stroke_index: arr(h => h), players: { Ann: { kind: 'index', course_hcp: 10, strokes: 9 }, Bob: { kind: 'index', course_hcp: 20, strokes: 19 }, Cy: { kind: 'index', course_hcp: 10, strokes: 9 }, Di: { kind: 'index', course_hcp: 10, strokes: 9 } } } };
+  A.skEnsure({ gatheringId: 3, holes: 18 }, asCfg);
+  const mk = A.skMarks();
+  ok(mk.get('ann').strokes === 15 && mk.get('bob').strokes === 15 && mk.get('cy').strokes === 10, 'A-S pair strokes = 50% of the two course handicaps added (15, 10)');
+  ok(mk.get('ann').got[1] === 1 && mk.get('ann').got[15] === 1 && !mk.get('ann').got[16], 'pair gets a stroke on the 15 hardest holes');
+}
+const lsrc = extractFn(src, 'liveScoreModeHtml');
+ok(/asMode/.test(lsrc) && /units/.test(lsrc), 'Live Score shows teams in Alternate Shot');
+
 console.log(`test_side_games: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

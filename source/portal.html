@@ -10078,6 +10078,28 @@ function skMarks() {
   const key = JSON.stringify([all, _sk.config && _sk.config.handicap && _sk.config.handicap.players ? Object.keys(_sk.config.handicap.players).length : 0]);
   if (_sk._marksKey === key && _sk._marks) return _sk._marks;
   const m = new Map(BFEngine.strokeMarksFor(_sk.config, all).map(x => [String(x.player).trim().toLowerCase(), x]));
+  if (liveSideGid(_sk.config) === 'altshot') {
+    // Alternate Shot: strokes belong to the PAIR (allowance % of both course handicaps added), so both partners carry the pair's marks.
+    const hc = _sk.config.handicap, a = gatheringAddon(_sk.config, 'altshot') || {};
+    const nm = x => String(x || '').trim().toLowerCase();
+    m.clear();
+    if (hc && hc.mode === 'net' && a.basis === 'net') {
+      const pct = a.allowance != null && a.allowance !== '' && Number.isFinite(Number(a.allowance)) ? Number(a.allowance) : 50;
+      const specs = new Map(Object.entries(hc.players || {}).map(([k, v]) => [nm(k), v]));
+      const pairs = (a.pairs || []).filter(pr => Array.isArray(pr) && pr.length === 2);
+      const strokesOf = pr => Math.round(pr.reduce((t, n) => { const sp = specs.get(nm(n)) || {}; return t + (sp.kind === 'index' && Number.isFinite(Number(sp.course_hcp)) ? Number(sp.course_hcp) : (Number(sp.strokes) || 0)); }, 0) * pct / 100);
+      const own = pairs.map(strokesOf);
+      pairs.forEach((pr, i) => {
+        let eff = own[i];
+        if (a.net_mode === 'low') { const base = i - (i % 2); eff -= Math.min(...[own[base], own[base + 1]].filter(v => v != null)); }
+        const sp0 = specs.get(nm(pr[0])) || {};
+        const si = Array.isArray(sp0.stroke_index) && sp0.stroke_index.length === 18 ? sp0.stroke_index : (Array.isArray(hc.stroke_index) && hc.stroke_index.length === 18 ? hc.stroke_index : null);
+        const got = {};
+        if (si) si.forEach((r, h) => { const k = BFEngine.strokesOnHole(eff, r, 18); if (k) got[h + 1] = k; });
+        pr.forEach(n => m.set(nm(n), { player: n, strokes: eff, got, known: !!si }));
+      });
+    }
+  }
   _sk._marksKey = key; _sk._marks = m;
   return m;
 }
@@ -10204,31 +10226,36 @@ function liveScoreModeHtml() {
   const g = skGroup(), gs = skGroups(), hole = _sk.hole, max = skMaxHole();
   if (!g.players.length) return `<div style="font-size:0.85rem;color:rgba(255,255,255,0.7);padding:8px 0">Nobody is set up for this game yet.</div>`;
   const pars = skPars(), par = pars ? pars[hole - 1] : null;
-  const vals = g.players.map(n => { const v = skCardOf(n)[hole - 1]; return v > 0 ? v : null; });
-  const done = vals.every(v => v != null);
   const first = n => String(n).trim().split(/\s+/)[0];
+  // Alternate Shot: one ball per pair, so the rows are the TEAMS (entering for the team fills in both partners).
+  const asMode = liveSideGid(_sk.config) === 'altshot';
+  const units = asMode ? g.pairs.filter(pr => pr.length === 2).map(pr => ({ k: g.players.indexOf(pr[0]), n: pr[0], label: pr.map(first).join(' & ') }))
+    : g.players.map((n, k) => ({ k, n, label: n }));
+  const vals = units.map(u => { const v = skCardOf(u.n)[hole - 1]; return v > 0 ? v : null; });
+  const done = vals.every(v => v != null);
   const navBtn = (d, svg, hot) => `<button type="button" aria-label="${d < 0 ? 'Previous hole' : 'Next hole'}" onclick="skNav(${d})" style="width:52px;height:52px;border-radius:12px;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;${hot ? 'border:0;background:#1D9E75' : 'border:1.5px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.08)'}">${svg}</button>`;
   const chevL = '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>';
   const chevR = '<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>';
   const keyStyle = on => `height:52px;border-radius:12px;font-family:'DM Mono',monospace;font-size:1.4rem;font-weight:600;color:#fff;cursor:pointer;box-sizing:border-box;${on ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.2)' : 'border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.1)'}`;
   const pad = `<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:2px 0 10px">${[1,2,3,4,5,6,7,8,9].map(n => `<button type="button" onclick="skTap(${n})" style="${keyStyle(n === par)}">${n}</button>`).join('')}<button type="button" aria-label="Clear this score" onclick="skClear()" style="height:52px;border-radius:12px;font-size:1.1rem;color:rgba(255,255,255,0.7);cursor:pointer;box-sizing:border-box;border:1.5px dashed rgba(255,255,255,0.3);background:transparent">✕</button></div>`;
-  const rows = g.players.map((n, k) => {
-    const v = vals[k], active = k === _sk.sel, d = v == null || par == null ? 0 : v - par;
+  const rows = units.map((u, ui) => {
+    const n = u.n, k = u.k, label0 = u.label;
+    const v = vals[ui], active = k === _sk.sel, d = v == null || par == null ? 0 : v - par;
     const col = v == null ? 'rgba(255,255,255,0.35)' : d < 0 ? '#5DCAA5' : d > 0 ? '#e0b44c' : '#fff';
     const pr = g.pairs.find(p => p.length === 2 && p[0] === n);
-    const label = pr ? `<div style="font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:10px 2px 4px;font-family:'DM Mono',monospace">${pr.map(x => escapeHtml(first(x))).join(' &amp; ')}</div>` : '';
+    const label = pr && !asMode ? `<div style="font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:10px 2px 4px;font-family:'DM Mono',monospace">${pr.map(x => escapeHtml(first(x))).join(' &amp; ')}</div>` : '';
     return `${label}<button type="button" onclick="skPick(${k})" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:12px;min-height:56px;box-sizing:border-box;cursor:pointer;margin-bottom:6px;color:#fff;font-family:inherit;text-align:left;${active ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.18)' : 'border:1.5px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.2)'}">
-      <span style="flex:1;min-width:0;font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(n)} ${skDotsHtml(skGot(n, hole), '#ffe08a')}${skGot(n, hole) ? `<span style="font-size:0.68rem;font-weight:500;color:#ffe08a;margin-left:4px">gets ${skGot(n, hole) > 1 ? skGot(n, hole) + ' strokes' : 'a stroke'}</span>` : ''}</span>
+      <span style="flex:1;min-width:0;font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(label0)} ${skDotsHtml(skGot(n, hole), '#ffe08a')}${skGot(n, hole) ? `<span style="font-size:0.68rem;font-weight:500;color:#ffe08a;margin-left:4px">gets ${skGot(n, hole) > 1 ? skGot(n, hole) + ' strokes' : 'a stroke'}</span>` : ''}</span>
       <span style="min-width:44px;text-align:right;font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:700;color:${col}">${v == null ? '–' : v}${v != null && skGot(n, hole) ? `<span style="display:block;font-size:0.66rem;font-weight:500;color:#ffe08a;line-height:1">net ${v - skGot(n, hole)}</span>` : ''}</span></button>${active ? pad : ''}`;
   }).join('');
   const nextH = hole < max ? hole + 1 : null;
-  const nextWho = nextH ? g.players.filter(n => skGot(n, nextH) > 0).map(n => `${escapeHtml(first(n))}${skGot(n, nextH) > 1 ? ' (' + skGot(n, nextH) + ')' : ''}`) : [];
+  const nextWho = nextH ? units.filter(u => skGot(u.n, nextH) > 0).map(u => `${escapeHtml(asMode ? u.label : first(u.n))}${skGot(u.n, nextH) > 1 ? ' (' + skGot(u.n, nextH) + ')' : ''}`) : [];
   const nextStrokes = nextH && skAnyStrokes() ? `<div style="margin-top:4px;font-size:0.76rem;color:#ffe08a;text-align:center;line-height:1.4">Hole ${nextH}: ${nextWho.length ? nextWho.join(', ') + ' get' + (nextWho.length === 1 && !/\(/.test(nextWho[0]) ? 's' : '') + ' a stroke' : 'no strokes in this group'}</div>` : '';
   const hi = par == null ? -1 : vals.findIndex(v => v != null && v >= par + 3);
-  const hint = hi >= 0 ? `${escapeHtml(first(g.players[hi]))} shows ${vals[hi]} on a par ${par}. Right? Tap the name to change it.`
-    : done ? (g.players.length === 2 ? 'Both are in. ' : 'All ' + g.players.length + ' are in. ') + 'Tap a name to change a score, or go to the next hole.'
-    : _sk.sel >= 0 ? `Tap ${escapeHtml(first(g.players[_sk.sel]))}'s score. It saves and moves to the next name.`
-    : 'Tap a name to enter a score.';
+  const hint = hi >= 0 ? `${escapeHtml(asMode ? units[hi].label : first(units[hi].n))} shows ${vals[hi]} on a par ${par}. Right? Tap the name to change it.`
+    : done ? (units.length === 2 ? 'Both are in. ' : 'All ' + units.length + ' are in. ') + 'Tap a ' + (asMode ? 'team' : 'name') + ' to change a score, or go to the next hole.'
+    : _sk.sel >= 0 ? `Tap ${escapeHtml(asMode ? (units.find(u => u.k === _sk.sel) || units[0]).label : first(g.players[_sk.sel]))}'s score. It saves and moves to the next ${asMode ? 'team' : 'name'}.`
+    : 'Tap a ' + (asMode ? 'team' : 'name') + ' to enter a score.';
   const status = _sk.err ? 'Not saved yet, will retry' : _sk.pending ? 'Saving…' : _sk.savedAt ? 'Saved' : '';
   const statusCol = _sk.err ? '#e0b44c' : '#5DCAA5';
   const chips = gs.length > 1 ? `<div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">${gs.map((x, i) => `<button type="button" onclick="skSetGroup(${i})" style="min-height:36px;padding:0 12px;border-radius:18px;font-family:inherit;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;${i === _sk.groupIdx ? 'background:#5DCAA5;color:#04342a;border:0' : 'background:transparent;color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.3)'}">Group ${x.n}</button>`).join('')}</div>` : '';
@@ -10361,8 +10388,10 @@ function fourballActionsHtml(cfg) {
       <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">${hd.res === 'T' ? `Halved. Both pairs counted ${hd.a}. ` : ''}${skAnyStrokes() ? 'Scores in the boxes are net (strokes already taken off). ' : ''}Tap a name for that player's full card.</div></div>` : '';
   const how = m.mode === 'match' ? 'One match for the round. It is announced the moment it is decided, you can keep playing.' : m.mode === 'total' ? 'One pot, lowest total wins.' : `${BFEngine.PERIODS[m.mode] ? BFEngine.PERIODS[m.mode].phrase : ''}, ${holesMode ? 'won on holes' : 'won on strokes'}. A tie is a push.`;
   const cardRows = skGroup().players.map((n, k) => {
+    const asPair = liveSideGid(_sk.config) === 'altshot' ? skGroup().pairs.find(pr => pr.includes(n)) : null;
+    if (asPair && asPair[0] !== n) return '';
     const c = skCardOf(n), d = c.filter(v => v > 0);
-    return `<button type="button" onclick="fbDrill(${k})" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;margin-bottom:6px;background:rgba(0,0,0,0.2);border:0;border-radius:10px;min-height:44px;box-sizing:border-box;color:#fff;font-family:inherit;cursor:pointer;text-align:left"><span style="flex:1;font-size:0.9rem;font-weight:600">${escapeHtml(n)}</span><span style="font-size:0.74rem;color:rgba(255,255,255,0.6)">thru ${d.length}</span><span style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:700;min-width:28px;text-align:right">${d.reduce((a, v) => a + v, 0) || '·'}</span><span style="color:rgba(255,255,255,0.5)">›</span></button>`;
+    return `<button type="button" onclick="fbDrill(${k})" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;margin-bottom:6px;background:rgba(0,0,0,0.2);border:0;border-radius:10px;min-height:44px;box-sizing:border-box;color:#fff;font-family:inherit;cursor:pointer;text-align:left"><span style="flex:1;font-size:0.9rem;font-weight:600">${escapeHtml(asPair ? asPair.join(' & ') : n)}</span><span style="font-size:0.74rem;color:rgba(255,255,255,0.6)">thru ${d.length}</span><span style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:700;min-width:28px;text-align:right">${d.reduce((a, v) => a + v, 0) || '·'}</span><span style="color:rgba(255,255,255,0.5)">›</span></button>`;
   }).join('');
   return `${toggle}${chips}
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="background:${TEAL};color:#04342a;font-weight:700;font-size:0.8rem;border-radius:7px;padding:4px 8px">${escapeHtml(iA)}</span><span style="font-size:0.84rem;font-weight:600">${fbShort(pa.names)}</span></div>
