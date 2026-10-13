@@ -1,3 +1,6 @@
+v4.20.1 · 2026-10-13
+Deployed: 2026-10-13 (Fix: after deleting a round, the Gatherings icon in the header stopped opening the panel until you reloaded the app. The small option picker (Holes, Golf format) shared an element id with the Gatherings panel, so closing the picker, or deleting a round, removed the panel from the page. The picker now has its own id and a delete just closes the panel. No Worker change.)
+
 v4.20.0 · 2026-10-12
 Deployed: 2026-10-12 (Net results now show where handicap strokes landed. In the hole-by-hole map, a small dot under a hole means a player got a stroke there (teal for the first pair, amber for the second); tap the hole to see who got one and that its scores are already net. The Summary lists each player's strokes under their name, and Low Score lists each player's strokes and holes. Strokes follow Off the low when that is chosen. Rounds closed before this update show no dots. Also: the pot preview says period pots. Worker needs no change, only its version tag differs.)
 

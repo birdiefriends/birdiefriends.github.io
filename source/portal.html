@@ -12263,7 +12263,7 @@ function closeHostPlayersSheet() {
 function openHostSheet(title, bodyHtml, doneHandler) {
   closeHostSheet();
   const ov = document.createElement('div');
-  ov.id = 'host-sheet-overlay';
+  ov.id = 'host-option-sheet'; // NOT 'host-sheet-overlay': that id is the My Gatherings panel, and closing this sheet used to delete the panel
   ov.style.cssText = 'position:fixed;inset:0;z-index:9200;background:rgba(20,30,25,0.45);display:flex;align-items:flex-end;justify-content:center';
   ov.onclick = e => { if (e.target === ov) closeHostSheet(); };
   ov.innerHTML = `<div style="width:100%;max-width:560px;max-height:85vh;overflow:auto;background:#fff;border-radius:18px 18px 0 0;padding-bottom:16px">
@@ -12274,7 +12274,7 @@ function openHostSheet(title, bodyHtml, doneHandler) {
   document.body.appendChild(ov);
 }
 function closeHostSheet() {
-  const ov = document.getElementById('host-sheet-overlay');
+  const ov = document.getElementById('host-option-sheet');
   if (ov) ov.remove();
 }
 function hostOptionRowsHtml(kind, opts, current) {
@@ -18255,7 +18255,7 @@ async function destroyRound(gid, title) {
     const d = data.deleted || {};
     showToast(`🗑 "${data.title}" deleted (${d.registrations || 0} players, ${d.scorecards || 0} scorecards)`);
     try { closeHistoryDetailView(); } catch (e) {}
-    try { if (typeof closeHostSheet === 'function') closeHostSheet(); } catch (e) {}
+    try { closeHostSheet(); closeGamesCardDialog(); closeHostPanel(); } catch (e) {} // close, never remove: the header icon must be able to reopen the panel
     await refreshGatherings();
     try { await loadMyHistory(); } catch (e) {}
   } catch (e) {
