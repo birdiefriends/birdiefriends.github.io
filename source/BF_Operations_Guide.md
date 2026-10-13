@@ -241,9 +241,9 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 ### Current Versions
 | Component | Version | Status |
 |-----------|---------|--------|
-| Portal | v4.15.1 · 2026-10-09 | Production ✅ — Dev-92: one add-a-player flow (member picker, read-back, Edit registers the players it adds, card button, Archive add/Open spot), started Gatherings stay in the host list until closed, Edit skips an unchanged `event_time`, cell forced then "TBD", Sub banner no longer says "5th player". Engine `bf_engine.js` 1.4.0. |
+| Portal | v4.23.3 · 2026-10-13 | Production ✅ — Dev-93: game registry, Fourball, Low Score and the scoring-periods layer, Live Score / Live Actions, stroke dots on every net view, the Games setup wizard with one last "The money" screen, Commissioner delete-this-round, MiserBall per-player result and Close hold. Engine `bf_engine.js` 1.16.7. |
 | GolfScorer | v8.58 · 2026-10-09 | Deployed ✅ — Dev-92: "+ Add Group" moved into the Groups header; empty Groups area is a drop target. Start each new event with ↺ New Event (it is the only thing that clears Groups, kept in localStorage `bf_groups_data`). |
-| Worker | main `worker.js` 3,427 lines; `bf_experiences_worker.js` 2,674 lines (Dev-92) | Deployed ✅ — no Worker change in portal v4.14.x–4.15.1. Manually pasted into Cloudflare by Brian. |
+| Worker | main `worker.js` 3,427 lines; `bf_experiences_worker.js` 2,986 lines (Dev-93) | Brian pastes Workers into Cloudflare manually. Dev-93 needed redeploys for `period`/`front_back`/`lowscore` (v4.19.0) and `/bfe/gathering-destroy` (v4.18.0): confirm both are live. Later engine bumps only change a comment in the schema block. |
 | deploy.html | 2026-06-18 | Live ✅ — all tabs functional (Session BP-1 fix) |
 | bf_deploy.py | 2026-06-18 | In library for reference only — TOKEN-authenticated functions not invoked by Claude |
 | bf_architecture.html | 2026-07-14 (Dev-63) | Library ✅ — GolfScorer node + publish-path note updated; ERD/D1 sections still current as of Dev-56, untouched — now further behind after Dev-67/70's schema additions, see Backlog |
