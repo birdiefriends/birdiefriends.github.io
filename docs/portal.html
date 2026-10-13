@@ -13522,6 +13522,7 @@ async function refreshHistoryAfterEdit() {
 // and caches the per-group data (photos/scores/notes byKey, sorted key
 // order) at module level; openHistoryDetail reads from that cache rather
 // than re-fetching or re-deriving anything, so opening a moment is instant.
+let _historyFullStrokes = {}; // event key -> { player(lowercase): full handicap strokes }
 let _historyStrokeMarks = {}; // event key -> stroke_marks from the closed games summary, for the My History scorecard modal
 let _historyScores = []; // cache from the last loadMyHistory call, for openScoreDetail lookups by id
 let _historyWeatherByKey = new Map(); // event_name -> weather row (Dev-67), rebuilt each loadMyHistory call
@@ -14006,9 +14007,16 @@ function openScoreDetail(scId) {
     // earlier, just enough to feel like it belongs next to them rather
     // than a plain data readout.
     const motifWatermark = venueMotifAreaScatter(venueMotifForEvent(groupEvt));
-    const sm = (_historyStrokeMarks[sc.event_name] || []).find(m => String(m.player).trim().toLowerCase() === String(sc.player).trim().toLowerCase());
+    const pk = String(sc.player).trim().toLowerCase();
+    const sm = (_historyStrokeMarks[sc.event_name] || []).find(m => String(m.player).trim().toLowerCase() === pk);
+    const full = (_historyFullStrokes[sc.event_name] || {})[pk];
     const got = sm && sm.got && Object.keys(sm.got).length ? sm.got : null;
-    const strokeNote = got ? `<div style="font-size:0.72rem;color:var(--text-muted);margin:-4px 0 10px"><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#0a5c47;margin-right:5px;vertical-align:middle"></span>Handicap stroke: ${sm.strokes} this round${sc.total != null ? ` &middot; net ${sc.total - sm.strokes}` : ''}</div>` : '';
+    const sLab = n => `${n} stroke${Math.abs(n) === 1 ? '' : 's'}`;
+    const tot = sc.total;
+    const strokeNote = (sm || full != null) ? `<div style="font-size:0.74rem;color:var(--text-muted);margin:-4px 0 10px;line-height:1.5">
+        ${tot != null && full != null ? `<div>Gross ${tot} &middot; net ${tot - full} (${sLab(full)}, full handicap)</div>` : ''}
+        ${sm ? `<div><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#0a5c47;margin-right:5px;vertical-align:middle"></span>${escapeHtml(sm.game || 'Game')} net ${tot != null ? (tot - sm.strokes) + ' ' : ''}(${sLab(sm.strokes)}${sm.net_mode === 'low' ? ', off the low' : ''}) &middot; dots mark these strokes</div>` : ''}
+      </div>` : '';
     bodyEl.innerHTML = `
       <div style="background:${tone.bg};border-top:2px dashed ${tone.border};border-bottom:2px dashed ${tone.border};padding:14px 4px;margin-bottom:2px;position:relative;overflow:hidden">
         ${motifWatermark}        ${historyEventDetailLine(groupEvt)}
@@ -16183,6 +16191,14 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     (rk.net || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.net = r.total; byName.set(norm(r.player), e); });
   }
   const strokesBy = new Map(((s.handicap && s.handicap.players) || []).map(p => [norm(p.player), Number(p.strokes) || 0]));
+  // Net games that play off the low use fewer strokes than the player's full allowance: say so per player.
+  const gameStrokes = new Map();
+  [['Fourball', s.fourball], ['Low Score', s.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => {
+    const k = norm(m.player);
+    if (!strokesBy.has(k) || Number(m.strokes) === strokesBy.get(k)) return;
+    if (!gameStrokes.has(k)) gameStrokes.set(k, []);
+    gameStrokes.get(k).push(`${Number(m.strokes)} in ${lab}`);
+  }));
   const people = [...byName.values()];
   const metric = { money: p => -p.total, net: p => (p.net == null ? Infinity : p.net), gross: p => (p.gross == null ? Infinity : p.gross) };
   const sortedBy = mode => {
@@ -16207,7 +16223,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     const gm = games.map(g => cell(p[g[0]] ? money(p[g[0]]) : '<span style="color:var(--text-hint)">·</span>')).join('');
     return `<div style="display:grid;grid-template-columns:${cols};gap:4px;align-items:center;font-size:0.82rem;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06)">
       <span style="color:var(--text-muted);font-size:0.74rem">${place === '' ? '' : (tied ? 'T' : '') + place}</span>
-      <span style="min-width:0;line-height:1.15" title="${esc(p.player)}">${(([f, l]) => `<span style="display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f)}</span>${l || strokesBy.has(norm(p.player)) ? `<span style="display:block;font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l)}${strokesBy.has(norm(p.player)) ? `${l ? ' · ' : ''}${strokesBy.get(norm(p.player))} stroke${Math.abs(strokesBy.get(norm(p.player))) === 1 ? '' : 's'}` : ''}</span>` : ''}`)(splitName(p.player))}</span>${sc}${gm}${cell(p.total ? money(p.total) : '·', true)}</div>`;
+      <span style="min-width:0;line-height:1.15" title="${esc(p.player)}">${(([f, l]) => `<span style="display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f)}</span>${l || strokesBy.has(norm(p.player)) ? `<span style="display:block;font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l)}${strokesBy.has(norm(p.player)) ? `${l ? ' · ' : ''}${strokesBy.get(norm(p.player))} stroke${Math.abs(strokesBy.get(norm(p.player))) === 1 ? '' : 's'}${gameStrokes.has(norm(p.player)) ? ' · ' + gameStrokes.get(norm(p.player)).join(' · ') : ''}` : ''}</span>` : ''}`)(splitName(p.player))}</span>${sc}${gm}${cell(p.total ? money(p.total) : '·', true)}</div>`;
   }).join('');
   const modes = hasRank ? [['net', 'Net'], ['gross', 'Gross'], ['money', '$']] : [['money', '$']];
   const defMode = hasRank ? 'net' : 'money';
@@ -16225,7 +16241,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     };
     addLine('🤝', 'Fourball', s.fourball, s.fourball && s.fourball.segments ? s.fourball.segments.win_by : null);
     addLine('🎯', 'Low Score', s.lowscore, null);
-    if (lines.length) sum += `<div style="font-size:0.78rem;line-height:1.45;background:rgba(255,255,255,0.45);border-radius:10px;padding:6px 10px;margin:2px 0 8px"><div style="font-size:0.68rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-hint);margin-bottom:2px">How it was played</div>${lines.join('')}</div>`;
+    if (lines.length) sum += `<div style="font-size:0.78rem;line-height:1.45;background:rgba(255,255,255,0.45);border-radius:10px;padding:6px 10px;margin:2px 0 8px"><div style="font-size:0.68rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-hint);margin-bottom:2px">How it was played</div>${lines.join('')}${gameStrokes.size ? '<div style="padding:3px 0;color:var(--text-muted)">The Net column uses each player\'s full handicap strokes. Games played off the low use fewer, shown under each name.</div>' : ''}</div>`;
   }
   if (modes.length > 1) sum += `<div style="display:flex;align-items:center;gap:6px;margin:4px 0 6px"><span style="font-size:0.72rem;color:var(--text-muted)">Rank by</span>${modes.map(([m, l]) => modeBtn(m, l)).join('')}<span style="font-size:0.68rem;color:var(--text-hint)">scores are for fun</span></div>`;
   sum += modes.map(([m]) => `<div data-gp-sort="${m}" style="${m === defMode ? '' : 'display:none'}">${matrix(m, m === 'gross' ? 'gross' : 'net')}</div>`).join('');
@@ -16657,9 +16673,10 @@ async function loadHistoryGameResults(key, groupEvt) {
     }
     if (!cfg || cfg.status !== 'closed' || !cfg.payout_summary) { el.innerHTML = ''; return; }
     {
-      const ps = cfg.payout_summary, byP = new Map();
-      [ps.fourball, ps.lowscore].forEach(g => ((g && g.stroke_marks) || []).forEach(m => { const k = String(m.player).trim().toLowerCase(); if (!byP.has(k) || (m.strokes > byP.get(k).strokes)) byP.set(k, m); }));
+      const ps = cfg.payout_summary, byP = new Map(), lc = x => String(x).trim().toLowerCase();
+      [['Fourball', ps.fourball], ['Low Score', ps.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => { if (!byP.has(lc(m.player))) byP.set(lc(m.player), { ...m, game: lab, net_mode: g.net_mode }); }));
       _historyStrokeMarks[key] = [...byP.values()];
+      _historyFullStrokes[key] = Object.fromEntries(((ps.handicap && ps.handicap.players) || []).map(x => [lc(x.player), Number(x.strokes) || 0]));
     }
     el.innerHTML = `
       <div style="background:rgba(255,255,255,0.55);border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:10px 12px;margin-bottom:10px">

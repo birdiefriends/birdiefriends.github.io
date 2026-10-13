@@ -42,5 +42,5 @@ h = ctx.f.renderGatheringPayoutHtml(old); ok(!/A dot is a handicap stroke/.test(
 // summary note
 const withHc = { ...snap, handicap: { allowance: 95, players: [{ player: 'Ann', tee: 'White', strokes: 10 }, { player: 'Bob', strokes: 1 }] }, rankings: null };
 h = ctx.f.renderGatheringPayoutHtml(withHc);
-ok(/10 strokes/.test(h) && /1 stroke</.test(h), 'summary lists each player\'s strokes, singular for one');
+ok(/10 strokes/.test(h) && /1 stroke(<| ·)/.test(h), 'summary lists each player\'s strokes, singular for one');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
