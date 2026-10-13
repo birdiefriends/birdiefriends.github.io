@@ -1,3 +1,6 @@
+v4.22.0 · 2026-10-13
+Deployed: 2026-10-13 (Games setup is now a step-by-step wizard, one question per screen. 1) What are you playing for (tap the games). 2) The buy-in. 3) One screen for each game you picked: Fourball (then its pairs on their own screen), Low Score, Skins, CTP, MiserBall, Birdie Payouts. 4) Handicap strokes, only if something is Net. 5) A review with a Change link on every line, then Save. A progress bar shows where you are, Previous steps back, and a saved setup opens on the review so a small change is one tap. If saving finds a problem it takes you to the screen that fixes it. Nothing about how games are saved or scored changed. No Worker change.)
+
 v4.21.4 · 2026-10-13
 Deployed: 2026-10-13 (Fix: the guided Gathering setup no longer asks "Who should we ask about the rest?" when everyone you are hoping for is already named. If you and the players you add fill the target number, it skips that step (the Gathering is invite-only, since there is nobody left to ask), the steps read "of 4", Back skips it too, and the recap says the field is full. If you raise the target later, the step comes back. No Worker change.)
 

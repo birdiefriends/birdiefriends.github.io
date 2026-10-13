@@ -18810,41 +18810,134 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
     ? regData.filter(r => r.eventName === g.eventName && r.status === 'Yes').length
     : gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes').length;
   const body = document.getElementById('host-sheet-body');
+  _gw = { step: existing && existing.games && existing.games.length ? 'review' : 'games', gid: gatheringId, name: g.name, existing: !!existing };
+  // One question per screen. Every game's section keeps its own element id and refresh function; the wizard only shows
+  // the pane for the current step, so all the form state and the save path stay exactly as they were.
   body.innerHTML = `
-    <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;
-      letter-spacing:0.06em;margin-bottom:12px">🎮 Games — ${g.name}</div>
-    <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;margin-bottom:14px">
-      Pick what's in play. Every registered player's My History gets the result once it's published —
-      no separate scoring UI, this reuses your regular scorecards and CTP.
+    <style>
+      #games-wizard[data-sub="pairs"] .gw-fb-setup{display:none}
+      #games-wizard[data-sub="setup"] .gw-fb-pairs{display:none}
+    </style>
+    <div id="games-wizard" data-sub="setup">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div id="gw-step-label" style="font-size:0.74rem;color:var(--text-muted);flex:1"></div>
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">🎮 ${escapeHtml(g.name)}</div></div>
+      <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:14px"><div id="gw-bar" style="height:100%;background:var(--green);width:0"></div></div>
+      <div class="gw-pane" id="gw-pane-games">
+        <div style="font-size:1.15rem;font-weight:700;margin-bottom:4px">What are you playing for?</div>
+        <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;margin-bottom:10px">Tap everything that is in. Details come one game at a time, next. Every registered player's My History gets the result once it is published.</div>
+        <div id="games-form-checklist">${gatheringGamesChecklistHtml()}</div>
+      </div>
+      <div class="gw-pane" id="gw-pane-buyin">
+        <div style="font-size:1.15rem;font-weight:700;margin-bottom:4px">What is the buy-in?</div>
+        <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;margin-bottom:10px">One number for everyone. We split it across your games; you can change any split on that game's screen.</div>
+        <div class="host-form-field">
+          <label>$ per Player <span style="color:#c0392b">*</span></label>
+          <input type="number" id="games-form-dpp" min="0.01" step="0.01"
+            value="${existing ? existing.dollar_per_player : ''}" style="width:100px"
+            oninput="onGamesFormDppInput()">
+          <div style="display:flex;gap:8px;margin-top:8px">${[5, 10, 20].map(v => `<button type="button" onclick="setGamesFormDpp(${v})" style="height:34px;padding:0 16px;border-radius:17px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.86rem;cursor:pointer">$${v}</button>`).join('')}</div>
+          <div id="games-form-suggest-note" style="font-size:0.74rem;color:var(--text-muted);margin-top:8px;line-height:1.5"></div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px" id="games-form-pot-preview"></div>
+        </div>
+      </div>
+      <div class="gw-pane" id="gw-pane-cttp"><div id="games-form-cttp-section">${gatheringGamesCttpSectionHtml()}</div></div>
+      <div class="gw-pane" id="gw-pane-birdieball"><div id="games-form-birdieball-section">${gatheringGamesBirdieballSectionHtml()}</div></div>
+      <div class="gw-pane" id="gw-pane-skins"><div id="games-form-skins-section">${gatheringGamesSkinsSectionHtml()}</div></div>
+      <div class="gw-pane" id="gw-pane-birdiepay"><div id="games-form-birdiepay-section">${gatheringGamesBirdiepaySectionHtml()}</div></div>
+      <div class="gw-pane" id="gw-pane-fourball"><div id="games-form-fourball-section">${gatheringGamesFourballSectionHtml()}</div></div>
+      <div class="gw-pane" id="gw-pane-lowscore"><div id="games-form-lowscore-section">${gatheringGamesLowscoreSectionHtml()}</div></div>
+      <div class="gw-pane" id="gw-pane-hcp"><div id="games-form-hcp-section">${gatheringGamesHcpSectionHtml()}</div></div>
+      <div class="gw-pane" id="gw-pane-review"><div id="gw-review"></div>
+        ${existing ? `
+        <button class="btn btn-secondary-danger btn-sm" style="width:100%;margin-top:10px"
+          onclick="deleteGatheringGames(${gatheringId},'${g.name.replace(/'/g,"\\'")}')">Turn Off Games</button>` : ''}
+      </div>
+      <button class="host-cta-btn" style="margin-top:16px" id="gw-next" onclick="gwNext()">Next</button>
+      <button class="host-cta-btn" style="margin-top:16px;display:none" id="btn-save-games"
+        onclick="submitGatheringGames(${gatheringId})">💾 Save Games</button>
+      <div style="text-align:center;margin-top:10px"><button type="button" class="btn btn-ghost btn-sm" id="gw-prev" style="color:var(--text-muted)" onclick="gwPrev()">‹ Previous step</button></div>
     </div>
-    <div class="host-form-field">
-      <label>Games</label>
-      <div id="games-form-checklist">${gatheringGamesChecklistHtml()}</div>
-    </div>
-    <div class="host-form-field">
-      <label>$ per Player <span style="color:#c0392b">*</span></label>
-      <input type="number" id="games-form-dpp" min="0.01" step="0.01"
-        value="${existing ? existing.dollar_per_player : ''}" style="width:100px"
-        oninput="onGamesFormDppInput()">
-      <div style="display:flex;gap:8px;margin-top:8px">${[5, 10, 20].map(v => `<button type="button" onclick="setGamesFormDpp(${v})" style="height:34px;padding:0 16px;border-radius:17px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.86rem;cursor:pointer">$${v}</button>`).join('')}</div>
-      <div id="games-form-suggest-note" style="font-size:0.74rem;color:var(--text-muted);margin-top:8px;line-height:1.5"></div>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px" id="games-form-pot-preview"></div>
-    </div>
-    <div id="games-form-cttp-section">${gatheringGamesCttpSectionHtml()}</div>
-    <div id="games-form-birdieball-section">${gatheringGamesBirdieballSectionHtml()}</div>
-    <div id="games-form-skins-section">${gatheringGamesSkinsSectionHtml()}</div>
-    <div id="games-form-birdiepay-section">${gatheringGamesBirdiepaySectionHtml()}</div>
-    <div id="games-form-fourball-section">${gatheringGamesFourballSectionHtml()}</div>
-    <div id="games-form-lowscore-section">${gatheringGamesLowscoreSectionHtml()}</div>
-    <div id="games-form-hcp-section">${gatheringGamesHcpSectionHtml()}</div>
-    <button class="host-cta-btn" style="margin-top:16px" id="btn-save-games"
-      onclick="submitGatheringGames(${gatheringId})">💾 Save Games</button>
-    ${existing ? `
-    <button class="btn btn-secondary-danger btn-sm" style="width:100%;margin-top:10px"
-      onclick="deleteGatheringGames(${gatheringId},'${g.name.replace(/'/g,"\\'")}')">Turn Off Games</button>` : ''}
   `;
   updateGamesFormPotPreview();
   applyGamesSuggestion(false);
+  gwRender();
+}
+// ── Games setup wizard: one question per screen ──────────────────────────────
+let _gw = { step: 'games' };
+const GW_NAMES = { games: 'Games', buyin: 'Buy-in', fourball: 'Fourball', fbpairs: 'Fourball pairs', lowscore: 'Low Score', skins: 'Skins', cttp: 'CTP', birdieball: 'MiserBall', birdiepay: 'Birdie Payouts', hcp: 'Handicap strokes', review: 'Review' };
+function gwSteps() {
+  const sel = _gamesFormSelected;
+  if (!sel.size) return ['games'];
+  const steps = ['games', 'buyin'];
+  Object.keys(GATHERING_GAMES_META).forEach(k => {
+    if (!sel.has(k)) return;
+    const id = k === 'fourball' ? 'fourball' : k;
+    if (GW_NAMES[id]) steps.push(id);
+    if (k === 'fourball') steps.push('fbpairs');
+  });
+  if (gamesFormHcpIsNet()) steps.push('hcp');
+  steps.push('review');
+  return steps;
+}
+function gwGoTo(step) { if (!_gw) return; _gw.step = step; gwRender(); }
+function gwNext() {
+  const steps = gwSteps(), i = steps.indexOf(_gw.step);
+  if (_gw.step === 'games' && !_gamesFormSelected.size) { showToast('Pick at least one game', true); return; }
+  if (_gw.step === 'buyin') {
+    const el = document.getElementById('games-form-dpp');
+    if (!(parseFloat(el && el.value) > 0)) { showToast('Pick a buy-in first', true); return; }
+  }
+  gwGoTo(steps[Math.min(steps.length - 1, i + 1)]);
+}
+function gwPrev() {
+  const steps = gwSteps(), i = steps.indexOf(_gw.step);
+  gwGoTo(steps[Math.max(0, i - 1)]);
+}
+function gwReviewHtml() {
+  const money = n => '$' + (Math.round((Number(n) || 0) * 100) / 100).toFixed(Number.isInteger(Number(n) || 0) ? 0 : 2);
+  const sel = _gamesFormSelected, fb = _gamesFormFourballConfig, ls = _gamesFormLowscoreConfig;
+  const per = pk => (BFEngine.PERIODS[pk] || BFEngine.PERIODS.round).label;
+  const basis = b => b === 'net' ? 'Net' : 'Gross';
+  const rows = [];
+  const add = (icon, name, detail, step) => rows.push(`<button type="button" onclick="gwGoTo('${step}')" style="display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 14px;background:#fff;border:0;border-bottom:1px solid var(--border);text-align:left;cursor:pointer;font-family:inherit"><span style="flex:1;font-size:0.9rem;line-height:1.35"><b>${icon} ${name}</b><br><span style="font-size:0.78rem;color:var(--text-muted)">${detail}</span></span><span style="font-size:0.74rem;color:var(--green-dark);font-weight:700">Change</span></button>`);
+  const dpp = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0;
+  add('💵', 'Buy-in', `${money(dpp)} per player · ${_gamesFormYesCount} confirmed Yes`, 'buyin');
+  if (sel.has('fourball')) {
+    const pk = BFEngine.periodKey(fb), np = fb.pairs.filter(pr => pr[0] && pr[1]).length;
+    add('🤝', 'Fourball', `${fb.basis === 'net' ? (fb.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'} · ${per(pk)} · ${money(fb.dollar_per_player)} per player · ${np ? np + ' pair' + (np === 1 ? '' : 's') : '<span style="color:#b8860b">no pairs yet</span>'}`, np ? 'fourball' : 'fbpairs');
+  }
+  if (sel.has('lowscore')) add('🎯', 'Low Score', `${basis(ls.basis)} · ${per(BFEngine.periodKey(ls))} · ${money(ls.dollar_per_player)} per player`, 'lowscore');
+  if (sel.has('skins')) add('⛳', 'Skins', `${basis(_gamesFormHcp.skins_basis)} · gets what is left`, 'skins');
+  if (sel.has('cttp')) add('🎯', 'CTP', `${money(_gamesFormCttpConfig.dollar_per_hole)} a hole · ${(_gamesFormCttpConfig.holes || []).length} hole${(_gamesFormCttpConfig.holes || []).length === 1 ? '' : 's'}`, 'cttp');
+  if (sel.has('birdieball')) add('🐦', 'MiserBall', `${money(_gamesFormBirdieballConfig.dollar_per_player)} per player`, 'birdieball');
+  if (sel.has('birdiepay')) add('🐤', 'Birdie Payouts', `${money(_gamesFormBirdiepayConfig.dollar_per_birdie)} a birdie · ${basis(_gamesFormHcp.birdiepay_basis)}`, 'birdiepay');
+  if (_gamesFormHcp.ranking === true) add('📊', 'Net ranking', 'Shown for fun, no money', 'hcp');
+  else if (gamesFormHcpIsNet()) add('⚖️', 'Handicap strokes', `${gamesFormPlayerNames().length} players`, 'hcp');
+  const pot = document.getElementById('games-form-pot-preview');
+  const rankOpt = gamesFormHcpIsNet() ? '' : `<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;margin:12px 2px 0;cursor:pointer"><input type="checkbox" onchange="setGamesFormRanking(this.checked);gwRender()"><span>📊 Also show a Net ranking <span style="color:var(--text-muted)">(for fun, no money)</span></span></label>`;
+  return `<div style="font-size:1.15rem;font-weight:700;margin-bottom:4px">Here is what will happen</div>
+    <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:10px">Tap Change on any line.</div>
+    <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">${rows.join('')}</div>
+    ${pot && pot.innerHTML ? `<div style="font-size:0.78rem;line-height:1.55;margin-top:12px;color:var(--text-muted)">${pot.innerHTML}</div>` : ''}${rankOpt}`;
+}
+function gwRender() {
+  const wiz = document.getElementById('games-wizard');
+  if (!wiz || !_gw) return;
+  const steps = gwSteps();
+  if (!steps.includes(_gw.step)) _gw.step = steps.includes('review') && _gw.step !== 'games' ? 'review' : 'games';
+  const cur = _gw.step, i = steps.indexOf(cur), moved = _gw.shown !== cur;
+  _gw.shown = cur;
+  const pane = cur === 'fbpairs' ? 'fourball' : cur;
+  wiz.dataset.sub = cur === 'fbpairs' ? 'pairs' : 'setup';
+  wiz.querySelectorAll('.gw-pane').forEach(el => { el.style.display = el.id === 'gw-pane-' + pane ? 'block' : 'none'; });
+  const lab = document.getElementById('gw-step-label'); if (lab) lab.textContent = `Step ${i + 1} of ${steps.length} · ${GW_NAMES[cur]}`;
+  const bar = document.getElementById('gw-bar'); if (bar) bar.style.width = Math.round((i + 1) / steps.length * 100) + '%';
+  if (cur === 'review') { const r = document.getElementById('gw-review'); if (r) r.innerHTML = gwReviewHtml(); }
+  const next = document.getElementById('gw-next'), save = document.getElementById('btn-save-games'), prev = document.getElementById('gw-prev');
+  if (next) { next.style.display = cur === 'review' ? 'none' : 'block'; next.textContent = cur === 'games' && !_gamesFormSelected.size ? 'Pick at least one game' : 'Next'; }
+  if (save) save.style.display = cur === 'review' ? 'block' : 'none';
+  if (prev) prev.style.display = i > 0 ? 'inline-flex' : 'none';
+  const sc = document.getElementById('host-sheet-body'); if (sc && moved) sc.scrollTop = 0;
 }
 // v4.9.14 — "we figure it out for the host": the buy-in is the one decision;
 // each ticked game's amount is filled by BFEngine.suggestGameAmounts (whole
@@ -18949,6 +19042,7 @@ function toggleGamesFormGame(key) {
   refreshGamesFormHcpSection();
   updateGamesFormPotPreview();
   applyGamesSuggestion(false);
+  if (typeof gwRender === 'function') gwRender();
 }
 // CTP section — $/hole rate + hole designation, restricted to Par-3 holes
 // when the venue's par data is on file ("all Par 3 holes or select Par 3
@@ -19172,6 +19266,7 @@ function gatheringGamesFourballSectionHtml() {
   const btn = 'height:34px;padding:0 14px;border-radius:17px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.82rem;cursor:pointer';
   return `
     <div class="host-form-field" id="games-form-fourball-field">
+      <div class="gw-fb-setup">
       <label>🤝 Fourball</label>
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.86rem">$</span>
@@ -19190,6 +19285,9 @@ function gatheringGamesFourballSectionHtml() {
         ${c.win_by === 'holes' ? '' : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <span style="flex:1;font-size:0.9rem;font-weight:600">Who competes</span>${seg([['group', 'Each foursome'], ['field', 'Whole field']], c.scope, 'setGamesFormFourballScope')}</div>`}
         ${(c.win_by === 'holes' || c.scope === 'group') && c.pairs.length % 2 === 1 ? `<div style="font-size:0.74rem;color:#b8860b;margin-bottom:8px">Foursomes need an even number of pairs. The last pair has no opponent, so its pot is returned.</div>` : ''}` : ''}
+      </div>
+      <div class="gw-fb-pairs">
+      <label>🤝 Fourball pairs</label>
       <div style="font-size:0.78rem;font-weight:700;margin:6px 0">Pairs</div>
       ${pairRows || `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">No pairs yet. Add them one at a time, or let us suggest balanced pairs.</div>`}
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
@@ -19202,6 +19300,7 @@ function gatheringGamesFourballSectionHtml() {
         !names.length ? 'No confirmed players yet. Players appear here as they register Yes.'
         : unpaired.length ? `Not in a pair yet: ${unpaired.map(escapeHtml).join(', ')}`
         : c.pairs.length ? `✓ ${c.pairs.length} pair${c.pairs.length === 1 ? '' : 's'}, everyone paired` : ''}</div>
+      </div>
     </div>`;
 }
 function refreshGamesFormFourballSection() {
@@ -19440,6 +19539,7 @@ function gatheringGamesHcpSectionHtml() {
 function refreshGamesFormHcpSection() {
   const el = document.getElementById('games-form-hcp-section');
   if (el) el.innerHTML = gatheringGamesHcpSectionHtml();
+  if (typeof gwRender === 'function') gwRender(); // Net on or off adds or drops the strokes step
 }
 function setGamesFormBasis(key, val) { _gamesFormHcp[key] = val === 'net' ? 'net' : 'gross'; refreshGamesFormSkinsSection(); const bp = document.getElementById('games-form-birdiepay-section'); if (bp) bp.innerHTML = gatheringGamesBirdiepaySectionHtml(); refreshGamesFormHcpSection(); }
 function setGamesFormAllowance(v) {
@@ -19564,13 +19664,14 @@ async function submitGatheringGames(gatheringId) {
   const g = (_gamesFormG && _gamesFormG.gatheringId === gatheringId) ? _gamesFormG : gatheringData.find(x => x.gatheringId === gatheringId);
   if (!g) { showToast('Gathering not found', true); return; }
   const games = [..._gamesFormSelected];
+  const bad = (step, msg) => { showToast(msg, true); if (typeof gwGoTo === 'function') gwGoTo(step); }; // say what is wrong and show the screen that fixes it
   if (!games.length) { showToast('Select at least one game', true); return; }
   const dpp = parseFloat(document.getElementById('games-form-dpp').value);
-  if (!dpp || dpp <= 0) { showToast('$ per Player must be greater than 0', true); return; }
+  if (!dpp || dpp <= 0) { bad('buyin', '$ per Player must be greater than 0'); return; }
   let cttp_config = null;
   if (games.includes('cttp')) {
-    if (!(_gamesFormCttpConfig.dollar_per_hole > 0)) { showToast('CTP: $ per hole must be greater than 0', true); return; }
-    if (!_gamesFormCttpConfig.holes.length) { showToast('CTP: pick at least one hole', true); return; }
+    if (!(_gamesFormCttpConfig.dollar_per_hole > 0)) { bad('cttp', 'CTP: $ per hole must be greater than 0'); return; }
+    if (!_gamesFormCttpConfig.holes.length) { bad('cttp', 'CTP: pick at least one hole'); return; }
     cttp_config = {
       dollar_per_hole: _gamesFormCttpConfig.dollar_per_hole,
       hole_mode: _gamesFormCttpConfig.hole_mode,
@@ -19579,38 +19680,38 @@ async function submitGatheringGames(gatheringId) {
   }
   let birdieball_config = null;
   if (games.includes('birdieball')) {
-    if (!(_gamesFormBirdieballConfig.dollar_per_player > 0)) { showToast('MiserBall: $ per player must be greater than 0', true); return; }
+    if (!(_gamesFormBirdieballConfig.dollar_per_player > 0)) { bad('birdieball', 'MiserBall: $ per player must be greater than 0'); return; }
     birdieball_config = { dollar_per_player: _gamesFormBirdieballConfig.dollar_per_player };
   }
   const overCommit = gamesFormOverCommit(dpp, _gamesFormYesCount);
-  if (overCommit.problem) { showToast(overCommit.problem, true); return; }
+  if (overCommit.problem) { bad('buyin', overCommit.problem); return; }
   let birdiepay_config = null;
   if (games.includes('birdiepay')) {
-    if (!(_gamesFormBirdiepayConfig.dollar_per_birdie > 0)) { showToast('Birdie Payouts: $ per birdie must be greater than 0', true); return; }
-    if (!(Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18)) { showToast('Birdie Payouts needs par data for this venue — add it in Venue Manager first', true); return; }
+    if (!(_gamesFormBirdiepayConfig.dollar_per_birdie > 0)) { bad('birdiepay', 'Birdie Payouts: $ per birdie must be greater than 0'); return; }
+    if (!(Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18)) { bad('birdiepay', 'Birdie Payouts needs par data for this venue — add it in Venue Manager first'); return; }
     birdiepay_config = { dollar_per_birdie: _gamesFormBirdiepayConfig.dollar_per_birdie, pars: _gamesFormBirdiepayPars.slice() };
   }
   let game_configs = null;
   if (games.includes('fourball')) {
     const c = _gamesFormFourballConfig;
     const rows = c.pairs.filter(pr => pr[0] || pr[1]);
-    if (rows.some(pr => !pr[0] || !pr[1])) { showToast('Fourball: finish or remove the incomplete pair', true); return; }
+    if (rows.some(pr => !pr[0] || !pr[1])) { bad('fbpairs', 'Fourball: finish or remove the incomplete pair'); return; }
     const fb = { dollar_per_player: c.dollar_per_player, basis: c.basis === 'net' ? 'net' : 'gross', net_mode: c.net_mode === 'low' ? 'low' : 'own', pairs: rows.map(pr => [pr[0], pr[1]]),
       ...(fourballSegCount(c) > 1 ? { period: c.period, win_by: c.win_by === 'holes' ? 'holes' : 'strokes', scope: c.win_by === 'holes' || c.scope === 'group' ? 'group' : 'field' } : {}) };
     const v = BFEngine.validateGameConfig('fourball', fb);
-    if (!v.ok) { showToast('Fourball: ' + v.errors[0], true); return; }
+    if (!v.ok) { bad('fbpairs', 'Fourball: ' + v.errors[0]); return; }
     game_configs = Object.assign(game_configs || {}, { fourball: fb });
   }
   if (games.includes('lowscore')) {
     const c = _gamesFormLowscoreConfig;
-    if (!(c.dollar_per_player > 0)) { showToast('Low Score: $ per player must be greater than 0', true); return; }
+    if (!(c.dollar_per_player > 0)) { bad('lowscore', 'Low Score: $ per player must be greater than 0'); return; }
     const ls = { dollar_per_player: c.dollar_per_player, basis: c.basis === 'net' ? 'net' : 'gross', ...(lowscoreSegCount(c) > 1 ? { period: c.period } : {}) };
     const v = BFEngine.validateGameConfig('lowscore', ls);
-    if (!v.ok) { showToast('Low Score: ' + v.errors[0], true); return; }
+    if (!v.ok) { bad('lowscore', 'Low Score: ' + v.errors[0]); return; }
     game_configs = Object.assign(game_configs || {}, { lowscore: ls });
   }
   const hcb = gamesFormBuildHandicapConfig();
-  if (hcb.problem) { showToast(hcb.problem, true); return; }
+  if (hcb.problem) { bad('hcp', hcb.problem); return; }
   const btn = document.getElementById('btn-save-games');
   if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); btn.textContent = 'Saving…'; }
   try {
