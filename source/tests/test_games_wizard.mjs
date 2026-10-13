@@ -36,25 +36,24 @@ const label = d => d.window.document.getElementById('gw-step-label').textContent
   a.gwNext(); ok(t.toasts.length === 1 && vis(doc)[0] === 'games', 'Next with nothing picked stays and says so');
   ok(doc.window.document.getElementById('gw-next').textContent === 'Pick at least one game', 'button says to pick');
   a.toggleGamesFormGame('fourball'); a.toggleGamesFormGame('skins');
-  eq(a.gwSteps(), ['games', 'buyin', 'fourball', 'fbpairs', 'skins', 'review'], 'steps follow the picks, pairs get their own step');
-  a.gwNext(); eq(vis(doc), ['buyin'], 'step 2 is the buy-in alone');
-  t.toasts.length = 0; a.gwNext(); ok(t.toasts.length === 1 && vis(doc)[0] === 'buyin', 'no buy-in: cannot move on');
-  doc.window.document.getElementById('games-form-dpp').value = '20'; a.gwNext();
-  eq(vis(doc), ['fourball'], 'fourball setup alone'); eq(doc.window.document.getElementById('games-wizard').dataset.sub, 'setup', 'setup half');
-  ok(/Step 3 of 6 · Fourball/.test(label(doc)), 'step label: ' + label(doc));
+  eq(a.gwSteps(), ['games', 'fourball', 'fbpairs', 'skins', 'money', 'review'], 'rules per game first, every dollar amount on the last screen before the review');
+  a.gwNext(); eq(vis(doc), ['fourball'], 'step 2 is the Fourball rules alone'); eq(doc.window.document.getElementById('games-wizard').dataset.sub, 'setup', 'setup half');
+  ok(/Step 2 of 6 · Fourball/.test(label(doc)), 'step label: ' + label(doc));
   a.gwNext(); eq(doc.window.document.getElementById('games-wizard').dataset.sub, 'pairs', 'pairs half on the next step'); ok(/Fourball pairs/.test(label(doc)), 'pairs label');
   a.gwNext(); eq(vis(doc), ['skins'], 'skins alone');
   a.setGamesFormFourballBasis('net');
   ok(a.gwSteps().includes('hcp') && /of 7/.test(label(doc)), 'Net on adds the strokes step and the count');
-  a.gwNext(); eq(vis(doc), ['hcp'], 'strokes step'); a.gwNext(); eq(vis(doc), ['review'], 'review is last');
+  a.gwNext(); eq(vis(doc), ['hcp'], 'strokes step'); a.gwNext(); eq(vis(doc), ['money'], 'the money comes after the rules and strokes');
+  t.toasts.length = 0; a.gwNext(); ok(t.toasts.length === 1 && vis(doc)[0] === 'money', 'no buy-in: cannot leave the money screen');
+  doc.window.document.getElementById('games-form-dpp').value = '20'; a.gwNext(); eq(vis(doc), ['review'], 'review is last');
   ok(doc.window.document.getElementById('btn-save-games').style.display === 'block' && doc.window.document.getElementById('gw-next').style.display === 'none', 'review shows Save, not Next');
   const rv = doc.window.document.getElementById('gw-review').innerHTML;
   ok(/Fourball/.test(rv) && /Skins/.test(rv) && /Buy-in/.test(rv) && /gwGoTo\('fourball'\)|gwGoTo\('fbpairs'\)/.test(rv), 'review lists each game with a Change link');
-  a.gwPrev(); eq(vis(doc), ['hcp'], 'Previous goes back one');
+  a.gwPrev(); eq(vis(doc), ['money'], 'Previous goes back one');
   // a problem found on save jumps to the screen that fixes it
   a.gwGoTo('review'); t.toasts.length = 0;
   doc.window.document.getElementById('games-form-dpp').value = '';
-  a.submitGatheringGames(7); eq(vis(doc), ['buyin'], 'save with no buy-in jumps to the buy-in step'); ok(t.toasts.length === 1, 'and says why');
+  a.submitGatheringGames(7); eq(vis(doc), ['money'], 'save with no buy-in jumps to the money step'); ok(t.toasts.length === 1, 'and says why');
 }
 {
   const t = world(), a = t.api, doc = t.dom;
@@ -62,21 +61,21 @@ const label = d => d.window.document.getElementById('gw-step-label').textContent
   a.renderGatheringGamesForm(7, { gatheringId: 7, name: 'T' }, { games: ['skins'], dollar_per_player: 10 });
   eq(vis(doc), ['review'], 'a saved config opens on the review step');
   ok(/Turn Off Games/.test(doc.window.document.getElementById('gw-pane-review').innerHTML), 'turn off lives on the review step');
-  a.gwGoTo('skins'); a.gwNext(); eq(vis(doc), ['review'], 'Next from the last game goes to review');
+  a.gwGoTo('skins'); a.gwNext(); eq(vis(doc), ['money'], 'Next from the last game goes to the money screen');
 }
 {
   const t = world(), a = t.api, doc = t.dom, d = doc.window.document;
   a.renderGatheringGamesForm(7, { gatheringId: 7, name: 'T' }, null);
-  a.toggleGamesFormGame('birdieball'); a.toggleGamesFormGame('fourball'); a.gwNext();
-  const dpp = d.getElementById('games-form-dpp'); dpp.value = '10'; dpp.dispatchEvent(new doc.window.Event('input')); t.ctx.onGamesFormDppInput();
+  a.toggleGamesFormGame('birdieball'); a.toggleGamesFormGame('fourball');
+  eq(a.gwSteps(), ['games', 'fourball', 'fbpairs', 'money', 'review'], 'MiserBall has no screen of its own, only an amount on the money screen');
+  a.gwNext(); a.gwNext(); a.gwNext(); eq(vis(doc), ['money'], 'on the money screen');
+  const dpp = d.getElementById('games-form-dpp'); dpp.value = '10'; t.ctx.onGamesFormDppInput();
   const bb = d.getElementById('gw-split-bb');
-  ok(!!bb && !!d.getElementById('gw-split-fb'), 'the buy-in screen has a box for every game amount');
-  ok(Number(bb.value) > 0, 'suggested MiserBall amount is filled in');
+  ok(!!bb && !!d.getElementById('gw-split-fb'), 'the money screen has a box for every game amount');
+  eq([d.getElementById('gw-split-fb').value, bb.value], ['8', '2'], 'the suggestion uses the whole $10: Fourball $8, MiserBall $2');
   bb.value = '3'; t.ctx.setGamesFormBirdieballDollarPerPlayer('3');
   t.ctx.onGamesFormDppInput();
   eq(d.getElementById('gw-split-bb').value, '3', 'a typed MiserBall $3 survives the buy-in changing');
-  a.gwNext(); a.gwNext(); a.gwNext();
-  eq(vis(doc), ['birdieball'], 'on the MiserBall screen');
-  eq(d.getElementById('games-form-bb-dpp').value, '3', 'its own box shows the amount typed on the buy-in screen');
+  ok(d.getElementById('games-wizard').innerHTML.includes('gw-money'), 'dollar inputs on the rules screens carry the hide marker');
 }
 console.log(`games wizard: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

@@ -1,3 +1,6 @@
+v4.23.0 · 2026-10-13
+Deployed: 2026-10-13 (Games setup: all the money moves to one last screen, The money. The screens before it only ask the rules: which games, then each game's Net or Gross, period and pairs (and CTP holes), then handicap strokes if something is Net. Then you pick the buy-in and get one suggested split across your games, built from those rules and using the whole buy-in, with a box for every amount to type over. The review comes after. MiserBall has no screen before The money because it is only an amount. If saving finds a missing amount it takes you to The money. No Worker change.)
+
 v4.22.4 · 2026-10-13
 Deployed: 2026-10-13 (MiserBall is now a dragon 🐉, sitting on its gold, everywhere the game shows: game list, setup, live panel, results and the lost-it alert. Real birdies keep the bird. No Worker change.)
 
