@@ -20264,6 +20264,7 @@ function gfSummaryLines(st, ctx) {
   if (st.ask === 'crew') lines.push({ step: 2, text: `Asking ${st.crewName || 'your crew'} (${(ctx.crewMembers || []).filter(n => n !== ctx.host).length} people)` });
   else if (st.ask === 'pick') lines.push({ step: 2, text: `Asking ${[...st.pickSet].filter(n => n !== ctx.host).length} people you picked${st.pickName ? ` (saved as "${st.pickName}")` : ''}` });
   else if (st.ask === 'all') lines.push({ step: 2, text: 'Open to all BirdieFriends, announced as soon as you create it' });
+  else if (st.ask === 'none' && gfFieldFull(st)) lines.push({ step: 2, text: 'The field is full, so nobody else is asked' });
   else if (st.ask === 'none') lines.push({ step: 2, text: 'Invite-only. Nobody else is asked yet; you can open it later from the Host Panel' });
   else lines.push({ step: 2, text: 'Who to ask: not chosen yet' });
   lines.push({ step: 3, text: plan.wantGames ? 'Games: you set them up next, right after it is created' : 'No games' });
@@ -20287,6 +20288,10 @@ async function showGuidedGathering() {
   if (closeBtn) { closeBtn.textContent = 'Cancel'; closeBtn.style.color = '#fff'; closeBtn.style.background = 'rgba(192,57,43,0.35)'; closeBtn.style.border = '1px solid rgba(224,82,82,0.4)'; }
   gfRender();
 }
+// Everyone the host is hoping for is already named: there is nobody left to ask, so the "who should we ask" step is skipped.
+function gfFieldFull(st) {
+  return !!st && !st.polling && Number(st.target) > 0 && (st.confirmed.size + (st.playing ? 1 : 0)) >= Number(st.target);
+}
 function gfChoiceHtml(on, handler, icon, title, sub) {
   return `<button type="button" onclick="${handler}" style="display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;padding:13px 14px;margin-bottom:10px;border-radius:12px;cursor:pointer;font-family:inherit;background:${on ? 'var(--green-light)' : '#fff'};border:2px solid ${on ? 'var(--green)' : 'var(--border)'}">
     <span style="font-size:1.3rem;line-height:1.2">${icon}</span>
@@ -20303,7 +20308,8 @@ function gfFooterHtml(nextLabel, nextHandler) {
 function gfRender() {
   const st = _gf; if (!st) return;
   const body = document.getElementById('host-sheet-body'); if (!body) return;
-  const stepLabel = n => `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px">Step ${n} of 5</div>`;
+  const full = gfFieldFull(st);
+  const stepLabel = n => `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px">Step ${full && n > 3 ? n - 1 : n} of ${full ? 4 : 5}</div>`;
   if (st.step === 0) {
     body.innerHTML = `${stepLabel(1)}
       <div class="section-label" style="margin-top:0">⛳ The basics</div>
@@ -20455,9 +20461,9 @@ function gfBack() {
   if (!st) { renderHostPanelList(); return; }
   gfReadBasics();
   if (st.step === 0) { const b = document.getElementById('host-sheet-back'); if (b) b.style.display = 'none'; _gf = null; renderHostPanelList(); return; }
-  st.step -= 1; gfRender();
+  st.step -= (st.step === 3 && gfFieldFull(st)) ? 2 : 1; gfRender();
 }
-function gfJump(n) { gfReadBasics(); _gf.step = n; gfRender(); }
+function gfJump(n) { gfReadBasics(); _gf.step = (n === 2 && gfFieldFull(_gf)) ? 1 : n; gfRender(); }
 function gfNext() {
   const st = _gf; if (!st) return;
   gfReadBasics();
@@ -20466,6 +20472,10 @@ function gfNext() {
     if (!st.ask) { showToast('Choose who to ask about the rest', true); return; }
     if (st.ask === 'crew' && !st.crewId) { showToast('Tap the crew you want to ask', true); return; }
     if (st.ask === 'pick' && !st.pickSet.size) { showToast('Pick at least one person', true); return; }
+  }
+  if (st.step === 1) {
+    if (gfFieldFull(st)) { st.askAuto = true; st.ask = 'none'; st.step = 3; gfRender(); return; }
+    if (st.askAuto) { st.ask = null; st.askAuto = false; }
   }
   st.step += 1; gfRender();
 }

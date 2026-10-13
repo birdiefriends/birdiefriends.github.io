@@ -11,7 +11,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('FAIL', m); } };
 const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), `${m}: got ${JSON.stringify(a)} want ${JSON.stringify(b)}`);
 
-const NAMES = ['gfFresh', 'gfBuildPlan', 'gfSummaryLines', 'gfCtx', 'gfBasicsError', 'gfReadBasics', 'gfPostCrew', 'gfPickCrew', 'gfCreate'];
+const NAMES = ['gfFresh', 'gfFieldFull', 'gfBuildPlan', 'gfSummaryLines', 'gfCtx', 'gfBasicsError', 'gfReadBasics', 'gfPostCrew', 'gfPickCrew', 'gfCreate'];
 function world(over = {}) {
   const calls = [], pushes = [], toasts = [], games = [];
   const members = over.members || [

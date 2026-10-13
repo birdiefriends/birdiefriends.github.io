@@ -1,3 +1,6 @@
+v4.21.4 · 2026-10-13
+Deployed: 2026-10-13 (Fix: the guided Gathering setup no longer asks "Who should we ask about the rest?" when everyone you are hoping for is already named. If you and the players you add fill the target number, it skips that step (the Gathering is invite-only, since there is nobody left to ask), the steps read "of 4", Back skips it too, and the recap says the field is full. If you raise the target later, the step comes back. No Worker change.)
+
 v4.21.3 · 2026-10-13
 Deployed: 2026-10-13 (Fourball results say who won on holes in plain words. Instead of "holes 4-2, 3 halved" each period reads "Brian & Test3 won by 2 holes" (or "holes tied"). No Worker change.)
 
