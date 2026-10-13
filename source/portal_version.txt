@@ -1,3 +1,6 @@
+v4.26.5 · 2026-10-13
+Deployed: 2026-10-13 (Alternate Shot and Match Play results get a real scoreboard. A result card says who beat whom and by how much ("3&2", "4 UP", or "3 strokes" when the pot is paid on total strokes), the holes tally (7 - 2, 9 halved), what it paid ("$20 each", or "Test1 & Test2 buy" on a $0 game), and story tags: wire to wire, never trailed, came back from N down, biggest lead, lead changes, decided early. Period pots (front / back / total) show who took each. The hole-by-hole strip works for both games, with a tap for each hole's scores. One-ball games and Match Play no longer show the individual Net / Gross ranking, since a player's own score isn't what those games are about; the Summary leads with the result card instead. No Worker change.)
+
 v4.26.4 · 2026-10-13
 Deployed: 2026-10-13 (One-ball games (Alternate Shot) now default Net to "Off the low": the team with the lower combined handicap plays to scratch and only the other team gets strokes, so one team at most. Full is still one tap away, and Match Play stays Full by default. When the whole field competes (more than two pairs), "off the low" is measured against the lowest team in the field. Games already saved keep what they were saved with. Needs the Worker redeployed (the Alternate Shot default is in its schema).)
 

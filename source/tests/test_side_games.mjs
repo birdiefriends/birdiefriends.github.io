@@ -79,7 +79,7 @@ ok(A.get().cards.Bob == null || A.get().cards.Bob[0] == null, 'Match Play does n
 
 // Results panel renders both games
 const rctx = { escapeHtml: s => String(s).replace(/&/g, '&amp;'), BFEngine: E }; vm.createContext(rctx);
-vm.runInContext(['renderGatheringPayoutHtml', 'gpTabStyle', 'gpBtnStyle'].map(n => extractFn(src, n)).join('\n') + ';this.f=renderGatheringPayoutHtml;', rctx);
+vm.runInContext(['renderGatheringPayoutHtml', 'gpTabStyle', 'gpBtnStyle', 'fourballResultsHeatHtml', 'fbIni', 'fbShort'].map(n => extractFn(src, n)).join('\n') + ';this.f=renderGatheringPayoutHtml;', rctx);
 const h1 = rctx.f(ten), h2 = rctx.f(as), h0 = rctx.f(zero);
 ok(/Match Play/.test(h1) && /Ann/.test(h1) && /10&amp;|UP|&amp;/.test(h1), 'Match Play tab shows the result text');
 ok(/Alternate Shot/.test(h2) && /A-S/.test(h2), 'Alternate Shot tab');

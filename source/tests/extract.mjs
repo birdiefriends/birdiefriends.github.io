@@ -43,7 +43,7 @@ if (!vm.__bfPatched) {
       if (!('_gamesFormSide' in ctx)) ctx._gamesFormSide = {
         altshot: { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 50, period: 'round', win_by: 'strokes', scope: 'field', pairs: [] },
         matchplay: { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 100, period: 'round', matches: [] } };
-      try { vm.runInContext(['liveSideGid', 'liveSideSides'].map(n => extractFn(portal, n)).join('\n'), ctx); } catch (e) {}
+      try { vm.runInContext(['liveSideGid', 'liveSideSides', 'sideMatchView', 'sideMatchStory', 'sideGroupResults', 'sideResultHeroHtml'].map(n => extractFn(portal, n)).join('\n'), ctx); } catch (e) {}
     }
     return ctx;
   };
