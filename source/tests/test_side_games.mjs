@@ -115,7 +115,7 @@ ok(/asMode/.test(lsrc) && /units/.test(lsrc), 'Live Score shows teams in Alterna
 }
 
 const fsrc = extractFn(src, 'fourballActionsHtml');
-ok(/altshot' \? skGot\(pr\.names\[0\], hole\)/.test(fsrc) && /onePair/.test(fsrc), 'Alternate Shot: the pair gets its stroke dots once, not once per partner');
+ok(/liveOneBall\(_sk\.config\) \? skGot\(pr\.names\[0\], hole\)/.test(fsrc) && /onePair/.test(fsrc), 'Alternate Shot: the pair gets its stroke dots once, not once per partner');
 
 // One-ball net default is Off the low; with the whole field competing the low is the whole field's
 {

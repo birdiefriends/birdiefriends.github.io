@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.18.2';
+  const ENGINE_VERSION = '1.19.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -660,7 +660,7 @@
         state.unallocated += unalloc2;
         return Object.assign({
           pairs: rows.map(r => r.pair), pot: pot2, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode, stroke_marks } : {}),
-          ...(kind !== 'bestball' ? { format: kind, ...(pct != null && netOk ? { allowance: pct } : {}) } : {}),
+          ...(kind !== 'bestball' ? { format: kind, unit: kind === 'match' ? 'match' : 'ball', ...(pct != null && netOk ? { allowance: pct } : {}) } : {}),
           ...(wantNet && !netOk ? { net_missing: true } : {}),
           standings: rows.map((r, i) => Object.assign({}, r, { scores: arrs[i], total: r.complete ? r.total : null }))
             .sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
@@ -691,7 +691,7 @@
       state.unallocated += unalloc;
       return Object.assign({
         pairs: rows.map(r => r.pair), pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode, stroke_marks } : {}),
-        ...(kind !== 'bestball' ? { format: kind, ...(pct != null && netOk ? { allowance: pct } : {}) } : {}),
+        ...(kind !== 'bestball' ? { format: kind, unit: kind === 'match' ? 'match' : 'ball', ...(pct != null && netOk ? { allowance: pct } : {}) } : {}),
         ...(wantNet && !netOk ? { net_missing: true } : {}),
         standings: rows.slice().sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
         winners: winners.map(w => w.pair), per_pair: perPair, per_player: perPlayer, given_back_each: givenBackEach
@@ -820,7 +820,7 @@
 
   defineGame('cttp', {
     kind: 'addon', input: 'none', net: false,
-    meta: { label: 'CTP', uiOrder: 2, icon: '🎯', seal: 'CTP',
+    meta: { traits: { unit: 'player', allowance: 'none', individualScores: true }, label: 'CTP', uiOrder: 2, icon: '🎯', seal: 'CTP',
       info: 'Closest to the Pin on the chosen holes (usually the par 3s). Whoever is closest on a hole wins that hole\'s fixed $ prize, taken from the pot. Claim it in the Live Panel; the newest claim leads. An unclaimed hole\'s money rolls into Skins.' },
     config: [
       { key: 'dollar_per_hole', type: 'money', label: '$ per hole', default: 0, positive: true, required: true },
@@ -842,7 +842,7 @@
 
   defineGame('birdieball', {
     kind: 'addon', input: 'none', net: false,
-    meta: { label: 'MiserBall', uiOrder: 3, icon: '🐉', seal: 'BIRDIEBALL',
+    meta: { traits: { unit: 'player', allowance: 'none', individualScores: true }, label: 'MiserBall', uiOrder: 3, icon: '🐉', seal: 'BIRDIEBALL',
       info: 'Everyone starts with one ball. Keep it all round and you win: everyone who still has theirs at the end splits the pot. If everybody loses theirs, the last MiserBall standing (the one lost latest) wins. Lose yours? Tap "I lost it" in the Live Panel so the group knows, and confirm on your scorecard.' },
     config: [{ key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true }],
     fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
@@ -866,7 +866,7 @@
   defineGame('fourball', {
     kind: 'addon', input: 'strokes', net: true, entity: 'pair',
     released: true,
-    meta: { label: 'BestBall', icon: '🤝', seal: 'BESTBALL', uiOrder: 5, group: 'format',
+    meta: { traits: { unit: 'pair', allowance: 'round', individualScores: true, sides: true }, label: 'BestBall', icon: '🤝', seal: 'BESTBALL', uiOrder: 5, group: 'format',
       info: 'Played in pairs. Everyone plays their own ball and the pair counts the better of its two scores on each hole (gross unless the host set it to Net). The pair with the lowest total wins and splits the BestBall pot; tied pairs split it. If a partner picks up, the other\'s score counts alone. The pot can also be split into segments (Front 9, Back 9 and Total, or holes 1-6, 7-12 and 13-18), each its own pot won on strokes or holes won; a tied segment is a push.' },
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
@@ -946,7 +946,7 @@
   defineGame('altshot', {
     kind: 'addon', input: 'strokes', net: true, entity: 'pair',
     released: true, moneyOptional: true,
-    meta: { label: 'Alternate Shot', icon: '🔁', seal: 'ALT SHOT', uiOrder: 5.2, group: 'format',
+    meta: { traits: { unit: 'ball', allowance: 'own', individualScores: false, sides: true, sideForm: true }, label: 'Alternate Shot', tab: 'A-S', short: 'One ball per pair', icon: '🔁', seal: 'ALT SHOT', uiOrder: 5.2, group: 'format',
       info: 'Played in pairs with ONE ball per pair, partners taking turns hitting it, so each pair posts one score a hole. The pair with the lowest total wins (or choose holes won in a head-to-head). Net uses a share of the two handicaps added together (50% is the usual); the host can change it. The pot can be left at $0 for bragging rights.' },
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0 },
@@ -988,7 +988,7 @@
   defineGame('matchplay', {
     kind: 'addon', input: 'strokes', net: true, entity: 'individual',
     released: true, moneyOptional: true,
-    meta: { label: 'Match Play', icon: '⚔️', seal: 'MATCH PLAY', uiOrder: 5.4, group: 'format',
+    meta: { traits: { unit: 'match', allowance: 'own', individualScores: false, sides: true, sideForm: true }, label: 'Match Play', tab: 'Match', short: 'Head to head, hole by hole', icon: '⚔️', seal: 'MATCH PLAY', uiOrder: 5.4, group: 'format',
       info: 'Head to head, hole by hole: the lower score wins the hole, and the match goes to whoever is ahead when there are not enough holes left to catch up (3&2). The winner is announced then, but they may play on. A match level after the last hole is halved and each player gets their money back. Net strokes are a % of each course handicap (100% is full), either full or off the lower handicap in the match. The pot can be left at $0.' },
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0 },
@@ -1037,7 +1037,7 @@
   defineGame('lowscore', {
     kind: 'addon', input: 'strokes', net: true, entity: 'individual',
     released: true,
-    meta: { label: 'Low Score', icon: '🎯', seal: 'LOW SCORE', uiOrder: 6, group: 'format',
+    meta: { traits: { unit: 'player', allowance: 'round', individualScores: true }, label: 'Low Score', icon: '🎯', seal: 'LOW SCORE', uiOrder: 6, group: 'format',
       info: 'Everyone plays their own ball and the lowest score wins. Choose the scoring period: the whole round, Front and Back, Front, Back and Total, or 6 / 6 / 6. Each period is its own pot, the ante is split across them, and the lowest total in a period takes that pot. A tie for low is a push and the antes come back. Gross unless the host set it to Net.' },
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
@@ -1072,7 +1072,7 @@
 
   defineGame('birdiepay', {
     kind: 'addon', input: 'strokes', net: true,
-    meta: { label: 'Birdie Payouts', uiOrder: 4, icon: '🐤', seal: 'BIRDIE PAY',
+    meta: { traits: { unit: 'player', allowance: 'round', individualScores: true }, label: 'Birdie Payouts', uiOrder: 4, icon: '🐤', seal: 'BIRDIE PAY',
       info: 'A flat $ for every birdie or better, paid to whoever made it, from the same pot before Skins (gross unless the host set it to Net, where a par with a stroke counts). An eagle still pays one birdie. Nothing to enter: it\'s worked out from the scorecards when the round closes.' },
     config: [
       { key: 'dollar_per_birdie', type: 'money', label: '$ per birdie', default: 0, positive: true, required: true },
@@ -1093,7 +1093,7 @@
 
   defineGame('skins', {
     kind: 'addon', input: 'strokes', net: true, residual: true,
-    meta: { label: 'Skins', uiOrder: 1, icon: '⛳', seal: 'SKINS',
+    meta: { traits: { unit: 'player', allowance: 'round', individualScores: true }, label: 'Skins', uiOrder: 1, icon: '⛳', seal: 'SKINS',
       info: 'Every hole is its own prize. The lowest score on a hole, outright, wins that skin (gross unless the host set it to Net); a tie wins nothing. Skins split whatever is left of the pot after CTP, MiserBall and Birdie Payouts, shared by the skins won.' },
     config: [{ key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' }],
     fixedCost: () => 0,   // the residual game: takes whatever the others leave
@@ -1618,8 +1618,27 @@
     });
   }
 
-  // Dev-94: the strokes Alternate Shot and Match Play actually use, so every screen can show the real numbers.
-  // These games do NOT use the round's allowance % (the 95%); they have their own allowance on the game:
+  // ── What each game IS, for every screen (Dev-94 refactor) ───────────────────────────────
+  // Screens read these instead of checking game ids:
+  //   unit              who a result belongs to: 'player' | 'pair' (better ball) | 'ball' (one ball per team) | 'match' (head to head)
+  //   sides             true = played hole by hole between sides (BestBall, Alternate Shot, Match Play): live scoring, hole strip, match story
+  //   sideForm          true = set up on the generic side-game form (pairs / matches, allowance, periods, pot)
+  //   allowance         'round' = uses the round's handicap allowance (the 95%), 'own' = has its own allowance and stroke rule, 'none' = no strokes
+  //   individualScores  true = a player's own gross / net score matters to the game (so the Net / Gross ranking is meaningful)
+  const TRAIT_DEFAULTS = { unit: 'player', sides: false, sideForm: false, allowance: 'none', individualScores: true };
+  function gameTraits(id) { const m = (ADDONS[id] && ADDONS[id].meta) || {}; return Object.assign({}, TRAIT_DEFAULTS, m.traits || {}); }
+  function gamesWith(pred) { return gamesInUiOrder().filter(id => pred(gameTraits(id), id)); }
+  function sideGames() { return gamesWith(t => t.sides); }
+  function sideFormGames() { return gamesWith(t => t.sideForm); }
+  // The sides of a configured side game, flattened in play order: pairs as given, or each match's two players.
+  function gameSides(id, addon) {
+    if (!addon) return [];
+    if (gameTraits(id).unit === 'match') return [].concat(...(addon.matches || []).filter(m => Array.isArray(m) && m.length === 2).map(m => [[m[0]], [m[1]]]));
+    return (addon.pairs || []).filter(p => Array.isArray(p) && (p.length === 2 || p.length === 1));
+  }
+
+  // The strokes the games with their OWN allowance (Alternate Shot, Match Play) actually use, so every screen can show
+  // the real numbers. These do NOT use the round's allowance % (the 95%). Each such game supplies `strokeRows(addon, h)`:
   //   altshot   a pair's strokes = allowance% (default 50) of the two COURSE handicaps added (given-kind: their given strokes)
   //   matchplay each player's strokes = allowance% (default 100) of their course handicap; 'low' = off the lower in the match
   // Returns [{ id, label, allowance, net_mode, rows: [{ names, strokes, got:{hole:k}, detail }] }] (net games only).
@@ -1632,37 +1651,125 @@
     const given = nm => { const sp = specs.get(norm(nm)); return sp && Number.isFinite(Number(sp.strokes)) ? Math.trunc(Number(sp.strokes)) : 0; };
     const siOf = nm => { const sp = specs.get(norm(nm)) || {}; return Array.isArray(sp.stroke_index) && sp.stroke_index.length === 18 ? sp.stroke_index : (Array.isArray(hc.stroke_index) && hc.stroke_index.length === 18 ? hc.stroke_index : null); };
     const gotFor = (nm, k) => { const si = siOf(nm), got = {}; if (si) si.forEach((r, h) => { const x = strokesOnHole(k, r, 18); if (x) got[h + 1] = x; }); return got; };
+    const pctOf = (a, dflt) => (a.allowance != null && a.allowance !== '' && Number.isFinite(Number(a.allowance)) ? Number(a.allowance) : dflt);
     const out = [];
-    const as = (config.addons || []).find(a => a.id === 'altshot');
-    if (as && as.basis === 'net') {
-      const pct = Number.isFinite(Number(as.allowance)) && as.allowance !== '' && as.allowance != null ? Number(as.allowance) : 50;
-      const pairs = (as.pairs || []).filter(pr => Array.isArray(pr) && pr.length === 2);
-      const base = pairs.map(pr => ({ sum: pr.reduce((t, n) => t + (course(n) != null ? course(n) : given(n)), 0), parts: pr.map(n => course(n) != null ? course(n) : given(n)) }));
-      const own = base.map(b => Math.round(b.sum * pct / 100));
-      const low = as.net_mode === 'low';
-      out.push({ id: 'altshot', label: 'Alternate Shot', allowance: pct, net_mode: low ? 'low' : 'own', rows: pairs.map((pr, i) => {
-        const field = fourballSegmentPlan(as).scope === 'field';
-        const lowest = low ? Math.min(...(field ? own : [own[i - (i % 2)], own[i - (i % 2) + 1]]).filter(v => v != null)) : 0;
-        const k = own[i] - lowest;
-        return { names: pr, strokes: k, got: gotFor(pr[0], k),
-          detail: `${pct}% of ${base[i].parts.map(v => Math.round(v * 10) / 10).join(' + ')} = ${own[i]}${low ? `, off the low (${lowest}) = ${k}` : ''}` };
-      }) });
-    }
-    const mp = (config.addons || []).find(a => a.id === 'matchplay');
-    if (mp && mp.basis === 'net') {
-      const pct = Number.isFinite(Number(mp.allowance)) && mp.allowance !== '' && mp.allowance != null ? Number(mp.allowance) : 100;
-      const low = mp.net_mode === 'low';
-      const rows = [];
-      (mp.matches || []).filter(m => Array.isArray(m) && m.length === 2).forEach(m => {
-        const own = m.map(n => course(n) != null ? Math.round(course(n) * pct / 100) : given(n));
-        const lowest = low ? Math.min(...own) : 0;
-        m.forEach((n, i) => { const k = own[i] - lowest;
-          rows.push({ names: [n], strokes: k, got: gotFor(n, k),
-            detail: course(n) != null ? `${pct}% of course hcp ${Math.round(course(n) * 10) / 10} = ${own[i]}${low ? `, off the low = ${k}` : ''}` : `Strokes given${low ? `, off the low = ${k}` : ''}` }); });
-      });
-      out.push({ id: 'matchplay', label: 'Match Play', allowance: pct, net_mode: low ? 'low' : 'own', rows });
-    }
+    gamesWith(t => t.allowance === 'own').forEach(id => {
+      const a = (config.addons || []).find(x => x.id === id);
+      if (!a || a.basis !== 'net' || !ADDONS[id].strokeRows) return;
+      const rows = ADDONS[id].strokeRows(a, { course, given, gotFor, pctOf, round1: v => Math.round(v * 10) / 10 });
+      out.push({ id, label: ADDONS[id].meta.label, allowance: rows.pct, net_mode: a.net_mode === 'low' ? 'low' : 'own', rows: rows.rows });
+    });
     return out;
+  }
+  ADDONS.altshot.strokeRows = (as, h) => {
+    const pct = h.pctOf(as, 50);
+    const pairs = (as.pairs || []).filter(pr => Array.isArray(pr) && pr.length === 2);
+    const base = pairs.map(pr => { const parts = pr.map(n => h.course(n) != null ? h.course(n) : h.given(n)); return { sum: parts.reduce((t, v) => t + v, 0), parts }; });
+    const own = base.map(b => Math.round(b.sum * pct / 100));
+    const low = as.net_mode === 'low';
+    const field = fourballSegmentPlan(as).scope === 'field';
+    return { pct, rows: pairs.map((pr, i) => {
+      const lowest = low ? Math.min(...(field ? own : [own[i - (i % 2)], own[i - (i % 2) + 1]]).filter(v => v != null)) : 0;
+      const k = own[i] - lowest;
+      return { names: pr, strokes: k, got: h.gotFor(pr[0], k), detail: `${pct}% of ${base[i].parts.map(h.round1).join(' + ')} = ${own[i]}${low ? `, off the low (${lowest}) = ${k}` : ''}` };
+    }) };
+  };
+  ADDONS.matchplay.strokeRows = (mp, h) => {
+    const pct = h.pctOf(mp, 100), low = mp.net_mode === 'low', rows = [];
+    (mp.matches || []).filter(m => Array.isArray(m) && m.length === 2).forEach(m => {
+      const own = m.map(n => h.course(n) != null ? Math.round(h.course(n) * pct / 100) : h.given(n));
+      const lowest = low ? Math.min(...own) : 0;
+      m.forEach((n, i) => { const k = own[i] - lowest;
+        rows.push({ names: [n], strokes: k, got: h.gotFor(n, k),
+          detail: h.course(n) != null ? `${pct}% of course hcp ${h.round1(h.course(n))} = ${own[i]}${low ? `, off the low = ${k}` : ''}` : `Strokes given${low ? `, off the low = ${k}` : ''}` }); });
+    });
+    return { pct, rows };
+  };
+
+  // ── Head-to-head results (Alternate Shot, Match Play): who beat whom, how, and the story ──────────
+  // The match view for a saved result (Match Play's sides are single players, paired up in order).
+  function sideMatchView(f, pairs) {
+    pairs = pairs || (f && f.pairs) || [];
+    const sg = f.segments, isM = f.format === 'match';
+    const addon = isM
+      ? { matches: pairs.reduce((a, p, i) => { if (i % 2) a[a.length - 1].push(p[0]); else a.push([p[0]]); return a; }, []).filter(m => m.length === 2), segments: sg ? sg.mode : 'round' }
+      : { pairs, segments: sg ? sg.mode : 'round', win_by: sg ? sg.win_by : 'strokes', scope: sg ? sg.scope : 'field' };
+    try { return fourballMatchView(f, addon); } catch (e) { return null; }
+  }
+  // How a match went, hole by hole. holes = [{ hole, res: 'A' | 'B' | 'T' | null }] in hole order (null = not played).
+  function sideMatchStory(holes) {
+    let a = 0, b = 0, t = 0, lead = 0, maxA = 0, maxB = 0, changes = 0, square = 0, last = 0, firstLead = null, lastChangeHole = null, played = 0;
+    (holes || []).forEach((h, i) => {
+      if (!h || !h.res) return;
+      played++;
+      if (h.res === 'A') { a++; lead++; } else if (h.res === 'B') { b++; lead--; } else t++;
+      maxA = Math.max(maxA, lead); maxB = Math.max(maxB, -lead);
+      if (lead === 0) square++;
+      const sgn = Math.sign(lead);
+      if (sgn !== 0) {
+        if (firstLead == null) firstLead = { side: sgn > 0 ? 'A' : 'B', hole: h.hole || i + 1 };
+        if (last !== 0 && sgn !== last) { changes++; lastChangeHole = h.hole || i + 1; }
+        last = sgn;
+      }
+    });
+    return { played, a, b, t, lead, maxA, maxB, changes, square, firstLead, lastChangeHole,
+      neverTrailed: played && b === 0 ? 'A' : (played && a === 0 ? 'B' : (maxB === 0 && lead > 0 ? 'A' : (maxA === 0 && lead < 0 ? 'B' : null))) };
+  }
+  // One entry per head-to-head in a saved result: who beat whom and how, ready to show.
+  function sideGroupResults(f) {
+    const mv = sideMatchView(f); if (!mv) return [];
+    const sg = f.segments, short = names => names.map(n => String(n).trim().split(/\s+/)[0]).join(' & ');
+    return mv.groups.filter(g => !g.solo && g.pairs.length === 2).map((g, gi) => {
+      const [pa, pb] = g.pairs, story = sideMatchStory(g.holes);
+      const paid = sg && sg.groups && sg.groups[gi] ? sg.groups[gi].segments : null;
+      const whole = paid && paid.length === 1 ? paid[0] : null;
+      const win = x => (x && x.status === 'won' && x.winner) ? (x.winner.join('|') === pa.names.join('|') ? 0 : 1) : null;
+      let big = '', small = '', winner = null, status = story.played ? 'inprogress' : 'notstarted';
+      const holesTxt = `${story.a} – ${story.b}${story.t ? `, ${story.t} halved` : ''}`;
+      if (whole) {
+        winner = win(whole);
+        status = whole.status === 'won' ? 'won' : whole.status === 'push' ? 'halved' : 'inprogress';
+        big = whole.result ? (status === 'halved' ? 'Halved' : whole.result) : (status === 'won' ? `${Math.abs(story.lead)} UP` : status === 'halved' ? 'Halved' : 'In progress');
+        small = `Holes ${holesTxt}`;
+      } else if (!sg || !paid) {
+        // one pot on total strokes: the result is the strokes, the holes are the story
+        const [tA, tB] = [pa, pb].map(x => { const r = (f.standings || []).find(z => z.pair.join('|') === x.names.join('|')); return r && r.complete ? r.total : null; });
+        if (tA != null && tB != null) {
+          winner = tA < tB ? 0 : tA > tB ? 1 : null; status = winner == null ? 'halved' : 'won';
+          const d = Math.abs(tA - tB);
+          big = winner == null ? 'Tied' : `${d} stroke${d === 1 ? '' : 's'}`;
+          small = `${tA} vs ${tB}${f.basis === 'net' ? ' net' : ''} · holes ${holesTxt}`;
+        } else { big = 'In progress'; small = story.played ? `Holes ${holesTxt}` : ''; }
+      } else {
+        // period pots (front / back / total): the headline is who took more of them
+        const wins = [0, 0]; paid.forEach(x => { const w = win(x); if (w != null) wins[w]++; });
+        winner = wins[0] === wins[1] ? null : wins[0] > wins[1] ? 0 : 1;
+        status = paid.every(x => x.status === 'pending') ? 'inprogress' : (winner == null ? 'halved' : 'won');
+        big = `${wins[0]} – ${wins[1]}`; small = `Pots won · holes ${holesTxt}`;
+      }
+      const segs = (paid && paid.length > 1) ? paid.map(x => ({ label: x.label, text: x.result || (x.status === 'won' ? '' : x.status === 'push' ? 'Halved' : 'In progress'), winner: win(x), money: x.per_player ? x.per_player : null })) : [];
+      const r = { names: [pa.names, pb.names], short: [short(pa.names), short(pb.names)], status, winner, big, small, story, segs,
+        pot: whole ? whole.pot : (paid ? paid.reduce((t, x) => t + (x.pot || 0), 0) : null),
+        perPlayer: whole ? (whole.per_player || null) : (!paid && winner != null && f.per_player ? f.per_player : null),
+        decidedEarly: !!(whole && whole.status === 'won' && /&/.test(whole.result || '')) };
+      r.tags = sideResultTags(r);
+      return r;
+    });
+  }
+  // The short story lines under a result ("Wire to wire", "Came back from 3 down"). Plain text with an icon; screens add the markup.
+  function sideResultTags(r) {
+    const st = r.story, tags = [], who = i => r.short[i];
+    if (!st.played || r.status === 'notstarted') return tags;
+    const w = r.winner;
+    if (st.firstLead && st.changes === 0 && st.square <= 1 && w != null) tags.push({ icon: '🏁', text: `Wire to wire for ${who(w)}` });
+    else if (w != null && st.neverTrailed === (w === 0 ? 'A' : 'B') && st.changes === 0) tags.push({ icon: '🛡️', text: `${who(w)} never trailed` });
+    else if (w != null && (w === 0 ? st.maxB : st.maxA) >= 2) tags.push({ icon: '🔥', text: `${who(w)} came back from ${w === 0 ? st.maxB : st.maxA} down` });
+    const big = Math.max(st.maxA, st.maxB);
+    if (big >= 3) tags.push({ icon: '📈', text: `Biggest lead: ${who(st.maxA >= st.maxB ? 0 : 1)} ${big} UP` });
+    if (st.changes >= 1) tags.push({ icon: '🔄', text: `Lead changed hands ${st.changes}×` });
+    if (st.square >= 3) tags.push({ icon: '⚖️', text: `All square ${st.square} times` });
+    if (r.decidedEarly) tags.push({ icon: '⏱️', text: `Decided early (${r.big})` });
+    return tags;
   }
 
   function suggestGameAmounts({ dollarPerPlayer, players, games, cttpHoles, periods }) {
@@ -1740,6 +1847,6 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, mergeHoleScores,
-    suggestGameAmounts, strokeMarksFor, sideStrokeSets
+    suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });

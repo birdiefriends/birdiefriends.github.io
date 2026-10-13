@@ -38,12 +38,14 @@ if (!vm.__bfPatched) {
     const ctx = orig.call(vm, o || {}, ...rest);
     if (!('GAMES_FORM_SIDE_IDS' in ctx)) {
       ctx.GAMES_FORM_SIDE_IDS = ['altshot', 'matchplay'];
+      if (!('BFEngine' in ctx)) ctx.BFEngine = loadEngine();
       ctx.LIVE_SIDE_GAMES = ['fourball', 'altshot', 'matchplay'];
+      ctx.GW_SIDE_STEP = { altshot: 'aspairs', matchplay: 'mpmatches' };
       ctx.GAMES_FORM_REC_ALLOWANCE = { altshot: 50, matchplay: 100 };
       if (!('_gamesFormSide' in ctx)) ctx._gamesFormSide = {
         altshot: { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 50, period: 'round', win_by: 'strokes', scope: 'field', pairs: [] },
         matchplay: { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 100, period: 'round', matches: [] } };
-      try { vm.runInContext(['liveSideGid', 'liveSideSides', 'sideMatchView', 'sideMatchStory', 'sideGroupResults', 'sideResultHeroHtml'].map(n => extractFn(portal, n)).join('\n'), ctx); } catch (e) {}
+      try { vm.runInContext(['liveSideGames', 'liveSideGid', 'liveSideTraits', 'liveSideSides', 'liveOneBall', 'liveSideChooserHtml', 'sideResultHeroHtml'].map(n => extractFn(portal, n)).join('\n'), ctx); } catch (e) {}
     }
     return ctx;
   };
