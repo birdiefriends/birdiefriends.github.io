@@ -3620,7 +3620,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.18.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.18.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -10078,27 +10078,11 @@ function skMarks() {
   const key = JSON.stringify([all, _sk.config && _sk.config.handicap && _sk.config.handicap.players ? Object.keys(_sk.config.handicap.players).length : 0]);
   if (_sk._marksKey === key && _sk._marks) return _sk._marks;
   const m = new Map(BFEngine.strokeMarksFor(_sk.config, all).map(x => [String(x.player).trim().toLowerCase(), x]));
-  if (liveSideGid(_sk.config) === 'altshot') {
-    // Alternate Shot: strokes belong to the PAIR (allowance % of both course handicaps added), so both partners carry the pair's marks.
-    const hc = _sk.config.handicap, a = gatheringAddon(_sk.config, 'altshot') || {};
-    const nm = x => String(x || '').trim().toLowerCase();
+  // Alternate Shot and Match Play use their OWN allowance (not the round's 95%): the engine says who gets what.
+  const side = liveSideGid(_sk.config);
+  if (side === 'altshot' || side === 'matchplay') {
     m.clear();
-    if (hc && hc.mode === 'net' && a.basis === 'net') {
-      const pct = a.allowance != null && a.allowance !== '' && Number.isFinite(Number(a.allowance)) ? Number(a.allowance) : 50;
-      const specs = new Map(Object.entries(hc.players || {}).map(([k, v]) => [nm(k), v]));
-      const pairs = (a.pairs || []).filter(pr => Array.isArray(pr) && pr.length === 2);
-      const strokesOf = pr => Math.round(pr.reduce((t, n) => { const sp = specs.get(nm(n)) || {}; return t + (sp.kind === 'index' && Number.isFinite(Number(sp.course_hcp)) ? Number(sp.course_hcp) : (Number(sp.strokes) || 0)); }, 0) * pct / 100);
-      const own = pairs.map(strokesOf);
-      pairs.forEach((pr, i) => {
-        let eff = own[i];
-        if (a.net_mode === 'low') { const base = i - (i % 2); eff -= Math.min(...[own[base], own[base + 1]].filter(v => v != null)); }
-        const sp0 = specs.get(nm(pr[0])) || {};
-        const si = Array.isArray(sp0.stroke_index) && sp0.stroke_index.length === 18 ? sp0.stroke_index : (Array.isArray(hc.stroke_index) && hc.stroke_index.length === 18 ? hc.stroke_index : null);
-        const got = {};
-        if (si) si.forEach((r, h) => { const k = BFEngine.strokesOnHole(eff, r, 18); if (k) got[h + 1] = k; });
-        pr.forEach(n => m.set(nm(n), { player: n, strokes: eff, got, known: !!si }));
-      });
-    }
+    BFEngine.sideStrokeSets(_sk.config).filter(st => st.id === side).forEach(st => st.rows.forEach(r => r.names.forEach(n => m.set(String(n).trim().toLowerCase(), { player: n, strokes: r.strokes, got: r.got, known: true }))));
   }
   _sk._marksKey = key; _sk._marks = m;
   return m;
@@ -16700,7 +16684,9 @@ function renderStrokeCardHtml(rc, me) {
   if (!hc || hc.mode !== 'net') return `<div style="font-size:0.84rem;color:var(--text-muted);padding:12px 0">This round is scored gross. No strokes are given.</div>`;
   const esc = v => escapeHtml(String(v ?? ''));
   const basisOf = id => { const a = (rc.addons || []).find(x => x.id === id); return a ? (a.basis === 'net' ? 'Net' : 'Gross') : null; };
-  const modes = [['⛳ Skins', basisOf('skins')], ['🐤 Birdie Payouts', basisOf('birdiepay')]].filter(m => m[1]).map(m => `${m[0]}: <b>${m[1]}</b>`).join(' · ');
+  const modes = [['⛳ Skins', basisOf('skins')], ['🐤 Birdie Payouts', basisOf('birdiepay')], ['🤝 BestBall', basisOf('fourball')], ['🎯 Low Score', basisOf('lowscore')], ['🔁 Alternate Shot', basisOf('altshot')], ['⚔️ Match Play', basisOf('matchplay')]].filter(m => m[1]).map(m => `${m[0]}: <b>${m[1]}</b>`).join(' · ');
+  const sets = BFEngine.sideStrokeSets(rc);
+  const stdUsed = ['skins', 'birdiepay', 'fourball', 'lowscore'].some(id => basisOf(id) === 'Net') || hc.ranking === true;
   const cell = (n, k) => `<div style="flex:1;text-align:center;font-size:0.62rem;line-height:1.5;border-radius:4px;${k ? 'background:var(--green);color:#fff;font-weight:800' : 'color:var(--text-hint)'}">${k > 1 ? n + '<br>••' : k ? n + '<br>•' : n + '<br>&nbsp;'}</div>`;
   const players = Object.entries(hc.players || {}).map(([name, sp]) => {
     const per = Array.from({ length: 18 }, (_, i) => (sp.stroke_index ? BFEngine.strokesOnHole(sp.strokes, sp.stroke_index[i], 18) : 0));
@@ -16717,7 +16703,14 @@ function renderStrokeCardHtml(rc, me) {
         <span style="font-weight:800;color:var(--green-dark)">${total} stroke${Math.abs(total) === 1 ? '' : 's'}</span></div>
       <div style="font-size:0.72rem;color:var(--text-muted)">${sp.tee ? esc(sp.tee) + ' tees · ' : ''}${how}</div>${grid}</div>`;
   }).join('');
-  return `<div style="font-size:0.8rem;color:var(--text-muted);line-height:1.5;margin-bottom:6px">${modes}<br>A green hole = the player gets a stroke there (•• = two), set by that tee's hole handicap. Decided before the first tee.</div>${players}`;
+  const setHtml = sets.map(st => `<div style="margin-top:12px;padding-top:8px;border-top:2px solid var(--border)">
+    <div style="font-weight:800;font-size:0.9rem">${st.label} strokes</div>
+    <div style="font-size:0.74rem;color:var(--text-muted);line-height:1.45">${st.id === 'altshot' ? `A pair's strokes are ${st.allowance}% of the two course handicaps added together` : `Each player's strokes are ${st.allowance}% of their course handicap`}${st.net_mode === 'low' ? ', then taken off the low' : ''}. The ${hc.allowance}% above does not apply to this game.</div>
+    ${st.rows.map(r => { const mine = !!me && r.names.some(n => String(n).trim().toLowerCase() === String(me).trim().toLowerCase());
+      const per = Array.from({ length: 18 }, (_, i) => r.got[i + 1] || 0);
+      const grid = [0, 9].map(o => `<div style="display:flex;gap:2px;margin-top:3px">${per.slice(o, o + 9).map((k, i) => cell(o + i + 1, k)).join('')}</div>`).join('');
+      return `<div style="padding:8px ${mine ? '10px' : '0'};border-top:1px solid var(--border);${mine ? 'background:var(--green-light);border-radius:10px;margin-top:4px' : ''}"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><span style="font-weight:800;font-size:0.9rem">${r.names.map(esc).join(' &amp; ')}${mine ? ' <span style="font-size:0.66rem;font-weight:700;color:var(--green-dark)">(you)</span>' : ''}</span><span style="font-weight:800;color:var(--green-dark)">${r.strokes} stroke${r.strokes === 1 ? '' : 's'}</span></div><div style="font-size:0.72rem;color:var(--text-muted)">${esc(r.detail)}</div>${grid}</div>`; }).join('')}</div>`).join('');
+  return `<div style="font-size:0.8rem;color:var(--text-muted);line-height:1.5;margin-bottom:6px">${modes}<br>A green hole = the player gets a stroke there (•• = two), set by that tee's hole handicap. Decided before the first tee.</div>${stdUsed || !sets.length ? `${sets.length ? '<div style="font-weight:800;font-size:0.9rem;margin-top:6px">Per player (' + esc(hc.allowance) + '% allowance)</div>' : ''}${players}` : ''}${setHtml}`;
 }
 function openStrokeCard(evtId) {
   const evt = evtId ? eventData.find(e => String(e.id) === String(evtId)) : (_atCourse && _atCourse.evt);
@@ -17632,12 +17625,19 @@ function gatheringGameDetailsBody(evt, config) {
   const hc = config.handicap;
   if (hc && hc.mode === 'net') {
     const per = Object.entries(hc.players || {}).map(([n, p]) => `${escapeHtml(n)} <b>${Number(p.strokes) || 0}</b>`).join(' · ');
+    // Which games use the round's allowance %, and which have their own (Alternate Shot, Match Play).
+    const isNetAddon = id => { const a = gatheringAddon(config, id); return !!(a && a.basis === 'net'); };
+    const stdGames = [['skins', 'Skins'], ['birdiepay', 'Birdie Payouts'], ['fourball', 'BestBall'], ['lowscore', 'Low Score']].filter(g => isNetAddon(g[0])).map(g => g[1]);
+    if (hc.ranking) stdGames.push('Net ranking');
+    const sets = BFEngine.sideStrokeSets(config);
+    const setLines = sets.map(st => `<br><b>${st.label}</b> · ${st.allowance}% allowance${st.net_mode === 'low' ? ', off the low' : ''}: ${st.rows.map(r => `${r.names.map(escapeHtml).join(' &amp; ')} <b>${r.strokes}</b>`).join(' · ')}`).join('');
+    const stdPart = stdGames.length || !sets.length ? `${stdGames.length ? stdGames.join(', ') + ': ' : ''}${hc.allowance}% allowance · ${per || 'no players set'}` : '';
     const evq = String(evt.id).replace(/'/g, "\\'");
     const pill = 'height:32px;padding:0 12px;border-radius:16px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.78rem;cursor:pointer';
     const btns = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
       <button type="button" style="${pill}" onclick="openStrokeCard('${evq}')">Strokes by hole</button>
       <button type="button" style="${pill}" onclick="closeModal('game-details-modal');openVenueViewerModal('${evq}')">Course with strokes</button></div>`;
-    rows.push(row('⚖️', 'Handicap strokes', `${hc.allowance}% allowance · ${per || 'no players set'}`, 'net', btns));
+    rows.push(row('⚖️', 'Handicap strokes', `${stdPart}${setLines}`, 'net', btns));
   }
   return `
     <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px">

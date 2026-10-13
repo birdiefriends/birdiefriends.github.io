@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.18.0';
+  const ENGINE_VERSION = '1.18.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1617,6 +1617,52 @@
     });
   }
 
+  // Dev-94: the strokes Alternate Shot and Match Play actually use, so every screen can show the real numbers.
+  // These games do NOT use the round's allowance % (the 95%); they have their own allowance on the game:
+  //   altshot   a pair's strokes = allowance% (default 50) of the two COURSE handicaps added (given-kind: their given strokes)
+  //   matchplay each player's strokes = allowance% (default 100) of their course handicap; 'low' = off the lower in the match
+  // Returns [{ id, label, allowance, net_mode, rows: [{ names, strokes, got:{hole:k}, detail }] }] (net games only).
+  function sideStrokeSets(src) {
+    const config = src && src.addons ? src : (src ? gatheringConfigFromLegacy(src) : null);
+    const hc = config && config.handicap;
+    if (!hc || hc.mode !== 'net') return [];
+    const specs = new Map(Object.entries(hc.players || {}).map(([k, v]) => [norm(k), v]));
+    const course = nm => { const sp = specs.get(norm(nm)); return sp && sp.kind === 'index' && Number.isFinite(Number(sp.course_hcp)) ? Number(sp.course_hcp) : null; };
+    const given = nm => { const sp = specs.get(norm(nm)); return sp && Number.isFinite(Number(sp.strokes)) ? Math.trunc(Number(sp.strokes)) : 0; };
+    const siOf = nm => { const sp = specs.get(norm(nm)) || {}; return Array.isArray(sp.stroke_index) && sp.stroke_index.length === 18 ? sp.stroke_index : (Array.isArray(hc.stroke_index) && hc.stroke_index.length === 18 ? hc.stroke_index : null); };
+    const gotFor = (nm, k) => { const si = siOf(nm), got = {}; if (si) si.forEach((r, h) => { const x = strokesOnHole(k, r, 18); if (x) got[h + 1] = x; }); return got; };
+    const out = [];
+    const as = (config.addons || []).find(a => a.id === 'altshot');
+    if (as && as.basis === 'net') {
+      const pct = Number.isFinite(Number(as.allowance)) && as.allowance !== '' && as.allowance != null ? Number(as.allowance) : 50;
+      const pairs = (as.pairs || []).filter(pr => Array.isArray(pr) && pr.length === 2);
+      const base = pairs.map(pr => ({ sum: pr.reduce((t, n) => t + (course(n) != null ? course(n) : given(n)), 0), parts: pr.map(n => course(n) != null ? course(n) : given(n)) }));
+      const own = base.map(b => Math.round(b.sum * pct / 100));
+      const low = as.net_mode === 'low';
+      out.push({ id: 'altshot', label: 'Alternate Shot', allowance: pct, net_mode: low ? 'low' : 'own', rows: pairs.map((pr, i) => {
+        const lowest = low ? Math.min(...[own[i - (i % 2)], own[i - (i % 2) + 1]].filter(v => v != null)) : 0;
+        const k = own[i] - lowest;
+        return { names: pr, strokes: k, got: gotFor(pr[0], k),
+          detail: `${pct}% of ${base[i].parts.map(v => Math.round(v * 10) / 10).join(' + ')} = ${own[i]}${low ? `, off the low (${lowest}) = ${k}` : ''}` };
+      }) });
+    }
+    const mp = (config.addons || []).find(a => a.id === 'matchplay');
+    if (mp && mp.basis === 'net') {
+      const pct = Number.isFinite(Number(mp.allowance)) && mp.allowance !== '' && mp.allowance != null ? Number(mp.allowance) : 100;
+      const low = mp.net_mode === 'low';
+      const rows = [];
+      (mp.matches || []).filter(m => Array.isArray(m) && m.length === 2).forEach(m => {
+        const own = m.map(n => course(n) != null ? Math.round(course(n) * pct / 100) : given(n));
+        const lowest = low ? Math.min(...own) : 0;
+        m.forEach((n, i) => { const k = own[i] - lowest;
+          rows.push({ names: [n], strokes: k, got: gotFor(n, k),
+            detail: course(n) != null ? `${pct}% of course hcp ${Math.round(course(n) * 10) / 10} = ${own[i]}${low ? `, off the low = ${k}` : ''}` : `Strokes given${low ? `, off the low = ${k}` : ''}` }); });
+      });
+      out.push({ id: 'matchplay', label: 'Match Play', allowance: pct, net_mode: low ? 'low' : 'own', rows });
+    }
+    return out;
+  }
+
   function suggestGameAmounts({ dollarPerPlayer, players, games, cttpHoles, periods }) {
     const B = Number(dollarPerPlayer) || 0;
     const n = Math.max(1, Math.floor(Number(players) || 0));
@@ -1692,6 +1738,6 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, mergeHoleScores,
-    suggestGameAmounts, strokeMarksFor
+    suggestGameAmounts, strokeMarksFor, sideStrokeSets
   };
 });

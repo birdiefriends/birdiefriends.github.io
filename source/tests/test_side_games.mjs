@@ -97,5 +97,22 @@ ok(/bragging rights/.test(h0), '$0 match says no money');
 const lsrc = extractFn(src, 'liveScoreModeHtml');
 ok(/asMode/.test(lsrc) && /units/.test(lsrc), 'Live Score shows teams in Alternate Shot');
 
+// Strokes shown must match the game: A-S ignores the round's 95%, Match Play uses its own allowance
+{
+  const rc = E.gatheringConfigFromLegacy({ games: ['altshot', 'matchplay'], dollar_per_player: 10,
+    game_configs: { altshot: { dollar_per_player: 10, basis: 'net', net_mode: 'own', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }, matchplay: { dollar_per_player: 0, basis: 'net', net_mode: 'low', allowance: 100, matches: [['Ann', 'Cy']] } },
+    handicap_config: { allowance: 95, players: { Ann: { kind: 'index', index: 8, course_hcp: 8.8, strokes: 8, stroke_index: arr(h => h), tee: 'G' }, Bob: { kind: 'index', index: 12, course_hcp: 12.4, strokes: 12, stroke_index: arr(h => h), tee: 'G' },
+      Cy: { kind: 'index', index: 20, course_hcp: 20.4, strokes: 19, stroke_index: arr(h => h), tee: 'G' }, Di: { kind: 'index', index: 4, course_hcp: 4.2, strokes: 4, stroke_index: arr(h => h), tee: 'G' } } } });
+  const sets = E.sideStrokeSets(rc);
+  const sa = sets.find(x => x.id === 'altshot'), sm = sets.find(x => x.id === 'matchplay');
+  ok(sa.rows[0].strokes === 11 && sa.rows[1].strokes === 12, 'A-S pairs: 50% of (8.8+12.4)=11 and (20.4+4.2)=12 (got ' + sa.rows.map(r => r.strokes) + ')');
+  ok(/50% of 8.8 \+ 12.4 = 11/.test(sa.rows[0].detail), 'A-S detail shows the arithmetic');
+  ok(sm.rows[0].strokes === 0 && sm.rows[1].strokes === 11 && /off the low/.test(sm.rows[1].detail), 'Match Play off the low: Ann 0, Cy 20-9=11 (got ' + sm.rows.map(r => r.strokes) + ')');
+  const sc = { BFEngine: E, escapeHtml: v => String(v) }; vm.createContext(sc); vm.runInContext(extractFn(src, 'renderStrokeCardHtml'), sc);
+  const hh = sc.renderStrokeCardHtml(rc, 'Ann');
+  ok(/Alternate Shot strokes/.test(hh) && /does not apply to this game/.test(hh) && /Match Play strokes/.test(hh), 'stroke card has a section per side game');
+  ok(!/Per player \(95%/.test(hh), 'no 95% per-player block when only A-S/Match Play are net');
+}
+
 console.log(`test_side_games: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
