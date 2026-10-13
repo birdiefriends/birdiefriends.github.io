@@ -1,3 +1,6 @@
+v4.24.2 · 2026-10-13
+Deployed: 2026-10-13 (CTP holes now default to ALL of a course's par 3s. A course with no CTP holes saved uses its par 3s, read from its tee data or its Vs Par table, instead of falling back to Blue Shamrock's holes (3, 8, 10, 15, 18). Holes you picked yourself always win, and nothing is written: events and setups that already saved their own CTP holes (a Gathering, a BFE-Admin event like the Wally Cup) are not changed. Venue Manager's CTP row shows "All par 3s" and a course with par data no longer counts as missing CTP. The CTP editor's Clear becomes "Back to all par 3s". No Worker change.)
+
 v4.24.1 · 2026-10-13
 Deployed: 2026-10-13 (Course tee card: the red shading on the six hardest holes (HCP 1 to 6) is gone, along with its legend. The HCP row is plain numbers. Net stroke shading is unchanged. No Worker change.)
 

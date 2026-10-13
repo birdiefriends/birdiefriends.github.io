@@ -26,7 +26,7 @@ const ctx = {
   },
 };
 vm.createContext(ctx);
-const names = ['escapeHtml', 'escapeHtmlAttr', 'venueSetupState', 'venueSetupLine', 'venueChipsHtml', 'setVenueFilter', 'setVenueSearch', 'renderVenueRows',
+const names = ['escapeHtml', 'escapeHtmlAttr', 'par3HoleNumbers', 'venueDefaultCttpHoles', 'venueCttpStatus', 'venueSetupState', 'venueSetupLine', 'venueChipsHtml', 'setVenueFilter', 'setVenueSearch', 'renderVenueRows',
   'adminFetchVenueTeesQuiet', 'venueLoadSetupData', 'loadAdminVenues', 'openVenueDialog', 'closeVenueDialog', 'venueDialogView', 'venueDialogBack',
   'venueParSum', 'venueDialogRowsHtml', 'venueDialogHomeHtml', 'venueMotifEditorHtml', 'venueDialogBodyHtml', 'renderVenueDialog',
   'vmBlankHoles', 'vmNormalizeHoles', 'adminEditVenueTee', 'adminNewVenueTee', 'vmNum', 'vmTeeCapture', 'venueTeeCheck', 'venueTeeEditorRefresh',
@@ -155,5 +155,68 @@ const h2 = vm.runInContext(`storedVenueTeesHtml({id:4})`, ctx2);
 ok(h2.includes('adminEditVenueTee(4, 7)') && h2.includes('adminDeleteVenueTee(4, 7)') && h2.includes('adminNewVenueTee(4)'), 'stored tees: Edit, Delete and Add a tee manually');
 ok(extractFn(src, 'adminGcApplyCoords').includes('/coords') && extractFn(src, 'venueGcLookupEditorHtml').includes('adminGcApplyCoords(${v.id})'), 'GC-API course offers one tap to set Weather location');
 ok(!/_adminVenue(Pars|Coords|Logo|Cttp|Gc)Open/.test(src), 'old per-panel open flags are gone');
+
+
+// ── CTP holes default to all par 3s (v4.24.2) ───────────────────────────────
+// par pattern with par 3s on holes 3, 8, 12, 17
+const PARS = [4,4,3,5,4,4,5,3,4,4,5,3,4,4,5,4,3,4];
+const teeP = { id: 1, tee_name: 'Blue', holes: PARS.map(p => ({ par: p, yardage: 300, handicap: 1 })) };
+ok(run(`par3HoleNumbers(${JSON.stringify(PARS)})`).join() === '3,8,12,17', 'par3HoleNumbers');
+ok(run(`venueDefaultCttpHoles(null, ${JSON.stringify([teeP])})`).join() === '3,8,12,17', 'default = all par 3s from tee data');
+ok(run(`venueDefaultCttpHoles(${JSON.stringify(JSON.stringify(PARS))}, [])`).join() === '3,8,12,17', 'falls back to the legacy Vs Par table');
+ok(run(`venueDefaultCttpHoles(null, [])`) === null && run(`venueDefaultCttpHoles('garbage', [{holes:[1]}])`) === null, 'no par data → null, never a guess');
+// status: saved holes win; else the default; else not set; null while loading
+run(`_adminVenueCttpCache = {}; _adminVenueTees = {}`);
+ok(run(`venueCttpStatus({id:9,pars:null}).state`) === null, 'status is "loading" before anything is fetched');
+ctx._adminVenueCttpCache[9] = { cttpHoles: [], raw: {} }; ctx._adminVenueTees[9] = [teeP];
+let st = run(`venueCttpStatus({id:9,pars:null})`);
+ok(st.state === true && st.isDefault && st.holes.join() === '3,8,12,17', 'nothing saved → defaults to all par 3s and counts as set');
+ctx._adminVenueCttpCache[9] = { cttpHoles: [5, 14], raw: {} };
+st = run(`venueCttpStatus({id:9,pars:null})`);
+ok(st.state === true && !st.isDefault && st.holes.join() === '5,14', 'saved holes win over the default (hand-picked stays hand-picked)');
+ctx._adminVenueCttpCache[8] = { cttpHoles: [], raw: {} }; ctx._adminVenueTees[8] = [];
+ok(run(`venueCttpStatus({id:8,pars:null})`).state === false, 'no saved holes and no par data → not set');
+
+// Live Panel resolution: saved → par 3s → null (BSGC fallback). It must never WRITE.
+function ctpCtx(catalog, tees, pars) {
+  const writes = [];
+  const c = { console, JSON, String, Array, Object, Number, Math, Promise, Object, BFE_API: 'https://bfe', _venueCttpHolesCache: {}, _resolvedCttpHoles: undefined, writes,
+    csNormalizedVenueName: () => 'Test GC', loadVenues: async () => {}, findVenueByName: () => ({ id: 5, name: 'Test GC', pars }),
+    fetch: async (url, opts) => {
+      if (opts && opts.method && opts.method !== 'GET') writes.push(url);
+      if (/venue-tee-catalog/.test(url)) return catalog === 404 ? { ok: false, json: async () => ({}) } : { ok: true, json: async () => ({ tee_catalog: catalog }) };
+      return { ok: true, json: async () => ({ ok: true, tees }) };
+    } };
+  vm.createContext(c);
+  vm.runInContext(['par3HoleNumbers', 'venueDefaultCttpHoles', 'venueDerivedCttpHoles', 'loadVenueCttpHoles'].map(n => extractFn(src, n)).join('\n'), c);
+  return c;
+}
+let k = ctpCtx({ cttpHoles: [6, 15] }, [teeP], null);
+await vm.runInContext('loadVenueCttpHoles({})', k);
+ok(k._resolvedCttpHoles.join() === '6,15', 'Live Panel: a venue with saved holes uses them, not the par 3s');
+k = ctpCtx({ mode: 'same', tee: { name: 'Blue' } }, [teeP], null); // catalog row exists (tee policy) but no cttpHoles
+await vm.runInContext('loadVenueCttpHoles({})', k);
+ok(k._resolvedCttpHoles.join() === '3,8,12,17', 'Live Panel: a catalog row without CTP holes defaults to all par 3s');
+k = ctpCtx(404, [teeP], null);
+await vm.runInContext('loadVenueCttpHoles({})', k);
+ok(k._resolvedCttpHoles.join() === '3,8,12,17', 'Live Panel: no catalog row at all defaults to all par 3s (was the BSGC holes)');
+k = ctpCtx(404, [], JSON.stringify(PARS));
+await vm.runInContext('loadVenueCttpHoles({})', k);
+ok(k._resolvedCttpHoles.join() === '3,8,12,17', 'Live Panel: legacy Vs Par table is enough');
+k = ctpCtx(404, [], null);
+await vm.runInContext('loadVenueCttpHoles({})', k);
+ok(k._resolvedCttpHoles === null, 'Live Panel: no par data anywhere → null, so the existing BSGC fallback still applies');
+ok(k.writes.length === 0, 'resolving CTP holes never writes anything');
+ok(!/venue-tee-catalog[^;]*POST/.test(extractFn(src, 'loadVenueCttpHoles')), 'loadVenueCttpHoles has no write path');
+// editor copy tells the truth about the default
+const cc = { _adminVenueCttpCache: { 9: { cttpHoles: [], raw: {} } }, _adminVenueTees: { 9: [teeP] } };
+vm.createContext(cc);
+vm.runInContext(['par3HoleNumbers', 'venueDefaultCttpHoles', 'venueCttpHolesEditorHtml'].map(n => extractFn(src, n)).join('\n'), cc);
+let eh = vm.runInContext(`venueCttpHolesEditorHtml({id:9,name:'X',pars:null})`, cc);
+ok(eh.includes('all par 3s (3, 8, 12, 17)') && eh.includes('placeholder="All par 3s: 3, 8, 12, 17"') && !eh.includes('Back to all par 3s'), 'editor shows the default and no clear button when nothing is saved');
+cc._adminVenueCttpCache[9] = { cttpHoles: [5], raw: {} };
+eh = vm.runInContext(`venueCttpHolesEditorHtml({id:9,name:'X',pars:null})`, cc);
+ok(eh.includes('Back to all par 3s') && eh.includes('value="5"'), 'with saved holes the clear button reads "Back to all par 3s"');
+ok(eh.includes('keeps its own holes'), 'editor says events keep their own holes');
 
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

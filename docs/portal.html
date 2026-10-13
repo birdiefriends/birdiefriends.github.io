@@ -3675,6 +3675,35 @@ let _resolvedCttpHoles   = null; // CTP holes for whichever event the Live Panel
 // data at all) behaves exactly as it always has. Only called when the Live
 // Panel is opened, not on every 60s refresh — CTP holes don't change
 // mid-round.
+// v4.24.2 — a course with no CTP holes saved defaults to ALL of its par 3s
+// (read from its tee data, else its Vs Par table). Derived on read, never
+// written, so an explicit pick (a Venue Manager entry, a BFE-Admin venue
+// default) always wins and no existing event or saved config changes.
+function par3HoleNumbers(pars) {
+  return (Array.isArray(pars) ? pars : []).map((p, i) => (Number(p) === 3 ? i + 1 : null)).filter(n => n != null);
+}
+// tees = stored tee rows (GET /bfe/venue-tees); parsJson = the venue's legacy Vs Par JSON.
+// Returns the par 3 hole numbers, or null when no par data is on file at all.
+function venueDefaultCttpHoles(parsJson, tees) {
+  const t = (Array.isArray(tees) ? tees : []).find(x => Array.isArray(x.holes) && x.holes.length === 18 && x.holes.every(h => h && Number.isFinite(Number(h.par))));
+  if (t) return par3HoleNumbers(t.holes.map(h => Number(h.par)));
+  try {
+    const arr = typeof parsJson === 'string' ? JSON.parse(parsJson) : parsJson;
+    if (Array.isArray(arr) && arr.length === 18 && arr.every(x => Number.isFinite(Number(x)))) return par3HoleNumbers(arr);
+  } catch (e) { /* malformed — no par data */ }
+  return null;
+}
+async function venueDerivedCttpHoles(v) {
+  try {
+    const res = await fetch(`${BFE_API}/bfe/venue-tees?venue_id=${encodeURIComponent(v.id)}`);
+    const data = await res.json();
+    const d = venueDefaultCttpHoles(v.pars, data && data.ok ? data.tees : []);
+    return (d && d.length) ? d : null;
+  } catch (e) {
+    const d = venueDefaultCttpHoles(v.pars, []);
+    return (d && d.length) ? d : null;
+  }
+}
 async function loadVenueCttpHoles(evt) {
   _resolvedCttpHoles = null;
   try {
@@ -3688,11 +3717,16 @@ async function loadVenueCttpHoles(evt) {
       _resolvedCttpHoles = _venueCttpHolesCache[v.id];
       return;
     }
+    // 1) holes saved for this venue (Venue Manager / BFE-Admin venue default) win;
+    // 2) otherwise all of its par 3s; 3) otherwise null → CTP_HOLES_DEFAULT downstream.
+    let explicit = null;
     const res = await fetch(`${BFE_API}/bfe/venue-tee-catalog?venue_id=${encodeURIComponent(v.id)}`);
-    if (!res.ok) { _venueCttpHolesCache[v.id] = null; return; } // e.g. 404 — no catalog saved for this venue yet
-    const data = await res.json();
-    const holes = Array.isArray(data?.tee_catalog?.cttpHoles) ? data.tee_catalog.cttpHoles : null;
-    _venueCttpHolesCache[v.id] = (holes && holes.length) ? holes : null;
+    if (res.ok) { // 404 = no catalog saved for this venue yet
+      const data = await res.json();
+      const holes = Array.isArray(data?.tee_catalog?.cttpHoles) ? data.tee_catalog.cttpHoles : null;
+      explicit = (holes && holes.length) ? holes : null;
+    }
+    _venueCttpHolesCache[v.id] = explicit || await venueDerivedCttpHoles(v);
     _resolvedCttpHoles = _venueCttpHolesCache[v.id];
   } catch (e) {
     console.warn('[CttP] loadVenueCttpHoles error (falling back to BSGC default):', e.message);
@@ -12471,15 +12505,25 @@ let _vmSetupRequested = {};            // venue id -> true once its tees + CTP s
 let _vmTeeEdit = null;                 // the tee being edited/added in the tee editor (state, so a re-render never loses it)
 const VM_VIEW_TITLES = { pars: 'Par (18 holes)', coords: 'Weather location', logo: 'Logo', ctp: 'CTP holes', tees: 'Tees and hole handicaps', teeedit: 'Edit tee', motif: 'Theme motif' };
 
+// CTP holes for a course: saved holes, else all par 3s from its par data (the default).
+// state: true = set (saved or defaulted), false = nothing on file, null = still loading.
+function venueCttpStatus(v) {
+  const cttp = _adminVenueCttpCache[v.id];
+  const tees = _adminVenueTees[v.id];
+  if (cttp && cttp.cttpHoles.length) return { state: true, holes: cttp.cttpHoles, isDefault: false };
+  const def = venueDefaultCttpHoles(v.pars, tees);
+  if (def && def.length) return { state: true, holes: def, isDefault: true };
+  if (!cttp || !Array.isArray(tees)) return { state: null, holes: [], isDefault: false };
+  return { state: false, holes: [], isDefault: false };
+}
 // What a course still needs. null = not loaded yet (never counted as missing).
 function venueSetupState(v) {
-  const cttp = _adminVenueCttpCache[v.id];
   const tees = _adminVenueTees[v.id];
   const items = [
     ['Par', !!v.pars],
     ['Location', v.lat != null && v.lng != null],
     ['Logo', !!v.logo_key],
-    ['CTP', cttp ? cttp.cttpHoles.length > 0 : null],
+    ['CTP', venueCttpStatus(v).state],
     ['Tees', Array.isArray(tees) ? tees.length > 0 : null]
   ];
   return {
@@ -12625,13 +12669,13 @@ function venueParSum(v) {
 }
 function venueDialogRowsHtml(v) {
   const ok = 'color:#17775a', miss = 'color:#a07100';
-  const cttp = _adminVenueCttpCache[v.id];
+  const ctpSt = venueCttpStatus(v);
   const tees = _adminVenueTees[v.id];
   const rows = [
     ['pars', 'Par (18 holes)', v.pars ? `Set${venueParSum(v) ? ' · ' + venueParSum(v) : ''}` : 'Not set', !!v.pars],
     ['coords', 'Weather location', (v.lat != null && v.lng != null) ? 'Set' : 'Not set', v.lat != null && v.lng != null],
     ['logo', 'Logo', v.logo_key ? 'Set' : 'Not set', !!v.logo_key],
-    ['ctp', 'CTP holes', !cttp ? '…' : cttp.cttpHoles.length ? cttp.cttpHoles.join(', ') : 'Not set', !!(cttp && cttp.cttpHoles.length)],
+    ['ctp', 'CTP holes', ctpSt.state === null ? '…' : ctpSt.state ? (ctpSt.isDefault ? 'All par 3s · ' : '') + ctpSt.holes.join(', ') : 'Not set', ctpSt.state === true],
     ['tees', 'Tees and hole handicaps', !Array.isArray(tees) ? '…' : tees.length ? `${tees.length} tee${tees.length === 1 ? '' : 's'}` : 'None', Array.isArray(tees) && tees.length > 0],
     ['motif', 'Theme motif', v.theme_motif ? 'Set' : 'Not set', !!v.theme_motif]
   ];
@@ -13453,17 +13497,21 @@ async function adminFetchVenueCttp(id) {
 function venueCttpHolesEditorHtml(v) {
   const entry = _adminVenueCttpCache[v.id] || { cttpHoles: [], raw: {} };
   const holesStr = entry.cttpHoles.join(', ');
+  const def = venueDefaultCttpHoles(v.pars, _adminVenueTees[v.id]);
+  const defTxt = (def && def.length) ? def.join(', ') : '';
   return `
     <div style="background:var(--surface);border-radius:10px;padding:10px;margin-top:6px">
       <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
         Which holes are Closest-to-the-Pin for this course — comma-separated hole numbers (e.g. 3, 8, 10, 15, 18).
         The Live Panel's CttP section uses this for ANY round played here, BF Series included — no BFE-Admin setup required.
+        ${defTxt ? `<br><b>${entry.cttpHoles.length ? 'Default if you clear this' : 'Right now'}: all par 3s (${defTxt}).</b> ${entry.cttpHoles.length ? '' : 'Type holes below only to use fewer than all of them.'}` : '<br>No par data on file for this course yet, so there is no default; add its tees or Vs Par first.'}
+        A Gathering or a BFE-Admin event keeps its own holes and is not changed by this.
       </div>
-      <input type="text" id="admin-cttp-holes-${v.id}" placeholder="e.g. 3, 8, 10, 15, 18" value="${holesStr}"
+      <input type="text" id="admin-cttp-holes-${v.id}" placeholder="${defTxt ? 'All par 3s: ' + defTxt : 'e.g. 3, 8, 10, 15, 18'}" value="${holesStr}"
         style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);font-size:0.85rem;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" style="flex:1;font-size:0.76rem;min-width:100px" onclick="adminSaveVenueCttpHoles(${v.id})">Save CTP Holes</button>
-        ${entry.cttpHoles.length ? `<button class="btn btn-secondary-danger btn-sm" style="font-size:0.76rem" onclick="adminClearVenueCttpHoles(${v.id},'${v.name.replace(/'/g,"\\'")}')">Clear</button>` : ''}
+        ${entry.cttpHoles.length ? `<button class="btn btn-secondary-danger btn-sm" style="font-size:0.76rem" onclick="adminClearVenueCttpHoles(${v.id},'${v.name.replace(/'/g,"\\'")}')">${defTxt ? 'Back to all par 3s' : 'Clear'}</button>` : ''}
       </div>
     </div>`;
 }
@@ -13505,7 +13553,11 @@ async function adminSaveVenueCttpHoles(id) {
   }
 }
 async function adminClearVenueCttpHoles(id, name) {
-  if (!confirm(`Clear CTP holes for "${name}"? The Live Panel will fall back to the BSGC default (3, 8, 10, 15, 18) for rounds here until it's re-entered.`)) return;
+  const _v = (_adminVenuesCache || []).find(x => x.id === id);
+  const _def = _v ? venueDefaultCttpHoles(_v.pars, _adminVenueTees[id]) : null;
+  if (!confirm(_def && _def.length
+    ? `Go back to all par 3s (${_def.join(', ')}) for "${name}"? The holes you picked will be removed from this course's default; events that already saved their own holes keep them.`
+    : `Clear CTP holes for "${name}"? With no par data on file the Live Panel will fall back to the BSGC default (3, 8, 10, 15, 18) for rounds here until it's re-entered.`)) return;
   try {
     await adminFetchVenueCttp(id);
     const merged = { ..._adminVenueCttpCache[id].raw };
