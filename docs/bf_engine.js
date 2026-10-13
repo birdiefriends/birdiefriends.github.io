@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.18.1';
+  const ENGINE_VERSION = '1.18.2';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -549,8 +549,9 @@
       const sideEff = (side, i) => {
         const mine = sideStrokes(side);
         if (mode !== 'low') return mine;
+        const field = kind !== 'match' && fourballSegmentPlan(addon).scope === 'field';
         const base = i - (i % 2);
-        const grp = [pairsCfg[base], pairsCfg[base + 1]].filter(sd => sd && sideCard(sd));
+        const grp = (field ? pairsCfg : [pairsCfg[base], pairsCfg[base + 1]]).filter(sd => sd && sideCard(sd));
         return mine - (grp.length ? Math.min(...grp.map(sideStrokes)) : 0);
       };
       const sideNet = (side, i) => { const c = sideCard(side); return c ? netCard(c, Object.assign({}, specOf(side[0]), { strokes: sideEff(side, i) }), inputs.hcSI) : null; };
@@ -950,7 +951,7 @@
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0 },
       { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
-      { key: 'net_mode', type: 'enum', label: 'Net strokes', values: ['own', 'low'], default: 'own' },
+      { key: 'net_mode', type: 'enum', label: 'Net strokes', values: ['own', 'low'], default: 'low' },
       { key: 'allowance', type: 'int', label: 'Handicap allowance %', default: 50, min: 1 },
       { key: 'period', type: 'enum', label: 'Scoring period', values: PERIOD_ORDER.slice(), default: 'round' },
       { key: 'win_by', type: 'enum', label: 'Won by', values: ['strokes', 'holes'], default: 'strokes' },
@@ -1318,7 +1319,7 @@
     const asc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.altshot : null;
     if (games.includes('altshot') && asc) {
       addons.push({ id: 'altshot', entity: 'pair', dollar_per_player: Number(asc.dollar_per_player) || 0, basis: asc.basis === 'net' ? 'net' : 'gross',
-        net_mode: asc.net_mode === 'low' ? 'low' : 'own', allowance: asc.allowance != null ? Number(asc.allowance) : 50, pairs: Array.isArray(asc.pairs) ? asc.pairs : [],
+        net_mode: asc.net_mode === 'own' ? 'own' : 'low', allowance: asc.allowance != null ? Number(asc.allowance) : 50, pairs: Array.isArray(asc.pairs) ? asc.pairs : [],
         ...(periodKey(asc) !== 'round' ? { period: periodKey(asc) } : {}), win_by: asc.win_by === 'holes' ? 'holes' : 'strokes', scope: asc.win_by === 'holes' || asc.scope === 'group' ? 'group' : 'field' });
     }
     const mpc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.matchplay : null;
@@ -1640,7 +1641,8 @@
       const own = base.map(b => Math.round(b.sum * pct / 100));
       const low = as.net_mode === 'low';
       out.push({ id: 'altshot', label: 'Alternate Shot', allowance: pct, net_mode: low ? 'low' : 'own', rows: pairs.map((pr, i) => {
-        const lowest = low ? Math.min(...[own[i - (i % 2)], own[i - (i % 2) + 1]].filter(v => v != null)) : 0;
+        const field = fourballSegmentPlan(as).scope === 'field';
+        const lowest = low ? Math.min(...(field ? own : [own[i - (i % 2)], own[i - (i % 2) + 1]]).filter(v => v != null)) : 0;
         const k = own[i] - lowest;
         return { names: pr, strokes: k, got: gotFor(pr[0], k),
           detail: `${pct}% of ${base[i].parts.map(v => Math.round(v * 10) / 10).join(' + ')} = ${own[i]}${low ? `, off the low (${lowest}) = ${k}` : ''}` };

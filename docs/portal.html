@@ -3620,7 +3620,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.18.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.18.2"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -11709,7 +11709,7 @@ const GAMES_FORM_REC_ALLOWANCE = { altshot: 50, matchplay: 100 };
 function gamesFormSideBlank(gid) {
   return gid === 'matchplay'
     ? { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 100, period: 'round', matches: [] }
-    : { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 50, period: 'round', win_by: 'strokes', scope: 'field', pairs: [] };
+    : { dollar_per_player: null, basis: 'gross', net_mode: 'low', allowance: 50, period: 'round', win_by: 'strokes', scope: 'field', pairs: [] };
 }
 function gamesFormSideFrom(gid, src) {
   const b = gamesFormSideBlank(gid);
@@ -20182,9 +20182,9 @@ function gatheringGamesSideSectionHtml(gid) {
   const btn = 'height:34px;padding:0 14px;border-radius:17px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.82rem;cursor:pointer';
   const netBlock = c.basis !== 'net' ? '' : `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <span style="flex:1;font-size:0.9rem;font-weight:600">Strokes</span>${seg([['own', 'Full'], ['low', 'Off the low']], c.net_mode, `(v=>setGamesFormSide('${gid}','net_mode',v))`)}</div>
+        <span style="flex:1;font-size:0.9rem;font-weight:600">Strokes</span>${seg([['own', 'Full'], ['low', mp ? 'Off the low' : 'Off the low (recommended)']], c.net_mode, `(v=>setGamesFormSide('${gid}','net_mode',v))`)}</div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px;line-height:1.5">${c.net_mode === 'low'
-        ? (mp ? 'The lower handicap plays to scratch and the other player gets the difference.' : 'The pair with the lower combined handicap plays to scratch and the other pair gets the difference.')
+        ? (mp ? 'The lower handicap plays to scratch and the other player gets the difference.' : 'Recommended for one-ball games: the pair with the lower combined handicap plays to scratch and the other pair gets the difference, so only one team ever gets strokes.')
         : (mp ? 'Each player gets their full handicap strokes, as most golfers think of it.' : 'Each pair gets its own strokes, from the combined handicaps.')}</div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Handicap allowance</span>

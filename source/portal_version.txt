@@ -1,3 +1,6 @@
+v4.26.4 · 2026-10-13
+Deployed: 2026-10-13 (One-ball games (Alternate Shot) now default Net to "Off the low": the team with the lower combined handicap plays to scratch and only the other team gets strokes, so one team at most. Full is still one tap away, and Match Play stays Full by default. When the whole field competes (more than two pairs), "off the low" is measured against the lowest team in the field. Games already saved keep what they were saved with. Needs the Worker redeployed (the Alternate Shot default is in its schema).)
+
 v4.26.3 · 2026-10-13
 Deployed: 2026-10-13 (Alternate Shot Live Actions: a team's handicap strokes show ONCE per team on each hole (the hole boxes used to draw the pair's dots twice, once per partner), and the hole detail says "team gets a stroke, net N" instead of repeating it under each player. No Worker change.)
 

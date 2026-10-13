@@ -117,5 +117,16 @@ ok(/asMode/.test(lsrc) && /units/.test(lsrc), 'Live Score shows teams in Alterna
 const fsrc = extractFn(src, 'fourballActionsHtml');
 ok(/altshot' \? skGot\(pr\.names\[0\], hole\)/.test(fsrc) && /onePair/.test(fsrc), 'Alternate Shot: the pair gets its stroke dots once, not once per partner');
 
+// One-ball net default is Off the low; with the whole field competing the low is the whole field's
+{
+  ok(E.gameSchemas().altshot.config.find(f => f.key === 'net_mode').default === 'low', 'A-S schema defaults to Off the low');
+  ok(E.gameSchemas().matchplay.config.find(f => f.key === 'net_mode').default === 'own', 'Match Play stays Full by default');
+  const pl = n => [n, { kind: 'index', course_hcp: 0, strokes: 0, stroke_index: arr(h => h) }];
+  const mk = (h1, h2, h3, h4, h5, h6) => ({ allowance: 95, players: Object.fromEntries([['A', h1], ['B', h2], ['C', h3], ['D', h4], ['E', h5], ['F', h6]].map(([n, h]) => [n, { kind: 'index', course_hcp: h, strokes: h, stroke_index: arr(x => x) }])) });
+  const rc = E.gatheringConfigFromLegacy({ games: ['altshot'], dollar_per_player: 10, game_configs: { altshot: { dollar_per_player: 10, basis: 'net', pairs: [['A', 'B'], ['C', 'D'], ['E', 'F']] } }, handicap_config: mk(10, 10, 20, 20, 30, 30) });
+  const st = E.sideStrokeSets(rc)[0];
+  ok(st.net_mode === 'low' && st.rows.map(r => r.strokes).join() === '0,10,20', 'field of three pairs: off the lowest pair (10,20,30 -> 0,10,20) (got ' + st.rows.map(r => r.strokes) + ')');
+}
+
 console.log(`test_side_games: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
