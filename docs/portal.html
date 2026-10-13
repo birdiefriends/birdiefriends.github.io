@@ -19441,7 +19441,7 @@ function gamesFormEntry(name) {
   let e = _gamesFormHcp.players[name];
   if (e) return e;
   const m = _gamesFormMembers.get(String(name).trim().toLowerCase());
-  if (!m) e = { kind: 'index', note: 'Not found in Membership: enter an index or strokes' };
+  if (!m) e = { kind: 'given', note: 'No handicap on file: enter the strokes they get' };
   else if (m.source === 'no_hcp' || m.hcp == null || !Number.isFinite(m.hcp)) e = { kind: 'given', note: 'No HCP on file: enter strokes given' };
   else e = { kind: 'index', index: m.hcp, note: `Index ${m.hcp} from Membership` };
   _gamesFormHcp.players[name] = e;
@@ -19527,7 +19527,7 @@ function gatheringGamesHcpSectionHtml() {
         const teeSel = `<select onchange="setGamesFormPlayerHcp(${q},'teeId',this.value)" style="${ctl};padding:0 6px">
           <option value="">Tee…</option>${_gamesFormTees.map(t => `<option value="${t.id}" ${String(t.id) === String(e.teeId) ? 'selected' : ''}>${escapeHtml(t.tee_name)}</option>`).join('')}</select>`;
         const kindSel = `<select onchange="setGamesFormPlayerHcp(${q},'kind',this.value)" style="${ctl};padding:0 6px">
-          ${[['index', 'Index'], ['given', 'Given'], ['gross', 'None']].map(([v, l]) => `<option value="${v}" ${kind === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+          ${[['index', 'Index'], ['given', 'Strokes given'], ['gross', 'None']].map(([v, l]) => `<option value="${v}" ${kind === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
         const val = kind === 'gross' ? '' : `<input type="number" step="${kind === 'index' ? '0.1' : '1'}" inputmode="decimal" value="${kind === 'index' ? (e.index ?? '') : (e.strokes ?? '')}"
           placeholder="${kind === 'index' ? 'Index' : 'Strokes'}" oninput="setGamesFormPlayerHcp(${q},'${kind === 'index' ? 'index' : 'strokes'}',this.value,true)" style="${ctl};padding:0 8px">`;
         return `<div style="padding:9px 0;border-top:1px solid var(--border)">

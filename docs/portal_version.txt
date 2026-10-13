@@ -1,3 +1,6 @@
+v4.22.2 · 2026-10-13
+Deployed: 2026-10-13 (Handicap strokes screen: a player BirdieFriends has no handicap for now starts on Strokes given (the number of strokes they get), not a blank Index, and that option reads "Strokes given" in full. Players with a handicap on file still start on Index. No Worker change.)
+
 v4.22.1 · 2026-10-13
 Deployed: 2026-10-13 (Games wizard: the buy-in screen now shows how it splits, with a box for each game's amount (Fourball, Low Score, CTP, MiserBall, Birdie Payouts) that you can type over, so you can make MiserBall $3 right there. A typed amount sticks when the buy-in changes, and the game's own screen shows it. No Worker change.)
 
