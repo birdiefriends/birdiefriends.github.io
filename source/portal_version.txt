@@ -1,3 +1,6 @@
+v4.21.0 · 2026-10-13
+Deployed: 2026-10-13 (Handicap strokes show up during play. In a Net round the Live Score pad marks each player who gets a stroke on the hole (gold dot and "gets a stroke"), shows a net preview next to the gross score you type, and says who gets a stroke on the next hole. In Live Actions, the hole boxes carry dots (teal for the first pair, amber for the second, also on holes not yet played), the hole sheet shows each player's net, and each player's card has dots under the holes. Off the low is followed. Gross rounds look the same as before. No Worker change.)
+
 v4.20.1 · 2026-10-13
 Deployed: 2026-10-13 (Fix: after deleting a round, the Gatherings icon in the header stopped opening the panel until you reloaded the app. The small option picker (Holes, Golf format) shared an element id with the Gatherings panel, so closing the picker, or deleting a round, removed the panel from the page. The picker now has its own id and a delete just closes the panel. No Worker change.)
 

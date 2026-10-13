@@ -3620,7 +3620,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.16.2"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.16.3"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -10028,6 +10028,19 @@ function skMaxHole() { return _sk && _sk.evt && _sk.evt.holes === 9 ? 9 : 18; }
 function skPars() { const p = csResolvePars(_sk.evt); return Array.isArray(p) && p.length === 18 ? p : null; }
 function skMode() { return (_sk && _sk.mode) || 'score'; }
 function setLiveScoreMode(m) { if (!_sk) return; _sk.mode = m === 'games' ? 'games' : 'score'; renderLiveBanner(); }
+// Handicap strokes for the live panels: who gets a stroke on which hole (Net games only; nothing otherwise).
+function skMarks() {
+  if (!_sk || !_sk.config) return new Map();
+  const all = [...new Set(skGroups().flatMap(g => g.players))];
+  const key = JSON.stringify([all, _sk.config && _sk.config.handicap && _sk.config.handicap.players ? Object.keys(_sk.config.handicap.players).length : 0]);
+  if (_sk._marksKey === key && _sk._marks) return _sk._marks;
+  const m = new Map(BFEngine.strokeMarksFor(_sk.config, all).map(x => [String(x.player).trim().toLowerCase(), x]));
+  _sk._marksKey = key; _sk._marks = m;
+  return m;
+}
+function skGot(name, hole) { const m = skMarks().get(String(name).trim().toLowerCase()); return m && m.known ? (Number(m.got[hole]) || 0) : 0; }
+function skAnyStrokes() { return [...skMarks().values()].some(x => x.known && Object.keys(x.got).length); }
+function skDotsHtml(k, color) { return k > 0 ? `<span aria-label="${k === 1 ? 'a stroke' : k + ' strokes'}" style="display:inline-flex;gap:2px;vertical-align:middle">${Array.from({ length: k }, () => `<span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block"></span>`).join('')}</span>` : ''; }
 function skCardOf(name) { return _sk.cards[name] || (_sk.cards[name] = new Array(18).fill(null)); }
 // Take the server's cards in: a hole not waiting to be saved from this phone follows the server.
 function skMergeRemote(rows) {
@@ -10150,9 +10163,12 @@ function liveScoreModeHtml() {
     const pr = g.pairs[Math.floor(k / 2)];
     const label = k % 2 === 0 && pr ? `<div style="font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:10px 2px 4px;font-family:'DM Mono',monospace">${pr.map(x => escapeHtml(first(x))).join(' &amp; ')}</div>` : '';
     return `${label}<button type="button" onclick="skPick(${k})" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:12px;min-height:56px;box-sizing:border-box;cursor:pointer;margin-bottom:6px;color:#fff;font-family:inherit;text-align:left;${active ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.18)' : 'border:1.5px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.2)'}">
-      <span style="flex:1;min-width:0;font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(n)}</span>
-      <span style="min-width:44px;text-align:right;font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:700;color:${col}">${v == null ? '–' : v}</span></button>${active ? pad : ''}`;
+      <span style="flex:1;min-width:0;font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(n)} ${skDotsHtml(skGot(n, hole), '#ffe08a')}${skGot(n, hole) ? `<span style="font-size:0.68rem;font-weight:500;color:#ffe08a;margin-left:4px">gets ${skGot(n, hole) > 1 ? skGot(n, hole) + ' strokes' : 'a stroke'}</span>` : ''}</span>
+      <span style="min-width:44px;text-align:right;font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:700;color:${col}">${v == null ? '–' : v}${v != null && skGot(n, hole) ? `<span style="display:block;font-size:0.66rem;font-weight:500;color:#ffe08a;line-height:1">net ${v - skGot(n, hole)}</span>` : ''}</span></button>${active ? pad : ''}`;
   }).join('');
+  const nextH = hole < max ? hole + 1 : null;
+  const nextWho = nextH ? g.players.filter(n => skGot(n, nextH) > 0).map(n => `${escapeHtml(first(n))}${skGot(n, nextH) > 1 ? ' (' + skGot(n, nextH) + ')' : ''}`) : [];
+  const nextStrokes = nextH && skAnyStrokes() ? `<div style="margin-top:4px;font-size:0.76rem;color:#ffe08a;text-align:center;line-height:1.4">Hole ${nextH}: ${nextWho.length ? nextWho.join(', ') + ' get' + (nextWho.length === 1 && !/\(/.test(nextWho[0]) ? 's' : '') + ' a stroke' : 'no strokes in this group'}</div>` : '';
   const hi = par == null ? -1 : vals.findIndex(v => v != null && v >= par + 3);
   const hint = hi >= 0 ? `${escapeHtml(first(g.players[hi]))} shows ${vals[hi]} on a par ${par}. Right? Tap the name to change it.`
     : done ? 'All four are in. Tap a name to change a score, or go to the next hole.'
@@ -10169,6 +10185,7 @@ function liveScoreModeHtml() {
       ${navBtn(1, chevR, done && hole < max)}
     </div>
     ${rows}
+    ${nextStrokes}
     <div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:34px">${hint}</div>`;
 }
 // ── Live Actions: the Fourball game view (Dev-93) ─────────────────────────────────────────
@@ -10220,13 +10237,14 @@ function fourballPlayerCardHtml(k) {
     return `<div style="margin-bottom:14px">
       <div style="${grid};font-family:'DM Mono',monospace;font-size:0.62rem;color:rgba(255,255,255,0.5);margin-bottom:2px">${idx.map(i => `<div style="text-align:center">${i + 1}</div>`).join('')}<div style="text-align:center">${off ? 'In' : 'Out'}</div></div>
       ${pars ? `<div style="${grid};font-family:'DM Mono',monospace;font-size:0.72rem;color:rgba(255,255,255,0.65);margin-bottom:4px">${idx.map(i => `<div style="text-align:center">${pars[i]}</div>`).join('')}<div style="text-align:center">${idx.reduce((a, i) => a + pars[i], 0)}</div></div>` : ''}
+      ${skAnyStrokes() ? `<div style="${grid};margin-top:2px;height:8px" aria-hidden="true">${idx.map(i => `<div style="text-align:center">${skDotsHtml(skGot(name, i + 1), '#ffe08a')}</div>`).join('')}<div></div></div>` : ''}
       <div style="${grid}">${cells}<div style="text-align:center;font-family:'DM Mono',monospace;font-size:0.95rem;font-weight:700">${played.length ? played.reduce((a, i) => a + card[i], 0) : ''}</div></div></div>`;
   };
   const done = card.filter(v => v > 0), tot = done.reduce((a, v) => a + v, 0);
   const toPar = pars && done.length ? tot - card.reduce((a, v, i) => a + (v > 0 ? pars[i] : 0), 0) : null;
   return `<button type="button" onclick="fbDrill(null)" style="background:none;border:0;color:#5DCAA5;font-family:inherit;font-size:0.84rem;font-weight:700;cursor:pointer;min-height:40px;padding:0;margin-bottom:6px">‹ Back to the game</button>
     <div style="font-size:1rem;font-weight:700;margin-bottom:2px">${escapeHtml(name)}</div>
-    <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-bottom:10px">Gross · thru ${done.length} · tap a hole to fix it</div>
+    <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-bottom:10px">Gross · thru ${done.length} · tap a hole to fix it${skAnyStrokes() ? ' · gold dots are handicap strokes' : ''}</div>
     ${nine(0)}${skMaxHole() > 9 ? nine(9) : ''}
     <div style="display:flex;align-items:center;border-top:1px solid rgba(255,255,255,0.15);padding-top:10px"><div style="flex:1;font-size:0.82rem;color:rgba(255,255,255,0.7)">Total through ${done.length} hole${done.length === 1 ? '' : 's'}</div>
       <div style="font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:700">${tot || '·'}</div>
@@ -10253,11 +10271,18 @@ function fourballActionsHtml(cfg) {
   const lastPlayed = played ? g.holes.filter(h => h.res).slice(-1)[0].hole : null;
   const sel = _fbUi.hole && g.holes[_fbUi.hole - 1] && g.holes[_fbUi.hole - 1].res ? _fbUi.hole : null;
   const iA = fbIni(pa.names, pb.names), iB = fbIni(pb.names, pa.names);
+  const liveDots = (hole, done) => {
+    if (!skAnyStrokes()) return '';
+    const n = pr => pr.names.reduce((t, x) => t + skGot(x, hole), 0);
+    const dot = c => `<span style="width:5px;height:5px;border-radius:50%;background:${c};display:inline-block"></span>`;
+    const a = n(pa), b = n(pb);
+    return `<span style="display:flex;justify-content:center;gap:2px;height:6px;margin-top:2px" aria-hidden="true">${Array.from({ length: a }, () => dot(done ? '#0a5c47' : TEAL)).join('')}${Array.from({ length: b }, () => dot(done ? '#7a5200' : AMB)).join('')}</span>`;
+  };
   const cell = h => {
     const done = !!h.res, on = h.hole === sel;
     const bg = !done ? 'transparent' : h.res === 'A' ? TEAL : h.res === 'B' ? AMB : 'rgba(255,255,255,0.14)';
     const col = !done ? 'rgba(255,255,255,0.4)' : h.res === 'A' ? '#04342a' : h.res === 'B' ? '#3a2a00' : 'rgba(255,255,255,0.85)';
-    return `<button type="button" ${done ? `onclick="fbPickHole(${h.hole})" aria-label="Hole ${h.hole}, ${h.res === 'T' ? 'halved' : escapeHtml(h.res === 'A' ? iA : iB) + ' won'}"` : 'disabled'} style="height:44px;border-radius:7px;font-family:'DM Mono',monospace;font-size:0.76rem;font-weight:700;padding:4px 0;box-sizing:border-box;cursor:${done ? 'pointer' : 'default'};background:${bg};color:${col};border:${on ? '2px solid #fff' : done ? '0' : '1px dashed rgba(255,255,255,0.22)'}"><span style="font-size:0.56rem;opacity:0.7;display:block;line-height:1;font-weight:500">${h.hole}</span>${done ? (h.res === 'T' ? '–' : escapeHtml(h.res === 'A' ? iA : iB)) : ''}</button>`;
+    return `<button type="button" ${done ? `onclick="fbPickHole(${h.hole})" aria-label="Hole ${h.hole}, ${h.res === 'T' ? 'halved' : escapeHtml(h.res === 'A' ? iA : iB) + ' won'}"` : 'disabled'} style="height:${skAnyStrokes() ? 50 : 44}px;border-radius:7px;font-family:'DM Mono',monospace;font-size:0.76rem;font-weight:700;padding:4px 0;box-sizing:border-box;cursor:${done ? 'pointer' : 'default'};background:${bg};color:${col};border:${on ? '2px solid #fff' : done ? '0' : '1px dashed rgba(255,255,255,0.22)'}"><span style="font-size:0.56rem;opacity:0.7;display:block;line-height:1;font-weight:500">${h.hole}</span>${done ? (h.res === 'T' ? '–' : escapeHtml(h.res === 'A' ? iA : iB)) : ''}${liveDots(h.hole, done)}</button>`;
   };
   const segHtml = g.segs.map(sg => {
     const hs = g.holes.slice(sg.from - 1, sg.to);
@@ -10271,13 +10296,13 @@ function fourballActionsHtml(cfg) {
   const hd = sel ? g.holes[sel - 1] : null;
   const par = hd && skPars() ? skPars()[sel - 1] : null;
   const pScores = pr => pr.names.map(n => { const v = skCardOf(n)[sel - 1]; return v > 0 ? v : '·'; }).join(', ');
-  const rowHtml = (pr, c, ini, bb, won, chipFg) => `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:10px;background:${won ? (c === TEAL ? 'rgba(93,202,165,0.18)' : 'rgba(224,180,76,0.18)') : 'rgba(255,255,255,0.05)'};border:1px solid ${won ? c : 'transparent'}"><span style="background:${c};color:${chipFg};font-weight:700;font-size:0.76rem;border-radius:7px;padding:4px 7px">${escapeHtml(ini)}</span><div style="flex:1;min-width:0">${pr.names.map(n => { const v = skCardOf(n)[sel - 1]; return `<button type="button" onclick="fbDrillName(${escapeHtml(JSON.stringify(n)).replace(/"/g, '&quot;')})" style="display:block;width:100%;text-align:left;background:none;border:0;color:#fff;font-family:inherit;font-size:0.88rem;font-weight:600;padding:5px 0;min-height:32px;cursor:pointer">${escapeHtml(String(n).trim().split(/\s+/)[0])} <span style="font-family:'DM Mono',monospace;color:rgba(255,255,255,0.85)">${v > 0 ? v : '·'}</span></button>`; }).join('')}</div><div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.25rem;font-weight:700">${bb}</div><div style="font-size:0.68rem;color:rgba(255,255,255,0.6)">${won ? 'won the hole' : hd.res === 'T' ? 'halved' : 'lost'}</div></div></div>`;
+  const rowHtml = (pr, c, ini, bb, won, chipFg) => `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:10px;background:${won ? (c === TEAL ? 'rgba(93,202,165,0.18)' : 'rgba(224,180,76,0.18)') : 'rgba(255,255,255,0.05)'};border:1px solid ${won ? c : 'transparent'}"><span style="background:${c};color:${chipFg};font-weight:700;font-size:0.76rem;border-radius:7px;padding:4px 7px">${escapeHtml(ini)}</span><div style="flex:1;min-width:0">${pr.names.map(n => { const v = skCardOf(n)[sel - 1]; return `<button type="button" onclick="fbDrillName(${escapeHtml(JSON.stringify(n)).replace(/"/g, '&quot;')})" style="display:block;width:100%;text-align:left;background:none;border:0;color:#fff;font-family:inherit;font-size:0.88rem;font-weight:600;padding:5px 0;min-height:32px;cursor:pointer">${escapeHtml(String(n).trim().split(/\s+/)[0])} <span style="font-family:'DM Mono',monospace;color:rgba(255,255,255,0.85)">${v > 0 ? v : '·'}</span>${skGot(n, sel) ? ` ${skDotsHtml(skGot(n, sel), '#ffe08a')} <span style="font-size:0.7rem;color:#ffe08a">${v > 0 ? 'net ' + (v - skGot(n, sel)) : 'gets ' + (skGot(n, sel) > 1 ? skGot(n, sel) + ' strokes' : 'a stroke')}</span>` : ''}</button>`; }).join('')}</div><div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.25rem;font-weight:700">${bb}</div><div style="font-size:0.68rem;color:rgba(255,255,255,0.6)">${won ? 'won the hole' : hd.res === 'T' ? 'halved' : 'lost'}</div></div></div>`;
   const stepBtn = (d, t) => `<button type="button" onclick="fbStepHole(${d})" aria-label="${d < 0 ? 'Previous' : 'Next'} hole" style="width:44px;height:44px;border-radius:10px;border:0;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;cursor:pointer">${t}</button>`;
   const detail = hd ? `<div onclick="fbCloseHole()" style="position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9990"></div>
     <div role="dialog" aria-label="Hole ${sel} details" style="position:fixed;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:#0b3b31;color:#fff;border-radius:18px 18px 0 0;padding:16px 16px 24px;z-index:9991;box-shadow:0 -8px 30px rgba(0,0,0,0.4)">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><div style="flex:1"><div style="font-size:1.05rem;font-weight:700">Hole ${sel}</div><div style="font-size:0.74rem;color:rgba(255,255,255,0.6)">${par ? `Par ${par}` : ''}</div></div>${stepBtn(-1, '‹')}${stepBtn(1, '›')}<button type="button" onclick="fbCloseHole()" aria-label="Close" style="width:44px;height:44px;border-radius:10px;border:0;background:transparent;color:rgba(255,255,255,0.7);font-size:1.2rem;cursor:pointer">✕</button></div>
       ${rowHtml(pa, TEAL, iA, hd.a, hd.res === 'A', '#04342a')}${rowHtml(pb, AMB, iB, hd.b, hd.res === 'B', '#3a2a00')}
-      <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">${hd.res === 'T' ? `Halved. Both pairs counted ${hd.a}. ` : ''}Tap a name for that player's full card.</div></div>` : '';
+      <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">${hd.res === 'T' ? `Halved. Both pairs counted ${hd.a}. ` : ''}${skAnyStrokes() ? 'Scores in the boxes are net (strokes already taken off). ' : ''}Tap a name for that player's full card.</div></div>` : '';
   const how = m.mode === 'total' ? 'One pot, lowest total wins.' : `${BFEngine.PERIODS[m.mode] ? BFEngine.PERIODS[m.mode].phrase : ''}, ${holesMode ? 'won on holes' : 'won on strokes'}. A tie is a push.`;
   const cardRows = skGroup().players.map((n, k) => {
     const c = skCardOf(n), d = c.filter(v => v > 0);

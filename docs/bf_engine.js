@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.16.2';
+  const ENGINE_VERSION = '1.16.3';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1355,6 +1355,35 @@
   // The guard that caps payouts at the pot still applies at close, so a wrong
   // guess can move money to Skins but never overpay. Designed for 4-8 players;
   // the caller passes max(4, confirmed Yes).
+  // Handicap strokes per player and hole, from the saved game config alone (no scorecards needed), for the live
+  // panels. `src` is a gathering row or its engine config. Follows Fourball's Off the low when that is chosen.
+  // Returns [{ player, strokes, got: { hole: count }, known }]; known=false when no strokes were set for the player.
+  function strokeMarksFor(src, names) {
+    const config = src && src.addons ? src : (src ? gatheringConfigFromLegacy(src) : null);
+    const hc = config && config.handicap;
+    if (!hc || hc.mode !== 'net') return (names || []).map(player => ({ player, strokes: 0, got: {}, known: false }));
+    const specs = new Map(Object.entries(hc.players || {}).map(([k, v]) => [norm(k), v]));
+    const fb = (config.addons || []).find(a => a.id === 'fourball');
+    const low = !!(fb && fb.basis === 'net' && fb.net_mode === 'low');
+    const own = nm => { const sp = specs.get(norm(nm)); return sp && Number.isFinite(Number(sp.strokes)) ? Math.trunc(Number(sp.strokes)) : null; };
+    let lowStrokes = 0;
+    if (low) {
+      const ss = [];
+      (fb.pairs || []).forEach(pr => (pr || []).forEach(nm => { const v = own(nm); if (v != null) ss.push(v); }));
+      lowStrokes = ss.length ? Math.min(...ss) : 0;
+    }
+    const paired = new Set(((fb && fb.pairs) || []).flat().map(norm));
+    return (names || []).map(player => {
+      const sp = specs.get(norm(player)); const base = own(player);
+      if (base == null) return { player, strokes: 0, got: {}, known: false };
+      const eff = base - (low && paired.has(norm(player)) ? lowStrokes : 0);
+      const si = sp && Array.isArray(sp.stroke_index) && sp.stroke_index.length === 18 ? sp.stroke_index : (Array.isArray(hc.stroke_index) && hc.stroke_index.length === 18 ? hc.stroke_index : null);
+      const got = {};
+      if (si) si.forEach((r, i) => { const k = strokesOnHole(eff, r, 18); if (k) got[i + 1] = k; });
+      return { player, strokes: eff, got, known: true };
+    });
+  }
+
   function suggestGameAmounts({ dollarPerPlayer, players, games, cttpHoles }) {
     const B = Number(dollarPerPlayer) || 0;
     const n = Math.max(1, Math.floor(Number(players) || 0));
@@ -1395,6 +1424,6 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, mergeHoleScores,
-    suggestGameAmounts
+    suggestGameAmounts, strokeMarksFor
   };
 });
