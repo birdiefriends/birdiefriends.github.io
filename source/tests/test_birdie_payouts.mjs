@@ -150,7 +150,7 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
     loadHostGamesConfigs: async () => {}, renderHostPanelList: () => {}
   };
   vm.createContext(ctx); ctx.BFEngine = E; ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
-  const fns = ['applyGamesSuggestion','fourballSegCount','lowscoreSegCount','periodSegCount','gameInfoBtnHtml','gameInfoPanelHtml','gatheringGamesChecklistHtml', 'toggleGamesFormGame', 'gatheringGamesCttpSectionHtml', 'gatheringGamesBirdieballSectionHtml',
+  const fns = ['gamesFormAutoRanking','applyGamesSuggestion','fourballSegCount','lowscoreSegCount','periodSegCount','gameInfoBtnHtml','gameInfoPanelHtml','gatheringGamesChecklistHtml', 'toggleGamesFormGame', 'gatheringGamesCttpSectionHtml', 'gatheringGamesBirdieballSectionHtml',
     'gamesBasisSelectHtml','gatheringGamesSkinsSectionHtml','refreshGamesFormSkinsSection','gatheringGamesBirdiepaySectionHtml', 'setGamesFormBirdiepayDollarPerBirdie', 'gamesFormOverCommit', 'updateGamesFormPotPreview', 'submitGatheringGames',
     'gamesFormEntry', 'gamesFormPlayerNames', 'gamesFormHcpIsNet', 'gamesFormResolvePlayerHcp', 'gamesFormBuildHandicapConfig', 'gatheringGamesHcpSectionHtml', 'refreshGamesFormHcpSection']; // Dev-91: net/gross section now part of the form
   vm.runInContext(`

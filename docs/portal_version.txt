@@ -1,3 +1,6 @@
+v4.23.1 · 2026-10-13
+Deployed: 2026-10-13 (Games setup, two tweaks. 1) "Who competes" (each foursome or whole field) is only asked when there are more than 4 players; with one foursome there is nothing to choose. 2) "Also show a Net ranking" now follows the games: it is on when any game is Net and off when none is. Tick or untick it yourself and it stays as you set it. Saved setups keep what they had. No Worker change.)
+
 v4.23.0 · 2026-10-13
 Deployed: 2026-10-13 (Games setup: all the money moves to one last screen, The money. The screens before it only ask the rules: which games, then each game's Net or Gross, period and pairs (and CTP holes), then handicap strokes if something is Net. Then you pick the buy-in and get one suggested split across your games, built from those rules and using the whole buy-in, with a box for every amount to type over. The review comes after. MiserBall has no screen before The money because it is only an amount. If saving finds a missing amount it takes you to The money. No Worker change.)
 

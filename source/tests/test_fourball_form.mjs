@@ -36,7 +36,7 @@ function sandbox({ names = ['Ann','Bob','Cy','Dee'], members = [] } = {}) {
     isOpenSpotName: () => false, regData: [], gatheringRegData: names.map(p => ({ gatheringId: 7, player: p, status: 'Yes' })) };
   vm.createContext(ctx); ctx.BFEngine = E;
   E.getGame('fourball').released = true;
-  const fns = ['gamesBasisSelectHtml','gamesScoredPeriodRowHtml','gamesPeriodPickerHtml','periodExplainHtml','periodSegCount','lowscoreSegCount','snapToPeriods','fourballSegCount','fourballSnapToSegments','setGamesFormFourballPeriod','setGamesFormFourballWinBy','setGamesFormFourballScope','gamesFormFourballNames','gatheringGamesFourballSectionHtml','refreshGamesFormFourballSection','setGamesFormFourballDollarPerPlayer','setGamesFormFourballBasis','setGamesFormFourballNetMode','setGamesFormFourballMember','addGamesFormFourballPair','removeGamesFormFourballPair','clearGamesFormFourballPairs','suggestGamesFormFourballPairs','gamesFormPlayerNames','gamesFormOverCommit','updateGamesFormPotPreview','submitGatheringGames','gamesFormHcpIsNet','gamesFormEntry','gamesFormResolvePlayerHcp','gamesFormBuildHandicapConfig','refreshGamesFormHcpSection'];
+  const fns = ['gamesFormAutoRanking','gamesBasisSelectHtml','gamesScoredPeriodRowHtml','gamesPeriodPickerHtml','periodExplainHtml','periodSegCount','lowscoreSegCount','snapToPeriods','fourballSegCount','fourballSnapToSegments','setGamesFormFourballPeriod','setGamesFormFourballWinBy','setGamesFormFourballScope','gamesFormFourballNames','gatheringGamesFourballSectionHtml','refreshGamesFormFourballSection','setGamesFormFourballDollarPerPlayer','setGamesFormFourballBasis','setGamesFormFourballNetMode','setGamesFormFourballMember','addGamesFormFourballPair','removeGamesFormFourballPair','clearGamesFormFourballPairs','suggestGamesFormFourballPairs','gamesFormPlayerNames','gamesFormOverCommit','updateGamesFormPotPreview','submitGatheringGames','gamesFormHcpIsNet','gamesFormEntry','gamesFormResolvePlayerHcp','gamesFormBuildHandicapConfig','refreshGamesFormHcpSection'];
   vm.runInContext(`
     let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(['fourball']); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = ${names.length};
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] }; let _gamesFormBirdieballConfig = { dollar_per_player: null }; let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; let _gamesFormBirdiepayPars = null;
@@ -112,8 +112,8 @@ const sec = t => t.dom.window.document.getElementById('games-form-fourball-secti
   const u = sandbox(); u.api.setSel([]); u.api.setGamesFormFourballDollarPerPlayer('5');
   ok(u.api.gatheringGamesFourballSectionHtml() === '', 'U: no section until ticked');
 }
-{ // pot variants: segments, win by, scope, per-segment ante
-  const t = sandbox(); const a = t.api;
+{ // pot variants: segments, win by, scope, per-segment ante (8 players: two foursomes, so "Who competes" is a real question)
+  const t = sandbox({ names: ['A1','A2','A3','A4','B1','B2','B3','B4'] }); const a = t.api;
   a.suggestGamesFormFourballPairs();
   a.setGamesFormFourballDollarPerPlayer('5');
   a.setGamesFormFourballPeriod('fbt');
@@ -122,6 +122,7 @@ const sec = t => t.dom.window.document.getElementById('games-form-fourball-secti
   eq(a.cfg().dollar_per_player, 15, 'S: with segments the box is per segment: $5 x 3 = $15 in all');
   let html = a.gatheringGamesFourballSectionHtml();
   ok(/Period won by/.test(html) && /Who competes/.test(html), 'S: win-by and scope appear once a split is chosen');
+  { const f = sandbox(); f.api.setGamesFormFourballPeriod('fbt'); const h4 = f.api.gatheringGamesFourballSectionHtml(); ok(/Period won by/.test(h4) && !/Who competes/.test(h4), 'S: with 4 players there is one foursome, so "Who competes" is not asked'); }
   ok(/\$15\.00 in all/.test(html) && /\$5\.00 for each of the 3 periods/.test(html), 'S: says $15 in all, $5 each');
   a.setGamesFormFourballWinBy('holes');
   eq([a.cfg().win_by, a.cfg().scope], ['holes', 'group'], 'S: holes won forces each foursome');
@@ -134,7 +135,7 @@ const sec = t => t.dom.window.document.getElementById('games-form-fourball-secti
   const prev = t.dom.window.document.getElementById('games-form-pot-preview').innerHTML;
   ok(/3 period pots/.test(prev), 'S: pot preview says it is cut into 3 period pots');
   await a.submitGatheringGames(7);
-  eq(t.posts[0].game_configs.fourball, { dollar_per_player: 12, basis: 'gross', net_mode: 'own', pairs: [['Ann','Dee'],['Bob','Cy']], period: 'sixes', win_by: 'holes', scope: 'group' }, 'S: payload carries the variant, total ante = $4 x 3');
+  eq(t.posts[0].game_configs.fourball, { dollar_per_player: 12, basis: 'gross', net_mode: 'own', pairs: a.cfg().pairs.map(pr => pr.slice()), period: 'sixes', win_by: 'holes', scope: 'group' }, 'S: payload carries the variant, total ante = $4 x 3');
   const o = sandbox(); o.api.suggestGamesFormFourballPairs(); o.api.setGamesFormFourballDollarPerPlayer('5'); await o.api.submitGatheringGames(7);
   ok(!('period' in o.posts[0].game_configs.fourball), 'S: one pot saves exactly the old shape');
 }
