@@ -13522,6 +13522,7 @@ async function refreshHistoryAfterEdit() {
 // and caches the per-group data (photos/scores/notes byKey, sorted key
 // order) at module level; openHistoryDetail reads from that cache rather
 // than re-fetching or re-deriving anything, so opening a moment is instant.
+let _historyStrokeMarks = {}; // event key -> stroke_marks from the closed games summary, for the My History scorecard modal
 let _historyScores = []; // cache from the last loadMyHistory call, for openScoreDetail lookups by id
 let _historyWeatherByKey = new Map(); // event_name -> weather row (Dev-67), rebuilt each loadMyHistory call
 let _historyGroupsSorted = [];   // ordered array of group keys, most-recent-event-first
@@ -13922,7 +13923,7 @@ async function submitHistoryNote(idx, key) {
 // Read-only 18-hole detail view for any player's full entry, tapped from
 // My History. Reuses csMarkStyle for the exact same visual language as the
 // entry widget (shape/color/double-ring), just without click handlers.
-function buildReadOnlyHoleGrid(holes, marks, start, end) {
+function buildReadOnlyHoleGrid(holes, marks, start, end, got) {
   let cells = '';
   for (let i = start; i < end; i++) {
     const v = holes[i];
@@ -13959,10 +13960,12 @@ function buildReadOnlyHoleGrid(holes, marks, start, end) {
       badge = `<span style="position:absolute;top:-4px;right:-4px;width:13px;height:13px;border-radius:${radius === '50%' ? '50%' : '3px'};
           background:${ring};color:#fff;font-size:0.5rem;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1">${badgeText}</span>`;
     }
+    const gk = got ? Number(got[i + 1]) || 0 : 0;
+    const gdots = got ? `<span style="display:flex;justify-content:center;gap:2px;height:6px" aria-hidden="true">${Array.from({ length: gk }, () => '<span style="width:5px;height:5px;border-radius:50%;background:#0a5c47;display:inline-block"></span>').join('')}</span>` : '';
     cells += `
       <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
         <span style="font-size:0.55rem;color:var(--text-hint)">${i + 1}</span>
-        <div style="position:relative;width:100%">${visual}${badge}</div>
+        <div style="position:relative;width:100%" ${gk ? `title="Handicap stroke${gk > 1 ? 's x' + gk : ''}"` : ''}>${visual}${badge}</div>${gdots}
       </div>`;
   }
   return `<div style="display:grid;grid-template-columns:repeat(9,1fr);gap:5px 4px">${cells}</div>`;
@@ -14003,18 +14006,22 @@ function openScoreDetail(scId) {
     // earlier, just enough to feel like it belongs next to them rather
     // than a plain data readout.
     const motifWatermark = venueMotifAreaScatter(venueMotifForEvent(groupEvt));
+    const sm = (_historyStrokeMarks[sc.event_name] || []).find(m => String(m.player).trim().toLowerCase() === String(sc.player).trim().toLowerCase());
+    const got = sm && sm.got && Object.keys(sm.got).length ? sm.got : null;
+    const strokeNote = got ? `<div style="font-size:0.72rem;color:var(--text-muted);margin:-4px 0 10px"><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#0a5c47;margin-right:5px;vertical-align:middle"></span>Handicap stroke: ${sm.strokes} this round${sc.total != null ? ` &middot; net ${sc.total - sm.strokes}` : ''}</div>` : '';
     bodyEl.innerHTML = `
       <div style="background:${tone.bg};border-top:2px dashed ${tone.border};border-bottom:2px dashed ${tone.border};padding:14px 4px;margin-bottom:2px;position:relative;overflow:hidden">
         ${motifWatermark}        ${historyEventDetailLine(groupEvt)}
         ${sc.tee_box ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px">⛳ ${sc.tee_box} tees</div>` : ''}
+        ${strokeNote}
         ${isNine ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">9 holes — ${sc.hole_half === 'back' ? 'Back' : 'Front'}</div>` : ''}
         ${showFront ? `
         <div style="font-size:0.7rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Front 9</div>
-        ${buildReadOnlyHoleGrid(holes, marks, 0, 9)}
+        ${buildReadOnlyHoleGrid(holes, marks, 0, 9, got)}
         <div style="text-align:right;font-family:'DM Mono',monospace;font-size:0.8rem;color:var(--text-muted);margin:6px 0 14px">Front: ${sc.front9 != null ? sc.front9 : '–'}</div>` : ''}
         ${showBack ? `
         <div style="font-size:0.7rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Back 9</div>
-        ${buildReadOnlyHoleGrid(holes, marks, 9, 18)}
+        ${buildReadOnlyHoleGrid(holes, marks, 9, 18, got)}
         <div style="text-align:right;font-family:'DM Mono',monospace;font-size:0.8rem;color:var(--text-muted);margin:6px 0 14px">Back: ${sc.back9 != null ? sc.back9 : '–'}</div>` : ''}
         <div style="display:flex;justify-content:space-between;align-items:baseline;background:var(--green-light);border-radius:10px;padding:10px 12px">
           <span style="font-size:0.85rem;font-weight:600;color:var(--green-dark)">Total</span>
@@ -16649,6 +16656,11 @@ async function loadHistoryGameResults(key, groupEvt) {
       return;
     }
     if (!cfg || cfg.status !== 'closed' || !cfg.payout_summary) { el.innerHTML = ''; return; }
+    {
+      const ps = cfg.payout_summary, byP = new Map();
+      [ps.fourball, ps.lowscore].forEach(g => ((g && g.stroke_marks) || []).forEach(m => { const k = String(m.player).trim().toLowerCase(); if (!byP.has(k) || (m.strokes > byP.get(k).strokes)) byP.set(k, m); }));
+      _historyStrokeMarks[key] = [...byP.values()];
+    }
     el.innerHTML = `
       <div style="background:rgba(255,255,255,0.55);border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:10px 12px;margin-bottom:10px">
         <div style="font-size:0.78rem;font-weight:800;margin-bottom:2px">🏆 Game Results</div>

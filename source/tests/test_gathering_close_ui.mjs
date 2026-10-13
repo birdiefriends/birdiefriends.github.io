@@ -33,7 +33,7 @@ function setup({ player = 'Brian Hager', status = 'open', hostId = 'Brian Hager'
   };
   ctx._cfg = cfg; ctx.posts = posts; ctx.toasts = toasts;
   vm.createContext(ctx);
-  vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') + '\nvar _gcClose = null; var _gcScratchAck = new Map(); var _spotsByGathering = new Map(); var _eventShadowByGid = new Map(); var _eventShadows = new Map();', ctx);
+  vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') + '\nvar _gcClose = null; var _gcScratchAck = new Map(); var _spotsByGathering = new Map(); var _eventShadowByGid = new Map(); var _eventShadows = new Map(); var _historyStrokeMarks = {};', ctx);
   return ctx;
 }
 // 1. Host opens sheet: scorecard check, missing/incomplete warnings, preview

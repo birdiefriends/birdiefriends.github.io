@@ -1,3 +1,6 @@
+v4.21.1 · 2026-10-13
+Deployed: 2026-10-13 (My History scorecards now show where handicap strokes landed. Open any player's scorecard from a Net round and a dot under a hole means that player got a stroke there, with a line giving their strokes and net total. Needs a round closed after v4.20.0 (older ones have no stroke record). Gross rounds look the same. No Worker change.)
+
 v4.21.0 · 2026-10-13
 Deployed: 2026-10-13 (Handicap strokes show up during play. In a Net round the Live Score pad marks each player who gets a stroke on the hole (gold dot and "gets a stroke"), shows a net preview next to the gross score you type, and says who gets a stroke on the next hole. In Live Actions, the hole boxes carry dots (teal for the first pair, amber for the second, also on holes not yet played), the hole sheet shows each player's net, and each player's card has dots under the holes. Off the low is followed. Gross rounds look the same as before. No Worker change.)
 
