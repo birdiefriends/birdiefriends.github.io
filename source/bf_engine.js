@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.16.4';
+  const ENGINE_VERSION = '1.16.5';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -726,7 +726,7 @@
 
   defineGame('birdieball', {
     kind: 'addon', input: 'none', net: false,
-    meta: { label: 'MiserBall', uiOrder: 3, icon: '🐦', seal: 'BIRDIEBALL',
+    meta: { label: 'MiserBall', uiOrder: 3, icon: '🐉', seal: 'BIRDIEBALL',
       info: 'Everyone starts with one ball. Keep it all round and you win: everyone who still has theirs at the end splits the pot. If everybody loses theirs, the last MiserBall standing (the one lost latest) wins. Lose yours? Tap "I lost it" in the Live Panel so the group knows, and confirm on your scorecard.' },
     config: [{ key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true }],
     fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),

@@ -3620,7 +3620,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.16.4"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.16.5"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -8214,7 +8214,7 @@ function buildAnnouncementsHTML(notifications, loading) {
     switch(bf_type) {
       case 'birdie':         return { icon:'🦅', label:'Birdie Alert',     accent:'rgba(245,200,66,0.15)',  border:'rgba(245,200,66,0.35)',  text:'#9a7a00' };
       case 'cttp':           return { icon:'🎯', label:'Closest to Pin',   accent:'rgba(29,158,117,0.12)', border:'rgba(29,158,117,0.3)',   text:'#0d6b54' };
-      case 'birdieball':     return { icon:'🐦', label:'MiserBall',       accent:'rgba(192,57,43,0.08)',   border:'rgba(192,57,43,0.2)',    text:'#922b21' };
+      case 'birdieball':     return { icon:'🐉', label:'MiserBall',       accent:'rgba(192,57,43,0.08)',   border:'rgba(192,57,43,0.2)',    text:'#922b21' };
       case 'gathering_invite':      return { icon:'⛳', label:'Gathering Invite', accent:'rgba(41,128,185,0.10)',  border:'rgba(41,128,185,0.25)',  text:'#1a5276' };
       case 'gathering_open_invite': return { icon:'📢', label:'Open Gathering',   accent:'rgba(41,128,185,0.10)',  border:'rgba(41,128,185,0.25)',  text:'#1a5276' };
       case 'gathering_date_changed':return { icon:'📅', label:'Date Changed',     accent:'rgba(230,168,0,0.12)',   border:'rgba(230,168,0,0.3)',    text:'#7a5800' };
@@ -9016,7 +9016,7 @@ function buildLivePanel(evt) {
         </div>
         ${bbLossRows.map(a => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;
           border-bottom:0.5px solid rgba(255,255,255,0.08);font-size:0.82rem;color:#fff">
-          <span>🐦💔</span><span>${a.player_name} — hole #${a.lost_hole}</span>
+          <span>🐉💔</span><span>${a.player_name} — hole #${a.lost_hole}</span>
         </div>`).join('')}
       </div>` : '';
     bbSection = `
@@ -9343,7 +9343,7 @@ function buildLivePanel(evt) {
     </div>` : ''}
     ${showBirdieBallSection ? `
     <div class="live-section">
-      <div class="live-section-header"><span class="lsh-icon">🐦</span>MiserBall</div>
+      <div class="live-section-header"><span class="lsh-icon">🐉</span>MiserBall</div>
       <div class="live-section-body">${bbSection}</div>
     </div>` : ''}
     ${showFourballSection ? `
@@ -10673,7 +10673,7 @@ async function submitBirdieBall() {
     // everyone but the loser; test mode sends to the commissioner only.
     // Best-effort: a failed push never undoes the saved alert.
     {
-      const heading = `🐦💔 ${player} lost the MiserBall`;
+      const heading = `🐉💔 ${player} lost the MiserBall`;
       const msg = `Hole #${_bbLostHole} — ${_bbLostStroke} stroke${Number(_bbLostStroke) === 1 ? '' : 's'}`;
       const others = (window._liveEvtIndividualPlayers || []).filter(n => n !== player);
       const sendP = LIVE_EVENT_TEST_MODE
@@ -16180,7 +16180,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   const games = [];
   if (s.skins) games.push(['skins', '⛳']);
   if (s.cttp) games.push(['cttp', '🎯']);
-  if (s.birdieball) games.push(['birdieball', '🐦']);
+  if (s.birdieball) games.push(['birdieball', '🐉']);
   if (s.birdiepay) games.push(['birdiepay', '🐤']);
   if (s.fourball) games.push(['fourball', '🤝']);
   if (s.lowscore) games.push(['lowscore', '🎯']);
@@ -16275,12 +16275,12 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   // ── MiserBall ──
   if (s.birdieball) {
     const b = s.birdieball;
-    let h = label(`🐦 MiserBall — ${money(b.pot)}`);
+    let h = label(`🐉 MiserBall — ${money(b.pot)}`);
     if (b.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(b.configured_pot)}, but the pot only had ${money(b.pot)} left after CTP</div>`;
     if (b.mode === 'kept') h += `<div style="font-size:0.78rem">Kept it: ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)} each</div>`;
     else if (b.mode === 'longest') h += `<div style="font-size:0.78rem">Nobody kept it — held longest (#${esc(b.longest_hole)}, stroke ${esc(b.longest_stroke)}): ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)}${b.winners.length > 1 ? ' each' : ''}</div>`;
     else h += `<div style="font-size:0.78rem;color:var(--text-muted)">No answers recorded — ${money(b.given_back_each)} back to each player</div>`;
-    panels.push({ key: 'bb', tab: '🐦 Miser', html: h });
+    panels.push({ key: 'bb', tab: '🐉 Miser', html: h });
   }
   // ── Birdie Payouts ──
   if (s.birdiepay) {
@@ -16573,7 +16573,7 @@ async function openGatheringCloseSheet(gatheringId) {
       : '';
     const bbHtml = (recon.bbLost.length || recon.bbMissing.length)
       ? `<div style="background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
-          🐦 MiserBall
+          🐉 MiserBall
           ${recon.bbLost.length ? `<div style="color:var(--text-muted);padding:2px 0">Lost it (from alerts / scorecards): ${recon.bbLost.map(a => `<b>${esc(a.player)}</b>${a.hole ? ` #${esc(a.hole)}` : ''}`).join(', ')}</div>` : ''}
           ${recon.bbMissing.length ? `<div style="padding:2px 0">No answer yet — they can't win it until you say they kept it:</div>
             ${recon.bbMissing.map(n => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0"><b>${esc(n)}</b>
@@ -16920,7 +16920,7 @@ function gatheringGameDetailsBody(evt, config) {
   if (bb) {
     const cost = (bb.dollar_per_player || 0) * yesCount;
     remaining -= cost;
-    rows.push(row('🐦', 'MiserBall', `$${(bb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot`, 'birdieball'));
+    rows.push(row('🐉', 'MiserBall', `$${(bb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot`, 'birdieball'));
   }
   const bp = gatheringAddon(config, 'birdiepay');
   if (bp) {
@@ -18872,7 +18872,7 @@ function gamesFormSplitHtml() {
   if (sel.has('fourball')) { const n = fourballSegCount(_gamesFormFourballConfig); rows.push(row('🤝', 'Fourball', inp('gw-split-fb', per(_gamesFormFourballConfig, n), 'setGamesFormFourballDollarPerPlayer', n > 1 ? 'per player, per period' : 'per player'))); }
   if (sel.has('lowscore')) { const n = lowscoreSegCount(_gamesFormLowscoreConfig); rows.push(row('🎯', 'Low Score', inp('gw-split-ls', per(_gamesFormLowscoreConfig, n), 'setGamesFormLowscoreDollarPerPlayer', n > 1 ? 'per player, per period' : 'per player'))); }
   if (sel.has('cttp')) rows.push(row('🎯', 'CTP', inp('gw-split-cttp', _gamesFormCttpConfig.dollar_per_hole, 'setGamesFormCttpDollarPerHole', 'a hole')));
-  if (sel.has('birdieball')) rows.push(row('🐦', 'MiserBall', inp('gw-split-bb', _gamesFormBirdieballConfig.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer', 'per player')));
+  if (sel.has('birdieball')) rows.push(row('🐉', 'MiserBall', inp('gw-split-bb', _gamesFormBirdieballConfig.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer', 'per player')));
   if (sel.has('birdiepay')) rows.push(row('🐤', 'Birdie Payouts', inp('gw-split-bp', _gamesFormBirdiepayConfig.dollar_per_birdie, 'setGamesFormBirdiepayDollarPerBirdie', 'a birdie')));
   if (sel.has('skins')) rows.push(row('⛳', 'Skins', '<span style="font-size:0.8rem;color:var(--text-muted)">gets what is left</span>'));
   if (!rows.length) return '';
@@ -18942,7 +18942,7 @@ function gwReviewHtml() {
   if (sel.has('lowscore')) add('🎯', 'Low Score', `${basis(ls.basis)} · ${per(BFEngine.periodKey(ls))} · ${money(ls.dollar_per_player)} per player`, 'lowscore');
   if (sel.has('skins')) add('⛳', 'Skins', `${basis(_gamesFormHcp.skins_basis)} · gets what is left`, 'skins');
   if (sel.has('cttp')) add('🎯', 'CTP', `${money(_gamesFormCttpConfig.dollar_per_hole)} a hole · ${(_gamesFormCttpConfig.holes || []).length} hole${(_gamesFormCttpConfig.holes || []).length === 1 ? '' : 's'}`, 'cttp');
-  if (sel.has('birdieball')) add('🐦', 'MiserBall', `${money(_gamesFormBirdieballConfig.dollar_per_player)} per player`, 'birdieball');
+  if (sel.has('birdieball')) add('🐉', 'MiserBall', `${money(_gamesFormBirdieballConfig.dollar_per_player)} per player`, 'birdieball');
   if (sel.has('birdiepay')) add('🐤', 'Birdie Payouts', `${money(_gamesFormBirdiepayConfig.dollar_per_birdie)} a birdie · ${basis(_gamesFormHcp.birdiepay_basis)}`, 'birdiepay');
   if (_gamesFormHcp.ranking === true) add('📊', 'Net ranking', 'Shown for fun, no money', 'hcp');
   else if (gamesFormHcpIsNet()) add('⚖️', 'Handicap strokes', `${gamesFormPlayerNames().length} players`, 'hcp');
@@ -19156,7 +19156,7 @@ function gatheringGamesBirdieballSectionHtml() {
   if (!_gamesFormSelected.has('birdieball')) return '';
   return `
     <div class="host-form-field" id="games-form-birdieball-field">
-      <label>🐦 MiserBall</label>
+      <label>🐉 MiserBall</label>
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.86rem">$</span>
         <input type="number" id="games-form-bb-dpp" min="0.01" step="0.01"
@@ -19654,7 +19654,7 @@ function updateGamesFormPotPreview(yesCount) {
   if (_gamesFormSelected.has('birdieball') && _gamesFormBirdieballConfig.dollar_per_player > 0) {
     const bbCost = _gamesFormBirdieballConfig.dollar_per_player * yesCount;
     remaining -= bbCost;
-    lines.push(`🐦 MiserBall: $${bbCost.toFixed(2)} (${yesCount} × $${_gamesFormBirdieballConfig.dollar_per_player.toFixed(2)}), carved out`);
+    lines.push(`🐉 MiserBall: $${bbCost.toFixed(2)} (${yesCount} × $${_gamesFormBirdieballConfig.dollar_per_player.toFixed(2)}), carved out`);
   }
   if (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.dollar_per_player > 0) {
     const fbCost = _gamesFormFourballConfig.dollar_per_player * yesCount;

@@ -1,3 +1,6 @@
+v4.22.4 · 2026-10-13
+Deployed: 2026-10-13 (MiserBall is now a dragon 🐉, sitting on its gold, everywhere the game shows: game list, setup, live panel, results and the lost-it alert. Real birdies keep the bird. No Worker change.)
+
 v4.22.3 · 2026-10-13
 Deployed: 2026-10-13 (Games: the suggested split now uses the whole buy-in. With Fourball and MiserBall at $10 it suggested $5 + $2 and left $3 in no game; it now suggests $8 + $2. When nothing like Skins is there to take what is left, Fourball and Low Score take the rest. The scoring periods are part of the sum: a 3-period Fourball gets whole dollars per period, rounded down so it never goes over the buy-in, and the spare dollars go to the other game. Changing a game's period re-suggests any amount you have not typed over. The buy-in screen warns when part of each buy-in is not in any game. No Worker change.)
 
