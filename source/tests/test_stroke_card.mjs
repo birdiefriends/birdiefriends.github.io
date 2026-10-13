@@ -53,9 +53,9 @@ ok(ctx.venueViewerStrokeInfo({ rc: E.gatheringConfigFromLegacy({ games: ['skins'
 const tee = { tee_name: 'Green', holes: PARS.map((p, i) => ({ par: p, handicap: SI[i], yardage: 350 })) };
 const gridNet = ctx.venueScorecardHtml(tee, muna.strokes);
 ok(/>STK</.test(gridNet) && (gridNet.match(/>••</g) || []).length === 2 && /stroke hole/.test(gridNet), 'grid with strokes: STK row, two doubles, stroke legend');
-ok(!/HCP 1–6 · hardest holes/.test(gridNet), 'stroke legend replaces the six-hardest legend');
+ok(!/hardest holes/.test(gridNet), 'no six-hardest legend on a stroke grid');
 const gridGross = ctx.venueScorecardHtml(tee);
-ok(!/>STK</.test(gridGross) && /HCP 1–6 · hardest holes/.test(gridGross), 'gross grid unchanged (hardest-6 shading, no STK row)');
+ok(!/>STK</.test(gridGross) && !/hardest holes/.test(gridGross) && !/rgba\(192,57,43/.test(gridGross) && /HCP = hole handicap/.test(gridGross), 'gross grid: no hardest-hole shading or legend, no STK row, HCP legend kept');
 
 console.log(`test_stroke_card: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

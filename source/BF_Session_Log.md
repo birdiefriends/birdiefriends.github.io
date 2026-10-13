@@ -5500,3 +5500,4 @@ mirror (bf_push normally writes both), leaving them one comment apart; resynced 
 - **GC-API:** picking a course no longer forces the Weather location editor open and pre-fills it; the tee list offers one tap, `adminGcApplyCoords`, that PATCHes the coordinates.
 - **Tests:** new `test_venue_dialog` (59 checks: list filters/search, the dialog, view navigation, reload keeping the editor, tee check, edit-and-fix save payload, add by hand, copy-from); `test_venue_rename` updated (rename UI now in `venueDialogHomeHtml`, GC jump now switches the dialog view). Full suite: 2 expected failures (`test_at_course`, `test_rail_drag`).
 - **Not live-verified:** the dialog on a real phone, and an edit-save of a real GC-API tee (Brian will use it on the next course that is wrong).
+- **v4.24.1:** removed the HCP 1–6 "hardest holes" shading and its legend from `venueScorecardHtml` (Brian). Net stroke shading and the STK row are unchanged. `test_stroke_card` updated.

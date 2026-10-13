@@ -15978,7 +15978,7 @@ function venueViewerDefaultTee(tees) {
 // holes (HCP 1–6) shaded darker so they pop; par row is the bold one.
 // Dev-91: `strokes` (optional, 18 numbers) = the strokes one player receives on
 // each hole in a NET round. When given, those holes are shaded green with dots
-// in place of the six-hardest shading, and a STK row is added.
+// and a STK row is added. (v4.24.1: the old shading of the six hardest holes was removed.)
 function venueScorecardHtml(t, strokes) {
   const holes = Array.isArray(t.holes) ? t.holes : [];
   if (!holes.length) return '<div style="font-size:0.78rem;color:var(--text-muted);padding:8px 0">No hole-by-hole data stored for this tee.</div>';
@@ -15986,7 +15986,6 @@ function venueScorecardHtml(t, strokes) {
   const sum = (arr, k) => arr.reduce((a, h) => a + (Number(h[k]) || 0), 0);
   const td = 'padding:5px 0;text-align:center;border-right:1px solid var(--border)';
   const lbl = 'padding:5px 6px;text-align:left;font-size:0.62rem;font-weight:800;letter-spacing:0.04em;border-right:1px solid var(--border);white-space:nowrap';
-  const hcpShade = n => (n >= 1 && n <= 6) ? `background:rgba(192,57,43,${(0.30 - (n - 1) * 0.04).toFixed(2)});font-weight:800` : '';
   const hasStk = Array.isArray(strokes) && strokes.length >= holes.length;
   const stkAt = i => (hasStk ? Number(strokes[i]) || 0 : 0);
   const stkShade = k => (k > 0 ? 'background:var(--green);color:#fff;font-weight:800' : '');
@@ -16011,7 +16010,7 @@ function venueScorecardHtml(t, strokes) {
       </tr>
       <tr style="border-top:1px solid var(--border)">
         <td style="${lbl};color:#8e2b20">HCP</td>
-        ${set.map((h, i) => `<td style="${td};${hasStk ? '' : hcpShade(Number(h.handicap))}">${h.handicap ?? '—'}</td>`).join('')}
+        ${set.map((h, i) => `<td style="${td}">${h.handicap ?? '—'}</td>`).join('')}
         ${extra.map(() => `<td style="${td};background:rgba(0,0,0,0.05)"></td>`).join('')}
       </tr>
       ${hasStk ? `<tr style="border-top:1px solid var(--border)">
@@ -16035,7 +16034,6 @@ function venueScorecardHtml(t, strokes) {
         <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--green);vertical-align:-1px"></span> stroke hole (•• = two)</span>
         <span>HCP = hole handicap (stroke index)</span></div>`
       : `<div style="display:flex;gap:10px;font-size:0.64rem;color:var(--text-muted);margin-top:-2px">
-        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:rgba(192,57,43,0.3);vertical-align:-1px"></span> HCP 1–6 · hardest holes</span>
         <span>HCP = hole handicap (stroke index)</span></div>`);
 }
 // Dev-87 — shared tee summary: dropdown + stat strip + scorecard grid. Used by

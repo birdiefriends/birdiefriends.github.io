@@ -1,3 +1,6 @@
+v4.24.1 · 2026-10-13
+Deployed: 2026-10-13 (Course tee card: the red shading on the six hardest holes (HCP 1 to 6) is gone, along with its legend. The HCP row is plain numbers. Net stroke shading is unchanged. No Worker change.)
+
 v4.24.0 · 2026-10-13
 Deployed: 2026-10-13 (Venue Manager, redesigned. 1) The long list that repeated every function under every course is now a course list: search it, filter All / Active / Needs setup, and each row says what that course is still missing. 2) Tap a course to open ONE dialog with its name, Rename, Active status, and a row for each function: Par, Weather location, Logo, CTP holes, Tees and hole handicaps, Theme motif. Each row opens its editor inside the dialog with a Back arrow; saving brings you back. 3) NEW: edit a tee's par, yardage and hole handicap for all 18 holes (Tees row, then Edit), or add a tee by hand when GolfCourseAPI is wrong or doesn't have the course. A hole handicap used twice is flagged and the save is refused until each of 1 to 18 is used once. A hand-edited tee is marked as manually edited, so a later GolfCourseAPI save asks before replacing it. Games already set up keep the strokes they were saved with. 4) GolfCourseAPI lookup now offers one tap to set Weather location from the course it found. No Worker change.)
 
