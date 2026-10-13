@@ -3620,7 +3620,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.16.3"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.16.4"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -18876,7 +18876,17 @@ function gamesFormSplitHtml() {
   if (sel.has('birdiepay')) rows.push(row('🐤', 'Birdie Payouts', inp('gw-split-bp', _gamesFormBirdiepayConfig.dollar_per_birdie, 'setGamesFormBirdiepayDollarPerBirdie', 'a birdie')));
   if (sel.has('skins')) rows.push(row('⛳', 'Skins', '<span style="font-size:0.8rem;color:var(--text-muted)">gets what is left</span>'));
   if (!rows.length) return '';
-  return `<div style="font-size:0.8rem;font-weight:700;margin:12px 0 2px">How it splits <span style="font-weight:400;color:var(--text-muted)">· type over any amount</span></div>${rows.join('')}`;
+  // Money not in any game is never played for. Say so when nothing (Skins, Birdie Payouts) is there to take what is left.
+  let gap = '';
+  const dppNow = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0;
+  if (dppNow > 0 && !sel.has('skins') && !sel.has('birdiepay')) {
+    const nPl = Math.max(4, _gamesFormYesCount);
+    const used = (sel.has('fourball') ? _gamesFormFourballConfig.dollar_per_player || 0 : 0) + (sel.has('lowscore') ? _gamesFormLowscoreConfig.dollar_per_player || 0 : 0)
+      + (sel.has('birdieball') ? _gamesFormBirdieballConfig.dollar_per_player || 0 : 0) + (sel.has('cttp') ? (_gamesFormCttpConfig.dollar_per_hole || 0) * (_gamesFormCttpConfig.holes || []).length / nPl : 0);
+    const left = Math.round((dppNow - used) * 100) / 100;
+    if (left > 0.004) gap = `<div style="font-size:0.76rem;color:#b8860b;margin-top:6px;line-height:1.45">$${left.toFixed(2)} of each $${dppNow.toFixed(2)} is not in any game, so nobody plays for it. Raise an amount, or lower the buy-in.</div>`;
+  }
+  return `<div style="font-size:0.8rem;font-weight:700;margin:12px 0 2px">How it splits <span style="font-weight:400;color:var(--text-muted)">· type over any amount</span></div>${rows.join('')}${gap}`;
 }
 function refreshGamesFormSplit() {
   const el = document.getElementById('games-form-split');
@@ -18992,12 +19002,12 @@ function applyGamesSuggestion(force) {
   if (force) _gamesFormTouched.clear();
   const n = Math.max(4, _gamesFormYesCount);
   const holes = (_gamesFormCttpConfig.holes || []).length || _gamesFormPar3Holes.length || 3;
-  const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: n, games: [..._gamesFormSelected], cttpHoles: holes });
+  const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: n, games: [..._gamesFormSelected], cttpHoles: holes, periods: { fourball: fourballSegCount(_gamesFormFourballConfig), lowscore: lowscoreSegCount(_gamesFormLowscoreConfig) } });
   if (sug.cttp && !_gamesFormTouched.has('cttp')) _gamesFormCttpConfig.dollar_per_hole = sug.cttp.dollar_per_hole;
   if (sug.birdieball && !_gamesFormTouched.has('birdieball')) _gamesFormBirdieballConfig.dollar_per_player = sug.birdieball.dollar_per_player;
   if (sug.birdiepay && !_gamesFormTouched.has('birdiepay')) _gamesFormBirdiepayConfig.dollar_per_birdie = sug.birdiepay.dollar_per_birdie;
-  if (sug.fourball && !_gamesFormTouched.has('fourball')) _gamesFormFourballConfig.dollar_per_player = fourballSnapToSegments(sug.fourball.dollar_per_player);
-  if (sug.lowscore && !_gamesFormTouched.has('lowscore')) _gamesFormLowscoreConfig.dollar_per_player = snapToPeriods(sug.lowscore.dollar_per_player, lowscoreSegCount(_gamesFormLowscoreConfig));
+  if (sug.fourball && !_gamesFormTouched.has('fourball')) _gamesFormFourballConfig.dollar_per_player = sug.fourball.dollar_per_player; // already a whole number per period
+  if (sug.lowscore && !_gamesFormTouched.has('lowscore')) _gamesFormLowscoreConfig.dollar_per_player = sug.lowscore.dollar_per_player;
   const ls2 = document.getElementById('games-form-lowscore-section'); if (ls2) ls2.innerHTML = gatheringGamesLowscoreSectionHtml();
   const fs = document.getElementById('games-form-fourball-section'); if (fs) fs.innerHTML = gatheringGamesFourballSectionHtml();
   const cs = document.getElementById('games-form-cttp-section'); if (cs) cs.innerHTML = gatheringGamesCttpSectionHtml();
@@ -19246,8 +19256,8 @@ function setGamesFormLowscorePeriod(v) {
   const c = _gamesFormLowscoreConfig;
   c.period = BFEngine.periodKey({ period: v });
   if (lowscoreSegCount(c) > 1 && c.dollar_per_player > 0) c.dollar_per_player = lowscoreSnapToPeriods(c.dollar_per_player);
-  _gamesFormTouched.add('lowscore');
   refreshGamesFormLowscoreSection();
+  applyGamesSuggestion(false);
   updateGamesFormPotPreview();
 }
 function setGamesFormLowscoreDollarPerPlayer(val) {
@@ -19350,8 +19360,8 @@ function setGamesFormFourballPeriod(v) {
   c.period = BFEngine.periodKey({ period: v });
   if (fourballSegCount(c) > 1 && c.dollar_per_player > 0) c.dollar_per_player = fourballSnapToSegments(c.dollar_per_player);
   if (c.period === 'round') { c.win_by = 'strokes'; c.scope = 'field'; }
-  _gamesFormTouched.add('fourball');
   refreshGamesFormFourballSection();
+  applyGamesSuggestion(false); // the periods change how the buy-in divides: re-suggest what the host has not typed over
   updateGamesFormPotPreview();
 }
 function setGamesFormFourballWinBy(v) {

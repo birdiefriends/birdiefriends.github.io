@@ -43,6 +43,7 @@ function sandbox({ names = ['Ann','Bob','Cy','Dee'], members = [] } = {}) {
     let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [] }; let _gamesFormFourballNote = ''; let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' };
     let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; let _gamesFormTees = []; let _gamesFormMembers = new Map(${JSON.stringify(members)}); let _gamesFormPar3Holes = []; let _gamesFormVenueParDataAvailable = false;
     function refreshGamesFormHcpSection() {}
+    function applyGamesSuggestion() {}
     ${fns.filter(n => n !== 'refreshGamesFormHcpSection').map(n => extractFn(src, n)).join('\n')}
     this.api = { ...{ setGamesFormFourballPeriod, setGamesFormFourballWinBy, setGamesFormFourballScope, fourballSnapToSegments, gatheringGamesFourballSectionHtml, setGamesFormFourballDollarPerPlayer, setGamesFormFourballBasis, setGamesFormFourballNetMode, setGamesFormFourballMember, addGamesFormFourballPair, removeGamesFormFourballPair, clearGamesFormFourballPairs, suggestGamesFormFourballPairs, submitGatheringGames, gamesFormOverCommit, updateGamesFormPotPreview }, cfg: () => _gamesFormFourballConfig, setSel: s => { _gamesFormSelected = new Set(s); }, setHcp: (n, e) => { _gamesFormHcp.players[n] = e; } };
   `, ctx);

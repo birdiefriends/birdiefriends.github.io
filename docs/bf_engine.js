@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.16.3';
+  const ENGINE_VERSION = '1.16.4';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1384,7 +1384,7 @@
     });
   }
 
-  function suggestGameAmounts({ dollarPerPlayer, players, games, cttpHoles }) {
+  function suggestGameAmounts({ dollarPerPlayer, players, games, cttpHoles, periods }) {
     const B = Number(dollarPerPlayer) || 0;
     const n = Math.max(1, Math.floor(Number(players) || 0));
     const has = g => (games || []).includes(g);
@@ -1401,13 +1401,24 @@
       out.cttp = { dollar_per_hole: per, holes };
     }
     if (has('birdiepay')) out.birdiepay = { dollar_per_birdie: dollars(0.3 * B) };
-    // Fourball is the main event: on its own the winning pair takes the whole pot; with side games ticked it
-    // takes half and they share the rest (Skins gets whatever is left).
-    // Low Score is a main event too; when both are ticked they share the main portion equally.
+    // The buy-in is meant to be played for in full. Fourball and Low Score are the main events:
+    //  - with Skins (or Birdie Payouts) ticked they take half and that game gets what is left, as before;
+    //  - with neither, nothing would soak up the rest, so the mains take everything the fixed games (CTP, MiserBall) leave.
+    // `periods` ({fourball: 3, lowscore: 1}) is how many pots each main is cut into: a main's total is a whole number of
+    // dollars per period, so it is rounded down to a multiple of that and the spare dollars go to whichever main can take them.
     const mains = ['fourball', 'lowscore'].filter(has);
     if (mains.length) {
-      const main = ['cttp', 'birdieball', 'birdiepay', 'skins'].some(has) ? 0.5 * B : B;
-      mains.forEach(g => { out[g] = { dollar_per_player: dollars(main / mains.length) }; });
+      const fixedPer = (out.birdieball ? out.birdieball.dollar_per_player : 0) + (out.cttp ? out.cttp.dollar_per_hole * out.cttp.holes / n : 0);
+      const main = has('skins') || has('birdiepay') ? 0.5 * B : Math.max(mains.length, B - fixedPer);
+      const pn = g => Math.max(1, Math.floor(Number(periods && periods[g]) || 1));
+      const tot = {};
+      mains.forEach(g => { const k = pn(g); tot[g] = Math.max(k, k * Math.floor(main / mains.length / k)); });
+      let spare = Math.floor(main - mains.reduce((a, g) => a + tot[g], 0));
+      for (let moved = true; moved && spare > 0;) {
+        moved = false;
+        mains.forEach(g => { if (spare >= pn(g)) { tot[g] += pn(g); spare -= pn(g); moved = true; } });
+      }
+      mains.forEach(g => { out[g] = { dollar_per_player: tot[g] }; });
     }
     return out;
   }

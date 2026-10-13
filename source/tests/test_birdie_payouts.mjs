@@ -150,12 +150,13 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
     loadHostGamesConfigs: async () => {}, renderHostPanelList: () => {}
   };
   vm.createContext(ctx); ctx.BFEngine = E; ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
-  const fns = ['applyGamesSuggestion','gameInfoBtnHtml','gameInfoPanelHtml','gatheringGamesChecklistHtml', 'toggleGamesFormGame', 'gatheringGamesCttpSectionHtml', 'gatheringGamesBirdieballSectionHtml',
+  const fns = ['applyGamesSuggestion','fourballSegCount','lowscoreSegCount','periodSegCount','gameInfoBtnHtml','gameInfoPanelHtml','gatheringGamesChecklistHtml', 'toggleGamesFormGame', 'gatheringGamesCttpSectionHtml', 'gatheringGamesBirdieballSectionHtml',
     'gamesBasisSelectHtml','gatheringGamesSkinsSectionHtml','refreshGamesFormSkinsSection','gatheringGamesBirdiepaySectionHtml', 'setGamesFormBirdiepayDollarPerBirdie', 'gamesFormOverCommit', 'updateGamesFormPotPreview', 'submitGatheringGames',
     'gamesFormEntry', 'gamesFormPlayerNames', 'gamesFormHcpIsNet', 'gamesFormResolvePlayerHcp', 'gamesFormBuildHandicapConfig', 'gatheringGamesHcpSectionHtml', 'refreshGamesFormHcpSection']; // Dev-91: net/gross section now part of the form
   vm.runInContext(`
     const GATHERING_GAMES_META = ${JSON.stringify({ skins: { label: 'Skins', icon: 'x' }, cttp: { label: 'CTP', icon: 'x' }, birdieball: { label: 'BirdieBall', icon: 'x' }, birdiepay: { label: 'Birdie Payouts', icon: 'x' } })};
     let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
+    let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round' }; let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' };
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
     let _gamesFormBirdieballConfig = { dollar_per_player: null };
     let _gamesFormBirdiepayConfig = { dollar_per_birdie: null };
