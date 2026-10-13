@@ -11695,11 +11695,6 @@ async function showCrewMembers(crewId, crewName) {
   }
 }
 let _venueDebounce      = null;      // debounce timer for Places API calls
-let _adminVenueParsOpen = {};        // venue id -> bool, which par editors are expanded in Venue Manager
-let _adminVenueCoordsOpen = {};      // venue id -> bool, which weather-location editors are expanded (Dev-67)
-let _adminVenueLogoOpen = {};        // venue id -> bool, which logo upload editors are expanded (Dev-67)
-let _adminVenueCttpOpen = {};        // venue id -> bool, which CTP-holes editors are expanded (Dev-82)
-let _adminVenueGcOpen = {};          // venue id -> bool, which GolfCourseAPI lookup panels are expanded (Dev-86)
 let _adminVenueGcResults = {};       // venue id -> array of search results from GET /bfe/coursedata/search
 let _adminVenueGcCourse = {};        // venue id -> full course-details object from GET /bfe/coursedata/courses/:id, once a search result is picked
 // Dev-87 — status + last query live in state, not only the DOM: every GC
@@ -12462,11 +12457,115 @@ async function saveTemplate(name, fields) {
   }
 }
 // ── Venue Manager (Commissioner Admin) ───────────────────────────────────────
+// v4.24.0: the old list repeated every management function under every course.
+// Now it is a course list (search + All / Active / Needs setup) that opens ONE
+// management dialog for the tapped course. The dialog's home screen lists the
+// functions with their status; each opens its editor inside the dialog with a
+// Back arrow. The editors themselves (par, weather location, logo, CTP holes,
+// GC-API lookup) are unchanged; every save still ends in loadAdminVenues(),
+// which now refreshes the list AND the open dialog.
+let _vmFilter = 'all';                 // 'all' | 'active' | 'needs'
+let _vmSearch = '';
+let _vmDlg = null;                     // { id, view } while the dialog is open. view: home|pars|coords|logo|ctp|tees|teeedit|motif
+let _vmSetupRequested = {};            // venue id -> true once its tees + CTP status were fetched for the list
+let _vmTeeEdit = null;                 // the tee being edited/added in the tee editor (state, so a re-render never loses it)
+const VM_VIEW_TITLES = { pars: 'Par (18 holes)', coords: 'Weather location', logo: 'Logo', ctp: 'CTP holes', tees: 'Tees and hole handicaps', teeedit: 'Edit tee', motif: 'Theme motif' };
+
+// What a course still needs. null = not loaded yet (never counted as missing).
+function venueSetupState(v) {
+  const cttp = _adminVenueCttpCache[v.id];
+  const tees = _adminVenueTees[v.id];
+  const items = [
+    ['Par', !!v.pars],
+    ['Location', v.lat != null && v.lng != null],
+    ['Logo', !!v.logo_key],
+    ['CTP', cttp ? cttp.cttpHoles.length > 0 : null],
+    ['Tees', Array.isArray(tees) ? tees.length > 0 : null]
+  ];
+  return {
+    have: items.filter(i => i[1] === true).map(i => i[0]),
+    missing: items.filter(i => i[1] === false).map(i => i[0]),
+    loading: items.some(i => i[1] === null)
+  };
+}
+function venueSetupLine(v) {
+  const s = venueSetupState(v);
+  if (!s.have.length && !s.missing.length) return 'Loading…';
+  if (!s.have.length) return s.loading ? 'Nothing set up yet · checking…' : 'Nothing set up yet';
+  if (!s.missing.length) return s.have.join(' · ') + (s.loading ? ' · checking…' : '');
+  return `${s.have.join(' · ')} — ${s.missing.join(', ')} missing`;
+}
+function venueChipsHtml() {
+  const chip = (key, label) => `<button type="button" onclick="setVenueFilter('${key}')"
+    style="padding:7px 12px;min-height:34px;border-radius:17px;font-family:inherit;font-size:0.76rem;font-weight:700;cursor:pointer;
+    ${_vmFilter === key ? 'background:var(--green-dark, #0d4a3a);color:#fff;border:1px solid var(--green-dark, #0d4a3a)' : 'background:#fff;color:var(--text);border:1px solid var(--border)'}">${label}</button>`;
+  return chip('all', 'All') + chip('active', 'Active') + chip('needs', 'Needs setup');
+}
+function setVenueFilter(key) {
+  _vmFilter = key;
+  const el = document.getElementById('vm-chips');
+  if (el) el.innerHTML = venueChipsHtml();
+  renderVenueRows();
+}
+function setVenueSearch(q) {
+  _vmSearch = String(q || '');
+  renderVenueRows(); // rows only, so the search box keeps focus while typing
+}
+function renderVenueRows() {
+  const el = document.getElementById('vm-rows');
+  if (!el) return;
+  const q = _vmSearch.trim().toLowerCase();
+  const rows = _adminVenuesCache.filter(v => {
+    if (q && !String(v.name || '').toLowerCase().includes(q)) return false;
+    if (_vmFilter === 'active') return !!v.active;
+    if (_vmFilter === 'needs') return !!v.active && venueSetupState(v).missing.length > 0;
+    return true;
+  });
+  if (!rows.length) {
+    el.innerHTML = `<div style="padding:14px;font-size:0.8rem;color:var(--text-muted)">${_adminVenuesCache.length ? 'No courses match.' : 'No venues found.'}</div>`;
+    return;
+  }
+  el.innerHTML = rows.map(v => {
+    const needs = !!v.active && venueSetupState(v).missing.length > 0;
+    const chip = !v.active ? ['Inactive', 'rgba(0,0,0,0.06)', 'var(--text-muted)'] : needs ? ['Needs setup', '#fdf1d6', '#7a5a00'] : ['Active', 'rgba(29,158,117,0.12)', '#17775a'];
+    return `<button type="button" onclick="openVenueDialog(${v.id})"
+      style="display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:10px 12px;background:#fff;border:0;border-bottom:1px solid var(--border);text-align:left;font-family:inherit;cursor:pointer;color:var(--text)">
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:0.86rem;font-weight:700;${v.active ? '' : 'color:var(--text-muted)'}">${escapeHtml(v.name)}</span>
+        <span style="display:block;font-size:0.7rem;color:var(--text-muted);margin-top:2px">${escapeHtml(venueSetupLine(v))}</span>
+      </span>
+      <span style="font-size:0.68rem;font-weight:700;padding:3px 8px;border-radius:10px;white-space:nowrap;background:${chip[1]};color:${chip[2]}">${chip[0]}</span>
+      <span style="color:var(--text-hint);font-size:1.1rem">›</span></button>`;
+  }).join('');
+}
+// Tees and CTP status for every course, fetched once per session (2 small GETs
+// per venue) so the list can say what is missing. Quiet: no re-render per fetch.
+async function adminFetchVenueTeesQuiet(id) {
+  try {
+    const res = await fetch(`${BFE_API}/bfe/venue-tees?venue_id=${id}`);
+    const data = await res.json();
+    _adminVenueTees[id] = data.ok ? (data.tees || []) : [];
+  } catch (e) {
+    _adminVenueTees[id] = [];
+  }
+}
+function venueLoadSetupData(venues) {
+  const need = venues.filter(v => !_vmSetupRequested[v.id]);
+  if (!need.length) return;
+  need.forEach(v => { _vmSetupRequested[v.id] = true; });
+  Promise.all(need.map(v => Promise.all([
+    _adminVenueTees[v.id] ? null : adminFetchVenueTeesQuiet(v.id),
+    _adminVenueCttpCache[v.id] ? null : adminFetchVenueCttp(v.id)
+  ]))).then(() => {
+    renderVenueRows();
+    if (_vmDlg && _vmDlg.view === 'home') renderVenueDialog(); // never while an editor is open: it would wipe typing
+  });
+}
 async function loadAdminVenues() {
   if (!isCommissioner()) return;
   const listEl = document.getElementById('admin-venues-list');
   if (!listEl) return;
-  listEl.innerHTML = '<div style="color:var(--text-hint);font-size:0.82rem">Loading…</div>';
+  if (!_adminVenuesCache.length) listEl.innerHTML = '<div style="color:var(--text-hint);font-size:0.82rem">Loading…</div>';
   try {
     const res = await fetch(`${GATHERINGS_API}/venues?pin=7797`);
     const data = await res.json();
@@ -12477,72 +12576,144 @@ async function loadAdminVenues() {
       listEl.innerHTML = '<div style="color:var(--text-hint);font-size:0.82rem">No venues found.</div>';
       return;
     }
-    listEl.innerHTML = venues.map(v => `
-      <div style="padding:7px 0;border-bottom:1px solid var(--border)">
-        <div style="display:flex;align-items:center;gap:8px">
-          ${_adminVenueRenaming[v.id] ? `
-          <div style="flex:1;display:flex;gap:6px;align-items:center">
-            <input type="text" id="admin-venue-rename-${v.id}" value="${v.name.replace(/"/g, '&quot;')}"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();adminSaveVenueName(${v.id})}if(event.key==='Escape'){adminToggleVenueRename(${v.id})}"
-              style="flex:1;padding:5px 7px;border-radius:6px;border:1px solid var(--border);font-size:0.83rem;font-family:inherit;box-sizing:border-box">
-            <button class="btn btn-secondary btn-sm" style="font-size:0.72rem;padding:3px 8px" onclick="adminSaveVenueName(${v.id})">Save</button>
-            <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px" onclick="adminToggleVenueRename(${v.id})">Cancel</button>
-          </div>` : `
-          <div style="flex:1;font-size:0.83rem;color:${v.active ? 'var(--text)' : 'var(--text-muted)'};${v.active ? '' : 'text-decoration:line-through'};display:flex;align-items:center;gap:6px">
-            <span>${v.name}</span>
-            <button class="btn btn-ghost btn-sm" title="Rename venue" style="font-size:0.68rem;padding:1px 6px;line-height:1.4" onclick="adminToggleVenueRename(${v.id})">✏️</button>
-          </div>`}
-          <span style="font-size:0.72rem;padding:2px 7px;border-radius:10px;font-weight:600;
-            ${v.active
-              ? 'background:rgba(29,158,117,0.12);color:#1D9E75;border:1px solid rgba(29,158,117,0.25)'
-              : 'background:rgba(0,0,0,0.06);color:var(--text-muted);border:1px solid var(--border)'}">
-            ${v.active ? 'Active' : 'Inactive'}
-          </span>
-          <button class="btn btn-ghost btn-sm" style="font-size:0.75rem;white-space:nowrap"
-            onclick="adminToggleVenue(${v.id}, ${v.active ? 0 : 1}, '${v.name.replace(/'/g,"\\'")}')">
-            ${v.active ? 'Deactivate' : 'Reactivate'}
-          </button>
-        </div>
-        <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-          <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px"
-            onclick="adminToggleVenueParsPanel(${v.id})">
-            ⛳ Vs Par${v.pars ? ' ✓' : ''} ${_adminVenueParsOpen[v.id] ? '▾' : '▸'}
-          </button>
-          <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px"
-            onclick="adminToggleVenueCoordsPanel(${v.id})">
-            📍 Weather Location${(v.lat != null && v.lng != null) ? ' ✓' : ''} ${_adminVenueCoordsOpen[v.id] ? '▾' : '▸'}
-          </button>
-          <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px"
-            onclick="adminToggleVenueLogoPanel(${v.id})">
-            🖼️ Logo${v.logo_key ? ' ✓' : ''} ${_adminVenueLogoOpen[v.id] ? '▾' : '▸'}
-          </button>
-          <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px"
-            onclick="adminToggleVenueCttpPanel(${v.id})">
-            🎯 CTP Holes${(_adminVenueCttpCache[v.id] && _adminVenueCttpCache[v.id].cttpHoles && _adminVenueCttpCache[v.id].cttpHoles.length) ? ' ✓' : ''} ${_adminVenueCttpOpen[v.id] ? '▾' : '▸'}
-          </button>
-          <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px"
-            onclick="adminToggleVenueGcPanel(${v.id})">
-            🔎 GC-API Lookup ${_adminVenueGcOpen[v.id] ? '▾' : '▸'}
-          </button>
-          <span style="display:flex;align-items:center;gap:4px">
-            <input type="text" id="admin-motif-${v.id}" placeholder="🍀 or paste a custom SVG icon" maxlength="2000" value="${v.theme_motif || ''}"
-              style="width:44px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);font-size:0.85rem;text-align:center;box-sizing:border-box">
-            <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:3px 8px" onclick="adminSaveVenueMotif(${v.id})">Save Motif</button>
-          </span>
-        </div>
-        ${_adminVenueParsOpen[v.id] ? venueParsEditorHtml(v) : ''}
-        ${_adminVenueCoordsOpen[v.id] ? venueCoordsEditorHtml(v) : ''}
-        ${_adminVenueLogoOpen[v.id] ? venueLogoEditorHtml(v) : ''}
-        ${_adminVenueCttpOpen[v.id] ? venueCttpHolesEditorHtml(v) : ''}
-        ${_adminVenueGcOpen[v.id] ? venueGcLookupEditorHtml(v) : ''}
-      </div>`).join('');
+    listEl.innerHTML = `
+      <input type="text" id="vm-search" placeholder="Search courses" aria-label="Search courses" value="${escapeHtmlAttr(_vmSearch)}" oninput="setVenueSearch(this.value)"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--border);font-size:0.86rem;font-family:inherit;background:#fff;margin-bottom:8px">
+      <div id="vm-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${venueChipsHtml()}</div>
+      <div id="vm-rows" style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden"></div>`;
+    renderVenueRows();
+    renderVenueDialog();
+    venueLoadSetupData(venues);
   } catch(e) {
     listEl.innerHTML = `<div style="color:#c0392b;font-size:0.82rem">Error: ${e.message}</div>`;
   }
 }
-function adminToggleVenueParsPanel(id) {
-  _adminVenueParsOpen[id] = !_adminVenueParsOpen[id];
-  loadAdminVenues();
+// ── The one dialog ───────────────────────────────────────────────────────────
+function openVenueDialog(id) {
+  _vmDlg = { id, view: 'home' };
+  document.body.style.overflow = 'hidden';
+  if (!_adminVenueTees[id]) adminFetchVenueTeesQuiet(id).then(() => { if (_vmDlg && _vmDlg.view === 'home') renderVenueDialog(); });
+  if (!_adminVenueCttpCache[id]) adminFetchVenueCttp(id).then(() => { if (_vmDlg && _vmDlg.view === 'home') renderVenueDialog(); });
+  renderVenueDialog(true);
+}
+function closeVenueDialog() {
+  _vmDlg = null;
+  _vmTeeEdit = null;
+  const ov = document.getElementById('vm-dialog');
+  if (ov) ov.remove();
+  document.body.style.overflow = '';
+  renderVenueRows(); // statuses may have changed while the dialog was open
+}
+function venueDialogView(view) {
+  if (!_vmDlg) return;
+  _vmDlg.view = view;
+  if (view === 'tees' && !_adminVenueTees[_vmDlg.id]) adminFetchVenueTeesQuiet(_vmDlg.id).then(() => renderVenueDialog());
+  if (view === 'ctp' && !_adminVenueCttpCache[_vmDlg.id]) adminFetchVenueCttp(_vmDlg.id).then(() => renderVenueDialog());
+  renderVenueDialog(true);
+}
+// Back: from the tee editor to the tees list, from any other editor to home.
+function venueDialogBack() {
+  if (!_vmDlg) return;
+  if (_vmDlg.view === 'teeedit') { _vmTeeEdit = null; venueDialogView('tees'); return; }
+  venueDialogView('home');
+}
+function venueParSum(v) {
+  try {
+    const p = v.pars ? JSON.parse(v.pars) : null;
+    return (Array.isArray(p) && p.length === 18) ? p.reduce((a, b) => a + (Number(b) || 0), 0) : null;
+  } catch (e) { return null; }
+}
+function venueDialogRowsHtml(v) {
+  const ok = 'color:#17775a', miss = 'color:#a07100';
+  const cttp = _adminVenueCttpCache[v.id];
+  const tees = _adminVenueTees[v.id];
+  const rows = [
+    ['pars', 'Par (18 holes)', v.pars ? `Set${venueParSum(v) ? ' · ' + venueParSum(v) : ''}` : 'Not set', !!v.pars],
+    ['coords', 'Weather location', (v.lat != null && v.lng != null) ? 'Set' : 'Not set', v.lat != null && v.lng != null],
+    ['logo', 'Logo', v.logo_key ? 'Set' : 'Not set', !!v.logo_key],
+    ['ctp', 'CTP holes', !cttp ? '…' : cttp.cttpHoles.length ? cttp.cttpHoles.join(', ') : 'Not set', !!(cttp && cttp.cttpHoles.length)],
+    ['tees', 'Tees and hole handicaps', !Array.isArray(tees) ? '…' : tees.length ? `${tees.length} tee${tees.length === 1 ? '' : 's'}` : 'None', Array.isArray(tees) && tees.length > 0],
+    ['motif', 'Theme motif', v.theme_motif ? 'Set' : 'Not set', !!v.theme_motif]
+  ];
+  return rows.map(r => `<button type="button" onclick="venueDialogView('${r[0]}')"
+    style="display:flex;align-items:center;gap:10px;width:100%;min-height:50px;padding:8px 14px;background:#fff;border:0;border-bottom:1px solid var(--border);text-align:left;font-family:inherit;cursor:pointer;color:var(--text)">
+    <span style="flex:1;font-size:0.9rem;font-weight:700">${r[1]}</span>
+    <span style="font-size:0.78rem;${r[3] ? ok : miss}">${r[2]}</span>
+    <span style="color:var(--text-hint);font-size:1.1rem">›</span></button>`).join('');
+}
+function venueDialogHomeHtml(v) {
+  const name = String(v.name || '');
+  const header = _adminVenueRenaming[v.id] ? `
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:12px">
+      <input type="text" id="admin-venue-rename-${v.id}" value="${escapeHtmlAttr(name)}"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();adminSaveVenueName(${v.id})}if(event.key==='Escape'){adminToggleVenueRename(${v.id})}"
+        style="flex:1;min-width:0;padding:9px 10px;border-radius:8px;border:1px solid var(--border);font-size:0.9rem;font-family:inherit;box-sizing:border-box">
+      <button class="btn btn-secondary btn-sm" onclick="adminSaveVenueName(${v.id})">Save</button>
+      <button class="btn btn-ghost btn-sm" onclick="adminToggleVenueRename(${v.id})">Cancel</button>
+    </div>` : `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="flex:1;font-size:0.8rem;color:var(--text-muted)"><button type="button" class="btn btn-ghost btn-sm" onclick="adminToggleVenueRename(${v.id})" style="padding:4px 8px">✏️ Rename</button></span>
+      <span style="font-size:0.72rem;padding:3px 9px;border-radius:10px;font-weight:700;${v.active ? 'background:rgba(29,158,117,0.12);color:#17775a' : 'background:rgba(0,0,0,0.06);color:var(--text-muted)'}">${v.active ? 'Active' : 'Inactive'}</span>
+    </div>`;
+  return `${header}
+    <div style="border:1px solid var(--border);border-radius:12px;overflow:hidden">${venueDialogRowsHtml(v)}</div>
+    <div style="font-size:0.7rem;color:var(--text-muted);line-height:1.5;margin-top:8px">Each row opens its editor in this dialog. Saving brings you back here.</div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button type="button" class="btn btn-secondary-danger" style="flex:1;min-height:44px" onclick="adminToggleVenue(${v.id}, ${v.active ? 0 : 1}, '${String(v.name).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">${v.active ? 'Deactivate venue' : 'Reactivate venue'}</button>
+      <button type="button" class="btn btn-primary" style="flex:1;min-height:44px" onclick="closeVenueDialog()">Done</button>
+    </div>`;
+}
+function venueMotifEditorHtml(v) {
+  return `
+    <div style="background:var(--surface);border-radius:10px;padding:10px">
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">An emoji or a pasted custom SVG icon shown for this venue's events.</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="text" id="admin-motif-${v.id}" placeholder="🍀 or paste a custom SVG icon" maxlength="2000" value="${escapeHtmlAttr(v.theme_motif || '')}"
+          style="flex:1;min-width:0;padding:9px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.9rem;box-sizing:border-box">
+        <button class="btn btn-secondary btn-sm" onclick="adminSaveVenueMotif(${v.id})">Save Motif</button>
+      </div>
+    </div>`;
+}
+function venueDialogBodyHtml(v) {
+  switch (_vmDlg.view) {
+    case 'pars':   return venueParsEditorHtml(v);
+    case 'coords': return venueCoordsEditorHtml(v);
+    case 'logo':   return venueLogoEditorHtml(v);
+    case 'ctp':    return _adminVenueCttpCache[v.id] ? venueCttpHolesEditorHtml(v) : '<div style="font-size:0.8rem;color:var(--text-muted)">Loading…</div>';
+    case 'tees':   return venueGcLookupEditorHtml(v);
+    case 'teeedit': return venueTeeEditorHtml(v);
+    case 'motif':  return venueMotifEditorHtml(v);
+    default:       return venueDialogHomeHtml(v);
+  }
+}
+function renderVenueDialog(resetScroll) {
+  if (!_vmDlg) return;
+  const v = _adminVenuesCache.find(x => x.id === _vmDlg.id);
+  if (!v) { closeVenueDialog(); return; }
+  let ov = document.getElementById('vm-dialog');
+  let prevScroll = 0;
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'vm-dialog';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9300;background:rgba(20,30,25,0.5);display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick = e => { if (e.target === ov) closeVenueDialog(); };
+    document.body.appendChild(ov);
+  } else {
+    const sc = ov.querySelector('#vm-dlg-scroll');
+    prevScroll = sc ? sc.scrollTop : 0;
+  }
+  const home = _vmDlg.view === 'home';
+  const title = home ? escapeHtml(v.name) : escapeHtml(VM_VIEW_TITLES[_vmDlg.view] || '');
+  ov.innerHTML = `<div style="width:100%;max-width:560px;max-height:90vh;display:flex;flex-direction:column;background:#fff;border-radius:18px 18px 0 0">
+    <div style="display:flex;align-items:center;gap:6px;padding:10px 12px 8px">
+      ${home ? '' : `<button type="button" onclick="venueDialogBack()" aria-label="Back" style="min-height:44px;padding:0 10px 0 4px;border:0;background:transparent;font-family:inherit;font-size:0.86rem;font-weight:700;color:var(--green-dark, #0d4a3a);cursor:pointer">‹ ${_vmDlg.view === 'teeedit' ? 'Tees' : escapeHtml(v.name)}</button>`}
+      <div style="flex:1;min-width:0;font-size:${home ? '1.05rem' : '0.95rem'};font-weight:700;${home ? '' : 'text-align:right;'}overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</div>
+      <button type="button" onclick="closeVenueDialog()" aria-label="Close" style="width:44px;height:44px;border:0;border-radius:12px;background:var(--surface);font-size:1.3rem;cursor:pointer;color:var(--text)">×</button>
+    </div>
+    <div id="vm-dlg-scroll" style="overflow:auto;padding:4px 16px 18px">${venueDialogBodyHtml(v)}</div></div>`;
+  const sc2 = ov.querySelector('#vm-dlg-scroll');
+  if (sc2) sc2.scrollTop = resetScroll ? 0 : prevScroll;
+  if (_vmDlg.view === 'teeedit') venueTeeEditorRefresh(); // fill the totals + handicap check line
 }
 // Inline 18-hole par editor for one venue. Plain number inputs, not the
 // scorecard's mark-entry UI — this is reference data (what par *is* for
@@ -12673,10 +12844,6 @@ async function adminClearVenuePars(id, name) {
     showToast('Error: ' + e.message, true);
   }
 }
-function adminToggleVenueCoordsPanel(id) {
-  _adminVenueCoordsOpen[id] = !_adminVenueCoordsOpen[id];
-  loadAdminVenues();
-}
 // Manual lat/lng entry, not auto-geocoded — a small local golf course often
 // isn't resolvable by name through a general geocoding service, and a wrong
 // silent guess would produce confidently-wrong weather (see worker.js
@@ -12693,7 +12860,7 @@ function venueCoordsEditorHtml(v) {
       <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">
         Long-press this course on Google Maps, then paste the coordinates shown at the bottom of the screen — or
         <a href="javascript:void(0)" onclick="adminJumpToGcLookup(${v.id})" style="color:var(--accent, #1D9E75);font-weight:600">try GolfCourseAPI ▾</a>
-        and pick the course; its coordinates fill in here automatically. Powers the 🌤️ weather chip on My History.
+        and pick the course, then tap "Use … for Weather location". Powers the 🌤️ weather chip on My History.
       </div>
       <div style="display:flex;gap:6px;margin-bottom:8px">
         <input type="text" id="admin-coord-lat-${v.id}" placeholder="Latitude" inputmode="decimal"
@@ -12722,6 +12889,7 @@ async function adminSaveVenueMotif(id) {
     if (!data.ok) throw new Error(data.error || 'Save failed');
     showToast('✅ Motif saved');
     _venues = null;
+    loadAdminVenues(); // refresh the dialog's Theme motif status
   } catch(e) {
     showToast('Error: ' + e.message, true);
   }
@@ -12782,11 +12950,6 @@ async function adminClearVenueCoords(id, name) {
 // they remain for venues not yet upgraded to per-tee storage, and Weather
 // Location's lat/lng still gets filled here since that's venue-level, not
 // tee-level.
-function adminToggleVenueGcPanel(id) {
-  _adminVenueGcOpen[id] = !_adminVenueGcOpen[id];
-  if (_adminVenueGcOpen[id] && !_adminVenueTees[id]) adminLoadVenueTees(id);
-  loadAdminVenues();
-}
 // "🔎 Try GolfCourseAPI" link inside the Weather Location panel (Dev-88) —
 // just opens the GC-API Lookup panel (loading any already-stored tees,
 // which costs nothing) and leaves Weather Location open too so the fields
@@ -12794,35 +12957,32 @@ function adminToggleVenueGcPanel(id) {
 // still only happens when Brian taps Search, so this never touches the
 // 35/day quota on its own.
 function adminJumpToGcLookup(id) {
-  _adminVenueGcOpen[id] = true;
-  _adminVenueCoordsOpen[id] = true;
-  if (!_adminVenueTees[id]) adminLoadVenueTees(id);
-  loadAdminVenues();
+  if (_vmDlg) _vmDlg.view = 'tees';
+  if (!_adminVenueTees[id]) adminFetchVenueTeesQuiet(id).then(() => renderVenueDialog());
+  renderVenueDialog(true);
 }
 async function adminLoadVenueTees(id) {
-  try {
-    const res = await fetch(`${BFE_API}/bfe/venue-tees?venue_id=${id}`);
-    const data = await res.json();
-    _adminVenueTees[id] = data.ok ? (data.tees || []) : [];
-  } catch (e) {
-    _adminVenueTees[id] = [];
-  }
+  await adminFetchVenueTeesQuiet(id);
   loadAdminVenues();
 }
 let _adminVenueTeeSel = {}; // venue id -> selected stored tee id (Dev-87)
 function storedVenueTeesHtml(v) {
   const tees = _adminVenueTees[v.id];
   if (!tees) return '<div style="font-size:0.74rem;color:var(--text-muted)">Loading stored tees…</div>';
-  if (!tees.length) return '<div style="font-size:0.74rem;color:var(--text-muted)">No tees stored yet for this venue.</div>';
+  const addTee = `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;font-size:0.76rem" onclick="adminNewVenueTee(${v.id})">＋ Add a tee manually</button>`;
+  if (!tees.length) return `<div style="font-size:0.74rem;color:var(--text-muted)">No tees stored yet for this venue.</div>${addTee}`;
   let t = tees.find(x => x.id === _adminVenueTeeSel[v.id]);
   if (!t) { t = venueViewerDefaultTee(tees); _adminVenueTeeSel[v.id] = t.id; }
-  const del = `<button onclick="adminDeleteVenueTee(${v.id}, ${t.id})" title="Delete the ${escapeHtml(t.tee_name)} tee"
+  const edit = `<button onclick="adminEditVenueTee(${v.id}, ${t.id})" title="Edit the ${escapeHtml(t.tee_name)} tee's par, yardage and hole handicaps"
+      style="flex-shrink:0;height:40px;padding:0 12px;border-radius:10px;border:1.5px solid var(--border);
+      background:#fff;color:var(--text);font-weight:800;font-size:0.76rem;font-family:inherit;cursor:pointer">✏️ Edit</button>`;
+  const del = edit + `<button onclick="adminDeleteVenueTee(${v.id}, ${t.id})" title="Delete the ${escapeHtml(t.tee_name)} tee"
       style="flex-shrink:0;height:40px;padding:0 12px;border-radius:10px;border:1.5px solid rgba(185,28,28,0.35);
       background:#fff;color:#b91c1c;font-weight:800;font-size:0.76rem;font-family:inherit;cursor:pointer">🗑 Delete</button>`;
   const src = t.source === 'gc_api' ? 'GolfCourseAPI' : (t.source || 'manual');
   const foot = `<div style="display:flex;justify-content:space-between;gap:8px;font-size:0.66rem;color:var(--text-muted);margin-top:4px">
       <span>${tees.length} tee${tees.length === 1 ? '' : 's'} stored · source: ${escapeHtml(src)}${t.updated_at ? ` · saved ${escapeHtml(String(t.updated_at).slice(0, 10))}` : ''}</span>
-      ${t.locked ? '<span style="color:#b45309;font-weight:700">🔒 manually edited</span>' : ''}</div>`;
+      ${t.locked ? '<span style="color:#b45309;font-weight:700">🔒 manually edited</span>' : ''}</div>${addTee}`;
   return venueTeeSummaryHtml({ tees, sel: t.id, selectId: `admin-tee-sel-${v.id}`,
     onchange: `adminSelectVenueTee(${v.id}, this.value)`, sideHtml: del, footHtml: foot, selectBg: '#fff' });
 }
@@ -12830,6 +12990,202 @@ function adminSelectVenueTee(venueId, teeId) {
   _adminVenueTeeSel[venueId] = Number(teeId);
   const el = document.getElementById(`admin-gc-stored-${venueId}`);
   if (el) el.innerHTML = storedVenueTeesHtml({ id: venueId }); // in place — no full Venue Manager re-render
+}
+// ── Manual tee + hole handicap editor (v4.24.0) ──────────────────────────────
+// GolfCourseAPI is not always right, and some courses are not in it. This edits
+// one tee's par / yardage / hole handicap (stroke index) for all 18 holes, or
+// adds a tee by hand. Saves through the existing POST /bfe/venue-tees as
+// source 'manual', which locks the tee so a later GC-API save can't silently
+// overwrite it. Games already set up keep the strokes frozen at save time.
+function vmBlankHoles() { return Array.from({ length: 18 }, () => ({ par: null, yardage: null, handicap: null })); }
+function vmNormalizeHoles(holes) {
+  const out = vmBlankHoles();
+  (Array.isArray(holes) ? holes : []).slice(0, 18).forEach((h, i) => {
+    const n = k => (h && h[k] != null && h[k] !== '' && Number.isFinite(Number(h[k]))) ? Number(h[k]) : null;
+    out[i] = { par: n('par'), yardage: n('yardage'), handicap: n('handicap') };
+  });
+  return out;
+}
+function adminEditVenueTee(venueId, teeId) {
+  const t = (_adminVenueTees[venueId] || []).find(x => x.id === Number(teeId));
+  if (!t) return;
+  _vmTeeEdit = { venueId, teeId: t.id, isNew: false, tee_name: t.tee_name, gender: t.gender || '',
+    course_rating: t.course_rating, slope_rating: t.slope_rating, gc_api_course_id: t.gc_api_course_id || null,
+    locked: !!t.locked, source: t.source || 'gc_api', holes: vmNormalizeHoles(t.holes) };
+  venueDialogView('teeedit');
+}
+function adminNewVenueTee(venueId) {
+  _vmTeeEdit = { venueId, teeId: null, isNew: true, tee_name: '', gender: 'male', course_rating: null, slope_rating: null,
+    gc_api_course_id: null, locked: false, source: 'manual', holes: vmBlankHoles() };
+  venueDialogView('teeedit');
+}
+function vmNum(id, float) {
+  const el = document.getElementById(id);
+  if (!el || String(el.value).trim() === '') return null;
+  const n = float ? parseFloat(el.value) : parseInt(el.value, 10);
+  return Number.isFinite(n) ? n : null;
+}
+// Pull whatever is typed in the editor back into _vmTeeEdit (the inputs are the
+// source of truth while typing; state only survives a re-render).
+function vmTeeCapture() {
+  const e = _vmTeeEdit;
+  if (!e) return;
+  const nameEl = document.getElementById('vm-tee-name');
+  const genEl = document.getElementById('vm-tee-gender');
+  if (nameEl) e.tee_name = nameEl.value;
+  if (genEl) e.gender = genEl.value;
+  e.course_rating = vmNum('vm-tee-rating', true);
+  e.slope_rating = vmNum('vm-tee-slope');
+  e.holes = e.holes.map((h, i) => ({ par: vmNum(`vm-h-par-${i}`), yardage: vmNum(`vm-h-yds-${i}`), handicap: vmNum(`vm-h-hcp-${i}`) }));
+}
+// Pure check of a tee: what is wrong, and the totals. Hole handicaps must be
+// 1-18, each used exactly once; pars 3-6.
+function venueTeeCheck(e) {
+  const errors = [];
+  const holes = (e && e.holes) || [];
+  const pars = holes.map(h => h.par);
+  const parBad = pars.length !== 18 || pars.some(p => p == null || !Number.isInteger(p) || p < 3 || p > 6);
+  if (parBad) errors.push('Every hole needs a par from 3 to 6.');
+  const hcps = holes.map(h => h.handicap);
+  const used = {};
+  hcps.forEach(n => { if (n != null) used[n] = (used[n] || 0) + 1; });
+  const hcpBad = hcps.length !== 18 || hcps.some(n => n == null || !Number.isInteger(n) || n < 1 || n > 18);
+  const dup = Object.keys(used).filter(k => used[k] > 1).map(Number).sort((a, b) => a - b);
+  const missing = [];
+  for (let n = 1; n <= 18; n++) if (!used[n]) missing.push(n);
+  if (hcpBad) errors.push('Every hole needs a handicap from 1 to 18.');
+  else if (dup.length) errors.push(`Handicap ${dup.join(', ')} is used more than once. Missing: ${missing.join(', ')}.`);
+  if (e && e.slope_rating != null && (e.slope_rating < 55 || e.slope_rating > 155)) errors.push('Slope should be between 55 and 155.');
+  if (e && e.course_rating != null && (e.course_rating < 50 || e.course_rating > 90)) errors.push('Course rating looks wrong (expected about 60 to 80).');
+  if (!e || !String(e.tee_name || '').trim()) errors.push('Give the tee a name.');
+  const sum = k => holes.every(h => h[k] != null) ? holes.reduce((a, h) => a + h[k], 0) : null;
+  return { errors, dup, missing, parTotal: sum('par'), yards: sum('yardage'),
+    hcpOk: !hcpBad && !dup.length, parOk: !parBad };
+}
+// Live status under the grid + red borders on repeated handicaps. No re-render.
+function venueTeeEditorRefresh() {
+  vmTeeCapture();
+  const e = _vmTeeEdit;
+  if (!e) return;
+  const c = venueTeeCheck(e);
+  const el = document.getElementById('vm-tee-check');
+  if (el) {
+    const line = `Par ${c.parTotal != null ? c.parTotal : '–'} · ${c.yards != null ? c.yards.toLocaleString() + ' yds' : '– yds'}`;
+    const hcp = c.hcpOk ? '<span style="color:#17775a;font-weight:700">✓ Handicaps 1–18 each used once</span>'
+      : c.dup.length ? `<span style="color:#b91c1c;font-weight:700">Handicap ${c.dup.join(', ')} used more than once · missing ${c.missing.join(', ')}</span>`
+      : '<span style="color:var(--text-muted)">Handicaps 1–18, each once</span>';
+    el.innerHTML = `${line}<br>${hcp}`;
+  }
+  for (let i = 0; i < 18; i++) {
+    const inp = document.getElementById(`vm-h-hcp-${i}`);
+    if (inp) inp.style.borderColor = c.dup.includes(e.holes[i].handicap) ? '#b91c1c' : '';
+  }
+}
+function venueTeeEditorCopyFrom(teeId) {
+  vmTeeCapture();
+  const e = _vmTeeEdit;
+  const src = (_adminVenueTees[e.venueId] || []).find(x => x.id === Number(teeId));
+  if (!e || !src) return;
+  e.holes = vmNormalizeHoles(src.holes);
+  if (e.course_rating == null) e.course_rating = src.course_rating;
+  if (e.slope_rating == null) e.slope_rating = src.slope_rating;
+  renderVenueDialog();
+}
+function venueTeeEditorHtml(v) {
+  const e = _vmTeeEdit;
+  if (!e || e.venueId !== v.id) return '<div style="font-size:0.8rem;color:var(--text-muted)">Nothing to edit.</div>';
+  const inp = 'width:100%;box-sizing:border-box;padding:7px 2px;text-align:center;border-radius:6px;border:1px solid var(--border);font-size:0.86rem;font-family:inherit;min-height:36px';
+  const field = 'padding:9px 10px;border-radius:8px;border:1px solid var(--border);font-size:0.88rem;font-family:inherit;box-sizing:border-box;width:100%';
+  const lbl = 'font-size:0.66rem;font-weight:800;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:3px';
+  const others = (_adminVenueTees[v.id] || []).filter(t => t.id !== e.teeId);
+  const rows = e.holes.map((h, i) => `
+    <div style="display:grid;grid-template-columns:34px 1fr 1.3fr 1fr;gap:6px;align-items:center;margin-bottom:5px${i === 8 ? ';padding-bottom:6px;border-bottom:1px dashed var(--border)' : ''}">
+      <div style="font-size:0.78rem;font-weight:800;text-align:center">${i + 1}</div>
+      <input type="number" id="vm-h-par-${i}" inputmode="numeric" min="3" max="6" value="${h.par != null ? h.par : ''}" oninput="venueTeeEditorRefresh()" style="${inp}" aria-label="Hole ${i + 1} par">
+      <input type="number" id="vm-h-yds-${i}" inputmode="numeric" min="0" max="999" value="${h.yardage != null ? h.yardage : ''}" oninput="venueTeeEditorRefresh()" style="${inp}" aria-label="Hole ${i + 1} yards">
+      <input type="number" id="vm-h-hcp-${i}" inputmode="numeric" min="1" max="18" value="${h.handicap != null ? h.handicap : ''}" oninput="venueTeeEditorRefresh()" style="${inp}" aria-label="Hole ${i + 1} handicap">
+    </div>`).join('');
+  return `
+    <div style="font-size:0.72rem;color:var(--text-muted);line-height:1.5;margin-bottom:10px">
+      ${e.isNew ? 'Add a tee by hand — for a course GolfCourseAPI does not have, or a tee it is missing.' : 'Correct this tee where GolfCourseAPI is wrong.'}
+      Saved here, it is marked 🔒 manually edited, so a later GolfCourseAPI save will ask before replacing it. Games already set up keep the strokes they were saved with.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div><div style="${lbl}">TEE NAME</div><input type="text" id="vm-tee-name" value="${escapeHtmlAttr(e.tee_name)}" placeholder="e.g. Blue" ${e.isNew ? '' : 'disabled'} oninput="venueTeeEditorRefresh()" style="${field}"></div>
+      <div><div style="${lbl}">TEES FOR</div><select id="vm-tee-gender" ${e.isNew ? '' : 'disabled'} style="${field}">
+        <option value="male" ${e.gender === 'male' ? 'selected' : ''}>Men</option>
+        <option value="female" ${e.gender === 'female' ? 'selected' : ''}>Women</option>
+        <option value="" ${e.gender === '' ? 'selected' : ''}>Any</option></select></div>
+      <div><div style="${lbl}">COURSE RATING</div><input type="number" step="0.1" id="vm-tee-rating" inputmode="decimal" value="${e.course_rating != null ? e.course_rating : ''}" oninput="venueTeeEditorRefresh()" style="${field}"></div>
+      <div><div style="${lbl}">SLOPE</div><input type="number" id="vm-tee-slope" inputmode="numeric" value="${e.slope_rating != null ? e.slope_rating : ''}" oninput="venueTeeEditorRefresh()" style="${field}"></div>
+    </div>
+    ${e.isNew && others.length ? `<div style="margin-bottom:8px"><div style="${lbl}">START FROM</div>
+      <select onchange="if(this.value)venueTeeEditorCopyFrom(this.value)" style="${field}"><option value="">Blank</option>${others.map(t => `<option value="${t.id}">Copy of ${escapeHtml(t.tee_name)}${/^m/i.test(t.gender || '') ? ' (M)' : /^(f|w)/i.test(t.gender || '') ? ' (W)' : ''}</option>`).join('')}</select></div>` : ''}
+    <div style="display:grid;grid-template-columns:34px 1fr 1.3fr 1fr;gap:6px;margin:10px 0 4px;font-size:0.62rem;font-weight:800;letter-spacing:0.04em;color:var(--text-muted);text-align:center">
+      <div>HOLE</div><div>PAR</div><div>YARDS</div><div>HCP</div></div>
+    ${rows}
+    <div id="vm-tee-check" style="font-size:0.76rem;line-height:1.6;margin:8px 0 10px;text-align:center"></div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="btn btn-ghost" style="min-height:44px" onclick="venueDialogBack()">Cancel</button>
+      <button type="button" class="btn btn-primary" style="flex:1;min-height:44px" onclick="adminSaveVenueTee()">${e.isNew ? 'Add tee' : 'Save tee'}</button>
+    </div>`;
+}
+async function adminSaveVenueTee() {
+  vmTeeCapture();
+  const e = _vmTeeEdit;
+  if (!e) return;
+  const c = venueTeeCheck(e);
+  if (c.errors.length) { showToast(c.errors[0], true); venueTeeEditorRefresh(); return; }
+  const name = String(e.tee_name).trim();
+  const gender = e.gender || null;
+  const existing = (_adminVenueTees[e.venueId] || []).find(t => t.tee_name === name && (t.gender || null) === gender && t.id !== e.teeId);
+  if (e.isNew && existing && !confirm(`A ${name} tee already exists for this course. Replace it with what you entered?`)) return;
+  const v = (_adminVenuesCache || []).find(x => x.id === e.venueId);
+  try {
+    const res = await fetch(`${BFE_API}/bfe/venue-tees`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        venue_id: e.venueId, venue_name: v ? v.name : null,
+        tee_name: name, gender,
+        course_rating: e.course_rating, slope_rating: e.slope_rating,
+        total_yards: c.yards, par_total: c.parTotal,
+        holes: e.holes.map(h => ({ par: h.par, yardage: h.yardage, handicap: h.handicap })),
+        gc_api_course_id: e.gc_api_course_id, source: 'manual',
+        force: true, pin: COMMISSIONER_PIN
+      })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    showToast(`✅ ${name} tee saved`);
+    if (data.id) _adminVenueTeeSel[e.venueId] = data.id;
+    _vmTeeEdit = null;
+    await adminFetchVenueTeesQuiet(e.venueId);
+    venueDialogView('tees');
+    loadAdminVenues(); // list statuses
+  } catch (err) {
+    showToast('Error saving tee: ' + err.message, true);
+  }
+}
+// Sets the venue's Weather location from the GolfCourseAPI course the commissioner
+// just picked — one explicit tap, no editor to open first.
+async function adminGcApplyCoords(id) {
+  const course = _adminVenueGcCourse[id];
+  if (!course || course.latitude == null || course.longitude == null) return;
+  try {
+    const res = await fetch(`${GATHERINGS_API}/venues/${id}/coords`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: '7797', lat: Number(course.latitude), lng: Number(course.longitude) })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    showToast('✅ Weather location saved');
+    _venues = null;
+    loadAdminVenues();
+  } catch (e) {
+    showToast('Error: ' + e.message, true);
+  }
 }
 function venueGcLookupEditorHtml(v) {
   const results = _adminVenueGcResults[v.id] || [];
@@ -12846,7 +13202,8 @@ function venueGcLookupEditorHtml(v) {
     : '';
   const teesHtml = course
     ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-        <div style="font-size:0.78rem;font-weight:600;margin-bottom:6px">${course.club_name || course.course_name}${(course.latitude != null) ? ' — lat/long filled into Weather Location above' : ''}</div>
+        <div style="font-size:0.78rem;font-weight:600;margin-bottom:6px">${course.club_name || course.course_name}</div>
+        ${(course.latitude != null && course.longitude != null) ? `<button class="btn btn-ghost btn-sm" style="font-size:0.72rem;margin-bottom:6px" onclick="adminGcApplyCoords(${v.id})">📍 Use ${Number(course.latitude).toFixed(4)}, ${Number(course.longitude).toFixed(4)} for Weather location</button>` : ''}
         ${(course.tees || []).map((t, i) => `
           <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
             <div style="flex:1;font-size:0.78rem">
@@ -12951,16 +13308,9 @@ async function adminGcSelectCourse(id, courseId) {
     if (!data.ok) { const err = new Error(data.error || 'Course lookup failed'); err.quota = gcIsQuotaError(res.status, data.error); throw err; }
     _adminVenueGcCourse[id] = data;
     adminGcSetStatus(id, (data.tees || []).length ? `${(data.tees || []).length} tee${(data.tees || []).length === 1 ? '' : 's'} found — “Save Tee” stores the ones you want.` : 'This course has no tee data in GolfCourseAPI.', (data.tees || []).length ? 'info' : 'warn');
-    if (data.latitude != null && data.longitude != null) {
-      _adminVenueCoordsOpen[id] = true;
-      await loadAdminVenues();
-      const latEl = document.getElementById(`admin-coord-lat-${id}`);
-      const lngEl = document.getElementById(`admin-coord-lng-${id}`);
-      if (latEl) latEl.value = data.latitude;
-      if (lngEl) lngEl.value = data.longitude;
-    } else {
-      loadAdminVenues();
-    }
+    // v4.24.0: the course's coordinates are offered as one tap in the tee list
+    // below ("Use these for Weather location"), not forced into another editor.
+    loadAdminVenues();
   } catch(e) {
     adminGcSetStatus(id, e.quota ? GC_QUOTA_MSG : 'Course lookup error: ' + escapeHtml(e.message), e.quota ? 'warn' : 'error');
   }
@@ -13010,10 +13360,6 @@ async function adminDeleteVenueTee(venueId, teeId) {
   } catch (e) {
     showToast('Error deleting tee: ' + e.message);
   }
-}
-function adminToggleVenueLogoPanel(id) {
-  _adminVenueLogoOpen[id] = !_adminVenueLogoOpen[id];
-  loadAdminVenues();
 }
 // A club crest/emblem, purely for visual variety across many rounds at
 // many venues — not brand-matched, not color-extracted. Real acquisition
@@ -13103,13 +13449,6 @@ async function adminFetchVenueCttp(id) {
   } catch(e) {
     _adminVenueCttpCache[id] = { cttpHoles: [], raw: {} };
   }
-}
-async function adminToggleVenueCttpPanel(id) {
-  _adminVenueCttpOpen[id] = !_adminVenueCttpOpen[id];
-  if (_adminVenueCttpOpen[id] && !_adminVenueCttpCache[id]) {
-    await adminFetchVenueCttp(id);
-  }
-  loadAdminVenues();
 }
 function venueCttpHolesEditorHtml(v) {
   const entry = _adminVenueCttpCache[v.id] || { cttpHoles: [], raw: {} };

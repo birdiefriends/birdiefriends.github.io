@@ -11,10 +11,11 @@ const HERE = (p) => fileURLToPath(new URL(p, import.meta.url));
 const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 
-// 1) Structural: the venue-row template (inside loadAdminVenues) renders the
-// rename input when _adminVenueRenaming[v.id] is set, and the ✏️ toggle when
-// it isn't — both wired to real function names.
-const loadAdminVenuesSrc = extractFn(src, 'loadAdminVenues');
+// 1) Structural: the venue dialog's home header (v4.24.0: moved from the old
+// per-row template in loadAdminVenues) renders the rename input when
+// _adminVenueRenaming[v.id] is set, and the ✏️ toggle when it isn't — both
+// wired to real function names.
+const loadAdminVenuesSrc = extractFn(src, 'venueDialogHomeHtml');
 ok(loadAdminVenuesSrc.includes('admin-venue-rename-${v.id}'), 'rename input id present');
 ok(loadAdminVenuesSrc.includes('adminSaveVenueName(${v.id})'), 'Enter/Save wired to adminSaveVenueName');
 ok(loadAdminVenuesSrc.includes('adminToggleVenueRename(${v.id})'), '✏️ / Cancel wired to adminToggleVenueRename');
@@ -31,7 +32,7 @@ ok(!/adminGcSearch|coursedata/.test(coordsHtmlSrc), 'coords panel itself never c
 const calls = { fetches: [], loadAdminVenuesCalls: 0, teesLoaded: [] };
 const ctx = {
   Array, String, Object, JSON, Number,
-  _adminVenueRenaming: {}, _adminVenueGcOpen: {}, _adminVenueCoordsOpen: {}, _adminVenueTees: {},
+  _adminVenueRenaming: {}, _vmDlg: { id: 3, view: 'coords' }, _adminVenueTees: {},
   _adminVenuesCache: [{ id: 3, name: 'Woodloch Sprngs', active: 1 }],
   _venues: 'cached-sentinel',
   document: { getElementById: (id) => (id === 'admin-venue-rename-3' ? { value: 'Woodloch Springs' } : null) },
@@ -42,7 +43,8 @@ const ctx = {
   },
   showToast: () => {},
   loadAdminVenues: async () => { calls.loadAdminVenuesCalls++; },
-  adminLoadVenueTees: async (id) => { calls.teesLoaded.push(id); },
+  adminFetchVenueTeesQuiet: async (id) => { calls.teesLoaded.push(id); },
+  renderVenueDialog: () => { calls.dialogRenders = (calls.dialogRenders || 0) + 1; },
   GATHERINGS_API: 'https://birdiefriends-push.example/api',
 };
 vm.createContext(ctx);
@@ -60,10 +62,10 @@ ok(calls.fetches[0].body.pin === '7797' && calls.fetches[0].body.name === 'Woodl
 ok(ctx._venues === null, 'venue cache reset after rename so matching picks up the new spelling');
 ok(ctx._adminVenueRenaming[3] === false, 'rename input closes on success');
 
-// adminJumpToGcLookup: opens both panels, loads tees if not cached, but never hits fetch itself
+// adminJumpToGcLookup: switches the dialog to Tees, loads tees if not cached, but never hits fetch itself
 calls.fetches.length = 0;
 await vm.runInContext('adminJumpToGcLookup(3)', ctx);
-ok(ctx._adminVenueGcOpen[3] === true && ctx._adminVenueCoordsOpen[3] === true, 'opens GC-API Lookup and keeps Weather Location open');
+ok(ctx._vmDlg.view === 'tees', 'jumps the dialog from Weather location to the Tees view (GC-API Lookup)');
 ok(calls.teesLoaded.includes(3), 'kicks off the (quota-free) stored-tees load, not a GC-API search');
 ok(calls.fetches.length === 0, 'jumping to the GC panel spends no GolfCourseAPI quota on its own');
 

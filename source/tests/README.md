@@ -27,6 +27,7 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_at_course.mjs` | At-the-course rail: location gate, beta gate, test mode (expiry, tap-off), auto-tuck with Live Panel |
 | `test_rail_drag.mjs` | Rail drag/snap/persist in real Chromium |
 | `test_venue_admin.mjs` | Shared tee summary: admin stored tees + player venue viewer |
+| `test_venue_dialog.mjs` | v4.24.0 Venue Manager: course list (search, Needs setup), one dialog per course, tee / hole-handicap editor (duplicate-handicap check, manual save payload, add by hand) |
 | `test_gc_search.mjs` | GC-API search status persistence, name-variant retry, 429 quota message |
 
 `moselem_tees.json` is a snapshot of Moselem's four real tees (2026-09-24), used as fixture data.
