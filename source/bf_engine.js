@@ -1725,12 +1725,13 @@
       const whole = paid && paid.length === 1 ? paid[0] : null;
       const win = x => (x && x.status === 'won' && x.winner) ? (x.winner.join('|') === pa.names.join('|') ? 0 : 1) : null;
       let big = '', small = '', winner = null, status = story.played ? 'inprogress' : 'notstarted';
-      const holesTxt = `${story.a} – ${story.b}${story.t ? `, ${story.t} halved` : ''}`;
+      // the winner's number first, so "7 – 6" always reads as the winner's view
+      const holesFor = w => { const [x, y] = w === 1 ? [story.b, story.a] : [story.a, story.b]; return `${x} – ${y}${story.t ? `, ${story.t} halved` : ''}`; };
       if (whole) {
         winner = win(whole);
         status = whole.status === 'won' ? 'won' : whole.status === 'push' ? 'halved' : 'inprogress';
         big = whole.result ? (status === 'halved' ? 'Halved' : whole.result) : (status === 'won' ? `${Math.abs(story.lead)} UP` : status === 'halved' ? 'Halved' : 'In progress');
-        small = `Holes ${holesTxt}`;
+        small = `Holes ${holesFor(winner)}`;
       } else if (!sg || !paid) {
         // one pot on total strokes: the result is the strokes, the holes are the story
         const [tA, tB] = [pa, pb].map(x => { const r = (f.standings || []).find(z => z.pair.join('|') === x.names.join('|')); return r && r.complete ? r.total : null; });
@@ -1738,14 +1739,15 @@
           winner = tA < tB ? 0 : tA > tB ? 1 : null; status = winner == null ? 'halved' : 'won';
           const d = Math.abs(tA - tB);
           big = winner == null ? 'Tied' : `${d} stroke${d === 1 ? '' : 's'}`;
-          small = `${tA} vs ${tB}${f.basis === 'net' ? ' net' : ''} · holes ${holesTxt}`;
+          small = `${winner === 1 ? tB : tA} vs ${winner === 1 ? tA : tB}${f.basis === 'net' ? ' net' : ''} · holes ${holesFor(winner)}`;
         } else { big = 'In progress'; small = story.played ? `Holes ${holesTxt}` : ''; }
       } else {
         // period pots (front / back / total): the headline is who took more of them
         const wins = [0, 0]; paid.forEach(x => { const w = win(x); if (w != null) wins[w]++; });
         winner = wins[0] === wins[1] ? null : wins[0] > wins[1] ? 0 : 1;
         status = paid.every(x => x.status === 'pending') ? 'inprogress' : (winner == null ? 'halved' : 'won');
-        big = `${wins[0]} – ${wins[1]}`; small = `Pots won · holes ${holesTxt}`;
+        const wf = winner === 1 ? [wins[1], wins[0]] : wins;
+        big = `${wf[0]} – ${wf[1]}`; small = `Pots won · holes ${holesFor(winner)}`;
       }
       const segs = (paid && paid.length > 1) ? paid.map(x => ({ label: x.label, text: x.result || (x.status === 'won' ? '' : x.status === 'push' ? 'Halved' : 'In progress'), winner: win(x), money: x.per_player ? x.per_player : null })) : [];
       const r = { names: [pa.names, pb.names], short: [short(pa.names), short(pb.names)], status, winner, big, small, story, segs,

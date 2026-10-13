@@ -13,7 +13,7 @@ const dots = h => (h.match(/width:5px;height:5px/g) || []).length;
 ok(dots(ctx.f(holes, [], 0, 9, { 2: 1, 4: 2 })) === 3, 'front 9: hole 2 one dot, hole 4 two dots');
 ok(dots(ctx.f(holes, [], 9, 18, { 2: 1, 4: 2, 11: 1 })) === 1, 'back 9 only gets its own dots');
 ok(dots(ctx.f(holes, [], 0, 9)) === 0, 'no marks: no dots, same as before');
-const fb = src.slice(src.indexOf('function renderGatheringPayoutHtml'), src.indexOf('function renderGatheringPayoutHtml') + 9000);
+const fb = src.slice(src.indexOf('function renderGatheringPayoutHtml'), src.indexOf('function renderGatheringPayoutHtml') + 16000);
 ok(/gameStrokes/.test(fb) && /in \$\{lab\}/.test(fb), 'summary rows list per-game strokes when they differ from the full allowance');
 ok(/Net column uses each player/.test(fb), 'how-it-was-played box explains full vs off the low');
 ok(/Gross \$\{tot\} &middot; net \$\{tot - full\}/.test(src), 'scorecard shows gross and full-handicap net');

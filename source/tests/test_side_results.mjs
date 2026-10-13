@@ -56,5 +56,28 @@ const mpHtml = A.renderGatheringPayoutHtml(mpSnap, null);
 ok(/Hole by hole/.test(html) && /Hole by hole/.test(mpHtml), 'both panels carry the hole-by-hole strip');
 ok(/3&amp;2/.test(mpHtml) && /data-gp-btn/.test(mpHtml) === false, 'Match Play only round: result on top, single sort (no buttons)');
 
+// winner-first: the winner's number leads, whichever side they were listed on
+{
+  const row = { games: ['matchplay'], dollar_per_player: 12, game_configs: { matchplay: { dollar_per_player: 12, basis: 'gross', period: 'fbt', matches: [['Ann', 'Bob']] } } };
+  // Bob wins front and back, halves the middle
+  const snapB = E.computeGatheringGamesPayout(row, [card('Ann', h => (h <= 6 || h > 12 ? 5 : 4)), card('Bob', h => (h <= 6 || h > 12 ? 4 : 4))], {}, []);
+  const r = A.sideGroupResults(snapB.matchplay)[0];
+  ok(r.winner === 1 && /^3 – 0$/.test(r.big), 'period pots read winner-first: 3 – 0 (got ' + r.big + ')');
+  ok(/holes 6 – 0|holes 12 – 0/.test(r.small) || /holes \d+ – \d+/.test(r.small), 'holes tally present');
+  const hh = r.small.match(/holes (\d+) – (\d+)/); ok(hh && Number(hh[1]) >= Number(hh[2]), 'holes tally is the winner\'s first (got ' + r.small + ')');
+}
+// the money table: antes handed back get their own column, net vs buy-in shown
+{
+  const row = { games: ['matchplay'], dollar_per_player: 12, game_configs: { matchplay: { dollar_per_player: 12, basis: 'gross', period: 'fbt', matches: [['Ann', 'Bob']] } } };
+  const snap2 = E.computeGatheringGamesPayout(row, [card('Ann', h => (h <= 6 ? 4 : 5)), card('Bob', h => (h <= 6 ? 5 : 5))], {}, []);
+  const t = A.renderGatheringPayoutHtml(snap2, null).replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
+  ok(/↩/.test(A.renderGatheringPayoutHtml(snap2, null)), 'a halved pot adds the antes-back column');
+  ok(/buy-in/.test(t) && /\+\$/.test(t), 'net vs buy-in shown with a plus for winners (got ' + t.slice(0, 300) + ')');
+}
+// initials never collide
+const fb = vm.runInContext(extractFn(src, 'fbIni') + ';fbIni', ctx);
+ok(fb(['Test2 Two'], ['Test3 Three']) !== fb(['Test3 Three'], ['Test2 Two']) && fb(['Test2'], ['Test3']) === 'Test2', 'Test2 / Test3 get distinct initials (got ' + fb(['Test2'], ['Test3']) + ')');
+ok(fb(['Brian'], ['Tony']) === 'B', 'normal names stay one letter');
+
 console.log(`test_side_results: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
