@@ -1,3 +1,6 @@
+v4.26.3 · 2026-10-13
+Deployed: 2026-10-13 (Alternate Shot Live Actions: a team's handicap strokes show ONCE per team on each hole (the hole boxes used to draw the pair's dots twice, once per partner), and the hole detail says "team gets a stroke, net N" instead of repeating it under each player. No Worker change.)
+
 v4.26.2 · 2026-10-13
 Deployed: 2026-10-13 (Handicap strokes now match each game. Alternate Shot and Match Play do NOT use the round's 95% allowance; they use their own. The game details screen lists, per game, which strokes apply: the 95% line names the games that use it (Skins, BestBall, ...), and Alternate Shot shows each PAIR's strokes (50% of the two course handicaps added) while Match Play shows each player's (their own allowance %, off the low if chosen). "Strokes by hole" gets a section per game with the arithmetic and the stroke holes, and the Live Match Play screen uses the same numbers. No Worker change.)
 
