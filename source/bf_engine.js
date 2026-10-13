@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.16.5';
+  const ENGINE_VERSION = '1.16.6';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1408,15 +1408,39 @@
     // dollars per period, so it is rounded down to a multiple of that and the spare dollars go to whichever main can take them.
     const mains = ['fourball', 'lowscore'].filter(has);
     if (mains.length) {
-      const fixedPer = (out.birdieball ? out.birdieball.dollar_per_player : 0) + (out.cttp ? out.cttp.dollar_per_hole * out.cttp.holes / n : 0);
-      const main = has('skins') || has('birdiepay') ? 0.5 * B : Math.max(mains.length, B - fixedPer);
+      const cttpPer = out.cttp ? out.cttp.dollar_per_hole * out.cttp.holes / n : 0;
+      const bbTarget = out.birdieball ? out.birdieball.dollar_per_player : 0;
+      const leftoverGame = has('skins') || has('birdiepay');
+      const main = leftoverGame ? 0.5 * B : Math.max(mains.length, B - cttpPer - bbTarget);
       const pn = g => Math.max(1, Math.floor(Number(periods && periods[g]) || 1));
+      const lo = g => Math.max(pn(g), pn(g) * Math.floor(main / mains.length / pn(g)));
       const tot = {};
-      mains.forEach(g => { const k = pn(g); tot[g] = Math.max(k, k * Math.floor(main / mains.length / k)); });
+      mains.forEach(g => { tot[g] = lo(g); });
+      if (!leftoverGame) {
+        // Nothing (Skins, Birdie Payouts) takes what is left, so land the whole buy-in. Each main is a whole number per period:
+        // try rounding each one down and up, and keep the combination that leaves MiserBall (the one game that can be any
+        // dollar amount) closest to its target. $10 with a 3-period Fourball: $9 + $1 beats $6 + $4.
+        let best = null;
+        for (let mask = 0; mask < (1 << mains.length); mask++) {
+          const t = {}; let sum = 0;
+          mains.forEach((g, i) => { t[g] = lo(g) + ((mask >> i) & 1 ? pn(g) : 0); sum += t[g]; });
+          const rest = B - cttpPer - sum;
+          if (out.birdieball ? rest < 1 : rest < -1e-9) continue;
+          const cost = (out.birdieball ? Math.abs(rest - bbTarget) : rest) + sum * 1e-6;
+          if (!best || cost < best.cost) best = { t, rest, cost };
+        }
+        if (best) {
+          mains.forEach(g => { tot[g] = best.t[g]; });
+          if (out.birdieball) out.birdieball = { dollar_per_player: Math.round(best.rest) };
+        }
+      }
       let spare = Math.floor(main - mains.reduce((a, g) => a + tot[g], 0));
-      for (let moved = true; moved && spare > 0;) {
-        moved = false;
-        mains.forEach(g => { if (spare >= pn(g)) { tot[g] += pn(g); spare -= pn(g); moved = true; } });
+      if (!leftoverGame && !out.birdieball) spare = Math.floor(B - cttpPer - mains.reduce((a, g) => a + tot[g], 0));
+      if (leftoverGame || !out.birdieball) {
+        for (let moved = true; moved && spare > 0;) {
+          moved = false;
+          mains.forEach(g => { if (spare >= pn(g)) { tot[g] += pn(g); spare -= pn(g); moved = true; } });
+        }
       }
       mains.forEach(g => { out[g] = { dollar_per_player: tot[g] }; });
     }

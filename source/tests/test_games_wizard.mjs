@@ -23,7 +23,7 @@ function world(existing) {
     let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round', win_by: 'strokes', scope: 'field' }; let _gamesFormFourballNote = ''; let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' };
     let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, ranking: false, players: {} }; let _gamesFormTees = [{ id: 1, tee_name: 'White' }]; let _gamesFormMembers = new Map(); let _gamesFormPar3Holes = []; let _gamesFormVenueParDataAvailable = false;
     ${uniq.map(n => extractFn(src, n)).join('\n')}
-    this.api = { renderGatheringGamesForm, toggleGamesFormGame, gwNext, gwPrev, gwGoTo, gwSteps, submitGatheringGames, setGamesFormFourballBasis, setGamesFormRanking, setGamesFormBasis, setGamesFormLowscoreBasis, hcp: () => _gamesFormHcp, state: () => _gw, selected: () => _gamesFormSelected };`, ctx);
+    this.api = { renderGatheringGamesForm, toggleGamesFormGame, gwNext, gwPrev, gwGoTo, gwSteps, submitGatheringGames, setGamesFormFourballBasis, setGamesFormRanking, setGamesFormFourballPeriod, setGamesFormBasis, setGamesFormLowscoreBasis, hcp: () => _gamesFormHcp, state: () => _gw, selected: () => _gamesFormSelected };`, ctx);
   return { ctx, api: ctx.api, dom, toasts, posts };
 }
 const vis = d => [...d.window.document.querySelectorAll('.gw-pane')].filter(e => e.style.display === 'block').map(e => e.id.replace('gw-pane-', ''));
@@ -90,5 +90,16 @@ const label = d => d.window.document.getElementById('gw-step-label').textContent
   ok(a.hcp().ranking === false, 'once the host unticks it, it stays unticked');
   a.setGamesFormRanking(true); a.setGamesFormBasis('skins_basis', 'gross'); a.setGamesFormFourballBasis('gross');
   ok(a.hcp().ranking === true, 'and a host-ticked ranking stays on');
+}
+{ // the money screen spells out the periods and the total, so the host does no mental math
+  const t = world(), a = t.api, doc = t.dom, d = doc.window.document;
+  a.renderGatheringGamesForm(7, { gatheringId: 7, name: 'T' }, null);
+  a.toggleGamesFormGame('birdieball'); a.toggleGamesFormGame('fourball'); a.setGamesFormFourballPeriod('sixes');
+  a.gwGoTo('money'); d.getElementById('games-form-dpp').value = '10'; t.ctx.onGamesFormDppInput();
+  const row = d.getElementById('games-form-split').textContent;
+  ok(/6 \/ 6 \/ 6 · 3 pots/.test(row), 'the Fourball row names the periods: ' + row.slice(0, 120));
+  eq([d.getElementById('gw-split-fb').value, d.getElementById('gw-split-bb').value], ['3', '1'], '$10 lands as $3 a period ($9) plus MiserBall $1');
+  ok(/3 × \$3 = \$9 each/.test(row), 'and shows 3 × $3 = $9 each');
+  ok(/All \$10\.00 is in a game/.test(row), 'and confirms the whole buy-in is in a game');
 }
 console.log(`games wizard: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

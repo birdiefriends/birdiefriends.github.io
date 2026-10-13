@@ -3620,7 +3620,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.16.5"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.16.6"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -18870,8 +18870,17 @@ function gamesFormSplitHtml() {
   const inp = (id, val, fn, unit) => `<span style="font-size:0.86rem">$</span><input type="number" id="${id}" min="0.01" step="0.01" value="${val || ''}" inputmode="decimal" oninput="${fn}(this.value)" style="width:78px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.78rem;color:var(--text-muted)">${unit}</span>`;
   const row = (icon, name, ctl) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border)"><span style="flex:1;font-size:0.9rem;font-weight:600">${icon} ${name}</span>${ctl}</div>`;
   const per = (c, n) => n > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / n * 100) / 100 : '') : (c.dollar_per_player || '');
-  if (sel.has('fourball')) { const n = fourballSegCount(_gamesFormFourballConfig); rows.push(row('🤝', 'Fourball', inp('gw-split-fb', per(_gamesFormFourballConfig, n), 'setGamesFormFourballDollarPerPlayer', n > 1 ? 'per player, per period' : 'per player'))); }
-  if (sel.has('lowscore')) { const n = lowscoreSegCount(_gamesFormLowscoreConfig); rows.push(row('🎯', 'Low Score', inp('gw-split-ls', per(_gamesFormLowscoreConfig, n), 'setGamesFormLowscoreDollarPerPlayer', n > 1 ? 'per player, per period' : 'per player'))); }
+  // A game cut into periods reads as the host thinks of it: the periods, then $ a period, then what each player puts in all.
+  const periodRow = (icon, name, c, n, id, fn) => {
+    const pk = BFEngine.periodKey(c), label = (BFEngine.PERIODS[pk] || BFEngine.PERIODS.round).label, each = per(c, n), tot = Number(c.dollar_per_player) || 0;
+    const money = v => '$' + (Math.round(v * 100) / 100).toFixed(Number.isInteger(Math.round(v * 100) / 100) ? 0 : 2);
+    const sub = n > 1 ? `${escapeHtml(label)} · ${n} pots` : 'one pot, whole round';
+    const unit = n > 1 ? 'a period' : 'per player';
+    const sum = n > 1 ? `<div style="font-size:0.8rem;text-align:right;margin-top:3px;white-space:nowrap">${n} × ${money(Number(each) || 0)} = <b>${money(tot)}</b> each</div>` : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--border)"><span style="flex:1;min-width:0"><span style="display:block;font-size:0.9rem;font-weight:600">${icon} ${name}</span><span style="display:block;font-size:0.76rem;color:var(--text-muted);margin-top:1px">${sub}</span></span><span style="display:block"><span style="display:flex;align-items:center;gap:6px;justify-content:flex-end"><span style="font-size:0.86rem">$</span><input type="number" id="${id}" min="0.01" step="0.01" value="${each || ''}" inputmode="decimal" oninput="${fn}(this.value)" style="width:78px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.78rem;color:var(--text-muted);min-width:58px">${unit}</span></span>${sum}</span></div>`;
+  };
+  if (sel.has('fourball')) rows.push(periodRow('🤝', 'Fourball', _gamesFormFourballConfig, fourballSegCount(_gamesFormFourballConfig), 'gw-split-fb', 'setGamesFormFourballDollarPerPlayer'));
+  if (sel.has('lowscore')) rows.push(periodRow('🎯', 'Low Score', _gamesFormLowscoreConfig, lowscoreSegCount(_gamesFormLowscoreConfig), 'gw-split-ls', 'setGamesFormLowscoreDollarPerPlayer'));
   if (sel.has('cttp')) rows.push(row('🎯', 'CTP', inp('gw-split-cttp', _gamesFormCttpConfig.dollar_per_hole, 'setGamesFormCttpDollarPerHole', 'a hole')));
   if (sel.has('birdieball')) rows.push(row('🐉', 'MiserBall', inp('gw-split-bb', _gamesFormBirdieballConfig.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer', 'per player')));
   if (sel.has('birdiepay')) rows.push(row('🐤', 'Birdie Payouts', inp('gw-split-bp', _gamesFormBirdiepayConfig.dollar_per_birdie, 'setGamesFormBirdiepayDollarPerBirdie', 'a birdie')));
@@ -18886,6 +18895,7 @@ function gamesFormSplitHtml() {
       + (sel.has('birdieball') ? _gamesFormBirdieballConfig.dollar_per_player || 0 : 0) + (sel.has('cttp') ? (_gamesFormCttpConfig.dollar_per_hole || 0) * (_gamesFormCttpConfig.holes || []).length / nPl : 0);
     const left = Math.round((dppNow - used) * 100) / 100;
     if (left > 0.004) gap = `<div style="font-size:0.76rem;color:#b8860b;margin-top:6px;line-height:1.45">$${left.toFixed(2)} of each $${dppNow.toFixed(2)} is not in any game, so nobody plays for it. Raise an amount, or lower the buy-in.</div>`;
+    else if (left > -0.004) gap = `<div style="font-size:0.76rem;color:var(--green-dark);margin-top:6px">✓ All $${dppNow.toFixed(2)} is in a game.</div>`;
   }
   return `<div style="font-size:0.8rem;font-weight:700;margin:12px 0 2px">How it splits <span style="font-weight:400;color:var(--text-muted)">· type over any amount</span></div>${rows.join('')}${gap}`;
 }
