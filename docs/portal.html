@@ -16322,9 +16322,17 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     }
     if (f.segments) {
       const sg = f.segments;
+      // "Brian & Test3 won by 2 holes": who is ahead on holes, not a bare 4-2.
+      const holesLead = (x, prs) => {
+        const a = Number(x.holes_won[0]) || 0, b = Number(x.holes_won[1]) || 0, d = Math.abs(a - b);
+        if (!d) return 'holes tied';
+        const pr = prs && prs[a > b ? 0 : 1];
+        const who = pr && pr.length ? pr.map(n => esc(String(n).trim().split(/\s+/)[0])).join(' &amp; ') : (a > b ? 'First pair' : 'Second pair');
+        return `${who} won by ${d} hole${d === 1 ? '' : 's'}`;
+      };
       h += (sg.groups || []).map(g => `<div style="padding:4px 0 6px;border-bottom:1px solid rgba(0,0,0,0.06)">
         ${sg.scope === 'group' ? `<div style="font-size:0.74rem;font-weight:700;margin-bottom:2px">Group ${esc(g.group)}: ${g.pairs.map(pr => pr.map(esc).join(' &amp; ')).join(' vs ')}</div>` : ''}
-        ${g.segments.map(x => line(`${esc(x.label)} <span style="color:var(--text-muted)">${money(x.pot)}${x.holes_won ? ` · holes ${esc(x.holes_won[0])}-${esc(x.holes_won[1])}${x.halved ? `, ${esc(x.halved)} halved` : ''}` : (Array.isArray(x.totals) && x.totals.every(v => v != null) ? ` · ${x.totals.map(esc).join(' vs ')} strokes` : '')}</span>`,
+        ${g.segments.map(x => line(`${esc(x.label)} <span style="color:var(--text-muted)">${money(x.pot)}${x.holes_won ? ` · ${holesLead(x, g.pairs)}` : (Array.isArray(x.totals) && x.totals.every(v => v != null) ? ` · ${x.totals.map(esc).join(' vs ')} strokes` : '')}</span>`,
           x.status === 'won' ? `<b>${x.winner.map(esc).join(' &amp; ')}</b> ${money(x.per_player)} each` : (x.status === 'push' ? `<span style="color:var(--text-muted)">Push, ante back</span>` : `<span style="color:#b8860b">Not finished, ante back</span>`))).join('')}</div>`).join('');
     }
     const heat = fourballResultsHeatHtml(f, fbCfg);

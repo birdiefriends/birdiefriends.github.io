@@ -47,7 +47,7 @@ const netRow = { ...row, game_configs: { fourball: { ...row.game_configs.fourbal
   const sc = [card('Ann', { 1: 3 }), card('Bob'), card('Cy'), card('Dee')];
   const h = ctx.f.renderGatheringPayoutHtml(E.computeGatheringGamesPayout(segRow, sc, {}, []));
   ok(h.includes('Front 9') && h.includes('Back 9') && h.includes('Total'), 'segments: three segment lines');
-  ok(/holes 1-0/.test(h) && h.includes('Ann &amp; Bob'), 'segments: holes-won tally and the winner');
+  ok(/Ann &amp; Bob won by 1 hole/.test(h) && h.includes('Ann &amp; Bob'), 'segments: holes-won tally and the winner');
   ok(/Push, ante back/.test(h), 'segments: a tied segment says push');
   ok(/Front 9, Back 9 and Total<\/b>, a segment goes to the pair that wins more holes/.test(h) && /antes \$15 \(\$5 per segment\)/.test(h) && /Each foursome is its own match/.test(h), 'segments: variant, win-by, ante and scope spelled out');
   ok(/pot is \$5 × the players in the match/.test(h), 'segments: says how a segment pot is built');

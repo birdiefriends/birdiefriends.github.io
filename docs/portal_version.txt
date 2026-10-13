@@ -1,3 +1,6 @@
+v4.21.3 · 2026-10-13
+Deployed: 2026-10-13 (Fourball results say who won on holes in plain words. Instead of "holes 4-2, 3 halved" each period reads "Brian & Test3 won by 2 holes" (or "holes tied"). No Worker change.)
+
 v4.21.2 · 2026-10-13
 Deployed: 2026-10-13 (Gross and net are now labelled in Net, off the low rounds. The My History scorecard shows two lines: gross and net on the player's full handicap (what the Summary's Net column ranks), and the game's own net with its strokes, e.g. Fourball net 75 (1 stroke, off the low). The dots mark the game's strokes. In the Summary, a player whose game strokes differ from the full allowance shows both under their name (8 strokes · 1 in Fourball), and How it was played explains the difference. No Worker change.)
 
