@@ -3620,7 +3620,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.16.6"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.16.7"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -16280,6 +16280,19 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     if (b.mode === 'kept') h += `<div style="font-size:0.78rem">Kept it: ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)} each</div>`;
     else if (b.mode === 'longest') h += `<div style="font-size:0.78rem">Nobody kept it — held longest (#${esc(b.longest_hole)}, stroke ${esc(b.longest_stroke)}): ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)}${b.winners.length > 1 ? ' each' : ''}</div>`;
     else h += `<div style="font-size:0.78rem;color:var(--text-muted)">No answers recorded — ${money(b.given_back_each)} back to each player</div>`;
+    // Every player, not just the winners: kept it / lost it where / no answer (older results lack this list).
+    if (Array.isArray(b.players) && b.players.length) {
+      const rank = p => p.won ? 0 : p.status === 'kept' ? 1 : p.status === 'lost' ? 2 : 3;
+      const lostAt = p => (Number(p.hole) || 0) * 100 + (Number(p.stroke) || 0);
+      const rows = b.players.slice().sort((x, y) => rank(x) - rank(y) || lostAt(y) - lostAt(x) || x.player.localeCompare(y.player));
+      h += `<div style="margin-top:6px">${rows.map(p => {
+        const what = p.status === 'kept' ? 'Kept it'
+          : p.status === 'lost' ? `Lost it${p.hole ? ` on #${esc(p.hole)}${p.stroke ? `, stroke ${esc(p.stroke)}` : ''}` : ''}`
+          : 'No answer';
+        const col = p.status === 'none' ? 'var(--danger, #c0392b)' : 'var(--text-muted)';
+        return `<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.06)">${line(`<b>${esc(p.player)}</b> <span style="color:${col}">${what}</span>`, p.won ? `🐉 ${money(b.per_winner)}` : '')}</div>`;
+      }).join('')}</div>`;
+    }
     panels.push({ key: 'bb', tab: '🐉 Miser', html: h });
   }
   // ── Birdie Payouts ──
@@ -16575,7 +16588,7 @@ async function openGatheringCloseSheet(gatheringId) {
       ? `<div style="background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
           🐉 MiserBall
           ${recon.bbLost.length ? `<div style="color:var(--text-muted);padding:2px 0">Lost it (from alerts / scorecards): ${recon.bbLost.map(a => `<b>${esc(a.player)}</b>${a.hole ? ` #${esc(a.hole)}` : ''}`).join(', ')}</div>` : ''}
-          ${recon.bbMissing.length ? `<div style="padding:2px 0">No answer yet — they can't win it until you say they kept it:</div>
+          ${recon.bbMissing.length ? `<div style="padding:2px 0"><b>Close is on hold.</b> No MiserBall answer for ${recon.bbMissing.length === 1 ? 'this player' : 'these players'}. Tap Kept it, or record where they lost it in the Live Panel, then Refresh:</div>
             ${recon.bbMissing.map(n => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0"><b>${esc(n)}</b>
               <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcBbKept(${gatheringId}, ${esc(JSON.stringify(n))})">Kept it</button></div>`).join('')}` : ''}</div>`
       : '';
@@ -16591,7 +16604,7 @@ async function openGatheringCloseSheet(gatheringId) {
       ? `<div style="background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
           ❓ A scorecard is under a name nobody registered: <b>${recon.unregisteredCards.map(esc).join(', ')}</b></div>`
       : '';
-    const closeBlocked = !cards.length || recon.blocking;
+    const closeBlocked = !cards.length || recon.blocking || recon.bbMissing.length > 0;
     body.innerHTML = `
       ${statusLine}${spotsHtml}${hcHtml}${bbHtml}${scratchHtml}${addedHtml}${strayHtml}${missingHtml}${incompleteHtml}
       ${alreadyClosed ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Already closed — saving again replaces the earlier result.</div>` : ''}
@@ -16599,7 +16612,7 @@ async function openGatheringCloseSheet(gatheringId) {
       <div style="display:flex;gap:8px;margin-top:14px">
         <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openGatheringCloseSheet(${gatheringId})">🔄 Refresh</button>
         <button class="btn btn-primary btn-sm" id="btn-gathering-close-confirm" style="flex:2" ${closeBlocked ? 'disabled' : ''}
-          onclick="confirmGatheringClose()">${openSpots.length ? '🪑 Open spots left' : recon.noHandicap.length ? '⚖️ Settle handicaps first' : `🏁 Close with ${cards.length} player${cards.length === 1 ? '' : 's'}`}</button>
+          onclick="confirmGatheringClose()">${openSpots.length ? '🪑 Open spots left' : recon.noHandicap.length ? '⚖️ Settle handicaps first' : recon.bbMissing.length ? `🐉 Confirm MiserBall for ${recon.bbMissing.length} first` : `🏁 Close with ${cards.length} player${cards.length === 1 ? '' : 's'}`}</button>
       </div>
       ${openSpots.length && cards.length && !recon.noHandicap.length
         ? `<button class="btn btn-secondary btn-sm" id="btn-gathering-close-ignore" style="width:100%;margin-top:8px" onclick="confirmGatheringClose(true)">🏁 Close anyway — ignore ${openSpots.length} open spot${openSpots.length === 1 ? '' : 's'}</button>` : ''}`;

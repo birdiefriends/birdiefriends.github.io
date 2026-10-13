@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.16.6';
+  const ENGINE_VERSION = '1.16.7';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -255,9 +255,20 @@
         const longest = mode === 'longest'
           ? answers.filter(a => winners.includes(L.canonical.get(norm(a.player_name))))[0]
           : null;
+        // Every player's status, so the result card can show the whole story (kept / lost where / no answer).
+        const byName = new Map(answers.map(a => [norm(a.player_name), a]));
+        const roster = [...L.rows.values()].map(r => {
+          const a = byName.get(norm(r.player));
+          const status = !a ? 'none' : (a.kept ? 'kept' : 'lost');
+          return { player: r.player, status,
+            hole: status === 'lost' && a.lost_hole != null ? a.lost_hole : null,
+            stroke: status === 'lost' && a.lost_stroke != null ? a.lost_stroke : null,
+            won: winners.includes(r.player) };
+        });
         return Object.assign({
           pot, mode, winners, per_winner: perWinner, given_back_each: givenBackEach,
-          longest_hole: longest ? longest.lost_hole : null, longest_stroke: longest ? longest.lost_stroke : null
+          longest_hole: longest ? longest.lost_hole : null, longest_stroke: longest ? longest.lost_stroke : null,
+          players: roster
         }, capped ? { capped: true, configured_pot: configuredPot } : {});
       }
     },

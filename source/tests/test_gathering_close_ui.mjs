@@ -27,7 +27,7 @@ function setup({ player = 'Brian Hager', status = 'open', hostId = 'Brian Hager'
         { player: 'Brian Hager', holes: h({ 1: 4 }) }, { player: 'Brian Hager', holes: h({ 1: 3 }) }, // newer (4) first — older 3 must be ignored
         { player: 'Scott Justus', holes: h({ 2: 3 }) }, { player: 'Tony Choy', holes: Object.assign(h({}), { 4: null }) } ] }) }; }
       if (url.includes('/bfe/gathering-spots?gathering_id=')) return { json: async () => ({ ok: true, spots: [] }) };   // Dev-90: open spots (none here; see test_open_spots_ui.mjs)
-      if (url.includes('/birdieball-answers')) return { json: async () => ({ ok: true, answers: [{ player_name: 'Tony Choy', kept: true }] }) };
+      if (url.includes('/birdieball-answers')) return { json: async () => ({ ok: true, answers: [{ player_name: 'Tony Choy', kept: true }, { player_name: 'Brian Hager', kept: false, lost_hole: 5, lost_stroke: 2 }, { player_name: 'Scott Justus', kept: false, lost_hole: 9, lost_stroke: 1 }] }) };
       throw new Error('unexpected ' + url);
     }
   };

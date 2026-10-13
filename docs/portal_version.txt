@@ -1,3 +1,6 @@
+v4.23.3 · 2026-10-13
+Deployed: 2026-10-13 (MiserBall, no guessing. 1) The Miser tab on a closed result now lists every player: Kept it, Lost it on #14 stroke 1, or No answer, with the winner marked and paid. 2) Close & Calculate holds the Close button until every player who turned in a card has a MiserBall answer, because live scoring no longer asks it on a scorecard: tap Kept it for each, or record the lost ball in the Live Panel, then Refresh. Results closed before this keep the old short view. No Worker change.)
+
 v4.23.2 · 2026-10-13
 Deployed: 2026-10-13 (Games setup, The money screen. 1) The suggested split now uses the whole buy-in: with a $10 buy-in, a 3-period Fourball and MiserBall it suggests Fourball $9 and MiserBall $1, not $6 + $2. 2) The Fourball and Low Score rows spell out the periods: "6 / 6 / 6 · 3 pots", "$ 3 a period", "3 × $3 = $9 each", so the host does no arithmetic. A green line confirms "All $10.00 is in a game." No Worker change.)
 

@@ -40,7 +40,12 @@ for (let i = 0; i < 5000; i++) {
   const args = [cfg, cards, rnd() < 0.05 ? null : leaders, rnd() < 0.05 ? undefined : bb];
   let a, b, ea, eb;
   try { a = JSON.stringify(OLD(...JSON.parse(JSON.stringify(args)))); } catch (e) { ea = String(e); }
-  try { b = JSON.stringify(E.computeGatheringGamesPayout(...JSON.parse(JSON.stringify(args)))); } catch (e) { eb = String(e); }
+  try {
+    const nr = E.computeGatheringGamesPayout(...JSON.parse(JSON.stringify(args)));
+    // v4.23.3: the one additive field. birdieball.players is the per-player status list for the result card; everything else must still match.
+    if (nr && nr.birdieball) delete nr.birdieball.players;
+    b = JSON.stringify(nr);
+  } catch (e) { eb = String(e); }
   // JSON round-trip on inputs so neither side can mutate the other's copy
   // (NaN/undefined become null/absent identically for both).
   // Dev-89: the ONE deliberate departure from Dev-87. A CTP purse / BirdieBall that is more than the
