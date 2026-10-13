@@ -62,7 +62,7 @@ await bad('birdieball with no config at all', { games: ['birdieball'] });
 await bad('birdiepay with no $ amount', { games: ['birdiepay'], birdiepay_config: { pars: PARS } });
 await bad('cttp with no $ amount', { games: ['cttp'], cttp_config: { holes: [3] } });
 
-// 3b. Fourball (Dev-93): arrives only through game_configs, validated by the same schema
+// 3b. BestBall (Dev-93): arrives only through game_configs, validated by the same schema
 const FB = { dollar_per_player: 5, basis: 'gross', net_mode: 'own', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] };
 db = mk(true);
 [st, j] = await call(db, 'POST', '/bfe/gathering-games', base({ games: ['fourball', 'skins'], game_configs: { fourball: FB } }));
@@ -73,7 +73,7 @@ await bad('fourball with one pair', { games: ['fourball'], game_configs: { fourb
 await bad('fourball player in two pairs', { games: ['fourball'], game_configs: { fourball: { ...FB, pairs: [['Ann', 'Bob'], ['Ann', 'Di']] } } });
 await bad('fourball with no config', { games: ['fourball'] });
 await bad('fourball bad net mode', { games: ['fourball'], game_configs: { fourball: { ...FB, net_mode: 'weird' } } });
-// Fourball Net must store the per-player handicap setup even when Skins/Birdie Pay are gross
+// BestBall Net must store the per-player handicap setup even when Skins/Birdie Pay are gross
 const SI = Array.from({ length: 18 }, (_, i) => i + 1);
 db = mk(true);
 [st, j] = await call(db, 'POST', '/bfe/gathering-games', base({ games: ['fourball'], game_configs: { fourball: { ...FB, basis: 'net' } },

@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.17.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.18.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -689,7 +689,7 @@ const GAME_SCHEMAS = {
     ]
   },
   "fourball": {
-    "label": "Fourball",
+    "label": "BestBall",
     "config": [
       {
         "key": "dollar_per_player",
@@ -770,6 +770,143 @@ const GAME_SCHEMAS = {
         "required": true
       }
     ]
+  },
+  "altshot": {
+    "label": "Alternate Shot",
+    "config": [
+      {
+        "key": "dollar_per_player",
+        "type": "money",
+        "label": "$ per player",
+        "default": 0
+      },
+      {
+        "key": "basis",
+        "type": "enum",
+        "label": "Gross or Net",
+        "values": [
+          "gross",
+          "net"
+        ],
+        "default": "gross"
+      },
+      {
+        "key": "net_mode",
+        "type": "enum",
+        "label": "Net strokes",
+        "values": [
+          "own",
+          "low"
+        ],
+        "default": "own"
+      },
+      {
+        "key": "allowance",
+        "type": "int",
+        "label": "Handicap allowance %",
+        "default": 50,
+        "min": 1
+      },
+      {
+        "key": "period",
+        "type": "enum",
+        "label": "Scoring period",
+        "values": [
+          "round",
+          "front_back",
+          "fbt",
+          "sixes"
+        ],
+        "default": "round"
+      },
+      {
+        "key": "win_by",
+        "type": "enum",
+        "label": "Won by",
+        "values": [
+          "strokes",
+          "holes"
+        ],
+        "default": "strokes"
+      },
+      {
+        "key": "scope",
+        "type": "enum",
+        "label": "Who competes",
+        "values": [
+          "field",
+          "group"
+        ],
+        "default": "field"
+      },
+      {
+        "key": "pairs",
+        "type": "pairs",
+        "label": "Pairs",
+        "default": [],
+        "required": true
+      }
+    ],
+    "moneyOptional": true
+  },
+  "matchplay": {
+    "label": "Match Play",
+    "config": [
+      {
+        "key": "dollar_per_player",
+        "type": "money",
+        "label": "$ per player",
+        "default": 0
+      },
+      {
+        "key": "basis",
+        "type": "enum",
+        "label": "Gross or Net",
+        "values": [
+          "gross",
+          "net"
+        ],
+        "default": "gross"
+      },
+      {
+        "key": "net_mode",
+        "type": "enum",
+        "label": "Net strokes",
+        "values": [
+          "own",
+          "low"
+        ],
+        "default": "own"
+      },
+      {
+        "key": "allowance",
+        "type": "int",
+        "label": "Handicap allowance %",
+        "default": 100,
+        "min": 1
+      },
+      {
+        "key": "period",
+        "type": "enum",
+        "label": "Scoring period",
+        "values": [
+          "round",
+          "front_back",
+          "fbt",
+          "sixes"
+        ],
+        "default": "round"
+      },
+      {
+        "key": "matches",
+        "type": "pairs",
+        "minPairs": 1,
+        "label": "Matches",
+        "default": [],
+        "required": true
+      }
+    ],
+    "moneyOptional": true
   },
   "lowscore": {
     "label": "Low Score",
@@ -882,10 +1019,10 @@ function validateFields(fields, cfg) {
       } else if (f.type === 'pairs') {
         // [[nameA, nameB], ...]: at least two pairs, two different names each, nobody in two pairs
         const names = [];
-        const wellFormed = Array.isArray(v) && v.length >= 2 && v.every(pr => Array.isArray(pr) && pr.length === 2 &&
+        const wellFormed = Array.isArray(v) && v.length >= (f.minPairs || 2) && v.every(pr => Array.isArray(pr) && pr.length === 2 &&
           pr.every(n => typeof n === 'string' && n.trim()) && pr[0].trim().toLowerCase() !== pr[1].trim().toLowerCase());
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
-        if (!wellFormed) errors.push(f.label + ' needs at least two pairs of two different players');
+        if (!wellFormed) errors.push(f.label + ' needs at least ' + ((f.minPairs || 2) === 1 ? 'one pair' : 'two pairs') + ' of two different players');
         else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be in one pair');
       } else if (f.type === 'enum') {
         if (!f.lenient && !(f.values || []).includes(v)) errors.push(f.label + ' must be one of ' + (f.values || []).join('/'));
@@ -1447,7 +1584,9 @@ export default {
       if (!Array.isArray(games) || !games.length || !games.every(g => VALID_GAMES.includes(g))) {
         return new Response(JSON.stringify({ error: `games must be a non-empty array from: ${VALID_GAMES.join(', ')}` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      if (!(Number(dollar_per_player) > 0)) {
+      // Dev-94: a $0 buy-in is allowed when every selected game can be played without money (Alternate Shot, Match Play).
+      const zeroOk = Number(dollar_per_player) === 0 && games.every(g => GAME_SCHEMAS[g] && GAME_SCHEMAS[g].moneyOptional);
+      if (!(Number(dollar_per_player) > 0) && !zeroOk) {
         return new Response(JSON.stringify({ error: 'dollar_per_player must be a positive number' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       // Dev-93: every selected game is validated and cleaned by the SAME schema-driven functions the
@@ -1527,7 +1666,7 @@ export default {
         const hcc = (handicap_config && typeof handicap_config === 'object') ? handicap_config : null;
         const hcPlayers = hcc && hcc.players && typeof hcc.players === 'object' ? hcc.players : null;
         // v4.13.0 — `ranking: true` stores the strokes too (Net/Gross ranking for fun, games stay gross).
-        const hcNet = hcc && (hcc.skins_basis === 'net' || hcc.birdiepay_basis === 'net' || hcc.ranking === true || (cleanCfgs.fourball && cleanCfgs.fourball.basis === 'net')); // Dev-93: Fourball Net needs the per-player strokes too
+        const hcNet = hcc && (hcc.skins_basis === 'net' || hcc.birdiepay_basis === 'net' || hcc.ranking === true || Object.keys(cleanCfgs).some(g => cleanCfgs[g] && cleanCfgs[g].basis === 'net')); // Dev-93: a Net BestBall (or Dev-94 Alternate Shot / Match Play) needs the per-player strokes too
         if (hcNet) {
           // v4.12.0 — an empty player list is allowed: players whose handicap isn't settled yet are
           // left out and flagged at Close & Calculate (the engine plays a missing net player scratch).

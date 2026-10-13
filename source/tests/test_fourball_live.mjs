@@ -1,4 +1,4 @@
-// Dev-93 — Fourball live standings: engine board (partial cards, to-par ranking, net) + Live Panel section.
+// Dev-93 — BestBall live standings: engine board (partial cards, to-par ranking, net) + Live Panel section.
 import fs from 'fs'; import vm from 'vm';
 import { extractFn, loadEngine } from './extract.mjs';
 import { fileURLToPath } from 'url';
@@ -21,7 +21,7 @@ const row = (fb = {}, extra = {}) => ({ games: ['fourball'], dollar_per_player: 
   const early = E.fourballBoard(row(), [card('Ann', 2), card('Bob', 2)], PARS);
   eq(early.rows.map(r => [r.pair.join('&'), r.played]), [['Ann&Bob', 2], ['Cy&Dee', 0]], 'board: a pair with no scores yet sits last, unranked'); eq(early.rows[1].place, null, 'board: unranked pair has no place');
   eq(E.fourballBoard(row(), [], PARS).rows.every(r => r.played === 0), true, 'board: nothing saved yet');
-  ok(E.fourballBoard({ games: ['skins'], dollar_per_player: 10 }, [card('Ann', 18)], PARS) === null, 'board: null when the game has no Fourball');
+  ok(E.fourballBoard({ games: ['skins'], dollar_per_player: 10 }, [card('Ann', 18)], PARS) === null, 'board: null when the game has no BestBall');
   const full = E.fourballBoard(row(), [card('Ann', 18), card('Bob', 18), card('Cy', 18, { 3: 4 }), card('Dee', 18, { 3: 4 })], PARS);
   ok(full.rows.every(r => r.complete) && full.rows[0].pair.join('&') === 'Ann&Bob', 'board: finished cards are marked F and agree with the payout winner');
   const snap = E.computeGatheringGamesPayout(row(), [card('Ann', 18), card('Bob', 18), card('Cy', 18, { 3: 4 }), card('Dee', 18, { 3: 4 })], {}, []);
@@ -50,8 +50,8 @@ const html = ctx.api.fourballLiveSectionHtml(cfg);
 ok(html.includes('Cy &amp; Dee') && html.includes('Ann &amp; Bob') && html.includes('thru 7') && html.includes('thru 5'), 'section: both pairs with holes played');
 ok(html.includes('-1') || html.includes('−1'), 'section: score to par shown'); ok(html.includes('⭐'), 'section: your own pair is marked');
 ok(/gross/.test(html), 'section: says gross');
-await (async () => { ctx._gatheringGamesIndex = new Map([[7, { games: ['skins'] }]]); await ctx.api.loadFourballLive({ gatheringId: 7 }); ok(ctx.api.get() === null, 'loader: no Fourball -> nothing kept'); })();
+await (async () => { ctx._gatheringGamesIndex = new Map([[7, { games: ['skins'] }]]); await ctx.api.loadFourballLive({ gatheringId: 7 }); ok(ctx.api.get() === null, 'loader: no BestBall -> nothing kept'); })();
 // wiring guards
 ok(/loadFourballLive\(getLiveEvent\(\)\)/.test(src) && /loadFourballLive\(evt\);/.test(src), 'panel open and the 60s refresh both reload standings');
-ok(/showFourballSection \? `/.test(src), 'the Fourball section only appears for a Fourball game');
+ok(/showFourballSection \? `/.test(src), 'the BestBall section only appears for a BestBall game');
 console.log(`fourball live: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

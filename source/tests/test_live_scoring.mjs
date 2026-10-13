@@ -37,13 +37,13 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date
   gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null, failNext: false,
   fetch: async (url, opt) => { if (ctx.failNext) throw new Error('offline'); posts.push(JSON.parse(opt.body)); return { json: async () => ({ ok: true }) }; } };
 vm.createContext(ctx);
-const names = ['liveScoringOn','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skMarks','skGot','skAnyStrokes','skDotsHtml','skCardOf','skMergeRemote','skGoFirstOpen','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml'];
+const names = ['liveScoringOn','skPartnerOf','skSetScoreOne','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skMarks','skGot','skAnyStrokes','skDotsHtml','skCardOf','skMergeRemote','skGoFirstOpen','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml'];
 vm.runInContext('let _sk = null; const _skChain = {};\n' + names.map(n => extractFn(src, n)).join('\n') + '\nthis.api={' + names.join(',') + ',get:()=>_sk};', ctx);
 const A = ctx.api;
-const evt = { gatheringId: 7, name: 'Sat Fourball', holes: 18 };
+const evt = { gatheringId: 7, name: 'Sat BestBall', holes: 18 };
 const tick = () => new Promise(r => setTimeout(r, 5));
 
-ok(A.liveScoringOn(config, 7) && !A.liveScoringOn(config, null) && !A.liveScoringOn(null, 7), 'on only for a Fourball round with a panel gid');
+ok(A.liveScoringOn(config, 7) && !A.liveScoringOn(config, null) && !A.liveScoringOn(null, 7), 'on only for a BestBall round with a panel gid');
 ok(!A.liveScoringOn(E.gatheringConfigFromLegacy({ games: ['skins'], dollar_per_player: 10 }), 7), 'a Skins-only round has no live scoring');
 A.skEnsure(evt, config);
 eq(A.skGroups().length, 2, 'two foursomes');

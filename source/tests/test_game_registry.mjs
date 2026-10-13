@@ -82,9 +82,9 @@ for (let t = 0; t < 400; t++) {
   ok(Math.abs(paid + r.unallocated - r.total_pot) < 1e-9, 'fuzz ' + t + ': conservation (' + chosen.join(',') + ')');
 }
 // 7. UI helpers: stable host-facing order, unique uiOrder, text lives only in the definition
-ok(E.gamesInUiOrder().join() === 'fourball,lowscore,skins,cttp,birdieball,birdiepay', 'UI order: Format group first (Fourball, Low Score), then the side games in their old order');
+ok(E.gamesInUiOrder().join() === 'fourball,altshot,matchplay,lowscore,skins,cttp,birdieball,birdiepay', 'UI order: Format group first (BestBall, Low Score), then the side games in their old order');
 ok(new Set(addons.map(id => E.getGame(id).meta.uiOrder)).size === addons.length, 'uiOrder is unique per game');
-ok(E.gamesInUiOrder().includes('fourball') && E.gamesUiMeta().fourball && E.gamesInfo().fourball, 'released Fourball shows in the portal tables');
+ok(E.gamesInUiOrder().includes('fourball') && E.gamesUiMeta().fourball && E.gamesInfo().fourball, 'released BestBall shows in the portal tables');
 ok((() => { const g = E.getGame('fourball'); g.released = false; const hidden = !E.gamesInUiOrder().includes('fourball') && !E.gamesUiMeta().fourball; g.released = true; return hidden; })(), 'the released flag still hides a game when off');
 ok(E.gamesInfo().skins === E.getGame('skins').meta.info && E.gamesSealLabels().birdiepay === 'BIRDIE PAY' && E.gamesUiMeta().birdieball.label === 'MiserBall', 'helpers read the definitions');
 
@@ -107,7 +107,7 @@ ok(!/GAMES_SEAL_LABELS = \{/.test(psrc), 'portal: no hand-written seal table');
 ok(!/const GATHERING_GAMES_META = \{/.test(psrc), 'portal: no hand-written game meta table');
 ok(!/(?:^|\n)\s+(skins|cttp|birdieball|birdiepay):\s+'(?:Every hole|Closest|Everyone|A flat)/.test(psrc), 'portal: no hand-written (i) text for a game');
 ok(/function gamesFormOverCommit[\s\S]{0,900}BFEngine\.potFit\(/.test(psrc), 'portal: over-commit guard uses BFEngine.potFit');
-// 10. Fourball specifics
+// 10. BestBall specifics
 {
   const full = v => Array.from({ length: 18 }, () => v);
   const card = (player, holes, extra) => Object.assign({ player, holes }, extra || {});
@@ -159,11 +159,11 @@ ok(/function gamesFormOverCommit[\s\S]{0,900}BFEngine\.potFit\(/.test(psrc), 'po
   ok(!V({ net_mode: 'weird' }).ok && !V({ dollar_per_player: 0 }).ok, 'bad net_mode / $0 rejected');
   // old snapshots keep their shape: no fourball key unless the game ran
   const plain = E.computeRoundPayout({ v: 1, payout: { entry_per_player: 10 }, addons: [{ id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] }, { scorecards: fives });
-  ok(!('fourball' in plain) && !plain.payouts.some(p => 'fourball' in p), 'snapshots without Fourball keep their exact shape');
+  ok(!('fourball' in plain) && !plain.payouts.some(p => 'fourball' in p), 'snapshots without BestBall keep their exact shape');
   // generic pot-fit sees it
-  ok(E.potFit({ fourball: { dollar_per_player: 5, pairs: PAIRS } }, 10, 4).fixedCost === 20, 'potFit counts the Fourball carve');
+  ok(E.potFit({ fourball: { dollar_per_player: 5, pairs: PAIRS } }, 10, 4).fixedCost === 20, 'potFit counts the BestBall carve');
 }
-// 11. Fourball through the Gathering adapter: the row shape the Worker returns -> payout
+// 11. BestBall through the Gathering adapter: the row shape the Worker returns -> payout
 {
   const full = v => Array.from({ length: 18 }, () => v);
   const SI = Array.from({ length: 18 }, (_, i) => i + 1);
@@ -184,7 +184,7 @@ ok(/function gamesFormOverCommit[\s\S]{0,900}BFEngine\.potFit\(/.test(psrc), 'po
 // Dev-93: picker groups — Format above Side games, driven by the registry
 {
   const m = E.gamesUiMeta();
-  ok(m.fourball.group === 'format' && ['skins','cttp','birdieball','birdiepay'].every(k => m[k].group === 'side'), 'groups: Fourball is a format, the rest are side games');
+  ok(m.fourball.group === 'format' && ['skins','cttp','birdieball','birdiepay'].every(k => m[k].group === 'side'), 'groups: BestBall is a format, the rest are side games');
   ok(E.GAME_GROUPS.map(g => g[1]).join() === 'Format,Side games', 'groups: headings Format / Side games');
   const order = E.gamesInUiOrder(); const lastFormat = Math.max(...order.map((k, i) => m[k].group === 'format' ? i : -1)); const firstSide = order.findIndex(k => m[k].group === 'side');
   ok(lastFormat < firstSide, 'groups: every format sorts before every side game');

@@ -43,14 +43,14 @@ ok(f({ games: ['lowscore', 'skins'] }).lowscore.dollar_per_player === 5, 'with s
   const four = [card('Ann'), card('Bob'), card('Cy'), card('Dee')];
   const hh = ctx.f.renderGatheringPayoutHtml(E.computeGatheringGamesPayout(frow, four, {}, []));
   ok(/How it was played/.test(hh) && /6 \/ 6 \/ 6/.test(hh) && /3 pots/.test(hh) && /won on strokes/.test(hh), 'summary spells out the period, pots and how each is won');
-  ok(/Fourball \(net, off the low · 6 \/ 6 \/ 6\)/.test(hh.replace(/<[^>]*>/g, '')) || /Fourball \(net, off the low · 6 \/ 6 \/ 6\)/.test(hh), 'Fourball tab title carries the period');
+  ok(/BestBall \(net, off the low · 6 \/ 6 \/ 6\)/.test(hh.replace(/<[^>]*>/g, '')) || /BestBall \(net, off the low · 6 \/ 6 \/ 6\)/.test(hh), 'BestBall tab title carries the period');
   const one = ctx.f.renderGatheringPayoutHtml(E.computeGatheringGamesPayout({ ...frow, game_configs: { fourball: { ...frow.game_configs.fourball, period: undefined, win_by: undefined, scope: undefined } } }, four, {}, []));
   ok(/one pot for the whole round/.test(one), 'one pot says so too');
   const lh = ctx.f.renderGatheringPayoutHtml(run({ period: 'fbt' }));
   ok(/How it was played/.test(lh) && /Front \/ Back \/ Total/.test(lh), 'Low Score summary names its period');
 }
 // the save check notices a server that drops the period
-ok(ctx.f.droppedGameSettings({ fourball: { period: 'sixes' } }, { fourball: {} }).join() === 'Fourball scoring period', 'dropped period is caught');
+ok(ctx.f.droppedGameSettings({ fourball: { period: 'sixes' } }, { fourball: {} }).join() === 'BestBall scoring period', 'dropped period is caught');
 ok(ctx.f.droppedGameSettings({ fourball: { period: 'sixes' } }, { fourball: { period: 'sixes' } }).length === 0, 'kept period passes');
 ok(ctx.f.droppedGameSettings({ lowscore: { period: 'round' } }, '{"lowscore":{}}').length === 0, 'whole round needs no period; JSON string accepted');
 ok(ctx.f.droppedGameSettings({ lowscore: { period: 'fbt' } }, null).join() === 'Low Score (whole game)', 'a missing game is caught');

@@ -10,7 +10,7 @@ const names = [...src.matchAll(/^(?:async )?function (gatheringGames\w+|setGames
 const uniq = [...new Set(names)].filter(n => !['gamesFormHcpOutHtml'].includes(n)).concat(['gamesFormHcpOutHtml']);
 function world(existing) {
   const dom = new JSDOM('<body><div id="host-sheet-body"></div></body>'); const toasts = [], posts = [];
-  const meta = { fourball: { label: 'Fourball', icon: 'F', group: 'format' }, lowscore: { label: 'Low Score', icon: 'L', group: 'format' }, skins: { label: 'Skins', icon: 'S' }, cttp: { label: 'CTP', icon: 'C' }, birdieball: { label: 'MiserBall', icon: 'M' }, birdiepay: { label: 'Birdie Payouts', icon: 'B' } };
+  const meta = { fourball: { label: 'BestBall', icon: 'F', group: 'format' }, lowscore: { label: 'Low Score', icon: 'L', group: 'format' }, skins: { label: 'Skins', icon: 'S' }, cttp: { label: 'CTP', icon: 'C' }, birdieball: { label: 'MiserBall', icon: 'M' }, birdiepay: { label: 'Birdie Payouts', icon: 'B' } };
   const ctx = { document: dom.window.document, console, JSON, Math, Number, String, Set, Map, Array, Object, parseFloat, BFEngine: E, GATHERING_GAMES_META: meta,
     showToast: (m, e) => toasts.push([m, !!e]), gatheringData: [{ gatheringId: 7, name: 'T', location: 'X' }], currentPlayer: 'Ann', BFE_API: 'x',
     gatheringsFetchJSON: async (u, o) => { posts.push(JSON.parse(o.body)); return { ok: true }; }, loadHostGamesConfigs: async () => {}, renderHostPanelList: () => {}, _hostGamesByGathering: new Map(),
@@ -37,9 +37,9 @@ const label = d => d.window.document.getElementById('gw-step-label').textContent
   ok(doc.window.document.getElementById('gw-next').textContent === 'Pick at least one game', 'button says to pick');
   a.toggleGamesFormGame('fourball'); a.toggleGamesFormGame('skins');
   eq(a.gwSteps(), ['games', 'fourball', 'fbpairs', 'skins', 'money', 'review'], 'rules per game first, every dollar amount on the last screen before the review');
-  a.gwNext(); eq(vis(doc), ['fourball'], 'step 2 is the Fourball rules alone'); eq(doc.window.document.getElementById('games-wizard').dataset.sub, 'setup', 'setup half');
-  ok(/Step 2 of 6 · Fourball/.test(label(doc)), 'step label: ' + label(doc));
-  a.gwNext(); eq(doc.window.document.getElementById('games-wizard').dataset.sub, 'pairs', 'pairs half on the next step'); ok(/Fourball pairs/.test(label(doc)), 'pairs label');
+  a.gwNext(); eq(vis(doc), ['fourball'], 'step 2 is the BestBall rules alone'); eq(doc.window.document.getElementById('games-wizard').dataset.sub, 'setup', 'setup half');
+  ok(/Step 2 of 6 · BestBall/.test(label(doc)), 'step label: ' + label(doc));
+  a.gwNext(); eq(doc.window.document.getElementById('games-wizard').dataset.sub, 'pairs', 'pairs half on the next step'); ok(/BestBall pairs/.test(label(doc)), 'pairs label');
   a.gwNext(); eq(vis(doc), ['skins'], 'skins alone');
   a.setGamesFormFourballBasis('net');
   ok(a.gwSteps().includes('hcp') && /of 7/.test(label(doc)), 'Net on adds the strokes step and the count');
@@ -48,7 +48,7 @@ const label = d => d.window.document.getElementById('gw-step-label').textContent
   doc.window.document.getElementById('games-form-dpp').value = '20'; a.gwNext(); eq(vis(doc), ['review'], 'review is last');
   ok(doc.window.document.getElementById('btn-save-games').style.display === 'block' && doc.window.document.getElementById('gw-next').style.display === 'none', 'review shows Save, not Next');
   const rv = doc.window.document.getElementById('gw-review').innerHTML;
-  ok(/Fourball/.test(rv) && /Skins/.test(rv) && /Buy-in/.test(rv) && /gwGoTo\('fourball'\)|gwGoTo\('fbpairs'\)/.test(rv), 'review lists each game with a Change link');
+  ok(/BestBall/.test(rv) && /Skins/.test(rv) && /Buy-in/.test(rv) && /gwGoTo\('fourball'\)|gwGoTo\('fbpairs'\)/.test(rv), 'review lists each game with a Change link');
   a.gwPrev(); eq(vis(doc), ['money'], 'Previous goes back one');
   // a problem found on save jumps to the screen that fixes it
   a.gwGoTo('review'); t.toasts.length = 0;
@@ -72,7 +72,7 @@ const label = d => d.window.document.getElementById('gw-step-label').textContent
   const dpp = d.getElementById('games-form-dpp'); dpp.value = '10'; t.ctx.onGamesFormDppInput();
   const bb = d.getElementById('gw-split-bb');
   ok(!!bb && !!d.getElementById('gw-split-fb'), 'the money screen has a box for every game amount');
-  eq([d.getElementById('gw-split-fb').value, bb.value], ['8', '2'], 'the suggestion uses the whole $10: Fourball $8, MiserBall $2');
+  eq([d.getElementById('gw-split-fb').value, bb.value], ['8', '2'], 'the suggestion uses the whole $10: BestBall $8, MiserBall $2');
   bb.value = '3'; t.ctx.setGamesFormBirdieballDollarPerPlayer('3');
   t.ctx.onGamesFormDppInput();
   eq(d.getElementById('gw-split-bb').value, '3', 'a typed MiserBall $3 survives the buy-in changing');
@@ -97,7 +97,7 @@ const label = d => d.window.document.getElementById('gw-step-label').textContent
   a.toggleGamesFormGame('birdieball'); a.toggleGamesFormGame('fourball'); a.setGamesFormFourballPeriod('sixes');
   a.gwGoTo('money'); d.getElementById('games-form-dpp').value = '10'; t.ctx.onGamesFormDppInput();
   const row = d.getElementById('games-form-split').textContent;
-  ok(/6 \/ 6 \/ 6 · 3 pots/.test(row), 'the Fourball row names the periods: ' + row.slice(0, 120));
+  ok(/6 \/ 6 \/ 6 · 3 pots/.test(row), 'the BestBall row names the periods: ' + row.slice(0, 120));
   eq([d.getElementById('gw-split-fb').value, d.getElementById('gw-split-bb').value], ['3', '1'], '$10 lands as $3 a period ($9) plus MiserBall $1');
   ok(/3 × \$3 = \$9 each/.test(row), 'and shows 3 × $3 = $9 each');
   ok(/All \$10\.00 is in a game/.test(row), 'and confirms the whole buy-in is in a game');

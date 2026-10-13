@@ -1,4 +1,4 @@
-// Dev-93 — Fourball step 3: the Games form section (pair editor, Gross/Net + net mode,
+// Dev-93 — BestBall step 3: the Games form section (pair editor, Gross/Net + net mode,
 // recommender button, pot preview, over-commit, save payload) plus recommendPairs unit tests.
 import fs from 'fs'; import vm from 'vm'; import { JSDOM } from 'jsdom';
 import { extractFn, loadEngine } from './extract.mjs';
@@ -98,7 +98,7 @@ const sec = t => t.dom.window.document.getElementById('games-form-fourball-secti
   a.setGamesFormFourballDollarPerPlayer('5');
   a.suggestGamesFormFourballPairs();
   const prev = t.dom.window.document.getElementById('games-form-pot-preview').innerHTML;
-  ok(/Fourball: \$20\.00 \(4 × \$5\.00\)/.test(prev), 'P: preview line shows carve');
+  ok(/BestBall: \$20\.00 \(4 × \$5\.00\)/.test(prev), 'P: preview line shows carve');
   eq(a.gamesFormOverCommit(20, 4).fixedCost, 20, 'P: fixed cost = rate × players');
   ok(a.gamesFormOverCommit(4, 4).problem, 'P: rate above $/player flagged');
   await a.submitGatheringGames(7);

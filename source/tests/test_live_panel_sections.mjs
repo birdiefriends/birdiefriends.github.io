@@ -18,7 +18,7 @@ const sec = (games, gid = 7) => ctx.f(cfg(games), gid);
 eq(ctx.f(null, null), { birdieAlert: true, cttp: true, birdieball: false, fourball: false }, 'no games config (BF Series): Birdie Alert + CTP as always');
 eq(ctx.f(cfg(['fourball']), null), { birdieAlert: true, cttp: true, birdieball: false, fourball: false }, 'no panel gid: classic panel even if a config object is passed');
 // gamed rounds
-eq(sec(['fourball']), { birdieAlert: false, cttp: false, birdieball: false, fourball: true }, 'Fourball only: no Birdie Alert, no CTP');
+eq(sec(['fourball']), { birdieAlert: false, cttp: false, birdieball: false, fourball: true }, 'BestBall only: no Birdie Alert, no CTP');
 eq(sec(['skins']), { birdieAlert: true, cttp: false, birdieball: false, fourball: false }, 'Skins: Birdie Alert on');
 eq(sec(['birdiepay']), { birdieAlert: true, cttp: false, birdieball: false, fourball: false }, 'Birdie Payouts: Birdie Alert on');
 eq(sec(['cttp']), { birdieAlert: false, cttp: true, birdieball: false, fourball: false }, 'CTP only: CTP section, no Birdie Alert');

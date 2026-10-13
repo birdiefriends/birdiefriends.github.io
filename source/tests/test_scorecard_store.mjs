@@ -12,7 +12,7 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 // (a) portal
 ok(/const SCORECARD_API = BFE_API;/.test(portal), 'SCORECARD_API points at the BFE Worker');
 const calls = [...portal.matchAll(/fetch\(`\$\{(\w+)\}\/scorecards([^`]*)`/g)];
-ok(calls.length === 9, 'expected 9 scorecard fetches (Dev-93 added the Fourball live board and live scoring), found ' + calls.length);
+ok(calls.length === 9, 'expected 9 scorecard fetches (Dev-93 added the BestBall live board and live scoring), found ' + calls.length);
 calls.forEach(([whole, api, rest]) => {
   const isCompletionCheck = api === 'BFE_API' && rest.startsWith('?event=');   // Wally Cup Live Panel "all cards in" check — any input type
   ok(api === 'SCORECARD_API' || isCompletionCheck, 'goes through SCORECARD_API: ' + whole);

@@ -30,6 +30,7 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_venue_dialog.mjs` | v4.24.0 Venue Manager: course list (search, Needs setup), one dialog per course, tee / hole-handicap editor (duplicate-handicap check, manual save payload, add by hand) |
 | `test_tee_par.mjs` | v4.25.0 par from the tee: default-tee pick, tee-first `csResolvePars`, Vs Par fill rules, ⭐ save keeps catalog, Par editor modes, Birdie Payouts `pars_by_player` (engine, schema, form) |
 | `test_gc_search.mjs` | GC-API search status persistence, name-variant retry, 429 quota message |
+| `test_side_games.mjs` | v4.26.0 Match Play + Alternate Shot: `matchSegmentResult` (early 3&2, halved, live), pots, play-on, $0, off-the-low vs full, A-S one score per pair, live mirroring, results tabs |
 
 `moselem_tees.json` is a snapshot of Moselem's four real tees (2026-09-24), used as fixture data.
 

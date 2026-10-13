@@ -1,4 +1,4 @@
-// Dev-93 — Fourball pot variants: segments (Front/Back/Total, 6/6/6), strokes vs holes won, foursome vs field, pushes, match view.
+// Dev-93 — BestBall pot variants: segments (Front/Back/Total, 6/6/6), strokes vs holes won, foursome vs field, pushes, match view.
 import { loadEngine } from './extract.mjs';
 let pass = 0, fail = 0;
 const eq = (a, b, m) => { const ok = JSON.stringify(a) === JSON.stringify(b); ok ? pass++ : fail++; if (!ok) console.log('FAIL', m, '\n  got', JSON.stringify(a), '\n  exp', JSON.stringify(b)); };
@@ -115,7 +115,7 @@ const front = v.groups[0].segs[0];
 eq([front.holes_won, front.halved, front.lead, front.leader, front.status, front.played], [[3, 0], 4, 3, 0, 'in_progress', 7], 'view: front tally 3-0, 4 halved, A leads by 3 holes');
 eq(v.groups[0].segs[1].status, 'not_started', 'view: back not started');
 eq(v.groups[0].strokes_lead, 3, 'view: total strokes lead');
-eq(E.fourballMatchView(null, addon), null, 'view: null without a Fourball result');
+eq(E.fourballMatchView(null, addon), null, 'view: null without a BestBall result');
 const solo = E.fourballMatchView(pay(cfg({}, 15, [['Ann', 'Bob'], ['Cy', 'Di'], ['Ed', 'Flo']]), []).fourball, { pairs: [['Ann', 'Bob'], ['Cy', 'Di'], ['Ed', 'Flo']] });
 ok(solo.groups[1].solo === true, 'view: a lone pair is marked solo');
 console.log(`fourball segments: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

@@ -1,4 +1,4 @@
-// Dev-93 Fourball step 4: results in the shared payout renderer (Close preview + My History),
+// Dev-93 BestBall step 4: results in the shared payout renderer (Close preview + My History),
 // the Close reconcile's net check, and the event-card Games details.
 import fs from 'fs'; import vm from 'vm';
 import { extractFn, loadEngine } from './extract.mjs';
@@ -22,7 +22,7 @@ const cards = [card('Ann', { 1: 3 }), card('Bob'), card('Cy'), card('Dee', { 2: 
 const snap = E.computeGatheringGamesPayout(row, cards, {}, []);
 ok(snap.fourball, 'engine ran fourball');
 const html = ctx.f.renderGatheringPayoutHtml(snap);
-ok(html.includes('🤝 Fourball'), 'tab present');
+ok(html.includes('🤝 BestBall'), 'tab present');
 ok(html.includes('Ann &amp; Bob') && html.includes('Cy &amp; Dee'), 'pairs listed');
 ok(/\$10 each/.test(html), 'winning pair paid per player');
 ok(html.includes('Hole by hole') && html.includes('data-fbres=') && html.includes('fbResOpen'), 'hole-by-hole heat map (tappable boxes)');
@@ -32,7 +32,7 @@ ok(!html.includes('<details>'), 'the cramped text list is gone when the heat map
 ok(/>AB</.test(html) && /aria-label="Hole 1, AB won"/.test(html) && /aria-label="Hole 2, CD won"/.test(html) || /aria-label="Hole 2, Halved"|Hole 2, AB won/.test(html), 'boxes carry the winner initials');
 { const old = { ...snap, fourball: { ...snap.fourball } }; delete old.fourball.pairs; const h2 = ctx.f.renderGatheringPayoutHtml(old, row.game_configs.fourball); ok(h2.includes('data-fbres='), 'older closed games: pairs come from the saved game config'); const h3 = ctx.f.renderGatheringPayoutHtml(old); ok(!h3.includes('data-fbres=') && h3.includes('Ann &amp; Bob'), 'no pairs anywhere: results still render without the strip'); }
 ok(html.includes('grid-template-columns') && html.includes('🤝</span>'), 'summary column for fourball');
-ok(!ctx.f.renderGatheringPayoutHtml(E.computeGatheringGamesPayout({ games: ['skins'], dollar_per_player: 20 }, cards, {}, [])).includes('Fourball'), 'no panel when game not played');
+ok(!ctx.f.renderGatheringPayoutHtml(E.computeGatheringGamesPayout({ games: ['skins'], dollar_per_player: 20 }, cards, {}, [])).includes('BestBall'), 'no panel when game not played');
 // incomplete pair + net missing + all-incomplete give-back
 const part = E.computeGatheringGamesPayout(row, [card('Ann'), { player: 'Bob', holes: [4,4,3] }, card('Cy'), card('Dee')], {}, []);
 ok(/holes in/.test(ctx.f.renderGatheringPayoutHtml(part)) || true, 'partial renders');
@@ -53,16 +53,16 @@ const netRow = { ...row, game_configs: { fourball: { ...row.game_configs.fourbal
   ok(/pot is \$5 × the players in the match/.test(h), 'segments: says how a segment pot is built');
   ok(/each foursome is its own match/i.test(h), 'segments: says how it was decided');
 }
-// reconcile: Fourball net with a card lacking strokes blocks, like Skins net
+// reconcile: BestBall net with a card lacking strokes blocks, like Skins net
 const hc = { allowance: 95, skins_basis: 'gross', birdiepay_basis: 'gross', players: { Ann: { strokes: 4 } } };
 const rec = ctx.f.gcReconcile({ config: { games: ['fourball'], handicap_config: hc, game_configs: netRow.game_configs }, cardPlayers: ['Ann', 'Bob'] });
-eq(rec.noHandicap, ['Bob'], 'reconcile: Fourball net flags missing strokes');
+eq(rec.noHandicap, ['Bob'], 'reconcile: BestBall net flags missing strokes');
 eq(ctx.f.gcReconcile({ config: { games: ['fourball'], handicap_config: hc, game_configs: row.game_configs }, cardPlayers: ['Ann', 'Bob'] }).noHandicap, [], 'reconcile: gross fourball does not');
 
 // event card details
 const cfg = E.gatheringConfigFromLegacy(row);
 const body = ctx.f.gatheringGameDetailsBody({ source: 'gathering', gatheringId: 7, name: 'T' }, cfg);
-ok(body.includes('Fourball') && body.includes('$5.00/player') && body.includes('$20.00 pot'), 'details: fourball row + pot');
+ok(body.includes('BestBall') && body.includes('$5.00/player') && body.includes('$20.00 pot'), 'details: fourball row + pot');
 ok(body.includes('Ann &amp; Bob') && body.includes('Cy &amp; Dee'), 'details: pairs shown');
 ok(/Skins · Gross[\s\S]*Gets what's left: \$60\.00/.test(body), 'details: skins remaining after fourball carve');
 // the card says what was played, not just the Format dropdown
@@ -72,7 +72,7 @@ ok(/Skins · Gross[\s\S]*Gets what's left: \$60\.00/.test(body), 'details: skins
   vm.createContext(c2);
   vm.runInContext(['fbVariantText','evtPlayLabel'].map(n => extractFn(src, n)).join('\n') + '\nthis.L=evtPlayLabel;', c2);
   const lbl = c2.L({ gatheringType: 'Individual Play' });
-  ok(/Fourball \(Front\/Back\/Total, holes won\)/.test(lbl) && /Skins/.test(lbl) && !/Individual Play/.test(lbl), 'card label: games with the Fourball variant, not "Individual Play"');
+  ok(/BestBall \(Front\/Back\/Total, holes won\)/.test(lbl) && /Skins/.test(lbl) && !/Individual Play/.test(lbl), 'card label: games with the BestBall variant, not "Individual Play"');
   ok(/^Best Ball · /.test(c2.L({ gatheringType: 'Best Ball' })), 'card label: a non-default Format is kept');
   c2.gatheringIsGamed = () => false;
   eq(c2.L({ gatheringType: 'Individual Play' }), 'Individual Play', 'card label: no games, the Format as before');

@@ -25,3 +25,26 @@ export function loadEngine() {
   const req = createRequire(import.meta.url);
   return req(_f2p(new URL('../bf_engine.js', import.meta.url)));
 }
+
+// Dev-94: portal constants/helpers that many extracted functions now lean on (side-game ids, live side-game picker).
+// Every sandbox gets them as globals so a test only lists the functions it actually exercises.
+import vm from 'vm';
+import fs from 'fs';
+if (!vm.__bfPatched) {
+  vm.__bfPatched = true;
+  const orig = vm.createContext;
+  const portal = fs.readFileSync(_f2p(new URL('../portal.html', import.meta.url)), 'utf8');
+  vm.createContext = function (o, ...rest) {
+    const ctx = orig.call(vm, o || {}, ...rest);
+    if (!('GAMES_FORM_SIDE_IDS' in ctx)) {
+      ctx.GAMES_FORM_SIDE_IDS = ['altshot', 'matchplay'];
+      ctx.LIVE_SIDE_GAMES = ['fourball', 'altshot', 'matchplay'];
+      ctx.GAMES_FORM_REC_ALLOWANCE = { altshot: 50, matchplay: 100 };
+      if (!('_gamesFormSide' in ctx)) ctx._gamesFormSide = {
+        altshot: { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 50, period: 'round', win_by: 'strokes', scope: 'field', pairs: [] },
+        matchplay: { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 100, period: 'round', matches: [] } };
+      try { vm.runInContext(['liveSideGid', 'liveSideSides'].map(n => extractFn(portal, n)).join('\n'), ctx); } catch (e) {}
+    }
+    return ctx;
+  };
+}
