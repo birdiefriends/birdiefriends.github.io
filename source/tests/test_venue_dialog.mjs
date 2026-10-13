@@ -26,12 +26,12 @@ const ctx = {
   },
 };
 vm.createContext(ctx);
-const names = ['escapeHtml', 'escapeHtmlAttr', 'par3HoleNumbers', 'venueDefaultCttpHoles', 'venueCttpStatus', 'venueSetupState', 'venueSetupLine', 'venueChipsHtml', 'setVenueFilter', 'setVenueSearch', 'renderVenueRows',
+const names = ['escapeHtml', 'escapeHtmlAttr', 'teeHolesPars', 'venueDefaultTeeFor', 'venueViewerDefaultTee', 'venueDefaultTeeName', 'venueParsInfo', 'ensureVenueTeeInfo', 'venueSyncParsFromTees', 'par3HoleNumbers', 'venueDefaultCttpHoles', 'venueCttpStatus', 'venueSetupState', 'venueSetupLine', 'venueChipsHtml', 'setVenueFilter', 'setVenueSearch', 'renderVenueRows',
   'adminFetchVenueTeesQuiet', 'venueLoadSetupData', 'loadAdminVenues', 'openVenueDialog', 'closeVenueDialog', 'venueDialogView', 'venueDialogBack',
   'venueParSum', 'venueDialogRowsHtml', 'venueDialogHomeHtml', 'venueMotifEditorHtml', 'venueDialogBodyHtml', 'renderVenueDialog',
   'vmBlankHoles', 'vmNormalizeHoles', 'adminEditVenueTee', 'adminNewVenueTee', 'vmNum', 'vmTeeCapture', 'venueTeeCheck', 'venueTeeEditorRefresh',
   'venueTeeEditorCopyFrom', 'venueTeeEditorHtml', 'adminSaveVenueTee', 'adminJumpToGcLookup'];
-vm.runInContext(`var _vmFilter='all', _vmSearch='', _vmDlg=null, _vmSetupRequested={}, _vmTeeEdit=null;
+vm.runInContext(`var _vmParsManual={}, _venueTeeInfo={}, _venueTeeInfoReq={}; var _vmFilter='all', _vmSearch='', _vmDlg=null, _vmSetupRequested={}, _vmTeeEdit=null;
 ${src.match(/const VM_VIEW_TITLES = \{[^\n]+\};/)[0]}
 ${names.map(n => extractFn(src, n)).join('\n')}`, ctx);
 const run = (c) => vm.runInContext(c, ctx);
@@ -76,7 +76,7 @@ ok(dom.window.document.querySelectorAll('#vm-dialog').length === 1, 'only one di
 for (const label of ['Par (18 holes)', 'Weather location', 'Logo', 'CTP holes', 'Tees and hole handicaps', 'Theme motif'])
   ok(dlg.innerHTML.includes(label), 'home lists ' + label);
 ok(/Logo<\/span>\s*<span[^>]*>Not set/.test(dlg.innerHTML), 'Logo shows Not set for Moselem');
-ok(/Par \(18 holes\)<\/span>\s*<span[^>]*>Set · 72/.test(dlg.innerHTML), 'Par shows its total');
+ok(/Par \(18 holes\)<\/span>\s*<span[^>]*>From Blue tee · 72/.test(dlg.innerHTML), 'Par shows the default tee and its total');
 ok(/Tees and hole handicaps<\/span>\s*<span[^>]*>1 tee/.test(dlg.innerHTML), 'Tees row shows the stored tee count');
 ok(dlg.innerHTML.includes('Deactivate venue') && dlg.innerHTML.includes('closeVenueDialog()'), 'Deactivate and Done present');
 ok(dlg.innerHTML.includes('adminToggleVenueRename(2)'), 'Rename lives in the dialog header');
@@ -145,9 +145,9 @@ ok(posts.length === 1 && posts[0].body.tee_name === 'Gold' && posts[0].body.sour
 
 // ── the tee list gets Edit + Add buttons; the GC panel's coords button ──────
 const w = new JSDOM('<div></div>').window;
-const ctx2 = { document: w.document, JSON, String, Array, Object, Number, Math, _adminVenueTees: { 4: [] }, _adminVenueTeeSel: {} };
+const ctx2 = { document: w.document, JSON, String, Array, Object, Number, Math, _adminVenueTees: { 4: [] }, _adminVenueTeeSel: {}, _adminVenueCttpCache: {} };
 vm.createContext(ctx2);
-const teeHelpers = ['escapeHtml', 'teeSwatchCss', 'teeHeaderColor', 'venueViewerDefaultTee', 'venueScorecardHtml', 'venueTeeSummaryHtml', 'storedVenueTeesHtml'];
+const teeHelpers = ['escapeHtml', 'teeSwatchCss', 'teeHeaderColor', 'teeHolesPars', 'venueDefaultTeeFor', 'venueDefaultTeeName', 'venueDefaultTee_', 'venueViewerDefaultTee', 'venueScorecardHtml', 'venueTeeSummaryHtml', 'storedVenueTeesHtml'];
 vm.runInContext(src.match(/const TEE_COLORS = \{[\s\S]*?\};/)[0] + '\n' + teeHelpers.map(n => extractFn(src, n)).join('\n'), ctx2);
 ok(vm.runInContext(`storedVenueTeesHtml({id:4})`, ctx2).includes('adminNewVenueTee(4)'), 'a course with no tees offers "Add a tee manually"');
 vm.runInContext(`_adminVenueTees[4] = ${JSON.stringify([tee(7, 'White')])}`, ctx2);
@@ -188,7 +188,7 @@ function ctpCtx(catalog, tees, pars) {
       return { ok: true, json: async () => ({ ok: true, tees }) };
     } };
   vm.createContext(c);
-  vm.runInContext(['par3HoleNumbers', 'venueDefaultCttpHoles', 'venueDerivedCttpHoles', 'loadVenueCttpHoles'].map(n => extractFn(src, n)).join('\n'), c);
+  vm.runInContext('var _venueTeeInfo = {}, _venueTeeInfoReq = {};\n' + ['par3HoleNumbers', 'teeHolesPars', 'venueDefaultTeeFor', 'venueViewerDefaultTee', 'ensureVenueTeeInfo', 'venueDefaultCttpHoles', 'venueDerivedCttpHoles', 'loadVenueCttpHoles'].map(n => extractFn(src, n)).join('\n'), c);
   return c;
 }
 let k = ctpCtx({ cttpHoles: [6, 15] }, [teeP], null);
@@ -211,7 +211,7 @@ ok(!/venue-tee-catalog[^;]*POST/.test(extractFn(src, 'loadVenueCttpHoles')), 'lo
 // editor copy tells the truth about the default
 const cc = { _adminVenueCttpCache: { 9: { cttpHoles: [], raw: {} } }, _adminVenueTees: { 9: [teeP] } };
 vm.createContext(cc);
-vm.runInContext(['par3HoleNumbers', 'venueDefaultCttpHoles', 'venueCttpHolesEditorHtml'].map(n => extractFn(src, n)).join('\n'), cc);
+vm.runInContext(['teeHolesPars', 'venueDefaultTeeFor', 'venueViewerDefaultTee', 'venueDefaultTeeName', 'par3HoleNumbers', 'venueDefaultCttpHoles', 'venueCttpHolesEditorHtml'].map(n => extractFn(src, n)).join('\n'), cc);
 let eh = vm.runInContext(`venueCttpHolesEditorHtml({id:9,name:'X',pars:null})`, cc);
 ok(eh.includes('all par 3s (3, 8, 12, 17)') && eh.includes('placeholder="All par 3s: 3, 8, 12, 17"') && !eh.includes('Back to all par 3s'), 'editor shows the default and no clear button when nothing is saved');
 cc._adminVenueCttpCache[9] = { cttpHoles: [5], raw: {} };

@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.16.7 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.17.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -826,6 +826,15 @@ const GAME_SCHEMAS = {
         "min": 3,
         "max": 6,
         "integer": true
+      },
+      {
+        "key": "pars_by_player",
+        "type": "parsmap",
+        "label": "Par by hole for players on a different tee",
+        "default": {},
+        "min": 3,
+        "max": 6,
+        "integer": true
       }
     ]
   },
@@ -865,6 +874,11 @@ function validateFields(fields, cfg) {
         if (!Array.isArray(v) || v.length !== 18 || !v.every(p => Number(p) >= lo && Number(p) <= hi && (!f.integer || Number.isInteger(Number(p))))) {
           errors.push(f.label + ' needs 18 par values' + (f.min != null ? ' (' + lo + '-' + hi + ')' : ''));
         }
+      } else if (f.type === 'parsmap') {
+        // { playerName: [18 pars] } — optional extra pars for players on a different tee
+        const lo = f.min != null ? f.min : 1, hi = f.max != null ? f.max : Infinity;
+        const okOne = a => Array.isArray(a) && a.length === 18 && a.every(p => Number(p) >= lo && Number(p) <= hi && (!f.integer || Number.isInteger(Number(p))));
+        if (typeof v !== 'object' || Array.isArray(v) || !Object.keys(v).every(k => okOne(v[k]))) errors.push(f.label + ' needs 18 par values (' + lo + '-' + hi + ') per player');
       } else if (f.type === 'pairs') {
         // [[nameA, nameB], ...]: at least two pairs, two different names each, nobody in two pairs
         const names = [];
@@ -888,6 +902,7 @@ function cleanFields(fields, cfg) {
       if (f.type === 'money' || f.type === 'int') out[f.key] = Number(v);
       else if (f.type === 'holes') out[f.key] = v.slice().sort((a, b) => a - b);
       else if (f.type === 'pars') out[f.key] = v.map(Number);
+      else if (f.type === 'parsmap') { const m = {}; Object.keys(v).forEach(k => { m[String(k).trim()] = v[k].map(Number); }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
       else if (f.type === 'enum') out[f.key] = (f.values || []).includes(v) ? v : f.default;
       else out[f.key] = v;

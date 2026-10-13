@@ -3620,7 +3620,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.16.7"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.17.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -3684,9 +3684,9 @@ function par3HoleNumbers(pars) {
 }
 // tees = stored tee rows (GET /bfe/venue-tees); parsJson = the venue's legacy Vs Par JSON.
 // Returns the par 3 hole numbers, or null when no par data is on file at all.
-function venueDefaultCttpHoles(parsJson, tees) {
-  const t = (Array.isArray(tees) ? tees : []).find(x => Array.isArray(x.holes) && x.holes.length === 18 && x.holes.every(h => h && Number.isFinite(Number(h.par))));
-  if (t) return par3HoleNumbers(t.holes.map(h => Number(h.par)));
+function venueDefaultCttpHoles(parsJson, tees, defaultTeeName) {
+  const t = venueDefaultTeeFor(Array.isArray(tees) ? tees : [], defaultTeeName); // v4.25.0: the course's default tee
+  if (t) return par3HoleNumbers(teeHolesPars(t));
   try {
     const arr = typeof parsJson === 'string' ? JSON.parse(parsJson) : parsJson;
     if (Array.isArray(arr) && arr.length === 18 && arr.every(x => Number.isFinite(Number(x)))) return par3HoleNumbers(arr);
@@ -3695,9 +3695,8 @@ function venueDefaultCttpHoles(parsJson, tees) {
 }
 async function venueDerivedCttpHoles(v) {
   try {
-    const res = await fetch(`${BFE_API}/bfe/venue-tees?venue_id=${encodeURIComponent(v.id)}`);
-    const data = await res.json();
-    const d = venueDefaultCttpHoles(v.pars, data && data.ok ? data.tees : []);
+    const info = await ensureVenueTeeInfo(v);
+    const d = venueDefaultCttpHoles(v.pars, info ? info.tees : [], info ? info.defaultTee : null);
     return (d && d.length) ? d : null;
   } catch (e) {
     const d = venueDefaultCttpHoles(v.pars, []);
@@ -10047,6 +10046,7 @@ function skEnsure(evt, config) {
   const gid = panelGamesGid(evt);
   const key = gamesScoreKeyForGid(gid);
   if (_sk && _sk.key === key) { _sk.evt = evt; _sk.config = config; return _sk; }
+  ensureVenueTeeInfoByName(csNormalizedVenueName(evt)); // v4.25.0: warm the tee pars for skPars()
   let dirty = {};
   try { dirty = JSON.parse(localStorage.getItem(skStoreKey(key)) || '{}') || {}; } catch (e) { dirty = {}; }
   _sk = { key, gid, evt, config, groupIdx: 0, hole: 1, sel: 0, cards: {}, dirty, pending: 0, err: false, savedAt: null, mode: null, loaded: false, groupSet: false };
@@ -10359,6 +10359,7 @@ async function loadFourballLive(evt) {
     const res = await fetch(`${SCORECARD_API}/scorecards?event=${encodeURIComponent(key)}&input=strokes`);
     const data = await res.json();
     const cards = latestScorecardPerPlayer(data.scorecards || []);
+    await ensureVenueTeeInfoByName(csNormalizedVenueName(evt));
     const pars = csResolvePars(evt);
     try { if (_sk && _sk.key === key) { skMergeRemote(cards); skFlush(); } } catch (e) { console.warn('[Score] merge error:', e.message); }
     _fbLive = { gid, row, cards, pars: Array.isArray(pars) && pars.length === 18 ? pars : null, board: BFEngine.fourballBoard(row, cards, Array.isArray(pars) && pars.length === 18 ? pars : null), at: Date.now() };
@@ -10467,6 +10468,7 @@ async function submitScorecard(evtName) {
       // Sheet already uses works identically here — same venue, same
       // holes array. Falls back to null (no marks) only when the venue's
       // par truly isn't known, same as Card Score Sheet's own behavior.
+      await ensureVenueTeeInfoByName(csNormalizedVenueName(_scEvt || { name: evtName }));
       const scPars = csResolvePars(_scEvt || { name: evtName });
       const scMarks = scPars ? _scHoles.map((v, i) => csMarkFromPar(v, scPars[i])) : null;
       const res = await fetch(`${SCORECARD_API}/scorecards`, {
@@ -11800,6 +11802,50 @@ function getVenueParsByName(name) {
     return null;
   }
 }
+// ── Par comes from the tee (v4.25.0) ────────────────────────────────────────
+// Tees of one course do not all share a par layout, so the per-tee hole data is the source of
+// par. A venue's DEFAULT tee (the ⭐ one saved in its tee catalog, else the median men's tee) is
+// what every par lookup uses unless the caller names a tee. The old venues.pars ("Vs Par") column
+// is kept as a fallback and for BFE-Admin results; Venue Manager fills it from the default tee.
+const _venueTeeInfo = {};      // venue id -> { tees, defaultTee, pars } once fetched
+const _venueTeeInfoReq = {};   // venue id -> in-flight promise
+function teeHolesPars(t) {
+  const h = t && Array.isArray(t.holes) ? t.holes : null;
+  if (!h || h.length !== 18) return null;
+  const pars = h.map(x => Number(x && x.par));
+  return pars.every(p => Number.isInteger(p) && p >= 3 && p <= 6) ? pars : null;
+}
+function venueDefaultTeeFor(tees, defaultName) {
+  const full = (tees || []).filter(t => teeHolesPars(t));
+  if (!full.length) return null;
+  return (defaultName && full.find(t => t.tee_name === defaultName)) || venueViewerDefaultTee(full);
+}
+async function ensureVenueTeeInfo(venue, force) {
+  if (!venue || venue.id == null) return null;
+  const id = venue.id;
+  if (!force && _venueTeeInfo[id]) return _venueTeeInfo[id];
+  if (!force && _venueTeeInfoReq[id]) return _venueTeeInfoReq[id];
+  const p = (async () => {
+    try {
+      const [tr, cr] = await Promise.all([
+        fetch(`${BFE_API}/bfe/venue-tees?venue_id=${encodeURIComponent(id)}`),
+        fetch(`${BFE_API}/bfe/venue-tee-catalog?venue_id=${encodeURIComponent(id)}`).catch(() => null)
+      ]);
+      const td = await tr.json();
+      const tees = td && td.ok ? (td.tees || []) : [];
+      let defaultTee = null;
+      try { if (cr && cr.ok) { const cd = await cr.json(); defaultTee = (cd && cd.tee_catalog && cd.tee_catalog.defaultTee) || null; } } catch (e) { /* no catalog row yet */ }
+      const dt = venueDefaultTeeFor(tees, defaultTee);
+      const info = { tees, defaultTee, pars: dt ? teeHolesPars(dt) : null };
+      _venueTeeInfo[id] = info;
+      return info;
+    } catch (e) { return null; }
+    finally { delete _venueTeeInfoReq[id]; }
+  })();
+  _venueTeeInfoReq[id] = p;
+  return p;
+}
+function ensureVenueTeeInfoByName(name) { return ensureVenueTeeInfo(findVenueByName(name)); }
 // D1 returns venues by sort_order (insertion order), not alphabetical — real
 // courses read better A-Z; "Other" is a catch-all, not a course name, so it
 // always sorts to the bottom regardless of where its own name would land.
@@ -12511,16 +12557,52 @@ function venueCttpStatus(v) {
   const cttp = _adminVenueCttpCache[v.id];
   const tees = _adminVenueTees[v.id];
   if (cttp && cttp.cttpHoles.length) return { state: true, holes: cttp.cttpHoles, isDefault: false };
-  const def = venueDefaultCttpHoles(v.pars, tees);
+  const def = venueDefaultCttpHoles(v.pars, tees, venueDefaultTeeName(v));
   if (def && def.length) return { state: true, holes: def, isDefault: true };
   if (!cttp || !Array.isArray(tees)) return { state: null, holes: [], isDefault: false };
   return { state: false, holes: [], isDefault: false };
 }
 // What a course still needs. null = not loaded yet (never counted as missing).
+let _vmParsManual = {};                // venue id -> true while the Par editor is in typed-in mode
+// Where a course's par comes from (v4.25.0): its default tee when it has one, else the stored Vs Par.
+function venueDefaultTeeName(v) {
+  const e = _adminVenueCttpCache[v.id];
+  return (e && e.raw && e.raw.defaultTee) || null;
+}
+function venueParsInfo(v) {
+  const tees = _adminVenueTees[v.id];
+  const tee = Array.isArray(tees) ? venueDefaultTeeFor(tees, venueDefaultTeeName(v)) : null;
+  const teePars = tee ? teeHolesPars(tee) : null;
+  let stored = null;
+  try { const a = JSON.parse(v.pars); if (Array.isArray(a) && a.length === 18) stored = a; } catch (e) { /* unset */ }
+  return { tee, teePars, stored, same: !!(teePars && stored && teePars.every((p, i) => Number(p) === Number(stored[i]))) };
+}
+// Fills the stored Vs Par column from the course's default tee. Without `overwrite` it only fills an
+// EMPTY one (a par somebody typed is never replaced behind their back). BFE-Admin results and the
+// older par readers still read that column.
+async function venueSyncParsFromTees(id, overwrite) {
+  try {
+    const info = await ensureVenueTeeInfo({ id }, true);
+    if (!info || !info.pars) return false;
+    const v = (_adminVenuesCache || []).find(x => x.id === id);
+    let stored = null;
+    try { const a = JSON.parse(v && v.pars); if (Array.isArray(a) && a.length === 18) stored = a; } catch (e) { /* unset */ }
+    if (stored && !overwrite) return false;
+    const res = await fetch(`${GATHERINGS_API}/venues/${id}/pars`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: '7797', pars: info.pars })
+    });
+    const data = await res.json();
+    if (!data.ok) return false;
+    if (v) v.pars = JSON.stringify(info.pars);
+    _venues = null;
+    return true;
+  } catch (e) { return false; }
+}
 function venueSetupState(v) {
   const tees = _adminVenueTees[v.id];
   const items = [
-    ['Par', !!v.pars],
+    ['Par', !!v.pars || !!venueParsInfo(v).teePars],
     ['Location', v.lat != null && v.lng != null],
     ['Logo', !!v.logo_key],
     ['CTP', venueCttpStatus(v).state],
@@ -12672,7 +12754,9 @@ function venueDialogRowsHtml(v) {
   const ctpSt = venueCttpStatus(v);
   const tees = _adminVenueTees[v.id];
   const rows = [
-    ['pars', 'Par (18 holes)', v.pars ? `Set${venueParSum(v) ? ' · ' + venueParSum(v) : ''}` : 'Not set', !!v.pars],
+    ['pars', 'Par (18 holes)', (() => { const pi = venueParsInfo(v);
+      if (pi.teePars) return `From ${escapeHtml(pi.tee.tee_name)} tee · ${pi.teePars.reduce((a, b) => a + b, 0)}`;
+      return v.pars ? `Set${venueParSum(v) ? ' · ' + venueParSum(v) : ''}` : 'Not set'; })(), !!v.pars || !!venueParsInfo(v).teePars],
     ['coords', 'Weather location', (v.lat != null && v.lng != null) ? 'Set' : 'Not set', v.lat != null && v.lng != null],
     ['logo', 'Logo', v.logo_key ? 'Set' : 'Not set', !!v.logo_key],
     ['ctp', 'CTP holes', ctpSt.state === null ? '…' : ctpSt.state ? (ctpSt.isDefault ? 'All par 3s · ' : '') + ctpSt.holes.join(', ') : 'Not set', ctpSt.state === true],
@@ -12764,7 +12848,37 @@ function renderVenueDialog(resetScroll) {
 // this course), not a played round. Values are read from the DOM at Save
 // time (same "no per-keystroke state sync" convention as Quick mode and
 // the tee-box Other field), so typing doesn't trigger any re-render.
+function venueParsDerivedHtml(v, pi) {
+  const cell = (p, i) => `<div style="text-align:center"><div style="font-size:0.58rem;color:var(--text-hint)">${i + 1}</div><div style="font-weight:800;font-size:0.9rem">${p}</div></div>`;
+  const row = (a, b) => `<div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin-bottom:6px">${pi.teePars.slice(a, b).map((p, i) => cell(p, a + i)).join('')}</div>`;
+  const total = pi.teePars.reduce((x, y) => x + y, 0);
+  const status = pi.same ? 'The stored Vs Par matches.' : (pi.stored ? '<b>The stored Vs Par is different.</b> Scorecards use the tee, but BFE-Admin results still read the stored one.' : 'No Vs Par stored yet.');
+  return `
+    <div style="background:var(--surface);border-radius:10px;padding:10px;margin-top:6px">
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;line-height:1.5">Par comes from this course's <b>⭐ ${escapeHtml(pi.tee.tee_name)}</b> tee (change which tee is the default under Tees and hole handicaps). Fix a wrong par by editing that tee. ${status}</div>
+      ${row(0, 9)}${row(9, 18)}
+      <div style="text-align:center;font-size:0.78rem;font-weight:700;margin-bottom:10px">Total: ${total}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${pi.same ? '' : `<button class="btn btn-secondary btn-sm" style="flex:1;font-size:0.76rem;min-width:140px" onclick="adminFillVenueParsFromTee(${v.id})">Fill stored Vs Par from this tee</button>`}
+        <button class="btn btn-ghost btn-sm" style="font-size:0.76rem" onclick="_vmParsManual[${v.id}]=true;renderVenueDialog()">Type it in instead</button>
+      </div>
+    </div>`;
+}
+async function adminFillVenueParsFromTee(id) {
+  const ok = await venueSyncParsFromTees(id, true);
+  showToast(ok ? '✅ Vs Par filled from the tee' : 'Could not fill Vs Par', !ok);
+  loadAdminVenues();
+}
+function adminFillParInputsFromTee(id) {
+  const v = (_adminVenuesCache || []).find(x => x.id === id);
+  const pi = v ? venueParsInfo(v) : null;
+  if (!pi || !pi.teePars) return;
+  pi.teePars.forEach((p, i) => { const el = document.getElementById(`admin-par-${id}-${i}`); if (el) el.value = p; });
+  adminUpdateVenueParTotals(id);
+}
 function venueParsEditorHtml(v) {
+  const pi = venueParsInfo(v);
+  if (pi.teePars && !_vmParsManual[v.id]) return venueParsDerivedHtml(v, pi);
   let pars = new Array(18).fill(null);
   if (v.pars) {
     try {
@@ -12806,6 +12920,7 @@ function venueParsEditorHtml(v) {
         <button class="btn btn-secondary btn-sm" style="flex:1;font-size:0.76rem;min-width:100px" onclick="adminSaveVenuePars(${v.id})">Save Par</button>
         ${v.pars ? `<button class="btn btn-secondary-danger btn-sm" style="font-size:0.76rem" onclick="adminClearVenuePars(${v.id},'${v.name.replace(/'/g,"\\'")}')">Clear</button>` : ''}
         ${isBsgc && !v.pars ? `<button class="btn btn-ghost btn-sm" style="font-size:0.76rem" onclick="adminPrefillBsgcPars(${v.id})">Prefill known BSGC par</button>` : ''}
+        ${pi.teePars ? `<button class="btn btn-ghost btn-sm" style="font-size:0.76rem" onclick="adminFillParInputsFromTee(${v.id})">Fill from tee</button><button class="btn btn-ghost btn-sm" style="font-size:0.76rem" onclick="_vmParsManual[${v.id}]=false;renderVenueDialog()">Use the tee's par</button>` : ''}
       </div>
       <div style="font-size:0.68rem;color:var(--text-hint);margin-top:6px">Once saved, marks auto-generate from this par whenever this venue's events are scored — same as BSGC already does.</div>
     </div>`;
@@ -12865,6 +12980,7 @@ async function adminSaveVenuePars(id) {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Save failed');
     showToast('✅ Par saved — marks will auto-generate for this venue');
+    _vmParsManual[id] = false;
     _venues = null; // reset both admin and public caches so the scorecard picks this up
     loadAdminVenues();
   } catch(e) {
@@ -13007,6 +13123,8 @@ function adminJumpToGcLookup(id) {
 }
 async function adminLoadVenueTees(id) {
   await adminFetchVenueTeesQuiet(id);
+  delete _venueTeeInfo[id];
+  await venueSyncParsFromTees(id, false); // fills an empty Vs Par from the default tee
   loadAdminVenues();
 }
 let _adminVenueTeeSel = {}; // venue id -> selected stored tee id (Dev-87)
@@ -13016,19 +13134,52 @@ function storedVenueTeesHtml(v) {
   const addTee = `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px;font-size:0.76rem" onclick="adminNewVenueTee(${v.id})">＋ Add a tee manually</button>`;
   if (!tees.length) return `<div style="font-size:0.74rem;color:var(--text-muted)">No tees stored yet for this venue.</div>${addTee}`;
   let t = tees.find(x => x.id === _adminVenueTeeSel[v.id]);
-  if (!t) { t = venueViewerDefaultTee(tees); _adminVenueTeeSel[v.id] = t.id; }
+  if (!t) { t = venueDefaultTeeFor(tees, venueDefaultTeeName(v)) || venueViewerDefaultTee(tees); _adminVenueTeeSel[v.id] = t.id; }
   const edit = `<button onclick="adminEditVenueTee(${v.id}, ${t.id})" title="Edit the ${escapeHtml(t.tee_name)} tee's par, yardage and hole handicaps"
       style="flex-shrink:0;height:40px;padding:0 12px;border-radius:10px;border:1.5px solid var(--border);
       background:#fff;color:var(--text);font-weight:800;font-size:0.76rem;font-family:inherit;cursor:pointer">✏️ Edit</button>`;
-  const del = edit + `<button onclick="adminDeleteVenueTee(${v.id}, ${t.id})" title="Delete the ${escapeHtml(t.tee_name)} tee"
+  const del = '<<STAR>>' + edit + `<button onclick="adminDeleteVenueTee(${v.id}, ${t.id})" title="Delete the ${escapeHtml(t.tee_name)} tee"
       style="flex-shrink:0;height:40px;padding:0 12px;border-radius:10px;border:1.5px solid rgba(185,28,28,0.35);
       background:#fff;color:#b91c1c;font-weight:800;font-size:0.76rem;font-family:inherit;cursor:pointer">🗑 Delete</button>`;
+  const defName = venueDefaultTee_(v, tees);
+  const isDef = defName === t.tee_name;
+  const star = isDef
+    ? `<span style="flex-shrink:0;font-size:0.72rem;font-weight:800;color:#8a6100;background:rgba(230,168,0,0.15);border-radius:10px;padding:5px 9px">⭐ Default</span>`
+    : `<button onclick="adminSetDefaultVenueTee(${v.id}, ${t.id})" title="Make the ${escapeHtml(t.tee_name)} tee this course's default: its pars are the course par" style="flex-shrink:0;height:40px;padding:0 10px;border-radius:10px;border:1.5px solid var(--border);background:#fff;font-weight:800;font-size:0.76rem;font-family:inherit;cursor:pointer">⭐ Make default</button>`;
   const src = t.source === 'gc_api' ? 'GolfCourseAPI' : (t.source || 'manual');
   const foot = `<div style="display:flex;justify-content:space-between;gap:8px;font-size:0.66rem;color:var(--text-muted);margin-top:4px">
       <span>${tees.length} tee${tees.length === 1 ? '' : 's'} stored · source: ${escapeHtml(src)}${t.updated_at ? ` · saved ${escapeHtml(String(t.updated_at).slice(0, 10))}` : ''}</span>
       ${t.locked ? '<span style="color:#b45309;font-weight:700">🔒 manually edited</span>' : ''}</div>${addTee}`;
   return venueTeeSummaryHtml({ tees, sel: t.id, selectId: `admin-tee-sel-${v.id}`,
-    onchange: `adminSelectVenueTee(${v.id}, this.value)`, sideHtml: del, footHtml: foot, selectBg: '#fff' });
+    onchange: `adminSelectVenueTee(${v.id}, this.value)`, sideHtml: del.replace('<<STAR>>', star), footHtml: foot, selectBg: '#fff' });
+}
+// The default tee's name for a venue, as it will actually resolve (saved ⭐, else the median men's tee).
+function venueDefaultTee_(v, tees) {
+  const dt = venueDefaultTeeFor(tees, venueDefaultTeeName(v));
+  return dt ? dt.tee_name : null;
+}
+async function adminSetDefaultVenueTee(venueId, teeId) {
+  const t = (_adminVenueTees[venueId] || []).find(x => x.id === Number(teeId));
+  if (!t) return;
+  if (!teeHolesPars(t)) { showToast('That tee has no complete par data yet, so it cannot be the default', true); return; }
+  const v = (_adminVenuesCache || []).find(x => x.id === venueId);
+  try {
+    await adminFetchVenueCttp(venueId); // fresh copy: a POST replaces the whole catalog, so keep everything else in it
+    const merged = { ..._adminVenueCttpCache[venueId].raw, defaultTee: t.tee_name };
+    const res = await fetch(`${BFE_API}/bfe/venue-tee-catalog`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ venue_id: venueId, venue_name: v ? v.name : null, tee_catalog: merged, pin: '7797' })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    _adminVenueCttpCache[venueId] = { cttpHoles: _adminVenueCttpCache[venueId].cttpHoles, raw: merged };
+    delete _venueTeeInfo[venueId];
+    await venueSyncParsFromTees(venueId, false);
+    showToast(`✅ ${t.tee_name} is now the default tee`);
+    loadAdminVenues();
+  } catch (e) {
+    showToast('Error: ' + e.message, true);
+  }
 }
 function adminSelectVenueTee(venueId, teeId) {
   _adminVenueTeeSel[venueId] = Number(teeId);
@@ -13205,6 +13356,8 @@ async function adminSaveVenueTee() {
     if (data.id) _adminVenueTeeSel[e.venueId] = data.id;
     _vmTeeEdit = null;
     await adminFetchVenueTeesQuiet(e.venueId);
+    delete _venueTeeInfo[e.venueId];
+    await venueSyncParsFromTees(e.venueId, false);
     venueDialogView('tees');
     loadAdminVenues(); // list statuses
   } catch (err) {
@@ -13497,7 +13650,7 @@ async function adminFetchVenueCttp(id) {
 function venueCttpHolesEditorHtml(v) {
   const entry = _adminVenueCttpCache[v.id] || { cttpHoles: [], raw: {} };
   const holesStr = entry.cttpHoles.join(', ');
-  const def = venueDefaultCttpHoles(v.pars, _adminVenueTees[v.id]);
+  const def = venueDefaultCttpHoles(v.pars, _adminVenueTees[v.id], venueDefaultTeeName(v));
   const defTxt = (def && def.length) ? def.join(', ') : '';
   return `
     <div style="background:var(--surface);border-radius:10px;padding:10px;margin-top:6px">
@@ -13554,7 +13707,7 @@ async function adminSaveVenueCttpHoles(id) {
 }
 async function adminClearVenueCttpHoles(id, name) {
   const _v = (_adminVenuesCache || []).find(x => x.id === id);
-  const _def = _v ? venueDefaultCttpHoles(_v.pars, _adminVenueTees[id]) : null;
+  const _def = _v ? venueDefaultCttpHoles(_v.pars, _adminVenueTees[id], venueDefaultTeeName(_v)) : null;
   if (!confirm(_def && _def.length
     ? `Go back to all par 3s (${_def.join(', ')}) for "${name}"? The holes you picked will be removed from this course's default; events that already saved their own holes keep them.`
     : `Clear CTP holes for "${name}"? With no par data on file the Live Panel will fall back to the BSGC default (3, 8, 10, 15, 18) for rounds here until it's re-entered.`)) return;
@@ -14575,10 +14728,21 @@ function venueMotifForEvent(evt) {
 // ('Blue Shamrock Golf Club'). Returns null (no auto-marks) for anything
 // else, since guessing par for an unknown course would produce confidently
 // wrong marks — worse than the honest blank state manual marking gives.
-function csResolvePars(evt) {
+function csResolvePars(evt, teeName) {
   const lookupName = csNormalizedVenueName(evt);
   if (!lookupName) return null;
-  // Dynamic venue par data (Venue Manager) takes priority — this is what
+  // v4.25.0: the tee's own pars come first (the named tee, else the course's default tee). If the
+  // tee data has not been fetched yet this call falls through to the stored Vs Par and starts the
+  // fetch, so the next call (callers that matter await ensureVenueTeeInfo first) is tee-based.
+  const _tv = findVenueByName(lookupName);
+  if (_tv) {
+    const info = _venueTeeInfo[_tv.id];
+    if (info) {
+      if (teeName) { const t = info.tees.find(x => x.tee_name === teeName); const tp = t && teeHolesPars(t); if (tp) return tp; }
+      if (info.pars) return info.pars;
+    } else ensureVenueTeeInfo(_tv);
+  }
+  // Dynamic venue par data (Venue Manager) next — this is what
   // makes a newly-entered course auto-generate marks with no code change.
   const dynamic = getVenueParsByName(lookupName);
   if (dynamic) return dynamic;
@@ -14668,12 +14832,14 @@ function openCardScoreSheet(evtOrId) {
   // confirm) there's no real saved entry to protect.
   loadVenues().then(() => {
     if (_cardScoreEvt !== evt) return; // sheet was reopened for a different event before this resolved
+    return ensureVenueTeeInfoByName(csNormalizedVenueName(evt)).then(() => {
     const refined = csResolvePars(evt);
     if (refined !== _csPars) {
       _csPars = refined;
       if (!_csHasExistingEntry) csPrefillHolesFromPar();
       renderCardScoreGrid();
     }
+    });
   });
 }
 function csSetMode(mode) {
@@ -19175,6 +19341,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
   // tee data (bfe_venue_tees) before the form paints, same "gather the
   // material first" ordering as showEditGatheringForm's crew pre-load.
   await Promise.all([loadGamesFormPar3Holes(g), loadGamesFormMembers()]);
+  _gamesFormBirdiepayPars = csResolvePars(g); // v4.25.0: default tee's pars, now that the tees are in
   // Re-opening a saved net config: its players carry the tee NAME; the form works by tee id.
   Object.values(_gamesFormHcp.players).forEach(e => {
     if (e && e.tee && e.teeId == null) { const t = _gamesFormTees.find(x => x.tee_name === e.tee); if (t) e.teeId = String(t.id); }
@@ -19188,19 +19355,14 @@ async function loadGamesFormPar3Holes(g) {
   try {
     const venue = findVenueByName(csNormalizedVenueName(g));
     if (!venue) return;
-    const res = await fetch(`${BFE_API}/bfe/venue-tees?venue_id=${venue.id}`);
-    const data = await res.json();
-    const tees = data.ok ? (data.tees || []) : [];
-    _gamesFormTees = tees.filter(t => Array.isArray(t.holes) && t.holes.length === 18);
-    // Par should be consistent across a venue's tees even though yardage and
-    // hole handicap rank vary (Brian, Dev-85) — any one tee with full hole
-    // data tells us which holes are Par 3s.
-    const teeWithHoles = tees.find(t => Array.isArray(t.holes) && t.holes.length === 18);
-    if (!teeWithHoles) return;
-    _gamesFormPar3Holes = teeWithHoles.holes
-      .map((h, i) => ({ hole: i + 1, par: h.par }))
-      .filter(h => h.par === 3)
-      .map(h => h.hole);
+    const info = await ensureVenueTeeInfo(venue, true);
+    if (!info) return;
+    _gamesFormTees = info.tees.filter(t => teeHolesPars(t));
+    // v4.25.0: the CTP hole picker follows the course's DEFAULT tee (⭐ in Venue Manager), not just
+    // whichever tee happens to be first.
+    const dt = venueDefaultTeeFor(info.tees, info.defaultTee);
+    if (!dt) return;
+    _gamesFormPar3Holes = dt.holes.map((h, i) => ({ hole: i + 1, par: h.par })).filter(h => h.par === 3).map(h => h.hole);
     _gamesFormVenueParDataAvailable = true;
   } catch (e) {
     _gamesFormPar3Holes = [];
@@ -19619,7 +19781,7 @@ function gatheringGamesBirdiepaySectionHtml() {
       ${haveParData ? '' : `
       <div style="font-size:0.74rem;color:#b8860b;background:rgba(230,168,0,0.1);border:1px solid rgba(230,168,0,0.3);
         border-radius:8px;padding:8px 10px;margin-top:8px">
-        No par data on file for this venue yet, so birdies can't be counted. Add its pars in Venue Manager (GC-API Lookup fills them) before saving Birdie Payouts.
+        No par data on file for this venue yet, so birdies can't be counted. Add one of its tees in Venue Manager (Tees and hole handicaps: GC-API Lookup fills them, or add by hand) before saving Birdie Payouts.
       </div>`}
     </div>`;
 }
@@ -20023,6 +20185,18 @@ function setGamesFormPlayerHcp(name, field, val, typing) {
 }
 // The frozen config the Worker stores and BFEngine reads (null = all gross).
 // problem = a sentence for the host; the save is refused until it's fixed.
+function gamesFormBirdiepayParsByPlayer() {
+  const out = {};
+  const base = Array.isArray(_gamesFormBirdiepayPars) ? _gamesFormBirdiepayPars : [];
+  gamesFormPlayerNames().forEach(n => {
+    const e = _gamesFormHcp.players && _gamesFormHcp.players[n];
+    if (!e || e.teeId == null || e.teeId === '') return;
+    const tee = _gamesFormTees.find(t => String(t.id) === String(e.teeId));
+    const tp = tee && teeHolesPars(tee);
+    if (tp && tp.some((p, i) => p !== base[i])) out[n] = tp;
+  });
+  return out;
+}
 function gamesFormBuildHandicapConfig() {
   if (!gamesFormHcpIsNet()) return { config: null, problem: null };
   // v4.12.0 — a player whose handicap isn't settled yet no longer blocks the save: they are
@@ -20153,8 +20327,11 @@ async function submitGatheringGames(gatheringId) {
   let birdiepay_config = null;
   if (games.includes('birdiepay')) {
     if (!(_gamesFormBirdiepayConfig.dollar_per_birdie > 0)) { bad('money', 'Birdie Payouts: $ per birdie must be greater than 0'); return; }
-    if (!(Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18)) { bad('birdiepay', 'Birdie Payouts needs par data for this venue — add it in Venue Manager first'); return; }
+    if (!(Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18)) { bad('birdiepay', 'Birdie Payouts needs par data for this venue — add a tee for it in Venue Manager first'); return; }
     birdiepay_config = { dollar_per_birdie: _gamesFormBirdiepayConfig.dollar_per_birdie, pars: _gamesFormBirdiepayPars.slice() };
+    // v4.25.0: a player on a tee whose pars differ from the course default is judged against THEIR tee's pars.
+    const byPlayer = gamesFormBirdiepayParsByPlayer();
+    if (Object.keys(byPlayer).length) birdiepay_config.pars_by_player = byPlayer;
   }
   let game_configs = null;
   if (games.includes('fourball')) {

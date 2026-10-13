@@ -31,7 +31,7 @@ const store = {};
 const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date, Promise, BFEngine: E, SCORECARD_API: 'https://sc', currentPlayer: 'Mike Kay',
   escapeHtml: s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])),
   localStorage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } },
-  panelGamesGid: e => e.gatheringId, gamesScoreKeyForGid: g => 'gathering:' + g, csResolvePars: () => PARS,
+  panelGamesGid: e => e.gatheringId, gamesScoreKeyForGid: g => 'gathering:' + g, csResolvePars: () => PARS, ensureVenueTeeInfoByName: async () => null,
   csMarkFromPar: (v, p) => (v == null ? null : v < p ? 'c' : v > p ? 's' : null), csNormalizedVenueName: () => 'BSGC',
   renderLiveBanner: () => { ctx.rendered++; }, rendered: 0, window: { addEventListener() {} },
   gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null, failNext: false,

@@ -36,7 +36,7 @@ const row = (fb = {}, extra = {}) => ({ games: ['fourball'], dollar_per_player: 
 const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date, BFEngine: E, SCORECARD_API: 'https://sc', currentPlayer: 'Cy',
   escapeHtml: s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])),
   _gatheringGamesIndex: new Map([[7, row()]]), panelGamesGid: e => e.gatheringId, gamesScoreKeyForGid: g => 'gathering:' + g,
-  csResolvePars: () => PARS, latestScorecardPerPlayer: rows => rows, renderLiveBanner: () => { ctx.rendered++; }, rendered: 0, fetched: [],
+  csResolvePars: () => PARS, ensureVenueTeeInfoByName: async () => null, csNormalizedVenueName: () => 'BSGC', latestScorecardPerPlayer: rows => rows, renderLiveBanner: () => { ctx.rendered++; }, rendered: 0, fetched: [],
   gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null,
   fetch: async url => { ctx.fetched.push(url); return { json: async () => ({ scorecards: [card('Ann', 5), card('Bob', 5), card('Cy', 7, { 1: 3 }), card('Dee', 3)] }) }; } };
 vm.createContext(ctx);

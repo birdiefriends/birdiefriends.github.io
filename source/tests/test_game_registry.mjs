@@ -4,7 +4,7 @@ import { createRequire } from 'module'; import { fileURLToPath } from 'url';
 const require = createRequire(import.meta.url);
 const E = require(fileURLToPath(new URL('../bf_engine.js', import.meta.url)));
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
-const TYPES = ['money', 'int', 'holes', 'pars', 'enum', 'pairs'];
+const TYPES = ['money', 'int', 'holes', 'pars', 'enum', 'pairs', 'parsmap'];
 const addons = E.listGames('addon'), bases = E.listGames('base');
 ok(addons.length >= 4 && bases.length >= 1, 'registry lists add-ons and base games');
 

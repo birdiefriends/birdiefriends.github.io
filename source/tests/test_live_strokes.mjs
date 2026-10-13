@@ -25,7 +25,7 @@ const store = {};
 const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date, Promise, BFEngine: E, SCORECARD_API: 'https://sc', currentPlayer: 'Ann',
   escapeHtml: s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])),
   localStorage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } },
-  panelGamesGid: e => e.gatheringId, gamesScoreKeyForGid: g => 'gathering:' + g, csResolvePars: () => PARS,
+  panelGamesGid: e => e.gatheringId, gamesScoreKeyForGid: g => 'gathering:' + g, csResolvePars: () => PARS, ensureVenueTeeInfoByName: async () => null, csNormalizedVenueName: () => 'BSGC',
   renderLiveBanner() {}, window: { addEventListener() {} }, gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null };
 vm.createContext(ctx);
 const fns = ['skStoreKey','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','skMarks','skGot','skAnyStrokes','skDotsHtml','skCardOf','liveScoreModeHtml','fourballPlayerCardHtml'];

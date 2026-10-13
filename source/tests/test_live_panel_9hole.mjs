@@ -84,6 +84,7 @@ function submitCtx() {
     eventData: [{ name: 'Chooch 9-Hole Gathering', holes: 9 }, { name: '18-Hole Gathering', holes: 18 }],
     SCORECARD_API: 'https://bfe.example/api',
     BFE_API: 'https://bfe.example/api',
+    ensureVenueTeeInfoByName: async () => null, findVenueByName: () => null, _venueTeeInfo: {},
     evtPhotoKey: (evt) => (evt && evt.name) || '',
     csNormalizedVenueName: () => 'Test Venue',
     // Dev-89 — submitScorecard now resolves marks the same way Card Score
@@ -143,6 +144,7 @@ function submitCtxWithRealPars() {
     eventData: [{ name: 'More Golf, Less Work Monday', holes: 18, location: 'Blue Shamrock Golf Club' }],
     SCORECARD_API: 'https://bfe.example/api',
     BFE_API: 'https://bfe.example/api',
+    ensureVenueTeeInfoByName: async () => null, findVenueByName: () => null, _venueTeeInfo: {},
     evtPhotoKey: (evt) => (evt && evt.name) || '',
     getVenueParsByName: () => null, // no Venue Manager override — forces the BSGC_PARS fallback, same as real prod for an unconfigured venue
     // Pulled from the real source rather than retyped, so this test breaks

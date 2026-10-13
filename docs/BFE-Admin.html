@@ -2229,6 +2229,7 @@ function parseCttpHolesInput(raw) {
 }
 function applyPolicyToVenueBlock(block, policy) {
   if (!policy) return;
+  if (policy.defaultTee) block.dataset.defaultTee = policy.defaultTee; // Venue Manager's ⭐ default tee: carried through so this save does not drop it
   if (Array.isArray(policy.cttpHoles)) block.querySelector('.venueCttpHoles').value = policy.cttpHoles.join(', ');
   if (policy.mode === 'same') {
     document.querySelector('input[name=teeMode][value=same]').checked = true;
@@ -2402,7 +2403,7 @@ async function buildAndAssembleConfig() {
       try {
         await fetch(base + '/bfe/venue-tee-catalog', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ venue_id: venueId, venue_name: venueName, tee_catalog: { mode: teePolicy.mode, ...teePolicy.byVenue[venueId] }, pin })
+          body: JSON.stringify({ venue_id: venueId, venue_name: venueName, tee_catalog: { mode: teePolicy.mode, ...teePolicy.byVenue[venueId], ...(block.dataset.defaultTee ? { defaultTee: block.dataset.defaultTee } : {}) }, pin })
         });
       } catch (e) { /* non-fatal — event config generation still succeeded */ }
     }

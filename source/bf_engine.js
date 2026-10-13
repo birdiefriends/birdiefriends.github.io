@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.16.7';
+  const ENGINE_VERSION = '1.17.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -290,18 +290,27 @@
         const L = state.ledger;
         const per = Number(addon.dollar_per_birdie) || 0;
         const pars = Array.isArray(addon.pars) ? addon.pars : [];
-        const havePars = pars.length === 18 && pars.every(p => Number(p) > 0);
+        const okPars = a => Array.isArray(a) && a.length === 18 && a.every(p => Number(p) > 0);
+        const havePars = okPars(pars);
+        // v1.17.0: pars_by_player = each player's own tee's pars (tees of one course do not all share a par
+        // layout). A player without an entry is judged against the round's default `pars`.
+        const byPlayer = new Map();
+        if (addon.pars_by_player && typeof addon.pars_by_player === 'object') {
+          Object.keys(addon.pars_by_player).forEach(k => { if (okPars(addon.pars_by_player[k])) byPlayer.set(norm(k), addon.pars_by_player[k]); });
+        }
         const net = addon.basis === 'net';
         const birdies = [];
-        if (havePars) {
+        if (havePars || byPlayer.size) {
           (inputs.scorecards || []).forEach(c => {
+            const cPars = byPlayer.get(norm(c.player)) || (havePars ? pars : null);
+            if (!cPars) return;
             const holes = Array.isArray(c.holes) ? c.holes : [];
             const off = (c.hole_count === 9 && c.hole_half === 'back') ? 9 : 0;
             // Dev-91: basis 'net' judges the birdie on gross − strokes received
             // (a par with a stroke is a net birdie; eagles are still ONE payout).
             const nc = net && inputs.netByPlayer ? inputs.netByPlayer.get(norm(c.player)) : null;
             holes.forEach((strokes, i) => {
-              const par = Number(pars[off + i]);
+              const par = Number(cPars[off + i]);
               if (!(typeof strokes === 'number' && strokes > 0 && par > 0)) return;
               if (!net) {
                 if (strokes <= par - 1) birdies.push({ hole: off + i + 1, player: L.canon(c.player), strokes, par });
@@ -324,7 +333,7 @@
         return {
           per_birdie: per, count, paid_each: paidEach, total_paid: totalPaid,
           capped, shortfall: capped ? owed - totalPaid : 0,
-          no_par_data: !havePars, birdies,
+          no_par_data: !havePars && !byPlayer.size, birdies,
           ...(net ? { basis: 'net' } : {})
         };
       }
@@ -880,7 +889,8 @@
       info: 'A flat $ for every birdie or better, paid to whoever made it, from the same pot before Skins (gross unless the host set it to Net, where a par with a stroke counts). An eagle still pays one birdie. Nothing to enter: it\'s worked out from the scorecards when the round closes.' },
     config: [
       { key: 'dollar_per_birdie', type: 'money', label: '$ per birdie', default: 0, positive: true, required: true },
-      { key: 'pars', type: 'pars', label: 'Par by hole', default: [], required: true, min: 3, max: 6, integer: true }
+      { key: 'pars', type: 'pars', label: 'Par by hole', default: [], required: true, min: 3, max: 6, integer: true },
+      { key: 'pars_by_player', type: 'parsmap', label: 'Par by hole for players on a different tee', default: {}, min: 3, max: 6, integer: true }
     ],
     fixedCost: () => 0,   // sized by birdies made, capped to the pot at close — never a fixed set-aside
     fixtures: [{
@@ -995,6 +1005,11 @@
         if (!Array.isArray(v) || v.length !== 18 || !v.every(p => Number(p) >= lo && Number(p) <= hi && (!f.integer || Number.isInteger(Number(p))))) {
           errors.push(f.label + ' needs 18 par values' + (f.min != null ? ' (' + lo + '-' + hi + ')' : ''));
         }
+      } else if (f.type === 'parsmap') {
+        // { playerName: [18 pars] } — optional extra pars for players on a different tee
+        const lo = f.min != null ? f.min : 1, hi = f.max != null ? f.max : Infinity;
+        const okOne = a => Array.isArray(a) && a.length === 18 && a.every(p => Number(p) >= lo && Number(p) <= hi && (!f.integer || Number.isInteger(Number(p))));
+        if (typeof v !== 'object' || Array.isArray(v) || !Object.keys(v).every(k => okOne(v[k]))) errors.push(f.label + ' needs 18 par values (' + lo + '-' + hi + ') per player');
       } else if (f.type === 'pairs') {
         // [[nameA, nameB], ...]: at least two pairs, two different names each, nobody in two pairs
         const names = [];
@@ -1020,6 +1035,7 @@
       if (f.type === 'money' || f.type === 'int') out[f.key] = Number(v);
       else if (f.type === 'holes') out[f.key] = v.slice().sort((a, b) => a - b);
       else if (f.type === 'pars') out[f.key] = v.map(Number);
+      else if (f.type === 'parsmap') { const m = {}; Object.keys(v).forEach(k => { m[String(k).trim()] = v[k].map(Number); }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
       else if (f.type === 'enum') out[f.key] = (f.values || []).includes(v) ? v : f.default;
       else out[f.key] = v;
@@ -1101,6 +1117,7 @@
     const basisOf = k => (hcc && hcc[k] === 'net' ? 'net' : 'gross');
     if (games.includes('birdiepay') && row.birdiepay_config) {
       const b = { id: 'birdiepay', entity: 'individual', dollar_per_birdie: row.birdiepay_config.dollar_per_birdie, pars: row.birdiepay_config.pars || [] };
+      if (row.birdiepay_config.pars_by_player && typeof row.birdiepay_config.pars_by_player === 'object') b.pars_by_player = row.birdiepay_config.pars_by_player;
       if (basisOf('birdiepay_basis') === 'net') b.basis = 'net';
       addons.push(b);
     }
