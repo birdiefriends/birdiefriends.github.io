@@ -2591,8 +2591,16 @@ export default {
         if (!wxRes.ok) {
           return new Response(JSON.stringify({ ok: false, reason: 'weather_api_error' }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
-        const wxData = await wxRes.json();
-        const d = wxData.daily;
+        let wxData = await wxRes.json();
+        let d = wxData.daily;
+        // The archive lags a few days. For a day that is already over (before today in New York), the forecast API
+        // serves the same observed values right away, so a round played yesterday gets its weather stamp the next
+        // morning instead of days later. Today itself is never cached: its high / low are still changing.
+        const todayNY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+        if ((d?.temperature_2m_max?.[0] == null || d?.temperature_2m_min?.[0] == null) && event_date < todayNY) {
+          const fcRes = await fetch(wxUrl.replace('https://archive-api.open-meteo.com/v1/archive', 'https://api.open-meteo.com/v1/forecast'));
+          if (fcRes.ok) { wxData = await fcRes.json(); d = wxData.daily; }
+        }
         const tempHigh = d?.temperature_2m_max?.[0];
         const tempLow  = d?.temperature_2m_min?.[0];
         // Archive not caught up yet for a very recent date — don't cache a

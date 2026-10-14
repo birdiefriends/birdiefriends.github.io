@@ -14451,6 +14451,25 @@ function toggleHistoryScrapMore(btn) {
   const open = grid.classList.toggle('expanded');
   btn.textContent = open ? 'Show fewer ▴' : btn.getAttribute('data-more');
 }
+// The weather stamp is cached by the first photo / score capture, which on the day of the round finds nothing yet (a day's
+// weather is only final once it is over). So when a past round is opened without a stamp, ask once more now.
+const _historyWxTried = new Set();
+function ensureHistoryWeather(key, idx, evt) {
+  try {
+    if (!evt || _historyWeatherByKey.get(key) || _historyWxTried.has(key)) return;
+    const venue = csNormalizedVenueName(evt);
+    if (!venue || !(evt.dt instanceof Date) || isNaN(evt.dt)) return;
+    const now = new Date(), startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (evt.dt >= startOfToday) return;   // today's weather is not final yet
+    _historyWxTried.add(key);
+    const pad = n => String(n).padStart(2, '0');
+    fetch(`${GATHERINGS_API}/weather/capture`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: key, venue, event_date: `${evt.dt.getFullYear()}-${pad(evt.dt.getMonth() + 1)}-${pad(evt.dt.getDate())}` }) })
+      .then(r => r.json()).then(j => {
+        if (j && j.ok && j.weather) { _historyWeatherByKey.set(key, j.weather); if (_currentHistoryDetailIdx === idx && document.getElementById('my-history-detail-body')) openHistoryDetail(idx); }
+      }).catch(() => {});
+  } catch (e) { /* weather is a keepsake, never an error */ }
+}
 function openHistoryDetail(idx) {
   const key = _historyGroupsSorted[idx];
   if (!key) return;
@@ -14460,6 +14479,7 @@ function openHistoryDetail(idx) {
   const evtNotes  = _historyNotesByKey.get(key)  || [];
   const crew = crewForGroupKey(key);
   const groupEvt = historyResolveEvent(key);
+  ensureHistoryWeather(key, idx, groupEvt);
   const detailLine = historyEventDetailLine(groupEvt);
   const crewLine = crew.length
     ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px">✅ ${crew.join(', ')}</div>`
