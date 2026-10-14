@@ -19606,6 +19606,19 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
       #games-wizard[data-sub="pairs"] .gw-fb-setup{display:none}
       #games-wizard[data-sub="setup"] .gw-fb-pairs{display:none}
     </style>
+    <style>
+      .gw-surprise { display:flex;flex-direction:column;align-items:center;gap:2px;width:100%;margin:2px 0 14px;padding:14px 12px 12px;border-radius:16px;border:2px dashed var(--green);background:linear-gradient(180deg,#f3fbf7,#e3f5ec);color:var(--green-dark);font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent }
+      .gw-surprise:active { transform:scale(0.98) }
+      .gw-dice { display:flex;align-items:flex-end;justify-content:center;height:84px;filter:drop-shadow(0 6px 6px rgba(7,80,58,0.25)) }
+      .gw-dice .gw-die:first-child { animation:gwWiggle 3.2s ease-in-out infinite;transform-origin:50% 60% }
+      .gw-dice .gw-die + .gw-die { animation:gwWiggle 3.2s ease-in-out 0.25s infinite reverse;transform-origin:50% 60% }
+      .gw-surprise.rolling .gw-die { animation:gwRoll 0.55s ease-in-out !important }
+      .gw-surprise-title { font-size:1.35rem;font-weight:800;letter-spacing:0.01em;line-height:1.1;margin-top:2px }
+      .gw-surprise-sub { font-size:0.78rem;color:var(--text-muted) }
+      @keyframes gwWiggle { 0%,70%,100% { translate:0 0 } 76% { translate:0 -6px } 82% { translate:0 0 } 88% { translate:0 -3px } }
+      @keyframes gwRoll { 0% { translate:0 0;rotate:0deg } 25% { translate:-6px -14px;rotate:-70deg } 50% { translate:6px 0;rotate:120deg } 75% { translate:-3px -8px;rotate:230deg } 100% { translate:0 0;rotate:360deg } }
+      @media (prefers-reduced-motion: reduce) { .gw-dice .gw-die, .gw-surprise.rolling .gw-die { animation:none !important } }
+    </style>
     <div id="games-wizard" data-sub="setup">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div id="gw-step-label" style="font-size:0.74rem;color:var(--text-muted);flex:1"></div>
         <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">🎮 ${escapeHtml(g.name)}</div></div>
@@ -19613,7 +19626,11 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
       <div class="gw-pane" id="gw-pane-games">
         <div style="font-size:1.15rem;font-weight:700;margin-bottom:4px">What are you playing for?</div>
         <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;margin-bottom:10px">Tap everything that is in. Details come one game at a time, next. Every registered player's My History gets the result once it is published.</div>
-        <button type="button" onclick="openGamesRoll()" style="width:100%;min-height:46px;margin-bottom:10px;border-radius:12px;border:1.5px dashed var(--green);background:#fff;color:var(--green-dark);font-family:inherit;font-weight:700;font-size:0.92rem;cursor:pointer">🎲 Surprise me: roll the dice for a full setup</button>
+        <button type="button" class="gw-surprise" onclick="gamesRollTap(this)" aria-label="Surprise me: roll the dice for a full setup">
+          <span class="gw-dice"><svg class="gw-die" viewBox="0 0 100 100" width="72" height="72" style="transform:rotate(-12deg);" aria-hidden="true"><defs><linearGradient id="gwdg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2fbf8f"/><stop offset="1" stop-color="#0b6b4e"/></linearGradient></defs><rect x="6" y="6" width="88" height="88" rx="20" fill="url(#gwdg1)" stroke="#07503a" stroke-width="3"/><rect x="12" y="12" width="76" height="30" rx="14" fill="#fff" opacity="0.14"/><circle cx="30" cy="30" r="6.5" fill="#fff"/><circle cx="70" cy="30" r="6.5" fill="#fff"/><circle cx="30" cy="50" r="6.5" fill="#fff"/><circle cx="70" cy="50" r="6.5" fill="#fff"/><circle cx="30" cy="70" r="6.5" fill="#fff"/><circle cx="70" cy="70" r="6.5" fill="#fff"/></svg><svg class="gw-die" viewBox="0 0 100 100" width="44" height="44" style="transform:rotate(14deg);margin:0 0 4px -16px" aria-hidden="true"><defs><linearGradient id="gwdg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2fbf8f"/><stop offset="1" stop-color="#0b6b4e"/></linearGradient></defs><rect x="6" y="6" width="88" height="88" rx="20" fill="url(#gwdg2)" stroke="#07503a" stroke-width="3"/><rect x="12" y="12" width="76" height="30" rx="14" fill="#fff" opacity="0.14"/><circle cx="30" cy="30" r="6.5" fill="#fff"/><circle cx="50" cy="50" r="6.5" fill="#fff"/><circle cx="70" cy="70" r="6.5" fill="#fff"/></svg></span>
+          <span class="gw-surprise-title">Surprise me</span>
+          <span class="gw-surprise-sub">Roll the dice for a full setup</span>
+        </button>
         <div id="games-form-checklist">${gatheringGamesChecklistHtml()}</div>
       </div>
       <div class="gw-pane" id="gw-pane-money">
@@ -20263,6 +20280,11 @@ function gamesRollCrew() {
   const known = names.filter(n => { const m = _gamesFormMembers.get(String(n).trim().toLowerCase()); const e = _gamesFormHcp.players[n];
     return (m && m.source !== 'no_hcp' && m.hcp != null && Number.isFinite(m.hcp)) || (e && e.kind === 'index' && e.index !== '' && e.index != null); }).length;
   return { players: names.length || _gamesFormYesCount, hasHcp: names.length > 0 && known / names.length >= 0.75, par3: _gamesFormVenueParDataAvailable && _gamesFormPar3Holes.length > 0, pars: _gamesFormVenueParDataAvailable };
+}
+// The big dice shake for half a second, then the roll screen opens.
+function gamesRollTap(btn) {
+  if (btn && !btn.classList.contains('rolling')) { btn.classList.add('rolling'); setTimeout(() => { btn.classList.remove('rolling'); openGamesRoll(); }, 520); }
+  else if (!btn) openGamesRoll();
 }
 function openGamesRoll() {
   const crew = gamesRollCrew();

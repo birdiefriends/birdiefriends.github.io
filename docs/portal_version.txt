@@ -1,3 +1,6 @@
+v4.29.1 · 2026-10-14
+Deployed: 2026-10-14 (Changed: the Surprise me button on the Games form is now a big feature button: a large green die and a smaller one, "Surprise me" underneath, with a gentle idle wiggle and a shake when tapped before the roll screen opens. Honors reduced-motion. No Worker change.)
+
 v4.29.0 · 2026-10-14
 Deployed: 2026-10-14 (New: 🎲 Surprise me on the Games form's first step. It rolls a complete setup for the crew: ONE format picked at equal odds from the ones that fit the player count (Hi-Lo needs foursomes, Match Play / Alternate Shot / BestBall need pairs, Low Score fits anyone), then 0 to 3 side games at equal odds, then every variant: Gross or Net (Net only when most players have a handicap on file), Full or Off the low, scoring period, holes won vs strokes. CTP and Birdie Payouts only roll when the venue's par data is on file. The roll screen lets you tick or untick the side games, change the buy-in (the amounts re-split to use the whole buy-in), or Roll again; Use this setup fills the normal form (pairs and matches suggested by handicap) and lands on Review. Nothing is saved until Save Games. Worker: only a version comment changed.)
 
