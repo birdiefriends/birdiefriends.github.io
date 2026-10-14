@@ -1,3 +1,6 @@
+v4.28.4 · 2026-10-14
+Deployed: 2026-10-14 (Games added or changed late now reach every phone: the app re-checks the round's games when it comes back to the foreground, and once a minute from an hour before tee time until 8 hours after. Before, other players only saw a late-configured game (and its Live Panel / live scoring) after reloading the app. Nothing redraws unless a config actually changed. No Worker change.)
+
 v4.28.3 · 2026-10-14
 Deployed: 2026-10-14 (Weather stamp on a round's history card: it was only fetched when a photo or score was saved, and that finds nothing on the day itself (the weather archive runs a few days behind), so a round played today never got its stamp. Now opening a PAST round that has no stamp asks again, and the Worker falls back to the live weather service for any day that is already over, so yesterday's round is stamped the next morning. Today's round still shows no stamp until the day is over, on purpose (its high and low are still changing). Worker change: REDEPLOY worker.js (the gatherings Worker, not the experiences one).)
 

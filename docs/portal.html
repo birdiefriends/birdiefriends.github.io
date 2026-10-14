@@ -17462,12 +17462,36 @@ async function refreshGatheringGamesIndex() {
     const data = await res.json();
     const configs = data.ok ? (data.configs || []) : [];
     _gatheringGamesIndex = new Map(configs.map(c => [c.gathering_id, c]));
+    _gamesIndexSig = JSON.stringify(configs.map(c => [c.gathering_id, c.updated_at, c.status]));
     await refreshEventShadows(true); // v4.9.4 — hidden event-games records + closed ids, before the render below
     if (typeof dataLoaded !== 'undefined' && dataLoaded) renderAll();
   } catch (e) {
     console.warn('[BFE] gathering-games index load failed:', e.message);
   }
 }
+// A host can add or change a round's games at any time, even after the Live Panel has opened, so every phone re-checks the open
+// games list when the app comes back to the foreground and once a minute around tee time (an hour before, until 8 hours after).
+// Cheap: one small fetch, and nothing is redrawn unless a config actually changed.
+let _gamesIndexSig = null, _gamesIndexBusy = false;
+function gamesIndexWatchWanted() {
+  if (typeof dataLoaded === 'undefined' || !dataLoaded || document.visibilityState !== 'visible') return false;
+  const now = Date.now();
+  return eventData.some(e => e.dt && now >= e.dt.getTime() - 3600000 && now <= e.dt.getTime() + LIVE_EVENT_HOURS * 3600000);
+}
+async function refreshGamesIndexIfChanged(force) {
+  if (_gamesIndexBusy || (!force && !gamesIndexWatchWanted())) return;
+  _gamesIndexBusy = true;
+  try {
+    const res = await fetch(`${BFE_API}/bfe/gathering-games?status=open`);
+    const data = await res.json();
+    if (!data.ok) return;
+    const sig = JSON.stringify((data.configs || []).map(c => [c.gathering_id, c.updated_at, c.status]));
+    const prev = _gamesIndexSig; _gamesIndexSig = sig;
+    if (prev !== null && prev !== sig) await refreshGatheringGamesIndex();
+  } catch (e) { /* a missed check is retried on the next tick */ } finally { _gamesIndexBusy = false; }
+}
+setInterval(() => refreshGamesIndexIfChanged(false), 60000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshGamesIndexIfChanged(false); });
 // Dev-88 — engine unification layer 2: the ONE way any consumer reads a
 // gamed Gathering's settings. Wraps BFEngine.gatheringConfigFromLegacy so
 // every reader gets the same Round Config v1 object (spec §2a.2 principle 1
