@@ -19612,12 +19612,14 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
       .gw-dice { display:flex;align-items:flex-end;justify-content:center;height:84px;filter:drop-shadow(0 6px 6px rgba(7,80,58,0.25)) }
       .gw-dice .gw-die:first-child { animation:gwWiggle 3.2s ease-in-out infinite;transform-origin:50% 60% }
       .gw-dice .gw-die + .gw-die { animation:gwWiggle 3.2s ease-in-out 0.25s infinite reverse;transform-origin:50% 60% }
+      .gw-reroll .gw-redice { display:inline-block;font-size:1.25rem;vertical-align:middle;margin-right:4px }
+      .gw-reroll.rolling .gw-redice { animation:gwRoll 0.5s ease-in-out 3 !important }
       .gw-surprise.rolling .gw-die { animation:gwRoll 0.5s ease-in-out 3 !important }
       .gw-surprise-title { font-size:1.35rem;font-weight:800;letter-spacing:0.01em;line-height:1.1;margin-top:2px }
       .gw-surprise-sub { font-size:0.78rem;color:var(--text-muted) }
       @keyframes gwWiggle { 0%,70%,100% { translate:0 0 } 76% { translate:0 -6px } 82% { translate:0 0 } 88% { translate:0 -3px } }
       @keyframes gwRoll { 0% { translate:0 0;rotate:0deg } 25% { translate:-6px -14px;rotate:-70deg } 50% { translate:6px 0;rotate:120deg } 75% { translate:-3px -8px;rotate:230deg } 100% { translate:0 0;rotate:360deg } }
-      @media (prefers-reduced-motion: reduce) { .gw-dice .gw-die, .gw-surprise.rolling .gw-die { animation:none !important } }
+      @media (prefers-reduced-motion: reduce) { .gw-dice .gw-die, .gw-surprise.rolling .gw-die, .gw-reroll.rolling .gw-redice { animation:none !important } }
     </style>
     <div id="games-wizard" data-sub="setup">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div id="gw-step-label" style="font-size:0.74rem;color:var(--text-muted);flex:1"></div>
@@ -20401,7 +20403,14 @@ function gamesRollRender(keepFocus) {
       <div style="display:flex;gap:8px;margin-bottom:6px">${[10, 20, 40].map(v => `<button type="button" onclick="gamesRollSetDpp(${v});gamesRollRender()" style="height:32px;padding:0 14px;border-radius:16px;border:1.5px solid var(--green);background:${dpp === v ? 'var(--green-light)' : '#fff'};color:var(--green);font-family:inherit;font-weight:700;cursor:pointer">$${v}</button>`).join('')}</div>
       <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:12px">Pot ${m(dpp * n)}. Amounts above are split to use the whole buy-in; you can fine-tune them after.</div>
       <button class="host-cta-btn" onclick="gamesRollUse()">Use this setup</button>
-      <button type="button" onclick="gamesRollDo()" style="width:100%;min-height:46px;margin-top:8px;border-radius:12px;border:1.5px solid var(--green);background:#fff;color:var(--green-dark);font-family:inherit;font-weight:700;cursor:pointer">🎲 Roll again</button></div>`;
+      <button type="button" class="gw-reroll" onclick="gamesRollAgain(this)" style="width:100%;min-height:46px;margin-top:8px;border-radius:12px;border:1.5px solid var(--green);background:#fff;color:var(--green-dark);font-family:inherit;font-weight:700;cursor:pointer"><span class="gw-redice">🎲</span> Roll again</button></div>`;
+}
+// Roll again: the die tumbles for 1.5 seconds, then the new setup appears.
+function gamesRollAgain(btn) {
+  if (!btn) { gamesRollDo(); return; }
+  if (btn.classList.contains('rolling')) return;
+  btn.classList.add('rolling');
+  setTimeout(() => { if (_roll && document.getElementById('games-roll-sheet')) gamesRollDo(); }, 1500);
 }
 function gamesRollClose() { const ov = document.getElementById('games-roll-sheet'); if (ov) ov.remove(); }
 function gamesRollUse() {

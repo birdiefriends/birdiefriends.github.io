@@ -1,3 +1,6 @@
+v4.30.2 · 2026-10-14
+Deployed: 2026-10-14 (Changed: Roll again on the Surprise me screen now tumbles the die for 1.5 seconds before the new setup appears, same as the big dice. No Worker change.)
+
 v4.30.1 · 2026-10-14
 Deployed: 2026-10-14 (New: Surprise me now asks first about anyone with no handicap on file: a quick HCP index or Strokes box per player (leave it empty to count them as average), then rolls. Typed handicaps feed the random draw, the wipeout guard and Net rolls. Nothing asked when everyone has a handicap. No Worker change.)
 
