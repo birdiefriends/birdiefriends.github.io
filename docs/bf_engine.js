@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.19.0';
+  const ENGINE_VERSION = '1.20.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -499,7 +499,50 @@
     return out;
   }
 
-  // Dev-94: the same engine now plays three formats, told apart by `kind`:
+  // Hi-Lo (Dev-94): two pairs head to head, each partner plays their own ball. Every hole is worth 2 points:
+  // 1 for the LOW ball (the better of a pair's two scores) and 1 for the HIGH ball (the worse of the two); the
+  // lower of each pair's lows / highs takes that point, a tie in either leaves the point with nobody.
+  // hiloHoles: per hole, a pair needs both partners' scores. Returns [{ score: low, high, by }] (null when a score is missing).
+  function hiloHoles(cards, holeCount) {
+    const out = [];
+    for (let h = 0; h < holeCount; h++) {
+      const v = cards.map(c => (Array.isArray(c) ? c[h] : null));
+      if (v.length < 2 || !v.every(x => typeof x === 'number')) { out.push(null); continue; }
+      const low = Math.min(...v), high = Math.max(...v);
+      out.push({ score: low, high, by: v.map((x, i) => (x === low ? i : -1)).filter(i => i >= 0) });
+    }
+    return out;
+  }
+  // One segment between two pairs. sides = [{ lo:[18], hi:[18] }, { lo, hi }]. `won` = points for each side,
+  // `halved` = points nobody got. Decided once every hole of the segment is in.
+  function hiloSegmentResult(sides, seg) {
+    const total = seg.b - seg.a;
+    const pts = [0, 0];
+    let scored = 0, nobody = 0;
+    for (let i = seg.a; i < seg.b; i++) {
+      const g = sides.map(s => [s.lo[i], s.hi[i]]);
+      if (!g.every(p => typeof p[0] === 'number' && typeof p[1] === 'number')) continue;
+      scored++;
+      [0, 1].forEach(k => {
+        if (g[0][k] < g[1][k]) pts[0]++; else if (g[0][k] > g[1][k]) pts[1]++; else nobody++;
+      });
+    }
+    const lead = pts[0] - pts[1];
+    const out = { info: pts.map(p => ({ played: scored, total: p, complete: scored === total })), status: 'pending', winner: null,
+      won: pts, halved: nobody, thru: scored, lead, points: true };
+    if (scored >= total) {
+      out.decided = true;
+      if (lead === 0) { out.status = 'push'; out.text = 'Halved'; }
+      else { out.status = 'won'; out.winner = lead > 0 ? 0 : 1; out.text = Math.max(pts[0], pts[1]) + '–' + Math.min(pts[0], pts[1]); }
+    } else {
+      out.decided = false;
+      out.text = scored === 0 ? 'Not started' : (lead === 0 ? 'All square' : Math.abs(lead) + ' UP') + ' thru ' + scored;
+    }
+    return out;
+  }
+
+  // Dev-94: the same engine now plays four formats, told apart by `kind`:
+  //   'hilo'     (id hilo)      two pairs head to head, own balls: low ball vs low ball and high ball vs high ball, 1 point each
   //   'bestball' (id fourball)  pairs, the better ball of the two counts (unchanged)
   //   'altshot'  (id altshot)   pairs, ONE ball per pair so one score per hole; the pair's strokes are a % of the two
   //                              course handicaps added together (`allowance`, default 50)
@@ -510,7 +553,10 @@
   // for altshot and matchplay (bragging rights / the loser buys at the pub): nothing moves, the result still shows.
   function sideFormatCarve(kind, state, addon, inputs) {
       const L = state.ledger;
-      const gid = kind === 'bestball' ? 'fourball' : kind === 'altshot' ? 'altshot' : 'matchplay';
+      const gid = kind === 'bestball' ? 'fourball' : kind === 'altshot' ? 'altshot' : kind === 'hilo' ? 'hilo' : 'matchplay';
+      const perPlayerBalls = kind === 'bestball' || kind === 'hilo';   // each partner plays their own ball (no shared side score)
+      const headToHead = kind === 'match' || kind === 'hilo';
+      const ownAllowance = kind === 'altshot' || kind === 'match';
       const size = kind === 'match' ? 1 : 2;
       const cardBy = new Map((inputs.scorecards || []).map(c => [norm(c.player), c]));
       const pairsCfg = kind === 'match'
@@ -528,7 +574,7 @@
       }
       const gross = c => (Array.isArray(c.holes) ? c.holes : []).map(v => (typeof v === 'number' && v > 0 ? v : null));
       // Alternate Shot / Match Play strokes: a % of the course handicap (index players), the given strokes otherwise.
-      const pct = kind !== 'bestball' && addon.allowance != null && addon.allowance !== '' && Number.isFinite(Number(addon.allowance)) ? Number(addon.allowance) : (kind === 'altshot' ? 50 : null);
+      const pct = ownAllowance && addon.allowance != null && addon.allowance !== '' && Number.isFinite(Number(addon.allowance)) ? Number(addon.allowance) : (kind === 'altshot' ? 50 : null);
       const specOf = nm => (netOk && inputs.hcSpecs.get(norm(nm))) || {};
       const courseOf = nm => { const sp = specOf(nm); return sp.kind === 'index' && Number.isFinite(Number(sp.course_hcp)) ? Number(sp.course_hcp) : null; };
       const playerStrokes = nm => { const c = courseOf(nm); return pct != null && c != null ? Math.round(c * pct / 100) : strokesOf(nm); };
@@ -582,39 +628,40 @@
         const got = {}; nc.received.forEach((k, h) => { if (k) got[off + h + 1] = k; });
         return { player: side.map(nm => L.canon(nm)).join(' & '), strokes: nc.strokes, got };
       };
-      const stroke_marks = !netOk ? null : kind === 'bestball'
+      const stroke_marks = !netOk ? null : perPlayerBalls
         ? [...new Set(pairsCfg.flat().map(norm))].map(k => pairsCfg.flat().find(n => norm(n) === k)).map(marksFor).filter(Boolean)
         : pairsCfg.map(sideMarks).filter(Boolean);
       const rows = pairsCfg.map((pr, si) => {
         const names = pr.map(nm => L.canon(nm));
-        const arrs = kind === 'bestball' ? pr.map(holesFor).filter(a => a) : [sideHoles(pr, si)].filter(a => a);
+        const arrs = perPlayerBalls ? pr.map(holesFor).filter(a => a) : [sideHoles(pr, si)].filter(a => a);
         const cards = pr.map(nm => cardBy.get(norm(nm))).filter(Boolean);
         const expected = cards.some(c => c.hole_count === 9) ? 9 : 18;
         const off = cards.some(c => c.hole_count === 9 && c.hole_half === 'back') ? 9 : 0;
-        const bb = arrs.length ? betterBallHoles(arrs, expected) : [];
+        const bb = arrs.length ? (kind === 'hilo' ? (arrs.length === 2 ? hiloHoles(arrs, expected) : []) : betterBallHoles(arrs, expected)) : [];
         const played = bb.filter(Boolean).length;
         const complete = arrs.length > 0 && played === expected;
         return {
           pair: names, complete, played,
           total: complete ? bb.reduce((a, h) => a + h.score, 0) : null,
-          holes: bb.map((h, i) => ({ hole: off + i + 1, score: h ? h.score : null, by: h ? h.by.map(ix => names[ix]) : [] }))
+          holes: bb.map((h, i) => ({ hole: off + i + 1, score: h ? h.score : null, ...(kind === 'hilo' ? { high: h ? h.high : null } : {}), by: h ? h.by.map(ix => names[ix]) : [] }))
         };
       });
       let plan = fourballSegmentPlan(addon);
       const nineRound = pairsCfg.some(pr => pr.some(nm => { const c = cardBy.get(norm(nm)); return c && c.hole_count === 9; }));
       const nineOff = pairsCfg.some(pr => pr.some(nm => { const c = cardBy.get(norm(nm)); return c && c.hole_count === 9 && c.hole_half === 'back'; })) ? 9 : 0;
-      if (kind === 'match') {
-        // always hole by hole between the two players of a match; the whole-round match is one segment
+      if (headToHead) {
+        // always hole by hole between the two sides of a match; the whole-round match is one segment
         const whole = nineRound ? [{ key: 'match', label: 'Match', a: nineOff, b: nineOff + 9 }] : [{ key: 'match', label: 'Match', a: 0, b: 18 }];
-        plan = { period: plan.period, mode: plan.period === 'round' || nineRound ? 'match' : plan.period, win_by: 'holes', scope: 'group', segs: plan.period === 'round' || nineRound ? whole : plan.segs };
+        plan = { period: plan.period, mode: plan.period === 'round' || nineRound ? 'match' : plan.period, win_by: kind === 'hilo' ? 'points' : 'holes', scope: 'group', segs: plan.period === 'round' || nineRound ? whole : plan.segs };
       }
       // participants: the whole round antes into BestBall; Alternate Shot and Match Play only the people in a side
       const nPlay = kind === 'bestball' ? L.n : pairsCfg.length * size;
       const everyoneIn = kind === 'bestball' ? L.players.slice() : pairsCfg.flat().map(nm => L.canon(nm));
       const giveBackTo = (names, amt) => { const back = names.length ? Math.floor(amt / names.length) : 0; names.forEach(nm => L.credit(nm, 'given_back', back)); return { each: back, unallocated: amt - back * names.length }; };
-      if (plan.mode !== 'total' && (kind === 'match' || !nineRound) && rows.length >= 2) {
+      if (plan.mode !== 'total' && (headToHead || !nineRound) && rows.length >= 2) {
         const scoresOf = r => { const a = new Array(18).fill(null); r.holes.forEach(h => { if (h.score != null) a[h.hole - 1] = h.score; }); return a; };
         const arrs = rows.map(scoresOf);
+        const hiArrs = kind === 'hilo' ? rows.map(r => { const a = new Array(18).fill(null); r.holes.forEach(h => { if (h.high != null) a[h.hole - 1] = h.high; }); return a; }) : null;
         const idxs = rows.map((_, i) => i);
         const groupIdx = plan.scope === 'group' ? idxs.reduce((acc, i) => { (i % 2 === 0 ? acc.push([i]) : acc[acc.length - 1].push(i)); return acc; }, []) : [idxs];
         const configuredPot2 = (Number(addon.dollar_per_player) || 0) * nPlay;
@@ -630,12 +677,12 @@
           const gNames = plan.scope === 'group' ? gi.reduce((a, i) => a.concat(rows[i].pair), []) : everyoneIn;
           const segsOut = plan.segs.map(sg => {
             const pot = Math.floor(perSeg * gPlayers);
-            const res = kind === 'match' ? matchSegmentResult(gi.map(i => arrs[i]), sg) : fourballSegmentResult(gi.map(i => arrs[i]), sg, plan.win_by);
+            const res = kind === 'hilo' ? hiloSegmentResult(gi.map(i => ({ lo: arrs[i], hi: hiArrs[i] })), sg) : kind === 'match' ? matchSegmentResult(gi.map(i => arrs[i]), sg) : fourballSegmentResult(gi.map(i => arrs[i]), sg, plan.win_by);
             const seg = { key: sg.key, label: sg.label, from: sg.a + 1, to: sg.b, pot, status: res.status, winner: null,
-              ...(res.won ? { holes_won: res.won, halved: res.halved } : {}),
+              ...(res.won ? (res.points ? { points: res.won, nobody: res.halved } : { holes_won: res.won, halved: res.halved }) : {}),
               ...(res.text ? { result: res.text, decided: !!res.decided, thru: res.thru } : {}),
               totals: res.info.map(x => (x.complete ? x.total : null)),
-          by: rows.map((r, i) => ({ player: r.player, total: res.info[i] && res.info[i].complete ? res.info[i].total : null })).sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total) };
+          by: rows.map((r, i) => ({ player: r.player, total: res.info[i] && res.info[i].complete ? res.info[i].total : null })).sort((a, b) => (a.total == null) - (b.total == null) || (res.points ? b.total - a.total : a.total - b.total)) };
             used += pot;
             if (res.status === 'won') {
               const wr = rows[gi[res.winner]];
@@ -660,7 +707,7 @@
         state.unallocated += unalloc2;
         return Object.assign({
           pairs: rows.map(r => r.pair), pot: pot2, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode, stroke_marks } : {}),
-          ...(kind !== 'bestball' ? { format: kind, unit: kind === 'match' ? 'match' : 'ball', ...(pct != null && netOk ? { allowance: pct } : {}) } : {}),
+          ...(kind !== 'bestball' ? { format: kind, unit: kind === 'match' ? 'match' : kind === 'hilo' ? 'pair' : 'ball', ...(pct != null && netOk ? { allowance: pct } : {}) } : {}),
           ...(wantNet && !netOk ? { net_missing: true } : {}),
           standings: rows.map((r, i) => Object.assign({}, r, { scores: arrs[i], total: r.complete ? r.total : null }))
             .sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
@@ -691,7 +738,7 @@
       state.unallocated += unalloc;
       return Object.assign({
         pairs: rows.map(r => r.pair), pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: mode, stroke_marks } : {}),
-        ...(kind !== 'bestball' ? { format: kind, unit: kind === 'match' ? 'match' : 'ball', ...(pct != null && netOk ? { allowance: pct } : {}) } : {}),
+        ...(kind !== 'bestball' ? { format: kind, unit: kind === 'match' ? 'match' : kind === 'hilo' ? 'pair' : 'ball', ...(pct != null && netOk ? { allowance: pct } : {}) } : {}),
         ...(wantNet && !netOk ? { net_missing: true } : {}),
         standings: rows.slice().sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
         winners: winners.map(w => w.pair), per_pair: perPair, per_player: perPlayer, given_back_each: givenBackEach
@@ -699,6 +746,7 @@
   }
   ADDONS.fourball = { id: 'fourball', order: 25, entity: 'pair', carve: (state, addon, inputs) => sideFormatCarve('bestball', state, addon, inputs) };
   ADDONS.altshot = { id: 'altshot', order: 25.2, entity: 'pair', carve: (state, addon, inputs) => sideFormatCarve('altshot', state, addon, inputs) };
+  ADDONS.hilo = { id: 'hilo', order: 25.3, entity: 'pair', carve: (state, addon, inputs) => sideFormatCarve('hilo', state, addon, inputs) };
   ADDONS.matchplay = { id: 'matchplay', order: 25.4, entity: 'individual', carve: (state, addon, inputs) => sideFormatCarve('match', state, addon, inputs) };
 
   // ── Low Score (Dev-93): an individual game over a scoring period ─────────────────────
@@ -985,10 +1033,69 @@
     }]
   });
 
+  defineGame('hilo', {
+    kind: 'addon', input: 'strokes', net: true, entity: 'pair',
+    released: true, moneyOptional: true,
+    meta: { traits: { unit: 'pair', allowance: 'round', individualScores: true, sides: true, sideForm: true, headToHead: true }, label: 'Hi-Lo', tab: 'Hi-Lo', short: 'Low ball + high ball, 2 points a hole', icon: '⚖️', seal: 'HI-LO', uiOrder: 5.3, group: 'format',
+      info: 'Two pairs play each other, every player on their own ball. Each hole is worth 2 points: 1 for the LOW ball (the better score of each pair) and 1 for the HIGH ball (the worse score of each pair). The lower low takes its point and the lower high takes its point; if they tie, nobody gets it. The pair with more points wins; level is a push and the antes come back. Partners stay the same all round. Gross or Net (Full or off the low). The pot can be played for the whole round, Front / Back, Front / Back / Total or 6 / 6 / 6, and can be left at $0.' },
+    config: [
+      { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0 },
+      { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
+      { key: 'net_mode', type: 'enum', label: 'Net strokes', values: ['own', 'low'], default: 'own' },
+      { key: 'period', type: 'enum', label: 'Scoring period', values: PERIOD_ORDER.slice(), default: 'round' },
+      { key: 'pairs', type: 'pairs', evenPairs: true, label: 'Pairs', default: [], required: true }
+    ],
+    fixedCost: cfg => (Number(cfg.dollar_per_player) || 0) * 2 * ((cfg.pairs || []).length),
+    maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
+    fixtures: [{
+      name: 'gross: Ann & Bob take both points on every hole, so they win the $40',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'hilo', entity: 'pair', dollar_per_player: 10, basis: 'gross', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+      // Ann 4 / Bob 5 vs Cy 5 / Di 6: low 4 beats 5, high 5 beats 6 -> 2 points a hole, 36-0.
+      inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5)), _P('Di', _ALL(6))] },
+      expect: { payouts: { Ann: 20, Bob: 20, Cy: 0, Di: 0 }, unallocated: 0, results: { hilo: { pot: 40 } } }
+    }, {
+      name: 'a split: each pair wins one point a hole (low for one, high for the other) so the match is level and every ante comes back',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'hilo', entity: 'pair', dollar_per_player: 10, basis: 'gross', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+      // Ann 3 / Bob 7 (low 3, high 7) vs Cy 4 / Di 5 (low 4, high 5): Ann & Bob take the low, Cy & Di the high.
+      inputs: { scorecards: [_P('Ann', _ALL(3)), _P('Bob', _ALL(7)), _P('Cy', _ALL(4)), _P('Di', _ALL(5))] },
+      expect: { payouts: { Ann: 10, Bob: 10, Cy: 10, Di: 10 }, unallocated: 0, results: { hilo: { pot: 40 } } }
+    }, {
+      name: 'ties give nobody the point: tied lows and a better high still decides the match',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'hilo', entity: 'pair', dollar_per_player: 10, basis: 'gross', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+      // Lows tie at 4, highs 5 vs 6: Ann & Bob get the high point only, 18-0.
+      inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(5)), _P('Cy', _ALL(4)), _P('Di', _ALL(6))] },
+      expect: { payouts: { Ann: 20, Bob: 20, Cy: 0, Di: 0 }, unallocated: 0, results: { hilo: { pot: 40 } } }
+    }, {
+      name: 'net, off the low: the strokes come off the lowest handicap and swing the points',
+      round: { dollar_per_player: 10, handicap: { mode: 'net', allowance: 100, stroke_index: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+          players: { Ann: { kind: 'given', strokes: 0 }, Bob: { kind: 'given', strokes: 18 }, Cy: { kind: 'given', strokes: 0 }, Di: { kind: 'given', strokes: 0 } } },
+        addons: [{ id: 'hilo', entity: 'pair', dollar_per_player: 10, basis: 'net', net_mode: 'low', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+      // Bob gets a stroke every hole: net 4. Ann 5 / Bob 4 (low 4, high 5) vs Cy 5 / Di 5 (low 5, high 5): Ann & Bob win the low, tie the high.
+      inputs: { scorecards: [_P('Ann', _ALL(5)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5)), _P('Di', _ALL(5))] },
+      expect: { payouts: { Ann: 20, Bob: 20, Cy: 0, Di: 0 }, unallocated: 0, results: { hilo: { pot: 40 } } }
+    }, {
+      name: 'periods (Front / Back): each half is its own pot and its own points',
+      round: { dollar_per_player: 20, addons: [
+        { id: 'hilo', entity: 'pair', dollar_per_player: 20, basis: 'gross', period: 'front_back', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+      // $10 a segment, $40 pot each. Front: Ann/Bob 4,5 vs Cy/Di 5,6. Back: Cy/Di 4,5 vs Ann/Bob 5,6.
+      inputs: { scorecards: [_P('Ann', _SPLIT(4, 5)), _P('Bob', _SPLIT(5, 6)), _P('Cy', _SPLIT(5, 4)), _P('Di', _SPLIT(6, 5))] },
+      expect: { payouts: { Ann: 20, Bob: 20, Cy: 20, Di: 20 }, unallocated: 0 }
+    }, {
+      name: '$0 pot: the match is still scored, nothing moves',
+      round: { dollar_per_player: 0, addons: [
+        { id: 'hilo', entity: 'pair', dollar_per_player: 0, basis: 'gross', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+      inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5)), _P('Di', _ALL(6))] },
+      expect: { payouts: { Ann: 0, Bob: 0, Cy: 0, Di: 0 }, unallocated: 0, results: { hilo: { pot: 0 } } }
+    }]
+  });
+
   defineGame('matchplay', {
     kind: 'addon', input: 'strokes', net: true, entity: 'individual',
     released: true, moneyOptional: true,
-    meta: { traits: { unit: 'match', allowance: 'own', individualScores: false, sides: true, sideForm: true }, label: 'Match Play', tab: 'Match', short: 'Head to head, hole by hole', icon: '⚔️', seal: 'MATCH PLAY', uiOrder: 5.4, group: 'format',
+    meta: { traits: { unit: 'match', allowance: 'own', individualScores: false, sides: true, sideForm: true, headToHead: true }, label: 'Match Play', tab: 'Match', short: 'Head to head, hole by hole', icon: '⚔️', seal: 'MATCH PLAY', uiOrder: 5.4, group: 'format',
       info: 'Head to head, hole by hole: the lower score wins the hole, and the match goes to whoever is ahead when there are not enough holes left to catch up (3&2). The winner is announced then, but they may play on. A match level after the last hole is halved and each player gets their money back. Net strokes are a % of each course handicap (100% is full), either full or off the lower handicap in the match. The pot can be left at $0.' },
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0 },
@@ -1200,10 +1307,10 @@
       } else if (f.type === 'pairs') {
         // [[nameA, nameB], ...]: at least two pairs, two different names each, nobody in two pairs
         const names = [];
-        const wellFormed = Array.isArray(v) && v.length >= (f.minPairs || 2) && v.every(pr => Array.isArray(pr) && pr.length === 2 &&
+        const wellFormed = Array.isArray(v) && v.length >= (f.minPairs || 2) && (!f.evenPairs || v.length % 2 === 0) && v.every(pr => Array.isArray(pr) && pr.length === 2 &&
           pr.every(n => typeof n === 'string' && n.trim()) && pr[0].trim().toLowerCase() !== pr[1].trim().toLowerCase());
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
-        if (!wellFormed) errors.push(f.label + ' needs at least ' + ((f.minPairs || 2) === 1 ? 'one pair' : 'two pairs') + ' of two different players');
+        if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one pair' : 'two pairs')) + ' of two different players');
         else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be in one pair');
       } else if (f.type === 'enum') {
         if (!f.lenient && !(f.values || []).includes(v)) errors.push(f.label + ' must be one of ' + (f.values || []).join('/'));
@@ -1322,6 +1429,12 @@
         net_mode: asc.net_mode === 'own' ? 'own' : 'low', allowance: asc.allowance != null ? Number(asc.allowance) : 50, pairs: Array.isArray(asc.pairs) ? asc.pairs : [],
         ...(periodKey(asc) !== 'round' ? { period: periodKey(asc) } : {}), win_by: asc.win_by === 'holes' ? 'holes' : 'strokes', scope: asc.win_by === 'holes' || asc.scope === 'group' ? 'group' : 'field' });
     }
+    const hlc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.hilo : null;
+    if (games.includes('hilo') && hlc) {
+      addons.push({ id: 'hilo', entity: 'pair', dollar_per_player: Number(hlc.dollar_per_player) || 0, basis: hlc.basis === 'net' ? 'net' : 'gross',
+        net_mode: hlc.net_mode === 'low' ? 'low' : 'own', pairs: Array.isArray(hlc.pairs) ? hlc.pairs : [],
+        ...(periodKey(hlc) !== 'round' ? { period: periodKey(hlc) } : {}) });
+    }
     const mpc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.matchplay : null;
     if (games.includes('matchplay') && mpc) {
       addons.push({ id: 'matchplay', entity: 'individual', dollar_per_player: Number(mpc.dollar_per_player) || 0, basis: mpc.basis === 'net' ? 'net' : 'gross',
@@ -1368,7 +1481,7 @@
     const dpp = Number(config && config.payout && config.payout.entry_per_player) || 0;
     const totalPot = dpp * ledger.n;
     const state = { ledger, remaining: totalPot, unallocated: 0, rollover: 0 };
-    const results = { cttp: null, birdieball: null, birdiepay: null, fourball: null, altshot: null, matchplay: null, lowscore: null, skins: null };
+    const results = { cttp: null, birdieball: null, birdiepay: null, fourball: null, altshot: null, hilo: null, matchplay: null, lowscore: null, skins: null };
     const addons = ((config && config.addons) || [])
       .filter(a => ADDONS[a.id])
       .slice()
@@ -1399,7 +1512,7 @@
       if (leftover > 0) state.unallocated += ledger.giveBack(leftover).unallocated;
     }
     const rows = [...ledger.rows.values()]
-      .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + (r.birdiepay || 0) + (r.fourball || 0) + (r.altshot || 0) + (r.matchplay || 0) + (r.lowscore || 0) + r.given_back }))
+      .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + (r.birdiepay || 0) + (r.fourball || 0) + (r.altshot || 0) + (r.hilo || 0) + (r.matchplay || 0) + (r.lowscore || 0) + r.given_back }))
       .sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
     const games = (config && config.legacy && config.legacy.games) || addons.map(a => a.id);
     return {
@@ -1410,6 +1523,7 @@
       ...(results.birdiepay ? { birdiepay: results.birdiepay } : {}),
       ...(results.fourball ? { fourball: results.fourball } : {}),
       ...(results.altshot ? { altshot: results.altshot } : {}),
+      ...(results.hilo ? { hilo: results.hilo } : {}),
       ...(results.matchplay ? { matchplay: results.matchplay } : {}),
       ...(results.lowscore ? { lowscore: results.lowscore } : {}),
       skins: results.skins, payouts: rows,
@@ -1473,14 +1587,15 @@
     if (!fb) return null;
     const isMatch = !!(addon && Array.isArray(addon.matches));
     let plan = fourballSegmentPlan(addon);
-    if (isMatch) plan = { period: plan.period, mode: plan.period === 'round' ? 'match' : plan.period, win_by: 'holes', scope: 'group', segs: plan.period === 'round' ? [{ key: 'match', label: 'Match', a: 0, b: 18 }] : plan.segs };
+    const isHilo = fb.format === 'hilo';
+    if (isMatch || isHilo) plan = { period: plan.period, mode: plan.period === 'round' ? 'match' : plan.period, win_by: isHilo ? 'points' : 'holes', scope: 'group', segs: plan.period === 'round' ? [{ key: 'match', label: 'Match', a: 0, b: 18 }] : plan.segs };
     const sidesCfg = isMatch ? [].concat(...addon.matches.filter(m => Array.isArray(m) && m.length === 2).map(m => [[m[0]], [m[1]]])) : (addon && addon.pairs);
     const viewSegs = plan.mode === 'total' ? PERIODS.fbt.segs : plan.segs; // the one-pot game still shows Front and Back
     const byKey = new Map((fb.standings || []).map(r => [r.pair.map(norm).join('|'), r]));
-    const scoresOf = pr => {
+    const scoresOf = (pr, field) => {
       const out = new Array(18).fill(null);
       const r = byKey.get(pr.map(norm).join('|'));
-      if (r) (r.holes || []).forEach(h => { if (h.score != null) out[h.hole - 1] = h.score; });
+      if (r) (r.holes || []).forEach(h => { const v = field ? h[field] : h.score; if (v != null) out[h.hole - 1] = v; });
       return out;
     };
     const money = (fb.segments && fb.segments.groups) || [];
@@ -1488,6 +1603,25 @@
       const pairs = g.pairs.map(pr => ({ names: pr, scores: scoresOf(pr) }));
       if (pairs.length < 2) return { n: g.n, pairs, solo: true };
       const A = pairs[0].scores, B = pairs[1].scores;
+      if (isHilo) {
+        // Hi-Lo: `a`/`b` are each pair's LOW ball, `ha`/`hb` its HIGH ball; pa/pb the points the pair took on the hole (0-2)
+        const HA = scoresOf(pairs[0].names, 'high'), HB = scoresOf(pairs[1].names, 'high');
+        const holes = A.map((a, i) => {
+          const full = a != null && B[i] != null && HA[i] != null && HB[i] != null;
+          const pa = full ? (a < B[i] ? 1 : 0) + (HA[i] < HB[i] ? 1 : 0) : null, pb = full ? (a > B[i] ? 1 : 0) + (HA[i] > HB[i] ? 1 : 0) : null;
+          return { hole: i + 1, a, b: B[i], ha: HA[i], hb: HB[i], pa, pb, res: !full ? null : pa > pb ? 'A' : pa < pb ? 'B' : 'T' };
+        });
+        const sides = [{ lo: A, hi: HA }, { lo: B, hi: HB }];
+        const segs = viewSegs.map(sg => {
+          const r = hiloSegmentResult(sides, sg);
+          const paid = ((money[gi] || {}).segments || []).find(x => x.key === sg.key) || null;
+          const both = holes.slice(sg.a, sg.b).filter(h => h.res).length;
+          return { key: sg.key, label: sg.label, from: sg.a + 1, to: sg.b, played: both, holes_won: r.won, points: r.won, halved: r.halved,
+            strokes: [0, 0], lead: r.lead, leader: r.lead === 0 ? null : (r.lead > 0 ? 0 : 1), final: r.status !== 'pending',
+            status: both === 0 ? 'not_started' : (r.status === 'pending' ? 'in_progress' : 'final'), pot: paid ? paid.pot : null, text: r.text, decided: !!r.decided };
+        });
+        return { n: g.n, pairs, holes, segs, strokes_lead: 0, hilo: true };
+      }
       const holes = A.map((a, i) => ({ hole: i + 1, a, b: B[i], res: a == null || B[i] == null ? null : a < B[i] ? 'A' : a > B[i] ? 'B' : 'T' }));
       const segs = viewSegs.map(sg => {
         const r = isMatch ? matchSegmentResult([A, B], sg) : fourballSegmentResult([A, B], sg, plan.win_by);
@@ -1702,7 +1836,8 @@
     (holes || []).forEach((h, i) => {
       if (!h || !h.res) return;
       played++;
-      if (h.res === 'A') { a++; lead++; } else if (h.res === 'B') { b++; lead--; } else t++;
+      if (h.pa != null) { a += h.pa; b += h.pb; lead += h.pa - h.pb; if (h.pa === h.pb) t++; }   // Hi-Lo: the story is told in points
+      else if (h.res === 'A') { a++; lead++; } else if (h.res === 'B') { b++; lead--; } else t++;
       maxA = Math.max(maxA, lead); maxB = Math.max(maxB, -lead);
       if (lead === 0) square++;
       const sgn = Math.sign(lead);
@@ -1726,12 +1861,14 @@
       const win = x => (x && x.status === 'won' && x.winner) ? (x.winner.join('|') === pa.names.join('|') ? 0 : 1) : null;
       let big = '', small = '', winner = null, status = story.played ? 'inprogress' : 'notstarted';
       // the winner's number first, so "7 – 6" always reads as the winner's view
-      const holesFor = w => { const [x, y] = w === 1 ? [story.b, story.a] : [story.a, story.b]; return `${x} – ${y}${story.t ? `, ${story.t} halved` : ''}`; };
+      const hilo = f.format === 'hilo';
+      const holesFor = w => { const [x, y] = w === 1 ? [story.b, story.a] : [story.a, story.b]; return hilo ? `${x} – ${y}` : `${x} – ${y}${story.t ? `, ${story.t} halved` : ''}`; };
       if (whole) {
         winner = win(whole);
         status = whole.status === 'won' ? 'won' : whole.status === 'push' ? 'halved' : 'inprogress';
-        big = whole.result ? (status === 'halved' ? 'Halved' : whole.result) : (status === 'won' ? `${Math.abs(story.lead)} UP` : status === 'halved' ? 'Halved' : 'In progress');
-        small = `Holes ${holesFor(winner)}`;
+        big = hilo ? (status === 'halved' ? 'Halved' : status === 'won' ? `${holesFor(winner)}` : 'In progress')
+          : whole.result ? (status === 'halved' ? 'Halved' : whole.result) : (status === 'won' ? `${Math.abs(story.lead)} UP` : status === 'halved' ? 'Halved' : 'In progress');
+        small = hilo ? `Points · ${status === 'halved' ? holesFor(0) : 'low ball + high ball'}` : `Holes ${holesFor(winner)}`;
       } else if (!sg || !paid) {
         // one pot on total strokes: the result is the strokes, the holes are the story
         const [tA, tB] = [pa, pb].map(x => { const r = (f.standings || []).find(z => z.pair.join('|') === x.names.join('|')); return r && r.complete ? r.total : null; });
@@ -1740,17 +1877,17 @@
           const d = Math.abs(tA - tB);
           big = winner == null ? 'Tied' : `${d} stroke${d === 1 ? '' : 's'}`;
           small = `${winner === 1 ? tB : tA} vs ${winner === 1 ? tA : tB}${f.basis === 'net' ? ' net' : ''} · holes ${holesFor(winner)}`;
-        } else { big = 'In progress'; small = story.played ? `Holes ${holesTxt}` : ''; }
+        } else { big = 'In progress'; small = story.played ? `Holes ${holesFor(winner)}` : ''; }
       } else {
         // period pots (front / back / total): the headline is who took more of them
         const wins = [0, 0]; paid.forEach(x => { const w = win(x); if (w != null) wins[w]++; });
         winner = wins[0] === wins[1] ? null : wins[0] > wins[1] ? 0 : 1;
         status = paid.every(x => x.status === 'pending') ? 'inprogress' : (winner == null ? 'halved' : 'won');
         const wf = winner === 1 ? [wins[1], wins[0]] : wins;
-        big = `${wf[0]} – ${wf[1]}`; small = `Pots won · holes ${holesFor(winner)}`;
+        big = `${wf[0]} – ${wf[1]}`; small = hilo ? `Pots won · points ${holesFor(winner)}` : `Pots won · holes ${holesFor(winner)}`;
       }
       const segs = (paid && paid.length > 1) ? paid.map(x => ({ label: x.label, text: x.result || (x.status === 'won' ? '' : x.status === 'push' ? 'Halved' : 'In progress'), winner: win(x), money: x.per_player ? x.per_player : null })) : [];
-      const r = { names: [pa.names, pb.names], short: [short(pa.names), short(pb.names)], status, winner, big, small, story, segs,
+      const r = { hilo, names: [pa.names, pb.names], short: [short(pa.names), short(pb.names)], status, winner, big, small, story, segs,
         pot: whole ? whole.pot : (paid ? paid.reduce((t, x) => t + (x.pot || 0), 0) : null),
         perPlayer: whole ? (whole.per_player || null) : (!paid && winner != null && f.per_player ? f.per_player : null),
         decidedEarly: !!(whole && whole.status === 'won' && /&/.test(whole.result || '')) };
@@ -1765,9 +1902,9 @@
     const w = r.winner;
     if (st.firstLead && st.changes === 0 && st.square <= 1 && w != null) tags.push({ icon: '🏁', text: `Wire to wire for ${who(w)}` });
     else if (w != null && st.neverTrailed === (w === 0 ? 'A' : 'B') && st.changes === 0) tags.push({ icon: '🛡️', text: `${who(w)} never trailed` });
-    else if (w != null && (w === 0 ? st.maxB : st.maxA) >= 2) tags.push({ icon: '🔥', text: `${who(w)} came back from ${w === 0 ? st.maxB : st.maxA} down` });
+    else if (w != null && (w === 0 ? st.maxB : st.maxA) >= 2) tags.push({ icon: '🔥', text: `${who(w)} came back from ${w === 0 ? st.maxB : st.maxA} ${r.hilo ? 'points ' : ''}down` });
     const big = Math.max(st.maxA, st.maxB);
-    if (big >= 3) tags.push({ icon: '📈', text: `Biggest lead: ${who(st.maxA >= st.maxB ? 0 : 1)} ${big} UP` });
+    if (big >= 3) tags.push({ icon: '📈', text: `Biggest lead: ${who(st.maxA >= st.maxB ? 0 : 1)} ${big} ${r.hilo ? 'pts up' : 'UP'}` });
     if (st.changes >= 1) tags.push({ icon: '🔄', text: `Lead changed hands ${st.changes}×` });
     if (st.square >= 3) tags.push({ icon: '⚖️', text: `All square ${st.square} times` });
     if (r.decidedEarly) tags.push({ icon: '⏱️', text: `Decided early (${r.big})` });
@@ -1779,7 +1916,7 @@
     const n = Math.max(1, Math.floor(Number(players) || 0));
     const has = g => (games || []).includes(g);
     const dollars = x => Math.max(1, Math.round(x));
-    const out = { players: n, pot: B * n, cttp: null, birdieball: null, birdiepay: null, fourball: null, altshot: null, matchplay: null, lowscore: null };
+    const out = { players: n, pot: B * n, cttp: null, birdieball: null, birdiepay: null, fourball: null, altshot: null, hilo: null, matchplay: null, lowscore: null };
     if (!(B > 0)) return out;
     if (has('birdieball')) out.birdieball = { dollar_per_player: dollars(0.2 * B) };
     if (has('cttp')) {
@@ -1796,7 +1933,7 @@
     //  - with neither, nothing would soak up the rest, so the mains take everything the fixed games (CTP, MiserBall) leave.
     // `periods` ({fourball: 3, lowscore: 1}) is how many pots each main is cut into: a main's total is a whole number of
     // dollars per period, so it is rounded down to a multiple of that and the spare dollars go to whichever main can take them.
-    const mains = ['fourball', 'altshot', 'matchplay', 'lowscore'].filter(has);
+    const mains = ['fourball', 'altshot', 'hilo', 'matchplay', 'lowscore'].filter(has);
     if (mains.length) {
       const cttpPer = out.cttp ? out.cttp.dollar_per_hole * out.cttp.holes / n : 0;
       const bbTarget = out.birdieball ? out.birdieball.dollar_per_player : 0;

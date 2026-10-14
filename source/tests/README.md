@@ -31,6 +31,7 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_tee_par.mjs` | v4.25.0 par from the tee: default-tee pick, tee-first `csResolvePars`, Vs Par fill rules, ⭐ save keeps catalog, Par editor modes, Birdie Payouts `pars_by_player` (engine, schema, form) |
 | `test_gc_search.mjs` | GC-API search status persistence, name-variant retry, 429 quota message |
 | `test_side_games.mjs` | v4.26.0 Match Play + Alternate Shot: `matchSegmentResult` (early 3&2, halved, live), pots, play-on, $0, off-the-low vs full, A-S one score per pair, live mirroring, results tabs |
+| `test_hilo.mjs` | v4.28.0 Hi-Lo: 2 points a hole (low + high), ties give nobody the point, push on level, periods, net off the low, match view / headline, form blank/load, wizard steps |
 | `test_side_results.mjs` | v4.26.5 A-S / Match Play results: story (lead changes, biggest lead), hero card text (3&2, strokes, $0 buys, halved), hole strip, no individual ranking for one-ball rounds |
 | `test_game_traits.mjs` | v4.27.0 registry traits are consistent; live/results/strokes screens never hard-code Alternate Shot / Match Play; multi-side-game chooser; engine match story |
 

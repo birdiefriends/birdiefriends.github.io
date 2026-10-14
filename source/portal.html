@@ -3620,7 +3620,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.19.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.20.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -10352,9 +10352,9 @@ function fourballActionsHtml(cfg) {
   if (!g || g.solo) return toggle + chips + `<div style="font-size:0.82rem;color:rgba(255,255,255,0.65);line-height:1.45">${g ? `${g.pairs[0].names.map(escapeHtml).join(' &amp; ')} has no opposing pair in this group.` : 'No pairs set up.'}</div>`;
   const TEAL = '#5DCAA5', AMB = '#e0b44c';
   const [pa, pb] = g.pairs;
-  const holesMode = m.win_by === 'holes';
+  const holesMode = m.win_by === 'holes', ptsMode = m.win_by === 'points';
   const played = g.holes.filter(h => h.res).length;
-  const tl = holesMode ? g.holes.reduce((a, h) => a + (h.res === 'A' ? 1 : h.res === 'B' ? -1 : 0), 0) : g.strokes_lead;
+  const tl = ptsMode ? g.holes.reduce((a, h) => a + (h.pa != null ? h.pa - h.pb : 0), 0) : holesMode ? g.holes.reduce((a, h) => a + (h.res === 'A' ? 1 : h.res === 'B' ? -1 : 0), 0) : g.strokes_lead;
   const lastPlayed = played ? g.holes.filter(h => h.res).slice(-1)[0].hole : null;
   const sel = _fbUi.hole && g.holes[_fbUi.hole - 1] && g.holes[_fbUi.hole - 1].res ? _fbUi.hole : null;
   const iA = fbIni(pa.names, pb.names), iB = fbIni(pb.names, pa.names);
@@ -10369,13 +10369,13 @@ function fourballActionsHtml(cfg) {
     const done = !!h.res, on = h.hole === sel;
     const bg = !done ? 'transparent' : h.res === 'A' ? TEAL : h.res === 'B' ? AMB : 'rgba(255,255,255,0.14)';
     const col = !done ? 'rgba(255,255,255,0.4)' : h.res === 'A' ? '#04342a' : h.res === 'B' ? '#3a2a00' : 'rgba(255,255,255,0.85)';
-    return `<button type="button" ${done ? `onclick="fbPickHole(${h.hole})" aria-label="Hole ${h.hole}, ${h.res === 'T' ? 'halved' : escapeHtml(h.res === 'A' ? iA : iB) + ' won'}"` : 'disabled'} style="height:${skAnyStrokes() ? 50 : 44}px;border-radius:7px;font-family:'DM Mono',monospace;font-size:0.76rem;font-weight:700;padding:4px 0;box-sizing:border-box;cursor:${done ? 'pointer' : 'default'};background:${bg};color:${col};border:${on ? '2px solid #fff' : done ? '0' : '1px dashed rgba(255,255,255,0.22)'}"><span style="font-size:0.56rem;opacity:0.7;display:block;line-height:1;font-weight:500">${h.hole}</span>${done ? (h.res === 'T' ? '–' : escapeHtml(h.res === 'A' ? iA : iB)) : ''}${liveDots(h.hole, done)}</button>`;
+    return `<button type="button" ${done ? `onclick="fbPickHole(${h.hole})" aria-label="Hole ${h.hole}, ${h.res === 'T' ? (ptsMode ? 'split' : 'halved') : escapeHtml(h.res === 'A' ? iA : iB) + ' won'}"` : 'disabled'} style="height:${skAnyStrokes() ? 50 : 44}px;border-radius:7px;font-family:'DM Mono',monospace;font-size:0.76rem;font-weight:700;padding:4px 0;box-sizing:border-box;cursor:${done ? 'pointer' : 'default'};background:${bg};color:${col};border:${on ? '2px solid #fff' : done ? '0' : '1px dashed rgba(255,255,255,0.22)'}"><span style="font-size:0.56rem;opacity:0.7;display:block;line-height:1;font-weight:500">${h.hole}</span>${done ? (h.res === 'T' ? '–' : escapeHtml(h.res === 'A' ? iA : iB)) : ''}${liveDots(h.hole, done)}</button>`;
   };
   const segHtml = g.segs.map(sg => {
     const hs = g.holes.slice(sg.from - 1, sg.to);
     const lead = sg.lead;
-    const tally = sg.text && sg.played > 0 ? (sg.decided ? (lead === 0 ? 'Halved' : `${lead > 0 ? iA : iB} wins ${sg.text}`) : (lead === 0 ? 'All square' : `${lead > 0 ? iA : iB} ${Math.abs(lead)} UP`)) : sg.played === 0 ? '' : lead === 0 ? 'All square' : `${lead > 0 ? iA : iB} ${Math.abs(lead)} ${holesMode ? (Math.abs(lead) === 1 ? 'hole up' : 'holes up') : (Math.abs(lead) === 1 ? 'stroke up' : 'strokes up')}`;
-    const detail = sg.played === 0 ? 'not started' : holesMode ? `${sg.holes_won[0]} - ${sg.holes_won[1]}, ${sg.halved} halved${sg.decided && sg.text && sg.played < sg.to - sg.from + 1 ? ', play on if you like' : ''}` : `${sg.strokes[0]} vs ${sg.strokes[1]}`;
+    const tally = sg.text && sg.played > 0 ? (sg.decided ? (lead === 0 ? 'Halved' : `${lead > 0 ? iA : iB} wins ${sg.text}`) : (lead === 0 ? 'All square' : `${lead > 0 ? iA : iB} ${Math.abs(lead)} ${ptsMode ? (Math.abs(lead) === 1 ? 'pt' : 'pts') + ' up' : 'UP'}`)) : sg.played === 0 ? '' : lead === 0 ? 'All square' : `${lead > 0 ? iA : iB} ${Math.abs(lead)} ${holesMode ? (Math.abs(lead) === 1 ? 'hole up' : 'holes up') : (Math.abs(lead) === 1 ? 'stroke up' : 'strokes up')}`;
+    const detail = sg.played === 0 ? 'not started' : ptsMode ? `${sg.points[0]} - ${sg.points[1]} points` : holesMode ? `${sg.holes_won[0]} - ${sg.holes_won[1]}, ${sg.halved} halved${sg.decided && sg.text && sg.played < sg.to - sg.from + 1 ? ', play on if you like' : ''}` : `${sg.strokes[0]} vs ${sg.strokes[1]}`;
     const cols = sg.to - sg.from + 1 === 9 || sg.to - sg.from + 1 === 18 ? 9 : 6;
     const grid = sg.to - sg.from + 1 === 18 ? '' : `<div style="display:grid;gap:4px;grid-template-columns:repeat(${cols},minmax(0,1fr))">${hs.map(cell).join('')}</div>`;
     return `<div style="margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px"><div style="flex:1;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.8)">${escapeHtml(sg.label)}${sg.pot ? ` <span style="font-weight:500;color:rgba(255,255,255,0.5)">· $${sg.pot}</span>` : ''}</div><div style="font-size:0.74rem;color:rgba(255,255,255,0.6)">${detail}</div>${tally ? `<div style="font-size:0.76rem;font-weight:700;color:${lead === 0 ? '#fff' : lead > 0 ? TEAL : AMB}">${tally}</div>` : ''}</div>${grid}</div>`;
@@ -10384,14 +10384,14 @@ function fourballActionsHtml(cfg) {
   const par = hd && skPars() ? skPars()[sel - 1] : null;
   const pScores = pr => pr.names.map(n => { const v = skCardOf(n)[sel - 1]; return v > 0 ? v : '·'; }).join(', ');
   const onePair = liveOneBall(_sk.config);
-  const rowHtml = (pr, c, ini, bb, won, chipFg) => `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:10px;background:${won ? (c === TEAL ? 'rgba(93,202,165,0.18)' : 'rgba(224,180,76,0.18)') : 'rgba(255,255,255,0.05)'};border:1px solid ${won ? c : 'transparent'}"><span style="background:${c};color:${chipFg};font-weight:700;font-size:0.76rem;border-radius:7px;padding:4px 7px">${escapeHtml(ini)}</span><div style="flex:1;min-width:0">${pr.names.map(n => { const v = skCardOf(n)[sel - 1]; return `<button type="button" onclick="fbDrillName(${escapeHtml(JSON.stringify(n)).replace(/"/g, '&quot;')})" style="display:block;width:100%;text-align:left;background:none;border:0;color:#fff;font-family:inherit;font-size:0.88rem;font-weight:600;padding:5px 0;min-height:32px;cursor:pointer">${escapeHtml(String(n).trim().split(/\s+/)[0])} <span style="font-family:'DM Mono',monospace;color:rgba(255,255,255,0.85)">${v > 0 ? v : '·'}</span>${skGot(n, sel) && !onePair ? ` ${skDotsHtml(skGot(n, sel), '#ffe08a')} <span style="font-size:0.7rem;color:#ffe08a">${v > 0 ? 'net ' + (v - skGot(n, sel)) : 'gets ' + (skGot(n, sel) > 1 ? skGot(n, sel) + ' strokes' : 'a stroke')}</span>` : ''}</button>`; }).join('')}${onePair && skGot(pr.names[0], sel) ? `<div style="font-size:0.7rem;color:#ffe08a;padding:2px 0">${skDotsHtml(skGot(pr.names[0], sel), '#ffe08a')} team gets ${skGot(pr.names[0], sel) > 1 ? skGot(pr.names[0], sel) + ' strokes' : 'a stroke'}${pr.names.some(n => skCardOf(n)[sel - 1] > 0) ? ', net ' + (Math.max(...pr.names.map(n => skCardOf(n)[sel - 1] || 0)) - skGot(pr.names[0], sel)) : ''}</div>` : ''}</div><div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.25rem;font-weight:700">${bb}</div><div style="font-size:0.68rem;color:rgba(255,255,255,0.6)">${won ? 'won the hole' : hd.res === 'T' ? 'halved' : 'lost'}</div></div></div>`;
+  const rowHtml = (pr, c, ini, bb, won, chipFg) => `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:10px;background:${won ? (c === TEAL ? 'rgba(93,202,165,0.18)' : 'rgba(224,180,76,0.18)') : 'rgba(255,255,255,0.05)'};border:1px solid ${won ? c : 'transparent'}"><span style="background:${c};color:${chipFg};font-weight:700;font-size:0.76rem;border-radius:7px;padding:4px 7px">${escapeHtml(ini)}</span><div style="flex:1;min-width:0">${pr.names.map(n => { const v = skCardOf(n)[sel - 1]; return `<button type="button" onclick="fbDrillName(${escapeHtml(JSON.stringify(n)).replace(/"/g, '&quot;')})" style="display:block;width:100%;text-align:left;background:none;border:0;color:#fff;font-family:inherit;font-size:0.88rem;font-weight:600;padding:5px 0;min-height:32px;cursor:pointer">${escapeHtml(String(n).trim().split(/\s+/)[0])} <span style="font-family:'DM Mono',monospace;color:rgba(255,255,255,0.85)">${v > 0 ? v : '·'}</span>${skGot(n, sel) && !onePair ? ` ${skDotsHtml(skGot(n, sel), '#ffe08a')} <span style="font-size:0.7rem;color:#ffe08a">${v > 0 ? 'net ' + (v - skGot(n, sel)) : 'gets ' + (skGot(n, sel) > 1 ? skGot(n, sel) + ' strokes' : 'a stroke')}</span>` : ''}</button>`; }).join('')}${onePair && skGot(pr.names[0], sel) ? `<div style="font-size:0.7rem;color:#ffe08a;padding:2px 0">${skDotsHtml(skGot(pr.names[0], sel), '#ffe08a')} team gets ${skGot(pr.names[0], sel) > 1 ? skGot(pr.names[0], sel) + ' strokes' : 'a stroke'}${pr.names.some(n => skCardOf(n)[sel - 1] > 0) ? ', net ' + (Math.max(...pr.names.map(n => skCardOf(n)[sel - 1] || 0)) - skGot(pr.names[0], sel)) : ''}</div>` : ''}</div><div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.25rem;font-weight:700">${bb}</div><div style="font-size:0.68rem;color:rgba(255,255,255,0.6)">${ptsMode ? (bb === 1 ? 'point' : 'points') : won ? 'won the hole' : hd.res === 'T' ? 'halved' : 'lost'}</div></div></div>`;
   const stepBtn = (d, t) => `<button type="button" onclick="fbStepHole(${d})" aria-label="${d < 0 ? 'Previous' : 'Next'} hole" style="width:44px;height:44px;border-radius:10px;border:0;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;cursor:pointer">${t}</button>`;
   const detail = hd ? `<div onclick="fbCloseHole()" style="position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9990"></div>
     <div role="dialog" aria-label="Hole ${sel} details" style="position:fixed;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:#0b3b31;color:#fff;border-radius:18px 18px 0 0;padding:16px 16px 24px;z-index:9991;box-shadow:0 -8px 30px rgba(0,0,0,0.4)">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><div style="flex:1"><div style="font-size:1.05rem;font-weight:700">Hole ${sel}</div><div style="font-size:0.74rem;color:rgba(255,255,255,0.6)">${par ? `Par ${par}` : ''}</div></div>${stepBtn(-1, '‹')}${stepBtn(1, '›')}<button type="button" onclick="fbCloseHole()" aria-label="Close" style="width:44px;height:44px;border-radius:10px;border:0;background:transparent;color:rgba(255,255,255,0.7);font-size:1.2rem;cursor:pointer">✕</button></div>
-      ${rowHtml(pa, TEAL, iA, hd.a, hd.res === 'A', '#04342a')}${rowHtml(pb, AMB, iB, hd.b, hd.res === 'B', '#3a2a00')}
-      <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">${hd.res === 'T' ? `Halved. Both pairs counted ${hd.a}. ` : ''}${skAnyStrokes() ? 'Scores in the boxes are net (strokes already taken off). ' : ''}Tap a name for that player's full card.</div></div>` : '';
-  const how = m.mode === 'match' ? 'One match for the round. It is announced the moment it is decided, you can keep playing.' : m.mode === 'total' ? 'One pot, lowest total wins.' : `${BFEngine.PERIODS[m.mode] ? BFEngine.PERIODS[m.mode].phrase : ''}, ${holesMode ? 'won on holes' : 'won on strokes'}. A tie is a push.`;
+      ${rowHtml(pa, TEAL, iA, ptsMode ? hd.pa : hd.a, hd.res === 'A', '#04342a')}${rowHtml(pb, AMB, iB, ptsMode ? hd.pb : hd.b, hd.res === 'B', '#3a2a00')}
+      <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">${ptsMode ? `Low ball ${hd.a} vs ${hd.b}, high ball ${hd.ha} vs ${hd.hb}. A tie gives nobody the point. ` : hd.res === 'T' ? `Halved. Both pairs counted ${hd.a}. ` : ''}${skAnyStrokes() ? 'Scores in the boxes are net (strokes already taken off). ' : ''}Tap a name for that player's full card.</div></div>` : '';
+  const how = m.mode === 'match' && ptsMode ? 'One match for the round: 2 points a hole, the winner is decided after the last hole.' : m.mode === 'match' ? 'One match for the round. It is announced the moment it is decided, you can keep playing.' : m.mode === 'total' ? 'One pot, lowest total wins.' : `${BFEngine.PERIODS[m.mode] ? BFEngine.PERIODS[m.mode].phrase : ''}, ${ptsMode ? 'won on points' : holesMode ? 'won on holes' : 'won on strokes'}. A tie is a push.`;
   const cardRows = skGroup().players.map((n, k) => {
     const asPair = liveOneBall(_sk.config) ? skGroup().pairs.find(pr => pr.includes(n)) : null;
     if (asPair && asPair[0] !== n) return '';
@@ -10401,7 +10401,7 @@ function fourballActionsHtml(cfg) {
   return `${toggle}${liveSideChooserHtml()}${chips}
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="background:${TEAL};color:#04342a;font-weight:700;font-size:0.8rem;border-radius:7px;padding:4px 8px">${escapeHtml(iA)}</span><span style="font-size:0.84rem;font-weight:600">${fbShort(pa.names)}</span></div>
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="background:${AMB};color:#3a2a00;font-weight:700;font-size:0.8rem;border-radius:7px;padding:4px 8px">${escapeHtml(iB)}</span><span style="font-size:0.84rem;font-weight:600">${fbShort(pb.names)}</span><span style="flex:1"></span><span style="font-size:0.74rem;color:rgba(255,255,255,0.6)">${played ? `Through ${played} hole${played === 1 ? "" : "s"}` : 'Not started'}</span></div>
-    ${played ? `<div style="background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px"><div style="flex:1;font-size:0.76rem;color:rgba(255,255,255,0.7)">${holesMode ? 'Game: most holes won.' : (liveOneBall(_sk.config) ? 'Game: fewest strokes, one ball per pair.' : 'Game: fewest strokes, better ball.')}</div><div style="font-size:0.9rem;font-weight:700;text-align:right;color:${tl === 0 ? '#fff' : tl > 0 ? TEAL : AMB}">${tl === 0 ? 'All square' : `${tl > 0 ? escapeHtml(iA) : escapeHtml(iB)} ${Math.abs(tl)} ${holesMode ? (Math.abs(tl) === 1 ? 'hole' : 'holes') : (Math.abs(tl) === 1 ? 'stroke' : 'strokes')} up`}</div></div>` : ''}
+    ${played ? `<div style="background:rgba(0,0,0,0.25);border-radius:10px;padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px"><div style="flex:1;font-size:0.76rem;color:rgba(255,255,255,0.7)">${ptsMode ? 'Game: most points, 2 a hole (low ball + high ball).' : holesMode ? 'Game: most holes won.' : (liveOneBall(_sk.config) ? 'Game: fewest strokes, one ball per pair.' : 'Game: fewest strokes, better ball.')}</div><div style="font-size:0.9rem;font-weight:700;text-align:right;color:${tl === 0 ? '#fff' : tl > 0 ? TEAL : AMB}">${tl === 0 ? 'All square' : `${tl > 0 ? escapeHtml(iA) : escapeHtml(iB)} ${Math.abs(tl)} ${ptsMode ? (Math.abs(tl) === 1 ? 'point' : 'points') : holesMode ? (Math.abs(tl) === 1 ? 'hole' : 'holes') : (Math.abs(tl) === 1 ? 'stroke' : 'strokes')} up`}</div></div>` : ''}
     <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-bottom:10px">${how}</div>
     <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-bottom:8px">Tap a hole for the details.</div>${segHtml}${detail}
     <div style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:14px 0 6px;font-family:'DM Mono',monospace">Scorecards</div>${cardRows}`;
@@ -10430,8 +10430,19 @@ function fourballLiveSectionHtml(cfg) {
   const fb = gatheringAddon(cfg, sideId);
   const b = _fbLive && _fbLive.board;
   const net = fb && fb.basis === 'net';
-  const head = `<div style="font-size:0.8rem;color:rgba(255,255,255,0.65);margin-bottom:8px;line-height:1.4">${({ ball: 'One ball per pair', match: 'Each player', pair: 'Better ball of each pair' })[BFEngine.gameTraits(sideId).unit] || ''}, ${net ? (fb.net_mode === 'low' ? 'net, off the low' : 'net, own strokes') : 'gross'}. ${BFEngine.gameTraits(sideId).unit === 'match' ? 'Matches are decided hole by hole, see My group.' : 'Lowest total wins.'} Updates as scores are saved.</div>`;
+  const head = `<div style="font-size:0.8rem;color:rgba(255,255,255,0.65);margin-bottom:8px;line-height:1.4">${BFEngine.gameTraits(sideId).headToHead ? (sideId === 'hilo' ? 'Low ball and high ball of each pair' : 'Each player') : ({ ball: 'One ball per pair', pair: 'Better ball of each pair' })[BFEngine.gameTraits(sideId).unit] || ''}, ${net ? (fb.net_mode === 'low' ? 'net, off the low' : 'net, own strokes') : 'gross'}. ${BFEngine.gameTraits(sideId).headToHead ? 'Pairs play head to head, hole by hole, see My group.' : 'Lowest total wins.'} Updates as scores are saved.</div>`;
   if (!b) return head + `<div style="font-size:0.82rem;color:rgba(255,255,255,0.5)">${_fbLive ? 'No scores saved yet.' : 'Loading standings…'}</div>`;
+  if (sideId === 'hilo') {
+    // Hi-Lo is pair against pair: the Field view is every match with its running points
+    const live = fbLiveCompute(), mv = live && live.match;
+    const lines = ((mv && mv.groups) || []).filter(g => !g.solo && g.pairs.length === 2).map(g => {
+      const pts = g.holes.reduce((t, h) => [t[0] + (h.pa || 0), t[1] + (h.pb || 0)], [0, 0]), thru = g.holes.filter(h => h.res).length;
+      const lead = pts[0] - pts[1], nm = pr => pr.names.map(n => escapeHtml(String(n).trim().split(/\s+/)[0])).join(' &amp; ');
+      const mine = g.pairs.some(pr => pr.names.some(n => String(n).trim().toLowerCase() === String(currentPlayer || '').trim().toLowerCase()));
+      return `<div style="padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.08);font-size:0.84rem;${mine ? 'font-weight:700' : ''}"><div style="display:flex;gap:8px;align-items:center"><span style="flex:1;min-width:0;${lead > 0 ? 'color:#5DCAA5' : ''}">${nm(g.pairs[0])}</span><span style="font-family:'DM Mono',monospace">${pts[0]} – ${pts[1]}</span><span style="flex:1;min-width:0;text-align:right;${lead < 0 ? 'color:#e0b44c' : ''}">${nm(g.pairs[1])}</span></div><div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:2px">${thru ? `thru ${thru} · ${lead === 0 ? 'all square' : Math.abs(lead) + ' point' + (Math.abs(lead) === 1 ? '' : 's') + ' up'}` : 'not started'}</div></div>`;
+    }).join('');
+    return head + (lines || `<div style="font-size:0.82rem;color:rgba(255,255,255,0.5)">No pairs set up.</div>`);
+  }
   const me = String(currentPlayer || '').trim().toLowerCase();
   const fmt = v => v === 0 ? 'E' : (v > 0 ? '+' + v : String(v));
   const rows = b.rows.map(r => {
@@ -11726,9 +11737,10 @@ let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period
 // Alternate Shot + Match Play (Dev-94): same shape as BestBall, one object per game. altshot lists `pairs`, matchplay lists `matches`.
 const GAMES_FORM_SIDE_IDS = BFEngine.sideFormGames(); // registry: games with the `sideForm` trait
 // The wizard's second step for each (pairs / matches). A new side-form game adds one entry here and one to GW_NAMES.
-const GW_SIDE_STEP = { altshot: 'aspairs', matchplay: 'mpmatches' };
-const GAMES_FORM_REC_ALLOWANCE = { altshot: 50, matchplay: 100 };
+const GW_SIDE_STEP = { altshot: 'aspairs', hilo: 'hlpairs', matchplay: 'mpmatches' };
+const GAMES_FORM_REC_ALLOWANCE = { altshot: 50, matchplay: 100 };   // only games with their own allowance (trait allowance 'own')
 function gamesFormSideBlank(gid) {
+  if (gid === 'hilo') return { dollar_per_player: null, basis: 'gross', net_mode: 'own', period: 'round', pairs: [] };
   return gid === 'matchplay'
     ? { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 100, period: 'round', matches: [] }
     : { dollar_per_player: null, basis: 'gross', net_mode: 'low', allowance: 50, period: 'round', win_by: 'strokes', scope: 'field', pairs: [] };
@@ -11739,6 +11751,7 @@ function gamesFormSideFrom(gid, src) {
   const out = Object.assign(b, { dollar_per_player: src.dollar_per_player, basis: src.basis === 'net' ? 'net' : 'gross', net_mode: src.net_mode === 'low' ? 'low' : 'own',
     allowance: src.allowance != null && Number.isFinite(Number(src.allowance)) ? Number(src.allowance) : b.allowance, period: BFEngine.periodKey(src) });
   if (gid === 'matchplay') out.matches = (src.matches || []).map(pr => pr.slice());
+  else if (gid === 'hilo') out.pairs = (src.pairs || []).map(pr => pr.slice());
   else { out.pairs = (src.pairs || []).map(pr => pr.slice()); out.win_by = src.win_by === 'holes' ? 'holes' : 'strokes'; out.scope = src.win_by === 'holes' || src.scope === 'group' ? 'group' : 'field'; }
   return out;
 }
@@ -16779,7 +16792,7 @@ function fourballResultsHeatHtml(f, fbCfg) {
   const mv = BFEngine.sideMatchView(f, pairs);
   if (!mv || !mv.groups.some(g => !g.solo && g.holes.some(h => h.res))) return '';
   const TEAL = '#5DCAA5', AMB = '#e0b44c', nm = x => String(x).trim().toLowerCase();
-  const holesMode = mv.win_by === 'holes', seg = mv.mode !== 'total' && mv.mode !== 'match';
+  const holesMode = mv.win_by === 'holes', ptsMode = mv.win_by === 'points', seg = mv.mode !== 'total' && mv.mode !== 'match';
   const marks = new Map((f.stroke_marks || []).map(m => [nm(m.player), m]));
   const gotOf = (names, hole) => names.map(n => { const m = marks.get(nm(n)); const k = m && m.got ? Number(m.got[hole]) || 0 : 0; return k ? { n: String(n).trim().split(/\s+/)[0], k } : null; }).filter(Boolean);
   const anyMarks = [...marks.values()].some(m => m.got && Object.keys(m.got).length);
@@ -16794,15 +16807,15 @@ function fourballResultsHeatHtml(f, fbCfg) {
     const [pa, pb] = g.pairs, iA = fbIni(pa.names, pb.names), iB = fbIni(pb.names, pa.names);
     const cell = h => {
       if (!h.res) return `<span style="height:${anyMarks ? 46 : 40}px;border-radius:7px;border:1px dashed rgba(0,0,0,0.18);box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:0.56rem;color:var(--text-muted);font-family:'DM Mono',monospace;line-height:1">${h.hole}</span>`;
-      const won = h.res === 'T' ? 'Halved' : (h.res === 'A' ? iA : iB) + ' won';
-      const d = { hole: h.hole, ia: iA, ib: iB, na: pa.names.map(n => String(n).trim().split(/\s+/)[0]).join(' & '), nb: pb.names.map(n => String(n).trim().split(/\s+/)[0]).join(' & '), a: h.a, b: h.b, res: h.res, bya: byOf(pa.names, h.hole), byb: byOf(pb.names, h.hole), sa: gotOf(pa.names, h.hole), sb: gotOf(pb.names, h.hole), fmt: f.unit || 'pair' };
+      const won = h.res === 'T' ? (ptsMode ? 'Split' : 'Halved') : (h.res === 'A' ? iA : iB) + ' won';
+      const d = { hole: h.hole, ia: iA, ib: iB, na: pa.names.map(n => String(n).trim().split(/\s+/)[0]).join(' & '), nb: pb.names.map(n => String(n).trim().split(/\s+/)[0]).join(' & '), a: h.a, b: h.b, ...(ptsMode ? { ha: h.ha, hb: h.hb, pa: h.pa, pb: h.pb } : {}), res: h.res, bya: byOf(pa.names, h.hole), byb: byOf(pb.names, h.hole), sa: gotOf(pa.names, h.hole), sb: gotOf(pb.names, h.hole), fmt: ptsMode ? 'hilo' : (f.unit || 'pair') };
       const bg = h.res === 'A' ? TEAL : h.res === 'B' ? AMB : 'rgba(0,0,0,0.1)';
       const col = h.res === 'A' ? '#04342a' : h.res === 'B' ? '#3a2a00' : 'var(--text-muted)';
       return `<button type="button" data-fbres="${escapeHtml(JSON.stringify(d))}" onclick="fbResOpen(this)" aria-label="Hole ${h.hole}, ${escapeHtml(won)}${gotOf(pa.names.concat(pb.names), h.hole).length ? ', strokes: ' + gotOf(pa.names.concat(pb.names), h.hole).map(x => x.n + (x.k > 1 ? ' x' + x.k : '')).join(', ') : ''}" style="height:${anyMarks ? 46 : 40}px;border-radius:7px;border:0;padding:3px 0;box-sizing:border-box;cursor:pointer;background:${bg};color:${col};font-family:'DM Mono',monospace;font-size:0.72rem;font-weight:700;width:100%"><span style="font-size:0.54rem;opacity:0.7;display:block;line-height:1;font-weight:500">${h.hole}</span>${h.res === 'T' ? '–' : escapeHtml(h.res === 'A' ? iA : iB)}${dotsHtml(d.sa, '#0a5c47', d.sb, '#7a5200')}</button>`;
     };
     const grid = hs => `<div style="display:grid;gap:4px;grid-template-columns:repeat(${hs.length === 6 ? 6 : 9},minmax(0,1fr))">${hs.map(cell).join('')}</div>`;
     const rows = (seg ? g.segs : [{ label: 'Front 9', from: 1, to: 9 }, { label: 'Back 9', from: 10, to: 18 }]).map(sg => {
-      const hs = g.holes.slice(sg.from - 1, sg.to), whole = sg.to - sg.from + 1 === 18, tally = seg && sg.played ? (sg.lead === 0 ? 'All square' : `${sg.lead > 0 ? iA : iB} ${Math.abs(sg.lead)} ${holesMode ? (Math.abs(sg.lead) === 1 ? 'hole' : 'holes') : (Math.abs(sg.lead) === 1 ? 'stroke' : 'strokes')} up`) : '';
+      const hs = g.holes.slice(sg.from - 1, sg.to), whole = sg.to - sg.from + 1 === 18, tally = seg && sg.played ? (sg.lead === 0 ? 'All square' : `${sg.lead > 0 ? iA : iB} ${Math.abs(sg.lead)} ${ptsMode ? (Math.abs(sg.lead) === 1 ? 'point' : 'points') : holesMode ? (Math.abs(sg.lead) === 1 ? 'hole' : 'holes') : (Math.abs(sg.lead) === 1 ? 'stroke' : 'strokes')} up`) : '';
       return `<div style="margin-bottom:6px"><div style="display:flex;gap:8px;font-size:0.72rem;margin-bottom:3px"><span style="flex:1;font-weight:600;color:var(--text-muted)">${escapeHtml(sg.label)}</span><span style="font-weight:700">${escapeHtml(tally)}</span></div>${whole ? '' : grid(hs)}</div>`;
     }).join('');
     const wA = g.holes.filter(h => h.res === 'A').length, wB = g.holes.filter(h => h.res === 'B').length, wT = g.holes.filter(h => h.res === 'T').length;
@@ -16821,13 +16834,13 @@ function fbResOpen(btn) {
   const prev = all[i - 1] && JSON.parse(all[i - 1].getAttribute('data-fbres')), next = all[i + 1] && JSON.parse(all[i + 1].getAttribute('data-fbres'));
   const same = x => x && x.na === d.na && x.nb === d.nb;
   const E = escapeHtml, TEAL = '#5DCAA5', AMB = '#e0b44c';
-  const row = (ini, c, fg, names, bb, won, by, st) => `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:10px;background:${won ? (c === TEAL ? 'rgba(93,202,165,0.18)' : 'rgba(224,180,76,0.18)') : 'rgba(255,255,255,0.05)'};border:1px solid ${won ? c : 'transparent'}"><span style="background:${c};color:${fg};font-weight:700;font-size:0.76rem;border-radius:7px;padding:4px 7px">${E(ini)}</span><div style="flex:1;min-width:0"><div style="font-size:0.88rem;font-weight:600">${E(names)}</div>${by.length ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.6)">counted: ${by.map(E).join(' &amp; ')}</div>` : ''}${(st || []).length ? `<div style="font-size:0.7rem;color:#ffe08a">${st.map(x => `${E(x.n)} got ${x.k > 1 ? x.k + ' strokes' : 'a stroke'} ${'●'.repeat(x.k)}`).join(' · ')}</div>` : ''}</div><div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.25rem;font-weight:700">${bb}</div><div style="font-size:0.68rem;color:rgba(255,255,255,0.6)">${won ? 'won the hole' : d.res === 'T' ? 'halved' : 'lost'}</div></div></div>`;
+  const row = (ini, c, fg, names, bb, won, by, st, sub) => `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:10px;background:${won ? (c === TEAL ? 'rgba(93,202,165,0.18)' : 'rgba(224,180,76,0.18)') : 'rgba(255,255,255,0.05)'};border:1px solid ${won ? c : 'transparent'}"><span style="background:${c};color:${fg};font-weight:700;font-size:0.76rem;border-radius:7px;padding:4px 7px">${E(ini)}</span><div style="flex:1;min-width:0"><div style="font-size:0.88rem;font-weight:600">${E(names)}</div>${sub ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.75)">${E(sub)}</div>` : by.length ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.6)">counted: ${by.map(E).join(' &amp; ')}</div>` : ''}${(st || []).length ? `<div style="font-size:0.7rem;color:#ffe08a">${st.map(x => `${E(x.n)} got ${x.k > 1 ? x.k + ' strokes' : 'a stroke'} ${'●'.repeat(x.k)}`).join(' · ')}</div>` : ''}</div><div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.25rem;font-weight:700">${bb}</div><div style="font-size:0.68rem;color:rgba(255,255,255,0.6)">${d.fmt === 'hilo' ? (bb === 1 ? 'point' : 'points') : won ? 'won the hole' : d.res === 'T' ? 'halved' : 'lost'}</div></div></div>`;
   const step = (j, t, ok) => `<button type="button" ${ok ? `onclick="fbResStep(${j})"` : 'disabled'} aria-label="${t === '‹' ? 'Previous' : 'Next'} hole" style="width:44px;height:44px;border-radius:10px;border:0;background:rgba(255,255,255,${ok ? 0.1 : 0.04});color:#fff;font-size:1.1rem;cursor:pointer">${t}</button>`;
   ov.innerHTML = `<div onclick="fbResClose()" style="position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9990"></div>
     <div role="dialog" aria-label="Hole ${d.hole} details" style="position:fixed;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:#0b3b31;color:#fff;border-radius:18px 18px 0 0;padding:16px 16px 24px;z-index:9991;box-shadow:0 -8px 30px rgba(0,0,0,0.4)">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><div style="flex:1;font-size:1.05rem;font-weight:700">Hole ${d.hole}</div>${step(i - 1, '‹', same(prev))}${step(i + 1, '›', same(next))}<button type="button" onclick="fbResClose()" aria-label="Close" style="width:44px;height:44px;border-radius:10px;border:0;background:transparent;color:rgba(255,255,255,0.7);font-size:1.2rem;cursor:pointer">✕</button></div>
-      ${row(d.ia, TEAL, '#04342a', d.na, d.a, d.res === 'A', d.bya, d.sa)}${row(d.ib, AMB, '#3a2a00', d.nb, d.b, d.res === 'B', d.byb, d.sb)}
-      <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">${d.fmt === 'ball' ? "Each pair's one ball" : d.fmt === 'match' ? "Each player's score" : "Each pair's better ball"}${((d.sa || []).length + (d.sb || []).length) ? ' (net: the stroke is already taken off)' : ''}${d.res === 'T' ? '. Halved, so neither pair gains' : ''}.</div></div>`;
+      ${row(d.ia, TEAL, '#04342a', d.na, d.fmt === 'hilo' ? d.pa : d.a, d.res === 'A', d.bya, d.sa, d.fmt === 'hilo' ? `low ${d.a} · high ${d.ha}` : '')}${row(d.ib, AMB, '#3a2a00', d.nb, d.fmt === 'hilo' ? d.pb : d.b, d.res === 'B', d.byb, d.sb, d.fmt === 'hilo' ? `low ${d.b} · high ${d.hb}` : '')}
+      <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-top:6px">${d.fmt === 'hilo' ? 'Low ball vs low ball and high ball vs high ball, 1 point each. A tie gives nobody the point' : d.fmt === 'ball' ? "Each pair's one ball" : d.fmt === 'match' ? "Each player's score" : "Each pair's better ball"}${((d.sa || []).length + (d.sb || []).length) ? ' (net: the stroke is already taken off)' : ''}${d.res === 'T' ? '. Halved, so neither pair gains' : ''}.</div></div>`;
   fbResOpen._all = all; fbResOpen._i = i;
 }
 function fbResStep(j) { const a = fbResOpen._all; if (a && a[j]) fbResOpen(a[j]); }
@@ -16857,7 +16870,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   BFEngine.sideFormGames().forEach(id => { if (s[id]) games.push([id, BFEngine.getGame(id).meta.icon]); });
   if (s.lowscore) games.push(['lowscore', '🎯']);
   const byName = new Map();
-  (s.payouts || []).forEach(r => byName.set(norm(r.player), { player: r.player, total: Number(r.total) || 0, skins: r.skins, cttp: r.cttp, birdieball: r.birdieball, birdiepay: r.birdiepay, fourball: r.fourball, altshot: r.altshot, matchplay: r.matchplay, lowscore: r.lowscore, given_back: r.given_back }));
+  (s.payouts || []).forEach(r => byName.set(norm(r.player), { player: r.player, total: Number(r.total) || 0, skins: r.skins, cttp: r.cttp, birdieball: r.birdieball, birdiepay: r.birdiepay, fourball: r.fourball, altshot: r.altshot, hilo: r.hilo, matchplay: r.matchplay, lowscore: r.lowscore, given_back: r.given_back }));
   if (hasRank) {
     (rk.gross || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.gross = r.total; e.strokes = r.strokes; byName.set(norm(r.player), e); });
     (rk.net || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.net = r.total; byName.set(norm(r.player), e); });
@@ -16865,7 +16878,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   const strokesBy = new Map(((s.handicap && s.handicap.players) || []).map(p => [norm(p.player), Number(p.strokes) || 0]));
   // Net games that play off the low use fewer strokes than the player's full allowance: say so per player.
   const gameStrokes = new Map();
-  [['BestBall', s.fourball], ['Alternate Shot', s.altshot], ['Match Play', s.matchplay], ['Low Score', s.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => {
+  [['BestBall', s.fourball], ['Alternate Shot', s.altshot], ['Hi-Lo', s.hilo], ['Match Play', s.matchplay], ['Low Score', s.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => {
     const k = norm(m.player);
     if (!strokesBy.has(k) || Number(m.strokes) === strokesBy.get(k)) return;
     if (!gameStrokes.has(k)) gameStrokes.set(k, []);
@@ -16912,11 +16925,12 @@ function renderGatheringPayoutHtml(s, fbCfg) {
       const pk = g.segments ? g.segments.mode : (g.period || 'round');
       const P = BFEngine.PERIODS[pk] || BFEngine.PERIODS.round;
       const basis = g.basis === 'net' ? (g.net_mode === 'low' ? 'net, off the low' : 'net') : 'gross';
-      const how = pk === 'round' ? 'one pot for the whole round' : `<b>${esc(P.label)}</b>: ${esc(P.phrase)}, ${P.segs.length} pots${winBy ? `, each won on ${winBy === 'holes' ? 'holes won' : 'strokes'}` : ''}`;
+      const how = pk === 'round' ? 'one pot for the whole round' : `<b>${esc(P.label)}</b>: ${esc(P.phrase)}, ${P.segs.length} pots${winBy ? `, each won on ${winBy === 'holes' ? 'holes won' : winBy === 'points' ? 'points' : 'strokes'}` : ''}`;
       lines.push(`<div style="padding:3px 0">${icon} <b>${name}</b> <span style="color:var(--text-muted)">(${basis})</span> · ${how}</div>`);
     };
     addLine('🤝', 'BestBall', s.fourball, s.fourball && s.fourball.segments ? s.fourball.segments.win_by : null);
     addLine('🔁', 'Alternate Shot', s.altshot, s.altshot && s.altshot.segments ? s.altshot.segments.win_by : null);
+    addLine('⚖️', 'Hi-Lo', s.hilo, s.hilo && s.hilo.segments ? s.hilo.segments.win_by : null);
     addLine('⚔️', 'Match Play', s.matchplay, s.matchplay && s.matchplay.segments ? s.matchplay.segments.win_by : null);
     addLine('🎯', 'Low Score', s.lowscore, null);
     if (lines.length) sum += `<div style="font-size:0.78rem;line-height:1.45;background:rgba(255,255,255,0.45);border-radius:10px;padding:6px 10px;margin:2px 0 8px"><div style="font-size:0.68rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-hint);margin-bottom:2px">How it was played</div>${lines.join('')}${gameStrokes.size ? '<div style="padding:3px 0;color:var(--text-muted)">The Net column uses each player\'s full handicap strokes. Games played off the low use fewer, shown under each name.</div>' : ''}</div>`;
@@ -17397,7 +17411,7 @@ async function loadHistoryGameResults(key, groupEvt) {
     if (!cfg || cfg.status !== 'closed' || !cfg.payout_summary) { el.innerHTML = ''; return; }
     {
       const ps = cfg.payout_summary, byP = new Map(), lc = x => String(x).trim().toLowerCase();
-      [['BestBall', ps.fourball], ['Alternate Shot', ps.altshot], ['Match Play', ps.matchplay], ['Low Score', ps.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => { if (!byP.has(lc(m.player))) byP.set(lc(m.player), { ...m, game: lab, net_mode: g.net_mode }); }));
+      [['BestBall', ps.fourball], ['Alternate Shot', ps.altshot], ['Hi-Lo', ps.hilo], ['Match Play', ps.matchplay], ['Low Score', ps.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => { if (!byP.has(lc(m.player))) byP.set(lc(m.player), { ...m, game: lab, net_mode: g.net_mode }); }));
       _historyStrokeMarks[key] = [...byP.values()];
       _historyFullStrokes[key] = Object.fromEntries(((ps.handicap && ps.handicap.players) || []).map(x => [lc(x.player), Number(x.strokes) || 0]));
     }
@@ -19500,7 +19514,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
       ? { skins_basis: hc.skins_basis === 'net' ? 'net' : 'gross', birdiepay_basis: hc.birdiepay_basis === 'net' ? 'net' : 'gross',
           ranking: hc.ranking === true, rankingTouched: true, allowance: hc.allowance == null ? 95 : hc.allowance, players: JSON.parse(JSON.stringify(hc.players || {})) }
       : { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; }
-  _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'matchplay', 'lowscore'] : []); // an existing config is the host's own numbers
+  _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'hilo', 'matchplay', 'lowscore'] : []); // an existing config is the host's own numbers
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; if (_gamesFormCard) closeGamesCardDialog(); else renderHostPanelList(); }; }
   const closeBtn = document.getElementById('host-sheet-close-btn');
@@ -19627,7 +19641,7 @@ function gamesFormSplitHtml() {
   const dppNow = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0;
   if (dppNow > 0 && !sel.has('skins') && !sel.has('birdiepay')) {
     const nPl = Math.max(4, _gamesFormYesCount);
-    const used = (sel.has('fourball') ? _gamesFormFourballConfig.dollar_per_player || 0 : 0) + (sel.has('altshot') ? _gamesFormSide.altshot.dollar_per_player || 0 : 0) + (sel.has('matchplay') ? _gamesFormSide.matchplay.dollar_per_player || 0 : 0) + (sel.has('lowscore') ? _gamesFormLowscoreConfig.dollar_per_player || 0 : 0)
+    const used = (sel.has('fourball') ? _gamesFormFourballConfig.dollar_per_player || 0 : 0) + (sel.has('altshot') ? _gamesFormSide.altshot.dollar_per_player || 0 : 0) + (sel.has('hilo') ? _gamesFormSide.hilo.dollar_per_player || 0 : 0) + (sel.has('matchplay') ? _gamesFormSide.matchplay.dollar_per_player || 0 : 0) + (sel.has('lowscore') ? _gamesFormLowscoreConfig.dollar_per_player || 0 : 0)
       + (sel.has('birdieball') ? _gamesFormBirdieballConfig.dollar_per_player || 0 : 0) + (sel.has('cttp') ? (_gamesFormCttpConfig.dollar_per_hole || 0) * (_gamesFormCttpConfig.holes || []).length / nPl : 0);
     const left = Math.round((dppNow - used) * 100) / 100;
     if (left > 0.004) gap = `<div style="font-size:0.76rem;color:#b8860b;margin-top:6px;line-height:1.45">$${left.toFixed(2)} of each $${dppNow.toFixed(2)} is not in any game, so nobody plays for it. Raise an amount, or lower the buy-in.</div>`;
@@ -19644,7 +19658,7 @@ function refreshGamesFormSplit() {
 }
 // ── Games setup wizard: one question per screen ──────────────────────────────
 let _gw = { step: 'games' };
-const GW_NAMES = { games: 'Games', money: 'The money', fourball: 'BestBall', fbpairs: 'BestBall pairs', altshot: 'Alternate Shot', aspairs: 'Alternate Shot pairs', matchplay: 'Match Play', mpmatches: 'Match Play matches', lowscore: 'Low Score', skins: 'Skins', cttp: 'CTP', birdieball: 'MiserBall', birdiepay: 'Birdie Payouts', hcp: 'Handicap strokes', review: 'Review' };
+const GW_NAMES = { games: 'Games', money: 'The money', fourball: 'BestBall', fbpairs: 'BestBall pairs', altshot: 'Alternate Shot', aspairs: 'Alternate Shot pairs', hilo: 'Hi-Lo', hlpairs: 'Hi-Lo pairs', matchplay: 'Match Play', mpmatches: 'Match Play matches', lowscore: 'Low Score', skins: 'Skins', cttp: 'CTP', birdieball: 'MiserBall', birdiepay: 'Birdie Payouts', hcp: 'Handicap strokes', review: 'Review' };
 function gwSteps() {
   const sel = _gamesFormSelected;
   if (!sel.size) return ['games'];
@@ -19696,10 +19710,10 @@ function gwReviewHtml() {
   }
   GAMES_FORM_SIDE_IDS.forEach(gid => {
     if (!sel.has(gid)) return;
-    const c = _gamesFormSide[gid], items = gamesFormSideItems(gid).filter(pr => pr[0] && pr[1]).length, pk = BFEngine.periodKey(c), mp = gid === 'matchplay';
-    const net = c.basis === 'net' ? `Net ${c.allowance}%${c.net_mode === 'low' ? ', off the low' : ''}` : 'Gross';
+    const c = _gamesFormSide[gid], items = gamesFormSideItems(gid).filter(pr => pr[0] && pr[1]).length, pk = BFEngine.periodKey(c), mp = gid === 'matchplay', meta = BFEngine.getGame(gid).meta;
+    const net = c.basis === 'net' ? `Net${GAMES_FORM_REC_ALLOWANCE[gid] ? ' ' + c.allowance + '%' : ''}${c.net_mode === 'low' ? ', off the low' : ''}` : 'Gross';
     const what = mp ? (items ? items + ' match' + (items === 1 ? '' : 'es') : '<span style="color:#b8860b">no matches yet</span>') : (items ? items + ' pair' + (items === 1 ? '' : 's') : '<span style="color:#b8860b">no pairs yet</span>');
-    add(mp ? '⚔️' : '🔁', mp ? 'Match Play' : 'Alternate Shot', `${net} · ${per(pk)} · ${Number(c.dollar_per_player) > 0 ? money(c.dollar_per_player) + ' per player' : 'no money'} · ${what}`, items ? gid : (mp ? 'mpmatches' : 'aspairs'));
+    add(meta.icon, meta.label, `${net} · ${per(pk)} · ${Number(c.dollar_per_player) > 0 ? money(c.dollar_per_player) + ' per player' : 'no money'} · ${what}`, items ? gid : GW_SIDE_STEP[gid]);
   });
   if (sel.has('lowscore')) add('🎯', 'Low Score', `${basis(ls.basis)} · ${per(BFEngine.periodKey(ls))} · ${money(ls.dollar_per_player)} per player`, 'lowscore');
   if (sel.has('skins')) add('⛳', 'Skins', `${basis(_gamesFormHcp.skins_basis)} · gets what is left`, 'skins');
@@ -19723,15 +19737,15 @@ function gwRender() {
   const cur = _gw.step, i = steps.indexOf(cur), moved = _gw.shown !== cur;
   _gw.shown = cur;
   if (moved) { // a screen can hold stale numbers if an amount was typed on the buy-in screen: rebuild it as it opens
-    const redo = { altshot: () => gatheringGamesSideSectionHtml('altshot'), aspairs: () => gatheringGamesSideSectionHtml('altshot'), matchplay: () => gatheringGamesSideSectionHtml('matchplay'), mpmatches: () => gatheringGamesSideSectionHtml('matchplay'),
+    const redo = { altshot: () => gatheringGamesSideSectionHtml('altshot'), aspairs: () => gatheringGamesSideSectionHtml('altshot'), hilo: () => gatheringGamesSideSectionHtml('hilo'), hlpairs: () => gatheringGamesSideSectionHtml('hilo'), matchplay: () => gatheringGamesSideSectionHtml('matchplay'), mpmatches: () => gatheringGamesSideSectionHtml('matchplay'),
       fourball: gatheringGamesFourballSectionHtml, fbpairs: gatheringGamesFourballSectionHtml, lowscore: gatheringGamesLowscoreSectionHtml, cttp: gatheringGamesCttpSectionHtml, birdiepay: gatheringGamesBirdiepaySectionHtml }[cur];
-    const box = { altshot: 'altshot', aspairs: 'altshot', matchplay: 'matchplay', mpmatches: 'matchplay', fourball: 'fourball', fbpairs: 'fourball', lowscore: 'lowscore', cttp: 'cttp', birdiepay: 'birdiepay' }[cur];
+    const box = { altshot: 'altshot', aspairs: 'altshot', hilo: 'hilo', hlpairs: 'hilo', matchplay: 'matchplay', mpmatches: 'matchplay', fourball: 'fourball', fbpairs: 'fourball', lowscore: 'lowscore', cttp: 'cttp', birdiepay: 'birdiepay' }[cur];
     const el = box && document.getElementById('games-form-' + box + '-section');
     if (redo && el) el.innerHTML = redo();
     if (cur === 'money') { applyGamesSuggestion(false); refreshGamesFormSplit(); } // the rules are set, so suggest the split now
   }
-  const pane = { fbpairs: 'fourball', aspairs: 'altshot', mpmatches: 'matchplay' }[cur] || cur;
-  wiz.dataset.sub = ['fbpairs', 'aspairs', 'mpmatches'].includes(cur) ? 'pairs' : 'setup';
+  const pane = { fbpairs: 'fourball', aspairs: 'altshot', hlpairs: 'hilo', mpmatches: 'matchplay' }[cur] || cur;
+  wiz.dataset.sub = ['fbpairs', 'aspairs', 'hlpairs', 'mpmatches'].includes(cur) ? 'pairs' : 'setup';
   wiz.querySelectorAll('.gw-pane').forEach(el => { el.style.display = el.id === 'gw-pane-' + pane ? 'block' : 'none'; });
   const lab = document.getElementById('gw-step-label'); if (lab) lab.textContent = `Step ${i + 1} of ${steps.length} · ${GW_NAMES[cur]}`;
   const bar = document.getElementById('gw-bar'); if (bar) bar.style.width = Math.round((i + 1) / steps.length * 100) + '%';
@@ -19760,12 +19774,12 @@ function applyGamesSuggestion(force) {
   const note = document.getElementById('games-form-suggest-note');
   if (!input) return;
   const dpp = parseFloat(input.value) || 0;
-  const anyAmountGame = ['cttp', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'matchplay', 'lowscore'].some(k => _gamesFormSelected.has(k));
+  const anyAmountGame = ['cttp', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'hilo', 'matchplay', 'lowscore'].some(k => _gamesFormSelected.has(k));
   if (!(dpp > 0) || !anyAmountGame) { if (note) note.innerHTML = anyAmountGame ? 'Pick a buy-in and amounts for each game are suggested for you.' : ''; return; }
   if (force) _gamesFormTouched.clear();
   const n = Math.max(4, _gamesFormYesCount);
   const holes = (_gamesFormCttpConfig.holes || []).length || _gamesFormPar3Holes.length || 3;
-  const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: n, games: [..._gamesFormSelected], cttpHoles: holes, periods: { fourball: fourballSegCount(_gamesFormFourballConfig), altshot: periodSegCount(_gamesFormSide.altshot), matchplay: periodSegCount(_gamesFormSide.matchplay), lowscore: lowscoreSegCount(_gamesFormLowscoreConfig) } });
+  const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: n, games: [..._gamesFormSelected], cttpHoles: holes, periods: { fourball: fourballSegCount(_gamesFormFourballConfig), altshot: periodSegCount(_gamesFormSide.altshot), hilo: periodSegCount(_gamesFormSide.hilo), matchplay: periodSegCount(_gamesFormSide.matchplay), lowscore: lowscoreSegCount(_gamesFormLowscoreConfig) } });
   if (sug.cttp && !_gamesFormTouched.has('cttp')) _gamesFormCttpConfig.dollar_per_hole = sug.cttp.dollar_per_hole;
   if (sug.birdieball && !_gamesFormTouched.has('birdieball')) _gamesFormBirdieballConfig.dollar_per_player = sug.birdieball.dollar_per_player;
   if (sug.birdiepay && !_gamesFormTouched.has('birdiepay')) _gamesFormBirdiepayConfig.dollar_per_birdie = sug.birdiepay.dollar_per_birdie;
@@ -20212,7 +20226,7 @@ function gamesFormSideNames(gid) {
 }
 function gatheringGamesSideSectionHtml(gid) {
   if (!_gamesFormSelected.has(gid)) return '';
-  const c = _gamesFormSide[gid], mp = gid === 'matchplay', meta = BFEngine.getGame(gid).meta;
+  const c = _gamesFormSide[gid], mp = gid === 'matchplay', hl = gid === 'hilo', meta = BFEngine.getGame(gid).meta;
   const items = gamesFormSideItems(gid), names = gamesFormSideNames(gid);
   const low = n => String(n || '').trim().toLowerCase();
   const segN = periodSegCount(c), pk = BFEngine.periodKey(c), rec = GAMES_FORM_REC_ALLOWANCE[gid];
@@ -20235,17 +20249,17 @@ function gatheringGamesSideSectionHtml(gid) {
   const netBlock = c.basis !== 'net' ? '' : `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Strokes</span>${seg([['own', 'Full'], ['low', mp ? 'Off the low' : 'Off the low (recommended)']], c.net_mode, `(v=>setGamesFormSide('${gid}','net_mode',v))`)}</div>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px;line-height:1.5">${c.net_mode === 'low'
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px;line-height:1.5">${hl ? (c.net_mode === 'low' ? 'The lowest handicap in the foursome plays to scratch and everyone else gets the difference.' : 'Everyone gets their own handicap strokes (the round\'s allowance).') : c.net_mode === 'low'
         ? (mp ? 'The lower handicap plays to scratch and the other player gets the difference.' : 'Recommended for one-ball games: the pair with the lower combined handicap plays to scratch and the other pair gets the difference, so only one team ever gets strokes.')
         : (mp ? 'Each player gets their full handicap strokes, as most golfers think of it.' : 'Each pair gets its own strokes, from the combined handicaps.')}</div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      ${hl ? '' : `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Handicap allowance</span>
         <input type="number" min="1" max="150" step="1" value="${c.allowance}" oninput="setGamesFormSide('${gid}','allowance',this.value,true)" style="width:70px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.86rem">%</span>
         ${Number(c.allowance) === rec ? '' : `<button type="button" onclick="setGamesFormSide('${gid}','allowance',${rec})" style="${btn};height:32px;padding:0 10px">Use ${rec}%</button>`}</div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px;line-height:1.5">${mp
         ? `${rec}% is recommended: each player gets their full course handicap. Lower it to narrow the gap between players.`
-        : `${rec}% is the usual for Alternate Shot: the pair's strokes are half of its two course handicaps added together, because only one ball is in play. Most hosts leave it.`}</div>`;
-  const winBlock = mp || segN <= 1 ? '' : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        : `${rec}% is the usual for Alternate Shot: the pair's strokes are half of its two course handicaps added together, because only one ball is in play. Most hosts leave it.`}</div>`}`;
+  const winBlock = mp || hl || segN <= 1 ? '' : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Period won by</span>${seg([['strokes', 'Strokes'], ['holes', 'Holes won']], c.win_by, `(v=>setGamesFormSide('${gid}','win_by',v))`)}</div>
         <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.win_by === 'holes' ? 'The pair that wins more holes wins the period.' : 'The pair with the lower total wins the period.'}</div>`;
   const dppBox = segN > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / segN * 100) / 100 : '') : (c.dollar_per_player || '');
@@ -20256,7 +20270,7 @@ function gatheringGamesSideSectionHtml(gid) {
       <div class="gw-money"><div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.86rem">$</span>
         <input type="number" id="games-form-${gid}-dpp" min="0" step="0.01" value="${dppBox}" style="width:90px"
-          oninput="setGames${mp ? 'FormMatchplay' : 'FormAltshot'}DollarPerPlayer(this.value)">
+          oninput="setGamesFormSideDollarFor.${gid}(this.value)">
         <span style="font-size:0.86rem;color:var(--text-muted)">${segN > 1 ? 'per player, per period' : 'per player'}</span>
       </div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">${segN > 1
@@ -20265,11 +20279,12 @@ function gatheringGamesSideSectionHtml(gid) {
       ${gamesScoredPeriodRowHtml(c.basis, `(v=>setGamesFormSide('${gid}','basis',v))`, pk, `(v=>setGamesFormSide('${gid}','period',v))`)}
       <div style="margin:10px 0 12px;background:var(--green-light);border-radius:10px;padding:10px 12px;font-size:0.8rem;line-height:1.45">${periodExplainHtml(pk, c.dollar_per_player, { round: mp
         ? 'Each match is its own pot: the winner takes it, and a match that ends level is halved, so both players get their money back.'
+        : hl ? 'Each hole is worth 2 points: 1 for the lower low ball, 1 for the lower high ball (a tie gives nobody the point). The pair with more points wins the pot. Level is a push and the antes come back.'
         : 'The pair with the lowest one-ball total wins one pot. Tied pairs split it.' })}</div>
       ${netBlock}${winBlock}
       </div>
       <div class="gw-fb-pairs">
-      <label>${meta.icon} ${meta.label} ${mp ? 'matches' : 'pairs'}</label>
+      <label>${meta.icon} ${meta.label} ${mp ? 'matches' : hl ? 'pairs (two pairs play each other)' : 'pairs'}</label>
       ${rows || `<div style="font-size:0.78rem;color:var(--text-muted);margin:8px 0">No ${mp ? 'matches' : 'pairs'} yet. Add them one at a time${mp ? '' : ', or let us suggest balanced pairs'}.</div>`}
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
         <button type="button" style="${btn}" onclick="suggestGamesFormSideItems('${gid}')">✨ Suggest ${mp ? 'matches' : 'pairs'}</button>
@@ -20292,7 +20307,7 @@ function setGamesFormSide(gid, key, val, typing) {
   const c = _gamesFormSide[gid];
   if (key === 'basis') c.basis = val === 'net' ? 'net' : 'gross';
   else if (key === 'net_mode') c.net_mode = val === 'low' ? 'low' : 'own';
-  else if (key === 'allowance') { const n = parseFloat(val); c.allowance = Number.isFinite(n) && n > 0 ? n : GAMES_FORM_REC_ALLOWANCE[gid]; }
+  else if (key === 'allowance' && GAMES_FORM_REC_ALLOWANCE[gid]) { const n = parseFloat(val); c.allowance = Number.isFinite(n) && n > 0 ? n : GAMES_FORM_REC_ALLOWANCE[gid]; }
   else if (key === 'win_by') { c.win_by = val === 'holes' ? 'holes' : 'strokes'; if (c.win_by === 'holes') c.scope = 'group'; }
   else if (key === 'period') {
     c.period = BFEngine.periodKey({ period: val });
@@ -20336,7 +20351,7 @@ function suggestGamesFormSideItems(gid) {
     else if (m && m.source !== 'no_hcp' && m.hcp != null && Number.isFinite(m.hcp)) hcp = m.hcp;
     return { name: n, hcp };
   });
-  if (players.length < (mp ? 2 : 4)) { showToast(mp ? 'Match Play needs at least 2 players' : 'Alternate Shot needs at least 4 players for two pairs', true); return; }
+  if (players.length < (mp ? 2 : 4)) { showToast(mp ? 'Match Play needs at least 2 players' : BFEngine.getGame(gid).meta.label + ' needs at least 4 players for two pairs', true); return; }
   const c = _gamesFormSide[gid];
   const bits = [];
   if (mp) {
@@ -20617,7 +20632,7 @@ function updateGamesFormPotPreview(yesCount) {
     if (!_gamesFormSelected.has(gid) || !(c.dollar_per_player > 0)) return;
     const people = gamesFormSideItems(gid).filter(pr => pr[0] && pr[1]).length * 2 || yesCount, cost = c.dollar_per_player * people, n = periodSegCount(c);
     remaining -= cost;
-    lines.push(`${gid === 'matchplay' ? '⚔️ Match Play' : '🔁 Alternate Shot'}: $${cost.toFixed(2)} (${people} players in ${gid === 'matchplay' ? 'matches' : 'pairs'} × $${c.dollar_per_player.toFixed(2)})${n > 1 ? `, cut into ${n} period pots` : ''}, carved out`);
+    lines.push(`${BFEngine.getGame(gid).meta.icon} ${BFEngine.getGame(gid).meta.label}: $${cost.toFixed(2)} (${people} players in ${gid === 'matchplay' ? 'matches' : 'pairs'} × $${c.dollar_per_player.toFixed(2)})${n > 1 ? `, cut into ${n} period pots` : ''}, carved out`);
   });
   if (_gamesFormSelected.has('lowscore') && _gamesFormLowscoreConfig.dollar_per_player > 0) {
     const lsCost = _gamesFormLowscoreConfig.dollar_per_player * yesCount, lsN = lowscoreSegCount(_gamesFormLowscoreConfig);
@@ -20709,12 +20724,13 @@ async function submitGatheringGames(gatheringId) {
   }
   GAMES_FORM_SIDE_IDS.forEach(gid => {
     if (!games.includes(gid) || bailed) return;
-    const c = _gamesFormSide[gid], mp = gid === 'matchplay', nm = mp ? 'Match Play' : 'Alternate Shot', step = mp ? 'mpmatches' : 'aspairs';
+    const c = _gamesFormSide[gid], mp = gid === 'matchplay', nm = BFEngine.getGame(gid).meta.label, step = GW_SIDE_STEP[gid];
     const rows = gamesFormSideItems(gid).filter(pr => pr[0] || pr[1]);
     if (rows.some(pr => !pr[0] || !pr[1])) { bad(step, `${nm}: finish or remove the incomplete ${mp ? 'match' : 'pair'}`); bailed = true; return; }
-    const cfg = { dollar_per_player: Number(c.dollar_per_player) || 0, basis: c.basis === 'net' ? 'net' : 'gross', net_mode: c.net_mode === 'low' ? 'low' : 'own', allowance: Number(c.allowance) || GAMES_FORM_REC_ALLOWANCE[gid],
+    const cfg = { dollar_per_player: Number(c.dollar_per_player) || 0, basis: c.basis === 'net' ? 'net' : 'gross', net_mode: c.net_mode === 'low' ? 'low' : 'own', ...(GAMES_FORM_REC_ALLOWANCE[gid] ? { allowance: Number(c.allowance) || GAMES_FORM_REC_ALLOWANCE[gid] } : {}),
       ...(periodSegCount(c) > 1 ? { period: c.period } : {}) };
     if (mp) cfg.matches = rows.map(pr => [pr[0], pr[1]]);
+    else if (gid === 'hilo') cfg.pairs = rows.map(pr => [pr[0], pr[1]]);
     else Object.assign(cfg, { win_by: periodSegCount(c) > 1 && c.win_by === 'holes' ? 'holes' : 'strokes', scope: periodSegCount(c) > 1 && (c.win_by === 'holes' || c.scope === 'group') ? 'group' : 'field', pairs: rows.map(pr => [pr[0], pr[1]]) });
     const v = BFEngine.validateGameConfig(gid, cfg);
     if (!v.ok) { bad(step, `${nm}: ${v.errors[0]}`); bailed = true; return; }

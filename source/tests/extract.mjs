@@ -37,10 +37,10 @@ if (!vm.__bfPatched) {
   vm.createContext = function (o, ...rest) {
     const ctx = orig.call(vm, o || {}, ...rest);
     if (!('GAMES_FORM_SIDE_IDS' in ctx)) {
-      ctx.GAMES_FORM_SIDE_IDS = ['altshot', 'matchplay'];
+      ctx.GAMES_FORM_SIDE_IDS = ['altshot', 'hilo', 'matchplay'];
       if (!('BFEngine' in ctx)) ctx.BFEngine = loadEngine();
       ctx.LIVE_SIDE_GAMES = ['fourball', 'altshot', 'matchplay'];
-      ctx.GW_SIDE_STEP = { altshot: 'aspairs', matchplay: 'mpmatches' };
+      ctx.GW_SIDE_STEP = { altshot: 'aspairs', hilo: 'hlpairs', matchplay: 'mpmatches' };
       ctx.GAMES_FORM_REC_ALLOWANCE = { altshot: 50, matchplay: 100 };
       if (!('_gamesFormSide' in ctx)) ctx._gamesFormSide = {
         altshot: { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 50, period: 'round', win_by: 'strokes', scope: 'field', pairs: [] },

@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.19.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.20.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -849,6 +849,58 @@ const GAME_SCHEMAS = {
     ],
     "moneyOptional": true
   },
+  "hilo": {
+    "label": "Hi-Lo",
+    "config": [
+      {
+        "key": "dollar_per_player",
+        "type": "money",
+        "label": "$ per player",
+        "default": 0
+      },
+      {
+        "key": "basis",
+        "type": "enum",
+        "label": "Gross or Net",
+        "values": [
+          "gross",
+          "net"
+        ],
+        "default": "gross"
+      },
+      {
+        "key": "net_mode",
+        "type": "enum",
+        "label": "Net strokes",
+        "values": [
+          "own",
+          "low"
+        ],
+        "default": "own"
+      },
+      {
+        "key": "period",
+        "type": "enum",
+        "label": "Scoring period",
+        "values": [
+          "round",
+          "front_back",
+          "fbt",
+          "sixes"
+        ],
+        "default": "round"
+      },
+      {
+        "key": "pairs",
+        "type": "pairs",
+        "evenPairs": true,
+        "label": "Pairs",
+        "default": [],
+        "required": true
+      }
+    ],
+    "moneyOptional": true
+  },
   "matchplay": {
     "label": "Match Play",
     "config": [
@@ -1019,10 +1071,10 @@ function validateFields(fields, cfg) {
       } else if (f.type === 'pairs') {
         // [[nameA, nameB], ...]: at least two pairs, two different names each, nobody in two pairs
         const names = [];
-        const wellFormed = Array.isArray(v) && v.length >= (f.minPairs || 2) && v.every(pr => Array.isArray(pr) && pr.length === 2 &&
+        const wellFormed = Array.isArray(v) && v.length >= (f.minPairs || 2) && (!f.evenPairs || v.length % 2 === 0) && v.every(pr => Array.isArray(pr) && pr.length === 2 &&
           pr.every(n => typeof n === 'string' && n.trim()) && pr[0].trim().toLowerCase() !== pr[1].trim().toLowerCase());
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
-        if (!wellFormed) errors.push(f.label + ' needs at least ' + ((f.minPairs || 2) === 1 ? 'one pair' : 'two pairs') + ' of two different players');
+        if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one pair' : 'two pairs')) + ' of two different players');
         else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be in one pair');
       } else if (f.type === 'enum') {
         if (!f.lenient && !(f.values || []).includes(v)) errors.push(f.label + ' must be one of ' + (f.values || []).join('/'));
