@@ -3625,7 +3625,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.20.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.21.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -19613,6 +19613,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
       <div class="gw-pane" id="gw-pane-games">
         <div style="font-size:1.15rem;font-weight:700;margin-bottom:4px">What are you playing for?</div>
         <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;margin-bottom:10px">Tap everything that is in. Details come one game at a time, next. Every registered player's My History gets the result once it is published.</div>
+        <button type="button" onclick="openGamesRoll()" style="width:100%;min-height:46px;margin-bottom:10px;border-radius:12px;border:1.5px dashed var(--green);background:#fff;color:var(--green-dark);font-family:inherit;font-weight:700;font-size:0.92rem;cursor:pointer">🎲 Surprise me: roll the dice for a full setup</button>
         <div id="games-form-checklist">${gatheringGamesChecklistHtml()}</div>
       </div>
       <div class="gw-pane" id="gw-pane-money">
@@ -20250,6 +20251,106 @@ function suggestGamesFormFourballPairs() {
   if (rec.unpaired.length) bits.push(`${rec.unpaired.map(escapeHtml).join(', ')} is left without a partner (odd number of players).`);
   _gamesFormFourballNote = '✨ ' + bits.join(' ');
   refreshGamesFormFourballSection();
+}
+
+// ── 🎲 Roll the dice (Dev-94) ───────────────────────────────────────────────────────────────────────────────────────
+// A random but complete setup for this crew: one format that fits the player count (equal odds), 0 to 3 side games, and every
+// variant rolled (Gross / Net, Full / Off the low, scoring period, holes vs strokes). The host can untick / tick the side games and
+// change the buy-in on the roll screen, roll again, then "Use this setup" fills the normal Games form and lands on Review.
+let _roll = null;   // { setup, dpp, on:Set(side ids), variants:{id}, crew }
+function gamesRollCrew() {
+  const names = gamesFormPlayerNames();
+  const known = names.filter(n => { const m = _gamesFormMembers.get(String(n).trim().toLowerCase()); const e = _gamesFormHcp.players[n];
+    return (m && m.source !== 'no_hcp' && m.hcp != null && Number.isFinite(m.hcp)) || (e && e.kind === 'index' && e.index !== '' && e.index != null); }).length;
+  return { players: names.length || _gamesFormYesCount, hasHcp: names.length > 0 && known / names.length >= 0.75, par3: _gamesFormVenueParDataAvailable && _gamesFormPar3Holes.length > 0, pars: _gamesFormVenueParDataAvailable };
+}
+function openGamesRoll() {
+  const crew = gamesRollCrew();
+  if (!BFEngine.rollFormatsFor(crew).length) { showToast('Rolling needs at least 2 confirmed players', true); return; }
+  const dppEl = document.getElementById('games-form-dpp'), cur = dppEl ? parseFloat(dppEl.value) : 0;
+  _roll = { crew, dpp: cur > 0 ? cur : 20 };
+  gamesRollDo();
+}
+function gamesRollDo() {
+  const setup = BFEngine.rollGameSetup(_roll.crew);
+  if (!setup) return;
+  _roll.setup = setup; _roll.on = new Set(setup.sides); _roll.variants = Object.assign({}, setup.rolled);
+  gamesRollRender();
+}
+function gamesRollToggleSide(id) {
+  if (_roll.on.has(id)) _roll.on.delete(id); else { _roll.on.add(id); if (!_roll.variants[id]) _roll.variants[id] = BFEngine.rollSideVariant(id, _roll.crew); }
+  gamesRollRender();
+}
+function gamesRollSetDpp(v) { const n = parseFloat(v); if (n > 0) { _roll.dpp = n; gamesRollRender(true); } }
+function gamesRollVariantText(id, v) {
+  const P = BFEngine.PERIODS;
+  const basis = v.basis === 'net' ? (v.net_mode === 'low' ? 'Net, off the low' : 'Net, full strokes') : 'Gross';
+  if (id === 'skins' || id === 'birdiepay') return basis;
+  if (id === 'cttp') return 'All par 3s';
+  if (id === 'birdieball') return 'MiserBall';
+  const per = v.period && v.period !== 'round' ? ` · ${P[v.period].label}${v.win_by === 'holes' ? ', holes won' : v.win_by === 'strokes' ? ', strokes' : ''}` : ' · whole round';
+  return basis + per;
+}
+function gamesRollRender(keepFocus) {
+  if (!_roll || !_roll.setup) return;
+  let ov = document.getElementById('games-roll-sheet');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'games-roll-sheet'; document.body.appendChild(ov); }
+  const E = escapeHtml, st = _roll.setup, n = _roll.crew.players, dpp = _roll.dpp;
+  const games = [st.main].concat([..._roll.on]);
+  const per = id => { const p = (_roll.variants[id] || {}).period; return p && BFEngine.PERIODS[p] ? Math.max(1, BFEngine.PERIODS[p].segs.length) : 1; };
+  const par3n = _gamesFormPar3Holes.length || 3;
+  const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: Math.max(4, n), games, cttpHoles: par3n, periods: Object.fromEntries(games.map(g => [g, per(g)])) });
+  const m = x => '$' + (Math.round(x * 100) / 100).toFixed(Number.isInteger(Math.round(x * 100) / 100) ? 0 : 2);
+  const amt = id => { const g = sug[id]; if (!g) return id === 'skins' ? 'gets what is left' : '';
+    return id === 'cttp' ? `${m(g.dollar_per_hole)} a hole` : id === 'birdiepay' ? `${m(g.dollar_per_birdie)} a birdie` : `${m(g.dollar_per_player)} per player`; };
+  const meta = id => BFEngine.getGame(id).meta;
+  const row = (id, checkable) => { const mt = meta(id), v = _roll.variants[id] || {}, on = !checkable || _roll.on.has(id);
+    return `<div ${checkable ? `onclick="gamesRollToggleSide('${id}')"` : ''} style="display:flex;align-items:center;gap:10px;padding:11px 12px;margin-bottom:8px;border-radius:10px;border:1.5px solid ${on ? 'var(--green)' : 'var(--border-med)'};background:${on ? 'var(--green-light)' : 'rgba(255,255,255,0.5)'};${checkable ? 'cursor:pointer' : ''}">
+      ${checkable ? `<span style="font-size:1.1rem">${on ? '☑' : '☐'}</span>` : `<span style="font-size:1.3rem">${mt.icon}</span>`}
+      <span style="flex:1;min-width:0"><b>${checkable ? mt.icon + ' ' : ''}${E(mt.label)}</b><br><span style="font-size:0.76rem;color:var(--text-muted)">${E(gamesRollVariantText(id, v))}${on && amt(id) ? ' · ' + E(amt(id)) : ''}</span></span></div>`; };
+  ov.innerHTML = `<div onclick="gamesRollClose()" style="position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10040"></div>
+    <div role="dialog" aria-label="Surprise setup" style="position:fixed;left:0;right:0;bottom:0;top:6%;max-width:560px;margin:0 auto;background:var(--bg,#f4faf6);border-radius:18px 18px 0 0;padding:16px 16px 20px;z-index:10041;overflow-y:auto;box-shadow:0 -8px 30px rgba(0,0,0,0.4)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div style="flex:1;font-size:1.15rem;font-weight:700">🎲 Your setup</div><button type="button" onclick="gamesRollClose()" aria-label="Close" style="width:40px;height:40px;border:0;background:transparent;font-size:1.2rem;cursor:pointer">✕</button></div>
+      <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.5;margin-bottom:10px">Rolled for ${n} player${n === 1 ? '' : 's'}${_roll.crew.hasHcp ? '' : ' (no handicaps on file for most, so gross)'}. Tick or untick the side games, change the buy-in, or roll again.</div>
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:6px 0">The game</div>${row(st.main, false)}
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:12px 0 6px">Side games</div>${st.sideOptions.map(id => row(id, true)).join('')}
+      <div style="display:flex;align-items:center;gap:8px;margin:12px 0 4px"><span style="flex:1;font-weight:600;font-size:0.9rem">Buy-in per player</span><span>$</span><input type="number" min="1" step="1" value="${dpp}" ${keepFocus ? 'autofocus' : ''} oninput="gamesRollSetDpp(this.value)" style="width:80px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"></div>
+      <div style="display:flex;gap:8px;margin-bottom:6px">${[10, 20, 40].map(v => `<button type="button" onclick="gamesRollSetDpp(${v});gamesRollRender()" style="height:32px;padding:0 14px;border-radius:16px;border:1.5px solid var(--green);background:${dpp === v ? 'var(--green-light)' : '#fff'};color:var(--green);font-family:inherit;font-weight:700;cursor:pointer">$${v}</button>`).join('')}</div>
+      <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:12px">Pot ${m(dpp * n)}. Amounts above are split to use the whole buy-in; you can fine-tune them after.</div>
+      <button class="host-cta-btn" onclick="gamesRollUse()">Use this setup</button>
+      <button type="button" onclick="gamesRollDo()" style="width:100%;min-height:46px;margin-top:8px;border-radius:12px;border:1.5px solid var(--green);background:#fff;color:var(--green-dark);font-family:inherit;font-weight:700;cursor:pointer">🎲 Roll again</button></div>`;
+}
+function gamesRollClose() { const ov = document.getElementById('games-roll-sheet'); if (ov) ov.remove(); }
+function gamesRollUse() {
+  if (!_roll || !_roll.setup) return;
+  const st = _roll.setup, ids = [st.main].concat([..._roll.on]);
+  gamesRollClose();
+  [..._gamesFormSelected].forEach(k => toggleGamesFormGame(k));   // start clean: each untick resets that game's settings
+  ids.forEach(id => toggleGamesFormGame(id));
+  const dppEl = document.getElementById('games-form-dpp'); if (dppEl) dppEl.value = _roll.dpp;
+  ids.forEach(id => {
+    const v = _roll.variants[id] || {};
+    if (id === 'skins') _gamesFormHcp.skins_basis = v.basis === 'net' ? 'net' : 'gross';
+    else if (id === 'birdiepay') _gamesFormHcp.birdiepay_basis = v.basis === 'net' ? 'net' : 'gross';
+    else if (id === 'fourball') Object.assign(_gamesFormFourballConfig, { basis: v.basis, net_mode: v.net_mode || 'own', period: v.period || 'round', win_by: v.win_by === 'holes' ? 'holes' : 'strokes', scope: v.win_by === 'holes' ? 'group' : 'field' });
+    else if (id === 'lowscore') Object.assign(_gamesFormLowscoreConfig, { basis: v.basis, period: v.period || 'round' });
+    else if (GAMES_FORM_SIDE_IDS.includes(id)) {
+      const c = _gamesFormSide[id];
+      Object.assign(c, { basis: v.basis, net_mode: v.net_mode || 'own', period: v.period || 'round' });
+      if (id === 'altshot') Object.assign(c, { win_by: v.win_by === 'holes' ? 'holes' : 'strokes', scope: v.win_by === 'holes' ? 'group' : 'field' });
+    }
+  });
+  _gamesFormTouched.clear();
+  if (ids.includes('fourball')) suggestGamesFormFourballPairs();
+  GAMES_FORM_SIDE_IDS.forEach(id => { if (ids.includes(id)) suggestGamesFormSideItems(id); });
+  gamesFormAutoRanking(); refreshGamesFormHcpSection();
+  applyGamesSuggestion(true);
+  GAMES_FORM_SIDE_IDS.forEach(id => refreshGamesFormSideSection(id));
+  refreshGamesFormFourballSection();
+  const ls = document.getElementById('games-form-lowscore-section'); if (ls) ls.innerHTML = gatheringGamesLowscoreSectionHtml();
+  updateGamesFormPotPreview();
+  showToast('🎲 Setup filled in. Check the review, then save.');
+  gwGoTo('review');
 }
 // ── Alternate Shot + Match Play (Dev-94) ─────────────────────────────────────────
 // Same wizard shape as BestBall: a rules screen, then who plays whom. Config lives in _gamesFormSide[gid]; the

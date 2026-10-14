@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.20.1';
+  const ENGINE_VERSION = '1.21.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1930,6 +1930,46 @@
     return tags;
   }
 
+  // ── Roll the dice (Dev-94): a random, complete, valid game setup for a crew ─────────────────────────────────────────
+  // Picks ONE format at equal odds from the ones that fit the crew, then 0..X side games, then rolls every variant of what it
+  // picked (Gross / Net, Full / Off the low, scoring period, holes won vs strokes). Pure: pass `rng` (() => [0,1)) to test it.
+  //   crew: { players, hasHcp, par3 }   players = confirmed count; hasHcp = most of them have a handicap on file (Net allowed);
+  //   par3 = the venue's par-3 holes are known (CTP allowed); pars = the venue's hole pars are known (Birdie Payouts allowed).
+  // Returns { main, sides: [ids], rolled: { [id]: variant } }. The caller adds pairs / matches and the money.
+  const ROLL_FORMATS = ['fourball', 'altshot', 'hilo', 'matchplay', 'lowscore'];
+  const ROLL_SIDES = ['skins', 'cttp', 'birdieball', 'birdiepay'];
+  function rollFormatsFor(crew) {
+    const n = Math.floor(Number(crew && crew.players) || 0), even = n % 2 === 0;
+    return ROLL_FORMATS.filter(id => id === 'lowscore' ? n >= 2 : id === 'matchplay' ? n >= 2 && even : id === 'hilo' ? n >= 4 && n % 4 === 0 : n >= 4 && even);
+  }
+  function rollSidesFor(crew) { return ROLL_SIDES.filter(id => id === 'cttp' ? !!(crew && crew.par3) : id === 'birdiepay' ? !!(crew && (crew.pars !== undefined ? crew.pars : crew.par3)) : true); }   // CTP needs the par-3 holes, Birdie Payouts the venue's pars
+  function rollVariant(id, crew, rnd) {
+    const pick = list => list[Math.min(list.length - 1, Math.floor(rnd() * list.length))];
+    const net = !!(crew && crew.hasHcp) && rnd() < 0.5;
+    const v = { basis: net ? 'net' : 'gross' };
+    if (id === 'skins' || id === 'birdiepay') return v;
+    if (id === 'cttp' || id === 'birdieball') return {};
+    v.period = pick(PERIOD_ORDER);
+    if (id !== 'lowscore') v.net_mode = net ? pick(['own', 'low']) : 'own';
+    if ((id === 'fourball' || id === 'altshot') && v.period !== 'round') v.win_by = pick(['strokes', 'holes']);
+    return v;
+  }
+  function rollGameSetup(crew, rng) {
+    const rnd = typeof rng === 'function' ? rng : Math.random;
+    const formats = rollFormatsFor(crew), sides = rollSidesFor(crew);
+    if (!formats.length) return null;
+    const main = formats[Math.min(formats.length - 1, Math.floor(rnd() * formats.length))];
+    const maxSides = Math.min(3, sides.length), k = Math.min(maxSides, Math.floor(rnd() * (maxSides + 1)));   // 0..3, equal odds
+    const pool = sides.slice(), chosen = [];
+    while (chosen.length < k && pool.length) chosen.push(pool.splice(Math.min(pool.length - 1, Math.floor(rnd() * pool.length)), 1)[0]);
+    chosen.sort((a, b) => ROLL_SIDES.indexOf(a) - ROLL_SIDES.indexOf(b));
+    const rolled = {};
+    [main].concat(chosen).forEach(id => { rolled[id] = rollVariant(id, crew, rnd); });
+    return { main, sides: chosen, rolled, formats, sideOptions: sides };
+  }
+  // Variant for a side game the host ticks AFTER the roll (so every checkbox is usable).
+  function rollSideVariant(id, crew, rng) { return rollVariant(id, crew, typeof rng === 'function' ? rng : Math.random); }
+
   function suggestGameAmounts({ dollarPerPlayer, players, games, cttpHoles, periods }) {
     const B = Number(dollarPerPlayer) || 0;
     const n = Math.max(1, Math.floor(Number(players) || 0));
@@ -2004,7 +2044,7 @@
     computeGatheringGamesPayout, fourballBoard, fourballMatchView, matchSegmentResult, fourballSegmentPlan, PERIODS, PERIOD_ORDER, periodKey, periodList,
     latestScorecardPerPlayer,
     scorecardMissingHoles,
-    fourballGroups, playerInitials, mergeHoleScores,
+    fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, mergeHoleScores,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });
