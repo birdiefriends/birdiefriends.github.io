@@ -61,8 +61,8 @@ function setup() {
     _gatheringGamesIndex: new Map([[gatheringId, row]]),
     openModal: (id) => opened.push(id),
   };
-  vm.createContext(ctx); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
-  const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','gatheringRoundConfig', 'evtGamesConfig', 'gamesGidFor', 'eventShadowFor', 'eventLocalDay', 'eventGamesRef', 'gatheringIsGamed', 'gatheringAddon', 'gatheringGameDetailsBody', 'openGameDetailsModal'];
+  vm.createContext(ctx); ctx.eventGamesAllowed = () => false; ctx._closedGamesGids = new Set(); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
+  const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','gatheringRoundConfig', 'evtGamesConfig', 'gamesGidFor', 'eventShadowFor', 'eventLocalDay', 'eventGamesRef', 'gatheringIsGamed', 'gatheringAddon', 'gatheringGameDetailsBody', 'gameDetailsEditHtml', 'openGameDetailsModal'];
   vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') + '\nvar _eventShadows = new Map();', ctx);
   return Object.assign(ctx, { opened, evt });
 }
@@ -70,6 +70,11 @@ function setup() {
 let c = setup();
 c.openGameDetailsModal('gathering-77');
 ok(c.opened.includes('game-details-modal'), 'openModal called with the right id');
+ok(!/Edit games/.test(c.document.getElementById('game-details-body').innerHTML), 'no Edit games for someone who may not edit');
+{ const c2 = setup(); c2.eventGamesAllowed = () => true; c2.openGameDetailsModal('gathering-77');
+  ok(/Edit games/.test(c2.document.getElementById('game-details-body').innerHTML), 'Edit games shown to the host');
+  const c3 = setup(); c3.eventGamesAllowed = () => true; c3._closedGamesGids = new Set([77]); c3.openGameDetailsModal('gathering-77');
+  ok(!/Edit games/.test(c3.document.getElementById('game-details-body').innerHTML), 'not offered once results are closed'); }
 const title = c.document.getElementById('game-details-title').textContent;
 ok(title.includes('Golf More, Work Less'), 'modal title carries the event name');
 const body = c.document.getElementById('game-details-body').innerHTML;
