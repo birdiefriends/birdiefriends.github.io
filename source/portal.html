@@ -20277,8 +20277,7 @@ function suggestGamesFormFourballPairs() {
 let _roll = null;   // { setup, dpp, on:Set(side ids), variants:{id}, crew }
 function gamesRollCrew() {
   const names = gamesFormPlayerNames();
-  const known = names.filter(n => { const m = _gamesFormMembers.get(String(n).trim().toLowerCase()); const e = _gamesFormHcp.players[n];
-    return (m && m.source !== 'no_hcp' && m.hcp != null && Number.isFinite(m.hcp)) || (e && e.kind === 'index' && e.index !== '' && e.index != null); }).length;
+  const known = names.filter(n => gamesRollHcpOf(n) !== null).length;
   return { players: names.length || _gamesFormYesCount, hasHcp: names.length > 0 && known / names.length >= 0.75, par3: _gamesFormVenueParDataAvailable && _gamesFormPar3Holes.length > 0, pars: _gamesFormVenueParDataAvailable };
 }
 // The big dice shake for half a second, then the roll screen opens.
@@ -20317,7 +20316,32 @@ function openGamesRoll() {
   const crew = gamesRollCrew();
   if (!BFEngine.rollFormatsFor(crew).length) { showToast('Rolling needs at least 2 confirmed players', true); return; }
   const dppEl = document.getElementById('games-form-dpp'), cur = dppEl ? parseFloat(dppEl.value) : 0;
-  _roll = { crew, dpp: cur > 0 ? cur : 20, pairing: 'random' };
+  const missing = gamesFormPlayerNames().filter(n => gamesRollHcpOf(n) === null);
+  _roll = { crew, dpp: cur > 0 ? cur : 20, pairing: 'random', missing, ask: missing.length > 0 };
+  if (_roll.ask) gamesRollAskRender(); else gamesRollDo();
+}
+// Pre-roll question: players with no handicap on file get a quick HCP index or strokes box, so the draw and the Net rolls have real numbers.
+function gamesRollAskRender() {
+  let ov = document.getElementById('games-roll-sheet');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'games-roll-sheet'; document.body.appendChild(ov); }
+  const E = escapeHtml;
+  const rows = _roll.missing.map((n, i) => { const e = gamesFormEntry(n), k = e.kind === 'index' ? 'index' : 'given', val = k === 'index' ? e.index : e.strokes;
+    const sb = (v, l) => `<button type="button" class="seg-btn${k === v ? ' seg-btn-active' : ''}" style="white-space:nowrap;padding:7px 10px" onclick="gamesRollAskKind(${i},'${v}')">${l}</button>`;
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border-med)"><div style="font-weight:600;margin-bottom:6px">${E(n)}</div>
+      <div style="display:flex;align-items:center;gap:8px"><div class="seg-toggle" style="margin:0">${sb('index', 'HCP index')}${sb('given', 'Strokes')}</div>
+      <input type="number" step="0.1" inputmode="decimal" placeholder="${k === 'index' ? 'e.g. 14.2' : 'e.g. 12'}" value="${val === '' || val == null ? '' : escapeHtmlAttr(String(val))}" oninput="gamesRollAskVal(${i},this.value)" style="width:90px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"></div></div>`; }).join('');
+  ov.innerHTML = `<div onclick="gamesRollClose()" style="position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10040"></div>
+    <div role="dialog" aria-label="Missing handicaps" style="position:fixed;left:0;right:0;bottom:0;top:10%;max-width:560px;margin:0 auto;background:var(--bg,#f4faf6);border-radius:18px 18px 0 0;padding:16px 16px 20px;z-index:10041;overflow-y:auto;box-shadow:0 -8px 30px rgba(0,0,0,0.4)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div style="flex:1;font-size:1.15rem;font-weight:700">🎲 Before we roll</div><button type="button" onclick="gamesRollClose()" aria-label="Close" style="width:40px;height:40px;border:0;background:transparent;font-size:1.2rem;cursor:pointer">✕</button></div>
+      <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.5;margin-bottom:6px">${_roll.missing.length === 1 ? 'This player has' : 'These players have'} no handicap on file. Add an index or the strokes they get, so the draw can be balanced and Net games are on the table. Leave a box empty to count them as average.</div>
+      ${rows}
+      <button class="host-cta-btn" style="margin-top:14px" onclick="gamesRollGo()">🎲 Roll</button></div>`;
+}
+function gamesRollAskKind(i, kind) { const n = _roll.missing[i], e = gamesFormEntry(n); e.kind = kind; delete e.note; gamesRollAskRender(); }
+function gamesRollAskVal(i, v) { const n = _roll.missing[i], e = gamesFormEntry(n); if (e.kind === 'index') e.index = v; else { e.kind = 'given'; e.strokes = v; } }
+function gamesRollGo() {
+  _roll.ask = false; _roll.crew = gamesRollCrew();
+  if (!BFEngine.rollFormatsFor(_roll.crew).length) { showToast('Rolling needs at least 2 confirmed players', true); return; }
   gamesRollDo();
 }
 function gamesRollDo() {
