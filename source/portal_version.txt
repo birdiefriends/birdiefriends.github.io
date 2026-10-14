@@ -1,3 +1,6 @@
+v4.31.3 · 2026-10-14
+Deployed: 2026-10-14 (Fixed: re-opening a game that was saved without handicap strokes and saving it again still left everyone out, because the form started every player with no tee. A new handicap row now starts on the course's default tee, so Edit games, Review, Save fills the strokes in (players with no handicap on file still need a number typed). New: when a game is Net but some players have no strokes saved, the player card on the Live Panel now says so and who, instead of silently showing no dots. No Worker change.)
+
 v4.31.2 · 2026-10-14
 Deployed: 2026-10-14 (New: ✏️ Edit games at the bottom of the Games details on an event card (host, or a Yes player on the day), so a configured game can be reopened and changed without going through the Gather tab. Not offered once results are closed. Scores already entered are kept. No Worker change.)
 

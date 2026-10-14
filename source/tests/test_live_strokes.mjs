@@ -28,7 +28,7 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date
   panelGamesGid: e => e.gatheringId, gamesScoreKeyForGid: g => 'gathering:' + g, csResolvePars: () => PARS, ensureVenueTeeInfoByName: async () => null, csNormalizedVenueName: () => 'BSGC',
   renderLiveBanner() {}, window: { addEventListener() {} }, gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null };
 vm.createContext(ctx);
-const fns = ['skStoreKey','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','skMarks','skGot','skAnyStrokes','skDotsHtml','skCardOf','liveScoreModeHtml','fourballPlayerCardHtml'];
+const fns = ['skStoreKey','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','skMarks','skGot','skAnyStrokes','skNetGapNote','skDotsHtml','skCardOf','liveScoreModeHtml','fourballPlayerCardHtml'];
 vm.runInContext('let _sk = null; let _fbUi = { view: "group", hole: null, drill: null };\n' + fns.map(n => extractFn(src, n)).join('\n') + '\nthis.api={' + fns.join(',') + ',get:()=>_sk};', ctx);
 const A = ctx.api;
 const cfgNet = E.gatheringConfigFromLegacy(row('own', [10, 4, 0, 2]));

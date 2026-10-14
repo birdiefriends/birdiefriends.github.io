@@ -10100,6 +10100,14 @@ function skMarks() {
   return m;
 }
 function skGot(name, hole) { const m = skMarks().get(String(name).trim().toLowerCase()); return m && m.known ? (Number(m.got[hole]) || 0) : 0; }
+// Net game but some players have no strokes saved: say so on the card, so it is not a silent "why no dots".
+function skNetGapNote() {
+  if (!_sk || !_sk.config || !(_sk.config.addons || []).some(a => a.basis === 'net')) return '';
+  const miss = [...skMarks().values()].filter(x => !x.known).map(x => x.player);
+  if (!miss.length) return '';
+  const all = miss.length >= skMarks().size;
+  return ` · <span style="color:#ffd27a">${all ? 'Net game, but no handicap strokes were saved. Host: Games, Edit games, Review.' : `no strokes for ${miss.slice(0, 3).map(escapeHtml).join(', ')}${miss.length > 3 ? ' and ' + (miss.length - 3) + ' more' : ''} (handicap or tee missing)`}</span>`;
+}
 function skAnyStrokes() { return [...skMarks().values()].some(x => x.known && Object.keys(x.got).length); }
 function skDotsHtml(k, color) { return k > 0 ? `<span aria-label="${k === 1 ? 'a stroke' : k + ' strokes'}" style="display:inline-flex;gap:2px;vertical-align:middle">${Array.from({ length: k }, () => `<span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block"></span>`).join('')}</span>` : ''; }
 function skCardOf(name) { return _sk.cards[name] || (_sk.cards[name] = new Array(18).fill(null)); }
@@ -10326,7 +10334,7 @@ function fourballPlayerCardHtml(k) {
   const toPar = pars && done.length ? tot - card.reduce((a, v, i) => a + (v > 0 ? pars[i] : 0), 0) : null;
   return `<button type="button" onclick="fbDrill(null)" style="background:none;border:0;color:#5DCAA5;font-family:inherit;font-size:0.84rem;font-weight:700;cursor:pointer;min-height:40px;padding:0;margin-bottom:6px">‹ Back to the game</button>
     <div style="font-size:1rem;font-weight:700;margin-bottom:2px">${escapeHtml(name)}</div>
-    <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-bottom:10px">Gross · thru ${done.length} · tap a hole to fix it${skAnyStrokes() ? ' · gold dots are handicap strokes' : ''}</div>
+    <div style="font-size:0.74rem;color:rgba(255,255,255,0.6);margin-bottom:10px">Gross · thru ${done.length} · tap a hole to fix it${skAnyStrokes() ? ' · gold dots are handicap strokes' : ''}${skNetGapNote()}</div>
     ${nine(0)}${skMaxHole() > 9 ? nine(9) : ''}
     <div style="display:flex;align-items:center;border-top:1px solid rgba(255,255,255,0.15);padding-top:10px"><div style="flex:1;font-size:0.82rem;color:rgba(255,255,255,0.7)">Total through ${done.length} hole${done.length === 1 ? '' : 's'}</div>
       <div style="font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:700">${tot || '·'}</div>
@@ -20658,6 +20666,8 @@ function gamesFormEntry(name) {
   if (!m) e = { kind: 'given', note: 'No handicap on file: enter the strokes they get' };
   else if (m.source === 'no_hcp' || m.hcp == null || !Number.isFinite(m.hcp)) e = { kind: 'given', note: 'No HCP on file: enter strokes given' };
   else e = { kind: 'index', index: m.hcp, note: `Index ${m.hcp} from Membership` };
+  // A new row starts on the course's default tee, so a Net game is never saved with nobody's strokes just because no tee was picked.
+  if (e.kind !== 'gross' && _gamesFormDefaultTeeId && (e.teeId == null || e.teeId === '')) e.teeId = _gamesFormDefaultTeeId;
   _gamesFormHcp.players[name] = e;
   return e;
 }

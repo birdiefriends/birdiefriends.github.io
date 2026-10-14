@@ -18,7 +18,7 @@ const tees = [
   { id: 2, tee_name: 'Gold', slope_rating: 115, course_rating: 66.0, par_total: 71, holes: PARS.map((_, i) => hole(i)) },
   { id: 3, tee_name: 'Broken', slope_rating: 120, course_rating: 68, par_total: 71, holes: PARS.map((_, i) => ({ par: PARS[i], handicap: 1 })) }
 ];
-const ctx = { BFEngine: E, _gamesFormG: { eventShadow: false }, _gamesFormGathering: 7, _gamesFormTees: tees,
+const ctx = { BFEngine: E, _gamesFormG: { eventShadow: false }, _gamesFormGathering: 7, _gamesFormTees: tees, _gamesFormDefaultTeeId: null,
   gatheringRegData: ['Brian Hager', 'Lee Chasen', 'Tony Hager', 'Muna Aliya'].map(p => ({ gatheringId: 7, player: p, status: 'Yes' })).concat([{ gatheringId: 7, player: 'Bailed', status: 'No' }]),
   regData: [], _gamesFormHcp: null, _gamesFormMembers: new Map(), _gamesFormSelected: new Set(['skins', 'birdiepay']), escapeHtml: v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;'), isOpenSpotName: n => /^Open Spot \d+$/i.test(String(n || '').trim()) };
 vm.createContext(ctx);

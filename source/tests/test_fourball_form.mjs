@@ -41,7 +41,7 @@ function sandbox({ names = ['Ann','Bob','Cy','Dee'], members = [] } = {}) {
     let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(['fourball']); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = ${names.length};
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] }; let _gamesFormBirdieballConfig = { dollar_per_player: null }; let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; let _gamesFormBirdiepayPars = null;
     let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [] }; let _gamesFormFourballNote = ''; let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' };
-    let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; let _gamesFormTees = []; let _gamesFormMembers = new Map(${JSON.stringify(members)}); let _gamesFormPar3Holes = []; let _gamesFormVenueParDataAvailable = false;
+    let _gamesFormDefaultTeeId = null; let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; let _gamesFormTees = []; let _gamesFormMembers = new Map(${JSON.stringify(members)}); let _gamesFormPar3Holes = []; let _gamesFormVenueParDataAvailable = false;
     function refreshGamesFormHcpSection() {}
     function applyGamesSuggestion() {}
     ${fns.filter(n => n !== 'refreshGamesFormHcpSection').map(n => extractFn(src, n)).join('\n')}

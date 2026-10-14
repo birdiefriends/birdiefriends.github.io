@@ -76,4 +76,11 @@ ok(bad === 0 && saved === 40, 'forty rolls: every one fills the form and saves (
   a.gamesRollGo();
   ok(!a.roll().ask && a.roll().crew.hasHcp && a.roll().setup, 'typed handicaps count: crew has handicaps and the roll runs');
 }
+// a fresh handicap row (e.g. re-opening a game saved with none) starts on the default tee
+{
+  const t = world(), a = t.api;
+  a.renderGatheringGamesForm(7, { gatheringId: 7, name: 'T' }, null);
+  const tee = vm.runInContext("gamesFormEntry('Ann').teeId", t.ctx);
+  ok(tee === '1', 'new handicap row defaults to the course default tee (got ' + tee + ')');
+}
 console.log(`test_roll_form: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
