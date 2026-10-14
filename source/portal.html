@@ -17758,6 +17758,15 @@ function gatheringGameDetailsBody(evt, config) {
       Scores and results publish to My History once the round is scored — no separate entry needed.
     </div>`;
 }
+// The host (or, for an event, a Yes player on the day) can change a configured game from its details: the same Games form,
+// opened on the saved config. Not offered once results are closed (those are reopened from My History).
+function gameDetailsEditHtml(evt) {
+  if (!eventGamesAllowed(evt)) return '';
+  const gid = gamesGidFor(evt);
+  if (gid != null && _closedGamesGids.has(Number(gid))) return '';
+  return `<button type="button" class="btn btn-secondary" style="width:100%;margin-top:14px" onclick="closeModal('game-details-modal');openGamesFromCard('${evt.id}')">✏️ Edit games</button>
+    <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px;line-height:1.5">Opens the Games setup with what is saved now. Scores already entered are kept.</div>`;
+}
 function openGameDetailsModal(evtOrId) {
   const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => String(e.id) === String(evtOrId));
   if (!evt) return;
@@ -17766,7 +17775,7 @@ function openGameDetailsModal(evtOrId) {
   const titleEl = document.getElementById('game-details-title');
   if (titleEl) titleEl.textContent = `🏆 ${evt.name}`;
   const bodyEl = document.getElementById('game-details-body');
-  if (bodyEl) bodyEl.innerHTML = gatheringGameDetailsBody(evt, config);
+  if (bodyEl) bodyEl.innerHTML = gatheringGameDetailsBody(evt, config) + gameDetailsEditHtml(evt);
   openModal('game-details-modal');
 }
 let _bfeBackedIndex = new Map();
