@@ -26,6 +26,13 @@ eq(sec(['birdieball']), { birdieAlert: false, cttp: false, birdieball: true, fou
 eq(sec(['skins', 'cttp', 'birdieball', 'birdiepay', 'fourball']), { birdieAlert: true, cttp: true, birdieball: true, fourball: true }, 'everything on: everything shows');
 // the render uses the helper and still gates by it
 ok(/const _lps = livePanelSections\(_liveConfig, _panelGid\);/.test(src), 'buildLivePanel resolves sections through the helper');
-ok(/showBirdieAlertSection \? `/.test(src), 'Birdie Alert section is gated');
+ok(/showBirdieAlertSection \? liveSectionHtml\('birdie'/.test(src), 'Birdie Alert section is gated');
 ok(!/const showCttpSection = _panelGid == null/.test(src), 'old inline CTP rule is gone (helper owns it)');
+// v4.28.2: Birdie Alert sits below the game panel; every section header folds
+{
+  const ps = src.indexOf('<div class="live-panel">');
+  const order = ['liveSectionHtml(\'cttp\'', 'liveSectionHtml(\'miserball\'', 'liveSectionHtml(\'game\'', 'liveSectionHtml(\'birdie\'', 'liveSectionHtml(\'scorecard\'', 'liveSectionHtml(\'close\''].map(k => src.indexOf(k, ps));
+  ok(order.every((v, i) => v > 0 && (i === 0 || v > order[i - 1])), 'order: game panel, then Birdie Alert, then Post-Round Scorecard');
+  ok(/function liveSectionToggle/.test(src) && /aria-expanded/.test(src) && /\.live-section\.collapsed \.live-section-body \{ display: none/.test(src), 'headers fold and unfold');
+}
 console.log(`live panel sections: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

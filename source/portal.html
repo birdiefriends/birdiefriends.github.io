@@ -1062,6 +1062,11 @@ body {
 .live-section-header .lsh-icon {
   font-size: 0.95rem; line-height: 1;
 }
+/* Tap a section header to fold it away / open it again */
+.live-section-header { cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; min-height: 40px; box-sizing: border-box; }
+.live-section-header .lsh-chev { margin-left: auto; font-size: 0.8rem; opacity: 0.75; transition: transform 0.15s; }
+.live-section.collapsed .lsh-chev { transform: rotate(-90deg); }
+.live-section.collapsed .live-section-body { display: none; }
 .live-section-body {
   background: rgba(0,0,0,0.18);
   padding: 14px 14px 12px;
@@ -9353,50 +9358,39 @@ function buildLivePanel(evt) {
   // same /photos/upload endpoint the rail's atCourseQuickCapture now covers,
   // so that copy was dropped — the rail is that round's only capture point
   // while it's live and gamed.
-  const photosSection = isBfeRound ? `
-    <div class="live-section">
-      <div class="live-section-header"><span class="lsh-icon">📸</span>Photos &amp; Notes</div>
-      <div class="live-section-body">${buildLivePanelPhotoSection(evt)}</div>
-    </div>` : '';
+  const photosSection = isBfeRound ? liveSectionHtml('photos', '📸', 'Photos &amp; Notes', buildLivePanelPhotoSection(evt)) : '';
   // ── SECTION 2.7: BestBall (Dev-93) — live pair standings from the scores saved so far ──
   const fbSection = showFourballSection ? (_skOn ? fourballActionsHtml(_liveConfig) : fourballLiveSectionHtml(_liveConfig)) : '';
   return `<div class="live-panel">
     ${_skOn ? livePanelModeToggleHtml('games') : ''}
     ${groupingsLink}
     ${photosSection}
-    ${showBirdieAlertSection ? `
-    <div class="live-section">
-      <div class="live-section-header"><span class="lsh-icon">🦅</span>Birdie Alert</div>
-      <div class="live-section-body">${birdieSection}</div>
-    </div>` : ''}
-    ${showCttpSection ? `
-    <div class="live-section">
-      <div class="live-section-header"><span class="lsh-icon">🎯</span>Closest to the Pin</div>
-      <div class="live-section-body">${ctpSection}</div>
-    </div>` : ''}
-    ${showBirdieBallSection ? `
-    <div class="live-section">
-      <div class="live-section-header"><span class="lsh-icon">🐉</span>MiserBall</div>
-      <div class="live-section-body">${bbSection}</div>
-    </div>` : ''}
-    ${showFourballSection ? `
-    <div class="live-section">
-      <div class="live-section-header"><span class="lsh-icon">${BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.icon}</span>${BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.label}</div>
-      <div class="live-section-body">${fbSection}</div>
-    </div>` : ''}
-    <div class="live-section">
-      <div class="live-section-header"><span class="lsh-icon">📋</span>Post-Round Scorecard</div>
-      <div class="live-section-body">${_skOn ? `<div style="font-size:0.82rem;color:rgba(255,255,255,0.75);line-height:1.45;margin-bottom:8px">Scores are saved live while you play, so there is nothing to enter after the round.</div><details><summary style="font-size:0.78rem;color:rgba(255,255,255,0.6);cursor:pointer;padding:8px 0">Enter a full card instead</summary>${scSection}</details>` : scSection}</div>
-    </div>
-    ${showCloseSection ? `
-    <div class="live-section">
-      <div class="live-section-header"><span class="lsh-icon">🏁</span>Host · Close &amp; Calculate</div>
-      <div class="live-section-body">
+    ${showCttpSection ? liveSectionHtml('cttp', '🎯', 'Closest to the Pin', ctpSection) : ''}
+    ${showBirdieBallSection ? liveSectionHtml('miserball', '🐉', 'MiserBall', bbSection) : ''}
+    ${showFourballSection ? liveSectionHtml('game', BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.icon, BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.label, fbSection) : ''}
+    ${showBirdieAlertSection ? liveSectionHtml('birdie', '🦅', 'Birdie Alert', birdieSection) : ''}
+    ${liveSectionHtml('scorecard', '📋', 'Post-Round Scorecard', `${_skOn ? `<div style="font-size:0.82rem;color:rgba(255,255,255,0.75);line-height:1.45;margin-bottom:8px">Scores are saved live while you play, so there is nothing to enter after the round.</div><details><summary style="font-size:0.78rem;color:rgba(255,255,255,0.6);cursor:pointer;padding:8px 0">Enter a full card instead</summary>${scSection}</details>` : scSection}`)}
+    ${showCloseSection ? liveSectionHtml('close', '🏁', 'Host · Close &amp; Calculate', `
         <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:10px;line-height:1.45">Once everyone's card is in: check scorecards, preview Skins/CTP/MiserBall/Birdie payouts, and post results to My History.</div>
         <button class="sc-submit-btn" onclick="openGatheringCloseSheet(${_panelGid})">🏁 Close &amp; Calculate</button>
-      </div>
-    </div>` : ''}
+      `) : ''}
   </div>`;
+}
+// Live panel sections fold away when their header is tapped. The folded set is remembered on this phone (and survives the
+// panel redrawing as scores come in); storage can be blocked, so it is only a convenience.
+const _liveFolded = (() => { try { return new Set(JSON.parse(localStorage.getItem('bf_live_folded') || '[]')); } catch (e) { return new Set(); } })();
+function liveSectionHtml(key, icon, title, bodyHtml) {
+  const folded = _liveFolded.has(key);
+  return `<div class="live-section${folded ? ' collapsed' : ''}" data-lskey="${key}">
+      <div class="live-section-header" role="button" tabindex="0" aria-expanded="${folded ? 'false' : 'true'}" onclick="liveSectionToggle(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();liveSectionToggle(this)}"><span class="lsh-icon">${icon}</span>${title}<span class="lsh-chev" aria-hidden="true">▾</span></div>
+      <div class="live-section-body">${bodyHtml}</div>
+    </div>`;
+}
+function liveSectionToggle(hd) {
+  const sec = hd.closest('.live-section'); if (!sec) return;
+  const key = sec.getAttribute('data-lskey'), folded = sec.classList.toggle('collapsed');
+  hd.setAttribute('aria-expanded', folded ? 'false' : 'true');
+  if (key) { if (folded) _liveFolded.add(key); else _liveFolded.delete(key); try { localStorage.setItem('bf_live_folded', JSON.stringify([..._liveFolded])); } catch (e) {} }
 }
 // ── Live Panel Photo Capture (Dev-57) ──────────────────────────────────────
 // Player-facing capture, distinct from the commissioner-only test panel on

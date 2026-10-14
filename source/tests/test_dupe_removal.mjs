@@ -25,7 +25,7 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 // 1) buildLivePanel: the Photos live-section only exists for a BFE-backed
 // round — not rendered at all (not even an empty shell) for a non-BFE round.
 const buildLivePanelSrc = extractFn(src, 'buildLivePanel');
-ok(/const photosSection = isBfeRound \? `/.test(buildLivePanelSrc), 'Photos live-section gated on isBfeRound');
+ok(/const photosSection = isBfeRound \? liveSectionHtml\('photos'/.test(buildLivePanelSrc), 'Photos live-section gated on isBfeRound');
 ok(buildLivePanelSrc.includes('${photosSection}'), 'gated photosSection is what actually gets spliced into the panel');
 ok(!/\$\{isBfeRound \? 'Photos &amp;/.test(buildLivePanelSrc), 'old always-rendered header form is gone (section itself is now conditional, not just its label)');
 

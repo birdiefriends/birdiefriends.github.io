@@ -53,5 +53,5 @@ ok(/gross/.test(html), 'section: says gross');
 await (async () => { ctx._gatheringGamesIndex = new Map([[7, { games: ['skins'] }]]); await ctx.api.loadFourballLive({ gatheringId: 7 }); ok(ctx.api.get() === null, 'loader: no BestBall -> nothing kept'); })();
 // wiring guards
 ok(/loadFourballLive\(getLiveEvent\(\)\)/.test(src) && /loadFourballLive\(evt\);/.test(src), 'panel open and the 60s refresh both reload standings');
-ok(/showFourballSection \? `/.test(src), 'the BestBall section only appears for a BestBall game');
+ok(/showFourballSection \? liveSectionHtml\('game'/.test(src), 'the BestBall section only appears for a BestBall game');
 console.log(`fourball live: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

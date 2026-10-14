@@ -1,3 +1,6 @@
+v4.28.2 · 2026-10-14
+Deployed: 2026-10-14 (Live Actions: the Birdie Alert section now sits below the game status panel (order: Closest to the Pin, MiserBall, the game, Birdie Alert, Post-Round Scorecard, Close). Every section header is now tap to fold away / open again, with a chevron showing which; the folded choice is remembered on that phone. No Worker change.)
+
 v4.28.1 · 2026-10-14
 Deployed: 2026-10-14 (Hi-Lo: "Net, off the low" now shows the right strokes. Live Score dots and the scoring both take strokes off the lowest handicap in YOUR foursome (before, the dots showed everyone's full strokes while the scoring already used the low, and the low was taken across every pair in the game). Worker: redeploy bf_experiences_worker.js only if you have not yet deployed v4.28.0's, otherwise only a version comment changed.)
 
