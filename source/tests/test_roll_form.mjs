@@ -54,6 +54,12 @@ for (let i = 0; i < 40; i++) {
   await a.submitGatheringGames(7);
   const gotNet = Object.values(r.variants).some(v => v.basis === 'net') && [r.setup.main, ...r.on].some(id => (r.variants[id] || {}).basis === 'net');
   if (NET && gotNet && t.posts.length === 1 && !(t.posts[0].handicap_config && Object.keys(t.posts[0].handicap_config.players || {}).length === 8)) { bad++; console.log('net roll saved without strokes for everyone', JSON.stringify(t.posts[0].handicap_config)); continue; }
+  if (NET && gotNet && t.posts.length === 1) {   // and the saved payload must really produce stroke dots for the live panel
+    const pl = t.posts[0], cfg = pl;
+    const marks = E.strokeMarksFor(cfg, eight), side = E.sideStrokeSets(cfg, { all: true });
+    const anyDots = marks.some(m => m.known && Object.keys(m.got || {}).length) || side.some(st => st.rows.some(r => Object.keys(r.got || {}).length));
+    if (!anyDots) { bad++; console.log('net roll saved but no dots', JSON.stringify(r.setup.rolled), Object.keys(pl.game_configs || {})); continue; }
+  }
   if (t.posts.length === 1) saved++; else { bad++; console.log('save refused', JSON.stringify(r.setup), t.toasts, a.state().step); }
 }
 if (NET) { console.log('net rolls:', sawNet); ok(sawNet > 5, 'the net run really rolled Net setups'); }
