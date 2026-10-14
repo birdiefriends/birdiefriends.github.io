@@ -1,3 +1,6 @@
+v4.31.0 · 2026-10-14
+Deployed: 2026-10-14 (Changed: Low Score is now called Individual Low Score everywhere it names the game: the Games form, review, money lines, Live results and the round summary. The live results tab stays short (Low Score) and the event card seal reads LOW SCORE · SOLO. Saved events are unaffected. Worker: only the game's display label changed in the embedded schema, so redeploy when convenient; nothing breaks if you don't.)
+
 v4.30.2 · 2026-10-14
 Deployed: 2026-10-14 (Changed: Roll again on the Surprise me screen now tumbles the die for 1.5 seconds before the new setup appears, same as the big dice. No Worker change.)
 

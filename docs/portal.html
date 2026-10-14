@@ -3625,7 +3625,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.22.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.22.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -16893,7 +16893,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   const strokesBy = new Map(((s.handicap && s.handicap.players) || []).map(p => [norm(p.player), Number(p.strokes) || 0]));
   // Net games that play off the low use fewer strokes than the player's full allowance: say so per player.
   const gameStrokes = new Map();
-  [['BestBall', s.fourball], ['Alternate Shot', s.altshot], ['Hi-Lo', s.hilo], ['Match Play', s.matchplay], ['Low Score', s.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => {
+  [['BestBall', s.fourball], ['Alternate Shot', s.altshot], ['Hi-Lo', s.hilo], ['Match Play', s.matchplay], ['Individual Low Score', s.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => {
     const k = norm(m.player);
     if (!strokesBy.has(k) || Number(m.strokes) === strokesBy.get(k)) return;
     if (!gameStrokes.has(k)) gameStrokes.set(k, []);
@@ -16947,7 +16947,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     addLine('🔁', 'Alternate Shot', s.altshot, s.altshot && s.altshot.segments ? s.altshot.segments.win_by : null);
     addLine('⚖️', 'Hi-Lo', s.hilo, s.hilo && s.hilo.segments ? s.hilo.segments.win_by : null);
     addLine('⚔️', 'Match Play', s.matchplay, s.matchplay && s.matchplay.segments ? s.matchplay.segments.win_by : null);
-    addLine('🎯', 'Low Score', s.lowscore, null);
+    addLine('🎯', 'Individual Low Score', s.lowscore, null);
     if (lines.length) sum += `<div style="font-size:0.78rem;line-height:1.45;background:rgba(255,255,255,0.45);border-radius:10px;padding:6px 10px;margin:2px 0 8px"><div style="font-size:0.68rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-hint);margin-bottom:2px">How it was played</div>${lines.join('')}${gameStrokes.size ? '<div style="padding:3px 0;color:var(--text-muted)">The Net column uses each player\'s full handicap strokes. Games played off the low use fewer, shown under each name.</div>' : ''}</div>`;
   }
   if (oneBallOnly) sum += BFEngine.sideFormGames().map(id => (s[id] ? sideResultHeroHtml(s[id], id) : '')).join('');
@@ -17100,7 +17100,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     const P = BFEngine.PERIODS[pk] || BFEngine.PERIODS.round;
     const net = f.basis === 'net' ? 'net' : 'gross';
     const nPl = (f.standings || []).length;
-    let h = label(`🎯 Low Score (${net}${pk === 'round' ? '' : ' · ' + P.label}) — ${money(f.pot)}`);
+    let h = label(`🎯 Individual Low Score (${net}${pk === 'round' ? '' : ' · ' + P.label}) — ${money(f.pot)}`);
     if (f.net_missing) h += `<div style="font-size:0.72rem;color:#b8860b;margin-bottom:2px">Net was chosen but no strokes were on file, so this played gross</div>`;
     if (f.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(f.configured_pot)}, but the pot only had ${money(f.pot)} left</div>`;
     const rules = [];
@@ -17426,7 +17426,7 @@ async function loadHistoryGameResults(key, groupEvt) {
     if (!cfg || cfg.status !== 'closed' || !cfg.payout_summary) { el.innerHTML = ''; return; }
     {
       const ps = cfg.payout_summary, byP = new Map(), lc = x => String(x).trim().toLowerCase();
-      [['BestBall', ps.fourball], ['Alternate Shot', ps.altshot], ['Hi-Lo', ps.hilo], ['Match Play', ps.matchplay], ['Low Score', ps.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => { if (!byP.has(lc(m.player))) byP.set(lc(m.player), { ...m, game: lab, net_mode: g.net_mode }); }));
+      [['BestBall', ps.fourball], ['Alternate Shot', ps.altshot], ['Hi-Lo', ps.hilo], ['Match Play', ps.matchplay], ['Individual Low Score', ps.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => { if (!byP.has(lc(m.player))) byP.set(lc(m.player), { ...m, game: lab, net_mode: g.net_mode }); }));
       _historyStrokeMarks[key] = [...byP.values()];
       _historyFullStrokes[key] = Object.fromEntries(((ps.handicap && ps.handicap.players) || []).map(x => [lc(x.player), Number(x.strokes) || 0]));
     }
@@ -17723,7 +17723,7 @@ function gatheringGameDetailsBody(evt, config) {
     const cost = (ls.dollar_per_player || 0) * yesCount;
     remaining -= cost;
     const lk = BFEngine.periodKey(ls);
-    rows.push(row('🎯', `Low Score · ${ls.basis === 'net' ? 'Net' : 'Gross'}`, `Lowest individual score · $${(ls.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, ${lk !== 'round' ? `${BFEngine.PERIODS[lk].phrase} are separate pots; a tie in a period is a push` : 'one pot for the lowest total; a tie is a push'}`, 'lowscore'));
+    rows.push(row('🎯', `Individual Low Score · ${ls.basis === 'net' ? 'Net' : 'Gross'}`, `Lowest individual score · $${(ls.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, ${lk !== 'round' ? `${BFEngine.PERIODS[lk].phrase} are separate pots; a tie in a period is a push` : 'one pot for the lowest total; a tie is a push'}`, 'lowscore'));
   }
   if ((config.legacy.games || []).includes('skins')) {
     const sk = gatheringAddon(config, 'skins');
@@ -19689,7 +19689,7 @@ function gamesFormSplitHtml() {
   };
   if (sel.has('fourball')) rows.push(periodRow('🤝', 'BestBall', _gamesFormFourballConfig, fourballSegCount(_gamesFormFourballConfig), 'gw-split-fb', 'setGamesFormFourballDollarPerPlayer'));
   GAMES_FORM_SIDE_IDS.forEach(g => { if (sel.has(g)) { const m = BFEngine.getGame(g).meta; rows.push(periodRow(m.icon, m.label, _gamesFormSide[g], periodSegCount(_gamesFormSide[g]), `gw-split-${g}`, `setGamesFormSideDollarFor.${g}`)); } });
-  if (sel.has('lowscore')) rows.push(periodRow('🎯', 'Low Score', _gamesFormLowscoreConfig, lowscoreSegCount(_gamesFormLowscoreConfig), 'gw-split-ls', 'setGamesFormLowscoreDollarPerPlayer'));
+  if (sel.has('lowscore')) rows.push(periodRow('🎯', 'Individual Low Score', _gamesFormLowscoreConfig, lowscoreSegCount(_gamesFormLowscoreConfig), 'gw-split-ls', 'setGamesFormLowscoreDollarPerPlayer'));
   if (sel.has('cttp')) rows.push(row('🎯', 'CTP', inp('gw-split-cttp', _gamesFormCttpConfig.dollar_per_hole, 'setGamesFormCttpDollarPerHole', 'a hole')));
   if (sel.has('birdieball')) rows.push(row('🐉', 'MiserBall', inp('gw-split-bb', _gamesFormBirdieballConfig.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer', 'per player')));
   if (sel.has('birdiepay')) rows.push(row('🐤', 'Birdie Payouts', inp('gw-split-bp', _gamesFormBirdiepayConfig.dollar_per_birdie, 'setGamesFormBirdiepayDollarPerBirdie', 'a birdie')));
@@ -19717,7 +19717,7 @@ function refreshGamesFormSplit() {
 }
 // ── Games setup wizard: one question per screen ──────────────────────────────
 let _gw = { step: 'games' };
-const GW_NAMES = { games: 'Games', money: 'The money', fourball: 'BestBall', fbpairs: 'BestBall pairs', altshot: 'Alternate Shot', aspairs: 'Alternate Shot pairs', hilo: 'Hi-Lo', hlpairs: 'Hi-Lo pairs', matchplay: 'Match Play', mpmatches: 'Match Play matches', lowscore: 'Low Score', skins: 'Skins', cttp: 'CTP', birdieball: 'MiserBall', birdiepay: 'Birdie Payouts', hcp: 'Handicap strokes', review: 'Review' };
+const GW_NAMES = { games: 'Games', money: 'The money', fourball: 'BestBall', fbpairs: 'BestBall pairs', altshot: 'Alternate Shot', aspairs: 'Alternate Shot pairs', hilo: 'Hi-Lo', hlpairs: 'Hi-Lo pairs', matchplay: 'Match Play', mpmatches: 'Match Play matches', lowscore: 'Individual Low Score', skins: 'Skins', cttp: 'CTP', birdieball: 'MiserBall', birdiepay: 'Birdie Payouts', hcp: 'Handicap strokes', review: 'Review' };
 function gwSteps() {
   const sel = _gamesFormSelected;
   if (!sel.size) return ['games'];
@@ -19774,7 +19774,7 @@ function gwReviewHtml() {
     const what = mp ? (items ? items + ' match' + (items === 1 ? '' : 'es') : '<span style="color:#b8860b">no matches yet</span>') : (items ? items + ' pair' + (items === 1 ? '' : 's') : '<span style="color:#b8860b">no pairs yet</span>');
     add(meta.icon, meta.label, `${net} · ${per(pk)} · ${Number(c.dollar_per_player) > 0 ? money(c.dollar_per_player) + ' per player' : 'no money'} · ${what}`, items ? gid : GW_SIDE_STEP[gid]);
   });
-  if (sel.has('lowscore')) add('🎯', 'Low Score', `${basis(ls.basis)} · ${per(BFEngine.periodKey(ls))} · ${money(ls.dollar_per_player)} per player`, 'lowscore');
+  if (sel.has('lowscore')) add('🎯', 'Individual Low Score', `${basis(ls.basis)} · ${per(BFEngine.periodKey(ls))} · ${money(ls.dollar_per_player)} per player`, 'lowscore');
   if (sel.has('skins')) add('⛳', 'Skins', `${basis(_gamesFormHcp.skins_basis)} · gets what is left`, 'skins');
   if (sel.has('cttp')) add('🎯', 'CTP', `${money(_gamesFormCttpConfig.dollar_per_hole)} a hole · ${(_gamesFormCttpConfig.holes || []).length} hole${(_gamesFormCttpConfig.holes || []).length === 1 ? '' : 's'}`, 'cttp');
   if (sel.has('birdieball')) add('🐉', 'MiserBall', `${money(_gamesFormBirdieballConfig.dollar_per_player)} per player`, 'money');
@@ -20081,7 +20081,7 @@ function gatheringGamesLowscoreSectionHtml() {
   const c = _gamesFormLowscoreConfig, n = lowscoreSegCount(c), pk = BFEngine.periodKey(c);
   return `
     <div class="host-form-field" id="games-form-lowscore-field">
-      <label>🎯 Low Score</label>
+      <label>🎯 Individual Low Score</label>
       <div class="gw-money"><div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.86rem">$</span>
         <input type="number" id="games-form-ls-dpp" min="0.01" step="0.01" value="${n > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / n * 100) / 100 : '') : (c.dollar_per_player || '')}" style="width:90px"
@@ -20751,7 +20751,7 @@ function gatheringGamesHcpSectionHtml() {
   if (!net) return `<div class="host-form-field" id="games-form-hcp-field">${rankingRow}<div style="font-size:0.72rem;color:var(--text-muted)">Every game is Gross. Set a game to Net above and a Handicap strokes card appears here.</div></div>`;
   const netNames = [];
   if (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.basis === 'net') netNames.push('BestBall');
-  if (_gamesFormSelected.has('lowscore') && _gamesFormLowscoreConfig.basis === 'net') netNames.push('Low Score');
+  if (_gamesFormSelected.has('lowscore') && _gamesFormLowscoreConfig.basis === 'net') netNames.push('Individual Low Score');
   GAMES_FORM_SIDE_IDS.forEach(g => { if (_gamesFormSelected.has(g) && _gamesFormSide[g].basis === 'net') netNames.push(BFEngine.getGame(g).meta.label); });
   if (hasSkins && _gamesFormHcp.skins_basis === 'net') netNames.push('Skins');
   if (hasBp && _gamesFormHcp.birdiepay_basis === 'net') netNames.push('Birdie Payouts');
@@ -20874,7 +20874,7 @@ function updateGamesFormPotPreview(yesCount) {
   if (_gamesFormSelected.has('lowscore') && _gamesFormLowscoreConfig.dollar_per_player > 0) {
     const lsCost = _gamesFormLowscoreConfig.dollar_per_player * yesCount, lsN = lowscoreSegCount(_gamesFormLowscoreConfig);
     remaining -= lsCost;
-    lines.push(lsN > 1 ? `🎯 Low Score: $${lsCost.toFixed(2)} (${yesCount} × $${_gamesFormLowscoreConfig.dollar_per_player.toFixed(2)}), cut into ${lsN} period pots` : `🎯 Low Score: $${lsCost.toFixed(2)} (${yesCount} × $${_gamesFormLowscoreConfig.dollar_per_player.toFixed(2)}), the lowest score takes it`);
+    lines.push(lsN > 1 ? `🎯 Individual Low Score: $${lsCost.toFixed(2)} (${yesCount} × $${_gamesFormLowscoreConfig.dollar_per_player.toFixed(2)}), cut into ${lsN} period pots` : `🎯 Individual Low Score: $${lsCost.toFixed(2)} (${yesCount} × $${_gamesFormLowscoreConfig.dollar_per_player.toFixed(2)}), the lowest score takes it`);
   }
   // Birdie Payouts is a variable cost (flat $ × birdies actually made), so it
   // can't be totalled here — say so instead of showing a made-up number.
@@ -20976,10 +20976,10 @@ async function submitGatheringGames(gatheringId) {
   if (bailed) return;
   if (games.includes('lowscore')) {
     const c = _gamesFormLowscoreConfig;
-    if (!(c.dollar_per_player > 0)) { bad('money', 'Low Score: $ per player must be greater than 0'); return; }
+    if (!(c.dollar_per_player > 0)) { bad('money', 'Individual Low Score: $ per player must be greater than 0'); return; }
     const ls = { dollar_per_player: c.dollar_per_player, basis: c.basis === 'net' ? 'net' : 'gross', ...(lowscoreSegCount(c) > 1 ? { period: c.period } : {}) };
     const v = BFEngine.validateGameConfig('lowscore', ls);
-    if (!v.ok) { bad('lowscore', 'Low Score: ' + v.errors[0]); return; }
+    if (!v.ok) { bad('lowscore', 'Individual Low Score: ' + v.errors[0]); return; }
     game_configs = Object.assign(game_configs || {}, { lowscore: ls });
   }
   const hcb = gamesFormBuildHandicapConfig();

@@ -53,5 +53,5 @@ ok(f({ games: ['lowscore', 'skins'] }).lowscore.dollar_per_player === 5, 'with s
 ok(ctx.f.droppedGameSettings({ fourball: { period: 'sixes' } }, { fourball: {} }).join() === 'BestBall scoring period', 'dropped period is caught');
 ok(ctx.f.droppedGameSettings({ fourball: { period: 'sixes' } }, { fourball: { period: 'sixes' } }).length === 0, 'kept period passes');
 ok(ctx.f.droppedGameSettings({ lowscore: { period: 'round' } }, '{"lowscore":{}}').length === 0, 'whole round needs no period; JSON string accepted');
-ok(ctx.f.droppedGameSettings({ lowscore: { period: 'fbt' } }, null).join() === 'Low Score (whole game)', 'a missing game is caught');
+ok(ctx.f.droppedGameSettings({ lowscore: { period: 'fbt' } }, null).join() === 'Individual Low Score (whole game)', 'a missing game is caught');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

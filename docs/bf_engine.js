@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.22.0';
+  const ENGINE_VERSION = '1.22.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1153,7 +1153,7 @@
   defineGame('lowscore', {
     kind: 'addon', input: 'strokes', net: true, entity: 'individual',
     released: true,
-    meta: { traits: { unit: 'player', allowance: 'round', individualScores: true }, label: 'Low Score', icon: '🎯', seal: 'LOW SCORE', uiOrder: 6, group: 'format',
+    meta: { traits: { unit: 'player', allowance: 'round', individualScores: true }, label: 'Individual Low Score', icon: '🎯', seal: 'LOW SCORE · SOLO', uiOrder: 6, group: 'format',
       info: 'Everyone plays their own ball and the lowest score wins. Choose the scoring period: the whole round, Front and Back, Front, Back and Total, or 6 / 6 / 6. Each period is its own pot, the ante is split across them, and the lowest total in a period takes that pot. A tie for low is a push and the antes come back. Gross unless the host set it to Net.' },
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
