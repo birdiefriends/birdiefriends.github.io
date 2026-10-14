@@ -16927,16 +16927,22 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   // against the buy-in underneath, so "what did I win" and "what do I get back" are never mixed up.
   const anyBack = [...byName.values()].some(p => Number(p.given_back) > 0);
   const buyIn = Number(s.dollar_per_player) || 0;
-  const cols = `1.4rem minmax(0,1fr) ${hasRank ? '2.3rem ' : ''}${games.map(() => '2.1rem').join(' ')}${games.length ? ' ' : ''}${anyBack ? '2.1rem ' : ''}3rem`;
+  // Many games (Hi-Lo + Skins + CTP + MiserBall + Birdie Payouts ...) no longer fit on a phone: the name column used to collapse to nothing.
+  // Past 4 money columns the score moves under the name, the columns tighten, and the table scrolls sideways rather than overlapping.
+  const moneyCols = games.length + (anyBack ? 1 : 0), compact = moneyCols >= 4, scoreCol = hasRank && !compact;
+  const colW = compact ? '1.65rem' : '2.1rem', nameMin = compact ? '4.6rem' : '0';
+  const cols = `${compact ? '0.9rem' : '1.4rem'} minmax(${nameMin},1fr) ${scoreCol ? '2.3rem ' : ''}${games.map(() => colW).join(' ')}${games.length ? ' ' : ''}${anyBack ? colW + ' ' : ''}${compact ? '2.5rem' : '3rem'}`;
+  const gridGap = compact ? '3px' : '4px';
   const cell = (v, bold) => `<span style="text-align:right;${bold ? 'font-weight:800;' : ''}">${v}</span>`;
-  const head = scoreLabel => `<div style="display:grid;grid-template-columns:${cols};gap:4px;font-size:0.68rem;color:var(--text-hint);padding:2px 0 4px;border-bottom:1px solid var(--border)">
-      <span></span><span>Player</span>${hasRank ? cell(scoreLabel) : ''}${games.map(g => cell(g[1])).join('')}${anyBack ? cell('↩') : ''}${cell('Total')}</div>`;
+  const head = scoreLabel => `<div style="display:grid;grid-template-columns:${cols};gap:${gridGap};font-size:0.68rem;color:var(--text-hint);padding:2px 0 4px;border-bottom:1px solid var(--border)">
+      <span></span><span style="overflow:hidden;white-space:nowrap">Player</span>${scoreCol ? cell(scoreLabel) : ''}${games.map(g => cell(g[1])).join('')}${anyBack ? cell('↩') : ''}${cell('Total')}</div>`;
   const matrix = (mode, scoreKey) => head(scoreKey === 'gross' ? 'Gross' : 'Net') + sortedBy(mode).map(({ p, place, tied }) => {
-    const sc = hasRank ? cell(p[scoreKey] == null ? '—' : esc(p[scoreKey])) : '';
+    const sc = scoreCol ? cell(p[scoreKey] == null ? '—' : esc(p[scoreKey])) : '';
+    const scSub = hasRank && compact && p[scoreKey] != null ? `${scoreKey === 'gross' ? 'Gross' : 'Net'} ${esc(p[scoreKey])}` : '';
     const gm = games.map(g => cell(p[g[0]] ? money(p[g[0]]) : '<span style="color:var(--text-hint)">·</span>')).join('');
-    return `<div style="display:grid;grid-template-columns:${cols};gap:4px;align-items:center;font-size:0.82rem;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06)">
+    return `<div style="display:grid;grid-template-columns:${cols};gap:${gridGap};align-items:center;font-size:${compact ? '0.78rem' : '0.82rem'};padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06)">
       <span style="color:var(--text-muted);font-size:0.74rem">${place === '' ? '' : (tied ? 'T' : '') + place}</span>
-      <span style="min-width:0;line-height:1.15" title="${esc(p.player)}">${(([f, l]) => `<span style="display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f)}</span>${l || strokesBy.has(norm(p.player)) ? `<span style="display:block;font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l)}${strokesBy.has(norm(p.player)) ? `${l ? ' · ' : ''}${strokesBy.get(norm(p.player))} stroke${Math.abs(strokesBy.get(norm(p.player))) === 1 ? '' : 's'}${gameStrokes.has(norm(p.player)) ? ' · ' + gameStrokes.get(norm(p.player)).join(' · ') : ''}` : ''}</span>` : ''}`)(splitName(p.player))}</span>${sc}${gm}${anyBack ? cell(p.given_back ? money(p.given_back) : '<span style="color:var(--text-hint)">·</span>') : ''}<span style="text-align:right;line-height:1.15"><span style="font-weight:800;display:block">${p.total ? money(p.total) : '·'}</span>${buyIn > 0 ? (() => { const n = (Number(p.total) || 0) - buyIn; return `<span style="font-size:0.66rem;font-weight:700;color:${n > 0 ? 'var(--green-dark)' : n < 0 ? '#b8860b' : 'var(--text-muted)'}">${n > 0 ? '+' : n < 0 ? '−' : ''}${money(Math.abs(n))}</span>`; })() : ''}</span></div>`;
+      <span style="min-width:0;line-height:1.15" title="${esc(p.player)}">${(([f, l]) => `<span style="display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f)}</span>${l || strokesBy.has(norm(p.player)) ? `<span style="display:block;font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l)}${strokesBy.has(norm(p.player)) ? `${l ? ' · ' : ''}${strokesBy.get(norm(p.player))} stroke${Math.abs(strokesBy.get(norm(p.player))) === 1 ? '' : 's'}${gameStrokes.has(norm(p.player)) ? ' · ' + gameStrokes.get(norm(p.player)).join(' · ') : ''}` : ''}</span>` : ''}`)(splitName(p.player))}${scSub ? `<span style="display:block;font-size:0.72rem;font-weight:700">${scSub}</span>` : ''}</span>${sc}${gm}${anyBack ? cell(p.given_back ? money(p.given_back) : '<span style="color:var(--text-hint)">·</span>') : ''}<span style="text-align:right;line-height:1.15"><span style="font-weight:800;display:block">${p.total ? money(p.total) : '·'}</span>${buyIn > 0 ? (() => { const n = (Number(p.total) || 0) - buyIn; return `<span style="font-size:0.66rem;font-weight:700;color:${n > 0 ? 'var(--green-dark)' : n < 0 ? '#b8860b' : 'var(--text-muted)'}">${n > 0 ? '+' : n < 0 ? '−' : ''}${money(Math.abs(n))}</span>`; })() : ''}</span></div>`;
   }).join('');
   const modes = hasRank ? [['net', 'Net'], ['gross', 'Gross'], ['money', '$']] : [['money', '$']];
   const defMode = hasRank ? 'net' : 'money';
@@ -16962,7 +16968,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   if (oneBallOnly) sum += BFEngine.sideFormGames().map(id => (s[id] ? sideResultHeroHtml(s[id], id) : '')).join('');
   if (modes.length > 1) sum += `<div style="display:flex;align-items:center;gap:6px;margin:4px 0 6px"><span style="font-size:0.72rem;color:var(--text-muted)">Rank by</span>${modes.map(([m, l]) => modeBtn(m, l)).join('')}<span style="font-size:0.68rem;color:var(--text-hint)">scores are for fun</span></div>`;
   sum += `<div style="font-size:0.7rem;color:var(--text-muted);margin:2px 0 4px;line-height:1.4">Game columns show what each game paid out.${anyBack ? ' ↩ is an ante handed back from a pot that was halved or not finished.' : ''} Total is everything that player receives${buyIn > 0 ? `; the small number is the result against the ${money(buyIn)} buy-in` : ''}.</div>`;
-  sum += modes.map(([m]) => `<div data-gp-sort="${m}" style="${m === defMode ? '' : 'display:none'}">${matrix(m, m === 'gross' ? 'gross' : 'net')}</div>`).join('');
+  sum += modes.map(([m]) => `<div data-gp-sort="${m}" style="overflow-x:auto;${m === defMode ? '' : 'display:none'}">${matrix(m, m === 'gross' ? 'gross' : 'net')}</div>`).join('');
   if (s.unallocated > 0) sum += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Rounding (whole dollars): ${money(s.unallocated)} stays with the host</div>`;
   panels.push({ key: 'sum', tab: '📋 Summary', html: sum });
 

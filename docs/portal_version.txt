@@ -1,3 +1,6 @@
+v4.31.4 · 2026-10-14
+Deployed: 2026-10-14 (Fixed: the results card with many games (Hi-Lo + Skins + CTP + MiserBall + Birdie Payouts, and so on) was too wide for a phone: the player names disappeared and the Player and Net headings overlapped. With four or more money columns the table now tightens its columns, shows each player's Net (or Gross) score under their name instead of in its own column, and scrolls sideways rather than overlapping if it still does not fit. Cards with fewer games look the same as before. No Worker change.)
+
 v4.31.3 · 2026-10-14
 Deployed: 2026-10-14 (Fixed: re-opening a game that was saved without handicap strokes and saving it again still left everyone out, because the form started every player with no tee. A new handicap row now starts on the course's default tee, so Edit games, Review, Save fills the strokes in (players with no handicap on file still need a number typed). New: when a game is Net but some players have no strokes saved, the player card on the Live Panel now says so and who, instead of silently showing no dots. No Worker change.)
 
