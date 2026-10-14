@@ -1,3 +1,6 @@
+v4.31.1 · 2026-10-14
+Deployed: 2026-10-14 (Fixed: a Surprise me setup that rolled Net saved with no strokes for anyone, so the live panel showed no handicap dots. The roll never picked a tee, and a player without a tee is left out of the handicap config. Now the roll gives every player the course's default tee (change any player's on the review step) and the confirmation says which tee it used, or who still has no handicap. Games already saved from a roll need their tees set once: open the games config, Review, handicap section, pick the tee, save. No Worker change.)
+
 v4.31.0 · 2026-10-14
 Deployed: 2026-10-14 (Changed: Low Score is now called Individual Low Score everywhere it names the game: the Games form, review, money lines, Live results and the round summary. The live results tab stays short (Low Score) and the event card seal reads LOW SCORE · SOLO. Saved events are unaffected. Worker: only the game's display label changed in the embedded schema, so redeploy when convenient; nothing breaks if you don't.)
 

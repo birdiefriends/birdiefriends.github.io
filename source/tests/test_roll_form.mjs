@@ -22,7 +22,7 @@ function world(existing) {
     let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = { gatheringId: 7, name: 'T' }; let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] }; let _gamesFormBirdieballConfig = { dollar_per_player: null }; let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; let _gamesFormBirdiepayPars = null;
     let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round', win_by: 'strokes', scope: 'field' }; let _gamesFormFourballNote = ''; let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' };
-    let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, ranking: false, players: {} }; let _gamesFormTees = [{ id: 1, tee_name: 'White' }]; let _roll = null; let _gamesFormSideNote = { altshot: '', hilo: '', matchplay: '' }; let _gamesFormMembers = new Map(); let _gamesFormPar3Holes = []; let _gamesFormVenueParDataAvailable = false;
+    let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, ranking: false, players: {} }; let _gamesFormTees = [{ id: 1, tee_name: 'White', slope_rating: 120, course_rating: 70, par_total: 72, holes: Array.from({ length: 18 }, (_, i) => ({ par: 4, handicap: i + 1 })) }]; let _gamesFormDefaultTeeId = '1'; function venueViewerDefaultTee(t) { return t[0]; }; let _roll = null; let _gamesFormSideNote = { altshot: '', hilo: '', matchplay: '' }; let _gamesFormMembers = new Map(); let _gamesFormPar3Holes = []; let _gamesFormVenueParDataAvailable = false;
     ${uniq.map(n => extractFn(src, n)).join('\n')}
     this.api = { openGamesRoll, gamesRollDo, gamesRollGo, gamesRollAskKind, gamesRollAskVal, gamesRollUse, gamesRollToggleSide, gamesRollSetDpp, roll: () => _roll, side: () => _gamesFormSide, fb: () => _gamesFormFourballConfig, ls: () => _gamesFormLowscoreConfig, renderGatheringGamesForm, toggleGamesFormGame, gwNext, gwPrev, gwGoTo, gwSteps, submitGatheringGames, setGamesFormFourballBasis, setGamesFormRanking, setGamesFormFourballPeriod, setGamesFormBasis, setGamesFormLowscoreBasis, hcp: () => _gamesFormHcp, state: () => _gw, selected: () => _gamesFormSelected };`, ctx);
   return { ctx, api: ctx.api, dom, toasts, posts };
@@ -52,6 +52,8 @@ for (let i = 0; i < 40; i++) {
   if (a.state().step !== 'review') { bad++; console.log('not on review', a.state().step); continue; }
   t.toasts.length = 0; t.posts.length = 0;
   await a.submitGatheringGames(7);
+  const gotNet = Object.values(r.variants).some(v => v.basis === 'net') && [r.setup.main, ...r.on].some(id => (r.variants[id] || {}).basis === 'net');
+  if (NET && gotNet && t.posts.length === 1 && !(t.posts[0].handicap_config && Object.keys(t.posts[0].handicap_config.players || {}).length === 8)) { bad++; console.log('net roll saved without strokes for everyone', JSON.stringify(t.posts[0].handicap_config)); continue; }
   if (t.posts.length === 1) saved++; else { bad++; console.log('save refused', JSON.stringify(r.setup), t.toasts, a.state().step); }
 }
 if (NET) { console.log('net rolls:', sawNet); ok(sawNet > 5, 'the net run really rolled Net setups'); }

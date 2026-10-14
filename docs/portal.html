@@ -11724,6 +11724,7 @@ let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; // Birdie Payouts (
 // 'given' (host types strokes), 'gross' (no strokes). Each net player needs a tee: slope/rating/par and the HOLE stroke index come from it.
 let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} };
 let _gamesFormMembers = new Map(); // Membership HCPs (bf_players) by lower-cased name: { hcp, source } — Index prefill, NoHCP -> ask for strokes
+let _gamesFormDefaultTeeId = null; // the venue's default (star) tee, used when a roll needs a tee for everyone
 let _gamesFormTees = []; // the venue's stored tees that carry full 18-hole data (slope, rating, par_total, holes[{par,handicap}])
 let _gamesFormBirdiepayPars = null; // 18 hole pars resolved for the Gathering's venue when the form opened (null = no par data on file)
 let _gamesFormBirdieballConfig = { dollar_per_player: null }; // MiserBall's OWN per-player rate — distinct from the main $/player pot rate
@@ -19573,7 +19574,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
 }
 async function loadGamesFormPar3Holes(g) {
   _gamesFormPar3Holes = [];
-  _gamesFormTees = [];
+  _gamesFormTees = []; _gamesFormDefaultTeeId = null;
   _gamesFormVenueParDataAvailable = false;
   try {
     const venue = findVenueByName(csNormalizedVenueName(g));
@@ -19585,6 +19586,7 @@ async function loadGamesFormPar3Holes(g) {
     // whichever tee happens to be first.
     const dt = venueDefaultTeeFor(info.tees, info.defaultTee);
     if (!dt) return;
+    if (dt.id != null) _gamesFormDefaultTeeId = String(dt.id);
     _gamesFormPar3Holes = dt.holes.map((h, i) => ({ hole: i + 1, par: h.par })).filter(h => h.par === 3).map(h => h.hole);
     _gamesFormVenueParDataAvailable = true;
   } catch (e) {
@@ -20440,13 +20442,24 @@ function gamesRollUse() {
     if (main === 'fourball') { _gamesFormFourballConfig.pairs = items; _gamesFormFourballNote = note; }
     else if (GAMES_ROLL_PAIRING[main]) { _gamesFormSide[main][main === 'matchplay' ? 'matches' : 'pairs'] = items; _gamesFormSideNote[main] = note; }
   }
-  gamesFormAutoRanking(); refreshGamesFormHcpSection();
+  gamesFormAutoRanking();
+  // A Net game needs a tee for every player (it sets the course handicap and the hole stroke index). The roll fills in the course's
+  // default tee, otherwise nobody would get strokes: a player without a tee is left out of the handicap config.
+  let teeNote = '';
+  if (gamesFormHcpIsNet()) {
+    const dt = _gamesFormTees.find(t => String(t.id) === String(_gamesFormDefaultTeeId)) || (_gamesFormTees.length ? venueViewerDefaultTee(_gamesFormTees) : null);
+    if (dt) gamesFormPlayerNames().forEach(n => { const e = gamesFormEntry(n); if (e.kind !== 'gross' && (e.teeId == null || e.teeId === '')) e.teeId = String(dt.id); });
+    const left = gamesFormPlayerNames().filter(n => gamesFormResolvePlayerHcp(n).problem);
+    teeNote = !_gamesFormTees.length ? ' No tee data for this course, so strokes cannot be worked out: set the handicaps and tees on the review step.'
+      : left.length ? ` No handicap yet for ${left.slice(0, 3).join(', ')}${left.length > 3 ? ` and ${left.length - 3} more` : ''}: they play scratch until you add one on the review step.` : (dt ? ` Net strokes use the ${dt.tee_name} tees; change any player's tee on the review step.` : '');
+  }
+  refreshGamesFormHcpSection();
   applyGamesSuggestion(true);
   GAMES_FORM_SIDE_IDS.forEach(id => refreshGamesFormSideSection(id));
   refreshGamesFormFourballSection();
   const ls = document.getElementById('games-form-lowscore-section'); if (ls) ls.innerHTML = gatheringGamesLowscoreSectionHtml();
   updateGamesFormPotPreview();
-  showToast('🎲 Setup filled in. Check the review, then save.');
+  showToast('🎲 Setup filled in. Check the review, then save.' + teeNote, !!teeNote && /cannot|scratch/.test(teeNote));
   gwGoTo('review');
 }
 // ── Alternate Shot + Match Play (Dev-94) ─────────────────────────────────────────
