@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.20.0';
+  const ENGINE_VERSION = '1.20.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -572,6 +572,15 @@
         pairsCfg.forEach(p => p.forEach(nm => { if (cardBy.has(norm(nm))) ss.push(strokesOf(nm)); }));
         lowStrokes = ss.length ? Math.min(...ss) : 0;
       }
+      // Hi-Lo is played foursome against foursome, so "off the low" means the lowest handicap in YOUR foursome
+      const lowOf = nm => {
+        if (kind !== 'hilo') return lowStrokes;
+        const i = pairsCfg.findIndex(p => p.some(x => norm(x) === norm(nm)));
+        if (i < 0) return lowStrokes;
+        const base = i - (i % 2), ss = [];
+        [pairsCfg[base], pairsCfg[base + 1]].forEach(p => (p || []).forEach(x => { if (cardBy.has(norm(x))) ss.push(strokesOf(x)); }));
+        return ss.length ? Math.min(...ss) : 0;
+      };
       const gross = c => (Array.isArray(c.holes) ? c.holes : []).map(v => (typeof v === 'number' && v > 0 ? v : null));
       // Alternate Shot / Match Play strokes: a % of the course handicap (index players), the given strokes otherwise.
       const pct = ownAllowance && addon.allowance != null && addon.allowance !== '' && Number.isFinite(Number(addon.allowance)) ? Number(addon.allowance) : (kind === 'altshot' ? 50 : null);
@@ -611,12 +620,12 @@
         if (!netOk) return gross(c);
         if (mode === 'own') { const nb = inputs.netByPlayer.get(norm(nm)); return nb ? nb.holes : gross(c); }
         const sp = inputs.hcSpecs.get(norm(nm)) || {};
-        return netCard(c, Object.assign({}, sp, { strokes: strokesOf(nm) - lowStrokes }), inputs.hcSI).holes;
+        return netCard(c, Object.assign({}, sp, { strokes: strokesOf(nm) - lowOf(nm) }), inputs.hcSI).holes;
       };
       // Which holes each player got a stroke on (after Off the low), so results can show who benefited and where.
       const marksFor = nm => {
         const c = cardBy.get(norm(nm)); if (!c) return null;
-        const eff = strokesOf(nm) - (mode === 'low' ? lowStrokes : 0);
+        const eff = strokesOf(nm) - (mode === 'low' ? lowOf(nm) : 0);
         const nc = netCard(c, Object.assign({}, inputs.hcSpecs.get(norm(nm)) || {}, { strokes: eff }), inputs.hcSI);
         const off = c.hole_count === 9 && c.hole_half === 'back' ? 9 : 0;
         const got = {}; nc.received.forEach((k, i) => { if (k) got[off + i + 1] = k; });
@@ -1776,7 +1785,7 @@
   //   altshot   a pair's strokes = allowance% (default 50) of the two COURSE handicaps added (given-kind: their given strokes)
   //   matchplay each player's strokes = allowance% (default 100) of their course handicap; 'low' = off the lower in the match
   // Returns [{ id, label, allowance, net_mode, rows: [{ names, strokes, got:{hole:k}, detail }] }] (net games only).
-  function sideStrokeSets(src) {
+  function sideStrokeSets(src, opts) {
     const config = src && src.addons ? src : (src ? gatheringConfigFromLegacy(src) : null);
     const hc = config && config.handicap;
     if (!hc || hc.mode !== 'net') return [];
@@ -1787,7 +1796,7 @@
     const gotFor = (nm, k) => { const si = siOf(nm), got = {}; if (si) si.forEach((r, h) => { const x = strokesOnHole(k, r, 18); if (x) got[h + 1] = x; }); return got; };
     const pctOf = (a, dflt) => (a.allowance != null && a.allowance !== '' && Number.isFinite(Number(a.allowance)) ? Number(a.allowance) : dflt);
     const out = [];
-    gamesWith(t => t.allowance === 'own').forEach(id => {
+    gamesWith((t, gid) => t.allowance === 'own' || (opts && opts.all && ADDONS[gid].strokeRows)).forEach(id => {
       const a = (config.addons || []).find(x => x.id === id);
       if (!a || a.basis !== 'net' || !ADDONS[id].strokeRows) return;
       const rows = ADDONS[id].strokeRows(a, { course, given, gotFor, pctOf, round1: v => Math.round(v * 10) / 10 });
@@ -1807,6 +1816,16 @@
       const k = own[i] - lowest;
       return { names: pr, strokes: k, got: h.gotFor(pr[0], k), detail: `${pct}% of ${base[i].parts.map(h.round1).join(' + ')} = ${own[i]}${low ? `, off the low (${lowest}) = ${k}` : ''}` };
     }) };
+  };
+  // Hi-Lo: each player's own strokes (the round's allowance), off the lowest handicap in the foursome when net_mode is 'low'
+  ADDONS.hilo.strokeRows = (hl, h) => {
+    const pairs = (hl.pairs || []).filter(pr => Array.isArray(pr) && pr.length === 2), low = hl.net_mode === 'low', rows = [];
+    pairs.forEach((pr, i) => {
+      const base = i - (i % 2), fs = [pairs[base], pairs[base + 1]].filter(Boolean).flat();
+      const lowest = low ? Math.min(...fs.map(n => h.given(n))) : 0;
+      pr.forEach(n => { const k = h.given(n) - lowest; rows.push({ names: [n], strokes: k, got: h.gotFor(n, k), detail: low ? `${h.given(n)} strokes, off the low (${lowest}) = ${k}` : `${h.given(n)} strokes` }); });
+    });
+    return { pct: null, rows };
   };
   ADDONS.matchplay.strokeRows = (mp, h) => {
     const pct = h.pctOf(mp, 100), low = mp.net_mode === 'low', rows = [];

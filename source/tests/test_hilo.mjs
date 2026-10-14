@@ -75,6 +75,21 @@ s = run(row(), [card('Ann', h => (h <= 3 ? 4 : null)), card('Bob', h => (h <= 3 
 const live = E.fourballMatchView(s.hilo, row().game_configs.hilo).groups[0];
 ok(live.segs[0].played === 3 && !live.segs[0].final && live.segs[0].lead === 3 * 1 + 3 * 0 + 0 || live.segs[0].lead > 0, 'live: leading in points, not final (lead ' + live.segs[0].lead + ')');
 
+// off the low is per foursome, and the live strokes (sideStrokeSets) match what the engine scores
+{
+  const mk = (n, k) => [n, { kind: 'given', strokes: k }];
+  const hc = { mode: 'net', allowance: 100, stroke_index: arr(h => h), players: Object.fromEntries([mk('Ann', 4), mk('Bob', 10), mk('Cy', 6), mk('Di', 8), mk('Ed', 20), mk('Flo', 22), mk('Gus', 25), mk('Hal', 30)]) };
+  const r = { games: ['hilo'], dollar_per_player: 10, handicap_config: hc, game_configs: { hilo: { dollar_per_player: 10, basis: 'net', net_mode: 'low', pairs: [['Ann', 'Bob'], ['Cy', 'Di'], ['Ed', 'Flo'], ['Gus', 'Hal']] } } };
+  const sets = E.sideStrokeSets(E.gatheringConfigFromLegacy(r), { all: true }).find(x => x.id === 'hilo');
+  const k = n => sets.rows.find(x => x.names[0] === n).strokes;
+  ok(k('Ann') === 0 && k('Cy') === 2 && k('Di') === 4 && k('Bob') === 6, 'foursome 1: low is Ann (4): Ann 0, Cy 2, Di 4, Bob 6');
+  ok(k('Ed') === 0 && k('Hal') === 10 && k('Gus') === 5, 'foursome 2 has its own low (Ed 20)');
+  const snap = run(r, ['Ann', 'Bob', 'Cy', 'Di', 'Ed', 'Flo', 'Gus', 'Hal'].map(n => card(n, () => 5)));
+  const m = n => snap.hilo.stroke_marks.find(x => x.player === n).strokes;
+  ok(m('Bob') === 6 && m('Hal') === 10 && m('Ed') === 0, 'engine scoring uses the same strokes (got ' + m('Bob') + '/' + m('Hal') + '/' + m('Ed') + ')');
+  ok(Object.keys(sets.rows.find(x => x.names[0] === 'Bob').got).length === 6, 'six holes marked for Bob');
+}
+
 // legacy config + suggested amounts
 const cfg = E.gatheringConfigFromLegacy(row());
 ok(cfg.addons.some(a => a.id === 'hilo' && a.pairs.length === 2), 'legacy config carries hilo');

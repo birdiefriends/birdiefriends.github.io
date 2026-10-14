@@ -3620,7 +3620,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.20.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.20.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -10092,14 +10092,15 @@ function setLiveScoreMode(m) { if (!_sk) return; _sk.mode = m === 'games' ? 'gam
 function skMarks() {
   if (!_sk || !_sk.config) return new Map();
   const all = [...new Set(skGroups().flatMap(g => g.players))];
-  const key = JSON.stringify([all, _sk.config && _sk.config.handicap && _sk.config.handicap.players ? Object.keys(_sk.config.handicap.players).length : 0]);
+  const key = JSON.stringify([liveSideGid(_sk.config), all, _sk.config && _sk.config.handicap && _sk.config.handicap.players ? Object.keys(_sk.config.handicap.players).length : 0]);
   if (_sk._marksKey === key && _sk._marks) return _sk._marks;
   const m = new Map(BFEngine.strokeMarksFor(_sk.config, all).map(x => [String(x.player).trim().toLowerCase(), x]));
   // Alternate Shot and Match Play use their OWN allowance (not the round's 95%): the engine says who gets what.
   const side = liveSideGid(_sk.config);
-  if (side && BFEngine.gameTraits(side).allowance === 'own') {
+  const sideAdd = side ? gatheringAddon(_sk.config, side) : null;
+  if (side && (BFEngine.gameTraits(side).allowance === 'own' || (sideAdd && sideAdd.net_mode === 'low' && sideAdd.basis === 'net' && BFEngine.sideStrokeSets(_sk.config, { all: true }).some(st => st.id === side)))) {
     m.clear();
-    BFEngine.sideStrokeSets(_sk.config).filter(st => st.id === side).forEach(st => st.rows.forEach(r => r.names.forEach(n => m.set(String(n).trim().toLowerCase(), { player: n, strokes: r.strokes, got: r.got, known: true }))));
+    BFEngine.sideStrokeSets(_sk.config, { all: true }).filter(st => st.id === side).forEach(st => st.rows.forEach(r => r.names.forEach(n => m.set(String(n).trim().toLowerCase(), { player: n, strokes: r.strokes, got: r.got, known: true }))));
   }
   _sk._marksKey = key; _sk._marks = m;
   return m;
