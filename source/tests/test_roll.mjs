@@ -57,4 +57,23 @@ ok(balanced, 'rolled setups always fit inside the buy-in');
   }
   ok(bad === 0, 'every rolled format validates (' + bad + ' invalid)');
 }
+// random draw: pairs / matches, every player once, wipeout guard
+{
+  const crew = ['A','B','C','D','E','F','G','H'].map((n, i) => ({ name: n, hcp: i * 4 }));
+  let allOnce = true, flagged = 0, calm = 0;
+  for (let i = 0; i < 300; i++) {
+    for (const kind of ['pairs', 'matches']) {
+      const d = E.rollDraw(crew, kind, rng), flat = d.items.flat();
+      if (flat.length !== 8 || new Set(flat).size !== 8) allOnce = false;
+      if (d.lopsided !== (d.maxGap >= d.threshold)) allOnce = false;
+      if (kind === 'pairs') { if (d.lopsided) flagged++; else calm++; }
+    }
+  }
+  ok(allOnce, 'draw seats every player exactly once and flags by threshold');
+  ok(flagged > 0 && calm > 0, 'random draws sometimes lopsided, sometimes fair (' + flagged + '/' + calm + ')');
+  const best = E.rollDraw([{ name: 'a', hcp: 0 }, { name: 'b', hcp: 2 }, { name: 'c', hcp: 20 }, { name: 'd', hcp: 22 }], 'pairs', () => 0);
+  ok(best.items.length === 2, 'four players make two pairs');
+  ok(!E.rollDraw([{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }], 'pairs').lopsided, 'no handicaps: never flagged (cannot judge)');
+  ok(E.rollDraw([{ name: 'a', hcp: 0 }, { name: 'b', hcp: 12 }], 'matches').lopsided, '12-stroke 1 v 1 is flagged');
+}
 console.log(`test_roll: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

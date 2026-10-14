@@ -3625,7 +3625,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.21.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.22.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -19612,7 +19612,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
       .gw-dice { display:flex;align-items:flex-end;justify-content:center;height:84px;filter:drop-shadow(0 6px 6px rgba(7,80,58,0.25)) }
       .gw-dice .gw-die:first-child { animation:gwWiggle 3.2s ease-in-out infinite;transform-origin:50% 60% }
       .gw-dice .gw-die + .gw-die { animation:gwWiggle 3.2s ease-in-out 0.25s infinite reverse;transform-origin:50% 60% }
-      .gw-surprise.rolling .gw-die { animation:gwRoll 0.55s ease-in-out !important }
+      .gw-surprise.rolling .gw-die { animation:gwRoll 0.5s ease-in-out 3 !important }
       .gw-surprise-title { font-size:1.35rem;font-weight:800;letter-spacing:0.01em;line-height:1.1;margin-top:2px }
       .gw-surprise-sub { font-size:0.78rem;color:var(--text-muted) }
       @keyframes gwWiggle { 0%,70%,100% { translate:0 0 } 76% { translate:0 -6px } 82% { translate:0 0 } 88% { translate:0 -3px } }
@@ -20283,20 +20283,48 @@ function gamesRollCrew() {
 }
 // The big dice shake for half a second, then the roll screen opens.
 function gamesRollTap(btn) {
-  if (btn && !btn.classList.contains('rolling')) { btn.classList.add('rolling'); setTimeout(() => { btn.classList.remove('rolling'); openGamesRoll(); }, 520); }
+  if (btn && !btn.classList.contains('rolling')) { btn.classList.add('rolling'); setTimeout(() => { btn.classList.remove('rolling'); openGamesRoll(); }, 1500); }
   else if (!btn) openGamesRoll();
 }
+// A player's handicap for the draw: host entry first, then Membership; null when none is on file.
+function gamesRollHcpOf(n) {
+  const e = _gamesFormHcp.players[n], m = _gamesFormMembers.get(String(n).trim().toLowerCase());
+  if (e && e.kind === 'index' && e.index !== '' && e.index != null && Number.isFinite(Number(e.index))) return Number(e.index);
+  if (e && e.kind === 'given' && e.strokes !== '' && e.strokes != null && Number.isFinite(Number(e.strokes))) return Number(e.strokes);
+  if (m && m.source !== 'no_hcp' && m.hcp != null && Number.isFinite(m.hcp)) return m.hcp;
+  return null;
+}
+// The paired formats and what they pair: 'pairs' (BestBall, Alternate Shot, Hi-Lo) or 'matches' (Match Play, 1 v 1).
+const GAMES_ROLL_PAIRING = { fourball: 'pairs', altshot: 'pairs', hilo: 'pairs', matchplay: 'matches' };
+// Deals the teams (random draw) and protects against a wipeout: a lopsided draw switches the main game to Net, off the low, so the
+// stronger side gives strokes (each player's own tee already sets the course handicap). Balanced mode keeps the usual strongest-with-weakest.
+function gamesRollDeal() {
+  const main = _roll.setup.main, kind = GAMES_ROLL_PAIRING[main];
+  _roll.variants[main] = Object.assign({}, _roll.setup.rolled[main]);
+  _roll.draw = null; _roll.guard = '';
+  if (!kind || _roll.pairing !== 'random') return;
+  const pl = gamesFormPlayerNames().map(n => ({ name: n, hcp: gamesRollHcpOf(n) }));
+  const d = BFEngine.rollDraw(pl, kind);
+  _roll.draw = d;
+  if (d.lopsided) {
+    const v = _roll.variants[main];
+    _roll.guard = `Lopsided draw (up to ${d.maxGap} strokes apart), so this is ${v.basis === 'net' && v.net_mode === 'low' ? 'already' : 'now'} Net, off the low: the stronger side gives strokes, using each player's own tee.`;
+    v.basis = 'net'; v.net_mode = 'low';
+  } else if (!d.usedHandicaps) _roll.guard = 'No handicaps on file, so the draw cannot be balanced. It is pure luck.';
+}
+function gamesRollSetPairing(v) { _roll.pairing = v; gamesRollDeal(); gamesRollRender(); }
 function openGamesRoll() {
   const crew = gamesRollCrew();
   if (!BFEngine.rollFormatsFor(crew).length) { showToast('Rolling needs at least 2 confirmed players', true); return; }
   const dppEl = document.getElementById('games-form-dpp'), cur = dppEl ? parseFloat(dppEl.value) : 0;
-  _roll = { crew, dpp: cur > 0 ? cur : 20 };
+  _roll = { crew, dpp: cur > 0 ? cur : 20, pairing: 'random' };
   gamesRollDo();
 }
 function gamesRollDo() {
   const setup = BFEngine.rollGameSetup(_roll.crew);
   if (!setup) return;
   _roll.setup = setup; _roll.on = new Set(setup.sides); _roll.variants = Object.assign({}, setup.rolled);
+  gamesRollDeal();
   gamesRollRender();
 }
 function gamesRollToggleSide(id) {
@@ -20330,11 +20358,20 @@ function gamesRollRender(keepFocus) {
     return `<div ${checkable ? `onclick="gamesRollToggleSide('${id}')"` : ''} style="display:flex;align-items:center;gap:10px;padding:11px 12px;margin-bottom:8px;border-radius:10px;border:1.5px solid ${on ? 'var(--green)' : 'var(--border-med)'};background:${on ? 'var(--green-light)' : 'rgba(255,255,255,0.5)'};${checkable ? 'cursor:pointer' : ''}">
       ${checkable ? `<span style="font-size:1.1rem">${on ? '☑' : '☐'}</span>` : `<span style="font-size:1.3rem">${mt.icon}</span>`}
       <span style="flex:1;min-width:0"><b>${checkable ? mt.icon + ' ' : ''}${E(mt.label)}</b><br><span style="font-size:0.76rem;color:var(--text-muted)">${E(gamesRollVariantText(id, v))}${on && amt(id) ? ' · ' + E(amt(id)) : ''}</span></span></div>`; };
+  const pk = GAMES_ROLL_PAIRING[st.main], mp = pk === 'matches';
+  const segBtn = (v, l) => `<button type="button" class="seg-btn${_roll.pairing === v ? ' seg-btn-active' : ''}" style="white-space:nowrap;padding:8px 12px" onclick="gamesRollSetPairing('${v}')">${l}</button>`;
+  const dr = _roll.draw, hc = x => x === null || x === undefined ? '?' : (Math.round(x * 10) / 10);
+  const teamsBlock = !pk ? '' : `<div style="margin:2px 0 4px;display:flex;align-items:center;gap:10px"><span style="flex:1;font-size:0.86rem;font-weight:600">${mp ? 'Matches' : 'Pairs'}</span><div class="seg-toggle" style="margin:0">${segBtn('random', '🔀 Random draw')}${segBtn('balanced', 'Balanced')}</div></div>
+    ${_roll.pairing === 'random' && dr ? `<div style="font-size:0.8rem;line-height:1.6;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.6);border:1px solid var(--border-med);margin-bottom:6px">${dr.items.map((pr, i) => {
+        const h = dr.hcps[i], t = `${E(pr[0])} <span style="color:var(--text-muted)">(${hc(h[0])})</span> ${mp ? 'vs' : '&amp;'} ${E(pr[1])} <span style="color:var(--text-muted)">(${hc(h[1])})</span>`;
+        return `<div>${mp ? '' : `<b>${i % 2 ? 'B' : 'A'}${Math.floor(i / 2) + 1}</b> `}${t}</div>${!mp && i % 2 && i < dr.items.length - 1 ? '<div style="height:4px"></div>' : ''}`; }).join('')}
+      <button type="button" onclick="gamesRollSetPairing('random')" style="margin-top:6px;height:32px;padding:0 12px;border-radius:16px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;cursor:pointer">🔀 Re-deal</button></div>` : ''}
+    <div style="font-size:0.74rem;color:var(--text-muted);line-height:1.5;margin-bottom:6px">${_roll.pairing === 'random' ? E(_roll.guard || 'Teams drawn at random, and the handicaps look fair enough to play it as rolled.') : 'Strongest with weakest by handicap, so the sides are evenly matched.'}</div>`;
   ov.innerHTML = `<div onclick="gamesRollClose()" style="position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10040"></div>
     <div role="dialog" aria-label="Surprise setup" style="position:fixed;left:0;right:0;bottom:0;top:6%;max-width:560px;margin:0 auto;background:var(--bg,#f4faf6);border-radius:18px 18px 0 0;padding:16px 16px 20px;z-index:10041;overflow-y:auto;box-shadow:0 -8px 30px rgba(0,0,0,0.4)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div style="flex:1;font-size:1.15rem;font-weight:700">🎲 Your setup</div><button type="button" onclick="gamesRollClose()" aria-label="Close" style="width:40px;height:40px;border:0;background:transparent;font-size:1.2rem;cursor:pointer">✕</button></div>
       <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.5;margin-bottom:10px">Rolled for ${n} player${n === 1 ? '' : 's'}${_roll.crew.hasHcp ? '' : ' (no handicaps on file for most, so gross)'}. Tick or untick the side games, change the buy-in, or roll again.</div>
-      <div style="font-size:0.72rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:6px 0">The game</div>${row(st.main, false)}
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:6px 0">The game</div>${row(st.main, false)}${teamsBlock}
       <div style="font-size:0.72rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:12px 0 6px">Side games</div>${st.sideOptions.map(id => row(id, true)).join('')}
       <div style="display:flex;align-items:center;gap:8px;margin:12px 0 4px"><span style="flex:1;font-weight:600;font-size:0.9rem">Buy-in per player</span><span>$</span><input type="number" min="1" step="1" value="${dpp}" ${keepFocus ? 'autofocus' : ''} oninput="gamesRollSetDpp(this.value)" style="width:80px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"></div>
       <div style="display:flex;gap:8px;margin-bottom:6px">${[10, 20, 40].map(v => `<button type="button" onclick="gamesRollSetDpp(${v});gamesRollRender()" style="height:32px;padding:0 14px;border-radius:16px;border:1.5px solid var(--green);background:${dpp === v ? 'var(--green-light)' : '#fff'};color:var(--green);font-family:inherit;font-weight:700;cursor:pointer">$${v}</button>`).join('')}</div>
@@ -20365,6 +20402,11 @@ function gamesRollUse() {
   _gamesFormTouched.clear();
   if (ids.includes('fourball')) suggestGamesFormFourballPairs();
   GAMES_FORM_SIDE_IDS.forEach(id => { if (ids.includes(id)) suggestGamesFormSideItems(id); });
+  if (_roll.pairing === 'random' && _roll.draw && _roll.draw.items.length) {
+    const main = st.main, items = _roll.draw.items.map(p => p.slice()), note = '🔀 Random draw. ' + (_roll.guard || 'Change any pair you like.');
+    if (main === 'fourball') { _gamesFormFourballConfig.pairs = items; _gamesFormFourballNote = note; }
+    else if (GAMES_ROLL_PAIRING[main]) { _gamesFormSide[main][main === 'matchplay' ? 'matches' : 'pairs'] = items; _gamesFormSideNote[main] = note; }
+  }
   gamesFormAutoRanking(); refreshGamesFormHcpSection();
   applyGamesSuggestion(true);
   GAMES_FORM_SIDE_IDS.forEach(id => refreshGamesFormSideSection(id));

@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.21.0';
+  const ENGINE_VERSION = '1.22.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1967,6 +1967,24 @@
     [main].concat(chosen).forEach(id => { rolled[id] = rollVariant(id, crew, rnd); });
     return { main, sides: chosen, rolled, formats, sideOptions: sides };
   }
+  // Random draw (Dev-94): shuffle the crew into pairs (or 1 v 1 matches) and measure how lopsided it came out. Pair 2k plays pair 2k+1
+  // (and in Hi-Lo they share a foursome). A player with no handicap counts as the crew average. `lopsided` means the handicap gap in some
+  // match is big enough that Gross would be a wipeout, so the caller switches the game to Net, off the low (the stronger side gives strokes).
+  const DRAW_LOPSIDED = { pairs: 6, matches: 5 };   // combined-handicap gap (pairs) / handicap gap (1 v 1) from which the draw is flagged
+  function rollDraw(players, kind, rng) {
+    const rnd = typeof rng === 'function' ? rng : Math.random;
+    const list = (players || []).filter(p => p && p.name).map(p => ({ name: String(p.name), hcp: p.hcp !== null && p.hcp !== undefined && p.hcp !== '' && Number.isFinite(Number(p.hcp)) ? Number(p.hcp) : null }));
+    const known = list.filter(p => p.hcp !== null), avg = known.length ? known.reduce((a, p) => a + p.hcp, 0) / known.length : 0;
+    const deck = list.slice();
+    for (let i = deck.length - 1; i > 0; i--) { const j = Math.min(i, Math.floor(rnd() * (i + 1))); const t = deck[i]; deck[i] = deck[j]; deck[j] = t; }
+    const items = [], hc = [];
+    for (let i = 0; i + 1 < deck.length; i += 2) { items.push([deck[i].name, deck[i + 1].name]); hc.push([deck[i].hcp === null ? avg : deck[i].hcp, deck[i + 1].hcp === null ? avg : deck[i + 1].hcp]); }
+    const m = kind === 'matches', gaps = [];
+    if (m) hc.forEach(h => gaps.push(Math.round(Math.abs(h[0] - h[1]) * 10) / 10));
+    else for (let i = 0; i + 1 < hc.length; i += 2) gaps.push(Math.round(Math.abs(hc[i][0] + hc[i][1] - hc[i + 1][0] - hc[i + 1][1]) * 10) / 10);
+    const maxGap = gaps.length ? Math.max.apply(null, gaps) : 0, threshold = m ? DRAW_LOPSIDED.matches : DRAW_LOPSIDED.pairs;
+    return { items, gaps, maxGap, usedHandicaps: known.length > 0, threshold, lopsided: known.length > 0 && maxGap >= threshold, hcps: hc };
+  }
   // Variant for a side game the host ticks AFTER the roll (so every checkbox is usable).
   function rollSideVariant(id, crew, rng) { return rollVariant(id, crew, typeof rng === 'function' ? rng : Math.random); }
 
@@ -2044,7 +2062,7 @@
     computeGatheringGamesPayout, fourballBoard, fourballMatchView, matchSegmentResult, fourballSegmentPlan, PERIODS, PERIOD_ORDER, periodKey, periodList,
     latestScorecardPerPlayer,
     scorecardMissingHoles,
-    fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, mergeHoleScores,
+    fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });

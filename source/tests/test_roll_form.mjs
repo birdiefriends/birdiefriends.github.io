@@ -6,6 +6,7 @@ const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const eq = (a, b, m) => { const g = JSON.stringify(a) === JSON.stringify(b); g ? pass++ : fail++; if (!g) console.log('FAIL', m, '\n  got', JSON.stringify(a), '\n  exp', JSON.stringify(b)); };
 const E = loadEngine(); E.getGame('fourball').released = true;
 const GW_NAMES_SRC = src.match(/^const GW_NAMES = .*$/m)[0];
+const ROLL_PAIRING_SRC = src.match(/^const GAMES_ROLL_PAIRING = .*$/m)[0];
 const names = [...src.matchAll(/^(?:async )?function (gatheringGames\w+|setGamesForm\w+|toggleGamesForm\w+|gamesForm\w+|refreshGamesForm\w+|gw\w+|gamesBasisSelectHtml|gamesScoredPeriodRowHtml|gamesPeriodPickerHtml|periodExplainHtml|periodSegCount|fourballSegCount|lowscoreSegCount|snapToPeriods|fourballSnapToSegments|lowscoreSnapToPeriods|renderGatheringGamesForm|applyGamesSuggestion|onGamesFormDppInput|updateGamesFormPotPreview|suggestGamesFormFourballPairs|gamesRoll\w+|openGamesRoll|suggestGamesFormSideItems|gamesFormSideItems|gamesFormSideNames|addGamesFormFourballPair|removeGamesFormFourballPair|clearGamesFormFourballPairs|submitGatheringGames)\b/gm)].map(m => m[1]);
 const uniq = [...new Set(names)].filter(n => !['gamesFormHcpOutHtml'].includes(n)).concat(['gamesFormHcpOutHtml']);
 function world(existing) {
@@ -17,7 +18,7 @@ function world(existing) {
     escapeHtml: s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])), escapeHtmlAttr: s => String(s).replace(/"/g, '&quot;'),
     gameInfoBtnHtml: () => '', gameInfoPanelHtml: () => '', isOpenSpotName: () => false, regData: [], gatheringRegData: ['Ann', 'Bob', 'Cy', 'Dee'].map(p => ({ gatheringId: 7, player: p, status: 'Yes' })), clearHostActionBar() {} };
   vm.createContext(ctx);
-  vm.runInContext(`let _gw = { step: 'games' }; ${GW_NAMES_SRC}
+  vm.runInContext(`let _gw = { step: 'games' }; ${GW_NAMES_SRC} ${ROLL_PAIRING_SRC}
     let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = { gatheringId: 7, name: 'T' }; let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] }; let _gamesFormBirdieballConfig = { dollar_per_player: null }; let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; let _gamesFormBirdiepayPars = null;
     let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round', win_by: 'strokes', scope: 'field' }; let _gamesFormFourballNote = ''; let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' };

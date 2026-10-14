@@ -1,3 +1,6 @@
+v4.30.0 · 2026-10-14
+Deployed: 2026-10-14 (New: Surprise me can now draw the teams at random. For BestBall, Alternate Shot, Hi-Lo and Match Play the roll screen has a Random draw / Balanced switch (Random draw is the default), lists the drawn pairs or matches with each player's handicap, and has a Re-deal button. Wipeout guard: if the draw is lopsided (pairs 6+ strokes apart combined, or a 1 v 1 gap of 5+), the game is switched to Net, off the low, so the stronger side gives strokes, using each player's own tee for the course handicap; the screen says when it did that. With no handicaps on file the draw is pure luck and says so. Balanced keeps strongest-with-weakest. Changed: the dice wiggle for 1.5 seconds before the roll screen opens. Worker: only a version comment changed.)
+
 v4.29.1 · 2026-10-14
 Deployed: 2026-10-14 (Changed: the Surprise me button on the Games form is now a big feature button: a large green die and a smaller one, "Surprise me" underneath, with a gentle idle wiggle and a shake when tapped before the roll screen opens. Honors reduced-motion. No Worker change.)
 
