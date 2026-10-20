@@ -2029,7 +2029,7 @@ const ENGINE_OPTIONS = [
   { id: 'scramble_pair', label: '2-man scramble' },
   { id: 'points_by_score_type', label: 'Points by score type' },
   { id: 'scorecard_only', label: 'Scorecard only (practice / fun round — no competitive calc)' },
-  { id: 'cup_match', label: 'Team match play (BF Cup) — scored in 4b' }
+  { id: 'cup_match', label: 'Team match play (Cup)' }
 ];
 let roundNameDates = {};
 let roundNameVenues = {};
@@ -6190,7 +6190,7 @@ function cupSummaryRender() {
   const built = cupState.rounds.reduce((a, r) => a + (r.matches || []).length, 0);
   const pts = cupState.rounds.length ? BFEngine.cupTotalPoints(cupState) : 0;
   const lines = [];
-  lines.push('<b>Field:</b> ' + field + ' players (' + plan.perSide + ' a side). A typical pairs day then singles day makes <b>' + plan.satMatches + '</b> pair matches (2 segments each) and <b>' + plan.sunMatches + '</b> singles matches: <b>' + plan.totalPoints + '</b> points, <b>' + plan.target + '</b> wins outright.');
+  if (field < 2) lines.push('<b>Field:</b> add the roster in section 3 to see the points math.'); else lines.push('<b>Field:</b> ' + field + ' players (' + plan.perSide + ' a side). A typical pairs day then singles day makes <b>' + plan.satMatches + '</b> pair matches (2 segments each) and <b>' + plan.sunMatches + '</b> singles matches: <b>' + plan.totalPoints + '</b> points, <b>' + plan.target + '</b> wins outright.');
   lines.push('<b>Teams:</b> ' + cupState.sides.map(s => cupEsc(s.name || 'Side ' + s.key) + ' ' + s.players.length + ' picked').join(' · '));
   lines.push('<b>Matches built:</b> ' + built + (pts ? ' (' + pts + ' points available, ' + (pts / 2 + 0.5) + ' wins)' : ''));
   const errs = v.errors.concat(cupState.rounds.length && !cupState.sides[0].name ? ['Name side A'] : [], cupState.rounds.length && !cupState.sides[1].name ? ['Name side B'] : []);

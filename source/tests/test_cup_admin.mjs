@@ -29,7 +29,7 @@ ok(cupRows.length === 2 && cupRows.every(tr => tr.querySelector('.r-wbpoints').d
 ok(d.querySelectorAll('.cup-round').length === 2, 'two Cup rounds shown in 4b, taken from section 4');
 const segs = d.querySelectorAll('.cup-sg[data-f="format"]');
 ok(segs.length === 3 && segs[0].value === 'altshot' && segs[1].value === 'bestball' && segs[2].value === 'singles', 'pairs round = foursomes + fourball, singles round = singles');
-ok(/0 players|16 players|players \(/.test(d.getElementById('cupSummary').textContent), 'summary describes the field');
+ok(/add the roster in section 3|players \(/.test(d.getElementById('cupSummary').textContent), 'summary describes the field (or asks for the roster)');
 ok(/Name side A/.test(d.getElementById('cupSummary').textContent), 'asks for side names');
 // holes indicator flows to the Cup round: make the singles round a front nine
 const sundayRow = cupRows[1]; sundayRow.querySelector('.r-holes').value = 'f9'; sundayRow.querySelector('.r-holes').dispatchEvent(new w.Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 20));
