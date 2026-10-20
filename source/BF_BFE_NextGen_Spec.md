@@ -1126,3 +1126,5 @@ Supersedes the open parts of §2a.9 / §13.8. BF Cup is **11/7–8, BSGC both da
 **Tool requirements this adds (slice 3):** coin-toss/first-pick control (commissioner-set), snake-draft team picker from the registered roster, pair builder per side, Saturday matchup draw with turn order and start/pass, Sunday singles lineup draw with start/pass option for Saturday's winner, undo for the commissioner, results written to `bfe_round_groups`.
 
 **Confirmed (Brian, 2026-10-20): Saturday matchup draw** = captains alternate placing one of their pairs against one of the other side's pairs, the coin-toss loser placing first. **No open design questions remain for the Cup**; next is sign-off, then slice 1 (segments) and slice 2 (head-to-head engine).
+
+**Principle (Brian, 2026-10-20): no template slice.** The Cup is set up and managed directly in BFE-A. It must be built as generic configuration (sides, segments, points per segment, the selection tool, head-to-head) with **nothing Cup-specific hardcoded** (no "Jake/Nate", no fixed 16, no BSGC), so any other host can replicate a team event the same way in BFE-A. If the Cup works, that is the proof other hosts can run one.
