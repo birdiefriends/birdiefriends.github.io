@@ -378,7 +378,8 @@
   <section class="card">
     <h2>6. Payout</h2>
     <p class="hint">Uses the same proportional formula as the BFSeries payout: podium 20% of pool (weighted split), CTP 15% spread across the round's CTP holes, remainder to skins. The Overall pot is podium-only (no CTP/skins). Wally Ball is a separate winner-take-all pool, split evenly if more than one player never loses the ball.</p>
-    <div class="row">
+    <label for="noPots" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:6px 0 10px"><input type="checkbox" id="noPots" style="width:auto;margin:0"> <b>No pot</b> <span class="subtle">(a no-money event, e.g. the BF Cup: no buy-in, no payout)</span></label>
+    <div class="row" id="potInputs">
       <div><label for="roundCollect">$ per player, per round pot</label><input type="number" id="roundCollect" value="10"></div>
       <div><label for="cttpHoles">CTP holes per round</label><input type="number" id="cttpHoles" value="2"></div>
       <div><label for="overallCollect">$ per player, Overall podium</label><input type="number" id="overallCollect" value="20"></div>
@@ -2439,7 +2440,15 @@ function resolveRoundTeeAssignments(roster, venuePolicy) {
   });
   return byPlayer;
 }
+function refreshNoPots() {
+  const off = document.getElementById('noPots').checked;
+  ['roundCollect', 'cttpHoles', 'overallCollect', 'wbCollect', 'podiumWeights'].forEach(id => { document.getElementById(id).disabled = off; });
+  document.getElementById('potInputs').style.opacity = off ? '0.45' : '1';
+  refreshBuyInDisplay();
+}
+document.getElementById('noPots').addEventListener('change', refreshNoPots);
 function refreshBuyInDisplay() {
+  if (document.getElementById('noPots') && document.getElementById('noPots').checked) { document.getElementById('buyInDisplay').value = 'No pot - $0.00'; return; }
   const roundCollect  = parseFloat(document.getElementById('roundCollect').value) || 0;
   const overallCollect = parseFloat(document.getElementById('overallCollect').value) || 0;
   const wbCollect     = parseFloat(document.getElementById('wbCollect').value) || 0;
@@ -2508,13 +2517,15 @@ async function buildAndAssembleConfig() {
   // downstream on the results page.
   const payoutEligibleRounds = config.rounds.filter(r => r.engine !== 'scorecard_only' && r.engine !== 'cup_match');
   const buyInPerPlayer  = roundCollect * payoutEligibleRounds.length + overallCollect + wbCollect;
+  const noPots = document.getElementById('noPots').checked;
+  // A round pot only exists for rounds that can pay one (an event of only Cup / practice rounds has none).
   const potPlan = [
-    { id: 'round', label: 'Round Pot', collectPerPlayer: roundCollect, cttpHoles, podiumWeights,
-      appliesToRounds: payoutEligibleRounds.map(r => r.name) },
+    ...(payoutEligibleRounds.length ? [{ id: 'round', label: 'Round Pot', collectPerPlayer: roundCollect, cttpHoles, podiumWeights,
+      appliesToRounds: payoutEligibleRounds.map(r => r.name) }] : []),
     { id: 'overall', label: 'Overall Podium', collectPerPlayer: overallCollect, podiumWeights },
     { id: 'wally_ball', label: 'Wally Ball Pot', collectPerPlayer: wbCollect, kind: 'pool_split' }
   ];
-  const payout = recommendPayoutConfig(buyInPerPlayer, playerCount, potPlan);
+  const payout = noPots ? { buyInPerPlayer: 0, playerCount, pots: [], noPots: true } : recommendPayoutConfig(buyInPerPlayer, playerCount, potPlan);
   config.payout = payout;
   assembledConfig = config;
   renderReview(config);
@@ -2671,6 +2682,8 @@ async function rehydrateFormFromConfig(config) {
     if (block) applyPolicyToVenueBlock(block, { mode: teePolicy.mode, ...teePolicy.byVenue[venueId] });
   });
   const pots = config.payout?.pots || [];
+  document.getElementById('noPots').checked = !!(config.payout && (config.payout.noPots || (Array.isArray(config.payout.pots) && config.payout.pots.length === 0)));
+  refreshNoPots();
   const roundPot   = pots.find(p => p.id && p.id.startsWith('round_'));
   const overallPot = pots.find(p => p.id === 'overall');
   const wbPot      = pots.find(p => p.id === 'wally_ball');

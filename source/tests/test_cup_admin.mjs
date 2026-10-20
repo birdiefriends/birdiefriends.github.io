@@ -95,4 +95,17 @@ w.addPlayerRow('Bill Steirer'); w.addPlayerRow('Lou Strohl', '', '20'); w.addPla
 await w.refreshRosterLastKnownHcp(); await new Promise(r => setTimeout(r, 30));
 const hc = [...d.querySelectorAll('#rosterBody .p-hcp')].map(i => i.value);
 ok(hc.join() === '5.3,20,,', 'blank HCP fills from last known; typed 20 is kept; "no HCP" and unknown players stay blank (got ' + hc.join() + ')');
+// No pot: a no-money event saves with zero pots even if the dollar boxes still hold numbers
+d.getElementById('roundCollect').value = '10'; d.getElementById('overallCollect').value = '20'; d.getElementById('wbCollect').value = '10';
+const np = d.getElementById('noPots'); np.checked = true; np.dispatchEvent(new w.Event('change', { bubbles: true }));
+ok(d.getElementById('roundCollect').disabled && /No pot/.test(d.getElementById('buyInDisplay').value), 'No pot greys out the dollar boxes');
+const b2 = posts.length; d.getElementById('saveBtn').click(); await new Promise(r => setTimeout(r, 300));
+const evPost = posts.slice(b2).find(p => /\/bfe\/events$/.test(p.u));
+ok(evPost && evPost.body.payout_plan.pots.length === 0 && evPost.body.payout_plan.buyInPerPlayer === 0, 'with No pot the event saves with no pots and no buy-in');
+await w.rehydrateFormFromConfig({ eventName: '2026 BF Cup', roster: [], rounds: [], payout: evPost.body.payout_plan });
+ok(d.getElementById('noPots').checked, 'and No pot is remembered when the event is loaded');
+np.checked = false; np.dispatchEvent(new w.Event('change', { bubbles: true }));
+w.addPlayerRow('Jake Knappenberger', 'j@x.test', '8'); w.addPlayerRow('Nate Stettler', 'n@x.test', '10'); const cr = w.addRoundRow('Only Cup', 'cup_match', '', '', false); await new Promise(r => setTimeout(r, 20));
+const b3 = posts.length; d.getElementById('saveBtn').click(); await new Promise(r => setTimeout(r, 300));
+ok(posts.slice(b3).some(p => /\/bfe\/events$/.test(p.u)), 'a Cup-only event with pot boxes filled no longer fails to reconcile (no eligible rounds, so no round pot)');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
