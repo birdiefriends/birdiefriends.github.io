@@ -10,6 +10,7 @@ const posts = []; let stored = null;
 const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true, url: 'https://x.test/BFE-Admin.html',
   beforeParse(w) {
     w.fetch = async (u, o) => { if (o && o.method === 'POST') { posts.push({ u, body: JSON.parse(o.body) }); stored = JSON.parse(o.body).config; return { ok: true, status: 200, json: async () => ({ ok: true }) }; }
+      if (/\/bfe\/events\?event=/.test(u)) return { ok: true, status: 200, json: async () => ({ config: globalThis.__evCfg, updated_at: 'now' }) };
       if (/\/bfe\/cup\?/.test(u)) return stored ? { ok: true, status: 200, json: async () => ({ config: stored }) } : { ok: false, status: 404, json: async () => ({}) };
       return { ok: true, status: 200, json: async () => ({ ok: true }) }; };
     w.alert = () => {}; w.confirm = () => true;
@@ -76,4 +77,15 @@ stored.draft = { started: true, picks: [{ n: 1, side: 'A', player: 'X' }] }; sto
 d.getElementById('cupSaveBtn').click(); await new Promise(r => setTimeout(r, 80));
 const last = posts[posts.length - 1].body.config;
 ok(last.draft && last.draft.picks.length === 1 && last.sides[0].players.join() === 'Cap,X', 'saving from BFE-Admin keeps the draft and the picked teams');
+// the Cup card comes back with the event, and saving the event saves the Cup too
+globalThis.__evCfg = { eventName: '2026 BF Cup', roster: [], payout: { buyInPerPlayer: 0, playerCount: 0, pots: [] }, rounds: [{ name: 'Saturday', engine: 'cup_match', engineParams: { cupSegments: [{ format: 'bestball', from: 1, to: 9 }, { format: 'altshot', from: 10, to: 18 }] } }, { name: 'Sunday', engine: 'cup_match', engineParams: { cupSegments: [{ format: 'singles', from: 1, to: 18 }] } }] };
+d.getElementById('cupNameA').value = ''; d.getElementById('cupNameB').value = ''; d.getElementById('cupPtHalf').value = '9';
+await w.loadEventConfig('2026 BF Cup'); await new Promise(r => setTimeout(r, 80));
+ok(d.getElementById('cupNameA').value === 'Team Jake' && d.getElementById('cupNameB').value === 'Team Nate' && d.getElementById('cupPtHalf').value === '0.5', 'loading a saved event brings back 4b (sides, colors, points)');
+ok(d.getElementById('cupEnabled').checked && d.querySelectorAll('.cup-round').length === 2, 'and the Cup rounds line up with section 4');
+w.addPlayerRow('Jake Knappenberger', 'j@x.test', '8'); w.addPlayerRow('Nate Stettler', 'n@x.test', '10');
+for (const id of ['roundCollect', 'overallCollect', 'wbCollect']) { d.getElementById(id).value = '0'; d.getElementById(id).dispatchEvent(new w.Event('input', { bubbles: true })); }
+const before = posts.length;
+d.getElementById('saveBtn').click(); await new Promise(r => setTimeout(r, 300));
+ok(posts.slice(before).some(p => /\/bfe\/events$/.test(p.u)) && posts.slice(before).some(p => /\/bfe\/cup$/.test(p.u)), 'Save config also saves the Cup card');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

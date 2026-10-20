@@ -337,7 +337,7 @@
   <!-- ── BF Cup (Dev-95) ───────────────────────────────────────────── -->
   <section class="card" id="cupSection">
     <h2>4b. Team Cup <span class="badge">new</span></h2>
-    <p class="hint"><b>Two saves:</b> this card's button saves the Cup (sides, captains, points); section 7's "Save config" saves the event itself (rounds, roster, venue) and is what makes it appear in Data &amp; reset. Do both. For a two-sided match-play event (the BF Cup). Name the sides and captains, set the points, and describe each day's segments. Teams, pairs and matches are filled in by the captains' selection tool; this card shows how far along they are. Nothing here is specific to one event: any host can set a team event up the same way.</p>
+    <p class="hint"><b>Saving:</b> section 7's "Save config" saves the event <b>and</b> this card together, and loading a saved event brings this card back. The button below saves just this card. For a two-sided match-play event (the BF Cup). Name the sides and captains, set the points, and describe each day's segments. Teams, pairs and matches are filled in by the captains' selection tool; this card shows how far along they are. Nothing here is specific to one event: any host can set a team event up the same way.</p>
     <label for="cupEnabled" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="cupEnabled" style="width:auto;margin:0"> This event is a team Cup</label>
     <div id="cupBody" style="display:none;margin-top:12px">
       <div class="row">
@@ -2633,6 +2633,8 @@ async function saveEventConfig() {
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   lastLoadedEventName = eventName; setupDirty = false;
   setStatus(`Saved — "${eventName}", ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
+  // One click saves everything: when this is a team Cup, the Cup card (sides, captains, points) is saved with the event.
+  if (document.getElementById('cupEnabled').checked) { await cupSave(); }
 }
 document.getElementById('saveBtn').addEventListener('click', async () => {
   try {
@@ -2696,6 +2698,7 @@ async function loadEventConfig(eventName) {
     await rehydrateFormFromConfig(assembledConfig);
     renderReview(assembledConfig);
     document.getElementById('outputSection').style.display = 'block';
+    await cupLoad(true, eventName);   // the Cup card (4b) comes back with the event: sides, captains, colors, points
     setStatus(`Loaded "${eventName}" (last saved ${data.updated_at}) — ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
   } catch (e) {
     setStatus('Load failed: ' + e.message, true);
@@ -6310,16 +6313,16 @@ async function cupSave() {
     } catch (e) { /* the list is a courtesy check only */ }
   } catch (e) { cupStatus('Could not save: ' + e.message, 'err'); }
 }
-async function cupLoad() {
-  const ev = document.getElementById('eventName').value.trim();
+async function cupLoad(quiet, evName) {
+  const ev = evName || document.getElementById('eventName').value.trim();
   try {
     const r = await fetch(cupBase() + '/bfe/cup?event=' + encodeURIComponent(ev));
     const j = await r.json();
-    if (r.status === 404) { cupStatus('No Cup saved for "' + ev + '" yet.', 'err'); return; }
+    if (r.status === 404) { if (!quiet) cupStatus('No Cup saved for "' + ev + '" yet.', 'err'); return; }
     if (!r.ok) throw new Error(j.error || r.status);
     Object.assign(cupState, { sides: j.config.sides, points: j.config.points || cupState.points, rounds: j.config.rounds || [], draft: j.config.draft, pool: j.config.pool });
     document.getElementById('cupEnabled').checked = true; document.getElementById('cupBody').style.display = 'block';
-    cupRender(); cupStatus('Loaded the saved Cup. Its rounds follow the Team match play rows in section 4.', 'ok');
+    cupRender(); cupSyncRounds(); cupStatus('Loaded the saved Cup (' + ev + '). Its rounds follow the Team match play rows in section 4.', 'ok');
   } catch (e) { cupStatus('Could not load: ' + e.message, 'err'); }
 }
 (function initCupSection() {
