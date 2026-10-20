@@ -27,9 +27,9 @@ h1,h2{font-family:'Baloo 2',sans-serif;margin:0}
 .mrow .win{color:var(--gold);font-weight:700}
 .verdict{margin-top:8px;text-align:center;font-weight:700;font-size:.92rem}
 .v-even{color:var(--good)}.v-close{color:var(--warn)}.v-tilted{color:var(--bad)}.v-unknown{color:var(--dim)}
-.teams{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.teams{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
 .team h2{font-size:1.15rem;margin-bottom:6px}
-.slot{display:flex;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;background:var(--navy3);margin:4px 0;font-size:.92rem}
+.slot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 6px;padding:6px 8px;border-radius:8px;background:var(--navy3);margin:4px 0;font-size:.92rem}
 .slot.cap{border:1px solid var(--gold)}
 .slot.new{animation:pop 1.6s ease-out}
 @keyframes pop{0%{background:var(--accent)}100%{background:var(--navy3)}}
@@ -55,7 +55,7 @@ button:disabled{opacity:.4;cursor:default}
 @keyframes flip{0%{transform:rotateY(0)}100%{transform:rotateY(1800deg)}}
 .err{color:var(--bad);font-weight:600}
 .hint{color:var(--dim);font-size:.85rem}
-@media(max-width:560px){.teams{gap:8px}.mhead{font-size:.9rem}}
+@media(max-width:560px){.teams{gap:8px}.mhead{font-size:.9rem}.card.team{padding:10px}.slot{font-size:.85rem}.slot .st{width:100%;font-size:.7rem}}
 </style>
 </head>
 <body>
