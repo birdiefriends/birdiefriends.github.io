@@ -1364,6 +1364,58 @@ export default {
     //   GET    /bfe/cup?event=<name>            no PIN (players read the board and their match)
     //   POST   /bfe/cup {event_name, config, pin}   PIN-gated, upsert (the selection tool re-saves the whole document)
     //   DELETE /bfe/cup?event=<name>&pin=       PIN-gated
+    //   Captain access: config.access = {A:'CODE', B:'CODE'} is stored with the document but NEVER returned to the public;
+    //   GET with &pin= includes it (host), GET with &cap=<code> adds `you` (the captain's side) and 403s on a bad code.
+    //   POST /bfe/cup/act {event_name, code, action:'pick', player}  a captain takes a player when it is his side's turn.
+    //   GET /bfe/cup-live   the Cup events whose draft is open (practice copies excluded) for the app banner.
+    const cupPublic = (cfgObj) => { const c = Object.assign({}, cfgObj); delete c.access; return c; };
+    if (url.pathname === '/bfe/cup-live' && request.method === 'GET') {
+      const J = (o, status) => new Response(JSON.stringify(o), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bfe_cup (event_name TEXT PRIMARY KEY, config TEXT NOT NULL, updated_at TEXT)`).run();
+        const { results } = await env.DB.prepare(`SELECT event_name, config, updated_at FROM bfe_cup ORDER BY updated_at DESC LIMIT 20`).all();
+        const live = [];
+        for (const r of results) {
+          if (/\(practice\)$/.test(r.event_name)) continue;
+          let c; try { c = JSON.parse(r.config); } catch (e) { continue; }
+          if (!c.draft || !c.draft.started) continue;
+          live.push({ event_name: r.event_name, updated_at: r.updated_at, locked: !!c.draft.locked, picks: (c.draft.picks || []).length, total: (c.draft.pool || []).length });
+        }
+        return J({ ok: true, events: live });
+      } catch (e) { return J({ error: 'Database error: ' + String(e.message || e) }, 500); }
+    }
+    if (url.pathname === '/bfe/cup/act' && request.method === 'POST') {
+      const J = (o, status) => new Response(JSON.stringify(o), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        let body; try { body = await request.json(); } catch (e) { return J({ error: 'Invalid JSON' }, 400); }
+        const row = await env.DB.prepare(`SELECT * FROM bfe_cup WHERE event_name = ?`).bind(String(body.event_name || '')).first();
+        if (!row) return J({ error: 'Not found' }, 404);
+        const cfgObj = JSON.parse(row.config);
+        const acc = cfgObj.access || {};
+        const side = Object.keys(acc).find(k => body.code && String(acc[k]) === String(body.code));
+        if (!side) return J({ error: 'Unauthorized' }, 403);
+        const norm = v => String(v == null ? '' : v).trim().toLowerCase();
+        if (body.action === 'pick') {
+          const d = cfgObj.draft || {};
+          if (!d.started || d.locked) return J({ error: 'The draft is not open' }, 409);
+          const keys = (cfgObj.sides || []).map(sd => sd.key);
+          const first = keys.includes(d.first) ? d.first : keys[0], other = keys.find(k => k !== first);
+          const caps = new Set((cfgObj.sides || []).map(sd => norm(sd.captain)).filter(Boolean));
+          const pool = (d.pool || []).filter(n => !caps.has(norm(n)));
+          const picks = d.picks || [];
+          if (picks.length >= pool.length) return J({ error: 'Every player is already picked' }, 409);
+          const onClock = (((picks.length + 1) >> 1) & 1) ? other : first;
+          if (onClock !== side) return J({ error: 'It is not your turn' }, 409);
+          const taken = new Set(picks.map(pk => norm(pk.player)));
+          const hit = pool.find(n => norm(n) === norm(body.player) && !taken.has(norm(n)));
+          if (!hit) return J({ error: String(body.player) + ' is not available' }, 409);
+          cfgObj.draft = Object.assign({}, d, { picks: picks.concat([{ n: picks.length + 1, side, player: hit }]) });
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
+          return J({ ok: true, config: cupPublic(cfgObj) });
+        }
+        return J({ error: 'Unknown action' }, 400);
+      } catch (e) { return J({ error: 'Database error: ' + String(e.message || e) }, 500); }
+    }
     if (url.pathname === '/bfe/cup') {
       const J = (o, status) => new Response(JSON.stringify(o), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       try {
@@ -1373,7 +1425,15 @@ export default {
           if (!event) return J({ error: 'event query param is required' }, 400);
           const row = await env.DB.prepare(`SELECT * FROM bfe_cup WHERE event_name = ?`).bind(event).first();
           if (!row) return J({ error: 'Not found' }, 404);
-          return J({ ok: true, event_name: row.event_name, config: JSON.parse(row.config), updated_at: row.updated_at });
+          const full = JSON.parse(row.config);
+          const capCode = url.searchParams.get('cap');
+          if (String(url.searchParams.get('pin')) === '7797') return J({ ok: true, event_name: row.event_name, config: full, updated_at: row.updated_at });
+          if (capCode) {
+            const you = Object.keys(full.access || {}).find(k => String(full.access[k]) === String(capCode));
+            if (!you) return J({ error: 'Unauthorized' }, 403);
+            return J({ ok: true, event_name: row.event_name, config: cupPublic(full), you, updated_at: row.updated_at });
+          }
+          return J({ ok: true, event_name: row.event_name, config: cupPublic(full), updated_at: row.updated_at });
         }
         if (request.method === 'POST') {
           let body; try { body = await request.json(); } catch (e) { return J({ error: 'Invalid JSON' }, 400); }
@@ -1381,6 +1441,8 @@ export default {
           const { event_name, config } = body;
           if (!event_name || !config || typeof config !== 'object') return J({ error: 'event_name and config (object) are required' }, 400);
           if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
+          // the public document never carries the captain codes, so a re-save must not wipe them
+          if (!config.access) { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.access) config.access = pc.access; } catch (e) { /* ignore */ } } }
           await env.DB.prepare(`INSERT INTO bfe_cup (event_name, config, updated_at) VALUES (?, ?, datetime('now'))
              ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(config)).run();
           return J({ ok: true });

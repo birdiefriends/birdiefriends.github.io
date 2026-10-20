@@ -71,6 +71,7 @@ button:disabled{opacity:.4;cursor:default}
   var qs = new URLSearchParams(location.search);
   var EVENT = qs.get('event') || '2026 BF Cup';
   var HOST = qs.get('host') === '1';
+  var CAP = qs.get('cap') || '', YOU = '';
   var PRACTICE = /\(practice\)$/.test(EVENT);
   var cfg = null, pin = '', busy = false, pending = null, error = '', sortBy = 'rank', lastPickNo = 0, coinFlip = false, notice = '';
   try { pin = sessionStorage.getItem('bf_cup_pin') || ''; } catch (e) {}
@@ -82,9 +83,11 @@ button:disabled{opacity:.4;cursor:default}
   function fmt(v, d) { return typeof v === 'number' ? (d == null ? String(Math.round(v * 10) / 10) : v.toFixed(d)) : '–'; }
 
   function load() {
-    return fetch(WORKER + '/bfe/cup?event=' + encodeURIComponent(EVENT) + '&_=' + Date.now()).then(function (r) {
+    var extra = CAP ? '&cap=' + encodeURIComponent(CAP) : (HOST && pin ? '&pin=' + encodeURIComponent(pin) : '');
+    return fetch(WORKER + '/bfe/cup?event=' + encodeURIComponent(EVENT) + extra + '&_=' + Date.now()).then(function (r) {
       if (r.status === 404) { cfg = null; error = 'The Cup has not been set up in BFE-Admin yet.'; return; }
-      return r.json().then(function (j) { cfg = j.config; error = ''; });
+      if (r.status === 403) { cfg = null; error = CAP ? 'That captain link is not valid. Ask the commissioner for a fresh one.' : 'Not allowed.'; return; }
+      return r.json().then(function (j) { cfg = j.config; YOU = j.you || ''; error = ''; });
     }).catch(function (e) { error = 'Could not reach the server: ' + e.message; });
   }
   function save() {
@@ -139,11 +142,20 @@ button:disabled{opacity:.4;cursor:default}
         + '</div>';
     }).join('') + '</div>';
   }
+  function canPick(v) { return !!v.onClock && ((HOST && !!pin) || (!!YOU && v.onClock === YOU)); }
+  function genCode() { var a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', o = ''; for (var i = 0; i < 6; i++) o += a.charAt(Math.floor(Math.random() * a.length)); return o; }
+  function linksHtml() {
+    if (!(HOST && pin) || !cfg.access) return '';
+    return '<div class="card"><h2>Captain links</h2><p class="hint">Send each captain his own link. It lets him pick for his side when it is his turn, and nothing else.</p>' + cfg.sides.map(function (sd) {
+      var url = location.origin + location.pathname + '?event=' + encodeURIComponent(EVENT) + '&cap=' + cfg.access[sd.key];
+      return '<div class="toolbar"><b>' + esc(sd.name || 'Side ' + sd.key) + (sd.captain ? ' · ' + esc(sd.captain) : '') + '</b><input type="text" readonly value="' + esc(url) + '" style="flex:1;min-width:200px"><button class="sec" data-copy="' + esc(url) + '">Copy</button></div>';
+    }).join('') + '</div>';
+  }
   function poolHtml(v) {
     var opts = [['rank', 'Series rank'], ['hcp', 'Handicap'], ['avg', 'Avg points'], ['birdies', 'Birdies'], ['name', 'A–Z']];
     return '<div class="card"><div class="toolbar"><b>Available players (' + v.remaining.length + ')</b><span style="flex:1"></span><label class="hint">Sort <select id="sortSel">'
       + opts.map(function (o) { return '<option value="' + o[0] + '"' + (sortBy === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label></div>'
-      + '<div class="grid">' + sorted(v.remaining).map(function (n) { return '<button class="pc" data-pick="' + esc(n) + '"' + (HOST && v.onClock ? '' : ' disabled style="opacity:1"') + '><b>' + esc(n) + '</b>' + chipsFor(n) + '</button>'; }).join('') + '</div></div>';
+      + '<div class="grid">' + sorted(v.remaining).map(function (n) { return '<button class="pc" data-pick="' + esc(n) + '"' + (canPick(v) ? '' : ' disabled style="opacity:1"') + '><b>' + esc(n) + '</b>' + chipsFor(n) + '</button>'; }).join('') + '</div></div>';
   }
 
   // ---------- host setup ----------
@@ -185,7 +197,8 @@ button:disabled{opacity:.4;cursor:default}
     }
     var clock = v.onClock;
     html += '<div class="banner live"><span class="dot"></span>' + (v.done ? (d.locked ? '🏁 Teams are set' : '✅ Every player is picked') : 'LIVE · Pick ' + v.pickNo + ' of ' + v.total + ' · <span style="color:#fff;text-decoration:underline">' + esc(sideName(clock)) + '</span> on the clock') + '</div>';
-    html += meterHtml(v) + teamsHtml(v) + (v.done ? '' : poolHtml(v));
+    if (YOU && !v.done) html += '<div class="banner" style="background:' + (v.onClock === YOU ? '#1a7f3c' : '#0a3161') + '">' + (v.onClock === YOU ? 'YOUR PICK, ' + esc(sideName(YOU)) + ' captain. Tap a player.' : 'Waiting for ' + esc(sideName(v.onClock)) + ' to pick') + '</div>';
+    html += meterHtml(v) + teamsHtml(v) + (v.done ? '' : poolHtml(v)) + linksHtml();
     if (HOST && pin) {
       html += '<div class="toolbar">' + '<button class="sec" id="undo"' + (v.picks.length ? '' : ' disabled') + '>↩︎ Undo last pick</button>'
         + (v.done && !d.locked ? '<button id="lock">Lock the teams</button>' : '') + '<button class="sec" id="resetDraft">Start over</button></div>';
@@ -228,11 +241,20 @@ button:disabled{opacity:.4;cursor:default}
       setTimeout(function () { d.first = cfg.sides[Math.random() < 0.5 ? 0 : 1].key; coinFlip = false; save(); }, 1400);
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-first]'), function (b) { b.addEventListener('click', function () { draft().first = b.getAttribute('data-first'); save(); }); });
-    on('startDraft', function () { var d = draft(); d.started = true; d.picks = d.picks || []; save(); });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-pick]'), function (b) { b.addEventListener('click', function () { if (HOST && pin) { pending = b.getAttribute('data-pick'); render(); } }); });
+    on('startDraft', function () { var d = draft(); if (!cfg.access) cfg.access = { A: genCode(), B: genCode() }; d.started = true; d.picks = d.picks || []; save(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pick]'), function (b) { b.addEventListener('click', function () { if (canPick(E.cupDraftView(cfg))) { pending = b.getAttribute('data-pick'); render(); } }); });
     on('cancelPick', function () { pending = null; render(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-copy]'), function (b) { b.addEventListener('click', function () { var u = b.getAttribute('data-copy'); try { navigator.clipboard.writeText(u); b.textContent = 'Copied'; } catch (e) { b.previousSibling.select(); } }); });
     on('confirmPick', function () {
-      var r = E.cupDraftPick(cfg, pending); pending = null;
+      var who = pending; pending = null;
+      if (YOU && !(HOST && pin)) {
+        busy = true;
+        fetch(WORKER + '/bfe/cup/act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT, code: CAP, action: 'pick', player: who }) })
+          .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); cfg = j.config; lastPickNo = cfg.draft.picks.length; error = ''; }); })
+          .catch(function (e) { error = e.message; }).then(function () { busy = false; return load(); }).then(render);
+        return;
+      }
+      var r = E.cupDraftPick(cfg, who);
       if (!r.ok) { error = r.reason; render(); return; }
       cfg.draft = r.draft; lastPickNo = r.draft.picks.length; save();
     });
@@ -251,7 +273,7 @@ button:disabled{opacity:.4;cursor:default}
         stats[n] = { hcp: Math.round((4 + rnd() * 20) * 10) / 10, rank: i + 1, avg: Math.round((2 + rnd() * 2.5) * 100) / 100, birdies: Math.round(rnd() * 12) };
       });
       var copy = JSON.parse(JSON.stringify(cfg));
-      copy.sides.forEach(function (sd) { sd.players = []; });
+      delete copy.access; copy.sides.forEach(function (sd) { sd.players = []; });
       copy.rounds.forEach(function (r) { r.matches = []; });
       copy.pool = pool; copy.draft = { started: false, first: null, pool: pool, stats: stats, picks: [], locked: false };
       fetch(WORKER + '/bfe/cup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT + ' (practice)', config: copy, pin: pin }) })
@@ -271,7 +293,7 @@ button:disabled{opacity:.4;cursor:default}
   }
 
   load().then(function () { render(); });
-  if (!HOST) setInterval(function () {
+  if (!HOST || CAP) setInterval(function () {
     if (busy) return; var before = JSON.stringify(cfg);
     load().then(function () { if (JSON.stringify(cfg) === before) return; var n = cfg && cfg.draft && cfg.draft.picks ? cfg.draft.picks.length : 0; lastPickNo = n; render(); });
   }, 4000);
