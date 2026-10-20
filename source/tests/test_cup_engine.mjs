@@ -169,5 +169,20 @@ ok(!E.cupValidate(nine).ok, 'a front-nine round cannot have a segment to hole 18
 nine.rounds[0].holes = { count: 9, half: 'back' }; nine.rounds[0].segments[0] = { key: 's', format: 'singles', from: 10, to: 18 };
 ok(E.cupValidate(nine).ok, 'a back-nine round uses holes 10-18');
 
+// one session per round, with 'same pairs as' (Saturday's two nines share their pairs)
+const sess = JSON.parse(JSON.stringify(cfg));
+sess.rounds = [
+  { key: 'fs', name: 'Foursomes', holes: { count: 9, half: 'front' }, segments: [{ key: 'altshot', format: 'altshot', from: 1, to: 9 }], matches: sat.matches },
+  { key: 'fb', name: 'Fourball', holes: { count: 9, half: 'back' }, sameAs: 'fs', segments: [{ key: 'bestball', format: 'bestball', from: 10, to: 18 }], matches: sat.matches },
+  { key: 'sg', name: 'Singles', segments: [{ key: 'singles', format: 'singles', from: 1, to: 18 }], matches: sun.matches }];
+ok(E.cupValidate(sess).ok, 'three sessions (two nines + singles) validate: ' + JSON.stringify(E.cupValidate(sess).errors));
+ok(E.cupTotalPoints(sess) === 16, 'two nines x 4 matches + 8 singles = 16 points');
+const st3 = E.cupStandings(sess, []);
+ok(st3.total === 16 && st3.target === 8.5 && st3.rounds.length === 3, 'standings read the same from separate session rows');
+const badSame = JSON.parse(JSON.stringify(sess)); badSame.rounds[0].sameAs = 'fb';
+ok(!E.cupValidate(badSame).ok, 'same-as must point to an EARLIER session');
+const badSize = JSON.parse(JSON.stringify(sess)); badSize.rounds[2].sameAs = 'fs';
+ok(!E.cupValidate(badSize).ok, 'singles cannot reuse a pairs session');
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

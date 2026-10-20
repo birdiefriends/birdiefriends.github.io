@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.24.1';
+  const ENGINE_VERSION = '1.24.2';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2247,7 +2247,15 @@
       if (sideOf.has(k)) errors.push(p + ' is on both sides'); else sideOf.set(k, sd.key);
     }));
     const unassigned = {};
-    (cfg.rounds || []).forEach(r => {
+    const roundList = cfg.rounds || [];
+    roundList.forEach((r, ri) => {
+      if (!r.sameAs) return;
+      const j = roundList.findIndex(x => x.key === r.sameAs);
+      if (j < 0 || j >= ri) { errors.push((r.name || r.key) + ': "same pairs as" must point to an earlier session'); return; }
+      const sizeOf = rd => { const f = CUP_FORMATS[((rd.segments || [])[0] || {}).format]; return f ? f.size : null; };
+      if (sizeOf(r) != null && sizeOf(roundList[j]) != null && sizeOf(r) !== sizeOf(roundList[j])) errors.push((r.name || r.key) + ': cannot share pairs with a session of a different side size');
+    });
+    roundList.forEach(r => {
       const segs = (r.segments || []).slice().sort((a, b) => a.from - b.from);
       let size = null;
       segs.forEach((sg, i) => {
