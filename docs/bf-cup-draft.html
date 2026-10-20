@@ -71,6 +71,7 @@ button:disabled{opacity:.4;cursor:default}
   var qs = new URLSearchParams(location.search);
   var EVENT = qs.get('event') || '2026 BF Cup';
   var HOST = qs.get('host') === '1';
+  var PRACTICE = /\(practice\)$/.test(EVENT);
   var cfg = null, pin = '', busy = false, pending = null, error = '', sortBy = 'rank', lastPickNo = 0, coinFlip = false, notice = '';
   try { pin = sessionStorage.getItem('bf_cup_pin') || ''; } catch (e) {}
   var E = window.BFEngine;
@@ -152,7 +153,10 @@ button:disabled{opacity:.4;cursor:default}
     var caps = cfg.sides.map(function (s) { return s.captain; });
     var missing = caps.some(function (c) { return !c; });
     var first = d.first;
-    return '<div class="card"><h2>1 · Players</h2><p class="hint">Everyone in the draft, one name per line. The captains are placed automatically and don\'t need to be listed.</p>'
+    var practiceCard = PRACTICE
+      ? '<div class="card"><b>Practice copy.</b> <span class="hint">Sample players and made-up stats. Nothing here touches the real Cup.</span><div class="toolbar"><button class="sec" id="practiceDelete">Delete this practice copy</button></div></div>'
+      : '<div class="card"><h2>Practice run</h2><p class="hint">Make a separate copy of this Cup with 16 sample players and made-up stats, to rehearse the whole flow. The real Cup is never touched.</p><div class="toolbar"><button class="sec" id="practiceMake">Create a practice copy</button>' + (notice && /practice/i.test(notice) ? ' <a href="' + esc(location.pathname + '?event=' + encodeURIComponent(EVENT + ' (practice)') + '&host=1') + '">Open the practice copy →</a>' : '') + '</div></div>';
+    return practiceCard + '<div class="card"><h2>1 · Players</h2><p class="hint">Everyone in the draft, one name per line. The captains are placed automatically and don\'t need to be listed.</p>'
       + '<textarea id="poolTxt" rows="8">' + esc(poolText) + '</textarea><div class="toolbar"><button class="sec" id="poolSave">Save the list</button><button class="sec" id="fillHcp">Fill handicaps from Membership</button></div></div>'
       + '<div class="card"><h2>2 · Player stats</h2><p class="hint">Paste a table from the sheet (a header row, then one row per player): Player, Ranking, Avg points, Birdie count, HCP. Missing values just show –.</p>'
       + '<textarea id="statsTxt" rows="5" placeholder="Player&#9;Avg Achievement&#9;Birdie Count&#9;HCP&#9;Player Ranking"></textarea><div class="toolbar"><button class="sec" id="statsApply">Apply stats</button><span class="hint">' + esc(notice) + '</span></div></div>'
@@ -189,7 +193,7 @@ button:disabled{opacity:.4;cursor:default}
     if (pending) html += '<div class="sheet"><span><b>' + esc(pending) + '</b> to <b>' + esc(sideName(clock)) + '</b>?</span><button id="confirmPick">Pick</button><button class="sec" id="cancelPick">Cancel</button></div>';
     app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html; wire();
   }
-  function hero() { return '<div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div>'; }
+  function hero() { return '<div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div>' + (PRACTICE ? '<div class="banner" style="background:#b8860b">PRACTICE RUN · sample players, nothing here is real</div>' : ''); }
 
   function wire() {
     function $(id) { return document.getElementById(id); }
@@ -237,6 +241,28 @@ button:disabled{opacity:.4;cursor:default}
       var v = E.cupDraftView(cfg);
       cfg.sides.forEach(function (s) { s.players = v.teams[s.key].slice(); });
       cfg.draft.locked = true; save();
+    });
+    on('practiceMake', function () {
+      var first = ['Alex','Ben','Cal','Dan','Eli','Finn','Gus','Hal','Ian','Joe','Kip','Lou','Max','Ned'];
+      var pool = first.map(function (n) { return n + ' Sample'; });
+      var stats = {}; var seed = 7;
+      function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+      pool.concat(cfg.sides.map(function (sd) { return sd.captain; }).filter(Boolean)).forEach(function (n, i) {
+        stats[n] = { hcp: Math.round((4 + rnd() * 20) * 10) / 10, rank: i + 1, avg: Math.round((2 + rnd() * 2.5) * 100) / 100, birdies: Math.round(rnd() * 12) };
+      });
+      var copy = JSON.parse(JSON.stringify(cfg));
+      copy.sides.forEach(function (sd) { sd.players = []; });
+      copy.rounds.forEach(function (r) { r.matches = []; });
+      copy.pool = pool; copy.draft = { started: false, first: null, pool: pool, stats: stats, picks: [], locked: false };
+      fetch(WORKER + '/bfe/cup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT + ' (practice)', config: copy, pin: pin }) })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); notice = 'Practice copy created.'; error = ''; }); })
+        .catch(function (e) { error = 'Could not create the practice copy: ' + e.message; }).then(render);
+    });
+    on('practiceDelete', function () {
+      if (!window.confirm('Delete this practice copy?')) return;
+      fetch(WORKER + '/bfe/cup?event=' + encodeURIComponent(EVENT) + '&pin=' + encodeURIComponent(pin), { method: 'DELETE' })
+        .then(function (r) { if (!r.ok) throw new Error(r.status); location.href = location.pathname + '?event=' + encodeURIComponent(EVENT.replace(/ \(practice\)$/, '')) + '&host=1'; })
+        .catch(function (e) { error = 'Could not delete: ' + e.message; render(); });
     });
     on('resetDraft', function () {
       if (!window.confirm('Clear every pick and start the draft over?')) return;

@@ -59,4 +59,17 @@ d.querySelector('[data-pick="P4"]').click(); d = dom.window.document; d.getEleme
 d.getElementById('lock').click(); await tick(); d = dom.window.document;
 ok(doc.sides[0].players.join() === 'Jake K,P2,P3' && doc.sides[1].players.join() === 'Nate S,P1,P4' && doc.draft.locked, 'locking writes the rosters (captain first) into the Cup');
 ok(posts.every(p => p.pin === '7797'), 'every save carried the PIN');
+// practice mode: a separate "(practice)" copy with sample players; the real event is never written
+doc = { sides: [{ key: 'A', name: 'Team Jake', captain: 'Jake K', color: 'red', players: ['Real1'] }, { key: 'B', name: 'Team Nate', captain: 'Nate S', color: 'blue', players: [] }], points: { win: 1, half: 0.5, loss: 0 }, pool: ['Real1'], draft: { started: true, picks: [{ n: 1 }] }, rounds: [{ key: 'sat', name: 'Sat', segments: [], matches: [{ key: 'm1' }] }] };
+const nBefore = posts.length;
+dom = await open('?host=1', '7797'); d = dom.window.document;
+ok(d.getElementById('practiceMake') === null, 'practice button is in the setup (shown only before the draft starts)');
+doc.draft.started = false; dom = await open('?host=1', '7797'); d = dom.window.document;
+ok(d.getElementById('practiceMake'), 'host sees "Create a practice copy"');
+d.getElementById('practiceMake').click(); await tick(150);
+const pp = posts[posts.length - 1];
+ok(posts.length === nBefore + 1 && pp.event_name === '2026 BF Cup (practice)', 'writes ONLY to the "(practice)" event name');
+ok(pp.config.draft.pool.length === 14 && Object.keys(pp.config.draft.stats).length === 16 && pp.config.sides.every(s => s.players.length === 0) && pp.config.rounds[0].matches.length === 0 && pp.config.sides[0].captain === 'Jake K', 'practice copy: 14 sample players + stats for 16, no teams or matches, same captains/sides/rounds');
+dom = await open('?host=1&event=' + encodeURIComponent('2026 BF Cup (practice)'), '7797'); d = dom.window.document;
+ok(/PRACTICE RUN/.test(d.body.textContent) && d.getElementById('practiceDelete'), 'the practice page is clearly marked and can be deleted');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
