@@ -1090,3 +1090,31 @@ Brian's standing rule is small shippable slices and never a big-bang rewrite. Th
 **Surprise me (engine 1.21–1.22):** `rollFormatsFor / rollGameSetup / rollSideVariant / rollDraw` build a random complete setup from the registry's own metadata and config schemas (so a new game joins the roll by being added to `ROLL_FORMATS` or `ROLL_SIDES`); `rollDraw` deals pairs or matches and flags a lopsided draw (combined-handicap gap 6+, 1 v 1 gap 5+) so the game can be switched to Net off the low.
 **Net needs a tee:** a player's saved handicap carries the tee, the course handicap and that tee's hole stroke index (§ Dev-91); a player without a tee or handicap is left out of `handicap_config` and plays scratch. The Games form now starts every new handicap row on the course's default tee.
 **For the BF Cup:** the games it needs exist as standalone single-day games; what remains is the multi-day wrapper (rounds, points per match, cumulative team points, clinch), which is BFE-A work (§2a.9, §13.3) and the Dev-95 session.
+
+### 13.12 BF Cup design note (Dev-95, 2026-10-20, Brian's answers) — AWAITING SIGN-OFF, NO CODE YET
+Supersedes the open parts of §2a.9 / §13.8. BF Cup is **11/7–8, BSGC both days, scratch, no money** (losers buy food and drinks at the Pub). Two sides, captains **Jake** and **Nate**. Field expected **16** (8 a side), registration still open.
+
+**Format**
+- **Saturday = ONE round, two separate 9-hole matches per pair-vs-pair:** Foursomes (alternate shot, one ball per pair) on #1–9, then Fourball (better ball) on #10–18. **Separate points** (a pair can win the fourball and lose the foursomes). Same pairs play both nines.
+- **Sunday = 18-hole singles match play**, one match per player, 1 point each.
+- **Points:** win 1, halve ½, loss 0 (configurable). A tied match is a half point each. **Overall points decide the Cup; no clinch number.**
+
+**Math (16 players):** Saturday 4 pairs a side = 4 matches x 2 nines = **8 points**; Sunday 8 singles = **8 points**; total 16. **8.5 wins outright; 8-8 is a shared Cup.** General rule, derived from the field and not hardcoded: for N players the total is N points; outright win = more than N/2.
+
+**Sides and picks:** captains manually pick their team and Saturday's pairs before Saturday's tee time through a **digital selection flow modelled on the Wally Cup 2Man draft** (captains assigned, picker writes sides and pairs into `bfe_round_groups` with `side_key` / `match_key`).
+
+**Capture:** strokes per ball. Saturday front nine reuses the **Alternate Shot** live panel (one score per pair), back nine the **BestBall** panel (each player). Sunday needs a **new Match Play singles live panel**. Skins / CTP are the captains' call, not decided; strokes capture keeps them possible.
+
+**Early close:** allowed. A match that closes early (e.g. 4&3) scores at that moment; pairs may keep recording and playing for fun without changing the points.
+
+**Money:** none; no payout work.
+
+**Build slices (in order, each shippable, tests first):**
+1. Round Config `segments` with per-segment format and points (Sat: foursomes #1-9, fourball #10-18; Sun: singles #1-18) and `rollup.points`.
+2. Head-to-head layer: compare a side's pair/player to the opposing one hole by hole, with early close, into points; side totals and Cup total (pure engine function, fixtures).
+3. Sides and the team picker (captains, picks, Saturday pairs, Sunday matchups) writing `side_key` / `match_key`.
+4. Live Panel: segment-aware entry (pair row on #1-9, player rows on #10-18), then Sunday singles Match Play panel.
+5. Close Round + Cup results page (match cards, running team score, 8.5 target).
+6. Go/no-go ~10/24; Jotform/manual stays the fallback.
+
+**Still open:** (a) who plays whom on Saturday (captains' choice or draw); (b) Sunday singles matchups and order (exchanged lineups or blind draw); (c) captains' pick order (snake draft or submitted lists); (d) behaviour if the field is not 16 (odd player, uneven sides).
