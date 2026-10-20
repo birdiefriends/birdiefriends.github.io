@@ -1117,4 +1117,12 @@ Supersedes the open parts of §2a.9 / §13.8. BF Cup is **11/7–8, BSGC both da
 5. Close Round + Cup results page (match cards, running team score, 8.5 target).
 6. Go/no-go ~10/24; Jotform/manual stays the fallback.
 
-**Still open:** (a) who plays whom on Saturday (captains' choice or draw); (b) Sunday singles matchups and order (exchanged lineups or blind draw); (c) captains' pick order (snake draft or submitted lists); (d) behaviour if the field is not 16 (odd player, uneven sides).
+**Brian's answers on the open items (2026-10-20):**
+- **Captains set the pairs** at an in-person meeting before Saturday; they select teams, pairs and matchups in a **purpose-built selection tool** (a nice, shared-screen flow, not the old 2Man draft UI as-is).
+- **Sunday singles lineup:** captains pick it **Saturday after the round**. Saturday's winning team chooses to **start or pass** in that lineup draw.
+- **Team draft:** **snake draft** (1-2-2-1...). Brian runs a coin toss to decide which captain picks first. The **toss loser starts the Saturday pairing draw** (reading of "Sat pairing draw": the order in which Saturday's pair-vs-pair matchups are set; confirm).
+- **Field:** 16 or 20, probably 16. No odd/uneven handling. 20 players = 5 pairs a side, 10 + 10 points, 10.5 wins (the N-points rule covers it).
+
+**Tool requirements this adds (slice 3):** coin-toss/first-pick control (commissioner-set), snake-draft team picker from the registered roster, pair builder per side, Saturday matchup draw with turn order and start/pass, Sunday singles lineup draw with start/pass option for Saturday's winner, undo for the commissioner, results written to `bfe_round_groups`.
+
+**Still open:** exactly how the Saturday matchup draw runs (see "toss loser starts the Saturday pairing draw"): do captains alternate placing one of their pairs against the other side's pair, with the toss loser placing first?
