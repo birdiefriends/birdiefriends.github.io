@@ -1125,4 +1125,4 @@ Supersedes the open parts of §2a.9 / §13.8. BF Cup is **11/7–8, BSGC both da
 
 **Tool requirements this adds (slice 3):** coin-toss/first-pick control (commissioner-set), snake-draft team picker from the registered roster, pair builder per side, Saturday matchup draw with turn order and start/pass, Sunday singles lineup draw with start/pass option for Saturday's winner, undo for the commissioner, results written to `bfe_round_groups`.
 
-**Still open:** exactly how the Saturday matchup draw runs (see "toss loser starts the Saturday pairing draw"): do captains alternate placing one of their pairs against the other side's pair, with the toss loser placing first?
+**Confirmed (Brian, 2026-10-20): Saturday matchup draw** = captains alternate placing one of their pairs against one of the other side's pairs, the coin-toss loser placing first. **No open design questions remain for the Cup**; next is sign-off, then slice 1 (segments) and slice 2 (head-to-head engine).
