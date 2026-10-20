@@ -10,6 +10,7 @@ const posts = []; let stored = null;
 const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true, url: 'https://x.test/BFE-Admin.html',
   beforeParse(w) {
     w.fetch = async (u, o) => { if (o && o.method === 'POST') { posts.push({ u, body: JSON.parse(o.body) }); stored = JSON.parse(o.body).config; return { ok: true, status: 200, json: async () => ({ ok: true }) }; }
+      if (/\/bfe\/players/.test(u)) return { ok: true, status: 200, json: async () => ({ ok: true, players: [{ name: 'Bill Steirer', current_hcp: 5.3, hcp_source: 'ghin_import', updated_at: '2026-10-20 12:00:00' }, { name: 'Lou Strohl', current_hcp: 14, hcp_source: 'estimated', updated_at: '2026-09-24 12:00:00' }, { name: 'Nobody Hcp', current_hcp: null, hcp_source: 'no_hcp' }] }) };
       if (/\/bfe\/events\?event=/.test(u)) return { ok: true, status: 200, json: async () => ({ config: globalThis.__evCfg, updated_at: 'now' }) };
       if (/\/bfe\/cup\?/.test(u)) return stored ? { ok: true, status: 200, json: async () => ({ config: stored }) } : { ok: false, status: 404, json: async () => ({}) };
       return { ok: true, status: 200, json: async () => ({ ok: true }) }; };
@@ -88,4 +89,10 @@ for (const id of ['roundCollect', 'overallCollect', 'wbCollect']) { d.getElement
 const before = posts.length;
 d.getElementById('saveBtn').click(); await new Promise(r => setTimeout(r, 300));
 ok(posts.slice(before).some(p => /\/bfe\/events$/.test(p.u)) && posts.slice(before).some(p => /\/bfe\/cup$/.test(p.u)), 'Save config also saves the Cup card');
+// blank HCP boxes fill from the master list; a typed number is never overwritten
+d.getElementById('rosterBody').innerHTML = '';
+w.addPlayerRow('Bill Steirer'); w.addPlayerRow('Lou Strohl', '', '20'); w.addPlayerRow('Nobody Hcp'); w.addPlayerRow('Unknown Guy');
+await w.refreshRosterLastKnownHcp(); await new Promise(r => setTimeout(r, 30));
+const hc = [...d.querySelectorAll('#rosterBody .p-hcp')].map(i => i.value);
+ok(hc.join() === '5.3,20,,', 'blank HCP fills from last known; typed 20 is kept; "no HCP" and unknown players stay blank (got ' + hc.join() + ')');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

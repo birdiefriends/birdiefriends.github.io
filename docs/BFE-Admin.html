@@ -1490,6 +1490,7 @@ async function refreshRosterLastKnownHcp() {
   if (statusEl) statusEl.textContent = 'Checking last known HCP…';
   try {
     const existing = await loadExistingPlayers();
+    let filled = 0;
     [...rosterBody.querySelectorAll('tr')].forEach(tr => {
       const cell = tr.querySelector('.p-lastknown');
       if (!cell) return;
@@ -1497,8 +1498,12 @@ async function refreshRosterLastKnownHcp() {
       if (!name) { cell.innerHTML = '—'; return; }
       const player = findExistingPlayer(existing, null, name);
       cell.innerHTML = renderRosterLastKnownCell(player);
+      // Blank HCP boxes take the last known number from the master list. A number the Host typed is never touched,
+      // and nothing is written back to the master list (this event's HCP is saved with the event only).
+      const box = tr.querySelector('.p-hcp');
+      if (box && box.value === '' && player && player.current_hcp != null && player.hcp_source !== 'no_hcp' && Number.isFinite(Number(player.current_hcp))) { box.value = player.current_hcp; filled++; }
     });
-    if (statusEl) statusEl.textContent = '';
+    if (statusEl) statusEl.textContent = filled ? `Filled ${filled} blank HCP(s) from the master list. Edit any box to override.` : '';
   } catch (e) {
     if (statusEl) statusEl.textContent = 'Could not load last known HCP: ' + e.message;
   }
