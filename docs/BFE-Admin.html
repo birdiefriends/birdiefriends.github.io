@@ -320,6 +320,7 @@
       <button type="button" class="secondary" id="loadRoundNamesBtn">&#x21BA; Load round names (Jotform + Gatherings)</button>
       <span class="subtle" id="roundNameLoadStatus">Not loaded yet — round names can be typed, but won't have a resolved tee time until this runs.</span>
     </div>
+    <div id="roundNameChips" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px"></div>
     <datalist id="roundNameOptions"></datalist>
     <table id="roundsTable">
       <thead><tr>
@@ -2178,9 +2179,29 @@ async function loadRoundNameOptions() {
   const dl = document.getElementById('roundNameOptions');
   dl.innerHTML = names.map(n => `<option value="${n.replace(/"/g, '&quot;')}">`).join('');
   statusEl.textContent = names.length
-    ? `${names.length} upcoming name(s) loaded${hiddenCount ? ` (${hiddenCount} past event(s) hidden)` : ''} — pick one in a Round name field above, or re-check an already-typed one.`
+    ? `${names.length} upcoming name(s) loaded${hiddenCount ? ` (${hiddenCount} past event(s) hidden)` : ''} — click one below to add it as a round (its date, tee time and venue fill in), or start typing in a Round name field.`
     : `Nothing upcoming found on either source${hiddenCount ? ` (${hiddenCount} past event(s) hidden)` : ''} — round names can still be typed, tee time just stays unresolved.`;
   [...roundsBody.querySelectorAll('tr')].forEach(tr => { updateRoundRowTeeTime(tr); updateRoundRowVenue(tr); });
+  renderRoundNameChips(names);
+}
+function renderRoundNameChips(names) {
+  const box = document.getElementById('roundNameChips');
+  const have = new Set([...roundsBody.querySelectorAll('.r-name')].map(i => i.value.trim()));
+  box.innerHTML = '';
+  (names || []).filter(n => !have.has(n)).forEach(n => {
+    const d = roundNameDates[n];
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'secondary'; b.style.cssText = 'padding:4px 10px;font-size:0.82rem';
+    b.textContent = '+ ' + n + (d instanceof Date ? ' · ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '');
+    b.addEventListener('click', () => {
+      // reuse a blank starter row if there is one, otherwise add a row
+      const blank = [...roundsBody.querySelectorAll('tr')].find(tr => !tr.querySelector('.r-name').value.trim());
+      if (blank) { blank.querySelector('.r-name').value = n; blank.querySelector('.r-name').dispatchEvent(new Event('change', { bubbles: true })); }
+      else addRoundRow(n);
+      b.remove();
+    });
+    box.appendChild(b);
+  });
 }
 document.getElementById('loadRoundNamesBtn').addEventListener('click', loadRoundNameOptions);
 function readRoundsInput() {
@@ -2518,6 +2539,7 @@ function setStatus(msg, isErr) {
   el.className = 'status ' + (isErr ? 'err' : 'ok');
   el.textContent = msg;
 }
+let lastLoadedEventName = '';   // the stored event this form was last loaded from / saved to (guards against overwriting a different one)
 async function saveEventConfig() {
   const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
   const pin  = document.getElementById('hostPin').value.trim();
@@ -2534,6 +2556,16 @@ async function saveEventConfig() {
       `OK to save anyway (rolls into Overall) — Cancel to go back and uncheck it in section 4 first.`
     );
     if (!proceed) { setStatus('Save cancelled — go uncheck "Rolls into Overall" for the round(s) above in section 4.', true); return; }
+  }
+  if (eventName !== lastLoadedEventName) {
+    // Saving replaces a stored event's rounds and roster wholesale: never do that to an event this form did not load.
+    try {
+      const lr = await fetch(base + '/bfe/events-list'); const lj = await lr.json();
+      const ex = (lj.events || []).find(e => e.event_name === eventName);
+      if (ex && !confirm(`A stored event named "${eventName}" already exists (${ex.rounds} round(s), ${ex.roster} roster row(s)).\n\nSaving REPLACES its rounds and roster with what is in this form, and this form did not load that event.\n\nOK to replace it - Cancel to go back and change the event name in section 1.`)) {
+        setStatus('Save cancelled - "' + eventName + '" is an existing event. Change the event name in section 1 (or Load it first).', true); return;
+      }
+    } catch (e) { /* if the list cannot be read, fall through to the normal save */ }
   }
   setStatus('Saving…');
   const res = await fetch(base + '/bfe/events', {
@@ -2557,6 +2589,7 @@ async function saveEventConfig() {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  lastLoadedEventName = eventName; setupDirty = false;
   setStatus(`Saved — "${eventName}", ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
 }
 document.getElementById('saveBtn').addEventListener('click', async () => {
@@ -2599,7 +2632,15 @@ async function rehydrateFormFromConfig(config) {
   if (overallPot) document.getElementById('overallCollect').value = overallPot.collectPerPlayer ?? '';
   if (wbPot) document.getElementById('wbCollect').value = wbPot.collectPerPlayer ?? '';
 }
+// Unsaved-work guard: any edit to the Setup form marks it dirty until a Save or Load completes.
+let setupDirty = false;
+(function () {
+  const mark = e => { if (e.target && e.target.closest && e.target.closest('#roundsBody, #cupSection') || (e.target && /^(eventName|cupColA|cupColB)$/.test(e.target.id || ''))) setupDirty = true; };
+  document.addEventListener('input', mark); document.addEventListener('change', mark);
+  window.addEventListener('beforeunload', ev => { if (setupDirty) { ev.preventDefault(); ev.returnValue = ''; } });
+})();
 async function loadEventConfig(eventName) {
+  if (setupDirty && !confirm('You have unsaved changes in the Setup form (rounds / Cup).\n\nLoading "' + eventName + '" will REPLACE them.\n\nOK to discard and load - Cancel to keep working.')) { setStatus('Load cancelled - your unsaved Setup changes were kept.'); return; }
   const base = document.getElementById('workerUrl').value.trim().replace(/\/$/, '');
   if (!base) { setStatus('Enter the BFE Worker base URL.', true); return; }
   if (!eventName) { setStatus('Enter or pick an event name.', true); return; }
@@ -2609,6 +2650,7 @@ async function loadEventConfig(eventName) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     assembledConfig = data.config;
+    lastLoadedEventName = eventName; setupDirty = false;
     await rehydrateFormFromConfig(assembledConfig);
     renderReview(assembledConfig);
     document.getElementById('outputSection').style.display = 'block';

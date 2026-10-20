@@ -1,2 +1,1 @@
-v4.31.8 · 2026-10-20
-Deployed: 2026-10-20 (Engine 1.24.2: Cup sessions can share pairs ("same pairs as"). BFE-Admin: each Cup session is its own section 4 row with a Format picker; the Team Cup card follows. No portal behavior change; Worker file only carries the engine version in a comment: deploy optional.)
+v4.31.9 · 2026-10-20
