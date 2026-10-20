@@ -7,15 +7,16 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap">
 <style>
 *{box-sizing:border-box}
-:root{--navy:#0d1f3d;--navy2:#152c52;--navy3:#1d3a68;--accent:#e8392a;--gold:#f2c14e;--white:#f5f0e8;--dim:rgba(245,240,232,.62);--faint:rgba(245,240,232,.12);--good:#6fbf7e;--warn:#e0a050;--bad:#ee6a5a}
-body{margin:0;background:var(--navy);color:var(--white);font-family:'DM Sans',sans-serif;line-height:1.35}
+:root{--navy:#0a1f44;--navy2:#10306a;--navy3:#183f82;--accent:#d6203a;--red:#d6203a;--redlt:#ff6b78;--blue:#2f6fe0;--bluelt:#7fb2ff;--gold:#ffffff;--white:#ffffff;--dim:rgba(255,255,255,.68);--faint:rgba(255,255,255,.16);--good:#7fd69a;--warn:#ffd36b;--bad:#ff9a8a}
+body{margin:0;background:var(--navy) radial-gradient(ellipse at 50% -10%,rgba(47,111,224,.35),transparent 60%);color:var(--white);font-family:'DM Sans',sans-serif;line-height:1.35}
 .page{max-width:980px;margin:0 auto;padding:0 16px 90px}
 h1,h2{font-family:'Baloo 2',sans-serif;margin:0}
-.hero{text-align:center;padding:26px 0 14px;border-bottom:1px solid rgba(232,57,42,.25)}
-.eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#f27a68;font-weight:600}
+.stripes{height:10px;background:repeating-linear-gradient(90deg,var(--red) 0 28px,#fff 28px 56px);margin:0 -16px}
+.hero{text-align:center;padding:22px 0 14px;border-bottom:2px solid #fff}
+.eyebrow{font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:#fff;font-weight:700}
 .hero h1{font-size:clamp(2.2rem,8vw,3.4rem);font-weight:800;line-height:1}
 .banner{margin:14px 0;padding:10px 14px;border-radius:10px;background:var(--navy2);border:1px solid var(--faint);font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.banner.live{border-color:var(--accent)}
+.banner.live{border-color:#fff}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);animation:pulse 1.4s infinite}
 @keyframes pulse{50%{opacity:.25}}
 .card{background:var(--navy2);border:1px solid var(--faint);border-radius:12px;padding:14px;margin:12px 0}
@@ -24,15 +25,17 @@ h1,h2{font-family:'Baloo 2',sans-serif;margin:0}
 .mhead{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:1.05rem;margin-bottom:4px}
 .mrow{font-size:.95rem;padding:3px 0;border-top:1px solid var(--faint)}
 .mrow .lab{color:var(--dim);font-size:.78rem;text-transform:uppercase;letter-spacing:.06em}
-.mrow .win{color:var(--gold);font-weight:700}
+.mrow .win{font-weight:800}.mrow .win.sa{color:var(--redlt)}.mrow .win.sb{color:var(--bluelt)}
+.mhead .ta{color:var(--redlt)}.mhead .tb{color:var(--bluelt)}
 .verdict{margin-top:8px;text-align:center;font-weight:700;font-size:.92rem}
 .v-even{color:var(--good)}.v-close{color:var(--warn)}.v-tilted{color:var(--bad)}.v-unknown{color:var(--dim)}
 .teams{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
-.team h2{font-size:1.15rem;margin-bottom:6px}
+.team h2{font-size:1.15rem;margin-bottom:6px}.card.team.sa{border-top:5px solid var(--red)}.card.team.sb{border-top:5px solid var(--blue)}
+.sa .slot{border-left:4px solid var(--red)}.sb .slot{border-left:4px solid var(--blue)}
 .slot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 6px;padding:6px 8px;border-radius:8px;background:var(--navy3);margin:4px 0;font-size:.92rem}
 .slot.cap{border:1px solid var(--gold)}
 .slot.new{animation:pop 1.6s ease-out}
-@keyframes pop{0%{background:var(--accent)}100%{background:var(--navy3)}}
+@keyframes pop{0%{background:#fff}100%{background:var(--navy3)}}
 .slot .n{color:var(--dim);font-size:.75rem;margin-right:6px}
 .slot .st{color:var(--dim);font-size:.75rem;white-space:nowrap}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
@@ -59,7 +62,7 @@ button:disabled{opacity:.4;cursor:default}
 </style>
 </head>
 <body>
-<div class="page" id="app"><div class="hero"><div class="eyebrow">BirdieFriends</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
+<div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
 <script src="bf_engine.js?v=1.24.0"></script>
 <script>
 (function () {
@@ -99,12 +102,12 @@ button:disabled{opacity:.4;cursor:default}
       var a = bal.sides[A][f], b = bal.sides[B][f];
       var m = bal.metrics[mk || f];
       var win = m && m.edge;
-      return '<div class="mrow"><div class="' + (win === A ? 'win' : '') + '">' + fmt(a, dec) + (suffix ? suffix(bal.sides[A]) : '') + '</div><div class="lab">' + label + '</div><div class="' + (win === B ? 'win' : '') + '">' + fmt(b, dec) + (suffix ? suffix(bal.sides[B]) : '') + '</div></div>';
+      return '<div class="mrow"><div class="' + (win === A ? 'win sa' : '') + '">' + fmt(a, dec) + (suffix ? suffix(bal.sides[A]) : '') + '</div><div class="lab">' + label + '</div><div class="' + (win === B ? 'win sb' : '') + '">' + fmt(b, dec) + (suffix ? suffix(bal.sides[B]) : '') + '</div></div>';
     }
     var edges = {}; Object.keys(bal.metrics).forEach(function (f) { var m = bal.metrics[f]; if (m && m.level === 2 && m.edge) edges[m.edge] = (edges[m.edge] || 0) + 1; });
     var fav = Object.keys(edges).sort(function (a, b) { return edges[b] - edges[a]; })[0];
     var vtxt = { even: '🟢 Dead even', close: '🟡 Close', tilted: '⚠️ Tilted' + (fav ? ' toward ' + esc(sideName(fav)) : ''), unknown: 'Add player stats to see the balance' }[bal.verdict];
-    return '<div class="meter"><div class="mhead"><div>' + esc(sideName(A)) + '</div><div class="hint">Team balance</div><div>' + esc(sideName(B)) + '</div></div>'
+    return '<div class="meter"><div class="mhead"><div class="ta">' + esc(sideName(A)) + '</div><div class="hint">Team balance</div><div class="tb">' + esc(sideName(B)) + '</div></div>'
       + row('Avg HCP', 'hcp', 1) + row('Avg Series pts', 'avg', 1) + row('Avg rank', 'rank', 1)
       + row('🐦 Birdies', 'birdieTotal', 0, 'birdies', function (s) { return ' <span class="hint">(' + fmt(s.birdies, 1) + ' avg)</span>'; })
       + '<div class="verdict v-' + bal.verdict + '">' + vtxt + '</div></div>';
@@ -126,9 +129,9 @@ button:disabled{opacity:.4;cursor:default}
     });
   }
   function teamsHtml(v) {
-    return '<div class="teams">' + cfg.sides.map(function (sd) {
+    return '<div class="teams">' + cfg.sides.map(function (sd, si) {
       var picks = v.picks.filter(function (p) { return p.side === sd.key; });
-      return '<div class="card team"><h2>' + esc(sd.name || 'Side ' + sd.key) + '</h2>'
+      return '<div class="card team ' + (si ? 'sb' : 'sa') + '"><h2>' + esc(sd.name || 'Side ' + sd.key) + '</h2>'
         + (sd.captain ? '<div class="slot cap"><span>👑 ' + esc(sd.captain) + '</span><span class="st">' + esc(stLine(sd.captain)) + '</span></div>' : '')
         + picks.map(function (p) { return '<div class="slot' + (p.n === lastPickNo && p.n === v.picks.length ? ' new' : '') + '"><span><span class="n">#' + p.n + '</span>' + esc(p.player) + '</span><span class="st">' + esc(stLine(p.player)) + '</span></div>'; }).join('')
         + '</div>';
@@ -176,7 +179,7 @@ button:disabled{opacity:.4;cursor:default}
       app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html; wire(); return;
     }
     var clock = v.onClock;
-    html += '<div class="banner live"><span class="dot"></span>' + (v.done ? (d.locked ? '🏁 Teams are set' : '✅ Every player is picked') : 'LIVE · Pick ' + v.pickNo + ' of ' + v.total + ' · <span style="color:var(--gold)">' + esc(sideName(clock)) + '</span> on the clock') + '</div>';
+    html += '<div class="banner live"><span class="dot"></span>' + (v.done ? (d.locked ? '🏁 Teams are set' : '✅ Every player is picked') : 'LIVE · Pick ' + v.pickNo + ' of ' + v.total + ' · <span style="color:#fff;text-decoration:underline">' + esc(sideName(clock)) + '</span> on the clock') + '</div>';
     html += meterHtml(v) + teamsHtml(v) + (v.done ? '' : poolHtml(v));
     if (HOST && pin) {
       html += '<div class="toolbar">' + '<button class="sec" id="undo"' + (v.picks.length ? '' : ' disabled') + '>↩︎ Undo last pick</button>'
@@ -185,7 +188,7 @@ button:disabled{opacity:.4;cursor:default}
     if (pending) html += '<div class="sheet"><span><b>' + esc(pending) + '</b> to <b>' + esc(sideName(clock)) + '</b>?</span><button id="confirmPick">Pick</button><button class="sec" id="cancelPick">Cancel</button></div>';
     app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html; wire();
   }
-  function hero() { return '<div class="hero"><div class="eyebrow">BirdieFriends</div><h1>BF Cup Draft</h1></div>'; }
+  function hero() { return '<div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div>'; }
 
   function wire() {
     function $(id) { return document.getElementById(id); }
