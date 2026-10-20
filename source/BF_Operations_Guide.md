@@ -241,9 +241,9 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 ### Current Versions
 | Component | Version | Status |
 |-----------|---------|--------|
-| Portal | v4.23.3 · 2026-10-13 | Production ✅ — Dev-93: game registry, Fourball, Low Score and the scoring-periods layer, Live Score / Live Actions, stroke dots on every net view, the Games setup wizard with one last "The money" screen, Commissioner delete-this-round, MiserBall per-player result and Close hold. Engine `bf_engine.js` 1.16.7. |
+| Portal | v4.31.4 · 2026-10-14 | Production ✅ — Dev-94: Venue Manager redesign and par-from-tee, BestBall / Alternate Shot / Match Play / Hi-Lo on one match engine, $0 pots, 🎲 Surprise me (random setup, random draw with wipeout guard), Edit games on the card, Individual Low Score, compact results table. Engine `bf_engine.js` 1.22.1. |
 | GolfScorer | v8.58 · 2026-10-09 | Deployed ✅ — Dev-92: "+ Add Group" moved into the Groups header; empty Groups area is a drop target. Start each new event with ↺ New Event (it is the only thing that clears Groups, kept in localStorage `bf_groups_data`). |
-| Worker | main `worker.js` 3,427 lines; `bf_experiences_worker.js` 2,986 lines (Dev-93) | Brian pastes Workers into Cloudflare manually. Dev-93 needed redeploys for `period`/`front_back`/`lowscore` (v4.19.0) and `/bfe/gathering-destroy` (v4.18.0): confirm both are live. Later engine bumps only change a comment in the schema block. |
+| Worker | main `worker.js` 3,435 lines; `bf_experiences_worker.js` 3,192 lines (Dev-94) | Brian pastes Workers into Cloudflare manually. Dev-94: main Worker weather forecast fallback (deployed); `bf_experiences_worker.js` needed Hi-Lo in its game schemas (deployed). Later changes to it (label, version comments) are cosmetic, deploy optional. |
 | deploy.html | 2026-06-18 | Live ✅ — all tabs functional (Session BP-1 fix) |
 | bf_deploy.py | 2026-06-18 | In library for reference only — TOKEN-authenticated functions not invoked by Claude |
 | bf_architecture.html | 2026-07-14 (Dev-63) | Library ✅ — GolfScorer node + publish-path note updated; ERD/D1 sections still current as of Dev-56, untouched — now further behind after Dev-67/70's schema additions, see Backlog |

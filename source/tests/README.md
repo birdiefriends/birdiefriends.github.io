@@ -32,8 +32,8 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_gc_search.mjs` | GC-API search status persistence, name-variant retry, 429 quota message |
 | `test_side_games.mjs` | v4.26.0 Match Play + Alternate Shot: `matchSegmentResult` (early 3&2, halved, live), pots, play-on, $0, off-the-low vs full, A-S one score per pair, live mirroring, results tabs |
 | `test_hilo.mjs` | v4.28.0 Hi-Lo: 2 points a hole (low + high), ties give nobody the point, push on level, periods, net off the low, match view / headline, form blank/load, wizard steps |
-| `test_roll.mjs` | v4.29.0 dice roll engine: fits the crew, equal odds over formats and 0-3 side games, Net only with handicaps, CTP / Birdie Payouts need par data, amounts balance, every roll validates |
-| `test_roll_form.mjs` | v4.29.0 dice roll on the real Games form: 40 rolls fill the form, tick/untick a side game, land on Review and save (Net and gross) |
+| `test_roll.mjs` | v4.29.0 dice roll engine: fits the crew, equal odds over formats and 0-3 side games, Net only with handicaps, CTP / Birdie Payouts need par data, amounts balance, every roll validates; v4.30.0 `rollDraw` (every player once, lopsided flag at 6 / 5 strokes, no handicaps never flagged) |
+| `test_roll_form.mjs` | v4.29.0 dice roll on the real Games form: 40 rolls fill the form, tick/untick a side game, land on Review and save (Net and `--gross`); v4.30.1 pre-roll handicap ask; v4.31.1 a Net roll saves a handicap for every player and its payload yields stroke dots; v4.31.3 a new handicap row defaults to the course tee |
 | `test_side_results.mjs` | v4.26.5 A-S / Match Play results: story (lead changes, biggest lead), hero card text (3&2, strokes, $0 buys, halved), hole strip, no individual ranking for one-ball rounds |
 | `test_game_traits.mjs` | v4.27.0 registry traits are consistent; live/results/strokes screens never hard-code Alternate Shot / Match Play; multi-side-game chooser; engine match story |
 
