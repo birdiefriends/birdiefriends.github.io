@@ -357,8 +357,18 @@
       <p class="hint" style="margin-top:0">Each Cup <b>session</b> is a row in section 4 with the engine <b>Team match play (Cup)</b>. Pick how it is played (Foursomes, Fourball or Singles) and which holes (18, Front 9 or Back 9). Every session is its own match for points. A session can reuse an earlier session's pairs ("same pairs as"), so Saturday's two nines use the same partners.</p>
       <div id="cupRounds"></div>
       <div class="btnbar">
-        <button type="button" class="secondary" id="cupAddPairsDay">+ Add Saturday sessions (Foursomes front 9, Fourball back 9)</button>
-        <button type="button" class="secondary" id="cupAddSinglesDay">+ Add Sunday singles (18 holes)</button>
+        <button type="button" class="secondary" id="cupAddBlank">+ Add a session</button>
+        <span class="subtle" style="margin:0 4px">or start from a layout:</span>
+        <select id="cupPreset" style="width:auto;display:inline-block">
+          <option value="pairsFB">Pairs: Fourball front 9, Foursomes back 9</option>
+          <option value="pairsFS">Pairs: Foursomes front 9, Fourball back 9</option>
+          <option value="pairs18FB">Pairs: Fourball, 18 holes</option>
+          <option value="pairs18FS">Pairs: Foursomes, 18 holes</option>
+          <option value="singles">Singles, 18 holes</option>
+          <option value="singles9">Singles: front 9 + back 9 (two matches)</option>
+        </select>
+        <button type="button" class="secondary" id="cupAddPreset">Add layout</button>
+        <div class="subtle" style="margin-top:6px">Layouts are only starting points. Every session row in section 4 can be changed freely: format, holes (18 / Front 9 / Back 9), and which earlier session's pairs it reuses.</div>
       </div>
       <div id="cupSummary" style="margin-top:12px;padding:10px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);font-size:0.9rem"></div>
       <div class="btnbar">
@@ -6205,13 +6215,16 @@ function cupSyncRounds() {
   if (document.getElementById('cupEnabled').checked) cupRender();
 }
 function cupAddRound(kind) {
-  const n = roundsBody.querySelectorAll('tr').length + 1;
-  if (kind === 'pairs') {
-    const a = addRoundRow('BF Cup Foursomes', 'cup_match', '', '', false, '', { count: 9, half: 'front' }, { cupFormat: 'altshot' });
-    addRoundRow('BF Cup Fourball', 'cup_match', '', '', false, '', { count: 9, half: 'back' }, { cupFormat: 'bestball', cupSameAs: 'BF Cup Foursomes' });
-  } else {
-    addRoundRow('BF Cup Singles', 'cup_match', '', '', false, '', null, { cupFormat: 'singles' });
-  }
+  const AS = { cupFormat: 'altshot' }, BB = { cupFormat: 'bestball' }, SI = { cupFormat: 'singles' };
+  const F = { count: 9, half: 'front' }, B = { count: 9, half: 'back' };
+  const add = (name, holes, p) => addRoundRow(name, 'cup_match', '', '', false, '', holes, p);
+  if (kind === 'blank') add('Cup session ' + (roundsBody.querySelectorAll('tr').length + 1), null, { cupFormat: 'bestball' });
+  else if (kind === 'pairsFB') { add('Cup Fourball', F, BB); add('Cup Foursomes', B, Object.assign({ cupSameAs: 'Cup Fourball' }, AS)); }
+  else if (kind === 'pairsFS') { add('Cup Foursomes', F, AS); add('Cup Fourball', B, Object.assign({ cupSameAs: 'Cup Foursomes' }, BB)); }
+  else if (kind === 'pairs18FB') add('Cup Fourball', null, BB);
+  else if (kind === 'pairs18FS') add('Cup Foursomes', null, AS);
+  else if (kind === 'singles9') { add('Cup Singles (front)', F, SI); add('Cup Singles (back)', B, SI); }
+  else add('Cup Singles', null, SI);
   cupSyncRounds();
 }
 function cupSyncFromInputs() {
@@ -6301,8 +6314,8 @@ async function cupLoad() {
   const body = document.getElementById('cupBody');
   document.getElementById('cupEnabled').addEventListener('change', e => { body.style.display = e.target.checked ? 'block' : 'none'; if (e.target.checked) cupSyncRounds(); });
   ['change', 'click'].forEach(ev => roundsBody.addEventListener(ev, () => setTimeout(cupSyncRounds, 0)));
-  document.getElementById('cupAddPairsDay').addEventListener('click', () => cupAddRound('pairs'));
-  document.getElementById('cupAddSinglesDay').addEventListener('click', () => cupAddRound('singles'));
+  document.getElementById('cupAddBlank').addEventListener('click', () => cupAddRound('blank'));
+  document.getElementById('cupAddPreset').addEventListener('click', () => cupAddRound(document.getElementById('cupPreset').value));
   document.getElementById('cupSaveBtn').addEventListener('click', cupSave);
   document.getElementById('cupLoadBtn').addEventListener('click', cupLoad);
   body.addEventListener('input', e => {

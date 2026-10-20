@@ -22,7 +22,7 @@ ok(d.getElementById('cupBody').style.display === 'block', 'enabling shows the ca
 ok([...d.querySelectorAll('.r-engine')][0].innerHTML.includes('cup_match'), 'section 4 offers the Team match play (Cup) engine');
 ok(d.querySelector('.r-holes') && [...d.querySelector('.r-holes').options].map(o => o.value).join() === '18,f9,b9', 'section 4 has a Holes column (18 / Front 9 / Back 9)');
 const rowsBefore = d.querySelectorAll('#roundsBody tr').length;
-d.getElementById('cupAddPairsDay').click(); d.getElementById('cupAddSinglesDay').click(); await new Promise(r => setTimeout(r, 20));
+d.getElementById('cupPreset').value='pairsFS'; d.getElementById('cupAddPreset').click(); d.getElementById('cupPreset').value='singles'; d.getElementById('cupAddPreset').click(); await new Promise(r => setTimeout(r, 20));
 ok(d.querySelectorAll('#roundsBody tr').length === rowsBefore + 3, 'Saturday = two session rows (foursomes + fourball), Sunday = one singles row');
 const cupRows = [...d.querySelectorAll('#roundsBody tr')].filter(tr => tr.querySelector('.r-engine').value === 'cup_match');
 ok(cupRows.length === 3 && cupRows.every(tr => tr.querySelector('.r-wbpoints').disabled && !tr.querySelector('.r-overall').checked && tr.querySelector('.r-overall').disabled), 'Cup rows: Wally Ball and Overall are off and locked');
@@ -31,7 +31,7 @@ ok(cupRows.map(tr => tr.querySelector('.r-cupfmt').value).join() === 'altshot,be
 ok(cupRows.map(tr => tr.querySelector('.r-holes').value).join() === 'f9,b9,18', 'holes: front 9, back 9, 18');
 ok(d.querySelectorAll('.cup-round').length === 3, 'three Cup sessions shown in 4b, taken from section 4');
 ok(/Foursomes · holes 1-9/.test(d.querySelectorAll('.cup-round')[0].textContent) && /Fourball · holes 10-18/.test(d.querySelectorAll('.cup-round')[1].textContent) && /Singles · holes 1-18/.test(d.querySelectorAll('.cup-round')[2].textContent), 'each session shows its format and hole range');
-ok(/same pairs as BF Cup Foursomes/.test(d.querySelectorAll('.cup-round')[1].textContent), 'the second nine reuses the first nine\'s pairs');
+ok(/same pairs as Cup Foursomes/.test(d.querySelectorAll('.cup-round')[1].textContent), 'the second nine reuses the first nine\'s pairs');
 ok(/add the roster in section 3|players \(/.test(d.getElementById('cupSummary').textContent), 'summary describes the field (or asks for the roster)');
 ok(/Name side A/.test(d.getElementById('cupSummary').textContent), 'asks for side names');
 // the host changes a session's holes: the 4b range follows
