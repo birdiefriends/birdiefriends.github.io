@@ -1357,6 +1357,46 @@ export default {
       }
     }
 
+    // ── BF Cup (Dev-95) ─────────────────────────────────────────────────
+    // One JSON document per Cup event: sides, points rule, rounds with their segments, and the matches the captains
+    // pick (spec §13.12). The shape is checked by BFEngine.cupValidate in the browser; the Worker only checks it is
+    // two sides and an array of rounds, then stores it. The table is created on first use, so there is no D1 step.
+    //   GET    /bfe/cup?event=<name>            no PIN (players read the board and their match)
+    //   POST   /bfe/cup {event_name, config, pin}   PIN-gated, upsert (the selection tool re-saves the whole document)
+    //   DELETE /bfe/cup?event=<name>&pin=       PIN-gated
+    if (url.pathname === '/bfe/cup') {
+      const J = (o, status) => new Response(JSON.stringify(o), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bfe_cup (event_name TEXT PRIMARY KEY, config TEXT NOT NULL, updated_at TEXT)`).run();
+        if (request.method === 'GET') {
+          const event = url.searchParams.get('event');
+          if (!event) return J({ error: 'event query param is required' }, 400);
+          const row = await env.DB.prepare(`SELECT * FROM bfe_cup WHERE event_name = ?`).bind(event).first();
+          if (!row) return J({ error: 'Not found' }, 404);
+          return J({ ok: true, event_name: row.event_name, config: JSON.parse(row.config), updated_at: row.updated_at });
+        }
+        if (request.method === 'POST') {
+          let body; try { body = await request.json(); } catch (e) { return J({ error: 'Invalid JSON' }, 400); }
+          if (String(body.pin) !== '7797') return J({ error: 'Unauthorized' }, 403);
+          const { event_name, config } = body;
+          if (!event_name || !config || typeof config !== 'object') return J({ error: 'event_name and config (object) are required' }, 400);
+          if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
+          await env.DB.prepare(`INSERT INTO bfe_cup (event_name, config, updated_at) VALUES (?, ?, datetime('now'))
+             ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(config)).run();
+          return J({ ok: true });
+        }
+        if (request.method === 'DELETE') {
+          if (String(url.searchParams.get('pin')) !== '7797') return J({ error: 'Unauthorized' }, 403);
+          const event = url.searchParams.get('event');
+          if (!event) return J({ error: 'event query param is required' }, 400);
+          await env.DB.prepare(`DELETE FROM bfe_cup WHERE event_name = ?`).bind(event).run();
+          return J({ ok: true });
+        }
+      } catch (e) {
+        return J({ error: 'Database error on the Cup config: ' + String(e.message || e) }, 500);
+      }
+    }
+
     // ── Venue tee catalog ────────────────────────────────────────────────
     // "Last-known-good, adjustable default" (spec §4a) for a venue's tee/
     // slope data — Setup prefills from this when a host picks a venue for a

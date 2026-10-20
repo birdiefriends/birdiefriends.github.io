@@ -333,6 +333,38 @@
       <button type="button" class="link" id="loadWcDefaultBtn">Load Wally Cup 2026 default schedule (Rd1 → Rd2 → 2Man → Rd3)</button>
     </div>
   </section>
+  <!-- ── BF Cup (Dev-95) ───────────────────────────────────────────── -->
+  <section class="card" id="cupSection">
+    <h2>4b. Team Cup <span class="badge">new</span></h2>
+    <p class="hint">For a two-sided match-play event (the BF Cup). Name the sides and captains, set the points, and describe each day's segments. Teams, pairs and matches are filled in by the captains' selection tool; this card shows how far along they are. Nothing here is specific to one event: any host can set a team event up the same way.</p>
+    <label for="cupEnabled" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="cupEnabled" style="width:auto;margin:0"> This event is a team Cup</label>
+    <div id="cupBody" style="display:none;margin-top:12px">
+      <div class="row">
+        <div><label for="cupNameA">Side A name</label><input type="text" id="cupNameA" placeholder="e.g. Team Jake"></div>
+        <div><label for="cupCapA">Side A captain</label><select id="cupCapA"></select></div>
+        <div><label for="cupNameB">Side B name</label><input type="text" id="cupNameB" placeholder="e.g. Team Nate"></div>
+        <div><label for="cupCapB">Side B captain</label><select id="cupCapB"></select></div>
+      </div>
+      <div class="row">
+        <div><label for="cupPtWin">Points for a win</label><input type="number" id="cupPtWin" step="0.5" min="0" value="1"></div>
+        <div><label for="cupPtHalf">Points each for a halve</label><input type="number" id="cupPtHalf" step="0.5" min="0" value="0.5"></div>
+        <div><label for="cupPtLoss">Points for a loss</label><input type="number" id="cupPtLoss" step="0.5" min="0" value="0"></div>
+      </div>
+      <h3 style="margin:14px 0 6px;font-size:0.95rem">Rounds and segments</h3>
+      <p class="hint" style="margin-top:0">Every segment is its own match for points. A round's name should match the round name in section 4 so the venue and tee time line up.</p>
+      <div id="cupRounds"></div>
+      <div class="btnbar">
+        <button type="button" class="secondary" id="cupAddPairsDay">+ Pairs day (Foursomes 1-9, Fourball 10-18)</button>
+        <button type="button" class="secondary" id="cupAddSinglesDay">+ Singles day (18 holes)</button>
+      </div>
+      <div id="cupSummary" style="margin-top:12px;padding:10px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);font-size:0.9rem"></div>
+      <div class="btnbar">
+        <button type="button" id="cupSaveBtn">Save Cup on the Worker</button>
+        <button type="button" class="secondary" id="cupLoadBtn">Load saved Cup</button>
+      </div>
+      <p class="status" id="cupStatus"></p>
+    </div>
+  </section>
   <!-- ── Tee policy ────────────────────────────────────────────────── -->
   <section class="card">
     <h2>5. Tee policy</h2>
@@ -497,6 +529,7 @@
     <pre id="rawConfig" style="margin-top:16px"></pre>
   </section>
 </main>
+<script src="bf_engine.js?v=1.23.0"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════════
 // Connection defaults — flat hardcoded constants, not derived from where
@@ -6052,6 +6085,133 @@ function toggleGamedayView() {
     statusEl.textContent = assembledConfig
       ? `"${eventName}" loaded — ${assembledConfig.rounds.length} round(s). Close Round below, Publish once it's saved.`
       : `Couldn't load "${eventName}" — check the status below Review, or open Full Admin.`;
+  });
+})();
+
+// ═══════════════════════════════════════════════════════
+// Team Cup setup (Dev-95). Reads BFEngine (bf_engine.js) for the plan, validation and totals; saves the whole Cup
+// document to the BFE Worker (/bfe/cup). The captains' selection tool fills sides[].players and rounds[].matches.
+// ═══════════════════════════════════════════════════════
+const cupState = {
+  sides: [{ key: 'A', name: '', captain: '', players: [] }, { key: 'B', name: '', captain: '', players: [] }],
+  points: { win: 1, half: 0.5, loss: 0 },
+  rounds: []
+};
+function cupEsc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function cupSlug(n) { return String(n || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'round'; }
+function cupRosterNames() { return readRosterInput().filter(p => !p.withdrawn).map(p => p.name); }
+function cupBase() { return (document.getElementById('workerUrl').value.trim() || DEFAULT_WORKER_URL).replace(/\/$/, ''); }
+function cupStatus(msg, kind) {
+  const el = document.getElementById('cupStatus');
+  el.textContent = msg; el.style.display = msg ? 'block' : 'none';
+  el.style.background = kind === 'err' ? '#fdecea' : '#e8f5e9'; el.style.color = kind === 'err' ? '#b71c1c' : '#1b5e20';
+}
+function cupAddRound(kind) {
+  const n = cupState.rounds.length + 1;
+  const segs = kind === 'pairs'
+    ? [{ key: 'foursomes', format: 'altshot', from: 1, to: 9 }, { key: 'fourball', format: 'bestball', from: 10, to: 18 }]
+    : [{ key: 'singles', format: 'singles', from: 1, to: 18 }];
+  const name = kind === 'pairs' ? 'Day ' + n + ' (pairs)' : 'Day ' + n + ' (singles)';
+  cupState.rounds.push({ key: cupSlug(name), name, segments: segs, matches: [] });
+  cupRender();
+}
+function cupSyncFromInputs() {
+  cupState.sides[0].name = document.getElementById('cupNameA').value.trim();
+  cupState.sides[1].name = document.getElementById('cupNameB').value.trim();
+  cupState.sides[0].captain = document.getElementById('cupCapA').value;
+  cupState.sides[1].captain = document.getElementById('cupCapB').value;
+  const num = (id, d) => { const v = document.getElementById(id).value; return v === '' || !isFinite(Number(v)) ? d : Number(v); };
+  cupState.points = { win: num('cupPtWin', 1), half: num('cupPtHalf', 0.5), loss: num('cupPtLoss', 0) };
+}
+function cupRender() {
+  const names = cupRosterNames();
+  ['A', 'B'].forEach((k, i) => {
+    const sel = document.getElementById('cupCap' + k);
+    const cur = cupState.sides[i].captain;
+    sel.innerHTML = '<option value="">— pick a captain —</option>' + names.map(n => '<option value="' + cupEsc(n) + '"' + (n === cur ? ' selected' : '') + '>' + cupEsc(n) + '</option>').join('');
+    document.getElementById('cupName' + k).value = cupState.sides[i].name;
+  });
+  document.getElementById('cupPtWin').value = cupState.points.win;
+  document.getElementById('cupPtHalf').value = cupState.points.half;
+  document.getElementById('cupPtLoss').value = cupState.points.loss;
+  const fmtOpts = f => Object.keys(BFEngine.CUP_FORMATS).map(k => '<option value="' + k + '"' + (k === f ? ' selected' : '') + '>' + BFEngine.CUP_FORMATS[k].label + '</option>').join('');
+  document.getElementById('cupRounds').innerHTML = cupState.rounds.map((r, ri) =>
+    '<div class="cup-round" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px">'
+    + '<div class="row"><div style="flex:2"><label>Round name</label><input type="text" list="roundNameOptions" class="cup-rname" data-ri="' + ri + '" value="' + cupEsc(r.name) + '"></div>'
+    + '<div style="align-self:flex-end"><button type="button" class="link cup-rdel" data-ri="' + ri + '">Remove round</button></div></div>'
+    + r.segments.map((sg, si) => '<div class="row" style="align-items:flex-end">'
+      + '<div><label>Segment</label><input type="text" class="cup-sg" data-f="key" data-ri="' + ri + '" data-si="' + si + '" value="' + cupEsc(sg.key) + '"></div>'
+      + '<div><label>Format</label><select class="cup-sg" data-f="format" data-ri="' + ri + '" data-si="' + si + '">' + fmtOpts(sg.format) + '</select></div>'
+      + '<div><label>From hole</label><input type="number" min="1" max="18" class="cup-sg" data-f="from" data-ri="' + ri + '" data-si="' + si + '" value="' + sg.from + '"></div>'
+      + '<div><label>To hole</label><input type="number" min="1" max="18" class="cup-sg" data-f="to" data-ri="' + ri + '" data-si="' + si + '" value="' + sg.to + '"></div>'
+      + '<div><button type="button" class="link cup-sdel" data-ri="' + ri + '" data-si="' + si + '">Remove</button></div></div>').join('')
+    + '<div class="btnbar"><button type="button" class="secondary cup-sadd" data-ri="' + ri + '">+ Segment</button></div>'
+    + '<div class="subtle">' + (r.matches || []).length + ' match(es) set by the captains</div></div>').join('')
+    || '<p class="subtle">No rounds yet. Add a pairs day and a singles day below.</p>';
+  cupSummaryRender();
+}
+function cupSummaryRender() {
+  cupSyncFromInputs();
+  const field = cupState.sides[0].players.length + cupState.sides[1].players.length || cupRosterNames().length;
+  const plan = BFEngine.cupPlanFor(field);
+  const v = BFEngine.cupValidate(cupState);
+  const built = cupState.rounds.reduce((a, r) => a + (r.matches || []).length, 0);
+  const pts = cupState.rounds.length ? BFEngine.cupTotalPoints(cupState) : 0;
+  const lines = [];
+  lines.push('<b>Field:</b> ' + field + ' players (' + plan.perSide + ' a side). A typical pairs day then singles day makes <b>' + plan.satMatches + '</b> pair matches (2 segments each) and <b>' + plan.sunMatches + '</b> singles matches: <b>' + plan.totalPoints + '</b> points, <b>' + plan.target + '</b> wins outright.');
+  lines.push('<b>Teams:</b> ' + cupState.sides.map(s => cupEsc(s.name || 'Side ' + s.key) + ' ' + s.players.length + ' picked').join(' · '));
+  lines.push('<b>Matches built:</b> ' + built + (pts ? ' (' + pts + ' points available, ' + (pts / 2 + 0.5) + ' wins)' : ''));
+  const errs = v.errors.concat(cupState.rounds.length && !cupState.sides[0].name ? ['Name side A'] : [], cupState.rounds.length && !cupState.sides[1].name ? ['Name side B'] : []);
+  if (errs.length) lines.push('<span style="color:#b71c1c"><b>Fix:</b> ' + errs.map(cupEsc).join('; ') + '</span>');
+  else lines.push('<span style="color:#1b5e20">Setup is consistent.</span>');
+  document.getElementById('cupSummary').innerHTML = lines.map(l => '<div style="margin:3px 0">' + l + '</div>').join('');
+}
+async function cupSave() {
+  cupSyncFromInputs();
+  const ev = document.getElementById('eventName').value.trim();
+  if (!ev) { cupStatus('Set the event name in section 1 first.', 'err'); return; }
+  const v = BFEngine.cupValidate(cupState);
+  if (!v.ok) { cupStatus('Fix the setup first: ' + v.errors.join('; '), 'err'); return; }
+  if (!cupState.sides[0].name || !cupState.sides[1].name) { cupStatus('Name both sides first.', 'err'); return; }
+  cupState.sides.forEach(s => { if (s.captain && !s.players.includes(s.captain)) s.players.unshift(s.captain); });
+  try {
+    const r = await fetch(cupBase() + '/bfe/cup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: ev, config: cupState, pin: hostPinValue() }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    cupStatus('Saved the Cup for "' + ev + '".', 'ok'); cupRender();
+  } catch (e) { cupStatus('Could not save: ' + e.message, 'err'); }
+}
+async function cupLoad() {
+  const ev = document.getElementById('eventName').value.trim();
+  try {
+    const r = await fetch(cupBase() + '/bfe/cup?event=' + encodeURIComponent(ev));
+    const j = await r.json();
+    if (r.status === 404) { cupStatus('No Cup saved for "' + ev + '" yet.', 'err'); return; }
+    if (!r.ok) throw new Error(j.error || r.status);
+    Object.assign(cupState, { sides: j.config.sides, points: j.config.points || cupState.points, rounds: j.config.rounds || [] });
+    document.getElementById('cupEnabled').checked = true; document.getElementById('cupBody').style.display = 'block';
+    cupRender(); cupStatus('Loaded the saved Cup.', 'ok');
+  } catch (e) { cupStatus('Could not load: ' + e.message, 'err'); }
+}
+(function initCupSection() {
+  const body = document.getElementById('cupBody');
+  document.getElementById('cupEnabled').addEventListener('change', e => { body.style.display = e.target.checked ? 'block' : 'none'; if (e.target.checked) cupRender(); });
+  document.getElementById('cupAddPairsDay').addEventListener('click', () => cupAddRound('pairs'));
+  document.getElementById('cupAddSinglesDay').addEventListener('click', () => cupAddRound('singles'));
+  document.getElementById('cupSaveBtn').addEventListener('click', cupSave);
+  document.getElementById('cupLoadBtn').addEventListener('click', cupLoad);
+  body.addEventListener('input', e => {
+    const t = e.target;
+    if (t.classList.contains('cup-rname')) { const r = cupState.rounds[+t.dataset.ri]; r.name = t.value; r.key = cupSlug(t.value); }
+    else if (t.classList.contains('cup-sg')) { const sg = cupState.rounds[+t.dataset.ri].segments[+t.dataset.si]; sg[t.dataset.f] = (t.dataset.f === 'from' || t.dataset.f === 'to') ? Number(t.value) : t.value; }
+    cupSummaryRender();
+  });
+  body.addEventListener('change', e => { if (e.target.id === 'cupCapA' || e.target.id === 'cupCapB') cupSummaryRender(); });
+  body.addEventListener('click', e => {
+    const t = e.target; const ri = +t.dataset.ri, si = +t.dataset.si;
+    if (t.classList.contains('cup-rdel')) { cupState.rounds.splice(ri, 1); cupRender(); }
+    else if (t.classList.contains('cup-sdel')) { cupState.rounds[ri].segments.splice(si, 1); cupRender(); }
+    else if (t.classList.contains('cup-sadd')) { cupState.rounds[ri].segments.push({ key: 'seg' + (cupState.rounds[ri].segments.length + 1), format: 'singles', from: 1, to: 18 }); cupRender(); }
   });
 })();
 </script>
