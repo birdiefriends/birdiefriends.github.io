@@ -1,2 +1,2 @@
-v4.31.5 · 2026-10-20
-Deployed: 2026-10-20 (Engine 1.23.0: the BF Cup scoring engine (Saturday foursomes and fourball nines, Sunday singles, early-close match play, Cup points and the 8.5 target, snake-draft order). Nothing in the app uses it yet. No Worker change; the Worker file only carries the new engine version in a comment.)
+v4.31.6 · 2026-10-20
+Deployed: 2026-10-20 (Engine 1.24.0: BF Cup team-draft logic (snake order, picks, undo, pasted player stats, team balance meter). New page bf-cup-draft.html for the captains. Nothing in the main portal changed besides the engine version. Worker file only carries the new engine version in a comment: deploy optional.)

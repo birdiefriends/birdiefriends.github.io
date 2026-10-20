@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BF Cup Draft</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap">
+<style>
+*{box-sizing:border-box}
+:root{--navy:#0d1f3d;--navy2:#152c52;--navy3:#1d3a68;--accent:#e8392a;--gold:#f2c14e;--white:#f5f0e8;--dim:rgba(245,240,232,.62);--faint:rgba(245,240,232,.12);--good:#6fbf7e;--warn:#e0a050;--bad:#ee6a5a}
+body{margin:0;background:var(--navy);color:var(--white);font-family:'DM Sans',sans-serif;line-height:1.35}
+.page{max-width:980px;margin:0 auto;padding:0 16px 90px}
+h1,h2{font-family:'Baloo 2',sans-serif;margin:0}
+.hero{text-align:center;padding:26px 0 14px;border-bottom:1px solid rgba(232,57,42,.25)}
+.eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#f27a68;font-weight:600}
+.hero h1{font-size:clamp(2.2rem,8vw,3.4rem);font-weight:800;line-height:1}
+.banner{margin:14px 0;padding:10px 14px;border-radius:10px;background:var(--navy2);border:1px solid var(--faint);font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.banner.live{border-color:var(--accent)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--accent);animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.card{background:var(--navy2);border:1px solid var(--faint);border-radius:12px;padding:14px;margin:12px 0}
+.meter{position:sticky;top:0;z-index:5;background:var(--navy2);border:1px solid var(--faint);border-radius:12px;padding:12px 14px;margin:12px 0;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.mhead,.mrow{display:grid;grid-template-columns:1fr 1.1fr 1fr;gap:8px;align-items:center;text-align:center}
+.mhead{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:1.05rem;margin-bottom:4px}
+.mrow{font-size:.95rem;padding:3px 0;border-top:1px solid var(--faint)}
+.mrow .lab{color:var(--dim);font-size:.78rem;text-transform:uppercase;letter-spacing:.06em}
+.mrow .win{color:var(--gold);font-weight:700}
+.verdict{margin-top:8px;text-align:center;font-weight:700;font-size:.92rem}
+.v-even{color:var(--good)}.v-close{color:var(--warn)}.v-tilted{color:var(--bad)}.v-unknown{color:var(--dim)}
+.teams{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.team h2{font-size:1.15rem;margin-bottom:6px}
+.slot{display:flex;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;background:var(--navy3);margin:4px 0;font-size:.92rem}
+.slot.cap{border:1px solid var(--gold)}
+.slot.new{animation:pop 1.6s ease-out}
+@keyframes pop{0%{background:var(--accent)}100%{background:var(--navy3)}}
+.slot .n{color:var(--dim);font-size:.75rem;margin-right:6px}
+.slot .st{color:var(--dim);font-size:.75rem;white-space:nowrap}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+select,input,textarea,button{font:inherit}
+select,input[type=text],input[type=password],textarea{background:var(--navy);color:var(--white);border:1px solid var(--faint);border-radius:8px;padding:8px}
+textarea{width:100%}
+button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-weight:700;cursor:pointer}
+button.sec{background:var(--navy3)}
+button:disabled{opacity:.4;cursor:default}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.pc{background:var(--navy3);border:1px solid var(--faint);border-radius:10px;padding:10px;text-align:left;color:var(--white);cursor:default}
+.host .pc{cursor:pointer}.host .pc:hover{border-color:var(--gold)}
+.pc b{display:block;font-size:1rem;margin-bottom:4px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:.75rem;background:var(--navy);border-radius:6px;padding:2px 7px;color:var(--dim)}
+.chip i{font-style:normal;color:var(--white);font-weight:700}
+.sheet{position:fixed;left:0;right:0;bottom:0;background:var(--navy2);border-top:2px solid var(--gold);padding:16px;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;z-index:9}
+.coin{font-size:3rem;display:inline-block}
+.coin.flip{animation:flip 1.4s ease-in-out}
+@keyframes flip{0%{transform:rotateY(0)}100%{transform:rotateY(1800deg)}}
+.err{color:var(--bad);font-weight:600}
+.hint{color:var(--dim);font-size:.85rem}
+@media(max-width:560px){.teams{gap:8px}.mhead{font-size:.9rem}}
+</style>
+</head>
+<body>
+<div class="page" id="app"><div class="hero"><div class="eyebrow">BirdieFriends</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
+<script src="bf_engine.js?v=1.24.0"></script>
+<script>
+(function () {
+  'use strict';
+  var WORKER = 'https://bf-experiences.birdiefriends01.workers.dev';
+  var qs = new URLSearchParams(location.search);
+  var EVENT = qs.get('event') || '2026 BF Cup';
+  var HOST = qs.get('host') === '1';
+  var cfg = null, pin = '', busy = false, pending = null, error = '', sortBy = 'rank', lastPickNo = 0, coinFlip = false, notice = '';
+  try { pin = sessionStorage.getItem('bf_cup_pin') || ''; } catch (e) {}
+  var E = window.BFEngine;
+  var app = document.getElementById('app');
+  function esc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function sideName(k) { var s = (cfg.sides || []).filter(function (x) { return x.key === k; })[0]; return s ? (s.name || 'Side ' + k) : k; }
+  function fmt(v, d) { return typeof v === 'number' ? (d == null ? String(Math.round(v * 10) / 10) : v.toFixed(d)) : '–'; }
+
+  function load() {
+    return fetch(WORKER + '/bfe/cup?event=' + encodeURIComponent(EVENT) + '&_=' + Date.now()).then(function (r) {
+      if (r.status === 404) { cfg = null; error = 'The Cup has not been set up in BFE-Admin yet.'; return; }
+      return r.json().then(function (j) { cfg = j.config; error = ''; });
+    }).catch(function (e) { error = 'Could not reach the server: ' + e.message; });
+  }
+  function save() {
+    busy = true;
+    return fetch(WORKER + '/bfe/cup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT, config: cfg, pin: pin }) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); error = ''; }); })
+      .catch(function (e) { error = 'Save failed: ' + e.message + (/Unauthorized/.test(e.message) ? ' (check the PIN)' : ''); })
+      .then(function () { busy = false; render(); });
+  }
+  function draft() { if (!cfg.draft) cfg.draft = { picks: [], stats: {} }; return cfg.draft; }
+
+  // ---------- meter ----------
+  function meterHtml(v) {
+    var d = cfg.draft || {}; var bal = E.cupBalance(v.teams, d.stats || {});
+    var A = cfg.sides[0].key, B = cfg.sides[1].key;
+    function row(label, f, dec, mk, suffix) {
+      var a = bal.sides[A][f], b = bal.sides[B][f];
+      var m = bal.metrics[mk || f];
+      var win = m && m.edge;
+      return '<div class="mrow"><div class="' + (win === A ? 'win' : '') + '">' + fmt(a, dec) + (suffix ? suffix(bal.sides[A]) : '') + '</div><div class="lab">' + label + '</div><div class="' + (win === B ? 'win' : '') + '">' + fmt(b, dec) + (suffix ? suffix(bal.sides[B]) : '') + '</div></div>';
+    }
+    var edges = {}; Object.keys(bal.metrics).forEach(function (f) { var m = bal.metrics[f]; if (m && m.level === 2 && m.edge) edges[m.edge] = (edges[m.edge] || 0) + 1; });
+    var fav = Object.keys(edges).sort(function (a, b) { return edges[b] - edges[a]; })[0];
+    var vtxt = { even: '🟢 Dead even', close: '🟡 Close', tilted: '⚠️ Tilted' + (fav ? ' toward ' + esc(sideName(fav)) : ''), unknown: 'Add player stats to see the balance' }[bal.verdict];
+    return '<div class="meter"><div class="mhead"><div>' + esc(sideName(A)) + '</div><div class="hint">Team balance</div><div>' + esc(sideName(B)) + '</div></div>'
+      + row('Avg HCP', 'hcp', 1) + row('Avg Series pts', 'avg', 1) + row('Avg rank', 'rank', 1)
+      + row('🐦 Birdies', 'birdieTotal', 0, 'birdies', function (s) { return ' <span class="hint">(' + fmt(s.birdies, 1) + ' avg)</span>'; })
+      + '<div class="verdict v-' + bal.verdict + '">' + vtxt + '</div></div>';
+  }
+  // ---------- cards ----------
+  function chipsFor(name) {
+    var s = ((cfg.draft || {}).stats || {})[name] || {};
+    return '<div class="chips"><span class="chip">HCP <i>' + fmt(s.hcp) + '</i></span><span class="chip">Rank <i>' + (s.rank != null ? '#' + s.rank : '–') + '</i></span><span class="chip">Avg <i>' + fmt(s.avg) + '</i></span><span class="chip">🐦 <i>' + fmt(s.birdies, 0) + '</i></span></div>';
+  }
+  function stLine(name) { var s = ((cfg.draft || {}).stats || {})[name] || {}; return 'HCP ' + fmt(s.hcp) + ' · #' + (s.rank != null ? s.rank : '–') + ' · ' + fmt(s.avg) + ' · 🐦' + fmt(s.birdies, 0); }
+  function sorted(list) {
+    var st = (cfg.draft || {}).stats || {};
+    var key = { rank: function (n) { return (st[n] || {}).rank; }, hcp: function (n) { return (st[n] || {}).hcp; }, avg: function (n) { return -((st[n] || {}).avg == null ? NaN : (st[n] || {}).avg); }, birdies: function (n) { return -((st[n] || {}).birdies == null ? NaN : (st[n] || {}).birdies); }, name: function (n) { return n.toLowerCase(); } }[sortBy];
+    return list.slice().sort(function (a, b) {
+      var x = key(a), y = key(b);
+      var xn = x == null || (typeof x === 'number' && isNaN(x)), yn = y == null || (typeof y === 'number' && isNaN(y));
+      if (xn && yn) return a.localeCompare(b); if (xn) return 1; if (yn) return -1;
+      return x < y ? -1 : x > y ? 1 : 0;
+    });
+  }
+  function teamsHtml(v) {
+    return '<div class="teams">' + cfg.sides.map(function (sd) {
+      var picks = v.picks.filter(function (p) { return p.side === sd.key; });
+      return '<div class="card team"><h2>' + esc(sd.name || 'Side ' + sd.key) + '</h2>'
+        + (sd.captain ? '<div class="slot cap"><span>👑 ' + esc(sd.captain) + '</span><span class="st">' + esc(stLine(sd.captain)) + '</span></div>' : '')
+        + picks.map(function (p) { return '<div class="slot' + (p.n === lastPickNo && p.n === v.picks.length ? ' new' : '') + '"><span><span class="n">#' + p.n + '</span>' + esc(p.player) + '</span><span class="st">' + esc(stLine(p.player)) + '</span></div>'; }).join('')
+        + '</div>';
+    }).join('') + '</div>';
+  }
+  function poolHtml(v) {
+    var opts = [['rank', 'Series rank'], ['hcp', 'Handicap'], ['avg', 'Avg points'], ['birdies', 'Birdies'], ['name', 'A–Z']];
+    return '<div class="card"><div class="toolbar"><b>Available players (' + v.remaining.length + ')</b><span style="flex:1"></span><label class="hint">Sort <select id="sortSel">'
+      + opts.map(function (o) { return '<option value="' + o[0] + '"' + (sortBy === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label></div>'
+      + '<div class="grid">' + sorted(v.remaining).map(function (n) { return '<button class="pc" data-pick="' + esc(n) + '"' + (HOST && v.onClock ? '' : ' disabled style="opacity:1"') + '><b>' + esc(n) + '</b>' + chipsFor(n) + '</button>'; }).join('') + '</div></div>';
+  }
+
+  // ---------- host setup ----------
+  function setupHtml() {
+    var d = cfg.draft || {};
+    var poolText = (d.pool || cfg.pool || []).join('\n');
+    var caps = cfg.sides.map(function (s) { return s.captain; });
+    var missing = caps.some(function (c) { return !c; });
+    var first = d.first;
+    return '<div class="card"><h2>1 · Players</h2><p class="hint">Everyone in the draft, one name per line. The captains are placed automatically and don\'t need to be listed.</p>'
+      + '<textarea id="poolTxt" rows="8">' + esc(poolText) + '</textarea><div class="toolbar"><button class="sec" id="poolSave">Save the list</button><button class="sec" id="fillHcp">Fill handicaps from Membership</button></div></div>'
+      + '<div class="card"><h2>2 · Player stats</h2><p class="hint">Paste a table from the sheet (a header row, then one row per player): Player, Ranking, Avg points, Birdie count, HCP. Missing values just show –.</p>'
+      + '<textarea id="statsTxt" rows="5" placeholder="Player&#9;Avg Achievement&#9;Birdie Count&#9;HCP&#9;Player Ranking"></textarea><div class="toolbar"><button class="sec" id="statsApply">Apply stats</button><span class="hint">' + esc(notice) + '</span></div></div>'
+      + '<div class="card"><h2>3 · Coin toss</h2><p class="hint">The winner picks first in the snake draft.</p>'
+      + '<div class="toolbar"><span class="coin' + (coinFlip ? ' flip' : '') + '">🪙</span><button id="toss">Toss the coin</button>'
+      + cfg.sides.map(function (s) { return '<button class="sec" data-first="' + s.key + '">' + esc(s.name || 'Side ' + s.key) + ' picks first</button>'; }).join('') + '</div>'
+      + '<div><b>' + (first ? esc(sideName(first)) + ' picks first' : 'Not decided yet') + '</b></div></div>'
+      + (missing ? '<p class="err">Both sides need a captain. Set them in BFE-Admin, section 4b.</p>' : '')
+      + '<div class="toolbar"><button id="startDraft"' + (missing || !first || !(d.pool || []).length ? ' disabled' : '') + '>Start the draft</button></div>';
+  }
+
+  function render() {
+    if (!cfg) { app.innerHTML = hero() + '<p class="' + (error ? 'err' : 'hint') + '">' + esc(error || 'Loading…') + '</p>'; return; }
+    var d = cfg.draft || {};
+    var started = !!d.started, v = E.cupDraftView(cfg);
+    if (started) lastPickNo = Math.max(lastPickNo, 0);
+    var html = hero();
+    if (error) html += '<p class="err">' + esc(error) + '</p>';
+    if (HOST && !pin) {
+      html += '<div class="card"><b>Commissioner PIN</b><div class="toolbar"><input type="password" id="pinIn" placeholder="PIN"><button id="pinGo">Unlock</button></div></div>';
+    }
+    if (!started) {
+      if (HOST && pin) html += setupHtml();
+      else html += '<div class="banner">The captains will draft their teams soon. Check back here.</div>';
+      app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html; wire(); return;
+    }
+    var clock = v.onClock;
+    html += '<div class="banner live"><span class="dot"></span>' + (v.done ? (d.locked ? '🏁 Teams are set' : '✅ Every player is picked') : 'LIVE · Pick ' + v.pickNo + ' of ' + v.total + ' · <span style="color:var(--gold)">' + esc(sideName(clock)) + '</span> on the clock') + '</div>';
+    html += meterHtml(v) + teamsHtml(v) + (v.done ? '' : poolHtml(v));
+    if (HOST && pin) {
+      html += '<div class="toolbar">' + '<button class="sec" id="undo"' + (v.picks.length ? '' : ' disabled') + '>↩︎ Undo last pick</button>'
+        + (v.done && !d.locked ? '<button id="lock">Lock the teams</button>' : '') + '<button class="sec" id="resetDraft">Start over</button></div>';
+    }
+    if (pending) html += '<div class="sheet"><span><b>' + esc(pending) + '</b> to <b>' + esc(sideName(clock)) + '</b>?</span><button id="confirmPick">Pick</button><button class="sec" id="cancelPick">Cancel</button></div>';
+    app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html; wire();
+  }
+  function hero() { return '<div class="hero"><div class="eyebrow">BirdieFriends</div><h1>BF Cup Draft</h1></div>'; }
+
+  function wire() {
+    function $(id) { return document.getElementById(id); }
+    function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
+    var sel = $('sortSel'); if (sel) sel.addEventListener('change', function () { sortBy = sel.value; render(); });
+    on('pinGo', function () { pin = $('pinIn').value.trim(); try { sessionStorage.setItem('bf_cup_pin', pin); } catch (e) {} render(); });
+    on('poolSave', function () {
+      var names = $('poolTxt').value.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+      draft().pool = names; cfg.pool = names; save();
+    });
+    on('fillHcp', function () {
+      fetch(WORKER + '/bfe/players').then(function (r) { return r.json(); }).then(function (j) {
+        var by = {}; (j.players || []).forEach(function (p) { by[String(p.name || '').trim().toLowerCase()] = p.current_hcp; });
+        var d = draft(); d.stats = d.stats || {}; var n = 0;
+        (d.pool || []).concat(cfg.sides.map(function (s) { return s.captain; }).filter(Boolean)).forEach(function (nm) {
+          var h = by[nm.toLowerCase()]; if (typeof h === 'number') { d.stats[nm] = Object.assign({}, d.stats[nm], { hcp: h }); n++; }
+        });
+        notice = 'Handicaps filled for ' + n + ' player(s).'; save();
+      }).catch(function (e) { error = 'Could not read Membership: ' + e.message; render(); });
+    });
+    on('statsApply', function () {
+      var d = draft(); var names = (d.pool || []).concat(cfg.sides.map(function (s) { return s.captain; }).filter(Boolean));
+      var r = E.cupParseStats($('statsTxt').value, names);
+      d.stats = d.stats || {}; Object.keys(r.stats).forEach(function (k) {
+        var cur = d.stats[k] || {}, nw = r.stats[k];
+        d.stats[k] = { hcp: nw.hcp != null ? nw.hcp : cur.hcp, rank: nw.rank != null ? nw.rank : cur.rank, avg: nw.avg != null ? nw.avg : cur.avg, birdies: nw.birdies != null ? nw.birdies : cur.birdies };
+      });
+      notice = r.matched + ' matched' + (r.unmatched.length ? '; not in the player list: ' + r.unmatched.join(', ') : '') + '.'; save();
+    });
+    on('toss', function () {
+      var d = draft(); coinFlip = true; render();
+      setTimeout(function () { d.first = cfg.sides[Math.random() < 0.5 ? 0 : 1].key; coinFlip = false; save(); }, 1400);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-first]'), function (b) { b.addEventListener('click', function () { draft().first = b.getAttribute('data-first'); save(); }); });
+    on('startDraft', function () { var d = draft(); d.started = true; d.picks = d.picks || []; save(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pick]'), function (b) { b.addEventListener('click', function () { if (HOST && pin) { pending = b.getAttribute('data-pick'); render(); } }); });
+    on('cancelPick', function () { pending = null; render(); });
+    on('confirmPick', function () {
+      var r = E.cupDraftPick(cfg, pending); pending = null;
+      if (!r.ok) { error = r.reason; render(); return; }
+      cfg.draft = r.draft; lastPickNo = r.draft.picks.length; save();
+    });
+    on('undo', function () { cfg.draft = E.cupDraftUndo(cfg); lastPickNo = cfg.draft.picks.length; save(); });
+    on('lock', function () {
+      var v = E.cupDraftView(cfg);
+      cfg.sides.forEach(function (s) { s.players = v.teams[s.key].slice(); });
+      cfg.draft.locked = true; save();
+    });
+    on('resetDraft', function () {
+      if (!window.confirm('Clear every pick and start the draft over?')) return;
+      cfg.draft.picks = []; cfg.draft.started = false; cfg.draft.locked = false; cfg.sides.forEach(function (s) { s.players = []; }); save();
+    });
+  }
+
+  load().then(function () { render(); });
+  if (!HOST) setInterval(function () {
+    if (busy) return; var before = JSON.stringify(cfg);
+    load().then(function () { if (JSON.stringify(cfg) === before) return; var n = cfg && cfg.draft && cfg.draft.picks ? cfg.draft.picks.length : 0; lastPickNo = n; render(); });
+  }, 4000);
+})();
+</script>
+</body>
+</html>

@@ -123,5 +123,43 @@ const part2 = JSON.parse(JSON.stringify(cfg)); part2.rounds[1].matches = part2.r
 const pv = E.cupValidate(part2);
 ok(pv.ok && pv.unassigned.sun.A.length === 5 && pv.unassigned.sat.A.length === 0, 'a half-built lineup is valid but reports who is unassigned per round');
 
+// ---------- team draft ----------
+const pool = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
+const dcfg = { sides: [{ key: 'A', name: 'Jake', captain: 'CapA' }, { key: 'B', name: 'Nate', captain: 'CapB' }], draft: { first: 'B', pool: pool.concat(['CapA', 'CapB']), picks: [] } };
+let dv = E.cupDraftView(dcfg);
+ok(dv.total === 6 && dv.onClock === 'B' && dv.pickNo === 1 && dv.remaining.length === 6, 'captains are not in the pool; the coin-toss winner picks first');
+ok(JSON.stringify(dv.order) === JSON.stringify(['B', 'A', 'A', 'B', 'B', 'A']), 'snake order 1-2-2-1 from the toss winner');
+let pk = E.cupDraftPick(dcfg, 'p3');
+ok(pk.ok && pk.draft.picks[0].side === 'B' && pk.draft.picks[0].player === 'P3', 'a pick goes to the side on the clock, name case-insensitive');
+const c2 = Object.assign({}, dcfg, { draft: pk.draft });
+dv = E.cupDraftView(c2);
+ok(dv.onClock === 'A' && dv.pickNo === 2 && dv.teams.B.join() === 'CapB,P3' && !dv.remaining.includes('P3'), 'next side up, team shows captain + pick');
+ok(!E.cupDraftPick(c2, 'P3').ok && !E.cupDraftPick(c2, 'Nobody').ok, 'cannot pick a taken or unknown player');
+ok(E.cupDraftUndo(c2).picks.length === 0, 'undo removes the last pick');
+let cur = c2; ['P1', 'P2', 'P4', 'P5', 'P6'].forEach(n => { cur = Object.assign({}, cur, { draft: E.cupDraftPick(cur, n).draft }); });
+dv = E.cupDraftView(cur);
+ok(dv.done && dv.onClock === null && dv.teams.A.length === 4 && dv.teams.B.length === 4, 'draft ends with equal teams');
+ok(!E.cupDraftPick(cur, 'P1').ok, 'nothing to pick once done');
+
+// ---------- pasted stats ----------
+const pasted = 'Player\tAVG Achievement\tSum of Birdie Count\tHCP\tPlayer Ranking\nDave Sherwin\t33.0\t14.0\t3.3\t1\nbrian hager\t28.0\t8.0\t6.5\t4\nSomeone Else\t20\t1\t9\t12';
+const ps = E.cupParseStats(pasted, ['Dave Sherwin', 'Brian Hager']);
+ok(ps.matched === 2 && ps.unmatched.join() === 'Someone Else', 'matches names case-insensitively, reports the rest');
+ok(ps.stats['Dave Sherwin'].avg === 33 && ps.stats['Dave Sherwin'].birdies === 14 && ps.stats['Dave Sherwin'].hcp === 3.3 && ps.stats['Brian Hager'].rank === 4, 'reads the 2025 sheet columns');
+ok(E.cupParseStats('Player,HCP\nA,5\nB,"7.5"', ['A', 'B']).stats.B.hcp === 7.5, 'comma separated works too');
+ok(E.cupParseStats('', []).matched === 0, 'empty paste is fine');
+
+// ---------- balance meter (last year\'s numbers: 10 Thieves 10.97 / Birdie Boyz 11.02, birdies 42 / 47) ----------
+const stt = {}; const tA = [], tB = [];
+[[3.3, 33, 14], [6.5, 28, 8], [10, 23.3, 9], [9, 26.3, 4], [8.6, 26, 1], [11.1, 20.6, 3], [14.3, 21, 2], [11, 20, 0], [16, 15, 0], [19.9, 14, 1]].forEach((r, i) => { stt['a' + i] = { hcp: r[0], avg: r[1], birdies: r[2], rank: i + 1 }; tA.push('a' + i); });
+[[3.3, 29.4, 14], [5.1, 30.6, 11], [11, 26, 6], [12.2, 23.6, 8], [8.2, 21.7, 2], [15, 25, 3], [10.3, 19.3, 3], [12, 20, 0], [15, 20, 0], [18.1, 10, 0]].forEach((r, i) => { stt['b' + i] = { hcp: r[0], avg: r[1], birdies: r[2], rank: i + 1 }; tB.push('b' + i); });
+let bal = E.cupBalance({ A: tA, B: tB }, stt);
+ok(Math.abs(bal.sides.A.hcp - 10.97) < 0.01 && bal.sides.A.birdieTotal === 42 && bal.sides.B.birdieTotal === 47, 'reproduces last year\'s sheet: 10.97 handicap, 42 vs 47 birdies');
+ok(bal.verdict === 'even' || bal.verdict === 'close', 'a carefully balanced Cup reads even/close (got ' + bal.verdict + ')');
+const stacked = E.cupBalance({ A: ['a0', 'a1', 'a2'], B: ['a7', 'a8', 'a9'] }, stt);
+ok(stacked.verdict === 'tilted' && stacked.metrics.hcp.edge === 'A' && stacked.metrics.avg.edge === 'A', 'a stacked team is flagged tilted with the edge named');
+ok(E.cupBalance({ A: ['x'], B: ['y'] }, {}).verdict === 'unknown', 'no stats yet: unknown, no crash');
+ok(E.cupBalance({ A: ['a0'], B: ['a1'] }, { a0: { hcp: 5 }, a1: { hcp: 5.5 } }).metrics.avg === null, 'a metric with no data is skipped');
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -6,10 +6,12 @@ const engine = fs.readFileSync(HERE('../bf_engine.js'), 'utf8');
 let html = fs.readFileSync(HERE('../../docs/BFE-Admin.html'), 'utf8');
 ok(html.includes('<script src="bf_engine.js?v='), 'page loads the shared engine');
 html = html.replace(/<script src="bf_engine.js[^>]*><\/script>/, '<script>' + engine.replace(/<\/script>/g, '<\\/script>') + '</script>');
-const posts = [];
+const posts = []; let stored = null;
 const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true, url: 'https://x.test/BFE-Admin.html',
   beforeParse(w) {
-    w.fetch = async (u, o) => { if (o && o.method === 'POST') posts.push({ u, body: JSON.parse(o.body) }); return { ok: true, status: 200, json: async () => ({ ok: true }) }; };
+    w.fetch = async (u, o) => { if (o && o.method === 'POST') { posts.push({ u, body: JSON.parse(o.body) }); stored = JSON.parse(o.body).config; return { ok: true, status: 200, json: async () => ({ ok: true }) }; }
+      if (/\/bfe\/cup\?/.test(u)) return stored ? { ok: true, status: 200, json: async () => ({ config: stored }) } : { ok: false, status: 404, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => ({ ok: true }) }; };
     w.alert = () => {}; w.confirm = () => true;
   } });
 const w = dom.window, d = w.document;
@@ -38,4 +40,9 @@ d.getElementById('cupSaveBtn').click(); await new Promise(r => setTimeout(r, 50)
 ok(posts.length === 1 && /\/bfe\/cup$/.test(posts[0].u) && posts[0].body.event_name === '2026 BF Cup' && posts[0].body.pin, 'saves to /bfe/cup with the PIN');
 const cfg = posts[0].body.config;
 ok(cfg.sides[0].name === 'Team Jake' && cfg.rounds.length === 2 && cfg.rounds[0].segments.length === 2 && cfg.points.half === 0.5, 'document has sides, rounds, segments, points');
+// a second save from this page must not wipe what the draft page stored (draft + teams)
+stored.draft = { started: true, picks: [{ n: 1, side: 'A', player: 'X' }] }; stored.sides[0].players = ['Cap', 'X'];
+d.getElementById('cupSaveBtn').click(); await new Promise(r => setTimeout(r, 80));
+const last = posts[posts.length - 1].body.config;
+ok(last.draft && last.draft.picks.length === 1 && last.sides[0].players.join() === 'Cap,X', 'saving from BFE-Admin keeps the draft and the picked teams');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

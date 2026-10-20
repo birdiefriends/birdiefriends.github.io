@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.23.0';
+  const ENGINE_VERSION = '1.24.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2155,6 +2155,83 @@
     }
     return out;
   }
+
+  // ---- BF Cup team draft (Dev-95) ------------------------------------------------------------------------------
+  // draft = { first:'A', pool:[names], stats:{name:{hcp,rank,avg,birdies}}, picks:[{n,side,player}] }. The captains are
+  // not in the pool; they are on their own team from the start. Snake order (1-2-2-1…) starting with `first`.
+  function cupDraftView(cfg) {
+    const d = (cfg && cfg.draft) || {};
+    const sides = (cfg && cfg.sides) || [];
+    const keys = sides.map(sd => sd.key);
+    const caps = new Set(sides.map(sd => norm(sd.captain)).filter(Boolean));
+    const pool = (d.pool || []).filter(n => !caps.has(norm(n)));
+    const picks = d.picks || [];
+    const taken = new Set(picks.map(pk => norm(pk.player)));
+    const first = keys.includes(d.first) ? d.first : keys[0];
+    const other = keys.find(k => k !== first);
+    const order = cupSnakeOrder(pool.length, first, other);
+    const teams = {};
+    sides.forEach(sd => { teams[sd.key] = (sd.captain ? [sd.captain] : []).concat(picks.filter(pk => pk.side === sd.key).map(pk => pk.player)); });
+    const remaining = pool.filter(n => !taken.has(norm(n)));
+    const done = pool.length > 0 && remaining.length === 0;
+    return { first, order, pickNo: picks.length + 1, total: pool.length, onClock: done || !pool.length ? null : order[picks.length], teams, remaining, picks, done };
+  }
+  // Pure: the draft after the side on the clock takes `player` (null + reason when not allowed).
+  function cupDraftPick(cfg, player) {
+    const v = cupDraftView(cfg);
+    if (!v.onClock) return { ok: false, reason: 'The draft is not open' };
+    const hit = v.remaining.find(n => norm(n) === norm(player));
+    if (!hit) return { ok: false, reason: player + ' is not available' };
+    const draft = Object.assign({}, cfg.draft, { picks: v.picks.concat([{ n: v.pickNo, side: v.onClock, player: hit }]) });
+    return { ok: true, draft };
+  }
+  function cupDraftUndo(cfg) {
+    const picks = ((cfg.draft || {}).picks || []).slice(0, -1);
+    return Object.assign({}, cfg.draft, { picks });
+  }
+  // Pasted stats table (tab or comma separated, header row). Columns found by name:
+  // Player/Name, Rank/Ranking, Avg(Points/Achievement), Birdie(s), HCP. Returns { stats, unmatched, matched } against `pool`.
+  function cupParseStats(text, pool) {
+    const rows = String(text || '').split(/\r?\n/).map(r => r.split(/\t|,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim())).filter(r => r.some(c => c));
+    if (rows.length < 2) return { stats: {}, matched: 0, unmatched: [] };
+    const head = rows[0].map(h => h.toLowerCase());
+    const col = re => head.findIndex(h => re.test(h));
+    const iName = col(/player$|^player|name/), iRank = col(/rank/), iAvg = col(/avg|average|achiev|points/), iBird = col(/birdie/), iHcp = col(/hcp|handicap/);
+    const num = v => { const n = parseFloat(String(v).replace(/[^0-9.+-]/g, '')); return Number.isFinite(n) ? n : null; };
+    const stats = {}; const names = new Map((pool || []).map(n => [norm(n), n]));
+    const unmatched = [];
+    rows.slice(1).forEach(r => {
+      const raw = r[iName >= 0 ? iName : 0]; if (!raw) return;
+      const key = norm(raw);
+      const canon = names.get(key);
+      if (!canon && pool && pool.length) { unmatched.push(raw); return; }
+      stats[canon || raw] = { hcp: iHcp >= 0 ? num(r[iHcp]) : null, rank: iRank >= 0 ? num(r[iRank]) : null, avg: iAvg >= 0 ? num(r[iAvg]) : null, birdies: iBird >= 0 ? num(r[iBird]) : null };
+    });
+    return { stats, matched: Object.keys(stats).length, unmatched };
+  }
+  // The balance meter. Per side: average of each stat over the players that have it. Gap per metric and a verdict.
+  // Lower handicap / better rank is better; higher avg points / more birdies is better.
+  const CUP_BALANCE_LIMITS = { hcp: [0.75, 1.75], avg: [2, 4], birdies: [0.6, 1.2], rank: [1.5, 3] };   // [even up to, close up to]
+  function cupBalance(teams, stats) {
+    const keys = Object.keys(teams);
+    const avgOf = (k, f) => { const v = (teams[k] || []).map(n => (stats && stats[n] ? stats[n][f] : null)).filter(x => typeof x === 'number'); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    const sides = {};
+    keys.forEach(k => { sides[k] = { players: (teams[k] || []).length, hcp: avgOf(k, 'hcp'), rank: avgOf(k, 'rank'), avg: avgOf(k, 'avg'), birdies: avgOf(k, 'birdies'),
+      birdieTotal: (teams[k] || []).reduce((a, n) => a + ((stats && stats[n] && typeof stats[n].birdies === 'number') ? stats[n].birdies : 0), 0) }; });
+    const metrics = {}; let worst = 0;
+    ['hcp', 'avg', 'birdies', 'rank'].forEach(f => {
+      const a = sides[keys[0]] && sides[keys[0]][f], b = sides[keys[1]] && sides[keys[1]][f];
+      if (typeof a !== 'number' || typeof b !== 'number') { metrics[f] = null; return; }
+      const gap = Math.abs(a - b), lim = CUP_BALANCE_LIMITS[f];
+      const level = gap <= lim[0] ? 0 : gap <= lim[1] ? 1 : 2;
+      const lowerBetter = f === 'hcp' || f === 'rank';
+      const edge = gap === 0 ? null : (lowerBetter ? (a < b ? keys[0] : keys[1]) : (a > b ? keys[0] : keys[1]));
+      metrics[f] = { gap: Math.round(gap * 100) / 100, level, edge };
+      worst = Math.max(worst, level);
+    });
+    const have = Object.values(metrics).filter(Boolean).length;
+    return { sides, metrics, verdict: have === 0 ? 'unknown' : ['even', 'close', 'tilted'][worst] };
+  }
   function cupTotalPoints(cfg) {
     const rule = cupPointsRule(cfg);
     return (cfg.rounds || []).reduce((t, r) => t + (r.matches || []).length * (r.segments || []).length, 0) * Math.max(rule.win + rule.loss, 2 * rule.half);
@@ -2210,7 +2287,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate,
+    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupDraftPick, cupDraftUndo, cupParseStats, cupBalance, CUP_BALANCE_LIMITS,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });

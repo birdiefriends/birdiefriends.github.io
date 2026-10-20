@@ -529,7 +529,7 @@
     <pre id="rawConfig" style="margin-top:16px"></pre>
   </section>
 </main>
-<script src="bf_engine.js?v=1.23.0"></script>
+<script src="bf_engine.js?v=1.24.0"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════════
 // Connection defaults — flat hardcoded constants, not derived from where
@@ -6174,7 +6174,16 @@ async function cupSave() {
   if (!v.ok) { cupStatus('Fix the setup first: ' + v.errors.join('; '), 'err'); return; }
   if (!cupState.sides[0].name || !cupState.sides[1].name) { cupStatus('Name both sides first.', 'err'); return; }
   cupState.sides.forEach(s => { if (s.captain && !s.players.includes(s.captain)) s.players.unshift(s.captain); });
+  cupState.pool = cupRosterNames();
   try {
+    // never wipe what the captains' draft page already saved (draft, teams, matches): keep it unless this page has its own
+    const cur = await fetch(cupBase() + '/bfe/cup?event=' + encodeURIComponent(ev));
+    if (cur.ok) {
+      const old = (await cur.json()).config || {};
+      if (!cupState.draft && old.draft) cupState.draft = old.draft;
+      cupState.sides.forEach((s, i) => { const o = (old.sides || [])[i]; if (o && (!s.players || !s.players.length) && o.players) s.players = o.players; });
+      cupState.rounds.forEach(r => { const o = (old.rounds || []).find(x => x.key === r.key); if (o && (!r.matches || !r.matches.length) && o.matches) r.matches = o.matches; });
+    }
     const r = await fetch(cupBase() + '/bfe/cup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: ev, config: cupState, pin: hostPinValue() }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
@@ -6188,7 +6197,7 @@ async function cupLoad() {
     const j = await r.json();
     if (r.status === 404) { cupStatus('No Cup saved for "' + ev + '" yet.', 'err'); return; }
     if (!r.ok) throw new Error(j.error || r.status);
-    Object.assign(cupState, { sides: j.config.sides, points: j.config.points || cupState.points, rounds: j.config.rounds || [] });
+    Object.assign(cupState, { sides: j.config.sides, points: j.config.points || cupState.points, rounds: j.config.rounds || [], draft: j.config.draft, pool: j.config.pool });
     document.getElementById('cupEnabled').checked = true; document.getElementById('cupBody').style.display = 'block';
     cupRender(); cupStatus('Loaded the saved Cup.', 'ok');
   } catch (e) { cupStatus('Could not load: ' + e.message, 'err'); }
