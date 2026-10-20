@@ -2002,7 +2002,7 @@ async function loadVenues() {
     venueList = data.venues || [];
     statusEl.textContent = `${venueList.length} venue(s) loaded.`;
     renderAllRoundVenueSelects();
-    [...roundsBody.querySelectorAll('tr')].forEach(updateRoundRowVenue);
+    [...roundsBody.querySelectorAll('tr.roundRow')].forEach(updateRoundRowVenue);
   } catch (e) {
     statusEl.textContent = 'Load failed: ' + e.message;
   }
@@ -2076,15 +2076,15 @@ function updateRoundRowVenue(tr) {
   }
 }
 function cupRowSegs(tr) {
-  return [...tr.querySelectorAll('.r-segs .seg')].map(e => ({ format: e.querySelector('.sg-fmt').value, from: parseInt(e.querySelector('.sg-from').value, 10) || 1, to: parseInt(e.querySelector('.sg-to').value, 10) || 18 }));
+  return [...tr._detail.querySelectorAll('.r-segs .seg')].map(e => ({ format: e.querySelector('.sg-fmt').value, from: parseInt(e.querySelector('.sg-from').value, 10) || 1, to: parseInt(e.querySelector('.sg-to').value, 10) || 18 }));
 }
 function cupSetSegs(tr, segs) {
-  const box = tr.querySelector('.r-segs');
+  const box = tr._detail.querySelector('.r-segs');
   box.innerHTML = '';
   (segs || []).forEach(sg => {
-    const e = document.createElement('div'); e.className = 'seg'; e.style.cssText = 'display:flex;gap:4px;align-items:center;margin-bottom:3px;flex-wrap:wrap';
-    e.innerHTML = '<select class="sg-fmt" style="width:auto">' + Object.keys(BFEngine.CUP_FORMATS).map(k => '<option value="' + k + '"' + (k === sg.format ? ' selected' : '') + '>' + BFEngine.CUP_FORMATS[k].label + '</option>').join('') + '</select>'
-      + '<span class="subtle">holes</span><input type="number" class="sg-from" min="1" max="18" value="' + sg.from + '" style="width:54px"><span class="subtle">to</span><input type="number" class="sg-to" min="1" max="18" value="' + sg.to + '" style="width:54px">'
+    const e = document.createElement('div'); e.className = 'seg'; e.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap';
+    e.innerHTML = '<select class="sg-fmt" style="width:auto;min-width:130px">' + Object.keys(BFEngine.CUP_FORMATS).map(k => '<option value="' + k + '"' + (k === sg.format ? ' selected' : '') + '>' + BFEngine.CUP_FORMATS[k].label + '</option>').join('') + '</select>'
+      + '<span class="subtle">Holes</span><input type="number" class="sg-from" min="1" max="18" value="' + sg.from + '" style="width:64px"><span class="subtle">to</span><input type="number" class="sg-to" min="1" max="18" value="' + sg.to + '" style="width:64px">'
       + '<button type="button" class="danger sg-x" style="padding:1px 7px" title="Remove this segment">×</button>';
     e.querySelector('.sg-x').addEventListener('click', () => { e.remove(); });
     box.appendChild(e);
@@ -2092,9 +2092,11 @@ function cupSetSegs(tr, segs) {
 }
 function cupRowToggle(tr) {
   const isCup = tr.querySelector('.r-engine').value === 'cup_match';
-  tr.querySelector('.r-cup').style.display = isCup ? 'block' : 'none';
-  const wb = tr.querySelector('.r-wbpoints'), ov = tr.querySelector('.r-overall');
-  if (isCup) { wb.value = ''; wb.disabled = true; ov.checked = false; ov.disabled = true; } else { wb.disabled = false; ov.disabled = false; }
+  tr._detail.style.display = isCup ? '' : 'none';
+  tr.querySelector('.r-cupnote').style.display = isCup ? 'block' : 'none';
+  const wb = tr.querySelector('.r-wbpoints'), ov = tr.querySelector('.r-overall'), hs = tr.querySelector('.r-holes');
+  if (isCup) { wb.value = ''; wb.disabled = true; ov.checked = false; ov.disabled = true; hs.value = '18'; hs.disabled = true; hs.title = 'Cup rounds set holes per segment'; }
+  else { wb.disabled = false; ov.disabled = false; hs.disabled = false; }
 }
 function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoints = '', rollsIntoOverall = true, teeTime = '', holes = null, cupP = null) {
   const id = ++roundIdSeq;
@@ -2107,11 +2109,21 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
     <td><input type="text" class="r-name" value="${name}" placeholder="e.g. Rd1" list="roundNameOptions">
       <div class="r-teetime-hint subtle" style="font-size:0.72rem;margin-top:2px"></div></td>
     <td><select class="r-engine">${ENGINE_OPTIONS.map(o => `<option value="${o.id}" ${o.id===engine?'selected':''}>${o.label}</option>`).join('')}</select>
-      <div class="r-cup" style="display:none;margin-top:4px">
-        <div class="subtle" style="font-size:0.72rem;margin-bottom:3px">Segments: each is its own match for points. Pairs / matchups carry through the whole round.</div>
-        <div class="r-segs"></div>
-        <button type="button" class="secondary r-addseg" style="padding:3px 8px;font-size:0.78rem">+ segment</button>
-        <select class="r-layout" title="Replace the segments with a common layout" style="width:auto;font-size:0.78rem">
+      <div class="r-cupnote subtle" style="display:none;font-size:0.75rem;margin-top:3px">Segments below ↓</div></td>
+    <td><select class="r-venue">${venueOptionsHtml(venueId)}</select>
+      <div class="r-venue-hint subtle" style="font-size:0.72rem;margin-top:2px"></div></td>
+    <td><select class="r-holes" title="18 holes, or a 9-hole round (front 1-9 / back 10-18)"><option value="18">18</option><option value="f9">Front 9</option><option value="b9">Back 9</option></select></td>
+    <td><input type="number" class="r-wbpoints" value="${wbPoints}" placeholder="e.g. 1" style="width:80px"></td>
+    <td style="text-align:center"><input type="checkbox" class="r-overall" ${rollsIntoOverall ? 'checked' : ''} style="width:auto"></td>
+    <td><button type="button" class="danger removeRoundBtn">Remove</button></td>`;
+  // Cup rounds get a full-width detail row (their segments) directly under the round row.
+  const dt = document.createElement('tr'); dt.className = 'cupDetail'; dt.style.display = 'none';
+  dt.innerHTML = `<td colspan="7" style="padding:0 0 10px"><div class="r-cup" style="background:var(--bg);border:1.5px solid var(--line);border-radius:8px;padding:10px 12px">
+      <div style="font-weight:600;font-size:0.88rem">Segments <span class="subtle" style="font-weight:400">· each is its own match for points · pairs / matchups carry through the whole round</span></div>
+      <div class="r-segs" style="margin:8px 0"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button type="button" class="secondary r-addseg" style="padding:4px 10px;font-size:0.82rem">+ Add segment</button>
+        <select class="r-layout" title="Replace the segments with a common layout" style="width:auto;font-size:0.82rem">
           <option value="">Quick layout…</option>
           <option value="fb_fs">Fourball 1-9, Foursomes 10-18</option>
           <option value="fs_fb">Foursomes 1-9, Fourball 10-18</option>
@@ -2120,14 +2132,9 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
           <option value="si18">Singles, 18 holes</option>
           <option value="si_split">Singles 1-9, Singles 10-18</option>
         </select>
-      </div></td>
-    <td><select class="r-venue">${venueOptionsHtml(venueId)}</select>
-      <div class="r-venue-hint subtle" style="font-size:0.72rem;margin-top:2px"></div></td>
-    <td><select class="r-holes" title="18 holes, or a 9-hole round (front 1-9 / back 10-18)"><option value="18">18</option><option value="f9">Front 9</option><option value="b9">Back 9</option></select></td>
-    <td><input type="number" class="r-wbpoints" value="${wbPoints}" placeholder="e.g. 1" style="width:80px"></td>
-    <td style="text-align:center"><input type="checkbox" class="r-overall" ${rollsIntoOverall ? 'checked' : ''} style="width:auto"></td>
-    <td><button type="button" class="danger removeRoundBtn">Remove</button></td>`;
-  tr.querySelector('.removeRoundBtn').addEventListener('click', () => { tr.remove(); refreshTeeVenueBlocks(); });
+      </div></div></td>`;
+  tr._detail = dt;
+  tr.querySelector('.removeRoundBtn').addEventListener('click', () => { dt.remove(); tr.remove(); refreshTeeVenueBlocks(); });
   if (holes && holes.count === 9) tr.querySelector('.r-holes').value = holes.half === 'back' ? 'b9' : 'f9';
   if (cupP && cupP.cupSameAs) tr.dataset.sameName = cupP.cupSameAs;
   {
@@ -2136,12 +2143,12 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
       : [{ format: (cupP && cupP.cupFormat) || 'bestball', from: rng[0], to: rng[1] }];
     cupSetSegs(tr, segs);
   }
-  tr.querySelector('.r-addseg').addEventListener('click', () => {
+  tr._detail.querySelector('.r-addseg').addEventListener('click', () => {
     const cur = cupRowSegs(tr), last = cur[cur.length - 1];
     const from = last ? Math.min(18, last.to + 1) : 1;
     cupSetSegs(tr, cur.concat([{ format: last ? last.format : 'bestball', from, to: 18 }]));
   });
-  tr.querySelector('.r-layout').addEventListener('change', ev => {
+  tr._detail.querySelector('.r-layout').addEventListener('change', ev => {
     const L = { fb_fs: [['bestball', 1, 9], ['altshot', 10, 18]], fs_fb: [['altshot', 1, 9], ['bestball', 10, 18]], fb18: [['bestball', 1, 18]], fs18: [['altshot', 1, 18]], si18: [['singles', 1, 18]], si_split: [['singles', 1, 9], ['singles', 10, 18]] }[ev.target.value];
     if (L) cupSetSegs(tr, L.map(x => ({ format: x[0], from: x[1], to: x[2] })));
     ev.target.value = '';
@@ -2159,7 +2166,7 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
     refreshTeeVenueBlocks();
   });
   tr.querySelector('.r-name').addEventListener('change', () => { updateRoundRowTeeTime(tr); updateRoundRowVenue(tr); });
-  roundsBody.appendChild(tr);
+  roundsBody.appendChild(tr); roundsBody.appendChild(dt);
   updateRoundRowTeeTime(tr);
   updateRoundRowVenue(tr);
   refreshTeeVenueBlocks();
@@ -2217,7 +2224,7 @@ async function loadRoundNameOptions() {
   statusEl.textContent = names.length
     ? `${names.length} upcoming name(s) loaded${hiddenCount ? ` (${hiddenCount} past event(s) hidden)` : ''} — click one below to add it as a round (its date, tee time and venue fill in), or start typing in a Round name field.`
     : `Nothing upcoming found on either source${hiddenCount ? ` (${hiddenCount} past event(s) hidden)` : ''} — round names can still be typed, tee time just stays unresolved.`;
-  [...roundsBody.querySelectorAll('tr')].forEach(tr => { updateRoundRowTeeTime(tr); updateRoundRowVenue(tr); });
+  [...roundsBody.querySelectorAll('tr.roundRow')].forEach(tr => { updateRoundRowTeeTime(tr); updateRoundRowVenue(tr); });
   renderRoundNameChips(names);
 }
 function renderRoundNameChips(names) {
@@ -2231,7 +2238,7 @@ function renderRoundNameChips(names) {
     b.textContent = '+ ' + n + (d instanceof Date ? ' · ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '');
     b.addEventListener('click', () => {
       // reuse a blank starter row if there is one, otherwise add a row
-      const blank = [...roundsBody.querySelectorAll('tr')].find(tr => !tr.querySelector('.r-name').value.trim());
+      const blank = [...roundsBody.querySelectorAll('tr.roundRow')].find(tr => !tr.querySelector('.r-name').value.trim());
       if (blank) { blank.querySelector('.r-name').value = n; blank.querySelector('.r-name').dispatchEvent(new Event('change', { bubbles: true })); }
       else addRoundRow(n);
       b.remove();
@@ -2241,7 +2248,7 @@ function renderRoundNameChips(names) {
 }
 document.getElementById('loadRoundNamesBtn').addEventListener('click', loadRoundNameOptions);
 function readRoundsInput() {
-  return [...roundsBody.querySelectorAll('tr')].map(tr => {
+  return [...roundsBody.querySelectorAll('tr.roundRow')].map(tr => {
     const name = tr.querySelector('.r-name').value.trim();
     const engine = tr.querySelector('.r-engine').value;
     const venueSel = tr.querySelector('.r-venue');
@@ -6215,7 +6222,7 @@ function cupHoleRange(holes) { return holes && holes.count === 9 ? (holes.half =
 // cup_match, keeping each round's matches. Matched by the row, then by name, so renaming a round does not lose its matches.
 function cupSyncRounds() {
   cupSyncFromInputs();
-  const rows = [...roundsBody.querySelectorAll('tr')].filter(tr => tr.querySelector('.r-engine').value === 'cup_match' && tr.querySelector('.r-name').value.trim());
+  const rows = [...roundsBody.querySelectorAll('tr.roundRow')].filter(tr => tr.querySelector('.r-engine').value === 'cup_match' && tr.querySelector('.r-name').value.trim());
   cupState.rounds = rows.map(tr => {
     const name = tr.querySelector('.r-name').value.trim(), rid = tr.dataset.roundId;
     const hv = tr.querySelector('.r-holes').value;
