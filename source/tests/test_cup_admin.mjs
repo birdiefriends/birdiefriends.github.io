@@ -22,34 +22,44 @@ ok(d.getElementById('cupBody').style.display === 'block', 'enabling shows the ca
 ok([...d.querySelectorAll('.r-engine')][0].innerHTML.includes('cup_match'), 'section 4 offers the Team match play (Cup) engine');
 ok(d.querySelector('.r-holes') && [...d.querySelector('.r-holes').options].map(o => o.value).join() === '18,f9,b9', 'section 4 has a Holes column (18 / Front 9 / Back 9)');
 const rowsBefore = d.querySelectorAll('#roundsBody tr').length;
-d.getElementById('cupPreset').value='pairsFS'; d.getElementById('cupAddPreset').click(); d.getElementById('cupPreset').value='singles'; d.getElementById('cupAddPreset').click(); await new Promise(r => setTimeout(r, 20));
-ok(d.querySelectorAll('#roundsBody tr').length === rowsBefore + 3, 'Saturday = two session rows (foursomes + fourball), Sunday = one singles row');
-const cupRows = [...d.querySelectorAll('#roundsBody tr')].filter(tr => tr.querySelector('.r-engine').value === 'cup_match');
-ok(cupRows.length === 3 && cupRows.every(tr => tr.querySelector('.r-wbpoints').disabled && !tr.querySelector('.r-overall').checked && tr.querySelector('.r-overall').disabled), 'Cup rows: Wally Ball and Overall are off and locked');
-ok(cupRows.every(tr => tr.querySelector('.r-cup').style.display === 'block'), 'Cup rows show the format and same-pairs pickers');
-ok(cupRows.map(tr => tr.querySelector('.r-cupfmt').value).join() === 'altshot,bestball,singles', 'formats: foursomes, fourball, singles');
-ok(cupRows.map(tr => tr.querySelector('.r-holes').value).join() === 'f9,b9,18', 'holes: front 9, back 9, 18');
-ok(d.querySelectorAll('.cup-round').length === 3, 'three Cup sessions shown in 4b, taken from section 4');
-ok(/Foursomes · holes 1-9/.test(d.querySelectorAll('.cup-round')[0].textContent) && /Fourball · holes 10-18/.test(d.querySelectorAll('.cup-round')[1].textContent) && /Singles · holes 1-18/.test(d.querySelectorAll('.cup-round')[2].textContent), 'each session shows its format and hole range');
-ok(/same pairs as Cup Foursomes/.test(d.querySelectorAll('.cup-round')[1].textContent), 'the second nine reuses the first nine\'s pairs');
+const setEngine = (tr, v) => { tr.querySelector('.r-engine').value = v; tr.querySelector('.r-engine').dispatchEvent(new w.Event('change', { bubbles: true })); };
+const layout = (tr, v) => { tr.querySelector('.r-layout').value = v; tr.querySelector('.r-layout').dispatchEvent(new w.Event('change', { bubbles: true })); };
+w.addRoundRow('BF Cup Sat'); w.addRoundRow('BF Cup Sun');
+const all = [...d.querySelectorAll('#roundsBody tr')]; const sat = all[all.length - 2], sun = all[all.length - 1];
+setEngine(sat, 'cup_match'); setEngine(sun, 'cup_match'); layout(sat, 'fb_fs'); layout(sun, 'si18'); await new Promise(r => setTimeout(r, 30));
+ok(d.querySelectorAll('#roundsBody tr').length === rowsBefore + 2, 'Saturday and Sunday are each ONE round row');
+const cupRows = [sat, sun];
+ok(cupRows.every(tr => tr.querySelector('.r-wbpoints').disabled && !tr.querySelector('.r-overall').checked && tr.querySelector('.r-overall').disabled), 'Cup rows: Wally Ball and Overall are off and locked');
+ok(cupRows.every(tr => tr.querySelector('.r-cup').style.display === 'block'), 'Cup rows show the segment editor');
+ok(sat.querySelectorAll('.seg').length === 2 && sun.querySelectorAll('.seg').length === 1, 'Saturday has two segments, Sunday one');
+ok([...sat.querySelectorAll('.sg-fmt')].map(e => e.value).join() === 'bestball,altshot' && [...sat.querySelectorAll('.sg-from')].map(e => e.value).join() === '1,10' && [...sat.querySelectorAll('.sg-to')].map(e => e.value).join() === '9,18', 'Saturday = Fourball 1-9 then Foursomes 10-18');
+ok(d.querySelectorAll('.cup-round').length === 2, 'two Cup rounds listed in 4b, taken from section 4');
+ok(/Fourball holes 1-9 \+ Foursomes holes 10-18/.test(d.querySelectorAll('.cup-round')[0].textContent) && /Singles holes 1-18/.test(d.querySelectorAll('.cup-round')[1].textContent), '4b shows each round\'s segments');
+ok(!d.getElementById('cupAddPreset') && !d.querySelector('.r-cupsame'), '4b no longer asks for rounds a second time');
 ok(/add the roster in section 3|players \(/.test(d.getElementById('cupSummary').textContent), 'summary describes the field (or asks for the roster)');
 ok(/Name side A/.test(d.getElementById('cupSummary').textContent), 'asks for side names');
-// the host changes a session's holes: the 4b range follows
-cupRows[2].querySelector('.r-holes').value = 'f9'; cupRows[2].querySelector('.r-holes').dispatchEvent(new w.Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 20));
-ok(/holes 1-9/.test(d.querySelectorAll('.cup-round')[2].textContent), 'changing Holes in section 4 changes the session\'s holes');
-cupRows[2].querySelector('.r-holes').value = '18'; cupRows[2].querySelector('.r-holes').dispatchEvent(new w.Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 20));
-// renaming a session keeps the same-pairs link
-cupRows[0].querySelector('.r-name').value = 'BF Cup Saturday A'; cupRows[0].querySelector('.r-name').dispatchEvent(new w.Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 20));
-ok(/same pairs as BF Cup Saturday A/.test(d.querySelectorAll('.cup-round')[1].textContent), 'renaming a session keeps the same-pairs link');
+// the host edits a segment by hand: add one, change a hole, remove it
+sat.querySelector('.r-addseg').click(); await new Promise(r => setTimeout(r, 20));
+ok(sat.querySelectorAll('.seg').length === 3, '+ segment adds a segment');
+sat.querySelectorAll('.seg')[2].querySelector('.sg-x').click(); await new Promise(r => setTimeout(r, 20));
+ok(sat.querySelectorAll('.seg').length === 2, 'x removes a segment');
+sat.querySelectorAll('.seg')[0].querySelector('.sg-to').value = '8'; sat.querySelectorAll('.seg')[0].querySelector('.sg-to').dispatchEvent(new w.Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 20));
+ok(/holes 1-8/.test(d.querySelectorAll('.cup-round')[0].textContent), 'editing a segment\'s holes updates 4b');
+sat.querySelectorAll('.seg')[0].querySelector('.sg-to').value = '9'; sat.querySelectorAll('.seg')[0].querySelector('.sg-to').dispatchEvent(new w.Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 20));
+// renaming a round keeps it
+sat.querySelector('.r-name').value = 'BF Cup Saturday'; sat.querySelector('.r-name').dispatchEvent(new w.Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 20));
 const saved = w.readRoundsInput().filter(r => r.engine === 'cup_match');
-ok(saved.length === 3 && saved[0].engineParams.cupFormat === 'altshot' && saved[0].engineParams.holes.half === 'front' && saved[1].engineParams.cupSameAs === 'BF Cup Saturday A' && saved[2].engineParams.holes === undefined, 'section 4 config keeps format, holes and same-pairs in engineParams (18 holes stays unstored)');
-// reloading a saved event config puts the Cup sessions back, with their same-pairs link
+ok(saved.length === 2 && saved[0].engineParams.cupSegments.length === 2 && saved[0].engineParams.cupSegments[1].format === 'altshot' && saved[1].engineParams.cupSegments[0].format === 'singles' && saved[0].engineParams.holes === undefined, 'section 4 config keeps the segments in engineParams (18 holes stays unstored)');
+// reloading a saved event config puts the rounds and segments back
 await w.rehydrateFormFromConfig({ eventName: '2026 BF Cup', roster: [], rounds: [
-  { name: 'Sat Foursomes', engine: 'cup_match', engineParams: { cupFormat: 'altshot', holes: { count: 9, half: 'front' } } },
-  { name: 'Sat Fourball', engine: 'cup_match', engineParams: { cupFormat: 'bestball', cupSameAs: 'Sat Foursomes', holes: { count: 9, half: 'back' } } },
-  { name: 'Sun Singles', engine: 'cup_match', engineParams: { cupFormat: 'singles' } }] });
+  { name: 'Saturday', engine: 'cup_match', engineParams: { cupSegments: [{ format: 'bestball', from: 1, to: 9 }, { format: 'altshot', from: 10, to: 18 }] } },
+  { name: 'Sunday', engine: 'cup_match', engineParams: { cupSegments: [{ format: 'singles', from: 1, to: 18 }] } },
+  { name: 'Old style', engine: 'cup_match', engineParams: { cupFormat: 'altshot', holes: { count: 9, half: 'back' } } }] });
 await new Promise(r => setTimeout(r, 30));
-ok(d.querySelectorAll('.cup-round').length === 3 && /same pairs as Sat Foursomes/.test(d.querySelectorAll('.cup-round')[1].textContent) && /Fourball · holes 10-18/.test(d.querySelectorAll('.cup-round')[1].textContent), 'a saved config reloads into section 4 and 4b with formats, holes and the same-pairs link');
+ok(d.querySelectorAll('.cup-round').length === 3 && /Fourball holes 1-9 \+ Foursomes holes 10-18/.test(d.querySelectorAll('.cup-round')[0].textContent), 'a saved config reloads into section 4 and 4b with its segments');
+ok(/Foursomes holes 10-18/.test(d.querySelectorAll('.cup-round')[2].textContent), 'an older single-format row still loads (its holes become the segment)');
+w.removeLastForTest && 0;
+[...d.querySelectorAll('#roundsBody tr')][2].querySelector('.removeRoundBtn').click(); await new Promise(r => setTimeout(r, 30));
 // save is refused until the sides are named, then posts the document with the PIN
 const nameA = d.getElementById('cupNameA'), nameB = d.getElementById('cupNameB');
 d.getElementById('eventName').value = '2026 BF Cup';
@@ -60,7 +70,7 @@ d.getElementById('cupSaveBtn').click(); await new Promise(r => setTimeout(r, 50)
 ok(posts.length === 1 && /\/bfe\/cup$/.test(posts[0].u) && posts[0].body.event_name === '2026 BF Cup' && posts[0].body.pin, 'saves to /bfe/cup with the PIN');
 const cfg = posts[0].body.config;
 ok(cfg.sides[0].color === 'red' && cfg.sides[1].color === 'blue', 'sides carry a color (A red, B blue by default)');
-ok(cfg.sides[0].name === 'Team Jake' && cfg.rounds.length === 3 && cfg.rounds[0].segments[0].format === 'altshot' && cfg.rounds[1].sameAs === cfg.rounds[0].key && cfg.points.half === 0.5, 'document has sides, sessions (one segment each), same-pairs link, points');
+ok(cfg.sides[0].name === 'Team Jake' && cfg.rounds.length === 2 && cfg.rounds[0].segments.length === 2 && cfg.rounds[0].segments[1].format === 'altshot' && cfg.rounds[1].segments[0].format === 'singles' && cfg.points.half === 0.5, 'document has sides, rounds with their segments, points');
 // a second save from this page must not wipe what the draft page stored (draft + teams)
 stored.draft = { started: true, picks: [{ n: 1, side: 'A', player: 'X' }] }; stored.sides[0].players = ['Cap', 'X'];
 d.getElementById('cupSaveBtn').click(); await new Promise(r => setTimeout(r, 80));

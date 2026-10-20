@@ -353,23 +353,9 @@
         <div><label for="cupPtHalf">Points each for a halve</label><input type="number" id="cupPtHalf" step="0.5" min="0" value="0.5"></div>
         <div><label for="cupPtLoss">Points for a loss</label><input type="number" id="cupPtLoss" step="0.5" min="0" value="0"></div>
       </div>
-      <h3 style="margin:14px 0 6px;font-size:0.95rem">Rounds and segments</h3>
-      <p class="hint" style="margin-top:0">Each Cup <b>session</b> is a row in section 4 with the engine <b>Team match play (Cup)</b>. Pick how it is played (Foursomes, Fourball or Singles) and which holes (18, Front 9 or Back 9). Every session is its own match for points. A session can reuse an earlier session's pairs ("same pairs as"), so Saturday's two nines use the same partners.</p>
+      <h3 style="margin:14px 0 6px;font-size:0.95rem">Rounds (set in section 4)</h3>
+      <p class="hint" style="margin-top:0">Describe each day in <b>section 4</b>: add a round, choose the engine <b>Team match play (Cup)</b>, then give it segments (Fourball, Foursomes or Singles, and the holes each covers). Every segment is its own match for points; the pairs or matchups are the same across a round's segments. This list shows what section 4 currently says.</p>
       <div id="cupRounds"></div>
-      <div class="btnbar">
-        <button type="button" class="secondary" id="cupAddBlank">+ Add a session</button>
-        <span class="subtle" style="margin:0 4px">or start from a layout:</span>
-        <select id="cupPreset" style="width:auto;display:inline-block">
-          <option value="pairsFB">Pairs: Fourball front 9, Foursomes back 9</option>
-          <option value="pairsFS">Pairs: Foursomes front 9, Fourball back 9</option>
-          <option value="pairs18FB">Pairs: Fourball, 18 holes</option>
-          <option value="pairs18FS">Pairs: Foursomes, 18 holes</option>
-          <option value="singles">Singles, 18 holes</option>
-          <option value="singles9">Singles: front 9 + back 9 (two matches)</option>
-        </select>
-        <button type="button" class="secondary" id="cupAddPreset">Add layout</button>
-        <div class="subtle" style="margin-top:6px">Layouts are only starting points. Every session row in section 4 can be changed freely: format, holes (18 / Front 9 / Back 9), and which earlier session's pairs it reuses.</div>
-      </div>
       <div id="cupSummary" style="margin-top:12px;padding:10px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);font-size:0.9rem"></div>
       <div class="btnbar">
         <button type="button" id="cupSaveBtn">Save Cup on the Worker</button>
@@ -2089,6 +2075,21 @@ function updateRoundRowVenue(tr) {
     hint.textContent = `⚠️ venue "${rawVenue}" not matched — pick manually`;
   }
 }
+function cupRowSegs(tr) {
+  return [...tr.querySelectorAll('.r-segs .seg')].map(e => ({ format: e.querySelector('.sg-fmt').value, from: parseInt(e.querySelector('.sg-from').value, 10) || 1, to: parseInt(e.querySelector('.sg-to').value, 10) || 18 }));
+}
+function cupSetSegs(tr, segs) {
+  const box = tr.querySelector('.r-segs');
+  box.innerHTML = '';
+  (segs || []).forEach(sg => {
+    const e = document.createElement('div'); e.className = 'seg'; e.style.cssText = 'display:flex;gap:4px;align-items:center;margin-bottom:3px;flex-wrap:wrap';
+    e.innerHTML = '<select class="sg-fmt" style="width:auto">' + Object.keys(BFEngine.CUP_FORMATS).map(k => '<option value="' + k + '"' + (k === sg.format ? ' selected' : '') + '>' + BFEngine.CUP_FORMATS[k].label + '</option>').join('') + '</select>'
+      + '<span class="subtle">holes</span><input type="number" class="sg-from" min="1" max="18" value="' + sg.from + '" style="width:54px"><span class="subtle">to</span><input type="number" class="sg-to" min="1" max="18" value="' + sg.to + '" style="width:54px">'
+      + '<button type="button" class="danger sg-x" style="padding:1px 7px" title="Remove this segment">×</button>';
+    e.querySelector('.sg-x').addEventListener('click', () => { e.remove(); });
+    box.appendChild(e);
+  });
+}
 function cupRowToggle(tr) {
   const isCup = tr.querySelector('.r-engine').value === 'cup_match';
   tr.querySelector('.r-cup').style.display = isCup ? 'block' : 'none';
@@ -2107,8 +2108,18 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
       <div class="r-teetime-hint subtle" style="font-size:0.72rem;margin-top:2px"></div></td>
     <td><select class="r-engine">${ENGINE_OPTIONS.map(o => `<option value="${o.id}" ${o.id===engine?'selected':''}>${o.label}</option>`).join('')}</select>
       <div class="r-cup" style="display:none;margin-top:4px">
-        <select class="r-cupfmt" title="How this session is played">${Object.keys(BFEngine.CUP_FORMATS).map(k => `<option value="${k}">${BFEngine.CUP_FORMATS[k].label}</option>`).join('')}</select>
-        <select class="r-cupsame" title="Plays with the same pairs / matchups as an earlier Cup round"></select>
+        <div class="subtle" style="font-size:0.72rem;margin-bottom:3px">Segments: each is its own match for points. Pairs / matchups carry through the whole round.</div>
+        <div class="r-segs"></div>
+        <button type="button" class="secondary r-addseg" style="padding:3px 8px;font-size:0.78rem">+ segment</button>
+        <select class="r-layout" title="Replace the segments with a common layout" style="width:auto;font-size:0.78rem">
+          <option value="">Quick layout…</option>
+          <option value="fb_fs">Fourball 1-9, Foursomes 10-18</option>
+          <option value="fs_fb">Foursomes 1-9, Fourball 10-18</option>
+          <option value="fb18">Fourball, 18 holes</option>
+          <option value="fs18">Foursomes, 18 holes</option>
+          <option value="si18">Singles, 18 holes</option>
+          <option value="si_split">Singles 1-9, Singles 10-18</option>
+        </select>
       </div></td>
     <td><select class="r-venue">${venueOptionsHtml(venueId)}</select>
       <div class="r-venue-hint subtle" style="font-size:0.72rem;margin-top:2px"></div></td>
@@ -2118,13 +2129,28 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
     <td><button type="button" class="danger removeRoundBtn">Remove</button></td>`;
   tr.querySelector('.removeRoundBtn').addEventListener('click', () => { tr.remove(); refreshTeeVenueBlocks(); });
   if (holes && holes.count === 9) tr.querySelector('.r-holes').value = holes.half === 'back' ? 'b9' : 'f9';
-  if (cupP && cupP.cupFormat) tr.querySelector('.r-cupfmt').value = cupP.cupFormat;
   if (cupP && cupP.cupSameAs) tr.dataset.sameName = cupP.cupSameAs;
-  tr.querySelector('.r-cupsame').addEventListener('change', () => { tr.dataset.sameName = ''; });
+  {
+    const rng = holes && holes.count === 9 ? (holes.half === 'back' ? [10, 18] : [1, 9]) : [1, 18];
+    const segs = cupP && Array.isArray(cupP.cupSegments) && cupP.cupSegments.length ? cupP.cupSegments
+      : [{ format: (cupP && cupP.cupFormat) || 'bestball', from: rng[0], to: rng[1] }];
+    cupSetSegs(tr, segs);
+  }
+  tr.querySelector('.r-addseg').addEventListener('click', () => {
+    const cur = cupRowSegs(tr), last = cur[cur.length - 1];
+    const from = last ? Math.min(18, last.to + 1) : 1;
+    cupSetSegs(tr, cur.concat([{ format: last ? last.format : 'bestball', from, to: 18 }]));
+  });
+  tr.querySelector('.r-layout').addEventListener('change', ev => {
+    const L = { fb_fs: [['bestball', 1, 9], ['altshot', 10, 18]], fs_fb: [['altshot', 1, 9], ['bestball', 10, 18]], fb18: [['bestball', 1, 18]], fs18: [['altshot', 1, 18]], si18: [['singles', 1, 18]], si_split: [['singles', 1, 9], ['singles', 10, 18]] }[ev.target.value];
+    if (L) cupSetSegs(tr, L.map(x => ({ format: x[0], from: x[1], to: x[2] })));
+    ev.target.value = '';
+  });
   tr.querySelector('.r-engine').addEventListener('change', (ev) => {
     tr.querySelector('.r-wbpoints').disabled = false;
     if (ev.target.value === 'scorecard_only' || ev.target.value === 'cup_match') tr.querySelector('.r-overall').checked = false;
     cupRowToggle(tr);
+    if (ev.target.value === 'cup_match' && !cupRowSegs(tr).length) cupSetSegs(tr, [{ format: 'bestball', from: 1, to: 18 }]);
     refreshTeeVenueBlocks();
   });
   tr.querySelector('.r-venue').addEventListener('change', () => {
@@ -2227,8 +2253,7 @@ function readRoundsInput() {
     if (wbPointsRaw !== '') influencers.push({ id: 'wally_ball', points: parseFloat(wbPointsRaw) || 0 });
     const hv = tr.querySelector('.r-holes') ? tr.querySelector('.r-holes').value : '18';
     const holes = hv === 'f9' ? { count: 9, half: 'front' } : hv === 'b9' ? { count: 9, half: 'back' } : null;   // 18 stays unstored so existing configs are unchanged
-    const same = tr.querySelector('.r-cupsame'), sameOpt = same && same.selectedOptions[0];
-    const cupEp = engine === 'cup_match' ? Object.assign({ cupFormat: tr.querySelector('.r-cupfmt').value }, sameOpt && sameOpt.value ? { cupSameAs: sameOpt.dataset.name } : (tr.dataset.sameName ? { cupSameAs: tr.dataset.sameName } : {})) : {};
+    const cupEp = engine === 'cup_match' ? Object.assign({ cupSegments: cupRowSegs(tr) }, tr.dataset.sameName ? { cupSameAs: tr.dataset.sameName } : {}) : {};
     const ep = Object.assign({}, engine === 'stableford_quota' ? { hcpMode: document.getElementById('hcpMode').value } : {}, holes ? { holes } : {}, cupEp);
     return {
       name, engine, engineParams: Object.keys(ep).length ? ep : undefined,
@@ -6191,41 +6216,15 @@ function cupHoleRange(holes) { return holes && holes.count === 9 ? (holes.half =
 function cupSyncRounds() {
   cupSyncFromInputs();
   const rows = [...roundsBody.querySelectorAll('tr')].filter(tr => tr.querySelector('.r-engine').value === 'cup_match' && tr.querySelector('.r-name').value.trim());
-  // "same pairs as" choices: earlier Cup sessions only
-  rows.forEach((tr, i) => {
-    const sel = tr.querySelector('.r-cupsame');
-    const prev = sel.value || '';
-    sel.innerHTML = '<option value="">own pairs / matchups</option>' + rows.slice(0, i).map(o => '<option value="' + o.dataset.roundId + '" data-name="' + cupEsc(o.querySelector('.r-name').value.trim()) + '">same as ' + cupEsc(o.querySelector('.r-name').value.trim()) + '</option>').join('');
-    let want = prev;
-    if (!want && tr.dataset.sameName) { const hit = rows.slice(0, i).find(o => o.querySelector('.r-name').value.trim() === tr.dataset.sameName); if (hit) want = hit.dataset.roundId; }
-    sel.value = want;
-    if (sel.value !== want) sel.value = '';
-  });
   cupState.rounds = rows.map(tr => {
     const name = tr.querySelector('.r-name').value.trim(), rid = tr.dataset.roundId;
     const hv = tr.querySelector('.r-holes').value;
     const holes = hv === 'f9' ? { count: 9, half: 'front' } : hv === 'b9' ? { count: 9, half: 'back' } : { count: 18 };
-    const fmt = tr.querySelector('.r-cupfmt').value, rng = cupHoleRange(holes);
-    const same = tr.querySelector('.r-cupsame').selectedOptions[0];
-    const sameRow = same && same.value ? rows.find(o => o.dataset.roundId === same.value) : null;
     const old = cupState.rounds.find(r => r.rid === rid) || cupState.rounds.find(r => r.name === name) || {};
-    return { key: cupSlug(name), name, rid, holes, segments: [{ key: fmt, format: fmt, from: rng[0], to: rng[1] }],
-      sameAs: sameRow ? cupSlug(sameRow.querySelector('.r-name').value.trim()) : null, matches: old.matches || [] };
+    const segments = cupRowSegs(tr).map(g => ({ key: g.format + '-' + g.from + '-' + g.to, format: g.format, from: g.from, to: g.to }));
+    return { key: cupSlug(name), name, rid, holes, segments, sameAs: tr.dataset.sameName ? cupSlug(tr.dataset.sameName) : null, matches: old.matches || [] };
   });
   if (document.getElementById('cupEnabled').checked) cupRender();
-}
-function cupAddRound(kind) {
-  const AS = { cupFormat: 'altshot' }, BB = { cupFormat: 'bestball' }, SI = { cupFormat: 'singles' };
-  const F = { count: 9, half: 'front' }, B = { count: 9, half: 'back' };
-  const add = (name, holes, p) => addRoundRow(name, 'cup_match', '', '', false, '', holes, p);
-  if (kind === 'blank') add('Cup session ' + (roundsBody.querySelectorAll('tr').length + 1), null, { cupFormat: 'bestball' });
-  else if (kind === 'pairsFB') { add('Cup Fourball', F, BB); add('Cup Foursomes', B, Object.assign({ cupSameAs: 'Cup Fourball' }, AS)); }
-  else if (kind === 'pairsFS') { add('Cup Foursomes', F, AS); add('Cup Fourball', B, Object.assign({ cupSameAs: 'Cup Foursomes' }, BB)); }
-  else if (kind === 'pairs18FB') add('Cup Fourball', null, BB);
-  else if (kind === 'pairs18FS') add('Cup Foursomes', null, AS);
-  else if (kind === 'singles9') { add('Cup Singles (front)', F, SI); add('Cup Singles (back)', B, SI); }
-  else add('Cup Singles', null, SI);
-  cupSyncRounds();
 }
 function cupSyncFromInputs() {
   cupState.sides[0].name = document.getElementById('cupNameA').value.trim();
@@ -6250,12 +6249,12 @@ function cupRender() {
   document.getElementById('cupPtHalf').value = cupState.points.half;
   document.getElementById('cupPtLoss').value = cupState.points.loss;
   const fmtOpts = f => Object.keys(BFEngine.CUP_FORMATS).map(k => '<option value="' + k + '"' + (k === f ? ' selected' : '') + '>' + BFEngine.CUP_FORMATS[k].label + '</option>').join('');
-  document.getElementById('cupRounds').innerHTML = cupState.rounds.map((r, ri) => {
-    const sg = r.segments[0] || {}, same = r.sameAs ? (cupState.rounds.find(x => x.key === r.sameAs) || {}).name : '';
+  document.getElementById('cupRounds').innerHTML = cupState.rounds.map(r => {
+    const hv = r.holes && r.holes.count === 9 ? (r.holes.half === 'back' ? ' (back 9 only)' : ' (front 9 only)') : '';
     return '<div class="cup-round" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px">'
-      + '<b>' + cupEsc(r.name) + '</b> <span class="subtle">· ' + cupEsc((BFEngine.CUP_FORMATS[sg.format] || {}).label || sg.format || '?') + ' · holes ' + (sg.from || '?') + '-' + (sg.to || '?')
-      + (same ? ' · same pairs as ' + cupEsc(same) : '') + ' · ' + (r.matches || []).length + ' match(es) set</span></div>';
-  }).join('') || '<p class="subtle">No Cup sessions yet. In section 4 add a round with the engine "Team match play (Cup)", or use the buttons below.</p>';
+      + '<b>' + cupEsc(r.name) + '</b>' + hv + ' <span class="subtle">· ' + r.segments.map(sg => cupEsc((BFEngine.CUP_FORMATS[sg.format] || {}).label || sg.format || '?') + ' holes ' + sg.from + '-' + sg.to).join(' + ')
+      + ' · ' + (r.matches || []).length + ' match(es) set</span></div>';
+  }).join('') || '<p class="subtle">No Cup rounds yet. In section 4 add a round and pick the engine "Team match play (Cup)".</p>';
   cupSummaryRender();
 }
 function cupSummaryRender() {
@@ -6314,8 +6313,6 @@ async function cupLoad() {
   const body = document.getElementById('cupBody');
   document.getElementById('cupEnabled').addEventListener('change', e => { body.style.display = e.target.checked ? 'block' : 'none'; if (e.target.checked) cupSyncRounds(); });
   ['change', 'click'].forEach(ev => roundsBody.addEventListener(ev, () => setTimeout(cupSyncRounds, 0)));
-  document.getElementById('cupAddBlank').addEventListener('click', () => cupAddRound('blank'));
-  document.getElementById('cupAddPreset').addEventListener('click', () => cupAddRound(document.getElementById('cupPreset').value));
   document.getElementById('cupSaveBtn').addEventListener('click', cupSave);
   document.getElementById('cupLoadBtn').addEventListener('click', cupLoad);
   body.addEventListener('input', e => {
