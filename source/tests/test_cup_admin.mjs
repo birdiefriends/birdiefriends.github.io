@@ -19,12 +19,25 @@ await new Promise(r => setTimeout(r, 200));
 ok(d.getElementById('cupSection') && d.getElementById('cupBody').style.display === 'none', 'card present, hidden until enabled');
 const en = d.getElementById('cupEnabled'); en.checked = true; en.dispatchEvent(new w.Event('change'));
 ok(d.getElementById('cupBody').style.display === 'block', 'enabling shows the card');
-d.getElementById('cupAddPairsDay').click(); d.getElementById('cupAddSinglesDay').click();
-ok(d.querySelectorAll('.cup-round').length === 2, 'two days added');
+ok([...d.querySelectorAll('.r-engine')][0].innerHTML.includes('cup_match'), 'section 4 offers the Team match play (BF Cup) engine');
+ok(d.querySelector('.r-holes') && [...d.querySelector('.r-holes').options].map(o => o.value).join() === '18,f9,b9', 'section 4 has a Holes column (18 / Front 9 / Back 9)');
+const rowsBefore = d.querySelectorAll('#roundsBody tr').length;
+d.getElementById('cupAddPairsDay').click(); d.getElementById('cupAddSinglesDay').click(); await new Promise(r => setTimeout(r, 20));
+ok(d.querySelectorAll('#roundsBody tr').length === rowsBefore + 2, 'the buttons add rows to section 4');
+const cupRows = [...d.querySelectorAll('#roundsBody tr')].filter(tr => tr.querySelector('.r-engine').value === 'cup_match');
+ok(cupRows.length === 2 && cupRows.every(tr => tr.querySelector('.r-wbpoints').disabled && !tr.querySelector('.r-overall').checked), 'Cup rows have the engine set; Wally Ball and Overall are off');
+ok(d.querySelectorAll('.cup-round').length === 2, 'two Cup rounds shown in 4b, taken from section 4');
 const segs = d.querySelectorAll('.cup-sg[data-f="format"]');
-ok(segs.length === 3 && segs[0].value === 'altshot' && segs[1].value === 'bestball' && segs[2].value === 'singles', 'pairs day = foursomes + fourball, singles day = singles');
+ok(segs.length === 3 && segs[0].value === 'altshot' && segs[1].value === 'bestball' && segs[2].value === 'singles', 'pairs round = foursomes + fourball, singles round = singles');
 ok(/0 players|16 players|players \(/.test(d.getElementById('cupSummary').textContent), 'summary describes the field');
 ok(/Name side A/.test(d.getElementById('cupSummary').textContent), 'asks for side names');
+// holes indicator flows to the Cup round: make the singles round a front nine
+const sundayRow = cupRows[1]; sundayRow.querySelector('.r-holes').value = 'f9'; sundayRow.querySelector('.r-holes').dispatchEvent(new w.Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 20));
+ok(/Front 9/.test(d.querySelectorAll('.cup-round')[1].textContent) && /only has holes 1-9/.test(d.getElementById('cupSummary').textContent), 'a 9-hole round is flagged when its segment runs past hole 9');
+sundayRow.querySelector('.r-holes').value = '18'; sundayRow.querySelector('.r-holes').dispatchEvent(new w.Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 20));
+// renaming a round keeps its segments
+cupRows[0].querySelector('.r-name').value = 'BF Cup Saturday'; cupRows[0].querySelector('.r-name').dispatchEvent(new w.Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 20));
+ok(d.querySelectorAll('.cup-round')[0].textContent.includes('BF Cup Saturday') && d.querySelectorAll('.cup-round')[0].querySelectorAll('.cup-sg[data-f="format"]').length === 2, 'renaming a round keeps its segments');
 // overlapping segments are flagged live
 const from2 = d.querySelectorAll('.cup-sg[data-f="from"]')[1]; from2.value = '8'; from2.dispatchEvent(new w.Event('input', { bubbles: true }));
 ok(/overlap/.test(d.getElementById('cupSummary').textContent), 'overlapping segments flagged');

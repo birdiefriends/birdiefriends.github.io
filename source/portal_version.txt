@@ -1,2 +1,2 @@
-v4.31.6 · 2026-10-20
-Deployed: 2026-10-20 (Engine 1.24.0: BF Cup team-draft logic (snake order, picks, undo, pasted player stats, team balance meter). New page bf-cup-draft.html for the captains. Nothing in the main portal changed besides the engine version. Worker file only carries the new engine version in a comment: deploy optional.)
+v4.31.7 · 2026-10-20
+Deployed: 2026-10-20 (Engine 1.24.1: Cup validation now knows 9-hole rounds. BFE-Admin: new Holes column and a Team match play (BF Cup) engine in section 4, and the Team Cup card takes its rounds from section 4. No portal behavior change. Worker file only carries the engine version in a comment: deploy optional.)

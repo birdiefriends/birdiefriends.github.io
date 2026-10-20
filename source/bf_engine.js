@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.24.0';
+  const ENGINE_VERSION = '1.24.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2255,6 +2255,10 @@
         if (!f) errors.push((r.name || r.key) + ': unknown format ' + sg.format);
         else if (size == null) size = f.size; else if (size !== f.size) errors.push((r.name || r.key) + ': formats in one round must use the same side size');
         if (!(sg.from >= 1 && sg.to <= 18 && sg.from <= sg.to)) errors.push((r.name || r.key) + ': segment ' + sg.key + ' is outside holes 1-18');
+        if (r.holes && r.holes.count === 9) {
+          const lo = r.holes.half === 'back' ? 10 : 1;
+          if (sg.from < lo || sg.to > lo + 8) errors.push((r.name || r.key) + ': a 9-hole round (' + (r.holes.half === 'back' ? 'back' : 'front') + ' nine) only has holes ' + lo + '-' + (lo + 8));
+        }
         if (i > 0 && sg.from <= segs[i - 1].to) errors.push((r.name || r.key) + ': segments overlap');
       });
       const seen = new Set();

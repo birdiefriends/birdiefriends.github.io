@@ -323,7 +323,7 @@
     <datalist id="roundNameOptions"></datalist>
     <table id="roundsTable">
       <thead><tr>
-        <th style="width:20%">Round name</th><th style="width:14%">Engine</th><th style="width:20%">Venue</th>
+        <th style="width:20%">Round name</th><th style="width:14%">Engine</th><th style="width:18%">Venue</th><th style="width:9%">Holes</th>
         <th style="width:16%">Wally Ball pts</th><th style="width:12%">Overall?</th><th></th>
       </tr></thead>
       <tbody id="roundsBody"></tbody>
@@ -353,11 +353,11 @@
         <div><label for="cupPtLoss">Points for a loss</label><input type="number" id="cupPtLoss" step="0.5" min="0" value="0"></div>
       </div>
       <h3 style="margin:14px 0 6px;font-size:0.95rem">Rounds and segments</h3>
-      <p class="hint" style="margin-top:0">Every segment is its own match for points. A round's name should match the round name in section 4 so the venue and tee time line up.</p>
+      <p class="hint" style="margin-top:0">A Cup round is a row in section 4 with the engine <b>Team match play (BF Cup)</b>, so its venue and tee time come from there. Saturday is ONE round (one tee time, one 18-hole card); here you split it into its sessions, called <b>segments</b>. Every segment is its own match for points.</p>
       <div id="cupRounds"></div>
       <div class="btnbar">
-        <button type="button" class="secondary" id="cupAddPairsDay">+ Pairs day (Foursomes 1-9, Fourball 10-18)</button>
-        <button type="button" class="secondary" id="cupAddSinglesDay">+ Singles day (18 holes)</button>
+        <button type="button" class="secondary" id="cupAddPairsDay">+ Add a pairs round (Foursomes 1-9, Fourball 10-18)</button>
+        <button type="button" class="secondary" id="cupAddSinglesDay">+ Add a singles round (18 holes)</button>
       </div>
       <div id="cupSummary" style="margin-top:12px;padding:10px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);font-size:0.9rem"></div>
       <div class="btnbar">
@@ -531,7 +531,7 @@
     <pre id="rawConfig" style="margin-top:16px"></pre>
   </section>
 </main>
-<script src="bf_engine.js?v=1.24.0"></script>
+<script src="bf_engine.js?v=1.24.1"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════════
 // Connection defaults — flat hardcoded constants, not derived from where
@@ -2028,7 +2028,8 @@ const ENGINE_OPTIONS = [
   { id: 'stableford_quota', label: 'Stableford quota' },
   { id: 'scramble_pair', label: '2-man scramble' },
   { id: 'points_by_score_type', label: 'Points by score type' },
-  { id: 'scorecard_only', label: 'Scorecard only (practice / fun round — no competitive calc)' }
+  { id: 'scorecard_only', label: 'Scorecard only (practice / fun round — no competitive calc)' },
+  { id: 'cup_match', label: 'Team match play (BF Cup) — scored in 4b' }
 ];
 let roundNameDates = {};
 let roundNameVenues = {};
@@ -2077,7 +2078,7 @@ function updateRoundRowVenue(tr) {
     hint.textContent = `⚠️ venue "${rawVenue}" not matched — pick manually`;
   }
 }
-function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoints = '', rollsIntoOverall = true, teeTime = '') {
+function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoints = '', rollsIntoOverall = true, teeTime = '', holes = null) {
   const id = ++roundIdSeq;
   const tr = document.createElement('tr');
   tr.className = 'roundRow';
@@ -2090,13 +2091,16 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
     <td><select class="r-engine">${ENGINE_OPTIONS.map(o => `<option value="${o.id}" ${o.id===engine?'selected':''}>${o.label}</option>`).join('')}</select></td>
     <td><select class="r-venue">${venueOptionsHtml(venueId)}</select>
       <div class="r-venue-hint subtle" style="font-size:0.72rem;margin-top:2px"></div></td>
+    <td><select class="r-holes" title="18 holes, or a 9-hole round (front 1-9 / back 10-18)"><option value="18">18</option><option value="f9">Front 9</option><option value="b9">Back 9</option></select></td>
     <td><input type="number" class="r-wbpoints" value="${wbPoints}" placeholder="e.g. 1" style="width:80px"></td>
     <td style="text-align:center"><input type="checkbox" class="r-overall" ${rollsIntoOverall ? 'checked' : ''} style="width:auto"></td>
     <td><button type="button" class="danger removeRoundBtn">Remove</button></td>`;
   tr.querySelector('.removeRoundBtn').addEventListener('click', () => { tr.remove(); refreshTeeVenueBlocks(); });
+  if (holes && holes.count === 9) tr.querySelector('.r-holes').value = holes.half === 'back' ? 'b9' : 'f9';
   tr.querySelector('.r-engine').addEventListener('change', (ev) => {
     tr.querySelector('.r-wbpoints').disabled = false;
-    if (ev.target.value === 'scorecard_only') tr.querySelector('.r-overall').checked = false;
+    if (ev.target.value === 'scorecard_only' || ev.target.value === 'cup_match') tr.querySelector('.r-overall').checked = false;
+    if (ev.target.value === 'cup_match') { tr.querySelector('.r-wbpoints').value = ''; tr.querySelector('.r-wbpoints').disabled = true; }
     refreshTeeVenueBlocks();
   });
   tr.querySelector('.r-venue').addEventListener('change', () => {
@@ -2109,6 +2113,8 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
   updateRoundRowTeeTime(tr);
   updateRoundRowVenue(tr);
   refreshTeeVenueBlocks();
+  if (engine === 'cup_match') { tr.querySelector('.r-wbpoints').disabled = true; }
+  return tr;
 }
 document.getElementById('addRoundBtn').addEventListener('click', () => addRoundRow());
 document.getElementById('loadWcDefaultBtn').addEventListener('click', () => {
@@ -2175,8 +2181,11 @@ function readRoundsInput() {
     const rollsIntoOverall = tr.querySelector('.r-overall').checked;
     const influencers = [];
     if (wbPointsRaw !== '') influencers.push({ id: 'wally_ball', points: parseFloat(wbPointsRaw) || 0 });
+    const hv = tr.querySelector('.r-holes') ? tr.querySelector('.r-holes').value : '18';
+    const holes = hv === 'f9' ? { count: 9, half: 'front' } : hv === 'b9' ? { count: 9, half: 'back' } : null;   // 18 stays unstored so existing configs are unchanged
+    const ep = Object.assign({}, engine === 'stableford_quota' ? { hcpMode: document.getElementById('hcpMode').value } : {}, holes ? { holes } : {});
     return {
-      name, engine, engineParams: engine === 'stableford_quota' ? { hcpMode: document.getElementById('hcpMode').value } : undefined,
+      name, engine, engineParams: Object.keys(ep).length ? ep : undefined,
       influencers, venue: venueName, venueId: venueId || null, rollsIntoOverall,
       teeTime: tr.dataset.teeTime || null
     };
@@ -2351,7 +2360,7 @@ function refreshBuyInDisplay() {
   const roundCollect  = parseFloat(document.getElementById('roundCollect').value) || 0;
   const overallCollect = parseFloat(document.getElementById('overallCollect').value) || 0;
   const wbCollect     = parseFloat(document.getElementById('wbCollect').value) || 0;
-  const roundCount = readRoundsInput().filter(r => r.engine !== 'scorecard_only').length;
+  const roundCount = readRoundsInput().filter(r => r.engine !== 'scorecard_only' && r.engine !== 'cup_match').length;
   const total = roundCollect * roundCount + overallCollect + wbCollect;
   document.getElementById('buyInDisplay').value = `$${total.toFixed(2)} (${roundCount} round pot${roundCount===1?'':'s'} × $${roundCollect} + $${overallCollect} Overall + $${wbCollect} Wally Ball)`;
 }
@@ -2414,7 +2423,7 @@ async function buildAndAssembleConfig() {
   // never have been assigned a round pot or counted toward buy-in to
   // begin with. Excluded here at the source rather than papered over
   // downstream on the results page.
-  const payoutEligibleRounds = config.rounds.filter(r => r.engine !== 'scorecard_only');
+  const payoutEligibleRounds = config.rounds.filter(r => r.engine !== 'scorecard_only' && r.engine !== 'cup_match');
   const buyInPerPlayer  = roundCollect * payoutEligibleRounds.length + overallCollect + wbCollect;
   const potPlan = [
     { id: 'round', label: 'Round Pot', collectPerPlayer: roundCollect, cttpHoles, podiumWeights,
@@ -2555,7 +2564,7 @@ async function rehydrateFormFromConfig(config) {
   roundsBody.innerHTML = '';
   (config.rounds || []).forEach(r => {
     const wbInf = (r.influencers || []).find(i => i.id === 'wally_ball');
-    addRoundRow(r.name || '', r.engine || 'stableford_quota', r.venueId || '', wbInf ? wbInf.points : '', r.rollsIntoOverall !== false, r.teeTime || '');
+    addRoundRow(r.name || '', r.engine || 'stableford_quota', r.venueId || '', wbInf ? wbInf.points : '', r.rollsIntoOverall !== false, r.teeTime || '', (r.engineParams && r.engineParams.holes) || null);
   });
   refreshTeeVenueBlocks();
   const teePolicy = config.teePolicy || {};
@@ -6108,14 +6117,31 @@ function cupStatus(msg, kind) {
   el.textContent = msg; el.style.display = msg ? 'block' : 'none';
   el.style.background = kind === 'err' ? '#fdecea' : '#e8f5e9'; el.style.color = kind === 'err' ? '#b71c1c' : '#1b5e20';
 }
-function cupAddRound(kind) {
-  const n = cupState.rounds.length + 1;
-  const segs = kind === 'pairs'
+function cupPreset(kind) {
+  return kind === 'pairs'
     ? [{ key: 'foursomes', format: 'altshot', from: 1, to: 9 }, { key: 'fourball', format: 'bestball', from: 10, to: 18 }]
     : [{ key: 'singles', format: 'singles', from: 1, to: 18 }];
-  const name = kind === 'pairs' ? 'Day ' + n + ' (pairs)' : 'Day ' + n + ' (singles)';
-  cupState.rounds.push({ key: cupSlug(name), name, segments: segs, matches: [] });
-  cupRender();
+}
+// Section 4 owns the rounds (name, venue, tee time, holes). This keeps the Cup's round list in step with the rows whose engine is cup_match,
+// keeping each round's segments and matches. Matched by the row, then by name, so renaming a round does not lose its segments.
+function cupSyncRounds() {
+  cupSyncFromInputs();
+  const rows = [...roundsBody.querySelectorAll('tr')].filter(tr => tr.querySelector('.r-engine').value === 'cup_match' && tr.querySelector('.r-name').value.trim());
+  cupState.rounds = rows.map(tr => {
+    const name = tr.querySelector('.r-name').value.trim(), rid = tr.dataset.roundId;
+    const hv = tr.querySelector('.r-holes').value;
+    const old = cupState.rounds.find(r => r.rid === rid) || cupState.rounds.find(r => r.name === name) || {};
+    return { key: cupSlug(name), name, rid, holes: hv === 'f9' ? { count: 9, half: 'front' } : hv === 'b9' ? { count: 9, half: 'back' } : { count: 18 },
+      segments: old.segments || [], matches: old.matches || [] };
+  });
+  if (document.getElementById('cupEnabled').checked) cupRender();
+}
+function cupAddRound(kind) {
+  const n = roundsBody.querySelectorAll('tr').length + 1;
+  const tr = addRoundRow(kind === 'pairs' ? 'BF Cup Day ' + n + ' (pairs)' : 'BF Cup Day ' + n + ' (singles)', 'cup_match', '', '', false, '', null);
+  cupSyncRounds();
+  const r = cupState.rounds.find(x => x.rid === tr.dataset.roundId);
+  if (r) { r.segments = cupPreset(kind); cupRender(); }
 }
 function cupSyncFromInputs() {
   cupState.sides[0].name = document.getElementById('cupNameA').value.trim();
@@ -6142,17 +6168,18 @@ function cupRender() {
   const fmtOpts = f => Object.keys(BFEngine.CUP_FORMATS).map(k => '<option value="' + k + '"' + (k === f ? ' selected' : '') + '>' + BFEngine.CUP_FORMATS[k].label + '</option>').join('');
   document.getElementById('cupRounds').innerHTML = cupState.rounds.map((r, ri) =>
     '<div class="cup-round" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px">'
-    + '<div class="row"><div style="flex:2"><label>Round name</label><input type="text" list="roundNameOptions" class="cup-rname" data-ri="' + ri + '" value="' + cupEsc(r.name) + '"></div>'
-    + '<div style="align-self:flex-end"><button type="button" class="link cup-rdel" data-ri="' + ri + '">Remove round</button></div></div>'
+    + '<div class="row"><div style="flex:2"><b>' + cupEsc(r.name) + '</b> <span class="subtle">' + (r.holes && r.holes.count === 9 ? (r.holes.half === 'back' ? 'Back 9 (holes 10-18)' : 'Front 9 (holes 1-9)') : '18 holes') + ' · name, venue and holes are set in section 4</span></div>'
+    + '<div style="align-self:flex-end"><button type="button" class="link cup-preset" data-ri="' + ri + '" data-kind="pairs">Pairs preset</button> <button type="button" class="link cup-preset" data-ri="' + ri + '" data-kind="singles">Singles preset</button></div></div>'
     + r.segments.map((sg, si) => '<div class="row" style="align-items:flex-end">'
       + '<div><label>Segment</label><input type="text" class="cup-sg" data-f="key" data-ri="' + ri + '" data-si="' + si + '" value="' + cupEsc(sg.key) + '"></div>'
       + '<div><label>Format</label><select class="cup-sg" data-f="format" data-ri="' + ri + '" data-si="' + si + '">' + fmtOpts(sg.format) + '</select></div>'
       + '<div><label>From hole</label><input type="number" min="1" max="18" class="cup-sg" data-f="from" data-ri="' + ri + '" data-si="' + si + '" value="' + sg.from + '"></div>'
       + '<div><label>To hole</label><input type="number" min="1" max="18" class="cup-sg" data-f="to" data-ri="' + ri + '" data-si="' + si + '" value="' + sg.to + '"></div>'
       + '<div><button type="button" class="link cup-sdel" data-ri="' + ri + '" data-si="' + si + '">Remove</button></div></div>').join('')
+    + (r.segments.length ? '' : '<p class="subtle">No segments yet. Use a preset, or add one.</p>')
     + '<div class="btnbar"><button type="button" class="secondary cup-sadd" data-ri="' + ri + '">+ Segment</button></div>'
     + '<div class="subtle">' + (r.matches || []).length + ' match(es) set by the captains</div></div>').join('')
-    || '<p class="subtle">No rounds yet. Add a pairs day and a singles day below.</p>';
+    || '<p class="subtle">No Cup rounds yet. In section 4 add a round with the engine "Team match play (BF Cup)", or use the buttons below.</p>';
   cupSummaryRender();
 }
 function cupSummaryRender() {
@@ -6204,26 +6231,26 @@ async function cupLoad() {
     if (!r.ok) throw new Error(j.error || r.status);
     Object.assign(cupState, { sides: j.config.sides, points: j.config.points || cupState.points, rounds: j.config.rounds || [], draft: j.config.draft, pool: j.config.pool });
     document.getElementById('cupEnabled').checked = true; document.getElementById('cupBody').style.display = 'block';
-    cupRender(); cupStatus('Loaded the saved Cup.', 'ok');
+    cupRender(); cupStatus('Loaded the saved Cup. Its rounds follow the Team match play rows in section 4.', 'ok');
   } catch (e) { cupStatus('Could not load: ' + e.message, 'err'); }
 }
 (function initCupSection() {
   const body = document.getElementById('cupBody');
-  document.getElementById('cupEnabled').addEventListener('change', e => { body.style.display = e.target.checked ? 'block' : 'none'; if (e.target.checked) cupRender(); });
+  document.getElementById('cupEnabled').addEventListener('change', e => { body.style.display = e.target.checked ? 'block' : 'none'; if (e.target.checked) cupSyncRounds(); });
+  ['change', 'click'].forEach(ev => roundsBody.addEventListener(ev, () => setTimeout(cupSyncRounds, 0)));
   document.getElementById('cupAddPairsDay').addEventListener('click', () => cupAddRound('pairs'));
   document.getElementById('cupAddSinglesDay').addEventListener('click', () => cupAddRound('singles'));
   document.getElementById('cupSaveBtn').addEventListener('click', cupSave);
   document.getElementById('cupLoadBtn').addEventListener('click', cupLoad);
   body.addEventListener('input', e => {
     const t = e.target;
-    if (t.classList.contains('cup-rname')) { const r = cupState.rounds[+t.dataset.ri]; r.name = t.value; r.key = cupSlug(t.value); }
-    else if (t.classList.contains('cup-sg')) { const sg = cupState.rounds[+t.dataset.ri].segments[+t.dataset.si]; sg[t.dataset.f] = (t.dataset.f === 'from' || t.dataset.f === 'to') ? Number(t.value) : t.value; }
+    if (t.classList.contains('cup-sg')) { const sg = cupState.rounds[+t.dataset.ri].segments[+t.dataset.si]; sg[t.dataset.f] = (t.dataset.f === 'from' || t.dataset.f === 'to') ? Number(t.value) : t.value; }
     cupSummaryRender();
   });
   body.addEventListener('change', e => { if (/^cup(Cap|Col)[AB]$/.test(e.target.id)) cupSummaryRender(); });
   body.addEventListener('click', e => {
     const t = e.target; const ri = +t.dataset.ri, si = +t.dataset.si;
-    if (t.classList.contains('cup-rdel')) { cupState.rounds.splice(ri, 1); cupRender(); }
+    if (t.classList.contains('cup-preset')) { cupState.rounds[ri].segments = cupPreset(t.dataset.kind); cupRender(); }
     else if (t.classList.contains('cup-sdel')) { cupState.rounds[ri].segments.splice(si, 1); cupRender(); }
     else if (t.classList.contains('cup-sadd')) { cupState.rounds[ri].segments.push({ key: 'seg' + (cupState.rounds[ri].segments.length + 1), format: 'singles', from: 1, to: 18 }); cupRender(); }
   });

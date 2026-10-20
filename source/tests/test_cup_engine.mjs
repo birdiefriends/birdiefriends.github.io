@@ -161,5 +161,13 @@ ok(stacked.verdict === 'tilted' && stacked.metrics.hcp.edge === 'A' && stacked.m
 ok(E.cupBalance({ A: ['x'], B: ['y'] }, {}).verdict === 'unknown', 'no stats yet: unknown, no crash');
 ok(E.cupBalance({ A: ['a0'], B: ['a1'] }, { a0: { hcp: 5 }, a1: { hcp: 5.5 } }).metrics.avg === null, 'a metric with no data is skipped');
 
+// 9-hole rounds: segments must sit inside the nine that is played
+const nine = JSON.parse(JSON.stringify(cfg)); nine.rounds = [Object.assign({}, nine.rounds[1], { holes: { count: 9, half: 'front' }, segments: [{ key: 's', format: 'singles', from: 1, to: 9 }] })];
+ok(E.cupValidate(nine).ok, 'a front-nine round with segment 1-9 is valid');
+nine.rounds[0].segments[0].to = 18;
+ok(!E.cupValidate(nine).ok, 'a front-nine round cannot have a segment to hole 18');
+nine.rounds[0].holes = { count: 9, half: 'back' }; nine.rounds[0].segments[0] = { key: 's', format: 'singles', from: 10, to: 18 };
+ok(E.cupValidate(nine).ok, 'a back-nine round uses holes 10-18');
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
