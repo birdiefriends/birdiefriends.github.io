@@ -7,7 +7,7 @@ const raw = fs.readFileSync(HERE('../../docs/bf-cup-draft.html'), 'utf8');
 ok(raw.includes('<script src="bf_engine.js?v=1.24.0">'), 'page loads the matching engine version');
 const page = raw.replace(/<script src="bf_engine.js[^>]*><\/script>/, '<script>' + engine + '</script>');
 // fake Worker
-let doc = { sides: [{ key: 'A', name: 'Team Jake', captain: 'Jake K', players: [] }, { key: 'B', name: 'Team Nate', captain: 'Nate S', players: [] }], points: { win: 1, half: 0.5, loss: 0 }, rounds: [], pool: ['Jake K', 'Nate S', 'P1', 'P2', 'P3', 'P4'] };
+let doc = { sides: [{ key: 'A', name: 'Team Jake', captain: 'Jake K', color: 'red', players: [] }, { key: 'B', name: 'Team Nate', captain: 'Nate S', color: 'blue', players: [] }], points: { win: 1, half: 0.5, loss: 0 }, rounds: [], pool: ['Jake K', 'Nate S', 'P1', 'P2', 'P3', 'P4'] };
 const posts = [];
 const fakeFetch = async (u, o) => {
   const J = (x, status = 200) => ({ ok: status < 400, status, json: async () => x });
@@ -45,6 +45,7 @@ ok(doc.draft.picks.length === 1 && doc.draft.picks[0].side === 'B' && doc.draft.
 ok(/Team Jake/.test(d.querySelector('.banner.live').textContent) && /Pick 2/.test(d.body.textContent), 'now Team Jake is on the clock (snake)');
 ok(/HCP/.test(d.querySelector('.meter').textContent) && /5\.8/.test(d.querySelector('.meter').textContent) && /6\.0/.test(d.querySelector('.meter').textContent), 'meter shows the averages (Nate 5.8, Jake 6.0)');
 // a watcher sees the same, with no pick buttons enabled
+ok(d.querySelector('.card.team.cred h2').textContent === 'Team Jake' && d.querySelector('.card.team.cblue h2').textContent === 'Team Nate', 'Team Jake is red, Team Nate is blue');
 const wdom = await open('', null); const wd = wdom.window.document;
 ok(/LIVE/.test(wd.querySelector('.banner').textContent) && wd.querySelectorAll('[data-pick]:not([disabled])').length === 0, 'watch mode: live banner, cards are not clickable');
 // finish: Jake P2, P3 (snake: B A A B), Nate P4

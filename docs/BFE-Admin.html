@@ -342,8 +342,10 @@
       <div class="row">
         <div><label for="cupNameA">Side A name</label><input type="text" id="cupNameA" placeholder="e.g. Team Jake"></div>
         <div><label for="cupCapA">Side A captain</label><select id="cupCapA"></select></div>
+        <div><label for="cupColA">Side A color</label><select id="cupColA"><option value="red">Red</option><option value="blue">Blue</option></select></div>
         <div><label for="cupNameB">Side B name</label><input type="text" id="cupNameB" placeholder="e.g. Team Nate"></div>
         <div><label for="cupCapB">Side B captain</label><select id="cupCapB"></select></div>
+        <div><label for="cupColB">Side B color</label><select id="cupColB"><option value="red">Red</option><option value="blue" selected>Blue</option></select></div>
       </div>
       <div class="row">
         <div><label for="cupPtWin">Points for a win</label><input type="number" id="cupPtWin" step="0.5" min="0" value="1"></div>
@@ -6118,6 +6120,8 @@ function cupAddRound(kind) {
 function cupSyncFromInputs() {
   cupState.sides[0].name = document.getElementById('cupNameA').value.trim();
   cupState.sides[1].name = document.getElementById('cupNameB').value.trim();
+  cupState.sides[0].color = document.getElementById('cupColA').value;
+  cupState.sides[1].color = document.getElementById('cupColB').value;
   cupState.sides[0].captain = document.getElementById('cupCapA').value;
   cupState.sides[1].captain = document.getElementById('cupCapB').value;
   const num = (id, d) => { const v = document.getElementById(id).value; return v === '' || !isFinite(Number(v)) ? d : Number(v); };
@@ -6130,6 +6134,7 @@ function cupRender() {
     const cur = cupState.sides[i].captain;
     sel.innerHTML = '<option value="">— pick a captain —</option>' + names.map(n => '<option value="' + cupEsc(n) + '"' + (n === cur ? ' selected' : '') + '>' + cupEsc(n) + '</option>').join('');
     document.getElementById('cupName' + k).value = cupState.sides[i].name;
+    document.getElementById('cupCol' + k).value = cupState.sides[i].color || (i ? 'blue' : 'red');
   });
   document.getElementById('cupPtWin').value = cupState.points.win;
   document.getElementById('cupPtHalf').value = cupState.points.half;
@@ -6215,7 +6220,7 @@ async function cupLoad() {
     else if (t.classList.contains('cup-sg')) { const sg = cupState.rounds[+t.dataset.ri].segments[+t.dataset.si]; sg[t.dataset.f] = (t.dataset.f === 'from' || t.dataset.f === 'to') ? Number(t.value) : t.value; }
     cupSummaryRender();
   });
-  body.addEventListener('change', e => { if (e.target.id === 'cupCapA' || e.target.id === 'cupCapB') cupSummaryRender(); });
+  body.addEventListener('change', e => { if (/^cup(Cap|Col)[AB]$/.test(e.target.id)) cupSummaryRender(); });
   body.addEventListener('click', e => {
     const t = e.target; const ri = +t.dataset.ri, si = +t.dataset.si;
     if (t.classList.contains('cup-rdel')) { cupState.rounds.splice(ri, 1); cupRender(); }

@@ -39,6 +39,7 @@ nameA.value = 'Team Jake'; nameB.value = 'Team Nate';
 d.getElementById('cupSaveBtn').click(); await new Promise(r => setTimeout(r, 50));
 ok(posts.length === 1 && /\/bfe\/cup$/.test(posts[0].u) && posts[0].body.event_name === '2026 BF Cup' && posts[0].body.pin, 'saves to /bfe/cup with the PIN');
 const cfg = posts[0].body.config;
+ok(cfg.sides[0].color === 'red' && cfg.sides[1].color === 'blue', 'sides carry a color (A red, B blue by default)');
 ok(cfg.sides[0].name === 'Team Jake' && cfg.rounds.length === 2 && cfg.rounds[0].segments.length === 2 && cfg.points.half === 0.5, 'document has sides, rounds, segments, points');
 // a second save from this page must not wipe what the draft page stored (draft + teams)
 stored.draft = { started: true, picks: [{ n: 1, side: 'A', player: 'X' }] }; stored.sides[0].players = ['Cap', 'X'];
