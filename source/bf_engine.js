@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.22.1';
+  const ENGINE_VERSION = '1.23.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2051,6 +2051,153 @@
     return out;
   }
 
+  // ======================================================================================================
+  // BF Cup (Dev-95): a two-sided, multi-round match-play event. Pure functions; nothing here knows a name,
+  // a venue or a field size (spec §13.12: any host can set a team event up in BFE-A).
+  //   cfg = { sides:[{key,name,captain?,players:[…]} x2], points:{win:1,half:0.5,loss:0},
+  //           rounds:[{ key, name, segments:[{key,format:'altshot'|'bestball'|'singles',from:1,to:9}],
+  //                     matches:[{ key, sides:[{side:'A',players:[…]},{side:'B',players:[…]}] }] }] }
+  // Every SEGMENT of a match is its own match for points (a pair can win the foursomes and lose the fourball).
+  // Scores come from `cards` = [{player, holes:[18 strokes]}], gross (the Cup is scratch). Foursomes carry ONE ball per
+  // pair (read from whichever partner's card has it), fourball the better ball, singles the player's own score.
+  // A match closes the moment a side leads by more holes than are left (3&2); holes played after that never count.
+  // ======================================================================================================
+  const CUP_FORMATS = { altshot: { size: 2, label: 'Foursomes' }, bestball: { size: 2, label: 'Fourball' }, singles: { size: 1, label: 'Singles' } };
+  function cupPointsRule(cfg) {
+    const p = (cfg && cfg.points) || {};
+    const n = (v, d) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
+    return { win: n(p.win, 1), half: n(p.half, 0.5), loss: n(p.loss, 0) };
+  }
+  // First half-point step strictly above half the total: 16 -> 8.5, 20 -> 10.5, 15 -> 8.
+  function cupWinTarget(total) { return total / 2 + 0.5; }
+  // What a field of N players makes: N/2 pairs-matches on the pair day (2 nines each) + N singles = N points a day.
+  function cupPlanFor(totalPlayers) {
+    const perSide = Math.floor(totalPlayers / 2);
+    const satMatches = Math.floor(perSide / 2), sunMatches = perSide;
+    const totalPoints = satMatches * 2 + sunMatches;
+    return { perSide, satMatches, sunMatches, totalPoints, target: cupWinTarget(totalPoints) };
+  }
+  // Draft orders. Snake 1-2-2-1…: whoever picks first in `first`; alternating = A,B,A,B… (the Saturday matchup draw).
+  function cupSnakeOrder(picks, first, other) { return Array.from({ length: picks }, (_, i) => (((i + 1) >> 1) & 1 ? other : first)); }
+  function cupAlternatingOrder(count, first, other) { return Array.from({ length: count }, (_, i) => (i % 2 ? other : first)); }
+  // One match segment, hole by hole from `from` to `to` (1-based). A, B = 18-slot score arrays (null = not played).
+  // The count stops at the first hole where either score is missing.
+  function cupMatchState(A, B, from, to) {
+    const total = to - from + 1;
+    let lead = 0, played = 0, closedAt = null, w0 = 0, w1 = 0, halved = 0, text = null, closeLead = 0;
+    for (let h = from - 1; h < to; h++) {
+      const x = A[h], y = B[h];
+      if (typeof x !== 'number' || typeof y !== 'number') break;
+      played++;
+      if (closedAt != null) continue;                   // play-on holes never change a closed match
+      if (x < y) { w0++; lead++; } else if (x > y) { w1++; lead--; } else halved++;
+      const left = total - played;
+      if (Math.abs(lead) > left) { closedAt = played; closeLead = lead; text = left > 0 ? Math.abs(lead) + '&' + left : Math.abs(lead) + ' UP'; }
+    }
+    const thru = closedAt != null ? closedAt : played;
+    const out = { total, thru, closedAt, lead: closedAt != null ? closeLead : lead, won: [w0, w1], halved, status: 'pending', winner: null, text: null, decided: false };
+    if (closedAt != null) { out.status = 'won'; out.winner = closeLead > 0 ? 0 : 1; out.text = text; out.decided = true; }
+    else if (played >= total) { out.status = 'push'; out.text = 'Halved'; out.decided = true; }
+    else out.text = played === 0 ? 'Not started' : (lead === 0 ? 'All square' : Math.abs(lead) + ' UP') + ' thru ' + played;
+    return out;
+  }
+  // The 18-slot score array of one side of a match for a format.
+  function cupSideScores(format, players, cardBy) {
+    const cs = (players || []).map(p => cardBy.get(norm(p))).filter(Boolean);
+    const out = new Array(18).fill(null);
+    if (!cs.length) return out;
+    for (let h = 0; h < 18; h++) {
+      const v = cs.map(c => (Array.isArray(c.holes) ? c.holes[h] : null)).filter(x => typeof x === 'number' && x > 0);
+      if (!v.length) continue;
+      if (format === 'bestball') out[h] = Math.min(...v);
+      else out[h] = v[0];                                // foursomes: the one shared ball; singles: the player's own
+    }
+    return out;
+  }
+  function cupCardMap(cards) { return new Map((cards || []).map(c => [norm(c.player), c])); }
+  // Standings for the whole Cup. Returns the per-round / per-match / per-segment view the scoreboard, results page
+  // and Live Panel all read, plus the side totals. Pending segments award nothing.
+  function cupStandings(cfg, cards) {
+    const rule = cupPointsRule(cfg);
+    const keys = (cfg.sides || []).map(s => s.key);
+    const cardBy = cupCardMap(cards);
+    const points = {}; keys.forEach(k => { points[k] = 0; });
+    let total = 0, open = 0;
+    const rounds = (cfg.rounds || []).map(r => {
+      const matches = (r.matches || []).map(m => {
+        const mp = {}; keys.forEach(k => { mp[k] = 0; });
+        const segments = (r.segments || []).map(sg => {
+          const fmt = sg.format;
+          const sa = cupSideScores(fmt, m.sides[0].players, cardBy), sb = cupSideScores(fmt, m.sides[1].players, cardBy);
+          const st = cupMatchState(sa, sb, sg.from, sg.to);
+          const sideKeys = [m.sides[0].side, m.sides[1].side];
+          const pts = { [sideKeys[0]]: 0, [sideKeys[1]]: 0 };
+          if (st.status === 'won') { pts[sideKeys[st.winner]] = rule.win; pts[sideKeys[1 - st.winner]] = rule.loss; }
+          else if (st.status === 'push') { pts[sideKeys[0]] = rule.half; pts[sideKeys[1]] = rule.half; }
+          sideKeys.forEach(k => { mp[k] += pts[k]; points[k] += pts[k]; });
+          total += Math.max(rule.win + rule.loss, 2 * rule.half);
+          if (!st.decided) open++;
+          return { key: sg.key, format: fmt, label: (CUP_FORMATS[fmt] || {}).label || fmt, from: sg.from, to: sg.to, status: st.status, decided: st.decided,
+            winner: st.winner != null ? sideKeys[st.winner] : null, text: st.text, thru: st.thru, closedAt: st.closedAt, lead: st.lead, points: pts };
+        });
+        return { key: m.key, sides: m.sides, segments, points: mp, done: segments.every(s => s.decided) };
+      });
+      return { key: r.key, name: r.name, matches, done: matches.length > 0 && matches.every(m => m.done) };
+    });
+    const target = cupWinTarget(total);
+    const out = { points, total, target, open, rounds, state: 'live', winner: null, shared: false, clinched: null };
+    keys.forEach(k => { if (points[k] >= target) out.clinched = k; });
+    if (total > 0 && open === 0) {
+      out.state = 'final';
+      const best = Math.max(...keys.map(k => points[k]));
+      const lead = keys.filter(k => points[k] === best);
+      if (lead.length === 1) out.winner = lead[0]; else out.shared = true;
+    }
+    return out;
+  }
+  function cupTotalPoints(cfg) {
+    const rule = cupPointsRule(cfg);
+    return (cfg.rounds || []).reduce((t, r) => t + (r.matches || []).length * (r.segments || []).length, 0) * Math.max(rule.win + rule.loss, 2 * rule.half);
+  }
+  // Structural checks. A half-built lineup (captains still picking) is valid: `unassigned[round][side]` lists who has no match yet.
+  function cupValidate(cfg) {
+    const errors = [];
+    const sides = cfg && cfg.sides;
+    if (!Array.isArray(sides) || sides.length !== 2 || !sides[0].key || sides[0].key === sides[1].key) return { ok: false, errors: ['The Cup needs exactly two sides with different keys'], unassigned: {} };
+    const sideOf = new Map();
+    sides.forEach(sd => (sd.players || []).forEach(p => {
+      const k = norm(p);
+      if (sideOf.has(k)) errors.push(p + ' is on both sides'); else sideOf.set(k, sd.key);
+    }));
+    const unassigned = {};
+    (cfg.rounds || []).forEach(r => {
+      const segs = (r.segments || []).slice().sort((a, b) => a.from - b.from);
+      let size = null;
+      segs.forEach((sg, i) => {
+        const f = CUP_FORMATS[sg.format];
+        if (!f) errors.push((r.name || r.key) + ': unknown format ' + sg.format);
+        else if (size == null) size = f.size; else if (size !== f.size) errors.push((r.name || r.key) + ': formats in one round must use the same side size');
+        if (!(sg.from >= 1 && sg.to <= 18 && sg.from <= sg.to)) errors.push((r.name || r.key) + ': segment ' + sg.key + ' is outside holes 1-18');
+        if (i > 0 && sg.from <= segs[i - 1].to) errors.push((r.name || r.key) + ': segments overlap');
+      });
+      const seen = new Set();
+      (r.matches || []).forEach(m => {
+        if (!m.sides || m.sides.length !== 2 || m.sides[0].side === m.sides[1].side) { errors.push((r.name || r.key) + ' ' + m.key + ': a match is one player/pair from each side'); return; }
+        m.sides.forEach(ms => {
+          if (size != null && (ms.players || []).length !== size) errors.push((r.name || r.key) + ' ' + m.key + ': needs ' + size + ' player(s) a side');
+          (ms.players || []).forEach(p => {
+            const k = norm(p);
+            if (sideOf.get(k) !== ms.side) errors.push(p + ' is not on side ' + ms.side);
+            if (seen.has(k)) errors.push(p + ' plays twice in ' + (r.name || r.key)); seen.add(k);
+          });
+        });
+      });
+      unassigned[r.key] = {};
+      sides.forEach(sd => { unassigned[r.key][sd.key] = (sd.players || []).filter(p => !seen.has(norm(p))); });
+    });
+    return { ok: errors.length === 0, errors, unassigned };
+  }
+
   return {
     ENGINE_VERSION,
     BASE_GAMES, ADDONS,
@@ -2063,6 +2210,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
+    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });
