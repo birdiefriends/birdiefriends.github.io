@@ -10398,10 +10398,10 @@ function fourballActionsHtml(cfg) {
     const nameBtn = (n, strong) => `<button type="button" onclick="fbDrillName(${escapeHtml(JSON.stringify(n)).replace(/"/g, '&quot;')})" style="background:none;border:0;color:${strong ? '#fff' : 'rgba(255,255,255,0.5)'};font-family:inherit;font-size:0.84rem;font-weight:${strong ? 700 : 500};padding:6px 4px;min-height:32px;cursor:pointer">${first(n)}${strong ? '' : ' ' + (netOf(n) != null ? netOf(n) : '·')}</button>`;
     // who supplied the number: every partner whose net equals it (a tie shows both)
     const side = (pr, val, c, ini, chipFg, win) => {
-      const sup = pr.names.filter(n => netOf(n) != null && netOf(n) === val), oth = pr.names.filter(n => !sup.includes(n));
+      const sup = pr.names.filter(n => netOf(n) != null && netOf(n) === val);   // only the player(s) whose score counts
       return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:5px;border-radius:10px;background:${win ? (c === TEAL ? 'rgba(93,202,165,0.18)' : 'rgba(224,180,76,0.18)') : 'rgba(255,255,255,0.05)'};border:1px solid ${win ? c : 'transparent'}">
         <span style="background:${c};color:${chipFg};font-weight:700;font-size:0.74rem;border-radius:7px;padding:4px 7px">${escapeHtml(ini)}</span>
-        <div style="flex:1;min-width:0">${sup.map(n => nameBtn(n, true)).join('')}${oth.map(n => nameBtn(n, false)).join('')}</div>
+        <div style="flex:1;min-width:0">${sup.map(n => nameBtn(n, true)).join('')}</div>
         <div style="text-align:right"><div style="font-family:'DM Mono',monospace;font-size:1.25rem;font-weight:700">${val != null ? val : '·'}</div>${win ? `<div style="font-size:0.68rem;color:${c}">+1 point</div>` : ''}</div></div>`;
     };
     const contest = (label, va, vb) => {
