@@ -145,6 +145,17 @@ eq(A.livePanelModeToggleHtml('score').includes("setLiveScoreMode('games')"), tru
   A.skSetScore('Brian Hager', 8, 3); A.skSetScore('Tom Marsh', 8, 4); A.skSetScore('Mike Kay', 8, 3); A.skSetScore('Dave Vance', 8, 3);
   h = L2.fourballActionsHtml(cfg2);
   ok(/Through 8 holes/.test(h), 'actions: scores tapped on this phone count before the server read');
+  // Hi-Lo: the hole sheet shows the two contests (low ball, high ball), who supplied each number, and who got the point
+  { const hiRow = { games: ['hilo'], dollar_per_player: 15, game_configs: { hilo: { dollar_per_player: 15, basis: 'gross', net_mode: 'own', pairs: pairs4 } } };
+    const hiCfg = E.gatheringConfigFromLegacy(hiRow); const oldCfg = A.get().config; A.get().config = hiCfg;
+    L2.set({ gid: 7, row: hiRow, cards: serverCards, pars: PARS, sideGid: 'hilo' }); L2.fbPickHole(2); let hh = L2.fourballActionsHtml(hiCfg);
+    if (process.env.DUMP_HH) (await import('fs')).writeFileSync(process.env.DUMP_HH, hh);
+    ok(/LOW BALL/.test(hh) && /HIGH BALL/.test(hh), 'hi-lo sheet: a low-ball contest and a high-ball contest');
+    eq((hh.match(/\+1 point/g) || []).length, 2, 'hi-lo sheet: hole 2 gives the first pair both points (low 3 v 4, high 4 v 5)');
+    ok(/Hole 2: BT 2 – 0 MD/.test(hh), 'hi-lo sheet: result line with the hole\'s points');
+    ok(/fbDrillName/.test(hh), 'hi-lo sheet: names still open the player card');
+    L2.fbPickHole(4); hh = L2.fourballActionsHtml(hiCfg);
+    ok(/tied, nobody gets the point/.test(hh) && (hh.match(/\+1 point/g) || []).length === 1, 'hi-lo sheet: a tied low ball says nobody gets the point; the high ball still pays one'); L2.fbCloseHole(); A.get().config = oldCfg; L2.set({ gid: 7, row: fbRow, cards: serverCards, pars: PARS }); }
   L2.fbDrill(0); h = L2.fourballActionsHtml(cfg2);
   ok(/Back to the game/.test(h) && /Brian Hager/.test(h) && /Total through 8 holes/.test(h) && />Out</.test(h), 'drill: one player\'s card with Out/In and total');
   ok(/skJump\(0,1\)/.test(h), 'drill: tapping a hole jumps to Live Score to fix it');
