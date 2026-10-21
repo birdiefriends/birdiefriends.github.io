@@ -10395,7 +10395,9 @@ function fourballActionsHtml(cfg) {
   const hiloHtml = () => {
     const netOf = n => { const v = skCardOf(n)[sel - 1]; return v > 0 ? v - skGot(n, sel) : null; };
     const first = n => escapeHtml(String(n).trim().split(/\s+/)[0]);
-    const nameBtn = (n, strong) => `<button type="button" onclick="fbDrillName(${escapeHtml(JSON.stringify(n)).replace(/"/g, '&quot;')})" style="background:none;border:0;color:${strong ? '#fff' : 'rgba(255,255,255,0.5)'};font-family:inherit;font-size:0.84rem;font-weight:${strong ? 700 : 500};padding:6px 4px;min-height:32px;cursor:pointer">${first(n)}${strong ? '' : ' ' + (netOf(n) != null ? netOf(n) : '·')}</button>`;
+    // gross, and the net in brackets when the player gets a stroke on this hole
+    const grossNet = n => { const g = skCardOf(n)[sel - 1]; if (!(g > 0)) return ''; return ` <span style="font-family:'DM Mono',monospace;font-weight:500;color:rgba(255,255,255,0.7)">${g}${skGot(n, sel) ? ` <span style="color:#ffe08a">(${g - skGot(n, sel)})</span>` : ''}</span>`; };
+    const nameBtn = (n, strong) => `<button type="button" onclick="fbDrillName(${escapeHtml(JSON.stringify(n)).replace(/"/g, '&quot;')})" style="background:none;border:0;color:${strong ? '#fff' : 'rgba(255,255,255,0.5)'};font-family:inherit;font-size:0.84rem;font-weight:${strong ? 700 : 500};padding:6px 4px;min-height:32px;cursor:pointer">${first(n)}${grossNet(n)}</button>`;
     // who supplied the number: every partner whose net equals it (a tie shows both)
     const side = (pr, val, c, ini, chipFg, win) => {
       const sup = pr.names.filter(n => netOf(n) != null && netOf(n) === val);   // only the player(s) whose score counts

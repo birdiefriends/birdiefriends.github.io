@@ -154,6 +154,7 @@ eq(A.livePanelModeToggleHtml('score').includes("setLiveScoreMode('games')"), tru
     eq((hh.match(/\+1 point/g) || []).length, 2, 'hi-lo sheet: hole 2 gives the first pair both points (low 3 v 4, high 4 v 5)');
     ok(/Hole 2: BT 2 – 0 MD/.test(hh), 'hi-lo sheet: result line with the hole\'s points');
     ok(/fbDrillName/.test(hh), 'hi-lo sheet: names still open the player card');
+    ok(/Tom[\s\S]{0,200}>3</.test(hh) || />\s*3\s*</.test(hh), 'hi-lo sheet: the gross score sits beside the player\'s name');
     L2.fbPickHole(4); hh = L2.fourballActionsHtml(hiCfg);
     ok(/tied, nobody gets the point/.test(hh) && (hh.match(/\+1 point/g) || []).length === 1, 'hi-lo sheet: a tied low ball says nobody gets the point; the high ball still pays one'); L2.fbCloseHole(); A.get().config = oldCfg; L2.set({ gid: 7, row: fbRow, cards: serverCards, pars: PARS }); }
   L2.fbDrill(0); h = L2.fourballActionsHtml(cfg2);
