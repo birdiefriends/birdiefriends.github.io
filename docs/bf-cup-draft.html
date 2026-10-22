@@ -325,10 +325,18 @@ button:disabled{opacity:.4;cursor:default}
     var practiceCard = PRACTICE
       ? '<div class="card"><b>Practice copy.</b> <span class="hint">Sample players and made-up stats. Nothing here touches the real Cup.</span><div class="toolbar"><button class="sec" id="practiceDelete">Delete this practice copy</button></div></div>'
       : '<div class="card"><h2>Practice run</h2><p class="hint">Make a separate copy of this Cup with 16 sample players and made-up stats, to rehearse the whole flow. The real Cup is never touched.</p><div class="toolbar"><button class="sec" id="practiceMake">Create a practice copy</button>' + (notice && /practice/i.test(notice) ? ' <a href="' + esc(location.pathname + '?event=' + encodeURIComponent(EVENT + ' (practice)') + '&host=1') + '">Open the practice copy →</a>' : '') + '</div></div>';
-    return practiceCard + '<div class="card"><h2>1 · Players</h2><p class="hint">Everyone in the draft, one name per line. The captains are placed automatically and don\'t need to be listed.</p>'
+    var st = d.stats || {}, tnames = (d.pool || cfg.pool || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean)).filter(function (n, i, a) { return a.indexOf(n) === i; });
+    var withHcp = tnames.filter(function (n) { return st[n] && typeof st[n].hcp === 'number'; }).length;
+    var table = tnames.length ? '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:.85rem"><tr style="color:var(--dim);text-align:left"><th>Player</th><th>HCP</th><th>Rank</th><th>Avg pts</th><th>🐦</th></tr>' + tnames.map(function (n) {
+      var x = st[n] || {}; function c(v, d2) { return '<td style="padding:3px 8px 3px 0;' + (typeof v === 'number' ? '' : 'color:var(--bad)') + '">' + fmt(v, d2) + '</td>'; }
+      return '<tr style="border-top:1px solid var(--faint)"><td style="padding:3px 8px 3px 0">' + esc(n) + (cfg.sides.some(function (sd) { return sd.captain === n; }) ? ' 👑' : '') + '</td>' + c(x.hcp) + c(x.rank, 0) + c(x.avg) + c(x.birdies, 0) + '</tr>'; }).join('') + '</table></div>' : '<p class="hint">No players yet.</p>';
+    var noticeBanner = notice && !/practice/i.test(notice) ? '<div class="banner" style="background:#1a7f3c">' + esc(notice) + '</div>' : '';
+    return noticeBanner + practiceCard + '<div class="card"><h2>1 · Players</h2><p class="hint">Everyone in the draft, one name per line. The captains are placed automatically and don\'t need to be listed. Every button below saves what is in this box first.</p>'
+      + '<div class="toolbar"><button id="loadRoster">Load players and handicaps from the event roster (BFE-Admin)</button></div>'
       + '<textarea id="poolTxt" rows="8">' + esc(poolText) + '</textarea><div class="toolbar"><button class="sec" id="poolSave">Save the list</button><button class="sec" id="fillHcp">Fill handicaps from Membership</button></div></div>'
+      + '<div class="card"><h2>Players and stats so far</h2><p class="hint">' + tnames.length + ' players, ' + withHcp + ' with a handicap. Anything in red is still missing.</p>' + table + '</div>'
       + '<div class="card"><h2>2 · Player stats</h2><p class="hint">Paste a table from the sheet (a header row, then one row per player): Player, Ranking, Avg points, Birdie count, HCP. Missing values just show –.</p>'
-      + '<textarea id="statsTxt" rows="5" placeholder="Player&#9;Avg Achievement&#9;Birdie Count&#9;HCP&#9;Player Ranking"></textarea><div class="toolbar"><button class="sec" id="statsApply">Apply stats</button><span class="hint">' + esc(notice) + '</span></div></div>'
+      + '<textarea id="statsTxt" rows="5" placeholder="Player&#9;Avg Achievement&#9;Birdie Count&#9;HCP&#9;Player Ranking"></textarea><div class="toolbar"><button class="sec" id="statsApply">Apply stats</button></div></div>'
       + '<div class="card"><h2>3 · Coin toss</h2><p class="hint">The winner picks first in the snake draft.</p>'
       + '<div class="toolbar"><span class="coin' + (coinFlip ? ' flip' : '') + '">🪙</span><button id="toss">Toss the coin</button>'
       + cfg.sides.map(function (s) { return '<button class="sec" data-first="' + s.key + '">' + esc(s.name || 'Side ' + s.key) + ' picks first</button>'; }).join('') + '</div>'
@@ -372,22 +380,38 @@ button:disabled{opacity:.4;cursor:default}
     pairsWire(); matchupWire();
     var sel = $('sortSel'); if (sel) sel.addEventListener('change', function () { sortBy = sel.value; render(); });
     on('pinGo', function () { pin = $('pinIn').value.trim(); try { sessionStorage.setItem('bf_cup_pin', pin); } catch (e) {} render(); });
-    on('poolSave', function () {
-      var names = $('poolTxt').value.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
-      draft().pool = names; cfg.pool = names; save();
+    function commitPool() {
+      var el = $('poolTxt'); if (!el) return (cfg.draft && cfg.draft.pool) || [];
+      var names = el.value.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+      draft().pool = names; cfg.pool = names; return names;
+    }
+    on('poolSave', function () { var n = commitPool(); notice = 'Saved ' + n.length + ' player(s).'; save(); });
+    on('loadRoster', function () {
+      commitPool();
+      var base = EVENT.replace(/ \(practice\)$/, '');
+      fetch(WORKER + '/bfe/events?event=' + encodeURIComponent(base)).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); }).then(function (j) {
+        var roster = ((j.config || {}).roster || []).filter(function (p) { return p && p.name && !p.withdrawn; });
+        if (!roster.length) { notice = 'The event "' + base + '" has no roster saved yet. Save the roster in BFE-Admin (section 3, then Save config).'; render(); return; }
+        var d = draft(); d.stats = d.stats || {}; var h = 0;
+        d.pool = roster.map(function (p) { return String(p.name).trim(); }); cfg.pool = d.pool;
+        roster.forEach(function (p) { var nm = String(p.name).trim(); if (p.hcp !== null && p.hcp !== undefined && p.hcp !== '' && isFinite(Number(p.hcp))) { d.stats[nm] = Object.assign({}, d.stats[nm], { hcp: Number(p.hcp) }); h++; } });
+        notice = 'Loaded ' + roster.length + ' players from "' + base + '" (' + h + ' with a handicap). Rank, points and birdies still come from the stats box below.'; save();
+      }).catch(function (e) { error = 'Could not read the event roster: ' + e.message; render(); });
     });
     on('fillHcp', function () {
+      commitPool();
       fetch(WORKER + '/bfe/players').then(function (r) { return r.json(); }).then(function (j) {
         var by = {}; (j.players || []).forEach(function (p) { by[String(p.name || '').trim().toLowerCase()] = p.current_hcp; });
         var d = draft(); d.stats = d.stats || {}; var n = 0;
         (d.pool || []).concat(cfg.sides.map(function (s) { return s.captain; }).filter(Boolean)).forEach(function (nm) {
           var h = by[nm.toLowerCase()]; if (typeof h === 'number') { d.stats[nm] = Object.assign({}, d.stats[nm], { hcp: h }); n++; }
         });
-        notice = 'Handicaps filled for ' + n + ' player(s).'; save();
+        notice = 'Handicaps filled for ' + n + ' of ' + ((d.pool || []).length) + ' player(s) from Membership.' + (n === 0 ? ' No names matched, so check the spelling against Membership.' : ''); save();
       }).catch(function (e) { error = 'Could not read Membership: ' + e.message; render(); });
     });
     on('statsApply', function () {
-      var d = draft(); var names = (d.pool || []).concat(cfg.sides.map(function (s) { return s.captain; }).filter(Boolean));
+      commitPool(); var d = draft();
+      if (!$('statsTxt').value.trim()) { notice = 'Paste the stats table into the box first, then Apply.'; render(); return; } var names = (d.pool || []).concat(cfg.sides.map(function (s) { return s.captain; }).filter(Boolean));
       var r = E.cupParseStats($('statsTxt').value, names);
       d.stats = d.stats || {}; Object.keys(r.stats).forEach(function (k) {
         var cur = d.stats[k] || {}, nw = r.stats[k];
@@ -396,11 +420,11 @@ button:disabled{opacity:.4;cursor:default}
       notice = r.matched + ' matched' + (r.unmatched.length ? '; not in the player list: ' + r.unmatched.join(', ') : '') + '.'; save();
     });
     on('toss', function () {
-      var d = draft(); coinFlip = true; render();
+      commitPool(); var d = draft(); coinFlip = true; render();
       setTimeout(function () { d.first = cfg.sides[Math.random() < 0.5 ? 0 : 1].key; coinFlip = false; save(); }, 1400);
     });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-first]'), function (b) { b.addEventListener('click', function () { draft().first = b.getAttribute('data-first'); save(); }); });
-    on('startDraft', function () { var d = draft(); if (!cfg.access) cfg.access = { A: genCode(), B: genCode() }; d.started = true; d.picks = d.picks || []; save(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-first]'), function (b) { b.addEventListener('click', function () { commitPool(); draft().first = b.getAttribute('data-first'); save(); }); });
+    on('startDraft', function () { commitPool(); var d = draft(); if (!cfg.access) cfg.access = { A: genCode(), B: genCode() }; d.started = true; d.picks = d.picks || []; save(); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-pick]'), function (b) { b.addEventListener('click', function () { if (canPick(E.cupDraftView(cfg))) { pending = b.getAttribute('data-pick'); render(); } }); });
     on('cancelPick', function () { pending = null; render(); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-copy]'), function (b) { b.addEventListener('click', function () { var u = b.getAttribute('data-copy'); try { navigator.clipboard.writeText(u); b.textContent = 'Copied'; } catch (e) { b.previousSibling.select(); } }); });
