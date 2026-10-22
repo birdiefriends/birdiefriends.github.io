@@ -102,7 +102,7 @@ button:disabled{opacity:.4;cursor:default}
   function load() {
     var extra = CAP ? '&cap=' + encodeURIComponent(CAP) : (HOST && pin ? '&pin=' + encodeURIComponent(pin) : '');
     return fetch(WORKER + '/bfe/cup?event=' + encodeURIComponent(EVENT) + extra + '&_=' + Date.now()).then(function (r) {
-      if (r.status === 404) { cfg = null; error = 'The Cup has not been set up in BFE-Admin yet.'; return; }
+      if (r.status === 404) { cfg = null; error = 'No Cup is saved under the name "' + EVENT + '". Check the event name in the link (event=...) matches BFE-Admin exactly, or save the Cup in BFE-Admin first.'; return; }
       if (r.status === 403) { cfg = null; error = CAP ? 'That captain link is not valid. Ask the commissioner for a fresh one.' : 'Not allowed.'; return; }
       return r.json().then(function (j) { cfg = j.config; YOU = j.you || ''; error = ''; });
     }).catch(function (e) { error = 'Could not reach the server: ' + e.message; });
