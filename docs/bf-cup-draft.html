@@ -80,7 +80,7 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.30.0"></script>
+<script src="bf_engine.js?v=1.31.0"></script>
 <script>
 (function () {
   'use strict';
@@ -335,7 +335,7 @@ button:disabled{opacity:.4;cursor:default}
       + '<div class="toolbar"><button id="loadRoster">Load players and handicaps from the event roster (BFE-Admin)</button></div>'
       + '<textarea id="poolTxt" rows="8">' + esc(poolText) + '</textarea><div class="toolbar"><button class="sec" id="poolSave">Save the list</button><button class="sec" id="fillHcp">Fill handicaps from Membership</button></div></div>'
       + '<div class="card"><h2>Players and stats so far</h2><p class="hint">' + tnames.length + ' players, ' + withHcp + ' with a handicap. Anything in red is still missing.</p>' + table + '</div>'
-      + '<div class="card"><h2>2 · Player stats</h2><p class="hint">Paste a table from the sheet. The GS Raw Data sheet works as is (Player, Played, Performance): each player gets points over/under quota per round. Or paste Player, Ranking, Avg points, Birdie count, HCP. Players with no data just show – and are left out of the balance.</p>'
+      + '<div class="card"><h2>2 · Player stats</h2><div class="toolbar"><button id="loadSeries">Load series stats (BFSeries results)</button></div><p class="hint">Pulls each player\'s series rank, average points over/under quota and birdie count from the published results, the same data My Game uses. Anyone with no rounds shows – and is left out of the balance. Or paste a table:  The GS Raw Data sheet works as is (Player, Played, Performance): each player gets points over/under quota per round. Or paste Player, Ranking, Avg points, Birdie count, HCP. Players with no data just show – and are left out of the balance.</p>'
       + '<textarea id="statsTxt" rows="5" placeholder="Player&#9;Avg Achievement&#9;Birdie Count&#9;HCP&#9;Player Ranking"></textarea><div class="toolbar"><button class="sec" id="statsApply">Apply stats</button></div></div>'
       + '<div class="card"><h2>3 · Pick order</h2><p class="hint">Snake: 1, then 2 and 2, back and forth, so the side that picks first does not run away with it. Playground: one pick each, Jake, Nate, Jake, Nate. The side that picks first is chosen below.</p>'
       + '<div class="toolbar"><button class="' + ((d.mode === 'alternate') ? 'sec' : '') + '" data-mode="snake">' + ((d.mode === 'alternate') ? '' : '✓ ') + 'Snake</button><button class="' + ((d.mode === 'alternate') ? '' : 'sec') + '" data-mode="alternate">' + ((d.mode === 'alternate') ? '✓ ' : '') + 'Playground (alternate)</button></div>'
@@ -422,6 +422,17 @@ button:disabled{opacity:.4;cursor:default}
       notice = r.matched + ' matched' + (r.unmatched.length ? '; not in the player list: ' + r.unmatched.join(', ') : '') + '.'; save();
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) { b.addEventListener('click', function () { commitPool(); draft().mode = b.getAttribute('data-mode'); save(); }); });
+    on('loadSeries', function () {
+      commitPool(); var d = draft(); d.stats = d.stats || {};
+      var names = (d.pool || cfg.pool || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean));
+      notice = 'Loading series results…'; render();
+      fetch('results.html?_=' + Date.now()).then(function (r) { return r.text(); }).then(function (html) {
+        var m = html.match(/const ALL_SERIES_DATA = (\{[\s\S]*?\});\s*\n/); if (!m) throw new Error('series data not found');
+        var r = E.cupSeriesStats(JSON.parse(m[1]), names);
+        Object.keys(r.stats).forEach(function (k) { var cur = d.stats[k] || {}, nw = r.stats[k]; d.stats[k] = { hcp: cur.hcp != null ? cur.hcp : null, rank: nw.rank, avg: nw.avg, birdies: nw.birdies }; });
+        notice = r.matched + ' players loaded from the series' + (r.missing.length ? '; no series rounds: ' + r.missing.join(', ') : '') + '.'; save();
+      }).catch(function (e) { notice = 'Could not load the series results (' + (e.message || e) + '). Paste the table instead.'; render(); });
+    });
     on('toss', function () {
       commitPool(); var d = draft(); coinFlip = true; render();
       setTimeout(function () { d.first = cfg.sides[Math.random() < 0.5 ? 0 : 1].key; coinFlip = false; save(); }, 1400);

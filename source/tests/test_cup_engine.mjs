@@ -282,5 +282,14 @@ ok(!E.cupValidate(badSize).ok, 'singles cannot reuse a pairs session');
   ok(r.stats['Bill Steirer'].avg === -0.07 && r.stats['Jake Knappenberger'].avg === -2.5, 'GS sheet: performance per round played');
   ok(r.stats['Chauncey Lutte'].avg === null && r.matched === 3 && !r.stats['Andrew Kabrick'], 'a player with no data is left out');
 }
+
+// ---------- series stats from the published results data ----------
+{
+  const data = { events: [{ scores: { 'Ann Lee': [4, 2, 0, 4], 'Bo Day': [2, 2, 2, 2] } }, { scores: { 'Ann Lee': [2, 2, 2, 6] } }],
+    playerHistory: { 'Ann Lee': { events: [{ result: 3, noHcp: false }, { result: 1, noHcp: false }] }, 'Bo Day': { events: [{ result: -2, noHcp: false }] }, 'Cy Fox': { events: [{ result: 5, noHcp: false }] } } };
+  const r = E.cupSeriesStats(data, ['ann lee', 'Bo Day', 'Andrew K']);
+  ok(r.stats['ann lee'].avg === 2 && r.stats['ann lee'].birdies === 3 && r.stats['ann lee'].rank === 2, 'series: avg, birdie holes (4+), rank among everyone');
+  ok(r.stats['Bo Day'].rank === 3 && r.matched === 2 && r.missing[0] === 'Andrew K', 'series: a player with no rounds is missing, not zero');
+}
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

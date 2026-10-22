@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.30.0';
+  const ENGINE_VERSION = '1.31.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2228,6 +2228,27 @@
     });
     return { stats, matched: Object.keys(stats).length, unmatched };
   }
+  // Series stats from the published results data (the same ALL_SERIES_DATA My Game reads: {events:[{scores:{name:[18 stableford pts]}}], playerHistory:{name:{events:[{result,noHcp}]}}}).
+  // Per pool player: avg = average points over/under quota per event, birdies = holes at 4+ points, rank = series rank by that average
+  // (among everyone in the data), played = events. A player with no history is simply absent.
+  function cupSeriesStats(data, pool) {
+    const out = { stats: {}, matched: 0, missing: [] };
+    if (!data || !data.playerHistory) return out;
+    const hist = data.playerHistory, events = data.events || [];
+    const avgOf = {};
+    Object.keys(hist).forEach(n => { const r = ((hist[n] && hist[n].events) || []).filter(e => !e.noHcp && typeof e.result === 'number'); if (r.length) avgOf[n] = r.reduce((a, e) => a + e.result, 0) / r.length; });
+    const order = Object.keys(avgOf).sort((a, b) => avgOf[b] - avgOf[a]);
+    const byNorm = new Map(Object.keys(hist).map(n => [norm(n), n]));
+    (pool || []).forEach(name => {
+      const key = byNorm.get(norm(name));
+      if (!key || avgOf[key] == null) { out.missing.push(name); return; }
+      let birdies = 0, played = 0;
+      events.forEach(e => { const sc = e.scores && e.scores[key]; if (sc) { played++; sc.forEach(p => { if (p >= 4) birdies++; }); } });
+      out.stats[name] = { rank: order.indexOf(key) + 1, avg: Math.round(avgOf[key] * 100) / 100, birdies, played };
+    });
+    out.matched = Object.keys(out.stats).length;
+    return out;
+  }
   // The balance meter. Per side: average of each stat over the players that have it. Gap per metric and a verdict.
   // Lower handicap / better rank is better; higher avg points / more birdies is better.
   const CUP_BALANCE_LIMITS = { hcp: [0.75, 1.75], avg: [2, 4], birdies: [0.6, 1.2], rank: [1.5, 3] };   // [even up to, close up to]
@@ -2464,7 +2485,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupDraftPick, cupDraftUndo, cupParseStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupHandicapRule, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
+    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupHandicapRule, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });
