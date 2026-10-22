@@ -174,7 +174,7 @@ ok(lo().style.display === 'block' && /5 seats still unfilled/.test(lo().innerHTM
 c.hostBumpHold(1); c.hostBumpHold(1); ok(c.hostAutoOpenSpots() === 2 && c.hostUnheldSeats() === 3, 'hold stepper: 2 held, 3 unheld');
 c.hostBumpHold(10); ok(c.hostAutoOpenSpots() === 5 && c.hostUnheldSeats() === 0 && !/choose one/.test(lo().innerHTML), 'hold caps at leftover; all held needs no announce choice');
 c.hostBumpHold(-10); ok(c.hostAutoOpenSpots() === 0, 'hold floors at 0');
-c.hostSetLeftAnnounce('open'); ok(c._hostLeftAnnounce === 'open' && !/choose one/.test(lo().innerHTML) && /aria-pressed="true"/.test(lo().innerHTML), 'choice recorded and shown');
+c.hostSetLeftAnnounce('open'); ok(c._hostLeftAnnounce === 'open' && !/choose one/.test(lo().innerHTML) && /aria-checked="true"/.test(lo().innerHTML), 'choice recorded and shown');
 c._hostCrewPicked = new Set(['A','B','C','D','E','F','G']); c.updateHostSpotsPreview(); ok(lo().style.display === 'none', 'no leftover seats: block hidden');
 c._hostCrewPicked = new Set(['A']); c._hostMode = 'open'; c.updateHostSpotsPreview(); ok(lo().style.display === 'none', 'open mode: block hidden'); c._hostMode = 'crew';
 ok(/_hostMode === 'crew' && hostUnheldSeats\(\) > 0 && !_hostLeftAnnounce/.test(src), 'Create guard blocks until the announce choice is made');

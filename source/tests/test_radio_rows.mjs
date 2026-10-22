@@ -13,4 +13,7 @@ ok(/rr-dot">\u2713/.test(h), 'selected row carries a check mark');
 ok(/\.seg-btn\.seg-btn-active::before \{ content: "\\2713"/.test(src), 'segmented toggle selected state shows a check');
 ok(!/\.seg-toggle \{[^}]*var\(--green\)/.test(src), 'segmented frame is no longer green');
 ok(/hilo'\) return \{[^}]*net_mode: 'low'/.test(src), 'Hi-Lo defaults to the recommended off-the-low');
+ok(/function hostSwitchHtml[\s\S]*?'On' : 'Off'/.test(src) && /function hostSwitchSet[\s\S]*?'On' : 'Off'/.test(src), 'gathering switches show On/Off in words');
+ok(/\.pref-chip\.active::before \{ content: "\\2713/.test(src) && /\.host-crew-chip\.selected::before/.test(src), 'chips show a check when selected');
+ok(/hostSetLeftAnnounce\('\$\{v\}'\)" aria-checked="\$\{on\}" class="rr-row/.test(src), 'seat-announce options are radio rows');
 console.log(`test_radio_rows: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
