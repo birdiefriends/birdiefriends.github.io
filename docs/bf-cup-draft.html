@@ -49,6 +49,7 @@ button:disabled{opacity:.4;cursor:default}
 .pc{background:var(--navy3);border:1px solid var(--faint);border-radius:10px;padding:10px;text-align:left;color:var(--white);cursor:default}
 .host .pc{cursor:pointer}.host .pc:hover{border-color:var(--gold)}
 .pc b{display:block;font-size:1rem;margin-bottom:4px}
+.pool{width:100%;border-collapse:collapse;font-size:.95rem}.pool th{color:var(--dim);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding:8px 6px;border-bottom:1px solid var(--faint);cursor:pointer;white-space:nowrap}.pool th.num,.pool td.num{text-align:right;font-variant-numeric:tabular-nums}.pool th.on{color:var(--gold)}.pool td{padding:9px 6px;border-bottom:1px solid var(--faint)}.pool td.on{color:#fff;font-weight:700}.pool td.nm{font-weight:700}.pool td.none{color:var(--dim)}.pool tr.pr.can{cursor:pointer}@media(max-width:480px){.pool{font-size:.85rem}.pool th{white-space:normal;padding:6px 3px;line-height:1.1}.pool td{padding:8px 3px}}.pool tr.pr.can:hover td{background:var(--navy3)}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{font-size:.75rem;background:var(--navy);border-radius:6px;padding:2px 7px;color:var(--dim)}
 .chip i{font-style:normal;color:var(--white);font-weight:700}
@@ -169,10 +170,16 @@ button:disabled{opacity:.4;cursor:default}
     }).join('') + '</div>';
   }
   function poolHtml(v) {
-    var opts = [['rank', 'Series rank'], ['hcp', 'Handicap'], ['avg', 'Avg vs Quota'], ['birdies', 'Birdies'], ['name', 'A–Z']];
-    return '<div class="card"><div class="toolbar"><b>Available players (' + v.remaining.length + ')</b><span style="flex:1"></span><label class="hint">Sort <select id="sortSel">'
-      + opts.map(function (o) { return '<option value="' + o[0] + '"' + (sortBy === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label></div>'
-      + '<div class="grid">' + sorted(v.remaining).map(function (n) { return '<button class="pc" data-pick="' + esc(n) + '"' + (canPick(v) ? '' : ' disabled style="opacity:1"') + '><b>' + esc(n) + '</b>' + chipsFor(n) + '</button>'; }).join('') + '</div></div>';
+    var cols = [['name', 'Player'], ['hcp', 'HCP'], ['rank', 'Rank'], ['avg', 'Avg vs Quota'], ['birdies', '🐦']];
+    var st = (cfg.draft || {}).stats || {}, can = canPick(v);
+    var head = '<tr>' + cols.map(function (c, i) { return '<th class="' + (i ? 'num' : '') + (sortBy === c[0] ? ' on' : '') + '" data-sort="' + c[0] + '">' + c[1] + (sortBy === c[0] ? ' ▾' : '') + '</th>'; }).join('') + '</tr>';
+    var rows = sorted(v.remaining).map(function (n) {
+      var s = st[n] || {};
+      function td(val, key) { return '<td class="num' + (sortBy === key ? ' on' : '') + (val === '–' ? ' none' : '') + '">' + val + '</td>'; }
+      return '<tr class="pr' + (can ? ' can' : '') + '" data-pick="' + esc(n) + '"><td class="nm' + (sortBy === 'name' ? ' on' : '') + '">' + esc(n) + '</td>' + td(fmt(s.hcp), 'hcp') + td(s.rank != null ? '#' + s.rank : '–', 'rank') + td(fmt(s.avg), 'avg') + td(fmt(s.birdies, 0), 'birdies') + '</tr>';
+    }).join('');
+    return '<div class="card"><div class="toolbar"><b>Available players (' + v.remaining.length + ')</b><span style="flex:1"></span><span class="hint">' + (can ? 'Tap a player to pick · ' : '') + 'tap a heading to sort · best first</span></div>'
+      + '<table class="pool"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div>';
   }
 
   // ---------- Saturday pairs ----------
@@ -380,7 +387,7 @@ button:disabled{opacity:.4;cursor:default}
     function $(id) { return document.getElementById(id); }
     function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
     pairsWire(); matchupWire();
-    var sel = $('sortSel'); if (sel) sel.addEventListener('change', function () { sortBy = sel.value; render(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-sort]'), function (h) { h.addEventListener('click', function () { sortBy = h.getAttribute('data-sort'); render(); }); });
     on('pinGo', function () { pin = $('pinIn').value.trim(); try { sessionStorage.setItem('bf_cup_pin', pin); } catch (e) {} render(); });
     function commitPool() {
       var el = $('poolTxt'); if (!el) return (cfg.draft && cfg.draft.pool) || [];

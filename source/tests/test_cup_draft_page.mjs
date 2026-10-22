@@ -47,7 +47,7 @@ ok(/HCP/.test(d.querySelector('.meter').textContent) && /5\.8/.test(d.querySelec
 // a watcher sees the same, with no pick buttons enabled
 ok(d.querySelector('.card.team.cred h2').textContent === 'Team Jake' && d.querySelector('.card.team.cblue h2').textContent === 'Team Nate', 'Team Jake is red, Team Nate is blue');
 const wdom = await open('', null); const wd = wdom.window.document;
-ok(/LIVE/.test(wd.querySelector('.banner').textContent) && wd.querySelectorAll('[data-pick]:not([disabled])').length === 0, 'watch mode: live banner, cards are not clickable');
+ok(/LIVE/.test(wd.querySelector('.banner').textContent) && wd.querySelectorAll('tr.pr.can').length === 0 && wd.querySelectorAll('[data-pick]').length > 0, 'watch mode: live banner, cards are not clickable');
 // finish: Jake P2, P3 (snake: B A A B), Nate P4
 for (const n of ['P2', 'P3', 'P4']) { d = dom.window.document; d.querySelector('[data-pick="' + n + '"]').click(); d = dom.window.document; d.getElementById('confirmPick').click(); await tick(); }
 d = dom.window.document;
