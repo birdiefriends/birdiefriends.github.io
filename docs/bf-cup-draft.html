@@ -80,7 +80,7 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.29.0"></script>
+<script src="bf_engine.js?v=1.30.0"></script>
 <script>
 (function () {
   'use strict';
@@ -130,7 +130,7 @@ button:disabled{opacity:.4;cursor:default}
     var fav = Object.keys(edges).sort(function (a, b) { return edges[b] - edges[a]; })[0];
     var vtxt = { even: '🟢 Dead even', close: '🟡 Close', tilted: '⚠️ Tilted' + (fav ? ' toward ' + esc(sideName(fav)) : ''), unknown: 'Add player stats to see the balance' }[bal.verdict];
     return '<div class="meter"><div class="mhead"><div class="' + colorOf(cfg.sides[0], 0) + '">' + esc(sideName(A)) + '</div><div class="hint">Team balance</div><div class="' + colorOf(cfg.sides[1], 1) + '">' + esc(sideName(B)) + '</div></div>'
-      + row('Avg HCP', 'hcp', 1) + row('Avg Series pts', 'avg', 1) + row('Avg rank', 'rank', 1)
+      + row('Avg HCP', 'hcp', 1) + row('Avg vs quota', 'avg', 1) + row('Avg rank', 'rank', 1)
       + row('🐦 Birdies', 'birdieTotal', 0, 'birdies', function (s) { return ' <span class="hint">(' + fmt(s.birdies, 1) + ' avg)</span>'; })
       + '<div class="verdict v-' + bal.verdict + '">' + vtxt + '</div></div>';
   }
@@ -169,7 +169,7 @@ button:disabled{opacity:.4;cursor:default}
     }).join('') + '</div>';
   }
   function poolHtml(v) {
-    var opts = [['rank', 'Series rank'], ['hcp', 'Handicap'], ['avg', 'Avg points'], ['birdies', 'Birdies'], ['name', 'A–Z']];
+    var opts = [['rank', 'Series rank'], ['hcp', 'Handicap'], ['avg', 'Avg vs quota'], ['birdies', 'Birdies'], ['name', 'A–Z']];
     return '<div class="card"><div class="toolbar"><b>Available players (' + v.remaining.length + ')</b><span style="flex:1"></span><label class="hint">Sort <select id="sortSel">'
       + opts.map(function (o) { return '<option value="' + o[0] + '"' + (sortBy === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label></div>'
       + '<div class="grid">' + sorted(v.remaining).map(function (n) { return '<button class="pc" data-pick="' + esc(n) + '"' + (canPick(v) ? '' : ' disabled style="opacity:1"') + '><b>' + esc(n) + '</b>' + chipsFor(n) + '</button>'; }).join('') + '</div></div>';
@@ -180,7 +180,7 @@ button:disabled{opacity:.4;cursor:default}
   function pairsOf(side) { var p = (cfg.pairs || {})[side]; return p && Array.isArray(p.list) ? p.list : null; }
   function pairLocked(side) { var p = (cfg.pairs || {})[side]; return !!(p && p.locked); }
   function pairCount(side) { var p = (cfg.pairs || {})[side]; return p ? (Array.isArray(p.list) ? p.list.length : (p.count || 0)) : 0; }
-  function numsFor(pr) { var n = E.cupPairStats(pr, (cfg.draft || {}).stats || {}); return 'HCP ' + fmt(n.hcp) + ' · Pts ' + fmt(n.avg) + ' · 🐦 ' + fmt(n.birdies, 0); }
+  function numsFor(pr) { var n = E.cupPairStats(pr, (cfg.draft || {}).stats || {}); return 'HCP ' + fmt(n.hcp) + ' · vs quota ' + fmt(n.avg) + ' · 🐦 ' + fmt(n.birdies, 0); }
   function pairCard(pr, cls, x) { return '<div class="pairc ' + cls + '"><div><b>' + esc(pr[0]) + ' &amp; ' + esc(pr[1]) + '</b><div class="num">' + esc(numsFor(pr)) + '</div></div>' + (x != null ? '<button class="sec" data-unpair="' + x + '" aria-label="Break this pair">✕</button>' : '') + '</div>'; }
   function pairsEditSide() { return HOST && pin ? (pairTab || cfg.sides[0].key) : YOU; }
   function pairsHtml() {
@@ -327,7 +327,7 @@ button:disabled{opacity:.4;cursor:default}
       : '<div class="card"><h2>Practice run</h2><p class="hint">Make a separate copy of this Cup with 16 sample players and made-up stats, to rehearse the whole flow. The real Cup is never touched.</p><div class="toolbar"><button class="sec" id="practiceMake">Create a practice copy</button>' + (notice && /practice/i.test(notice) ? ' <a href="' + esc(location.pathname + '?event=' + encodeURIComponent(EVENT + ' (practice)') + '&host=1') + '">Open the practice copy →</a>' : '') + '</div></div>';
     var st = d.stats || {}, tnames = (d.pool || cfg.pool || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean)).filter(function (n, i, a) { return a.indexOf(n) === i; });
     var withHcp = tnames.filter(function (n) { return st[n] && typeof st[n].hcp === 'number'; }).length;
-    var table = tnames.length ? '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:.85rem"><tr style="color:var(--dim);text-align:left"><th>Player</th><th>HCP</th><th>Rank</th><th>Avg pts</th><th>🐦</th></tr>' + tnames.map(function (n) {
+    var table = tnames.length ? '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:.85rem"><tr style="color:var(--dim);text-align:left"><th>Player</th><th>HCP</th><th>Rank</th><th>vs quota</th><th>🐦</th></tr>' + tnames.map(function (n) {
       var x = st[n] || {}; function c(v, d2) { return '<td style="padding:3px 8px 3px 0;' + (typeof v === 'number' ? '' : 'color:var(--bad)') + '">' + fmt(v, d2) + '</td>'; }
       return '<tr style="border-top:1px solid var(--faint)"><td style="padding:3px 8px 3px 0">' + esc(n) + (cfg.sides.some(function (sd) { return sd.captain === n; }) ? ' 👑' : '') + '</td>' + c(x.hcp) + c(x.rank, 0) + c(x.avg) + c(x.birdies, 0) + '</tr>'; }).join('') + '</table></div>' : '<p class="hint">No players yet.</p>';
     var noticeBanner = notice && !/practice/i.test(notice) ? '<div class="banner" style="background:#1a7f3c">' + esc(notice) + '</div>' : '';
@@ -335,9 +335,11 @@ button:disabled{opacity:.4;cursor:default}
       + '<div class="toolbar"><button id="loadRoster">Load players and handicaps from the event roster (BFE-Admin)</button></div>'
       + '<textarea id="poolTxt" rows="8">' + esc(poolText) + '</textarea><div class="toolbar"><button class="sec" id="poolSave">Save the list</button><button class="sec" id="fillHcp">Fill handicaps from Membership</button></div></div>'
       + '<div class="card"><h2>Players and stats so far</h2><p class="hint">' + tnames.length + ' players, ' + withHcp + ' with a handicap. Anything in red is still missing.</p>' + table + '</div>'
-      + '<div class="card"><h2>2 · Player stats</h2><p class="hint">Paste a table from the sheet (a header row, then one row per player): Player, Ranking, Avg points, Birdie count, HCP. Missing values just show –.</p>'
+      + '<div class="card"><h2>2 · Player stats</h2><p class="hint">Paste a table from the sheet. The GS Raw Data sheet works as is (Player, Played, Performance): each player gets points over/under quota per round. Or paste Player, Ranking, Avg points, Birdie count, HCP. Players with no data just show – and are left out of the balance.</p>'
       + '<textarea id="statsTxt" rows="5" placeholder="Player&#9;Avg Achievement&#9;Birdie Count&#9;HCP&#9;Player Ranking"></textarea><div class="toolbar"><button class="sec" id="statsApply">Apply stats</button></div></div>'
-      + '<div class="card"><h2>3 · Coin toss</h2><p class="hint">The winner picks first in the snake draft.</p>'
+      + '<div class="card"><h2>3 · Pick order</h2><p class="hint">Snake: 1, then 2 and 2, back and forth, so the side that picks first does not run away with it. Playground: one pick each, Jake, Nate, Jake, Nate. The side that picks first is chosen below.</p>'
+      + '<div class="toolbar"><button class="' + ((d.mode === 'alternate') ? 'sec' : '') + '" data-mode="snake">' + ((d.mode === 'alternate') ? '' : '✓ ') + 'Snake</button><button class="' + ((d.mode === 'alternate') ? '' : 'sec') + '" data-mode="alternate">' + ((d.mode === 'alternate') ? '✓ ' : '') + 'Playground (alternate)</button></div>'
+      + '<h3 style="margin:.8rem 0 .2rem">Who picks first</h3>'
       + '<div class="toolbar"><span class="coin' + (coinFlip ? ' flip' : '') + '">🪙</span><button id="toss">Toss the coin</button>'
       + cfg.sides.map(function (s) { return '<button class="sec" data-first="' + s.key + '">' + esc(s.name || 'Side ' + s.key) + ' picks first</button>'; }).join('') + '</div>'
       + '<div><b>' + (first ? esc(sideName(first)) + ' picks first' : 'Not decided yet') + '</b></div></div>'
@@ -419,6 +421,7 @@ button:disabled{opacity:.4;cursor:default}
       });
       notice = r.matched + ' matched' + (r.unmatched.length ? '; not in the player list: ' + r.unmatched.join(', ') : '') + '.'; save();
     });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) { b.addEventListener('click', function () { commitPool(); draft().mode = b.getAttribute('data-mode'); save(); }); });
     on('toss', function () {
       commitPool(); var d = draft(); coinFlip = true; render();
       setTimeout(function () { d.first = cfg.sides[Math.random() < 0.5 ? 0 : 1].key; coinFlip = false; save(); }, 1400);
@@ -453,7 +456,7 @@ button:disabled{opacity:.4;cursor:default}
       var stats = {}; var seed = 7;
       function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
       pool.concat(cfg.sides.map(function (sd) { return sd.captain; }).filter(Boolean)).forEach(function (n, i) {
-        stats[n] = { hcp: Math.round((4 + rnd() * 20) * 10) / 10, rank: i + 1, avg: Math.round((2 + rnd() * 2.5) * 100) / 100, birdies: Math.round(rnd() * 12) };
+        stats[n] = { hcp: Math.round((4 + rnd() * 20) * 10) / 10, rank: i + 1, avg: Math.round((rnd() * 6 - 3) * 100) / 100, birdies: Math.round(rnd() * 12) };
       });
       var copy = JSON.parse(JSON.stringify(cfg));
       delete copy.access; delete copy.pairs; delete copy.matchup; copy.sides.forEach(function (sd) { sd.players = []; });

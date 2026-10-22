@@ -131,4 +131,12 @@ r = await call('GET', '/bfe/cup-live'); ok(!JSON.stringify(r.json).includes('BBB
 ok(r.json.events.find(e => e.event_name === 'Draft Cup').phase === 'draft', 'an open draft is in the draft phase');
 await call('POST', '/bfe/cup', { event_name: 'Phase Cup', config: Object.assign({}, pcfg, { matchup: { started: true, first: 'B', log: [] } }), pin: '7797' });
 r = await call('GET', '/bfe/cup-live'); ok(r.json.events.find(e => e.event_name === 'Phase Cup').phase === 'matchups', 'a started matchup draw is the matchups phase');
+
+// ── playground draft order on the server ──
+await call('POST', '/bfe/cup', { event_name: 'Alt Cup', config: Object.assign({}, dcfg, { draft: Object.assign({}, dcfg.draft, { mode: 'alternate' }) }), pin: '7797' });
+const aact = (code, player) => call('POST', '/bfe/cup/act', { event_name: 'Alt Cup', code, action: 'pick', player });
+r = await aact('AAA111', 'P1'); ok(r.status === 200, 'alt: A picks first');
+r = await aact('AAA111', 'P2'); ok(r.status === 409, 'alt: A cannot pick twice in a row');
+r = await aact('BBB222', 'P2'); ok(r.status === 200, 'alt: B picks second');
+r = await aact('AAA111', 'P3'); ok(r.status === 200, 'alt: back to A');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

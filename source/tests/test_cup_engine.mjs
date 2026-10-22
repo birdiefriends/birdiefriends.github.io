@@ -269,5 +269,18 @@ ok(!E.cupValidate(badSize).ok, 'singles cannot reuse a pairs session');
   eq(hs.map((v, i) => v ? i + 1 : 0).filter(Boolean), [2, 4, 7, 11, 13], '5 strokes land on the five hardest holes (stroke index 1-5)');
   ok(E.cupValidate({ sides: [{ key: 'A' }, { key: 'B' }], rounds: [], handicap: { singles: 120 } }).errors.some(e => /Handicap allowance/.test(e)), 'validation rejects an allowance over 100');
 }
+
+// ---------- playground (alternating) draft and the GS raw sheet ----------
+{
+  const cfg = { sides: [{ key: 'A', captain: 'Jake' }, { key: 'B', captain: 'Nate' }], draft: { started: true, first: 'A', pool: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'], picks: [] } };
+  eq(E.cupDraftView(cfg).order, ['A', 'B', 'B', 'A', 'A', 'B'], 'default is the snake');
+  cfg.draft.mode = 'alternate';
+  eq(E.cupDraftView(cfg).order, ['A', 'B', 'A', 'B', 'A', 'B'], 'playground alternates one for one');
+  ok(E.cupDraftView(cfg).mode === 'alternate', 'the view reports the mode');
+  const sheet = 'title row\t\t\nPlayer\tTee\tPlayed\tPerformance\tAssigned\tAchieved\t\tSeries#2\nBill Steirer\tGreen\t4\t-0.3\t99.3\t99\nJake Knappenberger\tCombo\t5\t-12.5\t79.5\t67\nChauncey Lutte\tGold\t1\t—\t—\t—\n\t\t\t\t\t\t\tHCP\n';
+  const r = E.cupParseStats(sheet, ['Bill Steirer', 'Jake Knappenberger', 'Chauncey Lutte', 'Andrew Kabrick']);
+  ok(r.stats['Bill Steirer'].avg === -0.07 && r.stats['Jake Knappenberger'].avg === -2.5, 'GS sheet: performance per round played');
+  ok(r.stats['Chauncey Lutte'].avg === null && r.matched === 3 && !r.stats['Andrew Kabrick'], 'a player with no data is left out');
+}
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

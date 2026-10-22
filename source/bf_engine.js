@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.29.0';
+  const ENGINE_VERSION = '1.30.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2178,12 +2178,13 @@
     const taken = new Set(picks.map(pk => norm(pk.player)));
     const first = keys.includes(d.first) ? d.first : keys[0];
     const other = keys.find(k => k !== first);
-    const order = cupSnakeOrder(pool.length, first, other);
+    const mode = d.mode === 'alternate' ? 'alternate' : 'snake';
+    const order = mode === 'alternate' ? cupAlternatingOrder(pool.length, first, other) : cupSnakeOrder(pool.length, first, other);
     const teams = {};
     sides.forEach(sd => { teams[sd.key] = (sd.captain ? [sd.captain] : []).concat(picks.filter(pk => pk.side === sd.key).map(pk => pk.player)); });
     const remaining = pool.filter(n => !taken.has(norm(n)));
     const done = pool.length > 0 && remaining.length === 0;
-    return { first, order, pickNo: picks.length + 1, total: pool.length, onClock: done || !pool.length ? null : order[picks.length], teams, remaining, picks, done };
+    return { mode, first, order, pickNo: picks.length + 1, total: pool.length, onClock: done || !pool.length ? null : order[picks.length], teams, remaining, picks, done };
   }
   // Pure: the draft after the side on the clock takes `player` (null + reason when not allowed).
   function cupDraftPick(cfg, player) {
@@ -2202,10 +2203,16 @@
   // Player/Name, Rank/Ranking, Avg(Points/Achievement), Birdie(s), HCP. Returns { stats, unmatched, matched } against `pool`.
   function cupParseStats(text, pool) {
     const rows = String(text || '').split(/\r?\n/).map(r => r.split(/\t|,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim())).filter(r => r.some(c => c));
+    // The GS "Raw Data" sheet has a title row above the header; find the header row (the one with a Player cell).
+    const hi = Math.max(0, rows.findIndex(r => r.some(c => /^player$/i.test(c))));
+    rows.splice(0, hi);
     if (rows.length < 2) return { stats: {}, matched: 0, unmatched: [] };
     const head = rows[0].map(h => h.toLowerCase());
     const col = re => head.findIndex(h => re.test(h));
-    const iName = col(/player$|^player|name/), iRank = col(/rank/), iAvg = col(/avg|average|achiev|points/), iBird = col(/birdie/), iHcp = col(/hcp|handicap/);
+    const iName = col(/player$|^player|name/), iRank = col(/rank/), iBird = col(/birdie/), iHcp = col(/hcp|handicap/);
+    const iPlayed = col(/^played$/), iPerf = col(/^performance$/);
+    const gs = iPlayed >= 0 && iPerf >= 0;      // GS raw sheet: "avg" becomes points over/under quota per round played
+    const iAvg = gs ? -1 : col(/avg|average|achiev|points/);
     const num = v => { const n = parseFloat(String(v).replace(/[^0-9.+-]/g, '')); return Number.isFinite(n) ? n : null; };
     const stats = {}; const names = new Map((pool || []).map(n => [norm(n), n]));
     const unmatched = [];
@@ -2214,7 +2221,10 @@
       const key = norm(raw);
       const canon = names.get(key);
       if (!canon && pool && pool.length) { unmatched.push(raw); return; }
-      stats[canon || raw] = { hcp: iHcp >= 0 ? num(r[iHcp]) : null, rank: iRank >= 0 ? num(r[iRank]) : null, avg: iAvg >= 0 ? num(r[iAvg]) : null, birdies: iBird >= 0 ? num(r[iBird]) : null };
+      let avg = iAvg >= 0 ? num(r[iAvg]) : null, played = null;
+      if (gs) { played = num(r[iPlayed]); const perf = num(r[iPerf]); avg = (played && perf != null) ? Math.round(perf / played * 100) / 100 : null; }
+      stats[canon || raw] = { hcp: iHcp >= 0 && !gs ? num(r[iHcp]) : null, rank: iRank >= 0 ? num(r[iRank]) : null, avg, birdies: iBird >= 0 ? num(r[iBird]) : null };
+      if (gs) stats[canon || raw].played = played;
     });
     return { stats, matched: Object.keys(stats).length, unmatched };
   }

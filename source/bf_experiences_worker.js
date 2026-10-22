@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.29.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.30.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1432,7 +1432,7 @@ export default {
           const pool = (d.pool || []).filter(n => !caps.has(norm(n)));
           const picks = d.picks || [];
           if (picks.length >= pool.length) return J({ error: 'Every player is already picked' }, 409);
-          const onClock = (((picks.length + 1) >> 1) & 1) ? other : first;
+          const onClock = d.mode === 'alternate' ? (picks.length % 2 ? other : first) : ((((picks.length + 1) >> 1) & 1) ? other : first);
           if (onClock !== side) return J({ error: 'It is not your turn' }, 409);
           const taken = new Set(picks.map(pk => norm(pk.player)));
           const hit = pool.find(n => norm(n) === norm(body.player) && !taken.has(norm(n)));
