@@ -68,13 +68,19 @@ button:disabled{opacity:.4;cursor:default}
 .pairc b{font-size:1rem}.pairc .num{font-size:.85rem;color:var(--dim)}
 .cred .pairc,.pairc.cred{border-left-color:var(--red)}.cblue .pairc,.pairc.cblue{border-left-color:var(--blue)}
 .pairc button{padding:4px 10px}
+.mu-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.pairc.tap{cursor:pointer;border:2px solid #fff}.pairc.used{opacity:.45}
+.match{background:var(--navy3);border-radius:10px;padding:10px 12px;margin:8px 0}
+.match .vs{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}.match .vs>div:first-child{text-align:right}
+.match .vs b{display:block}.match .vs span.num{font-size:.8rem;color:var(--dim)}.match .vs .x{color:var(--dim);font-weight:700}
+.match .n{font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
 .pnote{background:rgba(255,255,255,.08);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:.88rem}
 @media(max-width:560px){.teams{gap:8px}.mhead{font-size:.9rem}.card.team{padding:10px}.slot{font-size:.85rem}.slot .st{width:100%;font-size:.7rem}}
 </style>
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.26.0"></script>
+<script src="bf_engine.js?v=1.27.0"></script>
 <script>
 (function () {
   'use strict';
@@ -230,7 +236,7 @@ button:disabled{opacity:.4;cursor:default}
       list.push([selectedP, n]); selectedP = ''; pairsSync(me, list, false);
     }); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-unpair]'), function (b) { b.addEventListener('click', function () { list.splice(parseInt(b.getAttribute('data-unpair'), 10), 1); pairsSync(me, list, false); }); });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-preopen]'), function (b) { b.addEventListener('click', function () { var k = b.getAttribute('data-preopen'); cfg.pairs[k].locked = false; pairTab = k; save(); }); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-preopen]'), function (b) { b.addEventListener('click', function () { var k = b.getAttribute('data-preopen'); cfg.pairs[k].locked = false; pairTab = k; if (cfg.matchup) { var ri = E.cupPairsRound(cfg); if (ri >= 0) cfg.rounds[ri].matches = []; delete cfg.matchup; } save(); }); });
     on('pSuggest', function () {
       if (list.length && !window.confirm('Replace your current pairs with the balanced suggestion?')) return;
       var rec = E.cupPairsSuggest(E.cupRosterOf(cfg, me), (cfg.draft || {}).stats || {}); selectedP = ''; pairsSync(me, rec.pairs, false);
@@ -238,6 +244,71 @@ button:disabled{opacity:.4;cursor:default}
     on('pClear', function () { selectedP = ''; pairsSync(me, [], false); });
     on('pLock', function () { if (window.confirm('Lock these pairs? The other captain will see them once he locks too.')) pairsSync(me, list, true); });
     on('pUnlock', function () { pairsSync(me, list, 'unlock'); });
+  }
+
+  // ---------- Saturday matchup draw ----------
+  var pendingPair = null;
+  function matchCardHtml(mt, i) {
+    var st = (cfg.draft || {}).stats || {};
+    function side(ms) { var si = cfg.sides.map(function (x) { return x.key; }).indexOf(ms.side); var sd = cfg.sides[si]; var n = E.cupPairStats(ms.players, st);
+      return '<div class="' + colorOf(sd, si) + '"><b>' + esc(ms.players[0]) + ' &amp; ' + esc(ms.players[1]) + '</b><span class="num">' + esc(sd.name || ms.side) + ' · HCP ' + fmt(n.hcp) + '</span></div>'; }
+    var a = E.cupPairStats(mt.sides[0].players, st).hcp, b = E.cupPairStats(mt.sides[1].players, st).hcp;
+    return '<div class="match"><div class="n">Match ' + (i + 1) + (a != null && b != null ? ' · ' + (Math.abs(a - b) < 0.05 ? 'dead even' : Math.round(Math.abs(a - b) * 10) / 10 + ' strokes apart') : '') + '</div><div class="vs">' + side(mt.sides[0]) + '<div class="x">vs</div>' + side(mt.sides[1]) + '</div></div>';
+  }
+  function matchupHtml() {
+    if (!(cfg.draft || {}).locked || !E.cupPairsRevealed(cfg)) return '';
+    var mu = E.cupMatchupView(cfg), host = HOST && !!pin;
+    var out = '<div class="card"><h2>Saturday matchups</h2>';
+    if (!mu.started) {
+      var dfirst = (cfg.draft || {}).first, starter = cfg.sides.map(function (x) { return x.key; }).filter(function (k) { return k !== dfirst; })[0] || cfg.sides[0].key;
+      if (!host) return out + '<p class="hint">Both sides are locked. The commissioner will start the matchup draw: the captains take turns putting up a pair and answering with one of theirs.</p></div>';
+      return out + '<p class="hint">The captains take turns: one puts up a pair, the other answers with the pair that will face it. Then they swap, until the last two pairs meet automatically.</p><div class="toolbar"><label class="hint">Who puts up first <select id="muFirst">'
+        + cfg.sides.map(function (sd) { return '<option value="' + sd.key + '"' + (sd.key === starter ? ' selected' : '') + '>' + esc(sd.name || sd.key) + (sd.key === starter ? ' (lost the coin toss)' : '') + '</option>'; }).join('') + '</select></label><button id="muStart">Start the matchup draw</button></div></div>';
+    }
+    if (!mu.even) return out + '<p class="err">The two sides have different numbers of pairs, so the draw cannot run. The commissioner can reopen a side.</p></div>';
+    var clock = mu.onClock, can = !!clock && ((host) || (!!YOU && YOU === clock));
+    if (mu.done) out += '<div class="banner" style="background:#1a7f3c">✅ Matchups are set</div>';
+    else out += '<div class="banner live mu-banner"><span class="dot"></span><span><b>' + esc(sideName(clock)) + '</b> ' + (mu.role === 'put' ? 'puts up a pair' : 'answers ' + esc(mu.facing[0]) + ' &amp; ' + esc(mu.facing[1])) + (can ? ' · <b>your move, tap a pair</b>' : '') + '</span></div>';
+    out += mu.matches.map(matchCardHtml).join('');
+    if (!mu.done) {
+      out += '<div class="mu-col">' + cfg.sides.map(function (sd, si) {
+        var list = ((cfg.pairs || {})[sd.key] || {}).list || [], av = mu.avail[sd.key].map(function (pr) { return pr.map(function (x) { return x.toLowerCase(); }).sort().join('|'); });
+        return '<div><div class="' + colorOf(sd, si) + '"><b>' + esc(sd.name || sd.key) + ' · pairs left (' + av.length + ')</b></div>' + list.map(function (pr, i) {
+          var left = av.indexOf(pr.map(function (x) { return x.toLowerCase(); }).sort().join('|')) >= 0;
+          var tap = left && can && clock === sd.key;
+          return left ? '<div class="pairc ' + colorOf(sd, si) + (tap ? ' tap' : '') + '"' + (tap ? ' data-mpick="' + i + '" data-mside="' + sd.key + '"' : '') + '><div><b>' + esc(pr[0]) + ' &amp; ' + esc(pr[1]) + '</b><div class="num">' + esc(numsFor(pr)) + '</div></div></div>' : '';
+        }).join('') + '</div>';
+      }).join('') + '</div>';
+    }
+    if (host) out += '<div class="toolbar">' + (mu.log.length ? '<button class="sec" id="muUndo">↩︎ Undo last pick</button>' : '') + '<button class="sec" id="muReset">Restart the matchup draw</button></div>';
+    return out + '</div>';
+  }
+  function matchupApply(newMu) {
+    cfg.matchup = newMu;
+    var mu = E.cupMatchupView(cfg), ri = E.cupPairsRound(cfg);
+    if (ri >= 0) cfg.rounds[ri].matches = mu.done ? mu.matches : [];
+    cfg.matchup.done = !!mu.done;
+  }
+  function matchupWire() {
+    function $(id) { return document.getElementById(id); }
+    function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
+    on('muStart', function () { cfg.matchup = { started: true, first: $('muFirst').value, log: [] }; save(); });
+    on('muUndo', function () { var m = cfg.matchup; matchupApply(Object.assign({}, m, { log: m.log.slice(0, -1) })); save(); });
+    on('muReset', function () { if (!window.confirm('Clear every matchup pick and start the matchup draw over?')) return; var ri = E.cupPairsRound(cfg); if (ri >= 0) cfg.rounds[ri].matches = []; delete cfg.matchup; save(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-mpick]'), function (b) { b.addEventListener('click', function () {
+      var side = b.getAttribute('data-mside'); pendingPair = { side: side, pair: cfg.pairs[side].list[parseInt(b.getAttribute('data-mpick'), 10)] }; render(); }); });
+    on('muCancel', function () { pendingPair = null; render(); });
+    on('muConfirm', function () {
+      var pp = pendingPair; pendingPair = null;
+      if (HOST && pin) {
+        var r = E.cupMatchupPick(cfg, pp.side, pp.pair); if (!r.ok) { error = r.reason; render(); return; }
+        matchupApply(r.matchup); save(); return;
+      }
+      busy = true;
+      fetch(WORKER + '/bfe/cup/act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT, code: CAP, action: 'match_pick', pair: pp.pair }) })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); cfg = j.config; error = ''; }); })
+        .catch(function (e) { error = e.message; }).then(function () { busy = false; return load(); }).then(render);
+    });
   }
 
   // ---------- host setup ----------
@@ -280,11 +351,12 @@ button:disabled{opacity:.4;cursor:default}
     var clock = v.onClock;
     html += '<div class="banner live"><span class="dot"></span>' + (v.done ? (d.locked ? '🏁 Teams are set' : '✅ Every player is picked') : 'LIVE · Pick ' + v.pickNo + ' of ' + v.total + ' · <span style="color:#fff;text-decoration:underline">' + esc(sideName(clock)) + '</span> on the clock') + '</div>';
     if (YOU && !v.done) html += '<div class="banner" style="background:' + (v.onClock === YOU ? '#1a7f3c' : '#0a3161') + '">' + (v.onClock === YOU ? 'YOUR PICK, ' + esc(sideName(YOU)) + ' captain. Tap a player.' : 'Waiting for ' + esc(sideName(v.onClock)) + ' to pick') + '</div>';
-    html += meterHtml(v) + teamsHtml(v) + (v.done ? '' : poolHtml(v)) + pairsHtml() + linksHtml();
+    html += meterHtml(v) + teamsHtml(v) + (v.done ? '' : poolHtml(v)) + pairsHtml() + matchupHtml() + linksHtml();
     if (HOST && pin) {
       html += '<div class="toolbar">' + '<button class="sec" id="undo"' + (v.picks.length ? '' : ' disabled') + '>↩︎ Undo last pick</button>'
         + (v.done && !d.locked ? '<button id="lock">Lock the teams</button>' : '') + '<button class="sec" id="resetDraft">Start over</button></div>';
     }
+    if (pendingPair) { var mu0 = E.cupMatchupView(cfg); html += '<div class="sheet"><span><b>' + esc(sideName(pendingPair.side)) + '</b>: ' + (mu0.role === 'put' ? 'put up' : 'answer with') + ' <b>' + esc(pendingPair.pair[0]) + ' &amp; ' + esc(pendingPair.pair[1]) + '</b>?</span><button id="muConfirm">Yes</button><button class="sec" id="muCancel">Cancel</button></div>'; }
     if (pending) html += '<div class="sheet"><span><b>' + esc(pending) + '</b> to <b>' + esc(sideName(clock)) + '</b>?</span><button id="confirmPick">Pick</button><button class="sec" id="cancelPick">Cancel</button></div>';
     app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html; wire();
   }
@@ -293,7 +365,7 @@ button:disabled{opacity:.4;cursor:default}
   function wire() {
     function $(id) { return document.getElementById(id); }
     function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
-    pairsWire();
+    pairsWire(); matchupWire();
     var sel = $('sortSel'); if (sel) sel.addEventListener('change', function () { sortBy = sel.value; render(); });
     on('pinGo', function () { pin = $('pinIn').value.trim(); try { sessionStorage.setItem('bf_cup_pin', pin); } catch (e) {} render(); });
     on('poolSave', function () {
@@ -356,7 +428,7 @@ button:disabled{opacity:.4;cursor:default}
         stats[n] = { hcp: Math.round((4 + rnd() * 20) * 10) / 10, rank: i + 1, avg: Math.round((2 + rnd() * 2.5) * 100) / 100, birdies: Math.round(rnd() * 12) };
       });
       var copy = JSON.parse(JSON.stringify(cfg));
-      delete copy.access; delete copy.pairs; copy.sides.forEach(function (sd) { sd.players = []; });
+      delete copy.access; delete copy.pairs; delete copy.matchup; copy.sides.forEach(function (sd) { sd.players = []; });
       copy.rounds.forEach(function (r) { r.matches = []; });
       copy.pool = pool; copy.draft = { started: false, first: null, pool: pool, stats: stats, picks: [], locked: false };
       fetch(WORKER + '/bfe/cup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT + ' (practice)', config: copy, pin: pin }) })
@@ -371,7 +443,7 @@ button:disabled{opacity:.4;cursor:default}
     });
     on('resetDraft', function () {
       if (!window.confirm('Clear every pick and start the draft over?')) return;
-      cfg.draft.picks = []; cfg.draft.started = false; cfg.draft.locked = false; delete cfg.pairs; cfg.sides.forEach(function (s) { s.players = []; }); save();
+      cfg.draft.picks = []; cfg.draft.started = false; cfg.draft.locked = false; delete cfg.pairs; delete cfg.matchup; cfg.sides.forEach(function (s) { s.players = []; }); save();
     });
   }
 

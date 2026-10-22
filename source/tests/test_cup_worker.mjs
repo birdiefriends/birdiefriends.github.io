@@ -96,4 +96,26 @@ await pact('BBB222', 'pair_set', [['Nate', 'B1'], ['B2', 'B3']]); r = await pact
 ok(r.status === 200 && r.json.config.pairs.A.list.length === 2, 'when B locks, B sees both sides');
 r = await call('GET', '/bfe/cup?event=Pair%20Cup'); ok(r.json.config.pairs.A.list && r.json.config.pairs.B.list, 'and so does the public');
 r = await pact('AAA111', 'pair_unlock'); ok(r.status === 409, 'after both lock only the commissioner can reopen');
+
+// ── Saturday matchup draw: put up and respond, server-enforced, writes the matches into the pairs round ──
+const mcfg = { sides: [{ key: 'A', name: 'A', players: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'] }, { key: 'B', name: 'B', players: ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'] }], points: { win: 1, half: 0.5, loss: 0 },
+  rounds: [{ key: 'sat', segments: [{ format: 'bestball', from: 1, to: 18 }], matches: [] }, { key: 'sun', segments: [{ format: 'singles', from: 1, to: 18 }], matches: [] }],
+  draft: { started: true, first: 'A', pool: [], picks: [], locked: true }, access: { A: 'AAA111', B: 'BBB222' },
+  pairs: { A: { list: [['a1', 'a2'], ['a3', 'a4'], ['a5', 'a6']], locked: true }, B: { list: [['b1', 'b2'], ['b3', 'b4'], ['b5', 'b6']], locked: true } } };
+await call('POST', '/bfe/cup', { event_name: 'Match Cup', config: mcfg, pin: '7797' });
+const mact = (code, pair) => call('POST', '/bfe/cup/act', { event_name: 'Match Cup', code, action: 'match_pick', pair });
+r = await mact('AAA111', ['a1', 'a2']); ok(r.status === 409 && /not started/.test(r.json.error), 'no picks until the host starts the draw');
+mcfg.matchup = { started: true, first: 'B', log: [] }; await call('POST', '/bfe/cup', { event_name: 'Match Cup', config: mcfg, pin: '7797' });
+r = await mact('AAA111', ['a1', 'a2']); ok(r.status === 409 && /not your turn/.test(r.json.error), 'the starting captain goes first');
+r = await mact('BBB222', ['a1', 'a2']); ok(r.status === 409 && /not available/.test(r.json.error), 'cannot use the other side\'s pair');
+r = await mact('BBB222', ['b2', 'b1']); ok(r.status === 200 && r.json.config.matchup.log[0].pair.join() === 'b1,b2', 'B puts up a pair (order-insensitive, canonical)');
+r = await mact('BBB222', ['b3', 'b4']); ok(r.status === 409, 'B cannot go twice');
+r = await mact('AAA111', ['a5', 'a6']); ok(r.status === 200 && !r.json.config.matchup.done, 'A responds');
+r = await mact('AAA111', ['a1', 'a2']); ok(r.status === 200 && !r.json.config.matchup.done, 'A, the responder, now puts up');
+r = await mact('BBB222', ['b3', 'b4']);
+ok(r.status === 200 && r.json.config.matchup.done === true, 'after N-1 rounds the draw is done');
+const sat = r.json.config.rounds[0].matches;
+ok(sat.length === 3 && sat[0].sides[0].side === 'A' && sat[0].sides[0].players.join() === 'a5,a6' && sat[0].sides[1].players.join() === 'b1,b2' && sat[2].sides[0].players.join() === 'a3,a4' && sat[2].sides[1].players.join() === 'b5,b6', 'the matches are written into the pairs round, the last two pairs meeting automatically');
+ok(r.json.config.rounds[1].matches.length === 0, 'Sunday is untouched');
+r = await mact('AAA111', ['a3', 'a4']); ok(r.status === 409 && /already set/.test(r.json.error), 'no more picks after completion');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

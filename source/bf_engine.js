@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.26.0';
+  const ENGINE_VERSION = '1.27.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2296,6 +2296,47 @@
     Object.keys(p).forEach(k => { out[k] = (open || k === viewerSide) ? p[k] : { locked: p[k].locked === true, count: (p[k].list || []).length }; });
     return out;
   }
+  // ── BF Cup Saturday matchup draw (Dev-95) ──────────────────────────────
+  // After both captains lock their pairs, the captains build the matches one at a time, "put up and respond": the starting captain puts
+  // up one of his pairs, the other captain answers with one of his to face it; then the roles swap, and so on. With N pairs a side that is
+  // N-1 rounds of two steps, and the last two pairs meet automatically. `cfg.matchup = {started, first, log:[{n, side, pair}]}`.
+  // The Worker re-implements the pick rule (it cannot load this file); keep the two in step.
+  function cupPairsRound(cfg) {
+    return ((cfg && cfg.rounds) || []).findIndex(r => { const f = CUP_FORMATS[((r.segments || [])[0] || {}).format]; return !!f && f.size === 2; });
+  }
+  const pairKey = pr => (pr || []).map(norm).sort().join('|');
+  function cupMatchupView(cfg) {
+    const m = cfg && cfg.matchup;
+    if (!m || !m.started) return { started: false };
+    const keys = ((cfg.sides) || []).map(sd => sd.key);
+    const first = keys.includes(m.first) ? m.first : keys[0], other = keys.find(k => k !== first);
+    const lists = {}; keys.forEach(k => { lists[k] = (((cfg.pairs || {})[k] || {}).list || []); });
+    const n = lists[first] ? lists[first].length : 0;
+    const log = m.log || [];
+    const used = {}; keys.forEach(k => { used[k] = new Set(); });
+    log.forEach(e => { if (used[e.side]) used[e.side].add(pairKey(e.pair)); });
+    const avail = {}; keys.forEach(k => { avail[k] = lists[k].filter(pr => !used[k].has(pairKey(pr))); });
+    const steps = Math.max(0, 2 * (n - 1)), done = n > 0 && log.length >= steps;
+    const round = log.length >> 1, putter = round % 2 === 0 ? first : other, responder = putter === first ? other : first;
+    const role = log.length % 2 === 0 ? 'put' : 'respond';
+    const matches = [];
+    for (let i = 0; i + 1 < log.length; i += 2) matches.push({ sides: [{ side: log[i].side, players: log[i].pair }, { side: log[i + 1].side, players: log[i + 1].pair }] });
+    if (done && avail[first][0] && avail[other][0]) matches.push({ sides: [{ side: first, players: avail[first][0] }, { side: other, players: avail[other][0] }] });
+    const ordered = matches.map((mt, i) => ({ key: 'm' + (i + 1), sides: mt.sides.slice().sort((a, b) => keys.indexOf(a.side) - keys.indexOf(b.side)) }));
+    return { started: true, first, other, n, log, role, onClock: done || !n ? null : (role === 'put' ? putter : responder), facing: role === 'respond' && !done ? log[log.length - 1].pair : null,
+      avail, matches: ordered, done, even: lists[first].length === lists[other].length };
+  }
+  // Pure: the matchup after `side` takes a step with `pair` (put up, or respond). Names are returned in the locked pair's spelling.
+  function cupMatchupPick(cfg, side, pair) {
+    const v = cupMatchupView(cfg);
+    if (!v.started) return { ok: false, reason: 'The matchup draw has not started' };
+    if (!v.even || v.n < 1) return { ok: false, reason: 'Both sides need the same number of pairs' };
+    if (v.done) return { ok: false, reason: 'The matchups are already set' };
+    if (v.onClock !== side) return { ok: false, reason: 'It is not your turn' };
+    const hit = v.avail[side].find(pr => pairKey(pr) === pairKey(pair));
+    if (!hit) return { ok: false, reason: 'That pair is not available' };
+    return { ok: true, matchup: Object.assign({}, cfg.matchup, { log: v.log.concat([{ n: v.log.length + 1, side, pair: hit.slice() }]) }) };
+  }
   function cupTotalPoints(cfg) {
     const rule = cupPointsRule(cfg);
     return (cfg.rounds || []).reduce((t, r) => t + (r.matches || []).length * (r.segments || []).length, 0) * Math.max(rule.win + rule.loss, 2 * rule.half);
@@ -2363,7 +2404,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupDraftPick, cupDraftUndo, cupParseStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, CUP_BALANCE_LIMITS,
+    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupDraftPick, cupDraftUndo, cupParseStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, CUP_BALANCE_LIMITS,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });

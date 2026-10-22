@@ -214,5 +214,33 @@ ok(!E.cupValidate(badSize).ok, 'singles cannot reuse a pairs session');
   ok(E.cupPairsRevealed(cfg) && E.cupPairsVisible(cfg, '', false).A.list, 'once both lock, everyone sees both');
   eq(E.cupRosterOf(cfg, 'A'), ['a1', 'a2'], 'roster comes from the locked team');
 }
+
+// ---------- Saturday matchup draw ----------
+{
+  const mk = (n) => Array.from({ length: n }, (_, i) => ['x' + i, 'y' + i]);
+  const cfg = { sides: [{ key: 'A' }, { key: 'B' }], rounds: [{ key: 'sat', segments: [{ format: 'bestball', from: 1, to: 9 }] }, { key: 'sun', segments: [{ format: 'singles', from: 1, to: 18 }] }],
+    pairs: { A: { list: [['a1', 'a2'], ['a3', 'a4'], ['a5', 'a6'], ['a7', 'a8']], locked: true }, B: { list: [['b1', 'b2'], ['b3', 'b4'], ['b5', 'b6'], ['b7', 'b8']], locked: true } },
+    matchup: { started: true, first: 'B', log: [] } };
+  ok(E.cupPairsRound(cfg) === 0, 'the pairs round is the first fourball/foursomes round');
+  let v = E.cupMatchupView(cfg);
+  ok(v.onClock === 'B' && v.role === 'put' && v.n === 4 && !v.done, 'the starting captain puts up first');
+  ok(!E.cupMatchupPick(cfg, 'A', ['a1', 'a2']).ok, 'the other captain cannot go first');
+  ok(!E.cupMatchupPick(cfg, 'B', ['a1', 'a2']).ok, 'a captain cannot put up the other side\'s pair');
+  const step = (side, pair) => { const r = E.cupMatchupPick(cfg, side, pair); if (!r.ok) throw new Error(r.reason); cfg.matchup = r.matchup; return E.cupMatchupView(cfg); };
+  v = step('B', ['B2', 'b1'].map(x => x.toLowerCase()));
+  ok(v.onClock === 'A' && v.role === 'respond' && v.facing.join() === 'b1,b2', 'the other captain responds, facing that pair');
+  v = step('A', ['a3', 'a4']);
+  ok(v.onClock === 'A' && v.role === 'put' && v.matches.length === 1, 'roles swap: the responder now puts up');
+  v = step('A', ['a1', 'a2']); v = step('B', ['b7', 'b8']);
+  ok(v.onClock === 'B' && v.role === 'put', 'round three: B puts up again');
+  ok(!E.cupMatchupPick(cfg, 'B', ['b1', 'b2']).ok, 'a pair already used cannot be used again');
+  v = step('B', ['b3', 'b4']); ok(v.onClock === 'A' && v.role === 'respond', 'A responds');
+  v = step('A', ['a5', 'a6']);
+  ok(v.done && v.onClock === null && v.matches.length === 4, 'after N-1 rounds the matchups are set');
+  eq(v.matches[3].sides.map(x => x.players.join()), ['a7,a8', 'b5,b6'], 'the last two pairs meet automatically');
+  eq(v.matches[0].sides.map(x => x.side), ['A', 'B'], 'each match lists the sides in the Cup\'s side order');
+  ok(!E.cupMatchupPick(cfg, 'A', ['a7', 'a8']).ok, 'no more picks once done');
+  ok(!E.cupMatchupView({ sides: cfg.sides, pairs: cfg.pairs }).started, 'no draw until the host starts it');
+}
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

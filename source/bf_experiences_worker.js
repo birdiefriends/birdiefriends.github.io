@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.26.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.27.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1369,6 +1369,9 @@ export default {
     //   POST /bfe/cup/act {event_name, code, action:'pick', player}  a captain takes a player when it is his side's turn.
     //   POST /bfe/cup/act {…, action:'pair_set', pairs:[[a,b],…]}  a captain saves his Saturday pairs (any partial list); 'pair_lock' locks them
     //   (everyone paired, one odd man out allowed); 'pair_unlock' reopens them only while the other captain has not locked.
+    //   POST /bfe/cup/act {…, action:'match_pick', pair:[a,b]}  the Saturday matchup draw: "put up and respond", alternating (BFEngine.cupMatchupView is the
+    //   browser twin). The commissioner starts it by saving config.matchup = {started, first, log:[]}; when the last pick lands the matches are written
+    //   into the pairs round (rounds[i].matches).
     //   GET /bfe/cup-live   the Cup events whose draft is open (practice copies excluded) for the app banner.
     // Saturday pairs (BFEngine.cupPairsVisible is the browser twin): a side's pairs are private to that captain and the commissioner
     // until both captains have locked; everyone else only learns whether each side has locked and how many pairs it made.
@@ -1466,6 +1469,39 @@ export default {
           await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj, side) });
         }
+        if (body.action === 'match_pick') {
+          const mu = cfgObj.matchup;
+          if (!mu || !mu.started) return J({ error: 'The matchup draw has not started' }, 409);
+          const keys = (cfgObj.sides || []).map(sd => sd.key);
+          const pk = (cfgObj.pairs || {});
+          if (!keys.every(k => pk[k] && pk[k].locked === true)) return J({ error: 'Both captains must lock their pairs first' }, 409);
+          const first = keys.includes(mu.first) ? mu.first : keys[0], other = keys.find(k => k !== first);
+          const pkey = pr => (pr || []).map(norm).sort().join('|');
+          const lists = {}; keys.forEach(k => { lists[k] = pk[k].list || []; });
+          const n = lists[first].length;
+          if (n < 1 || lists[other].length !== n) return J({ error: 'Both sides need the same number of pairs' }, 409);
+          const log = mu.log || [];
+          if (log.length >= 2 * (n - 1)) return J({ error: 'The matchups are already set' }, 409);
+          const round = log.length >> 1, putter = round % 2 === 0 ? first : other, responder = putter === first ? other : first;
+          const onClock = log.length % 2 === 0 ? putter : responder;
+          if (onClock !== side) return J({ error: 'It is not your turn' }, 409);
+          const used = new Set(log.filter(e => e.side === side).map(e => pkey(e.pair)));
+          const hit = lists[side].find(pr => pkey(pr) === pkey(body.pair) && !used.has(pkey(pr)));
+          if (!hit) return J({ error: 'That pair is not available' }, 409);
+          mu.log = log.concat([{ n: log.length + 1, side, pair: hit.slice() }]);
+          if (mu.log.length >= 2 * (n - 1)) {
+            const left = {}; keys.forEach(k => { const u = new Set(mu.log.filter(e => e.side === k).map(e => pkey(e.pair))); left[k] = lists[k].filter(pr => !u.has(pkey(pr)))[0]; });
+            const ms = [];
+            for (let i = 0; i + 1 < mu.log.length; i += 2) ms.push([{ side: mu.log[i].side, players: mu.log[i].pair }, { side: mu.log[i + 1].side, players: mu.log[i + 1].pair }]);
+            if (left[first] && left[other]) ms.push([{ side: first, players: left[first] }, { side: other, players: left[other] }]);
+            const ri = (cfgObj.rounds || []).findIndex(r => { const f = ((r.segments || [])[0] || {}).format; return f === 'bestball' || f === 'altshot'; });
+            if (ri >= 0) cfgObj.rounds[ri].matches = ms.map((sd, i) => ({ key: 'm' + (i + 1), sides: sd.slice().sort((a, b) => keys.indexOf(a.side) - keys.indexOf(b.side)) }));
+            mu.done = true;
+          }
+          cfgObj.matchup = mu;
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
+          return J({ ok: true, config: cupPublic(cfgObj, side) });
+        }
         return J({ error: 'Unknown action' }, 400);
       } catch (e) { return J({ error: 'Database error: ' + String(e.message || e) }, 500); }
     }
@@ -1496,7 +1532,7 @@ export default {
           if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
           // the public document never carries the captain codes, so a re-save must not wipe them
           // (the same goes for the captains' Saturday pairs: a page that never loaded them must not erase them)
-          if (!config.access || !config.pairs) { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; } catch (e) { /* ignore */ } } }
+          if (!config.access || !config.pairs || !config.matchup) { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
           await env.DB.prepare(`INSERT INTO bfe_cup (event_name, config, updated_at) VALUES (?, ?, datetime('now'))
              ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(config)).run();
           return J({ ok: true });
