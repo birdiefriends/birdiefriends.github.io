@@ -18151,25 +18151,39 @@ function renderDraftCalcPanel() {
     </div>`;
 }
 let _cupLive = null, _cupTimer = null;
-function openCupDraft() { if (_cupLive) window.open('bf-cup-draft.html?event=' + encodeURIComponent(_cupLive.event_name), '_blank'); }
+// What the app card says and where it goes. A captain gets his own captain screen (no link to copy); everyone else watches.
+function cupLiveCard(ev, player) {
+  const phase = ev.phase || (ev.locked ? 'pairs' : 'draft');
+  const title = { draft: 'Live selection', pairs: 'Saturday pairs', matchups: 'Matchup draw', set: 'Matchups are set' }[phase] || 'Live';
+  const cap = !!ev.cap_code;
+  let sub;
+  if (phase === 'draft') sub = cap ? 'You are a captain — tap to open your picking screen' : `Pick ${Math.min(ev.picks + 1, ev.total)} of ${ev.total} — tap to watch the selection live`;
+  else if (phase === 'pairs') sub = cap ? 'Teams are set — tap to build your pairs' : `Teams are set. Captains are building pairs (${ev.pairs_locked || 0} of 2 locked) — tap to follow`;
+  else if (phase === 'matchups') sub = cap ? 'Tap to make your matchup picks' : 'The captains are drawing the Saturday matchups — tap to watch';
+  else sub = 'Tap to see the Saturday matches';
+  const url = 'bf-cup-draft.html?event=' + encodeURIComponent(ev.event_name) + (cap ? '&cap=' + encodeURIComponent(ev.cap_code) : '');
+  return { title, sub, url, cap };
+}
+function openCupDraft() { if (_cupLive) window.open(cupLiveCard(_cupLive).url, '_blank'); }
 async function renderCupBanner() {
   const el = document.getElementById('home-cup-banner');
   if (!el) return;
   if (!_cupTimer) _cupTimer = setInterval(() => { if (document.getElementById('home-cup-banner')) renderCupBanner(); }, 20000);
   try {
-    const res = await fetch(`${BFE_API}/bfe/cup-live`);
+    const who = (typeof currentPlayer === 'string' && currentPlayer && currentPlayer !== 'Guest') ? `?player=${encodeURIComponent(currentPlayer)}` : '';
+    const res = await fetch(`${BFE_API}/bfe/cup-live${who}`);
     const data = await res.json();
     const ev = (data.events || [])[0];
     if (!ev) { el.innerHTML = ''; _cupLive = null; return; }
     _cupLive = ev;
-    const sub = ev.locked ? 'Teams are set — tap to see the rosters' : `Pick ${Math.min(ev.picks + 1, ev.total)} of ${ev.total} — tap to watch the selection live`;
-    const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const c = cupLiveCard(ev);
+    const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
     el.innerHTML = `<div class="live-banner" style="cursor:pointer;background:#0a3161;border-left:5px solid #c8102e" onclick="openCupDraft()">
       <div class="live-banner-header">
         <div class="live-dot" style="background:#c8102e"></div>
         <div style="flex:1">
-          <div class="live-banner-title">★ ${esc(ev.event_name)} — ${ev.locked ? 'Teams' : 'Live selection'}</div>
-          <div class="live-banner-sub">${sub}</div>
+          <div class="live-banner-title">★ ${esc(ev.event_name)} — ${esc(c.title)}${c.cap ? ' · 👑 Captain' : ''}</div>
+          <div class="live-banner-sub">${esc(c.sub)}</div>
         </div>
         <div class="live-banner-chev">›</div>
       </div>

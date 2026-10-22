@@ -118,4 +118,17 @@ const sat = r.json.config.rounds[0].matches;
 ok(sat.length === 3 && sat[0].sides[0].side === 'A' && sat[0].sides[0].players.join() === 'a5,a6' && sat[0].sides[1].players.join() === 'b1,b2' && sat[2].sides[0].players.join() === 'a3,a4' && sat[2].sides[1].players.join() === 'b5,b6', 'the matches are written into the pairs round, the last two pairs meeting automatically');
 ok(r.json.config.rounds[1].matches.length === 0, 'Sunday is untouched');
 r = await mact('AAA111', ['a3', 'a4']); ok(r.status === 409 && /already set/.test(r.json.error), 'no more picks after completion');
+
+// ── app card: phases, and a captain's own code for one-tap access (no copied links) ──
+r = await call('GET', '/bfe/cup-live');
+ok(r.json.events.find(e => e.event_name === 'Pair Cup').phase === 'matchups' || r.json.events.find(e => e.event_name === 'Pair Cup').phase === 'pairs', 'the live list reports a phase');
+ok(r.json.events.every(e => e.cap_code === undefined), 'with no player named, nobody gets a captain code');
+r = await call('GET', '/bfe/cup-live?player=Jake');
+ok(r.json.events.find(e => e.event_name === 'Pair Cup').cap_code === 'AAA111' && r.json.events.find(e => e.event_name === 'Pair Cup').cap_side === 'Team Jake', 'a captain named by the app gets his own side\'s code');
+r = await call('GET', '/bfe/cup-live?player=nate'); ok(r.json.events.find(e => e.event_name === 'Pair Cup').cap_code === 'BBB222', 'name match ignores case');
+r = await call('GET', '/bfe/cup-live?player=A1'); ok(r.json.events.find(e => e.event_name === 'Pair Cup').cap_code === undefined, 'a player who is not a captain gets no code');
+r = await call('GET', '/bfe/cup-live'); ok(!JSON.stringify(r.json).includes('BBB222') && !JSON.stringify(r.json).includes('AAA111'), 'the public list never shows a code');
+ok(r.json.events.find(e => e.event_name === 'Draft Cup').phase === 'draft', 'an open draft is in the draft phase');
+await call('POST', '/bfe/cup', { event_name: 'Phase Cup', config: Object.assign({}, pcfg, { matchup: { started: true, first: 'B', log: [] } }), pin: '7797' });
+r = await call('GET', '/bfe/cup-live'); ok(r.json.events.find(e => e.event_name === 'Phase Cup').phase === 'matchups', 'a started matchup draw is the matchups phase');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

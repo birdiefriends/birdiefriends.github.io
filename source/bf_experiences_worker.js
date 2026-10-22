@@ -1372,7 +1372,8 @@ export default {
     //   POST /bfe/cup/act {…, action:'match_pick', pair:[a,b]}  the Saturday matchup draw: "put up and respond", alternating (BFEngine.cupMatchupView is the
     //   browser twin). The commissioner starts it by saving config.matchup = {started, first, log:[]}; when the last pick lands the matches are written
     //   into the pairs round (rounds[i].matches).
-    //   GET /bfe/cup-live   the Cup events whose draft is open (practice copies excluded) for the app banner.
+    //   GET /bfe/cup-live[?player=<name>]   the Cup events whose selection is open (draft, pairs, matchup draw; practice copies excluded) for the app card;
+    //   with ?player= naming a captain, his own captain code comes back (cap_code) so the app can open his screen in one tap.
     // Saturday pairs (BFEngine.cupPairsVisible is the browser twin): a side's pairs are private to that captain and the commissioner
     // until both captains have locked; everyone else only learns whether each side has locked and how many pairs it made.
     const cupPublic = (cfgObj, viewerSide) => {
@@ -1391,12 +1392,22 @@ export default {
       try {
         await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bfe_cup (event_name TEXT PRIMARY KEY, config TEXT NOT NULL, updated_at TEXT)`).run();
         const { results } = await env.DB.prepare(`SELECT event_name, config, updated_at FROM bfe_cup ORDER BY updated_at DESC LIMIT 20`).all();
+        // ?player=<name>: the app says who is looking. If that name is a side's captain, his own captain code comes back so the app can open
+        // his captain screen with one tap (nobody has to copy a link). Like the app's other non-commissioner actions this trusts the name the
+        // app sends; it is a friends' event, and the commissioner can still undo anything.
+        const me = String(url.searchParams.get('player') || '').trim().toLowerCase();
         const live = [];
         for (const r of results) {
           if (/\(practice\)$/.test(r.event_name)) continue;
           let c; try { c = JSON.parse(r.config); } catch (e) { continue; }
           if (!c.draft || !c.draft.started) continue;
-          live.push({ event_name: r.event_name, updated_at: r.updated_at, locked: !!c.draft.locked, picks: (c.draft.picks || []).length, total: (c.draft.pool || []).length });
+          // phase: the draft, then the captains building pairs, then the matchup draw, then done
+          const pk = c.pairs || {}, keys = (c.sides || []).map(sd => sd.key);
+          const phase = !c.draft.locked ? 'draft' : (c.matchup && c.matchup.done) ? 'set' : (c.matchup && c.matchup.started) ? 'matchups' : 'pairs';
+          const ev = { event_name: r.event_name, updated_at: r.updated_at, locked: !!c.draft.locked, picks: (c.draft.picks || []).length, total: (c.draft.pool || []).length, phase,
+            pairs_locked: keys.filter(k => pk[k] && pk[k].locked).length, matchup_steps: c.matchup ? (c.matchup.log || []).length : 0 };
+          if (me) { const side = (c.sides || []).find(sd => sd.captain && String(sd.captain).trim().toLowerCase() === me); if (side && c.access && c.access[side.key]) { ev.cap_code = c.access[side.key]; ev.cap_side = side.name || side.key; } }
+          live.push(ev);
         }
         return J({ ok: true, events: live });
       } catch (e) { return J({ error: 'Database error: ' + String(e.message || e) }, 500); }
