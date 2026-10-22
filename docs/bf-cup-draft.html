@@ -130,14 +130,14 @@ button:disabled{opacity:.4;cursor:default}
     var fav = Object.keys(edges).sort(function (a, b) { return edges[b] - edges[a]; })[0];
     var vtxt = { even: '🟢 Dead even', close: '🟡 Close', tilted: '⚠️ Tilted' + (fav ? ' toward ' + esc(sideName(fav)) : ''), unknown: 'Add player stats to see the balance' }[bal.verdict];
     return '<div class="meter"><div class="mhead"><div class="' + colorOf(cfg.sides[0], 0) + '">' + esc(sideName(A)) + '</div><div class="hint">Team balance</div><div class="' + colorOf(cfg.sides[1], 1) + '">' + esc(sideName(B)) + '</div></div>'
-      + row('Avg HCP', 'hcp', 1) + row('Avg vs quota', 'avg', 1) + row('Avg rank', 'rank', 1)
+      + row('Avg HCP', 'hcp', 1) + row('Avg vs Quota', 'avg', 1) + row('Avg rank', 'rank', 1)
       + row('🐦 Birdies', 'birdieTotal', 0, 'birdies', function (s) { return ' <span class="hint">(' + fmt(s.birdies, 1) + ' avg)</span>'; })
       + '<div class="verdict v-' + bal.verdict + '">' + vtxt + '</div></div>';
   }
   // ---------- cards ----------
   function chipsFor(name) {
     var s = ((cfg.draft || {}).stats || {})[name] || {};
-    return '<div class="chips"><span class="chip">HCP <i>' + fmt(s.hcp) + '</i></span><span class="chip">Rank <i>' + (s.rank != null ? '#' + s.rank : '–') + '</i></span><span class="chip">Avg <i>' + fmt(s.avg) + '</i></span><span class="chip">🐦 <i>' + fmt(s.birdies, 0) + '</i></span></div>';
+    return '<div class="chips"><span class="chip">HCP <i>' + fmt(s.hcp) + '</i></span><span class="chip">Rank <i>' + (s.rank != null ? '#' + s.rank : '–') + '</i></span><span class="chip">Avg vs Quota <i>' + fmt(s.avg) + '</i></span><span class="chip">🐦 <i>' + fmt(s.birdies, 0) + '</i></span></div>';
   }
   function stLine(name) { var s = ((cfg.draft || {}).stats || {})[name] || {}; return 'HCP ' + fmt(s.hcp) + ' · #' + (s.rank != null ? s.rank : '–') + ' · ' + fmt(s.avg) + ' · 🐦' + fmt(s.birdies, 0); }
   function sorted(list) {
@@ -169,7 +169,7 @@ button:disabled{opacity:.4;cursor:default}
     }).join('') + '</div>';
   }
   function poolHtml(v) {
-    var opts = [['rank', 'Series rank'], ['hcp', 'Handicap'], ['avg', 'Avg vs quota'], ['birdies', 'Birdies'], ['name', 'A–Z']];
+    var opts = [['rank', 'Series rank'], ['hcp', 'Handicap'], ['avg', 'Avg vs Quota'], ['birdies', 'Birdies'], ['name', 'A–Z']];
     return '<div class="card"><div class="toolbar"><b>Available players (' + v.remaining.length + ')</b><span style="flex:1"></span><label class="hint">Sort <select id="sortSel">'
       + opts.map(function (o) { return '<option value="' + o[0] + '"' + (sortBy === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label></div>'
       + '<div class="grid">' + sorted(v.remaining).map(function (n) { return '<button class="pc" data-pick="' + esc(n) + '"' + (canPick(v) ? '' : ' disabled style="opacity:1"') + '><b>' + esc(n) + '</b>' + chipsFor(n) + '</button>'; }).join('') + '</div></div>';
@@ -180,7 +180,7 @@ button:disabled{opacity:.4;cursor:default}
   function pairsOf(side) { var p = (cfg.pairs || {})[side]; return p && Array.isArray(p.list) ? p.list : null; }
   function pairLocked(side) { var p = (cfg.pairs || {})[side]; return !!(p && p.locked); }
   function pairCount(side) { var p = (cfg.pairs || {})[side]; return p ? (Array.isArray(p.list) ? p.list.length : (p.count || 0)) : 0; }
-  function numsFor(pr) { var n = E.cupPairStats(pr, (cfg.draft || {}).stats || {}); return 'HCP ' + fmt(n.hcp) + ' · vs quota ' + fmt(n.avg) + ' · 🐦 ' + fmt(n.birdies, 0); }
+  function numsFor(pr) { var n = E.cupPairStats(pr, (cfg.draft || {}).stats || {}); return 'HCP ' + fmt(n.hcp) + ' · Avg vs Quota ' + fmt(n.avg) + ' · 🐦 ' + fmt(n.birdies, 0); }
   function pairCard(pr, cls, x) { return '<div class="pairc ' + cls + '"><div><b>' + esc(pr[0]) + ' &amp; ' + esc(pr[1]) + '</b><div class="num">' + esc(numsFor(pr)) + '</div></div>' + (x != null ? '<button class="sec" data-unpair="' + x + '" aria-label="Break this pair">✕</button>' : '') + '</div>'; }
   function pairsEditSide() { return HOST && pin ? (pairTab || cfg.sides[0].key) : YOU; }
   function pairsHtml() {
@@ -327,7 +327,7 @@ button:disabled{opacity:.4;cursor:default}
       : '<div class="card"><h2>Practice run</h2><p class="hint">Make a separate copy of this Cup with 16 sample players and made-up stats, to rehearse the whole flow. The real Cup is never touched.</p><div class="toolbar"><button class="sec" id="practiceMake">Create a practice copy</button>' + (notice && /practice/i.test(notice) ? ' <a href="' + esc(location.pathname + '?event=' + encodeURIComponent(EVENT + ' (practice)') + '&host=1') + '">Open the practice copy →</a>' : '') + '</div></div>';
     var st = d.stats || {}, tnames = (d.pool || cfg.pool || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean)).filter(function (n, i, a) { return a.indexOf(n) === i; });
     var withHcp = tnames.filter(function (n) { return st[n] && typeof st[n].hcp === 'number'; }).length;
-    var table = tnames.length ? '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:.85rem"><tr style="color:var(--dim);text-align:left"><th>Player</th><th>HCP</th><th>Rank</th><th>vs quota</th><th>🐦</th></tr>' + tnames.map(function (n) {
+    var table = tnames.length ? '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:.85rem"><tr style="color:var(--dim);text-align:left"><th>Player</th><th>HCP</th><th>Rank</th><th>Avg vs Quota</th><th>🐦</th></tr>' + tnames.map(function (n) {
       var x = st[n] || {}; function c(v, d2) { return '<td style="padding:3px 8px 3px 0;' + (typeof v === 'number' ? '' : 'color:var(--bad)') + '">' + fmt(v, d2) + '</td>'; }
       return '<tr style="border-top:1px solid var(--faint)"><td style="padding:3px 8px 3px 0">' + esc(n) + (cfg.sides.some(function (sd) { return sd.captain === n; }) ? ' 👑' : '') + '</td>' + c(x.hcp) + c(x.rank, 0) + c(x.avg) + c(x.birdies, 0) + '</tr>'; }).join('') + '</table></div>' : '<p class="hint">No players yet.</p>';
     var noticeBanner = notice && !/practice/i.test(notice) ? '<div class="banner" style="background:#1a7f3c">' + esc(notice) + '</div>' : '';
