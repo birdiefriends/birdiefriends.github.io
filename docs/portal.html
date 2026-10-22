@@ -3627,7 +3627,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.24.2"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.25.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -16951,8 +16951,13 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   };
   // Money columns: what each game WON, then ↩ (antes handed back from halved / unfinished pots), then the Total payout with the net
   // against the buy-in underneath, so "what did I win" and "what do I get back" are never mixed up.
-  const anyBack = [...byName.values()].some(p => Number(p.given_back) > 0);
   const buyIn = Number(s.dollar_per_player) || 0;
+  // The ante is what the games really collected. Money that no game took (a buy-in that does not divide evenly across the pots)
+  // was handed back; it is not part of any pot, so it is not shown as "pushed back" and is not part of what a player put in.
+  const unspentEach = Math.min(buyIn, Math.max(0, Number(s.unspent_each) || 0));
+  const ante = buyIn - unspentEach;
+  const pushedBack = p => Math.max(0, (Number(p.given_back) || 0) - unspentEach);
+  const anyBack = [...byName.values()].some(p => pushedBack(p) > 0);
   // Many games (Hi-Lo + Skins + CTP + MiserBall + Birdie Payouts ...) no longer fit on a phone: the name column used to collapse to nothing.
   // Past 4 money columns the score moves under the name, the columns tighten, and the table scrolls sideways rather than overlapping.
   const moneyCols = games.length + (anyBack ? 1 : 0), compact = moneyCols >= 4, scoreCol = hasRank && !compact;
@@ -16961,19 +16966,19 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   const gridGap = compact ? '3px' : '4px';
   const cell = (v, bold) => `<span style="text-align:right;${bold ? 'font-weight:800;' : ''}">${v}</span>`;
   const head = scoreLabel => `<div style="display:grid;grid-template-columns:${cols};gap:${gridGap};font-size:0.68rem;color:var(--text-hint);padding:2px 0 4px;border-bottom:1px solid var(--border)">
-      <span></span><span style="overflow:hidden;white-space:nowrap">Player</span>${scoreCol ? cell(scoreLabel) : ''}${games.map(g => cell(g[1])).join('')}${anyBack ? cell('↩') : ''}${cell('Total')}</div>`;
+      <span></span><span style="overflow:hidden;white-space:nowrap">Player</span>${scoreCol ? cell(scoreLabel) : ''}${games.map(g => cell(g[1])).join('')}${anyBack ? cell('↩') : ''}${cell(buyIn > 0 ? '+/−' : 'Total')}</div>`;
   const matrix = (mode, scoreKey) => head(scoreKey === 'gross' ? 'Gross' : 'Net') + sortedBy(mode).map(({ p, place, tied }) => {
     const sc = scoreCol ? cell(p[scoreKey] == null ? '—' : esc(p[scoreKey])) : '';
     const scSub = hasRank && compact && p[scoreKey] != null ? `${scoreKey === 'gross' ? 'Gross' : 'Net'} ${esc(p[scoreKey])}` : '';
     const gm = games.map(g => cell(p[g[0]] ? money(p[g[0]]) : '<span style="color:var(--text-hint)">·</span>')).join('');
     return `<div style="display:grid;grid-template-columns:${cols};gap:${gridGap};align-items:center;font-size:${compact ? '0.78rem' : '0.82rem'};padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06)">
       <span style="color:var(--text-muted);font-size:0.74rem">${place === '' ? '' : (tied ? 'T' : '') + place}</span>
-      <span style="min-width:0;line-height:1.15" title="${esc(p.player)}">${(([f, l]) => `<span style="display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f)}</span>${l || strokesBy.has(norm(p.player)) ? `<span style="display:block;font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l)}${strokesBy.has(norm(p.player)) ? `${l ? ' · ' : ''}${strokesBy.get(norm(p.player))} stroke${Math.abs(strokesBy.get(norm(p.player))) === 1 ? '' : 's'}${gameStrokes.has(norm(p.player)) ? ' · ' + gameStrokes.get(norm(p.player)).join(' · ') : ''}` : ''}</span>` : ''}`)(splitName(p.player))}${scSub ? `<span style="display:block;font-size:0.72rem;font-weight:700">${scSub}</span>` : ''}</span>${sc}${gm}${anyBack ? cell(p.given_back ? money(p.given_back) : '<span style="color:var(--text-hint)">·</span>') : ''}<span style="text-align:right;line-height:1.15"><span style="font-weight:800;display:block">${p.total ? money(p.total) : '·'}</span>${buyIn > 0 ? (() => { const n = (Number(p.total) || 0) - buyIn; return `<span style="font-size:0.66rem;font-weight:700;color:${n > 0 ? 'var(--green-dark)' : n < 0 ? '#b8860b' : 'var(--text-muted)'}">${n > 0 ? '+' : n < 0 ? '−' : ''}${money(Math.abs(n))}</span>`; })() : ''}</span></div>`;
+      <span style="min-width:0;line-height:1.15" title="${esc(p.player)}">${(([f, l]) => `<span style="display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f)}</span>${l || strokesBy.has(norm(p.player)) ? `<span style="display:block;font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l)}${strokesBy.has(norm(p.player)) ? `${l ? ' · ' : ''}${strokesBy.get(norm(p.player))} stroke${Math.abs(strokesBy.get(norm(p.player))) === 1 ? '' : 's'}${gameStrokes.has(norm(p.player)) ? ' · ' + gameStrokes.get(norm(p.player)).join(' · ') : ''}` : ''}</span>` : ''}`)(splitName(p.player))}${scSub ? `<span style="display:block;font-size:0.72rem;font-weight:700">${scSub}</span>` : ''}</span>${sc}${gm}${anyBack ? cell(pushedBack(p) ? money(pushedBack(p)) : '<span style="color:var(--text-hint)">·</span>') : ''}<span style="text-align:right;line-height:1.15">${buyIn > 0 ? (() => { const n = (Number(p.total) || 0) - buyIn; return `<span style="font-weight:800;display:block;color:${n > 0 ? 'var(--green-dark)' : n < 0 ? '#b8860b' : 'var(--text-muted)'}">${n > 0 ? '+' : n < 0 ? '−' : ''}${money(Math.abs(n))}</span>`; })() : `<span style="font-weight:800;display:block">${p.total ? money(p.total) : '·'}</span>`}</span></div>`;
   }).join('');
   const modes = hasRank ? [['net', 'Net'], ['gross', 'Gross'], ['money', '$']] : [['money', '$']];
   const defMode = hasRank ? 'net' : 'money';
   const modeBtn = (m, lab) => `<button type="button" data-gp-btn="${m}" onclick="gpSort('${uid}','${m}')" style="${gpBtnStyle(m === defMode)}">${lab}</button>`;
-  let sum = `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">${s.players_count} player${s.players_count === 1 ? '' : 's'} × ${money(s.dollar_per_player)} = <b style="color:var(--text)">${money(s.total_pot)} pot</b></div>`;
+  let sum = `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">${s.players_count} player${s.players_count === 1 ? '' : 's'} × ${money(ante)} = <b style="color:var(--text)">${money(ante * s.players_count)} pot</b>${unspentEach > 0 ? ` <span style="font-size:0.72rem;color:var(--text-hint)">· ${money(unspentEach)} of the ${money(buyIn)} buy-in was in no game and went back</span>` : ''}</div>`;
   {
     const lines = [];
     const addLine = (icon, name, g, winBy) => {
@@ -16993,9 +16998,10 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   }
   if (oneBallOnly) sum += BFEngine.sideFormGames().map(id => (s[id] ? sideResultHeroHtml(s[id], id) : '')).join('');
   if (modes.length > 1) sum += `<div style="display:flex;align-items:center;gap:6px;margin:4px 0 6px"><span style="font-size:0.72rem;color:var(--text-muted)">Rank by</span>${modes.map(([m, l]) => modeBtn(m, l)).join('')}<span style="font-size:0.68rem;color:var(--text-hint)">scores are for fun</span></div>`;
-  sum += `<div style="font-size:0.7rem;color:var(--text-muted);margin:2px 0 4px;line-height:1.4">Game columns show what each game paid out.${anyBack ? ' ↩ is an ante handed back from a pot that was halved or not finished.' : ''} Total is everything that player receives${buyIn > 0 ? `; the small number is the result against the ${money(buyIn)} buy-in` : ''}.</div>`;
+  sum += `<div style="font-size:0.7rem;color:var(--text-muted);margin:2px 0 4px;line-height:1.4">Game columns show what each game paid out.${anyBack ? ' ↩ is an ante handed back from a pot that was halved or not finished.' : ''}${buyIn > 0 ? ` <b>+/−</b> is each player's result: what came back to them, minus the ${money(ante)} they put in.` : ''}</div>`;
   sum += modes.map(([m]) => `<div data-gp-sort="${m}" style="overflow-x:auto;${m === defMode ? '' : 'display:none'}">${matrix(m, m === 'gross' ? 'gross' : 'net')}</div>`).join('');
   if (s.unallocated > 0) sum += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Rounding (whole dollars): ${money(s.unallocated)} stays with the host</div>`;
+  else if (buyIn > 0 && people.length && Math.abs(people.reduce((t, p) => t + (Number(p.total) || 0) - buyIn, 0)) < 0.005) sum += `<div style="font-size:0.72rem;color:var(--text-hint);margin-top:6px">Results add up to $0 across the group.</div>`;
   panels.push({ key: 'sum', tab: '📋 Summary', html: sum });
 
   // ── Skins: grouped by player ──
@@ -19719,7 +19725,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
           <label>$ per Player <span style="color:#c0392b">*</span></label>
           <input type="number" id="games-form-dpp" min="0.01" step="0.01"
             value="${existing ? existing.dollar_per_player : ''}" style="width:100px"
-            oninput="onGamesFormDppInput()">
+            oninput="onGamesFormDppInput()" onchange="snapGamesFormDpp()">
           <div style="display:flex;gap:8px;margin-top:8px">${[5, 10, 20].map(v => `<button type="button" onclick="setGamesFormDpp(${v})" style="height:34px;padding:0 16px;border-radius:17px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.86rem;cursor:pointer">$${v}</button>`).join('')}</div>
           <div id="games-form-suggest-note" style="font-size:0.74rem;color:var(--text-muted);margin-top:8px;line-height:1.5"></div>
           <div id="games-form-split">${gamesFormSplitHtml()}</div>
@@ -19904,6 +19910,29 @@ function setGamesFormDpp(v) {
   const input = document.getElementById('games-form-dpp');
   if (input) input.value = v;
   onGamesFormDppInput();
+  snapGamesFormDpp();
+}
+// The ante is what the games really collect. If the buy-in does not divide evenly across the games' pots and nothing (Skins,
+// Birdie Payouts) takes the rest, e.g. $10 over a 3-pot game = $9, the amount the pots use becomes the buy-in. Only when every
+// amount is still the suggested one: a host who typed his own amounts keeps what he typed.
+function gamesFormAnte(dpp) {
+  if (!(dpp > 0) || _gamesFormTouched.size) return null;
+  const n = Math.max(4, _gamesFormYesCount);
+  const holes = (_gamesFormCttpConfig.holes || []).length || _gamesFormPar3Holes.length || 3;
+  const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: n, games: [..._gamesFormSelected], cttpHoles: holes, periods: { fourball: fourballSegCount(_gamesFormFourballConfig), altshot: periodSegCount(_gamesFormSide.altshot), hilo: periodSegCount(_gamesFormSide.hilo), matchplay: periodSegCount(_gamesFormSide.matchplay), lowscore: lowscoreSegCount(_gamesFormLowscoreConfig) } });
+  return sug.ante > 0 && sug.unspent >= 1 && Number.isInteger(sug.ante) ? sug : null;
+}
+function snapGamesFormDpp() {
+  const input = document.getElementById('games-form-dpp');
+  if (!input) return;
+  const a = gamesFormAnte(parseFloat(input.value) || 0);
+  if (!a) return;
+  const was = parseFloat(input.value);
+  input.value = a.ante;
+  applyGamesSuggestion(false);
+  updateGamesFormPotPreview();
+  const note = document.getElementById('games-form-suggest-note');
+  if (note) note.innerHTML = `Buy-in set to <b>$${a.ante}</b>. $${was} does not divide evenly across the pots, so $${a.unspent} would not be played for.`;
 }
 function applyGamesSuggestion(force) {
   const input = document.getElementById('games-form-dpp');
@@ -20453,6 +20482,8 @@ function gamesRollRender(keepFocus) {
   const per = id => { const p = (_roll.variants[id] || {}).period; return p && BFEngine.PERIODS[p] ? Math.max(1, BFEngine.PERIODS[p].segs.length) : 1; };
   const par3n = _gamesFormPar3Holes.length || 3;
   const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: Math.max(4, n), games, cttpHoles: par3n, periods: Object.fromEntries(games.map(g => [g, per(g)])) });
+  const snap = sug.unspent >= 1 && sug.ante > 0 && Number.isInteger(sug.ante);
+  _roll.effDpp = snap ? sug.ante : dpp;   // what the games really collect becomes the buy-in
   const m = x => '$' + (Math.round(x * 100) / 100).toFixed(Number.isInteger(Math.round(x * 100) / 100) ? 0 : 2);
   const amt = id => { const g = sug[id]; if (!g) return id === 'skins' ? 'gets what is left' : '';
     return id === 'cttp' ? `${m(g.dollar_per_hole)} a hole` : id === 'birdiepay' ? `${m(g.dollar_per_birdie)} a birdie` : `${m(g.dollar_per_player)} per player`; };
@@ -20477,6 +20508,7 @@ function gamesRollRender(keepFocus) {
       <div style="font-size:0.72rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:6px 0">The game</div>${row(st.main, false)}${teamsBlock}
       <div style="font-size:0.72rem;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.05em;margin:12px 0 6px">Side games</div>${st.sideOptions.map(id => row(id, true)).join('')}
       <div style="display:flex;align-items:center;gap:8px;margin:12px 0 4px"><span style="flex:1;font-weight:600;font-size:0.9rem">Buy-in per player</span><span>$</span><input type="number" min="1" step="1" value="${dpp}" ${keepFocus ? 'autofocus' : ''} oninput="gamesRollSetDpp(this.value)" style="width:80px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"></div>
+      ${snap ? `<div style="font-size:0.76rem;color:var(--green-dark);margin:-2px 0 6px;line-height:1.45">The games use <b>$${sug.ante}</b> of that: $${dpp} does not divide evenly across the pots. The buy-in will be $${sug.ante}.</div>` : ''}
       <div style="display:flex;gap:8px;margin-bottom:6px">${[10, 20, 40].map(v => `<button type="button" onclick="gamesRollSetDpp(${v});gamesRollRender()" style="height:32px;padding:0 14px;border-radius:16px;border:1.5px solid var(--green);background:${dpp === v ? 'var(--green-light)' : '#fff'};color:var(--green);font-family:inherit;font-weight:700;cursor:pointer">$${v}</button>`).join('')}</div>
       <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:12px">Pot ${m(dpp * n)}. Amounts above are split to use the whole buy-in; you can fine-tune them after.</div>
       <button class="host-cta-btn" onclick="gamesRollUse()">Use this setup</button>
@@ -20496,7 +20528,7 @@ function gamesRollUse() {
   gamesRollClose();
   [..._gamesFormSelected].forEach(k => toggleGamesFormGame(k));   // start clean: each untick resets that game's settings
   ids.forEach(id => toggleGamesFormGame(id));
-  const dppEl = document.getElementById('games-form-dpp'); if (dppEl) dppEl.value = _roll.dpp;
+  const dppEl = document.getElementById('games-form-dpp'); if (dppEl) dppEl.value = _roll.effDpp || _roll.dpp;
   ids.forEach(id => {
     const v = _roll.variants[id] || {};
     if (id === 'skins') _gamesFormHcp.skins_basis = v.basis === 'net' ? 'net' : 'gross';
@@ -21011,6 +21043,7 @@ async function submitGatheringGames(gatheringId) {
   let dpp = parseFloat(document.getElementById('games-form-dpp').value);
   if (isNaN(dpp) && gamesFormMoneyOptional()) dpp = 0;
   if (!(dpp > 0) && !(dpp === 0 && gamesFormMoneyOptional())) { bad('money', '$ per Player must be greater than 0'); return; }
+  { const a = typeof gamesFormAnte === 'function' ? gamesFormAnte(dpp) : null; if (a) dpp = a.ante; }   // the buy-in is what the games really collect
   let cttp_config = null;
   if (games.includes('cttp')) {
     if (!(_gamesFormCttpConfig.dollar_per_hole > 0)) { bad('money', 'CTP: $ per hole must be greater than 0'); return; }

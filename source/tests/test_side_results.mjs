@@ -72,12 +72,26 @@ ok(/3&amp;2/.test(mpHtml) && /data-gp-btn/.test(mpHtml) === false, 'Match Play o
   const snap2 = E.computeGatheringGamesPayout(row, [card('Ann', h => (h <= 6 ? 4 : 5)), card('Bob', h => (h <= 6 ? 5 : 5))], {}, []);
   const t = A.renderGatheringPayoutHtml(snap2, null).replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
   ok(/↩/.test(A.renderGatheringPayoutHtml(snap2, null)), 'a halved pot adds the antes-back column');
-  ok(/buy-in/.test(t) && /\+\$/.test(t), 'net vs buy-in shown with a plus for winners (got ' + t.slice(0, 300) + ')');
+  ok(/\+\/−/.test(t) && /\+\$/.test(t), 'net result shown with a plus for winners (got ' + t.slice(0, 300) + ')');
 }
 // initials never collide
 const fb = vm.runInContext(extractFn(src, 'fbIni') + ';fbIni', ctx);
 ok(fb(['Test2 Two'], ['Test3 Three']) !== fb(['Test3 Three'], ['Test2 Two']) && fb(['Test2'], ['Test3']) === 'Test2', 'Test2 / Test3 get distinct initials (got ' + fb(['Test2'], ['Test3']) + ')');
 ok(fb(['Brian'], ['Tony']) === 'B', 'normal names stay one letter');
 
+// $10 buy-in, game uses $9 ($3 x 3 pots): the ante is $9, the $1 went back, and the results are only wins and losses
+{
+  const row = { games: ['hilo'], dollar_per_player: 10, game_configs: { hilo: { dollar_per_player: 9, basis: 'gross', period: 'fbt', win_by: 'points', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] } } };
+  // Ann/Bob win the front and the back; the total is halved
+  const sc = { Ann: h => (h <= 9 ? 3 : 4), Bob: h => 4, Cy: h => (h <= 9 ? 5 : 3), Di: h => 5 };
+  const snap3 = E.computeGatheringGamesPayout(row, ['Ann', 'Bob', 'Cy', 'Di'].map(n => card(n, sc[n])), {}, []);
+  ok(snap3.unspent_each === 1, 'the engine reports the $1 of each buy-in that no game took (got ' + snap3.unspent_each + ')');
+  const html3 = A.renderGatheringPayoutHtml(snap3, null); if (process.env.DUMP_RES) fs.writeFileSync(process.env.DUMP_RES, html3); const t3 = html3.replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
+  ok(/4 players × \$9 = \|?\$36 pot/.test(t3), 'the pot header uses the ante the games collected: 4 x $9 = $36 (got ' + t3.slice(0, 160) + ')');
+  ok(/\$1 of the \$10 buy-in was in no game and went back/.test(t3), 'and says where the other dollar went');
+  ok(/\|\+\$6\|/.test(t3) && /\|−\$6\|/.test(t3) && !/\|\$16\|/.test(t3), 'the last column is only the result (+$6 / −$6), not the $16 received (got ' + t3.slice(-420) + ')');
+  ok(/Results add up to \$0/.test(t3), 'the footer says the results add up to $0');
+  ok(!/↩[^|]*\|\$4/.test(t3), 'the returned unspent dollar is not shown as a pushed-back pot');
+}
 console.log(`test_side_results: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

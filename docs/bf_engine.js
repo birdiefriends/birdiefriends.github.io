@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.24.2';
+  const ENGINE_VERSION = '1.25.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1511,6 +1511,7 @@
     }
     const withCards = Object.assign({}, inputs, { scorecards: cards }, netByPlayer.size ? { netByPlayer, hcSpecs, hcSI: hc.stroke_index || null } : {});
     let residualRan = false;
+    let unspentEach = 0;   // what each player gets back of money that no game took (the buy-in did not divide evenly across the pots)
     addons.forEach(a => {
       results[a.id] = ADDONS[a.id].carve(state, a, withCards);
       if (ADDONS[a.id].residual) residualRan = true;
@@ -1518,7 +1519,7 @@
     if (!residualRan) {
       // No residual game to absorb the balance (incl. rollover) — give it back.
       const leftover = Math.max(0, state.remaining) + state.rollover;
-      if (leftover > 0) state.unallocated += ledger.giveBack(leftover).unallocated;
+      if (leftover > 0) { const gb = ledger.giveBack(leftover); state.unallocated += gb.unallocated; unspentEach = gb.each; }
     }
     const rows = [...ledger.rows.values()]
       .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + (r.birdiepay || 0) + (r.fourball || 0) + (r.altshot || 0) + (r.hilo || 0) + (r.matchplay || 0) + (r.lowscore || 0) + r.given_back }))
@@ -1527,6 +1528,7 @@
     return {
       calc_version: 1,
       players_count: ledger.n, players, dollar_per_player: dpp, total_pot: totalPot,
+      ...(unspentEach > 0 && (results.fourball || results.altshot || results.hilo || results.matchplay || results.lowscore) ? { unspent_each: unspentEach } : {}),   // only for the games with pots; every older shape is unchanged
       games, cttp: results.cttp, birdieball: results.birdieball,
       // birdiepay only appears in a snapshot when the game was on, so every pre-Dev-89 payout keeps its exact shape
       ...(results.birdiepay ? { birdiepay: results.birdiepay } : {}),
@@ -2047,6 +2049,13 @@
         }
       }
       mains.forEach(g => { out[g] = { dollar_per_player: tot[g] }; });
+      // What the games actually collect per player. When nothing (Skins, Birdie Payouts) soaks up the rest, a buy-in that does not
+      // divide evenly (e.g. $10 over a 3-pot game = $9) is not all played for: `ante` is the amount really in the pots, `unspent`
+      // the part that is not. Setup adopts `ante` as the buy-in so players are never told they put in money that no game takes.
+      if (!leftoverGame) {
+        const ante = cttpPer + (out.birdieball ? out.birdieball.dollar_per_player : 0) + mains.reduce((t, g) => t + tot[g], 0);
+        out.ante = Math.round(ante * 100) / 100; out.unspent = Math.max(0, Math.round((B - ante) * 100) / 100);
+      }
     }
     return out;
   }
