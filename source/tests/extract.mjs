@@ -46,7 +46,7 @@ if (!vm.__bfPatched) {
         altshot: { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 50, period: 'round', win_by: 'strokes', scope: 'field', pairs: [] },
         hilo: { dollar_per_player: null, basis: 'gross', net_mode: 'own', period: 'round', pairs: [] },
         matchplay: { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 100, period: 'round', matches: [] } };
-      try { vm.runInContext(['liveSideGames', 'liveSideGid', 'liveSideTraits', 'liveSideSides', 'liveOneBall', 'liveSideChooserHtml', 'sideResultHeroHtml'].map(n => extractFn(portal, n)).join('\n'), ctx); } catch (e) {}
+      try { vm.runInContext(['liveSideGames', 'liveSideGid', 'liveSideTraits', 'liveSideSides', 'liveOneBall', 'liveSideChooserHtml', 'sideResultHeroHtml', 'radioRowsHtml'].map(n => extractFn(portal, n)).join('\n'), ctx); } catch (e) {}
     }
     return ctx;
   };

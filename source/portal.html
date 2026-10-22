@@ -1272,25 +1272,47 @@ body {
 }
 /* checkboxes and radios keep their natural size inside a field (the rule above made them full width and squeezed their label to a sliver) */
 .host-form-field input[type="checkbox"], .host-form-field input[type="radio"] { width: auto; padding: 0; flex: none; margin: 0; }
-/* ── Segmented toggle (tee time status, who's coming) ── */
+/* ── Segmented toggle: selected = dark fill + check + bold; unselected = flat gray, no green (never rely on color alone) ── */
 .seg-toggle {
   display: flex; border-radius: 12px; overflow: hidden;
-  border: 2px solid var(--green); background: #fff;
+  border: 2px solid #9aa5a0; background: #e9ecea;
 }
 .seg-btn {
-  flex: 1; padding: 9px 8px; font-size: 0.82rem; font-weight: 700;
+  flex: 1; padding: 11px 8px; min-height: 44px; font-size: 0.82rem; font-weight: 500;
   font-family: inherit; cursor: pointer; transition: all 0.18s;
-  background: #fff; color: var(--text-muted); border: none;
-  display: flex; flex-direction: column; align-items: center;
+  background: #e9ecea; color: #5d6762; border: none; position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 2px; line-height: 1.2;
 }
-.seg-btn.seg-btn-active { background: var(--green); color: #fff; }
-.seg-btn:first-child { border-right: 1px solid var(--green); }
+.seg-btn.seg-btn-active { background: var(--green-dark); color: #fff; font-weight: 800; box-shadow: inset 0 0 0 2px #fff; }
+.seg-btn.seg-btn-active::before { content: "\2713"; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.95rem; }
+.seg-btn:first-child { border-right: 2px solid #9aa5a0; }
 .seg-sub {
   font-size: 0.67rem; font-weight: 400;
   opacity: 0.78; display: block;
 }
 .seg-btn.seg-btn-active .seg-sub { opacity: 0.88; }
+/* ── Radio rows: stacked choices with the consequence beside each one ── */
+.rr-list { display: flex; flex-direction: column; gap: 8px; margin: 0 0 8px; }
+.rr-row {
+  display: flex; align-items: flex-start; gap: 12px; text-align: left; width: 100%;
+  min-height: 52px; padding: 12px 14px; border-radius: 12px; cursor: pointer; font-family: inherit;
+  background: #f1f3f2; border: 2px solid #c3cbc7; color: #4d5752;
+}
+.rr-dot {
+  flex: none; width: 24px; height: 24px; border-radius: 50%; margin-top: 1px;
+  border: 2px solid #8a948f; background: #fff; color: #fff; font-size: 0.85rem; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.rr-name { font-size: 0.95rem; font-weight: 600; }
+.rr-desc { display: block; font-size: 0.76rem; font-weight: 400; line-height: 1.45; margin-top: 2px; }
+.rr-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 9px; font-size: 0.66rem; font-weight: 700; background: #dfe4e1; color: #4d5752; vertical-align: middle; }
+.rr-row.rr-on { background: var(--green-light); border-color: var(--green-dark); border-width: 3px; padding: 11px 13px; color: #0b3b30; }
+.rr-row.rr-on .rr-dot { background: var(--green-dark); border-color: var(--green-dark); }
+.rr-row.rr-on .rr-name { font-weight: 800; }
+.rr-row.rr-on .rr-tag { background: var(--green-dark); color: #fff; }
+.rr-readback { font-size: 0.78rem; color: var(--text-muted); margin: 0 0 10px; }
+.rr-readback b { color: var(--green-dark); }
 /* ── Gathering filter panel (My Preferences) ── */
 .pref-filter-row {
   padding: 10px 16px 6px;
@@ -11767,10 +11789,16 @@ let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period
 // Alternate Shot + Match Play (Dev-94): same shape as BestBall, one object per game. altshot lists `pairs`, matchplay lists `matches`.
 const GAMES_FORM_SIDE_IDS = BFEngine.sideFormGames(); // registry: games with the `sideForm` trait
 // The wizard's second step for each (pairs / matches). A new side-form game adds one entry here and one to GW_NAMES.
+// Stacked radio rows (replaces side-by-side toggles for choices with consequences): the selected row is filled, bold, check-marked.
+// items: [value, name, description, recommended]. fn: a JS expression that evaluates to a function of the value.
+function radioRowsHtml(items, cur, fn) {
+  return '<div class="rr-list" role="radiogroup">' + items.map(([v, name, desc, rec]) =>
+    `<button type="button" role="radio" aria-checked="${cur === v}" class="rr-row${cur === v ? ' rr-on' : ''}" onclick="${fn}('${v}')"><span class="rr-dot">${cur === v ? '\u2713' : ''}</span><span><span class="rr-name">${name}</span>${rec ? '<span class="rr-tag">Recommended</span>' : ''}<span class="rr-desc">${desc}</span></span></button>`).join('') + '</div>';
+}
 const GW_SIDE_STEP = { altshot: 'aspairs', hilo: 'hlpairs', matchplay: 'mpmatches' };
 const GAMES_FORM_REC_ALLOWANCE = { altshot: 50, matchplay: 100 };   // only games with their own allowance (trait allowance 'own')
 function gamesFormSideBlank(gid) {
-  if (gid === 'hilo') return { dollar_per_player: null, basis: 'gross', net_mode: 'own', period: 'round', pairs: [] };
+  if (gid === 'hilo') return { dollar_per_player: null, basis: 'gross', net_mode: 'low', period: 'round', pairs: [] };
   return gid === 'matchplay'
     ? { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 100, period: 'round', matches: [] }
     : { dollar_per_player: null, basis: 'gross', net_mode: 'low', allowance: 50, period: 'round', win_by: 'strokes', scope: 'field', pairs: [] };
@@ -20604,11 +20632,12 @@ function gatheringGamesSideSectionHtml(gid) {
   const seg = (list, cur, fn) => `<div class="seg-toggle" style="margin:0">${list.map(([v, l]) => `<button type="button" class="seg-btn${cur === v ? ' seg-btn-active' : ''}" style="white-space:nowrap;padding:9px 14px" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
   const btn = 'height:34px;padding:0 14px;border-radius:17px;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:inherit;font-weight:700;font-size:0.82rem;cursor:pointer';
   const netBlock = c.basis !== 'net' ? '' : `
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <span style="flex:1;font-size:0.9rem;font-weight:600">Strokes</span>${seg([['own', 'Full'], ['low', mp ? 'Off the low' : 'Off the low (recommended)']], c.net_mode, `(v=>setGamesFormSide('${gid}','net_mode',v))`)}</div>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px;line-height:1.5">${hl ? (c.net_mode === 'low' ? 'The lowest handicap in the foursome plays to scratch and everyone else gets the difference.' : 'Everyone gets their own handicap strokes (the round\'s allowance).') : c.net_mode === 'low'
-        ? (mp ? 'The lower handicap plays to scratch and the other player gets the difference.' : 'Recommended for one-ball games: the pair with the lower combined handicap plays to scratch and the other pair gets the difference, so only one team ever gets strokes.')
-        : (mp ? 'Each player gets their full handicap strokes, as most golfers think of it.' : 'Each pair gets its own strokes, from the combined handicaps.')}</div>
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:6px">Strokes</div>
+      ${radioRowsHtml([
+        ['own', 'Full', hl ? 'Everyone gets their own handicap strokes (the round\'s allowance).' : mp ? 'Each player gets their full handicap strokes, as most golfers think of it.' : 'Each pair gets its own strokes, from the combined handicaps.', false],
+        ['low', 'Off the low', hl ? 'The lowest handicap in the foursome plays to scratch and everyone else gets the difference.' : mp ? 'The lower handicap plays to scratch and the other player gets the difference.' : 'The pair with the lower combined handicap plays to scratch and the other pair gets the difference, so only one team ever gets strokes.', !mp]
+      ], c.net_mode, `(v=>setGamesFormSide('${gid}','net_mode',v))`)}
+      <div class="rr-readback">Strokes: <b>${c.net_mode === 'low' ? 'Off the low' : 'Full'}</b></div>
       ${hl ? '' : `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Handicap allowance</span>
         <input type="number" min="1" max="150" step="1" value="${c.allowance}" oninput="setGamesFormSide('${gid}','allowance',this.value,true)" style="width:70px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.86rem">%</span>

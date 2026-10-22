@@ -100,7 +100,7 @@ ok(sug.hilo && sug.hilo.dollar_per_player > 0, 'suggested amount for hilo');
 const ctx = { BFEngine: E, GW_SIDE_STEP: { altshot: 'aspairs', hilo: 'hlpairs', matchplay: 'mpmatches' }, GAMES_FORM_REC_ALLOWANCE: { altshot: 50, matchplay: 100 } }; vm.createContext(ctx);
 vm.runInContext(['gamesFormSideBlank', 'gamesFormSideFrom'].map(n => extractFn(src, n)).join('\n') + '\nthis.api={gamesFormSideBlank,gamesFormSideFrom};', ctx);
 const blank = ctx.api.gamesFormSideBlank('hilo');
-ok(Array.isArray(blank.pairs) && blank.net_mode === 'own' && blank.allowance === undefined, 'form blank: pairs, Full strokes, no own allowance');
+ok(Array.isArray(blank.pairs) && blank.net_mode === 'low' && blank.allowance === undefined, 'form blank: pairs, off-the-low (recommended) strokes, no own allowance');
 const frm = ctx.api.gamesFormSideFrom('hilo', { dollar_per_player: 5, basis: 'net', net_mode: 'low', pairs: [['A', 'B'], ['C', 'D']] });
 ok(frm.pairs.length === 2 && frm.net_mode === 'low' && frm.basis === 'net', 'form loads an existing config');
 ok(/GW_SIDE_STEP = \{[^}]*hilo: 'hlpairs'/.test(src) && /hlpairs: 'Hi-Lo pairs'/.test(src), 'wizard knows the Hi-Lo steps');

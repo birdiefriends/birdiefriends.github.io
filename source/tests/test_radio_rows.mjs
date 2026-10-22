@@ -1,0 +1,16 @@
+import fs from 'fs'; import vm from 'vm';
+import { extractFn } from './extract.mjs';
+const src = fs.readFileSync(new URL('../portal.html', import.meta.url), 'utf8');
+let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : (fail++, console.log('FAIL', m)); };
+const ctx = {}; vm.createContext(ctx);
+vm.runInContext(extractFn(src, 'radioRowsHtml') + '\nthis.f=radioRowsHtml;', ctx);
+const items = [['own', 'Full', 'd1', false], ['low', 'Off the low', 'd2', true]];
+const h = ctx.f(items, 'low', '(v=>x(v))');
+ok((h.match(/rr-on/g) || []).length === 1, 'exactly one row selected');
+ok(/aria-checked="true"[^>]*rr-on/.test(h) && (h.match(/aria-checked="false"/g) || []).length === 1, 'aria state matches');
+ok(h.includes('Recommended') && (h.match(/rr-tag/g) || []).length === 1, 'recommended tag only on the flagged option');
+ok(/rr-dot">\u2713/.test(h), 'selected row carries a check mark');
+ok(/\.seg-btn\.seg-btn-active::before \{ content: "\\2713"/.test(src), 'segmented toggle selected state shows a check');
+ok(!/\.seg-toggle \{[^}]*var\(--green\)/.test(src), 'segmented frame is no longer green');
+ok(/hilo'\) return \{[^}]*net_mode: 'low'/.test(src), 'Hi-Lo defaults to the recommended off-the-low');
+console.log(`test_radio_rows: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
