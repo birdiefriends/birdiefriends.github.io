@@ -245,24 +245,29 @@ ok(!E.cupValidate(badSize).ok, 'singles cannot reuse a pairs session');
 
 // ---------- Cup handicaps (off the low at a partial allowance) ----------
 {
-  eq(E.cupHandicapRule({}), { pct: 0, slope: null, rating: null, par: null }, 'no handicap block means scratch');
-  ok(E.cupHandicapRule({ handicap: { pct: 150 } }).pct === 100 && E.cupHandicapRule({ handicap: { pct: '50' } }).pct === 50, 'allowance is clamped to 0-100');
+  eq(E.cupHandicapRule({}), { pct: 0, by: { bestball: 0, altshot: 0, singles: 0 }, slope: null, rating: null, par: null }, 'no handicap block means scratch');
+  eq(E.cupHandicapRule({ handicap: { pct: 50, singles: 100 } }).by, { bestball: 50, altshot: 50, singles: 100 }, 'each format has its own allowance; an older single % fills the gaps');
+  ok(E.cupHandicapRule({ handicap: { bestball: 150 } }).by.bestball === 100 && E.cupHandicapRule({ handicap: { singles: '50' } }).by.singles === 50, 'allowance is clamped to 0-100');
   ok(E.cupCourseHcp(10, { slope: 132, rating: 71.2, par: 72 }) === 11 && E.cupCourseHcp(10.4, {}) === 10 && E.cupCourseHcp('', {}) === null, 'course handicap uses slope/rating/par when given, else the Index');
-  const rule = { pct: 50 }, h = { a1: 4, a2: 10, b1: 20, b2: 8 };
+  const rule = { pct: 50, by: { bestball: 50, altshot: 50, singles: 50 } }, h = { a1: 4, a2: 10, b1: 20, b2: 8 };
   const m = { sides: [{ side: 'A', players: ['a1', 'a2'] }, { side: 'B', players: ['b1', 'b2'] }] };
   const st = E.cupMatchStrokes(m, h, rule);
   eq(st.players.map(x => x.strokes), [0, 3, 8, 2], 'fourball: each player gets 50% of the gap to the low man in the match');
   eq(st.teams.map(x => x.strokes), [0, 7], 'foursomes: the higher pair gets 50% of the gap between the pairs\' combined handicaps (28 vs 14)');
   const sm = { sides: [{ side: 'A', players: ['a2'] }, { side: 'B', players: ['b1'] }] };
   eq(E.cupMatchStrokes(sm, h, rule).players.map(x => x.strokes), [0, 5], 'singles: 50% of the gap, 1:1');
-  ok(E.cupMatchStrokes(m, h, { pct: 0 }).players.every(x => x.strokes === 0), 'allowance 0 gives no strokes');
+  ok(E.cupMatchStrokes(m, h, E.cupHandicapRule({})).players.every(x => x.strokes === 0), 'allowance 0 gives no strokes');
   ok(E.cupMatchStrokes(m, { a1: 4, a2: 10, b1: 20 }, rule).players[3].strokes === 0 && !E.cupMatchStrokes(m, { a1: 4, a2: 10, b1: 20 }, rule).players[3].known, 'a missing handicap gets no strokes and is flagged');
   ok(E.cupMatchStrokeText(m, h, rule, ['bestball', 'altshot'], k => 'Team ' + k) === 'Fourball: a2 3, b1 8, b2 2 · Foursomes: Team B gets 7', 'the matchup card line names who gets what, only for the formats played');
-  ok(E.cupMatchStrokeText(m, h, { pct: 0 }, ['bestball'], null) === 'Scratch: no strokes', 'scratch says so');
+  ok(E.cupMatchStrokeText(m, h, E.cupHandicapRule({}), ['bestball'], null) === 'Scratch: no strokes', 'scratch says so');
+  const mixed = E.cupHandicapRule({ handicap: { bestball: 100, altshot: 50, singles: 75 } });
+  eq(E.cupMatchStrokes(m, h, mixed).players.map(x => x.strokes), [0, 6, 16, 4], 'fourball at 100% gives the full gap');
+  eq(E.cupMatchStrokes(sm, h, mixed).players.map(x => x.strokes), [0, 8], 'singles at 75% of a 10-stroke gap is 8 (rounded), independent of the fourball setting');
+  ok(E.cupMatchStrokeText(m, h, E.cupHandicapRule({ handicap: { bestball: 0, altshot: 50 } }), ['bestball', 'altshot'], k => k) === 'Fourball: scratch · Foursomes: B gets 7', 'a format set to 0 plays scratch while another still gets strokes');
   const si = [7, 1, 13, 3, 9, 15, 5, 17, 11, 8, 2, 14, 4, 10, 16, 6, 18, 12];
   const hs = E.cupHoleStrokes(5, si);
   eq(hs.map((v, i) => v ? i + 1 : 0).filter(Boolean), [2, 4, 7, 11, 13], '5 strokes land on the five hardest holes (stroke index 1-5)');
-  ok(E.cupValidate({ sides: [{ key: 'A' }, { key: 'B' }], rounds: [], handicap: { pct: 120 } }).errors.some(e => /Handicap allowance/.test(e)), 'validation rejects an allowance over 100');
+  ok(E.cupValidate({ sides: [{ key: 'A' }, { key: 'B' }], rounds: [], handicap: { singles: 120 } }).errors.some(e => /Handicap allowance/.test(e)), 'validation rejects an allowance over 100');
 }
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

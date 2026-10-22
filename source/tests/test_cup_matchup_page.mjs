@@ -56,7 +56,7 @@ ok(doc.matchup.done === true && doc.rounds[0].matches.length === 2 && /Matchups 
 ok(doc.rounds[0].matches[0].sides[0].players.join() === 'a1,a2' && doc.rounds[0].matches[0].sides[1].players.join() === 'b3,b4', 'match 1 is the put-up pair versus the answer, in side order');
 dom = await open(''); d = dom.window.document;
 ok(d.querySelectorAll('.match').length === 2 && /Scratch: no strokes/.test(d.body.textContent), 'a watcher sees the matches (scratch here, since no allowance is set)');
-doc.handicap = { pct: 50 }; dom = await open(''); d = dom.window.document;
+doc.handicap = { bestball: 50, altshot: 50, singles: 50 }; dom = await open(''); d = dom.window.document;
 ok(/Fourball: a2 1, b3 3, b4 4/.test(d.querySelector('.match').textContent), 'with a 50% allowance match 1 shows exactly who gets strokes (off the low: a1 plays scratch)');
 dom = await open('?host=1', '7797'); d = dom.window.document;
 await click(dom, '#muUndo'); d = dom.window.document;

@@ -355,12 +355,14 @@
       </div>
       <h3 style="margin:14px 0 6px;font-size:0.95rem">Handicaps</h3>
       <div class="row">
-        <div><label for="cupHcpPct">Handicap allowance (%)</label><input type="number" id="cupHcpPct" step="5" min="0" max="100" value="50"></div>
+        <div><label for="cupHcpBB">Fourball allowance (%)</label><input type="number" id="cupHcpBB" step="5" min="0" max="100" value="75"></div>
+        <div><label for="cupHcpFS">Foursomes allowance (%)</label><input type="number" id="cupHcpFS" step="5" min="0" max="100" value="50"></div>
+        <div><label for="cupHcpSI">Singles allowance (%)</label><input type="number" id="cupHcpSI" step="5" min="0" max="100" value="75"></div>
         <div><label for="cupSlope">Slope (optional)</label><input type="number" id="cupSlope" step="1" min="55" max="155" placeholder="e.g. 132"></div>
         <div><label for="cupRating">Course rating (optional)</label><input type="number" id="cupRating" step="0.1" placeholder="e.g. 71.2"></div>
         <div><label for="cupPar">Par (optional)</label><input type="number" id="cupPar" step="1" placeholder="e.g. 72"></div>
       </div>
-      <p class="hint" style="margin-top:0"><b>Off the low:</b> in each match the lowest handicap plays to scratch and everyone else gets this % of the difference (Foursomes compares the pairs' combined handicaps). 0 = scratch. Without slope, rating and par, the handicap Index is used as the course handicap.</p>
+      <p class="hint" style="margin-top:0"><b>Off the low:</b> in each match the lowest handicap plays to scratch and everyone else gets this % of the difference, set separately for each format (Foursomes compares the pairs' combined handicaps). 0 = scratch for that format; 100 = the full difference. Without slope, rating and par, the handicap Index is used as the course handicap.</p>
       <h3 style="margin:14px 0 6px;font-size:0.95rem">Rounds (set in section 4)</h3>
       <p class="hint" style="margin-top:0">Describe each day in <b>section 4</b>: add a round, choose the engine <b>Team match play (Cup)</b>, then give it segments (Fourball, Foursomes or Singles, and the holes each covers). Every segment is its own match for points; the pairs or matchups are the same across a round's segments. This list shows what section 4 currently says.</p>
       <div id="cupRounds"></div>
@@ -537,7 +539,7 @@
     <pre id="rawConfig" style="margin-top:16px"></pre>
   </section>
 </main>
-<script src="bf_engine.js?v=1.28.0"></script>
+<script src="bf_engine.js?v=1.29.0"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════════
 // Connection defaults — flat hardcoded constants, not derived from where
@@ -6235,7 +6237,7 @@ function toggleGamedayView() {
 const cupState = {
   sides: [{ key: 'A', name: '', captain: '', players: [] }, { key: 'B', name: '', captain: '', players: [] }],
   points: { win: 1, half: 0.5, loss: 0 },
-  handicap: { pct: 50 },
+  handicap: { bestball: 75, altshot: 50, singles: 75 },
   rounds: []
 };
 function cupEsc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -6273,7 +6275,7 @@ function cupSyncFromInputs() {
   const num = (id, d) => { const v = document.getElementById(id).value; return v === '' || !isFinite(Number(v)) ? d : Number(v); };
   cupState.points = { win: num('cupPtWin', 1), half: num('cupPtHalf', 0.5), loss: num('cupPtLoss', 0) };
   const opt = id => { const v = document.getElementById(id).value; return v === '' || !isFinite(Number(v)) ? null : Number(v); };
-  cupState.handicap = { pct: num('cupHcpPct', 0), slope: opt('cupSlope'), rating: opt('cupRating'), par: opt('cupPar') };
+  cupState.handicap = { bestball: num('cupHcpBB', 0), altshot: num('cupHcpFS', 0), singles: num('cupHcpSI', 0), slope: opt('cupSlope'), rating: opt('cupRating'), par: opt('cupPar') };
 }
 function cupRender() {
   const names = cupRosterNames();
@@ -6288,7 +6290,8 @@ function cupRender() {
   document.getElementById('cupPtHalf').value = cupState.points.half;
   document.getElementById('cupPtLoss').value = cupState.points.loss;
   const hc = cupState.handicap || {};
-  document.getElementById('cupHcpPct').value = hc.pct != null ? hc.pct : 0;
+  const hcr = BFEngine.cupHandicapRule({ handicap: hc });
+  document.getElementById('cupHcpBB').value = hcr.by.bestball; document.getElementById('cupHcpFS').value = hcr.by.altshot; document.getElementById('cupHcpSI').value = hcr.by.singles;
   document.getElementById('cupSlope').value = hc.slope != null ? hc.slope : '';
   document.getElementById('cupRating').value = hc.rating != null ? hc.rating : '';
   document.getElementById('cupPar').value = hc.par != null ? hc.par : '';
