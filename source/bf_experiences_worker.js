@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.25.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.26.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1367,8 +1367,22 @@ export default {
     //   Captain access: config.access = {A:'CODE', B:'CODE'} is stored with the document but NEVER returned to the public;
     //   GET with &pin= includes it (host), GET with &cap=<code> adds `you` (the captain's side) and 403s on a bad code.
     //   POST /bfe/cup/act {event_name, code, action:'pick', player}  a captain takes a player when it is his side's turn.
+    //   POST /bfe/cup/act {…, action:'pair_set', pairs:[[a,b],…]}  a captain saves his Saturday pairs (any partial list); 'pair_lock' locks them
+    //   (everyone paired, one odd man out allowed); 'pair_unlock' reopens them only while the other captain has not locked.
     //   GET /bfe/cup-live   the Cup events whose draft is open (practice copies excluded) for the app banner.
-    const cupPublic = (cfgObj) => { const c = Object.assign({}, cfgObj); delete c.access; return c; };
+    // Saturday pairs (BFEngine.cupPairsVisible is the browser twin): a side's pairs are private to that captain and the commissioner
+    // until both captains have locked; everyone else only learns whether each side has locked and how many pairs it made.
+    const cupPublic = (cfgObj, viewerSide) => {
+      const c = Object.assign({}, cfgObj); delete c.access;
+      if (c.pairs) {
+        const keys = (c.sides || []).map(sd => sd.key);
+        const open = keys.length === 2 && keys.every(k => c.pairs[k] && c.pairs[k].locked === true);
+        const out = {};
+        Object.keys(c.pairs).forEach(k => { const pr = c.pairs[k] || {}; out[k] = (open || k === viewerSide) ? pr : { locked: pr.locked === true, count: (pr.list || []).length }; });
+        c.pairs = out;
+      }
+      return c;
+    };
     if (url.pathname === '/bfe/cup-live' && request.method === 'GET') {
       const J = (o, status) => new Response(JSON.stringify(o), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       try {
@@ -1411,7 +1425,46 @@ export default {
           if (!hit) return J({ error: String(body.player) + ' is not available' }, 409);
           cfgObj.draft = Object.assign({}, d, { picks: picks.concat([{ n: picks.length + 1, side, player: hit }]) });
           await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
-          return J({ ok: true, config: cupPublic(cfgObj) });
+          return J({ ok: true, config: cupPublic(cfgObj, side) });
+        }
+        if (body.action === 'pair_set' || body.action === 'pair_lock' || body.action === 'pair_unlock') {
+          const d = cfgObj.draft || {};
+          if (!d.locked) return J({ error: 'The teams are not locked yet' }, 409);
+          const mine = (cfgObj.sides || []).find(sd => sd.key === side) || {};
+          const roster = Array.isArray(mine.players) ? mine.players : [];
+          if (!roster.length) return J({ error: 'Your team has no players' }, 409);
+          cfgObj.pairs = cfgObj.pairs || {};
+          const cur = cfgObj.pairs[side] || { list: [], locked: false };
+          const otherKey = (cfgObj.sides || []).map(sd => sd.key).find(k => k !== side);
+          const otherLocked = !!(cfgObj.pairs[otherKey] && cfgObj.pairs[otherKey].locked);
+          if (body.action === 'pair_unlock') {
+            if (otherLocked) return J({ error: 'Both captains have locked, so only the commissioner can reopen pairs' }, 409);
+            cfgObj.pairs[side] = { list: cur.list || [], locked: false };
+          } else {
+            if (cur.locked) return J({ error: 'Your pairs are locked. Unlock them to change them.' }, 409);
+            const canon = new Map(roster.map(n => [norm(n), n]));
+            let list = cur.list || [];
+            if (body.action === 'pair_set') {
+              if (!Array.isArray(body.pairs)) return J({ error: 'pairs must be a list' }, 400);
+              const used = new Set(); list = [];
+              for (const pr of body.pairs) {
+                if (!Array.isArray(pr) || pr.length !== 2) return J({ error: 'Each pair needs exactly two players' }, 400);
+                const names = pr.map(n => canon.get(norm(n)));
+                if (names.some(n => !n) || norm(names[0]) === norm(names[1])) return J({ error: 'A pair has a player who is not on your team' }, 400);
+                if (names.some(n => used.has(norm(n)))) return J({ error: 'A player is in two pairs' }, 400);
+                names.forEach(n => used.add(norm(n)));
+                list.push(names);
+              }
+              cfgObj.pairs[side] = { list, locked: false };
+            } else {
+              const used = new Set(); list.forEach(pr => pr.forEach(n => used.add(norm(n))));
+              const left = roster.filter(n => !used.has(norm(n)));
+              if (!list.length || !(left.length === 0 || (roster.length % 2 === 1 && left.length === 1))) return J({ error: left.length + ' player(s) still need a partner' }, 409);
+              cfgObj.pairs[side] = { list, locked: true };
+            }
+          }
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
+          return J({ ok: true, config: cupPublic(cfgObj, side) });
         }
         return J({ error: 'Unknown action' }, 400);
       } catch (e) { return J({ error: 'Database error: ' + String(e.message || e) }, 500); }
@@ -1431,7 +1484,7 @@ export default {
           if (capCode) {
             const you = Object.keys(full.access || {}).find(k => String(full.access[k]) === String(capCode));
             if (!you) return J({ error: 'Unauthorized' }, 403);
-            return J({ ok: true, event_name: row.event_name, config: cupPublic(full), you, updated_at: row.updated_at });
+            return J({ ok: true, event_name: row.event_name, config: cupPublic(full, you), you, updated_at: row.updated_at });
           }
           return J({ ok: true, event_name: row.event_name, config: cupPublic(full), updated_at: row.updated_at });
         }
@@ -1442,7 +1495,8 @@ export default {
           if (!event_name || !config || typeof config !== 'object') return J({ error: 'event_name and config (object) are required' }, 400);
           if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
           // the public document never carries the captain codes, so a re-save must not wipe them
-          if (!config.access) { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.access) config.access = pc.access; } catch (e) { /* ignore */ } } }
+          // (the same goes for the captains' Saturday pairs: a page that never loaded them must not erase them)
+          if (!config.access || !config.pairs) { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; } catch (e) { /* ignore */ } } }
           await env.DB.prepare(`INSERT INTO bfe_cup (event_name, config, updated_at) VALUES (?, ?, datetime('now'))
              ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(config)).run();
           return J({ ok: true });

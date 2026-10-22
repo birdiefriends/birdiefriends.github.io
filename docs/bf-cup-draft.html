@@ -58,12 +58,23 @@ button:disabled{opacity:.4;cursor:default}
 @keyframes flip{0%{transform:rotateY(0)}100%{transform:rotateY(1800deg)}}
 .err{color:var(--bad);font-weight:600}
 .hint{color:var(--dim);font-size:.85rem}
+/* Saturday pairs */
+.pstat{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 10px}
+.pstat span{background:var(--navy3);border-radius:8px;padding:5px 10px;font-size:.85rem;font-weight:600}
+.ptabs{display:flex;gap:8px;margin:6px 0 10px}.ptabs button{background:var(--navy3);border:2px solid transparent}.ptabs button.on{border-color:#fff;background:var(--navy);font-weight:800}
+.pp{background:var(--navy3);border:2px solid var(--faint);border-radius:10px;padding:10px;text-align:left;color:var(--white)}
+.pp.sel{border-color:#fff;background:#1d5fc4;box-shadow:0 0 0 2px #fff inset}
+.pairc{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--navy3);border-radius:10px;padding:10px 12px;margin:6px 0;border-left:5px solid var(--faint)}
+.pairc b{font-size:1rem}.pairc .num{font-size:.85rem;color:var(--dim)}
+.cred .pairc,.pairc.cred{border-left-color:var(--red)}.cblue .pairc,.pairc.cblue{border-left-color:var(--blue)}
+.pairc button{padding:4px 10px}
+.pnote{background:rgba(255,255,255,.08);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:.88rem}
 @media(max-width:560px){.teams{gap:8px}.mhead{font-size:.9rem}.card.team{padding:10px}.slot{font-size:.85rem}.slot .st{width:100%;font-size:.7rem}}
 </style>
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.25.0"></script>
+<script src="bf_engine.js?v=1.26.0"></script>
 <script>
 (function () {
   'use strict';
@@ -158,6 +169,77 @@ button:disabled{opacity:.4;cursor:default}
       + '<div class="grid">' + sorted(v.remaining).map(function (n) { return '<button class="pc" data-pick="' + esc(n) + '"' + (canPick(v) ? '' : ' disabled style="opacity:1"') + '><b>' + esc(n) + '</b>' + chipsFor(n) + '</button>'; }).join('') + '</div></div>';
   }
 
+  // ---------- Saturday pairs ----------
+  var selectedP = '', pairTab = '';
+  function pairsOf(side) { var p = (cfg.pairs || {})[side]; return p && Array.isArray(p.list) ? p.list : null; }
+  function pairLocked(side) { var p = (cfg.pairs || {})[side]; return !!(p && p.locked); }
+  function pairCount(side) { var p = (cfg.pairs || {})[side]; return p ? (Array.isArray(p.list) ? p.list.length : (p.count || 0)) : 0; }
+  function numsFor(pr) { var n = E.cupPairStats(pr, (cfg.draft || {}).stats || {}); return 'HCP ' + fmt(n.hcp) + ' · Pts ' + fmt(n.avg) + ' · 🐦 ' + fmt(n.birdies, 0); }
+  function pairCard(pr, cls, x) { return '<div class="pairc ' + cls + '"><div><b>' + esc(pr[0]) + ' &amp; ' + esc(pr[1]) + '</b><div class="num">' + esc(numsFor(pr)) + '</div></div>' + (x != null ? '<button class="sec" data-unpair="' + x + '" aria-label="Break this pair">✕</button>' : '') + '</div>'; }
+  function pairsEditSide() { return HOST && pin ? (pairTab || cfg.sides[0].key) : YOU; }
+  function pairsHtml() {
+    var d = cfg.draft || {}; if (!d.locked) return '';
+    var rev = E.cupPairsRevealed(cfg), me = pairsEditSide();
+    var out = '<div class="card"><h2>Saturday pairs</h2><p class="hint">Each captain splits his team into partners for Saturday. Nobody sees the other side\'s pairs until both captains lock them.</p><div class="pstat">'
+      + cfg.sides.map(function (sd) { return '<span>' + esc(sd.name || 'Side ' + sd.key) + ': ' + (pairLocked(sd.key) ? '🔒 locked' : 'building · ' + pairCount(sd.key) + ' pair' + (pairCount(sd.key) === 1 ? '' : 's')) + '</span>'; }).join('') + '</div>';
+    if (rev) {
+      out += '<div class="banner" style="background:#1a7f3c">Both sides are locked. Here are the pairs.</div><div class="teams">' + cfg.sides.map(function (sd, si) {
+        var list = pairsOf(sd.key) || [], st = (cfg.draft || {}).stats || {};
+        return '<div class="card team ' + colorOf(sd, si) + '"><h2>' + esc(sd.name || 'Side ' + sd.key) + '</h2>' + list.map(function (pr) { return pairCard(pr, colorOf(sd, si)); }).join('')
+          + '<div class="hint">Even-ness: ' + (E.cupPairsSpread(list, st) == null ? '–' : E.cupPairsSpread(list, st) + ' strokes between strongest and weakest pair') + '</div></div>';
+      }).join('') + '</div>';
+      if (HOST && pin) out += '<div class="toolbar">' + cfg.sides.map(function (sd) { return '<button class="sec" data-preopen="' + sd.key + '">Reopen ' + esc(sd.name || sd.key) + '</button>'; }).join('') + '</div>';
+      return out + '</div>';
+    }
+    if (!me) return out + '<p class="hint">The captains are building their pairs. This page updates by itself.</p></div>';
+    if (HOST && pin) out += '<div class="ptabs">' + cfg.sides.map(function (sd) { return '<button data-ptab="' + sd.key + '" class="' + (sd.key === me ? 'on' : '') + '">' + esc(sd.name || sd.key) + '</button>'; }).join('') + '</div>';
+    var sdx = cfg.sides.filter(function (x) { return x.key === me; })[0], si = cfg.sides.indexOf(sdx), cls = colorOf(sdx, si);
+    var roster = E.cupRosterOf(cfg, me), list = pairsOf(me) || [], locked = pairLocked(me), stt = E.cupPairsStatus(roster, list), stats = d.stats || {};
+    var chips = stt.leftover.map(function (n) { return '<button class="pp' + (selectedP === n ? ' sel' : '') + '" data-pp="' + esc(n) + '"' + (locked ? ' disabled style="opacity:.6"' : '') + '><b style="display:block">' + (selectedP === n ? '✓ ' : '') + esc(n) + '</b>' + chipsFor(n) + '</button>'; }).join('');
+    out += '<h2 class="' + cls + '" style="font-size:1.05rem;margin:6px 0">' + esc(sdx.name || 'Side ' + me) + (HOST && pin ? '' : ' · your pairs') + '</h2>';
+    if (locked) out += '<div class="pnote">🔒 Locked. ' + (cfg.sides.every(function (x) { return pairLocked(x.key); }) ? '' : 'Waiting for the other captain. You can unlock to change them until then.') + '</div>';
+    else if (stt.leftover.length) out += '<div class="pnote">' + (selectedP ? '<b>' + esc(selectedP) + '</b> is selected. Tap a partner.' : 'Tap a player, then tap a partner.') + (roster.length % 2 === 1 ? ' With an odd number, one player can sit out.' : '') + '</div>';
+    else out += '<div class="pnote">Everyone is paired. Check the numbers, then lock.</div>';
+    out += (chips ? '<div class="grid">' + chips + '</div>' : '') + '<div style="margin-top:8px">' + (list.length ? '<b>Pairs (' + list.length + ')</b>' : '') + list.map(function (pr, i) { return pairCard(pr, cls, locked ? null : i); }).join('') + '</div>';
+    var sp = E.cupPairsSpread(list, stats);
+    if (sp != null) out += '<div class="hint">Even-ness: ' + sp + ' strokes between your strongest and weakest pair (smaller is more even).</div>';
+    out += '<div class="toolbar">' + (locked ? '<button class="sec" id="pUnlock">Unlock to edit</button>' : '<button class="sec" id="pSuggest">Suggest balanced pairs</button>' + (list.length ? '<button class="sec" id="pClear">Clear</button>' : '') + '<button id="pLock"' + (stt.lockable ? '' : ' disabled') + '>🔒 Lock my pairs</button>') + '</div></div>';
+    return out;
+  }
+  function pairsSync(side, list, locked) {
+    cfg.pairs = cfg.pairs || {};
+    cfg.pairs[side] = { list: list, locked: !!locked };
+    if (HOST && pin) { save(); return; }
+    render();
+    busy = true;
+    var action = locked === true ? 'pair_lock' : locked === 'unlock' ? 'pair_unlock' : 'pair_set';
+    fetch(WORKER + '/bfe/cup/act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT, code: CAP, action: action, pairs: list }) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); cfg = j.config; error = ''; }); })
+      .catch(function (e) { error = e.message; }).then(function () { busy = false; return load(); }).then(render);
+  }
+  function pairsWire() {
+    function $(id) { return document.getElementById(id); }
+    function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
+    var me = pairsEditSide(); if (!me) return;
+    var list = (pairsOf(me) || []).map(function (p) { return p.slice(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ptab]'), function (b) { b.addEventListener('click', function () { pairTab = b.getAttribute('data-ptab'); selectedP = ''; render(); }); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pp]'), function (b) { b.addEventListener('click', function () {
+      var n = b.getAttribute('data-pp');
+      if (!selectedP) { selectedP = n; render(); return; }
+      if (selectedP === n) { selectedP = ''; render(); return; }
+      list.push([selectedP, n]); selectedP = ''; pairsSync(me, list, false);
+    }); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-unpair]'), function (b) { b.addEventListener('click', function () { list.splice(parseInt(b.getAttribute('data-unpair'), 10), 1); pairsSync(me, list, false); }); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-preopen]'), function (b) { b.addEventListener('click', function () { var k = b.getAttribute('data-preopen'); cfg.pairs[k].locked = false; pairTab = k; save(); }); });
+    on('pSuggest', function () {
+      if (list.length && !window.confirm('Replace your current pairs with the balanced suggestion?')) return;
+      var rec = E.cupPairsSuggest(E.cupRosterOf(cfg, me), (cfg.draft || {}).stats || {}); selectedP = ''; pairsSync(me, rec.pairs, false);
+    });
+    on('pClear', function () { selectedP = ''; pairsSync(me, [], false); });
+    on('pLock', function () { if (window.confirm('Lock these pairs? The other captain will see them once he locks too.')) pairsSync(me, list, true); });
+    on('pUnlock', function () { pairsSync(me, list, 'unlock'); });
+  }
+
   // ---------- host setup ----------
   function setupHtml() {
     var d = cfg.draft || {};
@@ -198,7 +280,7 @@ button:disabled{opacity:.4;cursor:default}
     var clock = v.onClock;
     html += '<div class="banner live"><span class="dot"></span>' + (v.done ? (d.locked ? '🏁 Teams are set' : '✅ Every player is picked') : 'LIVE · Pick ' + v.pickNo + ' of ' + v.total + ' · <span style="color:#fff;text-decoration:underline">' + esc(sideName(clock)) + '</span> on the clock') + '</div>';
     if (YOU && !v.done) html += '<div class="banner" style="background:' + (v.onClock === YOU ? '#1a7f3c' : '#0a3161') + '">' + (v.onClock === YOU ? 'YOUR PICK, ' + esc(sideName(YOU)) + ' captain. Tap a player.' : 'Waiting for ' + esc(sideName(v.onClock)) + ' to pick') + '</div>';
-    html += meterHtml(v) + teamsHtml(v) + (v.done ? '' : poolHtml(v)) + linksHtml();
+    html += meterHtml(v) + teamsHtml(v) + (v.done ? '' : poolHtml(v)) + pairsHtml() + linksHtml();
     if (HOST && pin) {
       html += '<div class="toolbar">' + '<button class="sec" id="undo"' + (v.picks.length ? '' : ' disabled') + '>↩︎ Undo last pick</button>'
         + (v.done && !d.locked ? '<button id="lock">Lock the teams</button>' : '') + '<button class="sec" id="resetDraft">Start over</button></div>';
@@ -211,6 +293,7 @@ button:disabled{opacity:.4;cursor:default}
   function wire() {
     function $(id) { return document.getElementById(id); }
     function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
+    pairsWire();
     var sel = $('sortSel'); if (sel) sel.addEventListener('change', function () { sortBy = sel.value; render(); });
     on('pinGo', function () { pin = $('pinIn').value.trim(); try { sessionStorage.setItem('bf_cup_pin', pin); } catch (e) {} render(); });
     on('poolSave', function () {
@@ -273,7 +356,7 @@ button:disabled{opacity:.4;cursor:default}
         stats[n] = { hcp: Math.round((4 + rnd() * 20) * 10) / 10, rank: i + 1, avg: Math.round((2 + rnd() * 2.5) * 100) / 100, birdies: Math.round(rnd() * 12) };
       });
       var copy = JSON.parse(JSON.stringify(cfg));
-      delete copy.access; copy.sides.forEach(function (sd) { sd.players = []; });
+      delete copy.access; delete copy.pairs; copy.sides.forEach(function (sd) { sd.players = []; });
       copy.rounds.forEach(function (r) { r.matches = []; });
       copy.pool = pool; copy.draft = { started: false, first: null, pool: pool, stats: stats, picks: [], locked: false };
       fetch(WORKER + '/bfe/cup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT + ' (practice)', config: copy, pin: pin }) })
@@ -288,13 +371,15 @@ button:disabled{opacity:.4;cursor:default}
     });
     on('resetDraft', function () {
       if (!window.confirm('Clear every pick and start the draft over?')) return;
-      cfg.draft.picks = []; cfg.draft.started = false; cfg.draft.locked = false; cfg.sides.forEach(function (s) { s.players = []; }); save();
+      cfg.draft.picks = []; cfg.draft.started = false; cfg.draft.locked = false; delete cfg.pairs; cfg.sides.forEach(function (s) { s.players = []; }); save();
     });
   }
 
   load().then(function () { render(); });
-  if (!HOST || CAP) setInterval(function () {
-    if (busy) return; var before = JSON.stringify(cfg);
+  setInterval(function () {
+    if (busy || !cfg) return;
+    if (HOST && !CAP && !(cfg.draft && cfg.draft.locked && pin)) return;
+    var before = JSON.stringify(cfg);
     load().then(function () { if (JSON.stringify(cfg) === before) return; var n = cfg && cfg.draft && cfg.draft.picks ? cfg.draft.picks.length : 0; lastPickNo = n; render(); });
   }, 4000);
 })();

@@ -184,5 +184,35 @@ ok(!E.cupValidate(badSame).ok, 'same-as must point to an EARLIER session');
 const badSize = JSON.parse(JSON.stringify(sess)); badSize.rounds[2].sameAs = 'fs';
 ok(!E.cupValidate(badSize).ok, 'singles cannot reuse a pairs session');
 
+
+// ---------- Saturday pairs ----------
+{
+  const roster = ['Jake', 'Ann', 'Bob', 'Cy'];
+  let st = E.cupPairsStatus(roster, [['jake', 'ANN']]);
+  ok(st.ok && st.pairs[0][0] === 'Jake' && st.pairs[0][1] === 'Ann' && st.leftover.length === 2 && !st.lockable, 'pairs come back in roster spelling; two left over is not lockable');
+  st = E.cupPairsStatus(roster, [['Jake', 'Ann'], ['Bob', 'Cy']]);
+  ok(st.lockable && st.leftover.length === 0, 'everyone paired is lockable');
+  ok(!E.cupPairsStatus(roster, [['Jake', 'Zed']]).ok, 'a stranger in a pair is an error');
+  ok(!E.cupPairsStatus(roster, [['Jake', 'Jake']]).ok, 'a player cannot partner himself');
+  ok(!E.cupPairsStatus(roster, [['Jake', 'Ann'], ['Ann', 'Bob']]).ok, 'a player cannot be in two pairs');
+  ok(!E.cupPairsStatus(roster, []).lockable, 'no pairs is not lockable');
+  const odd = ['Jake', 'Ann', 'Bob'];
+  ok(E.cupPairsStatus(odd, [['Jake', 'Ann']]).lockable, 'an odd roster may leave one man out');
+  ok(!E.cupPairsStatus(roster, [['Jake', 'Ann']]).lockable, 'an even roster may not');
+  const stats = { Jake: { hcp: 10, avg: 3 }, Ann: { hcp: 4.5, avg: 2.5 }, Bob: { hcp: 20 }, Cy: { hcp: 12, avg: 1 } };
+  eq(E.cupPairStats(['Jake', 'Ann'], stats), { hcp: 14.5, avg: 5.5, birdies: null }, 'combined numbers add; a missing stat stays unknown');
+  eq(E.cupPairStats(['Bob', 'Cy'], stats).avg, null, 'one missing value means no combined value');
+  eq(E.cupPairsSpread([['Jake', 'Ann'], ['Bob', 'Cy']], stats), 17.5, 'spread = strongest pair vs weakest pair (14.5 vs 32)');
+  const sug = E.cupPairsSuggest(roster, stats);
+  eq(sug.pairs, [['Ann', 'Bob'], ['Jake', 'Cy']], 'suggestion pairs strongest with weakest');
+  const cfg = { sides: [{ key: 'A', players: ['a1', 'a2'] }, { key: 'B', players: ['b1', 'b2'] }], pairs: { A: { list: [['a1', 'a2']], locked: true }, B: { list: [['b1', 'b2']], locked: false } } };
+  ok(!E.cupPairsRevealed(cfg), 'not revealed while one side is open');
+  eq(E.cupPairsVisible(cfg, 'B', false).A, { locked: true, count: 1 }, 'the open captain only sees that the other side locked');
+  ok(E.cupPairsVisible(cfg, 'B', false).B.list.length === 1, 'a captain sees his own pairs');
+  ok(E.cupPairsVisible(cfg, 'A', true).B.list, 'the commissioner sees everything');
+  cfg.pairs.B.locked = true;
+  ok(E.cupPairsRevealed(cfg) && E.cupPairsVisible(cfg, '', false).A.list, 'once both lock, everyone sees both');
+  eq(E.cupRosterOf(cfg, 'A'), ['a1', 'a2'], 'roster comes from the locked team');
+}
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

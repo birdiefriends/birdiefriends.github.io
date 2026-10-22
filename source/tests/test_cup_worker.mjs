@@ -69,4 +69,31 @@ ok(r.status === 200 && r.json.events.some(e => e.event_name === 'Draft Cup' && e
 await call('POST', '/bfe/cup', { event_name: 'Draft Cup (practice)', config: dcfg, pin: '7797' });
 r = await call('GET', '/bfe/cup-live');
 ok(!r.json.events.some(e => /practice/.test(e.event_name)), 'practice copies are not announced in the app');
+
+// ── Saturday pairs: server-enforced, private until both captains lock, never wiped by a re-save ──
+const pcfg = { sides: [{ key: 'A', name: 'Team Jake', captain: 'Jake', players: ['Jake', 'A1', 'A2', 'A3'] }, { key: 'B', name: 'Team Nate', captain: 'Nate', players: ['Nate', 'B1', 'B2', 'B3'] }], points: { win: 1, half: 0.5, loss: 0 }, rounds: [],
+  draft: { started: true, first: 'A', pool: ['A1', 'A2', 'A3', 'B1', 'B2', 'B3'], picks: [], locked: false }, access: { A: 'AAA111', B: 'BBB222' } };
+await call('POST', '/bfe/cup', { event_name: 'Pair Cup', config: pcfg, pin: '7797' });
+const pact = (code, action, pairs) => call('POST', '/bfe/cup/act', { event_name: 'Pair Cup', code, action, pairs });
+r = await pact('AAA111', 'pair_set', [['Jake', 'A1']]); ok(r.status === 409 && /not locked/.test(r.json.error), 'no pairs before the teams are locked');
+pcfg.draft.locked = true; await call('POST', '/bfe/cup', { event_name: 'Pair Cup', config: pcfg, pin: '7797' });
+r = await pact('wrong', 'pair_set', []); ok(r.status === 403, 'a bad code cannot touch pairs');
+r = await pact('AAA111', 'pair_set', [['Jake', 'B1']]); ok(r.status === 400, 'a captain cannot pair someone from the other team');
+r = await pact('AAA111', 'pair_set', [['Jake', 'A1'], ['A1', 'A2']]); ok(r.status === 400, 'a player cannot be in two pairs');
+r = await pact('AAA111', 'pair_set', [['jake', 'a1']]); ok(r.status === 200 && r.json.config.pairs.A.list[0][0] === 'Jake' && r.json.config.pairs.A.list[0][1] === 'A1', 'a partial list saves, in roster spelling');
+r = await pact('AAA111', 'pair_lock'); ok(r.status === 409 && /still need a partner/.test(r.json.error), 'cannot lock with players unpaired');
+r = await pact('AAA111', 'pair_set', [['Jake', 'A1'], ['A2', 'A3']]); r = await pact('AAA111', 'pair_lock');
+ok(r.status === 200 && r.json.config.pairs.A.locked === true, 'locks once everyone is paired');
+r = await pact('AAA111', 'pair_set', []); ok(r.status === 409, 'locked pairs cannot be edited');
+r = await call('GET', '/bfe/cup?event=Pair%20Cup&cap=BBB222');
+ok(r.json.config.pairs.A.locked === true && r.json.config.pairs.A.count === 2 && !r.json.config.pairs.A.list, 'the other captain sees THAT side locked, not who is paired');
+r = await call('GET', '/bfe/cup?event=Pair%20Cup');
+ok(!r.json.config.pairs.A.list && !JSON.stringify(r.json.config.pairs).includes('A2'), 'the public read hides unrevealed pairs');
+r = await call('GET', '/bfe/cup?event=Pair%20Cup&pin=7797'); ok(r.json.config.pairs.A.list.length === 2, 'the commissioner sees every pair');
+await call('POST', '/bfe/cup', { event_name: 'Pair Cup', config: Object.assign({}, pcfg, { pairs: undefined }), pin: '7797' });
+r = await call('GET', '/bfe/cup?event=Pair%20Cup&pin=7797'); ok(r.json.config.pairs && r.json.config.pairs.A.locked, 'a re-save from a page that never loaded pairs keeps them');
+await pact('BBB222', 'pair_set', [['Nate', 'B1'], ['B2', 'B3']]); r = await pact('BBB222', 'pair_lock');
+ok(r.status === 200 && r.json.config.pairs.A.list.length === 2, 'when B locks, B sees both sides');
+r = await call('GET', '/bfe/cup?event=Pair%20Cup'); ok(r.json.config.pairs.A.list && r.json.config.pairs.B.list, 'and so does the public');
+r = await pact('AAA111', 'pair_unlock'); ok(r.status === 409, 'after both lock only the commissioner can reopen');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.25.0';
+  const ENGINE_VERSION = '1.26.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2241,6 +2241,61 @@
     const have = Object.values(metrics).filter(Boolean).length;
     return { sides, metrics, verdict: have === 0 ? 'unknown' : ['even', 'close', 'tilted'][worst] };
   }
+  // ── BF Cup Saturday pairs (Dev-95) ─────────────────────────────────────
+  // Each captain splits his own side into pairs (Fourball / Foursomes partners). `cfg.pairs = {A:{list:[[a,b],...], locked}, B:{...}}`.
+  // A side's pairs stay private to that captain (and the commissioner) until BOTH captains lock; then both are revealed for the matchup draw.
+  // The Worker re-implements the membership checks (it cannot load this file); keep the two in step.
+  function cupRosterOf(cfg, side) {
+    const sd = ((cfg && cfg.sides) || []).find(x => x.key === side);
+    if (sd && Array.isArray(sd.players) && sd.players.length) return sd.players.slice();
+    return (cupDraftView(cfg).teams[side] || []).slice();
+  }
+  // Pure: checks a captain's pairs against his roster. Names come back in the roster's spelling.
+  // lockable = every player is paired (a single odd player out is allowed) and there is at least one pair.
+  function cupPairsStatus(roster, pairs) {
+    const canon = new Map((roster || []).map(n => [norm(n), n]));
+    const used = new Set(), out = [], errors = [];
+    (pairs || []).forEach((pr, i) => {
+      if (!Array.isArray(pr) || pr.length !== 2) { errors.push('Pair ' + (i + 1) + ' needs exactly two players'); return; }
+      const names = pr.map(n => canon.get(norm(n)));
+      if (names.some(n => !n)) { errors.push('Pair ' + (i + 1) + ' has someone who is not on this team'); return; }
+      if (norm(names[0]) === norm(names[1])) { errors.push('Pair ' + (i + 1) + ' lists the same player twice'); return; }
+      if (names.some(n => used.has(norm(n)))) { errors.push('A player is in two pairs'); return; }
+      names.forEach(n => used.add(norm(n)));
+      out.push(names);
+    });
+    const leftover = (roster || []).filter(n => !used.has(norm(n)));
+    const lockable = errors.length === 0 && out.length > 0 && (leftover.length === 0 || (roster.length % 2 === 1 && leftover.length === 1));
+    return { ok: errors.length === 0, errors, pairs: out, leftover, lockable };
+  }
+  // Pure: one pair's combined numbers. A total is null unless both players have that stat (a guess would mislead).
+  function cupPairStats(pair, stats) {
+    const get = (n, f) => (stats && stats[n] && typeof stats[n][f] === 'number') ? stats[n][f] : null;
+    const sum = f => { const a = get(pair[0], f), b = get(pair[1], f); return a === null || b === null ? null : Math.round((a + b) * 100) / 100; };
+    return { hcp: sum('hcp'), avg: sum('avg'), birdies: sum('birdies') };
+  }
+  // Pure: how far apart a side's own pairs are (combined HCP, highest minus lowest) so a captain can see if he is stacking one pair.
+  function cupPairsSpread(pairs, stats) {
+    const v = (pairs || []).map(pr => cupPairStats(pr, stats).hcp).filter(x => x !== null);
+    return v.length > 1 ? Math.round((Math.max.apply(null, v) - Math.min.apply(null, v)) * 10) / 10 : null;
+  }
+  // Pure: the balanced suggestion (strongest with weakest) for a roster, from the draft stats.
+  function cupPairsSuggest(roster, stats) {
+    return recommendPairs((roster || []).map(n => ({ name: n, hcp: stats && stats[n] ? stats[n].hcp : null })));
+  }
+  function cupPairsRevealed(cfg) {
+    const p = (cfg && cfg.pairs) || {};
+    const keys = ((cfg && cfg.sides) || []).map(x => x.key);
+    return keys.length === 2 && keys.every(k => p[k] && p[k].locked === true);
+  }
+  // Pure: what a viewer may see. The commissioner sees everything, a captain sees his own side, everyone else sees nothing until both are locked.
+  function cupPairsVisible(cfg, viewerSide, isHost) {
+    const p = (cfg && cfg.pairs) || {};
+    const open = isHost || cupPairsRevealed(cfg);
+    const out = {};
+    Object.keys(p).forEach(k => { out[k] = (open || k === viewerSide) ? p[k] : { locked: p[k].locked === true, count: (p[k].list || []).length }; });
+    return out;
+  }
   function cupTotalPoints(cfg) {
     const rule = cupPointsRule(cfg);
     return (cfg.rounds || []).reduce((t, r) => t + (r.matches || []).length * (r.segments || []).length, 0) * Math.max(rule.win + rule.loss, 2 * rule.half);
@@ -2308,7 +2363,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupDraftPick, cupDraftUndo, cupParseStats, cupBalance, CUP_BALANCE_LIMITS,
+    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupDraftPick, cupDraftUndo, cupParseStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, CUP_BALANCE_LIMITS,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });
