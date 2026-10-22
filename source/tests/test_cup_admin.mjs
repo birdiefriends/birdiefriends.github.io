@@ -10,9 +10,10 @@ const posts = []; let stored = null;
 const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true, url: 'https://x.test/BFE-Admin.html',
   beforeParse(w) {
     w.fetch = async (u, o) => { if (o && o.method === 'POST') { posts.push({ u, body: JSON.parse(o.body) }); stored = JSON.parse(o.body).config; return { ok: true, status: 200, json: async () => ({ ok: true }) }; }
+      if (/\/bfe\/venue-tees/.test(u)) return { ok: true, status: 200, json: async () => ({ ok: true, tees: [{ tee_name: 'Green', gender: 'male', course_rating: 71.2, slope_rating: 132, par_total: 72, holes: Array.from({ length: 18 }, (_, i) => ({ par: 4, yardage: 350, handicap: ((i * 7) % 18) + 1 })) }, { tee_name: 'Gold', gender: 'male', course_rating: 68.0, slope_rating: 120, par_total: 72, holes: [] }] }) };
       if (/\/bfe\/players/.test(u)) return { ok: true, status: 200, json: async () => ({ ok: true, players: [{ name: 'Bill Steirer', current_hcp: 5.3, hcp_source: 'ghin_import', updated_at: '2026-10-20 12:00:00' }, { name: 'Lou Strohl', current_hcp: 14, hcp_source: 'estimated', updated_at: '2026-09-24 12:00:00' }, { name: 'Nobody Hcp', current_hcp: null, hcp_source: 'no_hcp' }] }) };
       if (/\/bfe\/events\?event=/.test(u)) return { ok: true, status: 200, json: async () => ({ config: globalThis.__evCfg, updated_at: 'now' }) };
-      if (/\/bfe\/cup\?/.test(u)) return stored ? { ok: true, status: 200, json: async () => ({ config: stored }) } : { ok: false, status: 404, json: async () => ({}) };
+      if (/\/bfe\/cup\?/.test(u)) return stored ? { ok: true, status: 200, json: async () => ({ config: JSON.parse(JSON.stringify(stored)) }) } : { ok: false, status: 404, json: async () => ({}) };
       return { ok: true, status: 200, json: async () => ({ ok: true }) }; };
     w.alert = () => {}; w.confirm = () => true;
   } });
@@ -84,6 +85,12 @@ d.getElementById('cupNameA').value = ''; d.getElementById('cupNameB').value = ''
 await w.loadEventConfig('2026 BF Cup'); await new Promise(r => setTimeout(r, 80));
 ok(d.getElementById('cupNameA').value === 'Team Jake' && d.getElementById('cupNameB').value === 'Team Nate' && d.getElementById('cupPtHalf').value === '0.5', 'loading a saved event brings back 4b (sides, colors, points)');
 ok(d.getElementById('cupEnabled').checked && d.querySelectorAll('.cup-round').length === 2, 'and the Cup rounds line up with section 4');
+// regression: a Cup-only roster has no quotas (null); the review table used to throw on it and the Cup card never came back
+globalThis.__evCfg = Object.assign({}, globalThis.__evCfg, { roster: [{ name: 'Jake Knappenberger', hcp: 8, initialQuota: null, tee: null }, { name: 'Nate Stettler', hcp: null, initialQuota: null, tee: null }] });
+d.getElementById('cupNameA').value = ''; d.getElementById('cupCapA').value = '';
+await w.loadEventConfig('2026 BF Cup'); await new Promise(r => setTimeout(r, 80));
+ok(d.getElementById('cupNameA').value === 'Team Jake' && d.getElementById('cupNameB').value === 'Team Nate' && !/Load failed/.test(d.getElementById('saveStatus').textContent), 'an event whose roster has no quotas (Cup-only) still loads, and 4b comes back');
+
 w.addPlayerRow('Jake Knappenberger', 'j@x.test', '8'); w.addPlayerRow('Nate Stettler', 'n@x.test', '10');
 for (const id of ['roundCollect', 'overallCollect', 'wbCollect']) { d.getElementById(id).value = '0'; d.getElementById(id).dispatchEvent(new w.Event('input', { bubbles: true })); }
 const before = posts.length;
@@ -113,4 +120,15 @@ w.cupSyncFromInputs();
 ok(w.eval('cupState.handicap') && w.eval('cupState.handicap').bestball === 80 && w.eval('cupState.handicap').altshot === 50 && w.eval('cupState.handicap').singles === 100 && w.eval('cupState.handicap').slope === 132 && w.eval('cupState.handicap').rating === 71.2 && w.eval('cupState.handicap').par === 72, 'the Cup card reads the handicap allowance and course numbers into the saved document');
 d.getElementById('cupHcpBB').value = ''; d.getElementById('cupSlope').value = ''; w.eval('cupState.handicap = { pct: 25, singles: 90, slope: 120, rating: 70, par: 71 }'); w.cupRender();
 ok(d.getElementById('cupHcpBB').value === '25' && d.getElementById('cupHcpSI').value === '90' && d.getElementById('cupSlope').value === '120', 'a loaded Cup fills the handicap boxes back in');
+// course and tee come from the Venue Manager
+w.eval("venueList = [{ id: 7, name: 'Blue Shamrock' }, { id: 9, name: 'Other GC' }]"); w.cupVenueRender();
+ok([...d.getElementById('cupVenue').options].map(o => o.textContent).join() === '— pick a course —,Blue Shamrock,Other GC', 'the course list comes from the loaded venues');
+d.getElementById('cupVenue').value = '7'; d.getElementById('cupVenue').dispatchEvent(new w.Event('change')); await new Promise(r => setTimeout(r, 60));
+ok([...d.getElementById('cupTee').options].some(o => /Green \(male\) · 71.2 \/ 132 · par 72/.test(o.textContent)), 'the tee list shows rating / slope / par from the Venue Manager');
+d.getElementById('cupTee').value = '0'; d.getElementById('cupTee').dispatchEvent(new w.Event('change'));
+ok(d.getElementById('cupSlope').value === '132' && d.getElementById('cupRating').value === '71.2' && d.getElementById('cupPar').value === '72', 'picking a tee fills slope, rating and par');
+w.cupSyncFromInputs(); const hh = w.eval('cupState.handicap');
+ok(hh.venueId === 7 && hh.venueName === 'Blue Shamrock' && hh.tee === 'Green' && hh.strokeIndex.length === 18 && hh.slope === 132, 'the Cup keeps the venue, tee and hole stroke indexes (and a later sync does not drop them)');
+d.getElementById('cupTee').value = '1'; d.getElementById('cupTee').dispatchEvent(new w.Event('change'));
+ok(w.eval('cupState.handicap.strokeIndex') === null && /no stroke indexes/.test(d.getElementById('cupTeeHint').textContent), 'a tee without stroke indexes is flagged');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

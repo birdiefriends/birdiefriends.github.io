@@ -355,6 +355,11 @@
       </div>
       <h3 style="margin:14px 0 6px;font-size:0.95rem">Handicaps</h3>
       <div class="row">
+        <div><label for="cupVenue">Course (from Venue Manager)</label><select id="cupVenue"><option value="">— load venues in section 2 —</option></select></div>
+        <div><label for="cupTee">Tee</label><select id="cupTee"><option value="">— pick a course first —</option></select></div>
+      </div>
+      <p class="hint" style="margin-top:0" id="cupTeeHint">Picking a tee fills slope, rating, par and the hole stroke indexes from the Venue Manager. You can still edit the numbers below.</p>
+      <div class="row">
         <div><label for="cupHcpBB">Fourball allowance (%)</label><input type="number" id="cupHcpBB" step="5" min="0" max="100" value="75"></div>
         <div><label for="cupHcpFS">Foursomes allowance (%)</label><input type="number" id="cupHcpFS" step="5" min="0" max="100" value="50"></div>
         <div><label for="cupHcpSI">Singles allowance (%)</label><input type="number" id="cupHcpSI" step="5" min="0" max="100" value="75"></div>
@@ -2019,6 +2024,7 @@ async function loadVenues() {
     statusEl.textContent = `${venueList.length} venue(s) loaded.`;
     renderAllRoundVenueSelects();
     [...roundsBody.querySelectorAll('tr.roundRow')].forEach(updateRoundRowVenue);
+    if (typeof cupVenueRender === 'function') cupVenueRender();
   } catch (e) {
     statusEl.textContent = 'Load failed: ' + e.message;
   }
@@ -2572,7 +2578,7 @@ function renderReview(config) {
   let rosterHtml = '<h3>Roster &amp; quotas</h3><table><thead><tr><th>Name</th><th>Email</th><th>HCP</th><th>Tee</th><th>Slope</th><th>Initial quota</th></tr></thead><tbody>';
   config.roster.forEach(p => {
     const slopeDisplay = typeof p.tee?.slope === 'number' ? p.tee.slope.toFixed(1) : (p.tee?.slope ?? '—');
-    rosterHtml += `<tr><td>${p.name}</td><td>${p.email || '—'}</td><td>${p.hcp ?? '—'}</td><td>${p.tee?.name ?? '—'}</td><td>${slopeDisplay}</td><td>${p.isNoHcp ? 'NoHCP (set before Rd1)' : p.initialQuota.toFixed(2)}</td></tr>`;
+    rosterHtml += `<tr><td>${p.name}</td><td>${p.email || '—'}</td><td>${p.hcp ?? '—'}</td><td>${p.tee?.name ?? '—'}</td><td>${slopeDisplay}</td><td>${p.isNoHcp ? 'NoHCP (set before Rd1)' : (typeof p.initialQuota === 'number' ? p.initialQuota.toFixed(2) : '—')}</td></tr>`;
   });
   rosterHtml += '</tbody></table>';
   document.getElementById('reviewRoster').innerHTML = rosterHtml;
@@ -2724,7 +2730,7 @@ async function loadEventConfig(eventName) {
     assembledConfig = data.config;
     lastLoadedEventName = eventName; setupDirty = false;
     await rehydrateFormFromConfig(assembledConfig);
-    renderReview(assembledConfig);
+    try { renderReview(assembledConfig); } catch (e) { console.warn('[BFE] Review render failed (the Cup card still loads):', e); }
     document.getElementById('outputSection').style.display = 'block';
     await cupLoad(true, eventName);   // the Cup card (4b) comes back with the event: sides, captains, colors, points
     setStatus(`Loaded "${eventName}" (last saved ${data.updated_at}) — ${assembledConfig.rounds.length} round(s), ${assembledConfig.roster.length} roster row(s).`);
@@ -6275,7 +6281,47 @@ function cupSyncFromInputs() {
   const num = (id, d) => { const v = document.getElementById(id).value; return v === '' || !isFinite(Number(v)) ? d : Number(v); };
   cupState.points = { win: num('cupPtWin', 1), half: num('cupPtHalf', 0.5), loss: num('cupPtLoss', 0) };
   const opt = id => { const v = document.getElementById(id).value; return v === '' || !isFinite(Number(v)) ? null : Number(v); };
-  cupState.handicap = { bestball: num('cupHcpBB', 0), altshot: num('cupHcpFS', 0), singles: num('cupHcpSI', 0), slope: opt('cupSlope'), rating: opt('cupRating'), par: opt('cupPar') };
+  const prevH = cupState.handicap || {};
+  cupState.handicap = { bestball: num('cupHcpBB', 0), altshot: num('cupHcpFS', 0), singles: num('cupHcpSI', 0), slope: opt('cupSlope'), rating: opt('cupRating'), par: opt('cupPar'),
+    venueId: prevH.venueId || null, venueName: prevH.venueName || null, tee: prevH.tee || null, strokeIndex: prevH.strokeIndex || null };
+}
+// Course and tee for the Cup's handicaps come from the Venue Manager (GET /bfe/venue-tees). Picking a tee snapshots its slope, rating, par and hole
+// stroke indexes into the Cup document, so a later change in the Venue Manager never rewrites a Cup that is already set up.
+let cupTees = [];
+function cupTeeLabel(t) { return t.tee_name + (t.gender ? ' (' + t.gender + ')' : '') + ' · ' + (t.course_rating != null ? t.course_rating : '?') + ' / ' + (t.slope_rating != null ? t.slope_rating : '?') + (t.par_total != null ? ' · par ' + t.par_total : ''); }
+function cupVenueRender() {
+  const sel = document.getElementById('cupVenue'); if (!sel) return;
+  const h = cupState.handicap || {};
+  const firstCupRow = [...roundsBody.querySelectorAll('tr.roundRow')].find(tr => tr.querySelector('.r-engine').value === 'cup_match');
+  const want = h.venueId || (firstCupRow ? firstCupRow.querySelector('.r-venue').value : '');
+  sel.innerHTML = '<option value="">— pick a course —</option>' + venueList.map(v => '<option value="' + v.id + '"' + (String(v.id) === String(want) ? ' selected' : '') + '>' + cupEsc(v.name) + '</option>').join('');
+  if (!venueList.length && h.venueName) sel.innerHTML = '<option value="' + cupEsc(h.venueId || '') + '" selected>' + cupEsc(h.venueName) + '</option>';
+}
+async function cupLoadTees(venueId, keepTee) {
+  const tsel = document.getElementById('cupTee'); cupTees = [];
+  if (!venueId) { tsel.innerHTML = '<option value="">— pick a course first —</option>'; return; }
+  tsel.innerHTML = '<option value="">Loading tees…</option>';
+  try {
+    const r = await fetch(cupBase() + '/bfe/venue-tees?venue_id=' + encodeURIComponent(venueId)); const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    cupTees = j.tees || [];
+    tsel.innerHTML = cupTees.length ? '<option value="">— pick a tee —</option>' + cupTees.map((t, i) => '<option value="' + i + '"' + (keepTee && t.tee_name === keepTee ? ' selected' : '') + '>' + cupEsc(cupTeeLabel(t)) + '</option>').join('')
+      : '<option value="">No tees saved for this course yet (add them in the Venue Manager)</option>';
+  } catch (e) { tsel.innerHTML = '<option value="">Could not load tees: ' + cupEsc(e.message) + '</option>'; }
+}
+function cupApplyTee(t) {
+  const h = cupState.handicap = cupState.handicap || {};
+  const v = venueList.find(x => String(x.id) === String(document.getElementById('cupVenue').value));
+  h.venueId = v ? v.id : h.venueId; h.venueName = v ? v.name : h.venueName; h.tee = t ? t.tee_name : null;
+  if (t) {
+    document.getElementById('cupSlope').value = t.slope_rating != null ? t.slope_rating : '';
+    document.getElementById('cupRating').value = t.course_rating != null ? t.course_rating : '';
+    document.getElementById('cupPar').value = t.par_total != null ? t.par_total : '';
+    const si = (t.holes || []).map(x => Number(x.handicap));
+    h.strokeIndex = si.length === 18 && si.every(n => n >= 1 && n <= 18) ? si : null;
+  }
+  cupSummaryRender();
+  document.getElementById('cupTeeHint').textContent = t ? 'Using ' + cupTeeLabel(t) + (h.strokeIndex ? ', with its hole stroke indexes.' : '. This tee has no stroke indexes saved, so strokes cannot be placed on holes until they are added in the Venue Manager.') : 'Picking a tee fills slope, rating, par and the hole stroke indexes from the Venue Manager. You can still edit the numbers below.';
 }
 function cupRender() {
   const names = cupRosterNames();
@@ -6295,6 +6341,8 @@ function cupRender() {
   document.getElementById('cupSlope').value = hc.slope != null ? hc.slope : '';
   document.getElementById('cupRating').value = hc.rating != null ? hc.rating : '';
   document.getElementById('cupPar').value = hc.par != null ? hc.par : '';
+  cupVenueRender();
+  if (hc.venueId && !cupTees.length) cupLoadTees(hc.venueId, hc.tee);
   const fmtOpts = f => Object.keys(BFEngine.CUP_FORMATS).map(k => '<option value="' + k + '"' + (k === f ? ' selected' : '') + '>' + BFEngine.CUP_FORMATS[k].label + '</option>').join('');
   document.getElementById('cupRounds').innerHTML = cupState.rounds.map(r => {
     const hv = r.holes && r.holes.count === 9 ? (r.holes.half === 'back' ? ' (back 9 only)' : ' (front 9 only)') : '';
@@ -6366,6 +6414,8 @@ async function cupLoad(quiet, evName) {
   const body = document.getElementById('cupBody');
   document.getElementById('cupEnabled').addEventListener('change', e => { body.style.display = e.target.checked ? 'block' : 'none'; if (e.target.checked) cupSyncRounds(); });
   ['change', 'click'].forEach(ev => roundsBody.addEventListener(ev, () => setTimeout(cupSyncRounds, 0)));
+  document.getElementById('cupVenue').addEventListener('change', e => { const h = cupState.handicap = cupState.handicap || {}; h.venueId = e.target.value || null; h.tee = null; h.strokeIndex = null; cupLoadTees(e.target.value, null); });
+  document.getElementById('cupTee').addEventListener('change', e => cupApplyTee(e.target.value === '' ? null : cupTees[Number(e.target.value)]));
   document.getElementById('cupSaveBtn').addEventListener('click', cupSave);
   document.getElementById('cupLoadBtn').addEventListener('click', cupLoad);
   body.addEventListener('input', e => {
