@@ -80,7 +80,7 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.27.0"></script>
+<script src="bf_engine.js?v=1.28.0"></script>
 <script>
 (function () {
   'use strict';
@@ -252,8 +252,12 @@ button:disabled{opacity:.4;cursor:default}
     var st = (cfg.draft || {}).stats || {};
     function side(ms) { var si = cfg.sides.map(function (x) { return x.key; }).indexOf(ms.side); var sd = cfg.sides[si]; var n = E.cupPairStats(ms.players, st);
       return '<div class="' + colorOf(sd, si) + '"><b>' + esc(ms.players[0]) + ' &amp; ' + esc(ms.players[1]) + '</b><span class="num">' + esc(sd.name || ms.side) + ' · HCP ' + fmt(n.hcp) + '</span></div>'; }
-    var a = E.cupPairStats(mt.sides[0].players, st).hcp, b = E.cupPairStats(mt.sides[1].players, st).hcp;
-    return '<div class="match"><div class="n">Match ' + (i + 1) + (a != null && b != null ? ' · ' + (Math.abs(a - b) < 0.05 ? 'dead even' : Math.round(Math.abs(a - b) * 10) / 10 + ' strokes apart') : '') + '</div><div class="vs">' + side(mt.sides[0]) + '<div class="x">vs</div>' + side(mt.sides[1]) + '</div></div>';
+    var rule = E.cupHandicapRule(cfg), hcps = {};
+    Object.keys(st).forEach(function (n) { var c = E.cupCourseHcp(st[n].hcp, rule); if (c !== null) hcps[n] = c; });
+    var ri = E.cupPairsRound(cfg), fm = [];
+    ((ri >= 0 ? cfg.rounds[ri].segments : []) || []).forEach(function (sg) { if (fm.indexOf(sg.format) < 0) fm.push(sg.format); });
+    var line = E.cupMatchStrokeText(mt, hcps, rule, fm, sideName);
+    return '<div class="match"><div class="n">Match ' + (i + 1) + '</div><div class="vs">' + side(mt.sides[0]) + '<div class="x">vs</div>' + side(mt.sides[1]) + '</div><div class="num" style="text-align:center;margin-top:6px;font-size:.82rem;color:var(--dim)">' + esc(line) + '</div></div>';
   }
   function matchupHtml() {
     if (!(cfg.draft || {}).locked || !E.cupPairsRevealed(cfg)) return '';

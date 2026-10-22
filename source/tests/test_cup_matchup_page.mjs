@@ -55,7 +55,9 @@ await click(dom, '[data-mpick="0"]'); await click(dom, '#muConfirm'); d = dom.wi
 ok(doc.matchup.done === true && doc.rounds[0].matches.length === 2 && /Matchups are set/.test(d.body.textContent) && d.querySelectorAll('.match').length === 2, 'with two pairs a side the first response finishes it; the last pair meets automatically');
 ok(doc.rounds[0].matches[0].sides[0].players.join() === 'a1,a2' && doc.rounds[0].matches[0].sides[1].players.join() === 'b3,b4', 'match 1 is the put-up pair versus the answer, in side order');
 dom = await open(''); d = dom.window.document;
-ok(d.querySelectorAll('.match').length === 2 && /strokes apart|dead even/.test(d.body.textContent), 'a watcher sees the matches with how even each is');
+ok(d.querySelectorAll('.match').length === 2 && /Scratch: no strokes/.test(d.body.textContent), 'a watcher sees the matches (scratch here, since no allowance is set)');
+doc.handicap = { pct: 50 }; dom = await open(''); d = dom.window.document;
+ok(/Fourball: a2 1, b3 3, b4 4/.test(d.querySelector('.match').textContent), 'with a 50% allowance match 1 shows exactly who gets strokes (off the low: a1 plays scratch)');
 dom = await open('?host=1', '7797'); d = dom.window.document;
 await click(dom, '#muUndo'); d = dom.window.document;
 ok(doc.matchup.log.length === 1 && doc.rounds[0].matches.length === 0 && !doc.matchup.done, 'host undo takes back the last pick and clears the written matches');

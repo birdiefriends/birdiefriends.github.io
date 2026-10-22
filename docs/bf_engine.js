@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.27.0';
+  const ENGINE_VERSION = '1.28.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2337,6 +2337,49 @@
     if (!hit) return { ok: false, reason: 'That pair is not available' };
     return { ok: true, matchup: Object.assign({}, cfg.matchup, { log: v.log.concat([{ n: v.log.length + 1, side, pair: hit.slice() }]) }) };
   }
+  // ── BF Cup handicaps (Dev-95) ──────────────────────────────────────────
+  // "Off the low" at a partial allowance, one rule for every format: inside each match the lowest handicap plays to scratch and everyone
+  // else gets `pct`% of the difference (rounded). Fourball works per player (the low of all four), Foursomes per pair on the pair's COMBINED
+  // course handicap (one ball, a team handicap), Singles 1:1. cfg.handicap = {pct, slope, rating, par}: pct 0 (or absent) = scratch; without
+  // slope/rating/par the handicap Index is used as the course handicap. Strokes land on holes by stroke index (cupHoleStrokes).
+  function cupHandicapRule(cfg) {
+    const h = (cfg && cfg.handicap) || {};
+    const n = v => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null);
+    const pct = n(h.pct);
+    return { pct: pct == null ? 0 : Math.min(100, Math.max(0, pct)), slope: n(h.slope), rating: n(h.rating), par: n(h.par) };
+  }
+  function cupCourseHcp(index, rule) {
+    if (!Number.isFinite(Number(index)) || index === null || index === '') return null;
+    return Math.round(rule && rule.slope && rule.rating != null && rule.par != null ? courseHandicap(index, rule.slope, rule.rating, rule.par) : Number(index));
+  }
+  // match = {sides:[{side, players:[..]}, {…}]}; hcps = {name: course handicap}. Rows say what each player (Fourball, Singles) or pair (Foursomes) receives.
+  function cupMatchStrokes(match, hcps, rule) {
+    const pct = rule ? rule.pct : 0;
+    const get = n => { const v = hcps && hcps[n]; return Number.isFinite(v) ? v : null; };
+    const off = (vals) => { const known = vals.filter(v => v !== null); const low = known.length ? Math.min(...known) : null; return vals.map(v => (v === null || low === null || !pct) ? 0 : Math.round((v - low) * pct / 100)); };
+    const players = [].concat(...match.sides.map(sd => sd.players));
+    const pv = off(players.map(get));
+    const rows = players.map((n, i) => ({ names: [n], strokes: pv[i], known: get(n) !== null }));
+    const sums = match.sides.map(sd => { const v = sd.players.map(get); return v.some(x => x === null) ? null : v.reduce((a, b) => a + b, 0); });
+    const tv = off(sums);
+    const teams = match.sides.map((sd, i) => ({ names: sd.players.slice(), side: sd.side, strokes: tv[i], known: sums[i] !== null }));
+    return { pct, players: rows, teams };
+  }
+  // Pure: strokes per hole (index 0 = hole 1) for a player or pair getting `strokes`, from the 18 stroke indexes.
+  function cupHoleStrokes(strokes, strokeIndex) {
+    return Array.from({ length: 18 }, (_, i) => strokesOnHole(strokes, (strokeIndex || [])[i], 18));
+  }
+  // Pure: the plain-language line for a matchup card, only for the formats the round actually plays.
+  function cupMatchStrokeText(match, hcps, rule, formats, sideName) {
+    if (!rule || !rule.pct) return 'Scratch: no strokes';
+    const st = cupMatchStrokes(match, hcps, rule), out = [];
+    (formats || []).forEach(f => {
+      if (f === 'altshot') { const t = st.teams.filter(x => x.strokes > 0)[0]; out.push('Foursomes: ' + (t ? (sideName ? sideName(t.side) : t.side) + ' gets ' + t.strokes : 'even')); }
+      else if (f === 'bestball') { const g = st.players.filter(x => x.strokes > 0); out.push('Fourball: ' + (g.length ? g.map(x => x.names[0] + ' ' + x.strokes).join(', ') : 'even')); }
+      else if (f === 'singles') { const g = st.players.filter(x => x.strokes > 0); out.push('Singles: ' + (g.length ? g.map(x => x.names[0] + ' ' + x.strokes).join(', ') : 'even')); }
+    });
+    return out.join(' · ');
+  }
   function cupTotalPoints(cfg) {
     const rule = cupPointsRule(cfg);
     return (cfg.rounds || []).reduce((t, r) => t + (r.matches || []).length * (r.segments || []).length, 0) * Math.max(rule.win + rule.loss, 2 * rule.half);
@@ -2346,6 +2389,7 @@
     const errors = [];
     const sides = cfg && cfg.sides;
     if (!Array.isArray(sides) || sides.length !== 2 || !sides[0].key || sides[0].key === sides[1].key) return { ok: false, errors: ['The Cup needs exactly two sides with different keys'], unassigned: {} };
+    if (cfg.handicap && cfg.handicap.pct != null && cfg.handicap.pct !== '' && !(Number(cfg.handicap.pct) >= 0 && Number(cfg.handicap.pct) <= 100)) errors.push('Handicap allowance must be between 0 and 100');
     const sideOf = new Map();
     sides.forEach(sd => (sd.players || []).forEach(p => {
       const k = norm(p);
@@ -2404,7 +2448,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupDraftPick, cupDraftUndo, cupParseStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, CUP_BALANCE_LIMITS,
+    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupDraftPick, cupDraftUndo, cupParseStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupHandicapRule, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });
