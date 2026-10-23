@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.34.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.35.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1460,8 +1460,6 @@ export default {
           let control;
           if (body.stage === 'matchup') {
             if (!d.locked) return J({ error: 'The teams are not locked yet' }, 409);
-            const pk = cfgObj.pairs || {};
-            if (!keys.every(k => pk[k] && pk[k].locked === true)) return J({ error: 'Both captains must lock their pairs first' }, 409);
             if (cfgObj.matchup && cfgObj.matchup.started) return J({ error: 'The matchup draw has already started' }, 409);
             control = keys.find(k => k !== d.first);      // the captain who picked second in the team draft is in control of the next draw
           } else {
@@ -1539,30 +1537,31 @@ export default {
           return J({ ok: true, config: cupPublic(cfgObj, side) });
         }
         if (body.action === 'match_pick') {
+          // The matchup draw forms the pairs as they are put up (twin of BFEngine.cupMatchupView / cupMatchupPick).
           const mu = cfgObj.matchup;
           if (!mu || !mu.started) return J({ error: 'The matchup draw has not started' }, 409);
           const keys = (cfgObj.sides || []).map(sd => sd.key);
-          const pk = (cfgObj.pairs || {});
-          if (!keys.every(k => pk[k] && pk[k].locked === true)) return J({ error: 'Both captains must lock their pairs first' }, 409);
           const first = keys.includes(mu.first) ? mu.first : keys[0], other = keys.find(k => k !== first);
-          const pkey = pr => (pr || []).map(norm).sort().join('|');
-          const lists = {}; keys.forEach(k => { lists[k] = pk[k].list || []; });
-          const n = lists[first].length;
-          if (n < 1 || lists[other].length !== n) return J({ error: 'Both sides need the same number of pairs' }, 409);
-          const log = mu.log || [];
+          const roster = {}; keys.forEach(k => { roster[k] = ((cfgObj.sides.find(sd => sd.key === k) || {}).players || []); });
+          const N = roster[first].length;
+          if (!(N >= 2 && N % 2 === 0 && roster[other].length === N)) return J({ error: 'Both teams need the same, even number of players to make pairs' }, 409);
+          const n = N / 2, log = mu.log || [];
           if (log.length >= 2 * (n - 1)) return J({ error: 'The matchups are already set' }, 409);
           const round = log.length >> 1, putter = round % 2 === 0 ? first : other, responder = putter === first ? other : first;
           const onClock = log.length % 2 === 0 ? putter : responder;
           if (onClock !== side) return J({ error: 'It is not your turn' }, 409);
-          const used = new Set(log.filter(e => e.side === side).map(e => pkey(e.pair)));
-          const hit = lists[side].find(pr => pkey(pr) === pkey(body.pair) && !used.has(pkey(pr)));
-          if (!hit) return J({ error: 'That pair is not available' }, 409);
-          mu.log = log.concat([{ n: log.length + 1, side, pair: hit.slice() }]);
+          const usedBy = k => new Set(log.filter(e => e.side === k).flatMap(e => e.pair.map(norm)));
+          const pair = Array.isArray(body.pair) ? body.pair : [];
+          if (pair.length !== 2 || norm(pair[0]) === norm(pair[1])) return J({ error: 'A pair is two different players' }, 409);
+          const u = usedBy(side);
+          const canon = pair.map(x => roster[side].find(a => norm(a) === norm(x) && !u.has(norm(a))));
+          if (canon.some(c => !c)) return J({ error: 'Both players must still be unpaired' }, 409);
+          mu.log = log.concat([{ n: log.length + 1, side, pair: canon }]);
           if (mu.log.length >= 2 * (n - 1)) {
-            const left = {}; keys.forEach(k => { const u = new Set(mu.log.filter(e => e.side === k).map(e => pkey(e.pair))); left[k] = lists[k].filter(pr => !u.has(pkey(pr)))[0]; });
+            const left = {}; keys.forEach(k => { const uk = usedBy(k); mu.log.filter(e => e.side === k).forEach(e => e.pair.forEach(x => uk.add(norm(x)))); left[k] = roster[k].filter(x => !uk.has(norm(x))); });
             const ms = [];
             for (let i = 0; i + 1 < mu.log.length; i += 2) ms.push([{ side: mu.log[i].side, players: mu.log[i].pair }, { side: mu.log[i + 1].side, players: mu.log[i + 1].pair }]);
-            if (left[first] && left[other]) ms.push([{ side: first, players: left[first] }, { side: other, players: left[other] }]);
+            if (left[first].length === 2 && left[other].length === 2) ms.push([{ side: first, players: left[first] }, { side: other, players: left[other] }]);
             const ri = (cfgObj.rounds || []).findIndex(r => { const f = ((r.segments || [])[0] || {}).format; return f === 'bestball' || f === 'altshot'; });
             if (ri >= 0) cfgObj.rounds[ri].matches = ms.map((sd, i) => ({ key: 'm' + (i + 1), sides: sd.slice().sort((a, b) => keys.indexOf(a.side) - keys.indexOf(b.side)) }));
             mu.done = true;

@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.34.0';
+  const ENGINE_VERSION = '1.35.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2352,37 +2352,43 @@
     return ((cfg && cfg.rounds) || []).findIndex(r => { const f = CUP_FORMATS[((r.segments || [])[0] || {}).format]; return !!f && f.size === 2; });
   }
   const pairKey = pr => (pr || []).map(norm).sort().join('|');
+  // The Saturday matchup draw, "put up and respond", where the PAIRS are formed as they are put up (no pre-built lists):
+  // the first captain puts up a pair from his remaining players, the second answers with a pair from his, then they swap, and so on.
+  // The last two players on each side meet automatically. cfg.matchup = { started, first, log:[{n, side, pair}], done }.
   function cupMatchupView(cfg) {
     const m = cfg && cfg.matchup;
     if (!m || !m.started) return { started: false };
     const keys = ((cfg.sides) || []).map(sd => sd.key);
     const first = keys.includes(m.first) ? m.first : keys[0], other = keys.find(k => k !== first);
-    const lists = {}; keys.forEach(k => { lists[k] = (((cfg.pairs || {})[k] || {}).list || []); });
-    const n = lists[first] ? lists[first].length : 0;
+    const rosters = {}; keys.forEach(k => { rosters[k] = cupRosterOf(cfg, k); });
+    const N = rosters[first] ? rosters[first].length : 0;
+    const even = N >= 2 && N % 2 === 0 && rosters[other].length === N;
+    const n = even ? N / 2 : 0;                                  // pairs per side
     const log = m.log || [];
     const used = {}; keys.forEach(k => { used[k] = new Set(); });
-    log.forEach(e => { if (used[e.side]) used[e.side].add(pairKey(e.pair)); });
-    const avail = {}; keys.forEach(k => { avail[k] = lists[k].filter(pr => !used[k].has(pairKey(pr))); });
-    const steps = Math.max(0, 2 * (n - 1)), done = n > 0 && log.length >= steps;
+    log.forEach(e => { if (used[e.side]) (e.pair || []).forEach(x => used[e.side].add(norm(x))); });
+    const avail = {}; keys.forEach(k => { avail[k] = rosters[k].filter(x => !used[k].has(norm(x))); });   // players not yet in a pair
+    const steps = Math.max(0, 2 * (n - 1)), done = even && log.length >= steps;
     const round = log.length >> 1, putter = round % 2 === 0 ? first : other, responder = putter === first ? other : first;
     const role = log.length % 2 === 0 ? 'put' : 'respond';
     const matches = [];
     for (let i = 0; i + 1 < log.length; i += 2) matches.push({ sides: [{ side: log[i].side, players: log[i].pair }, { side: log[i + 1].side, players: log[i + 1].pair }] });
-    if (done && avail[first][0] && avail[other][0]) matches.push({ sides: [{ side: first, players: avail[first][0] }, { side: other, players: avail[other][0] }] });
+    if (done && avail[first].length === 2 && avail[other].length === 2) matches.push({ sides: [{ side: first, players: avail[first].slice() }, { side: other, players: avail[other].slice() }] });
     const ordered = matches.map((mt, i) => ({ key: 'm' + (i + 1), sides: mt.sides.slice().sort((a, b) => keys.indexOf(a.side) - keys.indexOf(b.side)) }));
     return { started: true, first, other, n, log, role, onClock: done || !n ? null : (role === 'put' ? putter : responder), facing: role === 'respond' && !done ? log[log.length - 1].pair : null,
-      avail, matches: ordered, done, even: lists[first].length === lists[other].length };
+      avail, matches: ordered, done, even, rosters };
   }
-  // Pure: the matchup after `side` takes a step with `pair` (put up, or respond). Names are returned in the locked pair's spelling.
+  // Pure: the matchup after `side` takes a step with `pair` (two of his remaining players). Names come back in the roster's spelling.
   function cupMatchupPick(cfg, side, pair) {
     const v = cupMatchupView(cfg);
     if (!v.started) return { ok: false, reason: 'The matchup draw has not started' };
-    if (!v.even || v.n < 1) return { ok: false, reason: 'Both sides need the same number of pairs' };
+    if (!v.even || v.n < 1) return { ok: false, reason: 'Both teams need the same, even number of players to make pairs' };
     if (v.done) return { ok: false, reason: 'The matchups are already set' };
     if (v.onClock !== side) return { ok: false, reason: 'It is not your turn' };
-    const hit = v.avail[side].find(pr => pairKey(pr) === pairKey(pair));
-    if (!hit) return { ok: false, reason: 'That pair is not available' };
-    return { ok: true, matchup: Object.assign({}, cfg.matchup, { log: v.log.concat([{ n: v.log.length + 1, side, pair: hit.slice() }]) }) };
+    if (!Array.isArray(pair) || pair.length !== 2 || norm(pair[0]) === norm(pair[1])) return { ok: false, reason: 'A pair is two different players' };
+    const canon = pair.map(x => v.avail[side].find(a => norm(a) === norm(x)));
+    if (canon.some(c => !c)) return { ok: false, reason: 'Both players must still be unpaired' };
+    return { ok: true, matchup: Object.assign({}, cfg.matchup, { log: v.log.concat([{ n: v.log.length + 1, side, pair: canon }]) }) };
   }
   // ── BF Cup handicaps (Dev-95) ──────────────────────────────────────────
   // "Off the low" at a partial allowance, one rule for every format: inside each match the lowest handicap plays to scratch and everyone

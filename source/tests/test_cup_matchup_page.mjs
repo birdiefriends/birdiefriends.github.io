@@ -8,8 +8,7 @@ const page = fs.readFileSync(HERE('../../docs/bf-cup-draft.html'), 'utf8').repla
 const stats = {}; ['a1','a2','a3','a4','b1','b2','b3','b4'].forEach((n, i) => stats[n] = { hcp: 5 + i });
 let doc = { sides: [{ key: 'A', name: 'Team Jake', captain: 'a1', color: 'red', players: ['a1','a2','a3','a4'] }, { key: 'B', name: 'Team Nate', captain: 'b1', color: 'blue', players: ['b1','b2','b3','b4'] }], points: { win: 1, half: 0.5, loss: 0 },
   rounds: [{ key: 'sat', name: 'Saturday', segments: [{ key: 's1', format: 'bestball', from: 1, to: 18 }], matches: [] }],
-  draft: { started: true, first: 'A', pool: [], stats, picks: [], locked: true }, access: { A: 'AAA111', B: 'BBB222' },
-  pairs: { A: { list: [['a1','a2'],['a3','a4']], locked: true }, B: { list: [['b1','b2'],['b3','b4']], locked: true } } };
+  draft: { started: true, first: 'A', pool: [], stats, picks: [], locked: true }, access: { A: 'AAA111', B: 'BBB222' }, };
 const calls = [];
 const pub = () => { const c = JSON.parse(JSON.stringify(doc)); delete c.access; return c; };
 const fakeFetch = async (u, o) => {
@@ -42,17 +41,18 @@ ok(d.getElementById('muStart') && /picked second/.test(d.getElementById('muFirst
 await click(dom, '#muStart'); d = dom.window.document;
 ok(doc.matchup && doc.matchup.first === 'B' && /Team Nate/.test(d.querySelector('.mu-banner').textContent) && /puts up a pair/.test(d.querySelector('.mu-banner').textContent), 'draw is on, Nate puts up first');
 dom = await open('?cap=AAA111'); d = dom.window.document;
-ok(d.querySelectorAll('[data-mpick]').length === 0 && /Team Nate/.test(d.querySelector('.mu-banner').textContent), 'Jake cannot pick while Nate is on the clock');
+ok(d.querySelectorAll('[data-mplayer]').length === 0 && /Team Nate/.test(d.querySelector('.mu-banner').textContent), 'Jake cannot pick while Nate is on the clock');
 dom = await open('?cap=BBB222'); d = dom.window.document;
-ok(d.querySelectorAll('[data-mpick]').length === 2 && /your move/.test(d.body.textContent), 'Nate can tap his own two pairs');
-await click(dom, '[data-mpick="1"][data-mside="B"]'); d = dom.window.document;
+ok(d.querySelectorAll('[data-mplayer]').length === 4 && /your move/.test(d.body.textContent), 'Nate can tap his own four players');
+await click(dom, '[data-mplayer="b3"]'); d = dom.window.document; ok(/partner/.test(d.body.textContent), 'after the first tap it asks for the partner');
+await click(dom, '[data-mplayer="b4"]'); d = dom.window.document;
 ok(d.getElementById('muConfirm') && /put up/.test(d.querySelector('.sheet').textContent) && /b3 &amp; b4|b3 & b4/.test(d.querySelector('.sheet').textContent), 'tap asks to confirm');
 await click(dom, '#muConfirm'); d = dom.window.document;
 const act = calls.filter(c => /act/.test(c.u)).pop();
 ok(JSON.parse(act.o.body).action === 'match_pick' && JSON.parse(act.o.body).code === 'BBB222' && doc.matchup.log.length === 1, 'the pick goes through /bfe/cup/act with his code');
 dom = await open('?cap=AAA111'); d = dom.window.document;
-ok(/answers b3 &amp; b4|answers b3 & b4/.test(d.querySelector('.mu-banner').textContent) && d.querySelectorAll('[data-mpick]').length === 2, 'Jake is asked to answer that pair and can tap his pairs');
-await click(dom, '[data-mpick="0"]'); await click(dom, '#muConfirm'); d = dom.window.document;
+ok(/answers b3 &amp; b4|answers b3 & b4/.test(d.querySelector('.mu-banner').textContent) && d.querySelectorAll('[data-mplayer]').length === 4, 'Jake is asked to answer that pair and can tap his players');
+await click(dom, '[data-mplayer="a1"]'); await click(dom, '[data-mplayer="a2"]'); await click(dom, '#muConfirm'); d = dom.window.document;
 ok(doc.matchup.done === true && doc.rounds[0].matches.length === 2 && /Matchups are set/.test(d.body.textContent) && d.querySelectorAll('.match').length === 2, 'with two pairs a side the first response finishes it; the last pair meets automatically');
 ok(doc.rounds[0].matches[0].sides[0].players.join() === 'a1,a2' && doc.rounds[0].matches[0].sides[1].players.join() === 'b3,b4', 'match 1 is the put-up pair versus the answer, in side order');
 dom = await open(''); d = dom.window.document;

@@ -3651,7 +3651,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.34.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.35.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -18160,12 +18160,12 @@ let _cupLive = null, _cupTimer = null;
 // What the app card says and where it goes. A captain gets his own captain screen (no link to copy); everyone else watches.
 function cupLiveCard(ev, player) {
   const phase = ev.phase || (ev.locked ? 'pairs' : 'draft');
-  const title = { draft: 'Live selection', pairs: 'Saturday pairs', matchups: 'Matchup draw', set: 'Matchups are set' }[phase] || 'Live';
+  const title = { draft: 'Live selection', pairs: 'Teams are set', matchups: 'Saturday draw', set: 'Matchups are set' }[phase] || 'Live';
   const cap = !!ev.cap_code;
   let sub;
   if (phase === 'draft') sub = cap ? 'You are a captain — tap to open your picking screen' : `Pick ${Math.min(ev.picks + 1, ev.total)} of ${ev.total} — tap to watch the selection live`;
-  else if (phase === 'pairs') sub = cap ? 'Teams are set — tap to build your pairs' : `Teams are set. Captains are building pairs (${ev.pairs_locked || 0} of 2 locked) — tap to follow`;
-  else if (phase === 'matchups') sub = cap ? 'Tap to make your matchup picks' : 'The captains are drawing the Saturday matchups — tap to watch';
+  else if (phase === 'pairs') sub = cap ? 'Teams are set — tap to start the Saturday draw' : 'Teams are set. The Saturday draw is about to start — tap to follow';
+  else if (phase === 'matchups') sub = cap ? 'Tap to put up or answer with a pair' : 'The captains are drawing the Saturday matchups — tap to watch';
   else sub = 'Tap to see the Saturday matches';
   const url = 'bf-cup-draft.html?event=' + encodeURIComponent(ev.event_name) + (cap ? '&cap=' + encodeURIComponent(ev.cap_code) : '');
   return { title, sub, url, cap };

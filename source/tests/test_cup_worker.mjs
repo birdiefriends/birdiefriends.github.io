@@ -107,15 +107,15 @@ const mact = (code, pair) => call('POST', '/bfe/cup/act', { event_name: 'Match C
 r = await mact('AAA111', ['a1', 'a2']); ok(r.status === 409 && /not started/.test(r.json.error), 'no picks until the host starts the draw');
 mcfg.matchup = { started: true, first: 'B', log: [] }; await call('POST', '/bfe/cup', { event_name: 'Match Cup', config: mcfg, pin: '7797' });
 r = await mact('AAA111', ['a1', 'a2']); ok(r.status === 409 && /not your turn/.test(r.json.error), 'the starting captain goes first');
-r = await mact('BBB222', ['a1', 'a2']); ok(r.status === 409 && /not available/.test(r.json.error), 'cannot use the other side\'s pair');
-r = await mact('BBB222', ['b2', 'b1']); ok(r.status === 200 && r.json.config.matchup.log[0].pair.join() === 'b1,b2', 'B puts up a pair (order-insensitive, canonical)');
+r = await mact('BBB222', ['a1', 'a2']); ok(r.status === 409 && /unpaired/.test(r.json.error), 'cannot use the other side\'s players');
+r = await mact('BBB222', ['b2', 'b1']); ok(r.status === 200 && r.json.config.matchup.log[0].pair.join() === 'b2,b1', 'B puts up a pair (names in roster spelling, order as chosen)');
 r = await mact('BBB222', ['b3', 'b4']); ok(r.status === 409, 'B cannot go twice');
 r = await mact('AAA111', ['a5', 'a6']); ok(r.status === 200 && !r.json.config.matchup.done, 'A responds');
 r = await mact('AAA111', ['a1', 'a2']); ok(r.status === 200 && !r.json.config.matchup.done, 'A, the responder, now puts up');
 r = await mact('BBB222', ['b3', 'b4']);
 ok(r.status === 200 && r.json.config.matchup.done === true, 'after N-1 rounds the draw is done');
 const sat = r.json.config.rounds[0].matches;
-ok(sat.length === 3 && sat[0].sides[0].side === 'A' && sat[0].sides[0].players.join() === 'a5,a6' && sat[0].sides[1].players.join() === 'b1,b2' && sat[2].sides[0].players.join() === 'a3,a4' && sat[2].sides[1].players.join() === 'b5,b6', 'the matches are written into the pairs round, the last two pairs meeting automatically');
+ok(sat.length === 3 && sat[0].sides[0].side === 'A' && sat[0].sides[0].players.join() === 'a5,a6' && sat[0].sides[1].players.join() === 'b2,b1' && sat[2].sides[0].players.join() === 'a3,a4' && sat[2].sides[1].players.join() === 'b5,b6', 'the matches are written into the pairs round, the last two pairs meeting automatically');
 ok(r.json.config.rounds[1].matches.length === 0, 'Sunday is untouched');
 r = await mact('AAA111', ['a3', 'a4']); ok(r.status === 409 && /already set/.test(r.json.error), 'no more picks after completion');
 

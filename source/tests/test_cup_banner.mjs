@@ -10,8 +10,8 @@ let c = card({ event_name: '2026 BF Cup', phase: 'draft', picks: 3, total: 14 })
 ok(c.url === 'bf-cup-draft.html?event=2026%20BF%20Cup' && !c.cap && /Pick 4 of 14/.test(c.sub), 'a player watches the draft');
 c = card({ event_name: '2026 BF Cup', phase: 'draft', picks: 3, total: 14, cap_code: 'AB12CD' });
 ok(/&cap=AB12CD$/.test(c.url) && c.cap && /picking screen/.test(c.sub), 'a captain opens his own screen');
-c = card({ event_name: 'X', phase: 'pairs', pairs_locked: 1, picks: 14, total: 14 }); ok(/1 of 2 locked/.test(c.sub) && c.title === 'Saturday pairs', 'pairs phase text');
-c = card({ event_name: 'X', phase: 'matchups', cap_code: 'Q' }); ok(/matchup picks/.test(c.sub), 'captain matchup text');
+c = card({ event_name: 'X', phase: 'pairs', picks: 14, total: 14 }); ok(/Saturday draw is about to start/.test(c.sub) && c.title === 'Teams are set', 'teams-set phase text');
+c = card({ event_name: 'X', phase: 'matchups', cap_code: 'Q' }); ok(/put up or answer/.test(c.sub), 'captain matchup text');
 c = card({ event_name: 'X', phase: 'set' }); ok(c.title === 'Matchups are set', 'set phase');
 
 // the event card's Teams button: only on Cup cards, and it routes by who is asking
