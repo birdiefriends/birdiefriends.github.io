@@ -13,4 +13,15 @@ ok(/&cap=AB12CD$/.test(c.url) && c.cap && /picking screen/.test(c.sub), 'a capta
 c = card({ event_name: 'X', phase: 'pairs', pairs_locked: 1, picks: 14, total: 14 }); ok(/1 of 2 locked/.test(c.sub) && c.title === 'Saturday pairs', 'pairs phase text');
 c = card({ event_name: 'X', phase: 'matchups', cap_code: 'Q' }); ok(/matchup picks/.test(c.sub), 'captain matchup text');
 c = card({ event_name: 'X', phase: 'set' }); ok(c.title === 'Matchups are set', 'set phase');
+
+// the event card's Teams button: only on Cup cards, and it routes by who is asking
+ok(/formatClass\(evt\.format\) === 'format-cup' \? `\s*<button class="icon-action-btn" onclick="openCupSelection/.test(src), 'a Cup card carries the Teams button');
+{
+  const opened = []; const c2 = { encodeURIComponent, window: { open: u => opened.push(u) }, eventData: [{ id: 'e1', name: 'Test BFCup' }], BFE_API: 'x', currentPlayer: 'Jake', isCommissioner: () => false,
+    fetch: async () => ({ json: async () => ({ events: [{ event_name: 'Test BFCup', cap_code: 'ZZ99' }] }) }) };
+  vm.createContext(c2); vm.runInContext(extractFn(src, 'openCupSelection'), c2);
+  await vm.runInContext('openCupSelection("e1")', c2); ok(opened[0] === 'bf-cup-draft.html?event=Test%20BFCup&cap=ZZ99', 'a captain goes to his own screen');
+  c2.isCommissioner = () => true; await vm.runInContext('openCupSelection("e1")', c2); ok(opened[1] === 'bf-cup-draft.html?event=Test%20BFCup&host=1', 'the commissioner goes to the host screen');
+  c2.isCommissioner = () => false; c2.fetch = async () => { throw new Error('offline'); }; await vm.runInContext('openCupSelection("e1")', c2); ok(opened[2] === 'bf-cup-draft.html?event=Test%20BFCup', 'offline falls back to watching');
+}
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

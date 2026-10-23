@@ -6125,6 +6125,12 @@ function buildEventCard(evt, isPast) {
            Venue wasn't named explicitly but is the same category (identical
            openVenueViewerModal call as the rail's Course button); removed on
            the same reasoning — flag if that reads wider than intended. -->
+      <!-- BF Cup: a hot link to the team selection (host screen for the commissioner, captain screen for a captain, watch for everyone else) so nobody saves a URL. -->
+      ${formatClass(evt.format) === 'format-cup' ? `
+      <button class="icon-action-btn" onclick="openCupSelection('${evt.id}')">
+        <span class="icon-action-badge secondary">🏅</span>
+        <span class="icon-action-label">Teams</span>
+      </button>` : ''}
       ${['format-wally','format-scramble'].includes(formatClass(evt.format)) ? `
       <button class="icon-action-btn" onclick="openCardGroupSheet('${evt.id}')">
         <span class="icon-action-badge secondary">👥</span>
@@ -18163,6 +18169,22 @@ function cupLiveCard(ev, player) {
   else sub = 'Tap to see the Saturday matches';
   const url = 'bf-cup-draft.html?event=' + encodeURIComponent(ev.event_name) + (cap ? '&cap=' + encodeURIComponent(ev.cap_code) : '');
   return { title, sub, url, cap };
+}
+// The card's Teams button. Commissioner: the host screen. A captain whose draft is open: his own captain screen. Everyone else: the watch screen.
+async function openCupSelection(evtOrId) {
+  const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => e.id === evtOrId);
+  if (!evt || !evt.name) return;
+  let url = 'bf-cup-draft.html?event=' + encodeURIComponent(evt.name);
+  if (isCommissioner()) url += '&host=1';
+  else {
+    try {
+      const who = (typeof currentPlayer === 'string' && currentPlayer && currentPlayer !== 'Guest') ? `?player=${encodeURIComponent(currentPlayer)}` : '';
+      const data = await fetch(`${BFE_API}/bfe/cup-live${who}`).then(r => r.json());
+      const live = (data.events || []).find(e => e.event_name === evt.name);
+      if (live && live.cap_code) url += '&cap=' + encodeURIComponent(live.cap_code);
+    } catch (e) { /* fall back to watching */ }
+  }
+  window.open(url, '_blank');
 }
 function openCupDraft() { if (_cupLive) window.open(cupLiveCard(_cupLive).url, '_blank'); }
 async function renderCupBanner() {
