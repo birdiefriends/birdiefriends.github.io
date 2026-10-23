@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.33.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.34.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1370,6 +1370,7 @@ export default {
     //   POST /bfe/cup/act {…, action:'pair_set', pairs:[[a,b],…]}  a captain saves his Saturday pairs (any partial list); 'pair_lock' locks them
     //   (everyone paired, one odd man out allowed); 'pair_unlock' reopens them only while the other captain has not locked.
     //   POST /bfe/cup/act {…, action:'signoff'|'unsign'}  a captain signs off on the finished teams (or takes it back); both signed = the teams lock.
+    //   POST /bfe/cup/act {…, action:'order', stage:'draft'|'matchup', choice:'start'|'defer'|'toss'}  the captain in control chooses who goes first.
     //   POST /bfe/cup/act {…, action:'match_pick', pair:[a,b]}  the Saturday matchup draw: "put up and respond", alternating (BFEngine.cupMatchupView is the
     //   browser twin). The commissioner starts it by saving config.matchup = {started, first, log:[]}; when the last pick lands the matches are written
     //   into the pairs round (rounds[i].matches).
@@ -1428,6 +1429,7 @@ export default {
           const d = cfgObj.draft || {};
           if (!d.started || d.locked) return J({ error: 'The draft is not open' }, 409);
           const keys = (cfgObj.sides || []).map(sd => sd.key);
+          if (!keys.includes(d.first)) return J({ error: 'The order has not been chosen yet' }, 409);
           const first = keys.includes(d.first) ? d.first : keys[0], other = keys.find(k => k !== first);
           const caps = new Set((cfgObj.sides || []).map(sd => norm(sd.captain)).filter(Boolean));
           const pool = (d.pool || []).filter(n => !caps.has(norm(n)));
@@ -1446,6 +1448,36 @@ export default {
             if (lastP) newPicks.push({ n: newPicks.length + 1, side: nextSide, player: lastP, auto: true });
           }
           cfgObj.draft = Object.assign({}, d, { picks: newPicks });
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
+          return J({ ok: true, config: cupPublic(cfgObj, side) });
+        }
+        if (body.action === 'order') {
+          // The captain in control chooses Start / Defer / Coin toss (twin of BFEngine.cupOrderFirst). stage 'draft': who picks first; stage 'matchup': who puts up first.
+          const d = cfgObj.draft || {};
+          const keys = (cfgObj.sides || []).map(sd => sd.key);
+          const names = {}; (cfgObj.sides || []).forEach(sd => { names[sd.key] = sd.name || sd.key; });
+          if (!['start', 'defer', 'toss'].includes(body.choice)) return J({ error: 'Choose start, defer or toss' }, 400);
+          let control;
+          if (body.stage === 'matchup') {
+            if (!d.locked) return J({ error: 'The teams are not locked yet' }, 409);
+            const pk = cfgObj.pairs || {};
+            if (!keys.every(k => pk[k] && pk[k].locked === true)) return J({ error: 'Both captains must lock their pairs first' }, 409);
+            if (cfgObj.matchup && cfgObj.matchup.started) return J({ error: 'The matchup draw has already started' }, 409);
+            control = keys.find(k => k !== d.first);      // the captain who picked second in the team draft is in control of the next draw
+          } else {
+            if (!d.started || d.locked) return J({ error: 'The draft is not open' }, 409);
+            if (keys.includes(d.first)) return J({ error: 'The order is already set' }, 409);
+            control = keys.includes(d.control) ? d.control : null;
+          }
+          if (!control || control !== side) return J({ error: 'You are not the captain in control' }, 403);
+          const other = keys.find(k => k !== control);
+          let first, text;
+          if (body.choice === 'start') { first = control; text = names[control] + ' chose to go first'; }
+          else if (body.choice === 'defer') { first = other; text = names[control] + ' deferred, so ' + names[other] + ' goes first'; }
+          else { first = Math.random() < 0.5 ? keys[0] : keys[1]; text = 'Coin toss for ' + names[control] + ': ' + names[first] + ' goes first'; }
+          const rec = { stage: body.stage === 'matchup' ? 'matchup' : 'draft', by: control, choice: body.choice, first, text };
+          if (rec.stage === 'matchup') cfgObj.matchup = { started: true, first, log: [], choice: rec };
+          else cfgObj.draft = Object.assign({}, d, { first, orderChoice: rec });
           await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj, side) });
         }

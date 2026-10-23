@@ -150,4 +150,25 @@ ok(r.status === 200 && r.json.config.draft.locked === true && r.json.config.side
 r = await sact('AAA111', 'signoff'); ok(r.status === 409, 'nothing to sign once the teams are locked');
 await call('POST', '/bfe/cup', { event_name: 'Early Cup', config: Object.assign({}, dcfg, { draft: Object.assign({}, dcfg.draft, { picks: [] }) }), pin: '7797' });
 r = await call('POST', '/bfe/cup/act', { event_name: 'Early Cup', code: 'AAA111', action: 'signoff' }); ok(r.status === 409 && /picked/.test(r.json.error), 'no sign-off until every player is picked');
+
+// ── captain in control: Start / Defer / Coin toss ──
+const octl = { sides: dcfg.sides, points: dcfg.points, rounds: [], access: dcfg.access, draft: { started: true, control: 'A', pool: ['P1', 'P2', 'P3', 'P4', 'Jake', 'Nate'], picks: [], locked: false } };
+await call('POST', '/bfe/cup', { event_name: 'Ctl Cup', config: octl, pin: '7797' });
+const oact = (code, extra) => call('POST', '/bfe/cup/act', Object.assign({ event_name: 'Ctl Cup', code, action: 'order', stage: 'draft' }, extra));
+r = await call('POST', '/bfe/cup/act', { event_name: 'Ctl Cup', code: 'AAA111', action: 'pick', player: 'P1' }); ok(r.status === 409 && /order/.test(r.json.error), 'no picks until the order is chosen');
+r = await oact('BBB222', { choice: 'start' }); ok(r.status === 403, 'only the captain in control can choose');
+r = await oact('AAA111', { choice: 'maybe' }); ok(r.status === 400, 'an unknown choice is refused');
+r = await oact('AAA111', { choice: 'defer' }); ok(r.status === 200 && r.json.config.draft.first === 'B' && /deferred/.test(r.json.config.draft.orderChoice.text), 'deferring gives the other side the first pick');
+r = await oact('AAA111', { choice: 'start' }); ok(r.status === 409, 'the order can only be chosen once');
+r = await call('POST', '/bfe/cup/act', { event_name: 'Ctl Cup', code: 'BBB222', action: 'pick', player: 'P1' }); ok(r.status === 200, 'then the first-pick side can pick');
+await call('POST', '/bfe/cup', { event_name: 'Ctl Cup', config: octl, pin: '7797' });
+const seen = new Set(); for (let i = 0; i < 12 && seen.size < 2; i++) { await call('POST', '/bfe/cup', { event_name: 'Ctl Cup', config: octl, pin: '7797' }); r = await oact('AAA111', { choice: 'toss' }); seen.add(r.json.config.draft.first); ok(['A', 'B'].includes(r.json.config.draft.first) && /Coin toss/.test(r.json.config.draft.orderChoice.text), 'a coin toss picks a side'); }
+ok(seen.size === 2, 'the coin toss really is random (both sides came up)');
+// Saturday matchup draw: the side that picked second is in control
+const ocfg2 = Object.assign({}, pcfg, { draft: Object.assign({}, pcfg.draft, { locked: true, first: 'A' }), pairs: { A: { list: [['Jake', 'A1'], ['A2', 'A3']], locked: true }, B: { list: [['Nate', 'B1'], ['B2', 'B3']], locked: true } }, matchup: undefined });
+await call('POST', '/bfe/cup', { event_name: 'Mu Cup', config: ocfg2, pin: '7797' });
+const oMu = (code, extra) => call('POST', '/bfe/cup/act', Object.assign({ event_name: 'Mu Cup', code, action: 'order', stage: 'matchup' }, extra));
+r = await oMu('AAA111', { choice: 'start' }); ok(r.status === 403, 'the side that picked first is not in control of the matchup draw');
+r = await oMu('BBB222', { choice: 'start' }); ok(r.status === 200 && r.json.config.matchup.started && r.json.config.matchup.first === 'B', 'the second-picking captain starts the matchup draw');
+r = await oMu('BBB222', { choice: 'start' }); ok(r.status === 409, 'it cannot be started twice');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

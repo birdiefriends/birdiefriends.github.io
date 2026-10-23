@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.33.0';
+  const ENGINE_VERSION = '1.34.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2178,13 +2178,24 @@
     const taken = new Set(picks.map(pk => norm(pk.player)));
     const first = keys.includes(d.first) ? d.first : keys[0];
     const other = keys.find(k => k !== first);
+    const awaitingOrder = !!d.started && !keys.includes(d.first);      // a captain in control has not chosen who picks first yet
     const mode = d.mode === 'alternate' ? 'alternate' : 'snake';
     const order = mode === 'alternate' ? cupAlternatingOrder(pool.length, first, other) : cupSnakeOrder(pool.length, first, other);
     const teams = {};
     sides.forEach(sd => { teams[sd.key] = (sd.captain ? [sd.captain] : []).concat(picks.filter(pk => pk.side === sd.key).map(pk => pk.player)); });
     const remaining = pool.filter(n => !taken.has(norm(n)));
     const done = pool.length > 0 && remaining.length === 0;
-    return { mode, first, order, pickNo: picks.length + 1, total: pool.length, onClock: done || !pool.length ? null : order[picks.length], teams, remaining, picks, done };
+    return { mode, first, order, pickNo: picks.length + 1, total: pool.length, onClock: done || !pool.length || awaitingOrder ? null : order[picks.length], teams, remaining, picks, done, awaitingOrder, control: keys.includes(d.control) ? d.control : null };
+  }
+  // "Captain in control": he chooses to Start (go first), Defer (the other side goes first) or flip a Coin toss. Pure; `rand` is a 0..1 number for the toss.
+  // Returns { first, text } where first is the side that goes first (picks first in the draft, puts up first in the matchup draw).
+  function cupOrderFirst(choice, control, keys, rand, names) {
+    const other = (keys || []).find(k => k !== control);
+    const nm = k => (names && names[k]) || k;
+    if (choice === 'start') return { first: control, text: nm(control) + ' chose to go first' };
+    if (choice === 'defer') return { first: other, text: nm(control) + ' deferred, so ' + nm(other) + ' goes first' };
+    if (choice === 'toss') { const f = rand < 0.5 ? keys[0] : keys[1]; return { first: f, text: 'Coin toss for ' + nm(control) + ': ' + nm(f) + ' goes first' }; }
+    return null;
   }
   // Pure: the draft after the side on the clock takes `player` (null + reason when not allowed).
   function cupDraftPick(cfg, player) {
@@ -2490,7 +2501,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupHandicapRule, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
+    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupHandicapRule, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });

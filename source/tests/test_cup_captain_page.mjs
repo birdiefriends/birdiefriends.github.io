@@ -64,4 +64,17 @@ ok(posts0() && /^[A-Z0-9]{6}$/.test(posts0().A) && /^[A-Z0-9]{6}$/.test(posts0()
   dm = await open('?host=1', '7797'); dd = dm.window.document; ok(!dd.getElementById('signoff') && /host override/.test(dd.body.textContent), 'the host can still lock, labeled as an override');
   doc = saved;
 }
+
+// team draft with a captain in control: no first side yet, he sees Start / Defer / Coin toss, the other captain waits
+{
+  const saved = JSON.parse(JSON.stringify(doc));
+  doc.access = { A: 'AAA111', B: 'BBB222' }; doc.draft = { started: true, control: 'A', pool: ['P1', 'P2'], stats: {}, picks: [], locked: false };
+  let dm = await open('?cap=AAA111'); let dd = dm.window.document;
+  ok(dd.querySelectorAll('[data-ochoice]').length === 3 && /You are in control/.test(dd.body.textContent) && !dd.querySelector('tr.pr.can'), 'the captain in control sees the three choices and cannot pick yet');
+  dm = await open('?cap=BBB222'); dd = dm.window.document;
+  ok(!dd.querySelector('[data-ochoice]') && /Team Jake is deciding/.test(dd.body.textContent), 'the other captain waits and sees who is deciding');
+  dm = await open('?host=1', '7797'); dd = dm.window.document;
+  ok(dd.querySelectorAll('[data-oforce]').length === 2, 'the host can still decide for him');
+  doc = saved;
+}
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

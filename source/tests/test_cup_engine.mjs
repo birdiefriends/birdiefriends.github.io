@@ -292,5 +292,17 @@ ok(!E.cupValidate(badSize).ok, 'singles cannot reuse a pairs session');
   ok(r.stats['ann lee'].avg === 2 && r.stats['ann lee'].birdies === 3 && r.stats['ann lee'].rank === 2, 'series: avg, birdie holes (4+), rank among everyone');
   ok(r.stats['Bo Day'].rank === 3 && r.matched === 2 && r.missing[0] === 'Andrew K', 'series: a player with no rounds is missing, not zero');
 }
+
+// ---------- captain in control ----------
+{
+  const K = ['A', 'B'], nm = { A: 'Team Jake', B: 'Team Nate' };
+  eq(E.cupOrderFirst('start', 'A', K, 0.5, nm).first, 'A', 'start: the captain in control goes first');
+  eq(E.cupOrderFirst('defer', 'A', K, 0.5, nm).first, 'B', 'defer: the other side goes first');
+  eq([E.cupOrderFirst('toss', 'A', K, 0.2, nm).first, E.cupOrderFirst('toss', 'A', K, 0.8, nm).first], ['A', 'B'], 'toss: the coin decides');
+  ok(/deferred/.test(E.cupOrderFirst('defer', 'A', K, 0, nm).text) && E.cupOrderFirst('nope', 'A', K, 0, nm) === null, 'text says what happened; unknown choice is null');
+  const cfg = { sides: [{ key: 'A', captain: 'Jake' }, { key: 'B', captain: 'Nate' }], draft: { started: true, control: 'A', pool: ['P1', 'P2'], picks: [] } };
+  const v = E.cupDraftView(cfg); ok(v.awaitingOrder && v.onClock === null && v.control === 'A', 'a started draft with no first side waits for the captain in control');
+  cfg.draft.first = 'B'; ok(!E.cupDraftView(cfg).awaitingOrder && E.cupDraftView(cfg).onClock === 'B', 'once chosen, the draft runs');
+}
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

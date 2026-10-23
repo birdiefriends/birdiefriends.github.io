@@ -81,7 +81,7 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.33.0"></script>
+<script src="bf_engine.js?v=1.34.0"></script>
 <script>
 (function () {
   'use strict';
@@ -293,15 +293,26 @@ button:disabled{opacity:.4;cursor:default}
     var line = E.cupMatchStrokeText(mt, hcps, rule, fm, sideName);
     return '<div class="match"><div class="n">Match ' + (i + 1) + '</div><div class="vs">' + side(mt.sides[0]) + '<div class="x">vs</div>' + side(mt.sides[1]) + '</div><div class="num" style="text-align:center;margin-top:6px;font-size:.82rem;color:var(--dim)">' + esc(line) + '</div></div>';
   }
+  // The captain in control chooses to go first, defer, or flip a coin. `stage` is 'draft' or 'matchup'. Everyone else sees who is deciding; the host can always decide for him.
+  function orderHtml(stage, control) {
+    var what = stage === 'matchup' ? 'put up the first pair' : 'pick first';
+    var mine = !!YOU && YOU === control && !(HOST && pin);
+    var out = '<div class="card"><h2>' + (mine ? 'You are in control' : esc(sideName(control)) + ' is deciding') + '</h2>';
+    if (mine) out += '<p class="hint">Choose who will ' + what + ' in the ' + (stage === 'matchup' ? 'Saturday matchup draw' : 'team draft') + '.</p><div class="toolbar"><button data-ochoice="start" data-ostage="' + stage + '">We ' + (stage === 'matchup' ? 'put up first' : 'pick first') + '</button><button class="sec" data-ochoice="defer" data-ostage="' + stage + '">Defer to them</button><button class="sec" data-ochoice="toss" data-ostage="' + stage + '">🪙 Coin toss</button></div>';
+    else out += '<p class="hint">' + esc(sideName(control)) + ' chooses whether to ' + what + ', defer, or flip a coin.</p>';
+    if (HOST && pin) out += '<div class="toolbar"><span class="hint">Host override:</span>' + cfg.sides.map(function (sd) { return '<button class="sec" data-oforce="' + sd.key + '" data-ostage="' + stage + '">' + esc(sd.name || sd.key) + ' goes first</button>'; }).join('') + '</div>';
+    return out + '</div>';
+  }
   function matchupHtml() {
     if (!(cfg.draft || {}).locked || !E.cupPairsRevealed(cfg)) return '';
     var mu = E.cupMatchupView(cfg), host = HOST && !!pin;
     var out = '<div class="card"><h2>Saturday matchups</h2>';
     if (!mu.started) {
       var dfirst = (cfg.draft || {}).first, starter = cfg.sides.map(function (x) { return x.key; }).filter(function (k) { return k !== dfirst; })[0] || cfg.sides[0].key;
-      if (!host) return out + '<p class="hint">Both sides are locked. The commissioner will start the matchup draw: the captains take turns putting up a pair and answering with one of theirs.</p></div>';
-      return out + '<p class="hint">The captains take turns: one puts up a pair, the other answers with the pair that will face it. Then they swap, until the last two pairs meet automatically.</p><div class="toolbar"><label class="hint">Who puts up first <select id="muFirst">'
-        + cfg.sides.map(function (sd) { return '<option value="' + sd.key + '"' + (sd.key === starter ? ' selected' : '') + '>' + esc(sd.name || sd.key) + (sd.key === starter ? ' (lost the coin toss)' : '') + '</option>'; }).join('') + '</select></label><button id="muStart">Start the matchup draw</button></div></div>';
+      var ctl = cfg.sides.map(function (x) { return x.key; }).filter(function (k) { return k !== dfirst; })[0];
+      if (!host) return out + '</div>' + (ctl ? orderHtml('matchup', ctl) : '<div class="card"><p class="hint">Both sides are locked. The matchup draw starts soon.</p></div>');
+      return out + '</div>' + orderHtml('matchup', ctl) + '<div class="card"><p class="hint">Host override. The captains take turns: one puts up a pair, the other answers with the pair that will face it. Then they swap, until the last two pairs meet automatically.</p><div class="toolbar"><label class="hint">Who puts up first <select id="muFirst">'
+        + cfg.sides.map(function (sd) { return '<option value="' + sd.key + '"' + (sd.key === starter ? ' selected' : '') + '>' + esc(sd.name || sd.key) + (sd.key === starter ? ' (picked second)' : '') + '</option>'; }).join('') + '</select></label><button id="muStart">Start the matchup draw</button></div></div>';
     }
     if (!mu.even) return out + '<p class="err">The two sides have different numbers of pairs, so the draw cannot run. The commissioner can reopen a side.</p></div>';
     var clock = mu.onClock, can = !!clock && ((host) || (!!YOU && YOU === clock));
@@ -373,12 +384,14 @@ button:disabled{opacity:.4;cursor:default}
       + '<textarea id="statsTxt" rows="5" placeholder="Player&#9;Avg Achievement&#9;Birdie Count&#9;HCP&#9;Player Ranking"></textarea><div class="toolbar"><button class="sec" id="statsApply">Apply stats</button></div></div>'
       + '<div class="card"><h2>3 · Pick order</h2><p class="hint">Snake: 1, then 2 and 2, back and forth, so the side that picks first does not run away with it. Playground: one pick each, Jake, Nate, Jake, Nate. The side that picks first is chosen below.</p>'
       + '<div class="toolbar"><button class="' + ((d.mode === 'alternate') ? 'sec' : '') + '" data-mode="snake">' + ((d.mode === 'alternate') ? '' : '✓ ') + 'Snake</button><button class="' + ((d.mode === 'alternate') ? '' : 'sec') + '" data-mode="alternate">' + ((d.mode === 'alternate') ? '✓ ' : '') + 'Playground (alternate)</button></div>'
-      + '<h3 style="margin:.8rem 0 .2rem">Who picks first</h3>'
+      + '<h3 style="margin:.8rem 0 .2rem">Captain in control</h3><p class="hint">The less skilled captain chooses, on his own phone, to pick first, defer, or flip a coin. Leave it on "I decide" to set who picks first yourself below.</p>'
+      + '<div class="toolbar"><select id="ctlSel"><option value="">I decide (host sets it)</option>' + cfg.sides.map(function (sd) { return '<option value="' + sd.key + '"' + (d.control === sd.key ? ' selected' : '') + '>' + esc(sd.captain ? sd.captain + ' (' + (sd.name || sd.key) + ')' : (sd.name || sd.key)) + ' is in control</option>'; }).join('') + '</select></div>'
+      + '<h3 style="margin:.8rem 0 .2rem">Or set who picks first yourself</h3>'
       + '<div class="toolbar"><span class="coin' + (coinFlip ? ' flip' : '') + '">🪙</span><button id="toss">Toss the coin</button>'
       + cfg.sides.map(function (s) { return '<button class="sec" data-first="' + s.key + '">' + esc(s.name || 'Side ' + s.key) + ' picks first</button>'; }).join('') + '</div>'
-      + '<div><b>' + (first ? esc(sideName(first)) + ' picks first' : 'Not decided yet') + '</b></div></div>'
+      + '<div><b>' + (first ? esc(sideName(first)) + ' picks first' : d.control ? esc(sideName(d.control)) + '\'s captain will choose when the draft starts' : 'Not decided yet') + '</b></div></div>'
       + (missing ? '<p class="err">Both sides need a captain. Set them in BFE-Admin, section 4b.</p>' : '')
-      + '<div class="toolbar"><button id="startDraft"' + (missing || !first || !(d.pool || []).length ? ' disabled' : '') + '>Start the draft</button></div>';
+      + '<div class="toolbar"><button id="startDraft"' + (missing || !(first || d.control) || !(d.pool || []).length ? ' disabled' : '') + '>Start the draft</button></div>';
   }
 
   function render() {
@@ -397,6 +410,8 @@ button:disabled{opacity:.4;cursor:default}
       app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html; wire(); return;
     }
     var clock = v.onClock;
+    if (d.orderChoice && d.orderChoice.text) html += '<div class="banner" style="background:#0a3161">🎲 ' + esc(d.orderChoice.text) + '</div>';
+    if (v.awaitingOrder) html += orderHtml('draft', v.control);
     html += '<div class="banner live"><span class="dot"></span>' + (v.done ? (d.locked ? '🏁 Teams are set' : '✅ Every player is picked') : 'LIVE · Pick ' + v.pickNo + ' of ' + v.total + ' · <span style="color:#fff;text-decoration:underline">' + esc(sideName(clock)) + '</span> on the clock') + '</div>';
     if (YOU && !v.done) html += '<div class="banner" style="background:' + (v.onClock === YOU ? '#1a7f3c' : '#0a3161') + '">' + (v.onClock === YOU ? 'YOUR PICK, ' + esc(sideName(YOU)) + ' captain. Tap a player.' : 'Waiting for ' + esc(sideName(v.onClock)) + ' to pick') + '</div>';
     if (v.done && !d.locked) {
@@ -460,6 +475,7 @@ button:disabled{opacity:.4;cursor:default}
       });
       notice = r.matched + ' matched' + (r.unmatched.length ? '; not in the player list: ' + r.unmatched.join(', ') : '') + '.'; save();
     });
+    var cs = $('ctlSel'); if (cs) cs.addEventListener('change', function () { commitPool(); var dd = draft(); if (cs.value) { dd.control = cs.value; dd.first = null; } else { delete dd.control; } save(); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) { b.addEventListener('click', function () { commitPool(); draft().mode = b.getAttribute('data-mode'); save(); }); });
     on('loadSeries', function () {
       commitPool(); var d = draft(); d.stats = d.stats || {};
@@ -474,9 +490,9 @@ button:disabled{opacity:.4;cursor:default}
     });
     on('toss', function () {
       commitPool(); var d = draft(); coinFlip = true; render();
-      setTimeout(function () { d.first = cfg.sides[Math.random() < 0.5 ? 0 : 1].key; coinFlip = false; save(); }, 1400);
+      setTimeout(function () { d.first = cfg.sides[Math.random() < 0.5 ? 0 : 1].key; delete d.control; coinFlip = false; save(); }, 1400);
     });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-first]'), function (b) { b.addEventListener('click', function () { commitPool(); draft().first = b.getAttribute('data-first'); save(); }); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-first]'), function (b) { b.addEventListener('click', function () { commitPool(); draft().first = b.getAttribute('data-first'); delete draft().control; save(); }); });
     on('startDraft', function () { commitPool(); var d = draft(); if (!cfg.access) cfg.access = { A: genCode(), B: genCode() }; d.started = true; d.picks = d.picks || []; save(); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-pick]'), function (b) { b.addEventListener('click', function () { if (canPick(E.cupDraftView(cfg))) { pending = b.getAttribute('data-pick'); render(); } }); });
     on('cancelPick', function () { pending = null; render(); });
@@ -495,6 +511,17 @@ button:disabled{opacity:.4;cursor:default}
       cfg.draft = r.draft; lastPickNo = r.draft.picks.length; save();
     });
     on('undo', function () { cfg.draft = E.cupDraftUndo(cfg); lastPickNo = cfg.draft.picks.length; save(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ochoice]'), function (b) { b.addEventListener('click', function () {
+      busy = true;
+      fetch(WORKER + '/bfe/cup/act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT, code: CAP, action: 'order', stage: b.getAttribute('data-ostage'), choice: b.getAttribute('data-ochoice') }) })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); cfg = j.config; error = ''; }); })
+        .catch(function (e) { error = e.message; }).then(function () { busy = false; return load(); }).then(render);
+    }); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-oforce]'), function (b) { b.addEventListener('click', function () {
+      var k = b.getAttribute('data-oforce');
+      if (b.getAttribute('data-ostage') === 'matchup') cfg.matchup = { started: true, first: k, log: [] }; else draft().first = k;
+      save();
+    }); });
     ['signoff', 'unsign'].forEach(function (act) { on(act, function () {
       busy = true;
       fetch(WORKER + '/bfe/cup/act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT, code: CAP, action: act }) })

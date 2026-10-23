@@ -17,6 +17,7 @@ const fakeFetch = async (u, o) => {
   calls.push({ u, o });
   if (/\/bfe\/cup\/act/.test(u)) {
     const b = JSON.parse(o.body), side = b.code === 'AAA111' ? 'A' : 'B';
+    if (b.action === 'order') { const f = E.cupOrderFirst(b.choice, side, ['A', 'B'], 0.9, {}); doc.matchup = { started: true, first: f.first, log: [], choice: { text: f.text } }; return J({ ok: true, config: pub() }); }
     const r = E.cupMatchupPick(doc, side, b.pair); if (!r.ok) return J({ error: r.reason }, 409);
     doc.matchup = r.matchup; const v = E.cupMatchupView(doc); if (v.done) { doc.rounds[0].matches = v.matches; doc.matchup.done = true; }
     return J({ ok: true, config: pub() });
@@ -35,9 +36,9 @@ async function open(query, pin) {
 }
 const click = async (dom, sel) => { const el = dom.window.document.querySelector(sel); if (!el) throw new Error('missing ' + sel); el.click(); await tick(120); };
 let dom = await open('?cap=AAA111'); let d = dom.window.document;
-ok(/Saturday matchups/.test(d.body.textContent) && /commissioner will start/.test(d.body.textContent) && !d.getElementById('muStart'), 'before the host starts, a captain just waits');
+ok(/Saturday matchups/.test(d.body.textContent) && /Team Nate is deciding/.test(d.body.textContent) && !d.getElementById('muStart') && !d.querySelector('[data-ochoice]'), 'the other captain just waits and sees who is deciding');
 dom = await open('?host=1', '7797'); d = dom.window.document;
-ok(d.getElementById('muStart') && /lost the coin toss/.test(d.getElementById('muFirst').innerHTML) && d.getElementById('muFirst').value === 'B', 'host starts it; the coin-toss loser is the default starter');
+ok(d.getElementById('muStart') && /picked second/.test(d.getElementById('muFirst').innerHTML) && d.getElementById('muFirst').value === 'B', 'host starts it; the coin-toss loser is the default starter');
 await click(dom, '#muStart'); d = dom.window.document;
 ok(doc.matchup && doc.matchup.first === 'B' && /Team Nate/.test(d.querySelector('.mu-banner').textContent) && /puts up a pair/.test(d.querySelector('.mu-banner').textContent), 'draw is on, Nate puts up first');
 dom = await open('?cap=AAA111'); d = dom.window.document;
@@ -61,4 +62,11 @@ ok(/Fourball: a2 1, b3 3, b4 4/.test(d.querySelector('.match').textContent), 'wi
 dom = await open('?host=1', '7797'); d = dom.window.document;
 await click(dom, '#muUndo'); d = dom.window.document;
 ok(doc.matchup.log.length === 1 && doc.rounds[0].matches.length === 0 && !doc.matchup.done, 'host undo takes back the last pick and clears the written matches');
+
+// the captain in control (picked second in the team draft = Team Nate) chooses Start / Defer / Coin toss himself
+doc.matchup = undefined;
+dom = await open('?cap=BBB222'); d = dom.window.document;
+ok(d.querySelectorAll('[data-ochoice]').length === 3 && /You are in control/.test(d.body.textContent), 'the captain in control sees Start, Defer and Coin toss');
+await click(dom, '[data-ochoice="defer"]');
+ok(doc.matchup && doc.matchup.started && doc.matchup.first === 'A', 'deferring hands the first put-up to the other side');
 console.log(`test_cup_matchup_page: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
