@@ -36,4 +36,13 @@ ok(/Paste the stats table/.test(d.body.textContent), 'Apply stats with nothing p
 // an event with no roster says so
 dom = await open('?host=1&event=Empty'); d = dom.window.document; d.getElementById('loadRoster').click(); await tick(200); d = dom.window.document;
 ok(/has no roster saved yet/.test(d.body.textContent), 'an event without a roster explains how to save one');
+
+// opening the host screen for a real (non-practice) event fills the roster, handicaps and series stats by itself
+doc.draft.pool = []; doc.draft.stats = {}; doc.draft.started = false; calls.length = 0;
+dom = await open('?host=1&event=Real%20Cup'); d = dom.window.document; await tick(300); d = dom.window.document;
+ok(calls.some(u => /bfe\/events\?event=Real%20Cup$/.test(u)) && calls.some(u => /results\.html/.test(u)), 'host screen reads the roster and the series data on open, no button');
+ok(doc.draft.pool.length >= 2 && doc.draft.stats['Ann Lee'] && doc.draft.stats['Ann Lee'].hcp === 9.1, 'the pool and handicaps are filled and saved');
+ok(/automatically/.test(d.body.textContent), 'and it says so');
+doc.draft.pool = ['Keep Me']; calls.length = 0; dom = await open('?host=1&event=Real%20Cup'); await tick(300);
+ok(doc.draft.pool.join() === 'Keep Me', 'an existing player list is never replaced by the automatic load');
 console.log(`test_cup_setup_page: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

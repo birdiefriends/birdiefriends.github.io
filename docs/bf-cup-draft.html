@@ -108,6 +108,33 @@ button:disabled{opacity:.4;cursor:default}
       return r.json().then(function (j) { cfg = j.config; YOU = j.you || ''; error = ''; });
     }).catch(function (e) { error = 'Could not reach the server: ' + e.message; });
   }
+  // Setup opens already filled in: the roster and handicaps from the event (BFE-Admin) and the series stats, with no button to press.
+  // Runs once per page load, for the host, before the draft starts. The player list is only set when it is empty (so typed edits are never wiped);
+  // handicaps and series stats are refreshed every time. The practice copy keeps its sample data.
+  var autoDone = false;
+  function autoFill() {
+    if (autoDone || !cfg || !(HOST && pin) || PRACTICE || (cfg.draft && cfg.draft.started)) return Promise.resolve(false);
+    autoDone = true;
+    var d = draft(); d.stats = d.stats || {}; var base = EVENT, got = { players: 0, hcp: 0, series: 0, rosterMissing: false };
+    return fetch(WORKER + '/bfe/events?event=' + encodeURIComponent(base)).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      var roster = j && j.config ? (j.config.roster || []).filter(function (p) { return p && p.name && !p.withdrawn; }) : [];
+      if (!roster.length) { got.rosterMissing = true; return; }
+      if (!(d.pool || []).length) { d.pool = roster.map(function (p) { return String(p.name).trim(); }); cfg.pool = d.pool; }
+      got.players = d.pool.length;
+      roster.forEach(function (p) { var nm = String(p.name).trim(); if (p.hcp !== null && p.hcp !== undefined && p.hcp !== '' && isFinite(Number(p.hcp))) { d.stats[nm] = Object.assign({}, d.stats[nm], { hcp: Number(p.hcp) }); got.hcp++; } });
+    }).catch(function () { got.rosterMissing = true; }).then(function () {
+      var names = (d.pool || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean));
+      if (!names.length) return;
+      return fetch('results.html?_=' + Date.now()).then(function (r) { return r.text(); }).then(function (html) {
+        var m = html.match(/const ALL_SERIES_DATA = (\{[\s\S]*?\});\s*\n/); if (!m) return;
+        var r = E.cupSeriesStats(JSON.parse(m[1]), names);
+        Object.keys(r.stats).forEach(function (k) { var cur = d.stats[k] || {}, nw = r.stats[k]; d.stats[k] = { hcp: cur.hcp != null ? cur.hcp : null, rank: nw.rank, avg: nw.avg, birdies: nw.birdies }; got.series++; });
+      }).catch(function () {});
+    }).then(function () {
+      notice = got.rosterMissing && !got.players ? 'The event has no roster saved yet, so type the players below (or save the roster in BFE-Admin, section 3).' : 'Loaded ' + got.players + ' players, ' + got.hcp + ' handicaps and ' + got.series + ' series records automatically.';
+      return save();
+    });
+  }
   function save() {
     busy = true;
     return fetch(WORKER + '/bfe/cup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT, config: cfg, pin: pin }) })
@@ -339,10 +366,10 @@ button:disabled{opacity:.4;cursor:default}
       return '<tr style="border-top:1px solid var(--faint)"><td style="padding:3px 8px 3px 0">' + esc(n) + (cfg.sides.some(function (sd) { return sd.captain === n; }) ? ' 👑' : '') + '</td>' + c(x.hcp) + c(x.rank, 0) + c(x.avg) + c(x.birdies, 0) + '</tr>'; }).join('') + '</table></div>' : '<p class="hint">No players yet.</p>';
     var noticeBanner = notice && !/practice/i.test(notice) ? '<div class="banner" style="background:#1a7f3c">' + esc(notice) + '</div>' : '';
     return noticeBanner + practiceCard + '<div class="card"><h2>1 · Players</h2><p class="hint">Everyone in the draft, one name per line. The captains are placed automatically and don\'t need to be listed. Every button below saves what is in this box first.</p>'
-      + '<div class="toolbar"><button id="loadRoster">Load players and handicaps from the event roster (BFE-Admin)</button></div>'
+      + '<div class="toolbar"><button id="loadRoster">Reload players and handicaps from the event roster</button></div>'
       + '<textarea id="poolTxt" rows="8">' + esc(poolText) + '</textarea><div class="toolbar"><button class="sec" id="poolSave">Save the list</button><button class="sec" id="fillHcp">Fill handicaps from Membership</button></div></div>'
       + '<div class="card"><h2>Players and stats so far</h2><p class="hint">' + tnames.length + ' players, ' + withHcp + ' with a handicap. Anything in red is still missing.</p>' + table + '</div>'
-      + '<div class="card"><h2>2 · Player stats</h2><div class="toolbar"><button id="loadSeries">Load series stats (BFSeries results)</button></div><p class="hint">Pulls each player\'s series rank, average points over/under quota and birdie count from the published results, the same data My Game uses. Anyone with no rounds shows – and is left out of the balance. Or paste a table:  The GS Raw Data sheet works as is (Player, Played, Performance): each player gets points over/under quota per round. Or paste Player, Ranking, Avg points, Birdie count, HCP. Players with no data just show – and are left out of the balance.</p>'
+      + '<div class="card"><h2>2 · Player stats</h2><div class="toolbar"><button id="loadSeries">Reload series stats</button></div><p class="hint">Pulls each player\'s series rank, average points over/under quota and birdie count from the published results, the same data My Game uses. Anyone with no rounds shows – and is left out of the balance. Or paste a table:  The GS Raw Data sheet works as is (Player, Played, Performance): each player gets points over/under quota per round. Or paste Player, Ranking, Avg points, Birdie count, HCP. Players with no data just show – and are left out of the balance.</p>'
       + '<textarea id="statsTxt" rows="5" placeholder="Player&#9;Avg Achievement&#9;Birdie Count&#9;HCP&#9;Player Ranking"></textarea><div class="toolbar"><button class="sec" id="statsApply">Apply stats</button></div></div>'
       + '<div class="card"><h2>3 · Pick order</h2><p class="hint">Snake: 1, then 2 and 2, back and forth, so the side that picks first does not run away with it. Playground: one pick each, Jake, Nate, Jake, Nate. The side that picks first is chosen below.</p>'
       + '<div class="toolbar"><button class="' + ((d.mode === 'alternate') ? 'sec' : '') + '" data-mode="snake">' + ((d.mode === 'alternate') ? '' : '✓ ') + 'Snake</button><button class="' + ((d.mode === 'alternate') ? '' : 'sec') + '" data-mode="alternate">' + ((d.mode === 'alternate') ? '✓ ' : '') + 'Playground (alternate)</button></div>'
@@ -388,7 +415,7 @@ button:disabled{opacity:.4;cursor:default}
     function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
     pairsWire(); matchupWire();
     Array.prototype.forEach.call(document.querySelectorAll('[data-sort]'), function (h) { h.addEventListener('click', function () { sortBy = h.getAttribute('data-sort'); render(); }); });
-    on('pinGo', function () { pin = $('pinIn').value.trim(); try { sessionStorage.setItem('bf_cup_pin', pin); } catch (e) {} render(); });
+    on('pinGo', function () { pin = $('pinIn').value.trim(); try { sessionStorage.setItem('bf_cup_pin', pin); } catch (e) {} render(); autoFill(); });
     function commitPool() {
       var el = $('poolTxt'); if (!el) return (cfg.draft && cfg.draft.pool) || [];
       var names = el.value.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
@@ -496,7 +523,7 @@ button:disabled{opacity:.4;cursor:default}
     });
   }
 
-  load().then(function () { render(); });
+  load().then(function () { render(); return autoFill(); });
   setInterval(function () {
     if (busy || !cfg) return;
     if (HOST && !CAP && !(cfg.draft && cfg.draft.locked && pin)) return;
