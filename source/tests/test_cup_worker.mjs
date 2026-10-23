@@ -62,7 +62,7 @@ r = await act('AAA111', 'P2'); ok(r.status === 409, 'snake: B has picks 2 and 3,
 r = await act('BBB222', 'P1'); ok(r.status === 409 && /not available/.test(r.json.error), 'a picked player is not available');
 r = await act('BBB222', 'P2'); ok(r.status === 200, 'B picks 2');
 r = await act('BBB222', 'P3'); ok(r.status === 200, 'B picks 3 (snake)');
-r = await act('AAA111', 'P4'); ok(r.status === 200 && r.json.config.draft.picks.length === 4, 'A picks 4');
+ok(r.json.config.draft.picks.length === 4 && r.json.config.draft.picks[3].auto === true && r.json.config.draft.picks[3].side === 'A', 'B\'s second pick leaves one player: A gets him automatically');
 r = await act('AAA111', 'P4'); ok(r.status === 409, 'nothing left to pick');
 r = await call('GET', '/bfe/cup-live');
 ok(r.status === 200 && r.json.events.some(e => e.event_name === 'Draft Cup' && e.picks === 4 && e.total === 6), 'the live list shows the open draft');

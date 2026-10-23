@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.31.0';
+  const ENGINE_VERSION = '1.32.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2192,11 +2192,16 @@
     if (!v.onClock) return { ok: false, reason: 'The draft is not open' };
     const hit = v.remaining.find(n => norm(n) === norm(player));
     if (!hit) return { ok: false, reason: player + ' is not available' };
-    const draft = Object.assign({}, cfg.draft, { picks: v.picks.concat([{ n: v.pickNo, side: v.onClock, player: hit }]) });
+    let draft = Object.assign({}, cfg.draft, { picks: v.picks.concat([{ n: v.pickNo, side: v.onClock, player: hit }]) });
+    // The last player has only one place to go: the side with the open slot takes him, no pick or confirm needed.
+    const after = cupDraftView(Object.assign({}, cfg, { draft }));
+    if (after.onClock && after.remaining.length === 1) draft = Object.assign({}, draft, { picks: draft.picks.concat([{ n: after.pickNo, side: after.onClock, player: after.remaining[0], auto: true }]) });
     return { ok: true, draft };
   }
   function cupDraftUndo(cfg) {
-    const picks = ((cfg.draft || {}).picks || []).slice(0, -1);
+    let picks = ((cfg.draft || {}).picks || []).slice();
+    const last = picks.pop();
+    if (last && last.auto) picks.pop();      // an automatic last pick goes back together with the pick that caused it
     return Object.assign({}, cfg.draft, { picks });
   }
   // Pasted stats table (tab or comma separated, header row). Columns found by name:

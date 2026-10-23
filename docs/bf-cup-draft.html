@@ -81,7 +81,7 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.31.0"></script>
+<script src="bf_engine.js?v=1.32.0"></script>
 <script>
 (function () {
   'use strict';
@@ -183,7 +183,7 @@ button:disabled{opacity:.4;cursor:default}
       var picks = v.picks.filter(function (p) { return p.side === sd.key; });
       return '<div class="card team ' + colorOf(sd, si) + '"><h2>' + esc(sd.name || 'Side ' + sd.key) + '</h2>'
         + (sd.captain ? '<div class="slot cap"><span>👑 ' + esc(sd.captain) + '</span><span class="st">' + esc(stLine(sd.captain)) + '</span></div>' : '')
-        + picks.map(function (p) { return '<div class="slot' + (p.n === lastPickNo && p.n === v.picks.length ? ' new' : '') + '"><span><span class="n">#' + p.n + '</span>' + esc(p.player) + '</span><span class="st">' + esc(stLine(p.player)) + '</span></div>'; }).join('')
+        + picks.map(function (p) { return '<div class="slot' + (p.n === lastPickNo && p.n === v.picks.length ? ' new' : '') + '"><span><span class="n">#' + p.n + '</span>' + esc(p.player) + (p.auto ? ' <span class="hint">· last spot</span>' : '') + '</span><span class="st">' + esc(stLine(p.player)) + '</span></div>'; }).join('')
         + '</div>';
     }).join('') + '</div>';
   }

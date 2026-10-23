@@ -136,9 +136,10 @@ dv = E.cupDraftView(c2);
 ok(dv.onClock === 'A' && dv.pickNo === 2 && dv.teams.B.join() === 'CapB,P3' && !dv.remaining.includes('P3'), 'next side up, team shows captain + pick');
 ok(!E.cupDraftPick(c2, 'P3').ok && !E.cupDraftPick(c2, 'Nobody').ok, 'cannot pick a taken or unknown player');
 ok(E.cupDraftUndo(c2).picks.length === 0, 'undo removes the last pick');
-let cur = c2; ['P1', 'P2', 'P4', 'P5', 'P6'].forEach(n => { cur = Object.assign({}, cur, { draft: E.cupDraftPick(cur, n).draft }); });
+let cur = c2; ['P1', 'P2', 'P4', 'P5'].forEach(n => { cur = Object.assign({}, cur, { draft: E.cupDraftPick(cur, n).draft }); });
 dv = E.cupDraftView(cur);
-ok(dv.done && dv.onClock === null && dv.teams.A.length === 4 && dv.teams.B.length === 4, 'draft ends with equal teams');
+ok(dv.done && dv.onClock === null && dv.teams.A.length === 4 && dv.teams.B.length === 4, 'draft ends with equal teams, the last player placed automatically');
+ok(E.cupDraftUndo(cur).picks.length === cur.draft.picks.length - 2, 'undo takes the automatic pick and the one before it');
 ok(!E.cupDraftPick(cur, 'P1').ok, 'nothing to pick once done');
 
 // ---------- pasted stats ----------

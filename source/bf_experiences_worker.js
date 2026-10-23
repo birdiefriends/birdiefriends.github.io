@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.31.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.32.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1437,7 +1437,14 @@ export default {
           const taken = new Set(picks.map(pk => norm(pk.player)));
           const hit = pool.find(n => norm(n) === norm(body.player) && !taken.has(norm(n)));
           if (!hit) return J({ error: String(body.player) + ' is not available' }, 409);
-          cfgObj.draft = Object.assign({}, d, { picks: picks.concat([{ n: picks.length + 1, side, player: hit }]) });
+          const newPicks = picks.concat([{ n: picks.length + 1, side, player: hit }]);
+          // the last player has only one place to go: the side with the open slot takes him, no pick or confirm needed (twin of BFEngine.cupDraftPick)
+          if (newPicks.length === pool.length - 1) {
+            const lastP = pool.find(n => !newPicks.some(pk => norm(pk.player) === norm(n)));
+            const nextSide = d.mode === 'alternate' ? (newPicks.length % 2 ? other : first) : ((((newPicks.length + 1) >> 1) & 1) ? other : first);
+            if (lastP) newPicks.push({ n: newPicks.length + 1, side: nextSide, player: lastP, auto: true });
+          }
+          cfgObj.draft = Object.assign({}, d, { picks: newPicks });
           await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj, side) });
         }
