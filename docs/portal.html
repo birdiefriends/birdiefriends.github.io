@@ -18187,6 +18187,10 @@ async function openCupSelection(evtOrId) {
   window.open(url, '_blank');
 }
 function openCupDraft() { if (_cupLive) window.open(cupLiveCard(_cupLive).url, '_blank'); }
+// The card is for the event's own people: a captain, a player registered for that event, or the commissioner. Everyone else sees nothing.
+function cupLiveForMe(events) {
+  return (events || []).find(e => e.cap_code || isRegisteredFor(e.event_name) || isCommissioner()) || null;
+}
 async function renderCupBanner() {
   const el = document.getElementById('home-cup-banner');
   if (!el) return;
@@ -18195,7 +18199,7 @@ async function renderCupBanner() {
     const who = (typeof currentPlayer === 'string' && currentPlayer && currentPlayer !== 'Guest') ? `?player=${encodeURIComponent(currentPlayer)}` : '';
     const res = await fetch(`${BFE_API}/bfe/cup-live${who}`);
     const data = await res.json();
-    const ev = (data.events || [])[0];
+    const ev = cupLiveForMe(data.events || []);
     if (!ev) { el.innerHTML = ''; _cupLive = null; return; }
     _cupLive = ev;
     const c = cupLiveCard(ev);

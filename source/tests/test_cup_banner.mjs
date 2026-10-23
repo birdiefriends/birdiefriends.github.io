@@ -24,4 +24,14 @@ ok(/formatClass\(evt\.format\) === 'format-cup' \? `\s*<button class="icon-actio
   c2.isCommissioner = () => true; await vm.runInContext('openCupSelection("e1")', c2); ok(opened[1] === 'bf-cup-draft.html?event=Test%20BFCup&host=1', 'the commissioner goes to the host screen');
   c2.isCommissioner = () => false; c2.fetch = async () => { throw new Error('offline'); }; await vm.runInContext('openCupSelection("e1")', c2); ok(opened[2] === 'bf-cup-draft.html?event=Test%20BFCup', 'offline falls back to watching');
 }
+
+// who sees the card: captain, registered player, commissioner; nobody else
+{
+  const c3 = { isRegisteredFor: n => n === 'Mine', isCommissioner: () => false }; vm.createContext(c3); vm.runInContext(extractFn(src, 'cupLiveForMe'), c3);
+  const pick = evs => vm.runInContext('cupLiveForMe(' + JSON.stringify(evs) + ')', c3);
+  ok(pick([{ event_name: 'Other' }]) === null, 'a player not in the event sees no card');
+  ok(pick([{ event_name: 'Mine' }]).event_name === 'Mine', 'a registered player sees the card');
+  ok(pick([{ event_name: 'Other', cap_code: 'X' }]).cap_code === 'X', 'a captain sees the card even if not registered');
+  c3.isCommissioner = () => true; ok(pick([{ event_name: 'Other' }]) !== null, 'the commissioner sees it');
+}
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
