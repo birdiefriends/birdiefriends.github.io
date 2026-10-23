@@ -35,13 +35,13 @@ ok(d.getElementById('confirmPick') && /P2/.test(d.querySelector('.sheet').textCo
 d.getElementById('confirmPick').click(); await tick(150); d = dom.window.document;
 const act = calls.filter(c => /\/bfe\/cup\/act/.test(c.u)).pop();
 ok(act && JSON.parse(act.o.body).code === 'AAA111' && JSON.parse(act.o.body).player === 'P2' && JSON.parse(act.o.body).action === 'pick', 'the pick goes through /bfe/cup/act with his code');
-ok(doc.draft.picks.length === 1 && /Waiting for Team Nate/.test(d.body.textContent) && [...d.querySelectorAll('[data-pick]')].every(b => b.disabled), 'after picking he waits and cannot pick again out of turn');
+ok(doc.draft.picks.length === 1 && /Waiting for Team Nate/.test(d.body.textContent) && !d.querySelector('tr.pr.can'), 'after picking he waits and cannot pick again out of turn');
 dom = await open('?cap=BBB222'); d = dom.window.document;
 ok(/Waiting for Team Jake|YOUR PICK/.test(d.body.textContent) && /YOUR PICK/.test(d.body.textContent), 'captain B is on the clock for pick 2 (snake)');
 dom = await open('?cap=wrong'); d = dom.window.document;
 ok(/not valid/.test(d.body.textContent) && !d.querySelector('[data-pick]'), 'a bad link is refused');
 dom = await open(''); d = dom.window.document;
-ok([...d.querySelectorAll('[data-pick]')].every(b => b.disabled) && ![...d.querySelectorAll('.banner')].some(b => /YOUR PICK/.test(b.textContent)), 'a spectator can only watch');
+ok(!d.querySelector('tr.pr.can') && ![...d.querySelectorAll('.banner')].some(b => /YOUR PICK/.test(b.textContent)), 'a spectator can only watch');
 dom = await open('?host=1', '7797'); d = dom.window.document;
 ok([...d.querySelectorAll('[data-copy]')].length === 2 && /cap=AAA111/.test(d.body.innerHTML) && /cap=BBB222/.test(d.body.innerHTML), 'the host sees both captain links');
 // starting a draft generates codes
