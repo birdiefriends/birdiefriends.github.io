@@ -215,7 +215,7 @@ button:disabled{opacity:.4;cursor:default}
   function matchCardHtml(mt, i) {
     var st = (cfg.draft || {}).stats || {};
     function side(ms) { var si = cfg.sides.map(function (x) { return x.key; }).indexOf(ms.side); var sd = cfg.sides[si]; var n = E.cupPairStats(ms.players, st);
-      return '<div class="' + colorOf(sd, si) + '"><b>' + esc(ms.players[0]) + ' &amp; ' + esc(ms.players[1]) + '</b><span class="num">' + esc(sd.name || ms.side) + ' · HCP ' + fmt(n.hcp) + '</span></div>'; }
+      return '<div class="' + colorOf(sd, si) + '"><b>' + esc(ms.players[0]) + ' &amp; ' + esc(ms.players[1]) + '</b><span class="num">' + esc(sd.name || ms.side) + ' · Avg HCP ' + (n.hcp === null ? '–' : fmt(n.hcp / 2)) + ' · Combined ' + fmt(n.hcp) + '</span></div>'; }
     var rule = E.cupHandicapRule(cfg), hcps = {};
     Object.keys(st).forEach(function (n) { var c = E.cupCourseHcp(st[n].hcp, rule); if (c !== null) hcps[n] = c; });
     var ri = E.cupPairsRound(cfg), fm = [];
