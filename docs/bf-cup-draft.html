@@ -71,7 +71,7 @@ button:disabled{opacity:.4;cursor:default}
 .pairc button{padding:4px 10px}
 .mu-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .backrow{padding:8px 4px 0}.backrow a{color:var(--dim);font-size:.9rem;text-decoration:none;font-weight:600}.backrow a:hover{color:#fff}
-.pairc.tap{cursor:pointer;border:2px solid #fff}.pairc.sel{background:#1a7f3c}.pairc.used{opacity:.45}
+.pairc.tap{cursor:pointer;border:2px solid #fff}.pairc.sel{background:#1a7f3c}.pairc.used{opacity:1;background:#0f2a55;border-left-width:4px}
 .match{background:var(--navy3);border-radius:10px;padding:10px 12px;margin:8px 0}
 .match .vs{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}.match .vs>div:first-child{text-align:right}
 .match .vs b{display:block}.match .vs span.num{font-size:.8rem;color:var(--dim)}.match .vs .x{color:var(--dim);font-weight:700}
@@ -248,12 +248,19 @@ button:disabled{opacity:.4;cursor:default}
     var clock = mu.onClock, can = !!clock && ((host) || (!!YOU && YOU === clock));
     if (mu.done) out += '<div class="banner" style="background:#1a7f3c">✅ Matchups are set</div>';
     else out += '<div class="banner live mu-banner"><span class="dot"></span><span><b>' + esc(sideName(clock)) + '</b> ' + (mu.role === 'put' ? 'puts up a pair' : 'answers ' + esc(mu.facing[0]) + ' &amp; ' + esc(mu.facing[1])) + (can ? ' · <b>your move, tap a pair</b>' : '') + '</span></div>';
+    // A pair that is up and waiting for an answer, shown front and centre so nobody has to guess who was picked.
+    if (!mu.done && mu.facing) { var pside = mu.log[mu.log.length - 1].side, psi = cfg.sides.map(function (x) { return x.key; }).indexOf(pside);
+      out += '<div class="match"><div class="n">Match ' + (mu.matches.length + 1) + ' · waiting for an answer</div><div class="vs"><div class="' + colorOf(cfg.sides[psi], psi) + '"><b>' + esc(mu.facing[0]) + ' &amp; ' + esc(mu.facing[1]) + '</b><span class="num">' + esc(sideName(pside)) + ' put them up</span></div><div class="x">vs</div><div><b>?</b><span class="num">' + esc(sideName(mu.onClock)) + ' to answer</span></div></div></div>'; }
     out += mu.matches.map(matchCardHtml).join('');
     if (!mu.done) {
       var st0 = (cfg.draft || {}).stats || {};
       out += '<div class="mu-col">' + cfg.sides.map(function (sd, si) {
         var tap = can && clock === sd.key;
-        return '<div><div class="' + colorOf(sd, si) + '"><b>' + esc(sd.name || sd.key) + ' · still to pair (' + mu.avail[sd.key].length + ')</b></div>' + mu.avail[sd.key].map(function (n) {
+        var formed = mu.log.map(function (e, i) { return { e: e, i: i }; }).filter(function (x) { return x.e.side === sd.key; });
+        var pairedHtml = formed.length ? '<div class="hint" style="margin:6px 0 2px">Paired (' + formed.length + ')</div>' + formed.map(function (x) {
+          var opp = x.i % 2 === 0 ? mu.log[x.i + 1] : mu.log[x.i - 1];
+          return '<div class="pairc used ' + colorOf(sd, si) + '"><div><b>' + esc(x.e.pair[0]) + ' &amp; ' + esc(x.e.pair[1]) + '</b><div class="num">Match ' + ((x.i >> 1) + 1) + ' · ' + (opp ? 'vs ' + esc(opp.pair[0]) + ' &amp; ' + esc(opp.pair[1]) : 'waiting for an answer') + '</div></div></div>'; }).join('') : '';
+        return '<div><div class="' + colorOf(sd, si) + '"><b>' + esc(sd.name || sd.key) + '</b></div>' + pairedHtml + '<div class="hint" style="margin:8px 0 2px">Still to pair (' + mu.avail[sd.key].length + ')</div>' + mu.avail[sd.key].map(function (n) {
           var s0 = st0[n] || {}, on = tap && mpSel === n;
           return '<div class="pairc ' + colorOf(sd, si) + (tap ? ' tap' : '') + (on ? ' sel' : '') + '"' + (tap ? ' data-mplayer="' + esc(n) + '" data-mside="' + sd.key + '"' : '') + '><div><b>' + esc(n) + '</b><div class="num">HCP ' + fmt(s0.hcp) + ' · ' + (s0.rank != null ? '#' + s0.rank : '–') + ' · Avg vs Quota ' + fmt(s0.avg) + '</div></div></div>';
         }).join('') + '</div>';

@@ -50,6 +50,8 @@ ok(d.getElementById('muConfirm') && /put up/.test(d.querySelector('.sheet').text
 await click(dom, '#muConfirm'); d = dom.window.document;
 const act = calls.filter(c => /act/.test(c.u)).pop();
 ok(JSON.parse(act.o.body).action === 'match_pick' && JSON.parse(act.o.body).code === 'BBB222' && doc.matchup.log.length === 1, 'the pick goes through /bfe/cup/act with his code');
+dom = await open(''); d = dom.window.document;
+ok(/waiting for an answer/.test(d.body.textContent) && /b3 & b4/.test(d.body.textContent) && /Paired \(1\)/.test(d.body.textContent), 'a watcher sees the pair that was put up and who put it up, plus the Paired list');
 dom = await open('?cap=AAA111'); d = dom.window.document;
 ok(/answers b3 &amp; b4|answers b3 & b4/.test(d.querySelector('.mu-banner').textContent) && d.querySelectorAll('[data-mplayer]').length === 4, 'Jake is asked to answer that pair and can tap his players');
 await click(dom, '[data-mplayer="a1"]'); await click(dom, '[data-mplayer="a2"]'); await click(dom, '#muConfirm'); d = dom.window.document;
