@@ -77,4 +77,6 @@ ok(posts0() && /^[A-Z0-9]{6}$/.test(posts0().A) && /^[A-Z0-9]{6}$/.test(posts0()
   ok(dd.querySelectorAll('[data-oforce]').length === 2, 'the host can still decide for him');
   doc = saved;
 }
+
+{ const dm = await open('?cap=AAA111'); const a = dm.window.document.getElementById('backApp'); ok(a && /Back to the app/.test(a.textContent) && a.getAttribute('href') === 'portal.html', 'the draft page has a Back to the app link'); }
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
