@@ -49,4 +49,19 @@ doc = { sides: doc.sides, points: doc.points, rounds: [], draft: { started: fals
 dom = await open('?host=1', '7797'); d = dom.window.document;
 d.getElementById('startDraft').click(); await tick(150);
 ok(posts0() && /^[A-Z0-9]{6}$/.test(posts0().A) && /^[A-Z0-9]{6}$/.test(posts0().B) && posts0().A !== posts0().B, 'starting the draft makes a different code for each side');
+
+// everyone is picked: each captain gets a sign-off button, a spectator and the host see the status
+{
+  const saved = JSON.parse(JSON.stringify(doc));
+  doc.access = { A: 'AAA111', B: 'BBB222' }; doc.draft = { started: true, first: 'A', pool: ['P1', 'P2'], stats: {}, picks: [{ n: 1, side: 'A', player: 'P1' }, { n: 2, side: 'B', player: 'P2' }], locked: false, signoff: { A: true } };
+  let dm = await open('?cap=AAA111'); let dd = dm.window.document;
+  ok(dd.getElementById('unsign') && !dd.getElementById('signoff') && /Jake signed off/.test(dd.body.textContent), 'a captain who has signed sees "take it back" and the status');
+  dm = await open('?cap=BBB222'); dd = dm.window.document;
+  ok(dd.getElementById('signoff') && /Nate to sign off/.test(dd.body.textContent), 'the other captain sees the Sign off button');
+  dd.getElementById('signoff').click(); await tick(200);
+  ok(calls.some(c => /act/.test(c.u) && c.o && JSON.parse(c.o.body).action === 'signoff' && JSON.parse(c.o.body).code === 'BBB222'), 'the button posts a signoff with his code');
+  dm = await open(''); dd = dm.window.document; ok(!dd.getElementById('signoff') && /signed off/.test(dd.body.textContent), 'a spectator sees the status but no button');
+  dm = await open('?host=1', '7797'); dd = dm.window.document; ok(!dd.getElementById('signoff') && /host override/.test(dd.body.textContent), 'the host can still lock, labeled as an override');
+  doc = saved;
+}
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

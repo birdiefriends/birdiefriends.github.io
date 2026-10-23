@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.32.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.33.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1369,6 +1369,7 @@ export default {
     //   POST /bfe/cup/act {event_name, code, action:'pick', player}  a captain takes a player when it is his side's turn.
     //   POST /bfe/cup/act {…, action:'pair_set', pairs:[[a,b],…]}  a captain saves his Saturday pairs (any partial list); 'pair_lock' locks them
     //   (everyone paired, one odd man out allowed); 'pair_unlock' reopens them only while the other captain has not locked.
+    //   POST /bfe/cup/act {…, action:'signoff'|'unsign'}  a captain signs off on the finished teams (or takes it back); both signed = the teams lock.
     //   POST /bfe/cup/act {…, action:'match_pick', pair:[a,b]}  the Saturday matchup draw: "put up and respond", alternating (BFEngine.cupMatchupView is the
     //   browser twin). The commissioner starts it by saving config.matchup = {started, first, log:[]}; when the last pick lands the matches are written
     //   into the pairs round (rounds[i].matches).
@@ -1445,6 +1446,24 @@ export default {
             if (lastP) newPicks.push({ n: newPicks.length + 1, side: nextSide, player: lastP, auto: true });
           }
           cfgObj.draft = Object.assign({}, d, { picks: newPicks });
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
+          return J({ ok: true, config: cupPublic(cfgObj, side) });
+        }
+        if (body.action === 'signoff' || body.action === 'unsign') {
+          // Each captain signs off on the finished teams; when both have, the teams lock themselves (twin of the host's "Lock the teams").
+          const d = cfgObj.draft || {};
+          if (!d.started || d.locked) return J({ error: 'The draft is not open' }, 409);
+          const caps = new Set((cfgObj.sides || []).map(sd => norm(sd.captain)).filter(Boolean));
+          const pool = (d.pool || []).filter(n => !caps.has(norm(n)));
+          const picks = d.picks || [];
+          if (!pool.length || picks.length < pool.length) return J({ error: 'Every player must be picked before you sign off' }, 409);
+          const so = Object.assign({}, d.signoff || {});
+          if (body.action === 'signoff') so[side] = true; else delete so[side];
+          cfgObj.draft = Object.assign({}, d, { signoff: so });
+          if ((cfgObj.sides || []).every(sd => so[sd.key])) {
+            cfgObj.sides = (cfgObj.sides || []).map(sd => Object.assign({}, sd, { players: (sd.captain ? [sd.captain] : []).concat(picks.filter(pk => pk.side === sd.key).map(pk => pk.player)) }));
+            cfgObj.draft.locked = true;
+          }
           await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj, side) });
         }

@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.32.0';
+  const ENGINE_VERSION = '1.33.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2202,7 +2202,7 @@
     let picks = ((cfg.draft || {}).picks || []).slice();
     const last = picks.pop();
     if (last && last.auto) picks.pop();      // an automatic last pick goes back together with the pick that caused it
-    return Object.assign({}, cfg.draft, { picks });
+    return Object.assign({}, cfg.draft, { picks, signoff: {} });      // any change to the picks clears the captains' sign-offs
   }
   // Pasted stats table (tab or comma separated, header row). Columns found by name:
   // Player/Name, Rank/Ranking, Avg(Points/Achievement), Birdie(s), HCP. Returns { stats, unmatched, matched } against `pool`.

@@ -81,7 +81,7 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.32.0"></script>
+<script src="bf_engine.js?v=1.33.0"></script>
 <script>
 (function () {
   'use strict';
@@ -399,10 +399,15 @@ button:disabled{opacity:.4;cursor:default}
     var clock = v.onClock;
     html += '<div class="banner live"><span class="dot"></span>' + (v.done ? (d.locked ? '🏁 Teams are set' : '✅ Every player is picked') : 'LIVE · Pick ' + v.pickNo + ' of ' + v.total + ' · <span style="color:#fff;text-decoration:underline">' + esc(sideName(clock)) + '</span> on the clock') + '</div>';
     if (YOU && !v.done) html += '<div class="banner" style="background:' + (v.onClock === YOU ? '#1a7f3c' : '#0a3161') + '">' + (v.onClock === YOU ? 'YOUR PICK, ' + esc(sideName(YOU)) + ' captain. Tap a player.' : 'Waiting for ' + esc(sideName(v.onClock)) + ' to pick') + '</div>';
+    if (v.done && !d.locked) {
+      var sg = d.signoff || {};
+      html += '<div class="banner" style="background:#0a3161">' + cfg.sides.map(function (sd) { return (sg[sd.key] ? '✅ ' : '⏳ ') + esc(sd.captain || sideName(sd.key)) + (sg[sd.key] ? ' signed off' : ' to sign off'); }).join(' &nbsp;·&nbsp; ') + '</div>';
+      if (YOU && !(HOST && pin)) html += '<div class="toolbar">' + (sg[YOU] ? '<span style="flex:1"><b>You signed off.</b> The teams lock when the other captain does.</span><button class="sec" id="unsign">Take it back</button>' : '<button id="signoff">Sign off on our team</button><span class="hint">Both captains sign off and the teams lock.</span>') + '</div>';
+    }
     html += meterHtml(v) + teamsHtml(v) + (v.done ? '' : poolHtml(v)) + pairsHtml() + matchupHtml() + linksHtml();
     if (HOST && pin) {
       html += '<div class="toolbar">' + '<button class="sec" id="undo"' + (v.picks.length ? '' : ' disabled') + '>↩︎ Undo last pick</button>'
-        + (v.done && !d.locked ? '<button id="lock">Lock the teams</button>' : '') + '<button class="sec" id="resetDraft">Start over</button></div>';
+        + (v.done && !d.locked ? '<button id="lock">Lock the teams (host override)</button>' : '') + '<button class="sec" id="resetDraft">Start over</button></div>';
     }
     if (pendingPair) { var mu0 = E.cupMatchupView(cfg); html += '<div class="sheet"><span><b>' + esc(sideName(pendingPair.side)) + '</b>: ' + (mu0.role === 'put' ? 'put up' : 'answer with') + ' <b>' + esc(pendingPair.pair[0]) + ' &amp; ' + esc(pendingPair.pair[1]) + '</b>?</span><button id="muConfirm">Yes</button><button class="sec" id="muCancel">Cancel</button></div>'; }
     if (pending) html += '<div class="sheet"><span><b>' + esc(pending) + '</b> to <b>' + esc(sideName(clock)) + '</b>?</span><button id="confirmPick">Pick</button><button class="sec" id="cancelPick">Cancel</button></div>';
@@ -490,6 +495,12 @@ button:disabled{opacity:.4;cursor:default}
       cfg.draft = r.draft; lastPickNo = r.draft.picks.length; save();
     });
     on('undo', function () { cfg.draft = E.cupDraftUndo(cfg); lastPickNo = cfg.draft.picks.length; save(); });
+    ['signoff', 'unsign'].forEach(function (act) { on(act, function () {
+      busy = true;
+      fetch(WORKER + '/bfe/cup/act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT, code: CAP, action: act }) })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); cfg = j.config; error = ''; }); })
+        .catch(function (e) { error = e.message; }).then(function () { busy = false; return load(); }).then(render);
+    }); });
     on('lock', function () {
       var v = E.cupDraftView(cfg);
       cfg.sides.forEach(function (s) { s.players = v.teams[s.key].slice(); });

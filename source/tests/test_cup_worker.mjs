@@ -139,4 +139,15 @@ r = await aact('AAA111', 'P1'); ok(r.status === 200, 'alt: A picks first');
 r = await aact('AAA111', 'P2'); ok(r.status === 409, 'alt: A cannot pick twice in a row');
 r = await aact('BBB222', 'P2'); ok(r.status === 200, 'alt: B picks second');
 r = await aact('AAA111', 'P3'); ok(r.status === 200, 'alt: back to A');
+
+// ── captains sign off; both signed = the teams lock themselves ──
+const sact = (code, action) => call('POST', '/bfe/cup/act', { event_name: 'Draft Cup', code, action });
+r = await sact('AAA111', 'signoff'); ok(r.status === 200 && r.json.config.draft.signoff.A === true && !r.json.config.draft.locked, 'A signs off; the teams stay open until B does');
+r = await sact('AAA111', 'unsign'); ok(r.status === 200 && !r.json.config.draft.signoff.A, 'a captain can take his sign-off back');
+r = await sact('wrong', 'signoff'); ok(r.status === 403, 'a bad code cannot sign off');
+await sact('AAA111', 'signoff'); r = await sact('BBB222', 'signoff');
+ok(r.status === 200 && r.json.config.draft.locked === true && r.json.config.sides[0].players[0] === 'Jake' && r.json.config.sides[0].players.length === 3 && r.json.config.sides[1].players.length === 3, 'both signed: locked, rosters written (captain first)');
+r = await sact('AAA111', 'signoff'); ok(r.status === 409, 'nothing to sign once the teams are locked');
+await call('POST', '/bfe/cup', { event_name: 'Early Cup', config: Object.assign({}, dcfg, { draft: Object.assign({}, dcfg.draft, { picks: [] }) }), pin: '7797' });
+r = await call('POST', '/bfe/cup/act', { event_name: 'Early Cup', code: 'AAA111', action: 'signoff' }); ok(r.status === 409 && /picked/.test(r.json.error), 'no sign-off until every player is picked');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
