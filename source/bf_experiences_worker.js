@@ -1378,6 +1378,17 @@ export default {
     //   with ?player= naming a captain, his own captain code comes back (cap_code) so the app can open his screen in one tap.
     // Saturday pairs (BFEngine.cupPairsVisible is the browser twin): a side's pairs are private to that captain and the commissioner
     // until both captains have locked; everyone else only learns whether each side has locked and how many pairs it made.
+    // Phase markers (BFE timeline backbone): the Cup record keeps WHEN each phase really began, stamped by the server the moment the state changes
+    // (not guessed later from photo times). cfg.phases = { selection_open, selection_locked, draw_open, draw_done } as ISO times. Idempotent: an existing
+    // marker keeps its time, and a marker whose state was reset (Start over, Restart the draw) is cleared. Round open/close markers join when the live panel lands.
+    const cupStampPhases = (cfg) => {
+      const now = new Date().toISOString(), ph = Object.assign({}, cfg.phases || {});
+      const d = cfg.draft || {}, m = cfg.matchup || {};
+      const want = { selection_open: !!d.started, selection_locked: !!d.locked, draw_open: !!m.started, draw_done: !!m.done };
+      Object.keys(want).forEach(k => { if (want[k]) { if (!ph[k]) ph[k] = now; } else delete ph[k]; });
+      cfg.phases = ph;
+      return cfg;
+    };
     const cupPublic = (cfgObj, viewerSide) => {
       const c = Object.assign({}, cfgObj); delete c.access;
       if (c.pairs) {
@@ -1448,7 +1459,7 @@ export default {
             if (lastP) newPicks.push({ n: newPicks.length + 1, side: nextSide, player: lastP, auto: true });
           }
           cfgObj.draft = Object.assign({}, d, { picks: newPicks });
-          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj, side) });
         }
         if (body.action === 'order') {
@@ -1476,7 +1487,7 @@ export default {
           const rec = { stage: body.stage === 'matchup' ? 'matchup' : 'draft', by: control, choice: body.choice, first, text };
           if (rec.stage === 'matchup') cfgObj.matchup = { started: true, first, log: [], choice: rec };
           else cfgObj.draft = Object.assign({}, d, { first, orderChoice: rec });
-          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj, side) });
         }
         if (body.action === 'signoff' || body.action === 'unsign') {
@@ -1494,7 +1505,7 @@ export default {
             cfgObj.sides = (cfgObj.sides || []).map(sd => Object.assign({}, sd, { players: (sd.captain ? [sd.captain] : []).concat(picks.filter(pk => pk.side === sd.key).map(pk => pk.player)) }));
             cfgObj.draft.locked = true;
           }
-          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj, side) });
         }
         if (body.action === 'pair_set' || body.action === 'pair_lock' || body.action === 'pair_unlock') {
@@ -1533,7 +1544,7 @@ export default {
               cfgObj.pairs[side] = { list, locked: true };
             }
           }
-          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj, side) });
         }
         if (body.action === 'match_pick') {
@@ -1567,7 +1578,7 @@ export default {
             mu.done = true;
           }
           cfgObj.matchup = mu;
-          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cfgObj), row.event_name).run();
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj, side) });
         }
         return J({ error: 'Unknown action' }, 400);
@@ -1600,9 +1611,9 @@ export default {
           if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
           // the public document never carries the captain codes, so a re-save must not wipe them
           // (the same goes for the captains' Saturday pairs: a page that never loaded them must not erase them)
-          if (!config.access || !config.pairs || !config.matchup) { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
+          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
           await env.DB.prepare(`INSERT INTO bfe_cup (event_name, config, updated_at) VALUES (?, ?, datetime('now'))
-             ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(config)).run();
+             ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(cupStampPhases(config))).run();
           return J({ ok: true });
         }
         if (request.method === 'DELETE') {

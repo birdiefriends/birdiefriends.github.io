@@ -171,4 +171,24 @@ const oMu = (code, extra) => call('POST', '/bfe/cup/act', Object.assign({ event_
 r = await oMu('AAA111', { choice: 'start' }); ok(r.status === 403, 'the side that picked first is not in control of the matchup draw');
 r = await oMu('BBB222', { choice: 'start' }); ok(r.status === 200 && r.json.config.matchup.started && r.json.config.matchup.first === 'B', 'the second-picking captain starts the matchup draw');
 r = await oMu('BBB222', { choice: 'start' }); ok(r.status === 409, 'it cannot be started twice');
+
+// ── phase markers: the server stamps WHEN each phase really began ──
+{
+  const base = { sides: dcfg.sides, points: dcfg.points, rounds: [], access: dcfg.access, draft: { started: false, first: 'A', pool: ['P1', 'P2', 'Jake', 'Nate'], picks: [], locked: false } };
+  await call('POST', '/bfe/cup', { event_name: 'Phase2 Cup', config: base, pin: '7797' });
+  let g = await call('GET', '/bfe/cup?event=Phase2%20Cup'); ok(!g.json.config.phases || !g.json.config.phases.selection_open, 'no markers before anything starts');
+  await call('POST', '/bfe/cup', { event_name: 'Phase2 Cup', config: Object.assign({}, base, { draft: Object.assign({}, base.draft, { started: true }) }), pin: '7797' });
+  g = await call('GET', '/bfe/cup?event=Phase2%20Cup'); const t0 = g.json.config.phases.selection_open;
+  ok(/^\d{4}-\d\d-\d\dT/.test(t0) && !g.json.config.phases.selection_locked, 'starting the draft stamps selection_open');
+  // a stale client save (no phases) must not lose or move the marker
+  await call('POST', '/bfe/cup', { event_name: 'Phase2 Cup', config: Object.assign({}, base, { draft: Object.assign({}, base.draft, { started: true }), phases: undefined }), pin: '7797' });
+  g = await call('GET', '/bfe/cup?event=Phase2%20Cup'); ok(g.json.config.phases.selection_open === t0, 'a re-save keeps the original time');
+  // both captains sign off through the Worker: selection_locked is stamped
+  await call('POST', '/bfe/cup/act', { event_name: 'Phase2 Cup', code: 'AAA111', action: 'pick', player: 'P1' });
+  await call('POST', '/bfe/cup/act', { event_name: 'Phase2 Cup', code: 'AAA111', action: 'signoff' }); r = await call('POST', '/bfe/cup/act', { event_name: 'Phase2 Cup', code: 'BBB222', action: 'signoff' });
+  g = await call('GET', '/bfe/cup?event=Phase2%20Cup'); ok(g.json.config.draft.locked && /^\d{4}/.test(g.json.config.phases.selection_locked || ''), 'signing off stamps selection_locked');
+  // Start over clears markers
+  await call('POST', '/bfe/cup', { event_name: 'Phase2 Cup', config: base, pin: '7797' });
+  g = await call('GET', '/bfe/cup?event=Phase2%20Cup'); ok(!g.json.config.phases.selection_open && !g.json.config.phases.selection_locked, 'starting over clears the markers');
+}
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
