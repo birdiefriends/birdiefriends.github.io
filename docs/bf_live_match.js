@@ -18,7 +18,7 @@
     '.lm .lmhead{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;text-align:center}' +
     '.lm .lmside{border-radius:10px;padding:8px 6px;font-weight:700;border-top:5px solid var(--line);background:var(--bg2)}' +
     '.lm .lmside.a{border-top-color:var(--a)}.lm .lmside.b{border-top-color:var(--b)}.lm .lmside.lead.a{background:var(--a)}.lm .lmside.lead.b{background:var(--b)}' +
-    '.lm .lmside small{display:block;font-weight:500;color:var(--dim);font-size:.75rem}.lm .lmside.lead small{color:var(--tx)}' +
+    '.lm .lmpn{display:block;font-size:1.05rem;line-height:1.25}.lm .lmside small{margin-top:3px;display:block;font-weight:500;color:var(--dim);font-size:.75rem}.lm .lmside.lead small{color:var(--tx)}' +
     '.lm .lmstat{font-weight:800;font-size:1.05rem;min-width:84px}.lm .lmstat small{display:block;font-weight:500;color:var(--dim);font-size:.72rem}' +
     '.lm .lmholes{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin:10px 0}' +
     '.lm .lmh{border:1px solid var(--line);background:var(--bg2);color:var(--tx);border-radius:7px;padding:6px 0;font:inherit;font-size:.78rem;font-weight:700;cursor:pointer;text-align:center}' +
@@ -180,7 +180,7 @@
     // match header
     h += '<div class="lmc"><div class="lmhead">' + match.sides.map(function (sd, i) {
       var cls = (i === 0 ? 'a' : 'b') + ((i === 0 && lead > 0) || (i === 1 && lead < 0) ? ' lead' : '');
-      return '<div class="lmside ' + cls + '">' + esc(sideName(cfg, sd.side)) + '<small>' + esc(sd.players.join(' & ')) + '</small></div>';
+      return '<div class="lmside ' + cls + '"><span class="lmpn">' + sd.players.map(esc).join('<br>') + '</span><small>' + esc(sideName(cfg, sd.side)) + '</small></div>';
     }).join('').replace('</div><div class="lmside b', '</div><div class="lmstat">' + esc(sl.text) + '<small>' + esc(sl.sub) + '</small></div><div class="lmside b') + '</div>';
     if (S.last && S.last.m === match.key && S.last.r === round.key) h += '<div class="lmmsg ok" style="background:' + (S.last.w === 'a' ? 'var(--a)' : S.last.w === 'b' ? 'var(--b)' : 'var(--bg2)') + '">' + esc(S.last.text) + '</div>';
     h += '<div class="lmdim" style="margin:6px 0">' + round.segments.map(function (sg) { return 'Holes ' + sg.from + '–' + sg.to + ': ' + FMT[sg.format]; }).join(' · ') + '</div>';
