@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.36.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.37.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1384,7 +1384,8 @@ export default {
     const cupStampPhases = (cfg) => {
       const now = new Date().toISOString(), ph = Object.assign({}, cfg.phases || {});
       const d = cfg.draft || {}, m = cfg.matchup || {};
-      const want = { selection_open: !!d.started, selection_locked: !!d.locked, draw_open: !!m.started, draw_done: !!m.done };
+      const sg = cfg.singles || {};
+      const want = { selection_open: !!d.started, selection_locked: !!d.locked, draw_open: !!m.started, draw_done: !!m.done, singles_open: !!sg.started, singles_done: !!sg.done };
       Object.keys(want).forEach(k => { if (want[k]) { if (!ph[k]) ph[k] = now; } else delete ph[k]; });
       cfg.phases = ph;
       return cfg;
@@ -1416,7 +1417,7 @@ export default {
           if (!c.draft || !c.draft.started || c.hide_card) continue;
           // phase: the draft, then the captains building pairs, then the matchup draw, then done
           const pk = c.pairs || {}, keys = (c.sides || []).map(sd => sd.key);
-          const phase = !c.draft.locked ? 'draft' : (c.matchup && c.matchup.done) ? 'set' : (c.matchup && c.matchup.started) ? 'matchups' : 'pairs';
+          const phase = !c.draft.locked ? 'draft' : ((c.singles && c.singles.started && !c.singles.done) || (c.matchup && c.matchup.done && c.results && Object.keys(c.results).length && !(c.singles && c.singles.done))) ? 'singles' : (c.matchup && c.matchup.done) ? 'set' : (c.matchup && c.matchup.started) ? 'matchups' : 'pairs';
           const ev = { event_name: r.event_name, updated_at: r.updated_at, locked: !!c.draft.locked, picks: (c.draft.picks || []).length, total: (c.draft.pool || []).length, phase,
             pairs_locked: keys.filter(k => pk[k] && pk[k].locked).length, matchup_steps: c.matchup ? (c.matchup.log || []).length : 0 };
           if (me) { const side = (c.sides || []).find(sd => sd.captain && String(sd.captain).trim().toLowerCase() === me); if (side && c.access && c.access[side.key]) { ev.cap_code = c.access[side.key]; ev.cap_side = side.name || side.key; } }
@@ -1443,7 +1444,12 @@ export default {
           const ph = cfgObj.phases = cfgObj.phases || {}, now = new Date().toISOString();
           if (body.action === 'round_end' || body.action === 'round_reopen') {
             if (!capOk && !(rd.matches || []).some(m => m.sides.some(sd => sd.players.some(p => norm(p) === norm(body.player))))) return J({ error: 'Only someone playing in this round can do that' }, 403);
-            if (body.action === 'round_end') { if (!ph['round_' + rd.key + '_end']) ph['round_' + rd.key + '_end'] = now; } else delete ph['round_' + rd.key + '_end'];
+            if (body.action === 'round_end') {
+              if (!ph['round_' + rd.key + '_end']) ph['round_' + rd.key + '_end'] = now;
+              // the finisher's page posts the round's points (it runs the same engine as the scoreboard); the singles draw reads them to see who lost
+              const pts = body.points && typeof body.points === 'object' ? body.points : null, ks = (cfgObj.sides || []).map(sd => sd.key);
+              if (pts && ks.length === 2 && ks.every(k => Number.isFinite(Number(pts[k])))) { cfgObj.results = cfgObj.results || {}; cfgObj.results[rd.key] = { points: { [ks[0]]: Number(pts[ks[0]]), [ks[1]]: Number(pts[ks[1]]) }, at: now, by: String(body.player || (capOk ? 'host' : '')).slice(0, 60) }; }
+            } else { delete ph['round_' + rd.key + '_end']; if (cfgObj.results) delete cfgObj.results[rd.key]; }
             await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
             return J({ ok: true, config: cupPublic(cfgObj) });
           }
@@ -1504,7 +1510,15 @@ export default {
           const names = {}; (cfgObj.sides || []).forEach(sd => { names[sd.key] = sd.name || sd.key; });
           if (!['start', 'defer', 'toss'].includes(body.choice)) return J({ error: 'Choose start, defer or toss' }, 400);
           let control;
-          if (body.stage === 'matchup') {
+          if (body.stage === 'singles') {
+            if (!d.locked) return J({ error: 'The teams are not locked yet' }, 409);
+            if (cfgObj.singles && cfgObj.singles.started) return J({ error: 'The singles draw has already started' }, 409);
+            const pi = (cfgObj.rounds || []).findIndex(r => { const f = ((r.segments || [])[0] || {}).format; return f === 'bestball' || f === 'altshot'; });
+            const res = pi >= 0 && cfgObj.results && cfgObj.results[cfgObj.rounds[pi].key];
+            if (!res || !res.points) return J({ error: 'Finish the pairs round first so we know who is in control' }, 409);
+            const a = Number(res.points[keys[0]]), b = Number(res.points[keys[1]]);
+            control = a === b ? keys.find(k => k !== d.first) : (a < b ? keys[0] : keys[1]);   // the side that lost; a tie goes to the captain who picked second
+          } else if (body.stage === 'matchup') {
             if (!d.locked) return J({ error: 'The teams are not locked yet' }, 409);
             if (cfgObj.matchup && cfgObj.matchup.started) return J({ error: 'The matchup draw has already started' }, 409);
             control = keys.find(k => k !== d.first);      // the captain who picked second in the team draft is in control of the next draw
@@ -1519,8 +1533,9 @@ export default {
           if (body.choice === 'start') { first = control; text = names[control] + ' chose to go first'; }
           else if (body.choice === 'defer') { first = other; text = names[control] + ' deferred, so ' + names[other] + ' goes first'; }
           else { first = Math.random() < 0.5 ? keys[0] : keys[1]; text = 'Coin toss for ' + names[control] + ': ' + names[first] + ' goes first'; }
-          const rec = { stage: body.stage === 'matchup' ? 'matchup' : 'draft', by: control, choice: body.choice, first, text };
-          if (rec.stage === 'matchup') cfgObj.matchup = { started: true, first, log: [], choice: rec };
+          const rec = { stage: body.stage === 'singles' ? 'singles' : body.stage === 'matchup' ? 'matchup' : 'draft', by: control, choice: body.choice, first, text };
+          if (rec.stage === 'singles') cfgObj.singles = { started: true, first, log: [], choice: rec };
+          else if (rec.stage === 'matchup') cfgObj.matchup = { started: true, first, log: [], choice: rec };
           else cfgObj.draft = Object.assign({}, d, { first, orderChoice: rec });
           await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj, side) });
@@ -1579,6 +1594,37 @@ export default {
               cfgObj.pairs[side] = { list, locked: true };
             }
           }
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
+          return J({ ok: true, config: cupPublic(cfgObj, side) });
+        }
+        if (body.action === 'singles_pick') {
+          // Sunday singles, "put up and respond" with single players (twin of BFEngine.cupSinglesView / cupSinglesPick).
+          const sgl = cfgObj.singles;
+          if (!sgl || !sgl.started) return J({ error: 'The singles draw has not started' }, 409);
+          const keys = (cfgObj.sides || []).map(sd => sd.key);
+          const first = keys.includes(sgl.first) ? sgl.first : keys[0], other = keys.find(k => k !== first);
+          const roster = {}; keys.forEach(k => { roster[k] = ((cfgObj.sides.find(sd => sd.key === k) || {}).players || []); });
+          const N = roster[first].length;
+          if (!(N >= 1 && roster[other].length === N)) return J({ error: 'Both teams need the same number of players for singles' }, 409);
+          const log = sgl.log || [];
+          if (log.length >= 2 * (N - 1)) return J({ error: 'The singles matchups are already set' }, 409);
+          const rnd = log.length >> 1, putter = rnd % 2 === 0 ? first : other, responder = putter === first ? other : first;
+          const onClock = log.length % 2 === 0 ? putter : responder;
+          if (onClock !== side) return J({ error: 'It is not your turn' }, 409);
+          const usedBy = k => new Set(log.filter(e => e.side === k).map(e => norm(e.player)));
+          const canon = roster[side].find(a => norm(a) === norm(body.player) && !usedBy(side).has(norm(a)));
+          if (!canon) return J({ error: 'That player is already in a match' }, 409);
+          sgl.log = log.concat([{ n: log.length + 1, side, player: canon }]);
+          if (sgl.log.length >= 2 * (N - 1)) {
+            const left = {}; keys.forEach(k => { const u = usedBy(k); sgl.log.filter(e => e.side === k).forEach(e => u.add(norm(e.player))); left[k] = roster[k].filter(x => !u.has(norm(x))); });
+            const ms = [];
+            for (let i = 0; i + 1 < sgl.log.length; i += 2) ms.push([{ side: sgl.log[i].side, players: [sgl.log[i].player] }, { side: sgl.log[i + 1].side, players: [sgl.log[i + 1].player] }]);
+            if (left[first].length === 1 && left[other].length === 1) ms.push([{ side: first, players: left[first] }, { side: other, players: left[other] }]);
+            const ri = (cfgObj.rounds || []).findIndex(r => ((r.segments || [])[0] || {}).format === 'singles');
+            if (ri >= 0) cfgObj.rounds[ri].matches = ms.map((sd, i) => ({ key: 'm' + (i + 1), sides: sd.slice().sort((a, b) => keys.indexOf(a.side) - keys.indexOf(b.side)) }));
+            sgl.done = true;
+          }
+          cfgObj.singles = sgl;
           await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj, side) });
         }
@@ -1646,7 +1692,7 @@ export default {
           if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
           // the public document never carries the captain codes, so a re-save must not wipe them
           // (the same goes for the captains' Saturday pairs: a page that never loaded them must not erase them)
-          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
+          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (!config.singles && pc.singles) config.singles = pc.singles; if (!config.results && pc.results) config.results = pc.results; if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
           await env.DB.prepare(`INSERT INTO bfe_cup (event_name, config, updated_at) VALUES (?, ?, datetime('now'))
              ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(cupStampPhases(config))).run();
           return J({ ok: true });

@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.36.0';
+  const ENGINE_VERSION = '1.37.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2391,6 +2391,54 @@
     if (canon.some(c => !c)) return { ok: false, reason: 'Both players must still be unpaired' };
     return { ok: true, matchup: Object.assign({}, cfg.matchup, { log: v.log.concat([{ n: v.log.length + 1, side, pair: canon }]) }) };
   }
+
+  // ── Sunday singles draw (Dev-95): "put up and respond" with single players. cfg.singles = { started, first, log:[{n, side, player}], done, choice }.
+  // The side that LOST the pairs round is in control (Start / Defer / Coin toss); a tie goes to the captain who picked second in the team draft.
+  // The result the finisher posted is in cfg.results[roundKey] = { points:{A,B} }. The last player on each side meets automatically.
+  function cupSinglesRound(cfg) {
+    return ((cfg && cfg.rounds) || []).findIndex(r => { const f = CUP_FORMATS[((r.segments || [])[0] || {}).format]; return !!f && f.size === 1; });
+  }
+  function cupSinglesControl(cfg) {
+    const keys = ((cfg && cfg.sides) || []).map(sd => sd.key), d = (cfg && cfg.draft) || {};
+    const ri = cupPairsRound(cfg), rd = ri >= 0 ? cfg.rounds[ri] : null;
+    const res = rd && cfg.results && cfg.results[rd.key];
+    const tieWinner = keys.find(k => k !== d.first) || keys[0];
+    if (!res || !res.points || keys.length !== 2) return { ready: false, control: tieWinner, tie: false, points: null };
+    const a = Number(res.points[keys[0]]), b = Number(res.points[keys[1]]);
+    if (!(Number.isFinite(a) && Number.isFinite(b))) return { ready: false, control: tieWinner, tie: false, points: null };
+    if (a === b) return { ready: true, control: tieWinner, tie: true, points: { [keys[0]]: a, [keys[1]]: b } };
+    return { ready: true, control: a < b ? keys[0] : keys[1], tie: false, points: { [keys[0]]: a, [keys[1]]: b } };
+  }
+  function cupSinglesView(cfg) {
+    const m = cfg && cfg.singles;
+    if (!m || !m.started) return { started: false };
+    const keys = ((cfg.sides) || []).map(sd => sd.key);
+    const first = keys.includes(m.first) ? m.first : keys[0], other = keys.find(k => k !== first);
+    const rosters = {}; keys.forEach(k => { rosters[k] = cupRosterOf(cfg, k); });
+    const N = rosters[first] ? rosters[first].length : 0, equal = N >= 1 && rosters[other].length === N;
+    const log = m.log || [];
+    const used = {}; keys.forEach(k => { used[k] = new Set(); });
+    log.forEach(e => { if (used[e.side]) used[e.side].add(norm(e.player)); });
+    const avail = {}; keys.forEach(k => { avail[k] = rosters[k].filter(x => !used[k].has(norm(x))); });
+    const steps = equal ? Math.max(0, 2 * (N - 1)) : 0, done = equal && log.length >= steps;
+    const round = log.length >> 1, putter = round % 2 === 0 ? first : other, responder = putter === first ? other : first;
+    const role = log.length % 2 === 0 ? 'put' : 'respond';
+    const ms = [];
+    for (let i = 0; i + 1 < log.length; i += 2) ms.push([{ side: log[i].side, players: [log[i].player] }, { side: log[i + 1].side, players: [log[i + 1].player] }]);
+    if (done && avail[first].length === 1 && avail[other].length === 1) ms.push([{ side: first, players: avail[first].slice() }, { side: other, players: avail[other].slice() }]);
+    const matches = ms.map((sd, i) => ({ key: 'm' + (i + 1), sides: sd.slice().sort((a, b) => keys.indexOf(a.side) - keys.indexOf(b.side)) }));
+    return { started: true, first, other, n: N, log, role, onClock: done || !equal ? null : (role === 'put' ? putter : responder), facing: role === 'respond' && !done ? log[log.length - 1].player : null, avail, matches, done, equal, rosters };
+  }
+  function cupSinglesPick(cfg, side, player) {
+    const v = cupSinglesView(cfg);
+    if (!v.started) return { ok: false, reason: 'The singles draw has not started' };
+    if (!v.equal) return { ok: false, reason: 'Both teams need the same number of players for singles' };
+    if (v.done) return { ok: false, reason: 'The singles matchups are already set' };
+    if (v.onClock !== side) return { ok: false, reason: 'It is not your turn' };
+    const canon = v.avail[side].find(a => norm(a) === norm(player));
+    if (!canon) return { ok: false, reason: 'That player is already in a match' };
+    return { ok: true, singles: Object.assign({}, cfg.singles, { log: v.log.concat([{ n: v.log.length + 1, side, player: canon }]) }) };
+  }
   // ── BF Cup handicaps (Dev-95) ──────────────────────────────────────────
   // "Off the low" at a partial allowance, one rule for every format: inside each match the lowest handicap plays to scratch and everyone
   // else gets `pct`% of the difference (rounded). Fourball works per player (the low of all four), Foursomes per pair on the pair's COMBINED
@@ -2560,7 +2608,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
+    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupSinglesRound, cupSinglesControl, cupSinglesView, cupSinglesPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });

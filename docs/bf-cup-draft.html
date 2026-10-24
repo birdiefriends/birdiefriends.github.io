@@ -82,8 +82,8 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.36.0"></script>
-<script src="bf_live_match.js?v=7"></script>
+<script src="bf_engine.js?v=1.37.0"></script>
+<script src="bf_live_match.js?v=8"></script>
 <script>
 (function () {
   'use strict';
@@ -226,10 +226,10 @@ button:disabled{opacity:.4;cursor:default}
   }
   // The captain in control chooses to go first, defer, or flip a coin. `stage` is 'draft' or 'matchup'. Everyone else sees who is deciding; the host can always decide for him.
   function orderHtml(stage, control) {
-    var what = stage === 'matchup' ? 'put up the first pair' : 'pick first';
+    var what = stage === 'singles' ? 'put up the first player' : stage === 'matchup' ? 'put up the first pair' : 'pick first';
     var mine = !!YOU && YOU === control && !(HOST && pin);
     var out = '<div class="card"><h2>' + (mine ? 'You are in control' : esc(sideName(control)) + ' is deciding') + '</h2>';
-    if (mine) out += '<p class="hint">Choose who will ' + what + ' in the ' + (stage === 'matchup' ? 'Saturday matchup draw' : 'team draft') + '.</p><div class="toolbar"><button data-ochoice="start" data-ostage="' + stage + '">We ' + (stage === 'matchup' ? 'put up first' : 'pick first') + '</button><button class="sec" data-ochoice="defer" data-ostage="' + stage + '">Defer to them</button><button class="sec" data-ochoice="toss" data-ostage="' + stage + '">🪙 Coin toss</button></div>';
+    if (mine) out += '<p class="hint">Choose who will ' + what + ' in the ' + (stage === 'singles' ? 'Sunday singles draw' : stage === 'matchup' ? 'Saturday matchup draw' : 'team draft') + '.</p><div class="toolbar"><button data-ochoice="start" data-ostage="' + stage + '">We ' + (stage !== 'draft' ? 'put up first' : 'pick first') + '</button><button class="sec" data-ochoice="defer" data-ostage="' + stage + '">Defer to them</button><button class="sec" data-ochoice="toss" data-ostage="' + stage + '">🪙 Coin toss</button></div>';
     else out += '<p class="hint">' + esc(sideName(control)) + ' chooses whether to ' + what + ', defer, or flip a coin.</p>';
     if (HOST && pin) out += '<div class="toolbar"><span class="hint">Host override:</span>' + cfg.sides.map(function (sd) { return '<button class="sec" data-oforce="' + sd.key + '" data-ostage="' + stage + '">' + esc(sd.name || sd.key) + ' goes first</button>'; }).join('') + '</div>';
     return out + '</div>';
@@ -270,6 +270,68 @@ button:disabled{opacity:.4;cursor:default}
     }
     if (host) out += '<div class="toolbar">' + (mu.log.length ? '<button class="sec" id="muUndo">↩︎ Undo last pick</button>' : '') + '<button class="sec" id="muReset">Restart the matchup draw</button></div>';
     return out + '</div>';
+  }
+  var pendingSingle = null;
+  function singlesApply(ns) {
+    cfg.singles = ns; var v = E.cupSinglesView(cfg), ri = E.cupSinglesRound(cfg);
+    if (ri >= 0) cfg.rounds[ri].matches = v.done ? v.matches : [];
+    cfg.singles.done = !!v.done;
+  }
+  function singlesOpen() {                                   // is the Sunday draw something the players should be looking at right now?
+    if (!(cfg.draft || {}).locked || E.cupSinglesRound(cfg) < 0) return false;
+    var sv = E.cupSinglesView(cfg), ctl = E.cupSinglesControl(cfg);
+    return sv.started ? !sv.done : ctl.ready;
+  }
+  function singlesHtml() {
+    if (!(cfg.draft || {}).locked || E.cupSinglesRound(cfg) < 0) return '';
+    if (E.cupPairsRound(cfg) >= 0 && !(cfg.matchup && cfg.matchup.done)) return '';
+    var sv = E.cupSinglesView(cfg), host = HOST && !!pin, ctl = E.cupSinglesControl(cfg), keys = cfg.sides.map(function (x) { return x.key; });
+    var out = '<div class="card"><h2>Sunday singles</h2>';
+    if (!sv.started) {
+      var why = ctl.ready ? '<div class="banner" style="background:#0a3161">Saturday ended ' + esc(sideName(keys[0])) + ' ' + fmt(ctl.points[keys[0]]) + ' – ' + fmt(ctl.points[keys[1]]) + ' ' + esc(sideName(keys[1])) + (ctl.tie ? '. A tie, so the captain who picked second in the team draft is in control.' : '. ' + esc(sideName(ctl.control)) + ' lost, so ' + esc(sideName(ctl.control)) + ' is in control.') + '</div>'
+        : '<p class="hint">Waiting for Saturday to finish. When the pairs round is finished (the Finish button on the Score tab), the side that lost chooses to put up first, defer or flip a coin.</p>';
+      out += why + '</div>' + (ctl.ready ? orderHtml('singles', ctl.control) : '');
+      if (host) out += '<div class="card"><p class="hint">Host override. Start the singles draw yourself and say who puts up first.</p><div class="toolbar"><select id="sgFirst">' + cfg.sides.map(function (sd) { return '<option value="' + sd.key + '"' + (sd.key === ctl.control ? ' selected' : '') + '>' + esc(sd.name || sd.key) + '</option>'; }).join('') + '</select><button id="sgStart">Start the singles draw</button></div></div>';
+      return out;
+    }
+    if (!sv.equal) return out + '<p class="err">Both teams need the same number of players for singles. Check the rosters in BFE-Admin.</p></div>';
+    var clock = sv.onClock, can = !!clock && (host || (!!YOU && YOU === clock));
+    if (sv.choice !== undefined) { /* unused */ }
+    if (cfg.singles.choice && cfg.singles.choice.text) out += '<div class="banner" style="background:#0a3161">🎲 ' + esc(cfg.singles.choice.text) + '</div>';
+    if (sv.done) out += '<div class="banner" style="background:#1a7f3c">✅ Singles matchups are set</div>';
+    else out += '<div class="banner live mu-banner"><span class="dot"></span><span><b>' + esc(sideName(clock)) + '</b> ' + (sv.role === 'put' ? 'puts up a player' : 'answers ' + esc(sv.facing)) + (can ? ' · <b>your move, tap a player</b>' : '') + '</span></div>';
+    if (!sv.done && sv.facing) { var pside = sv.log[sv.log.length - 1].side, psi = keys.indexOf(pside);
+      out += '<div class="match"><div class="n">Match ' + (sv.matches.length + 1) + ' · waiting for an answer</div><div class="vs"><div class="' + colorOf(cfg.sides[psi], psi) + '"><b>' + esc(sv.facing) + '</b><span class="num">' + esc(sideName(pside)) + ' put him up</span></div><div class="x">vs</div><div><b>?</b><span class="num">' + esc(sideName(clock)) + ' to answer</span></div></div></div>'; }
+    var st = (cfg.draft || {}).stats || {}, rule = E.cupHandicapRule(cfg), hcps = {};
+    Object.keys(st).forEach(function (n) { var c = E.cupCourseHcp(st[n].hcp, rule); if (c !== null) hcps[n] = c; });
+    out += sv.matches.map(function (mt, i) {
+      function sd1(ms) { var si = keys.indexOf(ms.side), sd = cfg.sides[si], x = st[ms.players[0]] || {}; return '<div class="' + colorOf(sd, si) + '"><b>' + esc(ms.players[0]) + '</b><span class="num">' + esc(sd.name || ms.side) + ' · HCP ' + fmt(x.hcp) + '</span></div>'; }
+      return '<div class="match"><div class="n">Match ' + (i + 1) + '</div><div class="vs">' + sd1(mt.sides[0]) + '<div class="x">vs</div>' + sd1(mt.sides[1]) + '</div><div class="num" style="text-align:center;margin-top:6px;font-size:.82rem;color:var(--dim)">' + esc(E.cupMatchStrokeText(mt, hcps, rule, ['singles'], sideName)) + '</div></div>'; }).join('');
+    if (!sv.done) out += '<div class="mu-col">' + cfg.sides.map(function (sd, si) {
+      var tap = can && clock === sd.key;
+      return '<div><div class="' + colorOf(sd, si) + '"><b>' + esc(sd.name || sd.key) + '</b></div><div class="hint" style="margin:8px 0 2px">Still to match (' + sv.avail[sd.key].length + ')</div>' + sv.avail[sd.key].map(function (n) {
+        var s0 = st[n] || {};
+        return '<div class="pairc ' + colorOf(sd, si) + (tap ? ' tap' : '') + '"' + (tap ? ' data-splayer="' + esc(n) + '" data-sside="' + sd.key + '"' : '') + '><div><b>' + esc(n) + '</b><div class="num">HCP ' + fmt(s0.hcp) + ' · ' + (s0.rank != null ? '#' + s0.rank : '–') + ' · Avg vs Quota ' + fmt(s0.avg) + '</div></div></div>'; }).join('') + '</div>';
+    }).join('') + '</div>';
+    if (host) out += '<div class="toolbar">' + (sv.log.length ? '<button class="sec" id="sgUndo">↩︎ Undo last pick</button>' : '') + '<button class="sec" id="sgReset">Restart the singles draw</button></div>';
+    return out + '</div>';
+  }
+  function singlesWire() {
+    function $(id) { return document.getElementById(id); }
+    function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
+    on('sgStart', function () { cfg.singles = { started: true, first: $('sgFirst').value, log: [] }; save(); });
+    on('sgUndo', function () { var m = cfg.singles; singlesApply(Object.assign({}, m, { log: m.log.slice(0, -1) })); save(); });
+    on('sgReset', function () { if (!window.confirm('Clear every singles pick and start the singles draw over?')) return; var ri = E.cupSinglesRound(cfg); if (ri >= 0) cfg.rounds[ri].matches = []; delete cfg.singles; save(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-splayer]'), function (b) { b.addEventListener('click', function () { pendingSingle = { side: b.getAttribute('data-sside'), player: b.getAttribute('data-splayer') }; render(); }); });
+    on('sgCancel', function () { pendingSingle = null; render(); });
+    on('sgConfirm', function () {
+      var pp = pendingSingle; pendingSingle = null;
+      if (HOST && pin) { var r = E.cupSinglesPick(cfg, pp.side, pp.player); if (!r.ok) { error = r.reason; render(); return; } singlesApply(r.singles); save(); return; }
+      busy = true;
+      fetch(WORKER + '/bfe/cup/act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT, code: CAP, action: 'singles_pick', player: pp.player }) })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); cfg = j.config; error = ''; }); })
+        .catch(function (e) { error = e.message; }).then(function () { busy = false; return load(); }).then(render);
+    });
   }
   function matchupApply(newMu) {
     cfg.matchup = newMu;
@@ -359,11 +421,12 @@ button:disabled{opacity:.4;cursor:default}
       if (view === 'score' || view === 'board') {
         var names = []; (cfg.rounds || []).forEach(function (r) { (r.matches || []).forEach(function (m) { m.sides.forEach(function (sd) { sd.players.forEach(function (p) { if (names.indexOf(p) < 0) names.push(p); }); }); }); });
         var who = '<div class="toolbar"><label class="hint">I am </label><select id="meSel"><option value="">(pick your name)</option>' + names.map(function (n) { return '<option' + (n === PLAYER ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></div>';
-        app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + '<div id="lmMount"></div>';
+        app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + (singlesOpen() ? '<div class="banner live"><span class="dot"></span><span>The Sunday singles draw is open.</span><button data-view="teams">Open the singles draw</button></div>' : '') + '<div id="lmMount"></div>';
         mountScore(); wire(); return;
       }
       html += tabs;
     }
+
     var clock = v.onClock;
     if (d.orderChoice && d.orderChoice.text) html += '<div class="banner" style="background:#0a3161">🎲 ' + esc(d.orderChoice.text) + '</div>';
     if (v.awaitingOrder) html += orderHtml('draft', v.control);
@@ -374,11 +437,12 @@ button:disabled{opacity:.4;cursor:default}
       html += '<div class="banner" style="background:#0a3161">' + cfg.sides.map(function (sd) { return (sg[sd.key] ? '✅ ' : '⏳ ') + esc(sd.captain || sideName(sd.key)) + (sg[sd.key] ? ' signed off' : ' to sign off'); }).join(' &nbsp;·&nbsp; ') + '</div>';
       if (YOU && !(HOST && pin)) html += '<div class="toolbar">' + (sg[YOU] ? '<span style="flex:1"><b>You signed off.</b> The teams lock when the other captain does.</span><button class="sec" id="unsign">Take it back</button>' : '<button id="signoff">Sign off on our team</button><span class="hint">Both captains sign off and the teams lock.</span>') + '</div>';
     }
-    html += meterHtml(v) + teamsHtml(v) + (v.done ? '' : poolHtml(v)) + matchupHtml() + linksHtml();
+    html += meterHtml(v) + teamsHtml(v) + (v.done ? '' : poolHtml(v)) + matchupHtml() + singlesHtml() + linksHtml();
     if (HOST && pin) {
       html += '<div class="toolbar">' + '<button class="sec" id="undo"' + (v.picks.length ? '' : ' disabled') + '>↩︎ Undo last pick</button>'
         + (v.done && !d.locked ? '<button id="lock">Lock the teams (host override)</button>' : '') + '<button class="sec" id="resetDraft">Start over</button></div>';
     }
+    if (pendingSingle) html += '<div class="sheet"><span><b>' + esc(sideName(pendingSingle.side)) + '</b>: ' + (E.cupSinglesView(cfg).role === 'put' ? 'put up' : 'answer with') + ' <b>' + esc(pendingSingle.player) + '</b>?</span><button id="sgConfirm">Confirm</button><button class="sec" id="sgCancel">Cancel</button></div>';
     if (pendingPair) { var mu0 = E.cupMatchupView(cfg); html += '<div class="sheet"><span><b>' + esc(sideName(pendingPair.side)) + '</b>: ' + (mu0.role === 'put' ? 'put up' : 'answer with') + ' <b>' + esc(pendingPair.pair[0]) + ' &amp; ' + esc(pendingPair.pair[1]) + '</b>?</span><button id="muConfirm">Yes</button><button class="sec" id="muCancel">Cancel</button></div>'; }
     if (pending) html += '<div class="sheet"><span><b>' + esc(pending) + '</b> to <b>' + esc(sideName(clock)) + '</b>?</span><button id="confirmPick">Pick</button><button class="sec" id="cancelPick">Cancel</button></div>';
     app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html; wire();
@@ -399,7 +463,7 @@ button:disabled{opacity:.4;cursor:default}
   function wire() {
     function $(id) { return document.getElementById(id); }
     function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
-    matchupWire();
+    matchupWire(); singlesWire();
     var ct = $('cardToggle'); if (ct) ct.addEventListener('click', function () { if (cfg.hide_card) delete cfg.hide_card; else cfg.hide_card = true; save(); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-view]'), function (b) { b.addEventListener('click', function () { view = b.getAttribute('data-view'); render(); }); });
     var me = $('meSel'); if (me) me.addEventListener('change', function () { PLAYER = me.value; try { localStorage.setItem('bf_cup_me', PLAYER); } catch (e) {} render(); });
@@ -488,7 +552,7 @@ button:disabled{opacity:.4;cursor:default}
     }); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-oforce]'), function (b) { b.addEventListener('click', function () {
       var k = b.getAttribute('data-oforce');
-      if (b.getAttribute('data-ostage') === 'matchup') cfg.matchup = { started: true, first: k, log: [] }; else draft().first = k;
+      var st0 = b.getAttribute('data-ostage'); if (st0 === 'singles') cfg.singles = { started: true, first: k, log: [] }; else if (st0 === 'matchup') cfg.matchup = { started: true, first: k, log: [] }; else draft().first = k;
       save();
     }); });
     ['signoff', 'unsign'].forEach(function (act) { on(act, function () {

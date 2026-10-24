@@ -222,6 +222,13 @@
     el.innerHTML = h; wire(round, match, hole, info);
   }
 
+  function roundPoints(round) {                              // this round's points per side, from the same engine the scoreboard uses
+    var cfg = S.opts.getCfg(), st = S.opts.E.cupLiveStandings(cfg), keys = (cfg.sides || []).map(function (x) { return x.key; }), out = {};
+    keys.forEach(function (k) { out[k] = 0; });
+    var r = st.rounds.filter(function (x) { return x.key === round.key; })[0];
+    if (r) r.matches.forEach(function (m) { keys.forEach(function (k) { out[k] += m.points[k] || 0; }); });
+    return out;
+  }
   function wire(round, match, hole, info) {
     var el = S.el, key = round.key + '|' + match.key + '|' + hole;
     function cur(r) { var cfg = S.opts.getCfg(), e = entryOf(cfg, round.key, match.key); return rowVal(r.key, S.inp[key] || {}, e && e.h && e.h[String(hole)]); }
@@ -246,7 +253,7 @@
       S.last = { r: round.key, m: match.key, w: wn, text: 'Hole ' + hole + ': ' + (wn === 'a' ? sideName(cfg, match.sides[0].side) + ' wins the hole' : wn === 'b' ? sideName(cfg, match.sides[1].side) + ' wins the hole' : 'halved') + '  ·  Match: ' + sl2.text + ' (' + sl2.sub + ')' }; S.err = '';
       S.who = null; S.hole = { r: round.key, m: match.key, h: Math.min(live.next, Math.max.apply(null, round.segments.map(function (s) { return s.to; }))) };
       render(); flush(); if (S.opts.onChange) S.opts.onChange(); });
-    function roundAct(action) { fetch(S.opts.worker + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: S.opts.event, action: action, round: round.key, player: S.opts.player || '', code: S.opts.code || undefined, pin: S.opts.pin || undefined }) })
+    function roundAct(action) { fetch(S.opts.worker + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: S.opts.event, action: action, round: round.key, points: action === 'round_end' ? roundPoints(round) : undefined, player: S.opts.player || '', code: S.opts.code || undefined, pin: S.opts.pin || undefined }) })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); }).then(function (j) { var c = S.opts.getCfg(); c.phases = j.config.phases; S.msg = ''; render(); if (S.opts.onChange) S.opts.onChange(); })
       .catch(function (e) { S.msg = 'Could not do that: ' + e.message; render(); }); }
     var fin = el.querySelector('#lmFinish'); if (fin) fin.addEventListener('click', function () { if (fin.textContent.indexOf('early') > 0 && !window.confirm('Some matches are not decided. Finish the round anyway?')) return; roundAct('round_end'); });
