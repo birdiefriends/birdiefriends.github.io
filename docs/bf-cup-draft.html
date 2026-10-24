@@ -83,7 +83,7 @@ button:disabled{opacity:.4;cursor:default}
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
 <script src="bf_engine.js?v=1.36.0"></script>
-<script src="bf_live_match.js?v=4"></script>
+<script src="bf_live_match.js?v=5"></script>
 <script>
 (function () {
   'use strict';
@@ -355,11 +355,11 @@ button:disabled{opacity:.4;cursor:default}
     var hasMatches = (cfg.rounds || []).some(function (r) { return (r.matches || []).length; });
     if (hasMatches && d.locked) {
       if (!view) view = 'score';
-      var tabs = '<div class="toolbar"><button class="' + (view === 'score' ? '' : 'sec') + '" data-view="score">Score</button><button class="' + (view === 'teams' ? '' : 'sec') + '" data-view="teams">Teams &amp; draw</button></div>';
-      if (view === 'score') {
+      var tabs = '<div class="toolbar"><button class="' + (view === 'score' ? '' : 'sec') + '" data-view="score">Score</button><button class="' + (view === 'board' ? '' : 'sec') + '" data-view="board">Leaderboard</button><button class="' + (view === 'teams' ? '' : 'sec') + '" data-view="teams">Teams &amp; draw</button></div>';
+      if (view === 'score' || view === 'board') {
         var names = []; (cfg.rounds || []).forEach(function (r) { (r.matches || []).forEach(function (m) { m.sides.forEach(function (sd) { sd.players.forEach(function (p) { if (names.indexOf(p) < 0) names.push(p); }); }); }); });
         var who = '<div class="toolbar"><label class="hint">I am </label><select id="meSel"><option value="">(pick your name)</option>' + names.map(function (n) { return '<option' + (n === PLAYER ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></div>';
-        app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + who + '<div id="lmMount"></div>';
+        app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + (view === 'score' ? who : '') + '<div id="lmMount"></div>';
         mountScore(); wire(); return;
       }
       html += tabs;
@@ -387,10 +387,12 @@ button:disabled{opacity:.4;cursor:default}
   var lmReady = false;
   function mountScore() {
     var el = document.getElementById('lmMount'); if (!el) return;
+    var setv = function () { window.BFLiveMatch.setView(view); };
     if (!lmReady) {
       lmReady = true;
-      window.BFLiveMatch.mount(el, { E: E, getCfg: function () { return cfg; }, worker: WORKER, event: EVENT, get player() { return PLAYER; }, code: CAP, get pin() { return HOST ? pin : ''; }, onChange: function () {} });
-    } else window.BFLiveMatch.attach(el);
+      window.BFLiveMatch.mount(el, { E: E, getCfg: function () { return cfg; }, worker: WORKER, event: EVENT, get player() { return PLAYER; }, code: CAP, get pin() { return HOST ? pin : ''; }, onChange: function () {}, goScore: function () { view = 'score'; render(); } });
+      setv(); window.BFLiveMatch.attach(el);
+    } else { setv(); window.BFLiveMatch.attach(el); }
   }
   function hero() { return '<div class="stripes"></div><div class="backrow"><a id="backApp" href="portal.html">← Back to the app</a></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div>' + (PRACTICE ? '<div class="banner" style="background:#b8860b">PRACTICE RUN · sample players, nothing here is real</div>' : ''); }
 

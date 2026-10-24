@@ -35,11 +35,13 @@
     '.lm .lmchips{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lm .lmchip{display:flex;justify-content:space-between;align-items:center;gap:6px;background:var(--bg2);color:var(--tx);border:2px solid var(--line);border-left:6px solid var(--line);border-radius:10px;padding:10px;font:inherit;font-weight:700;cursor:pointer;text-align:left}' +
     '.lm .lmchip.a{border-left-color:var(--a)}.lm .lmchip.b{border-left-color:var(--b)}.lm .lmchip.sel{border-color:var(--tx)}.lm .lmchip small{display:block;font-weight:500;color:var(--dim);font-size:.7rem}' +
     '.lm .lmcv{font-size:1.7rem;font-weight:800;min-width:30px;text-align:right}.lm .lmcv.pu{color:var(--warn)}.lm .lmpick{margin:10px 0 2px}' +
+    '.lm .lmbm{display:block;width:100%;background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px;font:inherit;text-align:left;cursor:pointer}.lm .lmbmh{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;font-weight:700;margin-bottom:6px}.lm .lmbmh .a{border-left:4px solid var(--a);padding-left:6px}.lm .lmbmh .b{border-left:4px solid var(--b);padding-left:6px;text-align:right;border-left:0;border-right:4px solid var(--b);padding-right:6px}' +
+    '.lm .lmbs{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid var(--line);font-size:.88rem}.lm .lmbs b.a{color:var(--a)}.lm .lmbs b.b{color:var(--b)}' +
     '.lm .lmpu{width:auto!important;padding:0 8px;font-size:.78rem!important}.lm .lmpu.on{background:var(--warn)!important;color:var(--ink)!important}' +
     '.lm .lmgo{width:100%;padding:13px;border-radius:10px;border:0;background:var(--lm-accent,var(--a));color:#fff;font:inherit;font-weight:800;font-size:1rem;cursor:pointer;margin-top:8px}.lm .lmgo:disabled{opacity:.45}' +
     '.lm .lmsec{background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-weight:700;cursor:pointer}' +
     '.lm .lmmsg{margin:8px 0;padding:8px 10px;border-radius:9px;background:var(--bg2);font-weight:600;font-size:.9rem}.lm .lmmsg.q{background:var(--warn);color:var(--ink)}.lm .lmmsg.ok{background:#1a7f3c;color:#fff}' +
-    '.lm .lmdim{color:var(--dim);font-size:.82rem}.lm .lmdots{letter-spacing:2px;color:var(--warn)}' +
+    '.lm .lmdim{color:var(--dim);font-size:.82rem}.lm .lmdots{letter-spacing:3px;color:var(--warn);font-size:1.15rem;line-height:1;margin-left:10px;display:inline-block;vertical-align:middle}' +
     '.lm .lmboard{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;text-align:center;font-weight:800}.lm .lmboard .big{font-size:1.9rem}' +
     '.lm .lmml{display:grid;grid-template-columns:1fr auto;gap:6px;padding:6px 0;border-top:1px solid var(--line);font-size:.88rem}';
 
@@ -125,12 +127,38 @@
     if (posted) { var k = Object.keys(posted).filter(function (x) { return norm(x) === norm(key); })[0]; if (k !== undefined) return posted[k]; }
     return undefined;
   }
+
+  // The leaderboard view: the points race and every match with both of its parts (Fourball / Foursomes), one record, one renderer.
+  function boardHtml(cfg, all, standings) {
+    var keys = (cfg.sides || []).map(function (x) { return x.key; }), h = '<div class="lm">';
+    h += '<div class="lmc"><div class="lmboard"><div style="color:var(--a)"><span class="big">' + standings.points[keys[0]] + '</span><div class="lmdim">' + esc(sideName(cfg, keys[0])) + '</div></div><div class="lmdim">POINTS<br>' + standings.target + ' to win</div><div style="color:var(--b)"><span class="big">' + standings.points[keys[1]] + '</span><div class="lmdim">' + esc(sideName(cfg, keys[1])) + '</div></div></div>' + (standings.clinched ? '<div class="lmmsg ok" style="margin-top:8px;text-align:center">' + esc(sideName(cfg, standings.clinched)) + ' has clinched the Cup</div>' : '') + '</div>';
+    standings.rounds.forEach(function (r) {
+      if (!r.matches.length) return;
+      h += '<div class="lmc"><b>' + esc(r.name || r.key) + '</b>' + (r.done ? ' <span class="lmdim">· final</span>' : '');
+      r.matches.forEach(function (m) {
+        h += '<button class="lmbm" data-lm-open="' + esc(r.key) + '|' + esc(m.key) + '"><div class="lmbmh"><span class="a">' + esc(m.sides[0].players.join(' & ')) + '</span><span class="lmdim">v</span><span class="b">' + esc(m.sides[1].players.join(' & ')) + '</span></div>';
+        m.segments.forEach(function (sg) {
+          var win = sg.winner ? sideName(cfg, sg.winner) + ' ' + sg.text : sg.text;
+          var cls = sg.winner === m.sides[0].side ? 'a' : sg.winner === m.sides[1].side ? 'b' : '';
+          h += '<div class="lmbs"><span class="lmdim">' + FMT[sg.format] + ' · ' + sg.from + '–' + sg.to + '</span><b class="' + cls + '">' + esc(sg.decided ? win : (sg.thru ? (sg.lead === 0 ? 'All square' : sideName(cfg, sg.lead > 0 ? m.sides[0].side : m.sides[1].side) + ' ' + Math.abs(sg.lead) + ' UP') + ' · thru ' + sg.thru : 'Not started')) + '</b></div>';
+        });
+        h += '</button>';
+      });
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
   function render() {
     if (!S) return;
     var cfg = S.opts.getCfg(), el = S.el; if (!cfg) { el.innerHTML = ''; return; }
     var all = matchesOf(cfg);
     if (!all.length) { el.innerHTML = '<div class="lm"><div class="lmc lmdim">Matches are not set yet. The scoring opens once the draw is done.</div></div>'; return; }
     var E = S.opts.E;
+    if (S.view === 'board') {
+      el.innerHTML = boardHtml(cfg, all, E.cupLiveStandings(cfg));
+      Array.prototype.forEach.call(el.querySelectorAll('[data-lm-open]'), function (b) { b.addEventListener('click', function () { var p = b.getAttribute('data-lm-open').split('|'); S.sel = { r: p[0], m: p[1] }; S.hole = null; if (S.opts.goScore) S.opts.goScore(); }); });
+      return;
+    }
     // choose the match: remembered, else mine, else the first
     var sel = S.sel && all.filter(function (x) { return x.round.key === S.sel.r && x.match.key === S.sel.m; })[0];
     if (!sel) sel = all.filter(function (x) { return mine(x.match, S.opts.player); })[0] || all[0];
@@ -139,13 +167,10 @@
     var maxHole = Math.max.apply(null, round.segments.map(function (s) { return s.to; }));
     var hole = S.hole && S.hole.m === match.key && S.hole.r === round.key ? S.hole.h : live.next;
     S.hole = { r: round.key, m: match.key, h: hole };
-    var q = queue(), standings = E.cupLiveStandings(cfg);
+    var q = queue();
     var sl = statusLine(cfg, live, match);
     var lead = 0; live.segments.forEach(function (s) { if (!lead && !s.state.decided && s.state.thru > 0) lead = s.state.lead; });
     var h = '<div class="lm">';
-    // team totals
-    var keys = (cfg.sides || []).map(function (s) { return s.key; });
-    h += '<div class="lmc"><div class="lmboard"><div style="color:var(--a)"><span class="big">' + standings.points[keys[0]] + '</span><div class="lmdim">' + esc(sideName(cfg, keys[0])) + '</div></div><div class="lmdim">POINTS<br>' + standings.target + ' to win</div><div style="color:var(--b)"><span class="big">' + standings.points[keys[1]] + '</span><div class="lmdim">' + esc(sideName(cfg, keys[1])) + '</div></div></div></div>';
     // match picker
     h += '<div class="lmtabs">' + all.map(function (x) {
       var ol = oneLine(cfg, x.round, x.match), on = x.round.key === round.key && x.match.key === match.key;
@@ -177,8 +202,8 @@
     }).join('') + '</div>';
     var curw = rowVal(who.key, inp, posted);
     if (info.fmt === 'altshot') h += '<div class="lmdim" style="margin:6px 0">Foursomes: one ball per team. Enter the team gross for the hole.</div>';
-    h += '<div class="lmpick"><div class="lmdim" style="margin-bottom:4px">' + esc(who.label) + ' · hole ' + hole + '</div><div class="lmtiles">' + [2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (curw === n ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|' + n + '">' + n + '</button>'; }).join('')
-      + '<button class="lmt sub' + (curw >= 9 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|more">' + (curw >= 9 ? curw : '9+') + '</button><button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0">P</button></div></div>';
+    h += '<div class="lmpick"><div class="lmdim" style="margin-bottom:4px">' + esc(who.label) + ' · hole ' + hole + '</div><div class="lmtiles">' + [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (curw === n ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|' + n + '">' + n + '</button>'; }).join('')
+      + '<button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0">P</button></div></div>';
     var missing = info.rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
     var anon = !S.opts.player && !S.opts.code && !S.opts.pin;
     if (!info.hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
@@ -189,8 +214,6 @@
     if (S.msg) h += '<div class="lmmsg">' + esc(S.msg) + '</div>';
     if (live.done) h += '<div class="lmmsg ok">This match is decided. ' + esc(sl.text) + '. You can keep entering holes for fun; the result does not change.</div>';
     h += '</div>';
-    // all matches
-    h += '<div class="lmc"><b>All matches</b>' + all.map(function (x) { var ol = oneLine(cfg, x.round, x.match); return '<div class="lmml"><span>' + esc((x.round.name || x.round.key) + ' ' + x.match.key.toUpperCase() + ' · ' + x.match.sides.map(function (s) { return s.players.join('/'); }).join(' v ')) + '</span><b>' + esc(ol.text) + (ol.extra ? ' <span class="lmdim">(' + esc(ol.extra) + ')</span>' : '') + '</b></div>'; }).join('') + '</div>';
     // round control
     var rEnd = cfg.phases && cfg.phases['round_' + round.key + '_end'], allDone = (round.matches || []).every(function (m) { return E.cupMatchLive(cfg, round, m, entryOf(cfg, round.key, m.key)).done; });
     h += '<div class="lmc">' + (rEnd ? '<b>' + esc(round.name || round.key) + ' is finished.</b> <button class="lmsec" id="lmReopen">Reopen it</button>' : '<button class="lmsec" id="lmFinish"' + '>' + (allDone ? 'Finish ' : 'Finish early: ') + esc(round.name || round.key) + '</button> <span class="lmdim">' + (allDone ? 'Every match is decided.' : 'Some matches are still open.') + '</span>') + '</div>';
@@ -204,8 +227,8 @@
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-sel]'), function (b) { b.addEventListener('click', function () { var p = b.getAttribute('data-lm-sel').split('|'); S.sel = { r: p[0], m: p[1] }; S.hole = null; S.msg = ''; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-hole]'), function (b) { b.addEventListener('click', function () { S.hole = { r: round.key, m: match.key, h: Number(b.getAttribute('data-lm-hole')) }; S.who = null; S.showAll = false; S.msg = ''; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-s]'), function (b) { b.addEventListener('click', function () {
-      var p = b.getAttribute('data-lm-s').split('|'), row = info.rows.filter(function (r) { return r.key === p[0]; })[0], c = cur(row), v;
-      if (p[1] === 'more') v = c >= 9 ? Math.min(15, c + 1) : 9; else v = Number(p[1]);
+      var p = b.getAttribute('data-lm-s').split('|'), row = info.rows.filter(function (r) { return r.key === p[0]; })[0], v;
+      v = Number(p[1]);
       (S.inp[key] = S.inp[key] || {})[row.key] = v;
       var nx = info.rows.filter(function (r) { return r.key !== row.key && cur(r) === undefined; })[0]; S.who = nx ? nx.key : row.key; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-who]'), function (b) { b.addEventListener('click', function () { S.who = b.getAttribute('data-lm-who'); render(); }); });
@@ -236,6 +259,7 @@
       render(); flush();
     },
     // the page re-draws its whole body on every change; hand the panel its new element
+    setView: function (v) { if (S) S.view = v; },
     attach: function (el) { if (!S) return; S.el = el; var cfg = S.opts.getCfg(); if (cfg) queue().forEach(function (p) { applyLocal(cfg, p); }); render(); },
     // call after the page reloaded the Cup from the server: keep unsent holes on top of the fresh scores
     refresh: function () { if (!S) return; var cfg = S.opts.getCfg(); if (cfg && queue().length) { var q = queue(); q.forEach(function (p) { applyLocal(cfg, p); }); } render(); },

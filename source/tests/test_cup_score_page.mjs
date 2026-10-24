@@ -65,6 +65,14 @@ ok(/Hole 1: Team Jake wins the hole.*Match: Team Jake 1 UP/.test(d.querySelector
 await click(dom, '#lmAll'); await click(dom, '[data-lm-hole="10"]'); d = dom.window.document;
 ok(d.querySelectorAll('.lmchip').length === 2 && /Foursomes/.test(d.querySelector('.lm').textContent) && /team gross/.test(d.querySelector('.lm').textContent), 'hole 10: two team chips and a team-gross note');
 ok(/Holes 1–9: Fourball · Holes 10–18: Foursomes/.test(d.querySelector('.lm').textContent), 'the round plan is shown');
+dom = await open('?player=Amy'); d = dom.window.document;
+ok(!!d.querySelector('.lmt[data-lm-s$="|1"]') && !/9\+/.test(d.querySelector('.lm').textContent), 'a 1 tile for the hole-in-one, no 9+');
+await click(dom, '[data-view="board"]'); d = dom.window.document;
+ok(/POINTS/.test(d.querySelector('.lm').textContent) && !d.querySelector('.lmchip'), 'Leaderboard tab: points race, no score entry');
+ok(/Fourball · 1–9/.test(d.querySelector('.lm').textContent) && /Foursomes · 10–18/.test(d.querySelector('.lm').textContent), 'each match shows both parts');
+ok(/Team Jake 2 UP · thru 2/.test(d.querySelector('.lm').textContent), 'live part shows who is up (got ' + d.querySelector('.lm').textContent.slice(0, 300) + ')');
+await click(dom, '.lmbm'); d = dom.window.document;
+ok(!!d.querySelector('.lmchip'), 'tap a match on the leaderboard to score it');
 // finish round
 dom = await open('?player=Jake'); await click(dom, '#lmFinish'); ok(posts.some(p => p.action === 'round_end' && p.round === 'r1'), 'finish round posts round_end');
 console.log('score page: ' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
