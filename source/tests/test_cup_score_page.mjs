@@ -19,6 +19,8 @@ const fakeFetch = async (u, o) => {
   if (/\/bfe\/cup\/act/.test(u)) {
     const b = JSON.parse(o.body); posts.push(b);
     if (b.action === 'score') { doc.scores = doc.scores || {}; const r = doc.scores[b.round] = doc.scores[b.round] || {}; const m = r[b.match] = r[b.match] || { h: {}, t: {}, by: {} }; m.h[String(b.hole)] = b.scores; m.t[String(b.hole)] = 'T'; doc.phases = doc.phases || {}; doc.phases['round_' + b.round + '_start'] = doc.phases['round_' + b.round + '_start'] || 'T'; }
+    if (b.action === 'match_close') { doc.closed = doc.closed || {}; doc.closed[b.round] = doc.closed[b.round] || {}; doc.closed[b.round][b.match] = { how: b.how, side: b.side, by: 'host' }; }
+    if (b.action === 'match_reopen') { delete doc.closed[b.round][b.match]; }
     if (b.action === 'round_end') { doc.phases = doc.phases || {}; doc.phases['round_' + b.round + '_end'] = 'T'; }
     return J({ ok: true, config: pub() });
   }
@@ -73,6 +75,15 @@ ok(/Fourball · 1–9/.test(d.querySelector('.lm').textContent) && /Foursomes ·
 ok(/Team Jake 2 UP · thru 2/.test(d.querySelector('.lm').textContent), 'live part shows who is up (got ' + d.querySelector('.lm').textContent.slice(0, 300) + ')');
 await click(dom, '.lmbm'); d = dom.window.document;
 ok(!!d.querySelector('.lmchip'), 'tap a match on the leaderboard to score it');
-// finish round
-dom = await open('?player=Jake'); await click(dom, '#lmFinish'); ok(posts.some(p => p.action === 'round_end' && p.round === 'r1'), 'finish round posts round_end');
+// match / round closing: host and captains only
+dom = await open('?player=Jake'); d = dom.window.document;
+ok(!d.querySelector('[data-lm-close]') && !d.getElementById('lmFinish') && /finishes by itself/.test(d.querySelector('.lm').textContent), 'a player sees no close buttons, and the round finishes by itself');
+dom = await open('?cap=AAA111&player=Jake'); d = dom.window.document;
+ok(d.querySelectorAll('[data-lm-close]').length === 4 && d.getElementById('lmFinish'), 'a captain can close a match (as it stands / either side concedes / halved) and finish early');
+await click(dom, '[data-lm-close^="concede|B"]'); d = dom.window.document;
+const mc = posts.filter(p => p.action === 'match_close').pop();
+ok(mc && mc.how === 'concede' && mc.side === 'B' && mc.match === 'm1' && mc.code === 'AAA111', 'the concession is posted with the captain code');
+ok(/Match closed by host: Team Nate conceded/.test(d.querySelector('.lm').textContent) && d.getElementById('lmMatchReopen'), 'the panel shows who closed it and offers Reopen');
+ok(posts.some(p => p.action === 'round_end' && p.round === 'r1') , 'with every match closed the round ends by itself');
+await click(dom, '#lmMatchReopen'); ok(posts.some(p => p.action === 'match_reopen'), 'a captain can reopen the match');
 console.log('score page: ' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

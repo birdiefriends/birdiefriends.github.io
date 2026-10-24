@@ -215,13 +215,28 @@
     if (S.msg) h += '<div class="lmmsg">' + esc(S.msg) + '</div>';
     if (live.done) h += '<div class="lmmsg ok">This match is decided. ' + esc(sl.text) + '. You can keep entering holes for fun; the result does not change.</div>';
     h += '</div>';
-    // round control
+    // closing a match by hand: host or captains only
+    var canClose = !!(S.opts.code || S.opts.pin), cl = live.closed;
+    if (cl) h += '<div class="lmmsg ok">Match closed by ' + esc(cl.by || 'a captain') + ': ' + esc(cl.how === 'concede' ? sideName(cfg, cl.side) + ' conceded' : cl.how === 'halve' ? 'called halved' : 'as it stands') + (canClose ? ' <button class="lmsec" id="lmMatchReopen" style="margin-left:8px">Reopen the match</button>' : '') + '</div>';
+    else if (canClose) h += '<div class="lmc"><b>Close this match</b><div class="lmdim" style="margin:4px 0 8px">Only for a concession or a match stopped early. A match that is mathematically over closes by itself.</div><div class="lmtabs"><button class="lmsec" data-lm-close="standing">As it stands</button>' + match.sides.map(function (sd) { return '<button class="lmsec" data-lm-close="concede|' + esc(sd.side) + '">' + esc(sideName(cfg, sd.side)) + ' concedes</button>'; }).join('') + '<button class="lmsec" data-lm-close="halve">Call it halved</button></div></div>';
+    // round control: the round finishes by itself once every match is decided or closed
     var rEnd = cfg.phases && cfg.phases['round_' + round.key + '_end'], allDone = (round.matches || []).every(function (m) { return E.cupMatchLive(cfg, round, m, entryOf(cfg, round.key, m.key)).done; });
-    h += '<div class="lmc">' + (rEnd ? '<b>' + esc(round.name || round.key) + ' is finished.</b> <button class="lmsec" id="lmReopen">Reopen it</button>' : '<button class="lmsec" id="lmFinish"' + '>' + (allDone ? 'Finish ' : 'Finish early: ') + esc(round.name || round.key) + '</button> <span class="lmdim">' + (allDone ? 'Every match is decided.' : 'Some matches are still open.') + '</span>') + '</div>';
+    h += '<div class="lmc">' + (rEnd ? '<b>' + esc(round.name || round.key) + ' is finished.</b>' + (canClose ? ' <button class="lmsec" id="lmReopen">Reopen it</button>' : '')
+      : canClose ? '<button class="lmsec" id="lmFinish">' + (allDone ? 'Finish ' : 'Finish early: ') + esc(round.name || round.key) + '</button> <span class="lmdim">' + (allDone ? 'Every match is decided.' : 'Some matches are still open.') + '</span>'
+      : '<span class="lmdim">' + esc(round.name || round.key) + ' finishes by itself when every match is decided.</span>') + '</div>';
+    if (allDone && !rEnd && (S.opts.player || canClose)) { S.autoEnd = S.autoEnd || {}; if (!S.autoEnd[round.key]) { S.autoEnd[round.key] = true; setTimeout(function () { act(round, 'round_end'); }, 50); } }
     h += '</div>';
     el.innerHTML = h; wire(round, match, hole, info);
   }
 
+  // One call for the round / match actions; whatever the Worker changed is merged into the page's copy of the Cup.
+  function act(round, action, extra) {
+    var body = Object.assign({ event_name: S.opts.event, action: action, round: round.key, points: action === 'round_end' ? roundPoints(round) : undefined, player: S.opts.player || '', code: S.opts.code || undefined, pin: S.opts.pin || undefined }, extra || {});
+    return fetch(S.opts.worker + '/bfe/cup/act', { method: 'POST', body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); })
+      .then(function (j) { var c = S.opts.getCfg(); ['phases', 'closed', 'results'].forEach(function (k) { if (j.config[k] !== undefined) c[k] = j.config[k]; else delete c[k]; }); S.msg = ''; render(); if (S.opts.onChange) S.opts.onChange(); })
+      .catch(function (e) { S.msg = 'Could not do that: ' + e.message; render(); });
+  }
   function roundPoints(round) {                              // this round's points per side, from the same engine the scoreboard uses
     var cfg = S.opts.getCfg(), st = S.opts.E.cupLiveStandings(cfg), keys = (cfg.sides || []).map(function (x) { return x.key; }), out = {};
     keys.forEach(function (k) { out[k] = 0; });
@@ -253,9 +268,11 @@
       S.last = { r: round.key, m: match.key, w: wn, text: 'Hole ' + hole + ': ' + (wn === 'a' ? sideName(cfg, match.sides[0].side) + ' wins the hole' : wn === 'b' ? sideName(cfg, match.sides[1].side) + ' wins the hole' : 'halved') + '  ·  Match: ' + sl2.text + ' (' + sl2.sub + ')' }; S.err = '';
       S.who = null; S.hole = { r: round.key, m: match.key, h: Math.min(live.next, Math.max.apply(null, round.segments.map(function (s) { return s.to; }))) };
       render(); flush(); if (S.opts.onChange) S.opts.onChange(); });
-    function roundAct(action) { fetch(S.opts.worker + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: S.opts.event, action: action, round: round.key, points: action === 'round_end' ? roundPoints(round) : undefined, player: S.opts.player || '', code: S.opts.code || undefined, pin: S.opts.pin || undefined }) })
-      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); }).then(function (j) { var c = S.opts.getCfg(); c.phases = j.config.phases; S.msg = ''; render(); if (S.opts.onChange) S.opts.onChange(); })
-      .catch(function (e) { S.msg = 'Could not do that: ' + e.message; render(); }); }
+    function roundAct(action) { act(round, action); }
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-close]'), function (b) { b.addEventListener('click', function () {
+      var p = b.getAttribute('data-lm-close').split('|'), msg = p[0] === 'concede' ? 'Record this match as conceded by ' + sideName(S.opts.getCfg(), p[1]) + '?' : p[0] === 'halve' ? 'Call this match halved?' : 'Close this match as it stands? Anything still open is decided on the current score.';
+      if (!window.confirm(msg)) return; act(round, 'match_close', { match: match.key, how: p[0], side: p[1] || undefined }); }); });
+    var mro = el.querySelector('#lmMatchReopen'); if (mro) mro.addEventListener('click', function () { act(round, 'match_reopen', { match: match.key }); });
     var fin = el.querySelector('#lmFinish'); if (fin) fin.addEventListener('click', function () { if (fin.textContent.indexOf('early') > 0 && !window.confirm('Some matches are not decided. Finish the round anyway?')) return; roundAct('round_end'); });
     var ro = el.querySelector('#lmReopen'); if (ro) ro.addEventListener('click', function () { roundAct('round_reopen'); });
   }

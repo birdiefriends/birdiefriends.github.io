@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.38.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.39.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1435,13 +1435,30 @@ export default {
         const cfgObj = JSON.parse(row.config);
         const acc = cfgObj.access || {};
         const norm = v => String(v == null ? '' : v).trim().toLowerCase();
-        if (body.action === 'score' || body.action === 'round_end' || body.action === 'round_reopen') {
+        if (body.action === 'score' || body.action === 'round_end' || body.action === 'round_reopen' || body.action === 'match_close' || body.action === 'match_reopen') {
           // Live scoring (trust model, like the rest of the app): anyone playing in the match can post its hole scores; a captain code or the PIN works too.
           const rd = (cfgObj.rounds || []).find(r => r.key === body.round);
           if (!rd) return J({ error: 'Unknown round' }, 404);
           const capOk = Object.keys(acc).some(k => body.code && String(acc[k]) === String(body.code)) || String(body.pin) === '7797';
           cfgObj.scores = cfgObj.scores || {};
           const ph = cfgObj.phases = cfgObj.phases || {}, now = new Date().toISOString();
+          if (body.action === 'match_close' || body.action === 'match_reopen') {
+            // Only the host or a captain closes a match by hand (a concession, a match stopped early); players just keep entering scores.
+            if (!capOk) return J({ error: 'Only the host or a captain can close a match' }, 403);
+            const mm = (rd.matches || []).find(x => x.key === body.match);
+            if (!mm) return J({ error: 'Unknown match' }, 404);
+            cfgObj.closed = cfgObj.closed || {}; cfgObj.closed[rd.key] = cfgObj.closed[rd.key] || {};
+            if (body.action === 'match_reopen') delete cfgObj.closed[rd.key][mm.key];
+            else {
+              if (!['standing', 'concede', 'halve'].includes(body.how)) return J({ error: 'Close it as it stands, conceded, or halved' }, 400);
+              const sd = (cfgObj.sides || []).map(x => x.key);
+              if (body.how === 'concede' && !sd.includes(body.side)) return J({ error: 'Say which side conceded' }, 400);
+              cfgObj.closed[rd.key][mm.key] = { how: body.how, side: body.how === 'concede' ? body.side : undefined, by: String(body.player || (String(body.pin) === '7797' ? 'host' : 'captain')).slice(0, 60), at: now };
+            }
+            await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
+            return J({ ok: true, config: cupPublic(cfgObj) });
+          }
+          if (body.action === 'round_reopen' && !capOk) return J({ error: 'Only the host or a captain can reopen a round' }, 403);
           if (body.action === 'round_end' || body.action === 'round_reopen') {
             if (!capOk && !(rd.matches || []).some(m => m.sides.some(sd => sd.players.some(p => norm(p) === norm(body.player))))) return J({ error: 'Only someone playing in this round can do that' }, 403);
             if (body.action === 'round_end') {
@@ -1692,7 +1709,7 @@ export default {
           if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
           // the public document never carries the captain codes, so a re-save must not wipe them
           // (the same goes for the captains' Saturday pairs: a page that never loaded them must not erase them)
-          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (!config.singles && pc.singles) config.singles = pc.singles; if (!config.results && pc.results) config.results = pc.results; if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
+          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (!config.singles && pc.singles) config.singles = pc.singles; if (!config.closed && pc.closed) config.closed = pc.closed; if (!config.results && pc.results) config.results = pc.results; if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
           await env.DB.prepare(`INSERT INTO bfe_cup (event_name, config, updated_at) VALUES (?, ?, datetime('now'))
              ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(cupStampPhases(config))).run();
           return J({ ok: true });

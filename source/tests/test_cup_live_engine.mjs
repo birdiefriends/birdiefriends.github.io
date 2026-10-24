@@ -53,4 +53,12 @@ ok(L.segments[0].nets[0][0] === 4 && L.segments[0].nets[1][0] === 5, 'no stroke 
   c4.rounds[0].matches.push({ key: 'm2', sides: [{ side: 'A', players: ['p3', 'p4'] }, { side: 'B', players: ['q3', 'q4'] }] });
   c4.rounds.push({ key: 'sun', name: 'Sunday', segments: [{ key: 's1', format: 'singles', from: 1, to: 18 }], matches: [] });
   const S4 = E.cupLiveStandings(c4); ok(S4.total === 8 && S4.target === 4.5 && S4.state === 'live', 'points on offer include the undrawn singles day (got total ' + S4.total + ', target ' + S4.target + ')'); }
+// closing a match by hand decides what is still open
+{ const base = JSON.parse(JSON.stringify(cfg)); const half = {}; for (let h = 1; h <= 3; h++) half[String(h)] = { Jake: 3, Amy: 3, Nate: 7, Bob: 7 };   // Jake/Amy 3 up thru 3
+  const t = (how, side) => { const c2 = JSON.parse(JSON.stringify(base)); c2.scores = { r1: { m1: { h: half } } }; c2.closed = { r1: { m1: { how, side } } }; return E.cupLiveStandings(c2); };
+  let S1 = t('standing'); ok(S1.points.A === 1 && S1.points.B === 0 || S1.points.A === 1.5, 'as it stands: the leader takes the part in progress (got ' + JSON.stringify(S1.points) + ')');
+  ok(S1.rounds[0].matches[0].segments[1].text === 'Halved', 'as it stands: a part that never started is halved');
+  S1 = t('concede', 'A'); ok(S1.points.B === 2 && S1.points.A === 0, 'Team Jake concedes: Team Nate takes both parts (got ' + JSON.stringify(S1.points) + ')');
+  S1 = t('halve'); ok(S1.points.A === 1 && S1.points.B === 1 && S1.state === 'final', 'halved: a half point each part');
+  ok(E.cupMatchLive(Object.assign({}, base, { closed: { r1: { m1: { how: 'halve' } } } }), base.rounds[0], base.rounds[0].matches[0], null).done, 'a closed match counts as done'); }
 console.log('live engine: ' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

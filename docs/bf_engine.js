@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.38.0';
+  const ENGINE_VERSION = '1.39.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2141,6 +2141,13 @@
           const sa = ov ? ov[0] : cupSideScores(fmt, m.sides[0].players, cardBy), sb = ov ? ov[1] : cupSideScores(fmt, m.sides[1].players, cardBy);
           const st = cupMatchState(sa, sb, sg.from, sg.to);
           const sideKeys = [m.sides[0].side, m.sides[1].side];
+          // A captain or the host closed this match by hand (a concession, a match stopped for dark, ...): what is still open is decided now.
+          const cl = cfg.closed && cfg.closed[r.key] && cfg.closed[r.key][m.key];
+          if (cl && !st.decided) {
+            if (cl.how === 'concede' && sideKeys.includes(cl.side)) { st.status = 'won'; st.winner = sideKeys.indexOf(cl.side) === 0 ? 1 : 0; st.text = 'Conceded'; st.decided = true; }
+            else if (cl.how === 'standing' && st.thru > 0 && st.lead !== 0) { st.status = 'won'; st.winner = st.lead > 0 ? 0 : 1; st.text = Math.abs(st.lead) + ' UP'; st.decided = true; }
+            else { st.status = 'push'; st.winner = null; st.text = 'Halved'; st.decided = true; }
+          }
           const pts = { [sideKeys[0]]: 0, [sideKeys[1]]: 0 };
           if (st.status === 'won') { pts[sideKeys[st.winner]] = rule.win; pts[sideKeys[1 - st.winner]] = rule.loss; }
           else if (st.status === 'push') { pts[sideKeys[0]] = rule.half; pts[sideKeys[1]] = rule.half; }
@@ -2540,8 +2547,9 @@
     });
     const max = Math.max(0, ...(round.segments || []).map(sg => sg.to));
     let next = 1; while (next <= max && H[String(next)]) next++;
-    const done = segs.length > 0 && segs.every(s => s.state.decided);
-    return { segments: segs, next: Math.min(next, max), allEntered: next > max, done, format: ((cupSegmentAt(round, Math.min(next, max)) || {}).format) || null };
+    const cl = cfg.closed && cfg.closed[round.key] && cfg.closed[round.key][match.key];
+    const done = segs.length > 0 && segs.every(s => s.state.decided) || !!cl;
+    return { closed: cl || null, segments: segs, next: Math.min(next, max), allEntered: next > max, done, format: ((cupSegmentAt(round, Math.min(next, max)) || {}).format) || null };
   }
   function cupLiveStandings(cfg) {
     const sc = (cfg && cfg.scores) || {};
