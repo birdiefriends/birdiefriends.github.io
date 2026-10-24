@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.37.0';
+  const ENGINE_VERSION = '1.38.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2152,6 +2152,13 @@
         });
         return { key: m.key, sides: m.sides, segments, points: mp, done: segments.every(s => s.decided) };
       });
+      // A session whose matches are not drawn yet still counts toward the points on offer (the singles day before the draw): one match per
+      // `size` players on a side, each segment worth a full match's points.
+      if (!matches.length) {
+        const f = CUP_FORMATS[((r.segments || [])[0] || {}).format], perSide = Math.max(0, ...(cfg.sides || []).map(sd => (sd.players || []).length));
+        const exp = f && f.size ? Math.floor(perSide / f.size) * (r.segments || []).length : 0;
+        total += exp * Math.max(rule.win + rule.loss, 2 * rule.half); open += exp;
+      }
       return { key: r.key, name: r.name, matches, done: matches.length > 0 && matches.every(m => m.done) };
     });
     const target = cupWinTarget(total);

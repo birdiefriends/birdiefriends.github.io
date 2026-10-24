@@ -48,4 +48,9 @@ ok(S0.points.A === 0 && S0.points.B === 0 && S0.open === 2, 'empty scores award 
 const cfg3 = JSON.parse(JSON.stringify(cfg)); delete cfg3.handicap.strokeIndex;
 L = E.cupMatchLive(cfg3, round, match, { h: { '1': { Jake: 4, Amy: 5, Nate: 5, Bob: 6 } } });
 ok(L.segments[0].nets[0][0] === 4 && L.segments[0].nets[1][0] === 5, 'no stroke index = scratch (got ' + L.segments[0].nets.map(a => a[0]) + ')');
+// an undrawn singles day still counts toward the points on offer (4 per side: 2 pair matches x 2 parts + 4 singles = 8 -> 4.5 wins)
+{ const c4 = JSON.parse(JSON.stringify(cfg)); c4.sides[0].players = ['Jake', 'Amy', 'p3', 'p4']; c4.sides[1].players = ['Nate', 'Bob', 'q3', 'q4'];
+  c4.rounds[0].matches.push({ key: 'm2', sides: [{ side: 'A', players: ['p3', 'p4'] }, { side: 'B', players: ['q3', 'q4'] }] });
+  c4.rounds.push({ key: 'sun', name: 'Sunday', segments: [{ key: 's1', format: 'singles', from: 1, to: 18 }], matches: [] });
+  const S4 = E.cupLiveStandings(c4); ok(S4.total === 8 && S4.target === 4.5 && S4.state === 'live', 'points on offer include the undrawn singles day (got total ' + S4.total + ', target ' + S4.target + ')'); }
 console.log('live engine: ' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
