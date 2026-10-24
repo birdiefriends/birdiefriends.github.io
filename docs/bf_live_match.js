@@ -72,7 +72,7 @@
     fetch(S.opts.worker + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: S.opts.event, action: 'score', round: post.round, match: post.match, hole: post.hole, scores: post.scores, player: post.player, code: S.opts.code || undefined, pin: S.opts.pin || undefined }) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
       .then(function (x) {
-        if (x.ok || (x.status >= 400 && x.status < 500)) { var qq = queue(); qq.shift(); setQueue(qq); if (!x.ok) S.msg = 'A score was refused: ' + (x.j.error || x.status); else if (x.j.config) { var c = S.opts.getCfg(); if (c) { c.phases = x.j.config.phases; mergeServer(c, x.j.config.scores); } } }
+        if (x.ok || (x.status >= 400 && x.status < 500)) { var qq = queue(); qq.shift(); setQueue(qq); if (!x.ok) { S.err = 'Hole ' + post.hole + ' was NOT saved: ' + (x.j.error || x.status) + '. Pick your name at the top and enter it again.'; var c0 = S.opts.getCfg(); try { delete c0.scores[post.round][post.match].h[String(post.hole)]; } catch (e) { /* nothing local to undo */ } } else if (x.j.config) { var c = S.opts.getCfg(); if (c) { c.phases = x.j.config.phases; mergeServer(c, x.j.config.scores); } } }
         S.flushing = false; render(); if (queue().length) flush();
       })
       .catch(function () { S.flushing = false; render(); });   // offline: leave it queued, the timer retries
@@ -157,6 +157,8 @@
       var cls = (i === 0 ? 'a' : 'b') + ((i === 0 && lead > 0) || (i === 1 && lead < 0) ? ' lead' : '');
       return '<div class="lmside ' + cls + '">' + esc(sideName(cfg, sd.side)) + '<small>' + esc(sd.players.join(' & ')) + '</small></div>';
     }).join('').replace('</div><div class="lmside b', '</div><div class="lmstat">' + esc(sl.text) + '<small>' + esc(sl.sub) + '</small></div><div class="lmside b') + '</div>';
+    if (S.last && S.last.m === match.key && S.last.r === round.key) h += '<div class="lmmsg ok" style="background:' + (S.last.w === 'a' ? 'var(--a)' : S.last.w === 'b' ? 'var(--b)' : 'var(--bg2)') + '">' + esc(S.last.text) + '</div>';
+    h += '<div class="lmdim" style="margin:6px 0">' + round.segments.map(function (sg) { return 'Holes ' + sg.from + '–' + sg.to + ': ' + FMT[sg.format]; }).join(' · ') + '</div>';
     // entry: hole by hole, tap a player, the numbers pop for that player (same flow as the gathering panel)
     var info = stat(cfg, round, match, hole), posted = entry && entry.h && entry.h[String(hole)];
     var inp = S.inp[round.key + '|' + match.key + '|' + hole] = S.inp[round.key + '|' + match.key + '|' + hole] || {};
@@ -174,13 +176,16 @@
       return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (cur === undefined ? '–' : (cur === 0 ? 'P' : cur)) + '</span></button>';
     }).join('') + '</div>';
     var curw = rowVal(who.key, inp, posted);
+    if (info.fmt === 'altshot') h += '<div class="lmdim" style="margin:6px 0">Foursomes: one ball per team. Enter the team gross for the hole.</div>';
     h += '<div class="lmpick"><div class="lmdim" style="margin-bottom:4px">' + esc(who.label) + ' · hole ' + hole + '</div><div class="lmtiles">' + [2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (curw === n ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|' + n + '">' + n + '</button>'; }).join('')
       + '<button class="lmt sub' + (curw >= 9 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|more">' + (curw >= 9 ? curw : '9+') + '</button><button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0">P</button></div></div>';
     var missing = info.rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
+    var anon = !S.opts.player && !S.opts.code && !S.opts.pin;
     if (!info.hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
-    h += '<button class="lmgo" id="lmPost"' + (missing ? ' disabled' : '') + '>' + (missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (posted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>';
+    h += '<button class="lmgo" id="lmPost"' + (missing || anon ? ' disabled' : '') + '>' + (anon ? 'Pick your name at the top first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (posted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>';
     if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, match: match, hole: hole, E: E }) || '';
     if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' hole' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
+    if (S.err) h += '<div class="lmmsg q" id="lmErr">⚠ ' + esc(S.err) + '</div>';
     if (S.msg) h += '<div class="lmmsg">' + esc(S.msg) + '</div>';
     if (live.done) h += '<div class="lmmsg ok">This match is decided. ' + esc(sl.text) + '. You can keep entering holes for fun; the result does not change.</div>';
     h += '</div>';
@@ -211,6 +216,8 @@
       var post = { round: round.key, match: match.key, hole: hole, scores: scores, player: S.opts.player || '', at: new Date().toISOString() };
       var cfg = S.opts.getCfg(); applyLocal(cfg, post); var qq = queue(); qq.push(post); setQueue(qq);
       delete S.inp[key]; S.msg = ''; var live = S.opts.E.cupMatchLive(cfg, round, match, entryOf(cfg, round.key, match.key));
+      var wn = holeWinner(live, hole), sl2 = statusLine(cfg, live, match);
+      S.last = { r: round.key, m: match.key, w: wn, text: 'Hole ' + hole + ': ' + (wn === 'a' ? sideName(cfg, match.sides[0].side) + ' wins the hole' : wn === 'b' ? sideName(cfg, match.sides[1].side) + ' wins the hole' : 'halved') + '  ·  Match: ' + sl2.text + ' (' + sl2.sub + ')' }; S.err = '';
       S.who = null; S.hole = { r: round.key, m: match.key, h: Math.min(live.next, Math.max.apply(null, round.segments.map(function (s) { return s.to; }))) };
       render(); flush(); if (S.opts.onChange) S.opts.onChange(); });
     function roundAct(action) { fetch(S.opts.worker + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: S.opts.event, action: action, round: round.key, player: S.opts.player || '', code: S.opts.code || undefined, pin: S.opts.pin || undefined }) })

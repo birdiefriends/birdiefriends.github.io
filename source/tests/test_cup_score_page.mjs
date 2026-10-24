@@ -43,6 +43,7 @@ ok(d.getElementById('lmPost').disabled && /Tap 1 more/.test(d.getElementById('lm
 await click(dom, '[data-lm-s="Bob|4"]'); d = dom.window.document;
 ok(/>3</.test(d.querySelectorAll('.lmcv')[0].outerHTML) && !d.getElementById('lmPost').disabled, 'one tap sets a score and unlocks Post');
 await click(dom, '#lmPost'); d = dom.window.document;
+ok(/Hole 1: Team Jake wins the hole/.test(d.querySelector('.lm').textContent) && /Match: Team Jake 1 UP/.test(d.querySelector('.lm').textContent), 'after posting, a banner says who won the hole and the match score');
 ok(posts.length === 1 && posts[0].action === 'score' && posts[0].hole === 1 && posts[0].scores.Jake === 3 && posts[0].scores.Bob === 4 && posts[0].player === 'Amy', 'post sends all four grosses and who posted');
 ok(/Hole 2/.test(d.body.textContent), 'moves on to the next hole');
 ok(/Team Jake 1 UP.*thru 1/.test(d.querySelector('.lmstat').textContent), 'status line (got ' + d.querySelector('.lmstat').textContent + ')');
@@ -58,6 +59,12 @@ ok(posts.length === before + 1 && !/waiting to send/.test(dom.window.document.qu
 await click(dom, '#lmAll'); ok(dom.window.document.querySelectorAll('.lmh').length === 18, 'tap the hole title to see all 18'); await click(dom, '[data-lm-hole="1"]'); d = dom.window.document; ok(/Hole 1/.test(d.body.textContent) && /posted/.test(d.body.textContent) && />3</.test(d.querySelectorAll('.lmcv')[0].outerHTML), 'tap a hole to review/edit it');
 // stranger sees the panel but is not asked as a player; identity picker
 dom = await open(''); d = dom.window.document; ok(d.getElementById('meSel') && d.getElementById('lmMount'), 'a name picker is offered');
+ok(d.getElementById('lmPost').disabled && /Pick your name/.test(d.getElementById('lmPost').textContent), 'no name picked: Post says so instead of failing silently');
+dom = await open('?player=Amy'); d = dom.window.document;
+ok(/Hole 1: Team Jake wins the hole.*Match: Team Jake 1 UP/.test(d.querySelector('.lm').textContent) === false, 'banner only after posting in this visit');
+await click(dom, '#lmAll'); await click(dom, '[data-lm-hole="10"]'); d = dom.window.document;
+ok(d.querySelectorAll('.lmchip').length === 2 && /Foursomes/.test(d.querySelector('.lm').textContent) && /team gross/.test(d.querySelector('.lm').textContent), 'hole 10: two team chips and a team-gross note');
+ok(/Holes 1–9: Fourball · Holes 10–18: Foursomes/.test(d.querySelector('.lm').textContent), 'the round plan is shown');
 // finish round
 dom = await open('?player=Jake'); await click(dom, '#lmFinish'); ok(posts.some(p => p.action === 'round_end' && p.round === 'r1'), 'finish round posts round_end');
 console.log('score page: ' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
