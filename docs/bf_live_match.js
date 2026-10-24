@@ -28,6 +28,7 @@
     '.lm .lmname.a{border-left:4px solid var(--a);padding-left:8px}.lm .lmname.b{border-left:4px solid var(--b);padding-left:8px}' +
     '.lm .lmstep{display:flex;align-items:center;gap:6px}.lm .lmstep button{width:46px;height:46px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);color:var(--tx);font:inherit;font-size:1.4rem;font-weight:800;cursor:pointer}' +
     '.lm .lmval{min-width:44px;text-align:center;font-size:1.6rem;font-weight:800}.lm .lmval.pu{font-size:1rem;color:var(--warn)}' +
+    '.lm .lmtiles{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;grid-column:1/-1}.lm .lmt{height:42px;border-radius:9px;border:1px solid var(--line);background:var(--bg2);color:var(--tx);font:inherit;font-weight:800;font-size:1.05rem;cursor:pointer;padding:0}.lm .lmt.on{background:var(--lm-accent,var(--a));border-color:var(--tx)}.lm .lmt.pu.on{background:var(--warn);color:var(--ink)}.lm .lmt.sub{font-size:.75rem;color:var(--dim)}' +
     '.lm .lmpu{width:auto!important;padding:0 8px;font-size:.78rem!important}.lm .lmpu.on{background:var(--warn)!important;color:var(--ink)!important}' +
     '.lm .lmgo{width:100%;padding:13px;border-radius:10px;border:0;background:var(--lm-accent,var(--a));color:#fff;font:inherit;font-weight:800;font-size:1rem;cursor:pointer;margin-top:8px}.lm .lmgo:disabled{opacity:.45}' +
     '.lm .lmsec{background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-weight:700;cursor:pointer}' +
@@ -113,6 +114,11 @@
     return { live: live, text: sl.text, extra: segs.join(' · ') };
   }
 
+  function rowVal(key, inp, posted) {                       // typed this visit, else what is already posted, else nothing (no default par)
+    if (inp[key] !== undefined) return inp[key];
+    if (posted) { var k = Object.keys(posted).filter(function (x) { return norm(x) === norm(key); })[0]; if (k !== undefined) return posted[k]; }
+    return undefined;
+  }
   function render() {
     if (!S) return;
     var cfg = S.opts.getCfg(), el = S.el; if (!cfg) { el.innerHTML = ''; return; }
@@ -153,15 +159,17 @@
     // entry
     var info = stat(cfg, round, match, hole), posted = entry && entry.h && entry.h[String(hole)];
     var inp = S.inp[round.key + '|' + match.key + '|' + hole] = S.inp[round.key + '|' + match.key + '|' + hole] || {};
-    var par = (cfg.handicap && cfg.handicap.pars && cfg.handicap.pars[hole - 1]) || 4;
     h += '<div style="font-weight:800;margin:6px 0">Hole ' + hole + ' <span class="lmdim">· ' + FMT[info.fmt] + (cfg.handicap && cfg.handicap.strokeIndex ? ' · stroke index ' + cfg.handicap.strokeIndex[hole - 1] : '') + (posted ? ' · posted' : '') + '</span></div>';
     info.rows.forEach(function (r) {
-      var cur = inp[r.key]; if (cur === undefined) { var pv = posted ? (function () { var k = Object.keys(posted).filter(function (x) { return norm(x) === norm(r.key); })[0]; return k === undefined ? undefined : posted[k]; })() : undefined; cur = pv !== undefined ? pv : par; }
+      var cur = rowVal(r.key, inp, posted);
       h += '<div class="lmrow"><div class="lmname ' + r.side + '">' + esc(r.label) + (r.strokes ? ' <span class="lmdots" title="handicap strokes on this hole">' + '●'.repeat(r.strokes) + '</span>' : '') + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + '</div>'
-        + '<div class="lmstep"><button data-lm-d="' + esc(r.key) + '|-1" aria-label="minus">−</button><div class="' + (cur === 0 ? 'lmval pu' : 'lmval') + '">' + (cur === 0 ? 'Pick up' : cur) + '</div><button data-lm-d="' + esc(r.key) + '|1" aria-label="plus">+</button><button class="lmpu' + (cur === 0 ? ' on' : '') + '" data-lm-pu="' + esc(r.key) + '">P</button></div></div>';
+        + '<div class="lmval' + (cur === 0 ? ' pu' : '') + '">' + (cur === undefined ? '–' : (cur === 0 ? 'Pick up' : cur)) + '</div>'
+        + '<div class="lmtiles">' + [2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (cur === n ? ' on' : '') + '" data-lm-s="' + esc(r.key) + '|' + n + '">' + n + '</button>'; }).join('')
+        + '<button class="lmt sub' + (cur >= 9 ? ' on' : '') + '" data-lm-s="' + esc(r.key) + '|more">' + (cur >= 9 ? cur : '9+') + '</button><button class="lmt pu' + (cur === 0 ? ' on' : '') + '" data-lm-s="' + esc(r.key) + '|0">P</button></div></div>';
     });
+    var missing = info.rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
     if (!info.hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
-    h += '<button class="lmgo" id="lmPost">' + (posted ? 'Update hole ' + hole : 'Post hole ' + hole) + '</button>';
+    h += '<button class="lmgo" id="lmPost"' + (missing ? ' disabled' : '') + '>' + (missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (posted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>';
     if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, match: match, hole: hole, E: E }) || '';
     if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' hole' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
     if (S.msg) h += '<div class="lmmsg">' + esc(S.msg) + '</div>';
@@ -173,21 +181,20 @@
     var rEnd = cfg.phases && cfg.phases['round_' + round.key + '_end'], allDone = (round.matches || []).every(function (m) { return E.cupMatchLive(cfg, round, m, entryOf(cfg, round.key, m.key)).done; });
     h += '<div class="lmc">' + (rEnd ? '<b>' + esc(round.name || round.key) + ' is finished.</b> <button class="lmsec" id="lmReopen">Reopen it</button>' : '<button class="lmsec" id="lmFinish"' + '>' + (allDone ? 'Finish ' : 'Finish early: ') + esc(round.name || round.key) + '</button> <span class="lmdim">' + (allDone ? 'Every match is decided.' : 'Some matches are still open.') + '</span>') + '</div>';
     h += '</div>';
-    el.innerHTML = h; wire(round, match, hole, par, info);
+    el.innerHTML = h; wire(round, match, hole, info);
   }
 
-  function wire(round, match, hole, par, info) {
+  function wire(round, match, hole, info) {
     var el = S.el, key = round.key + '|' + match.key + '|' + hole;
-    function cur(r) { var inp = S.inp[key] || {}; if (inp[r.key] !== undefined) return inp[r.key]; var cfg = S.opts.getCfg(), e = entryOf(cfg, round.key, match.key), p = e && e.h && e.h[String(hole)]; if (p) { var k = Object.keys(p).filter(function (x) { return norm(x) === norm(r.key); })[0]; if (k !== undefined) return p[k]; } return par; }
+    function cur(r) { var cfg = S.opts.getCfg(), e = entryOf(cfg, round.key, match.key); return rowVal(r.key, S.inp[key] || {}, e && e.h && e.h[String(hole)]); }
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-sel]'), function (b) { b.addEventListener('click', function () { var p = b.getAttribute('data-lm-sel').split('|'); S.sel = { r: p[0], m: p[1] }; S.hole = null; S.msg = ''; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-hole]'), function (b) { b.addEventListener('click', function () { S.hole = { r: round.key, m: match.key, h: Number(b.getAttribute('data-lm-hole')) }; S.msg = ''; render(); }); });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-d]'), function (b) { b.addEventListener('click', function () {
-      var p = b.getAttribute('data-lm-d').split('|'), row = info.rows.filter(function (r) { return r.key === p[0]; })[0], v = cur(row); if (v === 0) v = par; v = Math.max(1, Math.min(15, v + Number(p[1])));
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-s]'), function (b) { b.addEventListener('click', function () {
+      var p = b.getAttribute('data-lm-s').split('|'), row = info.rows.filter(function (r) { return r.key === p[0]; })[0], c = cur(row), v;
+      if (p[1] === 'more') v = c >= 9 ? Math.min(15, c + 1) : 9; else v = Number(p[1]);
       (S.inp[key] = S.inp[key] || {})[row.key] = v; render(); }); });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-pu]'), function (b) { b.addEventListener('click', function () {
-      var row = info.rows.filter(function (r) { return r.key === b.getAttribute('data-lm-pu'); })[0]; (S.inp[key] = S.inp[key] || {})[row.key] = cur(row) === 0 ? par : 0; render(); }); });
     var go = el.querySelector('#lmPost'); if (go) go.addEventListener('click', function () {
-      var scores = {}; info.rows.forEach(function (r) { scores[r.key] = cur(r); });
+      var scores = {}; info.rows.forEach(function (r) { scores[r.key] = cur(r); }); if (info.rows.some(function (r) { return scores[r.key] === undefined; })) return;
       var post = { round: round.key, match: match.key, hole: hole, scores: scores, player: S.opts.player || '', at: new Date().toISOString() };
       var cfg = S.opts.getCfg(); applyLocal(cfg, post); var qq = queue(); qq.push(post); setQueue(qq);
       delete S.inp[key]; S.msg = ''; var live = S.opts.E.cupMatchLive(cfg, round, match, entryOf(cfg, round.key, match.key));

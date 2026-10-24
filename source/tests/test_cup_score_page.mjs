@@ -37,8 +37,11 @@ ok(/★/.test(d.querySelector('.lmtab').textContent), 'my match is starred');
 ok(d.querySelectorAll('.lmrow').length === 4, 'fourball: one row per player');
 ok(d.querySelectorAll('.lmdots').length >= 3, 'handicap strokes shown as dots on hole 1 (SI 1)');
 // Jake birdie (3), others par: tap − on Jake
-await click(dom, '[data-lm-d="Jake|-1"]'); d = dom.window.document;
-ok(/>3</.test(d.querySelectorAll('.lmval')[0].outerHTML), 'minus lowers the score');
+ok(d.getElementById('lmPost').disabled && /Tap 4 more/.test(d.getElementById('lmPost').textContent), 'no default score: Post is locked until every player is tapped');
+await click(dom, '[data-lm-s="Jake|3"]'); await click(dom, '[data-lm-s="Amy|4"]'); await click(dom, '[data-lm-s="Nate|4"]'); d = dom.window.document;
+ok(d.getElementById('lmPost').disabled && /Tap 1 more/.test(d.getElementById('lmPost').textContent), 'still locked with one missing');
+await click(dom, '[data-lm-s="Bob|4"]'); d = dom.window.document;
+ok(/>3</.test(d.querySelectorAll('.lmval')[0].outerHTML) && !d.getElementById('lmPost').disabled, 'one tap sets a score and unlocks Post');
 await click(dom, '#lmPost'); d = dom.window.document;
 ok(posts.length === 1 && posts[0].action === 'score' && posts[0].hole === 1 && posts[0].scores.Jake === 3 && posts[0].scores.Bob === 4 && posts[0].player === 'Amy', 'post sends all four grosses and who posted');
 ok(/Hole 2/.test(d.body.textContent), 'moves on to the next hole');
@@ -46,7 +49,7 @@ ok(/Team Jake 1 UP.*thru 1/.test(d.querySelector('.lmstat').textContent), 'statu
 ok(d.querySelector('.lmh.a'), 'hole 1 colored for the winning side');
 // pickup + an offline hole is queued
 offline = true;
-await click(dom, '[data-lm-pu="Nate"]'); await click(dom, '[data-lm-pu="Bob"]'); await click(dom, '#lmPost'); d = dom.window.document;
+await click(dom, '[data-lm-s="Jake|4"]'); await click(dom, '[data-lm-s="Amy|4"]'); await click(dom, '[data-lm-s="Nate|0"]'); await click(dom, '[data-lm-s="Bob|0"]'); await click(dom, '#lmPost'); d = dom.window.document;
 ok(/waiting to send/.test(d.querySelector('.lm').textContent), 'offline: the hole is queued, not lost');
 ok(/Team Jake 2 UP.*thru 2/.test(d.querySelector('.lmstat').textContent), 'queued hole already counts on screen (got ' + d.querySelector('.lmstat').textContent + ')');
 offline = false; const before = posts.length; await tick(6500);
