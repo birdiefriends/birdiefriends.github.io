@@ -4,7 +4,7 @@ const HERE = p => fileURLToPath(new URL(p, import.meta.url));
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine();
 const engine = fs.readFileSync(HERE('../bf_engine.js'), 'utf8');
-const page = fs.readFileSync(HERE('../../docs/bf-cup-draft.html'), 'utf8').replace(/<script src="bf_engine.js[^>]*><\/script>/, '<script>' + engine + '</script>');
+const page = fs.readFileSync(HERE('../../docs/bf-cup-draft.html'), 'utf8').replace(/<script src="bf_engine.js[^>]*><\/script>/, '<script>' + engine + '</script>').replace(/<script src="bf_live_match.js[^>]*><\/script>/, '<script>' + fs.readFileSync(HERE('../../docs/bf_live_match.js'), 'utf8') + '</script>');
 const stats = {}; ['a1','a2','a3','a4','b1','b2','b3','b4'].forEach((n, i) => stats[n] = { hcp: 5 + i });
 let doc = { sides: [{ key: 'A', name: 'Team Jake', captain: 'a1', color: 'red', players: ['a1','a2','a3','a4'] }, { key: 'B', name: 'Team Nate', captain: 'b1', color: 'blue', players: ['b1','b2','b3','b4'] }], points: { win: 1, half: 0.5, loss: 0 },
   rounds: [{ key: 'sat', name: 'Saturday', segments: [{ key: 's1', format: 'bestball', from: 1, to: 18 }], matches: [] }],
@@ -55,13 +55,14 @@ ok(/waiting for an answer/.test(d.body.textContent) && /b3 & b4/.test(d.body.tex
 dom = await open('?cap=AAA111'); d = dom.window.document;
 ok(/answers b3 &amp; b4|answers b3 & b4/.test(d.querySelector('.mu-banner').textContent) && d.querySelectorAll('[data-mplayer]').length === 4, 'Jake is asked to answer that pair and can tap his players');
 await click(dom, '[data-mplayer="a1"]'); await click(dom, '[data-mplayer="a2"]'); await click(dom, '#muConfirm'); d = dom.window.document;
+if (dom.window.document.querySelector('[data-view="teams"]')) await click(dom, '[data-view="teams"]'); d = dom.window.document;
 ok(doc.matchup.done === true && doc.rounds[0].matches.length === 2 && /Matchups are set/.test(d.body.textContent) && d.querySelectorAll('.match').length === 2, 'with two pairs a side the first response finishes it; the last pair meets automatically');
 ok(doc.rounds[0].matches[0].sides[0].players.join() === 'a1,a2' && doc.rounds[0].matches[0].sides[1].players.join() === 'b3,b4', 'match 1 is the put-up pair versus the answer, in side order');
-dom = await open(''); d = dom.window.document;
+dom = await open('?view=teams'); d = dom.window.document;
 ok(d.querySelectorAll('.match').length === 2 && /Scratch: no strokes/.test(d.body.textContent), 'a watcher sees the matches (scratch here, since no allowance is set)');
-doc.handicap = { bestball: 50, altshot: 50, singles: 50 }; dom = await open(''); d = dom.window.document;
+doc.handicap = { bestball: 50, altshot: 50, singles: 50 }; dom = await open('?view=teams'); d = dom.window.document;
 ok(/Fourball: a2 1, b3 3, b4 4/.test(d.querySelector('.match').textContent), 'with a 50% allowance match 1 shows exactly who gets strokes (off the low: a1 plays scratch)');
-dom = await open('?host=1', '7797'); d = dom.window.document;
+dom = await open('?host=1&view=teams', '7797'); d = dom.window.document;
 await click(dom, '#muUndo'); d = dom.window.document;
 ok(doc.matchup.log.length === 1 && doc.rounds[0].matches.length === 0 && !doc.matchup.done, 'host undo takes back the last pick and clears the written matches');
 

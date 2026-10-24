@@ -4,7 +4,7 @@ const HERE = p => fileURLToPath(new URL(p, import.meta.url));
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const engine = fs.readFileSync(HERE('../bf_engine.js'), 'utf8');
 const raw = fs.readFileSync(HERE('../../docs/bf-cup-draft.html'), 'utf8');
-const page = raw.replace(/<script src="bf_engine.js[^>]*><\/script>/, '<script>' + engine + '</script>');
+const page = raw.replace(/<script src="bf_engine.js[^>]*><\/script>/, '<script>' + engine + '</script>').replace(/<script src="bf_live_match.js[^>]*><\/script>/, '<script>' + fs.readFileSync(HERE('../../docs/bf_live_match.js'), 'utf8') + '</script>');
 let doc = { sides: [{ key: 'A', name: 'Team Jake', captain: 'Jake', color: 'red', players: [] }, { key: 'B', name: 'Team Nate', captain: 'Nate', color: 'blue', players: [] }], points: { win: 1, half: 0.5, loss: 0 }, rounds: [],
   draft: { started: true, first: 'A', pool: ['P1', 'P2', 'P3', 'P4'], stats: {}, picks: [], locked: false }, access: { A: 'AAA111', B: 'BBB222' } };
 const calls = [];

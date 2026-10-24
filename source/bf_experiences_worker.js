@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.35.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.36.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1433,9 +1433,44 @@ export default {
         if (!row) return J({ error: 'Not found' }, 404);
         const cfgObj = JSON.parse(row.config);
         const acc = cfgObj.access || {};
+        const norm = v => String(v == null ? '' : v).trim().toLowerCase();
+        if (body.action === 'score' || body.action === 'round_end' || body.action === 'round_reopen') {
+          // Live scoring (trust model, like the rest of the app): anyone playing in the match can post its hole scores; a captain code or the PIN works too.
+          const rd = (cfgObj.rounds || []).find(r => r.key === body.round);
+          if (!rd) return J({ error: 'Unknown round' }, 404);
+          const capOk = Object.keys(acc).some(k => body.code && String(acc[k]) === String(body.code)) || String(body.pin) === '7797';
+          cfgObj.scores = cfgObj.scores || {};
+          const ph = cfgObj.phases = cfgObj.phases || {}, now = new Date().toISOString();
+          if (body.action === 'round_end' || body.action === 'round_reopen') {
+            if (!capOk && !(rd.matches || []).some(m => m.sides.some(sd => sd.players.some(p => norm(p) === norm(body.player))))) return J({ error: 'Only someone playing in this round can do that' }, 403);
+            if (body.action === 'round_end') { if (!ph['round_' + rd.key + '_end']) ph['round_' + rd.key + '_end'] = now; } else delete ph['round_' + rd.key + '_end'];
+            await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
+            return J({ ok: true, config: cupPublic(cfgObj) });
+          }
+          const m = (rd.matches || []).find(x => x.key === body.match);
+          if (!m) return J({ error: 'Unknown match' }, 404);
+          const members = [].concat(...m.sides.map(sd => sd.players));
+          if (!capOk && !members.some(p => norm(p) === norm(body.player))) return J({ error: 'Only the four playing this match can score it' }, 403);
+          const hole = Number(body.hole), maxHole = Math.max(0, ...(rd.segments || []).map(sg => Number(sg.to) || 0));
+          if (!(Number.isInteger(hole) && hole >= 1 && hole <= maxHole)) return J({ error: 'Hole must be 1 to ' + maxHole }, 400);
+          const incoming = body.scores && typeof body.scores === 'object' ? body.scores : null;
+          if (!incoming) return J({ error: 'scores is required' }, 400);
+          const clean = {};
+          for (const k of Object.keys(incoming)) {
+            const name = members.find(p => norm(p) === norm(k)); const g = Number(incoming[k]);
+            if (!name || !Number.isInteger(g) || g < 0 || g > 20) return J({ error: 'Bad score for ' + k }, 400);
+            clean[name] = g;
+          }
+          if (!Object.keys(clean).length) return J({ error: 'No scores' }, 400);
+          const rs = cfgObj.scores[rd.key] = cfgObj.scores[rd.key] || {};
+          const ms = rs[m.key] = rs[m.key] || { h: {}, t: {}, by: {} };
+          ms.h[String(hole)] = clean; ms.t[String(hole)] = now; ms.by[String(hole)] = String(body.player || (capOk ? 'host' : '')).slice(0, 60);
+          if (!ph['round_' + rd.key + '_start']) ph['round_' + rd.key + '_start'] = now;
+          await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
+          return J({ ok: true, config: cupPublic(cfgObj) });
+        }
         const side = Object.keys(acc).find(k => body.code && String(acc[k]) === String(body.code));
         if (!side) return J({ error: 'Unauthorized' }, 403);
-        const norm = v => String(v == null ? '' : v).trim().toLowerCase();
         if (body.action === 'pick') {
           const d = cfgObj.draft || {};
           if (!d.started || d.locked) return J({ error: 'The draft is not open' }, 409);
@@ -1611,7 +1646,7 @@ export default {
           if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
           // the public document never carries the captain codes, so a re-save must not wipe them
           // (the same goes for the captains' Saturday pairs: a page that never loaded them must not erase them)
-          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
+          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
           await env.DB.prepare(`INSERT INTO bfe_cup (event_name, config, updated_at) VALUES (?, ?, datetime('now'))
              ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(cupStampPhases(config))).run();
           return J({ ok: true });

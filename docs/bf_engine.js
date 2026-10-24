@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.35.0';
+  const ENGINE_VERSION = '1.36.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2126,7 +2126,7 @@
   function cupCardMap(cards) { return new Map((cards || []).map(c => [norm(c.player), c])); }
   // Standings for the whole Cup. Returns the per-round / per-match / per-segment view the scoreboard, results page
   // and Live Panel all read, plus the side totals. Pending segments award nothing.
-  function cupStandings(cfg, cards) {
+  function cupStandings(cfg, cards, opts) {
     const rule = cupPointsRule(cfg);
     const keys = (cfg.sides || []).map(s => s.key);
     const cardBy = cupCardMap(cards);
@@ -2137,7 +2137,8 @@
         const mp = {}; keys.forEach(k => { mp[k] = 0; });
         const segments = (r.segments || []).map(sg => {
           const fmt = sg.format;
-          const sa = cupSideScores(fmt, m.sides[0].players, cardBy), sb = cupSideScores(fmt, m.sides[1].players, cardBy);
+          const ov = opts && opts.sideScores ? opts.sideScores(r, m, sg) : null;
+          const sa = ov ? ov[0] : cupSideScores(fmt, m.sides[0].players, cardBy), sb = ov ? ov[1] : cupSideScores(fmt, m.sides[1].players, cardBy);
           const st = cupMatchState(sa, sb, sg.from, sg.to);
           const sideKeys = [m.sides[0].side, m.sides[1].side];
           const pts = { [sideKeys[0]]: 0, [sideKeys[1]]: 0 };
@@ -2439,6 +2440,58 @@
     });
     return out.join(' · ');
   }
+
+  // ---- BF Cup live scoring (Dev-95) ----------------------------------------------------------------------------
+  // Scores live in the Cup record: cfg.scores[roundKey][matchKey] = { h:{ '1':{ name: gross } }, t:{ '1': ISO }, by:{ '1': name } }.
+  // gross 0 = picked up. Foursomes keeps ONE team score under the pair's first player. Nets use the handicap strokes by hole.
+  function cupHcpMap(cfg) {
+    const rule = cupHandicapRule(cfg), st = (cfg && cfg.draft && cfg.draft.stats) || {}, out = {};
+    Object.keys(st).forEach(n => { const c = cupCourseHcp(st[n] && st[n].hcp, rule); if (c !== null) out[n] = c; });
+    return out;
+  }
+  function cupSegmentAt(round, hole) { return ((round && round.segments) || []).find(sg => hole >= sg.from && hole <= sg.to) || null; }
+  // The two 18-slot NET score arrays of one segment (null = hole not played yet; 99 = the side picked up).
+  function cupMatchNets(cfg, round, match, entry, seg) {
+    const rule = cupHandicapRule(cfg), hc = cupHcpMap(cfg), si = (cfg.handicap && cfg.handicap.strokeIndex) || null;
+    const st = cupMatchStrokes(match, hc, rule), hs = n => cupHoleStrokes(n, si || []);
+    const H = (entry && entry.h) || {};
+    const gv = (h, name) => { const e = H[String(h + 1)]; if (!e) return undefined; const k = Object.keys(e).find(x => norm(x) === norm(name)); return k === undefined ? undefined : Number(e[k]); };
+    return [0, 1].map(i => {
+      const sd = match.sides[i], out = new Array(18).fill(null);
+      for (let h = seg.from - 1; h < seg.to; h++) {
+        if (seg.format === 'altshot') {
+          const g = gv(h, sd.players[0]); if (g === undefined) continue;
+          const t = st.teams[i], arr = hs(t ? t.strokes : 0);
+          out[h] = g > 0 ? g - arr[h] : 99;
+        } else {
+          let best = null, seen = false;
+          sd.players.forEach(p => {
+            const g = gv(h, p); if (g === undefined) return; seen = true;
+            const row = st.players.find(r => norm(r.names[0]) === norm(p)), a = hs(row ? row.strokes : 0);
+            if (g > 0) best = best === null ? g - a[h] : Math.min(best, g - a[h]);
+          });
+          if (seen) out[h] = best === null ? 99 : best;
+        }
+      }
+      return out;
+    });
+  }
+  // One match: per segment the state + the hole list, the next hole to enter and the format in play there.
+  function cupMatchLive(cfg, round, match, entry) {
+    const H = (entry && entry.h) || {};
+    const segs = (round.segments || []).map(sg => {
+      const [A, B] = cupMatchNets(cfg, round, match, entry, sg);
+      return { key: sg.key, format: sg.format, from: sg.from, to: sg.to, nets: [A, B], state: cupMatchState(A, B, sg.from, sg.to) };
+    });
+    const max = Math.max(0, ...(round.segments || []).map(sg => sg.to));
+    let next = 1; while (next <= max && H[String(next)]) next++;
+    const done = segs.length > 0 && segs.every(s => s.state.decided);
+    return { segments: segs, next: Math.min(next, max), allEntered: next > max, done, format: ((cupSegmentAt(round, Math.min(next, max)) || {}).format) || null };
+  }
+  function cupLiveStandings(cfg) {
+    const sc = (cfg && cfg.scores) || {};
+    return cupStandings(cfg, [], { sideScores: (r, m, sg) => cupMatchNets(cfg, r, m, ((sc[r.key] || {})[m.key]) || null, sg) });
+  }
   function cupTotalPoints(cfg) {
     const rule = cupPointsRule(cfg);
     return (cfg.rounds || []).reduce((t, r) => t + (r.matches || []).length * (r.segments || []).length, 0) * Math.max(rule.win + rule.loss, 2 * rule.half);
@@ -2507,7 +2560,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupHandicapRule, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
+    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });

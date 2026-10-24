@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap">
 <style>
 *{box-sizing:border-box}
-:root{--navy:#0a1f44;--navy2:#10306a;--navy3:#183f82;--accent:#d6203a;--red:#d6203a;--redlt:#ff6b78;--blue:#2f6fe0;--bluelt:#7fb2ff;--gold:#ffffff;--white:#ffffff;--dim:rgba(255,255,255,.68);--faint:rgba(255,255,255,.16);--good:#7fd69a;--warn:#ffd36b;--bad:#ff9a8a}
+:root{--lm-a:#d6203a;--lm-b:#2f6fe0;--lm-card:#10306a;--lm-card2:#183f82;--lm-text:#fff;--lm-ink:#0a1f44;--navy:#0a1f44;--navy2:#10306a;--navy3:#183f82;--accent:#d6203a;--red:#d6203a;--redlt:#ff6b78;--blue:#2f6fe0;--bluelt:#7fb2ff;--gold:#ffffff;--white:#ffffff;--dim:rgba(255,255,255,.68);--faint:rgba(255,255,255,.16);--good:#7fd69a;--warn:#ffd36b;--bad:#ff9a8a}
 body{margin:0;background:var(--navy) radial-gradient(ellipse at 50% -10%,rgba(47,111,224,.35),transparent 60%);color:var(--white);font-family:'DM Sans',sans-serif;line-height:1.35}
 .page{max-width:980px;margin:0 auto;padding:0 16px 90px}
 h1,h2{font-family:'Baloo 2',sans-serif;margin:0}
@@ -82,7 +82,8 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.35.0"></script>
+<script src="bf_engine.js?v=1.36.0"></script>
+<script src="bf_live_match.js?v=1"></script>
 <script>
 (function () {
   'use strict';
@@ -350,6 +351,18 @@ button:disabled{opacity:.4;cursor:default}
       else html += '<div class="banner">The captains will draft their teams soon. Check back here.</div>';
       app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html; wire(); return;
     }
+    var hasMatches = (cfg.rounds || []).some(function (r) { return (r.matches || []).length; });
+    if (hasMatches && d.locked) {
+      if (!view) view = 'score';
+      var tabs = '<div class="toolbar"><button class="' + (view === 'score' ? '' : 'sec') + '" data-view="score">Score</button><button class="' + (view === 'teams' ? '' : 'sec') + '" data-view="teams">Teams &amp; draw</button></div>';
+      if (view === 'score') {
+        var names = []; (cfg.rounds || []).forEach(function (r) { (r.matches || []).forEach(function (m) { m.sides.forEach(function (sd) { sd.players.forEach(function (p) { if (names.indexOf(p) < 0) names.push(p); }); }); }); });
+        var who = '<div class="toolbar"><label class="hint">I am </label><select id="meSel"><option value="">(pick your name)</option>' + names.map(function (n) { return '<option' + (n === PLAYER ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></div>';
+        app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + who + '<div id="lmMount"></div>';
+        mountScore(); wire(); return;
+      }
+      html += tabs;
+    }
     var clock = v.onClock;
     if (d.orderChoice && d.orderChoice.text) html += '<div class="banner" style="background:#0a3161">🎲 ' + esc(d.orderChoice.text) + '</div>';
     if (v.awaitingOrder) html += orderHtml('draft', v.control);
@@ -369,12 +382,23 @@ button:disabled{opacity:.4;cursor:default}
     if (pending) html += '<div class="sheet"><span><b>' + esc(pending) + '</b> to <b>' + esc(sideName(clock)) + '</b>?</span><button id="confirmPick">Pick</button><button class="sec" id="cancelPick">Cancel</button></div>';
     app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html; wire();
   }
+  var view = qs.get('view') || '', PLAYER = qs.get('player') || ''; try { PLAYER = PLAYER || localStorage.getItem('bf_cup_me') || ''; } catch (e) {}
+  var lmReady = false;
+  function mountScore() {
+    var el = document.getElementById('lmMount'); if (!el) return;
+    if (!lmReady) {
+      lmReady = true;
+      window.BFLiveMatch.mount(el, { E: E, getCfg: function () { return cfg; }, worker: WORKER, event: EVENT, get player() { return PLAYER; }, code: CAP, get pin() { return HOST ? pin : ''; }, onChange: function () {} });
+    } else window.BFLiveMatch.attach(el);
+  }
   function hero() { return '<div class="stripes"></div><div class="backrow"><a id="backApp" href="portal.html">← Back to the app</a></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div>' + (PRACTICE ? '<div class="banner" style="background:#b8860b">PRACTICE RUN · sample players, nothing here is real</div>' : ''); }
 
   function wire() {
     function $(id) { return document.getElementById(id); }
     function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
     matchupWire();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-view]'), function (b) { b.addEventListener('click', function () { view = b.getAttribute('data-view'); render(); }); });
+    var me = $('meSel'); if (me) me.addEventListener('change', function () { PLAYER = me.value; try { localStorage.setItem('bf_cup_me', PLAYER); } catch (e) {} render(); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-sort]'), function (h) { h.addEventListener('click', function () { sortBy = h.getAttribute('data-sort'); render(); }); });
     on('pinGo', function () { pin = $('pinIn').value.trim(); try { sessionStorage.setItem('bf_cup_pin', pin); } catch (e) {} render(); autoFill(); });
     function commitPool() {

@@ -1,0 +1,60 @@
+// Dev-95 — the Score tab: pick your name, enter gross strokes, strokes by hole, match status, offline queue, round finish.
+import fs from 'fs'; import { JSDOM } from 'jsdom'; import { fileURLToPath } from 'url';
+const HERE = p => fileURLToPath(new URL(p, import.meta.url));
+let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
+const engine = fs.readFileSync(HERE('../bf_engine.js'), 'utf8');
+const lm = fs.readFileSync(HERE('../../docs/bf_live_match.js'), 'utf8');
+const page = fs.readFileSync(HERE('../../docs/bf-cup-draft.html'), 'utf8').replace(/<script src="bf_engine.js[^>]*><\/script>/, '<script>' + engine + '</script>').replace(/<script src="bf_live_match.js[^>]*><\/script>/, '<script>' + lm + '</script>');
+const SI = [1,3,5,7,9,11,13,15,17,2,4,6,8,10,12,14,16,18];
+let doc = { sides: [{ key: 'A', name: 'Team Jake', captain: 'Jake', players: ['Jake', 'Amy'] }, { key: 'B', name: 'Team Nate', captain: 'Nate', players: ['Nate', 'Bob'] }], points: { win: 1, half: 0.5, loss: 0 },
+  handicap: { bestball: 100, altshot: 100, singles: 100, strokeIndex: SI },
+  rounds: [{ key: 'r1', name: 'Saturday', holes: 18, segments: [{ key: 's1', format: 'bestball', from: 1, to: 9 }, { key: 's2', format: 'altshot', from: 10, to: 18 }],
+    matches: [{ key: 'm1', sides: [{ side: 'A', players: ['Jake', 'Amy'] }, { side: 'B', players: ['Nate', 'Bob'] }] }] }],
+  draft: { started: true, first: 'A', pool: [], stats: { Jake: { hcp: 10 }, Amy: { hcp: 14 }, Nate: { hcp: 6 }, Bob: { hcp: 8 } }, picks: [], locked: true }, matchup: { started: true, done: true, first: 'A', log: [] }, access: { A: 'AAA111', B: 'BBB222' } };
+const posts = []; let offline = false;
+const pub = () => { const c = JSON.parse(JSON.stringify(doc)); delete c.access; return c; };
+const fakeFetch = async (u, o) => {
+  const J = (x, status = 200) => ({ ok: status < 400, status, json: async () => x });
+  if (offline) throw new Error('offline');
+  if (/\/bfe\/cup\/act/.test(u)) {
+    const b = JSON.parse(o.body); posts.push(b);
+    if (b.action === 'score') { doc.scores = doc.scores || {}; const r = doc.scores[b.round] = doc.scores[b.round] || {}; const m = r[b.match] = r[b.match] || { h: {}, t: {}, by: {} }; m.h[String(b.hole)] = b.scores; m.t[String(b.hole)] = 'T'; doc.phases = doc.phases || {}; doc.phases['round_' + b.round + '_start'] = doc.phases['round_' + b.round + '_start'] || 'T'; }
+    if (b.action === 'round_end') { doc.phases = doc.phases || {}; doc.phases['round_' + b.round + '_end'] = 'T'; }
+    return J({ ok: true, config: pub() });
+  }
+  return J({ ok: true, config: pub() });
+};
+const tick = (ms = 80) => new Promise(r => setTimeout(r, ms));
+async function open(query) {
+  const dom = new JSDOM(page, { runScripts: 'dangerously', pretendToBeVisual: true, url: 'https://x.test/bf-cup-draft.html' + query, beforeParse(w) { w.fetch = fakeFetch; w.confirm = () => true; } });
+  await tick(150); return dom;
+}
+const click = async (dom, sel, n = 0) => { const el = dom.window.document.querySelectorAll(sel)[n]; if (!el) throw new Error('missing ' + sel); el.click(); await tick(120); };
+let dom = await open('?player=Amy'); let d = dom.window.document;
+ok(d.getElementById('lmMount') && /Hole 1/.test(d.body.textContent), 'locked teams with matches open on the Score tab');
+ok(/Fourball/.test(d.body.textContent) && /stroke index 1/.test(d.body.textContent), 'segment and stroke index shown');
+ok(/★/.test(d.querySelector('.lmtab').textContent), 'my match is starred');
+ok(d.querySelectorAll('.lmrow').length === 4, 'fourball: one row per player');
+ok(d.querySelectorAll('.lmdots').length >= 3, 'handicap strokes shown as dots on hole 1 (SI 1)');
+// Jake birdie (3), others par: tap − on Jake
+await click(dom, '[data-lm-d="Jake|-1"]'); d = dom.window.document;
+ok(/>3</.test(d.querySelectorAll('.lmval')[0].outerHTML), 'minus lowers the score');
+await click(dom, '#lmPost'); d = dom.window.document;
+ok(posts.length === 1 && posts[0].action === 'score' && posts[0].hole === 1 && posts[0].scores.Jake === 3 && posts[0].scores.Bob === 4 && posts[0].player === 'Amy', 'post sends all four grosses and who posted');
+ok(/Hole 2/.test(d.body.textContent), 'moves on to the next hole');
+ok(/Team Jake 1 UP.*thru 1/.test(d.querySelector('.lmstat').textContent), 'status line (got ' + d.querySelector('.lmstat').textContent + ')');
+ok(d.querySelector('.lmh.a'), 'hole 1 colored for the winning side');
+// pickup + an offline hole is queued
+offline = true;
+await click(dom, '[data-lm-pu="Nate"]'); await click(dom, '[data-lm-pu="Bob"]'); await click(dom, '#lmPost'); d = dom.window.document;
+ok(/waiting to send/.test(d.querySelector('.lm').textContent), 'offline: the hole is queued, not lost');
+ok(/Team Jake 2 UP.*thru 2/.test(d.querySelector('.lmstat').textContent), 'queued hole already counts on screen (got ' + d.querySelector('.lmstat').textContent + ')');
+offline = false; const before = posts.length; await tick(6500);
+ok(posts.length === before + 1 && !/waiting to send/.test(dom.window.document.querySelector('.lm').textContent), 'back online: the queue drains');
+// edit an old hole
+await click(dom, '[data-lm-hole="1"]'); d = dom.window.document; ok(/Hole 1/.test(d.body.textContent) && /posted/.test(d.body.textContent) && />3</.test(d.querySelectorAll('.lmval')[0].outerHTML), 'tap a hole to review/edit it');
+// stranger sees the panel but is not asked as a player; identity picker
+dom = await open(''); d = dom.window.document; ok(d.getElementById('meSel') && d.getElementById('lmMount'), 'a name picker is offered');
+// finish round
+dom = await open('?player=Jake'); await click(dom, '#lmFinish'); ok(posts.some(p => p.action === 'round_end' && p.round === 'r1'), 'finish round posts round_end');
+console.log('score page: ' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
