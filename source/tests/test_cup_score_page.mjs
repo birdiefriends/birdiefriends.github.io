@@ -34,19 +34,19 @@ let dom = await open('?player=Amy'); let d = dom.window.document;
 ok(d.getElementById('lmMount') && /Hole 1/.test(d.body.textContent), 'locked teams with matches open on the Score tab');
 ok(/Fourball/.test(d.body.textContent) && /stroke index 1/.test(d.body.textContent), 'segment and stroke index shown');
 ok(/★/.test(d.querySelector('.lmtab').textContent), 'my match is starred');
-ok(d.querySelectorAll('.lmrow').length === 4, 'fourball: one row per player');
-ok(d.querySelectorAll('.lmdots').length >= 3, 'handicap strokes shown as dots on hole 1 (SI 1)');
+ok(d.querySelectorAll('.lmchip').length === 4 && d.querySelectorAll('.lmt').length === 9, 'fourball: four player chips, ONE set of number tiles (for the player picked)');
+ok(d.querySelectorAll('.lmdots').length >= 3 && !d.querySelector('.lmholes'), 'handicap strokes shown as dots on hole 1 (SI 1)');
 // Jake birdie (3), others par: tap − on Jake
 ok(d.getElementById('lmPost').disabled && /Tap 4 more/.test(d.getElementById('lmPost').textContent), 'no default score: Post is locked until every player is tapped');
 await click(dom, '[data-lm-s="Jake|3"]'); await click(dom, '[data-lm-s="Amy|4"]'); await click(dom, '[data-lm-s="Nate|4"]'); d = dom.window.document;
 ok(d.getElementById('lmPost').disabled && /Tap 1 more/.test(d.getElementById('lmPost').textContent), 'still locked with one missing');
 await click(dom, '[data-lm-s="Bob|4"]'); d = dom.window.document;
-ok(/>3</.test(d.querySelectorAll('.lmval')[0].outerHTML) && !d.getElementById('lmPost').disabled, 'one tap sets a score and unlocks Post');
+ok(/>3</.test(d.querySelectorAll('.lmcv')[0].outerHTML) && !d.getElementById('lmPost').disabled, 'one tap sets a score and unlocks Post');
 await click(dom, '#lmPost'); d = dom.window.document;
 ok(posts.length === 1 && posts[0].action === 'score' && posts[0].hole === 1 && posts[0].scores.Jake === 3 && posts[0].scores.Bob === 4 && posts[0].player === 'Amy', 'post sends all four grosses and who posted');
 ok(/Hole 2/.test(d.body.textContent), 'moves on to the next hole');
 ok(/Team Jake 1 UP.*thru 1/.test(d.querySelector('.lmstat').textContent), 'status line (got ' + d.querySelector('.lmstat').textContent + ')');
-ok(d.querySelector('.lmh.a'), 'hole 1 colored for the winning side');
+await click(dom, '#lmAll'); ok(dom.window.document.querySelector('.lmh.a'), 'hole 1 colored for the winning side'); await click(dom, '#lmAll');
 // pickup + an offline hole is queued
 offline = true;
 await click(dom, '[data-lm-s="Jake|4"]'); await click(dom, '[data-lm-s="Amy|4"]'); await click(dom, '[data-lm-s="Nate|0"]'); await click(dom, '[data-lm-s="Bob|0"]'); await click(dom, '#lmPost'); d = dom.window.document;
@@ -55,7 +55,7 @@ ok(/Team Jake 2 UP.*thru 2/.test(d.querySelector('.lmstat').textContent), 'queue
 offline = false; const before = posts.length; await tick(6500);
 ok(posts.length === before + 1 && !/waiting to send/.test(dom.window.document.querySelector('.lm').textContent), 'back online: the queue drains');
 // edit an old hole
-await click(dom, '[data-lm-hole="1"]'); d = dom.window.document; ok(/Hole 1/.test(d.body.textContent) && /posted/.test(d.body.textContent) && />3</.test(d.querySelectorAll('.lmval')[0].outerHTML), 'tap a hole to review/edit it');
+await click(dom, '#lmAll'); ok(dom.window.document.querySelectorAll('.lmh').length === 18, 'tap the hole title to see all 18'); await click(dom, '[data-lm-hole="1"]'); d = dom.window.document; ok(/Hole 1/.test(d.body.textContent) && /posted/.test(d.body.textContent) && />3</.test(d.querySelectorAll('.lmcv')[0].outerHTML), 'tap a hole to review/edit it');
 // stranger sees the panel but is not asked as a player; identity picker
 dom = await open(''); d = dom.window.document; ok(d.getElementById('meSel') && d.getElementById('lmMount'), 'a name picker is offered');
 // finish round

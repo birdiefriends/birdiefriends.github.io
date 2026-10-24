@@ -29,6 +29,12 @@
     '.lm .lmstep{display:flex;align-items:center;gap:6px}.lm .lmstep button{width:46px;height:46px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);color:var(--tx);font:inherit;font-size:1.4rem;font-weight:800;cursor:pointer}' +
     '.lm .lmval{min-width:44px;text-align:center;font-size:1.6rem;font-weight:800}.lm .lmval.pu{font-size:1rem;color:var(--warn)}' +
     '.lm .lmtiles{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;grid-column:1/-1}.lm .lmt{height:42px;border-radius:9px;border:1px solid var(--line);background:var(--bg2);color:var(--tx);font:inherit;font-weight:800;font-size:1.05rem;cursor:pointer;padding:0}.lm .lmt.on{background:var(--lm-accent,var(--a));border-color:var(--tx)}.lm .lmt.pu.on{background:var(--warn);color:var(--ink)}.lm .lmt.sub{font-size:.75rem;color:var(--dim)}' +
+    '.lm .lmnav{display:grid;grid-template-columns:52px 1fr 52px;gap:8px;align-items:center;margin:4px 0 8px}.lm .lmarrow{height:48px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);color:var(--tx);font:inherit;font-size:1.6rem;font-weight:800;cursor:pointer}.lm .lmarrow:disabled{opacity:.3}' +
+    '.lm .lmhtitle{background:none;border:0;color:var(--tx);font:inherit;font-weight:800;font-size:1.35rem;cursor:pointer;text-align:center}.lm .lmhtitle small{display:block;font-weight:500;font-size:.72rem;color:var(--dim)}' +
+    '.lm .lmwin{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--dim)}.lm .lmwin.a{background:var(--a)}.lm .lmwin.b{background:var(--b)}' +
+    '.lm .lmchips{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lm .lmchip{display:flex;justify-content:space-between;align-items:center;gap:6px;background:var(--bg2);color:var(--tx);border:2px solid var(--line);border-left:6px solid var(--line);border-radius:10px;padding:10px;font:inherit;font-weight:700;cursor:pointer;text-align:left}' +
+    '.lm .lmchip.a{border-left-color:var(--a)}.lm .lmchip.b{border-left-color:var(--b)}.lm .lmchip.sel{border-color:var(--tx)}.lm .lmchip small{display:block;font-weight:500;color:var(--dim);font-size:.7rem}' +
+    '.lm .lmcv{font-size:1.7rem;font-weight:800;min-width:30px;text-align:right}.lm .lmcv.pu{color:var(--warn)}.lm .lmpick{margin:10px 0 2px}' +
     '.lm .lmpu{width:auto!important;padding:0 8px;font-size:.78rem!important}.lm .lmpu.on{background:var(--warn)!important;color:var(--ink)!important}' +
     '.lm .lmgo{width:100%;padding:13px;border-radius:10px;border:0;background:var(--lm-accent,var(--a));color:#fff;font:inherit;font-weight:800;font-size:1rem;cursor:pointer;margin-top:8px}.lm .lmgo:disabled{opacity:.45}' +
     '.lm .lmsec{background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-weight:700;cursor:pointer}' +
@@ -151,22 +157,25 @@
       var cls = (i === 0 ? 'a' : 'b') + ((i === 0 && lead > 0) || (i === 1 && lead < 0) ? ' lead' : '');
       return '<div class="lmside ' + cls + '">' + esc(sideName(cfg, sd.side)) + '<small>' + esc(sd.players.join(' & ')) + '</small></div>';
     }).join('').replace('</div><div class="lmside b', '</div><div class="lmstat">' + esc(sl.text) + '<small>' + esc(sl.sub) + '</small></div><div class="lmside b') + '</div>';
-    // hole strip
-    h += '<div class="lmholes">' + Array.apply(null, Array(maxHole)).map(function (_, i) {
+    // entry: hole by hole, tap a player, the numbers pop for that player (same flow as the gathering panel)
+    var info = stat(cfg, round, match, hole), posted = entry && entry.h && entry.h[String(hole)];
+    var inp = S.inp[round.key + '|' + match.key + '|' + hole] = S.inp[round.key + '|' + match.key + '|' + hole] || {};
+    var w0 = holeWinner(live, hole);
+    h += '<div class="lmnav"><button class="lmarrow" data-lm-go="-1"' + (hole <= 1 ? ' disabled' : '') + '>‹</button><button class="lmhtitle" id="lmAll">Hole ' + hole + (w0 ? ' <span class="lmwin ' + w0 + '"></span>' : '') + '<small>' + FMT[info.fmt] + (cfg.handicap && cfg.handicap.strokeIndex ? ' · stroke index ' + cfg.handicap.strokeIndex[hole - 1] : '') + (posted ? ' · posted' : '') + ' · tap for all holes</small></button><button class="lmarrow" data-lm-go="1"' + (hole >= maxHole ? ' disabled' : '') + '>›</button></div>';
+    if (S.showAll) h += '<div class="lmholes">' + Array.apply(null, Array(maxHole)).map(function (_, i) {
       var n = i + 1, w = holeWinner(live, n), segStart = round.segments.some(function (s) { return s.from === n && n > 1; });
       return '<button class="lmh ' + w + (n === hole ? ' cur' : '') + (segStart ? ' seg' : '') + '" data-lm-hole="' + n + '">' + n + '</button>';
     }).join('') + '</div>';
-    // entry
-    var info = stat(cfg, round, match, hole), posted = entry && entry.h && entry.h[String(hole)];
-    var inp = S.inp[round.key + '|' + match.key + '|' + hole] = S.inp[round.key + '|' + match.key + '|' + hole] || {};
-    h += '<div style="font-weight:800;margin:6px 0">Hole ' + hole + ' <span class="lmdim">· ' + FMT[info.fmt] + (cfg.handicap && cfg.handicap.strokeIndex ? ' · stroke index ' + cfg.handicap.strokeIndex[hole - 1] : '') + (posted ? ' · posted' : '') + '</span></div>';
-    info.rows.forEach(function (r) {
+    var firstOpen = info.rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; })[0];
+    var who = info.rows.filter(function (r) { return r.key === S.who; })[0] || firstOpen || info.rows[0];
+    S.who = who.key;
+    h += '<div class="lmchips">' + info.rows.map(function (r) {
       var cur = rowVal(r.key, inp, posted);
-      h += '<div class="lmrow"><div class="lmname ' + r.side + '">' + esc(r.label) + (r.strokes ? ' <span class="lmdots" title="handicap strokes on this hole">' + '●'.repeat(r.strokes) + '</span>' : '') + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + '</div>'
-        + '<div class="lmval' + (cur === 0 ? ' pu' : '') + '">' + (cur === undefined ? '–' : (cur === 0 ? 'Pick up' : cur)) + '</div>'
-        + '<div class="lmtiles">' + [2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (cur === n ? ' on' : '') + '" data-lm-s="' + esc(r.key) + '|' + n + '">' + n + '</button>'; }).join('')
-        + '<button class="lmt sub' + (cur >= 9 ? ' on' : '') + '" data-lm-s="' + esc(r.key) + '|more">' + (cur >= 9 ? cur : '9+') + '</button><button class="lmt pu' + (cur === 0 ? ' on' : '') + '" data-lm-s="' + esc(r.key) + '|0">P</button></div></div>';
-    });
+      return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (cur === undefined ? '–' : (cur === 0 ? 'P' : cur)) + '</span></button>';
+    }).join('') + '</div>';
+    var curw = rowVal(who.key, inp, posted);
+    h += '<div class="lmpick"><div class="lmdim" style="margin-bottom:4px">' + esc(who.label) + ' · hole ' + hole + '</div><div class="lmtiles">' + [2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (curw === n ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|' + n + '">' + n + '</button>'; }).join('')
+      + '<button class="lmt sub' + (curw >= 9 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|more">' + (curw >= 9 ? curw : '9+') + '</button><button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0">P</button></div></div>';
     var missing = info.rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
     if (!info.hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
     h += '<button class="lmgo" id="lmPost"' + (missing ? ' disabled' : '') + '>' + (missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (posted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>';
@@ -188,17 +197,21 @@
     var el = S.el, key = round.key + '|' + match.key + '|' + hole;
     function cur(r) { var cfg = S.opts.getCfg(), e = entryOf(cfg, round.key, match.key); return rowVal(r.key, S.inp[key] || {}, e && e.h && e.h[String(hole)]); }
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-sel]'), function (b) { b.addEventListener('click', function () { var p = b.getAttribute('data-lm-sel').split('|'); S.sel = { r: p[0], m: p[1] }; S.hole = null; S.msg = ''; render(); }); });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-hole]'), function (b) { b.addEventListener('click', function () { S.hole = { r: round.key, m: match.key, h: Number(b.getAttribute('data-lm-hole')) }; S.msg = ''; render(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-hole]'), function (b) { b.addEventListener('click', function () { S.hole = { r: round.key, m: match.key, h: Number(b.getAttribute('data-lm-hole')) }; S.who = null; S.showAll = false; S.msg = ''; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-s]'), function (b) { b.addEventListener('click', function () {
       var p = b.getAttribute('data-lm-s').split('|'), row = info.rows.filter(function (r) { return r.key === p[0]; })[0], c = cur(row), v;
       if (p[1] === 'more') v = c >= 9 ? Math.min(15, c + 1) : 9; else v = Number(p[1]);
-      (S.inp[key] = S.inp[key] || {})[row.key] = v; render(); }); });
+      (S.inp[key] = S.inp[key] || {})[row.key] = v;
+      var nx = info.rows.filter(function (r) { return r.key !== row.key && cur(r) === undefined; })[0]; S.who = nx ? nx.key : row.key; render(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-who]'), function (b) { b.addEventListener('click', function () { S.who = b.getAttribute('data-lm-who'); render(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-go]'), function (b) { b.addEventListener('click', function () { var mx = Math.max.apply(null, round.segments.map(function (x) { return x.to; })); S.hole = { r: round.key, m: match.key, h: Math.max(1, Math.min(mx, hole + Number(b.getAttribute('data-lm-go')))) }; S.who = null; S.msg = ''; render(); }); });
+    var all = el.querySelector('#lmAll'); if (all) all.addEventListener('click', function () { S.showAll = !S.showAll; render(); });
     var go = el.querySelector('#lmPost'); if (go) go.addEventListener('click', function () {
       var scores = {}; info.rows.forEach(function (r) { scores[r.key] = cur(r); }); if (info.rows.some(function (r) { return scores[r.key] === undefined; })) return;
       var post = { round: round.key, match: match.key, hole: hole, scores: scores, player: S.opts.player || '', at: new Date().toISOString() };
       var cfg = S.opts.getCfg(); applyLocal(cfg, post); var qq = queue(); qq.push(post); setQueue(qq);
       delete S.inp[key]; S.msg = ''; var live = S.opts.E.cupMatchLive(cfg, round, match, entryOf(cfg, round.key, match.key));
-      S.hole = { r: round.key, m: match.key, h: Math.min(live.next, Math.max.apply(null, round.segments.map(function (s) { return s.to; }))) };
+      S.who = null; S.hole = { r: round.key, m: match.key, h: Math.min(live.next, Math.max.apply(null, round.segments.map(function (s) { return s.to; }))) };
       render(); flush(); if (S.opts.onChange) S.opts.onChange(); });
     function roundAct(action) { fetch(S.opts.worker + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: S.opts.event, action: action, round: round.key, player: S.opts.player || '', code: S.opts.code || undefined, pin: S.opts.pin || undefined }) })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); }).then(function (j) { var c = S.opts.getCfg(); c.phases = j.config.phases; S.msg = ''; render(); if (S.opts.onChange) S.opts.onChange(); })
