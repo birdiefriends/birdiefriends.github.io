@@ -33,7 +33,7 @@ const click = async (dom, sel, n = 0) => { const el = dom.window.document.queryS
 let dom = await open('?player=Amy'); let d = dom.window.document;
 ok(d.getElementById('lmMount') && /Hole 1/.test(d.body.textContent), 'locked teams with matches open on the Score tab');
 ok(/Fourball/.test(d.body.textContent) && /stroke index 1/.test(d.body.textContent), 'segment and stroke index shown');
-ok(/★/.test(d.querySelector('.lmtab').textContent), 'my match is starred');
+ok(/★/.test(d.querySelector('#lmMatchSel').textContent) && d.querySelector('#lmMeSel').value === 'Amy' && d.querySelectorAll('#lmMeSel option').length === 5 && !d.querySelector('.lmtab'), 'a match dropdown (mine starred) and an I-am list narrowed to the four in the match');
 ok(d.querySelectorAll('.lmchip').length === 4 && d.querySelectorAll('.lmt').length === 9, 'fourball: four player chips, ONE set of number tiles (for the player picked)');
 ok(d.querySelectorAll('.lmdots').length >= 3 && !d.querySelector('.lmholes'), 'handicap strokes shown as dots on hole 1 (SI 1)');
 // Jake birdie (3), others par: tap − on Jake
@@ -58,8 +58,8 @@ ok(posts.length === before + 1 && !/waiting to send/.test(dom.window.document.qu
 // edit an old hole
 await click(dom, '#lmAll'); ok(dom.window.document.querySelectorAll('.lmh').length === 18, 'tap the hole title to see all 18'); await click(dom, '[data-lm-hole="1"]'); d = dom.window.document; ok(/Hole 1/.test(d.body.textContent) && /posted/.test(d.body.textContent) && />3</.test(d.querySelectorAll('.lmcv')[0].outerHTML), 'tap a hole to review/edit it');
 // stranger sees the panel but is not asked as a player; identity picker
-dom = await open(''); d = dom.window.document; ok(d.getElementById('meSel') && d.getElementById('lmMount'), 'a name picker is offered');
-ok(d.getElementById('lmPost').disabled && /Pick your name/.test(d.getElementById('lmPost').textContent), 'no name picked: Post says so instead of failing silently');
+dom = await open(''); d = dom.window.document; ok(d.getElementById('lmMeSel') && d.getElementById('lmMount'), 'a name picker is offered');
+ok(d.getElementById('lmPost').disabled && /Pick who you are/.test(d.getElementById('lmPost').textContent), 'no name picked: Post says so instead of failing silently');
 dom = await open('?player=Amy'); d = dom.window.document;
 ok(/Hole 1: Team Jake wins the hole.*Match: Team Jake 1 UP/.test(d.querySelector('.lm').textContent) === false, 'banner only after posting in this visit');
 await click(dom, '#lmAll'); await click(dom, '[data-lm-hole="10"]'); d = dom.window.document;

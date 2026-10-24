@@ -83,7 +83,7 @@ button:disabled{opacity:.4;cursor:default}
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
 <script src="bf_engine.js?v=1.36.0"></script>
-<script src="bf_live_match.js?v=6"></script>
+<script src="bf_live_match.js?v=7"></script>
 <script>
 (function () {
   'use strict';
@@ -359,7 +359,7 @@ button:disabled{opacity:.4;cursor:default}
       if (view === 'score' || view === 'board') {
         var names = []; (cfg.rounds || []).forEach(function (r) { (r.matches || []).forEach(function (m) { m.sides.forEach(function (sd) { sd.players.forEach(function (p) { if (names.indexOf(p) < 0) names.push(p); }); }); }); });
         var who = '<div class="toolbar"><label class="hint">I am </label><select id="meSel"><option value="">(pick your name)</option>' + names.map(function (n) { return '<option' + (n === PLAYER ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></div>';
-        app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + (view === 'score' ? who : '') + '<div id="lmMount"></div>';
+        app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + '<div id="lmMount"></div>';
         mountScore(); wire(); return;
       }
       html += tabs;
@@ -390,7 +390,7 @@ button:disabled{opacity:.4;cursor:default}
     var setv = function () { window.BFLiveMatch.setView(view); };
     if (!lmReady) {
       lmReady = true;
-      window.BFLiveMatch.mount(el, { E: E, getCfg: function () { return cfg; }, worker: WORKER, event: EVENT, get player() { return PLAYER; }, code: CAP, get pin() { return HOST ? pin : ''; }, onChange: function () {}, goScore: function () { view = 'score'; render(); } });
+      window.BFLiveMatch.mount(el, { E: E, getCfg: function () { return cfg; }, worker: WORKER, event: EVENT, get player() { return PLAYER; }, code: CAP, get pin() { return HOST ? pin : ''; }, onChange: function () {}, goScore: function () { view = 'score'; render(); }, setPlayer: function (n) { PLAYER = n; try { localStorage.setItem('bf_cup_me', PLAYER); } catch (e) {} } });
       setv(); window.BFLiveMatch.attach(el);
     } else { setv(); window.BFLiveMatch.attach(el); }
   }

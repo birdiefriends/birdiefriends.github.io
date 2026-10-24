@@ -12,6 +12,7 @@
     '.lm{--a:var(--lm-a,#d6203a);--b:var(--lm-b,#2f6fe0);--bg:var(--lm-card,#10306a);--bg2:var(--lm-card2,#183f82);--tx:var(--lm-text,#fff);--dim:var(--lm-dim,rgba(255,255,255,.68));--line:var(--lm-line,rgba(255,255,255,.16));--good:var(--lm-good,#7fd69a);--warn:var(--lm-warn,#ffd36b);--ink:var(--lm-ink,#0a1f44);color:var(--tx)}' +
     '.lm *{box-sizing:border-box}' +
     '.lm .lmc{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}' +
+    '.lm .lmbar{display:grid;grid-template-columns:1fr;gap:8px;margin:6px 0}.lm .lmbar label{display:block;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}.lm .lmbar select{display:block;width:100%;margin-top:3px;background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:11px;font:inherit;font-size:.95rem;text-transform:none;letter-spacing:0}' +
     '.lm .lmtabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}' +
     '.lm .lmtab{background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:.85rem;cursor:pointer;text-align:left}' +
     '.lm .lmtab.on{border-color:var(--tx);box-shadow:0 0 0 1px var(--tx)}.lm .lmtab small{display:block;color:var(--dim)}' +
@@ -171,12 +172,12 @@
     var sl = statusLine(cfg, live, match);
     var lead = 0; live.segments.forEach(function (s) { if (!lead && !s.state.decided && s.state.thru > 0) lead = s.state.lead; });
     var h = '<div class="lm">';
-    // match picker
-    h += '<div class="lmtabs">' + all.map(function (x) {
-      var ol = oneLine(cfg, x.round, x.match), on = x.round.key === round.key && x.match.key === match.key;
-      var label = x.match.sides.map(function (s) { return s.players.join('/'); }).join(' v ');
-      return '<button class="lmtab' + (on ? ' on' : '') + '" data-lm-sel="' + esc(x.round.key) + '|' + esc(x.match.key) + '">' + (mine(x.match, S.opts.player) ? '★ ' : '') + esc((x.round.name || x.round.key) + ' · ' + x.match.key.toUpperCase()) + '<small>' + esc(label) + '</small><small>' + esc(ol.text) + '</small></button>';
-    }).join('') + '</div>';
+    // who is scoring: pick the match, then who you are among its four players (no wall of matches)
+    var members = [].concat(match.sides[0].players, match.sides[1].players);
+    h += '<div class="lmbar"><label>Match<select id="lmMatchSel">' + all.map(function (x) {
+      var on = x.round.key === round.key && x.match.key === match.key, lab = (all.length > 1 && x.round.name ? x.round.name + ' ' : '') + x.match.key.toUpperCase() + ' · ' + x.match.sides.map(function (sd) { return sd.players.join('/'); }).join(' v ');
+      return '<option value="' + esc(x.round.key) + '|' + esc(x.match.key) + '"' + (on ? ' selected' : '') + '>' + (mine(x.match, S.opts.player) ? '★ ' : '') + esc(lab) + '</option>';
+    }).join('') + '</select></label><label>I am<select id="lmMeSel"><option value="">(who are you?)</option>' + members.map(function (n) { return '<option' + (norm(n) === norm(S.opts.player) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></label></div>';
     // match header
     h += '<div class="lmc"><div class="lmhead">' + match.sides.map(function (sd, i) {
       var cls = (i === 0 ? 'a' : 'b') + ((i === 0 && lead > 0) || (i === 1 && lead < 0) ? ' lead' : '');
@@ -207,7 +208,7 @@
     var missing = info.rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
     var anon = !S.opts.player && !S.opts.code && !S.opts.pin;
     if (!info.hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
-    h += '<button class="lmgo" id="lmPost"' + (missing || anon ? ' disabled' : '') + '>' + (anon ? 'Pick your name at the top first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (posted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>';
+    h += '<button class="lmgo" id="lmPost"' + (missing || anon ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (posted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>';
     if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, match: match, hole: hole, E: E }) || '';
     if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' hole' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
     if (S.err) h += '<div class="lmmsg q" id="lmErr">⚠ ' + esc(S.err) + '</div>';
@@ -224,6 +225,8 @@
   function wire(round, match, hole, info) {
     var el = S.el, key = round.key + '|' + match.key + '|' + hole;
     function cur(r) { var cfg = S.opts.getCfg(), e = entryOf(cfg, round.key, match.key); return rowVal(r.key, S.inp[key] || {}, e && e.h && e.h[String(hole)]); }
+    var ms = el.querySelector('#lmMatchSel'); if (ms) ms.addEventListener('change', function () { var p = ms.value.split('|'); S.sel = { r: p[0], m: p[1] }; S.hole = null; S.who = null; S.msg = ''; S.err = ''; S.last = null; render(); });
+    var me = el.querySelector('#lmMeSel'); if (me) me.addEventListener('change', function () { if (S.opts.setPlayer) S.opts.setPlayer(me.value); render(); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-sel]'), function (b) { b.addEventListener('click', function () { var p = b.getAttribute('data-lm-sel').split('|'); S.sel = { r: p[0], m: p[1] }; S.hole = null; S.msg = ''; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-hole]'), function (b) { b.addEventListener('click', function () { S.hole = { r: round.key, m: match.key, h: Number(b.getAttribute('data-lm-hole')) }; S.who = null; S.showAll = false; S.msg = ''; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-s]'), function (b) { b.addEventListener('click', function () {
