@@ -1413,7 +1413,7 @@ export default {
         for (const r of results) {
           if (/\(practice\)$/.test(r.event_name)) continue;
           let c; try { c = JSON.parse(r.config); } catch (e) { continue; }
-          if (!c.draft || !c.draft.started) continue;
+          if (!c.draft || !c.draft.started || c.hide_card) continue;
           // phase: the draft, then the captains building pairs, then the matchup draw, then done
           const pk = c.pairs || {}, keys = (c.sides || []).map(sd => sd.key);
           const phase = !c.draft.locked ? 'draft' : (c.matchup && c.matchup.done) ? 'set' : (c.matchup && c.matchup.started) ? 'matchups' : 'pairs';

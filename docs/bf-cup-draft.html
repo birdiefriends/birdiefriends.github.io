@@ -346,6 +346,7 @@ button:disabled{opacity:.4;cursor:default}
     if (HOST && !pin) {
       html += '<div class="card"><b>Commissioner PIN</b><div class="toolbar"><input type="password" id="pinIn" placeholder="PIN"><button id="pinGo">Unlock</button></div></div>';
     }
+    if (HOST && pin) html += '<div class="card"><b>App card: ' + (cfg.hide_card ? 'OFF' : 'ON') + '</b> <span class="hint">' + (cfg.hide_card ? 'Players do not see the Cup card in the app.' : 'Captains and players see the Cup card in the app while the Cup is live.') + '</span><div class="toolbar"><button class="sec" id="cardToggle">' + (cfg.hide_card ? 'Turn the app card on' : 'Turn the app card off') + '</button></div></div>';
     if (!started) {
       if (HOST && pin) html += setupHtml();
       else html += '<div class="banner">The captains will draft their teams soon. Check back here.</div>';
@@ -397,6 +398,7 @@ button:disabled{opacity:.4;cursor:default}
     function $(id) { return document.getElementById(id); }
     function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
     matchupWire();
+    var ct = $('cardToggle'); if (ct) ct.addEventListener('click', function () { if (cfg.hide_card) delete cfg.hide_card; else cfg.hide_card = true; save(); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-view]'), function (b) { b.addEventListener('click', function () { view = b.getAttribute('data-view'); render(); }); });
     var me = $('meSel'); if (me) me.addEventListener('change', function () { PLAYER = me.value; try { localStorage.setItem('bf_cup_me', PLAYER); } catch (e) {} render(); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-sort]'), function (h) { h.addEventListener('click', function () { sortBy = h.getAttribute('data-sort'); render(); }); });

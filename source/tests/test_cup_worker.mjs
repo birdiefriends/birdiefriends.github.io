@@ -123,6 +123,11 @@ r = await mact('AAA111', ['a3', 'a4']); ok(r.status === 409 && /already set/.tes
 r = await call('GET', '/bfe/cup-live');
 ok(r.json.events.find(e => e.event_name === 'Pair Cup').phase === 'matchups' || r.json.events.find(e => e.event_name === 'Pair Cup').phase === 'pairs', 'the live list reports a phase');
 ok(r.json.events.every(e => e.cap_code === undefined), 'with no player named, nobody gets a captain code');
+{ const full = (await call('GET', '/bfe/cup?event=Pair%20Cup&pin=7797')).json.config;
+  await call('POST', '/bfe/cup', { event_name: 'Pair Cup', config: Object.assign({}, full, { hide_card: true }), pin: '7797' });
+  r = await call('GET', '/bfe/cup-live'); ok(!r.json.events.find(e => e.event_name === 'Pair Cup'), 'host switch: a Cup with hide_card is off the app card list');
+  delete full.hide_card; await call('POST', '/bfe/cup', { event_name: 'Pair Cup', config: full, pin: '7797' });
+  r = await call('GET', '/bfe/cup-live'); ok(!!r.json.events.find(e => e.event_name === 'Pair Cup'), 'switching it back on brings the card back'); }
 r = await call('GET', '/bfe/cup-live?player=Jake');
 ok(r.json.events.find(e => e.event_name === 'Pair Cup').cap_code === 'AAA111' && r.json.events.find(e => e.event_name === 'Pair Cup').cap_side === 'Team Jake', 'a captain named by the app gets his own side\'s code');
 r = await call('GET', '/bfe/cup-live?player=nate'); ok(r.json.events.find(e => e.event_name === 'Pair Cup').cap_code === 'BBB222', 'name match ignores case');
