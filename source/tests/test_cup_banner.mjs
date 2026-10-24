@@ -20,9 +20,9 @@ ok(/formatClass\(evt\.format\) === 'format-cup' \? `\s*<button class="icon-actio
   const opened = []; const c2 = { encodeURIComponent, window: { open: u => opened.push(u) }, eventData: [{ id: 'e1', name: 'Test BFCup' }], BFE_API: 'x', currentPlayer: 'Jake', isCommissioner: () => false,
     fetch: async () => ({ json: async () => ({ events: [{ event_name: 'Test BFCup', cap_code: 'ZZ99' }] }) }) };
   vm.createContext(c2); vm.runInContext(extractFn(src, 'openCupSelection'), c2);
-  await vm.runInContext('openCupSelection("e1")', c2); ok(opened[0] === 'bf-cup-draft.html?event=Test%20BFCup&cap=ZZ99', 'a captain goes to his own screen');
-  c2.isCommissioner = () => true; await vm.runInContext('openCupSelection("e1")', c2); ok(opened[1] === 'bf-cup-draft.html?event=Test%20BFCup&host=1', 'the commissioner goes to the host screen');
-  c2.isCommissioner = () => false; c2.fetch = async () => { throw new Error('offline'); }; await vm.runInContext('openCupSelection("e1")', c2); ok(opened[2] === 'bf-cup-draft.html?event=Test%20BFCup', 'offline falls back to watching');
+  await vm.runInContext('openCupSelection("e1")', c2); ok(opened[0] === 'bf-cup-draft.html?event=Test%20BFCup&cap=ZZ99&player=Jake', 'a captain goes to his own screen');
+  c2.isCommissioner = () => true; await vm.runInContext('openCupSelection("e1")', c2); ok(opened[1] === 'bf-cup-draft.html?event=Test%20BFCup&host=1&player=Jake', 'the commissioner goes to the host screen');
+  c2.isCommissioner = () => false; c2.fetch = async () => { throw new Error('offline'); }; await vm.runInContext('openCupSelection("e1")', c2); ok(opened[2] === 'bf-cup-draft.html?event=Test%20BFCup&player=Jake', 'offline falls back to watching');
 }
 
 // who sees the card: captain, registered player, commissioner; nobody else
