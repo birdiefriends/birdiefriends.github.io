@@ -86,4 +86,14 @@ ok(mc && mc.how === 'concede' && mc.side === 'B' && mc.match === 'm1' && mc.code
 ok(/Match closed by host: Team Nate conceded/.test(d.querySelector('.lm').textContent) && d.getElementById('lmMatchReopen'), 'the panel shows who closed it and offers Reopen');
 ok(posts.some(p => p.action === 'round_end' && p.round === 'r1') , 'with every match closed the round ends by itself');
 await click(dom, '#lmMatchReopen'); ok(posts.some(p => p.action === 'match_reopen'), 'a captain can reopen the match');
+// finished matches show a result, not an entry form; the panel opens on the next unfinished match
+doc.closed = { r1: { m1: { how: 'concede', side: 'B', by: 'host' } } };
+doc.rounds[0].matches.push({ key: 'm2', sides: [{ side: 'A', players: ['Tom', 'Lou'] }, { side: 'B', players: ['Bill', 'BJ'] }] });
+doc.draft.stats.Tom = { hcp: 9 }; doc.draft.stats.Lou = { hcp: 12 }; doc.draft.stats.Bill = { hcp: 7 }; doc.draft.stats.BJ = { hcp: 15 };
+dom = await open('?player=Amy'); d = dom.window.document;
+ok(d.getElementById('lmMatchSel').value === 'r1|m2', 'Amy\'s match is finished, so the panel opens on the next one still to play (got ' + d.getElementById('lmMatchSel').value + ')');
+ok(d.querySelectorAll('optgroup').length === 1 && /Fourball \+ Foursomes/.test(d.querySelector('optgroup').label) && /final/.test(d.querySelector('#lmMatchSel').textContent), 'matches are grouped by round with their format and status');
+d.getElementById('lmMatchSel').value = 'r1|m1'; d.getElementById('lmMatchSel').dispatchEvent(new dom.window.Event('change')); await tick(100); d = dom.window.document;
+ok(/Match complete/.test(d.querySelector('.lm').textContent) && !d.querySelector('.lmchip') && d.getElementById('lmEdit') && /Conceded/.test(d.querySelector('.lm').textContent), 'a finished match shows its result, no entry form');
+await click(dom, '#lmEdit'); ok(!!dom.window.document.querySelector('.lmchip'), 'Correct a score brings the entry back');
 console.log('score page: ' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

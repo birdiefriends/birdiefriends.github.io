@@ -162,7 +162,8 @@
     }
     // choose the match: remembered, else mine, else the first
     var sel = S.sel && all.filter(function (x) { return x.round.key === S.sel.r && x.match.key === S.sel.m; })[0];
-    if (!sel) sel = all.filter(function (x) { return mine(x.match, S.opts.player); })[0] || all[0];
+    function isDone(x) { return E.cupMatchLive(cfg, x.round, x.match, entryOf(cfg, x.round.key, x.match.key)).done; }
+    if (!sel) sel = all.filter(function (x) { return mine(x.match, S.opts.player) && !isDone(x); })[0] || all.filter(function (x) { return !isDone(x); })[0] || all.filter(function (x) { return mine(x.match, S.opts.player); })[0] || all[0];
     S.sel = { r: sel.round.key, m: sel.match.key };
     var round = sel.round, match = sel.match, entry = entryOf(cfg, round.key, match.key), live = E.cupMatchLive(cfg, round, match, entry);
     var maxHole = Math.max.apply(null, round.segments.map(function (s) { return s.to; }));
@@ -170,13 +171,23 @@
     S.hole = { r: round.key, m: match.key, h: hole };
     var q = queue();
     var sl = statusLine(cfg, live, match);
+    var finished = live.done && !(S.edit && S.edit[round.key + '|' + match.key]);
+    var stdAll = E.cupLiveStandings(cfg), stdM = null; stdAll.rounds.forEach(function (rr) { if (rr.key === round.key) rr.matches.forEach(function (mm) { if (mm.key === match.key) stdM = mm; }); });
+    if (finished && stdM) { var pk = match.sides.map(function (sd) { return stdM.points[sd.side] || 0; }); sl = { text: pk[0] + ' – ' + pk[1], sub: 'Final' }; }
     var lead = 0; live.segments.forEach(function (s) { if (!lead && !s.state.decided && s.state.thru > 0) lead = s.state.lead; });
+    if (finished && stdM) { var pk2 = match.sides.map(function (sd) { return stdM.points[sd.side] || 0; }); lead = pk2[0] > pk2[1] ? 1 : pk2[0] < pk2[1] ? -1 : 0; }
     var h = '<div class="lm">';
     // who is scoring: pick the match, then who you are among its four players (no wall of matches)
     var members = [].concat(match.sides[0].players, match.sides[1].players);
-    h += '<div class="lmbar"><label>Match<select id="lmMatchSel">' + all.map(function (x) {
-      var on = x.round.key === round.key && x.match.key === match.key, lab = (all.length > 1 && x.round.name ? x.round.name + ' ' : '') + x.match.key.toUpperCase() + ' · ' + x.match.sides.map(function (sd) { return sd.players.join('/'); }).join(' v ');
-      return '<option value="' + esc(x.round.key) + '|' + esc(x.match.key) + '"' + (on ? ' selected' : '') + '>' + (mine(x.match, S.opts.player) ? '★ ' : '') + esc(lab) + '</option>';
+    var groups = []; all.forEach(function (x) { var g = groups.filter(function (y) { return y.round.key === x.round.key; })[0]; if (!g) groups.push(g = { round: x.round, items: [] }); g.items.push(x); });
+    h += '<div class="lmbar"><label>Match<select id="lmMatchSel">' + groups.map(function (g) {
+      var fm = g.round.segments.map(function (sg) { return FMT[sg.format]; }).filter(function (v, i, a2) { return a2.indexOf(v) === i; }).join(' + ');
+      return '<optgroup label="' + esc((g.round.name || g.round.key) + ' · ' + fm) + '">' + g.items.map(function (x) {
+        var on = x.round.key === round.key && x.match.key === match.key, lv = E.cupMatchLive(cfg, x.round, x.match, entryOf(cfg, x.round.key, x.match.key));
+        var stt = lv.done ? 'final' : (lv.segments.some(function (sg) { return sg.state.thru > 0; }) ? 'in play' : 'not started');
+        var lab = x.match.key.toUpperCase() + ' · ' + x.match.sides.map(function (sd) { return sd.players.join('/'); }).join(' v ') + ' · ' + stt;
+        return '<option value="' + esc(x.round.key) + '|' + esc(x.match.key) + '"' + (on ? ' selected' : '') + '>' + (mine(x.match, S.opts.player) ? '★ ' : '') + esc(lab) + '</option>';
+      }).join('') + '</optgroup>';
     }).join('') + '</select></label><label>I am<select id="lmMeSel"><option value="">(who are you?)</option>' + members.map(function (n) { return '<option' + (norm(n) === norm(S.opts.player) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></label></div>';
     // match header
     h += '<div class="lmc"><div class="lmhead">' + match.sides.map(function (sd, i) {
@@ -185,6 +196,7 @@
     }).join('').replace('</div><div class="lmside b', '</div><div class="lmstat">' + esc(sl.text) + '<small>' + esc(sl.sub) + '</small></div><div class="lmside b') + '</div>';
     if (S.last && S.last.m === match.key && S.last.r === round.key) h += '<div class="lmmsg ok" style="background:' + (S.last.w === 'a' ? 'var(--a)' : S.last.w === 'b' ? 'var(--b)' : 'var(--bg2)') + '">' + esc(S.last.text) + '</div>';
     h += '<div class="lmdim" style="margin:6px 0">' + round.segments.map(function (sg) { return 'Holes ' + sg.from + '–' + sg.to + ': ' + FMT[sg.format]; }).join(' · ') + '</div>';
+    var entryStart = h.length;
     // entry: hole by hole, tap a player, the numbers pop for that player (same flow as the gathering panel)
     var info = stat(cfg, round, match, hole), posted = entry && entry.h && entry.h[String(hole)];
     var inp = S.inp[round.key + '|' + match.key + '|' + hole] = S.inp[round.key + '|' + match.key + '|' + hole] || {};
@@ -213,12 +225,18 @@
     if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' hole' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
     if (S.err) h += '<div class="lmmsg q" id="lmErr">⚠ ' + esc(S.err) + '</div>';
     if (S.msg) h += '<div class="lmmsg">' + esc(S.msg) + '</div>';
-    if (live.done) h += '<div class="lmmsg ok">This match is decided. ' + esc(sl.text) + '. You can keep entering holes for fun; the result does not change.</div>';
+    if (live.done && !finished) h += '<div class="lmmsg">This match is already decided. Only correct a score here if one was entered wrong.</div>';
+    if (finished) {
+      h = h.slice(0, entryStart) + '<div class="lmdim" style="margin:6px 0">Match complete</div>' + (stdM ? stdM.segments.map(function (sg) {
+        var txt = sg.status === 'won' ? sideName(cfg, sg.winner) + ' ' + sg.text : sg.status === 'push' ? 'Halved' : 'Not played';
+        return '<div class="lmbs"><span class="lmdim">' + FMT[sg.format] + ' · holes ' + sg.from + '–' + sg.to + '</span><b class="' + (sg.winner === match.sides[0].side ? 'a' : sg.winner === match.sides[1].side ? 'b' : '') + '">' + esc(txt) + '</b></div>';
+      }).join('') : '') + '<button class="lmsec" id="lmEdit" style="margin-top:10px">Correct a score</button>';
+    }
     h += '</div>';
     // closing a match by hand: host or captains only
     var canClose = !!(S.opts.code || S.opts.pin), cl = live.closed;
     if (cl) h += '<div class="lmmsg ok">Match closed by ' + esc(cl.by || 'a captain') + ': ' + esc(cl.how === 'concede' ? sideName(cfg, cl.side) + ' conceded' : cl.how === 'halve' ? 'called halved' : 'as it stands') + (canClose ? ' <button class="lmsec" id="lmMatchReopen" style="margin-left:8px">Reopen the match</button>' : '') + '</div>';
-    else if (canClose) h += '<div class="lmc"><b>Close this match</b><div class="lmdim" style="margin:4px 0 8px">Only for a concession or a match stopped early. A match that is mathematically over closes by itself.</div><div class="lmtabs"><button class="lmsec" data-lm-close="standing">As it stands</button>' + match.sides.map(function (sd) { return '<button class="lmsec" data-lm-close="concede|' + esc(sd.side) + '">' + esc(sideName(cfg, sd.side)) + ' concedes</button>'; }).join('') + '<button class="lmsec" data-lm-close="halve">Call it halved</button></div></div>';
+    else if (canClose && !live.done) h += '<div class="lmc"><b>Close this match</b><div class="lmdim" style="margin:4px 0 8px">Only for a concession or a match stopped early. A match that is mathematically over closes by itself.</div><div class="lmtabs"><button class="lmsec" data-lm-close="standing">As it stands</button>' + match.sides.map(function (sd) { return '<button class="lmsec" data-lm-close="concede|' + esc(sd.side) + '">' + esc(sideName(cfg, sd.side)) + ' concedes</button>'; }).join('') + '<button class="lmsec" data-lm-close="halve">Call it halved</button></div></div>';
     // round control: the round finishes by itself once every match is decided or closed
     var rEnd = cfg.phases && cfg.phases['round_' + round.key + '_end'], allDone = (round.matches || []).every(function (m) { return E.cupMatchLive(cfg, round, m, entryOf(cfg, round.key, m.key)).done; });
     h += '<div class="lmc">' + (rEnd ? '<b>' + esc(round.name || round.key) + ' is finished.</b>' + (canClose ? ' <button class="lmsec" id="lmReopen">Reopen it</button>' : '')
@@ -272,6 +290,7 @@
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-close]'), function (b) { b.addEventListener('click', function () {
       var p = b.getAttribute('data-lm-close').split('|'), msg = p[0] === 'concede' ? 'Record this match as conceded by ' + sideName(S.opts.getCfg(), p[1]) + '?' : p[0] === 'halve' ? 'Call this match halved?' : 'Close this match as it stands? Anything still open is decided on the current score.';
       if (!window.confirm(msg)) return; act(round, 'match_close', { match: match.key, how: p[0], side: p[1] || undefined }); }); });
+    var ed = el.querySelector('#lmEdit'); if (ed) ed.addEventListener('click', function () { S.edit = S.edit || {}; S.edit[round.key + '|' + match.key] = true; render(); });
     var mro = el.querySelector('#lmMatchReopen'); if (mro) mro.addEventListener('click', function () { act(round, 'match_reopen', { match: match.key }); });
     var fin = el.querySelector('#lmFinish'); if (fin) fin.addEventListener('click', function () { if (fin.textContent.indexOf('early') > 0 && !window.confirm('Some matches are not decided. Finish the round anyway?')) return; roundAct('round_end'); });
     var ro = el.querySelector('#lmReopen'); if (ro) ro.addEventListener('click', function () { roundAct('round_reopen'); });
