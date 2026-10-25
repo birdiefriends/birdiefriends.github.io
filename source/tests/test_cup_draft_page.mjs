@@ -4,7 +4,7 @@ const HERE = p => fileURLToPath(new URL(p, import.meta.url));
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const engine = fs.readFileSync(HERE('../bf_engine.js'), 'utf8');
 const raw = fs.readFileSync(HERE('../../docs/bf-cup-draft.html'), 'utf8');
-ok(raw.includes('<script src="bf_engine.js?v=1.39.0">'), 'page loads the matching engine version');
+ok(raw.includes('<script src="bf_engine.js?v=1.40.0">'), 'page loads the matching engine version');
 const page = raw.replace(/<script src="bf_engine.js[^>]*><\/script>/, '<script>' + engine + '</script>').replace(/<script src="bf_live_match.js[^>]*><\/script>/, '<script>' + fs.readFileSync(HERE('../../docs/bf_live_match.js'), 'utf8') + '</script>');
 // fake Worker
 let doc = { sides: [{ key: 'A', name: 'Team Jake', captain: 'Jake K', color: 'red', players: [] }, { key: 'B', name: 'Team Nate', captain: 'Nate S', color: 'blue', players: [] }], points: { win: 1, half: 0.5, loss: 0 }, rounds: [], pool: ['Jake K', 'Nate S', 'P1', 'P2', 'P3', 'P4'] };

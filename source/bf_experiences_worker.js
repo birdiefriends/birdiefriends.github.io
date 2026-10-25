@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.39.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.40.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1473,7 +1473,11 @@ export default {
           const m = (rd.matches || []).find(x => x.key === body.match);
           if (!m) return J({ error: 'Unknown match' }, 404);
           const members = [].concat(...m.sides.map(sd => sd.players));
-          if (!capOk && !members.some(p => norm(p) === norm(body.player))) return J({ error: 'Only the four playing this match can score it' }, 403);
+          // the foursome plays together: in singles two matches share a group, and anyone in the group may score either match (BFEngine.cupGroupsOf)
+          const f0 = ((rd.segments || [])[0] || {}).format, per = rd.groupSize > 0 ? Math.floor(rd.groupSize) : (f0 === 'singles' ? 2 : 1);
+          const mi = (rd.matches || []).findIndex(x => x.key === m.key), g0 = mi - (mi % per);
+          const groupPlayers = [].concat(...(rd.matches || []).slice(g0, g0 + per).map(x => [].concat(...x.sides.map(sd => sd.players))));
+          if (!capOk && !groupPlayers.some(p => norm(p) === norm(body.player))) return J({ error: 'Only the four playing in this group can score it' }, 403);
           const hole = Number(body.hole), maxHole = Math.max(0, ...(rd.segments || []).map(sg => Number(sg.to) || 0));
           if (!(Number.isInteger(hole) && hole >= 1 && hole <= maxHole)) return J({ error: 'Hole must be 1 to ' + maxHole }, 400);
           const incoming = body.scores && typeof body.scores === 'object' ? body.scores : null;

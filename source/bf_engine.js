@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.39.0';
+  const ENGINE_VERSION = '1.40.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2551,6 +2551,22 @@
     const done = segs.length > 0 && segs.every(s => s.state.decided) || !!cl;
     return { closed: cl || null, segments: segs, next: Math.min(next, max), allEntered: next > max, done, format: ((cupSegmentAt(round, Math.min(next, max)) || {}).format) || null };
   }
+
+  // Who plays together. A session's matches are cut into groups (foursomes) for scoring: pairs matches are a group of one
+  // (the match IS the four players); singles matches go two to a group in draw order (matches 5 and 6 are Group 1). round.groupSize overrides.
+  function cupGroupsOf(round) {
+    const ms = (round && round.matches) || [], f = CUP_FORMATS[((round && round.segments || [])[0] || {}).format];
+    const per = round && round.groupSize > 0 ? Math.floor(round.groupSize) : (f && f.size === 1 ? 2 : 1);
+    const out = [];
+    for (let i = 0; i < ms.length; i += per) out.push({ key: 'g' + (out.length + 1), matches: ms.slice(i, i + per) });
+    return out;
+  }
+  // Match numbers run across the whole Cup in session order: "roundKey|matchKey" -> 1, 2, 3 ...
+  function cupMatchNumbers(cfg) {
+    const out = {}; let n = 0;
+    ((cfg && cfg.rounds) || []).forEach(r => (r.matches || []).forEach(m => { out[r.key + '|' + m.key] = ++n; }));
+    return out;
+  }
   function cupLiveStandings(cfg) {
     const sc = (cfg && cfg.scores) || {};
     return cupStandings(cfg, [], { sideScores: (r, m, sg) => cupMatchNets(cfg, r, m, ((sc[r.key] || {})[m.key]) || null, sg) });
@@ -2623,7 +2639,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupSinglesRound, cupSinglesControl, cupSinglesView, cupSinglesPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
+    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupSinglesRound, cupSinglesControl, cupSinglesView, cupSinglesPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupGroupsOf, cupMatchNumbers, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });

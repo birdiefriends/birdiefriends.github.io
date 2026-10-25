@@ -38,6 +38,7 @@
     '.lm .lmcv{font-size:1.7rem;font-weight:800;min-width:30px;text-align:right}.lm .lmcv.pu{color:var(--warn)}.lm .lmpick{margin:10px 0 2px}' +
     '.lm .lmbm{display:block;width:100%;background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px;font:inherit;text-align:left;cursor:pointer}.lm .lmbmh{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;font-weight:700;margin-bottom:6px}.lm .lmbmh .a{border-left:4px solid var(--a);padding-left:6px}.lm .lmbmh .b{border-left:4px solid var(--b);padding-left:6px;text-align:right;border-left:0;border-right:4px solid var(--b);padding-right:6px}' +
     '.lm .lmbs{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid var(--line);font-size:.88rem}.lm .lmbs b.a{color:var(--a)}.lm .lmbs b.b{color:var(--b)}' +
+    '.lm .lmmno{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}' +
     '.lm .lmpu{width:auto!important;padding:0 8px;font-size:.78rem!important}.lm .lmpu.on{background:var(--warn)!important;color:var(--ink)!important}' +
     '.lm .lmgo{width:100%;padding:13px;border-radius:10px;border:0;background:var(--lm-accent,var(--a));color:#fff;font:inherit;font-weight:800;font-size:1rem;cursor:pointer;margin-top:8px}.lm .lmgo:disabled{opacity:.45}' +
     '.lm .lmsec{background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-weight:700;cursor:pointer}' +
@@ -52,11 +53,17 @@
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage can be blocked */ } }
 
-  function matchesOf(cfg) {                                 // every match that has two real sides, with its round
+  function groupsOf(cfg) {                                  // the foursomes: each has a round and the matches it plays (BFEngine.cupGroupsOf)
     var out = [];
-    (cfg.rounds || []).forEach(function (r) { (r.matches || []).forEach(function (m) { if (m.sides && m.sides.length === 2 && m.sides.every(function (s) { return s.players && s.players.length; })) out.push({ round: r, match: m }); }); });
+    (cfg.rounds || []).forEach(function (r) {
+      S.opts.E.cupGroupsOf(r).forEach(function (g) {
+        var ms = g.matches.filter(function (m) { return m.sides && m.sides.length === 2 && m.sides.every(function (sd) { return sd.players && sd.players.length; }); });
+        if (ms.length) out.push({ round: r, key: g.key, matches: ms });
+      });
+    });
     return out;
   }
+  function mineG(g, player) { return g.matches.some(function (m) { return mine(m, player); }); }
   function sideName(cfg, key) { var s = (cfg.sides || []).filter(function (x) { return x.key === key; })[0]; return s ? (s.name || key) : key; }
   function entryOf(cfg, rk, mk) { return ((cfg.scores || {})[rk] || {})[mk] || null; }
   function mine(m, player) { return !!player && m.sides.some(function (s) { return s.players.some(function (p) { return norm(p) === norm(player); }); }); }
@@ -130,14 +137,18 @@
   }
 
   // The leaderboard view: the points race and every match with both of its parts (Fourball / Foursomes), one record, one renderer.
-  function boardHtml(cfg, all, standings) {
+  function groupTag(all, rk, mk) {                           // " · Group 2" when two matches share a foursome
+    var g = all.filter(function (x) { return x.round.key === rk && x.matches.some(function (m) { return m.key === mk; }); })[0];
+    return g && g.matches.length > 1 ? ' · Group ' + g.key.slice(1) : '';
+  }
+  function boardHtml(cfg, all, standings, nums) {
     var keys = (cfg.sides || []).map(function (x) { return x.key; }), h = '<div class="lm">';
     h += '<div class="lmc"><div class="lmboard"><div style="color:var(--a)"><span class="big">' + standings.points[keys[0]] + '</span><div class="lmdim">' + esc(sideName(cfg, keys[0])) + '</div></div><div class="lmdim">POINTS<br>' + standings.target + ' to win</div><div style="color:var(--b)"><span class="big">' + standings.points[keys[1]] + '</span><div class="lmdim">' + esc(sideName(cfg, keys[1])) + '</div></div></div>' + (standings.clinched ? '<div class="lmmsg ok" style="margin-top:8px;text-align:center">' + esc(sideName(cfg, standings.clinched)) + ' has clinched the Cup</div>' : '') + '</div>';
     standings.rounds.forEach(function (r) {
       if (!r.matches.length) return;
       h += '<div class="lmc"><b>' + esc(r.name || r.key) + '</b>' + (r.done ? ' <span class="lmdim">· final</span>' : '');
       r.matches.forEach(function (m) {
-        h += '<button class="lmbm" data-lm-open="' + esc(r.key) + '|' + esc(m.key) + '"><div class="lmbmh"><span class="a">' + esc(m.sides[0].players.join(' & ')) + '</span><span class="lmdim">v</span><span class="b">' + esc(m.sides[1].players.join(' & ')) + '</span></div>';
+        h += '<button class="lmbm" data-lm-open="' + esc(r.key) + '|' + esc(m.key) + '"><div class="lmmno">Match ' + nums[r.key + '|' + m.key] + groupTag(all, r.key, m.key) + '</div><div class="lmbmh"><span class="a">' + esc(m.sides[0].players.join(' & ')) + '</span><span class="lmdim">v</span><span class="b">' + esc(m.sides[1].players.join(' & ')) + '</span></div>';
         m.segments.forEach(function (sg) {
           var win = sg.winner ? sideName(cfg, sg.winner) + ' ' + sg.text : sg.text;
           var cls = sg.winner === m.sides[0].side ? 'a' : sg.winner === m.sides[1].side ? 'b' : '';
@@ -152,91 +163,107 @@
   function render() {
     if (!S) return;
     var cfg = S.opts.getCfg(), el = S.el; if (!cfg) { el.innerHTML = ''; return; }
-    var all = matchesOf(cfg);
+    var E = S.opts.E, all = groupsOf(cfg), nums = E.cupMatchNumbers(cfg);
     if (!all.length) { el.innerHTML = '<div class="lm"><div class="lmc lmdim">Matches are not set yet. The scoring opens once the draw is done.</div></div>'; return; }
-    var E = S.opts.E;
     if (S.view === 'board') {
-      el.innerHTML = boardHtml(cfg, all, E.cupLiveStandings(cfg));
-      Array.prototype.forEach.call(el.querySelectorAll('[data-lm-open]'), function (b) { b.addEventListener('click', function () { var p = b.getAttribute('data-lm-open').split('|'); S.sel = { r: p[0], m: p[1] }; S.hole = null; if (S.opts.goScore) S.opts.goScore(); }); });
+      el.innerHTML = boardHtml(cfg, all, E.cupLiveStandings(cfg), nums);
+      Array.prototype.forEach.call(el.querySelectorAll('[data-lm-open]'), function (b) { b.addEventListener('click', function () {
+        var p = b.getAttribute('data-lm-open').split('|'), g = all.filter(function (x) { return x.round.key === p[0] && x.matches.some(function (m) { return m.key === p[1]; }); })[0];
+        if (g) { S.sel = { r: g.round.key, g: g.key }; S.hole = null; if (S.opts.goScore) S.opts.goScore(); } }); });
       return;
     }
-    // choose the match: remembered, else mine, else the first
-    var sel = S.sel && all.filter(function (x) { return x.round.key === S.sel.r && x.match.key === S.sel.m; })[0];
-    function isDone(x) { return E.cupMatchLive(cfg, x.round, x.match, entryOf(cfg, x.round.key, x.match.key)).done; }
-    if (!sel) sel = all.filter(function (x) { return mine(x.match, S.opts.player) && !isDone(x); })[0] || all.filter(function (x) { return !isDone(x); })[0] || all.filter(function (x) { return mine(x.match, S.opts.player); })[0] || all[0];
-    S.sel = { r: sel.round.key, m: sel.match.key };
-    var round = sel.round, match = sel.match, entry = entryOf(cfg, round.key, match.key), live = E.cupMatchLive(cfg, round, match, entry);
+    function liveOf(g) { return g.matches.map(function (m) { return E.cupMatchLive(cfg, g.round, m, entryOf(cfg, g.round.key, m.key)); }); }
+    function gDone(g) { return liveOf(g).every(function (l) { return l.done; }); }
+    // choose the group: remembered, else mine and still open, else any still open, else mine, else the first
+    var grp = S.sel && all.filter(function (x) { return x.round.key === S.sel.r && x.key === S.sel.g; })[0];
+    if (!grp) grp = all.filter(function (x) { return mineG(x, S.opts.player) && !gDone(x); })[0] || all.filter(function (x) { return !gDone(x); })[0] || all.filter(function (x) { return mineG(x, S.opts.player); })[0] || all[0];
+    S.sel = { r: grp.round.key, g: grp.key };
+    var round = grp.round, matches = grp.matches, lives = liveOf(grp), gkey = round.key + '|' + grp.key;
     var maxHole = Math.max.apply(null, round.segments.map(function (s) { return s.to; }));
-    var hole = S.hole && S.hole.m === match.key && S.hole.r === round.key ? S.hole.h : live.next;
-    S.hole = { r: round.key, m: match.key, h: hole };
-    var q = queue();
-    var sl = statusLine(cfg, live, match);
-    var finished = live.done && !(S.edit && S.edit[round.key + '|' + match.key]);
-    var stdAll = E.cupLiveStandings(cfg), stdM = null; stdAll.rounds.forEach(function (rr) { if (rr.key === round.key) rr.matches.forEach(function (mm) { if (mm.key === match.key) stdM = mm; }); });
-    if (finished && stdM) { var pk = match.sides.map(function (sd) { return stdM.points[sd.side] || 0; }); sl = { text: pk[0] + ' – ' + pk[1], sub: 'Final' }; }
-    var lead = 0; live.segments.forEach(function (s) { if (!lead && !s.state.decided && s.state.thru > 0) lead = s.state.lead; });
-    if (finished && stdM) { var pk2 = match.sides.map(function (sd) { return stdM.points[sd.side] || 0; }); lead = pk2[0] > pk2[1] ? 1 : pk2[0] < pk2[1] ? -1 : 0; }
+    var gnext = Math.min.apply(null, lives.map(function (l) { return l.next; }));
+    var hole = S.hole && S.hole.g === gkey ? S.hole.h : gnext;
+    S.hole = { g: gkey, h: hole };
+    var q = queue(), std = E.cupLiveStandings(cfg), stdOf = {};
+    std.rounds.forEach(function (rr) { if (rr.key === round.key) rr.matches.forEach(function (mm) { stdOf[mm.key] = mm; }); });
+    var finished = lives.every(function (l) { return l.done; }) && !(S.edit && S.edit[gkey]);
     var h = '<div class="lm">';
-    // who is scoring: pick the match, then who you are among its four players (no wall of matches)
-    var members = [].concat(match.sides[0].players, match.sides[1].players);
-    var groups = []; all.forEach(function (x) { var g = groups.filter(function (y) { return y.round.key === x.round.key; })[0]; if (!g) groups.push(g = { round: x.round, items: [] }); g.items.push(x); });
-    h += '<div class="lmbar"><label>Match<select id="lmMatchSel">' + groups.map(function (g) {
-      var fm = g.round.segments.map(function (sg) { return FMT[sg.format]; }).filter(function (v, i, a2) { return a2.indexOf(v) === i; }).join(' + ');
-      return '<optgroup label="' + esc((g.round.name || g.round.key) + ' · ' + fm) + '">' + g.items.map(function (x) {
-        var on = x.round.key === round.key && x.match.key === match.key, lv = E.cupMatchLive(cfg, x.round, x.match, entryOf(cfg, x.round.key, x.match.key));
-        var stt = lv.done ? 'final' : (lv.segments.some(function (sg) { return sg.state.thru > 0; }) ? 'in play' : 'not started');
-        var lab = x.match.key.toUpperCase() + ' · ' + x.match.sides.map(function (sd) { return sd.players.join('/'); }).join(' v ') + ' · ' + stt;
-        return '<option value="' + esc(x.round.key) + '|' + esc(x.match.key) + '"' + (on ? ' selected' : '') + '>' + (mine(x.match, S.opts.player) ? '★ ' : '') + esc(lab) + '</option>';
+    // who is scoring: pick the group, then who you are among its four players
+    var members = []; matches.forEach(function (m) { m.sides.forEach(function (sd) { sd.players.forEach(function (p) { members.push(p); }); }); });
+    var byRound = []; all.forEach(function (x) { var b = byRound.filter(function (y) { return y.round.key === x.round.key; })[0]; if (!b) byRound.push(b = { round: x.round, items: [] }); b.items.push(x); });
+    h += '<div class="lmbar"><label>' + (matches.length > 1 || all.some(function (x) { return x.matches.length > 1; }) ? 'Group' : 'Match') + '<select id="lmMatchSel">' + byRound.map(function (b) {
+      var fm = b.round.segments.map(function (sg) { return FMT[sg.format]; }).filter(function (v, i, a2) { return a2.indexOf(v) === i; }).join(' + ');
+      return '<optgroup label="' + esc((b.round.name || b.round.key) + ' · ' + fm) + '">' + b.items.map(function (x) {
+        var lv = liveOf(x), stt = lv.every(function (l) { return l.done; }) ? 'final' : (lv.some(function (l) { return l.segments.some(function (sg) { return sg.state.thru > 0; }); }) ? 'in play' : 'not started');
+        var lab = (x.matches.length > 1 ? 'Group ' + x.key.slice(1) + ' · ' : '') + x.matches.map(function (m) { return 'M' + nums[x.round.key + '|' + m.key] + ' ' + m.sides.map(function (sd) { return sd.players.join('/'); }).join(' v '); }).join('  |  ') + ' · ' + stt;
+        return '<option value="' + esc(x.round.key) + '|' + esc(x.key) + '"' + (x.round.key === round.key && x.key === grp.key ? ' selected' : '') + '>' + (mineG(x, S.opts.player) ? '★ ' : '') + esc(lab) + '</option>';
       }).join('') + '</optgroup>';
     }).join('') + '</select></label><label>I am<select id="lmMeSel"><option value="">(who are you?)</option>' + members.map(function (n) { return '<option' + (norm(n) === norm(S.opts.player) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></label></div>';
-    // match header
-    h += '<div class="lmc"><div class="lmhead">' + match.sides.map(function (sd, i) {
-      var cls = (i === 0 ? 'a' : 'b') + ((i === 0 && lead > 0) || (i === 1 && lead < 0) ? ' lead' : '');
-      return '<div class="lmside ' + cls + '"><span class="lmpn">' + sd.players.map(esc).join('<br>') + '</span><small>' + esc(sideName(cfg, sd.side)) + '</small></div>';
-    }).join('').replace('</div><div class="lmside b', '</div><div class="lmstat">' + esc(sl.text) + '<small>' + esc(sl.sub) + '</small></div><div class="lmside b') + '</div>';
-    if (S.last && S.last.m === match.key && S.last.r === round.key) h += '<div class="lmmsg ok" style="background:' + (S.last.w === 'a' ? 'var(--a)' : S.last.w === 'b' ? 'var(--b)' : 'var(--bg2)') + '">' + esc(S.last.text) + '</div>';
+    // one header per match in the group
+    matches.forEach(function (match, i) {
+      var live = lives[i], sl = statusLine(cfg, live, match), lead = 0, sm = stdOf[match.key];
+      live.segments.forEach(function (s) { if (!lead && !s.state.decided && s.state.thru > 0) lead = s.state.lead; });
+      if (live.done && sm) { var pk = match.sides.map(function (sd) { return sm.points[sd.side] || 0; }); sl = { text: pk[0] + ' – ' + pk[1], sub: 'Final' }; lead = pk[0] > pk[1] ? 1 : pk[0] < pk[1] ? -1 : 0; }
+      h += '<div class="lmc"><div class="lmmno">Match ' + nums[round.key + '|' + match.key] + (matches.length > 1 ? ' · Group ' + grp.key.slice(1) : '') + '</div><div class="lmhead">' + match.sides.map(function (sd, k) {
+        var cls = (k === 0 ? 'a' : 'b') + ((k === 0 && lead > 0) || (k === 1 && lead < 0) ? ' lead' : '');
+        return '<div class="lmside ' + cls + '"><span class="lmpn">' + sd.players.map(esc).join('<br>') + '</span><small>' + esc(sideName(cfg, sd.side)) + '</small></div>';
+      }).join('').replace('</div><div class="lmside b', '</div><div class="lmstat">' + esc(sl.text) + '<small>' + esc(sl.sub) + '</small></div><div class="lmside b') + '</div>';
+      var cl = live.closed, canClose0 = !!(S.opts.code || S.opts.pin);
+      if (cl) h += '<div class="lmmsg ok">Closed by ' + esc(cl.by || 'a captain') + ': ' + esc(cl.how === 'concede' ? sideName(cfg, cl.side) + ' conceded' : cl.how === 'halve' ? 'called halved' : 'as it stands') + (canClose0 ? ' <button class="lmsec" data-lm-mreopen="' + esc(match.key) + '" style="margin-left:8px">Reopen</button>' : '') + '</div>';
+      h += '</div>';
+    });
+    if (S.last && S.last.g === gkey) h += S.last.lines.map(function (ln) { return '<div class="lmmsg ok" style="background:' + (ln.w === 'a' ? 'var(--a)' : ln.w === 'b' ? 'var(--b)' : 'var(--bg2)') + '">' + esc(ln.text) + '</div>'; }).join('');
     h += '<div class="lmdim" style="margin:6px 0">' + round.segments.map(function (sg) { return 'Holes ' + sg.from + '–' + sg.to + ': ' + FMT[sg.format]; }).join(' · ') + '</div>';
-    var entryStart = h.length;
-    // entry: hole by hole, tap a player, the numbers pop for that player (same flow as the gathering panel)
-    var info = stat(cfg, round, match, hole), posted = entry && entry.h && entry.h[String(hole)];
-    var inp = S.inp[round.key + '|' + match.key + '|' + hole] = S.inp[round.key + '|' + match.key + '|' + hole] || {};
-    var w0 = holeWinner(live, hole);
-    h += '<div class="lmnav"><button class="lmarrow" data-lm-go="-1"' + (hole <= 1 ? ' disabled' : '') + '>‹</button><button class="lmhtitle" id="lmAll">Hole ' + hole + (w0 ? ' <span class="lmwin ' + w0 + '"></span>' : '') + '<small>' + FMT[info.fmt] + (cfg.handicap && cfg.handicap.strokeIndex ? ' · stroke index ' + cfg.handicap.strokeIndex[hole - 1] : '') + (posted ? ' · posted' : '') + ' · tap for all holes</small></button><button class="lmarrow" data-lm-go="1"' + (hole >= maxHole ? ' disabled' : '') + '>›</button></div>';
+    h += '<div class="lmc">'; var entryStart = h.length;
+    // entry: hole by hole, tap a player, the numbers pop for that player (same flow as the gathering panel). One scorer keeps all four players.
+    var rows = [], hasSI = true, fmt0 = 'bestball', posted = {}, anyPosted = false;
+    matches.forEach(function (match) {
+      var info0 = stat(cfg, round, match, hole); fmt0 = info0.fmt; hasSI = info0.hasSI;
+      info0.rows.forEach(function (r) { r.m = match.key; rows.push(r); });
+      var en = entryOf(cfg, round.key, match.key), ph = en && en.h && en.h[String(hole)];
+      if (ph) { anyPosted = true; Object.keys(ph).forEach(function (k) { posted[k] = ph[k]; }); }
+    });
+    var inp = S.inp[gkey + '|' + hole] = S.inp[gkey + '|' + hole] || {};
+    var w0 = matches.length === 1 ? holeWinner(lives[0], hole) : '';
+    h += '<div class="lmnav"><button class="lmarrow" data-lm-go="-1"' + (hole <= 1 ? ' disabled' : '') + '>‹</button><button class="lmhtitle" id="lmAll">Hole ' + hole + (w0 ? ' <span class="lmwin ' + w0 + '"></span>' : '') + '<small>' + FMT[fmt0] + (cfg.handicap && cfg.handicap.strokeIndex ? ' · stroke index ' + cfg.handicap.strokeIndex[hole - 1] : '') + (anyPosted ? ' · posted' : '') + ' · tap for all holes</small></button><button class="lmarrow" data-lm-go="1"' + (hole >= maxHole ? ' disabled' : '') + '>›</button></div>';
     if (S.showAll) h += '<div class="lmholes">' + Array.apply(null, Array(maxHole)).map(function (_, i) {
-      var n = i + 1, w = holeWinner(live, n), segStart = round.segments.some(function (s) { return s.from === n && n > 1; });
+      var n = i + 1, w = matches.length === 1 ? holeWinner(lives[0], n) : '', segStart = round.segments.some(function (s) { return s.from === n && n > 1; });
       return '<button class="lmh ' + w + (n === hole ? ' cur' : '') + (segStart ? ' seg' : '') + '" data-lm-hole="' + n + '">' + n + '</button>';
     }).join('') + '</div>';
-    var firstOpen = info.rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; })[0];
-    var who = info.rows.filter(function (r) { return r.key === S.who; })[0] || firstOpen || info.rows[0];
+    var firstOpen = rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; })[0];
+    var who = rows.filter(function (r) { return r.key === S.who; })[0] || firstOpen || rows[0];
     S.who = who.key;
-    h += '<div class="lmchips">' + info.rows.map(function (r) {
+    h += '<div class="lmchips">' + rows.map(function (r) {
       var cur = rowVal(r.key, inp, posted);
       return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (cur === undefined ? '–' : (cur === 0 ? 'P' : cur)) + '</span></button>';
     }).join('') + '</div>';
     var curw = rowVal(who.key, inp, posted);
-    if (info.fmt === 'altshot') h += '<div class="lmdim" style="margin:6px 0">Foursomes: one ball per team. Enter the team gross for the hole.</div>';
+    if (fmt0 === 'altshot') h += '<div class="lmdim" style="margin:6px 0">Foursomes: one ball per team. Enter the team gross for the hole.</div>';
     h += '<div class="lmpick"><div class="lmdim" style="margin-bottom:4px">' + esc(who.label) + ' · hole ' + hole + '</div><div class="lmtiles">' + [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (curw === n ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|' + n + '">' + n + '</button>'; }).join('')
       + '<button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0">P</button></div></div>';
-    var missing = info.rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
+    var missing = rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
     var anon = !S.opts.player && !S.opts.code && !S.opts.pin;
-    if (!info.hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
-    h += '<button class="lmgo" id="lmPost"' + (missing || anon ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (posted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>';
-    if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, match: match, hole: hole, E: E }) || '';
-    if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' hole' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
+    if (!hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
+    h += '<button class="lmgo" id="lmPost"' + (missing || anon ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (anyPosted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>';
+    if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, matches: matches, hole: hole, E: E }) || '';
+    if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' score' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
     if (S.err) h += '<div class="lmmsg q" id="lmErr">⚠ ' + esc(S.err) + '</div>';
     if (S.msg) h += '<div class="lmmsg">' + esc(S.msg) + '</div>';
-    if (live.done && !finished) h += '<div class="lmmsg">This match is already decided. Only correct a score here if one was entered wrong.</div>';
+    if (lives.every(function (l) { return l.done; }) && !finished) h += '<div class="lmmsg">Already decided. Only correct a score here if one was entered wrong.</div>';
     if (finished) {
-      h = h.slice(0, entryStart) + '<div class="lmdim" style="margin:6px 0">Match complete</div>' + (stdM ? stdM.segments.map(function (sg) {
-        var txt = sg.status === 'won' ? sideName(cfg, sg.winner) + ' ' + sg.text : sg.status === 'push' ? 'Halved' : 'Not played';
-        return '<div class="lmbs"><span class="lmdim">' + FMT[sg.format] + ' · holes ' + sg.from + '–' + sg.to + '</span><b class="' + (sg.winner === match.sides[0].side ? 'a' : sg.winner === match.sides[1].side ? 'b' : '') + '">' + esc(txt) + '</b></div>';
-      }).join('') : '') + '<button class="lmsec" id="lmEdit" style="margin-top:10px">Correct a score</button>';
+      h = h.slice(0, entryStart) + '<div class="lmdim" style="margin:6px 0">' + (matches.length > 1 ? 'Group complete' : 'Match complete') + '</div>' + matches.map(function (match) {
+        var sm = stdOf[match.key]; if (!sm) return '';
+        return (matches.length > 1 ? '<div class="lmmno" style="margin-top:6px">Match ' + nums[round.key + '|' + match.key] + '</div>' : '') + sm.segments.map(function (sg) {
+          var txt = sg.status === 'won' ? sideName(cfg, sg.winner) + ' ' + sg.text : sg.status === 'push' ? 'Halved' : 'Not played';
+          return '<div class="lmbs"><span class="lmdim">' + FMT[sg.format] + ' · holes ' + sg.from + '–' + sg.to + '</span><b class="' + (sg.winner === match.sides[0].side ? 'a' : sg.winner === match.sides[1].side ? 'b' : '') + '">' + esc(txt) + '</b></div>'; }).join('');
+      }).join('') + '<button class="lmsec" id="lmEdit" style="margin-top:10px">Correct a score</button>';
     }
     h += '</div>';
-    // closing a match by hand: host or captains only
-    var canClose = !!(S.opts.code || S.opts.pin), cl = live.closed;
-    if (cl) h += '<div class="lmmsg ok">Match closed by ' + esc(cl.by || 'a captain') + ': ' + esc(cl.how === 'concede' ? sideName(cfg, cl.side) + ' conceded' : cl.how === 'halve' ? 'called halved' : 'as it stands') + (canClose ? ' <button class="lmsec" id="lmMatchReopen" style="margin-left:8px">Reopen the match</button>' : '') + '</div>';
-    else if (canClose && !live.done) h += '<div class="lmc"><b>Close this match</b><div class="lmdim" style="margin:4px 0 8px">Only for a concession or a match stopped early. A match that is mathematically over closes by itself.</div><div class="lmtabs"><button class="lmsec" data-lm-close="standing">As it stands</button>' + match.sides.map(function (sd) { return '<button class="lmsec" data-lm-close="concede|' + esc(sd.side) + '">' + esc(sideName(cfg, sd.side)) + ' concedes</button>'; }).join('') + '<button class="lmsec" data-lm-close="halve">Call it halved</button></div></div>';
+    // closing a match by hand: host or captains only, one box per match still open
+    var canClose = !!(S.opts.code || S.opts.pin);
+    if (canClose) matches.forEach(function (match, i) {
+      if (lives[i].done) return;
+      h += '<div class="lmc"><b>Close match ' + nums[round.key + '|' + match.key] + '</b><div class="lmdim" style="margin:4px 0 8px">Only for a concession or a match stopped early. A match that is mathematically over closes by itself.</div><div class="lmtabs"><button class="lmsec" data-lm-close="standing|" data-lm-cm="' + esc(match.key) + '">As it stands</button>' + match.sides.map(function (sd) { return '<button class="lmsec" data-lm-close="concede|' + esc(sd.side) + '" data-lm-cm="' + esc(match.key) + '">' + esc(sideName(cfg, sd.side)) + ' concedes</button>'; }).join('') + '<button class="lmsec" data-lm-close="halve|" data-lm-cm="' + esc(match.key) + '">Call it halved</button></div></div>';
+    });
     // round control: the round finishes by itself once every match is decided or closed
     var rEnd = cfg.phases && cfg.phases['round_' + round.key + '_end'], allDone = (round.matches || []).every(function (m) { return E.cupMatchLive(cfg, round, m, entryOf(cfg, round.key, m.key)).done; });
     h += '<div class="lmc">' + (rEnd ? '<b>' + esc(round.name || round.key) + ' is finished.</b>' + (canClose ? ' <button class="lmsec" id="lmReopen">Reopen it</button>' : '')
@@ -244,7 +271,7 @@
       : '<span class="lmdim">' + esc(round.name || round.key) + ' finishes by itself when every match is decided.</span>') + '</div>';
     if (allDone && !rEnd && (S.opts.player || canClose)) { S.autoEnd = S.autoEnd || {}; if (!S.autoEnd[round.key]) { S.autoEnd[round.key] = true; setTimeout(function () { act(round, 'round_end'); }, 50); } }
     h += '</div>';
-    el.innerHTML = h; wire(round, match, hole, info);
+    el.innerHTML = h; wire(round, grp, matches, hole, rows);
   }
 
   // One call for the round / match actions; whatever the Worker changed is merged into the page's copy of the Cup.
@@ -262,36 +289,42 @@
     if (r) r.matches.forEach(function (m) { keys.forEach(function (k) { out[k] += m.points[k] || 0; }); });
     return out;
   }
-  function wire(round, match, hole, info) {
-    var el = S.el, key = round.key + '|' + match.key + '|' + hole;
-    function cur(r) { var cfg = S.opts.getCfg(), e = entryOf(cfg, round.key, match.key); return rowVal(r.key, S.inp[key] || {}, e && e.h && e.h[String(hole)]); }
-    var ms = el.querySelector('#lmMatchSel'); if (ms) ms.addEventListener('change', function () { var p = ms.value.split('|'); S.sel = { r: p[0], m: p[1] }; S.hole = null; S.who = null; S.msg = ''; S.err = ''; S.last = null; render(); });
+  function wire(round, grp, matches, hole, rows) {
+    var el = S.el, gkey = round.key + '|' + grp.key, key = gkey + '|' + hole;
+    function postedOf() { var cfg = S.opts.getCfg(), out = {}; matches.forEach(function (m) { var e = entryOf(cfg, round.key, m.key), p = e && e.h && e.h[String(hole)]; if (p) Object.keys(p).forEach(function (k) { out[k] = p[k]; }); }); return out; }
+    function cur(r) { return rowVal(r.key, S.inp[key] || {}, postedOf()); }
+    var ms = el.querySelector('#lmMatchSel'); if (ms) ms.addEventListener('change', function () { var p = ms.value.split('|'); S.sel = { r: p[0], g: p[1] }; S.hole = null; S.who = null; S.msg = ''; S.err = ''; S.last = null; render(); });
     var me = el.querySelector('#lmMeSel'); if (me) me.addEventListener('change', function () { if (S.opts.setPlayer) S.opts.setPlayer(me.value); render(); });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-sel]'), function (b) { b.addEventListener('click', function () { var p = b.getAttribute('data-lm-sel').split('|'); S.sel = { r: p[0], m: p[1] }; S.hole = null; S.msg = ''; render(); }); });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-hole]'), function (b) { b.addEventListener('click', function () { S.hole = { r: round.key, m: match.key, h: Number(b.getAttribute('data-lm-hole')) }; S.who = null; S.showAll = false; S.msg = ''; render(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-hole]'), function (b) { b.addEventListener('click', function () { S.hole = { g: gkey, h: Number(b.getAttribute('data-lm-hole')) }; S.who = null; S.showAll = false; S.msg = ''; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-s]'), function (b) { b.addEventListener('click', function () {
-      var p = b.getAttribute('data-lm-s').split('|'), row = info.rows.filter(function (r) { return r.key === p[0]; })[0], v;
-      v = Number(p[1]);
-      (S.inp[key] = S.inp[key] || {})[row.key] = v;
-      var nx = info.rows.filter(function (r) { return r.key !== row.key && cur(r) === undefined; })[0]; S.who = nx ? nx.key : row.key; render(); }); });
+      var p = b.getAttribute('data-lm-s').split('|'), row = rows.filter(function (r) { return r.key === p[0]; })[0];
+      (S.inp[key] = S.inp[key] || {})[row.key] = Number(p[1]);
+      var nx = rows.filter(function (r) { return r.key !== row.key && cur(r) === undefined; })[0]; S.who = nx ? nx.key : row.key; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-who]'), function (b) { b.addEventListener('click', function () { S.who = b.getAttribute('data-lm-who'); render(); }); });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-go]'), function (b) { b.addEventListener('click', function () { var mx = Math.max.apply(null, round.segments.map(function (x) { return x.to; })); S.hole = { r: round.key, m: match.key, h: Math.max(1, Math.min(mx, hole + Number(b.getAttribute('data-lm-go')))) }; S.who = null; S.msg = ''; render(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-go]'), function (b) { b.addEventListener('click', function () { var mx = Math.max.apply(null, round.segments.map(function (x) { return x.to; })); S.hole = { g: gkey, h: Math.max(1, Math.min(mx, hole + Number(b.getAttribute('data-lm-go')))) }; S.who = null; S.msg = ''; render(); }); });
     var all = el.querySelector('#lmAll'); if (all) all.addEventListener('click', function () { S.showAll = !S.showAll; render(); });
     var go = el.querySelector('#lmPost'); if (go) go.addEventListener('click', function () {
-      var scores = {}; info.rows.forEach(function (r) { scores[r.key] = cur(r); }); if (info.rows.some(function (r) { return scores[r.key] === undefined; })) return;
-      var post = { round: round.key, match: match.key, hole: hole, scores: scores, player: S.opts.player || '', at: new Date().toISOString() };
-      var cfg = S.opts.getCfg(); applyLocal(cfg, post); var qq = queue(); qq.push(post); setQueue(qq);
-      delete S.inp[key]; S.msg = ''; var live = S.opts.E.cupMatchLive(cfg, round, match, entryOf(cfg, round.key, match.key));
-      var wn = holeWinner(live, hole), sl2 = statusLine(cfg, live, match);
-      S.last = { r: round.key, m: match.key, w: wn, text: 'Hole ' + hole + ': ' + (wn === 'a' ? sideName(cfg, match.sides[0].side) + ' wins the hole' : wn === 'b' ? sideName(cfg, match.sides[1].side) + ' wins the hole' : 'halved') + '  ·  Match: ' + sl2.text + ' (' + sl2.sub + ')' }; S.err = '';
-      S.who = null; S.hole = { r: round.key, m: match.key, h: Math.min(live.next, Math.max.apply(null, round.segments.map(function (s) { return s.to; }))) };
+      if (rows.some(function (r) { return cur(r) === undefined; })) return;
+      var cfg = S.opts.getCfg(), at = new Date().toISOString(), E = S.opts.E, nums = E.cupMatchNumbers(cfg), lines = [];
+      matches.forEach(function (match) {                       // one post per match; the Worker lets anyone in the group score any of its matches
+        var scores = {}; rows.filter(function (r) { return r.m === match.key; }).forEach(function (r) { scores[r.key] = cur(r); });
+        var post = { round: round.key, match: match.key, hole: hole, scores: scores, player: S.opts.player || '', at: at };
+        applyLocal(cfg, post); var qq = queue(); qq.push(post); setQueue(qq);
+      });
+      matches.forEach(function (match) {
+        var live = E.cupMatchLive(cfg, round, match, entryOf(cfg, round.key, match.key)), wn = holeWinner(live, hole), sl2 = statusLine(cfg, live, match);
+        lines.push({ w: wn, text: 'Match ' + nums[round.key + '|' + match.key] + ' · hole ' + hole + ': ' + (wn === 'a' ? sideName(cfg, match.sides[0].side) + ' wins the hole' : wn === 'b' ? sideName(cfg, match.sides[1].side) + ' wins the hole' : 'halved') + '  ·  ' + sl2.text + ' (' + sl2.sub + ')' });
+      });
+      delete S.inp[key]; S.msg = ''; S.err = ''; S.last = { g: gkey, lines: lines };
+      var nxt = Math.min.apply(null, matches.map(function (m) { return E.cupMatchLive(cfg, round, m, entryOf(cfg, round.key, m.key)).next; }));
+      S.who = null; S.hole = { g: gkey, h: Math.min(nxt, Math.max.apply(null, round.segments.map(function (s) { return s.to; }))) };
       render(); flush(); if (S.opts.onChange) S.opts.onChange(); });
     function roundAct(action) { act(round, action); }
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-close]'), function (b) { b.addEventListener('click', function () {
-      var p = b.getAttribute('data-lm-close').split('|'), msg = p[0] === 'concede' ? 'Record this match as conceded by ' + sideName(S.opts.getCfg(), p[1]) + '?' : p[0] === 'halve' ? 'Call this match halved?' : 'Close this match as it stands? Anything still open is decided on the current score.';
-      if (!window.confirm(msg)) return; act(round, 'match_close', { match: match.key, how: p[0], side: p[1] || undefined }); }); });
-    var ed = el.querySelector('#lmEdit'); if (ed) ed.addEventListener('click', function () { S.edit = S.edit || {}; S.edit[round.key + '|' + match.key] = true; render(); });
-    var mro = el.querySelector('#lmMatchReopen'); if (mro) mro.addEventListener('click', function () { act(round, 'match_reopen', { match: match.key }); });
+      var p = b.getAttribute('data-lm-close').split('|'), mk = b.getAttribute('data-lm-cm'), msg = p[0] === 'concede' ? 'Record this match as conceded by ' + sideName(S.opts.getCfg(), p[1]) + '?' : p[0] === 'halve' ? 'Call this match halved?' : 'Close this match as it stands? Anything still open is decided on the current score.';
+      if (!window.confirm(msg)) return; act(round, 'match_close', { match: mk, how: p[0], side: p[1] || undefined }); }); });
+    var ed = el.querySelector('#lmEdit'); if (ed) ed.addEventListener('click', function () { S.edit = S.edit || {}; S.edit[gkey] = true; render(); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-mreopen]'), function (b) { b.addEventListener('click', function () { act(round, 'match_reopen', { match: b.getAttribute('data-lm-mreopen') }); }); });
     var fin = el.querySelector('#lmFinish'); if (fin) fin.addEventListener('click', function () { if (fin.textContent.indexOf('early') > 0 && !window.confirm('Some matches are not decided. Finish the round anyway?')) return; roundAct('round_end'); });
     var ro = el.querySelector('#lmReopen'); if (ro) ro.addEventListener('click', function () { roundAct('round_reopen'); });
   }
