@@ -35,7 +35,7 @@ const click = async (dom, sel, n = 0) => { const el = dom.window.document.queryS
 let dom = await open('?player=Amy'); let d = dom.window.document;
 ok(d.getElementById('lmMount') && /Hole 1/.test(d.body.textContent), 'locked teams with matches open on the Score tab');
 ok(/Fourball/.test(d.body.textContent) && /stroke index 1/.test(d.body.textContent), 'segment and stroke index shown');
-ok(/★/.test(d.querySelector('#lmMatchSel').textContent) && d.querySelector('#lmMeSel').value === 'Amy' && d.querySelectorAll('#lmMeSel option').length === 5 && !d.querySelector('.lmtab'), 'a match dropdown (mine starred) and an I-am list narrowed to the four in the match');
+ok(!/★/.test(d.querySelector('#lmMatchSel').textContent) && d.querySelector('#lmMeSel').value === 'Amy' && d.querySelectorAll('#lmMeSel option').length === 5 && !d.querySelector('.lmtab'), 'a match dropdown (no star) and an I-am list narrowed to the four in the match');
 ok(d.querySelectorAll('.lmchip').length === 4 && d.querySelectorAll('.lmt').length === 9, 'fourball: four player chips, ONE set of number tiles (for the player picked)');
 ok(d.querySelectorAll('.lmdots').length >= 3 && !d.querySelector('.lmholes'), 'handicap strokes shown as dots on hole 1 (SI 1)');
 // Jake birdie (3), others par: tap − on Jake
@@ -72,9 +72,12 @@ ok(!!d.querySelector('.lmt[data-lm-s$="|1"]') && !/9\+/.test(d.querySelector('.l
 await click(dom, '[data-view="board"]'); d = dom.window.document;
 ok(/POINTS/.test(d.querySelector('.lm').textContent) && !d.querySelector('.lmchip'), 'Leaderboard tab: points race, no score entry');
 ok(/Fourball · 1–9/.test(d.querySelector('.lm').textContent) && /Foursomes · 10–18/.test(d.querySelector('.lm').textContent), 'each match shows both parts');
-ok(/Team Jake 2 UP · thru 2/.test(d.querySelector('.lm').textContent), 'live part shows who is up (got ' + d.querySelector('.lm').textContent.slice(0, 300) + ')');
-await click(dom, '.lmbm'); d = dom.window.document;
-ok(!!d.querySelector('.lmchip'), 'tap a match on the leaderboard to score it');
+ok(/2 UP/.test(d.querySelector('.lm').textContent) && /thru 2/.test(d.querySelector('.lm').textContent), 'live part shows who is up (got ' + d.querySelector('.lm').textContent.slice(0, 300) + ')');
+await click(dom, '[data-lm-open]'); d = dom.window.document;
+ok(!!d.querySelector('table.lmsc') && !d.querySelector('.lmchip') && /Scorecard|scorecard/.test(d.querySelector('.lm').textContent), 'tap a match on the leaderboard opens its scorecard in place (stays on the leaderboard)');
+ok(!!d.querySelector('.lmsc tr.mr') && !!d.querySelector('[data-lm-score]'), 'scorecard has the running match row and a way to go score');
+await click(dom, '[data-lm-score]'); d = dom.window.document;
+ok(!!d.querySelector('.lmchip'), 'Enter or correct scores jumps to the Score tab');
 // match / round closing: host and captains only
 dom = await open('?player=Jake'); d = dom.window.document;
 ok(!d.querySelector('[data-lm-close]') && !d.getElementById('lmFinish') && /finishes by itself/.test(d.querySelector('.lm').textContent), 'a player sees no close buttons, and the round finishes by itself');

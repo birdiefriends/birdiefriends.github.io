@@ -36,7 +36,17 @@
     '.lm .lmchips{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lm .lmchip{display:flex;justify-content:space-between;align-items:center;gap:6px;background:var(--bg2);color:var(--tx);border:2px solid var(--line);border-left:6px solid var(--line);border-radius:10px;padding:10px;font:inherit;font-weight:700;cursor:pointer;text-align:left}' +
     '.lm .lmchip.a{border-left-color:var(--a)}.lm .lmchip.b{border-left-color:var(--b)}.lm .lmchip.sel{border-color:var(--tx)}.lm .lmchip small{display:block;font-weight:500;color:var(--dim);font-size:.7rem}' +
     '.lm .lmcv{font-size:1.7rem;font-weight:800;min-width:30px;text-align:right}.lm .lmcv.pu{color:var(--warn)}.lm .lmpick{margin:10px 0 2px}' +
-    '.lm .lmbm{display:block;width:100%;background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px;font:inherit;text-align:left;cursor:pointer}.lm .lmbmh{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;font-weight:700;margin-bottom:6px}.lm .lmbmh .a{border-left:4px solid var(--a);padding-left:6px}.lm .lmbmh .b{border-left:4px solid var(--b);padding-left:6px;text-align:right;border-left:0;border-right:4px solid var(--b);padding-right:6px}' +
+    '.lm .lmbm{display:block;width:100%;background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:12px;padding:0;margin-top:10px;font:inherit;text-align:left;overflow:hidden}.lm .lmbmt{display:block;width:100%;background:none;color:inherit;border:0;font:inherit;text-align:left;padding:10px 10px 8px;cursor:pointer}' +
+    '.lm .lmbmh{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;font-weight:800;margin-bottom:8px}.lm .lmbmh .a{border-left:4px solid var(--a);padding-left:8px}.lm .lmbmh .b{text-align:right;border-right:4px solid var(--b);padding-right:8px}.lm .lmbmh .pt{font-size:1.15rem;text-align:center;min-width:62px;white-space:nowrap}.lm .lmbmh .pt .a,.lm .lmbmh .pt .b{border:0;padding:0}.lm .lmbmh .pt .a{color:var(--a)}.lm .lmbmh .pt .b{color:var(--b)}' +
+    '.lm .lmpr{display:grid;grid-template-columns:1fr auto 1fr;gap:4px;align-items:stretch;margin-top:4px;font-size:.86rem}.lm .lmpr .mid{display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.3;color:var(--dim);font-size:.74rem;padding:0 6px;min-width:96px}.lm .lmpr .c{display:flex;align-items:center;padding:7px 9px;border-radius:8px;font-weight:800;border:1px solid transparent;min-height:34px}.lm .lmpr .c.l{justify-content:flex-start}.lm .lmpr .c.r{justify-content:flex-end;text-align:right}' +
+    '.lm .lmpr .c.a.win{background:var(--a);color:#fff}.lm .lmpr .c.b.win{background:var(--b);color:#fff}.lm .lmpr .c.a.up{border-color:var(--a);color:var(--a)}.lm .lmpr .c.b.up{border-color:var(--b);color:var(--b)}.lm .lmpr .mid.half{color:var(--tx);font-weight:800}' +
+    '.lm .lmcar{display:flex;justify-content:center;color:var(--dim);font-size:.78rem;padding:3px 0 6px}' +
+    '.lm .lmscw{padding:2px 10px 10px;border-top:1px solid var(--line)}.lm .lmsct{margin:8px 0 2px;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}' +
+    '.lm table.lmsc{width:100%;border-collapse:collapse;table-layout:fixed;font-size:.78rem;text-align:center}.lm .lmsc th,.lm .lmsc td{padding:4px 0;border-bottom:1px solid var(--line)}.lm .lmsc th{color:var(--dim);font-weight:600}.lm .lmsc td.nm,.lm .lmsc th.nm{width:27%;text-align:left;padding-left:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}' +
+    '.lm .lmsc td.nm.a{border-left:3px solid var(--a)}.lm .lmsc td.nm.b{border-left:3px solid var(--b)}.lm .lmsc td.tt,.lm .lmsc th.tt{font-weight:800;width:11%}.lm .lmsc tr.mr td{font-weight:800;border-bottom:0}.lm .lmsc td.a{color:var(--a)}.lm .lmsc td.b{color:var(--b)}.lm .lmsc td.nm.a,.lm .lmsc td.nm.b{color:var(--tx)}' +
+    '.lm .lmcir,.lm .lmsq{display:inline-block;min-width:1.55em;line-height:1.55em;border:1.5px solid var(--tx);position:relative}.lm .lmcir{border-radius:50%}.lm .lmsq{border-radius:3px}.lm .lmcir.d,.lm .lmsq.d{box-shadow:0 0 0 2px var(--bg2),0 0 0 3.5px var(--tx)}' +
+    '.lm .lmsc sup{color:var(--warn);font-size:.9em;margin-left:1px}.lm .lmsc .pk{color:var(--warn)}' +
+    '.lm .lmgo2{display:block;width:100%;margin-top:8px;padding:10px;border-radius:10px;border:1px solid var(--line);background:none;color:var(--tx);font:inherit;font-weight:700;cursor:pointer}' +
     '.lm .lmbs{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid var(--line);font-size:.88rem}.lm .lmbs b.a{color:var(--a)}.lm .lmbs b.b{color:var(--b)}' +
     '.lm .lmmno{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}' +
     '.lm .lmpu{width:auto!important;padding:0 8px;font-size:.78rem!important}.lm .lmpu.on{background:var(--warn)!important;color:var(--ink)!important}' +
@@ -141,20 +151,96 @@
     var g = all.filter(function (x) { return x.round.key === rk && x.matches.some(function (m) { return m.key === mk; }); })[0];
     return g && g.matches.length > 1 ? ' · Group ' + g.key.slice(1) : '';
   }
+  // ---- pars: from the Cup's saved tee (cfg.handicap.pars); older Cups fetch them once from the Venue Manager. Never guessed.
+  function parsOf(cfg) {
+    var h = cfg.handicap || {};
+    if (Array.isArray(h.pars) && h.pars.length === 18 && h.pars.every(function (n) { return Number(n) >= 3 && Number(n) <= 6; })) return h.pars.map(Number);
+    if (S.pars) return S.pars;
+    if (h.venueId && h.tee && !S.parsTried) {
+      S.parsTried = true;
+      fetch(S.opts.worker + '/bfe/venue-tees?venue_id=' + encodeURIComponent(h.venueId)).then(function (r) { return r.json(); }).then(function (j) {
+        var t = (j.tees || []).filter(function (x) { return x.tee_name === h.tee; })[0], pr = t && (t.holes || []).map(function (x) { return Number(x.par); });
+        if (pr && pr.length === 18 && pr.every(function (n) { return n >= 3 && n <= 6; })) { S.pars = pr; render(); }
+      }).catch(function () { /* no pars: the card shows plain numbers */ });
+    }
+    return null;
+  }
+  function shortName(n) { var p = String(n).trim().split(/\s+/); return p.length > 1 ? p[0] + ' ' + p[p.length - 1].charAt(0) + '.' : p[0]; }
+  function grossAt(entry, name, hole) {
+    var hh = entry && entry.h && entry.h[String(hole)]; if (!hh) return undefined;
+    var k = Object.keys(hh).filter(function (x) { return norm(x) === norm(name); })[0]; return k === undefined ? undefined : hh[k];
+  }
+  function mark(g, par) {                                    // birdie = circle, bogey = square, eagle / double bogey = double
+    if (g === 0) return '<span class="pk">P</span>';
+    if (!par) return String(g);
+    if (g <= par - 2) return '<span class="lmcir d">' + g + '</span>';
+    if (g === par - 1) return '<span class="lmcir">' + g + '</span>';
+    if (g === par + 1) return '<span class="lmsq">' + g + '</span>';
+    if (g >= par + 2) return '<span class="lmsq d">' + g + '</span>';
+    return String(g);
+  }
+  function scorecardHtml(cfg, round, match) {                // the real card for one match, one table per part (Fourball / Foursomes) and per nine
+    var E = S.opts.E, entry = entryOf(cfg, round.key, match.key), live = E.cupMatchLive(cfg, round, match, entry), pars = parsOf(cfg), h = '<div class="lmscw">';
+    live.segments.forEach(function (sg) {
+      var spans = []; for (var a = sg.from; a <= sg.to;) { var b = Math.min(sg.to, a <= 9 ? 9 : 18); spans.push([a, b]); a = b + 1; }
+      spans.forEach(function (sp) {
+        var holes = []; for (var x = sp[0]; x <= sp[1]; x++) holes.push(x);
+        var tot = sp[0] === 1 && sp[1] === 9 ? 'Out' : sp[0] === 10 && sp[1] === 18 ? 'In' : 'Tot';
+        h += '<div class="lmsct">' + FMT[sg.format] + ' · holes ' + sp[0] + '–' + sp[1] + '</div><table class="lmsc"><thead><tr><th class="nm"></th>' + holes.map(function (n) { return '<th>' + n + '</th>'; }).join('') + '<th class="tt">' + tot + '</th></tr>' +
+          (pars ? '<tr><th class="nm">Par</th>' + holes.map(function (n) { return '<th>' + pars[n - 1] + '</th>'; }).join('') + '<th class="tt">' + holes.reduce(function (t, n) { return t + pars[n - 1]; }, 0) + '</th></tr>' : '') + '</thead><tbody>';
+        var lines = [];                                       // one line per player (team in foursomes)
+        match.sides.forEach(function (sd, i) {
+          if (sg.format === 'altshot') lines.push({ key: sd.players[0], label: sd.players.map(shortName).join(' / '), side: i === 0 ? 'a' : 'b' });
+          else sd.players.forEach(function (p) { lines.push({ key: p, label: shortName(p), side: i === 0 ? 'a' : 'b' }); });
+        });
+        lines.forEach(function (ln) {
+          var sum = 0, any = false;
+          h += '<tr><td class="nm ' + ln.side + '">' + esc(ln.label) + '</td>' + holes.map(function (n) {
+            var g = grossAt(entry, ln.key, n); if (g === undefined) return '<td></td>';
+            var st = stat(cfg, round, match, n).rows.filter(function (r) { return r.key === ln.key; })[0];
+            if (g > 0) { sum += g; any = true; }
+            return '<td>' + mark(g, pars && pars[n - 1]) + (st && st.strokes ? '<sup>' + '•'.repeat(st.strokes) + '</sup>' : '') + '</td>'; }).join('') + '<td class="tt">' + (any ? sum : '') + '</td></tr>';
+        });
+        var lead = 0, over = false;                           // running match status after each hole; blank once the match is mathematically over
+        for (var y = sg.from; y < sp[0]; y++) { var p0 = sg.nets[0][y - 1], q0 = sg.nets[1][y - 1]; if (p0 != null && q0 != null) { lead += p0 < q0 ? 1 : p0 > q0 ? -1 : 0; if (Math.abs(lead) > sg.to - y) over = true; } }
+        h += '<tr class="mr"><td class="nm">Match</td>' + holes.map(function (n) {
+          var p1 = sg.nets[0][n - 1], q1 = sg.nets[1][n - 1]; if (over || p1 == null || q1 == null) return '<td></td>';
+          lead += p1 < q1 ? 1 : p1 > q1 ? -1 : 0; if (Math.abs(lead) > sg.to - n) over = true;
+          return '<td class="' + (lead > 0 ? 'a' : lead < 0 ? 'b' : '') + '">' + (lead === 0 ? 'AS' : Math.abs(lead)) + '</td>'; }).join('') + '<td class="tt"></td></tr></tbody></table>';
+      });
+    });
+    if (!pars) h += '<div class="lmdim" style="margin-top:6px">Circles and squares need this tee’s hole pars. They appear once the course tee is saved in the Cup setup.</div>';
+    return h + '</div>';
+  }
+  function partRow(cfg, m, sg) {                             // one part of a match: the winning side lights up, halves sit in the middle
+    var A = m.sides[0].side, B = m.sides[1].side, lbl = FMT[sg.format] + ' · ' + sg.from + '–' + sg.to;
+    var aw = sg.decided && sg.winner === A, bw = sg.decided && sg.winner === B, half = sg.decided && !sg.winner;
+    var live = !sg.decided && sg.thru > 0 && sg.lead !== 0, txt = sg.text || '';
+    var l = aw ? txt : (live && sg.lead > 0 ? Math.abs(sg.lead) + ' UP' : ''), r = bw ? txt : (live && sg.lead < 0 ? Math.abs(sg.lead) + ' UP' : '');
+    var mid = esc(lbl) + (half ? '' : '') ;
+    if (half) mid = '<b>Halved</b><br>' + esc(lbl);
+    else if (sg.decided) mid = esc(lbl);
+    else if (sg.thru > 0) mid = esc(lbl) + '<br>' + (sg.lead === 0 ? 'All square · ' : '') + 'thru ' + sg.thru;
+    else mid = esc(lbl) + '<br>Not started';
+    return '<div class="lmpr"><div class="c l a' + (aw ? ' win' : l ? ' up' : '') + '">' + esc(l) + '</div><div class="mid' + (half ? ' half' : '') + '"><span>' + mid + '</span></div><div class="c r b' + (bw ? ' win' : r ? ' up' : '') + '">' + esc(r) + '</div></div>';
+  }
+  function fmtPts(n) { return n === 0.5 ? '½' : (n % 1 === 0.5 ? Math.floor(n) + '½' : String(n)); }
   function boardHtml(cfg, all, standings, nums) {
     var keys = (cfg.sides || []).map(function (x) { return x.key; }), h = '<div class="lm">';
     h += '<div class="lmc"><div class="lmboard"><div style="color:var(--a)"><span class="big">' + standings.points[keys[0]] + '</span><div class="lmdim">' + esc(sideName(cfg, keys[0])) + '</div></div><div class="lmdim">POINTS<br>' + standings.target + ' to win</div><div style="color:var(--b)"><span class="big">' + standings.points[keys[1]] + '</span><div class="lmdim">' + esc(sideName(cfg, keys[1])) + '</div></div></div>' + (standings.clinched ? '<div class="lmmsg ok" style="margin-top:8px;text-align:center">' + esc(sideName(cfg, standings.clinched)) + ' has clinched the Cup</div>' : '') + '</div>';
+    S.open = S.open || {};
     standings.rounds.forEach(function (r) {
       if (!r.matches.length) return;
+      var rnd = (cfg.rounds || []).filter(function (x) { return x.key === r.key; })[0];
       h += '<div class="lmc"><b>' + esc(r.name || r.key) + '</b>' + (r.done ? ' <span class="lmdim">· final</span>' : '');
       r.matches.forEach(function (m) {
-        h += '<button class="lmbm" data-lm-open="' + esc(r.key) + '|' + esc(m.key) + '"><div class="lmmno">Match ' + nums[r.key + '|' + m.key] + groupTag(all, r.key, m.key) + '</div><div class="lmbmh"><span class="a">' + esc(m.sides[0].players.join(' & ')) + '</span><span class="lmdim">v</span><span class="b">' + esc(m.sides[1].players.join(' & ')) + '</span></div>';
-        m.segments.forEach(function (sg) {
-          var win = sg.winner ? sideName(cfg, sg.winner) + ' ' + sg.text : sg.text;
-          var cls = sg.winner === m.sides[0].side ? 'a' : sg.winner === m.sides[1].side ? 'b' : '';
-          h += '<div class="lmbs"><span class="lmdim">' + FMT[sg.format] + ' · ' + sg.from + '–' + sg.to + '</span><b class="' + cls + '">' + esc(sg.decided ? win : (sg.thru ? (sg.lead === 0 ? 'All square' : sideName(cfg, sg.lead > 0 ? m.sides[0].side : m.sides[1].side) + ' ' + Math.abs(sg.lead) + ' UP') + ' · thru ' + sg.thru : 'Not started')) + '</b></div>';
-        });
-        h += '</button>';
+        var id = r.key + '|' + m.key, open = !!S.open[id], decided = m.segments.some(function (sg) { return sg.decided; });
+        var pa = m.points[keys[0]] || 0, pb = m.points[keys[1]] || 0;
+        h += '<div class="lmbm"><button class="lmbmt" data-lm-open="' + esc(id) + '"><div class="lmmno">Match ' + nums[id] + groupTag(all, r.key, m.key) + '</div><div class="lmbmh"><span class="a">' + esc(m.sides[0].players.join(' & ')) + '</span>' +
+          '<span class="pt">' + (decided ? '<span class="a">' + fmtPts(pa) + '</span> <span class="lmdim">–</span> <span class="b">' + fmtPts(pb) + '</span>' : '<span class="lmdim">v</span>') + '</span><span class="b">' + esc(m.sides[1].players.join(' & ')) + '</span></div>' +
+          m.segments.map(function (sg) { return partRow(cfg, m, sg); }).join('') + '<div class="lmcar">' + (open ? '▲ Hide scorecard' : '▼ Scorecard') + '</div></button>';
+        if (open && rnd) { var mt = (rnd.matches || []).filter(function (x) { return x.key === m.key; })[0]; if (mt) h += scorecardHtml(cfg, rnd, mt) + (S.opts.goScore ? '<div style="padding:0 10px 10px"><button class="lmgo2" data-lm-score="' + esc(id) + '">Enter or correct scores</button></div>' : ''); }
+        h += '</div>';
       });
       h += '</div>';
     });
@@ -167,8 +253,10 @@
     if (!all.length) { el.innerHTML = '<div class="lm"><div class="lmc lmdim">Matches are not set yet. The scoring opens once the draw is done.</div></div>'; return; }
     if (S.view === 'board') {
       el.innerHTML = boardHtml(cfg, all, E.cupLiveStandings(cfg), nums);
-      Array.prototype.forEach.call(el.querySelectorAll('[data-lm-open]'), function (b) { b.addEventListener('click', function () {
-        var p = b.getAttribute('data-lm-open').split('|'), g = all.filter(function (x) { return x.round.key === p[0] && x.matches.some(function (m) { return m.key === p[1]; }); })[0];
+      function toggle(id) { S.open[id] = !S.open[id]; var y = window.pageYOffset; render(); if (y > 0) window.scrollTo(0, y); }
+      Array.prototype.forEach.call(el.querySelectorAll('[data-lm-open]'), function (b) { b.addEventListener('click', function () { toggle(b.getAttribute('data-lm-open')); }); });
+      Array.prototype.forEach.call(el.querySelectorAll('[data-lm-score]'), function (b) { b.addEventListener('click', function () {
+        var p = b.getAttribute('data-lm-score').split('|'), g = all.filter(function (x) { return x.round.key === p[0] && x.matches.some(function (m) { return m.key === p[1]; }); })[0];
         if (g) { S.sel = { r: g.round.key, g: g.key }; S.hole = null; if (S.opts.goScore) S.opts.goScore(); } }); });
       return;
     }
@@ -195,7 +283,7 @@
       return '<optgroup label="' + esc((b.round.name || b.round.key) + ' · ' + fm) + '">' + b.items.map(function (x) {
         var lv = liveOf(x), stt = lv.every(function (l) { return l.done; }) ? 'final' : (lv.some(function (l) { return l.segments.some(function (sg) { return sg.state.thru > 0; }); }) ? 'in play' : 'not started');
         var lab = (x.matches.length > 1 ? 'Group ' + x.key.slice(1) + ' · ' : '') + x.matches.map(function (m) { return 'M' + nums[x.round.key + '|' + m.key] + ' ' + m.sides.map(function (sd) { return sd.players.join('/'); }).join(' v '); }).join('  |  ') + ' · ' + stt;
-        return '<option value="' + esc(x.round.key) + '|' + esc(x.key) + '"' + (x.round.key === round.key && x.key === grp.key ? ' selected' : '') + '>' + (mineG(x, S.opts.player) ? '★ ' : '') + esc(lab) + '</option>';
+        return '<option value="' + esc(x.round.key) + '|' + esc(x.key) + '"' + (x.round.key === round.key && x.key === grp.key ? ' selected' : '') + '>' + esc(lab) + '</option>';
       }).join('') + '</optgroup>';
     }).join('') + '</select></label><label>I am<select id="lmMeSel"><option value="">(who are you?)</option>' + members.map(function (n) { return '<option' + (norm(n) === norm(S.opts.player) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></label></div>';
     // one header per match in the group

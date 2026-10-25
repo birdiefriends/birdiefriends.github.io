@@ -6283,7 +6283,7 @@ function cupSyncFromInputs() {
   const opt = id => { const v = document.getElementById(id).value; return v === '' || !isFinite(Number(v)) ? null : Number(v); };
   const prevH = cupState.handicap || {};
   cupState.handicap = { bestball: num('cupHcpBB', 0), altshot: num('cupHcpFS', 0), singles: num('cupHcpSI', 0), slope: opt('cupSlope'), rating: opt('cupRating'), par: opt('cupPar'),
-    venueId: prevH.venueId || null, venueName: prevH.venueName || null, tee: prevH.tee || null, strokeIndex: prevH.strokeIndex || null };
+    venueId: prevH.venueId || null, venueName: prevH.venueName || null, tee: prevH.tee || null, strokeIndex: prevH.strokeIndex || null, pars: prevH.pars || null };
 }
 // Course and tee for the Cup's handicaps come from the Venue Manager (GET /bfe/venue-tees). Picking a tee snapshots its slope, rating, par and hole
 // stroke indexes into the Cup document, so a later change in the Venue Manager never rewrites a Cup that is already set up.
@@ -6319,6 +6319,8 @@ function cupApplyTee(t) {
     document.getElementById('cupPar').value = t.par_total != null ? t.par_total : '';
     const si = (t.holes || []).map(x => Number(x.handicap));
     h.strokeIndex = si.length === 18 && si.every(n => n >= 1 && n <= 18) ? si : null;
+    const pr = (t.holes || []).map(x => Number(x.par));
+    h.pars = pr.length === 18 && pr.every(n => n >= 3 && n <= 6) ? pr : null;
   }
   cupSummaryRender();
   document.getElementById('cupTeeHint').textContent = t ? 'Using ' + cupTeeLabel(t) + (h.strokeIndex ? ', with its hole stroke indexes.' : '. This tee has no stroke indexes saved, so strokes cannot be placed on holes until they are added in the Venue Manager.') : 'Picking a tee fills slope, rating, par and the hole stroke indexes from the Venue Manager. You can still edit the numbers below.';
@@ -6414,7 +6416,7 @@ async function cupLoad(quiet, evName) {
   const body = document.getElementById('cupBody');
   document.getElementById('cupEnabled').addEventListener('change', e => { body.style.display = e.target.checked ? 'block' : 'none'; if (e.target.checked) cupSyncRounds(); });
   ['change', 'click'].forEach(ev => roundsBody.addEventListener(ev, () => setTimeout(cupSyncRounds, 0)));
-  document.getElementById('cupVenue').addEventListener('change', e => { const h = cupState.handicap = cupState.handicap || {}; h.venueId = e.target.value || null; h.tee = null; h.strokeIndex = null; cupLoadTees(e.target.value, null); });
+  document.getElementById('cupVenue').addEventListener('change', e => { const h = cupState.handicap = cupState.handicap || {}; h.venueId = e.target.value || null; h.tee = null; h.strokeIndex = null; h.pars = null; cupLoadTees(e.target.value, null); });
   document.getElementById('cupTee').addEventListener('change', e => cupApplyTee(e.target.value === '' ? null : cupTees[Number(e.target.value)]));
   document.getElementById('cupSaveBtn').addEventListener('click', cupSave);
   document.getElementById('cupLoadBtn').addEventListener('click', cupLoad);
