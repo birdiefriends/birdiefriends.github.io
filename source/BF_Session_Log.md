@@ -5548,3 +5548,15 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - **Parked (Brian):** **Round Robin** (Tony Choy's 6/6/6 points game: needs Tony to confirm the stroke value and the open rules questions); My History scrapbook / story-tag commentary across every game; BFE-Admin all-par-3s CTP default and Live Panel CTP picks; the BFE-A / BF Cup configuration session (BF Cup 11/7–8).
 - **Offered, not built:** a warning BEFORE saving a Net game when some players have no handicap or tee; a confirm on saving game changes when scores already exist; literal "click to expand" wording on the Live Actions headers; making Re-deal tumble like Roll again; wrapping the results tab strip.
 - **Open into Dev-95:** Bootstrap §5 "Dev-95 start list".
+
+## Dev-95 — BF Cup: draft, draw and live scoring (2026-10-20 – 10-27)
+**Result:** portal v4.47.1, engine 1.40.0, Worker 3,565 lines, `docs/bf_live_match.js` v12; all on `main`, last code commit `4b22614`. Full detail in spec §13.13.
+- **Built:** team draft (captain links, snake, captain-in-control), Saturday matchup draw, Sunday singles draw, the reusable live panel (hole by hole, tiles 1-8 + P, offline queue, identity guard), scoring by foursome (two singles matches per group, match numbers across the Cup), off-the-low handicap by format, match close by host/captains, rounds that finish by themselves, a leaderboard with in-place scorecards (circles, squares, running match row), the app card with a host off switch, phase markers for the photo timeline, BFE-A saves tee pars.
+- **Brian's design calls that changed direction:** the all-tiles entry screen was too cluttered, so entry became hole by hole with a pop-up picker like the gathering games; dropdowns replaced the wall of match cards; match close is host/captains only; singles are organized by foursome; no star on the group list; the leaderboard drills down to a scorecard and no longer jumps to Score.
+- **Bugs found live and fixed:** an empty "I am" made the Worker refuse scores while the page showed them (Post now locked until a name is picked, refused posts revert with a warning); points to win ignored the undrawn singles day; the Score tab became the default and broke page tests (module inlined, `?view=teams`).
+- **Series #9 (2026-10-25):** results looked right but the publish went out as BFSeries#6 because Save to Series had not been run first. Fixed by running it; nothing was lost (the bad publish changed one timestamp line per page).
+- **Tests:** 13 Cup test files all pass; full `run_all` fails only `test_at_course` and `test_rail_drag` (known).
+- **Not live-verified:** a real roster and captains, 14-16 players, tee pars fetched from the Venue Manager on an older Cup, round auto-finish across several phones.
+- **Worker library vs Cloudflare:** in sync (Brian deployed the last Worker before the final merge).
+- **Open into Dev-96:** Bootstrap §5 "Dev-96 start list".
+
