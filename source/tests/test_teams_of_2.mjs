@@ -122,6 +122,11 @@ ok(C.teamSizeOf({ teamSize: 3 }) === 3 && C.teamSizeOf({ teamSize: 5 }) === 0 &&
 ok(C.teamNamesText(['A', 'B', 'C']) === 'A, B &amp; C', 'names read "A, B & C"');
 const cand3 = C.partnerCandidates([r3('Ann', 'Yes'), r3('B', 'Yes', 'Ann|C')], 'Ann', [], 3);
 ok(cand3[0].name === 'B' && cand3[0].tag === 'picked you', 'in a 3-man game, whoever picked me is offered first');
+// 11. team names: the team's name is whatever its members' rows carry
+st = C.teamsState([{ gatheringId: 7, player: 'A', status: 'Yes', partner: 'B', teamName: null }, { gatheringId: 7, player: 'B', status: 'Yes', partner: 'A', teamName: 'Fairway Fugitives' }], 2);
+ok(st.teams === 1 && st.names[0] === 'Fairway Fugitives', 'a team takes the name from whichever member has one');
+ok(/Fairway Fugitives/.test(C.teamChipsHtml({ teamSize: 2 }, [{ player: 'A', status: 'Yes', partner: 'B', teamName: 'Fairway Fugitives' }, { player: 'B', status: 'Yes', partner: 'A', teamName: 'Fairway Fugitives' }])), 'chips show the team name');
+ok(/registrations\/team-name/.test(src) && /ALTER TABLE registrations ADD COLUMN team_name|team_name = \?/.test(workerSrc) && /Only the host or a member of the team can name it/.test(workerSrc), 'portal and Worker have the naming route, host or member only');
 // worker
 ok(/members/.test(workerSrc) && /A team has at most 4 players/.test(workerSrc), 'the host route takes a whole team (up to 4)');
 ok(/picked\.length < 3/.test(workerSrc), 'a player can name up to 3 teammates');

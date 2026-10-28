@@ -1138,6 +1138,39 @@ export default {
       }
     }
 
+    // POST /registrations/team-name — name a team (v4.48.0). Body: { gathering_id, player_id, members:[...], name }.
+    // `player_id` is who is asking: the host, or a member of the team. The name is written to every member's row so it
+    // follows the team; a blank name clears it. Needs the one-time `ALTER TABLE registrations ADD COLUMN team_name TEXT;`
+    if (request.method === 'POST' && url.pathname === '/registrations/team-name') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { gathering_id, player_id } = body;
+      const lc = x => String(x).trim().toLowerCase();
+      const members = [];
+      (Array.isArray(body.members) ? body.members : []).forEach(n => { const t = String(n || '').trim(); if (t && !members.some(x => lc(x) === lc(t))) members.push(t); });
+      const name = String(body.name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+      if (!gathering_id || !player_id || !members.length || members.length > 4) {
+        return new Response(JSON.stringify({ error: 'gathering_id, player_id and 1 to 4 members are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const g = await env.DB.prepare(`SELECT host_id FROM gatherings WHERE id = ?`).bind(gathering_id).first();
+        if (!g) return new Response(JSON.stringify({ error: 'Gathering not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        if (g.host_id !== player_id && !members.some(m => lc(m) === lc(player_id))) {
+          return new Response(JSON.stringify({ error: 'Only the host or a member of the team can name it' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const stmts = members.map(m => env.DB.prepare(`UPDATE registrations SET team_name = ? WHERE gathering_id = ? AND player_id = ?`).bind(name || null, gathering_id, m));
+        await env.DB.batch(stmts);
+        return new Response(JSON.stringify({ ok: true, gathering_id: Number(gathering_id), members, name: name || null }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        const msg = /team_name/.test(String(e.message || e)) ? 'team_name column missing — run the one-time ALTER TABLE' : 'Database error naming the team';
+        return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // GET /gatherings/:id/registrations — host's view of who's responded
     if (request.method === 'GET' && /^\/gatherings\/\d+\/registrations$/.test(url.pathname)) {
       const gatheringId = url.pathname.split('/')[2];
@@ -1145,9 +1178,14 @@ export default {
         let results;
         try {
           ({ results } = await env.DB.prepare(
+            `SELECT player_id, status, registered_at, confirmed_for, host_note, added_by, added_at, partner_id, team_name FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
+          ).bind(gatheringId).all());
+        } catch (colErr0) {
+         try {
+          ({ results } = await env.DB.prepare(
             `SELECT player_id, status, registered_at, confirmed_for, host_note, added_by, added_at, partner_id FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
           ).bind(gatheringId).all());
-        } catch (colErr) {
+         } catch (colErr) {
           try {
             // partner_id not migrated yet (v4.48.0) — fall back to the previous column set
             ({ results } = await env.DB.prepare(
@@ -1159,6 +1197,7 @@ export default {
               `SELECT player_id, status, registered_at, confirmed_for, host_note FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
             ).bind(gatheringId).all());
           }
+         }
         }
         return new Response(JSON.stringify({ ok: true, registrations: results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }

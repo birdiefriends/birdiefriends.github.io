@@ -747,3 +747,8 @@ amounts round down and the remainder is reported as unallocated.
 On a team Gathering the Games form preselects Scramble, sets the team size, and fills the teams from the locked groups.
 
 **Deploy order.** Run the SQL, paste-deploy both Workers (`worker.js`, `bf_experiences_worker.js`), then publish the portal.
+
+**Team names (v4.49.0).** `registrations.team_name TEXT` (SQL: `ALTER TABLE registrations ADD COLUMN team_name TEXT;`), written to every member's row
+by `POST /registrations/team-name {gathering_id, player_id, members, name}` (host or a team member; up to 40 characters; blank clears). A locked team
+shows its name on the card, the chips and the host panel. The Scramble config carries `names`, parallel to `pairs` (new `strings` field type, engine 1.43.0),
+and results show the name with the members beneath. The Games form pre-fills names from the locked teams and has an optional name box on each team.

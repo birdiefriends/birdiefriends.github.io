@@ -154,5 +154,17 @@ ok(E.validateGameConfig('scramble', { team_size: 1, pairs: [['A'], ['B']] }).ok,
   ok((r1.payouts.find(p => p.player === 'A') || {}).scramble === 20, '1-man: the better score takes the $20 pot');
 }
 
+// 14. team names ride along, parallel to the teams
+{
+  const rowN = sc({ names: ['Birdie Hunters', ''] });
+  const rn = pay(rowN, teamCards(() => 4, () => 5));
+  const byPair = k => rn.scramble.standings.find(x => x.pair.join() === k);
+  ok(byPair('Ann,Bob').name === 'Birdie Hunters' && byPair('Cy,Di').name === undefined, 'a named team carries its name into the standings; an unnamed one does not');
+  ok(E.validateGameConfig('scramble', { pairs: [['A', 'B'], ['C', 'D']], names: ['X', ''] }).ok, 'names validate');
+  ok(!E.validateGameConfig('scramble', { pairs: [['A', 'B'], ['C', 'D']], names: ['x'.repeat(41), ''] }).ok, 'a name over 40 characters is refused');
+  const cl = E.cleanGameConfig('scramble', { pairs: [['A', 'B'], ['C', 'D']], names: ['  Pin Seekers  ', 7] });
+  ok(cl.names[0] === 'Pin Seekers' && cl.names[1] === '7', 'cleaning trims names');
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

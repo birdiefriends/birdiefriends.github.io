@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.42.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.43.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -901,6 +901,13 @@ const GAME_SCHEMAS = {
         "label": "Teams",
         "default": [],
         "required": true
+      },
+      {
+        "key": "names",
+        "type": "strings",
+        "label": "Team names",
+        "default": [],
+        "max": 40
       }
     ],
     "moneyOptional": true
@@ -1212,6 +1219,8 @@ function validateFields(fields, cfg) {
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
         if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
         else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be on one ' + (sz === 2 ? 'pair' : 'team'));
+      } else if (f.type === 'strings') {
+        if (!Array.isArray(v) || !v.every(x => typeof x === 'string' && x.trim().length <= (f.max || 60))) errors.push(f.label + ' must be short text (up to ' + (f.max || 60) + ' characters each)');
       } else if (f.type === 'enum') {
         if (!f.lenient && !(f.values || []).includes(v)) errors.push(f.label + ' must be one of ' + (f.values || []).join('/'));
       }
@@ -1229,6 +1238,7 @@ function cleanFields(fields, cfg) {
       else if (f.type === 'pars') out[f.key] = v.map(Number);
       else if (f.type === 'parsmap') { const m = {}; Object.keys(v).forEach(k => { m[String(k).trim()] = v[k].map(Number); }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
+      else if (f.type === 'strings') out[f.key] = v.map(x => String(x).trim().slice(0, f.max || 60));
       else if (f.type === 'enum') out[f.key] = (f.values || []).includes(v) ? v : f.default;
       else out[f.key] = v;
     });

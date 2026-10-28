@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.42.0';
+  const ENGINE_VERSION = '1.43.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -712,6 +712,11 @@
           holes: bb.map((h, i) => ({ hole: off + i + 1, score: h ? h.score : null, ...(kind === 'hilo' ? { high: h ? h.high : null } : {}), by: h ? h.by.map(ix => names[ix]) : [] }))
         };
       });
+      if (kind === 'scramble' && Array.isArray(addon.names)) {   // team names ride along, parallel to `pairs` as saved
+        const key = pr => pr.map(norm).sort().join('|'), nameBy = new Map();
+        (addon.pairs || []).forEach((pr, i) => { const nm = addon.names[i]; if (Array.isArray(pr) && typeof nm === 'string' && nm.trim()) nameBy.set(key(pr), nm.trim()); });
+        rows.forEach((r, i) => { const nm = nameBy.get(key(pairsCfg[i])); if (nm) r.name = nm; });
+      }
       let plan = fourballSegmentPlan(kind === 'scramble' ? {} : addon);   // a scramble is one whole-round contest for the field
       const nineRound = pairsCfg.some(pr => pr.some(nm => { const c = cardBy.get(norm(nm)); return c && c.hole_count === 9; }));
       const nineOff = pairsCfg.some(pr => pr.some(nm => { const c = cardBy.get(norm(nm)); return c && c.hole_count === 9 && c.hole_half === 'back'; })) ? 9 : 0;
@@ -1144,7 +1149,8 @@
       { key: 'allowance', type: 'int', label: 'Combined handicap %', default: 25, min: 1 },
       { key: 'payout', type: 'enum', label: 'Pays', values: ['winner', 'top2', 'top3'], default: 'winner' },
       { key: 'pars', type: 'pars', label: 'Par by hole (Stableford)', default: [], min: 3, max: 6, integer: true },
-      { key: 'pairs', type: 'pairs', sizeKey: 'team_size', label: 'Teams', default: [], required: true }
+      { key: 'pairs', type: 'pairs', sizeKey: 'team_size', label: 'Teams', default: [], required: true },
+      { key: 'names', type: 'strings', label: 'Team names', default: [], max: 40 }
     ],
     fixedCost: cfg => (Number(cfg.dollar_per_player) || 0) * scrambleSize(cfg) * ((cfg.pairs || []).length),
     maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
@@ -1468,6 +1474,8 @@
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
         if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
         else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be on one ' + (sz === 2 ? 'pair' : 'team'));
+      } else if (f.type === 'strings') {
+        if (!Array.isArray(v) || !v.every(x => typeof x === 'string' && x.trim().length <= (f.max || 60))) errors.push(f.label + ' must be short text (up to ' + (f.max || 60) + ' characters each)');
       } else if (f.type === 'enum') {
         if (!f.lenient && !(f.values || []).includes(v)) errors.push(f.label + ' must be one of ' + (f.values || []).join('/'));
       }
@@ -1487,6 +1495,7 @@
       else if (f.type === 'pars') out[f.key] = v.map(Number);
       else if (f.type === 'parsmap') { const m = {}; Object.keys(v).forEach(k => { m[String(k).trim()] = v[k].map(Number); }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
+      else if (f.type === 'strings') out[f.key] = v.map(x => String(x).trim().slice(0, f.max || 60));
       else if (f.type === 'enum') out[f.key] = (f.values || []).includes(v) ? v : f.default;
       else out[f.key] = v;
     });
@@ -1592,7 +1601,7 @@
         net_mode: scc.net_mode === 'low' ? 'low' : 'own', scoring: scc.scoring === 'stableford' ? 'stableford' : 'strokes', scale: scc.scale === 'standard' ? 'standard' : 'bf',
         hcp_method: scrambleMethod(scc), team_size: scrambleSize(scc), allowance: scrambleCombinedPct(scc),
         ...Object.fromEntries([1, 2, 3, 4].filter(i => scc['pct_' + i] != null && Number.isFinite(Number(scc['pct_' + i]))).map(i => ['pct_' + i, Number(scc['pct_' + i])])),
-        payout: ['winner', 'top2', 'top3'].includes(scc.payout) ? scc.payout : 'winner', pars: Array.isArray(scc.pars) ? scc.pars : [], pairs: Array.isArray(scc.pairs) ? scc.pairs : [] });
+        payout: ['winner', 'top2', 'top3'].includes(scc.payout) ? scc.payout : 'winner', pars: Array.isArray(scc.pars) ? scc.pars : [], pairs: Array.isArray(scc.pairs) ? scc.pairs : [], names: Array.isArray(scc.names) ? scc.names.map(x => String(x || '')) : [] });
     }
     const hlc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.hilo : null;
     if (games.includes('hilo') && hlc) {

@@ -3651,7 +3651,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.42.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.43.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -4567,7 +4567,8 @@ async function loadGatherings() {
           hostNote: r.host_note || null,           // Dev-49: crew → host note
           addedBy: r.added_by || null,             // v4.11.2: added on the course by someone in the group
           addedAt: r.added_at || null,
-          partner: r.partner_id || null            // v4.48.0: the partner this player named (Teams of 2)
+          partner: r.partner_id || null,           // v4.48.0: the partner this player named (Teams of 2)
+          teamName: r.team_name || null            // v4.48.0: the team's name (same on every member's row)
         });
       });
     });
@@ -6211,7 +6212,7 @@ function teamsState(rows, size) {
   const by = new Map(real.map(r => [tn(r.player), r]));
   const picksOf = r => { const seen = new Set(); return partnersOf(r.partner).filter(n => { const k = tn(n); if (!k || k === tn(r.player) || seen.has(k)) return false; seen.add(k); return true; }); };
   const teamKey = (r, picks) => [tn(r.player)].concat(picks.map(tn)).sort().join('|');
-  const pairs = [], locked = new Set();
+  const pairs = [], names = [], locked = new Set();
   yes.forEach(r => {
     if (locked.has(tn(r.player))) return;
     const picks = picksOf(r);
@@ -6220,7 +6221,7 @@ function teamsState(rows, size) {
     if (members.some(m => !m || m.status !== 'Yes' || locked.has(tn(m.player)))) return;
     const key = teamKey(r, picks);
     if (!members.every(m => teamKey(m, picksOf(m)) === key && picksOf(m).length === N - 1)) return;
-    pairs.push(members.map(m => m.player)); members.forEach(m => locked.add(tn(m.player)));
+    pairs.push(members.map(m => m.player)); names.push((members.map(m => m.teamName).find(Boolean)) || null); members.forEach(m => locked.add(tn(m.player)));
   });
   const waiting = [], open = [];
   const rank = ['no', 'none', 'sub', 'other', 'pending'];
@@ -6242,7 +6243,7 @@ function teamsState(rows, size) {
   // who has named each player (only counted while the namer is a Yes), so a request is visible to the person it is for
   const askedBy = {};
   yes.forEach(r => picksOf(r).forEach(n => { (askedBy[tn(n)] = askedBy[tn(n)] || []).push(r.player); }));
-  return { size: N, pairs, waiting, open, players: yes.length, teams: pairs.length, unpaired: yes.length - pairs.length * N, askedBy };
+  return { size: N, pairs, names, waiting, open, players: yes.length, teams: pairs.length, unpaired: yes.length - pairs.length * N, askedBy };
 }
 // Who `me` could team up with, in the order they should be offered: people who picked me, then Yes players still looking,
 // then every other active member. Never me, never anyone already locked into a team, never an Open Spot.
@@ -6367,7 +6368,10 @@ function teamBannerHtml(evt) {
   const askName = escapeHtml(asks[0] || '');
   const askJs = `acceptPartnerRequest('${id}', '${String(asks[0] || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;')}')`;
   if (me && me.status === 'Yes') {
-    if (pair) { const mt = pair.filter(n => tn(n) !== tn(currentPlayer)); return box('🤝', 'rgba(93,202,165,0.7)', `<b style="color:#5dcaa5">You're teamed with ${teamNamesText(mt)}</b> ${change}`); }
+    if (pair) {
+      const mt = pair.filter(n => tn(n) !== tn(currentPlayer)), tName = st.names[st.pairs.indexOf(pair)];
+      return box('🤝', 'rgba(93,202,165,0.7)', `<b style="color:#5dcaa5">You're teamed with ${teamNamesText(mt)}</b> ${change}<br>${tName ? `Team name: <b style="color:#F5C842">${escapeHtml(tName)}</b> ` : ''}<a href="#" onclick="openTeamNameSheet('${id}');return false" style="color:#F5C842;font-weight:700">${tName ? 'Rename' : '✏️ Name your team'}</a>`);
+    }
     if (asks.length) return box('🤝', '#F5C842', `<b style="color:#F5C842">${askName} picked you as their ${mates}</b>${asks.length > 1 ? ` (and ${asks.length - 1} more)` : ''}<br>${btn('Team up with ' + askName, askJs)} ${change.replace('Change', 'Pick someone else')}`);
     const picks = partnersOf(me.partner);
     if (picks.length) return box('⏳', 'rgba(245,200,66,0.6)', `<b style="color:#F5C842">Waiting on ${teamNamesText(picks)}</b> to say Yes and pick the same team${picks.length < N - 1 ? `, and ${N - 1 - picks.length} more still to pick` : ''}. ${change}`);
@@ -6381,7 +6385,7 @@ function teamChipsHtml(evt, players) {
   const st = teamsState(players, N);
   const chip = (t, extra) => `<span class="player-chip"${extra ? ` style="${extra}"` : ''}>${t}</span>`;
   const out = [];
-  st.pairs.forEach(pr => out.push(chip(`🤝 ${teamNamesText(pr)}`)));
+  st.pairs.forEach((pr, i) => out.push(chip(st.names[i] ? `🤝 <b>${escapeHtml(st.names[i])}</b> <span style="opacity:0.75">${teamNamesText(pr)}</span>` : `🤝 ${teamNamesText(pr)}`)));
   st.waiting.forEach(w => out.push(chip(`${escapeHtml(w.player)} <span style="opacity:0.7">→ ${w.picks.map(escapeHtml).join(' &amp; ')}${w.need ? ` +${w.need}` : ''}${w.wantsStatus === 'none' ? ' (not in yet)' : w.wantsStatus === 'no' ? ' (can\'t make it)' : w.wantsStatus === 'other' ? ' (teamed up)' : w.wantsStatus === 'sub' ? ' (Sub)' : ' ⏳'}</span>`, 'background:transparent;border:1px dashed rgba(245,200,66,0.7)')));
   st.open.forEach(n => out.push(chip(`${escapeHtml(n)} <span style="opacity:0.7">· needs a ${N === 2 ? 'partner' : 'team'}</span>`, 'background:transparent;border:1px dashed rgba(245,200,66,0.7)')));
   players.filter(p => p.status === 'Sub').forEach(p => out.push(chip(`${escapeHtml(p.player)} (Sub)`, 'opacity:0.8')));
@@ -6394,8 +6398,8 @@ function hostTeamsHtml(g) {
   const rows = gatheringRegData.filter(r => r.gatheringId === g.gatheringId);
   const st = teamsState(rows, N);
   const free = st.open.length + st.waiting.length;
-  const teamRows = st.pairs.map((pr, i) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><span style="font-size:0.84rem;font-weight:700">🤝 ${teamNamesText(pr)}</span>
-    <button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="hostUnpair(${g.gatheringId}, ${i})">Unteam</button></div>`).join('');
+  const teamRows = st.pairs.map((pr, i) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><span style="font-size:0.84rem;font-weight:700">🤝 ${st.names[i] ? escapeHtml(st.names[i]) + ' <span style="font-weight:400;color:var(--text-muted)">· ' + teamNamesText(pr) + '</span>' : teamNamesText(pr)}</span>
+    <span style="white-space:nowrap"><button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="openTeamNameSheetHost(${g.gatheringId}, ${i})">${st.names[i] ? 'Rename' : 'Name'}</button><button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="hostUnpair(${g.gatheringId}, ${i})">Unteam</button></span></div>`).join('');
   return `<div style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(29,158,117,0.08);border:1px solid rgba(29,158,117,0.35)">
     <div style="font-size:0.78rem;font-weight:700;margin-bottom:2px">${N === 2 ? 'Teams of 2' : N + '-man teams'} · ${st.players} player${st.players === 1 ? '' : 's'} · ${st.teams} team${st.teams === 1 ? '' : 's'}${free ? ` · <span style="color:#b8860b">${free} still need${free === 1 ? 's' : ''} a ${N === 2 ? 'partner' : 'team'}</span>` : ''}</div>
     ${teamRows}
@@ -6445,6 +6449,48 @@ async function hostPairConfirm() {
     closeHostSheet(); _hostPair = null;
     showToast(`🤝 ${names.join(' & ')} are a team`);
     await refreshAfterSpotChange(c.gatheringId);
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+// ── Team names ──
+let _teamNameCtx = null;   // { gatheringId, members, current }
+function openTeamNameSheet(evtId) {
+  const evt = eventData.find(e => e.id === evtId); if (!evt) return;
+  const N = teamSizeOf(evt), tn = s => String(s || '').trim().toLowerCase();
+  const st = teamsState(teamRowsFor(evt), N);
+  const i = st.pairs.findIndex(pr => pr.some(n => tn(n) === tn(currentPlayer)));
+  if (i < 0) { showToast('Your team locks in first, then you can name it', true); return; }
+  showTeamNameSheet(evt.gatheringId, st.pairs[i], st.names[i]);
+}
+function openTeamNameSheetHost(gatheringId, i) {
+  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  const st = teamsState(gatheringRegData.filter(r => r.gatheringId === gatheringId), teamSizeOf(g) || 2);
+  if (st.pairs[i]) showTeamNameSheet(gatheringId, st.pairs[i], st.names[i]);
+}
+function showTeamNameSheet(gatheringId, members, current) {
+  _teamNameCtx = { gatheringId, members, current: current || '' };
+  openHostSheet('Name your team', `<div style="padding:0 18px 8px;font-size:0.8rem;color:var(--text-muted);line-height:1.45">${teamNamesText(members)}. Make it good. Everyone on the team sees it, and it shows on the leaderboard.</div>
+    <div style="padding:0 18px"><input type="text" id="team-name-input" maxlength="40" value="${escapeHtml(current || '')}" placeholder="Team name" autocomplete="off"
+      style="width:100%;padding:11px 12px;border-radius:10px;border:1.5px solid var(--border);background:#fff;font-size:1rem;font-family:inherit;box-sizing:border-box;margin-bottom:10px"></div>
+    <div style="padding:0 18px"><button type="button" class="host-cta-btn" style="margin:0" onclick="saveTeamName()">Save name</button>
+    ${current ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px;width:100%;color:var(--text-muted)" onclick="saveTeamName(true)">Remove the name</button>` : ''}</div>`);
+  setTimeout(() => { const el = document.getElementById('team-name-input'); if (el) { el.focus(); el.select(); } }, 80);
+}
+async function saveTeamName(clear) {
+  const c = _teamNameCtx; if (!c) return;
+  const el = document.getElementById('team-name-input');
+  const name = clear ? '' : String((el && el.value) || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  try {
+    const res = await fetch(`${GATHERINGS_API}/registrations/team-name`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gathering_id: c.gatheringId, player_id: currentPlayer, members: c.members, name })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Could not save the name');
+    const tn = s => String(s || '').trim().toLowerCase(), set = new Set(c.members.map(tn));
+    [gatheringRegData, regData].forEach(arr => arr.forEach(r => { if (r.gatheringId === c.gatheringId && set.has(tn(r.player))) r.teamName = name || null; }));
+    closeHostSheet(); _teamNameCtx = null;
+    renderAll();
+    showToast(name ? `🏷️ Team named "${name}"` : 'Team name removed');
   } catch (e) { showToast('❌ ' + e.message, true); }
 }
 async function hostUnpair(gatheringId, pairIndex) {
@@ -11338,7 +11384,7 @@ async function gatheringReadBack(gatheringId) {
     const rows = data.registrations.map(r => ({
       id: `gr-${gatheringId}-${r.player_id}`, eventName: g ? g.name : '', gatheringId, player: r.player_id,
       status: sm[r.status] || 'No', createdAt: r.registered_at ? new Date(r.registered_at) : new Date(),
-      confirmedFor: r.confirmed_for || null, hostNote: r.host_note || null, addedBy: r.added_by || null, addedAt: r.added_at || null, partner: r.partner_id || null }));
+      confirmedFor: r.confirmed_for || null, hostNote: r.host_note || null, addedBy: r.added_by || null, addedAt: r.added_at || null, partner: r.partner_id || null, teamName: r.team_name || null }));
     gatheringRegData = gatheringRegData.filter(x => x.gatheringId !== gatheringId).concat(rows);
     regData = regData.filter(x => x.gatheringId !== gatheringId).concat(rows.map(r => ({ ...r })));
     return { ok: true, rows };
@@ -12094,7 +12140,7 @@ const GAMES_FORM_REC_ALLOWANCE = { altshot: 50, scramble: 25, matchplay: 100 }; 
 function gamesFormScramblePcts(src) { const pc = BFEngine.scramblePcts(src), o = {}; pc.forEach((v, i) => { o['pct_' + (i + 1)] = v; }); return o; }
 function gamesFormSideBlank(gid) {
   if (gid === 'hilo') return { dollar_per_player: null, basis: 'gross', net_mode: 'low', period: 'round', pairs: [] };
-  if (gid === 'scramble') return Object.assign({ dollar_per_player: null, basis: 'net', net_mode: 'own', allowance: BFEngine.scrambleCombinedPct({ team_size: 2 }), period: 'round', scoring: 'strokes', scale: 'bf', hcp_method: 'ranked', team_size: 2, payout: 'winner', pairs: [] }, gamesFormScramblePcts({ team_size: 2 }));
+  if (gid === 'scramble') return Object.assign({ dollar_per_player: null, basis: 'net', net_mode: 'own', allowance: BFEngine.scrambleCombinedPct({ team_size: 2 }), period: 'round', scoring: 'strokes', scale: 'bf', hcp_method: 'ranked', team_size: 2, payout: 'winner', pairs: [], names: [] }, gamesFormScramblePcts({ team_size: 2 }));
   return gid === 'matchplay'
     ? { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 100, period: 'round', matches: [] }
     : { dollar_per_player: null, basis: 'gross', net_mode: 'low', allowance: 50, period: 'round', win_by: 'strokes', scope: 'field', pairs: [] };
@@ -12108,6 +12154,7 @@ function gamesFormSideFrom(gid, src) {
   else if (gid === 'scramble') {
     out.pairs = (src.pairs || []).map(pr => pr.slice());
     out.scoring = src.scoring === 'stableford' ? 'stableford' : 'strokes'; out.scale = src.scale === 'standard' ? 'standard' : 'bf';
+    out.names = (Array.isArray(src.names) ? src.names : []).map(x => String(x || ''));
     out.team_size = BFEngine.scrambleSize(src);
     out.hcp_method = ['combined', 'none'].includes(src.hcp_method) ? src.hcp_method : 'ranked';
     Object.assign(out, gamesFormScramblePcts(src)); out.allowance = BFEngine.scrambleCombinedPct(src);
@@ -17199,7 +17246,7 @@ function scrambleResultsHtml(f, line, nm, esc) {
   h += (f.standings || []).map(r => {
     const place = r.complete && r.place != null ? `${r.tied ? 'T' : ''}${r.place}` : '—';
     const pp = paid.get(r.pair.join('|'));
-    return line(`<span style="color:var(--text-muted);display:inline-block;min-width:1.4rem">${place}</span><b>${nm(r.pair)}</b>${r.complete ? '' : ` <span style="color:var(--text-muted)">(${esc(r.played)} holes in)</span>`}`,
+    return line(`<span style="color:var(--text-muted);display:inline-block;min-width:1.4rem">${place}</span>${r.name ? `<b>${esc(r.name)}</b> <span style="color:var(--text-muted);font-size:0.74rem">${nm(r.pair)}</span>` : `<b>${nm(r.pair)}</b>`}${r.complete ? '' : ` <span style="color:var(--text-muted)">(${esc(r.played)} holes in)</span>`}`,
       r.complete ? `${esc(r.total)}${unit}${pp ? ' · ' + money(pp) + ' each' : ''}` : '—');
   }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No teams were set up</div>`;
   if (!(f.winners || []).length) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">No team finished all its holes${f.given_back_each ? `. ${money(f.given_back_each)} back to each player` : ''}</div>`;
@@ -20065,6 +20112,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
         const st = teamsState(gatheringRegData.filter(r => r.gatheringId === gatheringId), teamSizeOf(g));
         _gamesFormSide.scramble.team_size = teamSizeOf(g);
         _gamesFormSide.scramble.pairs = st.pairs.map(pr => pr.slice());
+        _gamesFormSide.scramble.names = st.names.map(x => x || '');
         if (st.pairs.length) _gamesFormSideNote.scramble = `Teams filled in from the locked partner pairs (${st.pairs.length}).${st.unpaired ? ` ${st.unpaired} player${st.unpaired === 1 ? ' is' : 's are'} not on a team yet.` : ''}`;
       }
     }
@@ -21045,7 +21093,7 @@ function gatheringGamesSideSectionHtml(gid) {
   const tsz = sc ? BFEngine.scrambleSize(c) : 2;
   const rows = items.map((pr, pi) => `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;${tsz > 2 ? 'flex-wrap:wrap' : ''}">
       <span style="font-size:0.72rem;font-weight:700;color:var(--text-muted);width:50px">${word} ${pi + 1}</span>${Array.from({ length: tsz }, (_, si) => (si ? `<span style="color:var(--text-muted)">${mp ? 'vs' : '&amp;'}</span>` : '') + picker(pi, si)).join('')}
-      <button type="button" aria-label="Remove" onclick="removeGamesFormSideItem('${gid}',${pi})" style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border-med);background:transparent;color:var(--text-muted);cursor:pointer;flex-shrink:0">✕</button></div>`).join('');
+      <button type="button" aria-label="Remove" onclick="removeGamesFormSideItem('${gid}',${pi})" style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border-med);background:transparent;color:var(--text-muted);cursor:pointer;flex-shrink:0">✕</button></div>${sc ? `<div style="display:flex;align-items:center;gap:6px;margin:-2px 0 10px 56px"><input type="text" maxlength="40" placeholder="Team name (optional)" value="${escapeHtmlAttr((c.names || [])[pi] || '')}" oninput="setGamesFormTeamName(${pi},this.value)" style="flex:1;min-width:0;height:34px;border-radius:8px;border:1.5px dashed var(--border);padding:0 10px;font-family:inherit;font-size:0.84rem;box-sizing:border-box"></div>` : ''}`).join('');
   const used = new Set(); items.forEach(pr => pr.forEach(n => { if (n) used.add(low(n)); }));
   const left = names.filter(n => !used.has(low(n)));
   const seg = (list, cur, fn) => `<div class="seg-toggle" style="margin:0">${list.map(([v, l]) => `<button type="button" class="seg-btn${cur === v ? ' seg-btn-active' : ''}" style="white-space:nowrap;padding:9px 14px" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
@@ -21187,10 +21235,12 @@ function setGamesFormSideDollar(gid, val) {
 const setGamesFormSideDollarFor = {}; GAMES_FORM_SIDE_IDS.forEach(g => { setGamesFormSideDollarFor[g] = v => setGamesFormSideDollar(g, v); });
 function setGamesFormSideMember(gid, pi, si, name) { gamesFormSideItems(gid)[pi][si] = name || ''; refreshGamesFormSideSection(gid); }
 function addGamesFormSideItem(gid) { gamesFormSideItems(gid).push(Array(gamesFormTeamSize(gid)).fill('')); refreshGamesFormSideSection(gid); }
-function removeGamesFormSideItem(gid, pi) { gamesFormSideItems(gid).splice(pi, 1); refreshGamesFormSideSection(gid); }
+function setGamesFormTeamName(pi, val) { const c = _gamesFormSide.scramble; c.names = c.names || []; while (c.names.length < c.pairs.length) c.names.push(''); c.names[pi] = String(val || '').slice(0, 40); }
+function removeGamesFormSideItem(gid, pi) { if (gid === 'scramble' && _gamesFormSide.scramble.names) _gamesFormSide.scramble.names.splice(pi, 1); gamesFormSideItems(gid).splice(pi, 1); refreshGamesFormSideSection(gid); }
 function clearGamesFormSideItems(gid) {
   const c = _gamesFormSide[gid];
   if (gid === 'matchplay') c.matches = []; else c.pairs = [];
+  if (gid === 'scramble') c.names = [];
   _gamesFormSideNote[gid] = '';
   refreshGamesFormSideSection(gid);
 }
@@ -21217,7 +21267,7 @@ function suggestGamesFormSideItems(gid) {
       const tier = order.slice(t * k, (t + 1) * k);
       tier.forEach((x, i) => teams[t % 2 ? k - 1 - i : i].push(x.name));
     }
-    _gamesFormSide[gid].pairs = teams;
+    _gamesFormSide[gid].pairs = teams; _gamesFormSide[gid].names = [];
     const left = known.concat(unknown).slice(k * n);
     _gamesFormSideNote[gid] = '✨ ' + (known.length ? 'Balanced by handicap: each team gets a strong, a middle and a weaker player, so the teams are evenly matched.' : 'No handicaps on file, so these are in name order. Change any team you like.')
       + (unknown.length && known.length ? ` No handicap on file for ${unknown.map(x => escapeHtml(x.name)).join(', ')}.` : '')
@@ -21612,6 +21662,7 @@ async function submitGatheringGames(gatheringId) {
       Object.assign(cfg, { scoring: c.scoring === 'stableford' ? 'stableford' : 'strokes', scale: c.scale === 'standard' ? 'standard' : 'bf', hcp_method: ['combined', 'none'].includes(c.hcp_method) ? c.hcp_method : 'ranked',
         team_size: BFEngine.scrambleSize(c), ...Object.fromEntries(Array.from({ length: BFEngine.scrambleSize(c) }, (_, i) => ['pct_' + (i + 1), Number(c['pct_' + (i + 1)])])), allowance: Number(c.allowance) || BFEngine.scrambleCombinedPct(c), payout: ['top2', 'top3'].includes(c.payout) ? c.payout : 'winner', pairs: rows.map(pr => [pr[0], pr[1]]) });
       delete cfg.period;
+      { const nm = gamesFormSideItems(gid).map((pr, i) => (pr.some(Boolean) ? String((c.names || [])[i] || '').trim().slice(0, 40) : null)).filter(x => x !== null); if (nm.some(Boolean)) cfg.names = nm; }
       if (cfg.scoring === 'stableford') {
         if (!(Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18)) { bad(step, 'Scramble: Stableford needs par data for this venue. Add a tee for it in Venue Manager first, or score by strokes'); bailed = true; return; }
         cfg.pars = _gamesFormBirdiepayPars.slice();
