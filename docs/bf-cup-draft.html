@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BF Cup Draft</title>
+<title>BirdieFriends Cup</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap">
 <style>
 *{box-sizing:border-box}
@@ -81,7 +81,7 @@ button:disabled{opacity:.4;cursor:default}
 </style>
 </head>
 <body>
-<div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div><p class="hint">Loading…</p></div>
+<div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BirdieFriends Cup</h1></div><p class="hint">Loading…</p></div>
 <script src="bf_engine.js?v=1.40.0"></script>
 <script src="bf_live_match.js?v=12"></script>
 <script>
@@ -458,7 +458,20 @@ button:disabled{opacity:.4;cursor:default}
       setv(); window.BFLiveMatch.attach(el);
     } else { setv(); window.BFLiveMatch.attach(el); }
   }
-  function hero() { return '<div class="stripes"></div><div class="backrow"><a id="backApp" href="portal.html">← Back to the app</a></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BF Cup Draft</h1></div>' + (PRACTICE ? '<div class="banner" style="background:#b8860b">PRACTICE RUN · sample players, nothing here is real</div>' : ''); }
+  // The page names itself after the event (not "BF Cup Draft") and says which stage it is showing.
+  function cupName() { return String(EVENT || 'BF Cup').replace(/\s*\(practice\)\s*$/, ''); }
+  function cupStage() {
+    var d = (cfg && cfg.draft) || {};
+    if (!cfg || !d.started) return 'Team selection';
+    if (!d.locked) return 'Team draft';
+    var hasMatches = (cfg.rounds || []).some(function (r) { return (r.matches || []).length; });
+    if (!hasMatches) return 'Matchup draw';
+    return view === 'board' ? 'Leaderboard' : view === 'teams' ? 'Teams & draw' : 'Scoring';
+  }
+  function hero() {
+    var nm = cupName(), stage = cupStage();
+    try { document.title = nm + ' · ' + stage; } catch (e) {}
+    return '<div class="stripes"></div><div class="backrow"><a id="backApp" href="portal.html">← Back to the app</a></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>' + esc(nm) + '</h1><div class="eyebrow">' + esc(stage) + '</div></div>' + (PRACTICE ? '<div class="banner" style="background:#b8860b">PRACTICE RUN · sample players, nothing here is real</div>' : ''); }
 
   function wire() {
     function $(id) { return document.getElementById(id); }
