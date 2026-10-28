@@ -126,6 +126,27 @@ ok(/Polling/.test(lines[1].text) && /Invite-only/.test(lines[3].text) && lines[4
   eq(open.names, ['Tom', 'Jeff'], 'everyone else with alerts on gets the open announcement (not Lou, Old, the host, or the confirmed)');
   ok(w.pushes.length === 2, 'exactly two notices'); ok(w.calls.at(-1).url === 'HOSTPANEL', 'back to the Host Panel'); eq(w.api.get(), null, 'flow state cleared');
 }
+// ── teams: an open scramble, polled or with a count ──
+{
+  const w = world(); const st = state(w.api, { ask: 'all', confirmed: [], target: 8, teamSize: 4 }); w.api.set(st);
+  await w.api.gfCreate();
+  const post = w.calls.find(c => c.url === '/gatherings');
+  ok(post && post.body.team_size === 4 && post.body.size === 8 && post.body.gathering_type === '4 Man Scramble', 'create: 4-man teams send team_size, total players and the format');
+}
+{
+  const w = world(); const st = state(w.api, { ask: 'all', confirmed: [], polling: true, teamSize: 2 }); w.api.set(st);
+  await w.api.gfCreate();
+  const post = w.calls.find(c => c.url === '/gatherings');
+  ok(post && post.body.team_size === 2 && post.body.size === null && post.body.tee_time_status === 'suggested' && post.body.gathering_type === '2 Man Scramble', 'create: a polled 2Man has teams and no seat count');
+}
+{
+  const w = world(); const st = state(w.api, { ask: 'all', target: 7, teamSize: 2 });
+  const plan = w.api.gfBuildPlan(st, ctx());
+  ok(plan.errors.some(e => /whole teams/.test(e)), 'a player count that is not whole teams is refused');
+  const plan2 = w.api.gfBuildPlan(state(w.api, { ask: 'all', target: 4 }), ctx());
+  ok(plan2.teamSize === 0 && !plan2.errors.length, 'no teams: nothing changes');
+}
+ok(/gfSetTeams/.test(extractFn(src, 'gfRender')) && /setHostTeamSize\(st\.teamSize\)/.test(extractFn(src, 'gfUseFullForm')), 'the guided flow offers Teams and hands them to the full form');
 // ── polling + invite-only: nothing sent, no size ──
 {
   const w = world(); w.api.set(state(w.api, { ask: 'none', polling: true })); await w.api.gfCreate();

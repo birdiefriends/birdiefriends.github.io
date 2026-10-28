@@ -22271,7 +22271,7 @@ function toggleCrewPickerSelection(name) {
 //   - no leftover-seat / held-seat step: an unanswered seat is just unanswered
 let _gf = null;
 function gfFresh() {
-  return { step: 0, title: '', venue: '', date: '', time: '08:00', polling: false, target: 4,
+  return { step: 0, title: '', venue: '', date: '', time: '08:00', polling: false, target: 4, teamSize: 0,
     playing: true, confirmed: new Set(), ask: null, crewId: null, crewName: null, crewMembers: null,
     pickSet: new Set(), pickName: null, wantGames: false, awaitingName: false, busy: false };
 }
@@ -22288,6 +22288,7 @@ function gfBuildPlan(st, ctx) {
     fillListEnabled: st.ask === 'all',
     crew: { kind: 'none' }, saveCrew: null,
     confirmed, registerYes, invitees: [], openAnnounce: [],
+    teamSize: st.teamSize >= 2 && st.teamSize <= 4 ? st.teamSize : 0,
     wantGames: st.wantGames === true, errors: []
   };
   const union = base => [...new Set(base.concat(confirmed))];
@@ -22321,6 +22322,7 @@ function gfBuildPlan(st, ctx) {
   } else {
     plan.errors.push('Choose who to ask about the rest');
   }
+  if (plan.teamSize && plan.size && plan.size % plan.teamSize) plan.errors.push(`Teams of ${plan.teamSize} need a player count in whole teams. Make it ${Math.ceil(plan.size / plan.teamSize) * plan.teamSize}, or poll.`);
   if (plan.size && registerYes.length > plan.size) {
     plan.errors.push(`${registerYes.length} are confirmed but you're hoping for ${plan.size}. Raise the number, or take someone off the confirmed list.`);
   }
@@ -22335,7 +22337,8 @@ function gfSummaryLines(st, ctx) {
   lines.push({ step: 0, text: [st.title, st.venue, when].filter(Boolean).join(' · ') });
   lines.push({ step: 0, text: st.polling
     ? 'Polling for a head count (tee time marked as suggested)'
-    : `Hoping for ${st.target} (tee time marked as confirmed)` });
+    : `Hoping for ${st.target}${plan.teamSize ? ' players' : ''} (tee time marked as confirmed)` });
+  if (plan.teamSize) lines.push({ step: 0, text: `Teams of ${plan.teamSize}: players sign up with their teammates` + (st.polling ? '' : `, ${Math.floor(st.target / plan.teamSize)} team${Math.floor(st.target / plan.teamSize) === 1 ? '' : 's'}`) });
   const inNames = (st.playing ? ['you'] : []).concat(plan.confirmed);
   lines.push({ step: 1, text: inNames.length ? `In: ${inNames.join(', ')}` : 'In: nobody yet' });
   if (st.ask === 'crew') lines.push({ step: 2, text: `Asking ${st.crewName || 'your crew'} (${(ctx.crewMembers || []).filter(n => n !== ctx.host).length} people)` });
@@ -22415,6 +22418,12 @@ function gfRender() {
           <button type="button" aria-label="More" onclick="gfBump(1)" style="width:40px;height:40px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:1.25rem;font-weight:600;cursor:pointer">+</button></div>`}
         ${hostSwitchHtml('gf-poll-switch', st.polling, 'gfTogglePolling()', "Not sure yet, I'm polling", 'No seat count for now. The tee time shows as suggested until you know.')}
       </div>
+      <div class="section-label">🤝 Individual or teams?</div>
+      <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">
+        ${hostSwitchHtml('gf-teams-switch', !!st.teamSize, 'gfSetTeams(' + (st.teamSize ? 0 : 2) + ')', 'Teams (scramble)', 'Players sign up with their teammates and play one ball per team. The count above is total players.')}
+        ${st.teamSize ? `<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-top:1px solid var(--border)"><span style="flex:1;font-size:0.86rem;font-weight:600">Players per team</span>
+          ${[2, 3, 4].map(n => `<button type="button" onclick="gfSetTeams(${n})" aria-pressed="${st.teamSize === n}" style="min-width:44px;height:34px;border-radius:17px;border:1.5px solid ${st.teamSize === n ? 'var(--green)' : 'var(--border-med)'};background:${st.teamSize === n ? 'var(--green)' : '#fff'};color:${st.teamSize === n ? '#fff' : 'var(--text)'};font-family:inherit;font-weight:700;cursor:pointer">${n}</button>`).join('')}</div>` : ''}
+      </div>
       ${gfFooterHtml('Next', 'gfNext()')}`;
   } else if (st.step === 1) {
     const names = [...st.confirmed];
@@ -22444,7 +22453,7 @@ function gfRender() {
     body.innerHTML = `${stepLabel(4)}
       <div class="section-label" style="margin-top:0">🎮 Playing for anything?</div>
       ${gfChoiceHtml(!st.wantGames, 'gfSetWantGames(false)', '🚫', 'No games', 'Just a round of golf.')}
-      ${gfChoiceHtml(st.wantGames, 'gfSetWantGames(true)', '🎮', 'Set up games', 'Pick the game, the format and the stakes on one screen, right after the Gathering is created.')}
+      ${gfChoiceHtml(st.wantGames, 'gfSetWantGames(true)', '🎮', 'Set up games', st.teamSize ? 'Scramble is picked for you. Set the scoring, handicaps and stakes on one screen, right after the Gathering is created.' : 'Pick the game, the format and the stakes on one screen, right after the Gathering is created.')}
       ${gfFooterHtml('Next', 'gfNext()')}`;
   } else {
     const ctx = gfCtx();
@@ -22480,8 +22489,19 @@ function gfBasicsError(st) {
 }
 function gfBump(d) {
   gfReadBasics();
-  _gf.target = Math.max(1, Math.min(32, (_gf.target || 4) + d));
+  const step = _gf.teamSize || 1;   // teams move a whole team at a time
+  _gf.target = Math.max(step, Math.min(32 - (32 % step), (_gf.target || 4) + d * step));
   const el = document.getElementById('gf-target'); if (el) el.textContent = String(_gf.target);
+}
+// Teams on/off and the team size. With a seat count set, the count snaps up to whole teams.
+function gfSetTeams(n) {
+  gfReadBasics();
+  n = Number(n); _gf.teamSize = n >= 2 && n <= 4 ? n : 0;
+  if (_gf.teamSize && !_gf.polling) {
+    const k = _gf.teamSize, t = Math.max(k, _gf.target || k);
+    _gf.target = t % k ? Math.min(32 - (32 % k), t + (k - (t % k))) : t;
+  }
+  gfRender();
 }
 function gfTogglePolling() { gfReadBasics(); _gf.polling = !_gf.polling; gfRender(); }
 function gfTogglePlaying() { _gf.playing = !_gf.playing; hostSwitchSet('gf-playing-switch', _gf.playing); }
@@ -22565,6 +22585,7 @@ async function gfUseFullForm() {
   set('host-new-title', st.title); set('host-new-venue', st.venue);
   set('host-new-date', st.date); set('host-new-time', st.time);
   if (!st.polling) set('host-new-size', String(st.target));
+  if (st.teamSize) setHostTeamSize(st.teamSize);
   _gf = null;
 }
 async function gfPostCrew(name, players) {
@@ -22597,7 +22618,8 @@ async function gfCreate() {
       body: JSON.stringify({
         host_id: currentPlayer, title, venue: st.venue || null, event_time: eventTime,
         size: plan.size, crew_id: crewId, fill_list_enabled: plan.fillListEnabled,
-        gathering_type: 'Individual Play', description: null,
+        gathering_type: plan.teamSize ? `${plan.teamSize} Man Scramble` : 'Individual Play', description: null,
+        ...(plan.teamSize ? { team_size: plan.teamSize } : {}),
         tee_time_status: plan.teeTimeStatus, holes: 18, auto_repeat: false
       })
     });
