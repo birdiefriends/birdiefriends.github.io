@@ -14,7 +14,7 @@ const got = (r, nm) => (r.payouts.find(p => p.player === nm) || {}).scramble || 
 // 1. team handicap helper
 ok(E.scrambleTeamStrokes({}, [10, 20]) === 7, 'low/high default: 35% of 10 + 15% of 20 = 6.5 -> 7 (got ' + E.scrambleTeamStrokes({}, [10, 20]) + ')');
 ok(E.scrambleTeamStrokes({}, [20, 10]) === 7, 'order of the two handicaps does not matter');
-ok(E.scrambleTeamStrokes({ low_pct: 25, high_pct: 10 }, [8, 16]) === 4, 'editable percentages: 25% of 8 + 10% of 16 = 3.6 -> 4');
+ok(E.scrambleTeamStrokes({ pct_1: 25, pct_2: 10 }, [8, 16]) === 4, 'editable percentages: 25% of 8 + 10% of 16 = 3.6 -> 4');
 ok(E.scrambleTeamStrokes({ hcp_method: 'combined' }, [10, 20]) === 8, 'combined default 25%: 25% of 30 = 7.5 -> 8');
 ok(E.scrambleTeamStrokes({ hcp_method: 'combined', allowance: 10 }, [10, 20]) === 3, 'combined 10% of 30 = 3');
 ok(E.scrambleTeamStrokes({ hcp_method: 'none' }, [10, 20]) === 0, 'none = scratch');
@@ -54,7 +54,7 @@ const players = { Ann: { kind: 'index', index: 10, course_hcp: 10, strokes: 10 }
 const SI = Array.from({ length: 18 }, (_, i) => i + 1);
 const net = (extra) => Object.assign(sc(Object.assign({ basis: 'net' }, extra)), { handicap_config: { mode: 'net', allowance: 100, stroke_index: SI, players } });
 r = pay(net({ net_mode: 'own' }), teamCards(() => 5, () => 5));
-ok(r.scramble.basis === 'net' && r.scramble.hcp_method === 'low_high', 'net result says low/high');
+ok(r.scramble.basis === 'net' && r.scramble.hcp_method === 'ranked', 'net result says ranked');
 const strokesOf = nm => (r.scramble.stroke_marks.find(m => m.player.split(' & ').includes(nm)) || {}).strokes;
 ok(strokesOf('Ann') === 7 && strokesOf('Cy') === 5, 'Ann & Bob get 7 strokes, Cy & Di 5 (got ' + strokesOf('Ann') + '/' + strokesOf('Cy') + ')');
 ok(got(r, 'Ann') === 20, 'Ann & Bob (83 net) beat Cy & Di (85 net)');
@@ -106,7 +106,7 @@ ok(E.validateGameConfig('scramble', { pairs: [['A', 'B'], ['C', 'D']], scoring: 
 const clean = E.cleanGameConfig('scramble', { pairs: [['A', 'B'], ['C', 'D']], bogus: 1 });
 ok(clean && clean.bogus === undefined && clean.pairs.length === 2, 'cleaning drops unknown keys and keeps the teams');
 const dflt = E.defaultConfig('scramble');
-ok(dflt.hcp_method === 'low_high' && dflt.basis === 'net' && dflt.payout === 'winner' && dflt.scoring === 'strokes' && dflt.low_pct === 35 && dflt.high_pct === 15 && dflt.allowance === 25, 'defaults: net, low/high 35/15, strokes, winner takes all');
+ok(dflt.hcp_method === 'ranked' && dflt.basis === 'net' && dflt.payout === 'winner' && dflt.scoring === 'strokes' && dflt.team_size === 2, 'defaults: net, ranked, 2-man, strokes, winner takes all');
 ok(E.gameSchemas().scramble && E.gameSchemas().scramble.moneyOptional, 'the Worker schema table carries scramble');
 
 // 12. strokes rows for the screens
@@ -128,6 +128,30 @@ for (let t = 0; t < 300; t++) {
   const res = pay(row, cards);
   const paid = res.payouts.reduce((s, p) => s + p.total, 0);
   ok(Math.abs(paid + res.unallocated - res.total_pot) < 1e-9, 'fuzz ' + t + ': conservation (' + paid + ' + ' + res.unallocated + ' vs ' + res.total_pot + ')');
+}
+
+// 13. xMan: teams of 1, 3 and 4
+ok(E.scrambleTeamStrokes({ team_size: 4 }, [4, 8, 12, 20]) === 6, '4-man 25/20/15/10: 1 + 1.6 + 1.8 + 2 = 6.4 -> 6');
+ok(E.scrambleTeamStrokes({ team_size: 3 }, [10, 20, 30]) === 8, '3-man 20/15/10: 2 + 3 + 3 = 8');
+ok(E.scrambleTeamStrokes({ team_size: 1 }, [14]) === 14, '1-man plays off its own full handicap');
+ok(E.scrambleTeamStrokes({ team_size: 4, hcp_method: 'combined' }, [10, 10, 10, 10]) === 7, '4-man combined default 18%: 18% of 40 = 7.2 -> 7');
+ok(E.scrambleTeamStrokes({ team_size: 3, hcp_method: 'combined' }, [10, 10, 10]) === 5, '3-man combined default 15%: 4.5 -> 5');
+ok(E.scrambleTeamStrokes({ team_size: 3, pct_1: 30 }, [10, 20, 30]) === 9, 'one percentage edited, the rest keep their defaults');
+ok(E.validateGameConfig('scramble', { team_size: 3, pairs: [['A', 'B', 'C'], ['D', 'E', 'F']] }).ok, '3-man teams validate');
+ok(!E.validateGameConfig('scramble', { team_size: 3, pairs: [['A', 'B'], ['C', 'D']] }).ok, 'pairs are refused when the team size is 3');
+ok(!E.validateGameConfig('scramble', { team_size: 4, pairs: [['A', 'B', 'C', 'A'], ['D', 'E', 'F', 'G']] }).ok, 'a player twice on one team is refused');
+ok(!E.validateGameConfig('scramble', { team_size: 5, pairs: [['A', 'B'], ['C', 'D']] }).ok, 'team size is 1 to 4');
+ok(E.validateGameConfig('scramble', { team_size: 1, pairs: [['A'], ['B']] }).ok, '1-man teams validate');
+{
+  const row = { games: ['scramble'], dollar_per_player: 10, game_configs: { scramble: { dollar_per_player: 10, basis: 'gross', team_size: 3, pairs: [['A', 'B', 'C'], ['D', 'E', 'F']] } } };
+  const cs = ['A', 'B', 'C'].map(n => card(n, () => 4)).concat(['D', 'E', 'F'].map(n => card(n, () => 5)));
+  const r3 = pay(row, cs);
+  const g3 = nm => (r3.payouts.find(p => p.player === nm) || {}).scramble || 0;
+  ok(r3.scramble.pot === 60 && g3('A') === 20 && g3('B') === 20 && g3('C') === 20 && g3('D') === 0, '3-man: $60 pot, the winning team of three gets $20 each');
+  ok(Math.abs(r3.payouts.reduce((t, p) => t + p.total, 0) + r3.unallocated - r3.total_pot) < 1e-9, '3-man money is conserved');
+  ok(r3.scramble.team_size === 3, 'result carries the team size');
+  const r1 = pay({ games: ['scramble'], dollar_per_player: 10, game_configs: { scramble: { dollar_per_player: 10, basis: 'gross', team_size: 1, pairs: [['A'], ['B']] } } }, [card('A', () => 4), card('B', () => 5)]);
+  ok((r1.payouts.find(p => p.player === 'A') || {}).scramble === 20, '1-man: the better score takes the $20 pot');
 }
 
 console.log(`${pass} passed, ${fail} failed`);

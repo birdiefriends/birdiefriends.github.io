@@ -213,8 +213,8 @@ async function spawnAutoRepeatGatherings(env) {
         continue;
       }
       // v4.48.0 — a repeating Teams-of-2 game stays a Teams-of-2 game (best effort: g.team_size is undefined before the migration)
-      if (Number(g.team_size) === 2) {
-        try { await env.DB.prepare(`UPDATE gatherings SET team_size = 2 WHERE id = ?`).bind(newId).run(); }
+      if (Number(g.team_size) >= 2 && Number(g.team_size) <= 4) {
+        try { await env.DB.prepare(`UPDATE gatherings SET team_size = ? WHERE id = ?`).bind(Number(g.team_size), newId).run(); }
         catch (tsErr) { console.warn('Auto-repeat: team_size copy failed', tsErr); }
       }
 
@@ -539,8 +539,8 @@ export default {
         ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0, gathering_type || null, description || null, tee_time_status || 'confirmed', holeCount, auto_repeat ? 1 : 0).run();
         // v4.48.0 — Teams of 2: `size` stays the number of PLAYERS (tee times are booked by players); team_size = 2 marks a
         // pairs event. A separate best-effort write so a Worker deployed before the one-time ALTER TABLE still creates the game.
-        if (Number(team_size) === 2) {
-          try { await env.DB.prepare(`UPDATE gatherings SET team_size = 2 WHERE id = ?`).bind(result.meta.last_row_id).run(); }
+        if (Number(team_size) >= 2 && Number(team_size) <= 4) {
+          try { await env.DB.prepare(`UPDATE gatherings SET team_size = ? WHERE id = ?`).bind(Number(team_size), result.meta.last_row_id).run(); }
           catch (tsErr) { console.warn('team_size not migrated yet:', tsErr); }
         }
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), {
@@ -997,8 +997,11 @@ export default {
         // partner_id absent = leave as is; '' / null = clear; a No always clears. The pair is "locked" only when both
         // players are Yes and name each other (worked out where it is shown); this just stores each player's choice.
         if (Object.prototype.hasOwnProperty.call(body, 'partner_id') || finalStatus === 'no') {
-          const wanted = finalStatus === 'no' ? '' : String(body.partner_id || '').trim().slice(0, 80);
-          const partner = wanted && wanted !== player_id ? wanted : null;
+          // xMan: a player names up to 3 teammates (2-man = one). Stored as the names joined with '|'; accepts an array or a string.
+          const rawList = finalStatus === 'no' ? [] : (Array.isArray(body.partner_id) ? body.partner_id : String(body.partner_id || '').split('|'));
+          const picked = [];
+          rawList.forEach(n => { const t = String(n || '').trim().slice(0, 80); if (t && t !== player_id && !picked.some(x => x.toLowerCase() === t.toLowerCase()) && picked.length < 3) picked.push(t); });
+          const partner = picked.length ? picked.join('|') : null;
           try {
             const prev = await env.DB.prepare(
               `SELECT partner_id FROM registrations WHERE gathering_id = ? AND player_id = ?`
@@ -1006,15 +1009,17 @@ export default {
             await env.DB.prepare(
               `UPDATE registrations SET partner_id = ? WHERE gathering_id = ? AND player_id = ?`
             ).bind(partner, gathering_id, player_id).run();
-            if (partner && (!prev || prev.partner_id !== partner)) {
+            const before = new Set(String((prev && prev.partner_id) || '').split('|').map(x => x.trim().toLowerCase()).filter(Boolean));
+            const fresh = picked.filter(n => !before.has(n.toLowerCase()));
+            for (const partnerName of fresh) {
               ctx.waitUntil((async () => {
                 try {
                   const g2 = await env.DB.prepare(`SELECT title FROM gatherings WHERE id = ?`).bind(gathering_id).first();
                   const sentAt = Date.now();
                   const kvKey  = `feed::${sentAt}`;
                   const title  = '🤝 Partner request';
-                  const bodyText = `${player_id} picked you as their partner for "${g2 ? g2.title : 'a game'}". Open the game to say Yes and team up.`;
-                  const bfMeta = { gathering_id: Number(gathering_id), player_id, invited: [partner] };
+                  const bodyText = `${player_id} picked you as a teammate for "${g2 ? g2.title : 'a game'}". Open the game to say Yes and team up.`;
+                  const bfMeta = { gathering_id: Number(gathering_id), player_id, invited: [partnerName] };
                   await env.BF_FLAGS.put(kvKey, JSON.stringify({
                     id: `feed-${sentAt}`, key: kvKey, title, body: bodyText, sentAt, type: 'gathering_partner', meta: bfMeta
                   }));
@@ -1025,7 +1030,7 @@ export default {
                       app_id: env.OS_APP_ID,
                       headings: { en: title },
                       contents: { en: bodyText },
-                      filters: [{ field: 'tag', key: 'player_name', relation: '=', value: partner }],
+                      filters: [{ field: 'tag', key: 'player_name', relation: '=', value: partnerName }],
                       url: 'https://birdiefriends.com/portal.html',
                       bf_type: 'gathering_partner',
                       bf_meta: bfMeta
@@ -1089,35 +1094,42 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { gathering_id, host_id, a, b } = body;
-      if (!gathering_id || !host_id || !a) {
-        return new Response(JSON.stringify({ error: 'gathering_id, host_id and a are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      // xMan: body.members = the whole team (2 to 4 names) to lock together, or one name to unpair. (a, b) still works for pairs.
+      const { gathering_id, host_id } = body;
+      const members = [];
+      (Array.isArray(body.members) ? body.members : [body.a, body.b]).forEach(n => { const t = String(n || '').trim(); if (t && !members.some(x => x.toLowerCase() === t.toLowerCase())) members.push(t); });
+      if (!gathering_id || !host_id || !members.length) {
+        return new Response(JSON.stringify({ error: 'gathering_id, host_id and members are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      if (b && String(b) === String(a)) {
-        return new Response(JSON.stringify({ error: 'A player cannot be their own partner' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      if (members.length > 4) {
+        return new Response(JSON.stringify({ error: 'A team has at most 4 players' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
       try {
         const g = await env.DB.prepare(`SELECT host_id FROM gatherings WHERE id = ?`).bind(gathering_id).first();
         if (!g) return new Response(JSON.stringify({ error: 'Gathering not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         if (g.host_id !== host_id) return new Response(JSON.stringify({ error: 'Only the host can pair players' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-        const names = b ? [a, b] : [a];
-        for (const nm of names) {
-          const row = await env.DB.prepare(`SELECT 1 AS ok FROM registrations WHERE gathering_id = ? AND player_id = ?`).bind(gathering_id, nm).first();
-          if (!row) return new Response(JSON.stringify({ error: `${nm} has not responded to this game` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        const all = await env.DB.prepare(`SELECT player_id, partner_id FROM registrations WHERE gathering_id = ?`).bind(gathering_id).all();
+        const rows = (all && all.results) || [];
+        const lc = x => String(x).trim().toLowerCase();
+        for (const nm of members) {
+          if (!rows.some(r => lc(r.player_id) === lc(nm))) return new Response(JSON.stringify({ error: `${nm} has not responded to this game` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
+        const inTeam = new Set(members.map(lc));
+        const set = (player, value) => env.DB.prepare(`UPDATE registrations SET partner_id = ? WHERE gathering_id = ? AND player_id = ?`).bind(value, gathering_id, player);
         const stmts = [];
-        // whoever pointed at either player (other than the two themselves) is released
-        stmts.push(env.DB.prepare(
-          `UPDATE registrations SET partner_id = NULL WHERE gathering_id = ? AND partner_id IN (${names.map(() => '?').join(',')}) AND player_id NOT IN (${names.map(() => '?').join(',')})`
-        ).bind(gathering_id, ...names, ...names));
-        if (b) {
-          stmts.push(env.DB.prepare(`UPDATE registrations SET partner_id = ? WHERE gathering_id = ? AND player_id = ?`).bind(b, gathering_id, a));
-          stmts.push(env.DB.prepare(`UPDATE registrations SET partner_id = ? WHERE gathering_id = ? AND player_id = ?`).bind(a, gathering_id, b));
+        // anyone outside the team who still named one of its members drops that name, so a team is never half-stale
+        rows.forEach(r => {
+          if (inTeam.has(lc(r.player_id)) || !r.partner_id) return;
+          const kept = String(r.partner_id).split('|').filter(n => n.trim() && !inTeam.has(lc(n)));
+          if (kept.length !== String(r.partner_id).split('|').filter(n => n.trim()).length) stmts.push(set(r.player_id, kept.length ? kept.join('|') : null));
+        });
+        if (members.length >= 2) {
+          members.forEach(m => stmts.push(set(m, members.filter(x => lc(x) !== lc(m)).join('|'))));
         } else {
-          stmts.push(env.DB.prepare(`UPDATE registrations SET partner_id = NULL WHERE gathering_id = ? AND player_id = ?`).bind(gathering_id, a));
+          stmts.push(set(members[0], null));
         }
-        await env.DB.batch(stmts);
-        return new Response(JSON.stringify({ ok: true, gathering_id: Number(gathering_id), a, b: b || null }), {
+        if (stmts.length) await env.DB.batch(stmts);
+        return new Response(JSON.stringify({ ok: true, gathering_id: Number(gathering_id), members }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       } catch (e) {

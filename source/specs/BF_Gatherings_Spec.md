@@ -719,23 +719,31 @@ to the POST body, Worker upsert picks it up).
 
 ---
 
-## 22. Teams of 2 (v4.48.0)
+## 22. xMan Teams and Scramble (v4.48.0)
 
-A reusable Gathering setting for pairs events (the Turkey 2Man, future 2Man events).
+A reusable Gathering setting for team events of 2, 3 or 4 players (the Turkey 2Man, future 2Man / 3Man / 4Man events). A 1-man scramble is
+just individual play, so team_size 1 is only a Scramble game option, not a Gathering setting.
 
-**Data.** `gatherings.team_size INTEGER` (2 = pairs event, NULL = normal) and `registrations.partner_id TEXT` (the partner this player named).
-`size` stays TOTAL PLAYERS, so capacity, Open Spots and tee-time counts are unchanged. Teams are always shown as a suffix to the player count.
+**Data.** `gatherings.team_size INTEGER` (2 to 4 = a team event, NULL = normal) and `registrations.partner_id TEXT` (the teammates this
+player named, joined with `|`; a 2-man event holds a single name). `size` stays TOTAL PLAYERS, so capacity, Open Spots and tee-time
+counts are unchanged; teams are shown as a suffix to the player count, and the host's player count must be a whole number of teams.
 SQL: `ALTER TABLE gatherings ADD COLUMN team_size INTEGER; ALTER TABLE registrations ADD COLUMN partner_id TEXT;`
 Both are written in separate best-effort statements, so a Worker deployed before the ALTER keeps working (reads fall back).
 
-**Registering.** A Yes on a Teams-of-2 card opens a partner picker. A team LOCKS only when both players are Yes and name each other
-(derived client-side by `teamsState`). A No clears the partner. Naming someone sends them a "Partner request" push.
-The host can pair or unpair by hand: `POST /registrations/partner {gathering_id, host_id, a, b}` (b null = unpair), host-only.
+**Registering.** A Yes on a team card opens a picker: one tap for a 2-man event, or up to team_size - 1 taps plus Done for 3 and 4.
+A team LOCKS only when all its members are Yes and every one of them names exactly the others (`teamsState`, derived client-side).
+A No clears the picks. Each newly named player gets a "Partner request" push. Accepting a request joins the asker's whole proposed team.
+The host can team or unteam players by hand: `POST /registrations/partner {gathering_id, host_id, members:[...]}` (2 to 4 names; one name
+= release that player), host-only; anyone outside the team who still named a member drops that name.
 
-**Scoring.** New game `scramble` (engine 1.41.0): one ball and one score per team, whole round only.
-Scoring is `strokes` (low total wins) or `stableford` (most points wins; birdie-premium scale 0/1/2/4/6/8 or the standard 3/4/5 scale; the venue's pars are frozen into the config like Birdie Payouts, and the form refuses to save Stableford without them).
-Team handicap (`hcp_method`): `low_high` (35% of the lower + 15% of the higher course handicap, both editable; the default), `combined` (a % of both added, default 25), or `none`. `net_mode` own / off the low.
-Pays (`payout`): winner / top2 (65/35) / top3 (50/30/20). Ties share the places they cover; places nobody filled are spread over those that were; all amounts round down and the remainder is reported as unallocated.
-On a Teams-of-2 Gathering the Games form preselects Scramble and fills the teams from the locked pairs.
+**Scoring.** Game `scramble` (engine 1.42.0): one ball and one score per team, whole round only, `team_size` 1 to 4 (default 2).
+`scoring` is `strokes` (low total wins) or `stableford` (most points wins; birdie-premium scale 0/1/2/4/6/8 or the standard 3/4/5; the venue's
+pars are frozen into the config like Birdie Payouts, and the form refuses to save Stableford without them).
+Team handicap (`hcp_method`): `ranked` (players ranked lowest handicap first, each takes `pct_1..pct_4` of their own course handicap; usual
+defaults 1-man 100, 2-man 35/15, 3-man 20/15/10, 4-man 25/20/15/10; all editable), `combined` (a % of all handicaps added, defaults
+25 / 15 / 18 for 2 / 3 / 4 players), or `none`. `net_mode` own / off the low team.
+`payout`: winner / top2 (65/35) / top3 (50/30/20). Ties share the places they cover; places nobody filled are spread over those that were; all
+amounts round down and the remainder is reported as unallocated.
+On a team Gathering the Games form preselects Scramble, sets the team size, and fills the teams from the locked groups.
 
 **Deploy order.** Run the SQL, paste-deploy both Workers (`worker.js`, `bf_experiences_worker.js`), then publish the portal.

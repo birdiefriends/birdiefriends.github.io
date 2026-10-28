@@ -14,7 +14,7 @@ function load(extra = {}) {
   const ctx = Object.assign({ console, JSON, Math, Number, String, Set, Map, Array, Object, Date,
     currentPlayer: 'Ann', isGuest: () => false, regData: [], gatheringRegData: [], memberData: [] }, extra);
   vm.createContext(ctx);
-  const names = ['isOpenSpotName', 'escapeHtml', 'teamsState', 'partnerCandidates', 'teamRowsFor', 'teamCountSuffix', 'teamBannerHtml', 'teamChipsHtml', 'hostTeamsHtml'];
+  const names = ['isOpenSpotName', 'escapeHtml', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamMateWord', 'teamsState', 'partnerCandidates', 'teamRowsFor', 'teamCountSuffix', 'teamBannerHtml', 'teamChipsHtml', 'hostTeamsHtml'];
   vm.runInContext(names.map(n => extractFn(src, n)).join('\n'), ctx);
   return ctx;
 }
@@ -40,7 +40,7 @@ ok(st.teams === 0 && st.waiting[0].wantsStatus === 'sub' && st.players === 1, 'a
 // names compare case-insensitively; open spots and nobody-names-themselves
 st = C.teamsState([row('Ann', 'Yes', 'bob'), row('Bob', 'Yes', 'ANN'), row('Open Spot 1', 'Yes'), row('Cy', 'Yes', 'Cy')]);
 ok(st.teams === 1 && st.players === 3, 'case-insensitive names; Open Spots are not players');
-ok(st.waiting.length === 1 && st.waiting[0].player === 'Cy', 'a player naming themselves never forms a team');
+ok(st.waiting.length === 0 && st.open.join() === 'Cy', 'a player naming themselves is treated as not having picked anyone');
 ok(C.teamsState([]).teams === 0 && C.teamsState(null).players === 0, 'no rows is fine');
 
 // 2. who named whom
@@ -91,17 +91,40 @@ const one = load({ gatheringRegData: [row('Ann', 'Yes', 'Bob'), row('Bob', 'Yes'
 ok(/One player is left without a partner/.test(one) && !/openHostPairSheet/.test(one), 'a single leftover player cannot be paired with anyone');
 
 // 8. New Gathering wiring and the registration request
-ok(/team_size: 2/.test(src) && /_hostTeams \? \{ team_size: 2 \}/.test(src), 'New Gathering sends team_size: 2 only when the switch is on');
-ok(/_hostTeams && \(size < 2 \|\| size % 2\)/.test(src), 'Teams of 2 refuses an odd number of players');
+ok(/_hostTeams \? \{ team_size: _hostTeams \}/.test(src), 'New Gathering sends team_size only when teams are on');
+ok(/_hostTeams && \(size < _hostTeams \|\| size % _hostTeams\)/.test(src), 'Teams refuse a player count that is not whole teams');
 ok(/id="host-teams-switch"|'host-teams-switch'/.test(src), 'the Teams of 2 switch is on the New Gathering form');
-ok(/evt\.teamSize === 2 && choice === 'Yes' && !\(opts && opts\.partnerDone\)\) \{ openPartnerSheet/.test(src), 'a Yes on a Teams-of-2 card opens the partner picker first');
+ok(/teamSizeOf\(evt\) && choice === 'Yes' && !\(opts && opts\.partnerDone\)\) \{ openPartnerSheet/.test(src), 'a Yes on a Teams-of-2 card opens the partner picker first');
 ok(/partner !== undefined \? \{ partner_id: partner \|\| null \} : \{\}/.test(src), 'the registration only carries partner_id when one was chosen or cleared');
-ok(/teamSize: Number\(g\.team_size\) === 2 \? 2 : null/.test(src) && /partner: r\.partner_id \|\| null/.test(src), 'loadGatherings reads team_size and each partner_id');
+ok(/teamSize: Number\(g\.team_size\) >= 2 && Number\(g\.team_size\) <= 4/.test(src) && /partner: r\.partner_id \|\| null/.test(src), 'loadGatherings reads team_size and each partner_id');
 
 // 9. the Worker: the columns, the host route, the fallbacks
-ok(/ALTER TABLE gatherings ADD COLUMN team_size|team_size = 2 WHERE id/.test(workerSrc), 'the Worker writes team_size');
+ok(/UPDATE gatherings SET team_size = \? WHERE id/.test(workerSrc), 'the Worker writes team_size');
 ok(/pathname === '\/registrations\/partner'/.test(workerSrc) && /Only the host can pair players/.test(workerSrc), 'host pairing route is host-only');
 ok(/partner_id not migrated yet/.test(workerSrc) && /status === 'no'/.test(workerSrc) === false || /finalStatus === 'no'/.test(workerSrc), 'a No clears the partner; the read falls back before the ALTER');
+
+// 10. xMan: teams of 3 and 4 lock only when everyone names everyone
+const r3 = (p, st, partner) => ({ gatheringId: 7, player: p, status: st, partner: partner || null });
+st = C.teamsState([r3('A', 'Yes', 'B|C'), r3('B', 'Yes', 'A|C'), r3('C', 'Yes', 'B|A'), r3('D', 'Yes')], 3);
+ok(st.teams === 1 && st.pairs[0].slice().sort().join() === 'A,B,C' && st.open.join() === 'D' && st.unpaired === 1, 'three Yes players naming each other lock as a 3-man team');
+st = C.teamsState([r3('A', 'Yes', 'B|C'), r3('B', 'Yes', 'A|C'), r3('C', 'Yes', 'A')], 3);
+ok(st.teams === 0 && st.waiting.length === 3, 'C only named A, so nothing locks and all three are still waiting');
+st = C.teamsState([r3('A', 'Yes', 'B|C'), r3('B', 'Yes', 'A|C'), r3('C', 'No', 'A|B')], 3);
+ok(st.teams === 0 && st.waiting.find(w => w.player === 'A').wantsStatus === 'no', 'a No on the team means no lock and says so');
+st = C.teamsState([r3('A', 'Yes', 'B|C'), r3('B', 'Yes', 'A|D'), r3('C', 'Yes', 'A|B'), r3('D', 'Yes', 'B|A')], 3);
+ok(st.teams === 0, 'teams that disagree about who is on them never lock');
+st = C.teamsState([r3('A', 'Yes', 'B'), r3('B', 'Yes', 'A')], 3);
+ok(st.teams === 0 && st.waiting[0].need === 1, 'a 3-man team with one teammate named needs one more');
+st = C.teamsState([r3('A', 'Yes', 'B|C|D'), r3('B', 'Yes', 'A|C|D'), r3('C', 'Yes', 'A|B|D'), r3('D', 'Yes', 'A|B|C'), r3('E', 'Yes', 'F|G|H'), r3('F', 'Yes', 'E|G|H')], 4);
+ok(st.teams === 1 && st.pairs[0].length === 4 && st.unpaired === 2, '4-man team locks; the other two are still looking');
+ok(C.partnersOf('A|B ').join() === 'A,B' && C.partnersOf(null).length === 0 && C.partnersOf('Solo').join() === 'Solo', 'picks are stored joined with |');
+ok(C.teamSizeOf({ teamSize: 3 }) === 3 && C.teamSizeOf({ teamSize: 5 }) === 0 && C.teamSizeOf({}) === 0, 'team size is 2 to 4, else not a team game');
+ok(C.teamNamesText(['A', 'B', 'C']) === 'A, B &amp; C', 'names read "A, B & C"');
+const cand3 = C.partnerCandidates([r3('Ann', 'Yes'), r3('B', 'Yes', 'Ann|C')], 'Ann', [], 3);
+ok(cand3[0].name === 'B' && cand3[0].tag === 'picked you', 'in a 3-man game, whoever picked me is offered first');
+// worker
+ok(/members/.test(workerSrc) && /A team has at most 4 players/.test(workerSrc), 'the host route takes a whole team (up to 4)');
+ok(/picked\.length < 3/.test(workerSrc), 'a player can name up to 3 teammates');
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

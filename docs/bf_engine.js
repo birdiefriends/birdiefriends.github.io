@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.41.0';
+  const ENGINE_VERSION = '1.42.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -541,20 +541,32 @@
     return out;
   }
 
-  // ── Scramble helpers (v4.48.0, Teams of 2) ─────────────────────────────────────────────────────────
-  // A team's strokes from its two COURSE handicaps (or the strokes the host gave them). Three host-picked methods:
-  //   low_high  35% of the lower + 15% of the higher (the usual two-person scramble rule; both % editable)
-  //   combined  allowance% (default 25) of the two added together
+  // ── Scramble helpers (v4.48.0, xMan Scramble: teams of 1 to 4) ───────────────────────────────────────
+  // A team's strokes from its players' COURSE handicaps (or the strokes the host gave them). Three host-picked methods:
+  //   ranked    the players ranked lowest handicap first, each takes a % of their own handicap (pct_1 = lowest ... pct_4).
+  //             Usual defaults: 2-man 35/15, 3-man 20/15/10, 4-man 25/20/15/10, 1-man 100
+  //   combined  allowance% of all the handicaps added together (default 25 / 15 / 18 for 2 / 3 / 4, 100 for 1)
   //   none      scratch
+  const SCRAMBLE_PCTS = { 1: [100], 2: [35, 15], 3: [20, 15, 10], 4: [25, 20, 15, 10] };
+  const SCRAMBLE_COMBINED = { 1: 100, 2: 25, 3: 15, 4: 18 };
+  function scrambleSize(addon) { const n = Math.trunc(Number(addon && addon.team_size)); return n >= 1 && n <= 4 ? n : 2; }
+  function scrambleMethod(addon) { return addon && addon.hcp_method === 'combined' ? 'combined' : addon && addon.hcp_method === 'none' ? 'none' : 'ranked'; }
+  function scramblePcts(addon) {
+    const n = scrambleSize(addon), a = addon || {};
+    return SCRAMBLE_PCTS[n].map((d, i) => { const v = a['pct_' + (i + 1)]; return v != null && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : d; });
+  }
+  function scrambleCombinedPct(addon) {
+    const v = addon && addon.allowance;
+    return v != null && v !== '' && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : SCRAMBLE_COMBINED[scrambleSize(addon)];
+  }
   function scrambleTeamStrokes(addon, hcps) {
-    const a = addon || {};
     const hs = (hcps || []).map(Number).filter(Number.isFinite).sort((x, y) => x - y);
     if (!hs.length) return 0;
-    const num = (v, d) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
-    const method = a.hcp_method === 'combined' ? 'combined' : a.hcp_method === 'none' ? 'none' : 'low_high';
+    const method = scrambleMethod(addon);
     if (method === 'none') return 0;
-    if (method === 'combined') return Math.round(hs.reduce((t, v) => t + v, 0) * num(a.allowance, 25) / 100);
-    return Math.round(hs[0] * num(a.low_pct, 35) / 100 + (hs.length > 1 ? hs[hs.length - 1] * num(a.high_pct, 15) / 100 : 0));
+    if (method === 'combined') return Math.round(hs.reduce((t, v) => t + v, 0) * scrambleCombinedPct(addon) / 100);
+    const pc = scramblePcts(addon);
+    return Math.round(hs.reduce((t, v, i) => t + v * (pc[i] != null ? pc[i] : 0) / 100, 0));
   }
   // Stableford points for one hole from the score against par. 'bf' is BirdieFriends' own table (birdie 4, the "birdie premium");
   // 'standard' is the usual 3 / 4 / 5. Bogey 1, par 2, double bogey or worse 0 in both.
@@ -588,11 +600,11 @@
       const perPlayerBalls = kind === 'bestball' || kind === 'hilo';   // each partner plays their own ball (no shared side score)
       const headToHead = kind === 'match' || kind === 'hilo';
       const ownAllowance = kind === 'altshot' || kind === 'match' || kind === 'scramble';
-      const size = kind === 'match' ? 1 : 2;
+      const size = kind === 'match' ? 1 : kind === 'scramble' ? scrambleSize(addon) : 2;
       const cardBy = new Map((inputs.scorecards || []).map(c => [norm(c.player), c]));
       const pairsCfg = kind === 'match'
         ? [].concat(...(addon.matches || []).filter(m => Array.isArray(m) && m.length === 2).map(m => [[m[0]], [m[1]]]))
-        : (addon.pairs || []).filter(p => Array.isArray(p) && p.length === 2);
+        : (addon.pairs || []).filter(p => Array.isArray(p) && p.length === size);
       const wantNet = addon.basis === 'net';
       const mode = addon.net_mode === 'low' ? 'low' : 'own';
       const netOk = wantNet && !!inputs.netByPlayer && !!inputs.hcSpecs;
@@ -614,7 +626,7 @@
       };
       const gross = c => (Array.isArray(c.holes) ? c.holes : []).map(v => (typeof v === 'number' && v > 0 ? v : null));
       // Alternate Shot / Match Play strokes: a % of the course handicap (index players), the given strokes otherwise.
-      const pct = ownAllowance && addon.allowance != null && addon.allowance !== '' && Number.isFinite(Number(addon.allowance)) ? Number(addon.allowance) : (kind === 'altshot' ? 50 : kind === 'scramble' ? 25 : null);
+      const pct = ownAllowance && addon.allowance != null && addon.allowance !== '' && Number.isFinite(Number(addon.allowance)) ? Number(addon.allowance) : (kind === 'altshot' ? 50 : kind === 'scramble' ? scrambleCombinedPct(addon) : null);
       const specOf = nm => (netOk && inputs.hcSpecs.get(norm(nm))) || {};
       const courseOf = nm => { const sp = specOf(nm); return sp.kind === 'index' && Number.isFinite(Number(sp.course_hcp)) ? Number(sp.course_hcp) : null; };
       const playerStrokes = nm => { const c = courseOf(nm); return pct != null && c != null ? Math.round(c * pct / 100) : strokesOf(nm); };
@@ -817,7 +829,7 @@
         standings: rows.slice().sort((a, b) => (a.total == null) - (b.total == null) || (a.total == null ? 0 : cmpTotal(a, b))),
         winners: winners.map(w => w.pair), per_pair: perPair, per_player: perPlayer, given_back_each: givenBackEach,
         ...(kind === 'scramble' ? { scoring: stable ? 'stableford' : 'strokes', ...(stable ? { scale } : {}),
-          hcp_method: addon.hcp_method === 'combined' ? 'combined' : addon.hcp_method === 'none' ? 'none' : 'low_high',
+          hcp_method: scrambleMethod(addon), team_size: size,
           payout: SCRAMBLE_SPLITS[addon.payout] ? addon.payout : 'winner', ...(placesOut ? { places: placesOut } : {}),
           ...(stable && !stablePars ? { par_missing: true } : {}) } : {})
       }, capped ? { capped: true, configured_pot: configuredPot } : {});
@@ -1115,23 +1127,26 @@
   defineGame('scramble', {
     kind: 'addon', input: 'strokes', net: true, entity: 'pair',
     released: true, moneyOptional: true,
-    meta: { traits: { unit: 'ball', allowance: 'own', individualScores: false, sides: true, sideForm: true }, label: 'Scramble', tab: 'Scramble', short: 'Two-person scramble, one score per team', icon: '🦃', seal: 'SCRAMBLE', uiOrder: 5.25, group: 'format',
-      info: 'Teams of two play ONE ball: both hit, take the best shot, both play from there, until it is in the hole. Each team posts one score a hole. Score it by strokes (lowest total wins) or Stableford points (most points wins). Net uses a team handicap: 35% of the lower course handicap plus 15% of the higher is the usual; the host can switch to a % of the two added together, or no handicap. Pay the winner, or the top 2 or 3 teams. The pot can be left at $0 for bragging rights.' },
+    meta: { traits: { unit: 'ball', allowance: 'own', individualScores: false, sides: true, sideForm: true }, label: 'Scramble', tab: 'Scramble', short: 'Scramble for teams of 1 to 4, one score per team', icon: '🦃', seal: 'SCRAMBLE', uiOrder: 5.25, group: 'format',
+      info: 'Teams of 1 to 4 players play ONE ball: everyone hits, the team takes the best shot, everyone plays from there, until it is in the hole. Each team posts one score a hole. Score it by strokes (lowest total wins) or Stableford points (most points wins). Net uses a team handicap: the players are ranked lowest handicap first and each takes a share of their own (2-man 35% and 15%, 3-man 20/15/10, 4-man 25/20/15/10 are the usual, all editable), or a % of all the handicaps added together, or none. Pay the winner, or the top 2 or 3 teams. The pot can be left at $0 for bragging rights.' },
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0 },
       { key: 'scoring', type: 'enum', label: 'Scoring', values: ['strokes', 'stableford'], default: 'strokes' },
       { key: 'scale', type: 'enum', label: 'Stableford points', values: ['bf', 'standard'], default: 'bf' },
       { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'net' },
       { key: 'net_mode', type: 'enum', label: 'Net strokes', values: ['own', 'low'], default: 'own' },
-      { key: 'hcp_method', type: 'enum', label: 'Team handicap', values: ['low_high', 'combined', 'none'], default: 'low_high' },
-      { key: 'low_pct', type: 'int', label: 'Lower handicap %', default: 35, min: 0 },
-      { key: 'high_pct', type: 'int', label: 'Higher handicap %', default: 15, min: 0 },
+      { key: 'team_size', type: 'int', label: 'Players per team', default: 2, min: 1, max: 4 },
+      { key: 'hcp_method', type: 'enum', label: 'Team handicap', values: ['ranked', 'combined', 'none'], default: 'ranked' },
+      { key: 'pct_1', type: 'int', label: 'Lowest handicap %', default: 35, min: 0 },
+      { key: 'pct_2', type: 'int', label: '2nd lowest handicap %', default: 15, min: 0 },
+      { key: 'pct_3', type: 'int', label: '3rd lowest handicap %', default: 10, min: 0 },
+      { key: 'pct_4', type: 'int', label: 'Highest handicap %', default: 10, min: 0 },
       { key: 'allowance', type: 'int', label: 'Combined handicap %', default: 25, min: 1 },
       { key: 'payout', type: 'enum', label: 'Pays', values: ['winner', 'top2', 'top3'], default: 'winner' },
       { key: 'pars', type: 'pars', label: 'Par by hole (Stableford)', default: [], min: 3, max: 6, integer: true },
-      { key: 'pairs', type: 'pairs', label: 'Teams', default: [], required: true }
+      { key: 'pairs', type: 'pairs', sizeKey: 'team_size', label: 'Teams', default: [], required: true }
     ],
-    fixedCost: cfg => (Number(cfg.dollar_per_player) || 0) * 2 * ((cfg.pairs || []).length),
+    fixedCost: cfg => (Number(cfg.dollar_per_player) || 0) * scrambleSize(cfg) * ((cfg.pairs || []).length),
     maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
     fixtures: [{
       name: 'strokes, gross: the team with the lower one-ball total takes the pot',
@@ -1144,7 +1159,7 @@
       round: { dollar_per_player: 10, handicap: { mode: 'net', allowance: 100, stroke_index: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
           players: { Ann: { kind: 'index', index: 10, course_hcp: 10, strokes: 10 }, Bob: { kind: 'index', index: 20, course_hcp: 20, strokes: 20 },
             Cy: { kind: 'index', index: 10, course_hcp: 10, strokes: 10 }, Di: { kind: 'index', index: 10, course_hcp: 10, strokes: 10 } } },
-        addons: [{ id: 'scramble', entity: 'pair', dollar_per_player: 10, basis: 'net', net_mode: 'own', hcp_method: 'low_high', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+        addons: [{ id: 'scramble', entity: 'pair', dollar_per_player: 10, basis: 'net', net_mode: 'own', hcp_method: 'ranked', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
       // Ann & Bob: 35% of 10 + 15% of 20 = 6.5 -> 7 strokes (holes 1-7 net 4, 8-18 net 5 = 83). Cy & Di: 35% of 10 + 15% of 10 = 5 strokes (85). Ann & Bob win.
       inputs: { scorecards: [_P('Ann', _ALL(5)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5)), _P('Di', _ALL(5))] },
       expect: { payouts: { Ann: 20, Bob: 20, Cy: 0, Di: 0 }, unallocated: 0, results: { scramble: { pot: 40, per_player: 20 } } }
@@ -1430,6 +1445,7 @@
         else if (f.type === 'int' && !Number.isInteger(n)) errors.push(f.label + ' must be a whole number');
         else if (f.positive && !(n > 0)) errors.push(f.label + ' must be more than 0');
         else if (f.min != null && n < f.min) errors.push(f.label + ' must be at least ' + f.min);
+        else if (f.max != null && n > f.max) errors.push(f.label + ' must be at most ' + f.max);
       } else if (f.type === 'holes') {
         if (!Array.isArray(v) || !v.length) errors.push(f.label + ': pick at least one hole');
         else if (!v.every(h => Number.isInteger(h) && h >= 1 && h <= 18) || new Set(v).size !== v.length) errors.push(f.label + ' must be unique holes 1-18');
@@ -1446,11 +1462,12 @@
       } else if (f.type === 'pairs') {
         // [[nameA, nameB], ...]: at least two pairs, two different names each, nobody in two pairs
         const names = [];
-        const wellFormed = Array.isArray(v) && v.length >= (f.minPairs || 2) && (!f.evenPairs || v.length % 2 === 0) && v.every(pr => Array.isArray(pr) && pr.length === 2 &&
-          pr.every(n => typeof n === 'string' && n.trim()) && pr[0].trim().toLowerCase() !== pr[1].trim().toLowerCase());
+        const sz = f.sizeKey && Number.isInteger(Number(cfg[f.sizeKey])) && Number(cfg[f.sizeKey]) >= 1 && Number(cfg[f.sizeKey]) <= 4 ? Number(cfg[f.sizeKey]) : 2;
+        const wellFormed = Array.isArray(v) && v.length >= (f.minPairs || 2) && (!f.evenPairs || v.length % 2 === 0) && v.every(pr => Array.isArray(pr) && pr.length === sz &&
+          pr.every(n => typeof n === 'string' && n.trim()) && new Set(pr.map(n => n.trim().toLowerCase())).size === sz);
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
-        if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one pair' : 'two pairs')) + ' of two different players');
-        else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be in one pair');
+        if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
+        else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be on one ' + (sz === 2 ? 'pair' : 'team'));
       } else if (f.type === 'enum') {
         if (!f.lenient && !(f.values || []).includes(v)) errors.push(f.label + ' must be one of ' + (f.values || []).join('/'));
       }
@@ -1573,8 +1590,8 @@
     if (games.includes('scramble') && scc) {
       addons.push({ id: 'scramble', entity: 'pair', dollar_per_player: Number(scc.dollar_per_player) || 0, basis: scc.basis === 'gross' ? 'gross' : 'net',
         net_mode: scc.net_mode === 'low' ? 'low' : 'own', scoring: scc.scoring === 'stableford' ? 'stableford' : 'strokes', scale: scc.scale === 'standard' ? 'standard' : 'bf',
-        hcp_method: scc.hcp_method === 'combined' ? 'combined' : scc.hcp_method === 'none' ? 'none' : 'low_high',
-        low_pct: scc.low_pct != null ? Number(scc.low_pct) : 35, high_pct: scc.high_pct != null ? Number(scc.high_pct) : 15, allowance: scc.allowance != null ? Number(scc.allowance) : 25,
+        hcp_method: scrambleMethod(scc), team_size: scrambleSize(scc), allowance: scrambleCombinedPct(scc),
+        ...Object.fromEntries([1, 2, 3, 4].filter(i => scc['pct_' + i] != null && Number.isFinite(Number(scc['pct_' + i]))).map(i => ['pct_' + i, Number(scc['pct_' + i])])),
         payout: ['winner', 'top2', 'top3'].includes(scc.payout) ? scc.payout : 'winner', pars: Array.isArray(scc.pars) ? scc.pars : [], pairs: Array.isArray(scc.pairs) ? scc.pairs : [] });
     }
     const hlc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.hilo : null;
@@ -1919,7 +1936,7 @@
   function gameSides(id, addon) {
     if (!addon) return [];
     if (gameTraits(id).unit === 'match') return [].concat(...(addon.matches || []).filter(m => Array.isArray(m) && m.length === 2).map(m => [[m[0]], [m[1]]]));
-    return (addon.pairs || []).filter(p => Array.isArray(p) && (p.length === 2 || p.length === 1));
+    return (addon.pairs || []).filter(p => Array.isArray(p) && (p.length >= 1 && p.length <= 4));
   }
 
   // The strokes the games with their OWN allowance (Alternate Shot, Match Play) actually use, so every screen can show
@@ -1959,17 +1976,17 @@
       return { names: pr, strokes: k, got: h.gotFor(pr[0], k), detail: `${pct}% of ${base[i].parts.map(h.round1).join(' + ')} = ${own[i]}${low ? `, off the low (${lowest}) = ${k}` : ''}` };
     }) };
   };
-  // Scramble: a team's strokes from its two course handicaps (low/high %, a combined %, or none); 'low' = off the lowest team
+  // Scramble: a team's strokes from its players' course handicaps (ranked %s, a combined %, or none); 'low' = off the lowest team
   ADDONS.scramble.strokeRows = (sc, h) => {
-    const method = sc.hcp_method === 'combined' ? 'combined' : sc.hcp_method === 'none' ? 'none' : 'low_high';
-    const pairs = (sc.pairs || []).filter(pr => Array.isArray(pr) && pr.length === 2);
-    const base = pairs.map(pr => pr.map(n => (h.course(n) != null ? h.course(n) : h.given(n))));
+    const method = scrambleMethod(sc), n = scrambleSize(sc);
+    const pairs = (sc.pairs || []).filter(pr => Array.isArray(pr) && pr.length === n);
+    const base = pairs.map(pr => pr.map(nm => (h.course(nm) != null ? h.course(nm) : h.given(nm))));
     const own = base.map(parts => scrambleTeamStrokes(sc, parts));
     const lowest = sc.net_mode === 'low' && own.length ? Math.min(...own) : 0;
-    const lp = h.pctOf({ allowance: sc.low_pct }, 35), hp = h.pctOf({ allowance: sc.high_pct }, 15), cp = h.pctOf(sc, 25);
-    return { pct: method === 'combined' ? cp : method === 'low_high' ? null : 0, rows: pairs.map((pr, i) => {
+    const pc = scramblePcts(sc), cp = scrambleCombinedPct(sc);
+    return { pct: method === 'combined' ? cp : method === 'ranked' ? null : 0, rows: pairs.map((pr, i) => {
       const k = own[i] - lowest, sorted = base[i].slice().sort((a, b) => a - b);
-      const how = method === 'none' ? 'No handicap' : method === 'combined' ? `${cp}% of ${base[i].map(h.round1).join(' + ')}` : `${lp}% of ${h.round1(sorted[0])} + ${hp}% of ${h.round1(sorted[sorted.length - 1])}`;
+      const how = method === 'none' ? 'No handicap' : method === 'combined' ? `${cp}% of ${base[i].map(h.round1).join(' + ')}` : sorted.map((v, j) => `${pc[j]}% of ${h.round1(v)}`).join(' + ');
       return { names: pr, strokes: k, got: h.gotFor(pr[0], k), detail: `${how} = ${own[i]}${lowest ? `, off the low (${lowest}) = ${k}` : ''}` };
     }) };
   };
@@ -2785,7 +2802,7 @@
     ENGINE_VERSION,
     BASE_GAMES, ADDONS,
     getGame, listGames, recommendPairs, GAME_GROUPS, gamesInUiOrder, gamesUiMeta, gamesInfo, gamesSealLabels, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
-    skinsWon, betterBallHoles, scrambleTeamStrokes, stablefordHolePoints,
+    skinsWon, betterBallHoles, scrambleTeamStrokes, scrambleSize, scramblePcts, scrambleCombinedPct, stablefordHolePoints,
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,
     computeRoundPayout,
