@@ -212,6 +212,11 @@ async function spawnAutoRepeatGatherings(env) {
         console.warn('Auto-repeat: failed to create successor for gathering', g.id, e);
         continue;
       }
+      // v4.48.0 — a repeating Teams-of-2 game stays a Teams-of-2 game (best effort: g.team_size is undefined before the migration)
+      if (Number(g.team_size) === 2) {
+        try { await env.DB.prepare(`UPDATE gatherings SET team_size = 2 WHERE id = ?`).bind(newId).run(); }
+        catch (tsErr) { console.warn('Auto-repeat: team_size copy failed', tsErr); }
+      }
 
       // Notify the crew — Worker-side send, same shape as the existing
       // cancel/date-change notifiers, since there's no client tap driving
@@ -522,7 +527,7 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled, gathering_type, description, tee_time_status, holes, auto_repeat } = body;
+      const { host_id, title, venue, event_time, size, crew_id, fill_list_enabled, gathering_type, description, tee_time_status, holes, auto_repeat, team_size } = body;
       if (!host_id || !title || !event_time) {
         return new Response(JSON.stringify({ error: 'host_id, title, and event_time are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -532,6 +537,12 @@ export default {
           `INSERT INTO gatherings (host_id, title, venue, event_time, size, crew_id, fill_list_enabled, status, gathering_type, description, tee_time_status, holes, auto_repeat)
            VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`
         ).bind(host_id, title, venue || null, event_time, size || null, crew_id || null, fill_list_enabled ? 1 : 0, gathering_type || null, description || null, tee_time_status || 'confirmed', holeCount, auto_repeat ? 1 : 0).run();
+        // v4.48.0 — Teams of 2: `size` stays the number of PLAYERS (tee times are booked by players); team_size = 2 marks a
+        // pairs event. A separate best-effort write so a Worker deployed before the one-time ALTER TABLE still creates the game.
+        if (Number(team_size) === 2) {
+          try { await env.DB.prepare(`UPDATE gatherings SET team_size = 2 WHERE id = ?`).bind(result.meta.last_row_id).run(); }
+          catch (tsErr) { console.warn('team_size not migrated yet:', tsErr); }
+        }
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -665,7 +676,7 @@ export default {
         // Open) could only be set at creation, with no way to fix a mistake
         // afterward (real incident: Walli created a Crew-mode Gathering,
         // discovered there was no path to switch it to Open).
-        const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description', 'tee_time_status', 'holes', 'fill_list_enabled', 'crew_id', 'auto_repeat'];
+        const allowed = ['title', 'venue', 'event_time', 'size', 'gathering_type', 'description', 'tee_time_status', 'holes', 'fill_list_enabled', 'crew_id', 'auto_repeat', 'team_size'];
         const setClauses = [];
         const binds = [];
         for (const field of allowed) {
@@ -901,7 +912,7 @@ export default {
       try { body = await request.json(); } catch(e) {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
-      const { gathering_id, player_id, status, confirmed_for, host_note, added_by } = body;
+      const { gathering_id, player_id, status, confirmed_for, host_note, added_by } = body;   // partner_id is read from body below (v4.48.0)
       if (!gathering_id || !player_id || !['yes','no','sub'].includes(status)) {
         return new Response(JSON.stringify({ error: 'gathering_id, player_id, and status (yes/no/sub) are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
@@ -980,6 +991,56 @@ export default {
           }
         }
 
+        // v4.48.0 — Teams of 2: the partner a player named with their response. Its own statement in try/catch so a Worker
+        // deployed BEFORE the one-time ALTER still saves the registration:
+        //   ALTER TABLE registrations ADD COLUMN partner_id TEXT;
+        // partner_id absent = leave as is; '' / null = clear; a No always clears. The pair is "locked" only when both
+        // players are Yes and name each other (worked out where it is shown); this just stores each player's choice.
+        if (Object.prototype.hasOwnProperty.call(body, 'partner_id') || finalStatus === 'no') {
+          const wanted = finalStatus === 'no' ? '' : String(body.partner_id || '').trim().slice(0, 80);
+          const partner = wanted && wanted !== player_id ? wanted : null;
+          try {
+            const prev = await env.DB.prepare(
+              `SELECT partner_id FROM registrations WHERE gathering_id = ? AND player_id = ?`
+            ).bind(gathering_id, player_id).first();
+            await env.DB.prepare(
+              `UPDATE registrations SET partner_id = ? WHERE gathering_id = ? AND player_id = ?`
+            ).bind(partner, gathering_id, player_id).run();
+            if (partner && (!prev || prev.partner_id !== partner)) {
+              ctx.waitUntil((async () => {
+                try {
+                  const g2 = await env.DB.prepare(`SELECT title FROM gatherings WHERE id = ?`).bind(gathering_id).first();
+                  const sentAt = Date.now();
+                  const kvKey  = `feed::${sentAt}`;
+                  const title  = '🤝 Partner request';
+                  const bodyText = `${player_id} picked you as their partner for "${g2 ? g2.title : 'a game'}". Open the game to say Yes and team up.`;
+                  const bfMeta = { gathering_id: Number(gathering_id), player_id, invited: [partner] };
+                  await env.BF_FLAGS.put(kvKey, JSON.stringify({
+                    id: `feed-${sentAt}`, key: kvKey, title, body: bodyText, sentAt, type: 'gathering_partner', meta: bfMeta
+                  }));
+                  await fetch('https://onesignal.com/api/v1/notifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
+                    body: JSON.stringify({
+                      app_id: env.OS_APP_ID,
+                      headings: { en: title },
+                      contents: { en: bodyText },
+                      filters: [{ field: 'tag', key: 'player_name', relation: '=', value: partner }],
+                      url: 'https://birdiefriends.com/portal.html',
+                      bf_type: 'gathering_partner',
+                      bf_meta: bfMeta
+                    })
+                  });
+                } catch (notifyErr) {
+                  console.warn('Partner request notify failed:', notifyErr);
+                }
+              })());
+            }
+          } catch (partnerErr) {
+            console.warn('partner_id column missing — run the ALTER:', partnerErr);
+          }
+        }
+
         if (downgraded && gInfo.host_id && gInfo.host_id !== player_id) {
           ctx.waitUntil((async () => {
             try {
@@ -1019,6 +1080,52 @@ export default {
       }
     }
 
+    // POST /registrations/partner — the host pairs (or unpairs) two players in a Teams-of-2 game (v4.48.0).
+    // Body: { gathering_id, host_id, a, b }  — b omitted/null = unpair `a` (and whoever named them).
+    // Both players must already have a response row; each is pointed at the other, and anyone else still pointing at either
+    // of them is cleared so a pair is never half-stale. Needs the one-time `ALTER TABLE registrations ADD COLUMN partner_id TEXT;`
+    if (request.method === 'POST' && url.pathname === '/registrations/partner') {
+      let body;
+      try { body = await request.json(); } catch(e) {
+        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      const { gathering_id, host_id, a, b } = body;
+      if (!gathering_id || !host_id || !a) {
+        return new Response(JSON.stringify({ error: 'gathering_id, host_id and a are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      if (b && String(b) === String(a)) {
+        return new Response(JSON.stringify({ error: 'A player cannot be their own partner' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+      try {
+        const g = await env.DB.prepare(`SELECT host_id FROM gatherings WHERE id = ?`).bind(gathering_id).first();
+        if (!g) return new Response(JSON.stringify({ error: 'Gathering not found' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        if (g.host_id !== host_id) return new Response(JSON.stringify({ error: 'Only the host can pair players' }), { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        const names = b ? [a, b] : [a];
+        for (const nm of names) {
+          const row = await env.DB.prepare(`SELECT 1 AS ok FROM registrations WHERE gathering_id = ? AND player_id = ?`).bind(gathering_id, nm).first();
+          if (!row) return new Response(JSON.stringify({ error: `${nm} has not responded to this game` }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+        const stmts = [];
+        // whoever pointed at either player (other than the two themselves) is released
+        stmts.push(env.DB.prepare(
+          `UPDATE registrations SET partner_id = NULL WHERE gathering_id = ? AND partner_id IN (${names.map(() => '?').join(',')}) AND player_id NOT IN (${names.map(() => '?').join(',')})`
+        ).bind(gathering_id, ...names, ...names));
+        if (b) {
+          stmts.push(env.DB.prepare(`UPDATE registrations SET partner_id = ? WHERE gathering_id = ? AND player_id = ?`).bind(b, gathering_id, a));
+          stmts.push(env.DB.prepare(`UPDATE registrations SET partner_id = ? WHERE gathering_id = ? AND player_id = ?`).bind(a, gathering_id, b));
+        } else {
+          stmts.push(env.DB.prepare(`UPDATE registrations SET partner_id = NULL WHERE gathering_id = ? AND player_id = ?`).bind(gathering_id, a));
+        }
+        await env.DB.batch(stmts);
+        return new Response(JSON.stringify({ ok: true, gathering_id: Number(gathering_id), a, b: b || null }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        const msg = /partner_id/.test(String(e.message || e)) ? 'partner_id column missing — run the one-time ALTER TABLE' : 'Database error pairing players';
+        return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // GET /gatherings/:id/registrations — host's view of who's responded
     if (request.method === 'GET' && /^\/gatherings\/\d+\/registrations$/.test(url.pathname)) {
       const gatheringId = url.pathname.split('/')[2];
@@ -1026,13 +1133,20 @@ export default {
         let results;
         try {
           ({ results } = await env.DB.prepare(
-            `SELECT player_id, status, registered_at, confirmed_for, host_note, added_by, added_at FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
+            `SELECT player_id, status, registered_at, confirmed_for, host_note, added_by, added_at, partner_id FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
           ).bind(gatheringId).all());
         } catch (colErr) {
-          // added_by / added_at not migrated yet — fall back to the original columns
-          ({ results } = await env.DB.prepare(
-            `SELECT player_id, status, registered_at, confirmed_for, host_note FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
-          ).bind(gatheringId).all());
+          try {
+            // partner_id not migrated yet (v4.48.0) — fall back to the previous column set
+            ({ results } = await env.DB.prepare(
+              `SELECT player_id, status, registered_at, confirmed_for, host_note, added_by, added_at FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
+            ).bind(gatheringId).all());
+          } catch (colErr2) {
+            // added_by / added_at not migrated yet — fall back to the original columns
+            ({ results } = await env.DB.prepare(
+              `SELECT player_id, status, registered_at, confirmed_for, host_note FROM registrations WHERE gathering_id = ? ORDER BY registered_at ASC`
+            ).bind(gatheringId).all());
+          }
         }
         return new Response(JSON.stringify({ ok: true, registrations: results }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }

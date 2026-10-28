@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.40.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.41.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -770,6 +770,117 @@ const GAME_SCHEMAS = {
         "required": true
       }
     ]
+  },
+  "scramble": {
+    "label": "Scramble",
+    "config": [
+      {
+        "key": "dollar_per_player",
+        "type": "money",
+        "label": "$ per player",
+        "default": 0
+      },
+      {
+        "key": "scoring",
+        "type": "enum",
+        "label": "Scoring",
+        "values": [
+          "strokes",
+          "stableford"
+        ],
+        "default": "strokes"
+      },
+      {
+        "key": "scale",
+        "type": "enum",
+        "label": "Stableford points",
+        "values": [
+          "bf",
+          "standard"
+        ],
+        "default": "bf"
+      },
+      {
+        "key": "basis",
+        "type": "enum",
+        "label": "Gross or Net",
+        "values": [
+          "gross",
+          "net"
+        ],
+        "default": "net"
+      },
+      {
+        "key": "net_mode",
+        "type": "enum",
+        "label": "Net strokes",
+        "values": [
+          "own",
+          "low"
+        ],
+        "default": "own"
+      },
+      {
+        "key": "hcp_method",
+        "type": "enum",
+        "label": "Team handicap",
+        "values": [
+          "low_high",
+          "combined",
+          "none"
+        ],
+        "default": "low_high"
+      },
+      {
+        "key": "low_pct",
+        "type": "int",
+        "label": "Lower handicap %",
+        "default": 35,
+        "min": 0
+      },
+      {
+        "key": "high_pct",
+        "type": "int",
+        "label": "Higher handicap %",
+        "default": 15,
+        "min": 0
+      },
+      {
+        "key": "allowance",
+        "type": "int",
+        "label": "Combined handicap %",
+        "default": 25,
+        "min": 1
+      },
+      {
+        "key": "payout",
+        "type": "enum",
+        "label": "Pays",
+        "values": [
+          "winner",
+          "top2",
+          "top3"
+        ],
+        "default": "winner"
+      },
+      {
+        "key": "pars",
+        "type": "pars",
+        "label": "Par by hole (Stableford)",
+        "default": [],
+        "min": 3,
+        "max": 6,
+        "integer": true
+      },
+      {
+        "key": "pairs",
+        "type": "pairs",
+        "label": "Teams",
+        "default": [],
+        "required": true
+      }
+    ],
+    "moneyOptional": true
   },
   "altshot": {
     "label": "Alternate Shot",
