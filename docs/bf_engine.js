@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.43.0';
+  const ENGINE_VERSION = '1.43.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1149,7 +1149,7 @@
       { key: 'allowance', type: 'int', label: 'Combined handicap %', default: 25, min: 1 },
       { key: 'payout', type: 'enum', label: 'Pays', values: ['winner', 'top2', 'top3'], default: 'winner' },
       { key: 'pars', type: 'pars', label: 'Par by hole (Stableford)', default: [], min: 3, max: 6, integer: true },
-      { key: 'pairs', type: 'pairs', sizeKey: 'team_size', label: 'Teams', default: [], required: true },
+      { key: 'pairs', type: 'pairs', sizeKey: 'team_size', minPairs: 0, label: 'Teams', default: [] },   // may be saved empty: a team event is set up before anyone has signed up, and the locked teams are filled in later
       { key: 'names', type: 'strings', label: 'Team names', default: [], max: 40 }
     ],
     fixedCost: cfg => (Number(cfg.dollar_per_player) || 0) * scrambleSize(cfg) * ((cfg.pairs || []).length),
@@ -1469,7 +1469,7 @@
         // [[nameA, nameB], ...]: at least two pairs, two different names each, nobody in two pairs
         const names = [];
         const sz = f.sizeKey && Number.isInteger(Number(cfg[f.sizeKey])) && Number(cfg[f.sizeKey]) >= 1 && Number(cfg[f.sizeKey]) <= 4 ? Number(cfg[f.sizeKey]) : 2;
-        const wellFormed = Array.isArray(v) && v.length >= (f.minPairs || 2) && (!f.evenPairs || v.length % 2 === 0) && v.every(pr => Array.isArray(pr) && pr.length === sz &&
+        const wellFormed = Array.isArray(v) && v.length >= (f.minPairs != null ? f.minPairs : 2) && (!f.evenPairs || v.length % 2 === 0) && v.every(pr => Array.isArray(pr) && pr.length === sz &&
           pr.every(n => typeof n === 'string' && n.trim()) && new Set(pr.map(n => n.trim().toLowerCase())).size === sz);
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
         if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));

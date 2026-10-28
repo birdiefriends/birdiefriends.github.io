@@ -100,7 +100,7 @@ ok(r.scramble.pot === 0 && r.scramble.standings[0].pair.join() === 'Ann,Bob' && 
 const traits = E.gameTraits('scramble');
 ok(traits.unit === 'ball' && traits.individualScores === false && traits.sides && traits.sideForm && traits.allowance === 'own', 'traits: one ball, no individual scores, pairs form, own allowance');
 ok(E.validateGameConfig('scramble', { dollar_per_player: 5, pairs: [['A', 'B'], ['C', 'D']] }).ok, 'a minimal config validates');
-ok(!E.validateGameConfig('scramble', { dollar_per_player: 5, pairs: [['A', 'B']] }).ok, 'needs at least two teams');
+ok(E.validateGameConfig('scramble', { dollar_per_player: 5, pairs: [['A', 'B']] }).ok, 'teams can be filled in as sign-ups arrive');
 ok(!E.validateGameConfig('scramble', { pairs: [['A', 'B'], ['C', 'D']], scoring: 'skins' }).ok, 'scoring must be strokes or stableford');
 ok(E.validateGameConfig('scramble', { pairs: [['A', 'B'], ['C', 'D']], scoring: 'stableford', pars: PAR4 }).ok, 'Stableford with 18 pars validates');
 const clean = E.cleanGameConfig('scramble', { pairs: [['A', 'B'], ['C', 'D']], bogus: 1 });
@@ -164,6 +164,16 @@ ok(E.validateGameConfig('scramble', { team_size: 1, pairs: [['A'], ['B']] }).ok,
   ok(!E.validateGameConfig('scramble', { pairs: [['A', 'B'], ['C', 'D']], names: ['x'.repeat(41), ''] }).ok, 'a name over 40 characters is refused');
   const cl = E.cleanGameConfig('scramble', { pairs: [['A', 'B'], ['C', 'D']], names: ['  Pin Seekers  ', 7] });
   ok(cl.names[0] === 'Pin Seekers' && cl.names[1] === '7', 'cleaning trims names');
+}
+
+// 15. a team event is set up before anyone signs up: no teams yet still saves
+ok(E.validateGameConfig('scramble', { team_size: 2, dollar_per_player: 10, pairs: [] }).ok, 'Scramble saves with no teams yet');
+ok(E.validateGameConfig('scramble', { team_size: 2 }).ok, 'Scramble saves with the teams left out');
+ok(!E.validateGameConfig('scramble', { team_size: 2, pairs: [['A']] }).ok, 'a half-filled team is still refused');
+ok(!E.validateGameConfig('altshot', { pairs: [] }).ok, 'other pair games still need their pairs');
+{
+  const r0 = pay({ games: ['scramble'], dollar_per_player: 10, game_configs: { scramble: { dollar_per_player: 10, basis: 'gross', team_size: 2, pairs: [] } } }, []);
+  ok(Math.abs(r0.payouts.reduce((t, p) => t + p.total, 0) + r0.unallocated - r0.total_pot) < 1e-9, 'settling with no teams does not break and conserves money');
 }
 
 console.log(`${pass} passed, ${fail} failed`);

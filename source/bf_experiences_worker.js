@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.43.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.43.1 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -898,9 +898,9 @@ const GAME_SCHEMAS = {
         "key": "pairs",
         "type": "pairs",
         "sizeKey": "team_size",
+        "minPairs": 0,
         "label": "Teams",
-        "default": [],
-        "required": true
+        "default": []
       },
       {
         "key": "names",
@@ -1214,7 +1214,7 @@ function validateFields(fields, cfg) {
         // [[nameA, nameB], ...]: at least two pairs, two different names each, nobody in two pairs
         const names = [];
         const sz = f.sizeKey && Number.isInteger(Number(cfg[f.sizeKey])) && Number(cfg[f.sizeKey]) >= 1 && Number(cfg[f.sizeKey]) <= 4 ? Number(cfg[f.sizeKey]) : 2;
-        const wellFormed = Array.isArray(v) && v.length >= (f.minPairs || 2) && (!f.evenPairs || v.length % 2 === 0) && v.every(pr => Array.isArray(pr) && pr.length === sz &&
+        const wellFormed = Array.isArray(v) && v.length >= (f.minPairs != null ? f.minPairs : 2) && (!f.evenPairs || v.length % 2 === 0) && v.every(pr => Array.isArray(pr) && pr.length === sz &&
           pr.every(n => typeof n === 'string' && n.trim()) && new Set(pr.map(n => n.trim().toLowerCase())).size === sz);
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
         if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
