@@ -4538,6 +4538,7 @@ async function loadGatherings() {
       teeTimeStatus: g.tee_time_status || 'confirmed',
       autoRepeat: g.auto_repeat === 1 || g.auto_repeat === true,
       capacity: g.size || null,
+      teamSize: Number(g.team_size) === 2 ? 2 : null,   // v4.48.0 — Teams of 2 (capacity above stays TOTAL PLAYERS)
       holes: (g.holes === 9) ? 9 : 18, // Dev-66 — 9-hole round support (e.g. Chooch's CGA Tuesday league)
       createdAt: g.created_at ? new Date(g.created_at) : null
     }));
@@ -4565,7 +4566,8 @@ async function loadGatherings() {
           confirmedFor: r.confirmed_for || null,  // Dev-48: stale-response detection
           hostNote: r.host_note || null,           // Dev-49: crew → host note
           addedBy: r.added_by || null,             // v4.11.2: added on the course by someone in the group
-          addedAt: r.added_at || null
+          addedAt: r.added_at || null,
+          partner: r.partner_id || null            // v4.48.0: the partner this player named (Teams of 2)
         });
       });
     });
@@ -5943,6 +5945,7 @@ function buildEventCard(evt, isPast) {
   const countLabel = dispCap
     ? `${yesCount}/${dispCap}${openSpotCount ? ` · ${openSpotCount} open` : ''}${subCount ? ` + ${subCount} sub` : ''}`
     : `${regCount} registered${openSpotCount ? ` · ${openSpotCount} open` : ''}`;
+  const teamSuffix = teamCountSuffix(evt, regData.filter(regMatchesEvt));   // v4.48.0 — Teams of 2: players stay the headline, teams follow
   const whoId = `who-${evt.id}`;
   // Top-right corner mark
   let markHtml = '';
@@ -6047,6 +6050,7 @@ function buildEventCard(evt, isPast) {
         </div>
       </div>
     </div>` : ''}
+    ${!isCanceled && !isPast ? teamBannerHtml(evt) : ''}
     ${actionHtml ? `<div class="event-card-actions" id="actions-${evt.id}">${actionHtml}</div>` : ''}
     ${(()=>{
       if (!groupingsMeta) return '';
@@ -6064,7 +6068,7 @@ function buildEventCard(evt, isPast) {
       </button>`;
     })()}
     <button class="who-playing-row" onclick="toggleWhoPlaying('${whoId}')">
-      <span style="pointer-events:none">${badgeHtml}${badgeHtml ? '&nbsp;&nbsp;' : ''}👥 ${countLabel}</span>
+      <span style="pointer-events:none">${badgeHtml}${badgeHtml ? '&nbsp;&nbsp;' : ''}👥 ${countLabel}${teamSuffix}</span>
       <span style="pointer-events:none;margin-left:auto;font-size:0.82rem;color:rgba(255,255,255,0.5)">Players ›</span>
     </button>
     <div class="icon-action-row" style="justify-content:flex-start;gap:26px;margin:10px 4px 2px">
@@ -6161,6 +6165,7 @@ function buildPlayerChips(evt) {
       : r.eventName === evt.name) && r.status !== 'No')
     .sort((a,b) => a.player.localeCompare(b.player));
   if (!players.length) return `<div class="bf-empty" style="padding:10px 16px">No registrations yet</div>`;
+  if (evt.source === 'gathering' && evt.teamSize === 2) return teamChipsHtml(evt, players);   // v4.48.0 — Teams of 2 shows teams, not a flat list
   // Identify Schrödinger player: last Yes registrant on a fivePending 8-man event
   let pendingId = null;
   if (evt) {
@@ -6183,6 +6188,208 @@ function buildPlayerChips(evt) {
       return `<span class="player-chip${cls ? ' '+cls : ''}">${p.player}${suffix}</span>`;
     }).join('') +
     `</div>`;
+}
+// ══════════════════════════════════════════
+// TEAMS OF 2 (v4.48.0)
+// A Gathering with team_size = 2: `capacity` stays TOTAL PLAYERS (tee times), each player names a partner with their Yes,
+// and a team is LOCKED only when both are Yes and name each other. Everything below is derived from the registration rows
+// ({ player, status, partner }), so the server only ever stores each player's own choice.
+// ══════════════════════════════════════════
+function teamsState(rows) {
+  const tn = s => String(s || '').trim().toLowerCase();
+  const real = (rows || []).filter(r => r && r.player && !isOpenSpotName(r.player));
+  const yes = real.filter(r => r.status === 'Yes');
+  const by = new Map(real.map(r => [tn(r.player), r]));
+  const pairs = [], locked = new Set();
+  yes.forEach(r => {
+    const p = r.partner ? by.get(tn(r.partner)) : null;
+    if (p && p.status === 'Yes' && p.partner && tn(p.partner) === tn(r.player) && tn(p.player) !== tn(r.player) && !locked.has(tn(r.player)) && !locked.has(tn(p.player))) {
+      pairs.push([r.player, p.player]); locked.add(tn(r.player)); locked.add(tn(p.player));
+    }
+  });
+  const waiting = [], open = [];
+  yes.filter(r => !locked.has(tn(r.player))).forEach(r => {
+    if (!r.partner) { open.push(r.player); return; }
+    const p = by.get(tn(r.partner));
+    // none = has not answered yet, no = said No, sub = Sub, other = Yes but teamed with / waiting on someone else, pending = Yes, has not picked back
+    const wantsStatus = !p ? 'none' : p.status === 'No' ? 'no' : p.status === 'Sub' ? 'sub' : (p.partner && tn(p.partner) !== tn(r.player) ? 'other' : 'pending');
+    waiting.push({ player: r.player, wants: r.partner, wantsStatus });
+  });
+  // who has named each player (only counted while the namer is a Yes), so a partner request is visible to the person it is for
+  const askedBy = {};
+  yes.forEach(r => { if (r.partner) (askedBy[tn(r.partner)] = askedBy[tn(r.partner)] || []).push(r.player); });
+  return { pairs, waiting, open, players: yes.length, teams: pairs.length, unpaired: yes.length - pairs.length * 2, askedBy };
+}
+// Who `me` could team up with, in the order they should be offered: people who picked me, then Yes players still looking,
+// then every other active member. Never me, never anyone already locked into a team, never an Open Spot.
+function partnerCandidates(rows, me, members) {
+  const tn = s => String(s || '').trim().toLowerCase();
+  const st = teamsState(rows);
+  const lockedSet = new Set(st.pairs.flat().map(tn));
+  const asked = (st.askedBy[tn(me)] || []).filter(n => !lockedSet.has(tn(n)));
+  const looking = st.open.concat(st.waiting.map(w => w.player));
+  const out = [], seen = new Set([tn(me)]);
+  const add = (name, tag) => { const k = tn(name); if (!name || seen.has(k) || lockedSet.has(k) || isOpenSpotName(name)) return; seen.add(k); out.push({ name, tag }); };
+  asked.forEach(n => add(n, 'picked you'));
+  looking.forEach(n => add(n, 'needs a partner'));
+  (members || []).filter(m => m && m.display && m.active !== 'InActive').map(m => m.display).sort((a, b) => a.localeCompare(b)).forEach(n => add(n, ''));
+  return out;
+}
+function teamRowsFor(evt) { return regData.filter(r => r.gatheringId === evt.gatheringId); }
+let _partnerCtx = null;
+function openPartnerSheet(evt, btn, registering) {
+  const rows = teamRowsFor(evt);
+  const list = partnerCandidates(rows, currentPlayer, memberData);
+  const mine = rows.find(r => r.player === currentPlayer);
+  _partnerCtx = { evt, btn: btn || document.createElement('button'), registering: !!registering, list, current: mine ? mine.partner : null };
+  openHostSheet(registering ? `Who are you playing with?` : `Change your partner`, `
+    <div style="padding:0 18px 8px;font-size:0.8rem;color:var(--text-muted);line-height:1.45">Pick your partner for <b>${escapeHtml(evt.name)}</b>. They get a notification and the team locks in when they say Yes and pick you back. Don't have one yet? Choose "Find me a partner" and the host can pair you.</div>
+    <div style="padding:0 18px"><input type="text" id="partner-search" placeholder="Search members…" oninput="filterPartnerList()"
+      style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;font-size:0.9rem;font-family:inherit;box-sizing:border-box;margin-bottom:8px"></div>
+    <div id="partner-list" style="padding:0 18px">${partnerListHtml('')}</div>`);
+}
+function partnerListHtml(q) {
+  const ctx = _partnerCtx; if (!ctx) return '';
+  const f = String(q || '').trim().toLowerCase();
+  const none = `<button type="button" class="player-picker-btn" style="width:100%;text-align:left;margin-bottom:5px;font-weight:700" onclick="pickPartner(-1)">🤝 Find me a partner<span style="font-weight:400;color:var(--text-muted)"> · I'll team up later</span></button>`;
+  const rows = ctx.list.map((c, i) => ({ c, i })).filter(x => !f || x.c.name.toLowerCase().includes(f));
+  return (f ? '' : none) + (rows.length ? rows.map(x => `<button type="button" class="player-picker-btn" style="width:100%;text-align:left;margin-bottom:5px${x.c.tag === 'picked you' ? ';border-color:var(--green);background:rgba(29,158,117,0.08)' : ''}" onclick="pickPartner(${x.i})">${escapeHtml(x.c.name)}${x.c.tag ? `<span style="font-weight:600;color:${x.c.tag === 'picked you' ? 'var(--green-dark)' : 'var(--text-muted)'}"> · ${x.c.tag}</span>` : ''}${ctx.current && ctx.current.toLowerCase() === x.c.name.toLowerCase() ? ' ✓' : ''}</button>`).join('') : `<div style="font-size:0.82rem;color:var(--text-muted);padding:10px 0">No matching members.</div>`);
+}
+function filterPartnerList() {
+  const el = document.getElementById('partner-list'), inp = document.getElementById('partner-search');
+  if (el && inp) el.innerHTML = partnerListHtml(inp.value);
+}
+async function pickPartner(i) {
+  const ctx = _partnerCtx; if (!ctx) return;
+  const name = i >= 0 ? (ctx.list[i] || {}).name || null : null;
+  closeHostSheet();
+  if (ctx.registering) return submitGatheringRegistration(ctx.evt, 'Yes', ctx.btn, { partnerDone: true, partner: name });
+  return setMyPartner(ctx.evt, name);
+}
+// Change (or clear) my partner without touching my Yes.
+async function setMyPartner(evt, name) {
+  try {
+    await writeGatheringRegistration(evt.gatheringId, 'yes', evt.rawEventTime || null, name || null);
+    [gatheringRegData, regData].forEach(arr => arr.forEach(r => { if (r.gatheringId === evt.gatheringId && r.player === currentPlayer) r.partner = name || null; }));
+    try { await gatheringReadBack(evt.gatheringId); } catch (_) { /* local state is already right */ }
+    renderAll();
+    showToast(name ? `🤝 Partner request sent to ${name}` : 'Partner cleared — the host can pair you');
+  } catch (e) {
+    showToast('Could not save your partner — try again', true);
+  }
+}
+function acceptPartnerRequest(evtId, name) {
+  const evt = eventData.find(e => e.id === evtId);
+  if (evt) setMyPartner(evt, name);
+}
+function openPartnerSheetById(evtId) {
+  const evt = eventData.find(e => e.id === evtId);
+  if (evt) openPartnerSheet(evt, null, false);
+}
+// One line for the card header: how many players (tee times) and how many locked teams.
+function teamCountSuffix(evt, rows) {
+  if (!evt || evt.teamSize !== 2) return '';
+  const st = teamsState(rows);
+  return ` · ${st.teams} team${st.teams === 1 ? '' : 's'}${st.unpaired > 0 ? ` · ${st.unpaired} need${st.unpaired === 1 ? 's' : ''} a partner` : ''}`;
+}
+// The viewer's own prompt on a Teams-of-2 card: pick a partner, accept a request, or a confirmation of the team.
+function teamBannerHtml(evt) {
+  if (!evt || evt.teamSize !== 2 || !currentPlayer || isGuest()) return '';
+  const tn = s => String(s || '').trim().toLowerCase();
+  const rows = teamRowsFor(evt);
+  const st = teamsState(rows);
+  const me = rows.find(r => r.player === currentPlayer);
+  const pair = st.pairs.find(pr => pr.some(n => tn(n) === tn(currentPlayer)));
+  const asks = (st.askedBy[tn(currentPlayer)] || []).filter(n => !st.pairs.flat().some(x => tn(x) === tn(n)));
+  const box = (icon, color, inner) => `<div style="background:rgba(255,255,255,0.07);border:1.5px solid ${color};border-radius:10px;padding:10px 12px;margin:8px 0 4px;display:flex;gap:10px;align-items:flex-start">
+    <span style="font-size:1.1rem;flex-shrink:0">${icon}</span><div style="flex:1;font-size:0.8rem;color:rgba(255,255,255,0.85);line-height:1.5">${inner}</div></div>`;
+  const btn = (label, js) => `<button type="button" onclick="${js}" style="margin-top:6px;background:#F5C842;color:#1a2a22;border:0;border-radius:8px;padding:6px 12px;font-size:0.8rem;font-weight:800;cursor:pointer;font-family:inherit">${label}</button>`;
+  const id = evt.id;
+  if (me && me.status === 'Yes') {
+    if (pair) { const mate = pair.find(n => tn(n) !== tn(currentPlayer)); return box('🤝', 'rgba(93,202,165,0.7)', `<b style="color:#5dcaa5">You're teamed with ${escapeHtml(mate)}</b> <a href="#" onclick="openPartnerSheetById('${id}');return false" style="color:rgba(255,255,255,0.6);margin-left:6px">Change</a>`); }
+    if (asks.length) return box('🤝', '#F5C842', `<b style="color:#F5C842">${escapeHtml(asks[0])} picked you as their partner</b>${asks.length > 1 ? ` (and ${asks.length - 1} more)` : ''}<br>${btn('Team up with ' + escapeHtml(asks[0]), `acceptPartnerRequest('${id}', '${escapeHtml(asks[0]).replace(/'/g, "\\'")}')`)} <a href="#" onclick="openPartnerSheetById('${id}');return false" style="color:rgba(255,255,255,0.6);margin-left:8px">Someone else</a>`);
+    if (me.partner) return box('⏳', 'rgba(245,200,66,0.6)', `<b style="color:#F5C842">Waiting on ${escapeHtml(me.partner)}</b> to say Yes and pick you back. <a href="#" onclick="openPartnerSheetById('${id}');return false" style="color:rgba(255,255,255,0.6);margin-left:6px">Change</a>`);
+    return box('🙋', 'rgba(245,200,66,0.6)', `<b style="color:#F5C842">Pick your partner</b> so your team locks in. The host can pair anyone who is left.<br>${btn('Pick a partner', `openPartnerSheetById('${id}')`)}`);
+  }
+  if (asks.length && (!me || me.status !== 'Yes')) return box('🤝', '#F5C842', `<b style="color:#F5C842">${escapeHtml(asks[0])} picked you as their partner</b>${asks.length > 1 ? ` (and ${asks.length - 1} more)` : ''}. Tap <b>Yes</b> below to team up.`);
+  return '';
+}
+function teamChipsHtml(evt, players) {
+  const st = teamsState(players);
+  const chip = (t, extra) => `<span class="player-chip"${extra ? ` style="${extra}"` : ''}>${t}</span>`;
+  const out = [];
+  st.pairs.forEach(pr => out.push(chip(`🤝 ${escapeHtml(pr[0])} &amp; ${escapeHtml(pr[1])}`)));
+  st.waiting.forEach(w => out.push(chip(`${escapeHtml(w.player)} <span style="opacity:0.7">→ ${escapeHtml(w.wants)}${w.wantsStatus === 'none' ? ' (not in yet)' : w.wantsStatus === 'no' ? ' (can\'t make it)' : w.wantsStatus === 'other' ? ' (teamed up)' : w.wantsStatus === 'sub' ? ' (Sub)' : ' ⏳'}</span>`, 'background:transparent;border:1px dashed rgba(255,255,255,0.4)')));
+  st.open.forEach(n => out.push(chip(`${escapeHtml(n)} <span style="opacity:0.7">· needs a partner</span>`, 'background:transparent;border:1px dashed rgba(245,200,66,0.7)')));
+  players.filter(p => p.status === 'Sub').forEach(p => out.push(chip(`${escapeHtml(p.player)} (Sub)`, 'opacity:0.8')));
+  players.filter(p => isOpenSpotName(p.player)).forEach(p => out.push(chip(`🪑 ${escapeHtml(p.player)}`, 'background:transparent;border:1px dashed rgba(255,255,255,0.4);opacity:0.75')));
+  return `<div class="player-chips">${out.join('')}</div>`;
+}
+// ── Host Panel: who is teamed, who still needs a partner, and a way to pair or unpair by hand ──
+function hostTeamsHtml(g) {
+  if (!g || g.teamSize !== 2) return '';
+  const rows = gatheringRegData.filter(r => r.gatheringId === g.gatheringId);
+  const st = teamsState(rows);
+  const free = st.open.length + st.waiting.length;
+  const pairRows = st.pairs.map((pr, i) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><span style="font-size:0.84rem;font-weight:700">🤝 ${escapeHtml(pr[0])} &amp; ${escapeHtml(pr[1])}</span>
+    <button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="hostUnpair(${g.gatheringId}, ${i})">Unpair</button></div>`).join('');
+  return `<div style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(29,158,117,0.08);border:1px solid rgba(29,158,117,0.35)">
+    <div style="font-size:0.78rem;font-weight:700;margin-bottom:2px">Teams of 2 · ${st.players} player${st.players === 1 ? '' : 's'} · ${st.teams} team${st.teams === 1 ? '' : 's'}${free ? ` · <span style="color:#b8860b">${free} still need${free === 1 ? 's' : ''} a partner</span>` : ''}</div>
+    ${pairRows}
+    ${free >= 2 ? `<button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="openHostPairSheet(${g.gatheringId})">🤝 Pair players</button>` : (free === 1 ? `<div style="font-size:0.76rem;color:var(--text-muted)">One player is left without a partner.</div>` : '')}
+  </div>`;
+}
+let _hostPair = null;   // { gatheringId, names:[unpaired Yes players], picked:Set(index) }
+function openHostPairSheet(gatheringId) {
+  const rows = gatheringRegData.filter(r => r.gatheringId === gatheringId);
+  const st = teamsState(rows);
+  const names = st.open.concat(st.waiting.map(w => w.player)).sort((a, b) => a.localeCompare(b));
+  _hostPair = { gatheringId, names, picked: [] };
+  renderHostPairSheet();
+}
+function renderHostPairSheet() {
+  const c = _hostPair; if (!c) return;
+  const btns = c.names.map((n, i) => { const on = c.picked.includes(i); return `<button type="button" class="player-picker-btn" style="width:100%;text-align:left;margin-bottom:5px${on ? ';border-color:var(--green);background:rgba(29,158,117,0.12);font-weight:800' : ''}" onclick="hostPairToggle(${i})">${on ? '✓ ' : ''}${escapeHtml(n)}</button>`; }).join('');
+  openHostSheet('Pair players', `<div style="padding:0 18px 8px;font-size:0.8rem;color:var(--text-muted);line-height:1.45">Tap two players to team them up. They are paired right away and each is told.</div>
+    <div style="padding:0 18px">${btns}</div>
+    <div style="padding:8px 18px 0"><button type="button" class="host-cta-btn" style="margin:0${c.picked.length === 2 ? '' : ';opacity:0.5'}" ${c.picked.length === 2 ? '' : 'disabled'} onclick="hostPairConfirm()">Pair ${c.picked.length === 2 ? escapeHtml(c.names[c.picked[0]]) + ' &amp; ' + escapeHtml(c.names[c.picked[1]]) : '(pick two)'}</button></div>`);
+}
+function hostPairToggle(i) {
+  const c = _hostPair; if (!c) return;
+  const k = c.picked.indexOf(i);
+  if (k >= 0) c.picked.splice(k, 1); else if (c.picked.length < 2) c.picked.push(i); else { c.picked.shift(); c.picked.push(i); }
+  renderHostPairSheet();
+}
+async function hostSetPair(gatheringId, a, b) {
+  const res = await fetch(`${GATHERINGS_API}/registrations/partner`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gathering_id: gatheringId, host_id: currentPlayer, a, b: b || null })
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Could not pair them');
+  return data;
+}
+async function hostPairConfirm() {
+  const c = _hostPair; if (!c || c.picked.length !== 2) return;
+  const a = c.names[c.picked[0]], b = c.names[c.picked[1]];
+  try {
+    await hostSetPair(c.gatheringId, a, b);
+    closeHostSheet(); _hostPair = null;
+    showToast(`🤝 ${a} & ${b} are a team`);
+    await refreshAfterSpotChange(c.gatheringId);
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
+async function hostUnpair(gatheringId, pairIndex) {
+  const st = teamsState(gatheringRegData.filter(r => r.gatheringId === gatheringId));
+  const pr = st.pairs[pairIndex];
+  if (!pr) { showToast('That team is already gone', true); return; }
+  if (!confirm(`Unpair ${pr[0]} and ${pr[1]}?\n\nThey go back to "needs a partner".`)) return;
+  try {
+    await hostSetPair(gatheringId, pr[0], null);
+    await hostSetPair(gatheringId, pr[1], null);
+    showToast('Unpaired');
+    await refreshAfterSpotChange(gatheringId);
+  } catch (e) { showToast('❌ ' + e.message, true); }
 }
 // ── Commissioner helpers ────────────────────────────────────────────────────
 function isCommissioner() {
@@ -7139,12 +7346,13 @@ async function submitRegistration(evtId, evtName, submitBtn, choice) {
   }
 }
 // ── Gatherings: D1-backed registration write (upsert, §16 POST /registrations) ──
-async function writeGatheringRegistration(gatheringId, status, eventTime) {
+async function writeGatheringRegistration(gatheringId, status, eventTime, partner) {
+  // partner (v4.48.0, Teams of 2): undefined = leave as is, null/'' = clear, a name = the partner this player picked
   const resp = await fetch(`${GATHERINGS_API}/registrations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ gathering_id: gatheringId, player_id: currentPlayer, status,
-      confirmed_for: eventTime || null })
+    body: JSON.stringify(Object.assign({ gathering_id: gatheringId, player_id: currentPlayer, status,
+      confirmed_for: eventTime || null }, partner !== undefined ? { partner_id: partner || null } : {}))
   });
   const data = await resp.json();
   if (!data.ok) throw new Error(data.error || 'Registration failed');
@@ -7362,12 +7570,15 @@ async function toggleGatheringAlerts() {
     console.warn('toggleGatheringAlerts error:', e.message);
   }
 }
-async function submitGatheringRegistration(evt, choice, submitBtn) {
+async function submitGatheringRegistration(evt, choice, submitBtn, opts) {
+  // v4.48.0 — Teams of 2: a Yes first asks who the partner is (or "find me one"), then comes back here with partnerDone.
+  if (evt.teamSize === 2 && choice === 'Yes' && !(opts && opts.partnerDone)) { openPartnerSheet(evt, submitBtn, true); return; }
+  const partner = opts && opts.partnerDone ? (opts.partner || null) : undefined;
   submitBtn.classList.add('btn-loading');
   submitBtn.textContent = choice === 'No' ? 'Submitting…' : 'Registering…';
   const status = choice.toLowerCase();
   try {
-    const regResult = await writeGatheringRegistration(evt.gatheringId, status, evt.rawEventTime || null);
+    const regResult = await writeGatheringRegistration(evt.gatheringId, status, evt.rawEventTime || null, partner);
     // Dev-70 — the server may have silently downgraded Yes to Sub if the
     // Gathering was already at capacity; regResult.status is the actual
     // saved value, not necessarily what was tapped. Everything below keys
@@ -7379,12 +7590,15 @@ async function submitGatheringRegistration(evt, choice, submitBtn) {
     if (row) {
       row.status = choice;
       row.confirmedFor = evt.rawEventTime || null;
+      if (partner !== undefined) row.partner = partner;
+      if (choice === 'No') row.partner = null;
     } else {
       gatheringRegData.push({
         id: `gr-${evt.gatheringId}-${currentPlayer}`,
         eventName: evt.name, gatheringId: evt.gatheringId,
         player: currentPlayer, status: choice, createdAt: new Date(),
-        confirmedFor: evt.rawEventTime || null
+        confirmedFor: evt.rawEventTime || null,
+        partner: partner || null
       });
     }
     // Also sync regData — snapshot built at load time by mergeGatherings(), used by findMyReg()
@@ -7395,13 +7609,14 @@ async function submitGatheringRegistration(evt, choice, submitBtn) {
     // status/headcount bleed reported by Brian.)
     const rdIdx = regData.findIndex(r => r.gatheringId === evt.gatheringId && r.player === currentPlayer);
     if (rdIdx >= 0) {
-      regData[rdIdx] = { ...regData[rdIdx], status: choice, confirmedFor: evt.rawEventTime || null };
+      regData[rdIdx] = { ...regData[rdIdx], status: choice, confirmedFor: evt.rawEventTime || null, ...(partner !== undefined ? { partner } : {}), ...(choice === 'No' ? { partner: null } : {}) };
     } else {
       regData.push({
         id: `gr-${evt.gatheringId}-${currentPlayer}`,
         eventName: evt.name, gatheringId: evt.gatheringId,
         player: currentPlayer, status: choice, createdAt: new Date(),
-        confirmedFor: evt.rawEventTime || null
+        confirmedFor: evt.rawEventTime || null,
+        partner: partner || null
       });
     }
     // v4.10.5 — a real Yes takes an Open Spot (the Worker released the placeholder); mirror it locally.
@@ -7429,6 +7644,7 @@ async function submitGatheringRegistration(evt, choice, submitBtn) {
       );
       // Restore InActive → Active if needed (BL-18 fix). Best-effort, non-blocking.
       restoreActiveIfNeeded().catch(e => console.warn('[Gathering] Active restore error:', e));
+      if (evt.teamSize === 2) { try { await gatheringReadBack(evt.gatheringId); } catch (_) { /* local state is already right */ } }
     }
     renderAll();
   } catch(e) {
@@ -7507,7 +7723,7 @@ async function changeGatheringRegistration(evt, subId, newAnswer, btn) {
     const regResult = await writeGatheringRegistration(evt.gatheringId, status, evt.rawEventTime || null);
     // Dev-70 — same capacity-downgrade handling as submitGatheringRegistration.
     if (regResult.downgraded) newAnswer = 'Sub';
-    if (reg) { reg.status = newAnswer; reg.confirmedFor = evt.rawEventTime || null; }
+    if (reg) { reg.status = newAnswer; reg.confirmedFor = evt.rawEventTime || null; if (newAnswer === 'No') reg.partner = null; }
     if (newAnswer === 'No') {
       restoreEvent(evt.id);
       renderAll();
@@ -11054,7 +11270,7 @@ async function gatheringReadBack(gatheringId) {
     const rows = data.registrations.map(r => ({
       id: `gr-${gatheringId}-${r.player_id}`, eventName: g ? g.name : '', gatheringId, player: r.player_id,
       status: sm[r.status] || 'No', createdAt: r.registered_at ? new Date(r.registered_at) : new Date(),
-      confirmedFor: r.confirmed_for || null, hostNote: r.host_note || null, addedBy: r.added_by || null, addedAt: r.added_at || null }));
+      confirmedFor: r.confirmed_for || null, hostNote: r.host_note || null, addedBy: r.added_by || null, addedAt: r.added_at || null, partner: r.partner_id || null }));
     gatheringRegData = gatheringRegData.filter(x => x.gatheringId !== gatheringId).concat(rows);
     regData = regData.filter(x => x.gatheringId !== gatheringId).concat(rows.map(r => ({ ...r })));
     return { ok: true, rows };
@@ -11756,6 +11972,7 @@ let _hostSelectedCrewId = null;      // set when reusing a saved Crew instead of
 let _hostRegisterAllCrew = false;    // Dev-69 — "Register all crew" toggle on the create form:
                                       // host already knows everyone's playing, so skip individual
                                       // RSVP and register the whole picked crew as Yes at creation time
+let _hostTeams = false;              // v4.48.0 — Teams of 2: players sign up with a partner (capacity stays TOTAL PLAYERS)
 let _hostAutoRepeat = false;         // Dev-70 — "Auto-repeat weekly" toggle, shared by create + edit
                                       // (only one of the two sheets is ever open at once).
 let _hostSelectedCrewName = null;
@@ -11803,10 +12020,11 @@ function radioRowsHtml(items, cur, fn) {
   return '<div class="rr-list" role="radiogroup">' + items.map(([v, name, desc, rec]) =>
     `<button type="button" role="radio" aria-checked="${cur === v}" class="rr-row${cur === v ? ' rr-on' : ''}" onclick="${fn}('${v}')"><span class="rr-dot">${cur === v ? '\u2713' : ''}</span><span><span class="rr-name">${name}</span>${rec ? '<span class="rr-tag">Recommended</span>' : ''}<span class="rr-desc">${desc}</span></span></button>`).join('') + '</div>';
 }
-const GW_SIDE_STEP = { altshot: 'aspairs', hilo: 'hlpairs', matchplay: 'mpmatches' };
-const GAMES_FORM_REC_ALLOWANCE = { altshot: 50, matchplay: 100 };   // only games with their own allowance (trait allowance 'own')
+const GW_SIDE_STEP = { altshot: 'aspairs', scramble: 'scpairs', hilo: 'hlpairs', matchplay: 'mpmatches' };
+const GAMES_FORM_REC_ALLOWANCE = { altshot: 50, scramble: 25, matchplay: 100 };   // only games with their own allowance (trait allowance 'own')
 function gamesFormSideBlank(gid) {
   if (gid === 'hilo') return { dollar_per_player: null, basis: 'gross', net_mode: 'low', period: 'round', pairs: [] };
+  if (gid === 'scramble') return { dollar_per_player: null, basis: 'net', net_mode: 'own', allowance: 25, period: 'round', scoring: 'strokes', scale: 'bf', hcp_method: 'low_high', low_pct: 35, high_pct: 15, payout: 'winner', pairs: [] };
   return gid === 'matchplay'
     ? { dollar_per_player: null, basis: 'gross', net_mode: 'own', allowance: 100, period: 'round', matches: [] }
     : { dollar_per_player: null, basis: 'gross', net_mode: 'low', allowance: 50, period: 'round', win_by: 'strokes', scope: 'field', pairs: [] };
@@ -11817,6 +12035,14 @@ function gamesFormSideFrom(gid, src) {
   const out = Object.assign(b, { dollar_per_player: src.dollar_per_player, basis: src.basis === 'net' ? 'net' : 'gross', net_mode: src.net_mode === 'low' ? 'low' : 'own',
     allowance: src.allowance != null && Number.isFinite(Number(src.allowance)) ? Number(src.allowance) : b.allowance, period: BFEngine.periodKey(src) });
   if (gid === 'matchplay') out.matches = (src.matches || []).map(pr => pr.slice());
+  else if (gid === 'scramble') {
+    out.pairs = (src.pairs || []).map(pr => pr.slice());
+    out.scoring = src.scoring === 'stableford' ? 'stableford' : 'strokes'; out.scale = src.scale === 'standard' ? 'standard' : 'bf';
+    out.hcp_method = ['combined', 'none'].includes(src.hcp_method) ? src.hcp_method : 'low_high';
+    out.low_pct = Number.isFinite(Number(src.low_pct)) && src.low_pct !== '' && src.low_pct != null ? Number(src.low_pct) : 35;
+    out.high_pct = Number.isFinite(Number(src.high_pct)) && src.high_pct !== '' && src.high_pct != null ? Number(src.high_pct) : 15;
+    out.payout = ['top2', 'top3'].includes(src.payout) ? src.payout : 'winner';
+  }
   else if (gid === 'hilo') out.pairs = (src.pairs || []).map(pr => pr.slice());
   else { out.pairs = (src.pairs || []).map(pr => pr.slice()); out.win_by = src.win_by === 'holes' ? 'holes' : 'strokes'; out.scope = src.win_by === 'holes' || src.scope === 'group' ? 'group' : 'field'; }
   return out;
@@ -12486,6 +12712,8 @@ function hostSetRowValue(id, text) {
 }
 function updateHostPlayersRow() {
   if (!document.getElementById('host-players-row')) return;
+  const capSub = document.getElementById('host-cap-sub');
+  if (capSub) capSub.textContent = hostCapacitySubText();
   if (_hostMode !== 'crew') { hostSetRowValue('host-players-row', 'Open to members'); renderHostLeftover(); return; }
   const invitees = [..._hostCrewPicked].filter(n => n !== currentPlayer).length;
   const spots = hostAutoOpenSpots();
@@ -12500,7 +12728,33 @@ function updateHostSpotsPreview() { updateHostPlayersRow(); }
 function bumpHostCapacity(d) {
   const el = document.getElementById('host-new-size');
   if (!el) return;
-  el.value = String(Math.max(1, Math.min(32, (parseInt(el.value, 10) || 0) + d)));
+  // Teams of 2: capacity moves a team (2 players) at a time so it is always an even number of players
+  el.value = String(Math.max(_hostTeams ? 2 : 1, Math.min(32, (parseInt(el.value, 10) || 0) + (_hostTeams ? d * 2 : d))));
+  updateHostSpotsPreview();
+}
+// v4.48.0 — Teams of 2 switch on New Gathering. Capacity is still TOTAL PLAYERS (tee times are booked by players);
+// the sub-line shows the teams that makes. Sets the Format to "2 Man Scramble" unless the host picked something else.
+function hostTeamsCount(players) { return Math.floor((parseInt(players, 10) || 0) / 2); }
+function hostCapacitySubText() {
+  const el = document.getElementById('host-new-size');
+  const n = el ? (parseInt(el.value, 10) || 0) : 0;
+  return _hostTeams ? `Total players · ${hostTeamsCount(n)} team${hostTeamsCount(n) === 1 ? '' : 's'} of 2` : 'Total players, all tee times';
+}
+function setHostTeams(on) {
+  _hostTeams = !!on;
+  hostSwitchSet('host-teams-switch', _hostTeams);
+  const el = document.getElementById('host-new-size');
+  if (el && _hostTeams) {
+    let n = parseInt(el.value, 10) || 0;
+    if (n < 2) n = 2;
+    if (n % 2) n = Math.min(32, n + 1);
+    el.value = String(n);
+  }
+  const sel = document.getElementById('host-new-type');
+  if (sel) {
+    if (_hostTeams && sel.value === 'Individual Play') { sel.value = '2 Man Scramble'; hostSetRowValue('host-format-row', '2 Man Scramble'); }
+    else if (!_hostTeams && sel.value === '2 Man Scramble') { sel.value = 'Individual Play'; hostSetRowValue('host-format-row', 'Individual Play'); }
+  }
   updateHostSpotsPreview();
 }
 function toggleHostMore() {
@@ -16850,6 +17104,27 @@ function openStrokeCard(evtId) {
 // Hole-by-hole heat map for the BestBall results (the keepsake of the round): one strip per foursome,
 // each box carries the initials of the pair that won the hole. Built from the saved result, so it works on closed games.
 // ── Alternate Shot / Match Play results (Dev-94): the data comes from BFEngine.sideGroupResults, this only draws it ──
+function isScrB(f) { return !!f && f.format === 'scramble'; }
+// Scramble: a team leaderboard (strokes: low wins; Stableford: high wins) with each place's payout.
+function scrambleResultsHtml(f, line, nm, esc) {
+  const money = v => '$' + (Number(v) || 0).toFixed(Number.isInteger(Number(v)) ? 0 : 2);
+  const stable = f.scoring === 'stableford', unit = stable ? ' pts' : '';
+  const how = [stable ? `Stableford${f.scale === 'standard' ? ' (standard)' : ' (birdie premium)'}` : 'Strokes',
+    f.basis === 'net' ? (f.hcp_method === 'combined' ? 'team handicap: both added' : 'team handicap: lower + higher') : '',
+    f.payout === 'top2' ? 'pays top 2' : f.payout === 'top3' ? 'pays top 3' : 'pays the winner'].filter(Boolean).join(' · ');
+  let h = `<div style="font-size:0.74rem;color:var(--text-muted);margin:0 0 6px">${esc(how)}</div>`;
+  if (f.par_missing) h += `<div style="font-size:0.74rem;color:#b8860b;margin-bottom:6px">No par data was saved with this game, so Stableford points could not be worked out.</div>`;
+  const paid = new Map();
+  (f.places || []).forEach(pl => pl.pairs.forEach(pr => paid.set(pr.join('|'), pl.per_player)));
+  h += (f.standings || []).map(r => {
+    const place = r.complete && r.place != null ? `${r.tied ? 'T' : ''}${r.place}` : '—';
+    const pp = paid.get(r.pair.join('|'));
+    return line(`<span style="color:var(--text-muted);display:inline-block;min-width:1.4rem">${place}</span><b>${nm(r.pair)}</b>${r.complete ? '' : ` <span style="color:var(--text-muted)">(${esc(r.played)} holes in)</span>`}`,
+      r.complete ? `${esc(r.total)}${unit}${pp ? ' · ' + money(pp) + ' each' : ''}` : '—');
+  }).join('') || `<div style="font-size:0.78rem;color:var(--text-muted)">No teams were set up</div>`;
+  if (!(f.winners || []).length) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">No team finished all its holes${f.given_back_each ? `. ${money(f.given_back_each)} back to each player` : ''}</div>`;
+  return h;
+}
 function sideResultHeroHtml(f, gid) {
   const esc = v => escapeHtml(String(v ?? ''));
   const TEAL = '#1f8a6a', AMB = '#b8860b';
@@ -16958,7 +17233,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   BFEngine.sideFormGames().forEach(id => { if (s[id]) games.push([id, BFEngine.getGame(id).meta.icon]); });
   if (s.lowscore) games.push(['lowscore', '🎯']);
   const byName = new Map();
-  (s.payouts || []).forEach(r => byName.set(norm(r.player), { player: r.player, total: Number(r.total) || 0, skins: r.skins, cttp: r.cttp, birdieball: r.birdieball, birdiepay: r.birdiepay, fourball: r.fourball, altshot: r.altshot, hilo: r.hilo, matchplay: r.matchplay, lowscore: r.lowscore, given_back: r.given_back }));
+  (s.payouts || []).forEach(r => byName.set(norm(r.player), { player: r.player, total: Number(r.total) || 0, skins: r.skins, cttp: r.cttp, birdieball: r.birdieball, birdiepay: r.birdiepay, fourball: r.fourball, altshot: r.altshot, scramble: r.scramble, hilo: r.hilo, matchplay: r.matchplay, lowscore: r.lowscore, given_back: r.given_back }));
   if (hasRank) {
     (rk.gross || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.gross = r.total; e.strokes = r.strokes; byName.set(norm(r.player), e); });
     (rk.net || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.net = r.total; byName.set(norm(r.player), e); });
@@ -16966,7 +17241,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   const strokesBy = new Map(((s.handicap && s.handicap.players) || []).map(p => [norm(p.player), Number(p.strokes) || 0]));
   // Net games that play off the low use fewer strokes than the player's full allowance: say so per player.
   const gameStrokes = new Map();
-  [['BestBall', s.fourball], ['Alternate Shot', s.altshot], ['Hi-Lo', s.hilo], ['Match Play', s.matchplay], ['Individual Low Score', s.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => {
+  [['BestBall', s.fourball], ['Alternate Shot', s.altshot], ['Scramble', s.scramble], ['Hi-Lo', s.hilo], ['Match Play', s.matchplay], ['Individual Low Score', s.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => {
     const k = norm(m.player);
     if (!strokesBy.has(k) || Number(m.strokes) === strokesBy.get(k)) return;
     if (!gameStrokes.has(k)) gameStrokes.set(k, []);
@@ -17029,12 +17304,13 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     };
     addLine('🤝', 'BestBall', s.fourball, s.fourball && s.fourball.segments ? s.fourball.segments.win_by : null);
     addLine('🔁', 'Alternate Shot', s.altshot, s.altshot && s.altshot.segments ? s.altshot.segments.win_by : null);
+    addLine('🦃', 'Scramble', s.scramble, null);
     addLine('⚖️', 'Hi-Lo', s.hilo, s.hilo && s.hilo.segments ? s.hilo.segments.win_by : null);
     addLine('⚔️', 'Match Play', s.matchplay, s.matchplay && s.matchplay.segments ? s.matchplay.segments.win_by : null);
     addLine('🎯', 'Individual Low Score', s.lowscore, null);
     if (lines.length) sum += `<div style="font-size:0.78rem;line-height:1.45;background:rgba(255,255,255,0.45);border-radius:10px;padding:6px 10px;margin:2px 0 8px"><div style="font-size:0.68rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-hint);margin-bottom:2px">How it was played</div>${lines.join('')}${gameStrokes.size ? '<div style="padding:3px 0;color:var(--text-muted)">The Net column uses each player\'s full handicap strokes. Games played off the low use fewer, shown under each name.</div>' : ''}</div>`;
   }
-  if (oneBallOnly) sum += BFEngine.sideFormGames().map(id => (s[id] ? sideResultHeroHtml(s[id], id) : '')).join('');
+  if (oneBallOnly) sum += BFEngine.sideFormGames().filter(id => id !== 'scramble').map(id => (s[id] ? sideResultHeroHtml(s[id], id) : '')).join('');
   if (modes.length > 1) sum += `<div style="display:flex;align-items:center;gap:6px;margin:4px 0 6px"><span style="font-size:0.72rem;color:var(--text-muted)">Rank by</span>${modes.map(([m, l]) => modeBtn(m, l)).join('')}<span style="font-size:0.68rem;color:var(--text-hint)">scores are for fun</span></div>`;
   sum += `<div style="font-size:0.7rem;color:var(--text-muted);margin:2px 0 4px;line-height:1.4">Game columns show what each game paid out.${anyBack ? ' ↩ is an ante handed back from a pot that was halved or not finished.' : ''}${buyIn > 0 ? ` <b>+/−</b> is each player's result: what came back to them, minus the ${money(ante)} they put in.` : ''}</div>`;
   sum += modes.map(([m]) => `<div data-gp-sort="${m}" style="overflow-x:auto;${m === defMode ? '' : 'display:none'}">${matrix(m, m === 'gross' ? 'gross' : 'net')}</div>`).join('');
@@ -17161,17 +17437,19 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     const meta = BFEngine.getGame(gid).meta, icon = meta.icon, title = meta.label, tab = `${icon} ${meta.tab || meta.label}`;
     const f = s[gid]; if (!f) return;
     const isMatch = BFEngine.gameTraits(gid).unit === 'match';
-    const basisTxt = f.basis === 'net' ? (f.net_mode === 'low' ? 'net, off the low' : 'net, own strokes') + (f.allowance != null ? `, ${f.allowance}% allowance` : '') : 'gross';
+    const basisTxt = f.basis === 'net' ? (f.net_mode === 'low' ? 'net, off the low' : 'net, own strokes') + (isScrB(f) ? '' : (f.allowance != null ? `, ${f.allowance}% allowance` : '')) : 'gross';
     const fpk = f.segments ? f.segments.mode : 'round';
     let h = label(`${icon} ${title} (${basisTxt}${fpk === 'round' || fpk === 'match' ? '' : ' · ' + (BFEngine.PERIODS[fpk] || BFEngine.PERIODS.round).label}) — ${money(f.pot)}`);
     if (f.net_missing) h += `<div style="font-size:0.72rem;color:#b8860b;margin-bottom:2px">Net was chosen but no strokes were on file, so this played gross</div>`;
     if (f.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(f.configured_pot)}, but the pot only had ${money(f.pot)} left</div>`;
     const sg = f.segments;
     const nm = pr => pr.map(esc).join(' &amp; ');
-    const heroOk = (f.pairs || []).length === 2 || !!(sg && sg.scope === 'group');
+    const isScr = gid === 'scramble', heroOk = !isScr && ((f.pairs || []).length === 2 || !!(sg && sg.scope === 'group'));
     if (!(f.pot > 0)) h += `<div style="font-size:0.76rem;color:var(--text-muted);margin:2px 0 8px">No money on this one: bragging rights (the loser buys).</div>`;
     if (heroOk) {
       h += sideResultHeroHtml(f, gid) + fourballResultsHeatHtml(f, null);
+    } else if (isScr) {
+      h += scrambleResultsHtml(f, line, nm, esc);
     } else {
       h += (f.standings || []).map(r => line(`<b>${nm(r.pair)}</b>${r.complete ? '' : ` <span style="color:var(--text-muted)">(${r.played} holes in)</span>`}`, r.complete ? `${esc(r.total)}${(f.winners || []).some(w => w.join('|') === r.pair.join('|')) && f.per_player ? ' · ' + money(f.per_player) + ' each' : ''}` : '—')).join('');
       if (!(f.winners || []).length) h += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">No pair finished all its holes${f.given_back_each ? ` — ${money(f.given_back_each)} back to each player` : ''}</div>`;
@@ -17511,7 +17789,7 @@ async function loadHistoryGameResults(key, groupEvt) {
     if (!cfg || cfg.status !== 'closed' || !cfg.payout_summary) { el.innerHTML = ''; return; }
     {
       const ps = cfg.payout_summary, byP = new Map(), lc = x => String(x).trim().toLowerCase();
-      [['BestBall', ps.fourball], ['Alternate Shot', ps.altshot], ['Hi-Lo', ps.hilo], ['Match Play', ps.matchplay], ['Individual Low Score', ps.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => { if (!byP.has(lc(m.player))) byP.set(lc(m.player), { ...m, game: lab, net_mode: g.net_mode }); }));
+      [['BestBall', ps.fourball], ['Alternate Shot', ps.altshot], ['Scramble', ps.scramble], ['Hi-Lo', ps.hilo], ['Match Play', ps.matchplay], ['Individual Low Score', ps.lowscore]].forEach(([lab, g]) => ((g && g.stroke_marks) || []).forEach(m => { if (!byP.has(lc(m.player))) byP.set(lc(m.player), { ...m, game: lab, net_mode: g.net_mode }); }));
       _historyStrokeMarks[key] = [...byP.values()];
       _historyFullStrokes[key] = Object.fromEntries(((ps.handicap && ps.handicap.players) || []).map(x => [lc(x.player), Number(x.strokes) || 0]));
     }
@@ -17800,7 +18078,7 @@ function gatheringGameDetailsBody(evt, config) {
     const aNet = a.basis === 'net';
     const kPk = BFEngine.periodKey(a);
     const list = sides.map(sd => sd.map(escapeHtml).join(isM ? ' vs ' : ' &amp; ')).join(' · ');
-    const allow = aNet ? ` · ${a.allowance != null && a.allowance !== '' ? a.allowance : (isM ? 100 : 50)}% allowance` : '';
+    const allow = gid === 'scramble' ? (aNet && a.hcp_method !== 'none' ? ` · ${a.hcp_method === 'combined' ? (a.allowance != null ? a.allowance : 25) + '% of both handicaps' : (a.low_pct != null ? a.low_pct : 35) + '% lower + ' + (a.high_pct != null ? a.high_pct : 15) + '% higher'}` : '') + (a.scoring === 'stableford' ? ' · Stableford' : '') + (a.payout === 'top2' ? ' · pays top 2' : a.payout === 'top3' ? ' · pays top 3' : '') : aNet ? ` · ${a.allowance != null && a.allowance !== '' ? a.allowance : (isM ? 100 : 50)}% allowance` : '';
     rows.push(row(icon, `${title} · ${aNet ? (a.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `${what}${allow} · ${dpp > 0 ? '$' + dpp.toFixed(2) + '/player · $' + cost.toFixed(2) + ' pot' : 'no money, the loser buys'}${kPk !== 'round' && !isM ? `, ${BFEngine.PERIODS[kPk].phrase} are separate pots` : ''}${isM ? ', winner announced the moment it is decided (you can play on)' : ''}${list ? `<br><b>${isM ? 'Matches' : 'Pairs'}:</b> ${list}` : ''}`, gid));
   });
   const ls = gatheringAddon(config, 'lowscore');
@@ -18885,6 +19163,7 @@ function renderHostPanelList() {
           ${detailHtml}
         </div>
         ${hostSpotsHtml(g, true)}
+        ${hostTeamsHtml(g)}
         ${g.teeTimeStatus === 'suggested' ? `
         <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:8px;
           background:rgba(230,168,0,0.1);border-color:rgba(230,168,0,0.4);color:#b8860b;font-weight:700"
@@ -19041,6 +19320,7 @@ function renderHostArchiveList() {
           ${detailHtml}
         </div>
         ${hostSpotsHtml(g, true)}
+        ${hostTeamsHtml(g)}
         <div class="host-gathering-actions">
           <button class="btn btn-primary btn-sm"
             onclick="hostAddPlayer(${g.gatheringId})">➕ Add a player</button>
@@ -19698,6 +19978,15 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
       : { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round', win_by: 'strokes', scope: 'field' };
     _gamesFormFourballNote = '';
     GAMES_FORM_SIDE_IDS.forEach(gid => { _gamesFormSide[gid] = gamesFormSideFrom(gid, existing && existing.game_configs && existing.game_configs[gid]); _gamesFormSideNote[gid] = ''; });
+    // Teams of 2: the locked partner pairs are the Scramble teams, and Scramble is the game to suggest
+    if (g.teamSize === 2 && !g.eventShadow) {
+      if (!existing && !(preselect && preselect.length)) _gamesFormSelected.add('scramble');
+      if (!_gamesFormSide.scramble.pairs.length) {
+        const st = teamsState(gatheringRegData.filter(r => r.gatheringId === gatheringId));
+        _gamesFormSide.scramble.pairs = st.pairs.map(pr => pr.slice());
+        if (st.pairs.length) _gamesFormSideNote.scramble = `Teams filled in from the locked partner pairs (${st.pairs.length}).${st.unpaired ? ` ${st.unpaired} player${st.unpaired === 1 ? ' is' : 's are'} not on a team yet.` : ''}`;
+      }
+    }
     const ls = existing && existing.game_configs && existing.game_configs.lowscore;
     _gamesFormLowscoreConfig = ls ? { dollar_per_player: ls.dollar_per_player, basis: ls.basis === 'net' ? 'net' : 'gross', period: BFEngine.periodKey(ls) } : { dollar_per_player: null, basis: 'gross', period: 'round' }; }
   // Par table for Birdie Payouts — same resolver Card Score Sheet uses (Venue
@@ -19709,7 +19998,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
       ? { skins_basis: hc.skins_basis === 'net' ? 'net' : 'gross', birdiepay_basis: hc.birdiepay_basis === 'net' ? 'net' : 'gross',
           ranking: hc.ranking === true, rankingTouched: true, allowance: hc.allowance == null ? 95 : hc.allowance, players: JSON.parse(JSON.stringify(hc.players || {})) }
       : { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; }
-  _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'hilo', 'matchplay', 'lowscore'] : []); // an existing config is the host's own numbers
+  _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'scramble', 'hilo', 'matchplay', 'lowscore'] : []); // an existing config is the host's own numbers
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; if (_gamesFormCard) closeGamesCardDialog(); else renderHostPanelList(); }; }
   const closeBtn = document.getElementById('host-sheet-close-btn');
@@ -19857,7 +20146,7 @@ function gamesFormSplitHtml() {
   const dppNow = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0;
   if (dppNow > 0 && !sel.has('skins') && !sel.has('birdiepay')) {
     const nPl = Math.max(4, _gamesFormYesCount);
-    const used = (sel.has('fourball') ? _gamesFormFourballConfig.dollar_per_player || 0 : 0) + (sel.has('altshot') ? _gamesFormSide.altshot.dollar_per_player || 0 : 0) + (sel.has('hilo') ? _gamesFormSide.hilo.dollar_per_player || 0 : 0) + (sel.has('matchplay') ? _gamesFormSide.matchplay.dollar_per_player || 0 : 0) + (sel.has('lowscore') ? _gamesFormLowscoreConfig.dollar_per_player || 0 : 0)
+    const used = (sel.has('fourball') ? _gamesFormFourballConfig.dollar_per_player || 0 : 0) + (sel.has('altshot') ? _gamesFormSide.altshot.dollar_per_player || 0 : 0) + (sel.has('scramble') ? _gamesFormSide.scramble.dollar_per_player || 0 : 0) + (sel.has('hilo') ? _gamesFormSide.hilo.dollar_per_player || 0 : 0) + (sel.has('matchplay') ? _gamesFormSide.matchplay.dollar_per_player || 0 : 0) + (sel.has('lowscore') ? _gamesFormLowscoreConfig.dollar_per_player || 0 : 0)
       + (sel.has('birdieball') ? _gamesFormBirdieballConfig.dollar_per_player || 0 : 0) + (sel.has('cttp') ? (_gamesFormCttpConfig.dollar_per_hole || 0) * (_gamesFormCttpConfig.holes || []).length / nPl : 0);
     const left = Math.round((dppNow - used) * 100) / 100;
     if (left > 0.004) gap = `<div style="font-size:0.76rem;color:#b8860b;margin-top:6px;line-height:1.45">$${left.toFixed(2)} of each $${dppNow.toFixed(2)} is not in any game, so nobody plays for it. Raise an amount, or lower the buy-in.</div>`;
@@ -19874,7 +20163,7 @@ function refreshGamesFormSplit() {
 }
 // ── Games setup wizard: one question per screen ──────────────────────────────
 let _gw = { step: 'games' };
-const GW_NAMES = { games: 'Games', money: 'The money', fourball: 'BestBall', fbpairs: 'BestBall pairs', altshot: 'Alternate Shot', aspairs: 'Alternate Shot pairs', hilo: 'Hi-Lo', hlpairs: 'Hi-Lo pairs', matchplay: 'Match Play', mpmatches: 'Match Play matches', lowscore: 'Individual Low Score', skins: 'Skins', cttp: 'CTP', birdieball: 'MiserBall', birdiepay: 'Birdie Payouts', hcp: 'Handicap strokes', review: 'Review' };
+const GW_NAMES = { games: 'Games', money: 'The money', fourball: 'BestBall', fbpairs: 'BestBall pairs', altshot: 'Alternate Shot', aspairs: 'Alternate Shot pairs', scramble: 'Scramble', scpairs: 'Scramble teams', hilo: 'Hi-Lo', hlpairs: 'Hi-Lo pairs', matchplay: 'Match Play', mpmatches: 'Match Play matches', lowscore: 'Individual Low Score', skins: 'Skins', cttp: 'CTP', birdieball: 'MiserBall', birdiepay: 'Birdie Payouts', hcp: 'Handicap strokes', review: 'Review' };
 function gwSteps() {
   const sel = _gamesFormSelected;
   if (!sel.size) return ['games'];
@@ -19928,8 +20217,9 @@ function gwReviewHtml() {
     if (!sel.has(gid)) return;
     const c = _gamesFormSide[gid], items = gamesFormSideItems(gid).filter(pr => pr[0] && pr[1]).length, pk = BFEngine.periodKey(c), mp = gid === 'matchplay', meta = BFEngine.getGame(gid).meta;
     const net = c.basis === 'net' ? `Net${GAMES_FORM_REC_ALLOWANCE[gid] ? ' ' + c.allowance + '%' : ''}${c.net_mode === 'low' ? ', off the low' : ''}` : 'Gross';
+    const scLine = gid === 'scramble' ? `${c.basis === 'net' ? (c.hcp_method === 'none' ? 'Gross' : 'Net ' + (c.hcp_method === 'combined' ? c.allowance + '% of both' : c.low_pct + '/' + c.high_pct + '%')) : 'Gross'} · ${c.scoring === 'stableford' ? 'Stableford' : 'Strokes'} · ${c.payout === 'top2' ? 'pays top 2' : c.payout === 'top3' ? 'pays top 3' : 'pays winner'}` : null;
     const what = mp ? (items ? items + ' match' + (items === 1 ? '' : 'es') : '<span style="color:#b8860b">no matches yet</span>') : (items ? items + ' pair' + (items === 1 ? '' : 's') : '<span style="color:#b8860b">no pairs yet</span>');
-    add(meta.icon, meta.label, `${net} · ${per(pk)} · ${Number(c.dollar_per_player) > 0 ? money(c.dollar_per_player) + ' per player' : 'no money'} · ${what}`, items ? gid : GW_SIDE_STEP[gid]);
+    add(meta.icon, meta.label, `${scLine || net + ' · ' + per(pk)} · ${Number(c.dollar_per_player) > 0 ? money(c.dollar_per_player) + ' per player' : 'no money'} · ${what}`, items ? gid : GW_SIDE_STEP[gid]);
   });
   if (sel.has('lowscore')) add('🎯', 'Individual Low Score', `${basis(ls.basis)} · ${per(BFEngine.periodKey(ls))} · ${money(ls.dollar_per_player)} per player`, 'lowscore');
   if (sel.has('skins')) add('⛳', 'Skins', `${basis(_gamesFormHcp.skins_basis)} · gets what is left`, 'skins');
@@ -19953,15 +20243,15 @@ function gwRender() {
   const cur = _gw.step, i = steps.indexOf(cur), moved = _gw.shown !== cur;
   _gw.shown = cur;
   if (moved) { // a screen can hold stale numbers if an amount was typed on the buy-in screen: rebuild it as it opens
-    const redo = { altshot: () => gatheringGamesSideSectionHtml('altshot'), aspairs: () => gatheringGamesSideSectionHtml('altshot'), hilo: () => gatheringGamesSideSectionHtml('hilo'), hlpairs: () => gatheringGamesSideSectionHtml('hilo'), matchplay: () => gatheringGamesSideSectionHtml('matchplay'), mpmatches: () => gatheringGamesSideSectionHtml('matchplay'),
+    const redo = { altshot: () => gatheringGamesSideSectionHtml('altshot'), aspairs: () => gatheringGamesSideSectionHtml('altshot'), scramble: () => gatheringGamesSideSectionHtml('scramble'), scpairs: () => gatheringGamesSideSectionHtml('scramble'), hilo: () => gatheringGamesSideSectionHtml('hilo'), hlpairs: () => gatheringGamesSideSectionHtml('hilo'), matchplay: () => gatheringGamesSideSectionHtml('matchplay'), mpmatches: () => gatheringGamesSideSectionHtml('matchplay'),
       fourball: gatheringGamesFourballSectionHtml, fbpairs: gatheringGamesFourballSectionHtml, lowscore: gatheringGamesLowscoreSectionHtml, cttp: gatheringGamesCttpSectionHtml, birdiepay: gatheringGamesBirdiepaySectionHtml }[cur];
-    const box = { altshot: 'altshot', aspairs: 'altshot', hilo: 'hilo', hlpairs: 'hilo', matchplay: 'matchplay', mpmatches: 'matchplay', fourball: 'fourball', fbpairs: 'fourball', lowscore: 'lowscore', cttp: 'cttp', birdiepay: 'birdiepay' }[cur];
+    const box = { altshot: 'altshot', aspairs: 'altshot', scramble: 'scramble', scpairs: 'scramble', hilo: 'hilo', hlpairs: 'hilo', matchplay: 'matchplay', mpmatches: 'matchplay', fourball: 'fourball', fbpairs: 'fourball', lowscore: 'lowscore', cttp: 'cttp', birdiepay: 'birdiepay' }[cur];
     const el = box && document.getElementById('games-form-' + box + '-section');
     if (redo && el) el.innerHTML = redo();
     if (cur === 'money') { applyGamesSuggestion(false); refreshGamesFormSplit(); } // the rules are set, so suggest the split now
   }
-  const pane = { fbpairs: 'fourball', aspairs: 'altshot', hlpairs: 'hilo', mpmatches: 'matchplay' }[cur] || cur;
-  wiz.dataset.sub = ['fbpairs', 'aspairs', 'hlpairs', 'mpmatches'].includes(cur) ? 'pairs' : 'setup';
+  const pane = { fbpairs: 'fourball', aspairs: 'altshot', scpairs: 'scramble', hlpairs: 'hilo', mpmatches: 'matchplay' }[cur] || cur;
+  wiz.dataset.sub = ['fbpairs', 'aspairs', 'scpairs', 'hlpairs', 'mpmatches'].includes(cur) ? 'pairs' : 'setup';
   wiz.querySelectorAll('.gw-pane').forEach(el => { el.style.display = el.id === 'gw-pane-' + pane ? 'block' : 'none'; });
   const lab = document.getElementById('gw-step-label'); if (lab) lab.textContent = `Step ${i + 1} of ${steps.length} · ${GW_NAMES[cur]}`;
   const bar = document.getElementById('gw-bar'); if (bar) bar.style.width = Math.round((i + 1) / steps.length * 100) + '%';
@@ -19993,7 +20283,7 @@ function gamesFormAnte(dpp) {
   if (!(dpp > 0) || _gamesFormTouched.size) return null;
   const n = Math.max(4, _gamesFormYesCount);
   const holes = (_gamesFormCttpConfig.holes || []).length || _gamesFormPar3Holes.length || 3;
-  const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: n, games: [..._gamesFormSelected], cttpHoles: holes, periods: { fourball: fourballSegCount(_gamesFormFourballConfig), altshot: periodSegCount(_gamesFormSide.altshot), hilo: periodSegCount(_gamesFormSide.hilo), matchplay: periodSegCount(_gamesFormSide.matchplay), lowscore: lowscoreSegCount(_gamesFormLowscoreConfig) } });
+  const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: n, games: [..._gamesFormSelected], cttpHoles: holes, periods: { fourball: fourballSegCount(_gamesFormFourballConfig), altshot: periodSegCount(_gamesFormSide.altshot), scramble: 1, hilo: periodSegCount(_gamesFormSide.hilo), matchplay: periodSegCount(_gamesFormSide.matchplay), lowscore: lowscoreSegCount(_gamesFormLowscoreConfig) } });
   return sug.ante > 0 && sug.unspent >= 1 && Number.isInteger(sug.ante) ? sug : null;
 }
 function snapGamesFormDpp() {
@@ -20013,12 +20303,12 @@ function applyGamesSuggestion(force) {
   const note = document.getElementById('games-form-suggest-note');
   if (!input) return;
   const dpp = parseFloat(input.value) || 0;
-  const anyAmountGame = ['cttp', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'hilo', 'matchplay', 'lowscore'].some(k => _gamesFormSelected.has(k));
+  const anyAmountGame = ['cttp', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'scramble', 'hilo', 'matchplay', 'lowscore'].some(k => _gamesFormSelected.has(k));
   if (!(dpp > 0) || !anyAmountGame) { if (note) note.innerHTML = anyAmountGame ? 'Pick a buy-in and amounts for each game are suggested for you.' : ''; return; }
   if (force) _gamesFormTouched.clear();
   const n = Math.max(4, _gamesFormYesCount);
   const holes = (_gamesFormCttpConfig.holes || []).length || _gamesFormPar3Holes.length || 3;
-  const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: n, games: [..._gamesFormSelected], cttpHoles: holes, periods: { fourball: fourballSegCount(_gamesFormFourballConfig), altshot: periodSegCount(_gamesFormSide.altshot), hilo: periodSegCount(_gamesFormSide.hilo), matchplay: periodSegCount(_gamesFormSide.matchplay), lowscore: lowscoreSegCount(_gamesFormLowscoreConfig) } });
+  const sug = BFEngine.suggestGameAmounts({ dollarPerPlayer: dpp, players: n, games: [..._gamesFormSelected], cttpHoles: holes, periods: { fourball: fourballSegCount(_gamesFormFourballConfig), altshot: periodSegCount(_gamesFormSide.altshot), scramble: 1, hilo: periodSegCount(_gamesFormSide.hilo), matchplay: periodSegCount(_gamesFormSide.matchplay), lowscore: lowscoreSegCount(_gamesFormLowscoreConfig) } });
   if (sug.cttp && !_gamesFormTouched.has('cttp')) _gamesFormCttpConfig.dollar_per_hole = sug.cttp.dollar_per_hole;
   if (sug.birdieball && !_gamesFormTouched.has('birdieball')) _gamesFormBirdieballConfig.dollar_per_player = sug.birdieball.dollar_per_player;
   if (sug.birdiepay && !_gamesFormTouched.has('birdiepay')) _gamesFormBirdiepayConfig.dollar_per_birdie = sug.birdiepay.dollar_per_birdie;
@@ -20657,11 +20947,11 @@ function gamesFormSideNames(gid) {
 }
 function gatheringGamesSideSectionHtml(gid) {
   if (!_gamesFormSelected.has(gid)) return '';
-  const c = _gamesFormSide[gid], mp = gid === 'matchplay', hl = gid === 'hilo', meta = BFEngine.getGame(gid).meta;
+  const c = _gamesFormSide[gid], mp = gid === 'matchplay', hl = gid === 'hilo', sc = gid === 'scramble', meta = BFEngine.getGame(gid).meta;
   const items = gamesFormSideItems(gid), names = gamesFormSideNames(gid);
   const low = n => String(n || '').trim().toLowerCase();
   const segN = periodSegCount(c), pk = BFEngine.periodKey(c), rec = GAMES_FORM_REC_ALLOWANCE[gid];
-  const word = mp ? 'Match' : 'Pair';
+  const word = mp ? 'Match' : sc ? 'Team' : 'Pair';
   const picker = (pi, si) => {
     const cur = items[pi][si];
     const taken = new Set();
@@ -20691,7 +20981,43 @@ function gatheringGamesSideSectionHtml(gid) {
       <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px;line-height:1.5">${mp
         ? `${rec}% is recommended: each player gets their full course handicap. Lower it to narrow the gap between players.`
         : `${rec}% is the usual for Alternate Shot: the pair's strokes are half of its two course handicaps added together, because only one ball is in play. Most hosts leave it.`}</div>`}`;
-  const winBlock = mp || hl || segN <= 1 ? '' : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+  const scNet = !sc ? '' : (c.basis !== 'net' ? '' : `
+      <div style="font-size:0.9rem;font-weight:600;margin-bottom:6px">Team handicap</div>
+      ${radioRowsHtml([
+        ['low_high', 'Lower + higher', 'The usual two-person scramble rule: a share of the lower course handicap plus a smaller share of the higher one.', true],
+        ['combined', 'Both added together', 'A percentage of the two course handicaps added together.', false],
+        ['none', 'No handicap', 'Plays gross. Strokes are not taken off.', false]
+      ], c.hcp_method, `(v=>setGamesFormSide('${gid}','hcp_method',v))`)}
+      ${c.hcp_method === 'low_high' ? `<div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px;flex-wrap:wrap">
+        <span style="font-size:0.86rem">Lower</span><input type="number" min="0" max="100" step="1" value="${c.low_pct}" oninput="setGamesFormSide('${gid}','low_pct',this.value,true)" style="width:64px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.86rem">%</span>
+        <span style="font-size:0.86rem;margin-left:8px">Higher</span><input type="number" min="0" max="100" step="1" value="${c.high_pct}" oninput="setGamesFormSide('${gid}','high_pct',this.value,true)" style="width:64px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.86rem">%</span></div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px;line-height:1.5">35% and 15% is the usual. A 10 and a 20 handicap get 35% of 10 + 15% of 20 = 6.5 strokes.</div>` : ''}
+      ${c.hcp_method === 'combined' ? `<div style="display:flex;align-items:center;gap:8px;margin:6px 0 4px"><span style="flex:1;font-size:0.9rem;font-weight:600">Percent of both added</span>
+        <input type="number" min="1" max="150" step="1" value="${c.allowance}" oninput="setGamesFormSide('${gid}','allowance',this.value,true)" style="width:70px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.86rem">%</span></div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">25% is the usual.</div>` : ''}
+      ${c.hcp_method === 'none' ? '' : `<div style="font-size:0.9rem;font-weight:600;margin:6px 0">Strokes</div>
+      ${radioRowsHtml([
+        ['own', 'Full', 'Each team gets its own strokes.', true],
+        ['low', 'Off the low', 'The team with the fewest strokes plays to scratch and the others get the difference.', false]
+      ], c.net_mode, `(v=>setGamesFormSide('${gid}','net_mode',v))`)}`}`);
+  const scRules = !sc ? '' : `
+      <div style="font-size:0.9rem;font-weight:600;margin:4px 0 6px">Scoring</div>
+      ${radioRowsHtml([
+        ['strokes', 'Strokes', 'One score a hole for the team. Lowest total wins.', true],
+        ['stableford', 'Stableford points', 'Points a hole from the team score against par. Most points wins.', false]
+      ], c.scoring, `(v=>setGamesFormSide('${gid}','scoring',v))`)}
+      ${c.scoring === 'stableford' ? `${radioRowsHtml([
+        ['bf', 'Birdie premium', 'Bogey 1, par 2, birdie 4, eagle 6. Rewards going low.', true],
+        ['standard', 'Standard', 'Bogey 1, par 2, birdie 3, eagle 4.', false]
+      ], c.scale, `(v=>setGamesFormSide('${gid}','scale',v))`)}
+      ${Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18 ? '' : '<div style="font-size:0.76rem;color:#b8860b;margin:6px 0 10px;line-height:1.5">No par data on file for this venue, and Stableford needs it. Add a tee for the venue in Venue Manager first, or score by strokes.</div>'}` : ''}
+      <div style="font-size:0.9rem;font-weight:600;margin:10px 0 6px">Pays</div>
+      ${radioRowsHtml([
+        ['winner', 'Winning team', 'One pot. Tied teams split it.', true],
+        ['top2', 'Top 2 teams', '65% to first, 35% to second.', false],
+        ['top3', 'Top 3 teams', '50% to first, 30% to second, 20% to third.', false]
+      ], c.payout, `(v=>setGamesFormSide('${gid}','payout',v))`)}`;
+  const winBlock = mp || hl || sc || segN <= 1 ? '' : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Period won by</span>${seg([['strokes', 'Strokes'], ['holes', 'Holes won']], c.win_by, `(v=>setGamesFormSide('${gid}','win_by',v))`)}</div>
         <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.win_by === 'holes' ? 'The pair that wins more holes wins the period.' : 'The pair with the lower total wins the period.'}</div>`;
   const dppBox = segN > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / segN * 100) / 100 : '') : (c.dollar_per_player || '');
@@ -20708,15 +21034,15 @@ function gatheringGamesSideSectionHtml(gid) {
       <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">${segN > 1
         ? `Each player puts in $${(c.dollar_per_player || 0).toFixed(2)} in all ($${(Math.round((c.dollar_per_player || 0) / segN * 100) / 100).toFixed(2)} for each of the ${segN} periods).`
         : 'Leave it at $0 to play for bragging rights (or the loser buys at the pub). The result is still worked out.'}</div></div>
-      ${gamesScoredPeriodRowHtml(c.basis, `(v=>setGamesFormSide('${gid}','basis',v))`, pk, `(v=>setGamesFormSide('${gid}','period',v))`)}
+      ${sc ? `<div style="margin-bottom:8px"><div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:3px">Scored on</div>${gamesBasisSelectHtml(c.basis, `(v=>setGamesFormSide('${gid}','basis',v))`)}</div>` : gamesScoredPeriodRowHtml(c.basis, `(v=>setGamesFormSide('${gid}','basis',v))`, pk, `(v=>setGamesFormSide('${gid}','period',v))`)}
       <div style="margin:10px 0 12px;background:var(--green-light);border-radius:10px;padding:10px 12px;font-size:0.8rem;line-height:1.45">${periodExplainHtml(pk, c.dollar_per_player, { round: mp
         ? 'Each match is its own pot: the winner takes it, and a match that ends level is halved, so both players get their money back.'
         : hl ? 'Each hole is worth 2 points: 1 for the lower low ball, 1 for the lower high ball (a tie gives nobody the point). The pair with more points wins the pot. Level is a push and the antes come back.'
-        : 'The pair with the lowest one-ball total wins one pot. Tied pairs split it.' })}</div>
-      ${netBlock}${winBlock}
+        : sc ? 'Both players hit, the team plays the best shot, and it repeats until the ball is in. The team posts one score a hole and the best team wins.' : 'The pair with the lowest one-ball total wins one pot. Tied pairs split it.' })}</div>
+      ${scRules}${sc ? scNet : netBlock}${winBlock}
       </div>
       <div class="gw-fb-pairs">
-      <label>${meta.icon} ${meta.label} ${mp ? 'matches' : hl ? 'pairs (two pairs play each other)' : 'pairs'}</label>
+      <label>${meta.icon} ${meta.label} ${mp ? 'matches' : hl ? 'pairs (two pairs play each other)' : sc ? 'teams' : 'pairs'}</label>
       ${rows || `<div style="font-size:0.78rem;color:var(--text-muted);margin:8px 0">No ${mp ? 'matches' : 'pairs'} yet. Add them one at a time${mp ? '' : ', or let us suggest balanced pairs'}.</div>`}
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
         <button type="button" style="${btn}" onclick="suggestGamesFormSideItems('${gid}')">✨ Suggest ${mp ? 'matches' : 'pairs'}</button>
@@ -20740,17 +21066,23 @@ function setGamesFormSide(gid, key, val, typing) {
   if (key === 'basis') c.basis = val === 'net' ? 'net' : 'gross';
   else if (key === 'net_mode') c.net_mode = val === 'low' ? 'low' : 'own';
   else if (key === 'allowance' && GAMES_FORM_REC_ALLOWANCE[gid]) { const n = parseFloat(val); c.allowance = Number.isFinite(n) && n > 0 ? n : GAMES_FORM_REC_ALLOWANCE[gid]; }
+  else if (gid === 'scramble' && key === 'scoring') c.scoring = val === 'stableford' ? 'stableford' : 'strokes';
+  else if (gid === 'scramble' && key === 'scale') c.scale = val === 'standard' ? 'standard' : 'bf';
+  else if (gid === 'scramble' && key === 'hcp_method') c.hcp_method = ['combined', 'none'].includes(val) ? val : 'low_high';
+  else if (gid === 'scramble' && key === 'payout') c.payout = ['top2', 'top3'].includes(val) ? val : 'winner';
+  else if (gid === 'scramble' && (key === 'low_pct' || key === 'high_pct')) { const n = parseFloat(val); c[key] = Number.isFinite(n) && n >= 0 ? n : (key === 'low_pct' ? 35 : 15); }
   else if (key === 'win_by') { c.win_by = val === 'holes' ? 'holes' : 'strokes'; if (c.win_by === 'holes') c.scope = 'group'; }
   else if (key === 'period') {
     c.period = BFEngine.periodKey({ period: val });
     if (periodSegCount(c) > 1 && c.dollar_per_player > 0) c.dollar_per_player = snapToPeriods(c.dollar_per_player, periodSegCount(c));
+    if (gid === 'scramble') c.period = 'round';
     if (c.period === 'round' && gid === 'altshot') { c.win_by = 'strokes'; c.scope = 'field'; }
     applyGamesSuggestion(false);
   }
   if (typing) { updateGamesFormPotPreview(); return; } // keep focus in the allowance box
   refreshGamesFormSideSection(gid);
   if (key === 'basis') { gamesFormAutoRanking(); refreshGamesFormHcpSection(); }
-  else if (key === 'net_mode' || key === 'allowance') refreshGamesFormHcpSection();
+  else if (key === 'net_mode' || key === 'allowance' || key === 'hcp_method' || key === 'low_pct' || key === 'high_pct') refreshGamesFormHcpSection();
   updateGamesFormPotPreview();
 }
 function setGamesFormSideDollar(gid, val) {
@@ -21166,6 +21498,15 @@ async function submitGatheringGames(gatheringId) {
       ...(periodSegCount(c) > 1 ? { period: c.period } : {}) };
     if (mp) cfg.matches = rows.map(pr => [pr[0], pr[1]]);
     else if (gid === 'hilo') cfg.pairs = rows.map(pr => [pr[0], pr[1]]);
+    else if (gid === 'scramble') {
+      Object.assign(cfg, { scoring: c.scoring === 'stableford' ? 'stableford' : 'strokes', scale: c.scale === 'standard' ? 'standard' : 'bf', hcp_method: ['combined', 'none'].includes(c.hcp_method) ? c.hcp_method : 'low_high',
+        low_pct: Number(c.low_pct), high_pct: Number(c.high_pct), allowance: Number(c.allowance) || 25, payout: ['top2', 'top3'].includes(c.payout) ? c.payout : 'winner', pairs: rows.map(pr => [pr[0], pr[1]]) });
+      delete cfg.period;
+      if (cfg.scoring === 'stableford') {
+        if (!(Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18)) { bad(step, 'Scramble: Stableford needs par data for this venue. Add a tee for it in Venue Manager first, or score by strokes'); bailed = true; return; }
+        cfg.pars = _gamesFormBirdiepayPars.slice();
+      }
+    }
     else Object.assign(cfg, { win_by: periodSegCount(c) > 1 && c.win_by === 'holes' ? 'holes' : 'strokes', scope: periodSegCount(c) > 1 && (c.win_by === 'holes' || c.scope === 'group') ? 'group' : 'field', pairs: rows.map(pr => [pr[0], pr[1]]) });
     const v = BFEngine.validateGameConfig(gid, cfg);
     if (!v.ok) { bad(step, `${nm}: ${v.errors[0]}`); bailed = true; return; }
@@ -21237,6 +21578,7 @@ async function showNewGatheringForm() {
   _hostMode = 'crew';
   _hostRegisterAllCrew = false;
   _hostAutoRepeat = false;
+  _hostTeams = false;
   _hostTeeTimeStatus = 'confirmed';
   _hostHoles = 18;
   clearHostActionBar();
@@ -21295,7 +21637,7 @@ async function showNewGatheringForm() {
       ${hostRowHtml('host-players-row', 'Players', 'You', 'openHostPlayersSheet()')}
       ${hostSwitchHtml('host-playing-switch', true, 'setHostPlaying(!_hostPlaying)', "I'm playing", 'Counts as one of the seats')}
       <div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 14px">
-        <div style="flex:1"><div style="font-size:0.94rem;font-weight:600">Capacity</div><div style="font-size:0.74rem;color:var(--text-muted);margin-top:1px">Total players, all tee times</div></div>
+        <div style="flex:1"><div style="font-size:0.94rem;font-weight:600">Capacity</div><div id="host-cap-sub" style="font-size:0.74rem;color:var(--text-muted);margin-top:1px">Total players, all tee times</div></div>
         <button type="button" aria-label="Fewer" onclick="bumpHostCapacity(-1)" style="width:40px;height:40px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:1.25rem;font-weight:600;cursor:pointer;color:var(--text)">−</button>
         <input type="number" id="host-new-size" value="4" min="1" max="32" oninput="updateHostSpotsPreview()" style="width:52px;text-align:center;font-size:1.05rem;font-weight:700;border:0;background:transparent;padding:0;-moz-appearance:textfield">
         <button type="button" aria-label="More" onclick="bumpHostCapacity(1)" style="width:40px;height:40px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:1.25rem;font-weight:600;cursor:pointer;color:var(--text)">+</button>
@@ -21306,6 +21648,7 @@ async function showNewGatheringForm() {
     <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">
       ${hostRowHtml('host-holes-row', 'Holes', '18', "openHostOptionSheet('holes')")}
       ${hostRowHtml('host-format-row', 'Format', 'Individual Play', "openHostOptionSheet('format')")}
+      ${hostSwitchHtml('host-teams-switch', false, 'setHostTeams(!_hostTeams)', 'Teams of 2', 'Players sign up with a partner. Capacity stays total players, so tee times are unchanged.', 'host-teams-sub')}
       ${hostSwitchHtml('host-games-switch', false, 'setHostWantGames(!_hostWantGames)', 'Set up games', 'The Games screen opens right after you tap Create: pick the game, format and stakes there.')}
     </div>
     <select id="host-new-type" style="display:none">
@@ -22159,6 +22502,7 @@ async function submitNewGathering() {
   if (!dateVal || !timeVal) { showToast('Date and time are required', true); return; }
   if (new Date(`${dateVal}T${timeVal}:00`) <= new Date()) { showToast('Date and time must be in the future', true); return; }
   if (!size || size < 1) { showToast('Tee Time Capacity is required', true); return; }
+  if (_hostTeams && (size < 2 || size % 2)) { showToast('Teams of 2 needs an even number of players', true); return; }
   // Crew mode requires at least one player selected; open mode has no crew requirement
   if (_hostMode === 'crew' && !_hostSelectedCrewId && _hostCrewPicked.size === 0) {
     showToast('Pick a Crew or select at least one player', true); return;
@@ -22227,6 +22571,7 @@ async function submitNewGathering() {
         event_time: eventTime, size, crew_id: crewId, fill_list_enabled: fillListEnabled,
         gathering_type: gatheringType, description,
         tee_time_status: _hostTeeTimeStatus, holes: _hostHoles,
+        ...(_hostTeams ? { team_size: 2 } : {}),   // v4.48.0 — Teams of 2 (size stays total players)
         auto_repeat: _hostMode === 'crew' && _hostAutoRepeat // Dev-70 — crew-mode only, enforced client-side too
       })
     });

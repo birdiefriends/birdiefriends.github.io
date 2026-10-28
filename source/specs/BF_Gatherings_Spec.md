@@ -716,3 +716,26 @@ to the POST body, Worker upsert picks it up).
    d. Host panel: "✏️ Edit" button + `showEditGatheringForm()` (pre-populated create form)
    e. Capacity conflict guard (client-side, before PATCH fires)
    f. Post-save confirmation messaging
+
+---
+
+## 22. Teams of 2 (v4.48.0)
+
+A reusable Gathering setting for pairs events (the Turkey 2Man, future 2Man events).
+
+**Data.** `gatherings.team_size INTEGER` (2 = pairs event, NULL = normal) and `registrations.partner_id TEXT` (the partner this player named).
+`size` stays TOTAL PLAYERS, so capacity, Open Spots and tee-time counts are unchanged. Teams are always shown as a suffix to the player count.
+SQL: `ALTER TABLE gatherings ADD COLUMN team_size INTEGER; ALTER TABLE registrations ADD COLUMN partner_id TEXT;`
+Both are written in separate best-effort statements, so a Worker deployed before the ALTER keeps working (reads fall back).
+
+**Registering.** A Yes on a Teams-of-2 card opens a partner picker. A team LOCKS only when both players are Yes and name each other
+(derived client-side by `teamsState`). A No clears the partner. Naming someone sends them a "Partner request" push.
+The host can pair or unpair by hand: `POST /registrations/partner {gathering_id, host_id, a, b}` (b null = unpair), host-only.
+
+**Scoring.** New game `scramble` (engine 1.41.0): one ball and one score per team, whole round only.
+Scoring is `strokes` (low total wins) or `stableford` (most points wins; birdie-premium scale 0/1/2/4/6/8 or the standard 3/4/5 scale; the venue's pars are frozen into the config like Birdie Payouts, and the form refuses to save Stableford without them).
+Team handicap (`hcp_method`): `low_high` (35% of the lower + 15% of the higher course handicap, both editable; the default), `combined` (a % of both added, default 25), or `none`. `net_mode` own / off the low.
+Pays (`payout`): winner / top2 (65/35) / top3 (50/30/20). Ties share the places they cover; places nobody filled are spread over those that were; all amounts round down and the remainder is reported as unallocated.
+On a Teams-of-2 Gathering the Games form preselects Scramble and fills the teams from the locked pairs.
+
+**Deploy order.** Run the SQL, paste-deploy both Workers (`worker.js`, `bf_experiences_worker.js`), then publish the portal.

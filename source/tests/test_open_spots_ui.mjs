@@ -12,7 +12,7 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','escapeHtml','evtPhotoKey','computeGatheringGamesPayout','latestScorecardPerPlayer','scorecardMissingHoles','renderGatheringPayoutHtml','gpTabStyle','gpBtnStyle',
   'openGatheringCloseSheet','gcReconcile','confirmGatheringClose','openModal','closeModal',
   'isOpenSpotName','loadHostSpots','hostSpotsHtml','hostAddOpenSpot','refreshAfterSpotChange','openFillSpotSheet','renderFillSpotSheet',
-  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','gamesScoreKeyForGid','eventNameFromRef','hostAutoOpenSpots','hostLeftoverSeats','hostUnheldSeats','hostBumpHold','hostSetLeftAnnounce','renderHostLeftover','updateHostSpotsPreview','updateHostPlayersRow','hostSwitchHtml','hostSwitchSet','hostRowHtml','hostSetRowValue','bumpHostCapacity','setHostWantGames','pickHostOption','setHostHoles','closeHostSheet','openHostSheet'];
+  'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','gamesScoreKeyForGid','eventNameFromRef','hostAutoOpenSpots','hostLeftoverSeats','hostUnheldSeats','hostBumpHold','hostSetLeftAnnounce','renderHostLeftover','updateHostSpotsPreview','updateHostPlayersRow','hostCapacitySubText','hostTeamsCount','setHostTeams','hostSwitchHtml','hostSwitchSet','hostRowHtml','hostSetRowValue','bumpHostCapacity','setHostWantGames','pickHostOption','setHostHoles','closeHostSheet','openHostSheet'];
 function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillOk = true } = {}) {
   const dom = new JSDOM(`<body><div id="gathering-close-modal"><div id="gathering-close-body"></div></div>
     <div id="gathering-spot-modal"><div id="gathering-spot-title"></div><div id="gathering-spot-body"></div></div>
@@ -50,7 +50,7 @@ function setup({ spots = [{ gathering_id: 69, player_id: 'Open Spot 1' }], fillO
   ctx.posts = posts; ctx.toasts = toasts; ctx.calls = calls;
   vm.createContext(ctx); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
   vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') +
-    '\nvar _spotsByGathering = new Map(); var _eventShadowByGid = new Map(); var _hostWantGames = false; var _hostHoles = 18; var GATHERING_GAMES_META = {skins:{label:"Skins",icon:"S"},cttp:{label:"CTP",icon:"C"},birdieball:{label:"BirdieBall",icon:"B"}}; var _hostHoldN = 0; var _hostLeftAnnounce = null; var _hostMode = "crew"; var _hostPlaying = true; var currentPlayer = "Brian Hager"; var _hostCrewPicked = new Set(); var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null; var _gcScratchAck = new Map();', ctx);
+    '\nvar _spotsByGathering = new Map(); var _eventShadowByGid = new Map(); var _hostWantGames = false; var _hostTeams = false; var _hostHoles = 18; var GATHERING_GAMES_META = {skins:{label:"Skins",icon:"S"},cttp:{label:"CTP",icon:"C"},birdieball:{label:"BirdieBall",icon:"B"}}; var _hostHoldN = 0; var _hostLeftAnnounce = null; var _hostMode = "crew"; var _hostPlaying = true; var currentPlayer = "Brian Hager"; var _hostCrewPicked = new Set(); var _hostPanelView = "list"; var _fillSpot = null; var _gcClose = null; var _gcScratchAck = new Map();', ctx);
   return ctx;
 }
 
