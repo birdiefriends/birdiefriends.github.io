@@ -5560,3 +5560,12 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - **Worker library vs Cloudflare:** in sync (Brian deployed the last Worker before the final merge).
 - **Open into Dev-96:** Bootstrap §5 "Dev-96 start list".
 
+
+## Dev-96 (part) — xMan Teams, Scramble, Team Names (2026-10-28)
+**Result:** portal v4.49.0, engine 1.43.0, all on `main` (last commit `c442a1a`); spec §22 in `specs/BF_Gatherings_Spec.md`. Brian ran the SQL and deployed both Workers (main `worker.js`, `bf_experiences_worker.js`) before each portal merge.
+- **Built:** a Gathering can be a team event (`gatherings.team_size` 2-4; `size` stays total players). Players name teammates with their Yes (`registrations.partner_id`, names joined with `|`); a team locks only when all members are Yes and name each other; host can team/unteam by hand (`POST /registrations/partner`, `members`); team names (`registrations.team_name`, `POST /registrations/team-name`). New game `scramble` for teams of 1-4: strokes or Stableford, ranked-share / combined / no team handicap, pays winner / top 2 / top 3, names carried into the config and results.
+- **SQL run:** `ALTER TABLE gatherings ADD COLUMN team_size INTEGER; ALTER TABLE registrations ADD COLUMN partner_id TEXT; ALTER TABLE registrations ADD COLUMN team_name TEXT;`
+- **Brian's design calls:** built first as Teams of 2, then generalized to xMan before deploy; team names added after. Total players, not teams, drives capacity and tee times. Both strokes and Stableford must be options.
+- **My defaults to check:** 3-man shares 20/15/10, 4-man 25/20/15/10, combined 25/15/18% for 2/3/4 players (the 18% is mine).
+- **Not live-verified:** a real Turkey 2Man registration (partner picker, host pairing, naming), push to a named partner, Scramble results on a real round.
+- **Next:** recreate the Turkey 2Man (11/15) as a Gathering with Teams on at 2 per team; the BF Cup final dev is still pending.
