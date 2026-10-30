@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#085041">
+<title>Series 10 at Quota</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600&family=DM+Mono&display=swap" rel="stylesheet">
+<style>
+  :root { --green:#085041; --green-mid:#0f6b52; --gold:#c9a227; --gold-lite:#fff8e1; --bg:#f4f7f5; --card:#fff; --text:#0a2e25; --muted:#6b8f82; --border:#d0e5dc; --up:#1a6b30; --down:#a32d2d; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+  header { background:var(--green); padding:20px 16px 16px; text-align:center; }
+  .logo-row { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:6px; }
+  .logo-circle { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+  .event-title { font-family:'Playfair Display',serif; font-size:1.5rem; font-weight:900; color:#fff; line-height:1.1; }
+  .event-sub { font-size:0.8rem; color:rgba(255,255,255,0.65); margin-top:4px; letter-spacing:0.05em; }
+  .event-date { font-size:0.78rem; color:var(--gold); margin-top:3px; font-weight:500; }
+  .nav { display:flex; justify-content:center; gap:8px; padding:10px 16px; background:#f4f7f5; border-bottom:1px solid #d0e5dc; flex-wrap:wrap; }
+  .nav a { padding:5px 14px; border-radius:20px; font-size:0.78rem; font-weight:600; text-decoration:none; color:#085041; background:#fff; border:1.5px solid #d0e5dc; }
+  .nav a.on { color:#fff; background:#085041; border-color:#085041; }
+  .tabs { display:flex; background:var(--green); border-top:1px solid rgba(255,255,255,0.1); overflow-x:auto; }
+  .tab { flex:1; min-width:80px; padding:10px 4px; font-size:0.72rem; font-weight:600; color:rgba(255,255,255,0.6); text-align:center; cursor:pointer; border:0; border-bottom:2px solid transparent; background:none; font-family:inherit; letter-spacing:0.04em; white-space:nowrap; }
+  .tab.active { color:#fff; border-bottom-color:var(--gold); }
+  .tab:focus-visible { outline:2px solid var(--gold); outline-offset:-2px; }
+  main { padding:16px; max-width:700px; margin:0 auto; }
+  .notice { font-size:0.75rem; color:var(--muted); padding:8px 12px; background:#f0f7f4; border-radius:8px; margin-bottom:12px; text-align:center; }
+  .card { background:var(--card); border-radius:12px; padding:16px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,0.07); }
+  .card-label { font-size:0.68rem; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); margin-bottom:10px; }
+  .scroll { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:0.82rem; font-variant-numeric:tabular-nums; }
+  th { font-size:0.65rem; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); padding:6px 8px; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
+  td { padding:8px; border-bottom:0.5px solid var(--border); vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  .r { text-align:right; } th.r { text-align:right; }
+  .num { font-family:'DM Mono',monospace; }
+  .rank { font-weight:700; width:34px; }
+  .sc { font-weight:700; }
+  .flt { font-size:0.62rem; font-weight:600; border-radius:8px; padding:1px 6px; margin-left:4px; background:#e8f5e9; color:#1a6b30; }
+  .flt.Combo { background:#fff8e1; color:#8a6a00; } .flt.Gold { background:#fdecd6; color:#9a4f00; }
+  .mv { font-family:'DM Mono',monospace; font-size:0.75rem; white-space:nowrap; }
+  .mv.up { color:var(--up); } .mv.down { color:var(--down); } .mv.same { color:var(--muted); }
+  tr.out td { color:var(--muted); }
+  ul { margin:0; padding-left:1.1em; font-size:0.8rem; line-height:1.5; color:#35574b; } li+li { margin-top:5px; }
+  .updated { text-align:center; font-size:0.72rem; color:var(--muted); padding:12px 0 8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo-row">
+    <div class="logo-circle" style="background:none;padding:0"><img src="data:image/png;base64,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" style="width:44px;height:44px;object-fit:contain" alt="BirdieFriends logo"></div>
+    <div>
+      <div class="event-title">Series 10 at Quota</div>
+      <div class="event-date">Sunday, November 1, 2026</div>
+    </div>
+  </div>
+  <div class="event-sub">Where the final standings land if everyone plays exactly to quota</div>
+</header>
+<div class="nav">
+  <a href="/portal.html">← Portal</a>
+  <a href="/groupings.html">&#x26F3; Groupings</a>
+  <a href="/standings.html">🏆 Standings</a>
+  <a href="/results.html">📋 Results</a>
+  <a href="/mygame.html">⛳ My Series</a>
+</div>
+<div class="tabs" role="tablist">
+  <button class="tab active" data-f="overall" role="tab">Overall</button>
+  <button class="tab" data-f="Green" role="tab">🟢 Green</button>
+  <button class="tab" data-f="Combo" role="tab">🟡 Combo</button>
+  <button class="tab" data-f="Gold" role="tab">🟠 Gold</button>
+</div>
+<main>
+  <div class="notice">Every registered player scores exactly their Sunday quota &nbsp;·&nbsp; Best 4 results count fully, the rest are averaged</div>
+  <div class="card"><div class="card-label" id="lbl">Projected final standings</div><div class="scroll"><table><thead><tr><th>#</th><th>Player</th><th class="r">Quota</th><th class="r">Series</th></tr></thead><tbody id="tb"></tbody></table></div></div>
+  <div class="card"><div class="card-label">How to read this</div><ul>
+    <li>Each registered player scores their Sunday quota exactly. Anyone who is not registered keeps the score they have.</li>
+    <li>"Series" is the series score after Sunday: best 4 results plus the average of the rest, each result being points minus quota.</li>
+    <li>"Was" under each name is the standing after Series #9, with the move up or down.</li>
+    <li>A round at quota helps players with five or six events more than players with four, because it replaces their weakest counted round. That is how the series formula works, and it is why a leader can slip with a quota day.</li>
+    <li>Quotas are from the preliminary groupings. If a handicap index changes before Sunday, a quota and its row change with it. Flights are as they stand now; the series re-sorts them after each event.</li>
+    <li>This is a projection from results through Series #9. Sunday's scores decide the standings.</li>
+  </ul></div>
+  <div class="updated">Projection as of Friday, October 30, 2026</div>
+</main>
+<script>
+var R=[{"name":"BJ Kolonia","flight":"Combo","score":6.62,"q":true,"quota":21.7,"now":2,"nowf":2,"nowscore":3.36,"play":true,"noHcp":false,"pro":1,"prof":1},{"name":"Jeff Rapp","flight":"Combo","score":6.13,"q":true,"quota":22.6,"now":3,"nowf":3,"nowscore":3.2,"play":true,"noHcp":false,"pro":2,"prof":2},{"name":"Adam Costa","flight":"Combo","score":6.12,"q":true,"quota":18.6,"now":4,"nowf":4,"nowscore":1.73,"play":true,"noHcp":false,"pro":3,"prof":3},{"name":"Rich Potts","flight":"Combo","score":6.0,"q":true,"quota":24.5,"now":1,"nowf":1,"nowscore":6.17,"play":true,"noHcp":true,"pro":4,"prof":4},{"name":"Evan Lindermuth","flight":"Green","score":4.77,"q":true,"quota":26.1,"now":8,"nowf":3,"nowscore":-0.13,"play":true,"noHcp":false,"pro":5,"prof":1},{"name":"Dave Sherwin","flight":"Green","score":4.23,"q":true,"quota":30.8,"now":6,"nowf":1,"nowscore":1.37,"play":true,"noHcp":false,"pro":6,"prof":2},{"name":"Chooch Wernett","flight":"Green","score":3.02,"q":true,"quota":21.1,"now":13,"nowf":5,"nowscore":-2.68,"play":true,"noHcp":false,"pro":7,"prof":3},{"name":"Bill Steirer","flight":"Green","score":2.91,"q":true,"quota":27.8,"now":16,"nowf":8,"nowscore":-3.74,"play":true,"noHcp":false,"pro":8,"prof":4},{"name":"Jeremy Burkett","flight":"Combo","score":1.57,"q":true,"quota":null,"now":5,"nowf":5,"nowscore":1.57,"play":false,"noHcp":false,"pro":9,"prof":5},{"name":"Rich Penberg","flight":"Gold","score":1.47,"q":true,"quota":8.6,"now":11,"nowf":1,"nowscore":-1.7,"play":true,"noHcp":false,"pro":10,"prof":1},{"name":"Mohamed Walli","flight":"Green","score":1.26,"q":true,"quota":24.5,"now":15,"nowf":7,"nowscore":-3.03,"play":true,"noHcp":false,"pro":11,"prof":5},{"name":"Jordan Knappenberger","flight":"Green","score":0.51,"q":true,"quota":31.2,"now":7,"nowf":2,"nowscore":0.51,"play":true,"noHcp":false,"pro":12,"prof":6},{"name":"Brian Hager","flight":"Green","score":-0.84,"q":true,"quota":24.0,"now":14,"nowf":6,"nowscore":-2.85,"play":true,"noHcp":false,"pro":13,"prof":7},{"name":"Scott Justus","flight":"Green","score":-0.95,"q":true,"quota":null,"now":9,"nowf":4,"nowscore":-0.95,"play":false,"noHcp":false,"pro":14,"prof":8},{"name":"Tom Stitt","flight":"Combo","score":-1.09,"q":true,"quota":20.6,"now":10,"nowf":6,"nowscore":-1.09,"play":true,"noHcp":false,"pro":15,"prof":6},{"name":"Harry Pry","flight":"Combo","score":-1.12,"q":true,"quota":14.9,"now":null,"nowf":null,"nowscore":-1.12,"play":true,"noHcp":false,"pro":16,"prof":7},{"name":"Jake Knappenberger","flight":"Combo","score":-1.33,"q":true,"quota":13.2,"now":17,"nowf":7,"nowscore":-6.97,"play":true,"noHcp":false,"pro":17,"prof":8},{"name":"Scott Skeens","flight":"Gold","score":-1.9,"q":true,"quota":14.5,"now":12,"nowf":2,"nowscore":-1.9,"play":true,"noHcp":false,"pro":18,"prof":2},{"name":"Tom Arnold","flight":"Green","score":-7.01,"q":true,"quota":null,"now":18,"nowf":9,"nowscore":-7.01,"play":false,"noHcp":false,"pro":19,"prof":9},{"name":"Nate Stettler","flight":"Combo","score":-9.1,"q":true,"quota":null,"now":19,"nowf":8,"nowscore":-9.1,"play":false,"noHcp":false,"pro":20,"prof":9}];
+var cur='overall';
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function draw(){
+  var rows=R.filter(function(r){return cur==='overall'||r.flight===cur});
+  document.getElementById('lbl').textContent=cur==='overall'?'Projected final standings, overall':'Projected final standings, '+cur+' flight';
+  document.getElementById('tb').innerHTML=rows.map(function(r,i){
+    var pro=cur==='overall'?r.pro:r.prof, now=cur==='overall'?r.now:r.nowf, d=now-pro;
+    var mv=d>0?'<span class="mv up">▲'+d+'</span>':d<0?'<span class="mv down">▼'+(-d)+'</span>':'<span class="mv same">–</span>';
+    var was=now==null?'<span class="mv same">new to the standings</span>':'<span class="mv same">was #'+now+'</span> '+mv;
+    return '<tr class="'+(r.play?'':'out')+'"><td class="rank">'+pro+'</td><td>'+esc(r.name)+(r.noHcp?'<span style="color:#999;font-size:.65rem;margin-left:3px" title="No GHIN handicap">⚙</span>':'')+(cur==='overall'?'<span class="flt '+r.flight+'">'+r.flight+'</span>':'')+'<div style="font-size:.7rem">'+was+(r.play?'':' · not registered')+'</div></td><td class="r num">'+(r.quota==null?'—':r.quota.toFixed(1))+'</td><td class="r num sc">'+(r.score>0?'+':'')+r.score.toFixed(2)+'</td></tr>'}).join('');
+}
+Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(t){t.addEventListener('click',function(){cur=t.getAttribute('data-f');Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(x){x.classList.toggle('active',x===t)});draw()})});
+draw();
+</script>
+</body>
+</html>
