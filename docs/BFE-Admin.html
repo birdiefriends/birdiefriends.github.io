@@ -369,9 +369,9 @@
         <p class="hint" style="margin:4px 0 0">Each player's course handicap uses HIS tee's slope, rating and par, and his strokes land on HIS tee's hole handicaps (a pair that shares one ball uses the higher-handicap partner's tee). Strokes are still taken off the low across those course handicaps. The tees are copied into the Cup when you pick them, so a later Venue Manager change never rewrites a Cup that is set up.</p>
       </div>
       <div class="row">
-        <div><label for="cupHcpBB">Fourball allowance (%)</label><input type="number" id="cupHcpBB" step="5" min="0" max="100" value="75"></div>
+        <div><label for="cupHcpBB">Fourball allowance (%)</label><input type="number" id="cupHcpBB" step="5" min="0" max="100" value="80"></div>
         <div><label for="cupHcpFS">Foursomes allowance (%)</label><input type="number" id="cupHcpFS" step="5" min="0" max="100" value="50"></div>
-        <div><label for="cupHcpSI">Singles allowance (%)</label><input type="number" id="cupHcpSI" step="5" min="0" max="100" value="75"></div>
+        <div><label for="cupHcpSI">Singles allowance (%)</label><input type="number" id="cupHcpSI" step="5" min="0" max="100" value="80"></div>
         <div><label for="cupSlope">Slope (optional)</label><input type="number" id="cupSlope" step="1" min="55" max="155" placeholder="e.g. 132"></div>
         <div><label for="cupRating">Course rating (optional)</label><input type="number" id="cupRating" step="0.1" placeholder="e.g. 71.2"></div>
         <div><label for="cupPar">Par (optional)</label><input type="number" id="cupPar" step="1" placeholder="e.g. 72"></div>
@@ -6258,7 +6258,7 @@ function toggleGamedayView() {
 const cupState = {
   sides: [{ key: 'A', name: '', captain: '', players: [] }, { key: 'B', name: '', captain: '', players: [] }],
   points: { win: 1, half: 0.5, loss: 0 },
-  handicap: { bestball: 75, altshot: 50, singles: 75 },
+  handicap: { bestball: 80, altshot: 50, singles: 80 },
   rounds: []
 };
 function cupEsc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
