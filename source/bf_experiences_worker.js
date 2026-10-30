@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.43.1 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.44.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1508,7 +1508,7 @@ export default {
     // pick (spec §13.12). The shape is checked by BFEngine.cupValidate in the browser; the Worker only checks it is
     // two sides and an array of rounds, then stores it. The table is created on first use, so there is no D1 step.
     //   GET    /bfe/cup?event=<name>            no PIN (players read the board and their match)
-    //   POST   /bfe/cup {event_name, config, pin}   PIN-gated, upsert (the selection tool re-saves the whole document)
+    //   POST   /bfe/cup {event_name, config, pin}   PIN-gated (global PIN, or that Cup's own host_code), upsert (the selection tool re-saves the whole document); only the global PIN creates a Cup or sets host_code
     //   DELETE /bfe/cup?event=<name>&pin=       PIN-gated
     //   Captain access: config.access = {A:'CODE', B:'CODE'} is stored with the document but NEVER returned to the public;
     //   GET with &pin= includes it (host), GET with &cap=<code> adds `you` (the captain's side) and 403s on a bad code.
@@ -1536,8 +1536,11 @@ export default {
       cfg.phases = ph;
       return cfg;
     };
+    // Per-event host code (Dev-97): the Cup record keeps a private `host_code` (never in the public document, like the captain codes). The host runs the Cup
+    // with it instead of the global PIN; 7797 stays as the commissioner override. Only the global PIN creates a Cup or sets/changes the code.
+    const cupIsHost = (cfgObj, pin) => String(pin) === '7797' || (!!cfgObj && typeof cfgObj.host_code === 'string' && cfgObj.host_code.length >= 4 && String(pin) === cfgObj.host_code);
     const cupPublic = (cfgObj, viewerSide) => {
-      const c = Object.assign({}, cfgObj); delete c.access;
+      const c = Object.assign({}, cfgObj); delete c.access; delete c.host_code;
       if (c.pairs) {
         const keys = (c.sides || []).map(sd => sd.key);
         const open = keys.length === 2 && keys.every(k => c.pairs[k] && c.pairs[k].locked === true);
@@ -1585,7 +1588,7 @@ export default {
           // Live scoring (trust model, like the rest of the app): anyone playing in the match can post its hole scores; a captain code or the PIN works too.
           const rd = (cfgObj.rounds || []).find(r => r.key === body.round);
           if (!rd) return J({ error: 'Unknown round' }, 404);
-          const capOk = Object.keys(acc).some(k => body.code && String(acc[k]) === String(body.code)) || String(body.pin) === '7797';
+          const capOk = Object.keys(acc).some(k => body.code && String(acc[k]) === String(body.code)) || cupIsHost(cfgObj, body.pin);
           cfgObj.scores = cfgObj.scores || {};
           const ph = cfgObj.phases = cfgObj.phases || {}, now = new Date().toISOString();
           if (body.action === 'match_close' || body.action === 'match_reopen') {
@@ -1599,7 +1602,7 @@ export default {
               if (!['standing', 'concede', 'halve'].includes(body.how)) return J({ error: 'Close it as it stands, conceded, or halved' }, 400);
               const sd = (cfgObj.sides || []).map(x => x.key);
               if (body.how === 'concede' && !sd.includes(body.side)) return J({ error: 'Say which side conceded' }, 400);
-              cfgObj.closed[rd.key][mm.key] = { how: body.how, side: body.how === 'concede' ? body.side : undefined, by: String(body.player || (String(body.pin) === '7797' ? 'host' : 'captain')).slice(0, 60), at: now };
+              cfgObj.closed[rd.key][mm.key] = { how: body.how, side: body.how === 'concede' ? body.side : undefined, by: String(body.player || (cupIsHost(cfgObj, body.pin) ? 'host' : 'captain')).slice(0, 60), at: now };
             }
             await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
             return J({ ok: true, config: cupPublic(cfgObj) });
@@ -1843,7 +1846,7 @@ export default {
           if (!row) return J({ error: 'Not found' }, 404);
           const full = JSON.parse(row.config);
           const capCode = url.searchParams.get('cap');
-          if (String(url.searchParams.get('pin')) === '7797') return J({ ok: true, event_name: row.event_name, config: full, updated_at: row.updated_at });
+          if (cupIsHost(full, url.searchParams.get('pin'))) return J({ ok: true, event_name: row.event_name, config: full, updated_at: row.updated_at });
           if (capCode) {
             const you = Object.keys(full.access || {}).find(k => String(full.access[k]) === String(capCode));
             if (!you) return J({ error: 'Unauthorized' }, 403);
@@ -1853,21 +1856,29 @@ export default {
         }
         if (request.method === 'POST') {
           let body; try { body = await request.json(); } catch (e) { return J({ error: 'Invalid JSON' }, 400); }
-          if (String(body.pin) !== '7797') return J({ error: 'Unauthorized' }, 403);
+          // the global PIN may create or replace any Cup; a host code may only re-save the Cup it belongs to
+          const byGlobal = String(body.pin) === '7797';
+          if (!byGlobal) {
+            const pr = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(String(body.event_name || '')).first();
+            let pcAuth = null; try { pcAuth = pr ? JSON.parse(pr.config) : null; } catch (e) { pcAuth = null; }
+            if (!cupIsHost(pcAuth, body.pin)) return J({ error: 'Unauthorized' }, 403);
+          }
           const { event_name, config } = body;
+          if (byGlobal && config && typeof config === 'object' && config.host_code != null && config.host_code !== '' && !/^[A-Za-z0-9-]{4,24}$/.test(String(config.host_code))) return J({ error: 'The host code needs 4 to 24 letters, digits or dashes' }, 400);
           if (!event_name || !config || typeof config !== 'object') return J({ error: 'event_name and config (object) are required' }, 400);
           if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
           // the public document never carries the captain codes, so a re-save must not wipe them
           // (the same goes for the captains' Saturday pairs: a page that never loaded them must not erase them)
-          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (!config.singles && pc.singles) config.singles = pc.singles; if (!config.closed && pc.closed) config.closed = pc.closed; if (!config.results && pc.results) config.results = pc.results; if (!config.access && pc.access) config.access = pc.access; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
+          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (!config.singles && pc.singles) config.singles = pc.singles; if (!config.closed && pc.closed) config.closed = pc.closed; if (!config.results && pc.results) config.results = pc.results; if (!config.access && pc.access) config.access = pc.access; if (!byGlobal) { if (pc.host_code) config.host_code = pc.host_code; else delete config.host_code; } else if (!config.host_code && pc.host_code) config.host_code = pc.host_code; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
           await env.DB.prepare(`INSERT INTO bfe_cup (event_name, config, updated_at) VALUES (?, ?, datetime('now'))
              ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(cupStampPhases(config))).run();
           return J({ ok: true });
         }
         if (request.method === 'DELETE') {
-          if (String(url.searchParams.get('pin')) !== '7797') return J({ error: 'Unauthorized' }, 403);
           const event = url.searchParams.get('event');
           if (!event) return J({ error: 'event query param is required' }, 400);
+          { const pr = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event).first(); let pcDel = null; try { pcDel = pr ? JSON.parse(pr.config) : null; } catch (e) { pcDel = null; }
+            if (!cupIsHost(pcDel, url.searchParams.get('pin'))) return J({ error: 'Unauthorized' }, 403); }
           await env.DB.prepare(`DELETE FROM bfe_cup WHERE event_name = ?`).bind(event).run();
           return J({ ok: true });
         }

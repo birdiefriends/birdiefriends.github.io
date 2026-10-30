@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.43.1';
+  const ENGINE_VERSION = '1.44.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2645,11 +2645,45 @@
     const legacy = n(h.pct);                                   // an older single allowance applies to any format without its own
     const by = {};
     ['bestball', 'altshot', 'singles'].forEach(f => { const v = n(h[f]); by[f] = clamp(v != null ? v : (legacy != null ? legacy : 0)); });
-    return { pct: Math.max(by.bestball, by.altshot, by.singles), by, slope: n(h.slope), rating: n(h.rating), par: n(h.par) };
+    const rule = { pct: Math.max(by.bestball, by.altshot, by.singles), by, slope: n(h.slope), rating: n(h.rating), par: n(h.par) };
+    const tiers = cupTiersOf(h);
+    if (tiers.length) rule.tiers = tiers;                      // only present when the Cup plays tees by handicap, so a one-tee Cup is unchanged
+    return rule;
+  }
+  // Tee by handicap: cfg.handicap.tiers = [{ tee, label, maxHcp, slope, rating, par, strokeIndex[18], pars[18] }, ...], frozen into the Cup record by BFE-A.
+  // A player plays the first tier whose maxHcp is above his Index (BFSeries: Green < 10, Combo < 18, Gold the rest); the last tier takes everyone above.
+  function cupTiersOf(h) {
+    const raw = h && Array.isArray(h.tiers) ? h.tiers : [];
+    const nn = v => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null);
+    const arr18 = (a, lo, hi) => (Array.isArray(a) && a.length === 18 && a.every(x => Number(x) >= lo && Number(x) <= hi) ? a.map(Number) : null);
+    return raw.map(t => ({ tee: String(t.tee || t.label || ''), label: String(t.label || t.tee || ''), maxHcp: nn(t.maxHcp), slope: nn(t.slope), rating: nn(t.rating), par: nn(t.par), strokeIndex: arr18(t.strokeIndex, 1, 18), pars: arr18(t.pars, 3, 6) }))
+      .filter(t => t.slope !== null && t.rating !== null && t.par !== null)
+      .sort((a, b) => (a.maxHcp === null ? Infinity : a.maxHcp) - (b.maxHcp === null ? Infinity : b.maxHcp));
+  }
+  function cupTierFor(index, rule) {
+    const ts = rule && rule.tiers, x = Number(index);
+    if (!ts || !ts.length || index === null || index === '' || !Number.isFinite(x)) return null;
+    return ts.find(t => t.maxHcp !== null && x < t.maxHcp) || ts[ts.length - 1];
+  }
+  function cupIndexOf(cfg, name) {
+    const st = (cfg && cfg.draft && cfg.draft.stats) || {}, k = Object.keys(st).find(x => norm(x) === norm(name)), v = k !== undefined && st[k] ? Number(st[k].hcp) : NaN;
+    return Number.isFinite(v) ? v : null;
+  }
+  // The hole stroke indexes that place a player's strokes: the ones of the tee his Index plays from. A pair (one ball) uses the higher-Index partner's tee,
+  // the partner who is receiving the strokes. Without tiers, or without a known Index, it is the Cup's single tee (cfg.handicap.strokeIndex).
+  function cupStrokeIndexFor(cfg, names) {
+    const rule = cupHandicapRule(cfg), h = (cfg && cfg.handicap) || {};
+    if (rule.tiers) {
+      const idx = (names || []).map(n => cupIndexOf(cfg, n)).filter(v => v !== null);
+      const t = idx.length ? cupTierFor(Math.max(...idx), rule) : null;
+      if (t && t.strokeIndex) return t.strokeIndex;
+    }
+    return Array.isArray(h.strokeIndex) && h.strokeIndex.length === 18 ? h.strokeIndex : null;
   }
   function cupCourseHcp(index, rule) {
     if (!Number.isFinite(Number(index)) || index === null || index === '') return null;
-    return Math.round(rule && rule.slope && rule.rating != null && rule.par != null ? courseHandicap(index, rule.slope, rule.rating, rule.par) : Number(index));
+    const r = cupTierFor(index, rule) || rule;
+    return Math.round(r && r.slope && r.rating != null && r.par != null ? courseHandicap(index, r.slope, r.rating, r.par) : Number(index));
   }
   // match = {sides:[{side, players:[..]}, {…}]}; hcps = {name: course handicap}. Rows say what each player (Fourball, Singles) or pair (Foursomes) receives.
   function cupMatchStrokes(match, hcps, rule) {
@@ -2694,8 +2728,8 @@
   function cupSegmentAt(round, hole) { return ((round && round.segments) || []).find(sg => hole >= sg.from && hole <= sg.to) || null; }
   // The two 18-slot NET score arrays of one segment (null = hole not played yet; 99 = the side picked up).
   function cupMatchNets(cfg, round, match, entry, seg) {
-    const rule = cupHandicapRule(cfg), hc = cupHcpMap(cfg), si = (cfg.handicap && cfg.handicap.strokeIndex) || null;
-    const st = cupMatchStrokes(match, hc, rule), hs = n => cupHoleStrokes(n, si || []);
+    const rule = cupHandicapRule(cfg), hc = cupHcpMap(cfg);
+    const st = cupMatchStrokes(match, hc, rule), hs = (n, names) => cupHoleStrokes(n, cupStrokeIndexFor(cfg, names) || []);
     const H = (entry && entry.h) || {};
     const gv = (h, name) => { const e = H[String(h + 1)]; if (!e) return undefined; const k = Object.keys(e).find(x => norm(x) === norm(name)); return k === undefined ? undefined : Number(e[k]); };
     return [0, 1].map(i => {
@@ -2703,13 +2737,13 @@
       for (let h = seg.from - 1; h < seg.to; h++) {
         if (seg.format === 'altshot') {
           const g = gv(h, sd.players[0]); if (g === undefined) continue;
-          const t = st.teams[i], arr = hs(t ? t.strokes : 0);
+          const t = st.teams[i], arr = hs(t ? t.strokes : 0, sd.players);
           out[h] = g > 0 ? g - arr[h] : 99;
         } else {
           let best = null, seen = false;
           sd.players.forEach(p => {
             const g = gv(h, p); if (g === undefined) return; seen = true;
-            const row = st.players.find(r => norm(r.names[0]) === norm(p)), a = hs(row ? row.strokes : 0);
+            const row = st.players.find(r => norm(r.names[0]) === norm(p)), a = hs(row ? row.strokes : 0, [p]);
             if (g > 0) best = best === null ? g - a[h] : Math.min(best, g - a[h]);
           });
           if (seen) out[h] = best === null ? 99 : best;
@@ -2819,7 +2853,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupSinglesRound, cupSinglesControl, cupSinglesView, cupSinglesPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupGroupsOf, cupMatchNumbers, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
+    CUP_FORMATS, cupTiersOf, cupTierFor, cupIndexOf, cupStrokeIndexFor, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupSinglesRound, cupSinglesControl, cupSinglesView, cupSinglesPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupGroupsOf, cupMatchNumbers, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });

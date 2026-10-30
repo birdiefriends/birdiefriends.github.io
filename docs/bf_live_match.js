@@ -103,16 +103,18 @@
   }
 
   function stat(cfg, round, match, hole) {                  // strokes the players / teams get on this hole, and who is entering what
-    var E = S.opts.E, rule = E.cupHandicapRule(cfg), hc = E.cupHcpMap(cfg), si = (cfg.handicap && cfg.handicap.strokeIndex) || null;
+    var E = S.opts.E, rule = E.cupHandicapRule(cfg), hc = E.cupHcpMap(cfg);
     var st = E.cupMatchStrokes(match, hc, rule), seg = E.cupSegmentAt(round, hole), fmt = seg ? seg.format : 'bestball';
     var rows = [];
-    function dots(n) { var a = E.cupHoleStrokes(n, si || [])[hole - 1]; return a || 0; }
+    // each player (or pair) places his strokes with the hole stroke indexes of HIS tee (tee by handicap); a one-tee Cup uses the Cup's tee
+    function dots(n, names) { var a = E.cupHoleStrokes(n, E.cupStrokeIndexFor(cfg, names) || [])[hole - 1]; return a || 0; }
     if (fmt === 'altshot') {
-      match.sides.forEach(function (sd, i) { rows.push({ key: sd.players[0], label: sideName(cfg, sd.side), sub: sd.players.join(' & '), side: i === 0 ? 'a' : 'b', strokes: dots(st.teams[i] ? st.teams[i].strokes : 0) }); });
+      match.sides.forEach(function (sd, i) { rows.push({ key: sd.players[0], label: sideName(cfg, sd.side), sub: sd.players.join(' & '), side: i === 0 ? 'a' : 'b', strokes: dots(st.teams[i] ? st.teams[i].strokes : 0, sd.players) }); });
     } else {
-      match.sides.forEach(function (sd, i) { sd.players.forEach(function (p) { var rw = st.players.filter(function (x) { return norm(x.names[0]) === norm(p); })[0]; rows.push({ key: p, label: p, sub: '', side: i === 0 ? 'a' : 'b', strokes: dots(rw ? rw.strokes : 0) }); }); });
+      match.sides.forEach(function (sd, i) { sd.players.forEach(function (p) { var rw = st.players.filter(function (x) { return norm(x.names[0]) === norm(p); })[0]; rows.push({ key: p, label: p, sub: '', side: i === 0 ? 'a' : 'b', strokes: dots(rw ? rw.strokes : 0, [p]) }); }); });
     }
-    return { fmt: fmt, rows: rows, hasSI: !!si };
+    var everyone = [].concat.apply([], match.sides.map(function (sd) { return sd.players; }));
+    return { fmt: fmt, rows: rows, hasSI: everyone.some(function (p) { return !!E.cupStrokeIndexFor(cfg, [p]); }) };
   }
 
   var FMT = { bestball: 'Fourball', altshot: 'Foursomes', singles: 'Singles' };

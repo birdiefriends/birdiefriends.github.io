@@ -356,9 +356,18 @@
       <h3 style="margin:14px 0 6px;font-size:0.95rem">Handicaps</h3>
       <div class="row">
         <div><label for="cupVenue">Course (from Venue Manager)</label><select id="cupVenue"><option value="">— load venues in section 2 —</option></select></div>
-        <div><label for="cupTee">Tee</label><select id="cupTee"><option value="">— pick a course first —</option></select></div>
+        <div id="cupTeeOne"><label for="cupTee">Tee</label><select id="cupTee"><option value="">— pick a course first —</option></select></div>
       </div>
       <p class="hint" style="margin-top:0" id="cupTeeHint">Picking a tee fills slope, rating, par and the hole stroke indexes from the Venue Manager. You can still edit the numbers below.</p>
+      <div class="row">
+        <div><label for="cupTeeMode">Tees</label><select id="cupTeeMode"><option value="one">One tee for everyone</option><option value="tiers">By handicap (each player plays the tee his Index calls for)</option></select></div>
+      </div>
+      <div id="cupTierBox" style="display:none;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+        <div id="cupTierRows"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px"><button type="button" class="link" id="cupTierPreset">BFSeries default (Green under 10, Combo under 18, Gold)</button><button type="button" class="link" id="cupTierAdd">+ Add a tier</button></div>
+        <p class="hint" style="margin:6px 0 0" id="cupTierHint"></p>
+        <p class="hint" style="margin:4px 0 0">Each player's course handicap uses HIS tee's slope, rating and par, and his strokes land on HIS tee's hole handicaps (a pair that shares one ball uses the higher-handicap partner's tee). Strokes are still taken off the low across those course handicaps. The tees are copied into the Cup when you pick them, so a later Venue Manager change never rewrites a Cup that is set up.</p>
+      </div>
       <div class="row">
         <div><label for="cupHcpBB">Fourball allowance (%)</label><input type="number" id="cupHcpBB" step="5" min="0" max="100" value="75"></div>
         <div><label for="cupHcpFS">Foursomes allowance (%)</label><input type="number" id="cupHcpFS" step="5" min="0" max="100" value="50"></div>
@@ -368,6 +377,12 @@
         <div><label for="cupPar">Par (optional)</label><input type="number" id="cupPar" step="1" placeholder="e.g. 72"></div>
       </div>
       <p class="hint" style="margin-top:0"><b>Off the low:</b> in each match the lowest handicap plays to scratch and everyone else gets this % of the difference, set separately for each format (Foursomes compares the pairs' combined handicaps). 0 = scratch for that format; 100 = the full difference. Without slope, rating and par, the handicap Index is used as the course handicap.</p>
+      <h3 style="margin:14px 0 6px;font-size:0.95rem">Host code</h3>
+      <div class="row">
+        <div><label for="cupHostCode">Host code for this Cup</label><input type="text" id="cupHostCode" maxlength="24" placeholder="Generate one" autocomplete="off"></div>
+        <div style="align-self:end"><button type="button" class="link" id="cupHostCodeGen">Generate a new code</button></div>
+      </div>
+      <p class="hint" style="margin-top:0">Whoever runs the Cup opens its page with <b>?host=1</b> and types this code instead of the global PIN. It works for this Cup only (setup, draft overrides, closing matches). Only the global PIN can create the Cup or change this code. Captain links are separate.</p>
       <h3 style="margin:14px 0 6px;font-size:0.95rem">Rounds (set in section 4)</h3>
       <p class="hint" style="margin-top:0">Describe each day in <b>section 4</b>: add a round, choose the engine <b>Team match play (Cup)</b>, then give it segments (Fourball, Foursomes or Singles, and the holes each covers). Every segment is its own match for points; the pairs or matchups are the same across a round's segments. This list shows what section 4 currently says.</p>
       <div id="cupRounds"></div>
@@ -544,7 +559,7 @@
     <pre id="rawConfig" style="margin-top:16px"></pre>
   </section>
 </main>
-<script src="bf_engine.js?v=1.40.0"></script>
+<script src="bf_engine.js?v=1.44.0"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════════
 // Connection defaults — flat hardcoded constants, not derived from where
@@ -6283,7 +6298,8 @@ function cupSyncFromInputs() {
   const opt = id => { const v = document.getElementById(id).value; return v === '' || !isFinite(Number(v)) ? null : Number(v); };
   const prevH = cupState.handicap || {};
   cupState.handicap = { bestball: num('cupHcpBB', 0), altshot: num('cupHcpFS', 0), singles: num('cupHcpSI', 0), slope: opt('cupSlope'), rating: opt('cupRating'), par: opt('cupPar'),
-    venueId: prevH.venueId || null, venueName: prevH.venueName || null, tee: prevH.tee || null, strokeIndex: prevH.strokeIndex || null, pars: prevH.pars || null };
+    venueId: prevH.venueId || null, venueName: prevH.venueName || null, tee: prevH.tee || null, strokeIndex: prevH.strokeIndex || null, pars: prevH.pars || null, tiers: prevH.tiers || null };
+  const hostEl = document.getElementById('cupHostCode'); if (hostEl) cupState.host_code = hostEl.value.trim();
 }
 // Course and tee for the Cup's handicaps come from the Venue Manager (GET /bfe/venue-tees). Picking a tee snapshots its slope, rating, par and hole
 // stroke indexes into the Cup document, so a later change in the Venue Manager never rewrites a Cup that is already set up.
@@ -6307,6 +6323,7 @@ async function cupLoadTees(venueId, keepTee) {
     cupTees = j.tees || [];
     tsel.innerHTML = cupTees.length ? '<option value="">— pick a tee —</option>' + cupTees.map((t, i) => '<option value="' + i + '"' + (keepTee && t.tee_name === keepTee ? ' selected' : '') + '>' + cupEsc(cupTeeLabel(t)) + '</option>').join('')
       : '<option value="">No tees saved for this course yet (add them in the Venue Manager)</option>';
+    if (cupTeeModeVal === 'tiers') { if (cupTierRows.length && !((cupState.handicap || {}).tiers)) cupTierSnapshot(); cupTierRender(); cupSummaryRender(); }
   } catch (e) { tsel.innerHTML = '<option value="">Could not load tees: ' + cupEsc(e.message) + '</option>'; }
 }
 function cupApplyTee(t) {
@@ -6324,6 +6341,64 @@ function cupApplyTee(t) {
   }
   cupSummaryRender();
   document.getElementById('cupTeeHint').textContent = t ? 'Using ' + cupTeeLabel(t) + (h.strokeIndex ? ', with its hole stroke indexes.' : '. This tee has no stroke indexes saved, so strokes cannot be placed on holes until they are added in the Venue Manager.') : 'Picking a tee fills slope, rating, par and the hole stroke indexes from the Venue Manager. You can still edit the numbers below.';
+}
+// ── Tee by handicap (BFSeries tiers) ──
+// Each tier = an Index limit and one of the venue's tees. A player plays the first tier whose limit is above his Index; the last tier takes everyone above.
+// Picking tees copies slope, rating, par, hole stroke indexes and pars into cupState.handicap.tiers (the Cup keeps its own numbers).
+let cupTeeModeVal = 'one';
+let cupTierRows = [];   // what is on screen: [{ label, maxHcp (null = no limit), tee (the venue tee's name) }]
+const CUP_TIER_PRESET = [{ label: 'Green', maxHcp: 10, tee: 'Green' }, { label: 'Combo', maxHcp: 18, tee: 'Green/Gold' }, { label: 'Gold', maxHcp: null, tee: 'Gold' }];
+function cupTierProblems() {
+  const p = [];
+  if (!cupTierRows.length) { p.push('Add at least one tier.'); return p; }
+  cupTierRows.forEach((r, i) => {
+    const last = i === cupTierRows.length - 1;
+    if (!r.tee) p.push('Pick a tee for tier ' + (i + 1) + '.');
+    else if (cupTees.length && !cupTees.some(t => t.tee_name === r.tee) && !((cupState.handicap || {}).tiers || []).some(t => t.tee === r.tee)) p.push('Tier ' + (i + 1) + ': this course has no tee called "' + r.tee + '".');
+    if (!last && (r.maxHcp == null || !isFinite(r.maxHcp))) p.push('Tier ' + (i + 1) + ' needs an Index limit (the last tier takes everyone above).');
+    if (i > 0 && !last && r.maxHcp != null && cupTierRows[i - 1].maxHcp != null && r.maxHcp <= cupTierRows[i - 1].maxHcp) p.push('Index limits must go up from tier to tier.');
+  });
+  return p;
+}
+function cupTierSnapshot() {
+  const h = cupState.handicap = cupState.handicap || {};
+  if (!cupTees.length && !(h.tiers && h.tiers.length)) { h.tiers = null; return; }
+  if (!cupTees.length) return;   // tees not loaded yet: keep what the Cup already holds
+  const out = [];
+  cupTierRows.forEach(r => {
+    const t = cupTees.find(x => x.tee_name === r.tee), prev = (h.tiers || []).find(x => x.tee === r.tee);
+    const lim = r.maxHcp == null || r.maxHcp === '' ? null : Number(r.maxHcp);
+    if (t) {
+      const si = (t.holes || []).map(x => Number(x.handicap)), pr = (t.holes || []).map(x => Number(x.par));
+      out.push({ tee: t.tee_name, label: r.label || t.tee_name, maxHcp: lim, slope: t.slope_rating, rating: t.course_rating, par: t.par_total,
+        strokeIndex: si.length === 18 && si.every(n => n >= 1 && n <= 18) ? si : null, pars: pr.length === 18 && pr.every(n => n >= 3 && n <= 6) ? pr : null });
+    } else if (prev) out.push(Object.assign({}, prev, { label: r.label || prev.tee, maxHcp: lim }));
+  });
+  h.tiers = out.length && out.length === cupTierRows.length ? out : null;
+  if (h.tiers) {   // the first tier also stands in as the Cup's single tee for anything that reads it (the pars, a player with no Index)
+    const f = h.tiers[0]; h.tee = f.tee; h.slope = f.slope; h.rating = f.rating; h.par = f.par; h.strokeIndex = f.strokeIndex; h.pars = f.pars;
+    document.getElementById('cupSlope').value = f.slope != null ? f.slope : ''; document.getElementById('cupRating').value = f.rating != null ? f.rating : ''; document.getElementById('cupPar').value = f.par != null ? f.par : '';
+  }
+}
+function cupTierHintRender() {
+  const el = document.getElementById('cupTierHint'); if (!el) return;
+  const pr = cupTierProblems(), h = cupState.handicap || {};
+  el.innerHTML = pr.length ? '<span style="color:#b71c1c">' + pr.map(cupEsc).join(' ') + '</span>'
+    : '<span style="color:#1b5e20">' + (h.tiers ? 'Tees saved into the Cup: ' + h.tiers.map(t => cupEsc(t.label) + ' (' + t.slope + ' / ' + t.rating + ')').join(', ') + '.' : 'Pick the course above and the tees are copied in.') + '</span>';
+}
+function cupTierRender() {
+  const box = document.getElementById('cupTierRows'); if (!box) return;
+  const names = cupTees.map(t => t.tee_name);
+  box.innerHTML = cupTierRows.map((r, i) => {
+    const last = i === cupTierRows.length - 1;
+    const opts = ['<option value="">— tee —</option>'].concat(names.concat(r.tee && !names.includes(r.tee) ? [r.tee] : []).map(n => '<option' + (n === r.tee ? ' selected' : '') + '>' + cupEsc(n) + '</option>')).join('');
+    return '<div class="row" style="align-items:end;margin-bottom:4px">'
+      + '<div><label>Name</label><input type="text" data-tier="' + i + '" data-f="label" value="' + cupEsc(r.label) + '" placeholder="e.g. Green"></div>'
+      + '<div><label>' + (last ? 'Index under (blank = everyone above)' : 'Index under') + '</label><input type="number" step="0.1" data-tier="' + i + '" data-f="maxHcp" value="' + (r.maxHcp == null ? '' : r.maxHcp) + '"' + (last ? ' placeholder="no limit"' : '') + '></div>'
+      + '<div><label>Venue tee</label><select data-tier="' + i + '" data-f="tee">' + opts + '</select></div>'
+      + '<div><button type="button" class="link" data-tier-del="' + i + '">✕</button></div></div>';
+  }).join('');
+  cupTierHintRender();
 }
 function cupRender() {
   const names = cupRosterNames();
@@ -6345,6 +6420,11 @@ function cupRender() {
   document.getElementById('cupPar').value = hc.par != null ? hc.par : '';
   cupVenueRender();
   if (hc.venueId && !cupTees.length) cupLoadTees(hc.venueId, hc.tee);
+  document.getElementById('cupTeeMode').value = cupTeeModeVal;
+  document.getElementById('cupTeeOne').style.display = cupTeeModeVal === 'tiers' ? 'none' : '';
+  document.getElementById('cupTierBox').style.display = cupTeeModeVal === 'tiers' ? '' : 'none';
+  if (cupTeeModeVal === 'tiers') cupTierRender();
+  { const hostEl = document.getElementById('cupHostCode'); if (hostEl && document.activeElement !== hostEl) hostEl.value = cupState.host_code || ''; }
   const fmtOpts = f => Object.keys(BFEngine.CUP_FORMATS).map(k => '<option value="' + k + '"' + (k === f ? ' selected' : '') + '>' + BFEngine.CUP_FORMATS[k].label + '</option>').join('');
   document.getElementById('cupRounds').innerHTML = cupState.rounds.map(r => {
     const hv = r.holes && r.holes.count === 9 ? (r.holes.half === 'back' ? ' (back 9 only)' : ' (front 9 only)') : '';
@@ -6364,6 +6444,7 @@ function cupSummaryRender() {
   const lines = [];
   if (field < 2) lines.push('<b>Field:</b> add the roster in section 3 to see the points math.'); else lines.push('<b>Field:</b> ' + field + ' players (' + plan.perSide + ' a side). A typical pairs day then singles day makes <b>' + plan.satMatches + '</b> pair matches (2 segments each) and <b>' + plan.sunMatches + '</b> singles matches: <b>' + plan.totalPoints + '</b> points, <b>' + plan.target + '</b> wins outright.');
   lines.push('<b>Teams:</b> ' + cupState.sides.map(s => cupEsc(s.name || 'Side ' + s.key) + ' ' + s.players.length + ' picked').join(' · '));
+  if (cupState.handicap && cupState.handicap.tiers) lines.push('<b>Tees:</b> by handicap, ' + cupState.handicap.tiers.map(t => cupEsc(t.label) + (t.maxHcp != null ? ' under ' + t.maxHcp : ' and above')).join(' · '));
   lines.push('<b>Matches built:</b> ' + built + (pts ? ' (' + pts + ' points available, ' + (pts / 2 + 0.5) + ' wins)' : ''));
   const errs = v.errors.concat(cupState.rounds.length && !cupState.sides[0].name ? ['Name side A'] : [], cupState.rounds.length && !cupState.sides[1].name ? ['Name side B'] : []);
   if (errs.length) lines.push('<span style="color:#b71c1c"><b>Fix:</b> ' + errs.map(cupEsc).join('; ') + '</span>');
@@ -6377,6 +6458,8 @@ async function cupSave() {
   const v = BFEngine.cupValidate(cupState);
   if (!v.ok) { cupStatus('Fix the setup first: ' + v.errors.join('; '), 'err'); return; }
   if (!cupState.sides[0].name || !cupState.sides[1].name) { cupStatus('Name both sides first.', 'err'); return; }
+  if (cupTeeModeVal === 'tiers') { const pr = cupTierProblems(); if (pr.length || !(cupState.handicap && cupState.handicap.tiers)) { cupStatus('Fix the tees first: ' + (pr.join(' ') || 'pick the course so the tier tees can be copied in.'), 'err'); return; } }
+  if (cupState.host_code && !/^[A-Za-z0-9-]{4,24}$/.test(cupState.host_code)) { cupStatus('The host code needs 4 to 24 letters, digits or dashes.', 'err'); return; }
   cupState.sides.forEach(s => { if (s.captain && !s.players.includes(s.captain)) s.players.unshift(s.captain); });
   cupState.pool = cupRosterNames();
   try {
@@ -6403,11 +6486,12 @@ async function cupSave() {
 async function cupLoad(quiet, evName) {
   const ev = evName || document.getElementById('eventName').value.trim();
   try {
-    const r = await fetch(cupBase() + '/bfe/cup?event=' + encodeURIComponent(ev));
+    const r = await fetch(cupBase() + '/bfe/cup?event=' + encodeURIComponent(ev) + '&pin=' + encodeURIComponent(hostPinValue()));
     const j = await r.json();
     if (r.status === 404) { if (!quiet) cupStatus('No Cup saved for "' + ev + '" yet.', 'err'); return; }
     if (!r.ok) throw new Error(j.error || r.status);
-    Object.assign(cupState, { sides: j.config.sides, points: j.config.points || cupState.points, handicap: j.config.handicap || cupState.handicap, rounds: j.config.rounds || [], draft: j.config.draft, pool: j.config.pool });
+    Object.assign(cupState, { sides: j.config.sides, points: j.config.points || cupState.points, handicap: j.config.handicap || cupState.handicap, rounds: j.config.rounds || [], draft: j.config.draft, pool: j.config.pool, host_code: j.config.host_code || '' });
+    { const tr = (j.config.handicap && j.config.handicap.tiers) || []; cupTeeModeVal = tr.length ? 'tiers' : 'one'; cupTierRows = tr.map(t => ({ label: t.label || t.tee, maxHcp: t.maxHcp == null ? null : Number(t.maxHcp), tee: t.tee })); }
     document.getElementById('cupEnabled').checked = true; document.getElementById('cupBody').style.display = 'block';
     cupRender(); cupSyncRounds(); cupStatus('Loaded the saved Cup (' + ev + '). Its rounds follow the Team match play rows in section 4.', 'ok');
   } catch (e) { cupStatus('Could not load: ' + e.message, 'err'); }
@@ -6416,9 +6500,33 @@ async function cupLoad(quiet, evName) {
   const body = document.getElementById('cupBody');
   document.getElementById('cupEnabled').addEventListener('change', e => { body.style.display = e.target.checked ? 'block' : 'none'; if (e.target.checked) cupSyncRounds(); });
   ['change', 'click'].forEach(ev => roundsBody.addEventListener(ev, () => setTimeout(cupSyncRounds, 0)));
-  document.getElementById('cupVenue').addEventListener('change', e => { const h = cupState.handicap = cupState.handicap || {}; h.venueId = e.target.value || null; h.tee = null; h.strokeIndex = null; h.pars = null; cupLoadTees(e.target.value, null); });
+  document.getElementById('cupVenue').addEventListener('change', e => { const h = cupState.handicap = cupState.handicap || {}; h.venueId = e.target.value || null; h.tee = null; h.strokeIndex = null; h.pars = null; h.tiers = null; cupLoadTees(e.target.value, null); });
   document.getElementById('cupTee').addEventListener('change', e => cupApplyTee(e.target.value === '' ? null : cupTees[Number(e.target.value)]));
   document.getElementById('cupSaveBtn').addEventListener('click', cupSave);
+  document.getElementById('cupTeeMode').addEventListener('change', e => {
+    cupTeeModeVal = e.target.value === 'tiers' ? 'tiers' : 'one';
+    const h = cupState.handicap = cupState.handicap || {};
+    if (cupTeeModeVal === 'tiers') { if (!cupTierRows.length) cupTierRows = CUP_TIER_PRESET.map(r => Object.assign({}, r)); cupTierSnapshot(); } else h.tiers = null;
+    cupRender();
+  });
+  document.getElementById('cupTierPreset').addEventListener('click', () => { cupTierRows = CUP_TIER_PRESET.map(r => Object.assign({}, r)); cupTierSnapshot(); cupTierRender(); cupSummaryRender(); });
+  document.getElementById('cupTierAdd').addEventListener('click', () => { cupTierRows.push({ label: '', maxHcp: null, tee: '' }); cupTierSnapshot(); cupTierRender(); });
+  const tierEdit = e => {
+    const t = e.target; if (t.dataset.tier == null) return;
+    const r = cupTierRows[Number(t.dataset.tier)]; if (!r) return;
+    r[t.dataset.f] = t.dataset.f === 'maxHcp' ? (t.value === '' ? null : Number(t.value)) : t.value;
+    cupTierSnapshot(); cupTierHintRender();
+  };
+  document.getElementById('cupTierBox').addEventListener('input', tierEdit);
+  document.getElementById('cupTierBox').addEventListener('change', tierEdit);
+  document.getElementById('cupTierBox').addEventListener('click', e => {
+    const d = e.target.closest('[data-tier-del]'); if (!d) return;
+    cupTierRows.splice(Number(d.dataset.tierDel), 1); cupTierSnapshot(); cupTierRender(); cupSummaryRender();
+  });
+  document.getElementById('cupHostCodeGen').addEventListener('click', () => {
+    const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', b = new Uint8Array(6); crypto.getRandomValues(b);
+    document.getElementById('cupHostCode').value = Array.from(b, x => a[x % a.length]).join(''); cupSummaryRender();
+  });
   document.getElementById('cupLoadBtn').addEventListener('click', cupLoad);
   body.addEventListener('input', e => {
     const t = e.target;

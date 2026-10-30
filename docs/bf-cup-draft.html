@@ -82,8 +82,8 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BirdieFriends Cup</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.40.0"></script>
-<script src="bf_live_match.js?v=12"></script>
+<script src="bf_engine.js?v=1.44.0"></script>
+<script src="bf_live_match.js?v=13"></script>
 <script>
 (function () {
   'use strict';
@@ -141,7 +141,7 @@ button:disabled{opacity:.4;cursor:default}
     busy = true;
     return fetch(WORKER + '/bfe/cup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: EVENT, config: cfg, pin: pin }) })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); error = ''; }); })
-      .catch(function (e) { error = 'Save failed: ' + e.message + (/Unauthorized/.test(e.message) ? ' (check the PIN)' : ''); })
+      .catch(function (e) { error = 'Save failed: ' + e.message + (/Unauthorized/.test(e.message) ? ' (check the host code)' : ''); })
       .then(function () { busy = false; render(); });
   }
   function draft() { if (!cfg.draft) cfg.draft = { picks: [], stats: {} }; return cfg.draft; }
@@ -406,7 +406,7 @@ button:disabled{opacity:.4;cursor:default}
     var html = hero();
     if (error) html += '<p class="err">' + esc(error) + '</p>';
     if (HOST && !pin) {
-      html += '<div class="card"><b>Commissioner PIN</b><div class="toolbar"><input type="password" id="pinIn" placeholder="PIN"><button id="pinGo">Unlock</button></div></div>';
+      html += '<div class="card"><b>Host code</b> <span class="hint">(or the commissioner PIN)</span><div class="toolbar"><input type="password" id="pinIn" placeholder="Host code"><button id="pinGo">Unlock</button></div></div>';
     }
     if (HOST && pin) html += '<div class="card"><b>App card: ' + (cfg.hide_card ? 'OFF' : 'ON') + '</b> <span class="hint">' + (cfg.hide_card ? 'Players do not see the Cup card in the app.' : 'Captains and players see the Cup card in the app while the Cup is live.') + '</span><div class="toolbar"><button class="sec" id="cardToggle">' + (cfg.hide_card ? 'Turn the app card on' : 'Turn the app card off') + '</button></div></div>';
     if (!started) {
