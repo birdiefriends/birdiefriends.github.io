@@ -140,11 +140,11 @@ button:disabled{opacity:.4;cursor:default}
     return fetch(WORKER + '/bfe/events?event=' + encodeURIComponent(base)).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
       var roster = j && j.config ? (j.config.roster || []).filter(function (p) { return p && p.name && !p.withdrawn; }) : [];
       if (!roster.length) { got.rosterMissing = true; return; }
-      if (!(d.pool || []).length) { d.pool = roster.map(function (p) { return String(p.name).trim(); }); cfg.pool = d.pool; }
+      if (!(d.pool || []).length) { var sk = (d.subs || []).map(function (n) { return n.toLowerCase(); }); d.pool = roster.map(function (p) { return String(p.name).trim(); }).filter(function (n) { return sk.indexOf(n.toLowerCase()) < 0; }); cfg.pool = d.pool; }
       got.players = d.pool.length;
       roster.forEach(function (p) { var nm = String(p.name).trim(); if (p.hcp !== null && p.hcp !== undefined && p.hcp !== '' && isFinite(Number(p.hcp))) { d.stats[nm] = Object.assign({}, d.stats[nm], { hcp: Number(p.hcp) }); got.hcp++; } });
     }).catch(function () { got.rosterMissing = true; }).then(function () {
-      var names = (d.pool || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean));
+      var names = (d.pool || []).concat(d.subs || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean));
       if (!names.length) return;
       return loadSeriesInto(d, names).then(function (r) { got.series = r.matched; }).catch(function () {});
     }).then(function () {
@@ -389,15 +389,19 @@ button:disabled{opacity:.4;cursor:default}
     var practiceCard = PRACTICE
       ? '<div class="card"><b>Practice copy.</b> <span class="hint">Sample players and made-up stats. Nothing here touches the real Cup.</span><div class="toolbar"><button class="sec" id="practiceDelete">Delete this practice copy</button></div></div>'
       : '<div class="card"><h2>Practice run</h2><p class="hint">Make a separate copy of this Cup with 16 sample players and made-up stats, to rehearse the whole flow. The real Cup is never touched.</p><div class="toolbar"><button class="sec" id="practiceMake">Create a practice copy</button>' + (notice && /practice/i.test(notice) ? ' <a href="' + esc(location.pathname + '?event=' + encodeURIComponent(EVENT + ' (practice)') + '&host=1') + '">Open the practice copy →</a>' : '') + '</div></div>';
-    var st = d.stats || {}, tnames = (d.pool || cfg.pool || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean)).filter(function (n, i, a) { return a.indexOf(n) === i; });
+    var st = d.stats || {}, tnames = (d.pool || cfg.pool || []).concat(d.subs || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean)).filter(function (n, i, a) { return a.indexOf(n) === i; });
     var withHcp = tnames.filter(function (n) { return st[n] && typeof st[n].hcp === 'number'; }).length;
     var table = tnames.length ? '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:.85rem"><tr style="color:var(--dim);text-align:left"><th>Player</th><th>HCP</th><th>Rank</th><th>Avg vs Quota</th><th>🐦</th></tr>' + tnames.map(function (n) {
       var x = st[n] || {}; function c(v, d2) { return '<td style="padding:3px 8px 3px 0;' + (typeof v === 'number' ? '' : 'color:var(--bad)') + '">' + fmt(v, d2) + '</td>'; }
-      return '<tr style="border-top:1px solid var(--faint)"><td style="padding:3px 8px 3px 0">' + esc(n) + (cfg.sides.some(function (sd) { return sd.captain === n; }) ? ' 👑' : '') + '</td>' + c(x.hcp) + c(x.rank, 0) + c(x.avg) + c(x.birdies, 0) + '</tr>'; }).join('') + '</table></div>' : '<p class="hint">No players yet.</p>';
+      return '<tr style="border-top:1px solid var(--faint)"><td style="padding:3px 8px 3px 0">' + esc(n) + (cfg.sides.some(function (sd) { return sd.captain === n; }) ? ' 👑' : '') + ((d.subs || []).indexOf(n) >= 0 ? ' (Sub)' : '') + '</td>' + c(x.hcp) + c(x.rank, 0) + c(x.avg) + c(x.birdies, 0) + '</tr>'; }).join('') + '</table></div>' : '<p class="hint">No players yet.</p>';
     var noticeBanner = notice && !/practice/i.test(notice) ? '<div class="banner" style="background:#1a7f3c">' + esc(notice) + '</div>' : '';
     return noticeBanner + practiceCard + '<div class="card"><h2>1 · Players</h2><p class="hint">Everyone in the draft, one name per line. The captains are placed automatically and don\'t need to be listed. Every button below saves what is in this box first.</p>'
       + '<div class="toolbar"><button id="loadRoster">Reload players and handicaps from the event roster</button></div>'
-      + '<textarea id="poolTxt" rows="8">' + esc(poolText) + '</textarea><div class="toolbar"><button class="sec" id="poolSave">Save the list</button><button class="sec" id="fillHcp">Fill handicaps from Membership</button></div></div>'
+      + '<textarea id="poolTxt" rows="8">' + esc(poolText) + '</textarea>'
+      + '<h3 style="margin:.8rem 0 .2rem">Substitute (not drafted)</h3><p class="hint">Stays out of the draft and the teams. He is only here in case a player cannot make game day. One name per line; his handicap and stats still load.</p>'
+      + '<textarea id="subsTxt" rows="2">' + esc((d.subs || []).join('\n')) + '</textarea>'
+      + (((d.pool || []).length + cfg.sides.filter(function (x) { return x.captain && (d.pool || []).indexOf(x.captain) < 0; }).length) % 2 ? '<div class="banner" style="background:#b3261e">The draft has an odd number of players. Move the extra player to the Substitute box above.</div>' : '')
+      + '<div class="toolbar"><button class="sec" id="poolSave">Save the list</button><button class="sec" id="fillHcp">Fill handicaps from Membership</button></div></div>'
       + '<div class="card"><h2>Players and stats so far</h2><p class="hint">' + tnames.length + ' players, ' + withHcp + ' with a handicap. Anything in red is still missing.</p>' + table + '</div>'
       + '<div class="card"><h2>2 · Player stats</h2>' + seriesLine(d) + '<div class="toolbar"><button id="loadSeries">Reload series stats</button><label class="hint">Series I expect to be in: <input id="expectSeries" type="number" min="1" style="width:4rem" value="' + (d.expectSeries || '') + '"></label></div><p class="hint">Pulls each player\'s series rank, average points over/under quota and birdie count from the published results, the same data My Game uses. Anyone with no rounds shows – and is left out of the balance. Or paste a table:  The GS Raw Data sheet works as is (Player, Played, Performance): each player gets points over/under quota per round. Or paste Player, Ranking, Avg points, Birdie count, HCP. Players with no data just show – and are left out of the balance.</p>'
       + '<textarea id="statsTxt" rows="5" placeholder="Player&#9;Avg Achievement&#9;Birdie Count&#9;HCP&#9;Player Ranking"></textarea><div class="toolbar"><button class="sec" id="statsApply">Apply stats</button></div></div>'
@@ -499,8 +503,11 @@ button:disabled{opacity:.4;cursor:default}
     on('pinGo', function () { pin = $('pinIn').value.trim(); try { sessionStorage.setItem('bf_cup_pin', pin); } catch (e) {} render(); autoFill(); });
     function commitPool() {
       var el = $('poolTxt'); if (!el) return (cfg.draft && cfg.draft.pool) || [];
-      var names = el.value.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
-      draft().pool = names; cfg.pool = names; return names;
+      var lines = function (t) { return String(t || '').split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean); };
+      var se = $('subsTxt'), subs = se ? lines(se.value) : (draft().subs || []);
+      var key = function (n) { return String(n).trim().toLowerCase(); }, subKeys = subs.map(key);
+      var names = lines(el.value).filter(function (n) { return subKeys.indexOf(key(n)) < 0; });   // a Sub is never in the draft pool
+      draft().pool = names; draft().subs = subs; cfg.pool = names; return names;
     }
     on('poolSave', function () { var n = commitPool(); notice = 'Saved ' + n.length + ' player(s).'; save(); });
     on('loadRoster', function () {
@@ -510,7 +517,8 @@ button:disabled{opacity:.4;cursor:default}
         var roster = ((j.config || {}).roster || []).filter(function (p) { return p && p.name && !p.withdrawn; });
         if (!roster.length) { notice = 'The event "' + base + '" has no roster saved yet. Save the roster in BFE-Admin (section 3, then Save config).'; render(); return; }
         var d = draft(); d.stats = d.stats || {}; var h = 0;
-        d.pool = roster.map(function (p) { return String(p.name).trim(); }); cfg.pool = d.pool;
+        var sk = (d.subs || []).map(function (n) { return n.toLowerCase(); });
+        d.pool = roster.map(function (p) { return String(p.name).trim(); }).filter(function (n) { return sk.indexOf(n.toLowerCase()) < 0; }); cfg.pool = d.pool;
         roster.forEach(function (p) { var nm = String(p.name).trim(); if (p.hcp !== null && p.hcp !== undefined && p.hcp !== '' && isFinite(Number(p.hcp))) { d.stats[nm] = Object.assign({}, d.stats[nm], { hcp: Number(p.hcp) }); h++; } });
         notice = 'Loaded ' + roster.length + ' players from "' + base + '" (' + h + ' with a handicap). Rank, points and birdies still come from the stats box below.'; save();
       }).catch(function (e) { error = 'Could not read the event roster: ' + e.message; render(); });
@@ -528,7 +536,7 @@ button:disabled{opacity:.4;cursor:default}
     });
     on('statsApply', function () {
       commitPool(); var d = draft();
-      if (!$('statsTxt').value.trim()) { notice = 'Paste the stats table into the box first, then Apply.'; render(); return; } var names = (d.pool || []).concat(cfg.sides.map(function (s) { return s.captain; }).filter(Boolean));
+      if (!$('statsTxt').value.trim()) { notice = 'Paste the stats table into the box first, then Apply.'; render(); return; } var names = (d.pool || []).concat(d.subs || []).concat(cfg.sides.map(function (s) { return s.captain; }).filter(Boolean));
       var r = E.cupParseStats($('statsTxt').value, names);
       d.stats = d.stats || {}; Object.keys(r.stats).forEach(function (k) {
         var cur = d.stats[k] || {}, nw = r.stats[k];
@@ -540,7 +548,7 @@ button:disabled{opacity:.4;cursor:default}
     Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) { b.addEventListener('click', function () { commitPool(); draft().mode = b.getAttribute('data-mode'); save(); }); });
     on('loadSeries', function () {
       commitPool(); var d = draft(); d.stats = d.stats || {};
-      var names = (d.pool || cfg.pool || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean));
+      var names = (d.pool || cfg.pool || []).concat(d.subs || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean));
       notice = 'Loading series results…'; render();
       loadSeriesInto(d, names).then(function (r) {
         notice = r.matched + ' players loaded from the series (through #' + (r.latest ? r.latest.num : '?') + ')' + (r.missing.length ? '; no series rounds: ' + r.missing.join(', ') : '') + '.'; save();
@@ -555,7 +563,7 @@ button:disabled{opacity:.4;cursor:default}
     // Starting the draft re-reads the roster handicaps and the published series results first, so the stats the captains see are never stale.
     on('startDraft', function () {
       commitPool(); var d = draft(); d.stats = d.stats || {}; notice = 'Refreshing handicaps and series results before the draft…'; render();
-      var names = (d.pool || cfg.pool || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean));
+      var names = (d.pool || cfg.pool || []).concat(d.subs || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean));
       fetch(WORKER + '/bfe/events?event=' + encodeURIComponent(EVENT)).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
         ((j && j.config && j.config.roster) || []).forEach(function (p) { if (p && p.name && !p.withdrawn && p.hcp !== null && p.hcp !== undefined && p.hcp !== '' && isFinite(Number(p.hcp))) { var nm = String(p.name).trim(); d.stats[nm] = Object.assign({}, d.stats[nm], { hcp: Number(p.hcp) }); } });
       }).catch(function () {}).then(function () { return loadSeriesInto(d, names); }).catch(function () { return null; }).then(function (r) {
