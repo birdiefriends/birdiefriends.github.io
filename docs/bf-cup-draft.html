@@ -126,6 +126,29 @@ button:disabled{opacity:.4;cursor:default}
       return { matched: r.matched, missing: r.missing, latest: latest, count: (data.events || []).length };
     });
   }
+  // A roster entry flagged `sub` (registered as a Sub on the event card, or ticked in BFE-Admin) is a Substitute: never in the draft pool.
+  function applyRosterSubs(d, roster) {
+    var have = (d.subs || []).map(function (n) { return n.toLowerCase(); });
+    roster.forEach(function (p) { if (p && p.sub) { var nm = String(p.name).trim(); if (have.indexOf(nm.toLowerCase()) < 0) { (d.subs = d.subs || []).push(nm); have.push(nm.toLowerCase()); } } });
+  }
+  // Swap the Substitute in for a player who cannot make game day: his name is replaced everywhere in the Cup (picks, teams, pairs, matches, scores),
+  // and he becomes the Substitute. Stats, subs list, access codes and the host code are left alone. Captains cannot be swapped here.
+  function swapPlayer(c, out, inn) {
+    var o = out.trim().toLowerCase(), skip = { stats: 1, subs: 1, access: 1, host_code: 1 }, n = 0;
+    (function walk(x, top) {
+      if (Array.isArray(x)) { x.forEach(function (v, i) { if (typeof v === 'string') { if (v.trim().toLowerCase() === o) { x[i] = inn; n++; } } else walk(v); }); }
+      else if (x && typeof x === 'object') {
+        Object.keys(x).forEach(function (k) {
+          if (skip[k]) return;
+          var v = x[k];
+          if (typeof v === 'string') { if (v.trim().toLowerCase() === o && k !== 'captain') { x[k] = inn; n++; } }
+          else walk(v);
+          if (k.trim().toLowerCase() === o) { x[inn] = x[k]; delete x[k]; n++; }
+        });
+      }
+    })(c, true);
+    return n;
+  }
   function seriesLine(d) {
     var t = d.seriesThrough, want = Number(d.expectSeries) || 0;
     if (!t) return '<div class="banner" style="background:#b3261e">The series results have not been loaded yet. Press "Reload series stats".</div>';
@@ -140,6 +163,7 @@ button:disabled{opacity:.4;cursor:default}
     return fetch(WORKER + '/bfe/events?event=' + encodeURIComponent(base)).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
       var roster = j && j.config ? (j.config.roster || []).filter(function (p) { return p && p.name && !p.withdrawn; }) : [];
       if (!roster.length) { got.rosterMissing = true; return; }
+      applyRosterSubs(d, roster);
       if (!(d.pool || []).length) { var sk = (d.subs || []).map(function (n) { return n.toLowerCase(); }); d.pool = roster.map(function (p) { return String(p.name).trim(); }).filter(function (n) { return sk.indexOf(n.toLowerCase()) < 0; }); cfg.pool = d.pool; }
       got.players = d.pool.length;
       roster.forEach(function (p) { var nm = String(p.name).trim(); if (p.hcp !== null && p.hcp !== undefined && p.hcp !== '' && isFinite(Number(p.hcp))) { d.stats[nm] = Object.assign({}, d.stats[nm], { hcp: Number(p.hcp) }); got.hcp++; } });
@@ -461,6 +485,12 @@ button:disabled{opacity:.4;cursor:default}
       html += '<div class="toolbar">' + '<button class="sec" id="undo"' + (v.picks.length ? '' : ' disabled') + '>↩︎ Undo last pick</button>'
         + (v.done && !d.locked ? '<button id="lock">Lock the teams (host override)</button>' : '') + '<button class="sec" id="resetDraft">Start over</button></div>';
     }
+    if (HOST && pin && (d.subs || []).length) {
+      var inDraft = []; cfg.sides.forEach(function (sd) { (v.teams[sd.key] || []).forEach(function (n) { if (sd.captain !== n && inDraft.indexOf(n) < 0) inDraft.push(n); }); });
+      html += '<div class="card"><h2>Substitute</h2><p class="hint">' + esc(d.subs.join(', ')) + (d.subs.length > 1 ? ' are' : ' is') + ' not on a team. If a player cannot make game day, swap the Substitute in: he takes his place on the team, in every pair and match, and the other player becomes the Substitute.</p>'
+        + (inDraft.length ? '<div class="toolbar"><select id="swapOut"><option value="">Player who cannot play…</option>' + inDraft.map(function (n) { return '<option>' + esc(n) + '</option>'; }).join('') + '</select>'
+        + '<select id="swapIn">' + d.subs.map(function (n) { return '<option>' + esc(n) + '</option>'; }).join('') + '</select><button id="swapGo">Swap</button></div>' : '<p class="hint">Teams are not drafted yet.</p>') + '</div>';
+    }
     if (pendingSingle) html += '<div class="sheet"><span><b>' + esc(sideName(pendingSingle.side)) + '</b>: ' + (E.cupSinglesView(cfg).role === 'put' ? 'put up' : 'answer with') + ' <b>' + esc(pendingSingle.player) + '</b>?</span><button id="sgConfirm">Confirm</button><button class="sec" id="sgCancel">Cancel</button></div>';
     if (pendingPair) { var mu0 = E.cupMatchupView(cfg); html += '<div class="sheet"><span><b>' + esc(sideName(pendingPair.side)) + '</b>: ' + (mu0.role === 'put' ? 'put up' : 'answer with') + ' <b>' + esc(pendingPair.pair[0]) + ' &amp; ' + esc(pendingPair.pair[1]) + '</b>?</span><button id="muConfirm">Yes</button><button class="sec" id="muCancel">Cancel</button></div>'; }
     if (pending) html += '<div class="sheet"><span><b>' + esc(pending) + '</b> to <b>' + esc(sideName(clock)) + '</b>?</span><button id="confirmPick">Pick</button><button class="sec" id="cancelPick">Cancel</button></div>';
@@ -517,6 +547,7 @@ button:disabled{opacity:.4;cursor:default}
         var roster = ((j.config || {}).roster || []).filter(function (p) { return p && p.name && !p.withdrawn; });
         if (!roster.length) { notice = 'The event "' + base + '" has no roster saved yet. Save the roster in BFE-Admin (section 3, then Save config).'; render(); return; }
         var d = draft(); d.stats = d.stats || {}; var h = 0;
+        applyRosterSubs(d, roster);
         var sk = (d.subs || []).map(function (n) { return n.toLowerCase(); });
         d.pool = roster.map(function (p) { return String(p.name).trim(); }).filter(function (n) { return sk.indexOf(n.toLowerCase()) < 0; }); cfg.pool = d.pool;
         roster.forEach(function (p) { var nm = String(p.name).trim(); if (p.hcp !== null && p.hcp !== undefined && p.hcp !== '' && isFinite(Number(p.hcp))) { d.stats[nm] = Object.assign({}, d.stats[nm], { hcp: Number(p.hcp) }); h++; } });
@@ -610,6 +641,14 @@ button:disabled{opacity:.4;cursor:default}
       var v = E.cupDraftView(cfg);
       cfg.sides.forEach(function (s) { s.players = v.teams[s.key].slice(); });
       cfg.draft.locked = true; save();
+    });
+    on('swapGo', function () {
+      var out = ($('swapOut') || {}).value, inn = ($('swapIn') || {}).value; if (!out || !inn) { notice = 'Pick the player who cannot play.'; render(); return; }
+      var hasScores = JSON.stringify(cfg.scores || {}).toLowerCase().indexOf(JSON.stringify(out.toLowerCase()).slice(1, -1) + '"') >= 0;
+      if (!confirm('Swap ' + inn + ' in for ' + out + '?' + (hasScores ? '\n\n' + out + ' already has scores entered. They will move to ' + inn + '.' : '') + '\n\n' + out + ' becomes the Substitute.')) return;
+      var d = draft(); swapPlayer(cfg, out, inn);
+      d.subs = (d.subs || []).filter(function (n) { return n !== inn; }).concat([out]);
+      notice = inn + ' is in for ' + out + '. ' + out + ' is now the Substitute.'; save();
     });
     on('practiceMake', function () {
       var first = ['Alex','Ben','Cal','Dan','Eli','Finn','Gus','Hal','Ian','Joe','Kip','Lou','Max','Ned'];

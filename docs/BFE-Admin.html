@@ -787,10 +787,10 @@ function resolveRoster(players, teePolicy, opts) {
       // is legitimately per-round, not averageable) — only slope is
       // overwritten so what's shown always matches what's actually used.
       const tee = { ...rawTee, slope };
-      return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope, initialQuota: 36 - (p.hcp * slope / 113), isNoHcp: false, withdrawn: !!p.withdrawn, withdrawnNote: p.withdrawnNote || null };
+      return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope, initialQuota: 36 - (p.hcp * slope / 113), isNoHcp: false, withdrawn: !!p.withdrawn, withdrawnNote: p.withdrawnNote || null, ...(p.sub ? { sub: true } : {}) };
     }
     const { tee, quota, isNoHcp } = computeInitialQuota(p.hcp, teePolicy);
-    return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope: tee.slope, initialQuota: quota, isNoHcp, withdrawn: !!p.withdrawn, withdrawnNote: p.withdrawnNote || null };
+    return { name: p.name, email: p.email || null, hcp: p.hcp, tee, slope: tee.slope, initialQuota: quota, isNoHcp, withdrawn: !!p.withdrawn, withdrawnNote: p.withdrawnNote || null, ...(p.sub ? { sub: true } : {}) };
   });
 }
 // Generic event config assembler — no per-event hardcoded round list.
@@ -1420,7 +1420,8 @@ async function fetchRegistrantsFromJotform(formId, eventName) {
   filtered.forEach(sub => {
     const name = jfGetAnswerByPriority(sub, [/player.*name/i, /full.*name/i, /^name$/i]);
     const email = jfGetAnswerByPriority(sub, [/email/i]);
-    if (name && name.trim()) players.push({ name: name.trim(), email: (email || '').trim() });
+    const rsvpAns = jfGetAnswerByPriority(sub, [/regist/i]);
+    if (name && name.trim()) players.push({ name: name.trim(), email: (email || '').trim(), sub: /^sub$/i.test(String(rsvpAns || '').trim()) });
   });
   const seen = new Set();
   return players.filter(p => {
@@ -1437,7 +1438,7 @@ let assembledConfig = null;
 let venueList = [];
 let roundIdSeq = 0;
 const rosterBody = document.getElementById('rosterBody');
-function addPlayerRow(name = '', email = '', hcp = '', withdrawn = false, withdrawnNote = '') {
+function addPlayerRow(name = '', email = '', hcp = '', withdrawn = false, withdrawnNote = '', sub = false) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><input type="text" class="p-name" value="${name}" placeholder="Player name"></td>
@@ -1448,6 +1449,10 @@ function addPlayerRow(name = '', email = '', hcp = '', withdrawn = false, withdr
       <label style="display:flex;align-items:center;gap:5px;white-space:nowrap">
         <input type="checkbox" class="p-withdrawn" style="width:auto" ${withdrawn ? 'checked' : ''}>
         <span class="subtle">Withdrew</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;white-space:nowrap" title="Registered as a Sub: kept out of a Cup draft, available to swap in">
+        <input type="checkbox" class="p-sub" style="width:auto" ${sub ? 'checked' : ''}>
+        <span class="subtle">Sub</span>
       </label>
       <input type="text" class="p-withdrawn-note" value="${withdrawnNote || ''}" placeholder="why/when (optional)"
         style="width:100%;margin-top:3px;font-size:0.8rem;display:${withdrawn ? 'block' : 'none'}">
@@ -1474,7 +1479,8 @@ function readRosterInput() {
     const hcp = hcpRaw === '' ? null : parseFloat(hcpRaw);
     const withdrawn = tr.querySelector('.p-withdrawn').checked;
     const withdrawnNote = tr.querySelector('.p-withdrawn-note').value.trim();
-    return { name, email, hcp, withdrawn, withdrawnNote: withdrawnNote || null };
+    const sub = tr.querySelector('.p-sub').checked;
+    return { name, email, hcp, withdrawn, withdrawnNote: withdrawnNote || null, ...(sub ? { sub: true } : {}) };
   }).filter(p => p.name);
 }
 // ── Roster HCP transparency (Dev-86, 2026-09-24) ──────────────────────────
@@ -2010,9 +2016,10 @@ document.getElementById('fetchRosterBtn').addEventListener('click', async () => 
       const key = p.name.toLowerCase();
       if (existingByName[key]) {
         existingByName[key].querySelector('.p-email').value = p.email;
+        if (p.sub) existingByName[key].querySelector('.p-sub').checked = true;
         updated++;
       } else {
-        addPlayerRow(p.name, p.email, '');
+        addPlayerRow(p.name, p.email, '', false, '', !!p.sub);
         added++;
       }
     });
@@ -2699,7 +2706,7 @@ async function rehydrateFormFromConfig(config) {
   document.getElementById('hcpMode').value = config.hcpMode || 'fixed';
   if (!venueList.length) await loadVenues();
   rosterBody.innerHTML = '';
-  (config.roster || []).forEach(p => addPlayerRow(p.name || '', p.email || '', p.hcp ?? '', !!p.withdrawn, p.withdrawnNote || ''));
+  (config.roster || []).forEach(p => addPlayerRow(p.name || '', p.email || '', p.hcp ?? '', !!p.withdrawn, p.withdrawnNote || '', !!p.sub));
   roundsBody.innerHTML = '';
   (config.rounds || []).forEach(r => {
     const wbInf = (r.influencers || []).find(i => i.id === 'wally_ball');
