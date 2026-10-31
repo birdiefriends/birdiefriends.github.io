@@ -186,7 +186,7 @@ function showPlayer(name) {
       narrative += `<p>${needed} more qualifying event${needed !== 1 ? 's' : ''} needed to be eligible for the series championship payout.</p>`;
     }
     if (p.hasRetroE1) {
-      narrative += `<p style="font-size:0.85rem;color:var(--text-muted);margin-top:6px">~ Event 1 baseline score has been retroactively included in the series calculation as an estimated result.</p>`;
+      narrative += `<p style="font-size:0.85rem;color:var(--text-muted);margin-top:6px">~ Event 1 baseline score has been retroactively included in the series calculation, using a quota averaged from your later events.</p>`;
     }
   }
 
@@ -203,7 +203,7 @@ function showPlayer(name) {
     const detailId = `evt-detail-${idx}`;
 
     if (isBaseline && p.hasRetroE1 && p.retroAvg !== null) {
-      // The baseline round counts in the series: its quota is estimated (average of every real quota and score so far) and is shown here like any other event.
+      // The baseline round counts in the series: its quota is averaged (average of every real quota and score so far) and is shown here like any other event.
       const rq = p.retroAvg;
       const rres = Math.round((evt.actual - rq)*100)/100;
       const rcol = rres > 0 ? '#1a6b30' : rres < 0 ? '#a32d2d' : '#555';
@@ -214,19 +214,19 @@ function showPlayer(name) {
             <span class="${teeClass(evt.tee)}">${evt.tee}</span>
             <span class="baseline-pill" style="margin-left:6px">Baseline</span>
           </div>
-          <div class="event-row-sub">Quota ~${rq.toFixed(2)} (estimated) · Score ${evt.actual} pts</div>
+          <div class="event-row-sub">Quota ${rq.toFixed(2)} (averaged) · Score ${evt.actual} pts</div>
         </div>
         <div class="event-row-score" style="color:${rcol}">${fmt2(rres)}</div>
         <span class="event-row-arrow">▼</span>
       </div>
       <div class="event-detail" id="${detailId}">
         <div class="math-block">
-          <span class="mlabel">Estimated Quota — Baseline Event</span>
-          You had no GHIN handicap at this event, so no quota was assigned then. Your real score of <strong>${evt.actual}</strong> counts, measured against an estimated quota: the average of every quota and score from your later events, with this event's own score left out.<br>
-          Estimated quota: <span class="math-result">${rq.toFixed(2)}</span><br>
+          <span class="mlabel">Averaged Quota — Baseline Event</span>
+          You had no GHIN handicap at this event, so no quota was assigned then. Your real score of <strong>${evt.actual}</strong> counts, measured against an averaged quota: the average of every quota and score from your later events, with this event's own score left out.<br>
+          Averaged quota: <span class="math-result">${rq.toFixed(2)}</span><br>
           ${evt.actual} − ${rq.toFixed(2)} = <span class="math-result">${fmt2(rres)}</span>
         </div>
-        <div style="font-size:0.83rem;color:var(--text-muted);margin-top:4px">The estimate is recalculated after every event you play, so this number can move a little.</div>
+        <div style="font-size:0.83rem;color:var(--text-muted);margin-top:4px">This average is recalculated after every event you play, so this number can move a little.</div>
       </div>`;
     } else if (isBaseline) {
       quotaRows += `
@@ -338,7 +338,7 @@ function showPlayer(name) {
 
     seriesRows += `
     <div class="series-row">
-      <div class="series-row-name">${isRetro ? 'Event 1 (estimated)' : evtName} ${tag}${retroTag}</div>
+      <div class="series-row-name">${isRetro ? 'Event 1 (averaged quota)' : evtName} ${tag}${retroTag}</div>
       <div class="series-row-val" style="color:${resColor}">${resStr}</div>
     </div>`;
   });
@@ -385,7 +385,7 @@ function showPlayer(name) {
   }
 
   let retroNote = p.hasRetroE1
-    ? `<div class="note">~ Your Event 1 (baseline) score counts — since you didn't have a handicap yet, a fair starting quota (${fmt2(p.retroAvg)}) has been estimated from how you've scored since. This recalculates as more events are played.</div>`
+    ? `<div class="note">~ Your Event 1 (baseline) score counts — since you didn't have a handicap yet, a fair starting quota (${fmt2(p.retroAvg)}) has been averaged from how you've scored since. This recalculates as more events are played.</div>`
     : '';
 
   wrap.innerHTML = `
@@ -418,6 +418,6 @@ function showPlayer(name) {
   </div>`;
 }
 </script>
-<div style="text-align:center;font-size:0.72rem;color:#888;padding:20px 0 8px;">Generated Oct 31, 6:29 AM &nbsp;·&nbsp; GS v8.59 · 2026-10-31</div>
+<div style="text-align:center;font-size:0.72rem;color:#888;padding:20px 0 8px;">Generated Oct 31, 6:33 AM &nbsp;·&nbsp; GS v8.60 · 2026-10-31</div>
 </body>
 </html>
