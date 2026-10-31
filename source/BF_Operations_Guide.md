@@ -242,7 +242,7 @@ GitHub token lost: github.com → Settings → Developer settings → Personal a
 | Component | Version | Status |
 |-----------|---------|--------|
 | Portal | v4.31.4 · 2026-10-14 | Production ✅ — Dev-94: Venue Manager redesign and par-from-tee, BestBall / Alternate Shot / Match Play / Hi-Lo on one match engine, $0 pots, 🎲 Surprise me (random setup, random draw with wipeout guard), Edit games on the card, Individual Low Score, compact results table. Engine `bf_engine.js` 1.22.1. |
-| GolfScorer | v8.58 · 2026-10-09 | Deployed ✅ — Dev-92: "+ Add Group" moved into the Groups header; empty Groups area is a drop target. Start each new event with ↺ New Event (it is the only thing that clears Groups, kept in localStorage `bf_groups_data`). |
+| GolfScorer | v8.59 · 2026-10-31 | Deployed ✅ — v8.59: My Series shows a NoHCP player's baseline round with its estimated quota and result (it counts in the series, so the row no longer says "No quota assigned"). Dev-92: Dev-92: "+ Add Group" moved into the Groups header; empty Groups area is a drop target. Start each new event with ↺ New Event (it is the only thing that clears Groups, kept in localStorage `bf_groups_data`). |
 | Worker | main `worker.js` 3,435 lines; `bf_experiences_worker.js` 3,192 lines (Dev-94) | Brian pastes Workers into Cloudflare manually. Dev-94: main Worker weather forecast fallback (deployed); `bf_experiences_worker.js` needed Hi-Lo in its game schemas (deployed). Later changes to it (label, version comments) are cosmetic, deploy optional. |
 | deploy.html | 2026-06-18 | Live ✅ — all tabs functional (Session BP-1 fix) |
 | bf_deploy.py | 2026-06-18 | In library for reference only — TOKEN-authenticated functions not invoked by Claude |
