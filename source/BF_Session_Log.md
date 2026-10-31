@@ -5584,3 +5584,8 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 ### Dev-97 (part) — BF Cup: automatic series refresh at draft start (2026-10-31)
 - `docs/bf-cup-draft.html`: one `loadSeriesInto()` loader (fresh, no-store) used by page load, Reload and Start. Start the draft re-reads roster handicaps + published `results.html` first. Host sets "Series I expect to be in" (`draft.expectSeries`); banner shows "through #N"; Start asks before using stale series. Cannot trigger the Golf Scorer publish itself.
 - Test: `test_cup_series_refresh.mjs` (9).
+
+### Dev-97 (part) — BF Cup: Substitute (2026-10-31)
+- Roster entries carry `sub: true` (BFE-A roster "Sub" tick; set automatically from the Jotform RSVP "Sub"). Cup page auto-puts them in `draft.subs`, never the pool; Sub box on host setup; odd-pool warning.
+- Host "Substitute" card (Teams view, after the draft): swaps the Sub in for a player everywhere (picks, teams, pairs, matches, scores); the other player becomes the Sub. Captains can't be swapped.
+- Tests: test_cup_subs (6), test_cup_swap (14), test_roster_sub (2).
