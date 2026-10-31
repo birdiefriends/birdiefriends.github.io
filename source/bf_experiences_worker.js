@@ -1246,6 +1246,14 @@ function cleanFields(fields, cfg) {
   }
 // <GAME_SCHEMAS:end>
 
+// Roster "Sub" flag (Dev-97): a registrant marked Sub on the event card. The roster table predates it, so the column is added lazily, once per
+// isolate; "duplicate column" just means it is already there.
+let _rosterSubCol = false;
+async function ensureRosterSubCol(db) {
+  if (_rosterSubCol) return;
+  try { await db.prepare(`ALTER TABLE bfe_event_roster ADD COLUMN is_sub INTEGER NOT NULL DEFAULT 0`).run(); } catch (e) { /* already added */ }
+  _rosterSubCol = true;
+}
 export default {
   async fetch(request, env, ctx) {
 
@@ -2901,6 +2909,7 @@ export default {
 
         await db.prepare(`DELETE FROM bfe_event_rounds WHERE event_id = ?`).bind(eventId).run();
         await db.prepare(`DELETE FROM bfe_event_roster WHERE event_id = ?`).bind(eventId).run();
+        await ensureRosterSubCol(db);
 
         // Pass 1: insert rounds without chains_from_round_id (don't know the
         // ids yet), remembering each round's name -> new id as we go.
@@ -2928,10 +2937,10 @@ export default {
         for (const p of (roster || [])) {
           if (!p.name) continue;
           await db.prepare(
-            `INSERT INTO bfe_event_roster (event_id, player_name, email, hcp_at_event, tee_name, slope, initial_quota, is_no_hcp)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+            `INSERT INTO bfe_event_roster (event_id, player_name, email, hcp_at_event, tee_name, slope, initial_quota, is_no_hcp, is_sub)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
           ).bind(eventId, p.name, p.email || null, (p.hcp === undefined || p.hcp === null) ? null : Number(p.hcp),
-                 p.tee?.name || null, p.slope ?? p.tee?.slope ?? null, p.initialQuota ?? null, p.isNoHcp ? 1 : 0).run();
+                 p.tee?.name || null, p.slope ?? p.tee?.slope ?? null, p.initialQuota ?? null, p.isNoHcp ? 1 : 0, p.sub ? 1 : 0).run();
         }
 
         return new Response(JSON.stringify({ ok: true, event_id: eventId }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
@@ -2985,7 +2994,8 @@ export default {
         const roster = rosterRows.map(p => ({
           name: p.player_name, email: p.email, hcp: p.hcp_at_event,
           tee: { name: p.tee_name, slope: p.slope }, slope: p.slope,
-          initialQuota: p.initial_quota, isNoHcp: !!p.is_no_hcp
+          initialQuota: p.initial_quota, isNoHcp: !!p.is_no_hcp,
+          ...(p.is_sub ? { sub: true } : {})
         }));
 
         const config = {
