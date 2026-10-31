@@ -5580,3 +5580,7 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - **Process:** the classifier blocks `git push --force` to `claude-staging`; merge `origin/main` into the staging tip and push normally instead. The Stop hook's "unpushed commits" message compares against `main`, verify with `git ls-remote`.
 - **Open:** Brian sets tees by handicap and the allowances in BFE-A 4b and re-saves before Sunday's draft; the draft Sunday 11/1; matchup draw after; 11/7-8 Cup.
 
+
+### Dev-97 (part) — BF Cup: automatic series refresh at draft start (2026-10-31)
+- `docs/bf-cup-draft.html`: one `loadSeriesInto()` loader (fresh, no-store) used by page load, Reload and Start. Start the draft re-reads roster handicaps + published `results.html` first. Host sets "Series I expect to be in" (`draft.expectSeries`); banner shows "through #N"; Start asks before using stale series. Cannot trigger the Golf Scorer publish itself.
+- Test: `test_cup_series_refresh.mjs` (9).
