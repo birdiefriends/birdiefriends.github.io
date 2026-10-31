@@ -6136,6 +6136,12 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-badge secondary">🏅</span>
         <span class="icon-action-label">Teams</span>
       </button>` : ''}
+      <!-- Series 10 finale: a hot link to the projected-standings page (docs/series10-at-quota.html). One-off; remove after the season. -->
+      ${evt.name === '2026 BFSeries#10' ? `
+      <button class="icon-action-btn" onclick="window.open('/series10-at-quota.html','_blank','noopener')">
+        <span class="icon-action-badge secondary">📊</span>
+        <span class="icon-action-label">Outlook</span>
+      </button>` : ''}
       ${['format-wally','format-scramble'].includes(formatClass(evt.format)) ? `
       <button class="icon-action-btn" onclick="openCardGroupSheet('${evt.id}')">
         <span class="icon-action-badge secondary">👥</span>
