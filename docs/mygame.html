@@ -202,7 +202,33 @@ function showPlayer(name) {
     const slope  = { Green:132, Combo:128, Gold:115 }[evt.tee] || 128;
     const detailId = `evt-detail-${idx}`;
 
-    if (isBaseline) {
+    if (isBaseline && p.hasRetroE1 && p.retroAvg !== null) {
+      // The baseline round counts in the series: its quota is estimated (average of every real quota and score so far) and is shown here like any other event.
+      const rq = p.retroAvg;
+      const rres = Math.round((evt.actual - rq)*100)/100;
+      const rcol = rres > 0 ? '#1a6b30' : rres < 0 ? '#a32d2d' : '#555';
+      quotaRows += `
+      <div class="event-row" onclick="toggleEventDetail('${detailId}')">
+        <div class="event-row-main">
+          <div class="event-row-name">Event ${evtNum}: ${evt.eventName}
+            <span class="${teeClass(evt.tee)}">${evt.tee}</span>
+            <span class="baseline-pill" style="margin-left:6px">Baseline</span>
+          </div>
+          <div class="event-row-sub">Quota ~${rq.toFixed(2)} (estimated) · Score ${evt.actual} pts</div>
+        </div>
+        <div class="event-row-score" style="color:${rcol}">${fmt2(rres)}</div>
+        <span class="event-row-arrow">▼</span>
+      </div>
+      <div class="event-detail" id="${detailId}">
+        <div class="math-block">
+          <span class="mlabel">Estimated Quota — Baseline Event</span>
+          You had no GHIN handicap at this event, so no quota was assigned then. Your real score of <strong>${evt.actual}</strong> counts, measured against an estimated quota: the average of every quota and score from your later events, with this event's own score left out.<br>
+          Estimated quota: <span class="math-result">${rq.toFixed(2)}</span><br>
+          ${evt.actual} − ${rq.toFixed(2)} = <span class="math-result">${fmt2(rres)}</span>
+        </div>
+        <div style="font-size:0.83rem;color:var(--text-muted);margin-top:4px">The estimate is recalculated after every event you play, so this number can move a little.</div>
+      </div>`;
+    } else if (isBaseline) {
       quotaRows += `
       <div class="event-row" onclick="toggleEventDetail('${detailId}')">
         <div class="event-row-main">
@@ -392,6 +418,6 @@ function showPlayer(name) {
   </div>`;
 }
 </script>
-<div style="text-align:center;font-size:0.72rem;color:#888;padding:20px 0 8px;">Generated Oct 25, 3:02 PM &nbsp;·&nbsp; GS v8.58 · 2026-10-09</div>
+<div style="text-align:center;font-size:0.72rem;color:#888;padding:20px 0 8px;">Generated Oct 31, 6:29 AM &nbsp;·&nbsp; GS v8.59 · 2026-10-31</div>
 </body>
 </html>
