@@ -18583,16 +18583,27 @@ function cupLiveCard(ev, player) {
   return { title, sub, url, cap };
 }
 // The card's Teams button. Commissioner: the host screen. A captain whose draft is open: his own captain screen. Everyone else: the watch screen.
+// The Cup record is keyed by the BFE event's own (umbrella) name, but the cards and registrations carry each ROUND's name ("2026 BFCup - Day1").
+function cupNameForCard(evt) {
+  const e = evt && typeof _bfeBackedIndex !== 'undefined' ? _bfeBackedIndex.get(evt.name) : null;
+  return (e && e.umbrellaName) || (evt && evt.name) || '';
+}
+function cupRoundNamesOf(umbrella) {
+  const out = []; if (typeof _bfeBackedIndex !== 'undefined') _bfeBackedIndex.forEach((v, k) => { if (v && v.umbrellaName === umbrella) out.push(k); });
+  return out;
+}
 async function openCupSelection(evtOrId) {
   const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => e.id === evtOrId);
   if (!evt || !evt.name) return;
-  let url = 'bf-cup-draft.html?event=' + encodeURIComponent(evt.name);
+  if (typeof _bfeBackedIndex !== 'undefined' && !_bfeBackedIndex.size && typeof refreshBFEBackedIndex === 'function') { try { await refreshBFEBackedIndex(); } catch (e) { /* fall back to the card's own name */ } }
+  const cupName = cupNameForCard(evt);
+  let url = 'bf-cup-draft.html?event=' + encodeURIComponent(cupName);
   if (isCommissioner()) url += '&host=1';
   else {
     try {
       const who = (typeof currentPlayer === 'string' && currentPlayer && currentPlayer !== 'Guest') ? `?player=${encodeURIComponent(currentPlayer)}` : '';
       const data = await fetch(`${BFE_API}/bfe/cup-live${who}`).then(r => r.json());
-      const live = (data.events || []).find(e => e.event_name === evt.name);
+      const live = (data.events || []).find(e => e.event_name === cupName);
       if (live && live.cap_code) url += '&cap=' + encodeURIComponent(live.cap_code);
     } catch (e) { /* fall back to watching */ }
   }
@@ -18602,7 +18613,7 @@ async function openCupSelection(evtOrId) {
 function openCupDraft() { if (_cupLive) window.open(cupLiveCard(_cupLive, typeof currentPlayer === 'string' ? currentPlayer : '').url, '_blank'); }
 // The card is for the event's own people: a captain, a player registered for that event, or the commissioner. Everyone else sees nothing.
 function cupLiveForMe(events) {
-  return (events || []).find(e => e.cap_code || isRegisteredFor(e.event_name) || isCommissioner()) || null;
+  return (events || []).find(e => e.cap_code || isRegisteredFor(e.event_name) || cupRoundNamesOf(e.event_name).some(n => isRegisteredFor(n)) || isCommissioner()) || null;
 }
 async function renderCupBanner() {
   const el = document.getElementById('home-cup-banner');
