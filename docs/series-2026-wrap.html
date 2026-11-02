@@ -44,7 +44,7 @@ td.r,th.r{text-align:right}
 .ev .pod{font-size:.85rem;color:var(--mut);margin:2px 0 8px}
 .facts{display:grid;gap:10px}
 .fact{background:var(--card);border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.07);padding:14px 18px;display:flex;gap:14px;align-items:flex-start}
-.fact .n{font-family:Georgia,serif;font-size:1.9rem;color:var(--gold);min-width:56px;text-align:center;line-height:1}
+.fact .n{font-family:Georgia,serif;font-size:1.45rem;color:var(--gold);width:84px;flex:none;text-align:center;line-height:1.1;white-space:nowrap;padding-top:2px}
 .fact p{font-size:.93rem}
 .thanks{background:var(--g);color:#fff;border-radius:14px;padding:24px 22px;text-align:center;margin-top:30px}
 .thanks h2{color:#e2c97e;margin-top:0}
@@ -53,7 +53,8 @@ td.r,th.r{text-align:right}
 .links{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:18px}
 .links a{background:#fff;color:var(--g);font-weight:700;text-decoration:none;padding:9px 18px;border-radius:22px;font-size:.88rem}
 .foot{text-align:center;color:var(--mut);font-size:.74rem;margin-top:22px}
-@media(max-width:480px){.stats{grid-template-columns:repeat(2,1fr)}}
+table.flights{table-layout:fixed}table.flights .pill{display:block;white-space:nowrap;width:fit-content;margin:4px 0 0;font-size:.62rem;padding:2px 7px}
+@media(max-width:480px){.stats{grid-template-columns:repeat(2,1fr)}table.flights td,table.flights th{padding:8px 3px;font-size:.68rem}table.flights th:first-child,table.flights td:first-child{width:24%}.card{padding:16px 14px}}
 </style>
 </head>
 <body>
@@ -67,7 +68,7 @@ td.r,th.r{text-align:right}
     <div class="stat"><b>7</b><span>Events</span></div>
     <div class="stat"><b>31</b><span>Players</span></div>
     <div class="stat"><b>131</b><span>Rounds played</span></div>
-    <div class="stat"><b>$380</b><span>Season Pot</span></div>
+    <div class="stat"><b>$3,000</b><span>In prizes</span></div>
   </div>
 </div>
 
@@ -77,7 +78,7 @@ td.r,th.r{text-align:right}
 <div class="lede">Nineteen players qualified for the Season Pot at $20 a head: $380 on the line, with the Overall crown and three flights up for grabs.</div>
 
 <div class="card champ">
-  <div class="kicker">🏆 Overall Champion · $77</div>
+  <div class="kicker">🏆 Overall Champion </div>
   <div class="big">BJ Kolonia</div>
   <p>And BJ Kolonia takes the whole thing! He sat third on the podium back in Series #3, climbed to second in #9, then came into the finale and <b>won it outright</b> at +3.65. A series score of <b>+10.27</b> is the best in the field by nearly three and a half points. Add the Combo flight title and BJ walks off with <span class="money">$117</span> from the Season Pot alone. Just a masterclass in finishing.</p>
 </div>
@@ -87,7 +88,7 @@ td.r,th.r{text-align:right}
 </div>
 
 <div class="card">
-  <table>
+  <table class="flights">
     <tr><th>Flight</th><th>1st</th><th>2nd</th><th>3rd</th></tr>
     <tr><td><b>Green</b> <span class="pill Green">9 qualified</span></td><td>Evan Lindermuth<br><span class="money">$40</span></td><td>Jordan Knappenberger<br><span class="money">$24</span></td><td>Bill Steirer<br><span class="money">$16</span></td></tr>
     <tr><td><b>Combo</b> <span class="pill Combo">8 qualified</span></td><td>BJ Kolonia<br><span class="money">$40</span></td><td>Rich Potts<br><span class="money">$24</span></td><td>Jeff Rapp<br><span class="money">$16</span></td></tr>
@@ -128,13 +129,13 @@ td.r,th.r{text-align:right}
 <div class="lede">The season money list: podium, skins, closest-to-the-pin and the Season Pot, all added up. The top six:</div>
 <div class="card">
   <table>
-    <tr><th>#</th><th>Player</th><th class="r">Events</th><th class="r">Pot</th><th class="r">Total</th></tr>
-    <tr><td>1</td><td><b>Jordan Knappenberger</b></td><td class="r">5</td><td class="r">$24</td><td class="r money">$292.00</td></tr>
-    <tr><td>2</td><td><b>Bill Steirer</b></td><td class="r">6</td><td class="r">$16</td><td class="r money">$270.33</td></tr>
-    <tr><td>3</td><td><b>Scott Justus</b></td><td class="r">4</td><td class="r">&mdash;</td><td class="r money">$260.29</td></tr>
-    <tr><td>4</td><td><b>Rich Potts</b></td><td class="r">5</td><td class="r">$70</td><td class="r money">$243.14</td></tr>
-    <tr><td>5</td><td><b>BJ Kolonia</b></td><td class="r">6</td><td class="r">$117</td><td class="r money">$237.00</td></tr>
-    <tr><td>6</td><td><b>Evan Lindermuth</b></td><td class="r">6</td><td class="r">$40</td><td class="r money">$199.33</td></tr>
+    <tr><th>#</th><th>Player</th><th class="r">Events</th><th class="r">Total</th></tr>
+    <tr><td>1</td><td><b>Jordan Knappenberger</b></td><td class="r">5</td><td class="r money">$292.00</td></tr>
+    <tr><td>2</td><td><b>Bill Steirer</b></td><td class="r">6</td><td class="r money">$270.33</td></tr>
+    <tr><td>3</td><td><b>Scott Justus</b></td><td class="r">4</td><td class="r money">$260.29</td></tr>
+    <tr><td>4</td><td><b>Rich Potts</b></td><td class="r">5</td><td class="r money">$243.14</td></tr>
+    <tr><td>5</td><td><b>BJ Kolonia</b></td><td class="r">6</td><td class="r money">$237.00</td></tr>
+    <tr><td>6</td><td><b>Evan Lindermuth</b></td><td class="r">6</td><td class="r money">$199.33</td></tr>
   </table>
 </div>
 <div class="card">
@@ -152,7 +153,7 @@ td.r,th.r{text-align:right}
   <div class="fact"><div class="n">4</div><p><b>Players who teed it up in all seven events:</b> Rich Penberg, Jeff Rapp, Chooch Wernett and Brian Hager. The iron men of 2026.</p></div>
   <div class="fact"><div class="n">+10.9</div><p><b>Red numbers into black:</b> Tom Arnold went from &minus;6.04 in his first scored event to +4.90 in his last, a podium finish at #9. Tom Stitt went from &minus;7.71 to +1.69, with two podiums along the way (2nd in #4, 3rd in #10).</p></div>
   <div class="fact"><div class="n">22</div><p><b>The biggest field of the year:</b> Series #3 in late May. The finale was the smallest at 13, but, as we saw, quality over quantity.</p></div>
-  <div class="fact"><div class="n">$2,620</div><p><b>Total event prize pools</b> across the season, with another $380 in the Season Pot.</p></div>
+  <div class="fact"><div class="n">$3,000</div><p><b>Total prize money for the season:</b> $2,620 in event pools (131 rounds at $20 a head) plus the $380 Season Pot.</p></div>
 </div>
 
 <div class="thanks">

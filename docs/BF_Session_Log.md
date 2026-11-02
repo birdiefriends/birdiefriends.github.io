@@ -5548,3 +5548,77 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - **Parked (Brian):** **Round Robin** (Tony Choy's 6/6/6 points game: needs Tony to confirm the stroke value and the open rules questions); My History scrapbook / story-tag commentary across every game; BFE-Admin all-par-3s CTP default and Live Panel CTP picks; the BFE-A / BF Cup configuration session (BF Cup 11/7–8).
 - **Offered, not built:** a warning BEFORE saving a Net game when some players have no handicap or tee; a confirm on saving game changes when scores already exist; literal "click to expand" wording on the Live Actions headers; making Re-deal tumble like Roll again; wrapping the results tab strip.
 - **Open into Dev-95:** Bootstrap §5 "Dev-95 start list".
+
+## Dev-95 — BF Cup: draft, draw and live scoring (2026-10-20 – 10-27)
+**Result:** portal v4.47.1, engine 1.40.0, Worker 3,565 lines, `docs/bf_live_match.js` v12; all on `main`, last code commit `4b22614`. Full detail in spec §13.13.
+- **Built:** team draft (captain links, snake, captain-in-control), Saturday matchup draw, Sunday singles draw, the reusable live panel (hole by hole, tiles 1-8 + P, offline queue, identity guard), scoring by foursome (two singles matches per group, match numbers across the Cup), off-the-low handicap by format, match close by host/captains, rounds that finish by themselves, a leaderboard with in-place scorecards (circles, squares, running match row), the app card with a host off switch, phase markers for the photo timeline, BFE-A saves tee pars.
+- **Brian's design calls that changed direction:** the all-tiles entry screen was too cluttered, so entry became hole by hole with a pop-up picker like the gathering games; dropdowns replaced the wall of match cards; match close is host/captains only; singles are organized by foursome; no star on the group list; the leaderboard drills down to a scorecard and no longer jumps to Score.
+- **Bugs found live and fixed:** an empty "I am" made the Worker refuse scores while the page showed them (Post now locked until a name is picked, refused posts revert with a warning); points to win ignored the undrawn singles day; the Score tab became the default and broke page tests (module inlined, `?view=teams`).
+- **Series #9 (2026-10-25):** results looked right but the publish went out as BFSeries#6 because Save to Series had not been run first. Fixed by running it; nothing was lost (the bad publish changed one timestamp line per page).
+- **Tests:** 13 Cup test files all pass; full `run_all` fails only `test_at_course` and `test_rail_drag` (known).
+- **Not live-verified:** a real roster and captains, 14-16 players, tee pars fetched from the Venue Manager on an older Cup, round auto-finish across several phones.
+- **Worker library vs Cloudflare:** in sync (Brian deployed the last Worker before the final merge).
+- **Open into Dev-96:** Bootstrap §5 "Dev-96 start list".
+
+
+## Dev-96 (part) — xMan Teams, Scramble, Team Names (2026-10-28)
+**Result:** portal v4.50.1, engine 1.43.1, all on `main` (last commit `7b3d349`); spec §22 in `specs/BF_Gatherings_Spec.md`. Brian ran the SQL and deployed both Workers (main `worker.js`, `bf_experiences_worker.js`) before each portal merge.
+- **Built:** a Gathering can be a team event (`gatherings.team_size` 2-4; `size` stays total players). Players name teammates with their Yes (`registrations.partner_id`, names joined with `|`); a team locks only when all members are Yes and name each other; host can team/unteam by hand (`POST /registrations/partner`, `members`); team names (`registrations.team_name`, `POST /registrations/team-name`). New game `scramble` for teams of 1-4: strokes or Stableford, ranked-share / combined / no team handicap, pays winner / top 2 / top 3, names carried into the config and results.
+- **SQL run:** `ALTER TABLE gatherings ADD COLUMN team_size INTEGER; ALTER TABLE registrations ADD COLUMN partner_id TEXT; ALTER TABLE registrations ADD COLUMN team_name TEXT;`
+- **Brian's design calls:** built first as Teams of 2, then generalized to xMan before deploy; team names added after. Total players, not teams, drives capacity and tee times. Both strokes and Stableford must be options.
+- **My defaults to check:** 3-man shares 20/15/10, 4-man 25/20/15/10, combined 25/15/18% for 2/3/4 players (the 18% is mine).
+- **Not live-verified:** a real Turkey 2Man registration (partner picker, host pairing, naming), push to a named partner, Scramble results on a real round.
+- **Next:** recreate the Turkey 2Man (11/15) as a Gathering with Teams on at 2 per team; the BF Cup final dev is still pending.
+- **Later in the session (v4.50.0-4.50.1):** (1) **Teams in the guided New Gathering flow** (Basics step "Individual or teams?", sends `team_size` and `gathering_type` "N Man Scramble"), including the open/polling path (`size` null, `tee_time_status` 'suggested'); the full form got a "3 Man Scramble" format. (2) **Scramble config saves with no teams yet** (engine 1.43.1): `pairs` is no longer required (`minPairs: 0`), because a team event is configured before anyone has signed up; a half-filled team is still refused. Reopening the Games form prefills locked teams from `teamsState` when the saved `pairs` is empty. (3) Worker `bf_experiences_worker.js` redeployed for 1.43.1; main `worker.js` unchanged. No SQL.
+- **Open into the Turkey 2Man thread (Dev-96 stays open for it):** Brian recreates the 11/15 event as an open (polling) Gathering with Teams on at 2 per team, then we verify live: partner picker and push to a named partner, host pairing/unpairing, team names, Games form prefill after sign-ups, Scramble (strokes or Stableford, per Brian's choice) results on a real round. Pre-existing failing tests: `test_at_course`, `test_rail_drag` (fail without these changes too).
+- **Incident (2026-10-28, 19:33):** two "AutoPush from Android" commits (`0b658e1`, `36317f8`) overwrote `docs/portal.html` and `source/portal.html` with a stale copy from `/storage/emulated/0/Download/portal.html` (engine 1.0.0, no Teams). The Turkey 2Man card lost team names, pairing and unpaired players while the header still read v4.50.1, because the version text comes from `portal_version.txt`, not from the page code. Data and Workers were fine. Fixed by restoring both files from `7b3d349` (commit `09c97cf`). **Lesson:** if a feature "disappears" while the header version is right, check `git log origin/main` for outside pushes before touching code, and check `bf_engine.js?v=` in the live page. Keep stale `portal.html` copies out of the Android Download folder.
+
+## Dev-97 (part) — BF Cup: tees by handicap, host code, page titles (2026-10-30)
+- **Assessment (10-28):** the Cup is built and tested end to end on "Test BFCup" only; nothing has run with the real roster. The live record "2026 BirdieFriends Cup" had no teams yet and one Green tee for everyone. Brian expects 16 players plus a Sub (17 registered); odd-roster rule: balanced teams are the minimum, extras are Subs.
+- **Built (staging, not yet merged):** Cup page titled by event and stage instead of "BF Cup Draft"; tees by handicap (engine 1.44.0, live module v13, BFE-A 4b tier rows); per-event host code (Worker, deployed by Brian 10-30); BFE-A allowance defaults 80 / 50 / 80. Spec §13.14 has the rules.
+- **Tests:** `test_cup_tiers` (26), `test_cup_hostcode` (23), `test_cup_admin_tiers` (27); `test_cup_draft_page` now follows the real engine version. Full suite fails only `test_at_course` and `test_rail_drag` (known).
+- **Process:** the classifier blocks `git push --force` to `claude-staging`; merge `origin/main` into the staging tip and push normally instead. The Stop hook's "unpushed commits" message compares against `main`, verify with `git ls-remote`.
+- **Open:** Brian sets tees by handicap and the allowances in BFE-A 4b and re-saves before Sunday's draft; the draft Sunday 11/1; matchup draw after; 11/7-8 Cup.
+
+
+### Dev-97 (part) — BF Cup: automatic series refresh at draft start (2026-10-31)
+- `docs/bf-cup-draft.html`: one `loadSeriesInto()` loader (fresh, no-store) used by page load, Reload and Start. Start the draft re-reads roster handicaps + published `results.html` first. Host sets "Series I expect to be in" (`draft.expectSeries`); banner shows "through #N"; Start asks before using stale series. Cannot trigger the Golf Scorer publish itself.
+- Test: `test_cup_series_refresh.mjs` (9).
+
+### Dev-97 (part) — BF Cup: Substitute (2026-10-31)
+- Roster entries carry `sub: true` (BFE-A roster "Sub" tick; set automatically from the Jotform RSVP "Sub"). Cup page auto-puts them in `draft.subs`, never the pool; Sub box on host setup; odd-pool warning.
+- Host "Substitute" card (Teams view, after the draft): swaps the Sub in for a player everywhere (picks, teams, pairs, matches, scores); the other player becomes the Sub. Captains can't be swapped.
+- Tests: test_cup_subs (6), test_cup_swap (14), test_roster_sub (2).
+
+### Dev-97 (part) — GS v8.61: Season Pot (2026-11-02)
+- `computeSeasonPot()` + a "Season Pot" tab on the series/standings page. $20 per QUALIFIED player; Overall 40%, Green/Combo/Gold an equal third of the other 60%; places 50/30/20; a place nobody earned (flight under 3 qualifiers) is spread across every other prize (factor pot/(pot-unpaid)); floor to whole dollars; tie averages the places covered (floored); the rounding remainder is the house's. Checked on real data through #9: 19 qualified (Green 9, Combo 8, Gold 2) = $380, paid $373, house $7; and last year's sheet (20 players, 50%, two flights) reproduces $100/60/40 and $50/30/20.
+- The Money tab label "Season pot to date" is now "Total event pools to date" (it is the per-event pools, not this pot).
+- Not yet: My Game line ("you are 2nd in Combo, projected $X"). Test: test_gs_season_pot.mjs (18).
+
+### Dev-97 (part) — GS v8.62: in-app Series standings fixed for NoHCP players (2026-11-02)
+- Bug: `buildStandings()` (the 7-Series tab, Sheets export, rankings) passed `ph.events` straight to `calcSeriesPerformance`, so a NoHCP player's baseline event (quota null) counted as quota 0 and the retroactive E1 was never added. Rich Potts showed +31.30 (assigned 91.8) in the app vs +6.80 (116.2) on the published pages. The published pages (`generateSeriesPage`, My Game) were already right.
+- Fix: same event set as the published pages (scored events + `buildRetroactiveE1Event`). Checked on the real published data: all 19 qualified rows match. Test: test_gs_buildstandings.mjs (4).
+- If Push to Sheets ran from the old build, the Sheets rows for NoHCP players are wrong: re-push.
+
+### Dev-97 (part) — GS v8.63: field check before the payout is fixed (2026-11-02)
+- Real incident (BFSeries#10, 11/1): no-shows were still on the roster when results were calculated, the pot ($20 x roster) overstated the money, the payout ran out of cash and had to be redone. 
+- `gsFieldInfo / gsFieldCheck / gsFieldModal / gsRemoveNoShows`: before Calculate Results, Save to Series (both buttons) and End of Event, compare the roster with scorecards entered. Players with no positive score = no-shows. Prompt shows the pot with everyone vs with those who played; Remove them / Keep all / Cancel. Asked once per no-show list; silent when nobody has scores yet or everyone does. Test: test_gs_field_check.mjs (13).
+
+### Dev-97 (part) — GS v8.64: Season Pot settings screen (2026-11-02)
+- Series screen has a "🏆 Season Pot settings" box: ante, Overall %, place % (1st to 5th, blank = unpaid, must total 100), flights. Saved per season in `seasons[season].potSettings` (rides with Export/Import JSON); Reset clears it. Live preview with today's standings. Pure helpers `gsPotNormalize` (defaults per field), `gsPotFromForm` (validation).
+- `computeSeasonPot(players, settings)` takes the settings and returns `opts`; `generateSeriesPage` passes `sd.potSettings`, and the page's "how it works" note is built from them. Rendering moved to `gsSeasonPotHTML` (shared by the published tab and the preview). 2026 defaults unchanged ($20, 40%, 50/30/20, all three flights): real Series #10 data still gives $380 / paid $373 / house $7.
+- Tests: test_gs_season_pot (29), test_gs_pot_settings_ui (11, real GS page in jsdom).
+
+### Dev-97 (part) — GS v8.65-v8.67: Season Pot FINAL, My Series final card, final money list (2026-11-02)
+- v8.65: Season Pot settings has a "Season is over" tick (`potSettings.final`). Ticked: the published Season Pot tab says FINAL instead of "projected". Test: test_gs_pot_settings_ui (13).
+- v8.66: My Series shows a "Final results" card per player (final overall and flight rank, Season Pot dollars, "did not qualify" / "out of the money" cases) only when final. Series data only, no Cup data. Test: test_gs_mygame_final (5).
+- v8.67: with final ticked, the Money tab gains a Season Pot column that counts in each total; pot-only winners are added. Test: test_gs_money_final (4).
+- Publish order for the season end: set Overall 39, tick Season is over, Save settings, Save to Series, Publish All Pages.
+
+### Dev-97 (part) — 2026 Series wrap-up page and archive (2026-11-02)
+- `docs/series-2026-wrap.html` (birdiefriends.com/series-2026-wrap.html): sportscaster-style season story built from the published series data (champions, per-event winners, money list, facts, all 31 players). Hand-written, not generated; every figure checked against `results.html` data. Total prize money $3,000 = 131 rounds x $20 ($2,620) + $380 Season Pot.
+- `docs/bf-series-2026-ARCHIVE.html`: ONE self-contained file (wrap-up, final Standings with the FINAL pot, Series #10 results, My Series, season data JSON download). Built by `source/tools/build_series_archive.mjs` (run `node source/tools/build_series_archive.mjs`; it reads `docs/results.html` data): renders `generateSeriesPage` / `generateMyGamePage` from the published data with `potSettings.final = true`, embeds each page in a `srcdoc` iframe, and rewires the in-page nav to switch tabs. Fonts fall back to system fonts offline.
+- Known gap: only the LAST event's results page exists on the site, so the archive has Series #10 results only.
+- Known data difference: the Money tab recomputes skins; the per-event `payoutSnapshot` totals differ slightly (Bill Steirer $254.33 vs $260, Scott Justus $260.29 vs $256). Check against cash actually paid.
+- Series #7 and #8 are not in the data.
+- Design for 2027 (not built): see `BF_Design_EventHome_Archive_2027.md`.
