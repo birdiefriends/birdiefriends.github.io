@@ -6244,10 +6244,17 @@ function buildStandings(season) {
   if (!sd) return [];
 
   return Object.entries(sd.playerHistory).map(([name, ph]) => {
-    const perf = calcSeriesPerformance(ph.events);
+    // Same event set the published pages use (generateSeriesPage / My Game): only scored events, plus the retroactive E1 for a NoHCP player.
+    // Feeding ph.events straight in counted a NoHCP baseline event (no quota) as quota 0, which inflated that player's performance
+    // (Rich Potts showed +31.30 in the app against the published +6.80). Dev-97.
+    const evts = ph.events || [];
+    let scorable = evts.filter(e => e.quota !== null && e.result !== null);
+    const retroE1 = buildRetroactiveE1Event(evts, scorable);
+    if (retroE1) scorable = [retroE1, ...scorable];
+    const perf = calcSeriesPerformance(scorable);
     return {
       name, tee: ph.tee,
-      played:      ph.events.length,
+      played:      evts.length,
       qualifies:   perf.qualifies,
       assigned:    perf.assigned,
       achieved:    perf.achieved,
@@ -8706,7 +8713,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.61 · 2026-11-02';
+const GS_VERSION = 'v8.62 · 2026-11-02';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire

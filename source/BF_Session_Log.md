@@ -5594,3 +5594,8 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - `computeSeasonPot()` + a "Season Pot" tab on the series/standings page. $20 per QUALIFIED player; Overall 40%, Green/Combo/Gold an equal third of the other 60%; places 50/30/20; a place nobody earned (flight under 3 qualifiers) is spread across every other prize (factor pot/(pot-unpaid)); floor to whole dollars; tie averages the places covered (floored); the rounding remainder is the house's. Checked on real data through #9: 19 qualified (Green 9, Combo 8, Gold 2) = $380, paid $373, house $7; and last year's sheet (20 players, 50%, two flights) reproduces $100/60/40 and $50/30/20.
 - The Money tab label "Season pot to date" is now "Total event pools to date" (it is the per-event pools, not this pot).
 - Not yet: My Game line ("you are 2nd in Combo, projected $X"). Test: test_gs_season_pot.mjs (18).
+
+### Dev-97 (part) — GS v8.62: in-app Series standings fixed for NoHCP players (2026-11-02)
+- Bug: `buildStandings()` (the 7-Series tab, Sheets export, rankings) passed `ph.events` straight to `calcSeriesPerformance`, so a NoHCP player's baseline event (quota null) counted as quota 0 and the retroactive E1 was never added. Rich Potts showed +31.30 (assigned 91.8) in the app vs +6.80 (116.2) on the published pages. The published pages (`generateSeriesPage`, My Game) were already right.
+- Fix: same event set as the published pages (scored events + `buildRetroactiveE1Event`). Checked on the real published data: all 19 qualified rows match. Test: test_gs_buildstandings.mjs (4).
+- If Push to Sheets ran from the old build, the Sheets rows for NoHCP players are wrong: re-push.
