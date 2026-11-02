@@ -1058,6 +1058,7 @@
         </div></div>
       <div style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap;font-size:0.82rem;align-items:center"><span style="font-size:0.75rem">Flights:</span>
         <label><input type="checkbox" class="pot-flight" value="Green"> Green</label><label><input type="checkbox" class="pot-flight" value="Combo"> Combo</label><label><input type="checkbox" class="pot-flight" value="Gold"> Gold</label></div>
+      <div style="margin-top:8px;font-size:0.82rem"><label><input type="checkbox" id="pot-final"> Season is over: label the published pot <b>FINAL</b> (otherwise it says projected)</label></div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="gsPotSave()">💾 Save settings</button><button class="btn btn-secondary btn-sm" onclick="gsPotReset()">Reset to defaults</button></div>
       <div id="pot-settings-status" style="display:none;margin-top:8px;font-size:0.82rem"></div>
       <div id="pot-preview" style="margin-top:10px"></div>
@@ -1989,7 +1990,7 @@ function gsPotNormalize(raw) {
   const pp = Array.isArray(r.placePct) ? r.placePct.map(Number).filter(x => x > 0) : [];
   const placePct = pp.length && Math.abs(pp.reduce((a, b) => a + b, 0) - 1) < 0.0001 ? pp : d.placePct.slice();
   const fl = Array.isArray(r.flights) ? r.flights.filter(f => ['Green', 'Combo', 'Gold'].includes(f)) : [];
-  return { ante, overallPct, placePct, flights: fl.length ? fl : d.flights.slice() };
+  return { ante, overallPct, placePct, flights: fl.length ? fl : d.flights.slice(), final: !!r.final };
 }
 // Form values (whole percents, strings) -> { settings, problems }. Pure, so the rules are testable.
 function gsPotFromForm(f) {
@@ -2006,7 +2007,7 @@ function gsPotFromForm(f) {
   else if (used.length && Math.abs(used.reduce((a, b) => a + Number(b), 0) - 100) > 0.01) problems.push('The place percentages must add up to 100 (they add up to ' + used.reduce((a, b) => a + Number(b), 0) + ').');
   const flights = (f.flights || []).filter(x => ['Green', 'Combo', 'Gold'].includes(x));
   if (!flights.length) problems.push('Pick at least one flight.');
-  return { problems, settings: problems.length ? null : { ante, overallPct: overall / 100, placePct: used.map(x => Number(x) / 100), flights } };
+  return { problems, settings: problems.length ? null : { ante, overallPct: overall / 100, placePct: used.map(x => Number(x) / 100), flights, final: !!f.final } };
 }
 
 // Renders the Season Pot (used by the published page and the settings preview). Inline styles only, so it works in both.
@@ -2025,7 +2026,7 @@ function gsSeasonPotHTML(sp) {
       return '<div class="card" style="padding:12px 14px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><b>' + g.label + '</b><span style="font-size:0.72rem;color:#888">' + g.size + ' qualified &middot; ' + (g.key === 'overall' ? pct + '% of the pot' : (nFl === 1 ? 'the other ' + fl + '%' : (nFl > 1 ? 'a ' + (nFl === 3 ? 'third' : 'share') + ' of the other ' + fl + '%' : ''))) + '</span></div>'
         + '<table style="width:100%;border-collapse:collapse;font-size:0.85rem"><tbody>' + rows + '</tbody></table>' + note + '</div>';
     };
-    return '<div class="notice">Season pot &middot; ' + sp.qualifiers + ' qualified players &times; $' + sp.ante + ' = <strong>$' + sp.pot + '</strong> &nbsp;&middot;&nbsp; projected, based on the standings today</div>'
+    return '<div class="notice">Season pot &middot; ' + sp.qualifiers + ' qualified players &times; $' + sp.ante + ' = <strong>$' + sp.pot + '</strong> &nbsp;&middot;&nbsp; ' + (sp.opts.final ? '<strong>FINAL</strong>' : 'projected, based on the standings today') + '</div>'
       + sp.groups.map(block).join('')
       + '<div class="notice" style="text-align:left">How it works: Overall gets ' + pct + '% of the pot; ' + sp.opts.flights.join(', ') + ' share the other ' + fl + '% equally. Each pays ' + sp.opts.placePct.map((x, i) => ord(i + 1) + ' ' + Math.round(x * 1000) / 10 + '%').join(' / ') + '. A place nobody has earned (a flight with fewer qualifiers than places) is spread across every other prize. Prizes round down to whole dollars; a tie averages the places it covers. Paid out: $' + sp.paid + (sp.house > 0 ? ' &middot; $' + sp.house + ' to the house (rounding)' : '') + '.</div>';
 }
@@ -6470,6 +6471,7 @@ function renderStandingsTable(flight) {
 // ── Season pot settings screen ──
 function gsPotRead() {
   return { ante: document.getElementById('pot-ante').value, overall: document.getElementById('pot-overall').value,
+    final: !!(document.getElementById('pot-final') || {}).checked,
     places: [...document.querySelectorAll('.pot-place')].map(i => i.value), flights: [...document.querySelectorAll('.pot-flight')].filter(c => c.checked).map(c => c.value) };
 }
 function gsPotRenderSettings() {
@@ -6481,6 +6483,7 @@ function gsPotRenderSettings() {
   document.getElementById('pot-overall').value = Math.round(st.overallPct * 1000) / 10;
   document.querySelectorAll('.pot-place').forEach((el, i) => { el.value = st.placePct[i] !== undefined ? Math.round(st.placePct[i] * 1000) / 10 : ''; });
   document.querySelectorAll('.pot-flight').forEach(c => { c.checked = st.flights.includes(c.value); });
+  const fin = document.getElementById('pot-final'); if (fin) fin.checked = !!st.final;
   gsPotPreview();
 }
 function gsPotPreview() {
@@ -8887,7 +8890,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.64 · 2026-11-02';
+const GS_VERSION = 'v8.65 · 2026-11-02';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire

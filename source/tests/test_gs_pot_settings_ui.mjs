@@ -36,6 +36,11 @@ ok(d.getElementById('pot-ante').value === '25' && d.getElementById('pot-overall'
 const page = w.generateSeriesPage('2026', JSON.parse(w.localStorage.getItem(key)).seasons[2026]);
 const potTab = page.slice(page.indexOf('id="tab-pot"'));
 ok(/15 qualified players &times; \$25 = <strong>\$375/.test(potTab) && /Overall gets 30%/.test(potTab) && /Green, Gold share the other 70%/.test(potTab) && !/>Combo</.test(potTab.slice(0, potTab.indexOf('How it works'))), 'the published Season Pot tab uses $25, 30% Overall, Green + Gold only');
+// FINAL label
+ok(/projected/.test(potTab.slice(0, 400)) && !/FINAL/.test(potTab.slice(0, 400)), 'not marked final: the published pot says projected');
+d.getElementById('pot-final').checked = true; w.gsPotSave();
+const pageF = w.generateSeriesPage('2026', JSON.parse(w.localStorage.getItem(key)).seasons[2026]);
+ok(/FINAL<\/strong>/.test(pageF.slice(pageF.indexOf('id="tab-pot"'), pageF.indexOf('id="tab-pot"') + 400)), 'ticking Season is over labels the published pot FINAL');
 // reset
 w.gsPotReset();
 ok(d.getElementById('pot-ante').value === '20' && !JSON.parse(w.localStorage.getItem(key)).seasons[2026].potSettings, 'Reset goes back to the defaults and clears the saved settings');
