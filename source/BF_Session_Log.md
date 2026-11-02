@@ -5608,3 +5608,17 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Series screen has a "🏆 Season Pot settings" box: ante, Overall %, place % (1st to 5th, blank = unpaid, must total 100), flights. Saved per season in `seasons[season].potSettings` (rides with Export/Import JSON); Reset clears it. Live preview with today's standings. Pure helpers `gsPotNormalize` (defaults per field), `gsPotFromForm` (validation).
 - `computeSeasonPot(players, settings)` takes the settings and returns `opts`; `generateSeriesPage` passes `sd.potSettings`, and the page's "how it works" note is built from them. Rendering moved to `gsSeasonPotHTML` (shared by the published tab and the preview). 2026 defaults unchanged ($20, 40%, 50/30/20, all three flights): real Series #10 data still gives $380 / paid $373 / house $7.
 - Tests: test_gs_season_pot (29), test_gs_pot_settings_ui (11, real GS page in jsdom).
+
+### Dev-97 (part) — GS v8.65-v8.67: Season Pot FINAL, My Series final card, final money list (2026-11-02)
+- v8.65: Season Pot settings has a "Season is over" tick (`potSettings.final`). Ticked: the published Season Pot tab says FINAL instead of "projected". Test: test_gs_pot_settings_ui (13).
+- v8.66: My Series shows a "Final results" card per player (final overall and flight rank, Season Pot dollars, "did not qualify" / "out of the money" cases) only when final. Series data only, no Cup data. Test: test_gs_mygame_final (5).
+- v8.67: with final ticked, the Money tab gains a Season Pot column that counts in each total; pot-only winners are added. Test: test_gs_money_final (4).
+- Publish order for the season end: set Overall 39, tick Season is over, Save settings, Save to Series, Publish All Pages.
+
+### Dev-97 (part) — 2026 Series wrap-up page and archive (2026-11-02)
+- `docs/series-2026-wrap.html` (birdiefriends.com/series-2026-wrap.html): sportscaster-style season story built from the published series data (champions, per-event winners, money list, facts, all 31 players). Hand-written, not generated; every figure checked against `results.html` data. Total prize money $3,000 = 131 rounds x $20 ($2,620) + $380 Season Pot.
+- `docs/bf-series-2026-ARCHIVE.html`: ONE self-contained file (wrap-up, final Standings with the FINAL pot, Series #10 results, My Series, season data JSON download). Built by `source/tools/build_series_archive.mjs` (run `node source/tools/build_series_archive.mjs`; it reads `docs/results.html` data): renders `generateSeriesPage` / `generateMyGamePage` from the published data with `potSettings.final = true`, embeds each page in a `srcdoc` iframe, and rewires the in-page nav to switch tabs. Fonts fall back to system fonts offline.
+- Known gap: only the LAST event's results page exists on the site, so the archive has Series #10 results only.
+- Known data difference: the Money tab recomputes skins; the per-event `payoutSnapshot` totals differ slightly (Bill Steirer $254.33 vs $260, Scott Justus $260.29 vs $256). Check against cash actually paid.
+- Series #7 and #8 are not in the data.
+- Design for 2027 (not built): see `BF_Design_EventHome_Archive_2027.md`.
