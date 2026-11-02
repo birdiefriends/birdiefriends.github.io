@@ -5,8 +5,8 @@
 - The stop hook "N unpushed commits" message is STALE (it compares against `main`). Verify with `git ls-remote origin claude-staging` versus `git rev-parse --short HEAD`.
 - Live: the 2026 Series wrap-up (`/series-2026-wrap.html`), the archive (`/bf-series-2026-ARCHIVE.html`), the Home banner, the Results screen groups, the landing-page card, and the push broadcast "Open this page" field. Brian sent the announcement push on 11/2.
 
-## OPEN: Brian still has to publish the FINAL Series pages
-The published standings / results / My Series were last published at 10:15 on 11/2 WITHOUT the final flag (no FINAL label, no Season Pot column in Money, no Final results card). In GS v8.67: 7-Series > Season Pot settings > Overall 39 > tick "Season is over" > Save settings > Save to Series > Publish All Pages. (The archive already shows the final state; it is generated from the data.) Check `docs/standings.html` for `<strong>FINAL</strong>` to confirm.
+## DONE: the final Series pages are published (11-02, verified live)
+Standings (Season Pot tab FINAL, Money column), results and My Series (Final results card) carry the final flag. Nothing to do. To republish: GS 7 · Series > Season Pot settings > (Season is over ticked) Save settings > Publish All Pages (Save to Series is not needed unless an event changed).
 
 ## Things to check or decide
 1. BF Cup weekend 11/7-11/8 (BSGC): confirm the draft state on `/bfe/cup` (built-in browser only), the Saturday pairings, the Sub swap, and captain links have never been run on the real Cup. The practice copy "2026 BirdieFriends Cup (practice)" still exists in D1 (harmless). BFSeries and BFCup are unrelated apart from the performance data (Brian's rule): never mix Cup data into Series pages.

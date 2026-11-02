@@ -5645,3 +5645,4 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 
 ### Dev-97 — closed (2026-11-02)
 - Handoff for Dev-98 is `BF_NextSession_Dev98.md`. Biggest open item: Brian must still publish the FINAL Series pages (Season is over ticked).
+- Bootstrap (`BF_Session_Bootstrap.md`) updated for Dev-98: new status block at the top, Dev-98 start-list pointer in section 5. Final Series pages confirmed live; handoff note updated.
