@@ -4925,6 +4925,18 @@ function generateMyGamePage(season, sd) {
     fp.forEach((p,i)=>{ playerData[p.name].flightRank = p.qualifies ? i+1 : null; });
   });
 
+  // FINAL results: only when the commissioner marks the season over (Season Pot settings). Series data only, nothing from the Cup.
+  const potSp = computeSeasonPot(allNames.map(n => ({ name: n, qualifies: playerData[n].qualifies, seriesFlight: playerData[n].seriesFlight, performance: playerData[n].seriesScore })), sd.potSettings);
+  const finalInfo = { final: !!potSp.opts.final, pot: potSp.pot, ante: potSp.ante, qualifiers: potSp.qualifiers, players: {} };
+  if (finalInfo.final) {
+    allNames.forEach(n => {
+      const wins = [];
+      potSp.groups.forEach(g => g.rows.forEach(r => { if (r.names.includes(n)) wins.push({ group: g.label, place: r.place, amount: r.amount, tied: r.tied }); }));
+      finalInfo.players[n] = { wins, total: wins.reduce((t, w) => t + w.amount, 0) };
+    });
+  }
+  const finalJson = JSON.stringify(finalInfo).replace(/</g,'\u003c').replace(/>/g,'\u003e');
+
   function teeReason(hcp, noHcp) {
     if (noHcp) return 'Manual tee selection (no GHIN handicap)';
     if (hcp < 10)  return `HCP ${hcp.toFixed(1)} is under 10.0 → Green tees (slope 132)`;
@@ -5045,6 +5057,7 @@ select:focus{outline:none;border-color:var(--green)}
 
 <script>
 const ALL_PLAYER_DATA = ${dataJson};
+const FINAL_RESULTS = ${finalJson};
 const EVENT_LIST = ${eventListJson};
 
 const sel = document.getElementById('player-select');
@@ -5325,7 +5338,23 @@ function showPlayer(name) {
     ? \`<div class="note">~ Your Event 1 (baseline) score counts — since you didn't have a handicap yet, a fair starting quota (\${fmt2(p.retroAvg)}) has been averaged from how you've scored since. This recalculates as more events are played.</div>\`
     : '';
 
-  wrap.innerHTML = \`
+  let finalCard = '';
+  if (FINAL_RESULTS.final) {
+    const ord = n => n + (['th','st','nd','rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : (n % 10 < 4 ? n % 10 : 0)]);
+    const fr = FINAL_RESULTS.players[p.name] || { wins: [], total: 0 };
+    let body;
+    if (!p.qualifies) {
+      body = '<p>Final: did not qualify for the series championship (4 events needed), so not in the Season Pot.</p>';
+    } else {
+      const lines = fr.wins.map(w => '<div class="series-row"><div class="series-row-name">' + (w.group === 'Overall' ? 'Overall' : w.group + ' flight') + ' &middot; ' + (w.tied ? 'T-' : '') + ord(w.place) + '</div><div class="series-row-val" style="color:#1a6b30">$' + w.amount + (w.tied ? ' each' : '') + '</div></div>').join('');
+      body = '<p>Final standing: <strong>' + ord(p.overallRank) + ' overall</strong> and <strong>' + ord(p.flightRank) + ' in the ' + (p.seriesFlight || p.tee) + ' flight</strong>.</p>' +
+        (fr.wins.length ? '<div class="series-rows">' + lines + '</div><div class="series-total-row"><div style="flex:1">Season Pot winnings</div><div class="series-total-val">$' + fr.total + '</div></div>'
+                        : '<p style="margin-top:6px">Out of the money this season. Thanks for playing.</p>');
+    }
+    finalCard = '<div class="summary-card" style="border-left-color:var(--gold);background:#fffaf0"><div style="font-family:\\'DM Serif Display\\',serif;font-size:1.15rem;margin-bottom:6px">🏆 Final results</div>' + body + '<div class="note">Season Pot: ' + FINAL_RESULTS.qualifiers + ' qualified players &times; $' + FINAL_RESULTS.ante + ' = $' + FINAL_RESULTS.pot + '.</div></div>';
+  }
+
+  wrap.innerHTML = finalCard + \`
   <div class="summary-card">\${narrative}</div>
 
   <div class="section">
@@ -5568,8 +5597,14 @@ function generateSeriesPage(season, sd) {
     }
   });
 
+  // Season Pot (computed once; used by the Season Pot tab and, once the season is marked FINAL, by the money list)
+  const seasonPot = computeSeasonPot(allPlayers, sd.potSettings);
+  const potFinal = !!seasonPot.opts.final;
+  const potEarn = {};
+  if (potFinal) seasonPot.groups.forEach(g => g.rows.forEach(r => r.names.forEach(n => { potEarn[n] = (potEarn[n] || 0) + r.amount; })));
   const moneyRows = Object.entries(moneyTotals)
-    .map(([name, m]) => ({name, podium: m.podium, skins: m.skins, ctp: m.ctp, total: m.podium + m.skins + m.ctp}))
+    .concat(potFinal ? Object.keys(potEarn).filter(n => !moneyTotals[n]).map(n => [n, {podium:0, skins:0, ctp:0}]) : [])
+    .map(([name, m]) => ({name, podium: m.podium, skins: m.skins, ctp: m.ctp, pot: potEarn[name] || 0, total: m.podium + m.skins + m.ctp + (potEarn[name] || 0)}))
     .filter(p => p.total > 0)
     .sort((a, b) => b.total - a.total);
 
@@ -5586,6 +5621,7 @@ function generateSeriesPage(season, sd) {
         + '<td style="padding:7px 8px;text-align:right;color:#555">' + fmtMoney(p.podium) + '</td>'
         + '<td style="padding:7px 8px;text-align:right;color:#555">' + fmtMoney(p.skins) + '</td>'
         + '<td style="padding:7px 8px;text-align:right;color:#555">' + fmtMoney(p.ctp) + '</td>'
+        + (potFinal ? '<td style="padding:7px 8px;text-align:right;color:#555">' + fmtMoney(p.pot) + '</td>' : '')
         + '<td style="padding:7px 8px;text-align:right;font-weight:700;color:#085041">$' + p.total.toFixed(2) + '</td>'
         + '</tr>';
     });
@@ -5596,12 +5632,13 @@ function generateSeriesPage(season, sd) {
       + '<th style="padding:8px;text-align:right">Podium</th>'
       + '<th style="padding:8px;text-align:right">Skins</th>'
       + '<th style="padding:8px;text-align:right">CTP</th>'
+      + (potFinal ? '<th style="padding:8px;text-align:right">Season Pot</th>' : '')
       + '<th style="padding:8px;text-align:right;font-weight:700">Total</th>'
       + '</tr></thead><tbody>' + mRows + '</tbody></table>';
   }
 
   // ── Season pot: Overall + flight payouts (computeSeasonPot) ──────────────────────────────────────
-  const seasonPotHTML = gsSeasonPotHTML(computeSeasonPot(allPlayers, sd.potSettings));
+  const seasonPotHTML = gsSeasonPotHTML(seasonPot);
 
   const standingsTableHTML = (flight) => `
     <div class="card" style="overflow-x:auto;-webkit-overflow-scrolling:touch">
@@ -5710,7 +5747,7 @@ function generateSeriesPage(season, sd) {
 
 <!-- MONEY -->
 <div class="tab-content" id="tab-money">
-  <div class="notice">Cumulative earnings across all events this season &nbsp;·&nbsp; Podium + Skins + CTP &nbsp;·&nbsp; Total event pools to date: <strong>$${events.reduce((s,e)=>s+Object.keys(e.scores||{}).length*20,0).toFixed(0)}</strong></div>
+  <div class="notice">Cumulative earnings across all events this season &nbsp;·&nbsp; Podium + Skins + CTP${potFinal ? ' + Season Pot' : ''} &nbsp;·&nbsp; Total event pools to date: <strong>$${events.reduce((s,e)=>s+Object.keys(e.scores||{}).length*20,0).toFixed(0)}</strong></div>
   ${moneyTableHTML}
 </div>
 
@@ -8890,7 +8927,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.65 · 2026-11-02';
+const GS_VERSION = 'v8.67 · 2026-11-02';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
