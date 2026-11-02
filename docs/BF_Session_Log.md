@@ -5642,3 +5642,6 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Home Announcements card: plain https links in a message are now clickable (`bfLinkify`, trailing punctuation left outside, existing anchors untouched). Push notification bodies themselves are still plain text.
 - The in-app Announcements card does not know the tap link (the Worker feed stores title and body only); to show a clickable link there, put the URL in the message text.
 - Test: test_portal_push_link.mjs (11); checked end to end in Chromium with the send stubbed (blank, /page, refused link).
+
+### Dev-97 — closed (2026-11-02)
+- Handoff for Dev-98 is `BF_NextSession_Dev98.md`. Biggest open item: Brian must still publish the FINAL Series pages (Season is over ticked).
