@@ -5622,3 +5622,9 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Known data difference: the Money tab recomputes skins; the per-event `payoutSnapshot` totals differ slightly (Bill Steirer $254.33 vs $260, Scott Justus $260.29 vs $256). Check against cash actually paid.
 - Series #7 and #8 are not in the data.
 - Design for 2027 (not built): see `BF_Design_EventHome_Archive_2027.md`.
+
+### Dev-97 (part) — Portal v4.51.0: link to the 2026 Series story (2026-11-02)
+- Portal Home: new `#home-series-wrap` slot (under the live-round banner, above the Cup/Trip/Wally banners) shows "The 2026 Series is a wrap" and opens `/series-2026-wrap.html`. Dismissible per device (localStorage `bf_series_wrap_hidden_2026`). One switch to retire it for 2027: `SERIES_WRAP.on = false`, or point `SERIES_WRAP` at the next story.
+- Portal Results screen: "That's a Wrap — the season story" is the first Published Results card.
+- Public landing (`docs/index.html` and the older `docs/series.html`): the "Live Series Standings" card is now "The 2026 Series is a wrap" with a "Read the Season Story" button; standings and latest results stay as smaller links.
+- Test: test_portal_series_wrap.mjs (11). 2027 idea: a permanent "Latest story" slot (see BF_Design_EventHome_Archive_2027.md).

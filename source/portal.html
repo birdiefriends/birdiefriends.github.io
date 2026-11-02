@@ -2115,6 +2115,8 @@ body {
   <!-- ── HOME SCREEN ── -->
   <div class="bf-screen active" id="screen-home">
     <div id="home-live-banner"></div>
+    <!-- 2026 Series wrap-up story: seasonal banner (switch off with SERIES_WRAP.on = false); see renderSeriesWrapBanner. -->
+    <div id="home-series-wrap"></div>
     <!-- Dev-80 (§8 step 5): persistent WCRP memories widget entry point — a
          separate banner from home-live-banner on purpose, since it's gated on
          the commissioner's own capture on/off switch (memories_capture_open),
@@ -2153,6 +2155,13 @@ body {
   <!-- ── RESULTS SCREEN ── -->
   <div class="bf-screen" id="screen-results">
     <div class="section-label">Published Results</div>
+    <a class="results-link-card" href="/series-2026-wrap.html">
+      <div>
+        <div class="rlc-label">BF Series 2026</div>
+        <div class="rlc-title">That's a Wrap &mdash; the season story</div>
+      </div>
+      <div class="rlc-arrow">↗</div>
+    </a>
     <a class="results-link-card" href="/wally-cup-results.html">
       <div>
         <div class="rlc-label">2026 Wally Cup</div>
@@ -5364,6 +5373,7 @@ function atCourseInitOnce() {
 }
 function renderAll() {
   renderHome();
+  renderSeriesWrapBanner();
   renderAllEvents();
   updateAdminNav();
   updateNewEventsBtn();
@@ -18614,6 +18624,33 @@ function openCupDraft() { if (_cupLive) window.open(cupLiveCard(_cupLive, typeof
 // The card is for the event's own people: a captain, a player registered for that event, or the commissioner. Everyone else sees nothing.
 function cupLiveForMe(events) {
   return (events || []).find(e => e.cap_code || isRegisteredFor(e.event_name) || cupRoundNamesOf(e.event_name).some(n => isRegisteredFor(n)) || isCommissioner()) || null;
+}
+// ── Seasonal story banner (Dev-97) ────────────────────────────────────────────
+// The season write-up is the "what BirdieFriends is about" piece, so it gets the top of Home. One object to
+// switch off when the next season starts: SERIES_WRAP.on = false (or point it at the next story).
+const SERIES_WRAP = { on: true, id: '2026', url: '/series-2026-wrap.html', title: 'The 2026 Series is a wrap', sub: 'Champions, event winners and the best of the season. Tap to read the story.' };
+function renderSeriesWrapBanner() {
+  const el = document.getElementById('home-series-wrap');
+  if (!el) return;
+  let hidden = false;
+  try { hidden = localStorage.getItem('bf_series_wrap_hidden_' + SERIES_WRAP.id) === '1'; } catch (e) { /* no storage: show it */ }
+  if (!SERIES_WRAP.on || hidden) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="live-banner" style="background:var(--green-dark);border-left:5px solid var(--gold)">
+    <div class="live-banner-header" style="cursor:pointer" onclick="openSeriesWrap()">
+      <div style="font-size:1.4rem">🏆</div>
+      <div style="flex:1">
+        <div class="live-banner-title">${SERIES_WRAP.title}</div>
+        <div class="live-banner-sub">${SERIES_WRAP.sub}</div>
+      </div>
+      <div class="live-banner-chev">›</div>
+      <div onclick="event.stopPropagation();hideSeriesWrap()" title="Hide" style="padding:4px 8px;opacity:.6;cursor:pointer;font-size:1rem">✕</div>
+    </div>
+  </div>`;
+}
+function openSeriesWrap() { window.open(SERIES_WRAP.url, '_blank'); }
+function hideSeriesWrap() {
+  try { localStorage.setItem('bf_series_wrap_hidden_' + SERIES_WRAP.id, '1'); } catch (e) { /* ignore */ }
+  renderSeriesWrapBanner();
 }
 async function renderCupBanner() {
   const el = document.getElementById('home-cup-banner');
