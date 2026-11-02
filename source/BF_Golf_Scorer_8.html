@@ -1029,7 +1029,7 @@
           <option value="2025">2025</option>
         </select>
       </div>
-      <button class="btn btn-primary" onclick="saveEventToSeries()">💾 Re-save Current Event</button>
+      <button class="btn btn-primary" onclick="gsSaveGuarded()">💾 Re-save Current Event</button>
       <button class="btn btn-secondary" onclick="loadSeriesStandings()">↻ Refresh Standings</button>
       <button class="btn btn-primary" onclick="publishAllPages()" style="background:linear-gradient(135deg,#0a3d6b,#1a6b9e);border-color:#0a3d6b">🌐 Publish All Pages</button>
       <button class="btn btn-primary" onclick="pushToSheets()" id="sheets-push-btn" style="background:linear-gradient(135deg,#1a6b30,#2a8a40);border-color:#1a6b30">📊 Push to Google Sheets</button>
@@ -1860,7 +1860,66 @@ function getScores() {
   return scores;
 }
 
-function calculateResults() {
+// ── Field check (Dev-97): the pot is $20 x the players in the roster, so a no-show on the roster overpays the field ─────────
+// A real event ran out of money because no-shows were still on the roster when results were calculated. Before anything that fixes the
+// payout (Calculate, Save to Series, End of Event) compare the roster with the scorecards actually entered, and let the host remove
+// the no-shows or confirm the roster is right. Pure part (testable): gsFieldInfo.
+function gsFieldInfo(players, scores, ante) {
+  ante = ante || 20;
+  const list = players || [];
+  const noShows = list.filter(p => !((scores && scores[p.name]) || []).some(v => Number(v) > 0)).map(p => p.name);
+  const played = list.length - noShows.length;
+  // nothing entered at all = scoring has not started, not a field problem
+  return { total: list.length, played, noShows, potAll: list.length * ante, potPlayed: played * ante, show: noShows.length > 0 && played > 0 };
+}
+let gsFieldAck = '';   // the no-show list the host already confirmed, so the same question is not asked on every page
+function gsRemoveNoShows(names) {
+  const set = new Set(names.map(n => n.trim().toLowerCase()));
+  document.querySelectorAll('#player-list .player-grid').forEach(row => {
+    const n = row.querySelector('input[type=text]');
+    if (n && set.has(n.value.trim().toLowerCase())) { const wrap = row.closest('[id^="player-row-"]') || row; wrap.remove(); }
+  });
+  document.querySelectorAll('#scorecard-body tr').forEach(tr => {
+    const inp = tr.querySelector('input[data-player]');
+    if (inp && set.has(String(inp.dataset.player).trim().toLowerCase())) tr.remove();
+  });
+  if (typeof cachedPlayers !== 'undefined' && Array.isArray(cachedPlayers)) cachedPlayers = cachedPlayers.filter(p => !set.has(p.name.trim().toLowerCase()));
+  try { updateTeePreview(); } catch (e) { /* preview only */ }
+}
+function gsFieldModal(info, what) {
+  return new Promise(resolve => {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:460px;width:100%;padding:18px;box-shadow:0 8px 30px rgba(0,0,0,.35);font-family:inherit">'
+      + '<div style="font-weight:700;font-size:1.05rem;margin-bottom:6px">⚠ Check the field before you ' + what + '</div>'
+      + '<p style="margin:6px 0;font-size:.9rem"><b>' + info.noShows.length + ' of ' + info.total + '</b> players on the roster have no scorecard:</p>'
+      + '<p style="margin:6px 0;font-size:.9rem;color:#a32d2d;font-weight:600">' + info.noShows.join(', ') + '</p>'
+      + '<p style="margin:8px 0;font-size:.85rem;color:#444">The pot is $20 per player on the roster. With everyone it is <b>$' + info.potAll + '</b>; with only the ' + info.played + ' who played it is <b>$' + info.potPlayed + '</b>. If these players did not play, the payouts will be too high.</p>'
+      + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">'
+      + '<button id="gsf-remove" style="padding:10px;border-radius:8px;border:0;background:#085041;color:#fff;font-weight:600;cursor:pointer">Remove them and continue (pot $' + info.potPlayed + ')</button>'
+      + '<button id="gsf-keep" style="padding:10px;border-radius:8px;border:1px solid #bbb;background:#fff;cursor:pointer">They did play, keep all ' + info.total + ' (pot $' + info.potAll + ')</button>'
+      + '<button id="gsf-cancel" style="padding:8px;border-radius:8px;border:0;background:none;color:#666;cursor:pointer">Cancel, I will fix the roster</button></div></div>';
+    document.body.appendChild(ov);
+    const done = v => { ov.remove(); resolve(v); };
+    ov.querySelector('#gsf-remove').onclick = () => done('remove');
+    ov.querySelector('#gsf-keep').onclick = () => done('keep');
+    ov.querySelector('#gsf-cancel').onclick = () => done('cancel');
+  });
+}
+// true = go ahead. Asks only when the roster has players with no scorecard, and only once per such list.
+async function gsFieldCheck(what) {
+  const info = gsFieldInfo(getPlayers(), getScores());
+  if (!info.show) return true;
+  const sig = info.noShows.slice().sort().join('|');
+  if (sig === gsFieldAck) return true;
+  const choice = await gsFieldModal(info, what);
+  if (choice === 'cancel') return false;
+  if (choice === 'remove') { gsRemoveNoShows(info.noShows); gsFieldAck = ''; return true; }
+  gsFieldAck = sig; return true;
+}
+
+async function calculateResults() {
+  if (!(await gsFieldCheck('calculate results'))) return;
   const players = getPlayers();
   const scores = getScores();
 
@@ -3075,8 +3134,9 @@ function showActionStatus(msg, type) {
 }
 
 // ── Save to Series from Results tab with clear feedback ──
-function saveEventToSeriesFromResults() {
+async function saveEventToSeriesFromResults() {
   const btn = document.getElementById('save-series-btn');
+  if (!(await gsFieldCheck('save to the series'))) return;
   saveEventToSeries();
   // Check result after save
   setTimeout(() => {
@@ -6203,7 +6263,10 @@ async function eoeRunStep(eventName, season, key) {
   return result.success;
 }
 
+async function gsSaveGuarded() { if (await gsFieldCheck('save to the series')) saveEventToSeries(); }
+
 async function endOfEvent() {
+  if (!(await gsFieldCheck('finish the event'))) return;
   const eventName = document.getElementById('event-name')?.value.trim();
   if (!eventName) { alert('No event loaded — nothing to finalize yet.'); return; }
   const season = document.getElementById('series-season')?.value || '2026';
@@ -8713,7 +8776,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.62 · 2026-11-02';
+const GS_VERSION = 'v8.63 · 2026-11-02';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
