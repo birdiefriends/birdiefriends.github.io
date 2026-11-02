@@ -2531,6 +2531,14 @@ body {
             style="width:100%;box-sizing:border-box;font-size:0.85rem;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;background:var(--surface);color:var(--text);resize:vertical"
             placeholder="Type your message here…"></textarea>
         </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:0.82rem;font-weight:600;color:var(--text);display:block;margin-bottom:6px">Open this page when tapped <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+          <input id="push-broadcast-url" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"
+            style="width:100%;box-sizing:border-box;font-size:0.85rem;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;background:var(--surface);color:var(--text)"
+            placeholder="Blank = open the app" />
+          <div style="font-size:0.76rem;color:var(--text-muted);margin-top:5px;line-height:1.5">A full https link, or a birdiefriends.com page like <code>/series-2026-wrap.html</code>.
+            <span style="color:var(--green-dark);font-weight:600;cursor:pointer;text-decoration:underline" onclick="document.getElementById('push-broadcast-url').value=SERIES_WRAP.url">Use the Series story</span></div>
+        </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-primary" style="font-size:0.85rem" onclick="adminPushBroadcast(this)">
             📣 Send Push to All Members
@@ -6630,10 +6638,29 @@ function textAllPlayers(evtId, evtName) {
   }
 }
 // ── Push Broadcast to All Members ────────────────────────────────────────────
+// Where a tapped broadcast opens. Blank = the app; "/page.html" = that birdiefriends.com page; otherwise it must be a full https link.
+const PUSH_DEFAULT_URL = 'https://birdiefriends.com/portal.html';
+function pushLinkNormalize(raw) {
+  const t = String(raw || '').trim();
+  if (!t) return { url: PUSH_DEFAULT_URL };
+  if (t.charAt(0) === '/') return { url: 'https://birdiefriends.com' + t };
+  if (/^https:\/\/[^\s/$.?#][^\s]*\.[^\s]+$/i.test(t)) return { url: t };
+  return { error: 'Link must start with https:// (or be a /page.html on birdiefriends.com)' };
+}
+// Makes plain https links clickable in the Home Announcements card (a push body is never tappable, but the card is).
+function bfLinkify(text) {
+  const s = String(text == null ? '' : text);
+  if (/<a\s/i.test(s)) return s;
+  return s.replace(/(https?:\/\/[^\s<>"']+)/g, function (m) {
+    let tail = ''; while (/[.,;:!?)]$/.test(m)) { tail = m.slice(-1) + tail; m = m.slice(0, -1); }
+    return '<a href="' + m + '" target="_blank" rel="noopener" style="color:var(--green-dark);font-weight:600;word-break:break-all">' + m + '</a>' + tail;
+  });
+}
 async function adminPushBroadcast(btn) {
   if (!isCommissioner()) return;
   const titleEl  = document.getElementById('push-broadcast-title');
   const bodyEl   = document.getElementById('push-broadcast-body');
+  const urlEl    = document.getElementById('push-broadcast-url');
   const statusEl = document.getElementById('push-broadcast-status');
   const title    = (titleEl.value || '').trim() || '⛳ BirdieFriends';
   const body     = (bodyEl.value  || '').trim();
@@ -6646,9 +6673,12 @@ async function adminPushBroadcast(btn) {
   }
   btn.disabled = true;
   statusEl.textContent = `⏳ Sending to ${eligible.length} subscriber${eligible.length !== 1 ? 's' : ''}…`;
-  const result = await osSendAll(title, body, 'https://birdiefriends.com/portal.html', 'broadcast');
+  const link = pushLinkNormalize(urlEl ? urlEl.value : '');
+  if (link.error) { statusEl.textContent = '⚠️ ' + link.error; btn.disabled = false; return; }
+  const result = await osSendAll(title, body, link.url, 'broadcast');
   if (result.ok) {
     const count = result.recipients ?? eligible.length;
+    if (urlEl) urlEl.value = '';
     const staleNote = result.staleIds ? ` (${result.staleIds.length} stale token${result.staleIds.length !== 1 ? 's' : ''} — check Push Subscribers)` : '';
     statusEl.textContent = `✅ Sent to ${count} subscriber${count !== 1 ? 's' : ''}${staleNote}`;
     bodyEl.value  = '';
@@ -8668,7 +8698,7 @@ function buildAnnouncementsHTML(notifications, loading) {
         ${dismissBtn}
       </div>
       ${title ? `<div style="font-size:0.85rem;font-weight:700;color:var(--text);margin-bottom:2px">${title}</div>` : ''}
-      <div style="font-size:0.83rem;color:var(--text);line-height:1.5">${body}</div>
+      <div style="font-size:0.83rem;color:var(--text);line-height:1.5">${bfLinkify(body)}</div>
     </div>`;
   }).join('');
   const clearAllBtn = commish

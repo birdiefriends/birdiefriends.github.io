@@ -5635,3 +5635,10 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Groupings & Tee Times card is hidden by `RESULTS_SHOW_GROUPINGS = false` until the first 2027 Series event (flip to true, or later make it follow the next scheduled Series event).
 - Push notifications (checked, not changed): the broadcast always sets the tap URL to `/portal.html`; a URL typed in the message is plain text (not tappable in the notification or in the Home "Announcements" card). Possible follow-up: optional "link" field on the broadcast form and auto-linking URLs in announcements.
 - Test: test_portal_series_wrap.mjs (18).
+
+### Dev-97 (part) — Portal v4.52.0: push broadcast can open a chosen page; links clickable in Announcements (2026-11-02)
+- Admin > Communicate > Push Notification: new optional "Open this page when tapped" field (blank = the app as before; `/page.html` = that birdiefriends.com page; or a full https link; anything else is refused). A "Use the Series story" shortcut fills `SERIES_WRAP.url`. The field is cleared after a successful send, kept on an error.
+- `pushLinkNormalize()` decides the tap URL passed to `osSendAll(...)`; the Worker already forwards `payload.url` to OneSignal, so NO Worker change.
+- Home Announcements card: plain https links in a message are now clickable (`bfLinkify`, trailing punctuation left outside, existing anchors untouched). Push notification bodies themselves are still plain text.
+- The in-app Announcements card does not know the tap link (the Worker feed stores title and body only); to show a clickable link there, put the URL in the message text.
+- Test: test_portal_push_link.mjs (11); checked end to end in Chromium with the send stubbed (blank, /page, refused link).

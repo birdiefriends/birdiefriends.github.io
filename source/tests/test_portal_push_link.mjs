@@ -1,0 +1,20 @@
+// Push broadcast: optional "open this page" link (blank = the app) and clickable links in the Home Announcements card.
+import fs from 'fs'; import vm from 'vm';
+import { extractFn } from './extract.mjs';
+const src = fs.readFileSync(new URL('../portal.html', import.meta.url), 'utf8');
+let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
+const ctx = vm.createContext({});
+vm.runInContext(src.match(/const PUSH_DEFAULT_URL = .*;/)[0] + '\n' + ['pushLinkNormalize', 'bfLinkify'].map(n => extractFn(src, n)).join('\n') + '; this.n = pushLinkNormalize; this.l = bfLinkify;', ctx);
+const n = ctx.n, l = ctx.l;
+ok(n('').url === 'https://birdiefriends.com/portal.html' && n('   ').url === 'https://birdiefriends.com/portal.html', 'blank opens the app');
+ok(n('/series-2026-wrap.html').url === 'https://birdiefriends.com/series-2026-wrap.html', 'a /page becomes a birdiefriends.com link');
+ok(n('https://birdiefriends.com/series-2026-wrap.html').url === 'https://birdiefriends.com/series-2026-wrap.html', 'full https link kept');
+ok(!!n('birdiefriends.com/x').error && !!n('http://birdiefriends.com/x').error && !!n('javascript:alert(1)').error && !!n('not a link').error, 'bad links are refused');
+ok(/<a href="https:\/\/birdiefriends.com\/x"[^>]*>https:\/\/birdiefriends.com\/x<\/a>\./.test(l('Read https://birdiefriends.com/x.')), 'link made clickable, trailing period left outside');
+ok(l('No link here') === 'No link here' && l('') === '' && l(null) === '', 'plain text unchanged');
+ok(l('<a href="https://a.com">a</a>') === '<a href="https://a.com">a</a>', 'existing anchors are not double-wrapped');
+ok(/target="_blank" rel="noopener"/.test(l('https://a.com/b')), 'opens in a new tab safely');
+ok(/id="push-broadcast-url"/.test(src) && /pushLinkNormalize\(urlEl/.test(src) && /osSendAll\(title, body, link\.url, 'broadcast'\)/.test(src), 'form field wired into the broadcast');
+ok(/\$\{bfLinkify\(body\)\}/.test(src), 'announcement card uses the linkifier');
+ok(fs.readFileSync(new URL('../../docs/portal.html', import.meta.url), 'utf8') === src, 'docs/portal.html matches source');
+console.log('portal_push_link: ' + pass + ' pass, ' + fail + ' fail'); process.exit(fail ? 1 : 0);
