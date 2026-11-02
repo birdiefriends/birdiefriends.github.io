@@ -5603,3 +5603,8 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 ### Dev-97 (part) — GS v8.63: field check before the payout is fixed (2026-11-02)
 - Real incident (BFSeries#10, 11/1): no-shows were still on the roster when results were calculated, the pot ($20 x roster) overstated the money, the payout ran out of cash and had to be redone. 
 - `gsFieldInfo / gsFieldCheck / gsFieldModal / gsRemoveNoShows`: before Calculate Results, Save to Series (both buttons) and End of Event, compare the roster with scorecards entered. Players with no positive score = no-shows. Prompt shows the pot with everyone vs with those who played; Remove them / Keep all / Cancel. Asked once per no-show list; silent when nobody has scores yet or everyone does. Test: test_gs_field_check.mjs (13).
+
+### Dev-97 (part) — GS v8.64: Season Pot settings screen (2026-11-02)
+- Series screen has a "🏆 Season Pot settings" box: ante, Overall %, place % (1st to 5th, blank = unpaid, must total 100), flights. Saved per season in `seasons[season].potSettings` (rides with Export/Import JSON); Reset clears it. Live preview with today's standings. Pure helpers `gsPotNormalize` (defaults per field), `gsPotFromForm` (validation).
+- `computeSeasonPot(players, settings)` takes the settings and returns `opts`; `generateSeriesPage` passes `sd.potSettings`, and the page's "how it works" note is built from them. Rendering moved to `gsSeasonPotHTML` (shared by the published tab and the preview). 2026 defaults unchanged ($20, 40%, 50/30/20, all three flights): real Series #10 data still gives $380 / paid $373 / house $7.
+- Tests: test_gs_season_pot (29), test_gs_pot_settings_ui (11, real GS page in jsdom).
