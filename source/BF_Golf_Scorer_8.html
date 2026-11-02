@@ -1896,6 +1896,45 @@ function calculateResults() {
 }
 
 
+// ── Season pot (Dev-97): the season-long Overall + flight payout ────────────────────────────────────────────────
+// Every QUALIFIED player puts in `ante` ($20). `overallPct` (40%) of the pot goes to the Overall podium; the rest is split equally across the flights.
+// Each group pays 1st/2nd/3rd at 50/30/20%. A place nobody earned (a flight with fewer than 3 qualifiers) is spread over EVERY paid prize in
+// proportion, so the whole pot still goes out. Prizes are floored to whole dollars; a tie averages the places the tied players occupy (floored).
+// Whatever is left from rounding down is the house's. Pure function: players = [{name, seriesFlight, qualifies, performance}].
+function computeSeasonPot(players, opts) {
+  const o = Object.assign({ ante: 20, overallPct: 0.40, placePct: [0.5, 0.3, 0.2], flights: ['Green', 'Combo', 'Gold'] }, opts || {});
+  const quals = (players || []).filter(p => p && p.qualifies && typeof p.performance === 'number');
+  const pot = quals.length * o.ante;
+  const groups = [{ key: 'overall', label: 'Overall', pool: pot * o.overallPct, members: quals }]
+    .concat(o.flights.map(f => ({ key: f, label: f, pool: pot * (1 - o.overallPct) / o.flights.length, members: quals.filter(p => p.seriesFlight === f) })));
+  // gross prize per place, and how much of it nobody earned
+  let unpaid = 0;
+  groups.forEach(g => {
+    g.size = g.members.length;
+    g.gross = o.placePct.map(x => g.pool * x);
+    g.paidPlaces = Math.min(o.placePct.length, g.size);
+    for (let i = g.paidPlaces; i < o.placePct.length; i++) unpaid += g.gross[i];
+  });
+  const payable = pot - unpaid;
+  const factor = payable > 0 ? pot / payable : 1;   // 1 when every place is filled
+  let paid = 0;
+  groups.forEach(g => {
+    const prize = g.gross.map((v, i) => i < g.paidPlaces ? Math.floor(v * factor + 1e-9) : 0);
+    const ranked = g.members.slice().sort((a, b) => b.performance - a.performance);
+    g.rows = [];
+    let i = 0;
+    while (i < ranked.length && i < o.placePct.length) {
+      let j = i; while (j < ranked.length && Math.abs(ranked[j].performance - ranked[i].performance) < 0.005) j++;
+      let sum = 0; for (let k = i; k < Math.min(j, o.placePct.length); k++) sum += prize[k];
+      const amount = Math.floor(sum / (j - i) + 1e-9);
+      g.rows.push({ place: i + 1, names: ranked.slice(i, j).map(p => p.name), amount, tied: j - i > 1 });
+      paid += amount * (j - i);
+      i = j;
+    }
+  });
+  return { pot, qualifiers: quals.length, ante: o.ante, overallPct: o.overallPct, groups, unpaidShare: unpaid, factor, paid, house: pot - paid };
+}
+
 function calculatePayout(quotaResults, skinWinners, ctpData) {
   const playerCount = quotaResults.length;
   const totalPool = playerCount * 20;
@@ -5425,6 +5464,26 @@ function generateSeriesPage(season, sd) {
       + '</tr></thead><tbody>' + mRows + '</tbody></table>';
   }
 
+  // ── Season pot: Overall + flight payouts (computeSeasonPot) ──────────────────────────────────────
+  const seasonPotHTML = (() => {
+    const sp = computeSeasonPot(allPlayers);
+    if (!sp.qualifiers) return '<p style="text-align:center;color:#999;padding:20px">Nobody has qualified yet (4 events). The season pot appears once players qualify.</p>';
+    const ord = n => n === 1 ? '1st' : n === 2 ? '2nd' : '3rd';
+    const money = v => '$' + v;
+    const pct = Math.round(sp.overallPct * 100), fl = 100 - pct, nFl = sp.groups.length - 1;
+    const block = g => {
+      const pool = Math.round(g.pool);
+      let rows = g.rows.map(r => '<tr><td style="padding:6px 8px;color:#999;font-size:0.75rem;white-space:nowrap">' + (r.tied ? 'T-' : '') + ord(r.place) + '</td><td style="padding:6px 8px;font-weight:500">' + r.names.join(', ') + '</td><td style="padding:6px 8px;text-align:right;font-weight:700;color:#085041">' + money(r.amount) + (r.tied ? '<span style="font-weight:400;color:#999;font-size:0.7rem"> each</span>' : '') + '</td></tr>').join('');
+      if (!g.rows.length) rows = '<tr><td colspan="3" style="padding:8px;color:#999;font-size:0.78rem">No qualifiers in this flight yet.</td></tr>';
+      const note = g.size < 3 ? '<div style="font-size:0.7rem;color:#a06a00;padding:2px 8px 6px">' + g.size + ' qualifier' + (g.size === 1 ? '' : 's') + ': ' + (g.size === 0 ? 'its' : (3 - g.size === 1 ? 'the unpaid 3rd place' : 'the unpaid places')) + ' money is spread across every other prize.</div>' : '';
+      return '<div class="card" style="padding:12px 14px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><b>' + g.label + '</b><span style="font-size:0.72rem;color:#888">' + g.size + ' qualified &middot; ' + (g.key === 'overall' ? pct + '% of the pot' : 'a third of the other ' + fl + '%') + '</span></div>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:0.85rem"><tbody>' + rows + '</tbody></table>' + note + '</div>';
+    };
+    return '<div class="notice">Season pot &middot; ' + sp.qualifiers + ' qualified players &times; $' + sp.ante + ' = <strong>$' + sp.pot + '</strong> &nbsp;&middot;&nbsp; projected, based on the standings today</div>'
+      + sp.groups.map(block).join('')
+      + '<div class="notice" style="text-align:left">How it works: Overall gets ' + pct + '% of the pot; Green, Combo and Gold share the other ' + fl + '% equally. Each pays 1st / 2nd / 3rd at 50 / 30 / 20%. A place nobody has earned (a flight with fewer than 3 qualifiers) is spread across every other prize. Prizes round down to whole dollars; a tie averages the places it covers. Paid out: $' + sp.paid + (sp.house > 0 ? ' &middot; $' + sp.house + ' to the house (rounding)' : '') + '.</div>';
+  })();
+
   const standingsTableHTML = (flight) => `
     <div class="card" style="overflow-x:auto;-webkit-overflow-scrolling:touch">
       <table style="min-width:520px">
@@ -5502,6 +5561,7 @@ function generateSeriesPage(season, sd) {
   <div class="tab" onclick="switchTab('combo',this)">🟡 Combo</div>
   <div class="tab" onclick="switchTab('gold',this)">🟠 Gold</div>
   <div class="tab" onclick="switchTab('money',this)">💰 Money</div>
+  <div class="tab" onclick="switchTab('pot',this)">🏆 Season Pot</div>
   <div class="tab" id="groups-tab" onclick="openGroupingsForEvent()" style="opacity:0.45" title="No groupings archive for this event">⛳ Groups</div>
 </div>
 
@@ -5531,8 +5591,13 @@ function generateSeriesPage(season, sd) {
 
 <!-- MONEY -->
 <div class="tab-content" id="tab-money">
-  <div class="notice">Cumulative earnings across all events this season &nbsp;·&nbsp; Podium + Skins + CTP &nbsp;·&nbsp; Season pot to date: <strong>$${events.reduce((s,e)=>s+Object.keys(e.scores||{}).length*20,0).toFixed(0)}</strong></div>
+  <div class="notice">Cumulative earnings across all events this season &nbsp;·&nbsp; Podium + Skins + CTP &nbsp;·&nbsp; Total event pools to date: <strong>$${events.reduce((s,e)=>s+Object.keys(e.scores||{}).length*20,0).toFixed(0)}</strong></div>
   ${moneyTableHTML}
+</div>
+
+<!-- SEASON POT -->
+<div class="tab-content" id="tab-pot">
+  ${seasonPotHTML}
 </div>
 
 <div class="updated">Updated ${new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})} &nbsp;·&nbsp; GS ${GS_VERSION}</div>
@@ -8641,7 +8706,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.60 · 2026-10-31';
+const GS_VERSION = 'v8.61 · 2026-11-02';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire

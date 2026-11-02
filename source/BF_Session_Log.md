@@ -5589,3 +5589,8 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Roster entries carry `sub: true` (BFE-A roster "Sub" tick; set automatically from the Jotform RSVP "Sub"). Cup page auto-puts them in `draft.subs`, never the pool; Sub box on host setup; odd-pool warning.
 - Host "Substitute" card (Teams view, after the draft): swaps the Sub in for a player everywhere (picks, teams, pairs, matches, scores); the other player becomes the Sub. Captains can't be swapped.
 - Tests: test_cup_subs (6), test_cup_swap (14), test_roster_sub (2).
+
+### Dev-97 (part) — GS v8.61: Season Pot (2026-11-02)
+- `computeSeasonPot()` + a "Season Pot" tab on the series/standings page. $20 per QUALIFIED player; Overall 40%, Green/Combo/Gold an equal third of the other 60%; places 50/30/20; a place nobody earned (flight under 3 qualifiers) is spread across every other prize (factor pot/(pot-unpaid)); floor to whole dollars; tie averages the places covered (floored); the rounding remainder is the house's. Checked on real data through #9: 19 qualified (Green 9, Combo 8, Gold 2) = $380, paid $373, house $7; and last year's sheet (20 players, 50%, two flights) reproduces $100/60/40 and $50/30/20.
+- The Money tab label "Season pot to date" is now "Total event pools to date" (it is the per-event pools, not this pot).
+- Not yet: My Game line ("you are 2nd in Combo, projected $X"). Test: test_gs_season_pot.mjs (18).
