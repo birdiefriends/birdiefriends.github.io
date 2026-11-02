@@ -5628,3 +5628,10 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Portal Results screen: "That's a Wrap — the season story" is the first Published Results card.
 - Public landing (`docs/index.html` and the older `docs/series.html`): the "Live Series Standings" card is now "The 2026 Series is a wrap" with a "Read the Season Story" button; standings and latest results stay as smaller links.
 - Test: test_portal_series_wrap.mjs (11). 2027 idea: a permanent "Latest story" slot (see BF_Design_EventHome_Archive_2027.md).
+
+### Dev-97 (part) — Portal v4.51.1: Results screen cleaned up for the off-season (2026-11-02)
+- Results screen now has two groups: "BF Series 2026" (That's a Wrap, Final Standings, My Game, My Series, Series #10 Results) and "Past Events" (Wally Cup, Garrett's Last Swing, whose "Live" label became "Cape May").
+- My Game (in-app hole-level stats) and My Series (published quota/series-score page) are different things and both stay.
+- Groupings & Tee Times card is hidden by `RESULTS_SHOW_GROUPINGS = false` until the first 2027 Series event (flip to true, or later make it follow the next scheduled Series event).
+- Push notifications (checked, not changed): the broadcast always sets the tap URL to `/portal.html`; a URL typed in the message is plain text (not tappable in the notification or in the Home "Announcements" card). Possible follow-up: optional "link" field on the broadcast form and auto-linking URLs in announcements.
+- Test: test_portal_series_wrap.mjs (18).

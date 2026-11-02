@@ -18,7 +18,17 @@ ctx.renderSeriesWrapBanner(); ok(el().innerHTML === '', 'stays hidden after re-r
 w.localStorage.clear(); ctx.SW.on = false; ctx.renderSeriesWrapBanner(); ok(el().innerHTML === '', 'off switch hides it');
 ok(src.indexOf('id="home-series-wrap"') > src.indexOf('id="home-live-banner"') && src.indexOf('id="home-series-wrap"') < src.indexOf('id="home-cup-banner"'), 'slot sits under the live banner, above the Cup/Trip banners');
 ok(/renderHome\(\);\s*renderSeriesWrapBanner\(\);/.test(src), 'rendered with the home screen');
-const rs = src.slice(src.indexOf('id="screen-results"')); ok(rs.indexOf('/series-2026-wrap.html') > 0 && rs.indexOf('/series-2026-wrap.html') < rs.indexOf('/wally-cup-results.html'), 'Results screen lists the story first');
+const rs = src.slice(src.indexOf('id="screen-results"'), src.indexOf('id="screen-mygame"'));
+ok(rs.indexOf('/series-2026-wrap.html') > 0 && rs.indexOf('/series-2026-wrap.html') < rs.indexOf('/wally-cup-results.html'), 'Results screen lists the story first');
+ok(rs.indexOf('>BF Series 2026</div>') > 0 && rs.indexOf('Past Events') > rs.indexOf('/results.html') && rs.indexOf('Past Events') < rs.indexOf('/wally-cup-results.html'), 'Series cards grouped above Past Events');
+ok(/Cape May/.test(rs) && !/Live/.test(rs), "Garrett's card no longer says Live");
+ok(/Final Standings/.test(rs) && /Series #10 Results/.test(rs) && !/Latest Event/.test(rs), 'standings and finale relabelled');
+ok(/onclick="showScreen\('mygame'/.test(rs) && /href="\/mygame.html"/.test(rs), 'My Game and My Series both kept');
+ok(/id="rlc-groupings"[^>]*display:none/.test(rs), 'Groupings card starts hidden');
+const dom2 = new JSDOM('<a id="rlc-groupings" style="display:none"></a><div id="home-series-wrap"></div>', { url: 'https://birdiefriends.com/portal.html' }); const c2 = vm.createContext({ document: dom2.window.document, localStorage: dom2.window.localStorage, window: dom2.window, console });
+vm.runInContext(src.match(/const RESULTS_SHOW_GROUPINGS = .*;/)[0].replace('false', 'true') + '\n' + src.match(/const SERIES_WRAP = .*;/)[0] + '\n' + extractFn(src, 'renderSeriesWrapBanner'), c2); c2.renderSeriesWrapBanner();
+ok(dom2.window.document.getElementById('rlc-groupings').style.display === '', 'flag true shows the Groupings card');
+ok(/RESULTS_SHOW_GROUPINGS = false/.test(src), 'flag is off for the off-season');
 for (const f of ['docs/index.html', 'docs/series.html']) { const t = fs.readFileSync(new URL(f, R), 'utf8'); ok(/Read the Season Story/.test(t) && !/Live Series Standings/.test(t), f + ' landing card updated'); }
 ok(fs.readFileSync(new URL('docs/portal.html', R), 'utf8') === src, 'docs/portal.html matches source');
 console.log('portal_series_wrap: ' + pass + ' pass, ' + fail + ' fail'); process.exit(fail ? 1 : 0);

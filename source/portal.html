@@ -2154,39 +2154,18 @@ body {
   </div>
   <!-- ── RESULTS SCREEN ── -->
   <div class="bf-screen" id="screen-results">
-    <div class="section-label">Published Results</div>
+    <div class="section-label">BF Series 2026</div>
     <a class="results-link-card" href="/series-2026-wrap.html">
       <div>
-        <div class="rlc-label">BF Series 2026</div>
+        <div class="rlc-label">Final · The season story</div>
         <div class="rlc-title">That's a Wrap &mdash; the season story</div>
-      </div>
-      <div class="rlc-arrow">↗</div>
-    </a>
-    <a class="results-link-card" href="/wally-cup-results.html">
-      <div>
-        <div class="rlc-label">2026 Wally Cup</div>
-        <div class="rlc-title">Wally Cup Results</div>
-      </div>
-      <div class="rlc-arrow">↗</div>
-    </a>
-    <a class="results-link-card" href="/garretts-last-swing.html">
-      <div>
-        <div class="rlc-label">Bachelor Weekend · Live</div>
-        <div class="rlc-title">Garrett's Last Swing</div>
-      </div>
-      <div class="rlc-arrow">↗</div>
-    </a>
-    <a class="results-link-card" href="/results.html">
-      <div>
-        <div class="rlc-label">Latest Event</div>
-        <div class="rlc-title">Event Results</div>
       </div>
       <div class="rlc-arrow">↗</div>
     </a>
     <a class="results-link-card" href="/standings.html">
       <div>
-        <div class="rlc-label">BF Series 2026</div>
-        <div class="rlc-title">Series Standings</div>
+        <div class="rlc-label">BF Series 2026 · Final</div>
+        <div class="rlc-title">Final Standings</div>
       </div>
       <div class="rlc-arrow">↗</div>
     </a>
@@ -2204,10 +2183,32 @@ body {
       </div>
       <div class="rlc-arrow">↗</div>
     </a>
-    <a class="results-link-card" href="/groupings.html">
+    <a class="results-link-card" href="/results.html">
+      <div>
+        <div class="rlc-label">The Finale · Nov 1</div>
+        <div class="rlc-title">Series #10 Results</div>
+      </div>
+      <div class="rlc-arrow">↗</div>
+    </a>
+    <a class="results-link-card" id="rlc-groupings" href="/groupings.html" style="display:none">
       <div>
         <div class="rlc-label">Next Series Event</div>
         <div class="rlc-title">Groupings &amp; Tee Times</div>
+      </div>
+      <div class="rlc-arrow">↗</div>
+    </a>
+    <div class="section-label" style="margin-top:18px">Past Events</div>
+    <a class="results-link-card" href="/wally-cup-results.html">
+      <div>
+        <div class="rlc-label">2026 Wally Cup</div>
+        <div class="rlc-title">Wally Cup Results</div>
+      </div>
+      <div class="rlc-arrow">↗</div>
+    </a>
+    <a class="results-link-card" href="/garretts-last-swing.html">
+      <div>
+        <div class="rlc-label">Bachelor Weekend · Cape May</div>
+        <div class="rlc-title">Garrett's Last Swing</div>
       </div>
       <div class="rlc-arrow">↗</div>
     </a>
@@ -18628,8 +18629,11 @@ function cupLiveForMe(events) {
 // ── Seasonal story banner (Dev-97) ────────────────────────────────────────────
 // The season write-up is the "what BirdieFriends is about" piece, so it gets the top of Home. One object to
 // switch off when the next season starts: SERIES_WRAP.on = false (or point it at the next story).
+// Season is over: the Groupings card on the Results screen stays hidden until the first 2027 Series event. Set true then (or make it follow the next scheduled Series event).
+const RESULTS_SHOW_GROUPINGS = false;
 const SERIES_WRAP = { on: true, id: '2026', url: '/series-2026-wrap.html', title: 'The 2026 Series is a wrap', sub: 'Champions, event winners and the best of the season. Tap to read the story.' };
 function renderSeriesWrapBanner() {
+  const gl = document.getElementById('rlc-groupings'); if (gl) gl.style.display = RESULTS_SHOW_GROUPINGS ? '' : 'none';
   const el = document.getElementById('home-series-wrap');
   if (!el) return;
   let hidden = false;
