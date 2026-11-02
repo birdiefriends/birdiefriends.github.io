@@ -3,7 +3,8 @@ import fs from 'fs'; import vm from 'vm';
 import { extractFn } from './extract.mjs';
 const src = fs.readFileSync(new URL('../BF_Golf_Scorer_8.html', import.meta.url), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
-const ctx = {}; vm.createContext(ctx); vm.runInContext(extractFn(src, 'computeSeasonPot') + '; this.f = computeSeasonPot;', ctx);
+const ctx = {}; vm.createContext(ctx); const defLine = src.match(/const GS_POT_DEFAULTS = .*;/)[0];
+vm.runInContext(defLine + '\n' + ['gsPotNormalize', 'gsPotFromForm', 'computeSeasonPot'].map(n => extractFn(src, n)).join('\n') + '; this.f = computeSeasonPot; this.norm = gsPotNormalize; this.form = gsPotFromForm;', ctx);
 const f = ctx.f;
 const mk = (flight, n, base) => Array.from({ length: n }, (_, i) => ({ name: flight[0] + (i + 1), seriesFlight: flight, qualifies: true, performance: base - i }));
 const amounts = (r, k) => r.groups.find(g => g.key === k).rows.map(x => x.amount);
@@ -51,4 +52,22 @@ r = f(ps);
 ok(r.qualifiers === 12 && r.pot === 240, 'a non-qualifier is not in the pot');
 ok(r.groups.find(g => g.key === 'Gold').rows.length === 0 && r.paid <= r.pot && r.paid >= r.pot - 10, 'no Gold qualifiers: the Gold pool goes to everyone else (paid $' + r.paid + ')');
 ok(JSON.stringify(f([])) .includes('"pot":0') && f([]).paid === 0, 'no qualifiers: nothing to pay');
+
+// ---- settings: defaults, normalising, form validation, custom settings flow through ----
+const dflt = ctx.norm();
+ok(dflt.ante === 20 && dflt.overallPct === 0.4 && dflt.placePct.join() === '0.5,0.3,0.2' && dflt.flights.join() === 'Green,Combo,Gold', 'no settings = the 2026 defaults');
+ok(ctx.norm({ ante: -5, overallPct: 7, placePct: [0.5, 0.2], flights: ['Nope'] }).ante === 20 && ctx.norm({ placePct: [0.5, 0.2] }).placePct.join() === '0.5,0.3,0.2', 'bad stored values fall back to the defaults, per field');
+let fm = ctx.form({ ante: '25', overall: '30', places: ['60', '40', '', '', ''], flights: ['Green', 'Gold'] });
+ok(!fm.problems.length && fm.settings.ante === 25 && Math.abs(fm.settings.overallPct - 0.3) < 1e-9 && fm.settings.placePct.join() === '0.6,0.4' && fm.settings.flights.join() === 'Green,Gold', 'a valid form becomes settings (two paid places, two flights)');
+ok(ctx.form({ ante: '20', overall: '40', places: ['50', '30', '10', '', ''], flights: ['Green'] }).problems.some(x => /add up to 100/.test(x)), 'places that do not add to 100 are refused');
+ok(ctx.form({ ante: '0', overall: '40', places: ['100', '', '', '', ''], flights: ['Green'] }).problems.some(x => /ante/.test(x)), 'a $0 ante is refused');
+ok(ctx.form({ ante: '20', overall: '120', places: ['100', '', '', '', ''], flights: ['Green'] }).problems.some(x => /Overall/.test(x)), 'Overall over 100% is refused');
+ok(ctx.form({ ante: '20', overall: '40', places: ['50', '', '50', '', ''], flights: ['Green'] }).problems.some(x => /gaps/.test(x)), 'a gap between places is refused');
+ok(ctx.form({ ante: '20', overall: '40', places: ['100', '', '', '', ''], flights: [] }).problems.some(x => /flight/.test(x)), 'no flights is refused');
+// custom settings drive the numbers: $25 ante, Overall 30%, two places 60/40, Green and Gold only
+ps = [...mk('Green', 5, 8), ...mk('Combo', 5, 7.5), ...mk('Gold', 5, 6.5)];
+r = f(ps, fm.settings);
+ok(r.pot === 375 && r.groups.length === 3 && r.groups[0].rows.length === 2, 'custom: $25 x 15 = $375, Overall and two flights, two places each');
+ok(amounts(r, 'overall').join() === [Math.floor(375 * 0.3 * 0.6), Math.floor(375 * 0.3 * 0.4)].join(), 'custom: Overall 30% split 60/40 (got ' + amounts(r, 'overall') + ')');
+ok(r.opts.flights.join() === 'Green,Gold', 'the settings used come back with the result');
 console.log(`gs_season_pot: ${pass} pass, ${fail} fail`); process.exit(fail ? 1 : 0);

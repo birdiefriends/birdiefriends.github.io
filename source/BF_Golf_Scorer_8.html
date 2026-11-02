@@ -1038,6 +1038,31 @@
       <button class="btn btn-secondary" onclick="patchHistoricalPayoutSnapshots()" id="payout-patch-btn" title="One-time fix: restores the real paid-out amounts for Series#2/3/4, overwritten by the Dev-62 formula change" style="background:#fff3cd;color:#7a5a00;border-color:#ffd97d">⚕ Fix Historical Payouts</button>
     </div>
 
+    <!-- Season pot settings (per season; the published Season Pot tab uses these) -->
+    <details id="pot-settings-box" style="margin:0 0 12px;border:1px solid var(--border-med);border-radius:10px;padding:10px 12px;background:#fff">
+      <summary style="cursor:pointer;font-weight:600;font-size:0.9rem">🏆 Season Pot settings</summary>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin:8px 0">Set once per season. Every qualified player puts in the ante. Overall takes its percent of the pot; the chosen flights share the rest equally. A place nobody earned is spread across every other prize, prizes round down to whole dollars, and the leftover is the house's.</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div><label style="font-size:0.75rem">Ante per player ($)</label><input type="number" id="pot-ante" min="1" step="1" style="width:80px;padding:6px"></div>
+        <div><label style="font-size:0.75rem">Overall % of pot</label><input type="number" id="pot-overall" min="0" max="100" step="1" style="width:80px;padding:6px"></div>
+        <div style="font-size:0.78rem;color:var(--text-muted);padding-bottom:8px" id="pot-flight-share"></div>
+      </div>
+      <div style="margin-top:8px"><label style="font-size:0.75rem">Place % within Overall and each flight (blank = not paid; must add to 100)</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:0.75rem">1st <input type="number" class="pot-place" min="0" max="100" step="1" style="width:64px;padding:6px"></span>
+          <span style="font-size:0.75rem">2nd <input type="number" class="pot-place" min="0" max="100" step="1" style="width:64px;padding:6px"></span>
+          <span style="font-size:0.75rem">3rd <input type="number" class="pot-place" min="0" max="100" step="1" style="width:64px;padding:6px"></span>
+          <span style="font-size:0.75rem">4th <input type="number" class="pot-place" min="0" max="100" step="1" style="width:64px;padding:6px"></span>
+          <span style="font-size:0.75rem">5th <input type="number" class="pot-place" min="0" max="100" step="1" style="width:64px;padding:6px"></span>
+          <span id="pot-place-sum" style="font-size:0.78rem;color:var(--text-muted)"></span>
+        </div></div>
+      <div style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap;font-size:0.82rem;align-items:center"><span style="font-size:0.75rem">Flights:</span>
+        <label><input type="checkbox" class="pot-flight" value="Green"> Green</label><label><input type="checkbox" class="pot-flight" value="Combo"> Combo</label><label><input type="checkbox" class="pot-flight" value="Gold"> Gold</label></div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="gsPotSave()">💾 Save settings</button><button class="btn btn-secondary btn-sm" onclick="gsPotReset()">Reset to defaults</button></div>
+      <div id="pot-settings-status" style="display:none;margin-top:8px;font-size:0.82rem"></div>
+      <div id="pot-preview" style="margin-top:10px"></div>
+    </details>
+
     <div id="series-save-status" style="display:none;padding:10px;border-radius:8px;margin-bottom:12px;font-size:0.85rem"></div>
 
     <!-- Flight tabs -->
@@ -1955,13 +1980,63 @@ async function calculateResults() {
 }
 
 
+// ── Season pot settings (Dev-97) — per season, kept with the season's series data and used by the published page ──────────
+const GS_POT_DEFAULTS = { ante: 20, overallPct: 0.40, placePct: [0.5, 0.3, 0.2], flights: ['Green', 'Combo', 'Gold'] };
+function gsPotNormalize(raw) {
+  const d = GS_POT_DEFAULTS, r = raw || {};
+  const ante = Number(r.ante) > 0 ? Number(r.ante) : d.ante;
+  const overallPct = (r.overallPct !== undefined && r.overallPct !== null && r.overallPct !== '' && Number(r.overallPct) >= 0 && Number(r.overallPct) <= 1) ? Number(r.overallPct) : d.overallPct;
+  const pp = Array.isArray(r.placePct) ? r.placePct.map(Number).filter(x => x > 0) : [];
+  const placePct = pp.length && Math.abs(pp.reduce((a, b) => a + b, 0) - 1) < 0.0001 ? pp : d.placePct.slice();
+  const fl = Array.isArray(r.flights) ? r.flights.filter(f => ['Green', 'Combo', 'Gold'].includes(f)) : [];
+  return { ante, overallPct, placePct, flights: fl.length ? fl : d.flights.slice() };
+}
+// Form values (whole percents, strings) -> { settings, problems }. Pure, so the rules are testable.
+function gsPotFromForm(f) {
+  const problems = [];
+  const ante = Number(f.ante);
+  if (!(ante > 0)) problems.push('The ante must be more than $0.');
+  const overall = Number(f.overall);
+  if (f.overall === '' || isNaN(overall) || overall < 0 || overall > 100) problems.push('Overall % must be between 0 and 100.');
+  const places = (f.places || []).map(x => String(x).trim());
+  let last = -1; places.forEach((x, i) => { if (x !== '') last = i; });
+  const used = places.slice(0, last + 1);
+  if (!used.length) problems.push('Enter at least the 1st place %.');
+  if (used.some(x => x === '' || isNaN(Number(x)) || Number(x) <= 0)) problems.push('Each place % must be a number above 0, with no gaps (1st, 2nd, 3rd in order).');
+  else if (used.length && Math.abs(used.reduce((a, b) => a + Number(b), 0) - 100) > 0.01) problems.push('The place percentages must add up to 100 (they add up to ' + used.reduce((a, b) => a + Number(b), 0) + ').');
+  const flights = (f.flights || []).filter(x => ['Green', 'Combo', 'Gold'].includes(x));
+  if (!flights.length) problems.push('Pick at least one flight.');
+  return { problems, settings: problems.length ? null : { ante, overallPct: overall / 100, placePct: used.map(x => Number(x) / 100), flights } };
+}
+
+// Renders the Season Pot (used by the published page and the settings preview). Inline styles only, so it works in both.
+function gsSeasonPotHTML(sp) {
+    if (!sp.qualifiers) return '<p style="text-align:center;color:#999;padding:20px">Nobody has qualified yet (4 events). The season pot appears once players qualify.</p>';
+    const ORD = ['1st', '2nd', '3rd', '4th', '5th'];
+    const ord = n => ORD[n - 1] || (n + 'th');
+    const money = v => '$' + v;
+    const pct = Math.round(sp.overallPct * 100), fl = 100 - pct, nFl = sp.groups.length - 1;
+    const nPlaces = sp.opts.placePct.length;
+    const block = g => {
+      let rows = g.rows.map(r => '<tr><td style="padding:6px 8px;color:#999;font-size:0.75rem;white-space:nowrap">' + (r.tied ? 'T-' : '') + ord(r.place) + '</td><td style="padding:6px 8px;font-weight:500">' + r.names.join(', ') + '</td><td style="padding:6px 8px;text-align:right;font-weight:700;color:#085041">' + money(r.amount) + (r.tied ? '<span style="font-weight:400;color:#999;font-size:0.7rem"> each</span>' : '') + '</td></tr>').join('');
+      if (!g.rows.length) rows = '<tr><td colspan="3" style="padding:8px;color:#999;font-size:0.78rem">No qualifiers in this flight yet.</td></tr>';
+      const missing = nPlaces - g.size;
+      const note = missing > 0 ? '<div style="font-size:0.7rem;color:#a06a00;padding:2px 8px 6px">' + g.size + ' qualifier' + (g.size === 1 ? '' : 's') + ': ' + (g.size === 0 ? 'its' : (missing === 1 ? 'the unpaid ' + ord(nPlaces) + ' place' : 'the unpaid places')) + ' money is spread across every other prize.</div>' : '';
+      return '<div class="card" style="padding:12px 14px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><b>' + g.label + '</b><span style="font-size:0.72rem;color:#888">' + g.size + ' qualified &middot; ' + (g.key === 'overall' ? pct + '% of the pot' : (nFl === 1 ? 'the other ' + fl + '%' : (nFl > 1 ? 'a ' + (nFl === 3 ? 'third' : 'share') + ' of the other ' + fl + '%' : ''))) + '</span></div>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:0.85rem"><tbody>' + rows + '</tbody></table>' + note + '</div>';
+    };
+    return '<div class="notice">Season pot &middot; ' + sp.qualifiers + ' qualified players &times; $' + sp.ante + ' = <strong>$' + sp.pot + '</strong> &nbsp;&middot;&nbsp; projected, based on the standings today</div>'
+      + sp.groups.map(block).join('')
+      + '<div class="notice" style="text-align:left">How it works: Overall gets ' + pct + '% of the pot; ' + sp.opts.flights.join(', ') + ' share the other ' + fl + '% equally. Each pays ' + sp.opts.placePct.map((x, i) => ord(i + 1) + ' ' + Math.round(x * 1000) / 10 + '%').join(' / ') + '. A place nobody has earned (a flight with fewer qualifiers than places) is spread across every other prize. Prizes round down to whole dollars; a tie averages the places it covers. Paid out: $' + sp.paid + (sp.house > 0 ? ' &middot; $' + sp.house + ' to the house (rounding)' : '') + '.</div>';
+}
+
 // ── Season pot (Dev-97): the season-long Overall + flight payout ────────────────────────────────────────────────
 // Every QUALIFIED player puts in `ante` ($20). `overallPct` (40%) of the pot goes to the Overall podium; the rest is split equally across the flights.
 // Each group pays 1st/2nd/3rd at 50/30/20%. A place nobody earned (a flight with fewer than 3 qualifiers) is spread over EVERY paid prize in
 // proportion, so the whole pot still goes out. Prizes are floored to whole dollars; a tie averages the places the tied players occupy (floored).
 // Whatever is left from rounding down is the house's. Pure function: players = [{name, seriesFlight, qualifies, performance}].
 function computeSeasonPot(players, opts) {
-  const o = Object.assign({ ante: 20, overallPct: 0.40, placePct: [0.5, 0.3, 0.2], flights: ['Green', 'Combo', 'Gold'] }, opts || {});
+  const o = gsPotNormalize(opts);
   const quals = (players || []).filter(p => p && p.qualifies && typeof p.performance === 'number');
   const pot = quals.length * o.ante;
   const groups = [{ key: 'overall', label: 'Overall', pool: pot * o.overallPct, members: quals }]
@@ -1991,7 +2066,7 @@ function computeSeasonPot(players, opts) {
       i = j;
     }
   });
-  return { pot, qualifiers: quals.length, ante: o.ante, overallPct: o.overallPct, groups, unpaidShare: unpaid, factor, paid, house: pot - paid };
+  return { opts: o, pot, qualifiers: quals.length, ante: o.ante, overallPct: o.overallPct, groups, unpaidShare: unpaid, factor, paid, house: pot - paid };
 }
 
 function calculatePayout(quotaResults, skinWinners, ctpData) {
@@ -5525,24 +5600,7 @@ function generateSeriesPage(season, sd) {
   }
 
   // ── Season pot: Overall + flight payouts (computeSeasonPot) ──────────────────────────────────────
-  const seasonPotHTML = (() => {
-    const sp = computeSeasonPot(allPlayers);
-    if (!sp.qualifiers) return '<p style="text-align:center;color:#999;padding:20px">Nobody has qualified yet (4 events). The season pot appears once players qualify.</p>';
-    const ord = n => n === 1 ? '1st' : n === 2 ? '2nd' : '3rd';
-    const money = v => '$' + v;
-    const pct = Math.round(sp.overallPct * 100), fl = 100 - pct, nFl = sp.groups.length - 1;
-    const block = g => {
-      const pool = Math.round(g.pool);
-      let rows = g.rows.map(r => '<tr><td style="padding:6px 8px;color:#999;font-size:0.75rem;white-space:nowrap">' + (r.tied ? 'T-' : '') + ord(r.place) + '</td><td style="padding:6px 8px;font-weight:500">' + r.names.join(', ') + '</td><td style="padding:6px 8px;text-align:right;font-weight:700;color:#085041">' + money(r.amount) + (r.tied ? '<span style="font-weight:400;color:#999;font-size:0.7rem"> each</span>' : '') + '</td></tr>').join('');
-      if (!g.rows.length) rows = '<tr><td colspan="3" style="padding:8px;color:#999;font-size:0.78rem">No qualifiers in this flight yet.</td></tr>';
-      const note = g.size < 3 ? '<div style="font-size:0.7rem;color:#a06a00;padding:2px 8px 6px">' + g.size + ' qualifier' + (g.size === 1 ? '' : 's') + ': ' + (g.size === 0 ? 'its' : (3 - g.size === 1 ? 'the unpaid 3rd place' : 'the unpaid places')) + ' money is spread across every other prize.</div>' : '';
-      return '<div class="card" style="padding:12px 14px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><b>' + g.label + '</b><span style="font-size:0.72rem;color:#888">' + g.size + ' qualified &middot; ' + (g.key === 'overall' ? pct + '% of the pot' : 'a third of the other ' + fl + '%') + '</span></div>'
-        + '<table style="width:100%;border-collapse:collapse;font-size:0.85rem"><tbody>' + rows + '</tbody></table>' + note + '</div>';
-    };
-    return '<div class="notice">Season pot &middot; ' + sp.qualifiers + ' qualified players &times; $' + sp.ante + ' = <strong>$' + sp.pot + '</strong> &nbsp;&middot;&nbsp; projected, based on the standings today</div>'
-      + sp.groups.map(block).join('')
-      + '<div class="notice" style="text-align:left">How it works: Overall gets ' + pct + '% of the pot; Green, Combo and Gold share the other ' + fl + '% equally. Each pays 1st / 2nd / 3rd at 50 / 30 / 20%. A place nobody has earned (a flight with fewer than 3 qualifiers) is spread across every other prize. Prizes round down to whole dollars; a tie averages the places it covers. Paid out: $' + sp.paid + (sp.house > 0 ? ' &middot; $' + sp.house + ' to the house (rounding)' : '') + '.</div>';
-  })();
+  const seasonPotHTML = gsSeasonPotHTML(computeSeasonPot(allPlayers, sd.potSettings));
 
   const standingsTableHTML = (flight) => `
     <div class="card" style="overflow-x:auto;-webkit-overflow-scrolling:touch">
@@ -6409,8 +6467,61 @@ function renderStandingsTable(flight) {
   wrap.innerHTML = html;
 }
 
+// ── Season pot settings screen ──
+function gsPotRead() {
+  return { ante: document.getElementById('pot-ante').value, overall: document.getElementById('pot-overall').value,
+    places: [...document.querySelectorAll('.pot-place')].map(i => i.value), flights: [...document.querySelectorAll('.pot-flight')].filter(c => c.checked).map(c => c.value) };
+}
+function gsPotRenderSettings() {
+  if (!document.getElementById('pot-ante')) return;
+  const season = document.getElementById('series-season')?.value || '2026';
+  const sd = getSeriesData().seasons[season];
+  const st = gsPotNormalize(sd && sd.potSettings);
+  document.getElementById('pot-ante').value = st.ante;
+  document.getElementById('pot-overall').value = Math.round(st.overallPct * 1000) / 10;
+  document.querySelectorAll('.pot-place').forEach((el, i) => { el.value = st.placePct[i] !== undefined ? Math.round(st.placePct[i] * 1000) / 10 : ''; });
+  document.querySelectorAll('.pot-flight').forEach(c => { c.checked = st.flights.includes(c.value); });
+  gsPotPreview();
+}
+function gsPotPreview() {
+  const season = document.getElementById('series-season')?.value || '2026';
+  const sd = getSeriesData().seasons[season];
+  const sum = document.getElementById('pot-place-sum'), share = document.getElementById('pot-flight-share'), box = document.getElementById('pot-preview');
+  const f = gsPotRead(), r = gsPotFromForm(f);
+  const total = f.places.reduce((a, x) => a + (Number(x) || 0), 0);
+  if (sum) { sum.textContent = 'total ' + (Math.round(total * 10) / 10) + '%'; sum.style.color = Math.abs(total - 100) < 0.01 ? '#1a6b30' : '#a32d2d'; }
+  if (share) share.textContent = (f.overall !== '' && !isNaN(Number(f.overall))) ? 'Flights share the other ' + (Math.round((100 - Number(f.overall)) * 10) / 10) + '% equally' : '';
+  if (!box) return;
+  if (!r.settings) { box.innerHTML = '<div style="color:#a32d2d;font-size:0.8rem">' + r.problems.join('<br>') + '</div>'; return; }
+  if (!sd) { box.innerHTML = ''; return; }
+  const players = buildStandings(season).map(p => ({ name: p.name, qualifies: p.qualifies, performance: p.performance, seriesFlight: (sd.playerHistory[p.name] && sd.playerHistory[p.name].seriesFlight) || p.tee }));
+  box.innerHTML = '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px">Preview with the standings today (not saved until you press Save):</div>' + gsSeasonPotHTML(computeSeasonPot(players, r.settings));
+}
+function gsPotSave() {
+  const st = document.getElementById('pot-settings-status'), r = gsPotFromForm(gsPotRead());
+  st.style.display = 'block';
+  if (!r.settings) { st.style.color = '#a32d2d'; st.innerHTML = r.problems.join('<br>'); return; }
+  const season = document.getElementById('series-season')?.value || '2026';
+  const data = getSeriesData();
+  if (!data.seasons[season]) data.seasons[season] = { events: [], playerHistory: {} };
+  data.seasons[season].potSettings = r.settings;
+  saveSeriesData(data);
+  st.style.color = '#1a6b30'; st.innerHTML = '✅ Saved for ' + season + '. Publish All Pages to put it on the standings page.';
+  gsPotPreview();
+}
+function gsPotReset() {
+  const season = document.getElementById('series-season')?.value || '2026';
+  const data = getSeriesData();
+  if (data.seasons[season]) { delete data.seasons[season].potSettings; saveSeriesData(data); }
+  const st = document.getElementById('pot-settings-status'); st.style.display = 'block'; st.style.color = '#1a6b30'; st.innerHTML = 'Back to the defaults for ' + season + '.';
+  gsPotRenderSettings();
+}
+document.addEventListener('input', e => { if (e.target && e.target.closest && e.target.closest('#pot-settings-box')) gsPotPreview(); });
+document.addEventListener('change', e => { if (e.target && e.target.closest && e.target.closest('#pot-settings-box')) gsPotPreview(); });
+
 function loadSeriesStandings() {
   const season = document.getElementById('series-season')?.value || '2026';
+  gsPotRenderSettings();
   renderStandingsTable(currentFlight);
   renderEventHistory(season);
   renderRawLeaderboard();
@@ -8776,7 +8887,7 @@ function grpKickOffEvent() {
 // out of sync again (same root-cause class as the Dev-55 portal_version.txt fix:
 // two hardcoded copies of the same fact will eventually disagree; one source of
 // truth can't). Declare GS_VERSION first — the header write depends on it.
-const GS_VERSION = 'v8.63 · 2026-11-02';
+const GS_VERSION = 'v8.64 · 2026-11-02';
 document.getElementById('header-version-display').textContent = GS_VERSION;
 
 // Groups tab is active by default — call grpOnTabOpen() on load since showTab() won't fire
