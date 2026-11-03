@@ -92,7 +92,7 @@ button:disabled{opacity:.4;cursor:default}
 .hcpt td.who b{display:block;font-size:.92rem}.hcpt td.who .sub{display:block;color:var(--dim);font-size:.72rem;font-weight:500}
 .hcpt tr.cred td.who{border-left:4px solid var(--red)}.hcpt tr.cblue td.who{border-left:4px solid var(--blue)}
 .hcpt td.dt{color:var(--faint);font-size:1.05rem}.hcpt tr.cred td.dt.on{color:var(--redlt)}.hcpt tr.cblue td.dt.on{color:var(--bluelt)}.hcpt td.dt.on{font-weight:800;background:rgba(255,255,255,.06)}
-.hcpt th.tot,.hcpt td.tot{min-width:58px;font-weight:700;white-space:nowrap}.hcpt .of{color:var(--dim);font-weight:500;font-size:.75rem}
+.hcpt th.tot,.hcpt td.tot{min-width:64px;font-weight:700;white-space:nowrap}.hcpt .of{color:var(--dim);font-weight:500;font-size:.75rem}
 @media(max-width:560px){.hcpt{font-size:.8rem}.hcpt td.who b{font-size:.84rem}.hcpt td.dt{font-size:.95rem}}
 @media print{
   body{background:#fff!important;color:#000!important}
@@ -479,7 +479,7 @@ button:disabled{opacity:.4;cursor:default}
     var firstName = function (n) { return String(n).split(' ')[0]; };
     var own = tiers.filter(function (t) { return t.strokeIndex && si && t.strokeIndex.join() !== si.join(); }).map(function (t) { return t.label; });
     var out = '<div class="card hcpintro"><div class="hcphead"><h2>Match handicaps</h2><button class="sec no-print" id="hcpPrint">🖨 Print</button></div>'
-      + '<p class="hint">● = a stroke on that hole, take it off the gross score before comparing. Fourball ' + (by.bestball || 0) + '% off the lowest course handicap in the match, foursomes ' + (by.altshot || 0) + '% of the gap in combined handicaps, singles ' + (by.singles || 0) + '% off the low. A half stroke rounds up. Course handicap is the Index adjusted for the tee played (slope and rating), so it can sit below the Index. A foursomes team handicap is the average of the two course handicaps. '
+      + '<p class="hint">● = a stroke on that hole, take it off the gross score before comparing. Fourball ' + (by.bestball || 0) + '% off the lowest course handicap in the match, foursomes ' + (by.altshot || 0) + '% of the gap in combined handicaps, singles ' + (by.singles || 0) + '% off the low. A half stroke rounds up. A player\'s strokes are spread over all 18 holes, and each format shows the ones that fall on its holes. Course handicap is the Index adjusted for the tee played (slope and rating), so it can sit below the Index. A foursomes team handicap is the average of the two course handicaps. '
       + (tiers.length ? 'Tees by Index: ' + tiers.map(function (t) { return esc(t.label) + (t.maxHcp != null ? ' under ' + t.maxHcp : ' above'); }).join(', ') + '. ' : '')
       + (own.length ? esc(own.join(', ')) + ' has its own hole handicaps, already used in the dots.' : '') + '</p></div>';
     var any = false;
@@ -493,7 +493,7 @@ button:disabled{opacity:.4;cursor:default}
         (rd.segments || []).forEach(function (sg) {
           var from = sg.from, to = sg.to, cols = []; for (var i = from; i <= to; i++) cols.push(i);
           var lab = (E.CUP_FORMATS[sg.format] || {}).label || sg.format;
-          var head = '<tr><th class="who">' + esc(lab) + ' · holes ' + from + '–' + to + '</th>' + cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '<th class="tot">Strokes</th></tr>';
+          var head = '<tr><th class="who">' + esc(lab) + ' · holes ' + from + '–' + to + '</th>' + cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '<th class="tot">' + (to - from + 1 < 18 ? 'Strokes this nine' : 'Strokes') + '</th></tr>';
           var rows = '';
           if (pars) rows += '<tr class="meta"><td class="who">Par</td>' + cols.map(function (c) { return '<td>' + pars[c - 1] + '</td>'; }).join('') + '<td class="tot"></td></tr>';
           if (si) rows += '<tr class="meta"><td class="who">Hole hcp</td>' + cols.map(function (c) { return '<td>' + si[c - 1] + '</td>'; }).join('') + '<td class="tot"></td></tr>';
@@ -502,7 +502,7 @@ button:disabled{opacity:.4;cursor:default}
             var here = cols.reduce(function (a, c) { return a + g[c - 1]; }, 0);
             return '<tr class="' + sideCls(k) + '"><td class="who"><b>' + esc(label) + '</b><span class="sub">' + (known ? '' : 'no handicap yet') + '</span></td>'
               + cols.map(function (c) { return '<td class="dt' + (g[c - 1] ? ' on' : '') + '">' + dots(g[c - 1]) + '</td>'; }).join('')
-              + '<td class="tot">' + (known ? here + ' <span class="of">of ' + strokes + '</span>' : '—') + '</td></tr>';
+              + '<td class="tot">' + (known ? here : '—') + '</td></tr>';
           };
           if (sg.format === 'altshot') {
             m.sides.forEach(function (sd, i) {

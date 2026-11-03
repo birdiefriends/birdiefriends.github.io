@@ -27,11 +27,11 @@ ok(d.querySelectorAll('.hcpmatch').length === 4, 'four Saturday matches are show
 ok(d.querySelectorAll('.hcpmatch')[0].querySelectorAll('table.hcpt').length === 2, 'each match has a fourball and a foursomes table');
 for (const n of ['Mohamed Walli', 'Jake Knappenberger', 'Jeff Rapp']) ok(dotsOf(d, 2, 'Fourball', n).holes.includes(6), n + ' has a stroke on hole 6');
 ok(JSON.stringify(dotsOf(d, 2, 'Fourball', 'Bill Steirer').holes) === '[]', 'the low player gets no strokes');
-ok(JSON.stringify(dotsOf(d, 1, 'Fourball', 'BJ Kolonia').holes) === '[2,4,6]' && dotsOf(d, 1, 'Fourball', 'BJ Kolonia').tot === '3 of 5', 'BJ: strokes on 2, 4, 6 (3 of his 5 land on the front nine)');
+ok(JSON.stringify(dotsOf(d, 1, 'Fourball', 'BJ Kolonia').holes) === '[2,4,6]' && dotsOf(d, 1, 'Fourball', 'BJ Kolonia').tot === '3', 'BJ: strokes on 2, 4, 6 (3 land on the front nine)');
 ok(JSON.stringify(dotsOf(d, 4, 'Fourball', 'Adam Costa').holes) === '[2,4,5,6,7]', 'Adam (9 strokes) holes 2, 4, 5, 6, 7');
 ok(JSON.stringify(dotsOf(d, 2, 'Foursomes', 'Mohamed & Jake').holes) === '[12,13]', 'Walli & Jake foursomes: holes 12 and 13');
 ok(JSON.stringify(dotsOf(d, 3, 'Foursomes', 'Evan & Harry').holes) === '[12,14]', "Evan & Harry use Gold's own hole handicaps: holes 12 and 14");
-ok(JSON.stringify(dotsOf(d, 4, 'Foursomes', 'Adam & Lou').holes) === '[12,13,14,17]' && dotsOf(d, 4, 'Foursomes', 'Adam & Lou').tot === '4 of 8', 'Adam & Lou: 8 strokes, 4 land on the back nine');
+ok(JSON.stringify(dotsOf(d, 4, 'Foursomes', 'Adam & Lou').holes) === '[12,13,14,17]' && dotsOf(d, 4, 'Foursomes', 'Adam & Lou').tot === '4', 'Adam & Lou: 4 strokes land on the back nine');
 ok(/Fourball 80%/.test(d.querySelector('.hcpintro').textContent) && /Gold has its own hole handicaps/.test(d.querySelector('.hcpintro').textContent), 'the intro states the allowances and that Gold has its own holes');
 ok(d.querySelectorAll('.hcpmatch .nm.cred').length === 4 && d.querySelectorAll('.hcpmatch .nm.cblue').length === 4, 'Team Jake pairs red, Team Nate pairs blue');
 const d0 = d;
@@ -41,6 +41,8 @@ ok(subOf(d0, 3, 'Fourball', 'Harry Pry') === 'Gold · Index 18.2 → course hcp 
 ok(subOf(d0, 3, 'Foursomes', 'Evan & Harry') === 'team hcp 12.0 (avg of 10 and 14)', 'foursomes show the team handicap as the average (got ' + subOf(d0, 3, 'Foursomes', 'Evan & Harry') + ')');
 ok(subOf(d0, 3, 'Foursomes', 'Dave & Chooch') === 'team hcp 8.5 (avg of 6 and 11)', 'a half-point average is shown (got ' + subOf(d0, 3, 'Foursomes', 'Dave & Chooch') + ')');
 ok(![...d0.querySelectorAll('.hcpt')].some(t => /combined/.test(t.textContent)), 'no "combined" sums left in the tables');
+ok(!/ of \d/.test([...d0.querySelectorAll('td.tot')].map(c => c.textContent).join('|')), 'the strokes column shows only what lands on these holes, no "of N"');
+ok(/Strokes this nine/.test(d0.querySelector('.hcpt th.tot').textContent), 'the column reads "Strokes this nine"');
 d.getElementById('hcpPrint').click(); ok(dom.window.__printed === true, 'Print opens the print dialog');
 ok(/@media print/.test(raw), 'print styles exist');
 const doc2 = JSON.parse(JSON.stringify(DOC)); delete doc2.draft.stats['Harry Pry'];

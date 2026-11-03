@@ -5652,4 +5652,5 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Venue data decision (Brian): the Combo tee (Green/Gold) carries Green's hole handicaps in the Venue Manager (the card has none for Combo); engine unchanged (per-tee hole handicaps stay generic). A plain BFE-A re-save keeps the Cup's frozen tiers: use "BFSeries default" in 4b to re-copy tees after a Venue Manager edit.
 - Fairness check (simulation, 30,000 runs per setting): 80 / 50 / 80 with the 18-hole index is within 0.02 expected points of even in every Saturday match; 90 / 100 fourball or ranking strokes per nine made it no better. Not changed.
 - Labels (same day): each player row shows tee, Index and course handicap (Harry: Gold · Index 18.2 → course hcp 14); foursomes rows show the team handicap as the AVERAGE of the two course handicaps (the strokes were always the average-based 50% of the combined gap; the sheet had labelled the sums).
-- Test: `test_cup_hcp_tab.mjs` (23, real Saturday record). Merged on Brian's "merge it".
+- Strokes column shows only the strokes that land on that nine (header "Strokes this nine"), no "of N"; the intro says a player's strokes are spread over 18 holes.
+- Test: `test_cup_hcp_tab.mjs` (25, real Saturday record). Merged on Brian's "merge it".
