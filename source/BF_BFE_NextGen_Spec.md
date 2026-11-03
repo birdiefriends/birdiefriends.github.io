@@ -1160,3 +1160,29 @@ Supersedes the open parts of §2a.9 / §13.8. BF Cup is **11/7–8, BSGC both da
 - **Foursomes:** each partner tees off from his own tee, then the pair alternates. The pair's handicap is the SUM of the two course handicaps (each from his own tee), and its strokes fall on the hole handicaps of the **higher-Index partner's tee** (Brian confirmed).
 - **Allowances (Brian, 10-30):** Fourball **80%**, Foursomes **50%** (of the difference between the pairs' combined handicaps), Singles **80%**. (USGA's published figures are 90 / 50 / 100; Brian chose 80 / 50 / 80.) BFE-A's boxes now default to these; the saved Cup record holds its own values and has to be re-saved in 4b to pick them up.
 - **Host code:** each Cup has a private `host_code` (set only by the global PIN in BFE-A 4b, never in the public document). The host uses it instead of the global PIN on that Cup's routes (`/bfe/cup` save, read and delete, match close); PIN 7797 stays as the commissioner override; only the global PIN creates a Cup or changes the code. Tests: `test_cup_hostcode.mjs`, `test_cup_admin_tiers.mjs`, `test_cup_tiers.mjs`.
+
+### 13.15 BF Cup games and money: design note (Dev-98, 2026-11-03) — DRAFT, no code until Brian signs off
+**Goal (Brian):** side games on a Cup are a normal thing a HOST does (the captains chose $20 a player, CTP on both days, Skins on Sunday), so this is built as the foundation for every host's Cup, not as a one-off for 11/7-8.
+
+**Finding: the money engine is already generic.** `computeRoundPayout(config, inputs)` is a pure function of a Round Config v1 (`payout.entry_per_player`, `addons[]`) and inputs (`scorecards`, `ctpLeaders`, `bbAnswers`). It does not know what a Gathering is. Each game is one registry definition with a config schema (`defineGame`: `config`, `fixedCost`, `maxPerPlayer`, fixtures). So the Cup does not get its own money logic; it supplies a Round Config and inputs per round, and the existing carve order, pot-fit guard, rollover (unclaimed CTP to Skins, no Skins = given back) and rounding all apply unchanged.
+
+**The "split days" question is already answered by the engine: a pot is per round.** The weekend buy-in is the sum of per-round entries. Example (numbers illustrative, the pot split is still open): 16 players, $20 a head, CTP $16 a hole on five par 3s each day, Skins Sunday only = Saturday entry $5 (CTP only: $80), Sunday entry $15 (CTP $80, Skins the residual $160). A host-facing planner can take "weekend buy-in + a percentage per game per day" and compile it to those per-round entries and $/hole; the engine only ever sees rounds.
+
+**Data model (all inside the Cup JSON, no D1 change; the Worker already stores unknown keys):**
+- `rounds[i].games = { entry_per_player, addons: [ { id:'cttp', dollar_per_hole, holes:[..] }, { id:'skins', basis:'gross', compare:'low' }, ... ] }`: exactly the Round Config v1 subset the engine reads.
+- `ctp[roundKey][hole] = { player, dist?, by, at }`: latest claim wins (same rule as Gatherings).
+- `rounds[i].payout`: the `computeRoundPayout` result, frozen when the host closes the round's money (re-openable), like Gatherings' `payout_summary`.
+
+**Adapter (pure, in the engine, tested with the real Saturday record):** `cupRoundMoney(cfg, roundKey)` builds `scorecards` from `cfg.scores[round][match].h[hole][name]` (gross; 0 = picked up = no score) and `ctpLeaders` from `cfg.ctp`, then calls `computeRoundPayout`. Net basis is NOT offered on a Cup in v1 (strokes are per match, not per field); Skins and Birdie Payouts are gross.
+
+**Rule that follows from capture:** a game that needs a score from every player on every hole (Skins, Birdie Payouts) can only run on a round whose segments record one ball per player (Fourball, Singles). A Foursomes hole has one team score, so the config check refuses Skins on Saturday's Foursomes holes with a plain message; CTP is a claim, not a score, so it works on any hole. Registry traits (`individualScores`) already say which games need per-player scores; a new `meta.cup` flag marks the games offered on a Cup.
+
+**Capture and display:**
+- CTP: a section under the hole entry on par-3 holes in the live panel (the panel's `opts.sections` hook exists and is unused): pick the player (and an optional distance). Anyone scoring in that group, a captain or the host can set it; latest claim wins. Needs ONE Worker action (`POST /bfe/cup/act {action:'ctp', round, hole, player, dist}`), which Brian pastes and deploys before the page merge.
+- A Money tab on the Cup page (next to Handicaps): per round the CTP winners and Skins won, the weekend total per player, the live Skins pot. A host-only Close money button freezes a round's payout.
+
+**Host configuration (BFE-A, the generic part):** a "Games and money" block per round in section 4: add a game from the registry (only `meta.cup` games); its form is generated from the game's `config` schema (so a new game appears with no BFE-A code), entry per player, and the existing pot-fit guard with a live "weekend buy-in = Sat $a + Sun $b" line. Saved with the Cup (host code or PIN). Cup creation still needs the commissioner PIN (separate item, §13.14).
+
+**Build order:** (1) engine adapter + validation + tests; (2) Money tab; (3) CTP section + the one Worker action; (4) BFE-A form. For 11/7-8, 1-3 plus a minimal form are the must-have; the paper cards remain the fallback.
+
+**Open (Brian):** (a) approve games stored on the round, planner optional; (b) v1 games = CTP, Skins (gross), Birdie Payouts?; (c) Saturday's unclaimed CTP: given back (engine default) or carried into Sunday's Skins (needs a cross-round carry); (d) who may enter a CTP claim (group scorers + captains + host proposed); (e) the pot split itself.
