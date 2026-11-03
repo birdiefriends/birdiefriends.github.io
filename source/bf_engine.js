@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.44.0';
+  const ENGINE_VERSION = '1.45.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2790,6 +2790,107 @@
     return (cfg.rounds || []).reduce((t, r) => t + (r.matches || []).length * (r.segments || []).length, 0) * Math.max(rule.win + rule.loss, 2 * rule.half);
   }
   // Structural checks. A half-built lineup (captains still picking) is valid: `unassigned[round][side]` lists who has no match yet.
+  // ---- BF Cup games and money (Dev-98, spec §13.15) -------------------------------------------------------------
+  // A Cup round carries its games as a Round Config v1 subset: rounds[i].games = { entry_per_player, addons:[{ id:'cttp', dollar_per_hole, holes },
+  // { id:'skins', basis:'gross' }, { id:'birdiepay', dollar_per_birdie }] }. CTP claims live in cfg.ctp[roundKey][hole] = { player, dist?, by, at }.
+  // The money is the SAME pure computeRoundPayout the Gatherings use; the Cup only supplies the round's cards. A frozen result sits in rounds[i].payout.
+  const CUP_MONEY_GAMES = ['cttp', 'skins', 'birdiepay'];                 // offered on a Cup round in v1
+  const CUP_NEEDS_PLAYER_SCORES = ['skins', 'birdiepay'];                  // need every player's own gross on every hole of the round
+  function cupRoundOf(cfg, roundKey) { return ((cfg && cfg.rounds) || []).find(r => r && r.key === roundKey) || null; }
+  function cupRoundPlayers(round) {
+    const out = [], seen = new Set();
+    ((round && round.matches) || []).forEach(m => (m.sides || []).forEach(sd => (sd.players || []).forEach(n => { if (!seen.has(norm(n))) { seen.add(norm(n)); out.push(n); } })));
+    return out;
+  }
+  // One card per player of the round: gross by hole (null = no score, or a hole played as Foursomes where only the pair has a score; a pick-up is no score).
+  function cupScorecards(cfg, roundKey) {
+    const round = cupRoundOf(cfg, roundKey); if (!round) return [];
+    const byMatch = (cfg.scores && cfg.scores[roundKey]) || {};
+    const cards = [];
+    (round.matches || []).forEach(m => {
+      const H = (byMatch[m.key] && byMatch[m.key].h) || {};
+      (m.sides || []).forEach(sd => (sd.players || []).forEach(n => {
+        const holes = new Array(18).fill(null);
+        for (let h = 1; h <= 18; h++) {
+          const seg = cupSegmentAt(round, h);
+          if (!seg || seg.format === 'altshot') continue;
+          const e = H[String(h)]; if (!e) continue;
+          const k = Object.keys(e).find(x => norm(x) === norm(n)); if (k === undefined) continue;
+          const g = Number(e[k]); if (Number.isFinite(g) && g > 0) holes[h - 1] = g;
+        }
+        cards.push({ player: n, holes });
+      }));
+    });
+    return cards;
+  }
+  function cupCtpLeaders(cfg, roundKey) { return (cfg && cfg.ctp && cfg.ctp[roundKey]) || {}; }
+  // The par 3s of the Cup's course (the default CTP holes), from the pars the Cup saved.
+  function cupParThrees(cfg) {
+    const pars = cfg && cfg.handicap && Array.isArray(cfg.handicap.pars) ? cfg.handicap.pars : [];
+    return pars.map((p, i) => (Number(p) === 3 ? i + 1 : null)).filter(Boolean);
+  }
+  // Problems with a round's games set-up, in plain words ([] = fine). Nothing configured = no problems.
+  function cupGamesProblems(cfg, roundKey) {
+    const round = cupRoundOf(cfg, roundKey), g = round && round.games;
+    if (!round) return ['No round called ' + roundKey];
+    if (!g) return [];
+    const out = [];
+    const dpp = Number(g.entry_per_player);
+    if (!(Number.isFinite(dpp) && dpp >= 0)) out.push('Entry per player must be a number (0 or more)');
+    const addons = Array.isArray(g.addons) ? g.addons : [];
+    const seen = new Set(), configs = {};
+    const hasFoursomes = (round.segments || []).some(sg => sg.format === 'altshot');
+    addons.forEach(a => {
+      const id = a && a.id, label = ((getGame(id) || {}).meta || {}).label || id;
+      if (!CUP_MONEY_GAMES.includes(id)) { out.push(label + ' is not offered on a Cup round yet'); return; }
+      if (seen.has(id)) { out.push(label + ' is on this round twice'); return; }
+      seen.add(id);
+      const eff = id === 'cttp' && !Array.isArray(a.holes) ? Object.assign({}, a, { holes: cupParThrees(cfg) }) : a;   // CTP defaults to the course's par 3s
+      configs[id] = eff;
+      const gm = getGame(id);
+      if (id === 'cttp' && !eff.holes.length) out.push(label + ': this Cup has no par 3s saved, so pick the CTP holes');
+      else if (gm && Array.isArray(gm.config) && gm.config.length) { const v = validateGameConfig(id, eff); if (!v.ok) v.errors.forEach(e => out.push(label + ': ' + e)); }
+      if (CUP_NEEDS_PLAYER_SCORES.includes(id) && hasFoursomes) out.push(label + ' needs every player\'s own score on every hole, and Foursomes records one score per pair. Run it on a round of Fourball or Singles.');
+      if (id === 'skins' && a.basis === 'net') out.push('Net skins is not offered on a Cup yet (strokes are set per match, not for the field). Use gross.');
+      if (id === 'cttp') (a.holes || []).forEach(h => { if (!(Number(h) >= 1 && Number(h) <= 18)) out.push('CTP hole ' + h + ' is not a hole 1 to 18'); });
+    });
+    if (Number.isFinite(dpp)) { const pf = potFit(configs, dpp, cupRoundPlayers(round).length); if (pf.problem) out.push(pf.problem); }
+    return out;
+  }
+  // The Round Config v1 the engine reads, built from the round's games.
+  function cupRoundConfig(cfg, roundKey) {
+    const round = cupRoundOf(cfg, roundKey), g = round && round.games; if (!g) return null;
+    const pars = cfg.handicap && Array.isArray(cfg.handicap.pars) && cfg.handicap.pars.length === 18 ? cfg.handicap.pars : [];
+    const addons = (Array.isArray(g.addons) ? g.addons : []).filter(a => a && CUP_MONEY_GAMES.includes(a.id)).map(a => {
+      const o = Object.assign({ entity: 'individual' }, a);
+      if (a.id === 'skins') { o.basis = 'gross'; o.compare = 'low'; }
+      if (a.id === 'birdiepay' && !(Array.isArray(a.pars) && a.pars.length === 18) && pars.length) o.pars = pars;
+      if (a.id === 'cttp' && !Array.isArray(a.holes)) o.holes = cupParThrees(cfg);
+      return o;
+    });
+    return { v: 1, base: { game: 'scorecard_only', params: {} }, entity: { level: 'individual', unit: 'player', derive: null }, input: 'strokes', compare: 'low', handicap: { mode: 'scratch' }, holes: { layout: null, half: null }, addons, payout: { entry_per_player: Number(g.entry_per_player) || 0 } };
+  }
+  // A round's money computed live from the Cup record (null when the round has no games).
+  function cupRoundMoney(cfg, roundKey) {
+    const config = cupRoundConfig(cfg, roundKey); if (!config) return null;
+    const problems = cupGamesProblems(cfg, roundKey);
+    const result = computeRoundPayout(config, { scorecards: cupScorecards(cfg, roundKey), ctpLeaders: cupCtpLeaders(cfg, roundKey) });
+    return { round: roundKey, problems, config, result };
+  }
+  // The whole event: per round the live result (or the frozen one the host closed) and each player's weekend total.
+  function cupMoneyView(cfg) {
+    const rounds = [], totals = new Map();
+    ((cfg && cfg.rounds) || []).forEach(rd => {
+      if (!rd || !rd.games) return;
+      const live = cupRoundMoney(cfg, rd.key), frozen = rd.payout && rd.payout.payouts ? rd.payout : null, result = frozen || (live && live.result);
+      if (!result) return;
+      rounds.push({ key: rd.key, name: rd.name || rd.key, frozen: !!frozen, problems: live ? live.problems : [], entry: Number(rd.games.entry_per_player) || 0, result });
+      (result.payouts || []).forEach(r => { const k = norm(r.player); const t = totals.get(k) || { player: r.player, won: 0, paid: 0 }; t.won += Number(r.total) || 0; t.paid += result.dollar_per_player || 0; totals.set(k, t); });
+    });
+    const players = [...totals.values()].map(t => Object.assign({}, t, { net: Math.round((t.won - t.paid) * 100) / 100 })).sort((a, b) => b.won - a.won || a.player.localeCompare(b.player));
+    return { rounds, players, buyIn: rounds.reduce((a, r) => a + r.entry, 0) };
+  }
+
   function cupValidate(cfg) {
     const errors = [];
     const sides = cfg && cfg.sides;
@@ -2854,6 +2955,7 @@
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
     CUP_FORMATS, cupTiersOf, cupTierFor, cupIndexOf, cupStrokeIndexFor, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupSinglesRound, cupSinglesControl, cupSinglesView, cupSinglesPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupGroupsOf, cupMatchNumbers, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
+    CUP_MONEY_GAMES, cupRoundOf, cupRoundPlayers, cupScorecards, cupCtpLeaders, cupParThrees, cupGamesProblems, cupRoundConfig, cupRoundMoney, cupMoneyView,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });

@@ -5654,3 +5654,9 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Labels (same day): each player row shows tee, Index and course handicap (Harry: Gold · Index 18.2 → course hcp 14); foursomes rows show the team handicap as the AVERAGE of the two course handicaps (the strokes were always the average-based 50% of the combined gap; the sheet had labelled the sums).
 - Strokes column shows only the strokes that land on that nine (header "Strokes this nine"), no "of N"; the intro says a player's strokes are spread over 18 holes.
 - Test: `test_cup_hcp_tab.mjs` (25, real Saturday record). Merged on Brian's "merge it".
+
+### Dev-98 (part) — BF Cup games and money, step 1: the engine bridge (2026-11-03) — STAGING, not merged
+- Spec §13.15 and `BF_Design_Event_Architecture.md` (Brian signed off the direction and said "go"). Engine **1.45.0**, portal **v4.52.1** (only the `?v=` changed).
+- `bf_engine.js`: `cupScorecards` (Cup gross by hole to the engine's cards; Foursomes holes and pick-ups are no individual score), `cupCtpLeaders`, `cupParThrees`, `cupGamesProblems` (plain-words checks, reuses `validateGameConfig` and `potFit`), `cupRoundConfig` (Round Config v1 from `rounds[i].games`), `cupRoundMoney` (calls the unchanged `computeRoundPayout`), `cupMoneyView` (per round live or frozen `rounds[i].payout`, weekend totals and buy-in). v1 games on a Cup: CTP, gross Skins, Birdie Payouts; Skins and Birdie Payouts refused on a round with Foursomes.
+- Test: `test_cup_money.mjs` (31): real Saturday matches and pars, made-up scores; Saturday $5 CTP-only, Sunday $15 CTP + skins, weekend $320 all paid out, frozen round.
+- Worker library: only a version comment changed (deploy optional). Next: Money tab (step 2), CTP entry + one Worker action (step 3), BFE-A "Games and money" on the round row (step 4).
