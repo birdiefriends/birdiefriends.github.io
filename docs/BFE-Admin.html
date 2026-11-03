@@ -2142,6 +2142,95 @@ function cupRowToggle(tr) {
   if (isCup) { wb.value = ''; wb.disabled = true; ov.checked = false; ov.disabled = true; hs.value = '18'; hs.disabled = true; hs.title = 'Cup rounds set holes per segment'; }
   else { wb.disabled = false; ov.disabled = false; hs.disabled = false; }
 }
+// ── Cup games and money (Dev-98, spec §13.15): a "Games and money" block on each Cup round row (section 4). The form is built from the game registry's
+// config schema, so a game added to BFEngine appears here with no new BFE-A code; the engine's own checks (pot fit, what a round can host) say what is wrong.
+const CUP_GAME_SKIP = { cttp: ['hole_mode'], skins: ['basis'], birdiepay: ['pars', 'pars_by_player'] };   // chosen for the Cup: all par 3s by default, skins gross, pars from the Cup's tee
+function cupGameFields(id) { const sc = BFEngine.gameSchemas()[id]; return ((sc && sc.config) || []).filter(f => !(CUP_GAME_SKIP[id] || []).includes(f.key) && ['money', 'int', 'holes', 'enum'].includes(f.type)); }
+function cupGameLabel(id) { const sc = BFEngine.gameSchemas()[id]; return sc ? sc.label : id; }
+function cupGamesRead(tr) {
+  const g = tr._games || { entry_per_player: '', addons: [] };
+  const hasEntry = g.entry_per_player !== '' && g.entry_per_player != null && isFinite(Number(g.entry_per_player));
+  if (!hasEntry && !g.addons.length) return null;
+  return { entry_per_player: hasEntry ? Number(g.entry_per_player) : 0, addons: g.addons.map(a => Object.assign({}, a)) };
+}
+function cupSetGames(tr, g) {
+  tr._gamesFromCup = true;   // the form now mirrors what the Cup holds
+  tr._games = g && typeof g === 'object' ? { entry_per_player: g.entry_per_player == null ? '' : g.entry_per_player, addons: (g.addons || []).map(a => Object.assign({}, a)) } : { entry_per_player: '', addons: [] };
+  cupGamesRender(tr);
+}
+// What the engine says about this round's games, with the field the round will really have (the drawn players, or the roster before the draw).
+function cupGamesCheck(tr) {
+  const games = cupGamesRead(tr); if (!games) return { problems: [], games: null, n: 0 };
+  const names = (cupState.draft && (cupState.draft.pool || []).length ? cupState.draft.pool.filter(n => !((cupState.draft.subs || []).includes(n))) : cupRosterNames());
+  const half = Math.ceil(names.length / 2);
+  const drawn = (cupState.rounds.find(r => r.rid === tr.dataset.roundId) || {}).matches || [];
+  const matches = drawn.length ? drawn : [{ key: 'x', sides: [{ side: 'A', players: names.slice(0, half) }, { side: 'B', players: names.slice(half) }] }];
+  const tmp = { handicap: cupState.handicap || {}, rounds: [{ key: 'x', segments: cupRowSegs(tr), games, matches }] };
+  return { problems: BFEngine.cupGamesProblems(tmp, 'x'), games, n: BFEngine.cupRoundPlayers(tmp.rounds[0]).length, cfg: tmp };
+}
+function cupGamesRender(tr) {
+  const box = tr._detail.querySelector('.r-games'); if (!box) return;
+  const g = tr._games;
+  box.querySelector('.g-entry').value = g.entry_per_player;
+  box.querySelector('.g-list').innerHTML = g.addons.map((a, i) => {
+    const fields = cupGameFields(a.id).map(f => {
+      const v = a[f.key] == null ? '' : (Array.isArray(a[f.key]) ? a[f.key].join(', ') : a[f.key]);
+      const lab = '<label style="display:inline-block;margin-right:10px">' + cupEsc(f.label) + ' ';
+      if (f.type === 'enum') return lab + '<select data-gi="' + i + '" data-gf="' + f.key + '" style="width:auto">' + (f.values || []).map(x => '<option' + (x === v ? ' selected' : '') + '>' + cupEsc(x) + '</option>').join('') + '</select></label>';
+      if (f.type === 'holes') return lab + '<input type="text" data-gi="' + i + '" data-gf="' + f.key + '" value="' + cupEsc(v) + '" placeholder="blank = every par 3" style="width:170px"></label>';
+      return lab + '<input type="number" min="0" step="0.5" data-gi="' + i + '" data-gf="' + f.key + '" value="' + cupEsc(v) + '" style="width:90px"></label>';
+    }).join('');
+    return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;padding:6px 8px;border:1px solid var(--line);border-radius:6px"><b>' + cupEsc(cupGameLabel(a.id)) + '</b>' + fields
+      + (a.id === 'skins' ? '<span class="subtle">gross; the skins pot is whatever is left after the other games</span>' : '') + '<button type="button" class="danger" data-gx="' + i + '" style="padding:1px 7px;margin-left:auto" title="Remove this game">×</button></div>';
+  }).join('');
+  const used = g.addons.map(a => a.id);
+  box.querySelector('.g-add').innerHTML = BFEngine.CUP_MONEY_GAMES.filter(id => !used.includes(id)).map(id => '<option value="' + id + '">' + cupEsc(cupGameLabel(id)) + '</option>').join('');
+  box.querySelector('.g-addbtn').disabled = !box.querySelector('.g-add').options.length;
+  cupGamesLine(tr);
+}
+function cupGamesLine(tr) {
+  const box = tr._detail.querySelector('.r-games'); if (!box) return;
+  const chk = cupGamesCheck(tr), line = box.querySelector('.g-line');
+  const rows = [...roundsBody.querySelectorAll('tr.roundRow')].filter(r => r.querySelector('.r-engine').value === 'cup_match' && r._games);
+  const parts = rows.map(r => { const g = cupGamesRead(r); return g && g.entry_per_player > 0 ? (r.querySelector('.r-name').value.trim() || 'Round') + ' $' + g.entry_per_player : null; }).filter(Boolean);
+  const total = rows.reduce((a, r) => { const g = cupGamesRead(r); return a + (g ? g.entry_per_player : 0); }, 0);
+  let h = parts.length ? '<span class="subtle">Weekend buy-in $' + total + ' a player (' + parts.map(cupEsc).join(' + ') + ').</span> ' : '';
+  if (chk.games && chk.n) {
+    const cfgs = {}; chk.games.addons.forEach(a => { cfgs[a.id] = a.id === 'cttp' && !Array.isArray(a.holes) ? Object.assign({}, a, { holes: BFEngine.cupParThrees(chk.cfg) }) : a; });
+    const pf = BFEngine.potFit(cfgs, chk.games.entry_per_player, chk.n);
+    h += '<span class="subtle">This round: pot $' + pf.pot + ' (' + chk.n + ' players)' + (pf.fixedCost ? ', set aside $' + pf.fixedCost : '') + (chk.games.addons.some(a => a.id === 'skins') ? ', skins gets $' + Math.max(0, pf.pot - pf.fixedCost) + ' plus any unclaimed CTP' : (pf.pot - pf.fixedCost > 0 ? ', $' + (pf.pot - pf.fixedCost) + ' goes back to the players' : '')) + '.</span> ';
+  }
+  if (chk.problems.length) h += '<span style="color:#b71c1c">' + chk.problems.map(cupEsc).join(' ') + '</span>';
+  line.innerHTML = h;
+}
+function cupGamesInit(tr) {
+  const box = document.createElement('div'); box.className = 'r-games'; box.style.cssText = 'margin-top:12px;border-top:1px solid var(--line);padding-top:10px';
+  box.innerHTML = '<div style="font-weight:600;font-size:0.88rem">Games and money <span class="subtle" style="font-weight:400">· this round\'s buy-in and side games; the Cup page\'s Money tab pays them out. Leave blank for no money.</span></div>'
+    + '<div style="margin:8px 0"><label>Entry per player ($) <input type="number" min="0" step="0.5" class="g-entry" placeholder="e.g. 5" style="width:110px"></label></div>'
+    + '<div class="g-list"></div>'
+    + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select class="g-add" style="width:auto"></select><button type="button" class="secondary g-addbtn" style="padding:4px 10px;font-size:0.82rem">+ Add game</button></div>'
+    + '<div class="g-line" style="margin-top:6px;font-size:0.85rem"></div>';
+  tr._detail.querySelector('.r-cup').appendChild(box);
+  tr._games = { entry_per_player: '', addons: [] };
+  box.querySelector('.g-entry').addEventListener('input', e => { tr._gamesDirty = true; tr._games.entry_per_player = e.target.value === '' ? '' : Number(e.target.value); cupGamesLine(tr); });
+  box.querySelector('.g-addbtn').addEventListener('click', () => {
+    const id = box.querySelector('.g-add').value; if (!id) return;
+    const a = { id }; if (id === 'skins') a.basis = 'gross';
+    tr._gamesDirty = true; tr._games.addons.push(a); cupGamesRender(tr);
+  });
+  const edit = e => {
+    const t = e.target, i = t.dataset.gi; if (i == null) return;
+    tr._gamesDirty = true;
+    const a = tr._games.addons[Number(i)], f = cupGameFields(a.id).find(x => x.key === t.dataset.gf); if (!a || !f) return;
+    if (f.type === 'holes') { const arr = t.value.split(/[ ,]+/).map(x => parseInt(x, 10)).filter(n => n >= 1 && n <= 18); if (arr.length) a[f.key] = arr; else delete a[f.key]; }
+    else if (f.type === 'enum') a[f.key] = t.value;
+    else if (t.value === '') delete a[f.key]; else a[f.key] = Number(t.value);
+    cupGamesLine(tr);
+  };
+  box.addEventListener('input', edit); box.addEventListener('change', edit);
+  box.addEventListener('click', e => { const x = e.target.closest('[data-gx]'); if (!x) return; tr._gamesDirty = true; tr._games.addons.splice(Number(x.dataset.gx), 1); cupGamesRender(tr); });
+  cupGamesRender(tr);
+}
 function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoints = '', rollsIntoOverall = true, teeTime = '', holes = null, cupP = null) {
   const id = ++roundIdSeq;
   const tr = document.createElement('tr');
@@ -2187,6 +2276,7 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
       : [{ format: (cupP && cupP.cupFormat) || 'bestball', from: rng[0], to: rng[1] }];
     cupSetSegs(tr, segs);
   }
+  cupGamesInit(tr);
   tr._detail.querySelector('.r-addseg').addEventListener('click', () => {
     const cur = cupRowSegs(tr), last = cur[cur.length - 1];
     const from = last ? Math.min(18, last.to + 1) : 1;
@@ -6289,7 +6379,8 @@ function cupSyncRounds() {
     const holes = hv === 'f9' ? { count: 9, half: 'front' } : hv === 'b9' ? { count: 9, half: 'back' } : { count: 18 };
     const old = cupState.rounds.find(r => r.rid === rid) || cupState.rounds.find(r => r.name === name) || {};
     const segments = cupRowSegs(tr).map(g => ({ key: g.format + '-' + g.from + '-' + g.to, format: g.format, from: g.from, to: g.to }));
-    return { key: cupSlug(name), name, rid, holes, segments, sameAs: tr.dataset.sameName ? cupSlug(tr.dataset.sameName) : null, matches: old.matches || [] };
+    const games = (tr._gamesDirty || tr._gamesFromCup) ? cupGamesRead(tr) : (old.games || null);   // the row's form is the source once it has loaded; until then keep what the Cup already holds
+    return Object.assign({ key: cupSlug(name), name, rid, holes, segments, sameAs: tr.dataset.sameName ? cupSlug(tr.dataset.sameName) : null, matches: old.matches || [] }, games ? { games } : {}, old.payout ? { payout: old.payout } : {});
   });
   if (document.getElementById('cupEnabled').checked) cupRender();
 }
@@ -6466,6 +6557,8 @@ async function cupSave() {
   if (!v.ok) { cupStatus('Fix the setup first: ' + v.errors.join('; '), 'err'); return; }
   if (!cupState.sides[0].name || !cupState.sides[1].name) { cupStatus('Name both sides first.', 'err'); return; }
   if (cupTeeModeVal === 'tiers') { const pr = cupTierProblems(); if (pr.length || !(cupState.handicap && cupState.handicap.tiers)) { cupStatus('Fix the tees first: ' + (pr.join(' ') || 'pick the course so the tier tees can be copied in.'), 'err'); return; } }
+  { const bad = []; [...roundsBody.querySelectorAll('tr.roundRow')].filter(tr => tr.querySelector('.r-engine').value === 'cup_match' && tr._games).forEach(tr => { const c = cupGamesCheck(tr); c.problems.forEach(p => bad.push((tr.querySelector('.r-name').value.trim() || 'Round') + ': ' + p)); });
+    if (bad.length) { cupStatus('Fix the games first: ' + bad.join(' '), 'err'); return; } }
   if (cupState.host_code && !/^[A-Za-z0-9-]{4,24}$/.test(cupState.host_code)) { cupStatus('The host code needs 4 to 24 letters, digits or dashes.', 'err'); return; }
   cupState.sides.forEach(s => { if (s.captain && !s.players.includes(s.captain)) s.players.unshift(s.captain); });
   cupState.pool = cupRosterNames();
@@ -6477,6 +6570,8 @@ async function cupSave() {
       if (!cupState.draft && old.draft) cupState.draft = old.draft;
       cupState.sides.forEach((s, i) => { const o = (old.sides || [])[i]; if (o && (!s.players || !s.players.length) && o.players) s.players = o.players; });
       cupState.rounds.forEach(r => { const o = (old.rounds || []).find(x => x.key === r.key); if (o && (!r.matches || !r.matches.length) && o.matches) r.matches = o.matches; });
+      // games the Cup already holds survive a save from a page that never opened that round's games form
+      cupState.rounds.forEach(r => { const o = (old.rounds || []).find(x => x.key === r.key); const tr = [...roundsBody.querySelectorAll('tr.roundRow')].find(t => t.dataset.roundId === r.rid); if (o && o.games && !r.games && !(tr && (tr._gamesDirty || tr._gamesFromCup))) r.games = o.games; });
     }
     const r = await fetch(cupBase() + '/bfe/cup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: ev, config: cupState, pin: hostPinValue() }) });
     const j = await r.json();
@@ -6500,6 +6595,11 @@ async function cupLoad(quiet, evName) {
     Object.assign(cupState, { sides: j.config.sides, points: j.config.points || cupState.points, handicap: j.config.handicap || cupState.handicap, rounds: j.config.rounds || [], draft: j.config.draft, pool: j.config.pool, host_code: j.config.host_code || '' });
     { const tr = (j.config.handicap && j.config.handicap.tiers) || []; cupTeeModeVal = tr.length ? 'tiers' : 'one'; cupTierRows = tr.map(t => ({ label: t.label || t.tee, maxHcp: t.maxHcp == null ? null : Number(t.maxHcp), tee: t.tee })); }
     document.getElementById('cupEnabled').checked = true; document.getElementById('cupBody').style.display = 'block';
+    [...roundsBody.querySelectorAll('tr.roundRow')].filter(tr => tr.querySelector('.r-engine').value === 'cup_match').forEach(tr => {
+      const nm = tr.querySelector('.r-name').value.trim();
+      const sr = (j.config.rounds || []).find(r => r.rid === tr.dataset.roundId) || (j.config.rounds || []).find(r => r.name === nm);
+      if (sr) cupSetGames(tr, sr.games || null);
+    });
     cupRender(); cupSyncRounds(); cupStatus('Loaded the saved Cup (' + ev + '). Its rounds follow the Team match play rows in section 4.', 'ok');
   } catch (e) { cupStatus('Could not load: ' + e.message, 'err'); }
 }

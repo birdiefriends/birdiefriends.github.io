@@ -93,7 +93,7 @@ button:disabled{opacity:.4;cursor:default}
 .hcpt tr.cred td.who{border-left:4px solid var(--red)}.hcpt tr.cblue td.who{border-left:4px solid var(--blue)}
 .hcpt td.dt{color:var(--faint);font-size:1.05rem}.hcpt tr.cred td.dt.on{color:var(--redlt)}.hcpt tr.cblue td.dt.on{color:var(--bluelt)}.hcpt td.dt.on{font-weight:800;background:rgba(255,255,255,.06)}
 .hcpt th.tot,.hcpt td.tot{min-width:64px;font-weight:700;white-space:nowrap}.hcpt .of{color:var(--dim);font-weight:500;font-size:.75rem}
-@media(max-width:560px){.hcpt{font-size:.8rem}.hcpt td.who b{font-size:.84rem}.hcpt td.dt{font-size:.95rem}}
+@media(max-width:560px){.hcpt.mny{min-width:0}.hcpt.mny th.who,.hcpt.mny td.who{min-width:0}.hcpt{font-size:.8rem}.hcpt td.who b{font-size:.84rem}.hcpt td.dt{font-size:.95rem}}
 @media print{
   body{background:#fff!important;color:#000!important}
   .stripes,.backrow,.toolbar,.no-print,.hero .eyebrow,.banner,.meter{display:none!important}
@@ -110,7 +110,7 @@ button:disabled{opacity:.4;cursor:default}
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BirdieFriends Cup</h1></div><p class="hint">Loading…</p></div>
 <script src="bf_engine.js?v=1.45.0"></script>
-<script src="bf_live_match.js?v=13"></script>
+<script src="bf_live_match.js?v=14"></script>
 <script>
 (function () {
   'use strict';
@@ -468,6 +468,50 @@ button:disabled{opacity:.4;cursor:default}
       + '<div class="toolbar"><button id="startDraft"' + (missing || !(first || d.control) || !(d.pool || []).length ? ' disabled' : '') + '>Start the draft</button></div>';
   }
 
+  // Money tab (Dev-98, spec §13.15): the games each round carries (rounds[i].games), computed live by BFEngine.cupMoneyView from the Cup's scores and CTP claims,
+  // or the frozen result once the host has closed that round's money.
+  function hasGames() { return (cfg.rounds || []).some(function (r) { return r && r.games && Array.isArray(r.games.addons) && r.games.addons.length; }); }
+  function usd(n) { n = Math.round((Number(n) || 0) * 100) / 100; return '$' + (n % 1 ? n.toFixed(2) : String(n)); }
+  function moneyAct(action, roundKey) {
+    if (!HOST || !pin || busy) return;
+    busy = true;
+    load().then(function () {                                   // fresh scores first: close what the Cup says NOW, not what this page saw a few seconds ago
+      var live = action === 'money_close' ? E.cupRoundMoney(cfg, roundKey) : null;
+      if (action === 'money_close' && live && live.problems.length) { error = 'Fix the games first: ' + live.problems.join('; '); busy = false; render(); return; }
+      var body = { event_name: EVENT, action: action, round: roundKey, pin: pin }; if (live) body.payout = live.result;
+      return fetch(WORKER + '/bfe/cup/act', { method: 'POST', body: JSON.stringify(body) }).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); })
+        .then(function (j) { cfg = Object.assign({}, cfg, j.config); error = ''; });
+    }).catch(function (e) { error = 'Could not do that: ' + e.message; }).then(function () { busy = false; render(); });
+  }
+  function moneyHtml() {
+    var mv = E.cupMoneyView(cfg), out = '';
+    var split = mv.rounds.map(function (r) { return esc(r.name) + ' ' + usd(r.entry); }).join(' + ');
+    out += '<div class="card hcpintro"><div class="hcphead"><h2>Money</h2><button class="sec no-print" id="hcpPrint">🖨 Print</button></div><p class="hint">Weekend buy-in ' + usd(mv.buyIn) + ' a player (' + split + '). Closest to the pin pays a fixed amount a hole. Skins is gross: the lowest score on a hole wins it outright, a tie wins nothing, and the skins pot is shared equally by the skins won. Figures move with the scores until the host closes a round.</p></div>';
+    if (error) out += '<p class="err">' + esc(error) + '</p>';
+    mv.rounds.forEach(function (r) {
+      var res = r.result, rows = res.payouts || [], cols = [['cttp', 'CTP'], ['skins', 'Skins'], ['birdiepay', 'Birdies'], ['given_back', 'Back']].filter(function (c) { return rows.some(function (p) { return Number(p[c[0]]) > 0; }); });
+      out += '<div class="card hcpmatch"><div class="hcptitle"><span class="n">' + (r.frozen ? 'Final · closed by the host' : 'Live · not closed') + '</span><span class="nm">' + esc(r.name) + '</span><span class="vsx">' + usd(r.entry) + ' each · pot ' + usd(res.total_pot) + ' · ' + res.players_count + ' players</span></div>';
+      if (HOST && pin && r.problems.length) out += '<p class="err">' + r.problems.map(esc).join('<br>') + '</p>';
+      if (res.cttp && res.cttp.holes && res.cttp.holes.length) {
+        out += '<div class="hcpwrap"><table class="hcpt mny"><thead><tr><th class="who">Closest to the pin</th><th>Hole</th><th>Distance</th><th class="tot">Paid</th></tr></thead><tbody>'
+          + res.cttp.holes.map(function (h) { return '<tr><td class="who"><b>' + (h.player ? esc(h.player) : '—') + '</b></td><td>' + h.hole + '</td><td>' + (h.dist ? esc(h.dist) : '') + '</td><td class="tot">' + (h.player ? usd(h.paid) : 'not claimed') + '</td></tr>'; }).join('')
+          + '</tbody></table></div>' + (res.cttp.unclaimed_to_skins ? '<p class="hint">' + usd(res.cttp.unclaimed_to_skins) + ' unclaimed' + (res.skins ? ' goes into the skins pot.' : ' goes back to the players.') + '</p>' : '');
+      }
+      if (res.skins) {
+        var won = res.skins.won || [];
+        out += '<div class="hcpwrap"><table class="hcpt mny"><thead><tr><th class="who">Skins · pot ' + usd(res.skins.pot) + '</th><th>Hole</th><th>Gross</th><th class="tot">Paid</th></tr></thead><tbody>'
+          + (won.length ? won.map(function (w) { return '<tr><td class="who"><b>' + esc(w.player) + '</b></td><td>' + w.hole + '</td><td>' + w.strokes + '</td><td class="tot">' + usd(res.skins.per_skin) + '</td></tr>'; }).join('') : '<tr><td class="who" colspan="4">No skins won yet' + (res.skins.given_back_each ? ': the pot goes back, ' + usd(res.skins.given_back_each) + ' each' : '') + '.</td></tr>')
+          + '</tbody></table></div>';
+      }
+      out += '<div class="hcpwrap"><table class="hcpt mny"><thead><tr><th class="who">Player</th>' + cols.map(function (c) { return '<th>' + c[1] + '</th>'; }).join('') + '<th class="tot">Total</th></tr></thead><tbody>'
+        + rows.map(function (p) { return '<tr><td class="who"><b>' + esc(p.player) + '</b></td>' + cols.map(function (c) { return '<td>' + (Number(p[c[0]]) ? usd(p[c[0]]) : '·') + '</td>'; }).join('') + '<td class="tot">' + usd(p.total) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+      if (HOST && pin) out += '<div class="toolbar no-print">' + (r.frozen ? '<button class="sec" data-money-reopen="' + esc(r.key) + '">Reopen the money</button>' : '<button data-money-close="' + esc(r.key) + '"' + (r.problems.length ? ' disabled' : '') + '>Close the money for ' + esc(r.name) + '</button>') + '</div>';
+      out += '</div>';
+    });
+    out += '<div class="card hcpmatch"><div class="hcptitle"><span class="n">Weekend</span><span class="nm">Each player\'s total</span></div><div class="hcpwrap"><table class="hcpt mny"><thead><tr><th class="who">Player</th><th>Won</th><th>Paid in</th><th class="tot">Net</th></tr></thead><tbody>'
+      + mv.players.map(function (p) { return '<tr><td class="who"><b>' + esc(p.player) + '</b></td><td>' + usd(p.won) + '</td><td>' + usd(p.paid) + '</td><td class="tot">' + (p.net > 0 ? '+' : p.net < 0 ? '−' : '') + usd(Math.abs(p.net)) + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
+    return out;
+  }
   // Handicaps tab: every match's strokes by hole, read from the live Cup record with the engine's own functions (so it follows a sub swap, a new draw or the Sunday singles).
   function hcpHtml() {
     var rule = E.cupHandicapRule(cfg), hc = E.cupHcpMap(cfg), h = cfg.handicap || {}, si = h.strokeIndex, pars = h.pars;
@@ -543,8 +587,9 @@ button:disabled{opacity:.4;cursor:default}
     var hasMatches = (cfg.rounds || []).some(function (r) { return (r.matches || []).length; });
     if (hasMatches && d.locked) {
       if (!view) view = 'score';
-      var tabs = '<div class="toolbar"><button class="' + (view === 'score' ? '' : 'sec') + '" data-view="score">Score</button><button class="' + (view === 'board' ? '' : 'sec') + '" data-view="board">Leaderboard</button><button class="' + (view === 'teams' ? '' : 'sec') + '" data-view="teams">Teams &amp; draw</button><button class="' + (view === 'hcp' ? '' : 'sec') + '" data-view="hcp">Handicaps</button></div>';
+      var tabs = '<div class="toolbar"><button class="' + (view === 'score' ? '' : 'sec') + '" data-view="score">Score</button><button class="' + (view === 'board' ? '' : 'sec') + '" data-view="board">Leaderboard</button><button class="' + (view === 'teams' ? '' : 'sec') + '" data-view="teams">Teams &amp; draw</button><button class="' + (view === 'hcp' ? '' : 'sec') + '" data-view="hcp">Handicaps</button>' + (hasGames() ? '<button class="' + (view === 'money' ? '' : 'sec') + '" data-view="money">Money</button>' : '') + '</div>';
       if (view === 'hcp') { app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + hcpHtml(); wire(); return; }
+      if (view === 'money' && hasGames()) { app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + moneyHtml(); wire(); return; }
       if (view === 'score' || view === 'board') {
         var names = []; (cfg.rounds || []).forEach(function (r) { (r.matches || []).forEach(function (m) { m.sides.forEach(function (sd) { sd.players.forEach(function (p) { if (names.indexOf(p) < 0) names.push(p); }); }); }); });
         var who = '<div class="toolbar"><label class="hint">I am </label><select id="meSel"><option value="">(pick your name)</option>' + names.map(function (n) { return '<option' + (n === PLAYER ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></div>';
@@ -599,7 +644,7 @@ button:disabled{opacity:.4;cursor:default}
     if (!d.locked) return 'Team draft';
     var hasMatches = (cfg.rounds || []).some(function (r) { return (r.matches || []).length; });
     if (!hasMatches) return 'Matchup draw';
-    return view === 'board' ? 'Leaderboard' : view === 'teams' ? 'Teams & draw' : view === 'hcp' ? 'Handicaps' : 'Scoring';
+    return view === 'board' ? 'Leaderboard' : view === 'teams' ? 'Teams & draw' : view === 'hcp' ? 'Handicaps' : view === 'money' ? 'Money' : 'Scoring';
   }
   function hero() {
     var nm = cupName(), stage = cupStage();
@@ -611,6 +656,8 @@ button:disabled{opacity:.4;cursor:default}
     function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
     matchupWire(); singlesWire();
     on('hcpPrint', function () { window.print(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-money-close]'), function (b) { b.addEventListener('click', function () { moneyAct('money_close', b.getAttribute('data-money-close')); }); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-money-reopen]'), function (b) { b.addEventListener('click', function () { moneyAct('money_reopen', b.getAttribute('data-money-reopen')); }); });
     var ct = $('cardToggle'); if (ct) ct.addEventListener('click', function () { if (cfg.hide_card) delete cfg.hide_card; else cfg.hide_card = true; save(); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-view]'), function (b) { b.addEventListener('click', function () { view = b.getAttribute('data-view'); render(); }); });
     var me = $('meSel'); if (me) me.addEventListener('change', function () { PLAYER = me.value; try { localStorage.setItem('bf_cup_me', PLAYER); } catch (e) {} render(); });

@@ -1528,6 +1528,8 @@ export default {
     //   POST /bfe/cup/act {…, action:'match_pick', pair:[a,b]}  the Saturday matchup draw: "put up and respond", alternating (BFEngine.cupMatchupView is the
     //   browser twin). The commissioner starts it by saving config.matchup = {started, first, log:[]}; when the last pick lands the matches are written
     //   into the pairs round (rounds[i].matches).
+    //   POST /bfe/cup/act {…, action:'ctp', round, hole, claim, dist?}  anyone playing in the round (or a captain/host) sets who is closest to the pin on a CTP hole of that round's games (claim '' clears it).
+    //   POST /bfe/cup/act {…, action:'money_close', round, payout, pin} / 'money_reopen'  the HOST freezes a round's computed payout into rounds[i].payout (BFEngine.cupMoneyView) or reopens it.
     //   GET /bfe/cup-live[?player=<name>]   the Cup events whose selection is open (draft, pairs, matchup draw; practice copies excluded) for the app card;
     //   with ?player= naming a captain, his own captain code comes back (cap_code) so the app can open his screen in one tap.
     // Saturday pairs (BFEngine.cupPairsVisible is the browser twin): a side's pairs are private to that captain and the commissioner
@@ -1592,13 +1594,49 @@ export default {
         const cfgObj = JSON.parse(row.config);
         const acc = cfgObj.access || {};
         const norm = v => String(v == null ? '' : v).trim().toLowerCase();
-        if (body.action === 'score' || body.action === 'round_end' || body.action === 'round_reopen' || body.action === 'match_close' || body.action === 'match_reopen') {
+        if (body.action === 'score' || body.action === 'round_end' || body.action === 'round_reopen' || body.action === 'match_close' || body.action === 'match_reopen' || body.action === 'ctp' || body.action === 'money_close' || body.action === 'money_reopen') {
           // Live scoring (trust model, like the rest of the app): anyone playing in the match can post its hole scores; a captain code or the PIN works too.
           const rd = (cfgObj.rounds || []).find(r => r.key === body.round);
           if (!rd) return J({ error: 'Unknown round' }, 404);
           const capOk = Object.keys(acc).some(k => body.code && String(acc[k]) === String(body.code)) || cupIsHost(cfgObj, body.pin);
           cfgObj.scores = cfgObj.scores || {};
           const ph = cfgObj.phases = cfgObj.phases || {}, now = new Date().toISOString();
+          // Cup games and money (Dev-98, spec §13.15). The games themselves are the round's Round Config (rd.games, set in BFE-A); these actions only record
+          // what players see on the course (closest to the pin) and let the HOST freeze or reopen a round's payout (the page computes it with BFEngine).
+          if (body.action === 'ctp') {
+            const ga = rd.games && Array.isArray(rd.games.addons) ? rd.games.addons.find(a => a && a.id === 'cttp') : null;
+            if (!ga) return J({ error: 'This round has no closest-to-the-pin game' }, 409);
+            if (rd.payout) return J({ error: 'The money for this round is closed. The host reopens it first.' }, 409);
+            const roundPlayers = []; (rd.matches || []).forEach(mm => mm.sides.forEach(sd => sd.players.forEach(p => roundPlayers.push(p))));
+            if (!capOk && !roundPlayers.some(p => norm(p) === norm(body.player))) return J({ error: 'Only someone playing in this round can set closest to the pin' }, 403);
+            const pars = cfgObj.handicap && Array.isArray(cfgObj.handicap.pars) ? cfgObj.handicap.pars : [];
+            const ctpHoles = Array.isArray(ga.holes) ? ga.holes.map(Number) : pars.map((pr, i) => (Number(pr) === 3 ? i + 1 : null)).filter(Boolean);
+            const ch = Number(body.hole);
+            if (!(Number.isInteger(ch) && ctpHoles.includes(ch))) return J({ error: 'Hole ' + body.hole + ' is not a closest-to-the-pin hole' }, 400);
+            cfgObj.ctp = cfgObj.ctp || {}; const cr = cfgObj.ctp[rd.key] = cfgObj.ctp[rd.key] || {};
+            const claim = String(body.claim == null ? '' : body.claim).trim();
+            if (!claim) delete cr[String(ch)];
+            else {
+              const cname = roundPlayers.find(p => norm(p) === norm(claim));
+              if (!cname) return J({ error: 'That player is not in this round' }, 400);
+              const dist = String(body.dist == null ? '' : body.dist).trim().slice(0, 20);
+              cr[String(ch)] = Object.assign({ player: cname }, dist ? { dist } : {}, { by: String(body.player || (capOk ? 'host' : '')).slice(0, 60), at: now });
+            }
+            await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
+            return J({ ok: true, config: cupPublic(cfgObj) });
+          }
+          if (body.action === 'money_close' || body.action === 'money_reopen') {
+            if (!cupIsHost(cfgObj, body.pin)) return J({ error: 'Only the host can close or reopen the money' }, 403);
+            if (!rd.games) return J({ error: 'This round has no games' }, 409);
+            if (body.action === 'money_reopen') delete rd.payout;
+            else {
+              const pay = body.payout;
+              if (!pay || typeof pay !== 'object' || !Array.isArray(pay.payouts) || !Number.isFinite(Number(pay.total_pot))) return J({ error: 'A payout result is required' }, 400);
+              rd.payout = Object.assign({}, pay, { closed_at: now, closed_by: 'host' });
+            }
+            await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
+            return J({ ok: true, config: cupPublic(cfgObj) });
+          }
           if (body.action === 'match_close' || body.action === 'match_reopen') {
             // Only the host or a captain closes a match by hand (a concession, a match stopped early); players just keep entering scores.
             if (!capOk) return J({ error: 'Only the host or a captain can close a match' }, 403);
@@ -1877,7 +1915,7 @@ export default {
           if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
           // the public document never carries the captain codes, so a re-save must not wipe them
           // (the same goes for the captains' Saturday pairs: a page that never loaded them must not erase them)
-          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (!config.singles && pc.singles) config.singles = pc.singles; if (!config.closed && pc.closed) config.closed = pc.closed; if (!config.results && pc.results) config.results = pc.results; if (!config.access && pc.access) config.access = pc.access; if (!byGlobal) { if (pc.host_code) config.host_code = pc.host_code; else delete config.host_code; } else if (!config.host_code && pc.host_code) config.host_code = pc.host_code; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; } catch (e) { /* ignore */ } } }
+          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (!config.singles && pc.singles) config.singles = pc.singles; if (!config.closed && pc.closed) config.closed = pc.closed; if (!config.results && pc.results) config.results = pc.results; if (!config.access && pc.access) config.access = pc.access; if (!byGlobal) { if (pc.host_code) config.host_code = pc.host_code; else delete config.host_code; } else if (!config.host_code && pc.host_code) config.host_code = pc.host_code; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; if (!config.ctp && pc.ctp) config.ctp = pc.ctp; (config.rounds || []).forEach(r0 => { const o0 = (pc.rounds || []).find(x => x && x.key === r0.key); if (o0 && o0.payout && !r0.payout) r0.payout = o0.payout; }); } catch (e) { /* ignore */ } } }
           await env.DB.prepare(`INSERT INTO bfe_cup (event_name, config, updated_at) VALUES (?, ?, datetime('now'))
              ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(cupStampPhases(config))).run();
           return J({ ok: true });

@@ -12,7 +12,7 @@
     '.lm{--a:var(--lm-a,#d6203a);--b:var(--lm-b,#2f6fe0);--bg:var(--lm-card,#10306a);--bg2:var(--lm-card2,#183f82);--tx:var(--lm-text,#fff);--dim:var(--lm-dim,rgba(255,255,255,.68));--line:var(--lm-line,rgba(255,255,255,.16));--good:var(--lm-good,#7fd69a);--warn:var(--lm-warn,#ffd36b);--ink:var(--lm-ink,#0a1f44);color:var(--tx)}' +
     '.lm *{box-sizing:border-box}' +
     '.lm .lmc{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}' +
-    '.lm .lmbar{display:grid;grid-template-columns:1fr;gap:8px;margin:6px 0}.lm .lmbar label{display:block;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}.lm .lmbar select{display:block;width:100%;margin-top:3px;background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:11px;font:inherit;font-size:.95rem;text-transform:none;letter-spacing:0}' +
+    '.lm .lmbar{display:grid;grid-template-columns:1fr;gap:8px;margin:6px 0}.lm .lmbar label{display:block;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}.lm .lmbar select,.lm .lmbar input{display:block;width:100%;margin-top:3px;background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:11px;font:inherit;font-size:.95rem;text-transform:none;letter-spacing:0}' +
     '.lm .lmtabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}' +
     '.lm .lmtab{background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:.85rem;cursor:pointer;text-align:left}' +
     '.lm .lmtab.on{border-color:var(--tx);box-shadow:0 0 0 1px var(--tx)}.lm .lmtab small{display:block;color:var(--dim)}' +
@@ -248,6 +248,22 @@
     });
     return h + '</div>';
   }
+  // Closest to the pin (Dev-98, spec §13.15): shown on a CTP hole of a round whose games include it. Anyone playing in the round may set who is closest.
+  function ctpHolesOf(cfg, round) {
+    var g = round && round.games, a = g && (g.addons || []).filter(function (x) { return x && x.id === 'cttp'; })[0];
+    if (!a) return null;
+    return Array.isArray(a.holes) ? a.holes.map(Number) : S.opts.E.cupParThrees(cfg);
+  }
+  function ctpHtml(cfg, round, hole) {
+    var hs = ctpHolesOf(cfg, round); if (!hs || hs.indexOf(Number(hole)) < 0) return '';
+    var cur = (((cfg.ctp || {})[round.key]) || {})[String(hole)] || null, closed = !!round.payout;
+    var players = S.opts.E.cupRoundPlayers(round);
+    var sel = '<select id="lmCtpSel"' + (closed ? ' disabled' : '') + '><option value="">(nobody on the green yet)</option>' + players.map(function (n) { return '<option' + (cur && norm(cur.player) === norm(n) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>';
+    return '<div class="lmc" id="lmCtp"><div class="lmmno">Closest to the pin · hole ' + hole + '</div>'
+      + (cur && cur.player ? '<div class="lmdim">Now: <b>' + esc(cur.player) + '</b>' + (cur.dist ? ' · ' + esc(cur.dist) : '') + (cur.by ? ' (set by ' + esc(cur.by) + ')' : '') + '</div>' : '<div class="lmdim">Nobody has it yet.</div>')
+      + '<div class="lmbar"><label>Who is closest' + sel + '</label><label>Distance (optional)<input id="lmCtpDist" type="text" maxlength="20" placeholder="e.g. 6 ft" value="' + esc((cur && cur.dist) || '') + '"' + (closed ? ' disabled' : '') + '></label></div>'
+      + (closed ? '<div class="lmdim">The money for this round is closed.</div>' : '<button class="lmgo2" id="lmCtpGo">Save closest on hole ' + hole + '</button>') + '</div>';
+  }
   function render() {
     if (!S) return;
     var cfg = S.opts.getCfg(), el = S.el; if (!cfg) { el.innerHTML = ''; return; }
@@ -335,6 +351,7 @@
     if (!hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
     h += '<button class="lmgo" id="lmPost"' + (missing || anon ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (anyPosted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>';
     if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, matches: matches, hole: hole, E: E }) || '';
+    h += ctpHtml(cfg, round, hole);
     if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' score' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
     if (S.err) h += '<div class="lmmsg q" id="lmErr">⚠ ' + esc(S.err) + '</div>';
     if (S.msg) h += '<div class="lmmsg">' + esc(S.msg) + '</div>';
@@ -369,7 +386,7 @@
     var body = Object.assign({ event_name: S.opts.event, action: action, round: round.key, points: action === 'round_end' ? roundPoints(round) : undefined, player: S.opts.player || '', code: S.opts.code || undefined, pin: S.opts.pin || undefined }, extra || {});
     return fetch(S.opts.worker + '/bfe/cup/act', { method: 'POST', body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); })
-      .then(function (j) { var c = S.opts.getCfg(); ['phases', 'closed', 'results'].forEach(function (k) { if (j.config[k] !== undefined) c[k] = j.config[k]; else delete c[k]; }); S.msg = ''; render(); if (S.opts.onChange) S.opts.onChange(); })
+      .then(function (j) { var c = S.opts.getCfg(); ['phases', 'closed', 'results', 'ctp'].forEach(function (k) { if (j.config[k] !== undefined) c[k] = j.config[k]; else delete c[k]; }); S.msg = ''; render(); if (S.opts.onChange) S.opts.onChange(); })
       .catch(function (e) { S.msg = 'Could not do that: ' + e.message; render(); });
   }
   function roundPoints(round) {                              // this round's points per side, from the same engine the scoreboard uses
@@ -384,6 +401,11 @@
     function postedOf() { var cfg = S.opts.getCfg(), out = {}; matches.forEach(function (m) { var e = entryOf(cfg, round.key, m.key), p = e && e.h && e.h[String(hole)]; if (p) Object.keys(p).forEach(function (k) { out[k] = p[k]; }); }); return out; }
     function cur(r) { return rowVal(r.key, S.inp[key] || {}, postedOf()); }
     var ms = el.querySelector('#lmMatchSel'); if (ms) ms.addEventListener('change', function () { var p = ms.value.split('|'); S.sel = { r: p[0], g: p[1] }; S.hole = null; S.who = null; S.msg = ''; S.err = ''; S.last = null; render(); });
+    var cg = el.querySelector('#lmCtpGo'); if (cg) cg.addEventListener('click', function () {
+      var who = el.querySelector('#lmCtpSel'), dist = el.querySelector('#lmCtpDist');
+      if (!S.opts.player && !S.opts.code && !S.opts.pin) { S.err = 'Pick who you are above first.'; render(); return; }
+      S.err = ''; act(round, 'ctp', { hole: hole, claim: who ? who.value : '', dist: dist ? dist.value : '' });
+    });
     var me = el.querySelector('#lmMeSel'); if (me) me.addEventListener('change', function () { if (S.opts.setPlayer) S.opts.setPlayer(me.value); render(); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-hole]'), function (b) { b.addEventListener('click', function () { S.hole = { g: gkey, h: Number(b.getAttribute('data-lm-hole')) }; S.who = null; S.showAll = false; S.msg = ''; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-s]'), function (b) { b.addEventListener('click', function () {
