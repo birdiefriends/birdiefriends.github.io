@@ -77,6 +77,33 @@ button:disabled{opacity:.4;cursor:default}
 .match .vs b{display:block}.match .vs span.num{font-size:.8rem;color:var(--dim)}.match .vs .x{color:var(--dim);font-weight:700}
 .match .n{font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
 .pnote{background:rgba(255,255,255,.08);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:.88rem}
+/* Handicaps tab */
+.hcphead{display:flex;justify-content:space-between;align-items:center;gap:10px}.hcphead h2{font-size:1.2rem}
+.hcprd{font-size:1.1rem;margin:18px 2px 4px;color:var(--dim);letter-spacing:.04em}
+.hcpmatch{padding:12px 12px 6px}.hcptitle{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;margin-bottom:8px;font-weight:700}
+.hcptitle .n{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);width:100%}
+.hcptitle .nm.cred{color:var(--redlt)}.hcptitle .nm.cblue{color:var(--bluelt)}.hcptitle .vsx{color:var(--dim);font-weight:600;font-size:.85rem}
+.hcpwrap{overflow-x:auto;margin:0 -4px 10px;padding:0 4px}
+.hcpt{border-collapse:collapse;width:100%;min-width:400px;font-size:.88rem}
+.hcpt th{font-size:.72rem;color:var(--dim);font-weight:700;padding:5px 3px;text-align:center;border-bottom:1px solid var(--faint)}
+.hcpt th.who,.hcpt td.who{text-align:left;padding-left:8px;min-width:104px}
+.hcpt td{padding:5px 1px;text-align:center;border-top:1px solid rgba(255,255,255,.07)}
+.hcpt tr.meta td{color:var(--dim);font-size:.78rem}
+.hcpt td.who b{display:block;font-size:.92rem}.hcpt td.who .sub{display:block;color:var(--dim);font-size:.72rem;font-weight:500}
+.hcpt tr.cred td.who{border-left:4px solid var(--red)}.hcpt tr.cblue td.who{border-left:4px solid var(--blue)}
+.hcpt td.dt{color:var(--faint);font-size:1.05rem}.hcpt tr.cred td.dt.on{color:var(--redlt)}.hcpt tr.cblue td.dt.on{color:var(--bluelt)}.hcpt td.dt.on{font-weight:800;background:rgba(255,255,255,.06)}
+.hcpt th.tot,.hcpt td.tot{min-width:58px;font-weight:700;white-space:nowrap}.hcpt .of{color:var(--dim);font-weight:500;font-size:.75rem}
+@media(max-width:560px){.hcpt{font-size:.8rem}.hcpt td.who b{font-size:.84rem}.hcpt td.dt{font-size:.95rem}}
+@media print{
+  body{background:#fff!important;color:#000!important}
+  .stripes,.backrow,.toolbar,.no-print,.hero .eyebrow,.banner,.meter{display:none!important}
+  .hero{border-bottom:2px solid #000;padding:6px 0}.hero h1{color:#000;font-size:1.6rem}
+  .card,.hcpmatch{background:#fff!important;border:1px solid #888!important;color:#000!important;box-shadow:none;break-inside:avoid;page-break-inside:avoid}
+  .hint,.hcpt th,.hcpt tr.meta td,.hcpt td.who .sub,.hcpt .of,.hcprd{color:#333!important}
+  .hcptitle .nm.cred,.hcpt tr.cred td.dt.on{color:#b0102a!important}.hcptitle .nm.cblue,.hcpt tr.cblue td.dt.on{color:#1a4fb0!important}
+  .hcpt td{border-top:1px solid #bbb!important}.hcpt td.dt{color:#999}.hcpt td.dt.on{background:#eee!important}
+  .hcpt{min-width:0}.hcpwrap{overflow:visible}
+}
 @media(max-width:560px){.teams{gap:8px}.mhead{font-size:.9rem}.card.team{padding:10px}.slot{font-size:.85rem}.slot .st{width:100%;font-size:.7rem}}
 </style>
 </head>
@@ -441,6 +468,62 @@ button:disabled{opacity:.4;cursor:default}
       + '<div class="toolbar"><button id="startDraft"' + (missing || !(first || d.control) || !(d.pool || []).length ? ' disabled' : '') + '>Start the draft</button></div>';
   }
 
+  // Handicaps tab: every match's strokes by hole, read from the live Cup record with the engine's own functions (so it follows a sub swap, a new draw or the Sunday singles).
+  function hcpHtml() {
+    var rule = E.cupHandicapRule(cfg), hc = E.cupHcpMap(cfg), h = cfg.handicap || {}, si = h.strokeIndex, pars = h.pars;
+    var by = rule.by || {}, tiers = rule.tiers || [];
+    var sideCls = function (k) { return k === 'A' ? 'cred' : 'cblue'; };
+    var sideNm = function (k) { return esc(sideName(k)); };
+    var teeOf = function (n) { var t = E.cupTierFor(E.cupIndexOf(cfg, n), rule); return t ? t.label : ''; };
+    var dots = function (n) { return n > 1 ? '●●' : n === 1 ? '●' : '·'; };
+    var firstName = function (n) { return String(n).split(' ')[0]; };
+    var own = tiers.filter(function (t) { return t.strokeIndex && si && t.strokeIndex.join() !== si.join(); }).map(function (t) { return t.label; });
+    var out = '<div class="card hcpintro"><div class="hcphead"><h2>Match handicaps</h2><button class="sec no-print" id="hcpPrint">🖨 Print</button></div>'
+      + '<p class="hint">● = a stroke on that hole, take it off the gross score before comparing. Fourball ' + (by.bestball || 0) + '% off the lowest course handicap in the match, foursomes ' + (by.altshot || 0) + '% of the gap in combined handicaps, singles ' + (by.singles || 0) + '% off the low. A half stroke rounds up. '
+      + (tiers.length ? 'Tees by Index: ' + tiers.map(function (t) { return esc(t.label) + (t.maxHcp != null ? ' under ' + t.maxHcp : ' above'); }).join(', ') + '. ' : '')
+      + (own.length ? esc(own.join(', ')) + ' has its own hole handicaps, already used in the dots.' : '') + '</p></div>';
+    var any = false;
+    (cfg.rounds || []).forEach(function (rd) {
+      var ms = rd.matches || []; if (!ms.length) return; any = true;
+      out += '<h2 class="hcprd">' + esc(rd.name || rd.key) + '</h2>';
+      ms.forEach(function (m, mi) {
+        var st = E.cupMatchStrokes(m, hc, rule);
+        var title = m.sides.map(function (sd) { return '<span class="' + sideCls(sd.side) + ' nm">' + esc(sd.players.join(' & ')) + '</span>'; }).join(' <span class="vsx">vs</span> ');
+        out += '<div class="card hcpmatch"><div class="hcptitle"><span class="n">Match ' + (mi + 1) + '</span>' + title + '</div>';
+        (rd.segments || []).forEach(function (sg) {
+          var from = sg.from, to = sg.to, cols = []; for (var i = from; i <= to; i++) cols.push(i);
+          var lab = (E.CUP_FORMATS[sg.format] || {}).label || sg.format;
+          var head = '<tr><th class="who">' + esc(lab) + ' · holes ' + from + '–' + to + '</th>' + cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '<th class="tot">Strokes</th></tr>';
+          var rows = '';
+          if (pars) rows += '<tr class="meta"><td class="who">Par</td>' + cols.map(function (c) { return '<td>' + pars[c - 1] + '</td>'; }).join('') + '<td class="tot"></td></tr>';
+          if (si) rows += '<tr class="meta"><td class="who">Hole hcp</td>' + cols.map(function (c) { return '<td>' + si[c - 1] + '</td>'; }).join('') + '<td class="tot"></td></tr>';
+          var line = function (names, strokes, known, k, label) {
+            var g = E.cupHoleStrokes(strokes, E.cupStrokeIndexFor(cfg, names));
+            var here = cols.reduce(function (a, c) { return a + g[c - 1]; }, 0);
+            return '<tr class="' + sideCls(k) + '"><td class="who"><b>' + esc(label) + '</b><span class="sub">' + (known ? '' : 'no handicap yet') + '</span></td>'
+              + cols.map(function (c) { return '<td class="dt' + (g[c - 1] ? ' on' : '') + '">' + dots(g[c - 1]) + '</td>'; }).join('')
+              + '<td class="tot">' + (known ? here + ' <span class="of">of ' + strokes + '</span>' : '—') + '</td></tr>';
+          };
+          if (sg.format === 'altshot') {
+            m.sides.forEach(function (sd, i) {
+              var t = st.teams[i], sum = sd.players.reduce(function (a, n) { return a + (hc[n] || 0); }, 0);
+              rows += line(sd.players, t ? t.strokes : 0, t ? t.known : false, sd.side, sd.players.map(firstName).join(' & ')).replace('<span class="sub">', '<span class="sub">combined ' + sum + ' ');
+            });
+          } else {
+            m.sides.forEach(function (sd) { sd.players.forEach(function (n) {
+              var r = st.players.filter(function (x) { return x.names[0] === n; })[0] || { strokes: 0, known: false };
+              var tl = teeOf(n);
+              rows += line([n], r.strokes, r.known, sd.side, n).replace('<span class="sub">', '<span class="sub">' + (tl ? esc(tl) + ' · ' : '') + 'hcp ' + (hc[n] != null ? hc[n] : '?') + ' ');
+            }); });
+          }
+          out += '<div class="hcpwrap"><table class="hcpt"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div>';
+        });
+        out += '</div>';
+      });
+    });
+    if (!any) out += '<div class="card"><p class="hint">No matches are drawn yet. The sheet fills in as the pairings are set.</p></div>';
+    return out;
+  }
   function render() {
     if (!cfg) { app.innerHTML = hero() + '<p class="' + (error ? 'err' : 'hint') + '">' + esc(error || 'Loading…') + '</p>'; return; }
     var d = cfg.draft || {};
@@ -460,7 +543,8 @@ button:disabled{opacity:.4;cursor:default}
     var hasMatches = (cfg.rounds || []).some(function (r) { return (r.matches || []).length; });
     if (hasMatches && d.locked) {
       if (!view) view = 'score';
-      var tabs = '<div class="toolbar"><button class="' + (view === 'score' ? '' : 'sec') + '" data-view="score">Score</button><button class="' + (view === 'board' ? '' : 'sec') + '" data-view="board">Leaderboard</button><button class="' + (view === 'teams' ? '' : 'sec') + '" data-view="teams">Teams &amp; draw</button></div>';
+      var tabs = '<div class="toolbar"><button class="' + (view === 'score' ? '' : 'sec') + '" data-view="score">Score</button><button class="' + (view === 'board' ? '' : 'sec') + '" data-view="board">Leaderboard</button><button class="' + (view === 'teams' ? '' : 'sec') + '" data-view="teams">Teams &amp; draw</button><button class="' + (view === 'hcp' ? '' : 'sec') + '" data-view="hcp">Handicaps</button></div>';
+      if (view === 'hcp') { app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + hcpHtml(); wire(); return; }
       if (view === 'score' || view === 'board') {
         var names = []; (cfg.rounds || []).forEach(function (r) { (r.matches || []).forEach(function (m) { m.sides.forEach(function (sd) { sd.players.forEach(function (p) { if (names.indexOf(p) < 0) names.push(p); }); }); }); });
         var who = '<div class="toolbar"><label class="hint">I am </label><select id="meSel"><option value="">(pick your name)</option>' + names.map(function (n) { return '<option' + (n === PLAYER ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></div>';
@@ -515,7 +599,7 @@ button:disabled{opacity:.4;cursor:default}
     if (!d.locked) return 'Team draft';
     var hasMatches = (cfg.rounds || []).some(function (r) { return (r.matches || []).length; });
     if (!hasMatches) return 'Matchup draw';
-    return view === 'board' ? 'Leaderboard' : view === 'teams' ? 'Teams & draw' : 'Scoring';
+    return view === 'board' ? 'Leaderboard' : view === 'teams' ? 'Teams & draw' : view === 'hcp' ? 'Handicaps' : 'Scoring';
   }
   function hero() {
     var nm = cupName(), stage = cupStage();
@@ -526,6 +610,7 @@ button:disabled{opacity:.4;cursor:default}
     function $(id) { return document.getElementById(id); }
     function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
     matchupWire(); singlesWire();
+    on('hcpPrint', function () { window.print(); });
     var ct = $('cardToggle'); if (ct) ct.addEventListener('click', function () { if (cfg.hide_card) delete cfg.hide_card; else cfg.hide_card = true; save(); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-view]'), function (b) { b.addEventListener('click', function () { view = b.getAttribute('data-view'); render(); }); });
     var me = $('meSel'); if (me) me.addEventListener('change', function () { PLAYER = me.value; try { localStorage.setItem('bf_cup_me', PLAYER); } catch (e) {} render(); });
