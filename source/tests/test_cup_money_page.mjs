@@ -68,10 +68,17 @@ ok(/Closest to the pin/.test(txt) && /Tom Stitt/.test(txt) && /4 ft/.test(txt) &
 ok(/Skins · pot \$/.test(txt) && /Brian Hager/.test(txt), 'Sunday skins: Brian\'s three 3s are the skins');
 const sunRows = [...d.querySelectorAll('.hcpmatch')][1];
 ok(/\$/.test(sunRows.textContent), 'Sunday card renders amounts');
+// Saturday's unclaimed hole 18 ($8) is carried into Sunday's skins pot, so Sunday can only close second
+ok(/unclaimed carries into the skins pot of a later round/.test(txt) && /incl\. \$8 carried in/.test(txt), 'Saturday says its unclaimed CTP is carried; Sunday\'s skins pot says it includes $8 carried in');
+ok(d.querySelector('[data-money-close="sun"]').disabled && /Close 2026 BFCup - Day1 first/.test(txt), 'Sunday\'s Close is disabled until Saturday is closed, and says why');
 // close Saturday
 d.querySelector('[data-money-close="sat"]').click(); await tick(400); d = dom.window.document; txt = d.getElementById('app').textContent;
 c = await dbCfg(); ok(c.rounds[0].payout && c.rounds[0].payout.total_pot === 40 && c.rounds[0].payout.closed_by === 'host', 'Close stores the frozen payout on the Worker ($5 x 8 players = $40)');
 ok(/Final · closed by the host/.test(txt) && d.querySelector('[data-money-reopen="sat"]'), 'the page shows Saturday as final with a Reopen button');
+// now Sunday can close: its frozen payout includes the $8 carried in (skins pot $80 + $8 = $88, Brian's three skins)
+ok(!d.querySelector('[data-money-close="sun"]').disabled, 'with Saturday closed, Sunday\'s Close is enabled');
+d.querySelector('[data-money-close="sun"]').click(); await tick(400); d = dom.window.document;
+c = await dbCfg(); ok(c.rounds[1].payout && c.rounds[1].payout.carried_in === 8 && c.rounds[1].payout.skins.pot === 88 && c.rounds[1].payout.skins.per_skin === 29, 'Sunday\'s frozen payout: $8 carried in, skins pot $88, $29 a skin');
 // players can no longer change a closed round's CTP from the panel
 dom = await open('&player=' + encodeURIComponent('Brian Hager')); d = dom.window.document;
 ok(d.getElementById('lmCtp') && !d.getElementById('lmCtpGo') && /closed/.test(d.getElementById('lmCtp').textContent), 'a closed round shows its CTP read-only');
@@ -80,6 +87,9 @@ dom = await open('&view=money'); d = dom.window.document;
 ok(/Final · closed by the host/.test(d.getElementById('app').textContent) && !d.querySelector('[data-money-close],[data-money-reopen]'), 'everyone can read the money; only the host has the buttons');
 // reopen
 dom = await open('&host=1&view=money', 'HOST1'); d = dom.window.document;
+d.querySelector('[data-money-reopen="sat"]').click(); await tick(400); c = await dbCfg(); d = dom.window.document;
+ok(c.rounds[0].payout && /Reopen 2026 BFCup - Day2 first/.test(d.getElementById('app').textContent), 'Saturday cannot be reopened while Sunday holds money carried from it');
+d.querySelector('[data-money-reopen="sun"]').click(); await tick(400); d = dom.window.document;
 d.querySelector('[data-money-reopen="sat"]').click(); await tick(400); c = await dbCfg();
 ok(!c.rounds[0].payout && /Live · not closed/.test(dom.window.document.getElementById('app').textContent), 'Reopen clears the frozen payout');
 // the weekend table adds the two days

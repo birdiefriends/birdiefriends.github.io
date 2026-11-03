@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.45.0';
+  const ENGINE_VERSION = '1.46.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1654,7 +1654,10 @@
     const ledger = makeLedger(players);
     const dpp = Number(config && config.payout && config.payout.entry_per_player) || 0;
     const totalPot = dpp * ledger.n;
-    const state = { ledger, remaining: totalPot, unallocated: 0, rollover: 0 };
+    // Optional, for events that run several rounds (the Cup): payout.carry_in = money an earlier round passed on (it joins the residual game, Skins), and
+    // payout.carry_unclaimed = this round hands its unclaimed CTP on instead of giving it back when it has no Skins. Absent = every older result unchanged.
+    const carryIn = Math.max(0, Number(config && config.payout && config.payout.carry_in) || 0);
+    const state = { ledger, remaining: totalPot, unallocated: 0, rollover: carryIn };
     const results = { cttp: null, birdieball: null, birdiepay: null, fourball: null, altshot: null, scramble: null, hilo: null, matchplay: null, lowscore: null, skins: null };
     const addons = ((config && config.addons) || [])
       .filter(a => ADDONS[a.id])
@@ -1676,6 +1679,7 @@
     }
     const withCards = Object.assign({}, inputs, { scorecards: cards }, netByPlayer.size ? { netByPlayer, hcSpecs, hcSI: hc.stroke_index || null } : {});
     let residualRan = false;
+    let carriedOut = 0;
     let unspentEach = 0;   // what each player gets back of money that no game took (the buy-in did not divide evenly across the pots)
     addons.forEach(a => {
       results[a.id] = ADDONS[a.id].carve(state, a, withCards);
@@ -1683,7 +1687,9 @@
     });
     if (!residualRan) {
       // No residual game to absorb the balance (incl. rollover) — give it back.
-      const leftover = Math.max(0, state.remaining) + state.rollover;
+      const carryOut = config && config.payout && config.payout.carry_unclaimed ? state.rollover : 0;
+      carriedOut = carryOut;
+      const leftover = Math.max(0, state.remaining) + state.rollover - carryOut;
       if (leftover > 0) { const gb = ledger.giveBack(leftover); state.unallocated += gb.unallocated; unspentEach = gb.each; }
     }
     const rows = [...ledger.rows.values()]
@@ -1693,6 +1699,7 @@
     return {
       calc_version: 1,
       players_count: ledger.n, players, dollar_per_player: dpp, total_pot: totalPot,
+      ...(carryIn > 0 ? { carried_in: carryIn } : {}), ...(carriedOut > 0 ? { carried_out: carriedOut } : {}),
       ...(unspentEach > 0 && (results.fourball || results.altshot || results.scramble || results.hilo || results.matchplay || results.lowscore) ? { unspent_each: unspentEach } : {}),   // only for the games with pots; every older shape is unchanged
       games, cttp: results.cttp, birdieball: results.birdieball,
       // birdiepay only appears in a snapshot when the game was on, so every pre-Dev-89 payout keeps its exact shape
@@ -2858,7 +2865,7 @@
     return out;
   }
   // The Round Config v1 the engine reads, built from the round's games.
-  function cupRoundConfig(cfg, roundKey) {
+  function cupRoundConfig(cfg, roundKey, opts) {
     const round = cupRoundOf(cfg, roundKey), g = round && round.games; if (!g) return null;
     const pars = cfg.handicap && Array.isArray(cfg.handicap.pars) && cfg.handicap.pars.length === 18 ? cfg.handicap.pars : [];
     const addons = (Array.isArray(g.addons) ? g.addons : []).filter(a => a && CUP_MONEY_GAMES.includes(a.id)).map(a => {
@@ -2868,23 +2875,33 @@
       if (a.id === 'cttp' && !Array.isArray(a.holes)) o.holes = cupParThrees(cfg);
       return o;
     });
-    return { v: 1, base: { game: 'scorecard_only', params: {} }, entity: { level: 'individual', unit: 'player', derive: null }, input: 'strokes', compare: 'low', handicap: { mode: 'scratch' }, holes: { layout: null, half: null }, addons, payout: { entry_per_player: Number(g.entry_per_player) || 0 } };
+    return { v: 1, base: { game: 'scorecard_only', params: {} }, entity: { level: 'individual', unit: 'player', derive: null }, input: 'strokes', compare: 'low', handicap: { mode: 'scratch' }, holes: { layout: null, half: null }, addons, payout: Object.assign({ entry_per_player: Number(g.entry_per_player) || 0 }, opts && opts.carryIn > 0 ? { carry_in: opts.carryIn } : {}, opts && opts.carryOut ? { carry_unclaimed: true } : {}) };
   }
   // A round's money computed live from the Cup record (null when the round has no games).
-  function cupRoundMoney(cfg, roundKey) {
-    const config = cupRoundConfig(cfg, roundKey); if (!config) return null;
+  function cupRoundMoney(cfg, roundKey, opts) {
+    const config = cupRoundConfig(cfg, roundKey, opts); if (!config) return null;
     const problems = cupGamesProblems(cfg, roundKey);
     const result = computeRoundPayout(config, { scorecards: cupScorecards(cfg, roundKey), ctpLeaders: cupCtpLeaders(cfg, roundKey) });
     return { round: roundKey, problems, config, result };
   }
   // The whole event: per round the live result (or the frozen one the host closed) and each player's weekend total.
+  // Unclaimed CTP rule (Brian, 2026-11-03): it goes into the Skins pot. In a round with Skins that is the same round (the engine's residual game);
+  // in a round without Skins it is carried into the next round that has Skins (a round with no Skins after it gives it back).
   function cupMoneyView(cfg) {
+    const list = ((cfg && cfg.rounds) || []).filter(rd => rd && rd.games && Array.isArray(rd.games.addons) && rd.games.addons.length);
+    const hasSkins = rd => rd.games.addons.some(a => a && a.id === 'skins');
     const rounds = [], totals = new Map();
-    ((cfg && cfg.rounds) || []).forEach(rd => {
-      if (!rd || !rd.games) return;
-      const live = cupRoundMoney(cfg, rd.key), frozen = rd.payout && rd.payout.payouts ? rd.payout : null, result = frozen || (live && live.result);
-      if (!result) return;
-      rounds.push({ key: rd.key, name: rd.name || rd.key, frozen: !!frozen, problems: live ? live.problems : [], entry: Number(rd.games.entry_per_player) || 0, result });
+    let carry = 0, carryOpen = false, carrySource = null;
+    list.forEach((rd, idx) => {
+      const frozen = rd.payout && rd.payout.payouts ? rd.payout : null;
+      const carriesOut = !hasSkins(rd) && list.slice(idx + 1).some(hasSkins);
+      const carryIn = carry, needsClose = carryIn > 0 && carryOpen ? carrySource : null;
+      const live = frozen ? null : cupRoundMoney(cfg, rd.key, { carryIn, carryOut: carriesOut });
+      const result = frozen || (live && live.result); if (!result) return;
+      const out = Number(result.carried_out) || 0;
+      if (hasSkins(rd)) { carry = 0; carryOpen = false; carrySource = null; }
+      else { carry = out > 0 ? out : 0; if (!frozen && out > 0) { carryOpen = true; carrySource = rd.name || rd.key; } if (carry === 0) { carryOpen = false; carrySource = null; } }
+      rounds.push({ key: rd.key, name: rd.name || rd.key, frozen: !!frozen, problems: live ? live.problems : [], entry: Number(rd.games.entry_per_player) || 0, result, live: live ? live.result : null, needsClose });
       (result.payouts || []).forEach(r => { const k = norm(r.player); const t = totals.get(k) || { player: r.player, won: 0, paid: 0 }; t.won += Number(r.total) || 0; t.paid += result.dollar_per_player || 0; totals.set(k, t); });
     });
     const players = [...totals.values()].map(t => Object.assign({}, t, { net: Math.round((t.won - t.paid) * 100) / 100 })).sort((a, b) => b.won - a.won || a.player.localeCompare(b.player));

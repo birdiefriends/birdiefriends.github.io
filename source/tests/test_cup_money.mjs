@@ -74,16 +74,36 @@ eq(su.skins.won.map(w => w.hole + ':' + w.player), ['1:Brian Hager', '2:Harry Pr
 ok(su.skins.pot === 160 && su.skins.per_skin === 40, 'skins pot is the $160 left after CTP: $40 a skin');
 ok(st('Brian Hager') === 40 && st('Lou Strohl') === 56 && st('Dave Sherwin') === 16 && st('Nate Stettler') === 0, 'payouts: skin $40, skin + CTP $56, CTP $16, nothing');
 ok(su.payouts.reduce((a, p) => a + p.total, 0) + su.unallocated === 240, 'Sunday: every dollar accounted for');
-// --- the weekend
+// --- the weekend, with the Cup rule: unclaimed CTP goes into the Skins pot (Saturday has no Skins, so it is carried into Sunday's)
 const mv = E.cupMoneyView(cfg);
 ok(mv.rounds.length === 2 && mv.buyIn === 20, 'two rounds with games; the weekend buy-in is $5 + $15 = $20');
+const sa = mv.rounds[0].result, sn = mv.rounds[1].result;
+ok(sa.carried_out === 16 && !sa.payouts.some(p => p.given_back > 0), 'Saturday: hole 18\'s unclaimed $16 is carried out, nobody is given $1 back');
+ok(sa.payouts.reduce((a, p) => a + p.total, 0) + sa.carried_out === 80, 'Saturday: $64 paid + $16 carried = the $80 pot');
+ok(sn.carried_in === 16 && sn.skins.pot === 176 && sn.skins.per_skin === 44, 'Sunday: the skins pot is $160 + the $16 carried = $176, $44 a skin');
+ok(mv.rounds[1].needsClose === '2026 BFCup - Day1', 'Sunday cannot close before Saturday (its skins pot includes Saturday\'s carry)');
 const wk = n => mv.players.find(p => p.player === n);
-ok(wk('Brian Hager').won === 57 && wk('Brian Hager').paid === 20 && wk('Brian Hager').net === 37, 'Brian: $17 Saturday + $40 Sunday = $57, paid $20, up $37');
-ok(wk('Nate Stettler').won === 1 && wk('Nate Stettler').net === -19, 'Nate: $1 back, paid $20, down $19');
-ok(mv.players.reduce((a, p) => a + p.won, 0) === 320, 'the weekend pays out all $320');
-// --- a closed round is frozen: later score edits do not change it
-cfg.rounds[1].payout = JSON.parse(JSON.stringify(su));
+ok(wk('Brian Hager').won === 60 && wk('Brian Hager').paid === 20 && wk('Brian Hager').net === 40, 'Brian: $16 CTP Saturday + $44 skin Sunday = $60, paid $20, up $40');
+ok(wk('Nate Stettler').won === 0 && wk('Nate Stettler').net === -20, 'Nate: nothing back now (the unclaimed money went to Sunday\'s skins), down $20');
+ok(mv.players.reduce((a, p) => a + p.won, 0) === 320, 'the weekend still pays out all $320');
+// closing Saturday first frees Sunday, and the frozen Saturday keeps carrying the same $16
+cfg.rounds[0].payout = JSON.parse(JSON.stringify(mv.rounds[0].live));
+let mv2 = E.cupMoneyView(cfg);
+ok(mv2.rounds[0].frozen && mv2.rounds[1].needsClose === null && mv2.rounds[1].result.skins.pot === 176, 'with Saturday closed, Sunday is free to close and keeps the carried $16');
+// a closed round is frozen: later score edits do not change it
+cfg.rounds[1].payout = JSON.parse(JSON.stringify(mv2.rounds[1].live));
 cfg.scores[sun.key].s6.h[1]['Brian Hager'] = 5;
-ok(E.cupMoneyView(cfg).rounds[1].frozen === true && E.cupMoneyView(cfg).players.find(p => p.player === 'Brian Hager').won === 57, 'a closed round keeps its frozen payout');
-ok(E.cupRoundMoney(cfg, sun.key).result.skins.won.every(w => w.player !== 'Brian Hager'), 'while the live figure moves with the scores (reopening recalculates)');
+mv2 = E.cupMoneyView(cfg);
+ok(mv2.rounds[1].frozen === true && mv2.players.find(p => p.player === 'Brian Hager').won === 60, 'a closed round keeps its frozen payout');
+ok(E.cupRoundMoney(cfg, sun.key, { carryIn: 16 }).result.skins.won.every(w => w.player !== 'Brian Hager'), 'while the live figure moves with the scores (reopening recalculates)');
+// --- no Skins round later: Saturday's unclaimed CTP is given back to the players, as the engine does by default
+const solo = base(); satScores(solo); solo.rounds[0].games = { entry_per_player: 5, addons: [{ id: 'cttp', dollar_per_hole: 16 }] }; solo.ctp[sat.key] = cfg.ctp[sat.key];
+const sv = E.cupMoneyView(solo).rounds[0].result;
+ok(!sv.carried_out && sv.payouts.find(p => p.player === 'Nate Stettler').total === 1, 'with no Skins round after it, the unclaimed $16 goes back: $1 each');
+// --- the engine core: carry_in joins the Skins pot, and is reported only when used (older results keep their exact shape)
+const core = E.computeRoundPayout({ v: 1, payout: { entry_per_player: 10, carry_in: 12 }, addons: [{ id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
+  { scorecards: [{ player: 'A', holes: [3, 4] }, { player: 'B', holes: [4, 4] }] });
+ok(core.carried_in === 12 && core.skins.pot === 32 && core.skins.per_skin === 32 && core.payouts.find(p => p.player === 'A').total === 32, 'carry_in $12 + $20 pot = $32 skins pot to the one skin');
+const plain = E.computeRoundPayout({ v: 1, payout: { entry_per_player: 10 }, addons: [{ id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] }, { scorecards: [{ player: 'A', holes: [3] }, { player: 'B', holes: [4] }] });
+ok(!('carried_in' in plain) && !('carried_out' in plain), 'a round with no carry has the same result shape as before');
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
