@@ -34,6 +34,13 @@ ok(JSON.stringify(dotsOf(d, 3, 'Foursomes', 'Evan & Harry').holes) === '[12,14]'
 ok(JSON.stringify(dotsOf(d, 4, 'Foursomes', 'Adam & Lou').holes) === '[12,13,14,17]' && dotsOf(d, 4, 'Foursomes', 'Adam & Lou').tot === '4 of 8', 'Adam & Lou: 8 strokes, 4 land on the back nine');
 ok(/Fourball 80%/.test(d.querySelector('.hcpintro').textContent) && /Gold has its own hole handicaps/.test(d.querySelector('.hcpintro').textContent), 'the intro states the allowances and that Gold has its own holes');
 ok(d.querySelectorAll('.hcpmatch .nm.cred').length === 4 && d.querySelectorAll('.hcpmatch .nm.cblue').length === 4, 'Team Jake pairs red, Team Nate pairs blue');
+const d0 = d;
+// labels: Index and course handicap on every player row; foursomes show the team average, not the sum
+const subOf = (d, matchNo, segTitle, who) => { const card = d.querySelectorAll('.hcpmatch')[matchNo - 1]; const tbl = [...card.querySelectorAll('table.hcpt')].find(t => t.querySelector('th.who').textContent.indexOf(segTitle) === 0); const row = [...tbl.querySelectorAll('tbody tr')].find(r => r.querySelector('td.who b') && r.querySelector('td.who b').textContent === who); return row.querySelector('td.who .sub').textContent.replace(/\s+/g, ' ').trim(); };
+ok(subOf(d0, 3, 'Fourball', 'Harry Pry') === 'Gold · Index 18.2 → course hcp 14', 'Harry: tee, Index and course handicap are all shown (got ' + subOf(d0, 3, 'Fourball', 'Harry Pry') + ')');
+ok(subOf(d0, 3, 'Foursomes', 'Evan & Harry') === 'team hcp 12.0 (avg of 10 and 14)', 'foursomes show the team handicap as the average (got ' + subOf(d0, 3, 'Foursomes', 'Evan & Harry') + ')');
+ok(subOf(d0, 3, 'Foursomes', 'Dave & Chooch') === 'team hcp 8.5 (avg of 6 and 11)', 'a half-point average is shown (got ' + subOf(d0, 3, 'Foursomes', 'Dave & Chooch') + ')');
+ok(![...d0.querySelectorAll('.hcpt')].some(t => /combined/.test(t.textContent)), 'no "combined" sums left in the tables');
 d.getElementById('hcpPrint').click(); ok(dom.window.__printed === true, 'Print opens the print dialog');
 ok(/@media print/.test(raw), 'print styles exist');
 const doc2 = JSON.parse(JSON.stringify(DOC)); delete doc2.draft.stats['Harry Pry'];

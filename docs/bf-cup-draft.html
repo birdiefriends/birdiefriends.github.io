@@ -479,7 +479,7 @@ button:disabled{opacity:.4;cursor:default}
     var firstName = function (n) { return String(n).split(' ')[0]; };
     var own = tiers.filter(function (t) { return t.strokeIndex && si && t.strokeIndex.join() !== si.join(); }).map(function (t) { return t.label; });
     var out = '<div class="card hcpintro"><div class="hcphead"><h2>Match handicaps</h2><button class="sec no-print" id="hcpPrint">🖨 Print</button></div>'
-      + '<p class="hint">● = a stroke on that hole, take it off the gross score before comparing. Fourball ' + (by.bestball || 0) + '% off the lowest course handicap in the match, foursomes ' + (by.altshot || 0) + '% of the gap in combined handicaps, singles ' + (by.singles || 0) + '% off the low. A half stroke rounds up. '
+      + '<p class="hint">● = a stroke on that hole, take it off the gross score before comparing. Fourball ' + (by.bestball || 0) + '% off the lowest course handicap in the match, foursomes ' + (by.altshot || 0) + '% of the gap in combined handicaps, singles ' + (by.singles || 0) + '% off the low. A half stroke rounds up. Course handicap is the Index adjusted for the tee played (slope and rating), so it can sit below the Index. A foursomes team handicap is the average of the two course handicaps. '
       + (tiers.length ? 'Tees by Index: ' + tiers.map(function (t) { return esc(t.label) + (t.maxHcp != null ? ' under ' + t.maxHcp : ' above'); }).join(', ') + '. ' : '')
       + (own.length ? esc(own.join(', ')) + ' has its own hole handicaps, already used in the dots.' : '') + '</p></div>';
     var any = false;
@@ -506,14 +506,14 @@ button:disabled{opacity:.4;cursor:default}
           };
           if (sg.format === 'altshot') {
             m.sides.forEach(function (sd, i) {
-              var t = st.teams[i], sum = sd.players.reduce(function (a, n) { return a + (hc[n] || 0); }, 0);
-              rows += line(sd.players, t ? t.strokes : 0, t ? t.known : false, sd.side, sd.players.map(firstName).join(' & ')).replace('<span class="sub">', '<span class="sub">combined ' + sum + ' ');
+              var t = st.teams[i], sum = sd.players.reduce(function (a, n) { return a + (hc[n] || 0); }, 0), avg = sum / (sd.players.length || 1);
+              rows += line(sd.players, t ? t.strokes : 0, t ? t.known : false, sd.side, sd.players.map(firstName).join(' & ')).replace('<span class="sub">', '<span class="sub">team hcp ' + (Math.round(avg * 10) / 10).toFixed(1) + ' (avg of ' + sd.players.map(function (n) { return hc[n] != null ? hc[n] : '?'; }).join(' and ') + ') ');
             });
           } else {
             m.sides.forEach(function (sd) { sd.players.forEach(function (n) {
               var r = st.players.filter(function (x) { return x.names[0] === n; })[0] || { strokes: 0, known: false };
-              var tl = teeOf(n);
-              rows += line([n], r.strokes, r.known, sd.side, n).replace('<span class="sub">', '<span class="sub">' + (tl ? esc(tl) + ' · ' : '') + 'hcp ' + (hc[n] != null ? hc[n] : '?') + ' ');
+              var tl = teeOf(n), ix = E.cupIndexOf(cfg, n);
+              rows += line([n], r.strokes, r.known, sd.side, n).replace('<span class="sub">', '<span class="sub">' + (tl ? esc(tl) + ' · ' : '') + (ix !== null ? 'Index ' + ix.toFixed(1) + ' → ' : '') + 'course hcp ' + (hc[n] != null ? hc[n] : '?') + ' ');
             }); });
           }
           out += '<div class="hcpwrap"><table class="hcpt"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div>';
