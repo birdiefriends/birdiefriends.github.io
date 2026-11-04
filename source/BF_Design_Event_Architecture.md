@@ -43,3 +43,6 @@ No Cup-only payout logic; Cup-specific code is confined to the adapter and the o
 
 ## Stop conditions
 If the Cup needs the engine core to change, or the BFE-A form cannot be generated from the game schemas without Cup-only code, stop and revisit: the seam is not clean.
+
+**Deferred impact: BFE-A host UX (Brian, 2026-11-04).** BFE-A is an admin tool built for the commissioner; for hosts its UX is unusable and needs a complete redesign, not patches. First concrete symptom: the add-a-game dropdown reads as an already-added game until "+ Add game" is pressed. Design the host-facing event builder on the five layers above, with the Cup as the reference implementation.
+

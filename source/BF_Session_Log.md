@@ -5676,4 +5676,5 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 
 ### Dev-98 (2026-11-04) — CTP by $ per player
 - Engine 1.47.0: CTP `dollar_per_player` (whole-dollar split of players x $ over the CTP holes); `$ per hole` still wins when given; schema `requiredUnless` (additive). Worker schema block regenerated (no Worker deploy needed for the Cup to work; the next deploy carries it). BFE-A shows the computed $ a hole. Portal v4.52.3. Tests: test_cup_money 47, test_cup_admin_games 23. Staged on claude-staging, not merged.
+- Noted, not fixed (Brian, 2026-11-04): BFE-A's "Games and money" add-a-game dropdown looks like an added game before + Add game is pressed. Brian's larger point: BFE-A's UX is unusable for hosts and needs a complete redesign for host use. Quick fix considered ("Add a game..." placeholder, hide games already added) and deferred into that redesign.
 
