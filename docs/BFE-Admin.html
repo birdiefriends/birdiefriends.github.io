@@ -2144,7 +2144,7 @@ function cupRowToggle(tr) {
 }
 // ── Cup games and money (Dev-98, spec §13.15): a "Games and money" block on each Cup round row (section 4). The form is built from the game registry's
 // config schema, so a game added to BFEngine appears here with no new BFE-A code; the engine's own checks (pot fit, what a round can host) say what is wrong.
-const CUP_GAME_SKIP = { cttp: ['hole_mode'], skins: ['basis'], birdiepay: ['pars', 'pars_by_player'] };   // chosen for the Cup: all par 3s by default, skins gross, pars from the Cup's tee
+const CUP_GAME_SKIP = { cttp: ['hole_mode', 'dollar_per_hole'], skins: ['basis'], birdiepay: ['pars', 'pars_by_player'] };   // chosen for the Cup: all par 3s by default, skins gross, pars from the Cup's tee
 function cupGameFields(id) { const sc = BFEngine.gameSchemas()[id]; return ((sc && sc.config) || []).filter(f => !(CUP_GAME_SKIP[id] || []).includes(f.key) && ['money', 'int', 'holes', 'enum'].includes(f.type)); }
 function cupGameLabel(id) { const sc = BFEngine.gameSchemas()[id]; return sc ? sc.label : id; }
 function cupGamesRead(tr) {
@@ -2155,7 +2155,7 @@ function cupGamesRead(tr) {
 }
 function cupSetGames(tr, g) {
   tr._gamesFromCup = true;   // the form now mirrors what the Cup holds
-  tr._games = g && typeof g === 'object' ? { entry_per_player: g.entry_per_player == null ? '' : g.entry_per_player, addons: (g.addons || []).map(a => Object.assign({}, a)) } : { entry_per_player: '', addons: [] };
+  tr._games = g && typeof g === 'object' ? { entry_per_player: g.entry_per_player == null ? '' : g.entry_per_player, addons: (g.addons || []).map(a => { const o = Object.assign({}, a); if (o.id === 'cttp') delete o.dollar_per_hole; return o; }) } : { entry_per_player: '', addons: [] };
   cupGamesRender(tr);
 }
 // What the engine says about this round's games, with the field the round will really have (the drawn players, or the roster before the draw).
@@ -2166,7 +2166,7 @@ function cupGamesCheck(tr) {
   const drawn = (cupState.rounds.find(r => r.rid === tr.dataset.roundId) || {}).matches || [];
   const matches = drawn.length ? drawn : [{ key: 'x', sides: [{ side: 'A', players: names.slice(0, half) }, { side: 'B', players: names.slice(half) }] }];
   const tmp = { handicap: cupState.handicap || {}, rounds: [{ key: 'x', segments: cupRowSegs(tr), games, matches }] };
-  return { problems: BFEngine.cupGamesProblems(tmp, 'x'), games, n: BFEngine.cupRoundPlayers(tmp.rounds[0]).length, cfg: tmp };
+  return { problems: BFEngine.cupGamesProblems(tmp, 'x').map(m => /^CTP: \$ per hole is required/.test(m) ? 'CTP: enter $ per player (what each player puts in for closest to the pin).' : m), games, n: BFEngine.cupRoundPlayers(tmp.rounds[0]).length, cfg: tmp };
 }
 function cupGamesRender(tr) {
   const box = tr._detail.querySelector('.r-games'); if (!box) return;
@@ -2199,8 +2199,10 @@ function cupGamesLine(tr) {
     const cfgs = {}; chk.games.addons.forEach(a => { cfgs[a.id] = a.id === 'cttp' && !Array.isArray(a.holes) ? Object.assign({}, a, { holes: BFEngine.cupParThrees(chk.cfg) }) : a; });
     const pf = BFEngine.potFit(cfgs, chk.games.entry_per_player, chk.n);
     const ct = chk.games.addons.find(x => x.id === 'cttp');
-    if (ct && !(Number(ct.dollar_per_hole) > 0) && Number(ct.dollar_per_player) > 0) { const nh = (Array.isArray(ct.holes) ? ct.holes : BFEngine.cupParThrees(chk.cfg)).length; if (nh) h += '<span class="subtle">CTP: $' + ct.dollar_per_player + ' a player over ' + nh + ' hole' + (nh > 1 ? 's' : '') + ' = $' + Math.floor(ct.dollar_per_player * chk.n / nh) + ' a hole.</span> '; }
-    h += '<span class="subtle">This round: pot $' + pf.pot + ' (' + chk.n + ' players)' + (pf.fixedCost ? ', set aside $' + pf.fixedCost : '') + (chk.games.addons.some(a => a.id === 'skins') ? ', skins gets $' + Math.max(0, pf.pot - pf.fixedCost) + ' plus any unclaimed CTP' : (pf.pot - pf.fixedCost > 0 ? ', $' + (pf.pot - pf.fixedCost) + ' goes back to the players' : '')) + '.</span> ';
+    const hasSk = chk.games.addons.some(a => a.id === 'skins');
+    let ctpCost = 0;
+    if (ct && Number(ct.dollar_per_player) > 0) { const nh = (Array.isArray(ct.holes) ? ct.holes : BFEngine.cupParThrees(chk.cfg)).length; if (nh) { const ph = Math.floor(ct.dollar_per_player * chk.n / nh); ctpCost = ph * nh; h += '<span class="subtle"><b>Each CTP is worth $' + ph + '</b> ($' + ct.dollar_per_player + ' a player × ' + chk.n + ' players ÷ ' + nh + ' hole' + (nh > 1 ? 's' : '') + ').</span> '; } }
+    h += '<span class="subtle">Round pot $' + pf.pot + ' (' + chk.n + ' players)' + (hasSk ? '; Skins gets the other $' + Math.max(0, pf.pot - ctpCost) + ' plus any unclaimed CTP' : (pf.pot - ctpCost > 0 ? '; the other $' + (pf.pot - ctpCost) + ' goes back to the players' : '')) + '.</span> ';
     if (!chk.games.addons.some(a => a.id === 'skins') && chk.games.addons.some(a => a.id === 'cttp') && [...roundsBody.querySelectorAll('tr.roundRow')].some(r => r !== tr && r._games && cupGamesRead(r) && cupGamesRead(r).addons.some(a => a.id === 'skins'))) h += '<span class="subtle">Unclaimed CTP here goes into the Skins pot of the round that has Skins.</span> ';
   }
   if (chk.problems.length) h += '<span style="color:#b71c1c">' + chk.problems.map(cupEsc).join(' ') + '</span>';
