@@ -96,4 +96,10 @@ ok(posts.length === before + 1 && stored.rounds[0].games && stored.rounds[0].gam
 for (const tr of [sat]) { tr._gamesDirty = true; w.cupSetGames(tr, null); tr._gamesDirty = true; }
 w.cupSyncRounds(); d.getElementById('cupSaveBtn').click(); await wait(100);
 ok(!stored.rounds[0].games && stored.rounds[1].games, 'clearing a round\'s games on purpose removes them (only that round)');
+// --- a stale copy of the page must not undo the host's Substitute swap (the Cup page owns the draft, teams, pairs and matches)
+w.eval("cupState.sides[0].players = ['Jeff Rapp', 'Old Mate']; cupState.draft = { subs: ['Rich Penberg'], picks: ['Jeff Rapp'] }; cupState.rounds[0].matches = [{ key: 'm1', sides: [{ side: 'A', players: ['Jeff Rapp', 'Old Mate'] }, { side: 'B', players: ['P', 'Q'] }] }];");
+stored.sides[0].players = ['Rich Penberg', 'Old Mate']; stored.draft = { subs: ['Jeff Rapp'], picks: ['Rich Penberg'] };
+stored.rounds[0].matches = [{ key: 'm1', sides: [{ side: 'A', players: ['Rich Penberg', 'Old Mate'] }, { side: 'B', players: ['P', 'Q'] }] }];
+d.getElementById('cupSaveBtn').click(); await wait(100);
+ok(stored.sides[0].players.includes('Rich Penberg') && !stored.sides[0].players.includes('Jeff Rapp') && stored.draft.subs[0] === 'Jeff Rapp' && JSON.stringify(stored.rounds[0].matches).includes('Rich Penberg') && !JSON.stringify(stored.rounds[0].matches).includes('Jeff Rapp'), 'a save from an older copy of this page keeps the swap: Rich stays in, Jeff stays out (team, draft, match)');
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

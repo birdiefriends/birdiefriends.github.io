@@ -6572,9 +6572,11 @@ async function cupSave() {
     const cur = await fetch(cupBase() + '/bfe/cup?event=' + encodeURIComponent(ev));
     if (cur.ok) {
       const old = (await cur.json()).config || {};
-      if (!cupState.draft && old.draft) cupState.draft = old.draft;
-      cupState.sides.forEach((s, i) => { const o = (old.sides || [])[i]; if (o && (!s.players || !s.players.length) && o.players) s.players = o.players; });
-      cupState.rounds.forEach(r => { const o = (old.rounds || []).find(x => x.key === r.key); if (o && (!r.matches || !r.matches.length) && o.matches) r.matches = o.matches; });
+      // The draft, the teams, the pairs and the matches belong to the Cup page (the captains' tool and the host's Substitute swap). This page can be open
+      // on an older copy, so what the Cup holds NOW always wins; a save here only changes names, points, rounds, tees, games and money.
+      if (old.draft) cupState.draft = old.draft;
+      cupState.sides.forEach((s, i) => { const o = (old.sides || [])[i]; if (o && Array.isArray(o.players) && o.players.length) { s.players = o.players.slice(); if (s.captain && !s.players.includes(s.captain)) s.players.unshift(s.captain); } });
+      cupState.rounds.forEach(r => { const o = (old.rounds || []).find(x => x.key === r.key); if (o && Array.isArray(o.matches) && o.matches.length) r.matches = o.matches; });
       // games the Cup already holds survive a save from a page that never opened that round's games form
       cupState.rounds.forEach(r => { const o = (old.rounds || []).find(x => x.key === r.key); const tr = [...roundsBody.querySelectorAll('tr.roundRow')].find(t => t.dataset.roundId === r.rid); if (o && o.games && !r.games && !(tr && (tr._gamesDirty || tr._gamesFromCup))) r.games = o.games; });
     }
