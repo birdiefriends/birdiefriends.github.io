@@ -5673,3 +5673,7 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Rule: unclaimed CTP joins the Skins pot. Same round when it has Skins (the engine's existing residual rule: the +Games engine never asked, it always rolled unclaimed CTP into Skins, or gave it back when the round had no Skins); Saturday has no Skins, so it is carried into Sunday's.
 - Engine **1.46.0** (core, additive): `payout.carry_unclaimed` (a round hands its unclaimed CTP on instead of giving it back) and `payout.carry_in` (joins the residual game); result gains `carried_in` / `carried_out` only when used. `cupMoneyView` orders the rounds and carries; Close is refused until the earlier round is closed, and Reopen until the later one is reopened. Portal v4.52.2 (`?v=` only).
 - Tests: `test_cup_money` (39), `test_cup_money_page` (29). No Worker change.
+
+### Dev-98 (2026-11-04) — CTP by $ per player
+- Engine 1.47.0: CTP `dollar_per_player` (whole-dollar split of players x $ over the CTP holes); `$ per hole` still wins when given; schema `requiredUnless` (additive). Worker schema block regenerated (no Worker deploy needed for the Cup to work; the next deploy carries it). BFE-A shows the computed $ a hole. Portal v4.52.3. Tests: test_cup_money 47, test_cup_admin_games 23. Staged on claude-staging, not merged.
+

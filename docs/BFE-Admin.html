@@ -559,7 +559,7 @@
     <pre id="rawConfig" style="margin-top:16px"></pre>
   </section>
 </main>
-<script src="bf_engine.js?v=1.46.0"></script>
+<script src="bf_engine.js?v=1.47.0"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════════
 // Connection defaults — flat hardcoded constants, not derived from where
@@ -2198,6 +2198,8 @@ function cupGamesLine(tr) {
   if (chk.games && chk.n) {
     const cfgs = {}; chk.games.addons.forEach(a => { cfgs[a.id] = a.id === 'cttp' && !Array.isArray(a.holes) ? Object.assign({}, a, { holes: BFEngine.cupParThrees(chk.cfg) }) : a; });
     const pf = BFEngine.potFit(cfgs, chk.games.entry_per_player, chk.n);
+    const ct = chk.games.addons.find(x => x.id === 'cttp');
+    if (ct && !(Number(ct.dollar_per_hole) > 0) && Number(ct.dollar_per_player) > 0) { const nh = (Array.isArray(ct.holes) ? ct.holes : BFEngine.cupParThrees(chk.cfg)).length; if (nh) h += '<span class="subtle">CTP: $' + ct.dollar_per_player + ' a player over ' + nh + ' hole' + (nh > 1 ? 's' : '') + ' = $' + Math.floor(ct.dollar_per_player * chk.n / nh) + ' a hole.</span> '; }
     h += '<span class="subtle">This round: pot $' + pf.pot + ' (' + chk.n + ' players)' + (pf.fixedCost ? ', set aside $' + pf.fixedCost : '') + (chk.games.addons.some(a => a.id === 'skins') ? ', skins gets $' + Math.max(0, pf.pot - pf.fixedCost) + ' plus any unclaimed CTP' : (pf.pot - pf.fixedCost > 0 ? ', $' + (pf.pot - pf.fixedCost) + ' goes back to the players' : '')) + '.</span> ';
     if (!chk.games.addons.some(a => a.id === 'skins') && chk.games.addons.some(a => a.id === 'cttp') && [...roundsBody.querySelectorAll('tr.roundRow')].some(r => r !== tr && r._games && cupGamesRead(r) && cupGamesRead(r).addons.some(a => a.id === 'skins'))) h += '<span class="subtle">Unclaimed CTP here goes into the Skins pot of the round that has Skins.</span> ';
   }

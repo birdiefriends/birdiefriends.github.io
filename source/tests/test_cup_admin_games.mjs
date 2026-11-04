@@ -45,10 +45,13 @@ ok([...box(sat).querySelectorAll('.g-add option')].map(o => o.value).join() === 
 ok(w.eval('cupState.rounds.every(r => !r.games)'), 'nothing configured = no games in the Cup');
 // --- Saturday: $5 entry, CTP at $8 a hole on the default par 3s
 entry(sat, 5); addGame(sat, 'cttp');
-ok(box(sat).querySelectorAll('[data-gi="0"]').length === 2 && /\$ per hole/.test(box(sat).textContent) && !/Hole mode/.test(box(sat).textContent), 'the CTP form is generated from the schema ($ per hole, holes) and hides what the Cup fixes');
+ok(box(sat).querySelectorAll('[data-gi="0"]').length === 3 && /\$ per hole/.test(box(sat).textContent) && /\$ per player/.test(box(sat).textContent) && !/Hole mode/.test(box(sat).textContent), 'the CTP form is generated from the schema ($ per hole, $ per player, holes) and hides what the Cup fixes');
 field(sat, 0, 'dollar_per_hole', 8); await wait(30);
 ok(/pot \$80 \(16 players\)/.test(line(sat)) && /set aside \$40/.test(line(sat)) && /\$40 goes back to the players/.test(line(sat)), 'the line shows the pot, the CTP set-aside (5 par 3s x $8) and what goes back: ' + line(sat));
 ok(box(sat).querySelector('[data-gf="holes"]').placeholder === 'blank = every par 3', 'blank CTP holes mean the par 3s');
+field(sat, 0, 'dollar_per_hole', ''); field(sat, 0, 'dollar_per_player', 5); await wait(30);
+ok(/\$5 a player over 5 holes = \$16 a hole/.test(line(sat)) && /set aside \$80/.test(line(sat)) && !/goes back/.test(line(sat)) && !/required/.test(line(sat)), 'CTP at $5 a player works out to $16 a hole and uses the whole $80 pot: ' + line(sat));
+field(sat, 0, 'dollar_per_player', ''); field(sat, 0, 'dollar_per_hole', 8); await wait(30);
 // --- Skins on Saturday is refused with the reason (Foursomes holes have one score per pair)
 addGame(sat, 'skins'); await wait(30);
 ok(/Foursomes records one score per pair/.test(line(sat)), 'Skins on a round with Foursomes is flagged by the engine\'s own check: ' + line(sat));

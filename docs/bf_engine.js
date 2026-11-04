@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.46.0';
+  const ENGINE_VERSION = '1.47.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -186,8 +186,12 @@
       id: 'cttp', order: 10, entity: 'individual',
       carve(state, addon, inputs) {
         const L = state.ledger;
-        const configuredPerHole = Number(addon.dollar_per_hole) || 0;
         const holes = (addon.holes || []).slice().sort((a, b) => a - b);
+        // $ per player (Dev-98): the CTP purse is that much from every player in the pot, split evenly over the CTP holes, whole dollars
+        // (the odd dollars stay in the pot for the residual game). A fixed $ per hole, when given, wins, so every existing config pays as before.
+        const perPlayer = Number(addon.dollar_per_player) || 0;
+        const configuredPerHole = Number(addon.dollar_per_hole) > 0 ? Number(addon.dollar_per_hole)
+          : (perPlayer > 0 && holes.length ? Math.floor(perPlayer * L.n / holes.length) : 0);
         const avail = Math.max(0, state.remaining);
         const capped = holes.length > 0 && configuredPerHole * holes.length > avail;
         const perHole = capped ? Math.floor(avail / holes.length) : configuredPerHole;
@@ -965,13 +969,14 @@
   defineGame('cttp', {
     kind: 'addon', input: 'none', net: false,
     meta: { traits: { unit: 'player', allowance: 'none', individualScores: true }, label: 'CTP', uiOrder: 2, icon: '🎯', seal: 'CTP',
-      info: 'Closest to the Pin on the chosen holes (usually the par 3s). Whoever is closest on a hole wins that hole\'s fixed $ prize, taken from the pot. Claim it in the Live Panel; the newest claim leads. An unclaimed hole\'s money rolls into Skins.' },
+      info: 'Closest to the Pin on the chosen holes (usually the par 3s). Whoever is closest on a hole wins that hole\'s $ prize, taken from the pot: a fixed $ per hole, or a $ per player that is split over the holes. Claim it in the Live Panel; the newest claim leads. An unclaimed hole\'s money rolls into Skins.' },
     config: [
-      { key: 'dollar_per_hole', type: 'money', label: '$ per hole', default: 0, positive: true, required: true },
+      { key: 'dollar_per_hole', type: 'money', label: '$ per hole', default: 0, positive: true, required: true, requiredUnless: 'dollar_per_player' },
+      { key: 'dollar_per_player', type: 'money', label: '$ per player (split over the holes)', default: 0, positive: true },
       { key: 'hole_mode', type: 'enum', label: 'Hole mode', values: ['all_par3', 'custom'], default: 'all_par3', lenient: true },  // lenient = an unknown value is cleaned to the default, not rejected (the Worker always did this)
       { key: 'holes', type: 'holes', label: 'Holes', default: [], required: true }
     ],
-    fixedCost: cfg => (Number(cfg.dollar_per_hole) || 0) * ((cfg.holes || []).length),
+    fixedCost: (cfg, ctx) => { const h = (cfg.holes || []).length; return Number(cfg.dollar_per_hole) > 0 || !(Number(cfg.dollar_per_player) > 0) ? (Number(cfg.dollar_per_hole) || 0) * h : (h ? Math.floor(Number(cfg.dollar_per_player) * ((ctx && ctx.players) || 0) / h) * h : 0); },
     fixtures: [{
       name: 'two holes, one claimed, one unclaimed rolls to skins',
       round: { dollar_per_player: 10, addons: [
@@ -1444,7 +1449,7 @@
     cfg = cfg || {};
     (fields || []).forEach(f => {
       const v = cfg[f.key];
-      if (v === undefined || v === null) { if (f.required) errors.push(f.label + ' is required'); return; }
+      if (v === undefined || v === null) { if (f.required && !(f.requiredUnless && Number(cfg[f.requiredUnless]) > 0)) errors.push(f.label + ' is required'); return; }
       if (f.type === 'money' || f.type === 'int') {
         const n = Number(v);
         if (!Number.isFinite(n)) errors.push(f.label + ' must be a number');

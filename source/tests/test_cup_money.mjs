@@ -106,4 +106,23 @@ const core = E.computeRoundPayout({ v: 1, payout: { entry_per_player: 10, carry_
 ok(core.carried_in === 12 && core.skins.pot === 32 && core.skins.per_skin === 32 && core.payouts.find(p => p.player === 'A').total === 32, 'carry_in $12 + $20 pot = $32 skins pot to the one skin');
 const plain = E.computeRoundPayout({ v: 1, payout: { entry_per_player: 10 }, addons: [{ id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] }, { scorecards: [{ player: 'A', holes: [3] }, { player: 'B', holes: [4] }] });
 ok(!('carried_in' in plain) && !('carried_out' in plain), 'a round with no carry has the same result shape as before');
+// --- CTP by $ per player: the engine works out each hole's prize from the pot (Dev-98)
+const pp = base(); satScores(pp); pp.rounds[0].games = { entry_per_player: 5, addons: [{ id: 'cttp', dollar_per_player: 5 }] }; pp.ctp[sat.key] = cfg.ctp[sat.key];
+const ppr = E.cupRoundMoney(pp, sat.key);
+ok(ppr.problems.length === 0 && ppr.result.cttp.per_hole === 16 && ppr.result.cttp.holes.length === 5, '$5 a player over 5 par 3s = $16 a hole, no problems: ' + JSON.stringify(ppr.problems));
+ok(ppr.result.payouts.reduce((a, p) => a + p.total, 0) + ppr.result.unallocated === 80, 'every dollar of the pot is accounted for');
+const few = E.computeRoundPayout({ v: 1, payout: { entry_per_player: 5 }, addons: [{ id: 'cttp', entity: 'individual', dollar_per_player: 5, holes: [3, 8, 10, 15, 18] }] },
+  { scorecards: Array.from({ length: 14 }, (_, i) => ({ player: 'P' + i, holes: [4] })), ctpLeaders: {} });
+ok(few.cttp.per_hole === 14 && few.total_pot === 70, 'with 14 players the same setting pays $14 a hole: the engine follows the actual pot');
+const odd = E.computeRoundPayout({ v: 1, payout: { entry_per_player: 5 }, addons: [{ id: 'cttp', entity: 'individual', dollar_per_player: 5, holes: [3, 8, 10, 15, 18] }] },
+  { scorecards: Array.from({ length: 13 }, (_, i) => ({ player: 'P' + i, holes: [4] })), ctpLeaders: {} });
+ok(odd.cttp.per_hole === 13, '13 players: $65 over 5 holes = $13 a hole');
+const odd2 = E.computeRoundPayout({ v: 1, payout: { entry_per_player: 5 }, addons: [{ id: 'cttp', entity: 'individual', dollar_per_player: 5, holes: [3, 8, 10] }] },
+  { scorecards: Array.from({ length: 16 }, (_, i) => ({ player: 'P' + i, holes: [4] })), ctpLeaders: {} });
+ok(odd2.cttp.per_hole === 26, '$80 over 3 holes pays whole dollars: $26 a hole, the odd $2 is not lost: ' + (odd2.unallocated + odd2.payouts.reduce((a, p) => a + p.total, 0)));
+const both = E.computeRoundPayout({ v: 1, payout: { entry_per_player: 5 }, addons: [{ id: 'cttp', entity: 'individual', dollar_per_hole: 4, dollar_per_player: 5, holes: [3, 8] }] },
+  { scorecards: Array.from({ length: 16 }, (_, i) => ({ player: 'P' + i, holes: [4] })), ctpLeaders: {} });
+ok(both.cttp.per_hole === 4, 'a fixed $ per hole, when given, wins (existing configs pay exactly as before)');
+ok(E.validateGameConfig('cttp', { holes: [3] }).ok === false && E.validateGameConfig('cttp', { dollar_per_player: 5, holes: [3] }).ok === true, 'CTP needs a $ per hole or a $ per player');
+ok(E.potFit({ cttp: { dollar_per_player: 5, holes: [3, 8, 10, 15, 18] } }, 5, 16).fixedCost === 80, 'the pot-fit check sets aside $80 for a $5-a-player CTP');
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
