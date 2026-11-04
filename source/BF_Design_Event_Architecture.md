@@ -46,3 +46,5 @@ If the Cup needs the engine core to change, or the BFE-A form cannot be generate
 
 **Deferred impact: BFE-A host UX (Brian, 2026-11-04).** BFE-A is an admin tool built for the commissioner; for hosts its UX is unusable and needs a complete redesign, not patches. First concrete symptom: the add-a-game dropdown reads as an already-added game until "+ Add game" is pressed. Design the host-facing event builder on the five layers above, with the Cup as the reference implementation.
 
+**UX principle (Brian, 2026-11-04): capture appears where the event happens.** The Cup's CTP entry shows only on a CTP hole, inside the live scoring flow, and not as a dedicated always-there section of the panel. Brian prefers this: dynamic and contextual is cleaner than a standing section. It only works for live scoring (a round entered after the fact has no "current hole"), which he accepts. Apply the same rule to other capture adapters (e.g. a birdie or MiserBall prompt appearing on the hole it applies to) and design after-the-fact entry as a separate, deliberate path.
+
