@@ -5089,6 +5089,7 @@ function parseDateFromJF(str) {
 // breaks outright for a post-round stop that isn't on the venue's property
 // (Brian: "sometimes the pub isn't on property").
 const AT_COURSE_RADIUS_M = 1000;      // proximity trigger radius (layer 1)
+const AT_COURSE_GPS = false;           // Brian 2026-11-04: GPS proximity (layer 1) is OFF: it made every phone ask for location. Tee-time window and the manual toggle still work.
 const AT_COURSE_TEE_WINDOW_MIN = 15;  // tee-time trigger window, minutes before tee time (layer 2)
 let _atCourse = null;              // { evt, venue, distM, reason } — the ON state (reason: 'proximity'|'tee_window'|'latched')
 let _atCoursePick = null;          // today's Yes/Sub round, if any — set even while OFF, since the manual toggle needs it
@@ -5172,7 +5173,7 @@ async function refreshAtCourse() {
   }
   // Layer 1 — proximity, only possible when the venue resolved with coordinates.
   const v = pick.venue;
-  if (v && v.lat != null && v.lng != null && navigator.geolocation) {
+  if (AT_COURSE_GPS && v && v.lat != null && v.lng != null && navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(pos => {
       const { latitude, longitude } = pos.coords;
       const d = haversineM(latitude, longitude, Number(v.lat), Number(v.lng));
