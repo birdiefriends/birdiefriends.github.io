@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.47.0';
+  const ENGINE_VERSION = '1.47.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2886,8 +2886,15 @@
   function cupRoundMoney(cfg, roundKey, opts) {
     const config = cupRoundConfig(cfg, roundKey, opts); if (!config) return null;
     const problems = cupGamesProblems(cfg, roundKey);
-    const result = computeRoundPayout(config, { scorecards: cupScorecards(cfg, roundKey), ctpLeaders: cupCtpLeaders(cfg, roundKey) });
-    return { round: roundKey, problems, config, result };
+    // Before a round is drawn (Sunday's singles) it has no cards, so its pot would read $0. Until it has some, expect the whole Cup field to play it.
+    let cards = cupScorecards(cfg, roundKey), expected = false;
+    if (!cards.length) {
+      const seen = new Set();
+      ((cfg && cfg.sides) || []).forEach(sd => (sd.players || []).forEach(n => { if (!seen.has(norm(n))) { seen.add(norm(n)); cards.push({ player: n, holes: new Array(18).fill(null) }); } }));
+      expected = cards.length > 0;
+    }
+    const result = computeRoundPayout(config, { scorecards: cards, ctpLeaders: cupCtpLeaders(cfg, roundKey) });
+    return { round: roundKey, problems, config, result, expected };
   }
   // The whole event: per round the live result (or the frozen one the host closed) and each player's weekend total.
   // Unclaimed CTP rule (Brian, 2026-11-03): it goes into the Skins pot. In a round with Skins that is the same round (the engine's residual game);
@@ -2906,7 +2913,7 @@
       const out = Number(result.carried_out) || 0;
       if (hasSkins(rd)) { carry = 0; carryOpen = false; carrySource = null; }
       else { carry = out > 0 ? out : 0; if (!frozen && out > 0) { carryOpen = true; carrySource = rd.name || rd.key; } if (carry === 0) { carryOpen = false; carrySource = null; } }
-      rounds.push({ key: rd.key, name: rd.name || rd.key, frozen: !!frozen, problems: live ? live.problems : [], entry: Number(rd.games.entry_per_player) || 0, result, live: live ? live.result : null, needsClose });
+      rounds.push({ key: rd.key, name: rd.name || rd.key, frozen: !!frozen, expected: !!(live && live.expected), problems: live ? live.problems : [], entry: Number(rd.games.entry_per_player) || 0, result, live: live ? live.result : null, needsClose });
       (result.payouts || []).forEach(r => { const k = norm(r.player); const t = totals.get(k) || { player: r.player, won: 0, paid: 0 }; t.won += Number(r.total) || 0; t.paid += result.dollar_per_player || 0; totals.set(k, t); });
     });
     const players = [...totals.values()].map(t => Object.assign({}, t, { net: Math.round((t.won - t.paid) * 100) / 100 })).sort((a, b) => b.won - a.won || a.player.localeCompare(b.player));

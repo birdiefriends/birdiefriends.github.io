@@ -125,4 +125,11 @@ const both = E.computeRoundPayout({ v: 1, payout: { entry_per_player: 5 }, addon
 ok(both.cttp.per_hole === 4, 'a fixed $ per hole, when given, wins (existing configs pay exactly as before)');
 ok(E.validateGameConfig('cttp', { holes: [3] }).ok === false && E.validateGameConfig('cttp', { dollar_per_player: 5, holes: [3] }).ok === true, 'CTP needs a $ per hole or a $ per player');
 ok(E.potFit({ cttp: { dollar_per_player: 5, holes: [3, 8, 10, 15, 18] } }, 5, 16).fixedCost === 80, 'the pot-fit check sets aside $80 for a $5-a-player CTP');
+// --- before a round is drawn it has no cards: expect the whole Cup field instead of a $0 pot (Dev-98)
+const pre = base(); pre.rounds[0].games = { entry_per_player: 5, addons: [{ id: 'cttp', dollar_per_player: 5 }] }; pre.rounds[1].games = { entry_per_player: 15, addons: [{ id: 'cttp', dollar_per_player: 5 }, { id: 'skins' }] };
+pre.rounds[1].matches = [];
+const pv = E.cupMoneyView(pre);
+ok(pv.rounds[1].expected === true && pv.rounds[1].result.players_count === 16 && pv.rounds[1].result.total_pot === 240, 'an undrawn round expects all 16 players: pot $240: ' + pv.rounds[1].result.players_count + ' / ' + pv.rounds[1].result.total_pot);
+ok(pv.rounds[1].result.cttp.per_hole === 16, 'and each CTP is worth $16');
+ok(pv.rounds[0].expected === false, 'a round with matches uses its real cards, not the expectation');
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

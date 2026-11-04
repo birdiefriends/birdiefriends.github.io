@@ -109,7 +109,7 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BirdieFriends Cup</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.47.0"></script>
+<script src="bf_engine.js?v=1.47.1"></script>
 <script src="bf_live_match.js?v=16"></script>
 <script>
 (function () {
@@ -483,6 +483,7 @@ button:disabled{opacity:.4;cursor:default}
       }
       var vr = action === 'money_close' ? E.cupMoneyView(cfg).rounds.filter(function (x) { return x.key === roundKey; })[0] : null;   // the view includes money carried in from an earlier round
       if (action === 'money_close' && vr && vr.needsClose) { error = 'Close ' + vr.needsClose + ' first: this round\'s skins pot includes its unclaimed closest-to-the-pin money.'; busy = false; render(); return; }
+      if (action === 'money_close' && vr && vr.expected) { error = 'Nobody has a card in this round yet, so there is nothing to close.'; busy = false; render(); return; }
       if (action === 'money_close' && vr && vr.problems.length) { error = 'Fix the games first: ' + vr.problems.join('; '); busy = false; render(); return; }
       var body = { event_name: EVENT, action: action, round: roundKey, pin: pin }; if (vr && vr.live) body.payout = vr.live;
       return fetch(WORKER + '/bfe/cup/act', { method: 'POST', body: JSON.stringify(body) }).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); })
@@ -496,7 +497,7 @@ button:disabled{opacity:.4;cursor:default}
     if (error) out += '<p class="err">' + esc(error) + '</p>';
     mv.rounds.forEach(function (r) {
       var res = r.result, rows = res.payouts || [], cols = [['cttp', 'CTP'], ['skins', 'Skins'], ['birdiepay', 'Birdies'], ['given_back', 'Back']].filter(function (c) { return rows.some(function (p) { return Number(p[c[0]]) > 0; }); });
-      out += '<div class="card hcpmatch"><div class="hcptitle"><span class="n">' + (r.frozen ? 'Final · closed by the host' : 'Live · not closed') + '</span><span class="nm">' + esc(r.name) + '</span><span class="vsx">' + usd(r.entry) + ' each · pot ' + usd(res.total_pot) + ' · ' + res.players_count + ' players</span></div>';
+      out += '<div class="card hcpmatch"><div class="hcptitle"><span class="n">' + (r.frozen ? 'Final · closed by the host' : 'Live · not closed') + '</span><span class="nm">' + esc(r.name) + '</span><span class="vsx">' + usd(r.entry) + ' each · pot ' + usd(res.total_pot) + ' · ' + res.players_count + ' players' + (r.expected ? ' (expected: nobody has a card yet)' : '') + '</span></div>';
       if (HOST && pin && r.problems.length) out += '<p class="err">' + r.problems.map(esc).join('<br>') + '</p>';
       if (res.cttp && res.cttp.holes && res.cttp.holes.length) {
         out += '<div class="hcpwrap"><table class="hcpt mny"><thead><tr><th class="who">Closest to the pin</th><th>Hole</th><th>Distance</th><th class="tot">Paid</th></tr></thead><tbody>'
@@ -511,7 +512,7 @@ button:disabled{opacity:.4;cursor:default}
       }
       out += '<div class="hcpwrap"><table class="hcpt mny"><thead><tr><th class="who">Player</th>' + cols.map(function (c) { return '<th>' + c[1] + '</th>'; }).join('') + '<th class="tot">Total</th></tr></thead><tbody>'
         + rows.map(function (p) { return '<tr><td class="who"><b>' + esc(p.player) + '</b></td>' + cols.map(function (c) { return '<td>' + (Number(p[c[0]]) ? usd(p[c[0]]) : '·') + '</td>'; }).join('') + '<td class="tot">' + usd(p.total) + '</td></tr>'; }).join('') + '</tbody></table></div>';
-      if (HOST && pin) out += '<div class="toolbar no-print">' + (r.frozen ? '<button class="sec" data-money-reopen="' + esc(r.key) + '">Reopen the money</button>' : '<button data-money-close="' + esc(r.key) + '"' + (r.problems.length || r.needsClose ? ' disabled' : '') + '>Close the money for ' + esc(r.name) + '</button>') + '</div>' + (!r.frozen && r.needsClose ? '<p class="hint no-print">Close ' + esc(r.needsClose) + ' first: this round\'s skins pot includes its unclaimed closest-to-the-pin money.</p>' : '');
+      if (HOST && pin) out += '<div class="toolbar no-print">' + (r.frozen ? '<button class="sec" data-money-reopen="' + esc(r.key) + '">Reopen the money</button>' : '<button data-money-close="' + esc(r.key) + '"' + (r.problems.length || r.needsClose || r.expected ? ' disabled' : '') + '>Close the money for ' + esc(r.name) + '</button>') + '</div>' + (!r.frozen && r.needsClose ? '<p class="hint no-print">Close ' + esc(r.needsClose) + ' first: this round\'s skins pot includes its unclaimed closest-to-the-pin money.</p>' : '');
       out += '</div>';
     });
     out += '<div class="card hcpmatch"><div class="hcptitle"><span class="n">Weekend</span><span class="nm">Each player\'s total</span></div><div class="hcpwrap"><table class="hcpt mny"><thead><tr><th class="who">Player</th><th>Won</th><th>Paid in</th><th class="tot">Net</th></tr></thead><tbody>'
