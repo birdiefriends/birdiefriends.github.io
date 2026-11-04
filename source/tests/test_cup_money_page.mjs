@@ -94,5 +94,10 @@ d.querySelector('[data-money-reopen="sun"]').click(); await tick(400); d = dom.w
 d.querySelector('[data-money-reopen="sat"]').click(); await tick(400); c = await dbCfg();
 ok(!c.rounds[0].payout && /Live · not closed/.test(dom.window.document.getElementById('app').textContent), 'Reopen clears the frozen payout');
 // the weekend table adds the two days
-ok(/Each player's total/.test(d.getElementById('app').textContent) && /Paid in/.test(d.getElementById('app').textContent), 'the weekend table is there');
+ok(/Who has won money/.test(d.getElementById('app').textContent) && /Paid in/.test(d.getElementById('app').textContent), 'the weekend table is there');
+{ const rowsOf = t => [...t.querySelectorAll('tbody tr')].map(r => r.textContent);
+  const wk = [...d.querySelectorAll('.hcpmatch')].filter(x => /Who has won money/.test(x.textContent))[0];
+  ok(wk && rowsOf(wk).every(t => /\$[1-9]/.test(t) || /Nobody has won money yet/.test(t)), 'the weekend table lists only players who won money');
+  const pr = [...d.querySelectorAll('.hcpmatch')].filter(x => /Closest to the pin|Skins/.test(x.textContent) || /pot/.test(x.textContent));
+  ok(pr.length && pr.every(x => ![...x.querySelectorAll('table.mny')].pop() || [...[...x.querySelectorAll('table.mny')].pop().querySelectorAll('tbody tr')].every(r => /\$[1-9]/.test(r.textContent) || /Nobody has won/.test(r.textContent))), 'each round table lists only winners'); }
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
