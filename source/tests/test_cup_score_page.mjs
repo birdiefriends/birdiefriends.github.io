@@ -35,11 +35,14 @@ const click = async (dom, sel, n = 0) => { const el = dom.window.document.queryS
 let dom = await open('?player=Amy'); let d = dom.window.document;
 ok(d.getElementById('lmMount') && /Hole 1/.test(d.body.textContent), 'locked teams with matches open on the Score tab');
 ok(/Fourball/.test(d.body.textContent) && /stroke index 1/.test(d.body.textContent), 'segment and stroke index shown');
-ok(!/★/.test(d.querySelector('#lmMatchSel').textContent) && d.querySelector('#lmMeSel').value === 'Amy' && d.querySelectorAll('#lmMeSel option').length === 5 && !d.querySelector('.lmtab'), 'a match dropdown (no star) and an I-am list narrowed to the four in the match');
-ok(d.querySelectorAll('.lmchip').length === 4 && d.querySelectorAll('.lmt').length === 9, 'fourball: four player chips, ONE set of number tiles (for the player picked)');
+ok(!/★/.test(d.querySelector('#lmMatchSel').textContent) && !d.querySelector('#lmMeSel') && !d.querySelector('.lmtab'), 'a match dropdown (no star); no I-am box when the name is already known (Amy is in this match)');
+ok(d.querySelectorAll('.lmchip').length === 4 && d.querySelectorAll('.lmt').length === 10, 'fourball: four player chips, ONE set of number tiles (1-8, P and a clear tile) for the player picked');
 ok(d.querySelectorAll('.lmdots').length >= 3 && !d.querySelector('.lmholes'), 'handicap strokes shown as dots on hole 1 (SI 1)');
 // Jake birdie (3), others par: tap − on Jake
 ok(d.getElementById('lmPost').disabled && /Tap 4 more/.test(d.getElementById('lmPost').textContent), 'no default score: Post is locked until every player is tapped');
+// a mis-tap can be taken back: the clear tile empties the box (and the Post button counts it as missing again)
+await click(dom, '[data-lm-s="Jake|5"]'); await click(dom, '[data-lm-who="Jake"]'); await click(dom, '[data-lm-s="Jake|clear"]'); d = dom.window.document;
+ok(/–/.test([...d.querySelectorAll('.lmchip')].find(c => /Jake/.test(c.textContent)).textContent) && /Tap 4 more scores/.test(d.getElementById('lmPost').textContent), 'the clear tile takes a tapped score back: Jake shows – and Post wants all four again: ' + d.getElementById('lmPost').textContent);
 await click(dom, '[data-lm-s="Jake|3"]'); await click(dom, '[data-lm-s="Amy|4"]'); await click(dom, '[data-lm-s="Nate|4"]'); d = dom.window.document;
 ok(d.getElementById('lmPost').disabled && /Tap 1 more/.test(d.getElementById('lmPost').textContent), 'still locked with one missing');
 await click(dom, '[data-lm-s="Bob|4"]'); d = dom.window.document;
@@ -60,7 +63,7 @@ ok(posts.length === before + 1 && !/waiting to send/.test(dom.window.document.qu
 // edit an old hole
 await click(dom, '#lmAll'); ok(dom.window.document.querySelectorAll('.lmh').length === 18, 'tap the hole title to see all 18'); await click(dom, '[data-lm-hole="1"]'); d = dom.window.document; ok(/Hole 1/.test(d.body.textContent) && /posted/.test(d.body.textContent) && />3</.test(d.querySelectorAll('.lmcv')[0].outerHTML), 'tap a hole to review/edit it');
 // stranger sees the panel but is not asked as a player; identity picker
-dom = await open(''); d = dom.window.document; ok(d.getElementById('lmMeSel') && d.getElementById('lmMount'), 'a name picker is offered');
+dom = await open(''); d = dom.window.document; ok(d.getElementById('lmMeSel') && d.getElementById('lmMount') && d.querySelectorAll('#lmMeSel option').length === 5, 'a stranger is asked who they are, among the four in the match');
 ok(d.getElementById('lmPost').disabled && /Pick who you are/.test(d.getElementById('lmPost').textContent), 'no name picked: Post says so instead of failing silently');
 dom = await open('?player=Amy'); d = dom.window.document;
 ok(/Match 1 · hole 1: Team Jake wins the hole/.test(d.querySelector('.lm').textContent) === false, 'banner only after posting in this visit');

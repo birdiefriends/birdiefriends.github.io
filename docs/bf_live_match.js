@@ -29,7 +29,7 @@
     '.lm .lmname.a{border-left:4px solid var(--a);padding-left:8px}.lm .lmname.b{border-left:4px solid var(--b);padding-left:8px}' +
     '.lm .lmstep{display:flex;align-items:center;gap:6px}.lm .lmstep button{width:46px;height:46px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);color:var(--tx);font:inherit;font-size:1.4rem;font-weight:800;cursor:pointer}' +
     '.lm .lmval{min-width:44px;text-align:center;font-size:1.6rem;font-weight:800}.lm .lmval.pu{font-size:1rem;color:var(--warn)}' +
-    '.lm .lmtiles{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;grid-column:1/-1}.lm .lmt{height:42px;border-radius:9px;border:1px solid var(--line);background:var(--bg2);color:var(--tx);font:inherit;font-weight:800;font-size:1.05rem;cursor:pointer;padding:0}.lm .lmt.on{background:var(--lm-accent,var(--a));border-color:var(--tx)}.lm .lmt.pu.on{background:var(--warn);color:var(--ink)}.lm .lmt.sub{font-size:.75rem;color:var(--dim)}' +
+    '.lm .lmtiles{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;grid-column:1/-1}.lm .lmt{height:42px;border-radius:9px;border:1px solid var(--line);background:var(--bg2);color:var(--tx);font:inherit;font-weight:800;font-size:1.05rem;cursor:pointer;padding:0}.lm .lmt.on{background:var(--lm-accent,var(--a));border-color:var(--tx)}.lm .lmt.pu.on{background:var(--warn);color:var(--ink)}.lm .lmt.sub{font-size:.75rem;color:var(--dim)}' +
     '.lm .lmnav{display:grid;grid-template-columns:52px 1fr 52px;gap:8px;align-items:center;margin:4px 0 8px}.lm .lmarrow{height:48px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);color:var(--tx);font:inherit;font-size:1.6rem;font-weight:800;cursor:pointer}.lm .lmarrow:disabled{opacity:.3}' +
     '.lm .lmhtitle{background:none;border:0;color:var(--tx);font:inherit;font-weight:800;font-size:1.35rem;cursor:pointer;text-align:center}.lm .lmhtitle small{display:block;font-weight:500;font-size:.72rem;color:var(--dim)}' +
     '.lm .lmwin{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--dim)}.lm .lmwin.a{background:var(--a)}.lm .lmwin.b{background:var(--b)}' +
@@ -307,7 +307,9 @@
         var lab = (x.matches.length > 1 ? 'Group ' + x.key.slice(1) + ' · ' : '') + x.matches.map(function (m) { return 'M' + nums[x.round.key + '|' + m.key] + ' ' + m.sides.map(function (sd) { return sd.players.join('/'); }).join(' v '); }).join('  |  ') + ' · ' + stt;
         return '<option value="' + esc(x.round.key) + '|' + esc(x.key) + '"' + (x.round.key === round.key && x.key === grp.key ? ' selected' : '') + '>' + esc(lab) + '</option>';
       }).join('') + '</optgroup>';
-    }).join('') + '</select></label><label>I am<select id="lmMeSel"><option value="">(who are you?)</option>' + members.map(function (n) { return '<option' + (norm(n) === norm(S.opts.player) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></label></div>';
+    }).join('') + '</select></label>'
+      // "I am" is only asked when the page does not already know: a host or captain link needs no name, and neither does a player whose name came from the app (or was picked before) and is in this match
+      + ((S.opts.code || S.opts.pin || members.some(function (n) { return norm(n) === norm(S.opts.player); })) ? '' : '<label>I am<select id="lmMeSel"><option value="">(who are you?)</option>' + members.map(function (n) { return '<option>' + esc(n) + '</option>'; }).join('') + '</select></label>') + '</div>';
     // one header per match in the group
     matches.forEach(function (match, i) {
       var live = lives[i], sl = statusLine(cfg, live, match), lead = 0, sm = stdOf[match.key];
@@ -349,7 +351,7 @@
     var curw = rowVal(who.key, inp, posted);
     if (fmt0 === 'altshot') h += '<div class="lmdim" style="margin:6px 0">Foursomes: one ball per team. Enter the team gross for the hole.</div>';
     h += '<div class="lmpick"><div class="lmdim" style="margin-bottom:4px">' + esc(who.label) + ' · hole ' + hole + '</div><div class="lmtiles">' + [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (curw === n ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|' + n + '">' + n + '</button>'; }).join('')
-      + '<button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0">P</button></div></div>';
+      + '<button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0">P</button><button class="lmt" data-lm-s="' + esc(who.key) + '|clear" aria-label="Clear this score" title="Clear this score">✕</button></div></div>';
     var missing = rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
     var anon = !S.opts.player && !S.opts.code && !S.opts.pin;
     if (!hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
@@ -414,6 +416,7 @@
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-hole]'), function (b) { b.addEventListener('click', function () { S.hole = { g: gkey, h: Number(b.getAttribute('data-lm-hole')) }; S.who = null; S.showAll = false; S.msg = ''; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-s]'), function (b) { b.addEventListener('click', function () {
       var p = b.getAttribute('data-lm-s').split('|'), row = rows.filter(function (r) { return r.key === p[0]; })[0];
+      if (p[1] === 'clear') { if (S.inp[key]) delete S.inp[key][row.key]; S.who = row.key; render(); return; }   // take back a tap: the box goes back to what was posted (or empty)
       (S.inp[key] = S.inp[key] || {})[row.key] = Number(p[1]);
       var nx = rows.filter(function (r) { return r.key !== row.key && cur(r) === undefined; })[0]; S.who = nx ? nx.key : row.key; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-who]'), function (b) { b.addEventListener('click', function () { S.who = b.getAttribute('data-lm-who'); render(); }); });
