@@ -94,6 +94,7 @@ d.querySelector('[data-money-reopen="sun"]').click(); await tick(400); d = dom.w
 d.querySelector('[data-money-reopen="sat"]').click(); await tick(400); c = await dbCfg();
 ok(!c.rounds[0].payout && /Live · not closed/.test(dom.window.document.getElementById('app').textContent), 'Reopen clears the frozen payout');
 // the weekend table adds the two days
+ok(![...d.querySelectorAll('.hcpmatch')].some(x => /No skins won yet/.test(x.textContent) && [...x.querySelectorAll('th')].some(h => h.textContent === 'Back')), 'a pot given back is not listed as winnings (no Back rows)');
 ok(/Who has won money/.test(d.getElementById('app').textContent) && /Paid in/.test(d.getElementById('app').textContent), 'the weekend table is there');
 { const rowsOf = t => [...t.querySelectorAll('tbody tr')].map(r => r.textContent);
   const wk = [...d.querySelectorAll('.hcpmatch')].filter(x => /Who has won money/.test(x.textContent))[0];

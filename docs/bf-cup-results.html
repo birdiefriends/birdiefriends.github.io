@@ -199,7 +199,8 @@ td.r,th.r{text-align:right}
       }
       o += '</div>';
     });
-    if (mv.players.length) o += '<div class="card"><div class="kicker">Weekend winnings</div><table style="margin-top:8px"><tr><th>Player</th><th class="r">Won</th></tr>' + mv.players.filter(function (p) { return p.won > 0; }).map(function (p) { return '<tr><td>' + esc(p.player) + '</td><td class="r money">' + usd(p.won) + '</td></tr>'; }).join('') + '</table></div>';
+    var earners = {}; mv.rounds.forEach(function (r) { ((r.result && r.result.payouts) || []).forEach(function (p) { if (Number(p.total) - Number(p.given_back || 0) > 0) earners[p.player] = true; }); });
+    if (mv.players.some(function (p) { return earners[p.player]; })) o += '<div class="card"><div class="kicker">Weekend winnings</div><table style="margin-top:8px"><tr><th>Player</th><th class="r">Won</th></tr>' + mv.players.filter(function (p) { return earners[p.player]; }).map(function (p) { return '<tr><td>' + esc(p.player) + '</td><td class="r money">' + usd(p.won) + '</td></tr>'; }).join('') + '</table></div>';
     return o;
   }
   function renderMem() {

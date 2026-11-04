@@ -492,11 +492,12 @@ button:disabled{opacity:.4;cursor:default}
   }
   function moneyHtml() {
     var mv = E.cupMoneyView(cfg), out = '';
+    var earners = {}; mv.rounds.forEach(function (r) { ((r.result && r.result.payouts) || []).forEach(function (p) { if (Number(p.total) - Number(p.given_back || 0) > 0) earners[p.player] = true; }); });   // won money, not a refund of the pot
     var split = mv.rounds.map(function (r) { return esc(r.name) + ' ' + usd(r.entry); }).join(' + ');
     out += '<div class="card hcpintro"><div class="hcphead"><h2>Money</h2><button class="sec no-print" id="hcpPrint">🖨 Print</button></div><p class="hint">Weekend buy-in ' + usd(mv.buyIn) + ' a player (' + split + '). Closest to the pin pays a fixed amount a hole, and any hole nobody claims goes into the skins pot. Skins is gross: the lowest score on a hole wins it outright, a tie wins nothing, and the skins pot is shared equally by the skins won. Figures move with the scores until the host closes a round.</p></div>';
     if (error) out += '<p class="err">' + esc(error) + '</p>';
     mv.rounds.forEach(function (r) {
-      var res = r.result, allRows = res.payouts || [], rows = allRows.filter(function (p) { return Number(p.total) > 0; }), cols = [['cttp', 'CTP'], ['skins', 'Skins'], ['birdiepay', 'Birdies'], ['given_back', 'Back']].filter(function (c) { return rows.some(function (p) { return Number(p[c[0]]) > 0; }); });
+      var res = r.result, allRows = res.payouts || [], rows = allRows.filter(function (p) { return Number(p.total) - Number(p.given_back || 0) > 0; }), cols = [['cttp', 'CTP'], ['skins', 'Skins'], ['birdiepay', 'Birdies'], ['given_back', 'Back']].filter(function (c) { return rows.some(function (p) { return Number(p[c[0]]) > 0; }); });
       out += '<div class="card hcpmatch"><div class="hcptitle"><span class="n">' + (r.frozen ? 'Final · closed by the host' : 'Live · not closed') + '</span><span class="nm">' + esc(r.name) + '</span><span class="vsx">' + usd(r.entry) + ' each · pot ' + usd(res.total_pot) + ' · ' + res.players_count + ' players' + (r.expected ? ' (expected: nobody has a card yet)' : '') + '</span></div>';
       if (HOST && pin && r.problems.length) out += '<p class="err">' + r.problems.map(esc).join('<br>') + '</p>';
       if (res.cttp && res.cttp.holes && res.cttp.holes.length) {
@@ -516,7 +517,7 @@ button:disabled{opacity:.4;cursor:default}
       out += '</div>';
     });
     out += '<div class="card hcpmatch"><div class="hcptitle"><span class="n">Weekend</span><span class="nm">Who has won money</span></div><div class="hcpwrap"><table class="hcpt mny"><thead><tr><th class="who">Player</th><th>Won</th><th>Paid in</th><th class="tot">Net</th></tr></thead><tbody>'
-      + (mv.players.some(function (p) { return p.won > 0; }) ? '' : '<tr><td class="who" colspan="4">Nobody has won money yet</td></tr>') + mv.players.filter(function (p) { return p.won > 0; }).map(function (p) { return '<tr><td class="who"><b>' + esc(p.player) + '</b></td><td>' + usd(p.won) + '</td><td>' + usd(p.paid) + '</td><td class="tot">' + (p.net > 0 ? '+' : p.net < 0 ? '−' : '') + usd(Math.abs(p.net)) + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
+      + (mv.players.some(function (p) { return earners[p.player]; }) ? '' : '<tr><td class="who" colspan="4">Nobody has won money yet</td></tr>') + mv.players.filter(function (p) { return earners[p.player]; }).map(function (p) { return '<tr><td class="who"><b>' + esc(p.player) + '</b></td><td>' + usd(p.won) + '</td><td>' + usd(p.paid) + '</td><td class="tot">' + (p.net > 0 ? '+' : p.net < 0 ? '−' : '') + usd(Math.abs(p.net)) + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
     return out;
   }
   // Handicaps tab: every match's strokes by hole, read from the live Cup record with the engine's own functions (so it follows a sub swap, a new draw or the Sunday singles).
