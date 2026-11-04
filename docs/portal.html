@@ -8651,6 +8651,15 @@ function buildAnnouncementsHTML(notifications, loading) {
       const isHost    = gid && gatheringData.some(g => g.gatheringId === gid && g.hostId === currentPlayer);
       if (!isHost && (!invited || !invited.includes(currentPlayer))) return false;
     }
+    // Partner requests and full-game notices are addressed to one person: only that person sees them in the feed (the push was already targeted).
+    if (n.bf_type === 'gathering_partner') {
+      const invited = n.meta && n.meta.invited;
+      if (!invited || !invited.includes(currentPlayer)) return false;
+    }
+    if (n.bf_type === 'gathering_capacity') {
+      const gid = n.meta && n.meta.gathering_id;
+      if (!(gid && gatheringData.some(g => g.gatheringId === gid && g.hostId === currentPlayer))) return false;
+    }
     if (n.bf_type === 'gathering_open_invite') {
       const myMember = memberData.find(m => m.display === currentPlayer);
       if (!myMember || myMember.gatheringAlerts !== 'Yes') return false;
