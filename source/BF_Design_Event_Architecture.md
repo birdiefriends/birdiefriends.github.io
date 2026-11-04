@@ -50,3 +50,13 @@ If the Cup needs the engine core to change, or the BFE-A form cannot be generate
 
 **Capture follows the event type (Brian, 2026-11-04; BF Cup is the test case).** One rule decides where a photo or video goes, whatever the entry point (the At the course rail, the card's photo sheet, the Live Panel): an ordinary event card keeps its own photos (Gatherings `event_photos`, shown in My History); a card that belongs to a BFE (multi-day: BF Cup, Wally Cup, a trip) goes to that BFE's memories (`bfe_event_memories`, tagged with the round name), so the whole weekend sits in one place. Found: the Live Panel already did this (Dev-80) but the rail and the card sheet always used Gatherings, so Cup photos would have scattered across the Day1 and Day2 cards. Now `bfeCaptureTarget(evt)` in the portal is the one resolver; the card photo sheet of a BFE card lists the whole event's memories. Not gated on `memories_capture_open` (same as the Live Panel); that switch still gates the Trip Memories Home banner. Still to do: BFE memories do not show in My History (only in the sheet and the Trip Memories modal); notes still go to the card's own thread; the Cup results and memories page is the proper home for the weekend package. Fallback if this misbehaves on the day: Brian's earlier plan (a results/memories page that reads both pipelines).
 
+
+## BFCup results and memories page (design mock, Dev-98)
+
+Mock: `docs/bf-cup-results-MOCK.html` (noindex, sample data only). Mirrors the Wally Cup results layout (hero, tabs, memories, Download Archive) and takes the sportscaster voice from `series-2026-wrap.html` (the "commentator" Brian likes). The Series page is a single story; the Cup is two days with a head-to-head score, so tabs fit better than one long page.
+
+- Hero: team score, winner highlighted, Cup MVP.
+- Tabs: The Story (commentator headline + 3 paragraphs, Saturday and Sunday calls, moments chips) / Saturday (4 matches, fourball and foursomes points) / Sunday (singles) / Money (CTP, skins, player totals from `cupMoneyView`) / Memories (one timeline across both days from `bfe_event_memories`, by round_name, plus card notes) with Download Archive.
+- Commentator text: drafted from the final Cup record Sunday night (figures read from data, never invented), read over, then published. Same tone guardrails as BF_EventNarratives_Spec.md. For Sunday it can be hand-written like the Series wrap; a Worker generator is a later step.
+- Data: all from the public Cup GET plus `/bfe/memories/list`. No new collection.
+- Fallback if rail capture routing misbehaves on Saturday: this page reads both pipelines (Gatherings `event_photos` and BFE memories).
