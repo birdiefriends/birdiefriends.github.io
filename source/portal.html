@@ -16208,6 +16208,10 @@ async function compressImageFile(file, maxDim = 1600, quality = 0.8) {
 function evtPhotoKey(evt) {
   return evt.source === 'gathering' ? `gathering:${evt.gatheringId}` : evt.name;
 }
+// Where this card's photos and videos go: the BFE it belongs to (null for an ordinary event card). One rule for the rail, the card's photo sheet and the Live Panel.
+function bfeCaptureTarget(evt) {
+  return (evt && typeof _bfeBackedIndex !== 'undefined' && _bfeBackedIndex.has(evt.name)) ? _bfeBackedIndex.get(evt.name) : null;
+}
 // Seasonal "paper" tone for My History groups (Dev-67) — a background tint
 // that shifts with the calendar, independent of venue. Northern hemisphere
 // seasons, since every BF venue is in one. Purely decorative — falls back
@@ -16343,7 +16347,7 @@ function openCardPhotoSheet(evtOrId) {
   if (!evt) return;
   _cardPhotoEvt = evt;
   const titleEl = document.getElementById('card-photo-title');
-  if (titleEl) titleEl.textContent = `📷 ${evt.name}`;
+  if (titleEl) titleEl.textContent = bfeCaptureTarget(evt) ? `📷 ${bfeCaptureTarget(evt).umbrellaName} · memories` : `📷 ${evt.name}`;
   const statusEl = document.getElementById('card-photo-status');
   if (statusEl) statusEl.textContent = '';
   document.getElementById('card-photo-list').innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted)">Loading…</div>';
@@ -16354,6 +16358,13 @@ async function loadCardPhotos() {
   const listEl = document.getElementById('card-photo-list');
   if (!_cardPhotoEvt || !listEl) return;
   try {
+    const bfeTarget = bfeCaptureTarget(_cardPhotoEvt);
+    if (bfeTarget) {   // a BFE card shows the whole event's memories (every round), newest first
+      const r2 = await fetch(`${BFE_API}/bfe/memories?event_id=${bfeTarget.bfeEventId}`);
+      const d2 = await r2.json(); const ms = (d2.memories || []).slice().reverse();
+      listEl.innerHTML = ms.length ? ms.map(m => renderWCRPPhotoThumb(m)).join('') : '<div style="font-size:0.8rem;color:var(--text-muted)">No photos yet — be the first! They go into the ' + bfeTarget.umbrellaName + ' memories.</div>';
+      return;
+    }
     const key = evtPhotoKey(_cardPhotoEvt);
     // No pin — public tier, approved-only (photos upload as approved-by-default
     // already, Dev-62), same trust model as every other player-facing photo call.
@@ -16532,10 +16543,16 @@ async function cardPhotoCameraPicked(inputEl) {
     const uploadFile = await compressImageFile(file);
     setCardPhotoBusy(true, '📤 Uploading — please keep this open…');
     const form = new FormData();
-    form.append('event_name', evtPhotoKey(evt));
+    // Capture follows the event type (Brian, 2026-11-04): an ordinary event card keeps its own photos (My History); a card that belongs to a BFE
+    // (a multi-day event such as the BF Cup) goes into that event's memories, tagged with the round, so the whole weekend lives in one place.
+    const bfeTarget = bfeCaptureTarget(evt);
+    if (bfeTarget) {
+      form.append('event_id', bfeTarget.bfeEventId);
+      if (bfeTarget.roundName) form.append('round_name', bfeTarget.roundName);
+    } else form.append('event_name', evtPhotoKey(evt));
     form.append('captured_by', currentPlayer || '');
     form.append('file', uploadFile);
-    const res = await fetch(`${GATHERINGS_API}/photos/upload`, { method: 'POST', body: form });
+    const res = await fetch(bfeTarget ? `${BFE_API}/bfe/memories/upload` : `${GATHERINGS_API}/photos/upload`, { method: 'POST', body: form });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Upload failed');
     setCardPhotoBusy(false);
@@ -18991,6 +19008,7 @@ async function deleteWCRPMemory(id) {
     if (!data.ok) throw new Error(data.error || 'Delete failed');
     showToast('🗑 Deleted');
     loadWCRPPhotos();
+    if (document.getElementById('card-photo-modal')?.classList.contains('open')) loadCardPhotos();
   } catch (e) {
     showToast('Error: ' + e.message, true);
   }
