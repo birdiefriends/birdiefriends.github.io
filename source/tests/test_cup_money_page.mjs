@@ -39,7 +39,8 @@ const dbCfg = async () => (await (await workerFetch(API + '/bfe/cup?event=E&pin=
 let dom = await open('&player=' + encodeURIComponent('Brian Hager')), d = dom.window.document;
 ok(d.getElementById('lmMount') && /Hole 10/.test(d.querySelector('#lmAll').textContent) && d.getElementById('lmCtp'), 'hole 10 (a par 3) shows the closest-to-the-pin section');
 ok(/Nobody has it yet/.test(d.getElementById('lmCtp').textContent), 'no claim yet');
-ok([...d.querySelectorAll('#lmCtpSel option')].map(o => o.textContent).includes('Harry Pry') && d.querySelectorAll('#lmCtpSel option').length === 9, 'anyone in the round can be picked (8 players + nobody)');
+{ const opts = [...d.querySelectorAll('#lmCtpSel option')].map(o => o.textContent);
+  ok(opts.length === 5 && ['Brian Hager', 'BJ Kolonia', 'Tom Stitt', 'Andrew Kabrick'].every(n => opts.includes(n)) && !opts.includes('Harry Pry'), 'only the four players of this match can be picked (plus nobody): ' + opts.join(' | ')); }
 d.getElementById('lmCtpSel').value = 'Tom Stitt'; d.getElementById('lmCtpDist').value = '4 ft'; d.getElementById('lmCtpGo').click(); await tick(300); d = dom.window.document;
 let c = await dbCfg();
 ok(c.ctp && c.ctp.sat['10'].player === 'Tom Stitt' && c.ctp.sat['10'].dist === '4 ft' && c.ctp.sat['10'].by === 'Brian Hager', 'the claim is saved on the Worker with who set it');

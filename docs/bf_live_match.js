@@ -254,10 +254,14 @@
     if (!a) return null;
     return Array.isArray(a.holes) ? a.holes.map(Number) : S.opts.E.cupParThrees(cfg);
   }
-  function ctpHtml(cfg, round, hole) {
+  function ctpHtml(cfg, round, hole, matches) {
     var hs = ctpHolesOf(cfg, round); if (!hs || hs.indexOf(Number(hole)) < 0) return '';
     var cur = (((cfg.ctp || {})[round.key]) || {})[String(hole)] || null, closed = !!round.payout;
-    var players = S.opts.E.cupRoundPlayers(round);
+    // the players of this group's own match(es); whoever already holds the hole (set from another group, or by a captain) stays in the list
+    var players = [];
+    (matches || []).forEach(function (m) { (m.sides || []).forEach(function (sd) { (sd.players || []).forEach(function (n) { if (players.indexOf(n) < 0) players.push(n); }); }); });
+    if (!players.length) players = S.opts.E.cupRoundPlayers(round);
+    if (cur && cur.player && !players.some(function (n) { return norm(n) === norm(cur.player); })) players.push(cur.player);
     var sel = '<select id="lmCtpSel"' + (closed ? ' disabled' : '') + '><option value="">(nobody on the green yet)</option>' + players.map(function (n) { return '<option' + (cur && norm(cur.player) === norm(n) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>';
     return '<div class="lmc" id="lmCtp"><div class="lmmno">Closest to the pin · hole ' + hole + '</div>'
       + (cur && cur.player ? '<div class="lmdim">Now: <b>' + esc(cur.player) + '</b>' + (cur.dist ? ' · ' + esc(cur.dist) : '') + (cur.by ? ' (set by ' + esc(cur.by) + ')' : '') + '</div>' : '<div class="lmdim">Nobody has it yet.</div>')
@@ -351,7 +355,7 @@
     if (!hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
     h += '<button class="lmgo" id="lmPost"' + (missing || anon ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (anyPosted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>';
     if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, matches: matches, hole: hole, E: E }) || '';
-    h += ctpHtml(cfg, round, hole);
+    h += ctpHtml(cfg, round, hole, matches);
     if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' score' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
     if (S.err) h += '<div class="lmmsg q" id="lmErr">⚠ ' + esc(S.err) + '</div>';
     if (S.msg) h += '<div class="lmmsg">' + esc(S.msg) + '</div>';
