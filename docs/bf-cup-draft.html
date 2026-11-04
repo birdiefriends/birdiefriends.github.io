@@ -656,7 +656,7 @@ button:disabled{opacity:.4;cursor:default}
   function hero() {
     var nm = cupName(), stage = cupStage();
     try { document.title = nm + ' · ' + stage; } catch (e) {}
-    return '<div class="stripes"></div><div class="backrow"><a id="backApp" href="portal.html">← Back to the app</a></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>' + esc(nm) + '</h1><div class="eyebrow">' + esc(stage) + '</div></div>' + (PRACTICE ? '<div class="banner" style="background:#b8860b">PRACTICE RUN · sample players, nothing here is real</div>' : ''); }
+    return '<div class="stripes"></div><div class="backrow"><a id="backApp" href="portal.html">← Back to the app</a> &nbsp;·&nbsp; <a id="resultsLink" href="bf-cup-results.html?event=' + encodeURIComponent(EVENT) + '">Results</a></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>' + esc(nm) + '</h1><div class="eyebrow">' + esc(stage) + '</div></div>' + (PRACTICE ? '<div class="banner" style="background:#b8860b">PRACTICE RUN · sample players, nothing here is real</div>' : ''); }
 
   function wire() {
     function $(id) { return document.getElementById(id); }
