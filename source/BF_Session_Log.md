@@ -5729,3 +5729,6 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Player chips show only what was entered; a blank optional winner is "–" with "optional" (no "Won" on a player).
 - The › arrow stops at the first unposted hole. The hole grid (tap the hole title) still jumps anywhere, for testing and catch-up (v29).
 - Older tests that jumped ahead now post the earlier holes first (drives, money page, score page).
+
+## Score chips: names first, team colour (panel v30)
+- Chips lead with the player names (Greensomes: "Brian Hager & BJ Kolonia"), team name small underneath with a team-colour dot; thicker colour bar and a light team-colour tint (red / blue) on every chip, all formats.

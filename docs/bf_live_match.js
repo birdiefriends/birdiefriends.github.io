@@ -34,7 +34,7 @@
     '.lm .lmhtitle{background:none;border:0;color:var(--tx);font:inherit;font-weight:800;font-size:1.35rem;cursor:pointer;text-align:center}.lm .lmhtitle small{display:block;font-weight:500;font-size:.72rem;color:var(--dim)}' +
     '.lm .lmwin{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--dim)}.lm .lmwin.a{background:var(--a)}.lm .lmwin.b{background:var(--b)}' +
     '.lm .lmchips{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lm .lmchip{display:flex;justify-content:space-between;align-items:center;gap:6px;background:var(--bg2);color:var(--tx);border:2px solid var(--line);border-left:6px solid var(--line);border-radius:10px;padding:10px;font:inherit;font-weight:700;cursor:pointer;text-align:left}' +
-    '.lm .lmchip.a{border-left-color:var(--a)}.lm .lmchip.b{border-left-color:var(--b)}.lm .lmchip.sel{border-color:var(--tx)}.lm .lmchip small{display:block;font-weight:500;color:var(--dim);font-size:.7rem}' +
+    '.lm .lmchip.a{border-left:10px solid var(--a);background:color-mix(in srgb,var(--a) 18%,var(--bg2))}.lm .lmchip.b{border-left:10px solid var(--b);background:color-mix(in srgb,var(--b) 18%,var(--bg2))}.lm .lmchip .lmtm::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:var(--dim)}.lm .lmchip.a .lmtm::before{background:var(--a)}.lm .lmchip.b .lmtm::before{background:var(--b)}.lm .lmchip.sel{border-color:var(--tx)}.lm .lmchip small{display:block;font-weight:500;color:var(--dim);font-size:.7rem}' +
     '.lm .lmcv{font-size:1.7rem;font-weight:800;min-width:30px;text-align:right}.lm .lmcv.pu{color:var(--warn);font-size:1.15rem}.lm .lmpick{margin:10px 0 2px}' +
     '.lm .lmbm{display:block;width:100%;background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:12px;padding:0;margin-top:10px;font:inherit;text-align:left;overflow:hidden}.lm .lmbmt{display:block;width:100%;background:none;color:inherit;border:0;font:inherit;text-align:left;padding:10px 10px 8px;cursor:pointer}' +
     '.lm .lmbmh{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;font-weight:800;margin-bottom:8px}.lm .lmbmh .a{border-left:4px solid var(--a);padding-left:8px}.lm .lmbmh .b{text-align:right;border-right:4px solid var(--b);padding-right:8px}.lm .lmbmh .pt{font-size:1.15rem;text-align:center;min-width:62px;white-space:nowrap}.lm .lmbmh .pt .a,.lm .lmbmh .pt .b{border:0;padding:0}.lm .lmbmh .pt .a{color:var(--a)}.lm .lmbmh .pt .b{color:var(--b)}' +
@@ -150,9 +150,9 @@
     // each player (or pair) places his strokes with the hole stroke indexes of HIS tee (tee by handicap); a one-tee Cup uses the Cup's tee
     function dots(n, names) { var a = E.cupHoleStrokes(n, E.cupStrokeIndexFor(cfg, names) || [])[hole - 1]; return a || 0; }
     if (fmt === 'altshot') {
-      match.sides.forEach(function (sd, i) { rows.push({ key: sd.players[0], label: sideName(cfg, sd.side), sub: sd.players.join(' & '), side: i === 0 ? 'a' : 'b', strokes: dots(st.teams[i] ? st.teams[i].strokes : 0, sd.players) }); });
+      match.sides.forEach(function (sd, i) { rows.push({ key: sd.players[0], label: sd.players.join(' & '), sub: sideName(cfg, sd.side), side: i === 0 ? 'a' : 'b', strokes: dots(st.teams[i] ? st.teams[i].strokes : 0, sd.players) }); });
     } else {
-      match.sides.forEach(function (sd, i) { sd.players.forEach(function (p) { var rw = st.players.filter(function (x) { return norm(x.names[0]) === norm(p); })[0]; rows.push({ key: p, label: p, sub: '', side: i === 0 ? 'a' : 'b', strokes: dots(rw ? rw.strokes : 0, [p]) }); }); });
+      match.sides.forEach(function (sd, i) { sd.players.forEach(function (p) { var rw = st.players.filter(function (x) { return norm(x.names[0]) === norm(p); })[0]; rows.push({ key: p, label: p, sub: sideName(cfg, sd.side), side: i === 0 ? 'a' : 'b', strokes: dots(rw ? rw.strokes : 0, [p]) }); }); });
     }
     var everyone = [].concat.apply([], match.sides.map(function (sd) { return sd.players; }));
     return { fmt: fmt, rows: rows, hasSI: everyone.some(function (p) { return !!E.cupStrokeIndexFor(cfg, [p]); }) };
@@ -495,7 +495,7 @@
     if (fmt0 === 'altshot') h += '<div class="lmdim" style="margin:-2px 0 6px">One ball per team: enter the team gross for the hole.</div>';
     h += '<div class="lmchips">' + rows.map(function (r) {
       var cur = effVal(rows, r, inp, posted), optBlank = (cur === undefined || cur < 0) && optRow(rows, r, inp, posted);
-      return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : (optBlank ? '<small>optional</small>' : '')) + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (optBlank ? '–' : cur === undefined ? '–' : (cur === 0 ? 'Out' : cur)) + '</span></button>';
+      return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small class="lmtm">' + esc(r.sub) + (optBlank ? ' · optional' : '') + '</small>' : (optBlank ? '<small>optional</small>' : '')) + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (optBlank ? '–' : cur === undefined ? '–' : (cur === 0 ? 'Out' : cur)) + '</span></button>';
     }).join('') + '</div>';
     var curw = effVal(rows, who, inp, posted), whoOpt = optRow(rows, who, inp, posted);
     h += '<div class="lmpick"><div class="lmdim" style="margin-bottom:4px">' + esc(who.label) + ' · hole ' + hole + '</div><div class="lmtiles">' + [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (curw === n ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|' + n + '">' + n + '</button>'; }).join('')
