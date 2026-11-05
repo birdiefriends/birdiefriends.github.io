@@ -134,4 +134,16 @@ if (box) {
 }
 // a player (no pin) never sees the box
 const dom3 = await open('&player=' + encodeURIComponent('Evan Lindermuth')); await tick(150); ok(!dom3.window.document.querySelector('[data-lm-nsbox]'), 'a player does not get the host box');
+
+// ---- the host-only No-show tab: the plan table with mulligans, hidden from players
+const dom4 = await open('&host=1&player=' + encodeURIComponent(A1), 'HOST1'); const d4 = () => dom4.window.document; await tick(200);
+const tabBtn = d4().querySelector('[data-view="noshow"]'); ok(!!tabBtn, 'host sees a No-show tab');
+if (tabBtn) { tabBtn.click(); await tick(80);
+  const t4 = d4().body.textContent; ok(/If someone does not show/.test(t4) && /Mulligans/.test(t4), 'the plan page shows with a Mulligans column');
+  const rowOf = n => [...d4().querySelectorAll('tr')].find(tr => tr.textContent.includes(n));
+  ok(/Harry Pry/.test(rowOf('Harry Pry').textContent) && rowOf('Harry Pry').cells[3].textContent === '4' && /86 or better/.test(rowOf('Harry Pry').textContent), 'Harry: 4 mulligans, 86 or better');
+  ok(rowOf('Brian Hager').cells[3].textContent === '3' && /79 or better/.test(rowOf('Brian Hager').textContent) && /83\+/.test(rowOf('Brian Hager').textContent), 'Brian: 3 mulligans, 79 / 80-82 / 83+');
+}
+const dom5 = await open('&player=' + encodeURIComponent(A1)); await tick(150); ok(!dom5.window.document.querySelector('[data-view="noshow"]'), 'players never see the No-show tab');
+const dom6 = await open('&host=1&player=' + encodeURIComponent(A1)); await tick(150); ok(!dom6.window.document.querySelector('[data-view="noshow"]'), 'host=1 without the PIN does not show it either');
 console.log('no-show: ' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

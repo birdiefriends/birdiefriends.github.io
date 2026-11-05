@@ -554,6 +554,23 @@ window.BF_NOSHOW_PLAN = {
     return out;
   }
   // Handicaps tab: every match's strokes by hole, read from the live Cup record with the engine's own functions (so it follows a sub swap, a new draw or the Sunday singles).
+  // The no-show plan (host only, never shown to players): what the host reaches for if someone does not turn up. The numbers are window.BF_NOSHOW_PLAN.
+  function noshowHtml() {
+    var plan = window.BF_NOSHOW_PLAN || {}, rule = E.cupHandicapRule(cfg);
+    var rows = [];
+    (cfg.sides || []).forEach(function (sd, si) { (sd.players || []).forEach(function (n) { rows.push({ n: n, side: sd, si: si }); }); });
+    rows.sort(function (a, b) { var x = E.cupIndexOf(cfg, a.n), y = E.cupIndexOf(cfg, b.n); return (x === null ? 99 : x) - (y === null ? 99 : y); });
+    var body = rows.map(function (r) {
+      var pl = plan[r.n] || {}, ix = E.cupIndexOf(cfg, r.n), t = E.cupTierFor(ix, rule), mu = pl.mulligans != null ? pl.mulligans : E.cupMulliganDefault(ix);
+      return '<tr><td class="nm ' + (r.si === 0 ? 'cred' : 'cblue') + '">' + esc(r.n) + '</td><td>' + (ix === null ? '–' : fmt(ix)) + '</td><td>' + esc(t ? t.label : '–') + '</td><td><b>' + mu + '</b></td>'
+        + (pl.win != null ? '<td>' + pl.win + ' or better</td><td>' + (pl.win + 1) + '–' + pl.half + '</td><td>' + (pl.half + 1) + '+</td>' : '<td colspan="3" class="hint">captains set a range</td>') + '</tr>';
+    }).join('');
+    return '<div class="card"><h2>If someone does not show</h2><p class="hint">Host only. Nothing here is visible to players until you mark a no-show on that match (Score tab, “Someone did not show?”). One no-show per match.</p>'
+      + '<p><b>Saturday</b> (a pair against one): the lone player gets the mulligans below on the Fourball nine. A redo must be played, one per hole, any shot but putts. Greensomes: two tee shots, play the better, play on alone. Points count as normal.</p>'
+      + '<p><b>Sunday</b> (singles, no opponent): the player plays the round against his target score at his Cup tee. Win, half or lose it by gross. No hole counts worse than net double bogey (Out counts as one). A loss is a point for the no-show’s team.</p>'
+      + '<div style="overflow-x:auto"><table><tr><th>Player</th><th>Index</th><th>Tee</th><th>Mulligans</th><th>Sunday win</th><th>Half</th><th>Loss</th></tr>' + body + '</table></div>'
+      + '<p class="hint">Mulligans start from the handicap tiers (under 6: 2, 6–10: 3, over 10 to 20: 4, over 20: 5) with the captains’ adjustments. The host can change the count when marking. Targets come from 2026 GHIN rounds; Lou and Andrew have none.</p></div>';
+  }
   function hcpHtml() {
     var rule = E.cupHandicapRule(cfg), hc = E.cupHcpMap(cfg), h = cfg.handicap || {}, si = h.strokeIndex, pars = h.pars;
     var by = rule.by || {}, tiers = rule.tiers || [];
@@ -628,7 +645,8 @@ window.BF_NOSHOW_PLAN = {
     var hasMatches = (cfg.rounds || []).some(function (r) { return (r.matches || []).length; });
     if (hasMatches && d.locked) {
       if (!view) view = 'score';
-      var tabs = '<div class="toolbar"><button class="' + (view === 'score' ? '' : 'sec') + '" data-view="score">Score</button><button class="' + (view === 'board' ? '' : 'sec') + '" data-view="board">Leaderboard</button><button class="' + (view === 'teams' ? '' : 'sec') + '" data-view="teams">Teams &amp; draw</button><button class="' + (view === 'hcp' ? '' : 'sec') + '" data-view="hcp">Handicaps</button>' + (hasGames() ? '<button class="' + (view === 'money' ? '' : 'sec') + '" data-view="money">Money</button>' : '') + '</div>';
+      var tabs = '<div class="toolbar"><button class="' + (view === 'score' ? '' : 'sec') + '" data-view="score">Score</button><button class="' + (view === 'board' ? '' : 'sec') + '" data-view="board">Leaderboard</button><button class="' + (view === 'teams' ? '' : 'sec') + '" data-view="teams">Teams &amp; draw</button><button class="' + (view === 'hcp' ? '' : 'sec') + '" data-view="hcp">Handicaps</button>' + (hasGames() ? '<button class="' + (view === 'money' ? '' : 'sec') + '" data-view="money">Money</button>' : '') + (HOST && pin ? '<button class="' + (view === 'noshow' ? '' : 'sec') + '" data-view="noshow">No-show</button>' : '') + '</div>';
+      if (view === 'noshow' && HOST && pin) { app.className = 'page host'; app.innerHTML = html + tabs + noshowHtml(); wire(); return; }
       if (view === 'hcp') { app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + hcpHtml(); wire(); return; }
       if (view === 'money' && hasGames()) { app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + moneyHtml(); wire(); return; }
       if (view === 'score' || view === 'board') {
@@ -685,7 +703,7 @@ window.BF_NOSHOW_PLAN = {
     if (!d.locked) return 'Team draft';
     var hasMatches = (cfg.rounds || []).some(function (r) { return (r.matches || []).length; });
     if (!hasMatches) return 'Matchup draw';
-    return view === 'board' ? 'Leaderboard' : view === 'teams' ? 'Teams & draw' : view === 'hcp' ? 'Handicaps' : view === 'money' ? 'Money' : 'Scoring';
+    return view === 'board' ? 'Leaderboard' : view === 'teams' ? 'Teams & draw' : view === 'hcp' ? 'Handicaps' : view === 'money' ? 'Money' : view === 'noshow' ? 'No-show' : 'Scoring';
   }
   function hero() {
     var nm = cupName(), stage = cupStage();
