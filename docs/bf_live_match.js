@@ -35,7 +35,7 @@
     '.lm .lmwin{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--dim)}.lm .lmwin.a{background:var(--a)}.lm .lmwin.b{background:var(--b)}' +
     '.lm .lmchips{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lm .lmchip{display:flex;justify-content:space-between;align-items:center;gap:6px;background:var(--bg2);color:var(--tx);border:2px solid var(--line);border-left:6px solid var(--line);border-radius:10px;padding:10px;font:inherit;font-weight:700;cursor:pointer;text-align:left}' +
     '.lm .lmchip.a{border-left-color:var(--a)}.lm .lmchip.b{border-left-color:var(--b)}.lm .lmchip.sel{border-color:var(--tx)}.lm .lmchip small{display:block;font-weight:500;color:var(--dim);font-size:.7rem}' +
-    '.lm .lmcv{font-size:1.7rem;font-weight:800;min-width:30px;text-align:right}.lm .lmcv.pu{color:var(--warn)}.lm .lmpick{margin:10px 0 2px}' +
+    '.lm .lmcv{font-size:1.7rem;font-weight:800;min-width:30px;text-align:right}.lm .lmcv.pu{color:var(--warn);font-size:1.15rem}.lm .lmpick{margin:10px 0 2px}' +
     '.lm .lmbm{display:block;width:100%;background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:12px;padding:0;margin-top:10px;font:inherit;text-align:left;overflow:hidden}.lm .lmbmt{display:block;width:100%;background:none;color:inherit;border:0;font:inherit;text-align:left;padding:10px 10px 8px;cursor:pointer}' +
     '.lm .lmbmh{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;font-weight:800;margin-bottom:8px}.lm .lmbmh .a{border-left:4px solid var(--a);padding-left:8px}.lm .lmbmh .b{text-align:right;border-right:4px solid var(--b);padding-right:8px}.lm .lmbmh .pt{font-size:1.15rem;text-align:center;min-width:62px;white-space:nowrap}.lm .lmbmh .pt .a,.lm .lmbmh .pt .b{border:0;padding:0}.lm .lmbmh .pt .a{color:var(--a)}.lm .lmbmh .pt .b{color:var(--b)}' +
     '.lm .lmpr{display:grid;grid-template-columns:1fr auto 1fr;gap:4px;align-items:stretch;margin-top:4px;font-size:.86rem}.lm .lmpr .mid{display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.3;color:var(--dim);font-size:.74rem;padding:0 6px;min-width:96px}.lm .lmpr .c{display:flex;align-items:center;padding:7px 9px;border-radius:8px;font-weight:800;border:1px solid transparent;min-height:34px}.lm .lmpr .c.l{justify-content:flex-start}.lm .lmpr .c.r{justify-content:flex-end;text-align:right}' +
@@ -45,7 +45,7 @@
     '.lm table.lmsc{width:100%;border-collapse:collapse;table-layout:fixed;font-size:.78rem;text-align:center}.lm .lmsc th,.lm .lmsc td{padding:4px 0;border-bottom:1px solid var(--line)}.lm .lmsc th{color:var(--dim);font-weight:600}.lm .lmsc td.nm,.lm .lmsc th.nm{width:27%;text-align:left;padding-left:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}' +
     '.lm .lmsc td.nm.a{border-left:3px solid var(--a)}.lm .lmsc td.nm.b{border-left:3px solid var(--b)}.lm .lmsc td.tt,.lm .lmsc th.tt{font-weight:800;width:11%}.lm .lmsc tr.mr td{font-weight:800;border-bottom:0}.lm .lmsc td.a{color:var(--a)}.lm .lmsc td.b{color:var(--b)}.lm .lmsc td.nm.a,.lm .lmsc td.nm.b{color:var(--tx)}' +
     '.lm .lmcir,.lm .lmsq{display:inline-block;min-width:1.55em;line-height:1.55em;border:1.5px solid var(--tx);position:relative}.lm .lmcir{border-radius:50%}.lm .lmsq{border-radius:3px}.lm .lmcir.d,.lm .lmsq.d{box-shadow:0 0 0 2px var(--bg2),0 0 0 3.5px var(--tx)}' +
-    '.lm .lmsc sup{color:var(--warn);font-size:.9em;margin-left:1px}.lm .lmsc .pk{color:var(--warn)}' +
+    '.lm .lmsc sup{color:var(--warn);font-size:.9em;margin-left:1px}.lm .lmsc .pk{color:var(--warn);font-size:.72em}' +
     '.lm .lmgo2{display:block;width:100%;margin-top:8px;padding:10px;border-radius:10px;border:1px solid var(--line);background:none;color:var(--tx);font:inherit;font-weight:700;cursor:pointer}' +
     '.lm .lmbs{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid var(--line);font-size:.88rem}.lm .lmbs b.a{color:var(--a)}.lm .lmbs b.b{color:var(--b)}' +
     '.lm .lmmno{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}' +
@@ -213,7 +213,7 @@
     var k = Object.keys(hh).filter(function (x) { return norm(x) === norm(name); })[0]; return k === undefined ? undefined : hh[k];
   }
   function mark(g, par) {                                    // birdie = circle, bogey = square, eagle / double bogey = double
-    if (g === 0) return '<span class="pk">P</span>';
+    if (g === 0) return '<span class="pk" title="Out of the hole">Out</span>';
     if (!par) return String(g);
     if (g <= par - 2) return '<span class="lmcir d">' + g + '</span>';
     if (g === par - 1) return '<span class="lmcir">' + g + '</span>';
@@ -468,11 +468,11 @@
     if (fmt0 === 'altshot') h += '<div class="lmdim" style="margin:-2px 0 6px">One ball per team: enter the team gross for the hole.</div>';
     h += '<div class="lmchips">' + rows.map(function (r) {
       var cur = rowVal(r.key, inp, posted);
-      return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (cur === undefined ? '–' : (cur === 0 ? 'P' : cur)) + '</span></button>';
+      return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (cur === undefined ? '–' : (cur === 0 ? 'Out' : cur)) + '</span></button>';
     }).join('') + '</div>';
     var curw = rowVal(who.key, inp, posted);
     h += '<div class="lmpick"><div class="lmdim" style="margin-bottom:4px">' + esc(who.label) + ' · hole ' + hole + '</div><div class="lmtiles">' + [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (curw === n ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|' + n + '">' + n + '</button>'; }).join('')
-      + '<button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0">P</button><button class="lmt" data-lm-s="' + esc(who.key) + '|clear" aria-label="Clear this score" title="Clear this score">✕</button></div></div>';
+      + '<button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0" title="Out of the hole: the other side wins it" style="font-size:.74rem">Out</button><button class="lmt" data-lm-s="' + esc(who.key) + '|clear" aria-label="Clear this score" title="Clear this score">✕</button></div><div class="lmdim" style="margin-top:6px">Putt conceded? Enter the score as if you holed it. <b>Out</b> means you gave up the hole and the other side wins it.</div></div>';
     var missing = rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
     var anon = !S.opts.player && !S.opts.code && !S.opts.pin;
     if (!hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
