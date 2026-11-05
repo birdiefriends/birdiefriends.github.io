@@ -68,13 +68,13 @@ ok(d.getElementById('lmPost').disabled && /Pick who you are/.test(d.getElementBy
 dom = await open('?player=Amy'); d = dom.window.document;
 ok(/Match 1 · hole 1: Team Jake wins the hole/.test(d.querySelector('.lm').textContent) === false, 'banner only after posting in this visit');
 await click(dom, '#lmAll'); await click(dom, '[data-lm-hole="10"]'); d = dom.window.document;
-ok(d.querySelectorAll('.lmchip').length === 2 && /Foursomes/.test(d.querySelector('.lm').textContent) && /team gross/.test(d.querySelector('.lm').textContent), 'hole 10: two team chips and a team-gross note');
-ok(/Holes 1–9: Fourball · Holes 10–18: Foursomes/.test(d.querySelector('.lm').textContent), 'the round plan is shown');
+ok(d.querySelectorAll('.lmchip').length === 2 && /Greensomes/.test(d.querySelector('.lm').textContent) && /team gross/.test(d.querySelector('.lm').textContent), 'hole 10: two team chips and a team-gross note');
+ok(/Holes 1–9: Fourball · Holes 10–18: Greensomes/.test(d.querySelector('.lm').textContent), 'the round plan is shown');
 dom = await open('?player=Amy'); d = dom.window.document;
 ok(!!d.querySelector('.lmt[data-lm-s$="|1"]') && !/9\+/.test(d.querySelector('.lm').textContent), 'a 1 tile for the hole-in-one, no 9+');
 await click(dom, '[data-view="board"]'); d = dom.window.document;
 ok(/POINTS/.test(d.querySelector('.lm').textContent) && !d.querySelector('.lmchip'), 'Leaderboard tab: points race, no score entry');
-ok(/Fourball · 1–9/.test(d.querySelector('.lm').textContent) && /Foursomes · 10–18/.test(d.querySelector('.lm').textContent), 'each match shows both parts');
+ok(/Fourball · 1–9/.test(d.querySelector('.lm').textContent) && /Greensomes · 10–18/.test(d.querySelector('.lm').textContent), 'each match shows both parts');
 ok(/2 UP/.test(d.querySelector('.lm').textContent) && /thru 2/.test(d.querySelector('.lm').textContent), 'live part shows who is up (got ' + d.querySelector('.lm').textContent.slice(0, 300) + ')');
 await click(dom, '[data-lm-open]'); d = dom.window.document;
 ok(!!d.querySelector('table.lmsc') && !d.querySelector('.lmchip') && /Scorecard|scorecard/.test(d.querySelector('.lm').textContent), 'tap a match on the leaderboard opens its scorecard in place (stays on the leaderboard)');
@@ -98,7 +98,7 @@ doc.rounds[0].matches.push({ key: 'm2', sides: [{ side: 'A', players: ['Tom', 'L
 doc.draft.stats.Tom = { hcp: 9 }; doc.draft.stats.Lou = { hcp: 12 }; doc.draft.stats.Bill = { hcp: 7 }; doc.draft.stats.BJ = { hcp: 15 };
 dom = await open('?player=Amy'); d = dom.window.document;
 ok(d.getElementById('lmMatchSel').value === 'r1|g2', 'Amy\'s match is finished, so the panel opens on the next one still to play (got ' + d.getElementById('lmMatchSel').value + ')');
-ok(d.querySelectorAll('optgroup').length === 1 && /Fourball \+ Foursomes/.test(d.querySelector('optgroup').label) && /final/.test(d.querySelector('#lmMatchSel').textContent), 'matches are grouped by round with their format and status');
+ok(d.querySelectorAll('optgroup').length === 1 && /Fourball \+ Greensomes/.test(d.querySelector('optgroup').label) && /final/.test(d.querySelector('#lmMatchSel').textContent), 'matches are grouped by round with their format and status');
 d.getElementById('lmMatchSel').value = 'r1|g1'; d.getElementById('lmMatchSel').dispatchEvent(new dom.window.Event('change')); await tick(100); d = dom.window.document;
 ok(/Match complete/.test(d.querySelector('.lm').textContent) && !d.querySelector('.lmchip') && d.getElementById('lmEdit') && /Conceded/.test(d.querySelector('.lm').textContent), 'a finished match shows its result, no entry form');
 await click(dom, '#lmEdit'); ok(!!dom.window.document.querySelector('.lmchip'), 'Correct a score brings the entry back');

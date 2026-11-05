@@ -29,17 +29,17 @@ for (const n of ['Mohamed Walli', 'Jake Knappenberger', 'Jeff Rapp']) ok(dotsOf(
 ok(JSON.stringify(dotsOf(d, 2, 'Fourball', 'Bill Steirer').holes) === '[]', 'the low player gets no strokes');
 ok(JSON.stringify(dotsOf(d, 1, 'Fourball', 'BJ Kolonia').holes) === '[2,4,6]' && dotsOf(d, 1, 'Fourball', 'BJ Kolonia').tot === '3', 'BJ: strokes on 2, 4, 6 (3 land on the front nine)');
 ok(JSON.stringify(dotsOf(d, 4, 'Fourball', 'Adam Costa').holes) === '[2,4,5,6,7]', 'Adam (9 strokes) holes 2, 4, 5, 6, 7');
-ok(JSON.stringify(dotsOf(d, 2, 'Foursomes', 'Mohamed & Jake').holes) === '[12,13]', 'Walli & Jake foursomes: holes 12 and 13');
-ok(JSON.stringify(dotsOf(d, 3, 'Foursomes', 'Evan & Harry').holes) === '[12,14]', "Evan & Harry use Gold's own hole handicaps: holes 12 and 14");
-ok(JSON.stringify(dotsOf(d, 4, 'Foursomes', 'Adam & Lou').holes) === '[12,13,14,17]' && dotsOf(d, 4, 'Foursomes', 'Adam & Lou').tot === '4', 'Adam & Lou: 4 strokes land on the back nine');
+ok(JSON.stringify(dotsOf(d, 2, 'Greensomes', 'Mohamed & Jake').holes) === '[12,13]', 'Walli & Jake foursomes: holes 12 and 13');
+ok(JSON.stringify(dotsOf(d, 3, 'Greensomes', 'Evan & Harry').holes) === '[12,14]', "Evan & Harry use Gold's own hole handicaps: holes 12 and 14");
+ok(JSON.stringify(dotsOf(d, 4, 'Greensomes', 'Adam & Lou').holes) === '[12,13,14,17]' && dotsOf(d, 4, 'Greensomes', 'Adam & Lou').tot === '4', 'Adam & Lou: 4 strokes land on the back nine');
 ok(/Fourball 80%/.test(d.querySelector('.hcpintro').textContent) && /Gold has its own hole handicaps/.test(d.querySelector('.hcpintro').textContent), 'the intro states the allowances and that Gold has its own holes');
 ok(d.querySelectorAll('.hcpmatch .nm.cred').length === 4 && d.querySelectorAll('.hcpmatch .nm.cblue').length === 4, 'Team Jake pairs red, Team Nate pairs blue');
 const d0 = d;
 // labels: Index and course handicap on every player row; foursomes show the team average, not the sum
 const subOf = (d, matchNo, segTitle, who) => { const card = d.querySelectorAll('.hcpmatch')[matchNo - 1]; const tbl = [...card.querySelectorAll('table.hcpt')].find(t => t.querySelector('th.who').textContent.indexOf(segTitle) === 0); const row = [...tbl.querySelectorAll('tbody tr')].find(r => r.querySelector('td.who b') && r.querySelector('td.who b').textContent === who); return row.querySelector('td.who .sub').textContent.replace(/\s+/g, ' ').trim(); };
 ok(subOf(d0, 3, 'Fourball', 'Harry Pry') === 'Gold · Index 18.2 → course hcp 14', 'Harry: tee, Index and course handicap are all shown (got ' + subOf(d0, 3, 'Fourball', 'Harry Pry') + ')');
-ok(subOf(d0, 3, 'Foursomes', 'Evan & Harry') === 'team hcp 12.0 (avg of 10 and 14)', 'foursomes show the team handicap as the average (got ' + subOf(d0, 3, 'Foursomes', 'Evan & Harry') + ')');
-ok(subOf(d0, 3, 'Foursomes', 'Dave & Chooch') === 'team hcp 8.5 (avg of 6 and 11)', 'a half-point average is shown (got ' + subOf(d0, 3, 'Foursomes', 'Dave & Chooch') + ')');
+ok(subOf(d0, 3, 'Greensomes', 'Evan & Harry') === 'team hcp 12.0 (avg of 10 and 14)', 'foursomes show the team handicap as the average (got ' + subOf(d0, 3, 'Greensomes', 'Evan & Harry') + ')');
+ok(subOf(d0, 3, 'Greensomes', 'Dave & Chooch') === 'team hcp 8.5 (avg of 6 and 11)', 'a half-point average is shown (got ' + subOf(d0, 3, 'Greensomes', 'Dave & Chooch') + ')');
 ok(![...d0.querySelectorAll('.hcpt')].some(t => /combined/.test(t.textContent)), 'no "combined" sums left in the tables');
 ok(!/ of \d/.test([...d0.querySelectorAll('td.tot')].map(c => c.textContent).join('|')), 'the strokes column shows only what lands on these holes, no "of N"');
 ok(/Strokes this nine/.test(d0.querySelector('.hcpt th.tot').textContent), 'the column reads "Strokes this nine"');

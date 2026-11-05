@@ -370,7 +370,7 @@
       </div>
       <div class="row">
         <div><label for="cupHcpBB">Fourball allowance (%)</label><input type="number" id="cupHcpBB" step="5" min="0" max="100" value="80"></div>
-        <div><label for="cupHcpFS">Foursomes allowance (%)</label><input type="number" id="cupHcpFS" step="5" min="0" max="100" value="50"></div>
+        <div><label for="cupHcpFS">Greensomes allowance (%)</label><input type="number" id="cupHcpFS" step="5" min="0" max="100" value="50"></div>
         <div><label for="cupHcpSI">Singles allowance (%)</label><input type="number" id="cupHcpSI" step="5" min="0" max="100" value="80"></div>
         <div><label for="cupSlope">Slope (optional)</label><input type="number" id="cupSlope" step="1" min="55" max="155" placeholder="e.g. 132"></div>
         <div><label for="cupRating">Course rating (optional)</label><input type="number" id="cupRating" step="0.1" placeholder="e.g. 71.2"></div>
@@ -559,7 +559,7 @@
     <pre id="rawConfig" style="margin-top:16px"></pre>
   </section>
 </main>
-<script src="bf_engine.js?v=1.47.1"></script>
+<script src="bf_engine.js?v=1.47.2"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════════
 // Connection defaults — flat hardcoded constants, not derived from where
@@ -2263,10 +2263,10 @@ function addRoundRow(name = '', engine = 'stableford_quota', venueId = '', wbPoi
         <button type="button" class="secondary r-addseg" style="padding:4px 10px;font-size:0.82rem">+ Add segment</button>
         <select class="r-layout" title="Replace the segments with a common layout" style="width:auto;font-size:0.82rem">
           <option value="">Quick layout…</option>
-          <option value="fb_fs">Fourball 1-9, Foursomes 10-18</option>
-          <option value="fs_fb">Foursomes 1-9, Fourball 10-18</option>
+          <option value="fb_fs">Fourball 1-9, Greensomes 10-18</option>
+          <option value="fs_fb">Greensomes 1-9, Fourball 10-18</option>
           <option value="fb18">Fourball, 18 holes</option>
-          <option value="fs18">Foursomes, 18 holes</option>
+          <option value="fs18">Greensomes, 18 holes</option>
           <option value="si18">Singles, 18 holes</option>
           <option value="si_split">Singles 1-9, Singles 10-18</option>
         </select>

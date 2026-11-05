@@ -40,6 +40,7 @@ async function open(query, fetchFn) {
   const dom = new JSDOM(page, { runScripts: 'dangerously', pretendToBeVisual: true, url: 'https://x.test/bf-cup-results.html' + query, beforeParse(w) { w.fetch = fetchFn || memStub; w.scrollTo = () => {}; } });
   await tick(400); return dom;
 }
+await workerFetch(API + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: 'E', round: 'sat', match: 'm1', action: 'drive', hole: 10, drive: 'Brian Hager', player: 'Brian Hager' }) });
 let dom = await open('?event=E'), d = dom.window.document;
 ok(d.querySelector('.hero h1'), 'the page renders');
 ok(/Team Jake/.test(d.querySelector('.score').textContent) && /Team Nate/.test(d.querySelector('.score').textContent), 'both team names in the score box');
@@ -50,6 +51,7 @@ ok(d.querySelector('.bcast .head') && d.querySelector('.bcast .head').textConten
 ok(/Team (Jake|Nate)/.test(d.querySelector('.bcast').textContent), 'commentator names a team');
 const tab = n => { [...dom.window.document.querySelectorAll('.tab')][n].click(); return dom.window.document; };
 d = tab(1); ok(d.querySelectorAll(".m").length === 2 && /Brian Hager/.test(d.body.textContent) && /Fourball/.test(d.body.textContent), "Saturday shows its matches with the fourball and foursomes result");
+ok(/Drives used: .*Hager 1/.test(tab(1).body.textContent), 'the Saturday card shows how many times each partner\'s drive was used');
 d = tab(2); ok(d.querySelectorAll('.m').length >= 1, 'Sunday shows singles matches (' + d.querySelectorAll('.m').length + ')');
 d = tab(3); ok(/Money/.test(d.querySelector('h2').textContent) && /Closest to the pin|Skins/.test(d.body.textContent), 'Money tab shows the games');
 d = tab(4); ok(d.querySelectorAll('.ph').length === 2 && d.querySelector('.ph video') && d.querySelector('.ph img'), 'Memories shows the photo and the video');

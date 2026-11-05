@@ -53,11 +53,11 @@ ok(box(sat).querySelector('[data-gf="holes"]').placeholder === 'blank = every pa
 field(sat, 0, 'dollar_per_player', 2); await wait(30);
 ok(/Each CTP is worth \$6/.test(line(sat)) && /the other \$50 goes back to the players/.test(line(sat)), 'a smaller CTP leaves money for the players: ' + line(sat));
 field(sat, 0, 'dollar_per_player', 5); await wait(30);
-// --- Skins on Saturday is refused with the reason (Foursomes holes have one score per pair)
+// --- Skins on Saturday is refused with the reason (Greensomes holes have one score per pair)
 addGame(sat, 'skins'); await wait(30);
-ok(/Foursomes records one score per pair/.test(line(sat)), 'Skins on a round with Foursomes is flagged by the engine\'s own check: ' + line(sat));
+ok(/Greensomes records one score per pair/.test(line(sat)), 'Skins on a round with Greensomes is flagged by the engine\'s own check: ' + line(sat));
 box(sat).querySelector('[data-gx="1"]').click(); await wait(30);
-ok(!/Foursomes records/.test(line(sat)), 'remove it and the problem clears');
+ok(!/Greensomes records/.test(line(sat)), 'remove it and the problem clears');
 // --- Sunday: $15 entry, CTP $16 a hole + skins
 entry(sun, 15); addGame(sun, 'cttp'); field(sun, 0, 'dollar_per_player', 5); addGame(sun, 'skins'); await wait(30);
 ok(/Weekend buy-in \$20 a player/.test(line(sun)) && /Cup Sat \$5 \+ Cup Sun \$15/.test(line(sun)), 'the weekend buy-in adds the rounds: $5 + $15 = $20');

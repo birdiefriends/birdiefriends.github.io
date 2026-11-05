@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.47.1';
+  const ENGINE_VERSION = '1.47.2';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2263,7 +2263,7 @@
   // pair (read from whichever partner's card has it), fourball the better ball, singles the player's own score.
   // A match closes the moment a side leads by more holes than are left (3&2); holes played after that never count.
   // ======================================================================================================
-  const CUP_FORMATS = { altshot: { size: 2, label: 'Foursomes' }, bestball: { size: 2, label: 'Fourball' }, singles: { size: 1, label: 'Singles' } };
+  const CUP_FORMATS = { altshot: { size: 2, label: 'Greensomes' }, bestball: { size: 2, label: 'Fourball' }, singles: { size: 1, label: 'Singles' } };
   function cupPointsRule(cfg) {
     const p = (cfg && cfg.points) || {};
     const n = (v, d) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
@@ -2314,6 +2314,31 @@
       else out[h] = v[0];                                // foursomes: the one shared ball; singles: the player's own
     }
     return out;
+  }
+
+  // Greensomes drive tally (Brian, 2026-11-05): both partners tee off, the pair picks one drive, and each partner's drive has to be used at least
+  // `min` times over the part (9 holes -> 4, so 5/4). cfg.drives[round][match][hole] = {player, by, at}. Only a tally: nothing is blocked or penalised
+  // (the captains settle a shortfall), the panel and results page just show the count and when a choice is forced.
+  function cupDriveStatus(cfg, round, match, seg) {
+    const holes = Math.max(0, (Number(seg.to) || 0) - (Number(seg.from) || 0) + 1);
+    const min = Number(round && round.drive_min) > 0 ? Math.floor(Number(round.drive_min)) : Math.floor(holes / 2);
+    const dr = ((((cfg || {}).drives || {})[round.key] || {})[match.key]) || {};
+    const sides = (match.sides || []).map(sd => {
+      const counts = {}; (sd.players || []).forEach(p => { counts[p] = 0; });
+      let logged = 0; const by = {};
+      for (let h = seg.from; h <= seg.to; h++) {
+        const e = dr[String(h)]; if (!e || !e.player) continue;
+        const nm = (sd.players || []).find(p => norm(p) === norm(e.player)); if (!nm) continue;
+        counts[nm]++; logged++; by[h] = nm;
+      }
+      const left = holes - logged;
+      const need = {}; (sd.players || []).forEach(p => { need[p] = Math.max(0, min - counts[p]); });
+      const total = Object.values(need).reduce((a, b) => a + b, 0);
+      // forced: the holes left are all needed by the players still short; impossible: more drives needed than holes left
+      const forced = left > 0 && total >= left ? (sd.players || []).filter(p => need[p] > 0) : [];
+      return { side: sd.side, players: sd.players || [], counts, by, logged, left, min, need, forced: total === left && left > 0 ? forced : [], impossible: total > left };
+    });
+    return { holes, min, sides };
   }
   function cupCardMap(cards) { return new Map((cards || []).map(c => [norm(c.player), c])); }
   // Standings for the whole Cup. Returns the per-round / per-match / per-segment view the scoreboard, results page
@@ -2722,7 +2747,7 @@
     const st = cupMatchStrokes(match, hcps, rule), out = [];
     (formats || []).forEach(f => {
       if (!pctOf[f]) { out.push((CUP_FORMATS[f] || {}).label + ': scratch'); return; }
-      if (f === 'altshot') { const t = st.teams.filter(x => x.strokes > 0)[0]; out.push('Foursomes: ' + (t ? (sideName ? sideName(t.side) : t.side) + ' gets ' + t.strokes : 'even')); }
+      if (f === 'altshot') { const t = st.teams.filter(x => x.strokes > 0)[0]; out.push('Greensomes: ' + (t ? (sideName ? sideName(t.side) : t.side) + ' gets ' + t.strokes : 'even')); }
       else if (f === 'bestball') { const g = st.players.filter(x => x.strokes > 0); out.push('Fourball: ' + (g.length ? g.map(x => x.names[0] + ' ' + x.strokes).join(', ') : 'even')); }
       else if (f === 'singles') { const g = st.players.filter(x => x.strokes > 0); out.push('Singles: ' + (g.length ? g.map(x => x.names[0] + ' ' + x.strokes).join(', ') : 'even')); }
     });
@@ -2862,7 +2887,7 @@
       const gm = getGame(id);
       if (id === 'cttp' && !eff.holes.length) out.push(label + ': this Cup has no par 3s saved, so pick the CTP holes');
       else if (gm && Array.isArray(gm.config) && gm.config.length) { const v = validateGameConfig(id, eff); if (!v.ok) v.errors.forEach(e => out.push(label + ': ' + e)); }
-      if (CUP_NEEDS_PLAYER_SCORES.includes(id) && hasFoursomes) out.push(label + ' needs every player\'s own score on every hole, and Foursomes records one score per pair. Run it on a round of Fourball or Singles.');
+      if (CUP_NEEDS_PLAYER_SCORES.includes(id) && hasFoursomes) out.push(label + ' needs every player\'s own score on every hole, and Greensomes records one score per pair. Run it on a round of Fourball or Singles.');
       if (id === 'skins' && a.basis === 'net') out.push('Net skins is not offered on a Cup yet (strokes are set per match, not for the field). Use gross.');
       if (id === 'cttp') (a.holes || []).forEach(h => { if (!(Number(h) >= 1 && Number(h) <= 18)) out.push('CTP hole ' + h + ' is not a hole 1 to 18'); });
     });
@@ -2983,7 +3008,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupTiersOf, cupTierFor, cupIndexOf, cupStrokeIndexFor, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupSinglesRound, cupSinglesControl, cupSinglesView, cupSinglesPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupGroupsOf, cupMatchNumbers, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
+    CUP_FORMATS, cupTiersOf, cupTierFor, cupIndexOf, cupStrokeIndexFor, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupDriveStatus, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupSinglesRound, cupSinglesControl, cupSinglesView, cupSinglesPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupGroupsOf, cupMatchNumbers, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
     CUP_MONEY_GAMES, cupRoundOf, cupRoundPlayers, cupScorecards, cupCtpLeaders, cupParThrees, cupGamesProblems, cupRoundConfig, cupRoundMoney, cupMoneyView,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };

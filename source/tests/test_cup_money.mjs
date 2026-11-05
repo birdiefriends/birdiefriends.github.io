@@ -56,7 +56,7 @@ ok(tot('Nate Stettler') === 1, 'everyone else gets the unclaimed $16 back, $1 ea
 ok(r.payouts.reduce((a, p) => a + p.total, 0) + r.unallocated === 80, 'every dollar of the pot is accounted for');
 // --- what a host cannot configure
 const prob = (mut) => { const c = base(); satScores(c); c.rounds[0].games = { entry_per_player: 5, addons: [{ id: 'cttp', dollar_per_hole: 16 }] }; mut(c.rounds[0].games); return E.cupGamesProblems(c, sat.key); };
-ok(prob(g => g.addons.push({ id: 'skins', basis: 'gross' })).some(p => /Foursomes records one score per pair/.test(p)), 'Skins is refused on a round with Foursomes, with the reason');
+ok(prob(g => g.addons.push({ id: 'skins', basis: 'gross' })).some(p => /Greensomes records one score per pair/.test(p)), 'Skins is refused on a round with Greensomes, with the reason');
 ok(prob(g => g.addons.push({ id: 'birdiepay', dollar_per_birdie: 2 })).some(p => /Birdie Payouts needs every player/.test(p)), 'Birdie Payouts is refused the same way');
 ok(prob(g => g.addons.push({ id: 'hilo' })).some(p => /not offered on a Cup round/.test(p)), 'a game outside the Cup list is refused');
 ok(prob(g => g.addons.push({ id: 'cttp', dollar_per_hole: 1 })).some(p => /twice/.test(p)), 'the same game twice is refused');

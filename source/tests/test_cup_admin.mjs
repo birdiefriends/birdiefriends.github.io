@@ -35,9 +35,9 @@ const cupRows = [sat, sun];
 ok(cupRows.every(tr => tr.querySelector('.r-wbpoints').disabled && !tr.querySelector('.r-overall').checked && tr.querySelector('.r-overall').disabled), 'Cup rows: Wally Ball and Overall are off and locked');
 ok(cupRows.every(tr => tr._detail.style.display !== 'none' && tr.querySelector('.r-holes').disabled), 'Cup rows show a full-width segment editor and the redundant Holes box is locked');
 ok(sat._detail.querySelectorAll('.seg').length === 2 && sun._detail.querySelectorAll('.seg').length === 1, 'Saturday has two segments, Sunday one');
-ok([...sat._detail.querySelectorAll('.sg-fmt')].map(e => e.value).join() === 'bestball,altshot' && [...sat._detail.querySelectorAll('.sg-from')].map(e => e.value).join() === '1,10' && [...sat._detail.querySelectorAll('.sg-to')].map(e => e.value).join() === '9,18', 'Saturday = Fourball 1-9 then Foursomes 10-18');
+ok([...sat._detail.querySelectorAll('.sg-fmt')].map(e => e.value).join() === 'bestball,altshot' && [...sat._detail.querySelectorAll('.sg-from')].map(e => e.value).join() === '1,10' && [...sat._detail.querySelectorAll('.sg-to')].map(e => e.value).join() === '9,18', 'Saturday = Fourball 1-9 then Greensomes 10-18');
 ok(d.querySelectorAll('.cup-round').length === 2, 'two Cup rounds listed in 4b, taken from section 4');
-ok(/Fourball holes 1-9 \+ Foursomes holes 10-18/.test(d.querySelectorAll('.cup-round')[0].textContent) && /Singles holes 1-18/.test(d.querySelectorAll('.cup-round')[1].textContent), '4b shows each round\'s segments');
+ok(/Fourball holes 1-9 \+ Greensomes holes 10-18/.test(d.querySelectorAll('.cup-round')[0].textContent) && /Singles holes 1-18/.test(d.querySelectorAll('.cup-round')[1].textContent), '4b shows each round\'s segments');
 ok(!d.getElementById('cupAddPreset') && !d.querySelector('.r-cupsame'), '4b no longer asks for rounds a second time');
 ok(/add the roster in section 3|players \(/.test(d.getElementById('cupSummary').textContent), 'summary describes the field (or asks for the roster)');
 ok(/Name side A/.test(d.getElementById('cupSummary').textContent), 'asks for side names');
@@ -59,8 +59,8 @@ await w.rehydrateFormFromConfig({ eventName: '2026 BF Cup', roster: [], rounds: 
   { name: 'Sunday', engine: 'cup_match', engineParams: { cupSegments: [{ format: 'singles', from: 1, to: 18 }] } },
   { name: 'Old style', engine: 'cup_match', engineParams: { cupFormat: 'altshot', holes: { count: 9, half: 'back' } } }] });
 await new Promise(r => setTimeout(r, 30));
-ok(d.querySelectorAll('.cup-round').length === 3 && /Fourball holes 1-9 \+ Foursomes holes 10-18/.test(d.querySelectorAll('.cup-round')[0].textContent), 'a saved config reloads into section 4 and 4b with its segments');
-ok(/Foursomes holes 10-18/.test(d.querySelectorAll('.cup-round')[2].textContent), 'an older single-format row still loads (its holes become the segment)');
+ok(d.querySelectorAll('.cup-round').length === 3 && /Fourball holes 1-9 \+ Greensomes holes 10-18/.test(d.querySelectorAll('.cup-round')[0].textContent), 'a saved config reloads into section 4 and 4b with its segments');
+ok(/Greensomes holes 10-18/.test(d.querySelectorAll('.cup-round')[2].textContent), 'an older single-format row still loads (its holes become the segment)');
 w.removeLastForTest && 0;
 [...d.querySelectorAll('#roundsBody tr.roundRow')][2].querySelector('.removeRoundBtn').click(); await new Promise(r => setTimeout(r, 30));
 // save is refused until the sides are named, then posts the document with the PIN
