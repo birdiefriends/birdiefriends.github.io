@@ -269,6 +269,12 @@
   }
   // Greensomes: each team says whose drive it used on the hole BEFORE the score can be saved. The choice is held on the page (S.drv) until Save, then
   // travels with the score post (so it is queued offline like the score). Returns { matchKey: { sideKey: name } } or null when it is not a Greensomes hole.
+  // A match that is already decided keeps being scored (skins, closest to the pin, everyone has paid to play). Its points are frozen by the engine at the
+  // clinching hole, so a hole after that is "play-on": still entered, never changes the result. The tee-shot mark is optional on a play-on Greensomes hole.
+  function playOn(cfg, round, match, hole) {
+    var lv = S.opts.E.cupMatchLive(cfg, round, match, entryOf(cfg, round.key, match.key)), sg = lv.segments.filter(function (x) { return hole >= x.from && hole <= x.to; })[0];
+    return !!(sg && sg.state.closedAt != null && hole > sg.state.closedAt);
+  }
   function driveSeg(round, hole) { return (round.segments || []).filter(function (sg) { return sg.format === 'altshot' && hole >= sg.from && hole <= sg.to; })[0] || null; }
   function driveChoices(cfg, round, matches, hole, gkey) {
     if (!driveSeg(round, hole)) return null;
@@ -305,14 +311,14 @@
         dm[String(pp[1])] = dm[String(pp[1])] || {}; dm[String(pp[1])][sd.side] = { player: v };
       }); });
     });
-    var rowsH = '', sums = [], marked = 0, total = 0;
+    var rowsH = '', sums = [], marked = 0, total = 0, optN = 0;
     matches.forEach(function (match) {
-      var st = E.cupDriveStatus(view, round, match, seg);
+      var st = E.cupDriveStatus(view, round, match, seg), opt = playOn(cfg, round, match, hole);
       st.sides.forEach(function (sd) {
         if (sd.players.length < 2) return;
-        total++;
+        if (opt) optN++; else total++;
         var mine = sd.players.filter(function (p) { return norm(p) === norm(ch[match.key][sd.side]); })[0];
-        if (mine) { marked++; sums.push(esc(sideName(cfg, sd.side)) + ': ' + esc(shortName(mine)) + ' (' + sd.counts[mine] + ' of ' + sd.min + '+)'); }
+        if (mine) { if (!opt) marked++; sums.push(esc(sideName(cfg, sd.side)) + ': ' + esc(shortName(mine)) + ' (' + sd.counts[mine] + ' of ' + sd.min + '+)'); }
         var warn = '';
         if (sd.impossible) warn = 'Not enough holes left for both drives to reach ' + sd.min + '. The captains decide.';
         else if (sd.forced.length) warn = (sd.forced.length === 1 ? esc(shortName(sd.forced[0])) + '’s drive' : 'Both drives') + ' must be used on the ' + (sd.left === 1 ? 'last hole' : 'last ' + sd.left + ' holes') + ' to reach ' + sd.min + '.';
@@ -323,13 +329,13 @@
           + '</div><div class="lmdim">Used: ' + line + ' · ' + sd.left + ' hole' + (sd.left === 1 ? '' : 's') + ' unmarked · each needs ' + sd.min + '</div>' + (warn ? '<div class="warn">' + warn + '</div>' : '') + '</div>';
       });
     });
-    if (!total) return '';
+    if (!total && !optN) return '';
     S.drvOpen = S.drvOpen || {};
-    var key = gkey + '|' + hole, done = marked === total, folded = done && !S.drvOpen[key];
-    var pill = done ? 'Marked ✓' : marked ? marked + ' of ' + total + ' marked' : 'Mark whose drive';
-    var h = '<div class="lmst tee">' + stepHead(stepNo, '🏌️', 'Tee shot', pill, done, false);
+    var key = gkey + '|' + hole, allOpt = !total, done = !allOpt && marked === total, folded = done && !S.drvOpen[key];
+    var pill = allOpt ? 'Match over' : done ? 'Marked ✓' : marked ? marked + ' of ' + total + ' marked' : 'Mark whose drive';
+    var h = '<div class="lmst tee">' + stepHead(stepNo, '🏌️', 'Tee shot', pill, done, allOpt);
     if (folded) return h + '<div class="lmstsum"><span>' + sums.join(' · ') + '</span><button data-lm-drvopen="' + esc(key) + '">change</button></div></div>';
-    return h + '<div class="lmdim" style="margin-bottom:2px">Both tee off, pick one drive, then alternate. Tap whose drive your team used.</div>' + rowsH + (done ? '<div style="text-align:right"><button class="lmsec" data-lm-drvopen="' + esc(key) + '" style="padding:5px 12px;font-size:.82rem">Done</button></div>' : '') + '</div>';
+    return h + '<div class="lmdim" style="margin-bottom:2px">' + (allOpt ? 'This match is already decided, so the tee shot is optional on the holes you play on.' : 'Both tee off, pick one drive, then alternate. Tap whose drive your team used.') + '</div>' + rowsH + (done ? '<div style="text-align:right"><button class="lmsec" data-lm-drvopen="' + esc(key) + '" style="padding:5px 12px;font-size:.82rem">Done</button></div>' : '') + '</div>';
   }
   // Closest to the pin (Dev-98, spec §13.15): shown on a CTP hole of a round whose games include it. Anyone playing in the round may set who is closest.
   function ctpHolesOf(cfg, round) {
@@ -366,7 +372,7 @@
       return;
     }
     function liveOf(g) { return g.matches.map(function (m) { return E.cupMatchLive(cfg, g.round, m, entryOf(cfg, g.round.key, m.key)); }); }
-    function gDone(g) { return liveOf(g).every(function (l) { return l.done; }); }
+    function gDone(g) { return liveOf(g).every(function (l) { return l.done && (l.closed || l.allEntered); }); }   // decided AND every hole in: a decided match still being played stays selectable
     // choose the group: remembered, else mine and still open, else any still open, else mine, else the first
     var grp = S.sel && all.filter(function (x) { return x.round.key === S.sel.r && x.key === S.sel.g; })[0];
     if (!grp) grp = all.filter(function (x) { return mineG(x, S.opts.player) && !gDone(x); })[0] || all.filter(function (x) { return !gDone(x); })[0] || all.filter(function (x) { return mineG(x, S.opts.player); })[0] || all[0];
@@ -378,7 +384,7 @@
     S.hole = { g: gkey, h: hole };
     var q = queue(), std = E.cupLiveStandings(cfg), stdOf = {};
     std.rounds.forEach(function (rr) { if (rr.key === round.key) rr.matches.forEach(function (mm) { stdOf[mm.key] = mm; }); });
-    var finished = lives.every(function (l) { return l.done; }) && !(S.edit && S.edit[gkey]);
+    var wrapped = lives.every(function (l) { return l.closed || l.allEntered; }), finished = lives.every(function (l) { return l.done; }) && wrapped && !(S.edit && S.edit[gkey]);
     var h = '<div class="lm">';
     // who is scoring: pick the group, then who you are among its four players
     var members = []; matches.forEach(function (m) { m.sides.forEach(function (sd) { sd.players.forEach(function (p) { members.push(p); }); }); });
@@ -442,14 +448,18 @@
     var anon = !S.opts.player && !S.opts.code && !S.opts.pin;
     if (!hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
     var dch = driveChoices(cfg, round, matches, hole, gkey), noDrive = [];
-    if (dch) matches.forEach(function (m) { m.sides.forEach(function (sd) { if (!dch[m.key][sd.side]) noDrive.push(sideName(cfg, sd.side)); }); });
+    if (dch) matches.forEach(function (m) { if (playOn(cfg, round, m, hole)) return; m.sides.forEach(function (sd) { if (!dch[m.key][sd.side]) noDrive.push(sideName(cfg, sd.side)); }); });
     h += '<button class="lmgo' + (!missing && !anon && !noDrive.length ? ' ready' : '') + '" id="lmPost"' + (missing || anon || noDrive.length ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : noDrive.length ? 'Mark whose drive first (' + noDrive.join(', ') + ')' : (anyPosted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>' + (anyPosted && !anon ? '<button class="lmsec" id="lmClear" style="margin-top:8px;width:100%">Clear hole ' + hole + ' (start it over)</button>' : '') + '</div>';
     if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, matches: matches, hole: hole, E: E }) || '';
     h += ctpHtml(cfg, round, hole, matches, stepNo + 1);
     if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' score' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
     if (S.err) h += '<div class="lmmsg q" id="lmErr">⚠ ' + esc(S.err) + '</div>';
     if (S.msg) h += '<div class="lmmsg">' + esc(S.msg) + '</div>';
-    if (lives.every(function (l) { return l.done; }) && !finished) h += '<div class="lmmsg">Already decided. Only correct a score here if one was entered wrong.</div>';
+    if (!finished) matches.forEach(function (match, i) {      // decided but still being played: say so, keep the entry open
+      if (!lives[i].done || lives[i].closed) return;
+      var sm = stdOf[match.key], parts = sm ? sm.segments.filter(function (sg) { return sg.status === 'won'; }).map(function (sg) { return sideName(cfg, sg.winner) + ' ' + sg.text; }) : [];
+      h += '<div class="lmmsg">Match ' + nums[round.key + '|' + match.key] + ' is over' + (parts.length ? ': ' + esc(parts.join(', ')) : '') + '. Points are locked. Keep scoring so everyone’s skins and closest-to-the-pin count; the round stays open until every hole is in.</div>';
+    });
     if (finished) {
       h = h.slice(0, entryStart) + '<div class="lmdim" style="margin:6px 0">' + (matches.length > 1 ? 'Group complete' : 'Match complete') + '</div>' + matches.map(function (match) {
         var sm = stdOf[match.key]; if (!sm) return '';
@@ -466,10 +476,10 @@
       h += '<div class="lmc"><b>Close match ' + nums[round.key + '|' + match.key] + '</b><div class="lmdim" style="margin:4px 0 8px">Only for a concession or a match stopped early. A match that is mathematically over closes by itself.</div><div class="lmtabs"><button class="lmsec" data-lm-close="standing|" data-lm-cm="' + esc(match.key) + '">As it stands</button>' + match.sides.map(function (sd) { return '<button class="lmsec" data-lm-close="concede|' + esc(sd.side) + '" data-lm-cm="' + esc(match.key) + '">' + esc(sideName(cfg, sd.side)) + ' concedes</button>'; }).join('') + '<button class="lmsec" data-lm-close="halve|" data-lm-cm="' + esc(match.key) + '">Call it halved</button></div></div>';
     });
     // round control: the round finishes by itself once every match is decided or closed
-    var rEnd = cfg.phases && cfg.phases['round_' + round.key + '_end'], allDone = (round.matches || []).every(function (m) { return E.cupMatchLive(cfg, round, m, entryOf(cfg, round.key, m.key)).done; });
+    var rEnd = cfg.phases && cfg.phases['round_' + round.key + '_end'], allDone = (round.matches || []).every(function (m) { var lv = E.cupMatchLive(cfg, round, m, entryOf(cfg, round.key, m.key)); return lv.done && (lv.closed || lv.allEntered); });
     h += '<div class="lmc">' + (rEnd ? '<b>' + esc(round.name || round.key) + ' is finished.</b>' + (canClose ? ' <button class="lmsec" id="lmReopen">Reopen it</button>' : '')
-      : canClose ? '<button class="lmsec" id="lmFinish">' + (allDone ? 'Finish ' : 'Finish early: ') + esc(round.name || round.key) + '</button> <span class="lmdim">' + (allDone ? 'Every match is decided.' : 'Some matches are still open.') + '</span>'
-      : '<span class="lmdim">' + esc(round.name || round.key) + ' finishes by itself when every match is decided.</span>') + '</div>';
+      : canClose ? '<button class="lmsec" id="lmFinish">' + (allDone ? 'Finish ' : 'Finish early: ') + esc(round.name || round.key) + '</button> <span class="lmdim">' + (allDone ? 'Every match is decided and every hole is in.' : 'Some matches or holes are still open.') + '</span>'
+      : '<span class="lmdim">' + esc(round.name || round.key) + ' finishes by itself when every match is decided and every hole is in.</span>') + '</div>';
     if (allDone && !rEnd && (S.opts.player || canClose)) { S.autoEnd = S.autoEnd || {}; if (!S.autoEnd[round.key]) { S.autoEnd[round.key] = true; setTimeout(function () { act(round, 'round_end'); }, 50); } }
     h += '</div>';
     el.innerHTML = h; wire(round, grp, matches, hole, rows);

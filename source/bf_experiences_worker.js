@@ -1964,7 +1964,28 @@ export default {
           if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
           // the public document never carries the captain codes, so a re-save must not wipe them
           // (the same goes for the captains' Saturday pairs: a page that never loaded them must not erase them)
-          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (!config.singles && pc.singles) config.singles = pc.singles; if (!config.closed && pc.closed) config.closed = pc.closed; if (!config.results && pc.results) config.results = pc.results; if (!config.access && pc.access) config.access = pc.access; if (!byGlobal) { if (pc.host_code) config.host_code = pc.host_code; else delete config.host_code; } else if (!config.host_code && pc.host_code) config.host_code = pc.host_code; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; if (!config.ctp && pc.ctp) config.ctp = pc.ctp; if (!config.drives && pc.drives) config.drives = pc.drives; (config.rounds || []).forEach(r0 => { const o0 = (pc.rounds || []).find(x => x && x.key === r0.key); if (o0 && o0.payout && !r0.payout) r0.payout = o0.payout; }); } catch (e) { /* ignore */ } } }
+          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (config.singles === undefined && pc.singles) config.singles = pc.singles; if (!config.closed && pc.closed) config.closed = pc.closed; if (!config.results && pc.results) config.results = pc.results; if (!config.access && pc.access) config.access = pc.access; if (!byGlobal) { if (pc.host_code) config.host_code = pc.host_code; else delete config.host_code; } else if (!config.host_code && pc.host_code) config.host_code = pc.host_code; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; if (!config.ctp && pc.ctp) config.ctp = pc.ctp; if (!config.drives && pc.drives) config.drives = pc.drives; (config.rounds || []).forEach(r0 => { const o0 = (pc.rounds || []).find(x => x && x.key === r0.key); if (o0 && o0.payout && !r0.payout) r0.payout = o0.payout; }); } catch (e) { /* ignore */ } } }
+          // Singles-draw guardrails (Brian, 2026-11-05). Starting or restarting the Sunday draw renumbers the Sunday matches (m1, m2 ...) and scores are stored by that number,
+          // so leftover Sunday scores would attach to the wrong players; and the host override must not quietly skip the "Saturday decides who is in control" rule.
+          // (config.singles === null is the host's deliberate restart; undefined means the page never loaded it, so the saved one is kept.)
+          { const pv = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); let pc2 = null; try { pc2 = pv ? JSON.parse(pv.config) : null; } catch (e) { pc2 = null; }
+            if (pc2) {
+              const wasOn = !!(pc2.singles && pc2.singles.started), nowOn = !!(config.singles && config.singles.started), fresh = nowOn && !wasOn, reset = wasOn && !nowOn;
+              if (fresh || reset) {
+                const sri = (config.rounds || []).findIndex(r => ((r.segments || [])[0] || {}).format === 'singles'), sk = sri >= 0 ? config.rounds[sri].key : null;
+                const nHoles = sk && config.scores && config.scores[sk] ? Object.values(config.scores[sk]).reduce((a, e) => a + Object.keys((e && e.h) || {}).length, 0) : 0;
+                if (fresh && body.override !== true) {
+                  const pi = (config.rounds || []).findIndex(r => { const f = ((r.segments || [])[0] || {}).format; return f === 'bestball' || f === 'altshot'; });
+                  const res = pi >= 0 && config.results && config.results[config.rounds[pi].key];
+                  if (!res || !res.points) return J({ error: 'Saturday is not finished, so nobody has earned control of the singles draw yet. Confirm the host override to start it anyway.', code: 'needs_override' }, 409);
+                }
+                if (nHoles > 0) {
+                  if (body.discard_scores !== true) return J({ error: 'Sunday already has ' + nHoles + ' saved hole score' + (nHoles === 1 ? '' : 's') + '. Starting or restarting the draw would attach them to the wrong matches. Confirm to delete them first.', code: 'sunday_scores', holes: nHoles }, 409);
+                  delete config.scores[sk]; if (config.drives) delete config.drives[sk]; if (config.ctp) delete config.ctp[sk]; if (config.results) delete config.results[sk]; if (config.closed) delete config.closed[sk];
+                  if (config.phases) { delete config.phases['round_' + sk + '_start']; delete config.phases['round_' + sk + '_end']; }
+                }
+              }
+            } }
           await env.DB.prepare(`INSERT INTO bfe_cup (event_name, config, updated_at) VALUES (?, ?, datetime('now'))
              ON CONFLICT(event_name) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at`).bind(event_name, JSON.stringify(cupStampPhases(config))).run();
           return J({ ok: true });

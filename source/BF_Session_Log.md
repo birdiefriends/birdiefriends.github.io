@@ -5694,3 +5694,9 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 ## 2026-11-05 — BF Cup: Clear hole + unsaved-tap drive tally
 - Brian saved hole 1 while testing and could not reset it: the ✕ only undoes a tap before Save. Added Worker action `clear_hole` {round, match, hole} (deletes the hole's scores and Greensomes drives; same trust as scoring, closed match needs a captain) and a "Clear hole N" button on saved holes in the live panel (v21, confirm first, queued posts for that hole dropped, one match at a time).
 - Greensomes drive tally now counts unsaved taps on other holes; folded tee card shows "(n of 4+)". Panel v20. Tests: test_cup_drives 36.
+
+## 2026-11-05 — BF Cup: rounds stay open until every hole is in (play-on) + singles-draw guardrails
+- Panel v22: a decided match keeps its score entry open ("Match N is over, 3&2. Points are locked. Keep scoring...") until every hole is scored; the "final" view, group-done and the auto round_end now wait for every hole (or a manual close). Why: Sunday has gross skins and Hole 18 is a CTP, and everyone pays to play. Points are unaffected: cupMatchState already freezes a match at the clinching hole ("play-on holes never change a closed match"). Greensomes tee shot is optional on a play-on hole.
+- Worker (host save): starting the Sunday draw before Saturday is finished needs `override:true` (page asks the host); starting or restarting it while Sunday has scores needs `discard_scores:true` (deletes Sunday scores/drives/ctp/results/closed and the round stamps). `singles: null` is now a deliberate restart; before, the Worker restored the saved singles on every re-save, so "Restart the singles draw" silently did nothing.
+- Draft page: host "Ready for the singles draw?" card (equal rosters, Saturday matches decided, Saturday finished, Sunday empty).
+- Tests: test_cup_playon.mjs (22).
