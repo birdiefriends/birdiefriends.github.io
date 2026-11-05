@@ -107,7 +107,7 @@ c = await dbCfg(); ok(c.drives && c.drives.sat.m1['11'].A.player === 'BJ Kolonia
   if (goto(16)) {
     await tick(80); const base0 = brianCount();
     btn('Brian').click(); await tick(60); ok(brianCount() === base0 + 1, 'tap on hole 16 counts at once');
-    goto(17); await tick(80); ok(/Hole 16/.test(dq().querySelector('#lmAll').textContent), 'cannot move on to hole 17 while hole 16 is not posted');
+    ok(dq().querySelector('[data-lm-go="1"]').disabled, 'the › arrow is locked while hole 16 is not posted');
   } else ok(false, 'hole 16 button not found');
 }
 // Clear hole: a saved hole can be taken back to empty (Brian, 2026-11-05: could not reset hole 1 after a test save)

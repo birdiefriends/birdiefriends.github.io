@@ -422,8 +422,7 @@
     var round = grp.round, matches = grp.matches, lives = liveOf(grp), gkey = round.key + '|' + grp.key;
     var maxHole = Math.max.apply(null, round.segments.map(function (s) { return s.to; }));
     var gnext = Math.min.apply(null, lives.map(function (l) { return l.next; }));
-    var allowed = Math.min(maxHole, gnext), hole = S.hole && S.hole.g === gkey ? S.hole.h : gnext;
-    if (hole > allowed) hole = allowed;           // no moving past a hole that is not posted yet
+    var allowed = Math.min(maxHole, gnext), hole = S.hole && S.hole.g === gkey ? S.hole.h : gnext;           // the › arrow will not run past the first unposted hole; the hole grid can still jump anywhere
     S.hole = { g: gkey, h: hole };
     var q = queue(), std = E.cupLiveStandings(cfg), stdOf = {};
     std.rounds.forEach(function (rr) { if (rr.key === round.key) rr.matches.forEach(function (mm) { stdOf[mm.key] = mm; }); });
@@ -471,7 +470,7 @@
     h += '<div class="lmnav"><button class="lmarrow" data-lm-go="-1"' + (hole <= 1 ? ' disabled' : '') + '>‹</button><button class="lmhtitle" id="lmAll">Hole ' + hole + (w0 ? ' <span class="lmwin ' + w0 + '"></span>' : '') + '<small>' + FMT[fmt0] + (cfg.handicap && cfg.handicap.strokeIndex ? ' · stroke index ' + cfg.handicap.strokeIndex[hole - 1] : '') + (anyPosted ? ' · posted' : '') + ' · tap for all holes</small></button><button class="lmarrow" data-lm-go="1"' + (hole >= allowed ? ' disabled' : '') + '>›</button></div>';
     if (S.showAll) h += '<div class="lmholes">' + Array.apply(null, Array(maxHole)).map(function (_, i) {
       var n = i + 1, w = matches.length === 1 ? holeWinner(lives[0], n) : '', segStart = round.segments.some(function (s) { return s.from === n && n > 1; });
-      return '<button class="lmh ' + w + (n === hole ? ' cur' : '') + (segStart ? ' seg' : '') + '"' + (n > allowed ? ' disabled style="opacity:.35"' : '') + ' data-lm-hole="' + n + '">' + n + '</button>';
+      return '<button class="lmh ' + w + (n === hole ? ' cur' : '') + (segStart ? ' seg' : '') + '"' + '' + ' data-lm-hole="' + n + '">' + n + '</button>';
     }).join('') + '</div>';
     var firstOpen = rows.filter(function (r) { return needRow(rows, r, inp, posted); })[0];
     var who = rows.filter(function (r) { return r.key === S.who; })[0] || firstOpen || rows[0];

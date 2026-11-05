@@ -80,4 +80,5 @@ c = await dbCfg(); ok(c.scores.sat.m1.h['4'][B1] === 3 && c.scores.sat.m1.h['4']
 goto(3); await tick(80);
 dq().querySelector('[data-lm-who="' + A2 + '"]').click(); await tick(40); dq().querySelector('[data-lm-s="' + A2 + '|5"]').click(); await tick(60);
 ok(dq().getElementById('lmPost').disabled, 'a posted -1 needs a real score once the other side is back in');
+goto(12); await tick(80); ok(/Hole 12/.test(dq().querySelector('#lmAll').textContent), 'the hole grid still jumps to any hole (for testing and catch-up)'); ok(dq().querySelector('[data-lm-go="1"]').disabled, 'but the › arrow stays locked until this hole is posted');
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

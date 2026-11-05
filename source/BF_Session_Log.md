@@ -5727,5 +5727,5 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 ## Hole result preview + hole lock (panel v27, panel-only: no Worker change)
 - Above Post, each match shows what posting will do: "Team X wins hole N" (with net, "by concession" or "other side out"), "Hole N halved" (both sides Out also halves), and the match status after it, computed by the engine on a copy of the Cup. Incomplete: "N scores to go".
 - Player chips show only what was entered; a blank optional winner is "–" with "optional" (no "Won" on a player).
-- The › arrow and the hole grid stop at the first unposted hole; earlier holes can still be corrected.
+- The › arrow stops at the first unposted hole. The hole grid (tap the hole title) still jumps anywhere, for testing and catch-up (v29).
 - Older tests that jumped ahead now post the earlier holes first (drives, money page, score page).
