@@ -50,12 +50,17 @@
     '.lm .lmbs{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid var(--line);font-size:.88rem}.lm .lmbs b.a{color:var(--a)}.lm .lmbs b.b{color:var(--b)}' +
     '.lm .lmmno{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}' +
     '.lm .lmpu{width:auto!important;padding:0 8px;font-size:.78rem!important}.lm .lmpu.on{background:var(--warn)!important;color:var(--ink)!important}' +
-    '.lm .lmgo{width:100%;padding:13px;border-radius:10px;border:0;background:var(--lm-accent,var(--a));color:#fff;font:inherit;font-weight:800;font-size:1rem;cursor:pointer;margin-top:8px}.lm .lmgo:disabled{opacity:.45}' +
+    '.lm .lmgo{width:100%;padding:13px;border-radius:10px;border:0;background:var(--lm-accent,var(--a));color:#fff;font:inherit;font-weight:800;font-size:1rem;cursor:pointer;margin-top:8px}.lm .lmgo:disabled{opacity:1;background:var(--bg2);color:var(--dim);border:1px solid var(--line)}.lm .lmgo.ready{background:#2e9e5b;color:#fff}' +
     '.lm .lmsec{background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-weight:700;cursor:pointer}' +
     '.lm .lmmsg{margin:8px 0;padding:8px 10px;border-radius:9px;background:var(--bg2);font-weight:600;font-size:.9rem}.lm .lmmsg.q{background:var(--warn);color:var(--ink)}.lm .lmmsg.ok{background:#1a7f3c;color:#fff}' +
     '.lm .lmdim{color:var(--dim);font-size:.82rem}.lm .lmdots{letter-spacing:3px;color:var(--warn);font-size:1.15rem;line-height:1;margin-left:10px;display:inline-block;vertical-align:middle}' +
     '.lm .lmboard{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;text-align:center;font-weight:800}.lm .lmboard .big{font-size:1.9rem}' +
     '.lm .lmdrv{margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg2)}.lm .lmdrv .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0}.lm .lmdrv button{padding:11px 6px;border-radius:10px;border:2px solid var(--line);background:var(--bg);color:var(--tx);font:inherit;font-weight:700;cursor:pointer}.lm .lmdrv button.on{border-color:var(--tx);background:var(--tx);color:var(--ink)}.lm .lmdrv .warn{color:var(--warn);font-weight:700;font-size:.85rem}' +
+    '.lm .lmst{border:1px solid var(--line);border-left:5px solid var(--sc,var(--line));border-radius:12px;padding:10px 12px;margin:12px 0;background:var(--bg)}.lm .lmst.tee{--sc:#ffd36b}.lm .lmst.score{--sc:#7fd69a}.lm .lmst.ctp{--sc:#fff}' +
+    '.lm .lmsth{display:flex;align-items:center;gap:8px;margin-bottom:8px}.lm .lmsth .n{width:24px;height:24px;border-radius:50%;background:var(--sc);color:var(--ink);font-weight:800;font-size:.85rem;display:flex;align-items:center;justify-content:center;flex:none}.lm .lmsth .t{font-weight:800;font-size:1.02rem}.lm .lmsth .sp{flex:1}' +
+    '.lm .lmpill{font-size:.72rem;font-weight:700;border-radius:999px;padding:3px 9px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}.lm .lmpill.ok{background:#1a7f4b;border-color:#1a7f4b;color:#fff}.lm .lmpill.opt{border-style:dashed}' +
+    '.lm .lmst.opt .lmdrv button,.lm .lmst.opt select,.lm .lmst.opt .lmgo2{font-size:.9rem}.lm .lmst.opt{background:transparent}.lm .lmstsum{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:600}.lm .lmstsum button{background:none;border:0;color:var(--dim);text-decoration:underline;font:inherit;font-size:.85rem;cursor:pointer}' +
+    '.lm .lmtr{display:grid;grid-template-columns:78px 1fr 1fr;gap:6px;align-items:center;margin:6px 0}.lm .lmtr .tn{font-size:.72rem;font-weight:700;border-left:4px solid var(--line);padding-left:6px;color:var(--dim);line-height:1.2}.lm .lmtr .tn.a{border-left-color:var(--a)}.lm .lmtr .tn.b{border-left-color:var(--b)}.lm .lmtr button{padding:10px 4px;border-radius:10px;border:2px solid var(--line);background:var(--bg2);color:var(--tx);font:inherit;font-weight:700;cursor:pointer}.lm .lmtr button.on{border-color:var(--tx);background:var(--tx);color:var(--ink)}' +
     '.lm .lmml{display:grid;grid-template-columns:1fr auto;gap:6px;padding:6px 0;border-top:1px solid var(--line);font-size:.88rem}';
 
   var S = null;          // module state
@@ -253,28 +258,41 @@
     });
     return h + '</div>';
   }
+  // One numbered header per entry step (tee shot / score / closest to the pin) so the three jobs read as different things at a glance.
+  function stepHead(n, icon, title, pill, ok, opt) {
+    return '<div class="lmsth"><span class="n">' + n + '</span><span class="t">' + icon + ' ' + esc(title) + '</span><span class="sp"></span>' + (opt ? '<span class="lmpill opt">Optional</span>' : '') + (pill ? '<span class="lmpill' + (ok ? ' ok' : '') + '">' + esc(pill) + '</span>' : '') + '</div>';
+  }
   // Greensomes drive tally: tap whose drive the pair used on this hole. Optional (the score saves either way); the count is shown to everyone.
-  function driveHtml(cfg, round, matches, hole) {
-    var E = S.opts.E, h = '';
+  // One card, one row per team. Once every team has a drive marked the card folds to a one-line summary (tap "change" to reopen it).
+  function driveHtml(cfg, round, matches, hole, stepNo, gkey) {
+    var E = S.opts.E;
     var seg = (round.segments || []).filter(function (sg) { return sg.format === 'altshot' && hole >= sg.from && hole <= sg.to; })[0];
     if (!seg) return '';
+    var rowsH = '', sums = [], marked = 0, total = 0, notes = '';
     matches.forEach(function (match) {
-      var st = E.cupDriveStatus(cfg, round, match, seg), dr = ((((cfg.drives || {})[round.key] || {})[match.key]) || {})[String(hole)] || null;
+      var st = E.cupDriveStatus(cfg, round, match, seg), dh = ((((cfg.drives || {})[round.key] || {})[match.key]) || {})[String(hole)] || {};
       st.sides.forEach(function (sd) {
         if (sd.players.length < 2) return;
-        var line = sd.players.map(function (p) { return esc(shortName(p)) + ' <b>' + sd.counts[p] + '</b>'; }).join(' · ');
+        total++;
+        var dr = dh[sd.side] || null, mine = dr && sd.players.filter(function (p) { return norm(p) === norm(dr.player); })[0];
+        if (mine) { marked++; sums.push(esc(sideName(cfg, sd.side)) + ': ' + esc(shortName(mine))); }
         var warn = '';
         if (sd.impossible) warn = 'Not enough holes left for both drives to reach ' + sd.min + '. The captains decide.';
         else if (sd.forced.length) warn = (sd.forced.length === 1 ? esc(shortName(sd.forced[0])) + '’s drive' : 'Both drives') + ' must be used on the ' + (sd.left === 1 ? 'last hole' : 'last ' + sd.left + ' holes') + ' to reach ' + sd.min + '.';
         else if (sd.left > 0) { var lo = sd.players.filter(function (p) { return sd.need[p] > 0; }); if (lo.length === 1 && sd.need[lo[0]] >= sd.left - 1 && sd.left <= 3) warn = esc(shortName(lo[0])) + ' still needs ' + sd.need[lo[0]] + ' of the last ' + sd.left + '.'; }
-        var mine = dr && sd.players.filter(function (p) { return norm(p) === norm(dr.player); })[0];
-        h += '<div class="lmdrv"><div class="lmmno">' + (matches.length > 1 || sd.side ? esc(sideName(cfg, sd.side)) + ' · ' : '') + 'whose drive on hole ' + hole + '?</div><div class="btns">'
+        var line = sd.players.map(function (p) { return esc(shortName(p)) + ' <b>' + sd.counts[p] + '</b>'; }).join(' · ');
+        rowsH += '<div class="lmdrv" style="border:0;padding:0;background:none;margin:6px 0"><div class="lmtr"><span class="tn ' + (sd.side === (match.sides[0] || {}).side ? 'a' : 'b') + '">' + esc(sideName(cfg, sd.side)) + '</span>'
           + sd.players.map(function (p) { return '<button data-lm-drv="' + esc(match.key) + '|' + esc(p) + '" class="' + (mine === p ? 'on' : '') + '">' + esc(shortName(p)) + '</button>'; }).join('')
-          + '</div><div class="lmdim">Drives used: ' + line + ' · ' + sd.left + ' hole' + (sd.left === 1 ? '' : 's') + ' unmarked · each partner needs at least ' + sd.min + '</div>'
-          + (warn ? '<div class="warn">' + warn + '</div>' : '') + '</div>';
+          + '</div><div class="lmdim">Used: ' + line + ' · ' + sd.left + ' hole' + (sd.left === 1 ? '' : 's') + ' unmarked · each needs ' + sd.min + '</div>' + (warn ? '<div class="warn">' + warn + '</div>' : '') + '</div>';
       });
     });
-    return h;
+    if (!total) return '';
+    S.drvOpen = S.drvOpen || {};
+    var key = gkey + '|' + hole, done = marked === total, folded = done && !S.drvOpen[key];
+    var pill = done ? 'Marked ✓' : marked ? marked + ' of ' + total + ' marked' : 'Not marked';
+    var h = '<div class="lmst tee opt">' + stepHead(stepNo, '🏌️', 'Tee shot', pill, done, true);
+    if (folded) return h + '<div class="lmstsum"><span>' + sums.join(' · ') + '</span><button data-lm-drvopen="' + esc(key) + '">change</button></div></div>';
+    return h + '<div class="lmdim" style="margin-bottom:2px">Both tee off, pick one drive, then alternate. Tap whose drive you used.</div>' + rowsH + (done ? '<div style="text-align:right"><button class="lmsec" data-lm-drvopen="' + esc(key) + '" style="padding:5px 12px;font-size:.82rem">Done</button></div>' : '') + '</div>';
   }
   // Closest to the pin (Dev-98, spec §13.15): shown on a CTP hole of a round whose games include it. Anyone playing in the round may set who is closest.
   function ctpHolesOf(cfg, round) {
@@ -282,7 +300,7 @@
     if (!a) return null;
     return Array.isArray(a.holes) ? a.holes.map(Number) : S.opts.E.cupParThrees(cfg);
   }
-  function ctpHtml(cfg, round, hole, matches) {
+  function ctpHtml(cfg, round, hole, matches, stepNo) {
     var hs = ctpHolesOf(cfg, round); if (!hs || hs.indexOf(Number(hole)) < 0) return '';
     var cur = (((cfg.ctp || {})[round.key]) || {})[String(hole)] || null, closed = !!round.payout;
     // the players of this group's own match(es); whoever already holds the hole (set from another group, or by a captain) stays in the list
@@ -291,7 +309,7 @@
     if (!players.length) players = S.opts.E.cupRoundPlayers(round);
     if (cur && cur.player && !players.some(function (n) { return norm(n) === norm(cur.player); })) players.push(cur.player);
     var sel = '<select id="lmCtpSel"' + (closed ? ' disabled' : '') + '><option value="">(nobody on the green yet)</option>' + players.map(function (n) { return '<option' + (cur && norm(cur.player) === norm(n) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>';
-    return '<div class="lmc" id="lmCtp"><div class="lmmno">Closest to the pin · hole ' + hole + '</div>'
+    return '<div class="lmst ctp opt" id="lmCtp">' + stepHead(stepNo, '🚩', 'Closest to pin', cur && cur.player ? shortName(cur.player) + ' ✓' : 'Nobody yet', !!(cur && cur.player), true)
       + (cur && cur.player ? '<div class="lmdim">Now: <b>' + esc(cur.player) + '</b>' + (cur.dist ? ' · ' + esc(cur.dist) : '') + (cur.by ? ' (set by ' + esc(cur.by) + ')' : '') + '</div>' : '<div class="lmdim">Nobody has it yet.</div>')
       + '<div class="lmbar"><label>Who is closest' + sel + '</label><label>Distance (optional)<input id="lmCtpDist" type="text" maxlength="20" placeholder="e.g. 6 ft" value="' + esc((cur && cur.dist) || '') + '"' + (closed ? ' disabled' : '') + '></label></div>'
       + (closed ? '<div class="lmdim">The money for this round is closed.</div>' : '<button class="lmgo2" id="lmCtpGo">Save closest on hole ' + hole + '</button>') + '</div>';
@@ -372,20 +390,23 @@
     var firstOpen = rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; })[0];
     var who = rows.filter(function (r) { return r.key === S.who; })[0] || firstOpen || rows[0];
     S.who = who.key;
+    var stepNo = 0, missing0 = rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
+    if (fmt0 === 'altshot') h += driveHtml(cfg, round, matches, hole, ++stepNo, gkey);
+    h += '<div class="lmst score">' + stepHead(++stepNo, '⛳', fmt0 === 'altshot' ? 'Team score' : 'Score', missing0 ? missing0 + ' to enter' : anyPosted ? 'Saved ✓' : 'Ready', !missing0 && anyPosted, false);
+    if (fmt0 === 'altshot') h += '<div class="lmdim" style="margin:-2px 0 6px">One ball per team: enter the team gross for the hole.</div>';
     h += '<div class="lmchips">' + rows.map(function (r) {
       var cur = rowVal(r.key, inp, posted);
       return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (cur === undefined ? '–' : (cur === 0 ? 'P' : cur)) + '</span></button>';
     }).join('') + '</div>';
     var curw = rowVal(who.key, inp, posted);
-    if (fmt0 === 'altshot') h += '<div class="lmdim" style="margin:6px 0">Greensomes: both tee off, pick one drive, then alternate. One ball per team: enter the team gross for the hole.</div>' + driveHtml(cfg, round, matches, hole);
     h += '<div class="lmpick"><div class="lmdim" style="margin-bottom:4px">' + esc(who.label) + ' · hole ' + hole + '</div><div class="lmtiles">' + [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (curw === n ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|' + n + '">' + n + '</button>'; }).join('')
       + '<button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0">P</button><button class="lmt" data-lm-s="' + esc(who.key) + '|clear" aria-label="Clear this score" title="Clear this score">✕</button></div></div>';
     var missing = rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
     var anon = !S.opts.player && !S.opts.code && !S.opts.pin;
     if (!hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
-    h += '<button class="lmgo" id="lmPost"' + (missing || anon ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (anyPosted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>';
+    h += '<button class="lmgo' + (!missing && !anon ? ' ready' : '') + '" id="lmPost"' + (missing || anon ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (anyPosted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>' + '</div>';
     if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, matches: matches, hole: hole, E: E }) || '';
-    h += ctpHtml(cfg, round, hole, matches);
+    h += ctpHtml(cfg, round, hole, matches, stepNo + 1);
     if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' score' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
     if (S.err) h += '<div class="lmmsg q" id="lmErr">⚠ ' + esc(S.err) + '</div>';
     if (S.msg) h += '<div class="lmmsg">' + esc(S.msg) + '</div>';
@@ -437,10 +458,13 @@
     var ms = el.querySelector('#lmMatchSel'); if (ms) ms.addEventListener('change', function () { var p = ms.value.split('|'); S.sel = { r: p[0], g: p[1] }; S.hole = null; S.who = null; S.msg = ''; S.err = ''; S.last = null; render(); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-drv]'), function (b) { b.addEventListener('click', function () {
       if (!S.opts.player && !S.opts.code && !S.opts.pin) { S.err = 'Pick who you are above first.'; render(); return; }
-      var p = b.getAttribute('data-lm-drv').split('|'), cfg = S.opts.getCfg(), cur = ((((cfg.drives || {})[round.key] || {})[p[0]]) || {})[String(hole)];
+      var p = b.getAttribute('data-lm-drv').split('|'), cfg = S.opts.getCfg();
+      var mm = (round.matches || []).filter(function (x) { return x.key === p[0]; })[0], sk = mm && mm.sides.filter(function (sd) { return sd.players.some(function (n) { return norm(n) === norm(p[1]); }); })[0];
+      var cur = ((((((cfg.drives || {})[round.key] || {})[p[0]]) || {})[String(hole)]) || {})[sk && sk.side];
       var same = cur && norm(cur.player) === norm(p[1]);                       // tapping the chosen name again takes it back
-      S.err = ''; act(round, 'drive', { match: p[0], hole: hole, drive: same ? '' : p[1] });
+      S.err = ''; act(round, 'drive', { match: p[0], hole: hole, side: sk ? sk.side : '', drive: same ? '' : p[1] });
     }); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-drvopen]'), function (b) { b.addEventListener('click', function () { S.drvOpen = S.drvOpen || {}; var k2 = b.getAttribute('data-lm-drvopen'); S.drvOpen[k2] = !S.drvOpen[k2]; render(); }); });
     var cg = el.querySelector('#lmCtpGo'); if (cg) cg.addEventListener('click', function () {
       var who = el.querySelector('#lmCtpSel'), dist = el.querySelector('#lmCtpDist');
       if (!S.opts.player && !S.opts.code && !S.opts.pin) { S.err = 'Pick who you are above first.'; render(); return; }

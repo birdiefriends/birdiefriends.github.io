@@ -1689,12 +1689,18 @@ export default {
             if (!seg) return J({ error: 'Hole ' + hole + ' is not a Greensomes hole' }, 400);
             if (((cfgObj.closed || {})[rd.key] || {})[m.key] && !capOk) return J({ error: 'This match is closed. A captain reopens it first.' }, 409);
             cfgObj.drives = cfgObj.drives || {}; const dr = cfgObj.drives[rd.key] = cfgObj.drives[rd.key] || {}; const dm = dr[m.key] = dr[m.key] || {};
+            // one record per team per hole: dm[hole] = { <sideKey>: {player, by, at} }, so both teams in a match can mark their own drive
             const who = String(body.drive == null ? '' : body.drive).trim();
-            if (!who) delete dm[String(hole)];
-            else {
+            if (!who) {
+              const sk = String(body.side || '');
+              if (!m.sides.some(sd => String(sd.side) === sk)) return J({ error: 'Say which team to clear' }, 400);
+              if (dm[String(hole)]) { delete dm[String(hole)][sk]; if (!Object.keys(dm[String(hole)]).length) delete dm[String(hole)]; }
+            } else {
               const dn = members.find(p => norm(p) === norm(who));
               if (!dn) return J({ error: who + ' is not in this match' }, 400);
-              dm[String(hole)] = { player: dn, by: String(body.player || (capOk ? 'host' : '')).slice(0, 60), at: now };
+              const dsd = m.sides.find(sd => sd.players.some(p => norm(p) === norm(dn)));
+              dm[String(hole)] = dm[String(hole)] || {};
+              dm[String(hole)][dsd.side] = { player: dn, by: String(body.player || (capOk ? 'host' : '')).slice(0, 60), at: now };
             }
             await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
             return J({ ok: true, config: cupPublic(cfgObj) });

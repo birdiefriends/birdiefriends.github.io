@@ -2317,7 +2317,7 @@
   }
 
   // Greensomes drive tally (Brian, 2026-11-05): both partners tee off, the pair picks one drive, and each partner's drive has to be used at least
-  // `min` times over the part (9 holes -> 4, so 5/4). cfg.drives[round][match][hole] = {player, by, at}. Only a tally: nothing is blocked or penalised
+  // `min` times over the part (9 holes -> 4, so 5/4). cfg.drives[round][match][hole][sideKey] = {player, by, at}. Only a tally: nothing is blocked or penalised
   // (the captains settle a shortfall), the panel and results page just show the count and when a choice is forced.
   function cupDriveStatus(cfg, round, match, seg) {
     const holes = Math.max(0, (Number(seg.to) || 0) - (Number(seg.from) || 0) + 1);
@@ -2327,7 +2327,7 @@
       const counts = {}; (sd.players || []).forEach(p => { counts[p] = 0; });
       let logged = 0; const by = {};
       for (let h = seg.from; h <= seg.to; h++) {
-        const e = dr[String(h)]; if (!e || !e.player) continue;
+        const e = (dr[String(h)] || {})[sd.side]; if (!e || !e.player) continue;
         const nm = (sd.players || []).find(p => norm(p) === norm(e.player)); if (!nm) continue;
         counts[nm]++; logged++; by[h] = nm;
       }
