@@ -4,8 +4,9 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 const E = loadEngine();
 const HERE = p => fileURLToPath(new URL(p, import.meta.url));
 const lm = fs.readFileSync(HERE('../../docs/bf_live_match.js'), 'utf8');
-ok(!/>P<\/button>/.test(lm) && /\|0" title="Out of the hole/.test(lm), 'the P tile is relabelled Out');
+ok(!/>P<\/button>/.test(lm) && /\|0" title="' \+ \(fmt0 === 'bestball'/.test(lm), 'the P tile is relabelled Out');
 ok(/Putt conceded\? Enter the score as if you holed it/.test(lm), 'the hint about conceded putts is under the tiles');
+ok(/Your partner’s score still counts; if you are both Out, the other team wins it/.test(lm) && /you gave up the hole and the other side wins it/.test(lm), 'the Out hint is worded for partners in fourball and for one-ball sides elsewhere');
 const mk = fmt => ({ sides: [{ key: 'A' }, { key: 'B' }], points: { win: 1, half: 0.5, loss: 0 }, handicap: { bestball: 0, altshot: 0, singles: 0, pars: new Array(18).fill(4), strokeIndex: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18] }, draft: { stats: {} },
   rounds: [{ key: 'r', segments: [{ key: 's', format: fmt, from: 1, to: 18 }], matches: [{ key: 'm', sides: [{ side: 'A', players: fmt === 'singles' ? ['A1'] : ['A1', 'A2'] }, { side: 'B', players: fmt === 'singles' ? ['B1'] : ['B1', 'B2'] }] }] }], scores: {} });
 const hole1 = (fmt, scores) => { const c = mk(fmt); c.scores.r = { m: { h: { 1: scores }, t: {}, by: {} } }; const lv = E.cupMatchLive(c, c.rounds[0], c.rounds[0].matches[0], c.scores.r.m); return lv.segments[0].state; };
