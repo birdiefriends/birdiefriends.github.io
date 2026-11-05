@@ -67,7 +67,7 @@ dq().querySelector('[data-lm-s="' + A1 + '|0"]').click(); await tick(40);
 ok(dq().getElementById('lmPost').disabled, 'one Out is not enough: the partner and the winners still need scores');
 dq().querySelector('[data-lm-s="' + A2 + '|0"]').click(); await tick(60);
 ok(!dq().getElementById('lmPost').disabled, 'both Out: Save is on with the winners blank');
-ok(/wins hole 3 · by concession/.test(dq().body.textContent), 'banner says the winners take it by concession'); ok(/optional/.test(dq().body.textContent), 'winner chips say optional');
+ok(/wins hole 3 · by concession/.test(dq().body.textContent), 'banner says the winners take it by concession'); ok(/concession accepted/i.test(dq().body.textContent) && /Accepted/.test(dq().body.textContent), 'winner chips say Accepted / concession accepted');
 dq().getElementById('lmPost').click(); await tick(500);
 c = await dbCfg(); ok(c.scores.sat.m1.h['3'][B1] === -1 && c.scores.sat.m1.h['3'][B2] === -1 && c.scores.sat.m1.h['3'][A1] === 0, 'panel saved Out, Out, -1, -1');
 // a winner enters a real score instead: it counts

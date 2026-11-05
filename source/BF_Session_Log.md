@@ -5732,3 +5732,6 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 
 ## Score chips: names first, team colour (panel v30)
 - Chips lead with the player names (Greensomes: "Brian Hager & BJ Kolonia"), team name small underneath with a team-colour dot; thicker colour bar and a light team-colour tint (red / blue) on every chip, all formats.
+
+## Concession is automatic, not blank (panel v31)
+- When a side is entirely Out, the other side's chips auto-show "Accepted ✓" (team line "concession accepted") and Post is on; tapping a number overrides it and counts as a finish-out for skins. Saved as -1 as before. Banner status now uses the segment holding the hole (was showing the first undecided segment).
