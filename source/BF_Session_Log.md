@@ -5713,3 +5713,8 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Verified (test_cup_out_tile.mjs, 9): fourball, one partner Out and the other scores = team keeps its best ball; BOTH partners Out = team concedes; both teams Out = halved, so no double-concession marker is needed. Greensomes and singles: Out loses the hole.
 - Parked (rare, decided to wait): winner-optional row when a side concedes a whole hole and the other side does not want to finish it. No-show tool: paused by Brian.
 - v25 wording: in Fourball the Out hint and tooltip say "You are out of this hole. Your partner's score still counts; if you are both Out, the other team wins it" (Brian: "the other side wins it" is untrue when a partner is still in). Greensomes/singles keep "you gave up the hole and the other side wins it".
+
+## Won by concession (engine 1.47.3, panel v26)
+- When every player on one side is Out (0), the opposing side's rows become optional. Blank is saved as -1 (won by concession: no gross, no skin try); a real number is a finish-out and counts for skins. Works for fourball (both pair Out, both winners may stay blank), Greensomes (one row per side) and singles.
+- Engine `cupMatchNets`: -1 is a won hole (-99). Worker `score`: -1 accepted only if the other side is entirely 0 in the same save (400 otherwise). Panel shows "Won"; a posted -1 needs a real score again if the other side is no longer entirely Out.
+- Tests: test_cup_concede.mjs (21).

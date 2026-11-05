@@ -188,6 +188,17 @@
     return undefined;
   }
 
+  // Won by concession: when every player on one side is Out (0), the other side's rows are optional. Blank = won by concession (saved as -1, no score, no skin try); a number = finished out (counts for skins).
+  function optRow(rows, r, inp, posted) {
+    var opp = rows.filter(function (x) { return x.m === r.m && x.side !== r.side; });
+    return opp.length > 0 && opp.every(function (x) { return rowVal(x.key, inp, posted) === 0; });
+  }
+  function effVal(rows, r, inp, posted) {                   // what counts as entered: a posted -1 is only good while the other side is still entirely Out
+    var v = rowVal(r.key, inp, posted);
+    return (v !== undefined && v < 0 && !optRow(rows, r, inp, posted)) ? undefined : v;
+  }
+  function needRow(rows, r, inp, posted) { return effVal(rows, r, inp, posted) === undefined && !optRow(rows, r, inp, posted); }
+
   // The leaderboard view: the points race and every match with both of its parts (Fourball / Greensomes), one record, one renderer.
   function groupTag(all, rk, mk) {                           // " · Group 2" when two matches share a foursome
     var g = all.filter(function (x) { return x.round.key === rk && x.matches.some(function (m) { return m.key === mk; }); })[0];
@@ -214,6 +225,7 @@
   }
   function mark(g, par) {                                    // birdie = circle, bogey = square, eagle / double bogey = double
     if (g === 0) return '<span class="pk" title="Out of the hole">Out</span>';
+    if (g < 0) return '<span class="pk" title="Won by concession">Won</span>';
     if (!par) return String(g);
     if (g <= par - 2) return '<span class="lmcir d">' + g + '</span>';
     if (g === par - 1) return '<span class="lmcir">' + g + '</span>';
@@ -459,21 +471,21 @@
       var n = i + 1, w = matches.length === 1 ? holeWinner(lives[0], n) : '', segStart = round.segments.some(function (s) { return s.from === n && n > 1; });
       return '<button class="lmh ' + w + (n === hole ? ' cur' : '') + (segStart ? ' seg' : '') + '" data-lm-hole="' + n + '">' + n + '</button>';
     }).join('') + '</div>';
-    var firstOpen = rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; })[0];
+    var firstOpen = rows.filter(function (r) { return needRow(rows, r, inp, posted); })[0];
     var who = rows.filter(function (r) { return r.key === S.who; })[0] || firstOpen || rows[0];
     S.who = who.key;
-    var stepNo = 0, missing0 = rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
+    var stepNo = 0, missing0 = rows.filter(function (r) { return needRow(rows, r, inp, posted); }).length;
     if (fmt0 === 'altshot') h += driveHtml(cfg, round, matches, hole, ++stepNo, gkey);
     h += '<div class="lmst score">' + stepHead(++stepNo, '⛳', fmt0 === 'altshot' ? 'Team score' : 'Score', missing0 ? missing0 + ' to enter' : anyPosted ? 'Saved ✓' : 'Ready', !missing0 && anyPosted, false);
     if (fmt0 === 'altshot') h += '<div class="lmdim" style="margin:-2px 0 6px">One ball per team: enter the team gross for the hole.</div>';
     h += '<div class="lmchips">' + rows.map(function (r) {
-      var cur = rowVal(r.key, inp, posted);
-      return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (cur === undefined ? '–' : (cur === 0 ? 'Out' : cur)) + '</span></button>';
+      var cur = effVal(rows, r, inp, posted); if (cur === undefined && optRow(rows, r, inp, posted)) cur = -1;
+      return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (cur === undefined ? '–' : (cur === 0 ? 'Out' : cur < 0 ? 'Won' : cur)) + '</span></button>';
     }).join('') + '</div>';
-    var curw = rowVal(who.key, inp, posted);
+    var curw = effVal(rows, who, inp, posted), whoOpt = optRow(rows, who, inp, posted);
     h += '<div class="lmpick"><div class="lmdim" style="margin-bottom:4px">' + esc(who.label) + ' · hole ' + hole + '</div><div class="lmtiles">' + [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (curw === n ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|' + n + '">' + n + '</button>'; }).join('')
-      + '<button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0" title="' + (fmt0 === 'bestball' ? 'Out of this hole. Your partner’s score still counts; if you are both Out the other team wins it' : 'Out of the hole: the other side wins it') + '" style="font-size:.74rem">Out</button><button class="lmt" data-lm-s="' + esc(who.key) + '|clear" aria-label="Clear this score" title="Clear this score">✕</button></div><div class="lmdim" style="margin-top:6px">Putt conceded? Enter the score as if you holed it. ' + (fmt0 === 'bestball' ? '<b>Out</b> means you are out of this hole. Your partner’s score still counts; if you are both Out, the other team wins it.' : '<b>Out</b> means you gave up the hole and the other side wins it.') + '</div></div>';
-    var missing = rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
+      + '<button class="lmt pu' + (curw === 0 ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|0" title="' + (fmt0 === 'bestball' ? 'Out of this hole. Your partner’s score still counts; if you are both Out the other team wins it' : 'Out of the hole: the other side wins it') + '" style="font-size:.74rem">Out</button><button class="lmt" data-lm-s="' + esc(who.key) + '|clear" aria-label="Clear this score" title="Clear this score">✕</button></div><div class="lmdim" style="margin-top:6px">Putt conceded? Enter the score as if you holed it. ' + (fmt0 === 'bestball' ? '<b>Out</b> means you are out of this hole. Your partner’s score still counts; if you are both Out, the other team wins it.' : '<b>Out</b> means you gave up the hole and the other side wins it.') + '</div>' + (whoOpt ? '<div class="lmdim" style="margin-top:6px"><b>Won by concession.</b> The other side is out of this hole, so leave this blank to take it. Enter a score only if you are finishing out for the skin.</div>' : '') + '</div>';
+    var missing = rows.filter(function (r) { return needRow(rows, r, inp, posted); }).length;
     var anon = !S.opts.player && !S.opts.code && !S.opts.pin;
     if (!hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
     var dch = driveChoices(cfg, round, matches, hole, gkey), noDrive = [];
@@ -532,7 +544,8 @@
   function wire(round, grp, matches, hole, rows) {
     var el = S.el, gkey = round.key + '|' + grp.key, key = gkey + '|' + hole;
     function postedOf() { var cfg = S.opts.getCfg(), out = {}; matches.forEach(function (m) { var e = entryOf(cfg, round.key, m.key), p = e && e.h && e.h[String(hole)]; if (p) Object.keys(p).forEach(function (k) { out[k] = p[k]; }); }); return out; }
-    function cur(r) { return rowVal(r.key, S.inp[key] || {}, postedOf()); }
+    function cur(r) { return effVal(rows, r, S.inp[key] || {}, postedOf()); }
+    function need(r) { return needRow(rows, r, S.inp[key] || {}, postedOf()); }
     var ms = el.querySelector('#lmMatchSel'); if (ms) ms.addEventListener('change', function () { var p = ms.value.split('|'); S.sel = { r: p[0], g: p[1] }; S.hole = null; S.who = null; S.msg = ''; S.err = ''; S.last = null; render(); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-drv]'), function (b) { b.addEventListener('click', function () {
       var p = b.getAttribute('data-lm-drv').split('|'), cfg = S.opts.getCfg();
@@ -554,7 +567,7 @@
       var p = b.getAttribute('data-lm-s').split('|'), row = rows.filter(function (r) { return r.key === p[0]; })[0];
       if (p[1] === 'clear') { if (S.inp[key]) delete S.inp[key][row.key]; S.who = row.key; render(); return; }   // take back a tap: the box goes back to what was posted (or empty)
       (S.inp[key] = S.inp[key] || {})[row.key] = Number(p[1]);
-      var nx = rows.filter(function (r) { return r.key !== row.key && cur(r) === undefined; })[0]; S.who = nx ? nx.key : row.key; render(); }); });
+      var nx = rows.filter(function (r) { return r.key !== row.key && need(r); })[0]; S.who = nx ? nx.key : row.key; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-who]'), function (b) { b.addEventListener('click', function () { S.who = b.getAttribute('data-lm-who'); render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-go]'), function (b) { b.addEventListener('click', function () { var mx = Math.max.apply(null, round.segments.map(function (x) { return x.to; })); S.hole = { g: gkey, h: Math.max(1, Math.min(mx, hole + Number(b.getAttribute('data-lm-go')))) }; S.who = null; S.msg = ''; render(); }); });
     var all = el.querySelector('#lmAll'); if (all) all.addEventListener('click', function () { S.showAll = !S.showAll; render(); });
@@ -567,10 +580,10 @@
       Promise.all(sent).then(function () { if (S.opts.onChange) S.opts.onChange(); });
     });
     var go = el.querySelector('#lmPost'); if (go) go.addEventListener('click', function () {
-      if (rows.some(function (r) { return cur(r) === undefined; })) return;
+      if (rows.some(need)) return;
       var cfg = S.opts.getCfg(), at = new Date().toISOString(), E = S.opts.E, nums = E.cupMatchNumbers(cfg), lines = [];
       matches.forEach(function (match) {                       // one post per match; the Worker lets anyone in the group score any of its matches
-        var scores = {}; rows.filter(function (r) { return r.m === match.key; }).forEach(function (r) { scores[r.key] = cur(r); });
+        var scores = {}; rows.filter(function (r) { return r.m === match.key; }).forEach(function (r) { var v = cur(r); scores[r.key] = v === undefined ? -1 : v; });
         var post = { round: round.key, match: match.key, hole: hole, scores: scores, player: S.opts.player || '', at: at };
         var dv = driveChoices(cfg, round, [match], hole, gkey); if (dv) post.drives = dv[match.key];
         applyLocal(cfg, post); var qq = queue(); qq.push(post); setQueue(qq);

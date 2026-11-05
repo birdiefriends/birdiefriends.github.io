@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.47.2';
+  const ENGINE_VERSION = '1.47.3';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2775,13 +2775,14 @@
         if (seg.format === 'altshot') {
           const g = gv(h, sd.players[0]); if (g === undefined) continue;
           const t = st.teams[i], arr = hs(t ? t.strokes : 0, sd.players);
-          out[h] = g > 0 ? g - arr[h] : 99;
+          out[h] = g > 0 ? g - arr[h] : g < 0 ? -99 : 99;   // 0 = Out (99), -1 = won by concession (-99)
         } else {
           let best = null, seen = false;
           sd.players.forEach(p => {
             const g = gv(h, p); if (g === undefined) return; seen = true;
             const row = st.players.find(r => norm(r.names[0]) === norm(p)), a = hs(row ? row.strokes : 0, [p]);
             if (g > 0) best = best === null ? g - a[h] : Math.min(best, g - a[h]);
+            else if (g < 0) best = -99;                    // won by concession
           });
           if (seen) out[h] = best === null ? 99 : best;
         }

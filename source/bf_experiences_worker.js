@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.47.2 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.47.3 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1719,8 +1719,17 @@ export default {
           const clean = {};
           for (const k of Object.keys(incoming)) {
             const name = members.find(p => norm(p) === norm(k)); const g = Number(incoming[k]);
-            if (!name || !Number.isInteger(g) || g < 0 || g > 20) return J({ error: 'Bad score for ' + k }, 400);
+            if (!name || !Number.isInteger(g) || g < -1 || g > 20) return J({ error: 'Bad score for ' + k }, 400);
             clean[name] = g;
+          }
+          // -1 = won by concession (no gross). Only valid while every player of the OTHER side is Out (0) in this same save.
+          for (const nm of Object.keys(clean)) {
+            if (clean[nm] !== -1) continue;
+            const mine = (m.sides || []).findIndex(sd => (sd.players || []).some(p => norm(p) === norm(nm)));
+            const other = mine < 0 ? null : m.sides[1 - mine];
+            const sg = (rd.segments || []).find(x => hole >= Number(x.from) && hole <= Number(x.to));
+            const need = other ? (sg && sg.format === 'altshot' ? [other.players[0]] : other.players) : [];
+            if (!need.length || !need.every(p => { const kk = Object.keys(clean).find(x => norm(x) === norm(p)); return kk !== undefined && clean[kk] === 0; })) return J({ error: 'A hole is only won by concession when the other side is entirely Out' }, 400);
           }
           if (!Object.keys(clean).length) return J({ error: 'No scores' }, 400);
           const rs = cfgObj.scores[rd.key] = cfgObj.scores[rd.key] || {};
