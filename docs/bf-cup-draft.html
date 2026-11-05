@@ -109,8 +109,20 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BirdieFriends Cup</h1></div><p class="hint">Loading…</p></div>
-<script src="bf_engine.js?v=1.47.3"></script>
-<script src="bf_live_match.js?v=33"></script>
+<script>
+// No-show plan (Brian, 2026-11-05): per player, the mulligans he gets as the lone player on the Fourball nine, and the Sunday gross target (win with 'win' or better,
+// half up to 'half'). Targets come from each player's 2026 GHIN rounds at his Cup tee; Lou and Andrew have none, so the host types a range the captains agree.
+window.BF_NOSHOW_PLAN = {
+  'Jordan Knappenberger': { mulligans: 2, win: 76, half: 79 }, 'Dave Sherwin': { mulligans: 2, win: 78, half: 81 }, 'Brian Hager': { mulligans: 3, win: 79, half: 82 },
+  'Bill Steirer': { mulligans: 3, win: 79, half: 82 }, 'Mohamed Walli': { mulligans: 3, win: 81, half: 84 }, 'Evan Lindermuth': { mulligans: 4, win: 81, half: 84 },
+  'Chooch Wernett': { mulligans: 3, win: 82, half: 85 }, 'Nate Stettler': { mulligans: 4, win: 82, half: 86 }, 'Jake Knappenberger': { mulligans: 4, win: 83, half: 86 },
+  'BJ Kolonia': { mulligans: 3, win: 85, half: 89 }, 'Tom Stitt': { mulligans: 3, win: 85, half: 89 }, 'Harry Pry': { mulligans: 4, win: 86, half: 89 },
+  'Adam Costa': { mulligans: 3, win: 88, half: 92 }, 'Rich Penberg': { mulligans: 6, win: 95, half: 100 },
+  'Lou Strohl': { mulligans: 4 }, 'Andrew Kabrick': { mulligans: 3 }
+};
+</script>
+<script src="bf_engine.js?v=1.48.0"></script>
+<script src="bf_live_match.js?v=34"></script>
 <script>
 (function () {
   'use strict';
@@ -561,7 +573,7 @@ button:disabled{opacity:.4;cursor:default}
       out += '<h2 class="hcprd">' + esc(rd.name || rd.key) + '</h2>';
       ms.forEach(function (m, mi) {
         var st = E.cupMatchStrokes(m, hc, rule);
-        var title = m.sides.map(function (sd) { return '<span class="' + sideCls(sd.side) + ' nm">' + esc(sd.players.join(' & ')) + '</span>'; }).join(' <span class="vsx">vs</span> ');
+        var title = m.sides.map(function (sd) { return '<span class="' + sideCls(sd.side) + ' nm">' + esc(E.cupSideNames(sd).join(' & ')) + '</span>'; }).join(' <span class="vsx">vs</span> ');
         out += '<div class="card hcpmatch"><div class="hcptitle"><span class="n">Match ' + (mi + 1) + '</span>' + title + '</div>';
         (rd.segments || []).forEach(function (sg) {
           var from = sg.from, to = sg.to, cols = []; for (var i = from; i <= to; i++) cols.push(i);
@@ -661,7 +673,7 @@ button:disabled{opacity:.4;cursor:default}
     var setv = function () { window.BFLiveMatch.setView(view); };
     if (!lmReady) {
       lmReady = true;
-      window.BFLiveMatch.mount(el, { E: E, getCfg: function () { return cfg; }, worker: WORKER, event: EVENT, get player() { return PLAYER; }, code: CAP, get pin() { return HOST ? pin : ''; }, onChange: function () {}, goScore: function () { view = 'score'; render(); }, setPlayer: function (n) { PLAYER = n; try { localStorage.setItem('bf_cup_me', PLAYER); } catch (e) {} } });
+      window.BFLiveMatch.mount(el, { E: E, noshowPlan: window.BF_NOSHOW_PLAN || {}, getCfg: function () { return cfg; }, worker: WORKER, event: EVENT, get player() { return PLAYER; }, code: CAP, get pin() { return HOST ? pin : ''; }, onChange: function () {}, goScore: function () { view = 'score'; render(); }, setPlayer: function (n) { PLAYER = n; try { localStorage.setItem('bf_cup_me', PLAYER); } catch (e) {} } });
       setv(); window.BFLiveMatch.attach(el);
     } else { setv(); window.BFLiveMatch.attach(el); }
   }

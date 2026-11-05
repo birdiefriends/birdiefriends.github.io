@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.47.3 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.48.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1602,7 +1602,7 @@ export default {
         const cfgObj = JSON.parse(row.config);
         const acc = cfgObj.access || {};
         const norm = v => String(v == null ? '' : v).trim().toLowerCase();
-        if (body.action === 'score' || body.action === 'clear_hole' || body.action === 'drive' || body.action === 'round_end' || body.action === 'round_reopen' || body.action === 'match_close' || body.action === 'match_reopen' || body.action === 'ctp' || body.action === 'money_close' || body.action === 'money_reopen') {
+        if (body.action === 'score' || body.action === 'clear_hole' || body.action === 'drive' || body.action === 'round_end' || body.action === 'round_reopen' || body.action === 'match_close' || body.action === 'match_reopen' || body.action === 'ctp' || body.action === 'money_close' || body.action === 'money_reopen' || body.action === 'noshow' || body.action === 'noshow_undo' || body.action === 'mulligan') {
           // Live scoring (trust model, like the rest of the app): anyone playing in the match can post its hole scores; a captain code or the PIN works too.
           const rd = (cfgObj.rounds || []).find(r => r.key === body.round);
           if (!rd) return J({ error: 'Unknown round' }, 404);
@@ -1629,6 +1629,43 @@ export default {
               if (!cname) return J({ error: 'That player is not in this round' }, 400);
               const dist = String(body.dist == null ? '' : body.dist).trim().slice(0, 20);
               cr[String(ch)] = Object.assign({ player: cname }, dist ? { dist } : {}, { by: String(body.player || (capOk ? 'host' : '')).slice(0, 60), at: now });
+            }
+            await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
+            return J({ ok: true, config: cupPublic(cfgObj) });
+          }
+          // One player did not show (Brian, 2026-11-05, BFEngine.cupWalkover / cupMulligans). The HOST takes him out of his match before tee-off: he leaves his side's players,
+          // sd.away keeps his name, match.noshow holds the rules. A pair then plays one player (mulligans on the Fourball nine); in singles the other player plays a gross target.
+          if (body.action === 'noshow' || body.action === 'noshow_undo') {
+            if (!cupIsHost(cfgObj, body.pin)) return J({ error: 'Only the host can mark a no-show' }, 403);
+            const hasScores = mk => { const sc = ((cfgObj.scores || {})[rd.key] || {})[mk]; return !!(sc && sc.h && Object.keys(sc.h).length); };
+            if (body.action === 'noshow') {
+              const who = String(body.who == null ? '' : body.who).trim();
+              const mm = (rd.matches || []).find(x => x.sides.some(sd => sd.players.some(p => norm(p) === norm(who))));
+              if (!mm) return J({ error: 'That player is not in a match this round' }, 404);
+              if (mm.noshow) return J({ error: 'This match already has a no-show. One per match.' }, 409);
+              if (hasScores(mm.key)) return J({ error: 'This match already has scores. Clear them first.' }, 409);
+              const sd = mm.sides.find(x => x.players.some(p => norm(p) === norm(who)));
+              const idx = sd.players.findIndex(p => norm(p) === norm(who)), name = sd.players[idx];
+              const singles = mm.sides.every(x => x.players.length === 1);
+              const ns = { player: name, side: sd.side, idx, at: now, by: 'host' };
+              if (singles) {
+                const win = Number(body.win), half = Number(body.half);
+                if (!(Number.isInteger(win) && Number.isInteger(half) && win >= 40 && half >= win && half <= 150)) return J({ error: 'A singles no-show needs a target: the score that wins and the highest score that halves' }, 400);
+                ns.win = win; ns.half = half;
+              } else {
+                const mu = body.mulligans == null ? 3 : Number(body.mulligans);
+                if (!(Number.isInteger(mu) && mu >= 0 && mu <= 9)) return J({ error: 'Mulligans must be a whole number from 0 to 9' }, 400);
+                ns.mulligans = mu; ns.used = {};
+              }
+              sd.players.splice(idx, 1); sd.away = (sd.away || []).concat(name); mm.noshow = ns;
+            } else {
+              const mm = (rd.matches || []).find(x => x.key === body.match);
+              if (!mm || !mm.noshow) return J({ error: 'There is no no-show in that match' }, 404);
+              if (hasScores(mm.key)) return J({ error: 'This match already has scores. Clear them first.' }, 409);
+              const sd = mm.sides.find(x => x.side === mm.noshow.side);
+              if (sd) { sd.players.splice(Math.min(Math.max(0, Number(mm.noshow.idx) || 0), sd.players.length), 0, mm.noshow.player); sd.away = (sd.away || []).filter(n => norm(n) !== norm(mm.noshow.player)); if (!sd.away.length) delete sd.away; }
+              delete mm.noshow;
+              if (cfgObj.drives && cfgObj.drives[rd.key]) delete cfgObj.drives[rd.key][mm.key];
             }
             await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
             return J({ ok: true, config: cupPublic(cfgObj) });
@@ -1683,6 +1720,22 @@ export default {
           if (!capOk && !groupPlayers.some(p => norm(p) === norm(body.player))) return J({ error: 'Only the four playing in this group can score it' }, 403);
           const hole = Number(body.hole), maxHole = Math.max(0, ...(rd.segments || []).map(sg => Number(sg.to) || 0));
           if (!(Number.isInteger(hole) && hole >= 1 && hole <= maxHole)) return J({ error: 'Hole must be 1 to ' + maxHole }, 400);
+          if (body.action === 'mulligan') {
+            // The lone player's mulligans on the Fourball nine: a tally (one per hole, no more than the match allows). Same trust as scoring.
+            const ns = m.noshow;
+            if (!ns || !(Number(ns.mulligans) > 0)) return J({ error: 'This match has no mulligans' }, 409);
+            const seg = (rd.segments || []).find(sg => sg.format === 'bestball' && hole >= Number(sg.from) && hole <= Number(sg.to));
+            if (!seg) return J({ error: 'Mulligans are for the Fourball holes only' }, 400);
+            if (((cfgObj.closed || {})[rd.key] || {})[m.key] && !capOk) return J({ error: 'This match is closed. A captain reopens it first.' }, 409);
+            ns.used = ns.used || {};
+            if (body.on === false || body.on === 'false') delete ns.used[String(hole)];
+            else if (!ns.used[String(hole)]) {
+              if (Object.keys(ns.used).length >= Number(ns.mulligans)) return J({ error: 'No mulligans left' }, 409);
+              ns.used[String(hole)] = true;
+            }
+            await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
+            return J({ ok: true, config: cupPublic(cfgObj) });
+          }
           if (body.action === 'drive') {
             // Greensomes: whose drive the pair used on a hole (BFEngine.cupDriveStatus keeps the tally). Same trust model as scoring: anyone in the group, a captain or the host.
             const seg = (rd.segments || []).find(sg => sg.format === 'altshot' && hole >= Number(sg.from) && hole <= Number(sg.to));

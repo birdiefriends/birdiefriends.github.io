@@ -81,7 +81,7 @@ td.r,th.r{text-align:right}
 <div class="stripes"></div>
 <div class="nav"><a href="/portal.html">← Portal</a><a href="#" id="liveLink">Live</a></div>
 <div id="app"><div class="empty">Loading the Cup…</div></div>
-<script src="bf_engine.js?v=1.47.3"></script>
+<script src="bf_engine.js?v=1.48.0"></script>
 <script>
 (function () {
   var WORKER = 'https://bf-experiences.birdiefriends01.workers.dev';
@@ -114,7 +114,7 @@ td.r,th.r{text-align:right}
 
   // ── commentator: written from the standings (figures only ever come from the Cup record) ──
   function matchLine(r, m, ix) {
-    var segs = m.segments, names = function (i) { return m.sides[i].players.map(function (p) { return p.split(' ').slice(-1)[0]; }).join(' and '); };
+    var segs = m.segments, names = function (i) { return E.cupSideNames(m.sides[i]).map(function (p) { return p.split(' ').slice(-1)[0]; }).join(' and '); };
     var bits = segs.filter(function (s) { return s.decided; });
     var tot = {}; m.sides.forEach(function (s) { tot[s.side] = m.points[s.side] || 0; });
     return { a: names(0), b: names(1), ka: m.sides[0].side, kb: m.sides[1].side, pa: tot[m.sides[0].side], pb: tot[m.sides[1].side], done: m.done, segs: bits };
@@ -188,7 +188,7 @@ td.r,th.r{text-align:right}
       var ka = m.sides[0].side, kb = m.sides[1].side, pa = m.points[ka] || 0, pb = m.points[kb] || 0;
       var chip = !m.segments.some(function (s) { return s.thru > 0 || s.decided; }) ? '<span class="res h">Not started</span>' : (m.done ? (pa === pb ? '<span class="res h">' + pts(pa) + ' \u2013 ' + pts(pb) + '</span>' : '<span class="res ' + (pa > pb ? 'j' : 'n') + '">' + esc(sideName(pa > pb ? ka : kb)).toUpperCase() + ' ' + pts(Math.max(pa, pb)) + '</span>') : '<span class="res h"><span class="live"></span>LIVE</span>');
       var segTxt = m.segments.map(function (s) { return esc(s.label) + ' ' + esc(s.decided ? (s.winner ? sideName(s.winner) + ' ' + s.text : s.text) : s.text || ''); }).join(' \u00b7 ');
-      o += '<div class="sess">Match ' + (nums[r.key + '|' + m.key] || '') + '</div><div class="m"><div class="side ' + cls(ka) + '" style="border-left-color:var(--' + (cls(ka) === 'cred' ? 'red' : 'blue') + ')"><span class="w">' + esc(m.sides[0].players.join(' / ')) + '</span></div>' + chip + '<div class="side b" style="border-right-color:var(--' + (cls(kb) === 'cred' ? 'red' : 'blue') + ')">' + esc(m.sides[1].players.join(' / ')) + '</div></div><div class="pts" style="margin:-4px 0 6px 4px">' + segTxt + driveTxt(ri, m) + '</div>';
+      o += '<div class="sess">Match ' + (nums[r.key + '|' + m.key] || '') + '</div><div class="m"><div class="side ' + cls(ka) + '" style="border-left-color:var(--' + (cls(ka) === 'cred' ? 'red' : 'blue') + ')"><span class="w">' + esc(E.cupSideNames(m.sides[0]).join(' / ')) + '</span></div>' + chip + '<div class="side b" style="border-right-color:var(--' + (cls(kb) === 'cred' ? 'red' : 'blue') + ')">' + esc(E.cupSideNames(m.sides[1]).join(' / ')) + '</div></div><div class="pts" style="margin:-4px 0 6px 4px">' + segTxt + driveTxt(ri, m) + '</div>';
     });
     return o;
   }

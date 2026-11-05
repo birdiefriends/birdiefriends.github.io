@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.47.3';
+  const ENGINE_VERSION = '1.48.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2332,7 +2332,8 @@
         counts[nm]++; logged++; by[h] = nm;
       }
       const left = holes - logged;
-      const need = {}; (sd.players || []).forEach(p => { need[p] = Math.max(0, min - counts[p]); });
+      const solo = (sd.players || []).length < 2;               // a lone player (his partner did not show) hits two tee shots and plays on: no tally for him
+      const need = {}; (sd.players || []).forEach(p => { need[p] = solo ? 0 : Math.max(0, min - counts[p]); });
       const total = Object.values(need).reduce((a, b) => a + b, 0);
       // forced: the holes left are all needed by the players still short; impossible: more drives needed than holes left
       const forced = left > 0 && total >= left ? (sd.players || []).filter(p => need[p] > 0) : [];
@@ -2356,7 +2357,9 @@
           const fmt = sg.format;
           const ov = opts && opts.sideScores ? opts.sideScores(r, m, sg) : null;
           const sa = ov ? ov[0] : cupSideScores(fmt, m.sides[0].players, cardBy), sb = ov ? ov[1] : cupSideScores(fmt, m.sides[1].players, cardBy);
-          const st = cupMatchState(sa, sb, sg.from, sg.to);
+          const wo = m.noshow ? cupWalkover(cfg, r, m) : null;
+          const st = wo ? { total: wo.holes, thru: wo.thru, closedAt: null, lead: 0, won: [0, 0], halved: 0, status: wo.done ? (wo.result === 'half' ? 'push' : 'won') : 'pending',
+            winner: wo.done && wo.result !== 'half' ? (wo.result === 'win' ? wo.side : 1 - wo.side) : null, text: wo.text, decided: wo.done } : cupMatchState(sa, sb, sg.from, sg.to);
           const sideKeys = [m.sides[0].side, m.sides[1].side];
           // A captain or the host closed this match by hand (a concession, a match stopped for dark, ...): what is still open is decided now.
           const cl = cfg.closed && cfg.closed[r.key] && cfg.closed[r.key][m.key];
@@ -2731,7 +2734,8 @@
     const singles = match.sides.every(sd => sd.players.length === 1);
     const pv = off(players.map(get), singles ? by.singles : by.bestball);
     const rows = players.map((n, i) => ({ names: [n], strokes: pv[i], known: get(n) !== null }));
-    const sums = match.sides.map(sd => { const v = sd.players.map(get); return v.some(x => x === null) ? null : v.reduce((a, b) => a + b, 0); });
+    // A lone player (his partner did not show) is compared with a pair as if his partner played to the same handicap: his own, doubled.
+    const sums = match.sides.map((sd, i) => { const v = sd.players.map(get); if (!v.length || v.some(x => x === null)) return null; const t = v.reduce((a, b) => a + b, 0); return v.length === 1 && match.sides[1 - i].players.length > 1 ? t * 2 : t; });
     const tv = off(sums, by.altshot);
     const teams = match.sides.map((sd, i) => ({ names: sd.players.slice(), side: sd.side, strokes: tv[i], known: sums[i] !== null }));
     return { by, players: rows, teams };
@@ -2790,6 +2794,45 @@
       return out;
     });
   }
+  // ---- One player did not show (Brian, 2026-11-05) -------------------------------------------------------------
+  // The host marks a no-show: the player leaves his side's `players` (so the rest of the engine just sees a smaller side), `sd.away` keeps his name and
+  // match.noshow = { player, side, mulligans, used:{hole:true}, win?, half? } holds the rules. Saturday (a pair against one): the lone player has a few
+  // mulligans on the Fourball nine (a tally, like the Greensomes drives: nothing is blocked). Sunday (singles): match.noshow.win/half are a gross target;
+  // the present player plays the round against it (cupWalkover). No hole counts worse than net double bogey (par + 2 + the strokes he gets), Out included.
+  function cupSideNames(sd) { return (sd && sd.players && sd.players.length) ? sd.players.slice() : ((sd && sd.away) || []).map(n => n + ' (no-show)'); }
+  // Mulligans by Index when the host has no plan for him: under 6 -> 2, up to 10 -> 3, up to 20 -> 4, more -> 5.
+  function cupMulliganDefault(index) { const x = Number(index); if (index === null || index === '' || !Number.isFinite(x)) return 3; return x < 6 ? 2 : x <= 10 ? 3 : x <= 20 ? 4 : 5; }
+  function cupMulligans(match, seg) {
+    const ns = match && match.noshow; if (!ns || !(Number(ns.mulligans) > 0)) return null;
+    if (seg && seg.format !== 'bestball') return null;
+    const used = Object.keys(ns.used || {}).filter(h => ns.used[h]).map(Number).sort((a, b) => a - b);
+    const lone = ((match.sides || []).find(sd => (sd.players || []).length === 1) || {}).players;
+    return { player: lone ? lone[0] : null, total: Math.floor(Number(ns.mulligans)), used, left: Math.max(0, Math.floor(Number(ns.mulligans)) - used.length) };
+  }
+  function cupWalkover(cfg, round, match) {
+    const ns = match && match.noshow;
+    if (!ns || !(Number(ns.win) > 0) || !(Number(ns.half) >= Number(ns.win))) return null;
+    const sides = match.sides || [], idx = sides.findIndex((sd, i) => (sd.players || []).length === 1 && !((sides[1 - i] || {}).players || []).length);
+    if (idx < 0) return null;
+    const player = sides[idx].players[0], rule = cupHandicapRule(cfg), h = cfg.handicap || {};
+    const index = cupIndexOf(cfg, player), tier = cupTierFor(index, rule), ch = cupCourseHcp(index, rule) || 0;
+    const si = (tier && tier.strokeIndex) || (Array.isArray(h.strokeIndex) && h.strokeIndex.length === 18 ? h.strokeIndex : null) || [];
+    const pars = (tier && tier.pars) || (Array.isArray(h.pars) && h.pars.length === 18 ? h.pars.map(Number) : null) || new Array(18).fill(4);
+    const arr = cupHoleStrokes(ch, si);
+    const E0 = (((cfg.scores || {})[round.key] || {})[match.key] || {}).h || {};
+    const max = Math.max(0, ...(round.segments || []).map(sg => sg.to));
+    let thru = 0, total = 0, outs = 0;
+    for (let hh = 1; hh <= max; hh++) {
+      const e = E0[String(hh)]; if (!e) break;
+      const k = Object.keys(e).find(x => norm(x) === norm(player)); if (k === undefined) break;
+      const g = Number(e[k]), cap = pars[hh - 1] + 2 + arr[hh - 1];
+      total += g > 0 ? Math.min(g, cap) : cap; if (!(g > 0)) outs++; thru++;
+    }
+    const win = Number(ns.win), half = Number(ns.half), done = thru >= max && max > 0;
+    const res = done ? (total <= win ? 'win' : total <= half ? 'half' : 'loss') : null;
+    return { player, side: idx, win, half, thru, total, outs, done, result: res, holes: max,
+      text: done ? total + (res === 'win' ? ' beats ' + win : res === 'half' ? ' halves (' + (win + 1) + '–' + half + ')' : ' misses (' + (half + 1) + '+)') : (thru ? total + ' thru ' + thru : 'Not started') };
+  }
   // One match: per segment the state + the hole list, the next hole to enter and the format in play there.
   function cupMatchLive(cfg, round, match, entry) {
     const H = (entry && entry.h) || {};
@@ -2800,8 +2843,9 @@
     const max = Math.max(0, ...(round.segments || []).map(sg => sg.to));
     let next = 1; while (next <= max && H[String(next)]) next++;
     const cl = cfg.closed && cfg.closed[round.key] && cfg.closed[round.key][match.key];
-    const done = segs.length > 0 && segs.every(s => s.state.decided) || !!cl;
-    return { closed: cl || null, segments: segs, next: Math.min(next, max), allEntered: next > max, done, format: ((cupSegmentAt(round, Math.min(next, max)) || {}).format) || null };
+    const wo = cupWalkover(cfg, round, match);
+    const done = wo ? (wo.done || !!cl) : (segs.length > 0 && segs.every(s => s.state.decided) || !!cl);
+    return { closed: cl || null, segments: segs, next: Math.min(next, max), allEntered: next > max, done, walkover: wo, format: ((cupSegmentAt(round, Math.min(next, max)) || {}).format) || null };
   }
 
   // Who plays together. A session's matches are cut into groups (foursomes) for scoring: pairs matches are a group of one
@@ -3009,7 +3053,7 @@
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
-    CUP_FORMATS, cupTiersOf, cupTierFor, cupIndexOf, cupStrokeIndexFor, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupDriveStatus, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupSinglesRound, cupSinglesControl, cupSinglesView, cupSinglesPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupGroupsOf, cupMatchNumbers, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
+    CUP_FORMATS, cupTiersOf, cupTierFor, cupIndexOf, cupStrokeIndexFor, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupDriveStatus, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupSinglesRound, cupSinglesControl, cupSinglesView, cupSinglesPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupSideNames, cupMulliganDefault, cupMulligans, cupWalkover, cupGroupsOf, cupMatchNumbers, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
     CUP_MONEY_GAMES, cupRoundOf, cupRoundPlayers, cupScorecards, cupCtpLeaders, cupParThrees, cupGamesProblems, cupRoundConfig, cupRoundMoney, cupMoneyView,
     suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
