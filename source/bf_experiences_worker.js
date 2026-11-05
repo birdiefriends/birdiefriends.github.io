@@ -1717,6 +1717,16 @@ export default {
           const rs = cfgObj.scores[rd.key] = cfgObj.scores[rd.key] || {};
           const ms = rs[m.key] = rs[m.key] || { h: {}, t: {}, by: {} };
           ms.h[String(hole)] = clean; ms.t[String(hole)] = now; ms.by[String(hole)] = String(body.player || (capOk ? 'host' : '')).slice(0, 60);
+          // Greensomes: each team's drive travels with the score ({ sideKey: playerName }); a bad entry is ignored, it never blocks the score
+          if (body.drives && typeof body.drives === 'object' && (rd.segments || []).some(sg => sg.format === 'altshot' && hole >= Number(sg.from) && hole <= Number(sg.to))) {
+            cfgObj.drives = cfgObj.drives || {}; const dr0 = cfgObj.drives[rd.key] = cfgObj.drives[rd.key] || {}; const dm0 = dr0[m.key] = dr0[m.key] || {};
+            for (const sd of m.sides) {
+              if (!Object.prototype.hasOwnProperty.call(body.drives, sd.side)) continue;
+              const dn = sd.players.find(p => norm(p) === norm(body.drives[sd.side]));
+              if (dn) { dm0[String(hole)] = dm0[String(hole)] || {}; dm0[String(hole)][sd.side] = { player: dn, by: String(body.player || (capOk ? 'host' : '')).slice(0, 60), at: now }; }
+              else if (!String(body.drives[sd.side] || '').trim() && dm0[String(hole)]) { delete dm0[String(hole)][sd.side]; if (!Object.keys(dm0[String(hole)]).length) delete dm0[String(hole)]; }
+            }
+          }
           if (!ph['round_' + rd.key + '_start']) ph['round_' + rd.key + '_start'] = now;
           await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
           return J({ ok: true, config: cupPublic(cfgObj) });

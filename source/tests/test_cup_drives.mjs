@@ -62,32 +62,37 @@ if (E2) {
   s0 = st({ 10: 'Brian Hager', 11: 'BJ Kolonia', 12: 'Brian Hager', 13: 'BJ Kolonia' });
   ok(s0.forced.length === 0 && !s0.impossible && s0.left === 5, 'an even split is fine');
 }
-// the live panel on hole 10 (Greensomes)
+// the live panel on hole 10 (Greensomes): the tee shot is required, held on the page, and saved with the score
 let dom = await open('&player=' + encodeURIComponent('Brian Hager')), d = dom.window.document;
-ok(/Greensomes/.test(d.querySelector('#lmAll').parentNode.textContent + d.body.textContent), 'the panel calls the format Greensomes');
+ok(/Greensomes/.test(d.body.textContent), 'the panel calls the format Greensomes');
 ok(d.querySelectorAll('[data-lm-drv]').length >= 4, 'both partners of both teams get a drive button: ' + d.querySelectorAll('[data-lm-drv]').length);
-const btn = n => [...dom.window.document.querySelectorAll('[data-lm-drv]')].filter(b => b.textContent.startsWith(n))[0];
-btn('Brian').click(); await tick(300); d = dom.window.document;
+ok(!/Optional/.test(d.querySelector('.lmst.tee').textContent), 'the tee shot is not labelled optional');
+const dq = () => dom.window.document;
+const btn = n => [...dq().querySelectorAll('[data-lm-drv]')].filter(b => b.textContent.startsWith(n))[0];
+const tile = (who, n) => dq().querySelector('[data-lm-s="' + who + '|' + n + '"]');
+tile('Brian Hager', 5).click(); tile('Tom Stitt', 5).click(); await tick(100);
+ok(dq().getElementById('lmPost').disabled && /Mark whose drive first/.test(dq().getElementById('lmPost').textContent), 'with both scores in but no drives, Save is off and says to mark whose drive');
+btn('Brian').click(); await tick(100);
 ok(btn('Brian').classList.contains('on'), 'the tapped partner is highlighted');
-ok(/Drives used: Brian H\. <b>1<\/b>|Brian H\. 1/.test(d.querySelector('.lmdrv').innerHTML) || /Brian H\.\s*1/.test(d.querySelector('.lmdrv').textContent), 'the count reads 1 for Brian');
-let c = await dbCfg(); ok(c.drives && c.drives.sat.m1['10'].A.player === 'Brian Hager', 'it is saved on the Worker');
-btn('Brian').click(); await tick(300);
-c = await dbCfg(); ok(!c.drives || !c.drives.sat || !c.drives.sat.m1 || !c.drives.sat.m1['10'], 'tapping again takes it back');
-// both teams of one match mark their own drive on the same hole
-await act({ action: 'drive', hole: 12, drive: 'Brian Hager', player: 'Brian Hager' }); await act({ action: 'drive', hole: 12, drive: 'Tom Stitt', player: 'Brian Hager' });
-c = await dbCfg(); ok(c.drives.sat.m1['12'].A.player === 'Brian Hager' && c.drives.sat.m1['12'].B.player === 'Tom Stitt', 'each team keeps its own drive on a hole');
-await act({ action: 'drive', hole: 12, drive: '', side: 'B', player: 'Brian Hager' }); await act({ action: 'drive', hole: 12, drive: '', side: 'A', player: 'Brian Hager' });
-// both teams marked: the tee card folds to one line, "change" reopens it; the score card shows its state
-btn('Brian').click(); await tick(300);
-{ const pb = dom.window.document.querySelectorAll('[data-lm-drv]'); const other = [...pb].filter(b => b.textContent.startsWith('Tom'))[0]; other.click(); await tick(300); }
-d = dom.window.document;
+ok(/Brian H\.\s*1/.test(dq().querySelector('.lmdrv').textContent), 'the count includes the pick on screen (Brian 1)');
+ok(dq().getElementById('lmPost').disabled && /Team Nate/.test(dq().getElementById('lmPost').textContent), 'one team marked: Save still off and names the team still to mark');
+let c = await dbCfg(); ok(!c.drives || !c.drives.sat || !c.drives.sat.m1 || !c.drives.sat.m1['10'], 'nothing is sent until Save');
+btn('Brian').click(); await tick(100);
+ok(!btn('Brian').classList.contains('on'), 'tapping the same partner again takes it back');
+btn('Brian').click(); btn('Tom').click(); await tick(100);
+d = dq();
 ok(/Brian H\./.test(d.querySelector('.lmst.tee').textContent) && /Tom S\./.test(d.querySelector('.lmst.tee').textContent) && !d.querySelector('[data-lm-drv]') && d.querySelector('[data-lm-drvopen]'), 'with both teams marked the tee card folds to a summary with a change link');
 ok(/Marked/.test(d.querySelector('.lmst.tee').textContent), 'the tee card pill says Marked');
-d.querySelector('[data-lm-drvopen]').click(); await tick(100); d = dom.window.document;
-ok(d.querySelectorAll('[data-lm-drv]').length >= 4, 'change reopens the buttons');
-ok([...d.querySelectorAll('.lmst .lmsth .n')].map(n => n.textContent).join() === '1,2,3', 'steps are numbered 1 tee shot, 2 score, 3 closest to the pin (hole 10 is a par 3)');
-ok(/to enter/.test(d.querySelector('.lmst.score').textContent) && d.querySelector('#lmPost').disabled && !d.querySelector('#lmPost').classList.contains('ready'), 'the score card says what is left and the button is greyed');
+d.querySelector('[data-lm-drvopen]').click(); await tick(100);
+ok(dq().querySelectorAll('[data-lm-drv]').length >= 4, 'change reopens the buttons');
+ok([...dq().querySelectorAll('.lmst .lmsth .n')].map(n => n.textContent).join() === '1,2,3', 'steps are numbered 1 tee shot, 2 score, 3 closest to the pin (hole 10 is a par 3)');
+ok(!dq().getElementById('lmPost').disabled && dq().getElementById('lmPost').classList.contains('ready'), 'with scores and both drives the Save button is green');
 if (process.env.DUMP) { (await import('fs')).writeFileSync('/tmp/panel.html', dom.serialize().replace(/<script[\s\S]*?<\/script>/g, '')); }
+dq().getElementById('lmPost').click(); await tick(500);
+c = await dbCfg();
+ok(c.drives && c.drives.sat.m1['10'].A.player === 'Brian Hager' && c.drives.sat.m1['10'].B.player === 'Tom Stitt', 'Save posts both drives with the score');
+ok(c.scores.sat.m1.h['10'] && Object.values(c.scores.sat.m1.h['10']).length === 2, 'and the score itself');
+await act({ action: 'drive', hole: 10, drive: '', side: 'A', player: 'Brian Hager' }); await act({ action: 'drive', hole: 10, drive: '', side: 'B', player: 'Brian Hager' });
 // host re-save keeps the drives
 await act({ action: 'drive', hole: 11, drive: 'BJ Kolonia', player: 'Brian Hager' });
 const cur = await dbCfg(); const resave = JSON.parse(JSON.stringify(cur)); delete resave.drives;

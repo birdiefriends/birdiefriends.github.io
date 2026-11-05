@@ -91,11 +91,16 @@
   function applyLocal(cfg, post) {                          // optimistic: show the score at once, the server confirms later
     cfg.scores = cfg.scores || {}; var r = cfg.scores[post.round] = cfg.scores[post.round] || {}; var e = r[post.match] = r[post.match] || { h: {}, t: {}, by: {} };
     e.h[String(post.hole)] = post.scores; e.t[String(post.hole)] = post.at; e.by[String(post.hole)] = post.player || '';
+    if (post.drives) {                                       // Greensomes: whose drive each team used travels with the score
+      cfg.drives = cfg.drives || {}; var dm = (cfg.drives[post.round] = cfg.drives[post.round] || {})[post.match] = (cfg.drives[post.round][post.match] || {});
+      dm[String(post.hole)] = dm[String(post.hole)] || {};
+      Object.keys(post.drives).forEach(function (k) { if (post.drives[k]) dm[String(post.hole)][k] = { player: post.drives[k], by: post.player || '', at: post.at }; else delete dm[String(post.hole)][k]; });
+    }
   }
   function flush() {
     if (!S || S.flushing) return; var q = queue(); if (!q.length) return; S.flushing = true;
     var post = q[0];
-    fetch(S.opts.worker + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: S.opts.event, action: 'score', round: post.round, match: post.match, hole: post.hole, scores: post.scores, player: post.player, code: S.opts.code || undefined, pin: S.opts.pin || undefined }) })
+    fetch(S.opts.worker + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: S.opts.event, action: 'score', round: post.round, match: post.match, hole: post.hole, scores: post.scores, drives: post.drives, player: post.player, code: S.opts.code || undefined, pin: S.opts.pin || undefined }) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
       .then(function (x) {
         if (x.ok || (x.status >= 400 && x.status < 500)) { var qq = queue(); qq.shift(); setQueue(qq); if (!x.ok) { S.err = 'Hole ' + post.hole + ' was NOT saved: ' + (x.j.error || x.status) + '. Pick your name at the top and enter it again.'; var c0 = S.opts.getCfg(); try { delete c0.scores[post.round][post.match].h[String(post.hole)]; } catch (e) { /* nothing local to undo */ } } else if (x.j.config) { var c = S.opts.getCfg(); if (c) { c.phases = x.j.config.phases; mergeServer(c, x.j.config.scores); } } }
@@ -262,19 +267,41 @@
   function stepHead(n, icon, title, pill, ok, opt) {
     return '<div class="lmsth"><span class="n">' + n + '</span><span class="t">' + icon + ' ' + esc(title) + '</span><span class="sp"></span>' + (opt ? '<span class="lmpill opt">Optional</span>' : '') + (pill ? '<span class="lmpill' + (ok ? ' ok' : '') + '">' + esc(pill) + '</span>' : '') + '</div>';
   }
-  // Greensomes drive tally: tap whose drive the pair used on this hole. Optional (the score saves either way); the count is shown to everyone.
-  // One card, one row per team. Once every team has a drive marked the card folds to a one-line summary (tap "change" to reopen it).
+  // Greensomes: each team says whose drive it used on the hole BEFORE the score can be saved. The choice is held on the page (S.drv) until Save, then
+  // travels with the score post (so it is queued offline like the score). Returns { matchKey: { sideKey: name } } or null when it is not a Greensomes hole.
+  function driveSeg(round, hole) { return (round.segments || []).filter(function (sg) { return sg.format === 'altshot' && hole >= sg.from && hole <= sg.to; })[0] || null; }
+  function driveChoices(cfg, round, matches, hole, gkey) {
+    if (!driveSeg(round, hole)) return null;
+    var pend = (S.drv || {})[gkey + '|' + hole] || {}, out = {};
+    matches.forEach(function (m) {
+      var posted = ((((cfg.drives || {})[round.key] || {})[m.key]) || {})[String(hole)] || {}; out[m.key] = {};
+      m.sides.forEach(function (sd) {
+        var pk = m.key + '|' + sd.side, v = Object.prototype.hasOwnProperty.call(pend, pk) ? pend[pk] : (posted[sd.side] ? posted[sd.side].player : '');
+        out[m.key][sd.side] = v || '';
+      });
+    });
+    return out;
+  }
+  // One numbered header per entry step (tee shot / score / closest to the pin) so the three jobs read as different things at a glance.
+  function stepHead(n, icon, title, pill, ok, opt) {
+    return '<div class="lmsth"><span class="n">' + n + '</span><span class="t">' + icon + ' ' + esc(title) + '</span><span class="sp"></span>' + (opt ? '<span class="lmpill opt">Optional</span>' : '') + (pill ? '<span class="lmpill' + (ok ? ' ok' : '') + '">' + esc(pill) + '</span>' : '') + '</div>';
+  }
+  // The tee-shot card: one row per team, tap whose drive was used. Required: Save stays off until every team has one. The count includes the pick on screen.
+  // Once every team has a drive the card folds to a one-line summary ("change" reopens it).
   function driveHtml(cfg, round, matches, hole, stepNo, gkey) {
-    var E = S.opts.E;
-    var seg = (round.segments || []).filter(function (sg) { return sg.format === 'altshot' && hole >= sg.from && hole <= sg.to; })[0];
-    if (!seg) return '';
-    var rowsH = '', sums = [], marked = 0, total = 0, notes = '';
+    var E = S.opts.E, seg = driveSeg(round, hole); if (!seg) return '';
+    var ch = driveChoices(cfg, round, matches, hole, gkey), view = Object.assign({}, cfg, { drives: JSON.parse(JSON.stringify(cfg.drives || {})) });
+    matches.forEach(function (m) { m.sides.forEach(function (sd) {
+      var v = ch[m.key][sd.side], dm = ((view.drives[round.key] = view.drives[round.key] || {})[m.key] = view.drives[round.key][m.key] || {});
+      dm[String(hole)] = dm[String(hole)] || {}; if (v) dm[String(hole)][sd.side] = { player: v }; else delete dm[String(hole)][sd.side];
+    }); });
+    var rowsH = '', sums = [], marked = 0, total = 0;
     matches.forEach(function (match) {
-      var st = E.cupDriveStatus(cfg, round, match, seg), dh = ((((cfg.drives || {})[round.key] || {})[match.key]) || {})[String(hole)] || {};
+      var st = E.cupDriveStatus(view, round, match, seg);
       st.sides.forEach(function (sd) {
         if (sd.players.length < 2) return;
         total++;
-        var dr = dh[sd.side] || null, mine = dr && sd.players.filter(function (p) { return norm(p) === norm(dr.player); })[0];
+        var mine = sd.players.filter(function (p) { return norm(p) === norm(ch[match.key][sd.side]); })[0];
         if (mine) { marked++; sums.push(esc(sideName(cfg, sd.side)) + ': ' + esc(shortName(mine))); }
         var warn = '';
         if (sd.impossible) warn = 'Not enough holes left for both drives to reach ' + sd.min + '. The captains decide.';
@@ -289,10 +316,10 @@
     if (!total) return '';
     S.drvOpen = S.drvOpen || {};
     var key = gkey + '|' + hole, done = marked === total, folded = done && !S.drvOpen[key];
-    var pill = done ? 'Marked ✓' : marked ? marked + ' of ' + total + ' marked' : 'Not marked';
-    var h = '<div class="lmst tee opt">' + stepHead(stepNo, '🏌️', 'Tee shot', pill, done, true);
+    var pill = done ? 'Marked ✓' : marked ? marked + ' of ' + total + ' marked' : 'Mark whose drive';
+    var h = '<div class="lmst tee">' + stepHead(stepNo, '🏌️', 'Tee shot', pill, done, false);
     if (folded) return h + '<div class="lmstsum"><span>' + sums.join(' · ') + '</span><button data-lm-drvopen="' + esc(key) + '">change</button></div></div>';
-    return h + '<div class="lmdim" style="margin-bottom:2px">Both tee off, pick one drive, then alternate. Tap whose drive you used.</div>' + rowsH + (done ? '<div style="text-align:right"><button class="lmsec" data-lm-drvopen="' + esc(key) + '" style="padding:5px 12px;font-size:.82rem">Done</button></div>' : '') + '</div>';
+    return h + '<div class="lmdim" style="margin-bottom:2px">Both tee off, pick one drive, then alternate. Tap whose drive your team used.</div>' + rowsH + (done ? '<div style="text-align:right"><button class="lmsec" data-lm-drvopen="' + esc(key) + '" style="padding:5px 12px;font-size:.82rem">Done</button></div>' : '') + '</div>';
   }
   // Closest to the pin (Dev-98, spec §13.15): shown on a CTP hole of a round whose games include it. Anyone playing in the round may set who is closest.
   function ctpHolesOf(cfg, round) {
@@ -404,7 +431,9 @@
     var missing = rows.filter(function (r) { return rowVal(r.key, inp, posted) === undefined; }).length;
     var anon = !S.opts.player && !S.opts.code && !S.opts.pin;
     if (!hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
-    h += '<button class="lmgo' + (!missing && !anon ? ' ready' : '') + '" id="lmPost"' + (missing || anon ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : (anyPosted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>' + '</div>';
+    var dch = driveChoices(cfg, round, matches, hole, gkey), noDrive = [];
+    if (dch) matches.forEach(function (m) { m.sides.forEach(function (sd) { if (!dch[m.key][sd.side]) noDrive.push(sideName(cfg, sd.side)); }); });
+    h += '<button class="lmgo' + (!missing && !anon && !noDrive.length ? ' ready' : '') + '" id="lmPost"' + (missing || anon || noDrive.length ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : noDrive.length ? 'Mark whose drive first (' + noDrive.join(', ') + ')' : (anyPosted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>' + '</div>';
     if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, matches: matches, hole: hole, E: E }) || '';
     h += ctpHtml(cfg, round, hole, matches, stepNo + 1);
     if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' score' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
@@ -457,12 +486,12 @@
     function cur(r) { return rowVal(r.key, S.inp[key] || {}, postedOf()); }
     var ms = el.querySelector('#lmMatchSel'); if (ms) ms.addEventListener('change', function () { var p = ms.value.split('|'); S.sel = { r: p[0], g: p[1] }; S.hole = null; S.who = null; S.msg = ''; S.err = ''; S.last = null; render(); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-drv]'), function (b) { b.addEventListener('click', function () {
-      if (!S.opts.player && !S.opts.code && !S.opts.pin) { S.err = 'Pick who you are above first.'; render(); return; }
       var p = b.getAttribute('data-lm-drv').split('|'), cfg = S.opts.getCfg();
       var mm = (round.matches || []).filter(function (x) { return x.key === p[0]; })[0], sk = mm && mm.sides.filter(function (sd) { return sd.players.some(function (n) { return norm(n) === norm(p[1]); }); })[0];
-      var cur = ((((((cfg.drives || {})[round.key] || {})[p[0]]) || {})[String(hole)]) || {})[sk && sk.side];
-      var same = cur && norm(cur.player) === norm(p[1]);                       // tapping the chosen name again takes it back
-      S.err = ''; act(round, 'drive', { match: p[0], hole: hole, side: sk ? sk.side : '', drive: same ? '' : p[1] });
+      if (!sk) return;
+      var ch = driveChoices(cfg, round, matches, hole, gkey), same = ch && ch[p[0]] && norm(ch[p[0]][sk.side]) === norm(p[1]);   // tapping the chosen name again takes it back
+      S.drv = S.drv || {}; var dk = gkey + '|' + hole; S.drv[dk] = S.drv[dk] || {}; S.drv[dk][p[0] + '|' + sk.side] = same ? '' : p[1];
+      S.err = ''; render();
     }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-drvopen]'), function (b) { b.addEventListener('click', function () { S.drvOpen = S.drvOpen || {}; var k2 = b.getAttribute('data-lm-drvopen'); S.drvOpen[k2] = !S.drvOpen[k2]; render(); }); });
     var cg = el.querySelector('#lmCtpGo'); if (cg) cg.addEventListener('click', function () {
@@ -486,13 +515,14 @@
       matches.forEach(function (match) {                       // one post per match; the Worker lets anyone in the group score any of its matches
         var scores = {}; rows.filter(function (r) { return r.m === match.key; }).forEach(function (r) { scores[r.key] = cur(r); });
         var post = { round: round.key, match: match.key, hole: hole, scores: scores, player: S.opts.player || '', at: at };
+        var dv = driveChoices(cfg, round, [match], hole, gkey); if (dv) post.drives = dv[match.key];
         applyLocal(cfg, post); var qq = queue(); qq.push(post); setQueue(qq);
       });
       matches.forEach(function (match) {
         var live = E.cupMatchLive(cfg, round, match, entryOf(cfg, round.key, match.key)), wn = holeWinner(live, hole), sl2 = statusLine(cfg, live, match);
         lines.push({ w: wn, text: 'Match ' + nums[round.key + '|' + match.key] + ' · hole ' + hole + ': ' + (wn === 'a' ? sideName(cfg, match.sides[0].side) + ' wins the hole' : wn === 'b' ? sideName(cfg, match.sides[1].side) + ' wins the hole' : 'halved') + '  ·  ' + sl2.text + ' (' + sl2.sub + ')' });
       });
-      delete S.inp[key]; S.msg = ''; S.err = ''; S.last = { g: gkey, lines: lines };
+      delete S.inp[key]; if (S.drv) delete S.drv[gkey + '|' + hole]; S.msg = ''; S.err = ''; S.last = { g: gkey, lines: lines };
       var nxt = Math.min.apply(null, matches.map(function (m) { return E.cupMatchLive(cfg, round, m, entryOf(cfg, round.key, m.key)).next; }));
       S.who = null; S.hole = { g: gkey, h: Math.min(nxt, Math.max.apply(null, round.segments.map(function (s) { return s.to; }))) };
       render(); flush(); if (S.opts.onChange) S.opts.onChange(); });
