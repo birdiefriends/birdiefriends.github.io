@@ -1602,7 +1602,7 @@ export default {
         const cfgObj = JSON.parse(row.config);
         const acc = cfgObj.access || {};
         const norm = v => String(v == null ? '' : v).trim().toLowerCase();
-        if (body.action === 'score' || body.action === 'drive' || body.action === 'round_end' || body.action === 'round_reopen' || body.action === 'match_close' || body.action === 'match_reopen' || body.action === 'ctp' || body.action === 'money_close' || body.action === 'money_reopen') {
+        if (body.action === 'score' || body.action === 'clear_hole' || body.action === 'drive' || body.action === 'round_end' || body.action === 'round_reopen' || body.action === 'match_close' || body.action === 'match_reopen' || body.action === 'ctp' || body.action === 'money_close' || body.action === 'money_reopen') {
           // Live scoring (trust model, like the rest of the app): anyone playing in the match can post its hole scores; a captain code or the PIN works too.
           const rd = (cfgObj.rounds || []).find(r => r.key === body.round);
           if (!rd) return J({ error: 'Unknown round' }, 404);
@@ -1702,6 +1702,15 @@ export default {
               dm[String(hole)] = dm[String(hole)] || {};
               dm[String(hole)][dsd.side] = { player: dn, by: String(body.player || (capOk ? 'host' : '')).slice(0, 60), at: now };
             }
+            await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
+            return J({ ok: true, config: cupPublic(cfgObj) });
+          }
+          if (body.action === 'clear_hole') {
+            // take a saved hole back to empty (a mistaken or test entry): its scores and, on a Greensomes hole, its drives. Same trust as scoring; a closed match needs a captain.
+            if (((cfgObj.closed || {})[rd.key] || {})[m.key] && !capOk) return J({ error: 'This match is closed. A captain reopens it first.' }, 409);
+            const rs1 = (cfgObj.scores[rd.key] || {})[m.key];
+            if (rs1) { ['h', 't', 'by'].forEach(k => { if (rs1[k]) delete rs1[k][String(hole)]; }); }
+            const dm1 = ((cfgObj.drives || {})[rd.key] || {})[m.key]; if (dm1) delete dm1[String(hole)];
             await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
             return J({ ok: true, config: cupPublic(cfgObj) });
           }

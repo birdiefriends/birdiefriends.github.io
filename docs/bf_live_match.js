@@ -443,7 +443,7 @@
     if (!hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
     var dch = driveChoices(cfg, round, matches, hole, gkey), noDrive = [];
     if (dch) matches.forEach(function (m) { m.sides.forEach(function (sd) { if (!dch[m.key][sd.side]) noDrive.push(sideName(cfg, sd.side)); }); });
-    h += '<button class="lmgo' + (!missing && !anon && !noDrive.length ? ' ready' : '') + '" id="lmPost"' + (missing || anon || noDrive.length ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : noDrive.length ? 'Mark whose drive first (' + noDrive.join(', ') + ')' : (anyPosted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>' + '</div>';
+    h += '<button class="lmgo' + (!missing && !anon && !noDrive.length ? ' ready' : '') + '" id="lmPost"' + (missing || anon || noDrive.length ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : noDrive.length ? 'Mark whose drive first (' + noDrive.join(', ') + ')' : (anyPosted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>' + (anyPosted && !anon ? '<button class="lmsec" id="lmClear" style="margin-top:8px;width:100%">Clear hole ' + hole + ' (start it over)</button>' : '') + '</div>';
     if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, matches: matches, hole: hole, E: E }) || '';
     h += ctpHtml(cfg, round, hole, matches, stepNo + 1);
     if (q.length) h += '<div class="lmmsg q">⏳ ' + q.length + ' score' + (q.length > 1 ? 's' : '') + ' waiting to send. Weak signal is fine; it keeps trying.</div>';
@@ -519,6 +519,14 @@
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-who]'), function (b) { b.addEventListener('click', function () { S.who = b.getAttribute('data-lm-who'); render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-go]'), function (b) { b.addEventListener('click', function () { var mx = Math.max.apply(null, round.segments.map(function (x) { return x.to; })); S.hole = { g: gkey, h: Math.max(1, Math.min(mx, hole + Number(b.getAttribute('data-lm-go')))) }; S.who = null; S.msg = ''; render(); }); });
     var all = el.querySelector('#lmAll'); if (all) all.addEventListener('click', function () { S.showAll = !S.showAll; render(); });
+    var clr = el.querySelector('#lmClear'); if (clr) clr.addEventListener('click', function () {
+      if (!window.confirm('Clear hole ' + hole + '? Its scores' + (driveSeg(round, hole) ? ' and tee shots' : '') + ' are deleted so you can enter it again.')) return;
+      var cfg = S.opts.getCfg(), qq = queue().filter(function (p) { return !(p.round === round.key && Number(p.hole) === hole && matches.some(function (m) { return m.key === p.match; })); }); setQueue(qq);
+      var sent = [matches.reduce(function (pr, m) { return pr.then(function () { return act(round, 'clear_hole', { match: m.key, hole: hole }); }); }, Promise.resolve())];   // one at a time: each is a read-modify-write on the Cup record
+      matches.forEach(function (m) { var e = entryOf(cfg, round.key, m.key); if (e) ['h', 't', 'by'].forEach(function (k) { if (e[k]) delete e[k][String(hole)]; }); });
+      delete S.inp[key]; if (S.drv) delete S.drv[gkey + '|' + hole]; S.who = null; S.msg = ''; S.err = ''; S.last = null; render(); if (S.opts.onChange) S.opts.onChange();
+      Promise.all(sent).then(function () { if (S.opts.onChange) S.opts.onChange(); });
+    });
     var go = el.querySelector('#lmPost'); if (go) go.addEventListener('click', function () {
       if (rows.some(function (r) { return cur(r) === undefined; })) return;
       var cfg = S.opts.getCfg(), at = new Date().toISOString(), E = S.opts.E, nums = E.cupMatchNumbers(cfg), lines = [];

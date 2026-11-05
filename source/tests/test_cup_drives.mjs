@@ -110,4 +110,18 @@ c = await dbCfg(); ok(c.drives && c.drives.sat.m1['11'].A.player === 'BJ Kolonia
     btn('Brian').click(); await tick(60); ok(brianCount() === base0 + 2, 'a second tap on hole 17 makes Brian ' + (base0 + 2) + ', saved or not');
   } else ok(false, 'hole 16 button not found');
 }
+// Clear hole: a saved hole can be taken back to empty (Brian, 2026-11-05: could not reset hole 1 after a test save)
+{
+  const dq2 = () => dom.window.document;
+  dom = await open('&player=' + encodeURIComponent('Brian Hager')); await tick(100);
+  let cc = await dbCfg(); ok(cc.scores.sat.m1.h['10'], 'hole 10 is saved before the clear');
+  const a = dq2().getElementById('lmAll'); if (a && !dq2().querySelector('[data-lm-hole]')) a.click();
+  dq2().querySelector('[data-lm-hole="10"]').click(); await tick(100);
+  const cb = dq2().getElementById('lmClear'); ok(!!cb && /Clear hole 10/.test(cb.textContent), 'a saved hole offers Clear hole');
+  cb.click(); await tick(600);
+  cc = await dbCfg();
+  ok(!cc.scores.sat.m1.h['10'] && !(cc.drives.sat.m1 || {})['10'], 'Clear hole removes the scores and drives on the Worker');
+  ok(cc.scores.sat.m1.h['1'] && cc.scores.sat.m1.h['9'], 'other holes are untouched');
+  ok(!dq2().getElementById('lmClear') && /Tap 2 more|Post hole 10|Mark whose drive/.test(dq2().getElementById('lmPost').textContent), 'the panel is back to an empty hole 10');
+}
 console.log(`test_cup_drives: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
