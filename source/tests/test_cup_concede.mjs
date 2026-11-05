@@ -81,4 +81,14 @@ goto(3); await tick(80);
 dq().querySelector('[data-lm-who="' + A2 + '"]').click(); await tick(40); dq().querySelector('[data-lm-s="' + A2 + '|5"]').click(); await tick(60);
 ok(dq().getElementById('lmPost').disabled, 'a posted -1 needs a real score once the other side is back in');
 goto(12); await tick(80); ok(/Hole 12/.test(dq().querySelector('#lmAll').textContent), 'the hole grid still jumps to any hole (for testing and catch-up)'); ok(dq().querySelector('[data-lm-go="1"]').disabled, 'but the › arrow stays locked until this hole is posted');
+// Sunday singles: the skin line and the "played it out?" wording
+{ goto(1); }
+dom = await open('&player=' + encodeURIComponent(A1)); 
+{ const sel = dq().getElementById('lmMatchSel'); const opt = [...sel.options].find(o => /^sun\|/.test(o.value)); sel.value = opt.value; sel.dispatchEvent(new dom.window.Event('change')); await tick(80);
+  const go = h => { const a = dq().getElementById('lmAll'); if (a && !dq().querySelector('[data-lm-hole]')) a.click(); dq().querySelector('[data-lm-hole="' + h + '"]').click(); };
+  go(5); await tick(60);
+  dq().querySelector('[data-lm-s="' + A1 + '|0"]').click(); await tick(60);
+  ok(/Skin: No skin in play/.test(dq().body.textContent) && /played it out\? tap your score/.test(dq().body.textContent), 'Sunday: Accepted shows no skin in play and asks "played it out?"');
+  dq().querySelector('[data-lm-who="' + B1 + '"]').click(); await tick(40); dq().querySelector('[data-lm-s="' + B1 + '|3"]').click(); await tick(60);
+  ok(/Skin: Tom S\. 3 in for the skin/.test(dq().body.textContent), 'a finish-out number is in for the skin: ' + (dq().querySelector('.lmres') || {}).textContent); }
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

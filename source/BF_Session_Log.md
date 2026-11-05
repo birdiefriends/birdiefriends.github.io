@@ -5735,3 +5735,6 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 
 ## Concession is automatic, not blank (panel v31)
 - When a side is entirely Out, the other side's chips auto-show "Accepted ✓" (team line "concession accepted") and Post is on; tapping a number overrides it and counts as a finish-out for skins. Saved as -1 as before. Banner status now uses the segment holding the hole (was showing the first undecided segment).
+
+## Skin wording on concessions (panel v32)
+- Rounds with a skins game: the accepted winner's chip says "played it out? tap your score", the note adds "Accepted means no skin", and the result banner gets a Skin line ("No skin in play" / "Tom S. 3 in for the skin"). Rounds without skins (Saturday) show no skin wording.
