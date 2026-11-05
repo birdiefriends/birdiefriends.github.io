@@ -542,17 +542,20 @@
       }).join('') + '<button class="lmsec" id="lmEdit" style="margin-top:10px">Correct a score</button>';
     }
     h += '</div>';
-    // marking a no-show: the HOST only, before the match has scores
-    if (S.opts.pin) matches.forEach(function (match) {
-      var en0 = entryOf(cfg, round.key, match.key); if (match.noshow || (en0 && en0.h && Object.keys(en0.h).length)) return;
-      var sing = round.segments.length > 0 && round.segments.every(function (sg) { return sg.format === 'singles'; }), plan = S.opts.noshowPlan || {};
-      var names = [].concat.apply([], match.sides.map(function (sd) { return sd.players; }));
-      h += '<div class="lmc"><b>Someone did not show?</b><div class="lmdim" style="margin:4px 0 8px">' + (sing ? 'He leaves the match. The other player plays the round against a target score.' : 'He leaves the match. The other side plays one player, with mulligans on the Fourball nine.') + ' Do this before tee-off. One no-show per match.</div>'
-        + '<div class="lmns" data-lm-nsbox="' + esc(match.key) + '" data-lm-sing="' + (sing ? '1' : '') + '"><select data-lm-nswho>' + names.map(function (n) { return '<option>' + esc(n) + '</option>'; }).join('') + '</select>'
-        + (sing ? '<label>Win with<input type="number" inputmode="numeric" data-lm-nswin> or better</label><label>Half up to<input type="number" inputmode="numeric" data-lm-nshalf></label>'
-                : '<label>Mulligans<input type="number" inputmode="numeric" min="0" max="9" data-lm-nsmul></label>')
-        + '<button class="lmsec" data-lm-nsgo="' + esc(match.key) + '">Mark no-show</button></div></div>';
-    });
+    // marking a no-show: the HOST only, before the match has scores. Any player in any round can be picked, not just this group's.
+    if (S.opts.pin) {
+      var cands = [];
+      (cfg.rounds || []).forEach(function (rd) { (rd.matches || []).forEach(function (mt) {
+        var en0 = entryOf(cfg, rd.key, mt.key); if (mt.noshow || (en0 && en0.h && Object.keys(en0.h).length)) return;
+        var sing0 = (rd.segments || []).length > 0 && rd.segments.every(function (sg) { return sg.format === 'singles'; });
+        mt.sides.forEach(function (sd) { sd.players.forEach(function (n) { cands.push({ v: rd.key + '|' + mt.key + '|' + n, sing: sing0, label: n + ' · ' + (rd.name || rd.key) + ' · M' + nums[rd.key + '|' + mt.key] }); }); });
+      }); });
+      if (cands.length) h += '<div class="lmc"><b>Someone did not show?</b><div class="lmdim" style="margin:4px 0 8px">Pick him from any round. On a pairs day the other side plays one player with mulligans on the Fourball nine; in singles the other player plays a target score. Do this before tee-off. One no-show per match.</div>'
+        + '<div class="lmns" data-lm-nsbox="1"><select data-lm-nswho>' + cands.map(function (c0) { return '<option value="' + esc(c0.v) + '" data-sing="' + (c0.sing ? '1' : '') + '">' + esc(c0.label) + '</option>'; }).join('') + '</select>'
+        + '<span data-lm-nssing><label>Win with<input type="number" inputmode="numeric" data-lm-nswin> or better</label><label>Half up to<input type="number" inputmode="numeric" data-lm-nshalf></label></span>'
+        + '<span data-lm-nspair><label>Mulligans<input type="number" inputmode="numeric" min="0" max="9" data-lm-nsmul></label></span>'
+        + '<button class="lmsec" data-lm-nsgo="1">Mark no-show</button></div></div>';
+    }
     // closing a match by hand: host or captains only, one box per match still open
     var canClose = !!(S.opts.code || S.opts.pin);
     if (canClose) matches.forEach(function (match, i) {
@@ -649,18 +652,21 @@
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-nsundo]'), function (b) { b.addEventListener('click', function () { if (!window.confirm('Put this player back in the match? Only possible before any score is entered.')) return; act(round, 'noshow_undo', { match: b.getAttribute('data-lm-nsundo') }); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-nsbox]'), function (bx) {
       var E0 = S.opts.E, cfg0 = S.opts.getCfg(), plan = S.opts.noshowPlan || {}, sel = bx.querySelector('[data-lm-nswho]');
+      function parts() { var q = sel.value.split('|'); return { round: q[0], match: q[1], name: q.slice(2).join('|') }; }
       function prefill() {
-        var nm = sel.value, pl = plan[nm] || {}, mu = bx.querySelector('[data-lm-nsmul]'), w = bx.querySelector('[data-lm-nswin]'), hf = bx.querySelector('[data-lm-nshalf]');
-        if (mu) mu.value = pl.mulligans != null ? pl.mulligans : E0.cupMulliganDefault(E0.cupIndexOf(cfg0, nm));
-        if (w) w.value = pl.win != null ? pl.win : ''; if (hf) hf.value = pl.half != null ? pl.half : '';
+        var pt = parts(), pl = plan[pt.name] || {}, sing = sel.options[sel.selectedIndex].getAttribute('data-sing') === '1';
+        bx.querySelector('[data-lm-nssing]').style.display = sing ? '' : 'none'; bx.querySelector('[data-lm-nspair]').style.display = sing ? 'none' : '';
+        bx.querySelector('[data-lm-nsmul]').value = pl.mulligans != null ? pl.mulligans : E0.cupMulliganDefault(E0.cupIndexOf(cfg0, pt.name));
+        bx.querySelector('[data-lm-nswin]').value = pl.win != null ? pl.win : ''; bx.querySelector('[data-lm-nshalf]').value = pl.half != null ? pl.half : '';
       }
       sel.addEventListener('change', prefill); prefill();
       bx.querySelector('[data-lm-nsgo]').addEventListener('click', function () {
-        var sing = bx.getAttribute('data-lm-sing') === '1', ex = { who: sel.value };
+        var pt = parts(), sing = sel.options[sel.selectedIndex].getAttribute('data-sing') === '1', ex = { who: pt.name }, rd0 = (cfg0.rounds || []).filter(function (x) { return x.key === pt.round; })[0];
+        if (!rd0) return;
         if (sing) { ex.win = Number(bx.querySelector('[data-lm-nswin]').value); ex.half = Number(bx.querySelector('[data-lm-nshalf]').value); if (!(ex.win > 0 && ex.half >= ex.win)) { S.msg = 'Enter the score that wins and the highest score that halves.'; render(); return; } }
         else ex.mulligans = Number(bx.querySelector('[data-lm-nsmul]').value);
-        if (!window.confirm('Mark ' + sel.value + ' as a no-show? He leaves this match.')) return;
-        act(round, 'noshow', ex);
+        if (!window.confirm('Mark ' + pt.name + ' as a no-show? He leaves his match.')) return;
+        act(rd0, 'noshow', ex);
       });
     });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-mreopen]'), function (b) { b.addEventListener('click', function () { act(round, 'match_reopen', { match: b.getAttribute('data-lm-mreopen') }); }); });

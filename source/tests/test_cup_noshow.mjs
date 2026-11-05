@@ -123,9 +123,9 @@ ok(!/Mark whose drive first \([^)]*Team Nate/.test(txt()), 'the lone team (Team 
 
 // ---- panel (host): mark a no-show from the screen, prefilled from the plan; the note and the undo button appear
 const dom2 = await open('&host=1&player=' + encodeURIComponent('Dave Sherwin'), 'HOST1'); const d2 = () => dom2.window.document; await tick(200);
-const box = d2().querySelector('[data-lm-nsbox="m2"]'); ok(!!box, 'host sees the no-show box on a match with no scores');
+const box = d2().querySelector('[data-lm-nsbox]'); ok(!!box, 'host sees the no-show box'); ok(box && [...box.querySelectorAll('option')].some(o => o.value === 'sun|s2|Andrew Kabrick') && [...box.querySelectorAll('option')].some(o => o.value === 'sat|m1|Tom Stitt') === false, 'it lists players from other rounds and matches (not the one already marked)');
 if (box) {
-  const sel = box.querySelector('[data-lm-nswho]'); sel.value = 'Harry Pry'; sel.dispatchEvent(new dom2.window.Event('change')); await tick(20);
+  const sel = box.querySelector('[data-lm-nswho]'); sel.value = 'sat|m2|Harry Pry'; sel.dispatchEvent(new dom2.window.Event('change')); await tick(20);
   ok(box.querySelector('[data-lm-nsmul]').value === '4', "prefilled from the plan: Harry gets 4 mulligans (got " + box.querySelector('[data-lm-nsmul]').value + ')');
   box.querySelector('[data-lm-nsgo]').click(); await tick(500);
   c = await dbCfg(); ok(c.rounds[0].matches[1].noshow && c.rounds[0].matches[1].noshow.player === 'Harry Pry' && c.rounds[0].matches[1].noshow.mulligans === 4, 'the panel marked Harry with 4 mulligans');
