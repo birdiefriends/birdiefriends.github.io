@@ -5718,3 +5718,8 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - When every player on one side is Out (0), the opposing side's rows become optional. Blank is saved as -1 (won by concession: no gross, no skin try); a real number is a finish-out and counts for skins. Works for fourball (both pair Out, both winners may stay blank), Greensomes (one row per side) and singles.
 - Engine `cupMatchNets`: -1 is a won hole (-99). Worker `score`: -1 accepted only if the other side is entirely 0 in the same save (400 otherwise). Panel shows "Won"; a posted -1 needs a real score again if the other side is no longer entirely Out.
 - Tests: test_cup_concede.mjs (21).
+
+## Won by concession (engine 1.47.3, panel v26)
+- When every player on one side is Out (0), the opposing side's rows become optional. Blank is saved as -1 (won by concession: no gross, no skin try); a real number is a finish-out and counts for skins. Works for fourball (both pair Out, both winners may stay blank), Greensomes (one row per side) and singles.
+- Engine `cupMatchNets`: -1 is a won hole (-99). Worker `score`: -1 accepted only if the other side is entirely 0 in the same save (400 otherwise). Panel shows "Won"; a posted -1 needs a real score again if the other side is no longer entirely Out.
+- Tests: test_cup_concede.mjs (21).
