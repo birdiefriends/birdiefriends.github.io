@@ -5723,3 +5723,9 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - When every player on one side is Out (0), the opposing side's rows become optional. Blank is saved as -1 (won by concession: no gross, no skin try); a real number is a finish-out and counts for skins. Works for fourball (both pair Out, both winners may stay blank), Greensomes (one row per side) and singles.
 - Engine `cupMatchNets`: -1 is a won hole (-99). Worker `score`: -1 accepted only if the other side is entirely 0 in the same save (400 otherwise). Panel shows "Won"; a posted -1 needs a real score again if the other side is no longer entirely Out.
 - Tests: test_cup_concede.mjs (21).
+
+## Hole result preview + hole lock (panel v27, panel-only: no Worker change)
+- Above Post, each match shows what posting will do: "Team X wins hole N" (with net, "by concession" or "other side out"), "Hole N halved" (both sides Out also halves), and the match status after it, computed by the engine on a copy of the Cup. Incomplete: "N scores to go".
+- Player chips show only what was entered; a blank optional winner is "–" with "optional" (no "Won" on a player).
+- The › arrow and the hole grid stop at the first unposted hole; earlier holes can still be corrected.
+- Older tests that jumped ahead now post the earlier holes first (drives, money page, score page).

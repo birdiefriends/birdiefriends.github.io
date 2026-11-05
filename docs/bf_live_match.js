@@ -421,7 +421,8 @@
     var round = grp.round, matches = grp.matches, lives = liveOf(grp), gkey = round.key + '|' + grp.key;
     var maxHole = Math.max.apply(null, round.segments.map(function (s) { return s.to; }));
     var gnext = Math.min.apply(null, lives.map(function (l) { return l.next; }));
-    var hole = S.hole && S.hole.g === gkey ? S.hole.h : gnext;
+    var allowed = Math.min(maxHole, gnext), hole = S.hole && S.hole.g === gkey ? S.hole.h : gnext;
+    if (hole > allowed) hole = allowed;           // no moving past a hole that is not posted yet
     S.hole = { g: gkey, h: hole };
     var q = queue(), std = E.cupLiveStandings(cfg), stdOf = {};
     std.rounds.forEach(function (rr) { if (rr.key === round.key) rr.matches.forEach(function (mm) { stdOf[mm.key] = mm; }); });
@@ -466,10 +467,10 @@
     });
     var inp = S.inp[gkey + '|' + hole] = S.inp[gkey + '|' + hole] || {};
     var w0 = matches.length === 1 ? holeWinner(lives[0], hole) : '';
-    h += '<div class="lmnav"><button class="lmarrow" data-lm-go="-1"' + (hole <= 1 ? ' disabled' : '') + '>‹</button><button class="lmhtitle" id="lmAll">Hole ' + hole + (w0 ? ' <span class="lmwin ' + w0 + '"></span>' : '') + '<small>' + FMT[fmt0] + (cfg.handicap && cfg.handicap.strokeIndex ? ' · stroke index ' + cfg.handicap.strokeIndex[hole - 1] : '') + (anyPosted ? ' · posted' : '') + ' · tap for all holes</small></button><button class="lmarrow" data-lm-go="1"' + (hole >= maxHole ? ' disabled' : '') + '>›</button></div>';
+    h += '<div class="lmnav"><button class="lmarrow" data-lm-go="-1"' + (hole <= 1 ? ' disabled' : '') + '>‹</button><button class="lmhtitle" id="lmAll">Hole ' + hole + (w0 ? ' <span class="lmwin ' + w0 + '"></span>' : '') + '<small>' + FMT[fmt0] + (cfg.handicap && cfg.handicap.strokeIndex ? ' · stroke index ' + cfg.handicap.strokeIndex[hole - 1] : '') + (anyPosted ? ' · posted' : '') + ' · tap for all holes</small></button><button class="lmarrow" data-lm-go="1"' + (hole >= allowed ? ' disabled' : '') + '>›</button></div>';
     if (S.showAll) h += '<div class="lmholes">' + Array.apply(null, Array(maxHole)).map(function (_, i) {
       var n = i + 1, w = matches.length === 1 ? holeWinner(lives[0], n) : '', segStart = round.segments.some(function (s) { return s.from === n && n > 1; });
-      return '<button class="lmh ' + w + (n === hole ? ' cur' : '') + (segStart ? ' seg' : '') + '" data-lm-hole="' + n + '">' + n + '</button>';
+      return '<button class="lmh ' + w + (n === hole ? ' cur' : '') + (segStart ? ' seg' : '') + '"' + (n > allowed ? ' disabled style="opacity:.35"' : '') + ' data-lm-hole="' + n + '">' + n + '</button>';
     }).join('') + '</div>';
     var firstOpen = rows.filter(function (r) { return needRow(rows, r, inp, posted); })[0];
     var who = rows.filter(function (r) { return r.key === S.who; })[0] || firstOpen || rows[0];
@@ -479,8 +480,8 @@
     h += '<div class="lmst score">' + stepHead(++stepNo, '⛳', fmt0 === 'altshot' ? 'Team score' : 'Score', missing0 ? missing0 + ' to enter' : anyPosted ? 'Saved ✓' : 'Ready', !missing0 && anyPosted, false);
     if (fmt0 === 'altshot') h += '<div class="lmdim" style="margin:-2px 0 6px">One ball per team: enter the team gross for the hole.</div>';
     h += '<div class="lmchips">' + rows.map(function (r) {
-      var cur = effVal(rows, r, inp, posted); if (cur === undefined && optRow(rows, r, inp, posted)) cur = -1;
-      return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (cur === undefined ? '–' : (cur === 0 ? 'Out' : cur < 0 ? 'Won' : cur)) + '</span></button>';
+      var cur = effVal(rows, r, inp, posted), optBlank = (cur === undefined || cur < 0) && optRow(rows, r, inp, posted);
+      return '<button class="lmchip ' + r.side + (r.key === who.key ? ' sel' : '') + '" data-lm-who="' + esc(r.key) + '"><span class="lmcn">' + esc(r.label) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : (optBlank ? '<small>optional</small>' : '')) + (r.strokes ? '<span class="lmdots">' + '●'.repeat(r.strokes) + '</span>' : '') + '</span><span class="lmcv' + (cur === 0 ? ' pu' : '') + '">' + (optBlank ? '–' : cur === undefined ? '–' : (cur === 0 ? 'Out' : cur)) + '</span></button>';
     }).join('') + '</div>';
     var curw = effVal(rows, who, inp, posted), whoOpt = optRow(rows, who, inp, posted);
     h += '<div class="lmpick"><div class="lmdim" style="margin-bottom:4px">' + esc(who.label) + ' · hole ' + hole + '</div><div class="lmtiles">' + [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<button class="lmt' + (curw === n ? ' on' : '') + '" data-lm-s="' + esc(who.key) + '|' + n + '">' + n + '</button>'; }).join('')
@@ -490,6 +491,18 @@
     if (!hasSI) h += '<div class="lmdim">No stroke indexes are saved for this course, so scores count as gross (no handicap strokes).</div>';
     var dch = driveChoices(cfg, round, matches, hole, gkey), noDrive = [];
     if (dch) matches.forEach(function (m) { if (playOn(cfg, round, m, hole)) return; m.sides.forEach(function (sd) { if (!dch[m.key][sd.side]) noDrive.push(sideName(cfg, sd.side)); }); });
+    // what posting will do, shown before the tap: the hole result for each match, worked out by the same engine as the scoreboard
+    matches.forEach(function (match) {
+      var mr = rows.filter(function (r) { return r.m === match.key; }), mm = mr.filter(function (r) { return needRow(rows, r, inp, posted); }).length;
+      if (mm) { h += '<div class="lmmsg q">' + (matches.length > 1 ? 'Match ' + nums[round.key + '|' + match.key] + ': ' : '') + mm + ' score' + (mm > 1 ? 's' : '') + ' to go</div>'; return; }
+      var pc = JSON.parse(JSON.stringify(cfg)), sc0 = {};
+      mr.forEach(function (r) { var v = effVal(rows, r, inp, posted); sc0[r.key] = v === undefined ? -1 : v; });
+      applyLocal(pc, { round: round.key, match: match.key, hole: hole, scores: sc0, at: '', player: '' });
+      var lv = E.cupMatchLive(pc, round, match, entryOf(pc, round.key, match.key)), wn = holeWinner(lv, hole), sl3 = statusLine(pc, lv, match);
+      var sgm = lv.segments.filter(function (x) { return hole >= x.from && hole <= x.to; })[0], nA = sgm && sgm.nets[0][hole - 1], nB = sgm && sgm.nets[1][hole - 1];
+      var conc = nA === -99 || nB === -99, bothOut = nA === 99 && nB === 99, why = conc ? ' · by concession' : (wn !== 'h' && (nA === 99 || nB === 99) ? ' · other side out' : (bothOut ? ' · both sides out' : (nA != null && nB != null && Math.abs(nA) < 50 && Math.abs(nB) < 50 && wn !== 'h' ? ' · net ' + (wn === 'a' ? nA + ' v ' + nB : nB + ' v ' + nA) : '')));
+      h += '<div class="lmmsg" style="background:' + (wn === 'a' ? 'var(--a)' : wn === 'b' ? 'var(--b)' : 'var(--bg2)') + '">' + (matches.length > 1 ? 'Match ' + nums[round.key + '|' + match.key] + ' · ' : '') + (wn === 'a' ? esc(sideName(cfg, match.sides[0].side)) + ' wins hole ' + hole : wn === 'b' ? esc(sideName(cfg, match.sides[1].side)) + ' wins hole ' + hole : 'Hole ' + hole + ' halved') + esc(why) + '<small style="display:block;font-weight:500;opacity:.85">' + esc(sl3.text) + ' · ' + esc(sl3.sub) + '</small></div>';
+    });
     h += '<button class="lmgo' + (!missing && !anon && !noDrive.length ? ' ready' : '') + '" id="lmPost"' + (missing || anon || noDrive.length ? ' disabled' : '') + '>' + (anon ? 'Pick who you are above first' : missing ? 'Tap ' + missing + ' more score' + (missing > 1 ? 's' : '') : noDrive.length ? 'Mark whose drive first (' + noDrive.join(', ') + ')' : (anyPosted ? 'Update hole ' + hole : 'Post hole ' + hole)) + '</button>' + (anyPosted && !anon ? '<button class="lmsec" id="lmClear" style="margin-top:8px;width:100%">Clear hole ' + hole + ' (start it over)</button>' : '') + '</div>';
     if (S.opts.sections) h += S.opts.sections({ cfg: cfg, round: round, matches: matches, hole: hole, E: E }) || '';
     h += ctpHtml(cfg, round, hole, matches, stepNo + 1);
@@ -569,7 +582,7 @@
       (S.inp[key] = S.inp[key] || {})[row.key] = Number(p[1]);
       var nx = rows.filter(function (r) { return r.key !== row.key && need(r); })[0]; S.who = nx ? nx.key : row.key; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-who]'), function (b) { b.addEventListener('click', function () { S.who = b.getAttribute('data-lm-who'); render(); }); });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-go]'), function (b) { b.addEventListener('click', function () { var mx = Math.max.apply(null, round.segments.map(function (x) { return x.to; })); S.hole = { g: gkey, h: Math.max(1, Math.min(mx, hole + Number(b.getAttribute('data-lm-go')))) }; S.who = null; S.msg = ''; render(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-go]'), function (b) { b.addEventListener('click', function () { var mx = Math.max.apply(null, round.segments.map(function (x) { return x.to; })); S.hole = { g: gkey, h: Math.max(1, Math.min(mx, allowed, hole + Number(b.getAttribute('data-lm-go')))) }; S.who = null; S.msg = ''; render(); }); });
     var all = el.querySelector('#lmAll'); if (all) all.addEventListener('click', function () { S.showAll = !S.showAll; render(); });
     var clr = el.querySelector('#lmClear'); if (clr) clr.addEventListener('click', function () {
       if (!window.confirm('Clear hole ' + hole + '? Its scores' + (driveSeg(round, hole) ? ' and tee shots' : '') + ' are deleted so you can enter it again.')) return;

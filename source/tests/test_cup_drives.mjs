@@ -102,12 +102,12 @@ c = await dbCfg(); ok(c.drives && c.drives.sat.m1['11'].A.player === 'BJ Kolonia
 {
   const goto = h => { const a = dq().getElementById('lmAll'); if (a && !dq().querySelector('[data-lm-hole]')) a.click(); const b = dq().querySelector('[data-lm-hole="' + h + '"]'); if (b) { b.click(); return true; } return false; };
   const brianCount = () => { const m = (dq().querySelector('.lmst.tee').textContent.replace(/\s+/g, ' ')).match(/Brian H\. (\d+)/); return m ? Number(m[1]) : -1; };
+  for (let hh = 10; hh <= 15; hh++) await act({ action: 'score', hole: hh, scores: { 'Brian Hager': 5, 'Tom Stitt': 5 }, drives: { A: 'Brian Hager', B: 'Tom Stitt' }, player: 'Brian Hager' });   // the hole lock: 16 is reachable once 10-15 are posted
   dom = await open('&player=' + encodeURIComponent('Brian Hager')); await tick(100);
   if (goto(16)) {
     await tick(80); const base0 = brianCount();
     btn('Brian').click(); await tick(60); ok(brianCount() === base0 + 1, 'tap on hole 16 counts at once');
-    goto(17); await tick(80); ok(brianCount() === base0 + 1, 'hole 17 view already counts the unsaved hole 16 pick');
-    btn('Brian').click(); await tick(60); ok(brianCount() === base0 + 2, 'a second tap on hole 17 makes Brian ' + (base0 + 2) + ', saved or not');
+    goto(17); await tick(80); ok(/Hole 16/.test(dq().querySelector('#lmAll').textContent), 'cannot move on to hole 17 while hole 16 is not posted');
   } else ok(false, 'hole 16 button not found');
 }
 // Clear hole: a saved hole can be taken back to empty (Brian, 2026-11-05: could not reset hole 1 after a test save)

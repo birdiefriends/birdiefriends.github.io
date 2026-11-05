@@ -67,8 +67,11 @@ dom = await open(''); d = dom.window.document; ok(d.getElementById('lmMeSel') &&
 ok(d.getElementById('lmPost').disabled && /Pick who you are/.test(d.getElementById('lmPost').textContent), 'no name picked: Post says so instead of failing silently');
 dom = await open('?player=Amy'); d = dom.window.document;
 ok(/Match 1 · hole 1: Team Jake wins the hole/.test(d.querySelector('.lm').textContent) === false, 'banner only after posting in this visit');
+const bakScores = JSON.stringify(doc.scores || {});
+{ doc.scores = doc.scores || {}; doc.scores.r1 = doc.scores.r1 || {}; const hh = {}; for (let i = 1; i <= 9; i++) { hh[i] = {}; doc.rounds[0].matches[0].sides.forEach(sd => sd.players.forEach(p => { hh[i][p] = 5; })); } doc.scores.r1.m1 = { h: hh, t: {}, by: {} }; dom = await open('?player=Amy'); }   // the hole lock: hole 10 is reachable once 1-9 are in
 await click(dom, '#lmAll'); await click(dom, '[data-lm-hole="10"]'); d = dom.window.document;
 ok(d.querySelectorAll('.lmchip').length === 2 && /Greensomes/.test(d.querySelector('.lm').textContent) && /team gross/.test(d.querySelector('.lm').textContent), 'hole 10: two team chips and a team-gross note');
+doc.scores = JSON.parse(bakScores); dom = await open('?player=Amy'); d = dom.window.document;   // back to the state the rest of the test expects
 ok(/Holes 1–9: Fourball · Holes 10–18: Greensomes/.test(d.querySelector('.lm').textContent), 'the round plan is shown');
 dom = await open('?player=Amy'); d = dom.window.document;
 ok(!!d.querySelector('.lmt[data-lm-s$="|1"]') && !/9\+/.test(d.querySelector('.lm').textContent), 'a 1 tile for the hole-in-one, no 9+');

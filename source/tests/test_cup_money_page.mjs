@@ -45,7 +45,8 @@ d.getElementById('lmCtpSel').value = 'Tom Stitt'; d.getElementById('lmCtpDist').
 let c = await dbCfg();
 ok(c.ctp && c.ctp.sat['10'].player === 'Tom Stitt' && c.ctp.sat['10'].dist === '4 ft' && c.ctp.sat['10'].by === 'Brian Hager', 'the claim is saved on the Worker with who set it');
 ok(/Now:\s*Tom Stitt/.test(d.getElementById('lmCtp').textContent) && /4 ft/.test(d.getElementById('lmCtp').textContent), 'the panel shows the claim');
-d.querySelector('[data-lm-go="1"]').click(); await tick(); d = dom.window.document;
+await workerFetch(API + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: 'E', action: 'score', round: 'sat', match: 'm1', hole: 10, scores: { 'Brian Hager': 5, 'Tom Stitt': 5 }, drives: { A: 'Brian Hager', B: 'Tom Stitt' }, player: 'Brian Hager' }) });   // the hole lock: post hole 10 before moving on
+dom = await open('&player=' + encodeURIComponent('Brian Hager')); d = dom.window.document; d.getElementById('lmAll').click(); d.querySelector('[data-lm-hole="11"]').click(); await tick(); d = dom.window.document;
 ok(/Hole 11/.test(d.querySelector('#lmAll').textContent) && !d.getElementById('lmCtp'), 'hole 11 (par 5) has none');
 // --- the host's Money tab (host code in the session, like the host page)
 for (const [h, who] of [[3, 'Dave Sherwin'], [8, 'BJ Kolonia'], [15, 'Tom Stitt']]) { await workerFetch(API + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: 'E', action: 'ctp', round: 'sat', hole: h, claim: who, pin: 'HOST1' }) }); }
@@ -81,7 +82,7 @@ ok(!d.querySelector('[data-money-close="sun"]').disabled, 'with Saturday closed,
 d.querySelector('[data-money-close="sun"]').click(); await tick(400); d = dom.window.document;
 c = await dbCfg(); ok(c.rounds[1].payout && c.rounds[1].payout.carried_in === 8 && c.rounds[1].payout.skins.pot === 88 && c.rounds[1].payout.skins.per_skin === 29, 'Sunday\'s frozen payout: $8 carried in, skins pot $88, $29 a skin');
 // players can no longer change a closed round's CTP from the panel
-dom = await open('&player=' + encodeURIComponent('Brian Hager')); d = dom.window.document;
+dom = await open('&player=' + encodeURIComponent('Brian Hager')); d = dom.window.document; if (d.getElementById('lmAll')) { d.getElementById('lmAll').click(); d.querySelector('[data-lm-hole="10"]').click(); await tick(); d = dom.window.document; }
 ok(d.getElementById('lmCtp') && !d.getElementById('lmCtpGo') && /closed/.test(d.getElementById('lmCtp').textContent), 'a closed round shows its CTP read-only');
 // a spectator (no host code) sees the numbers but has no buttons
 dom = await open('&view=money'); d = dom.window.document;
