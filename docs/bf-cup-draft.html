@@ -111,14 +111,14 @@ button:disabled{opacity:.4;cursor:default}
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BirdieFriends Cup</h1></div><p class="hint">Loading…</p></div>
 <script>
 // No-show plan (Brian, 2026-11-05): per player, the mulligans he gets as the lone player on the Fourball nine, and the Sunday gross target (win with 'win' or better,
-// half up to 'half'). Targets come from each player's 2026 GHIN rounds at his Cup tee; Lou and Andrew have none, so the host types a range the captains agree.
+// half up to 'half'). Targets come from each player's 2026 GHIN rounds at his Cup tee; Lou (3 Series rounds, estimated) and Andrew (1 round and a guessed handicap) are estimates the captains can change.
 window.BF_NOSHOW_PLAN = {
   'Jordan Knappenberger': { mulligans: 2, win: 76, half: 79 }, 'Dave Sherwin': { mulligans: 2, win: 78, half: 81 }, 'Brian Hager': { mulligans: 3, win: 79, half: 82 },
   'Bill Steirer': { mulligans: 3, win: 79, half: 82 }, 'Mohamed Walli': { mulligans: 3, win: 81, half: 84 }, 'Evan Lindermuth': { mulligans: 4, win: 81, half: 84 },
   'Chooch Wernett': { mulligans: 3, win: 82, half: 85 }, 'Nate Stettler': { mulligans: 4, win: 82, half: 86 }, 'Jake Knappenberger': { mulligans: 4, win: 83, half: 86 },
   'BJ Kolonia': { mulligans: 3, win: 85, half: 89 }, 'Tom Stitt': { mulligans: 3, win: 85, half: 89 }, 'Harry Pry': { mulligans: 4, win: 86, half: 89 },
   'Adam Costa': { mulligans: 3, win: 88, half: 92 }, 'Rich Penberg': { mulligans: 6, win: 95, half: 100 },
-  'Lou Strohl': { mulligans: 4 }, 'Andrew Kabrick': { mulligans: 3 }
+  'Lou Strohl': { mulligans: 4, win: 86, half: 90 }, 'Andrew Kabrick': { mulligans: 3, win: 86, half: 90 }
 };
 </script>
 <script src="bf_engine.js?v=1.48.0"></script>
@@ -569,7 +569,7 @@ window.BF_NOSHOW_PLAN = {
       + '<p><b>Saturday</b> (a pair against one): the lone player gets the mulligans below on the Fourball nine. A redo must be played, one per hole, any shot but putts. Greensomes: two tee shots, play the better, play on alone. Points count as normal.</p>'
       + '<p><b>Sunday</b> (singles, no opponent): the player plays the round against his target score at his Cup tee. Win, half or lose it by gross. No hole counts worse than net double bogey (Out counts as one). A loss is a point for the no-show’s team.</p>'
       + '<div style="overflow-x:auto"><table><tr><th>Player</th><th>Index</th><th>Tee</th><th>Mulligans</th><th>Sunday win</th><th>Half</th><th>Loss</th></tr>' + body + '</table></div>'
-      + '<p class="hint">Mulligans start from the handicap tiers (under 6: 2, 6–10: 3, over 10 to 20: 4, over 20: 5) with the captains’ adjustments. The host can change the count when marking. Targets come from 2026 GHIN rounds; Lou and Andrew have none.</p></div>';
+      + '<p class="hint">Mulligans start from the handicap tiers (under 6: 2, 6–10: 3, over 10 to 20: 4, over 20: 5) with the captains’ adjustments. The host can change the count when marking. Targets come from 2026 GHIN rounds; Lou and Andrew are estimates from their BFSeries rounds.</p></div>';
   }
   function hcpHtml() {
     var rule = E.cupHandicapRule(cfg), hc = E.cupHcpMap(cfg), h = cfg.handicap || {}, si = h.strokeIndex, pars = h.pars;
