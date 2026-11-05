@@ -5738,3 +5738,9 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 
 ## Skin wording on concessions (panel v32)
 - Rounds with a skins game: the accepted winner's chip says "played it out? tap your score", the note adds "Accepted means no skin", and the result banner gets a Skin line ("No skin in play" / "Tom S. 3 in for the skin"). Rounds without skins (Saturday) show no skin wording.
+
+## Parked for BFE-A futures (Brian, 2026-11-05): short-handed matches (no-show) — design findings
+- Ghost partners are NOT the answer for BFE-A: a ghost that fits needs the player's real history at that course, and ordinary hosts will not have it.
+- Backtest on the 7 BFSeries rounds at Blue Shamrock (same course and par-3s as the Cup; Series hole data is quota points, 0 = double+, 1 bogey, 2 par, 4 birdie), Cup handicap rule (80% off lowest), 9-hole fourball, lone player vs a real pair, expected points for the lone side: two real pairs 0.50; no help 0.14; net-par ghost 0.84 (far too generous); replay of the no-show's typical round 0.42 but 0.19-0.65 depending on who is missing; head start 1 up 0.25, 2 up 0.39, 3 up 0.56.
+- Conclusion so far: a plain head start (about 3 up on a 9-hole fourball segment) is the host-friendly, data-free approximation; it hides no scoring and is one sentence to explain. Greensomes is close to 1 v 1 and untested (no alternate-shot data).
+- Status: nothing built. The Cup no-show tool stays paused; captains' note still to be drafted.
