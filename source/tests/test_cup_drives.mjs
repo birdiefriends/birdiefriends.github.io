@@ -98,4 +98,16 @@ await act({ action: 'drive', hole: 11, drive: 'BJ Kolonia', player: 'Brian Hager
 const cur = await dbCfg(); const resave = JSON.parse(JSON.stringify(cur)); delete resave.drives;
 await workerFetch(API + '/bfe/cup', { method: 'POST', body: JSON.stringify({ event_name: 'E', config: resave, pin: '7797' }) });
 c = await dbCfg(); ok(c.drives && c.drives.sat.m1['11'].A.player === 'BJ Kolonia', 'a host re-save does not wipe the drive record');
+// running tally counts taps on other holes that are not saved yet (Brian, 2026-11-05: tapped his name on 10 and 11, expected Brian 2)
+{
+  const goto = h => { const a = dq().getElementById('lmAll'); if (a && !dq().querySelector('[data-lm-hole]')) a.click(); const b = dq().querySelector('[data-lm-hole="' + h + '"]'); if (b) { b.click(); return true; } return false; };
+  const brianCount = () => { const m = (dq().querySelector('.lmst.tee').textContent.replace(/\s+/g, ' ')).match(/Brian H\. (\d+)/); return m ? Number(m[1]) : -1; };
+  dom = await open('&player=' + encodeURIComponent('Brian Hager')); await tick(100);
+  if (goto(16)) {
+    await tick(80); const base0 = brianCount();
+    btn('Brian').click(); await tick(60); ok(brianCount() === base0 + 1, 'tap on hole 16 counts at once');
+    goto(17); await tick(80); ok(brianCount() === base0 + 1, 'hole 17 view already counts the unsaved hole 16 pick');
+    btn('Brian').click(); await tick(60); ok(brianCount() === base0 + 2, 'a second tap on hole 17 makes Brian ' + (base0 + 2) + ', saved or not');
+  } else ok(false, 'hole 16 button not found');
+}
 console.log(`test_cup_drives: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

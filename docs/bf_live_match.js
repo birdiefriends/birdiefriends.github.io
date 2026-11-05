@@ -295,6 +295,16 @@
       var v = ch[m.key][sd.side], dm = ((view.drives[round.key] = view.drives[round.key] || {})[m.key] = view.drives[round.key][m.key] || {});
       dm[String(hole)] = dm[String(hole)] || {}; if (v) dm[String(hole)][sd.side] = { player: v }; else delete dm[String(hole)][sd.side];
     }); });
+    // picks made on OTHER holes but not saved yet still count, so the running tally matches what the player has tapped
+    var pendAll = S.drv || {};
+    Object.keys(pendAll).forEach(function (dk) {
+      var cut = dk.lastIndexOf('|'), pp = [dk.slice(0, cut), dk.slice(cut + 1)]; if (pp[0] !== gkey || Number(pp[1]) === Number(hole) || Number(pp[1]) < seg.from || Number(pp[1]) > seg.to) return;
+      matches.forEach(function (m) { m.sides.forEach(function (sd) {
+        var v = pendAll[dk][m.key + '|' + sd.side]; if (!v) return;
+        var dm = ((view.drives[round.key] = view.drives[round.key] || {})[m.key] = view.drives[round.key][m.key] || {});
+        dm[String(pp[1])] = dm[String(pp[1])] || {}; dm[String(pp[1])][sd.side] = { player: v };
+      }); });
+    });
     var rowsH = '', sums = [], marked = 0, total = 0;
     matches.forEach(function (match) {
       var st = E.cupDriveStatus(view, round, match, seg);
@@ -302,7 +312,7 @@
         if (sd.players.length < 2) return;
         total++;
         var mine = sd.players.filter(function (p) { return norm(p) === norm(ch[match.key][sd.side]); })[0];
-        if (mine) { marked++; sums.push(esc(sideName(cfg, sd.side)) + ': ' + esc(shortName(mine))); }
+        if (mine) { marked++; sums.push(esc(sideName(cfg, sd.side)) + ': ' + esc(shortName(mine)) + ' (' + sd.counts[mine] + ' of ' + sd.min + '+)'); }
         var warn = '';
         if (sd.impossible) warn = 'Not enough holes left for both drives to reach ' + sd.min + '. The captains decide.';
         else if (sd.forced.length) warn = (sd.forced.length === 1 ? esc(shortName(sd.forced[0])) + '’s drive' : 'Both drives') + ' must be used on the ' + (sd.left === 1 ? 'last hole' : 'last ' + sd.left + ' holes') + ' to reach ' + sd.min + '.';
