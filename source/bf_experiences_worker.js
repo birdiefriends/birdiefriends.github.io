@@ -1737,8 +1737,26 @@ export default {
             }
           }
           if (!ph['round_' + rd.key + '_start']) ph['round_' + rd.key + '_start'] = now;
+          // Birdie alerts (Brian, 2026-11-05): on a round that plays skins, a GROSS birdie or better is announced once. Each (hole, player) is flagged the moment it is
+          // first seen, so a correction or a re-post never announces twice; the page that posted the score gets the new ones back and sends the push.
+          // Off with cfg.birdie_alerts === false. Greensomes holes (one shared ball) are skipped.
+          const newBirdies = [];
+          {
+            const hasSkins = !!(rd.games && Array.isArray(rd.games.addons) && rd.games.addons.some(a => a && a.id === 'skins'));
+            const par = Number(((cfgObj.handicap || {}).pars || [])[hole - 1]);
+            const sgAt = (rd.segments || []).find(sg => hole >= Number(sg.from) && hole <= Number(sg.to));
+            if (hasSkins && cfgObj.birdie_alerts !== false && par >= 3 && sgAt && sgAt.format !== 'altshot') {
+              cfgObj.announced = cfgObj.announced || {}; const an = cfgObj.announced[rd.key] = cfgObj.announced[rd.key] || {};
+              for (const nm of Object.keys(clean)) {
+                const g = clean[nm]; if (!(g >= 1) || g > par - 1) continue;           // 0 = picked up; par or worse is not news
+                const k = hole + '|' + norm(nm); if (an[k]) continue;
+                const st = par - g >= 3 ? 'Albatross' : par - g === 2 ? 'Eagle' : 'Birdie';
+                an[k] = { type: st, at: now }; newBirdies.push({ hole, player: nm, scoreType: st });
+              }
+            }
+          }
           await env.DB.prepare(`UPDATE bfe_cup SET config = ?, updated_at = datetime('now') WHERE event_name = ?`).bind(JSON.stringify(cupStampPhases(cfgObj)), row.event_name).run();
-          return J({ ok: true, config: cupPublic(cfgObj) });
+          return J({ ok: true, config: cupPublic(cfgObj), birdies: newBirdies });
         }
         const side = Object.keys(acc).find(k => body.code && String(acc[k]) === String(body.code));
         if (!side) return J({ error: 'Unauthorized' }, 403);
@@ -1964,7 +1982,7 @@ export default {
           if (!Array.isArray(config.sides) || config.sides.length !== 2 || !Array.isArray(config.rounds)) return J({ error: 'config needs two sides and a rounds array' }, 400);
           // the public document never carries the captain codes, so a re-save must not wipe them
           // (the same goes for the captains' Saturday pairs: a page that never loaded them must not erase them)
-          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (config.singles === undefined && pc.singles) config.singles = pc.singles; if (!config.closed && pc.closed) config.closed = pc.closed; if (!config.results && pc.results) config.results = pc.results; if (!config.access && pc.access) config.access = pc.access; if (!byGlobal) { if (pc.host_code) config.host_code = pc.host_code; else delete config.host_code; } else if (!config.host_code && pc.host_code) config.host_code = pc.host_code; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; if (!config.ctp && pc.ctp) config.ctp = pc.ctp; if (!config.drives && pc.drives) config.drives = pc.drives; (config.rounds || []).forEach(r0 => { const o0 = (pc.rounds || []).find(x => x && x.key === r0.key); if (o0 && o0.payout && !r0.payout) r0.payout = o0.payout; }); } catch (e) { /* ignore */ } } }
+          { const prev = await env.DB.prepare(`SELECT config FROM bfe_cup WHERE event_name = ?`).bind(event_name).first(); if (prev) { try { const pc = JSON.parse(prev.config); if (pc.phases) config.phases = pc.phases; if (pc.scores) config.scores = pc.scores; if (config.singles === undefined && pc.singles) config.singles = pc.singles; if (!config.closed && pc.closed) config.closed = pc.closed; if (!config.results && pc.results) config.results = pc.results; if (!config.access && pc.access) config.access = pc.access; if (!byGlobal) { if (pc.host_code) config.host_code = pc.host_code; else delete config.host_code; } else if (!config.host_code && pc.host_code) config.host_code = pc.host_code; if (!config.pairs && pc.pairs) config.pairs = pc.pairs; if (!config.matchup && pc.matchup) config.matchup = pc.matchup; if (!config.ctp && pc.ctp) config.ctp = pc.ctp; if (!config.drives && pc.drives) config.drives = pc.drives; if (!config.announced && pc.announced) config.announced = pc.announced; if (config.birdie_alerts === undefined && pc.birdie_alerts !== undefined) config.birdie_alerts = pc.birdie_alerts; (config.rounds || []).forEach(r0 => { const o0 = (pc.rounds || []).find(x => x && x.key === r0.key); if (o0 && o0.payout && !r0.payout) r0.payout = o0.payout; }); } catch (e) { /* ignore */ } } }
           // Singles-draw guardrails (Brian, 2026-11-05). Starting or restarting the Sunday draw renumbers the Sunday matches (m1, m2 ...) and scores are stored by that number,
           // so leftover Sunday scores would attach to the wrong players; and the host override must not quietly skip the "Saturday decides who is in control" rule.
           // (config.singles === null is the host's deliberate restart; undefined means the page never loaded it, so the saved one is kept.)

@@ -103,10 +103,39 @@
     fetch(S.opts.worker + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: S.opts.event, action: 'score', round: post.round, match: post.match, hole: post.hole, scores: post.scores, drives: post.drives, player: post.player, code: S.opts.code || undefined, pin: S.opts.pin || undefined }) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j, status: r.status }; }); })
       .then(function (x) {
+        if (x.ok && x.j && x.j.birdies && x.j.birdies.length) announceBirdies(x.j.birdies);
         if (x.ok || (x.status >= 400 && x.status < 500)) { var qq = queue(); qq.shift(); setQueue(qq); if (!x.ok) { S.err = 'Hole ' + post.hole + ' was NOT saved: ' + (x.j.error || x.status) + '. Pick your name at the top and enter it again.'; var c0 = S.opts.getCfg(); try { delete c0.scores[post.round][post.match].h[String(post.hole)]; } catch (e) { /* nothing local to undo */ } } else if (x.j.config) { var c = S.opts.getCfg(); if (c) { c.phases = x.j.config.phases; mergeServer(c, x.j.config.scores); } } }
         S.flushing = false; render(); if (queue().length) flush();
       })
       .catch(function () { S.flushing = false; render(); });   // offline: leave it queued, the timer retries
+  }
+  // Gross birdies on a skins round (the Worker flags each one once and hands the new ones back with the saved score). The push goes out the same way the portal's
+  // manual Birdie Alert does (same Worker, same feed entry type 'birdie' + meta), so the Skin Status board and the portal's announcements pick it up unchanged.
+  var PUSH_URL = 'https://birdiefriends-push.birdiefriends01.workers.dev/', OS_APP = '88022359-a979-4814-8a52-6f1df9884be2';
+  var BRANK = { Birdie: 1, Eagle: 2, Albatross: 3 }, BEMOJI = { Birdie: '🐦', Eagle: '🦅', Albatross: '🦄' };
+  function skinLine(b, prior) {
+    var mineR = BRANK[b.scoreType] || 1, best = null;
+    prior.filter(function (e) { return e.meta && e.meta.hole === b.hole; }).forEach(function (e) { var r = BRANK[e.meta.scoreType] || 1; if (!best || r > best.rank) best = { rank: r, scoreType: e.meta.scoreType }; });
+    if (!best || mineR > best.rank) return 'Skin Frontrunner';
+    if (mineR === best.rank) return 'Skin Busted!';
+    return 'Trails the ' + best.scoreType + ' on this hole, no skin change';
+  }
+  function announceBirdies(list) {
+    var cfg = S.opts.getCfg(), names = [];
+    ((cfg && cfg.sides) || []).forEach(function (sd) { (sd.players || []).forEach(function (n) { if (names.indexOf(n) < 0) names.push(n); }); });
+    if (!names.length) return;
+    var filters = []; names.forEach(function (n, i) { if (i) filters.push({ operator: 'OR' }); filters.push({ field: 'tag', key: 'player_name', relation: '=', value: n }); });
+    fetch(PUSH_URL + 'feed').then(function (r) { return r.json(); }).then(function (d) { return d.feed || []; }).catch(function () { return null; }).then(function (feed) {
+      var cutoff = Date.now() - 18 * 3600 * 1000, prior = (feed || []).filter(function (e) { return e.type === 'birdie' && e.meta && e.sentAt > cutoff; });
+      return list.reduce(function (chain, b) {
+        return chain.then(function () {
+          var msg = feed ? skinLine(b, prior) : 'Gross ' + b.scoreType.toLowerCase() + ', skin watch';
+          prior.push({ type: 'birdie', meta: b, sentAt: Date.now() });
+          return fetch(PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ app_id: OS_APP, headings: { en: (BEMOJI[b.scoreType] || '🐦') + ' #' + b.hole + ' — ' + b.player }, contents: { en: msg }, bf_type: 'birdie', bf_meta: { hole: b.hole, player: b.player, scoreType: b.scoreType }, url: 'https://birdiefriends.com/portal.html', filters: filters }) })
+            .then(function (r) { return r.json(); }).catch(function () { return null; });
+        });
+      }, Promise.resolve());
+    }).catch(function () { /* an announcement never blocks scoring */ });
   }
   function mergeServer(cfg, serverScores) {                 // server wins, but keep holes still waiting in the queue
     var keep = queue(); cfg.scores = JSON.parse(JSON.stringify(serverScores || {}));

@@ -110,7 +110,7 @@ button:disabled{opacity:.4;cursor:default}
 <body>
 <div class="page" id="app"><div class="stripes"></div><div class="hero"><div class="eyebrow">★ BirdieFriends ★</div><h1>BirdieFriends Cup</h1></div><p class="hint">Loading…</p></div>
 <script src="bf_engine.js?v=1.47.2"></script>
-<script src="bf_live_match.js?v=22"></script>
+<script src="bf_live_match.js?v=23"></script>
 <script>
 (function () {
   'use strict';
@@ -516,6 +516,7 @@ button:disabled{opacity:.4;cursor:default}
     var split = mv.rounds.map(function (r) { return esc(r.name) + ' ' + usd(r.entry); }).join(' + ');
     out += '<div class="card hcpintro"><div class="hcphead"><h2>Money</h2><button class="sec no-print" id="hcpPrint">🖨 Print</button></div><p class="hint">Weekend buy-in ' + usd(mv.buyIn) + ' a player (' + split + '). Closest to the pin pays a fixed amount a hole, and any hole nobody claims goes into the skins pot. Skins is gross: the lowest score on a hole wins it outright, a tie wins nothing, and the skins pot is shared equally by the skins won. Figures move with the scores until the host closes a round.</p></div>';
     if (error) out += '<p class="err">' + esc(error) + '</p>';
+    if (HOST && pin) out += '<div class="card no-print"><p class="hint" style="margin:0">🐦 Birdie alerts are <b>' + (cfg.birdie_alerts === false ? 'OFF' : 'ON') + '</b>. A gross birdie or better on a round that plays skins goes out as a push to the Cup players, once per player per hole.</p><div class="toolbar"><button class="sec" id="birdieToggle">' + (cfg.birdie_alerts === false ? 'Turn birdie alerts on' : 'Turn birdie alerts off') + '</button></div></div>';
     mv.rounds.forEach(function (r) {
       var res = r.result, allRows = res.payouts || [], rows = allRows.filter(function (p) { return Number(p.total) - Number(p.given_back || 0) > 0; }), cols = [['cttp', 'CTP'], ['skins', 'Skins'], ['birdiepay', 'Birdies'], ['given_back', 'Back']].filter(function (c) { return rows.some(function (p) { return Number(p[c[0]]) > 0; }); });
       out += '<div class="card hcpmatch"><div class="hcptitle"><span class="n">' + (r.frozen ? 'Final · closed by the host' : 'Live · not closed') + '</span><span class="nm">' + esc(r.name) + '</span><span class="vsx">' + usd(r.entry) + ' each · pot ' + usd(res.total_pot) + ' · ' + res.players_count + ' players' + (r.expected ? ' (expected: nobody has a card yet)' : '') + '</span></div>';
@@ -684,6 +685,7 @@ button:disabled{opacity:.4;cursor:default}
     function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
     matchupWire(); singlesWire();
     on('hcpPrint', function () { window.print(); });
+    (function () { var bt = document.getElementById('birdieToggle'); if (bt) bt.addEventListener('click', function () { cfg.birdie_alerts = cfg.birdie_alerts === false ? true : false; save(); }); })();
     Array.prototype.forEach.call(document.querySelectorAll('[data-money-close]'), function (b) { b.addEventListener('click', function () { moneyAct('money_close', b.getAttribute('data-money-close')); }); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-money-reopen]'), function (b) { b.addEventListener('click', function () { moneyAct('money_reopen', b.getAttribute('data-money-reopen')); }); });
     var ct = $('cardToggle'); if (ct) ct.addEventListener('click', function () { if (cfg.hide_card) delete cfg.hide_card; else cfg.hide_card = true; save(); });
