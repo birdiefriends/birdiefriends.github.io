@@ -554,6 +554,21 @@ window.BF_NOSHOW_PLAN = {
     return out;
   }
   // Handicaps tab: every match's strokes by hole, read from the live Cup record with the engine's own functions (so it follows a sub swap, a new draw or the Sunday singles).
+  // The first-tee briefing (host only): what to say to the players. Tap an item to tick it off; the ticks are only on this screen.
+  function briefHtml() {
+    var sec = [
+      ['Before tee-off', ['Fourball holes 1–9, Greensomes holes 10–18. Sunday is singles. Team Jake v Team Nate.', 'Each match: win 1, halve ½, loss 0.', 'Everyone plays his assigned Cup tee (Green, Combo or Gold). Confirm before leaving the box.', 'The app applies the strokes. Fourball: off the lowest in the match at 80%. Greensomes: half of the two handicaps added.']],
+      ['Playing the holes', ['Fourball: own ball, the better net score of the pair counts.', 'Greensomes: both tee off, pick one drive, alternate shots. Each player needs his minimum drives over the nine. After each hole, mark whose drive was used.', 'Conceded putt: enter the score as if holed.', 'Out: you are out of the hole, your partner’s score still counts. Both partners Out: the other team wins the hole.', 'No hole counts worse than net double bogey. Pick up past that.']],
+      ['Using the app', ['One person per group enters, after each hole, not during it.', 'Check the banner at the top of the Score card before Post Hole. It shows who won the hole. If it looks wrong, fix the score first.', 'Other side Out: the app shows Accepted ✓. Leave it, unless you played the hole out for a skin: then enter your score.', 'The arrow is locked until the hole is posted. The hole grid jumps anywhere, for corrections.']],
+      ['Side games and money', ['Skins: say which rounds count.', 'Closest to the pin: par 3s, holes 3, 8, 10, 15, 18.', 'Money: entry and payouts in one sentence. Saturday settles first.']],
+      ['Conduct and logistics', ['Keep pace. Disputes go to the captains, not the group.', 'Captains can close or reopen a match from the panel.']],
+      ['Sunday', ['Singles pairings are drawn after the Saturday round.', 'Singles at each player’s own Cup tee, strokes applied by the app. 1 / ½ / 0 per match.', 'A no-show Sunday morning is handled on the day with the host box.']],
+      ['Only if someone did not show (do not announce otherwise)', ['Saturday: the lone player gets mulligans on the Fourball holes (counts on the No-show tab). The redo must be played, one per hole, any shot but putts. Greensomes holes: two tee shots, play the better one, play on alone.', 'Sunday: the player plays a target score instead of an opponent. A miss gives the point to the no-show’s team.', 'Host: Score tab, “Someone did not show?”. Pick him from any round.']]
+    ];
+    return '<div class="card"><h2>First-tee briefing</h2><p class="hint">Host only. Tap an item to tick it off (it only marks this screen).</p>' + sec.map(function (g) {
+      return '<h3 style="margin:14px 0 6px">' + esc(g[0]) + '</h3>' + g[1].map(function (t) { return '<label style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid rgba(255,255,255,.08);cursor:pointer"><input type="checkbox" style="margin-top:3px;flex:none;width:20px;height:20px"><span>' + esc(t) + '</span></label>'; }).join('');
+    }).join('') + '</div>';
+  }
   // The no-show plan (host only, never shown to players): what the host reaches for if someone does not turn up. The numbers are window.BF_NOSHOW_PLAN.
   function noshowHtml() {
     var plan = window.BF_NOSHOW_PLAN || {}, rule = E.cupHandicapRule(cfg);
@@ -645,7 +660,8 @@ window.BF_NOSHOW_PLAN = {
     var hasMatches = (cfg.rounds || []).some(function (r) { return (r.matches || []).length; });
     if (hasMatches && d.locked) {
       if (!view) view = 'score';
-      var tabs = '<div class="toolbar"><button class="' + (view === 'score' ? '' : 'sec') + '" data-view="score">Score</button><button class="' + (view === 'board' ? '' : 'sec') + '" data-view="board">Leaderboard</button><button class="' + (view === 'teams' ? '' : 'sec') + '" data-view="teams">Teams &amp; draw</button><button class="' + (view === 'hcp' ? '' : 'sec') + '" data-view="hcp">Handicaps</button>' + (hasGames() ? '<button class="' + (view === 'money' ? '' : 'sec') + '" data-view="money">Money</button>' : '') + (HOST && pin ? '<button class="' + (view === 'noshow' ? '' : 'sec') + '" data-view="noshow">No-show</button>' : '') + '</div>';
+      var tabs = '<div class="toolbar"><button class="' + (view === 'score' ? '' : 'sec') + '" data-view="score">Score</button><button class="' + (view === 'board' ? '' : 'sec') + '" data-view="board">Leaderboard</button><button class="' + (view === 'teams' ? '' : 'sec') + '" data-view="teams">Teams &amp; draw</button><button class="' + (view === 'hcp' ? '' : 'sec') + '" data-view="hcp">Handicaps</button>' + (hasGames() ? '<button class="' + (view === 'money' ? '' : 'sec') + '" data-view="money">Money</button>' : '') + (HOST && pin ? '<button class="' + (view === 'brief' ? '' : 'sec') + '" data-view="brief">Brief</button><button class="' + (view === 'noshow' ? '' : 'sec') + '" data-view="noshow">No-show</button>' : '') + '</div>';
+      if (view === 'brief' && HOST && pin) { app.className = 'page host'; app.innerHTML = html + tabs + briefHtml(); wire(); return; }
       if (view === 'noshow' && HOST && pin) { app.className = 'page host'; app.innerHTML = html + tabs + noshowHtml(); wire(); return; }
       if (view === 'hcp') { app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + hcpHtml(); wire(); return; }
       if (view === 'money' && hasGames()) { app.className = 'page' + (HOST ? ' host' : ''); app.innerHTML = html + tabs + moneyHtml(); wire(); return; }
@@ -703,7 +719,7 @@ window.BF_NOSHOW_PLAN = {
     if (!d.locked) return 'Team draft';
     var hasMatches = (cfg.rounds || []).some(function (r) { return (r.matches || []).length; });
     if (!hasMatches) return 'Matchup draw';
-    return view === 'board' ? 'Leaderboard' : view === 'teams' ? 'Teams & draw' : view === 'hcp' ? 'Handicaps' : view === 'money' ? 'Money' : view === 'noshow' ? 'No-show' : 'Scoring';
+    return view === 'board' ? 'Leaderboard' : view === 'teams' ? 'Teams & draw' : view === 'hcp' ? 'Handicaps' : view === 'money' ? 'Money' : view === 'noshow' ? 'No-show' : view === 'brief' ? 'Brief' : 'Scoring';
   }
   function hero() {
     var nm = cupName(), stage = cupStage();

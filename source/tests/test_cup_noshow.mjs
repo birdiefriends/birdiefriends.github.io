@@ -146,4 +146,10 @@ if (tabBtn) { tabBtn.click(); await tick(80);
 }
 const dom5 = await open('&player=' + encodeURIComponent(A1)); await tick(150); ok(!dom5.window.document.querySelector('[data-view="noshow"]'), 'players never see the No-show tab');
 const dom6 = await open('&host=1&player=' + encodeURIComponent(A1)); await tick(150); ok(!dom6.window.document.querySelector('[data-view="noshow"]'), 'host=1 without the PIN does not show it either');
+
+// ---- the host-only Brief tab (first-tee checklist)
+const dom7 = await open('&host=1&player=' + encodeURIComponent(A1), 'HOST1'); const d7 = () => dom7.window.document; await tick(200);
+const bt = d7().querySelector('[data-view="brief"]'); ok(!!bt, 'host sees a Brief tab');
+if (bt) { bt.click(); await tick(80); const t7 = d7().body.textContent; ok(/First-tee briefing/.test(t7) && /Out: you are out of the hole/.test(t7) && /Only if someone did not show/.test(t7) && d7().querySelectorAll('input[type=checkbox]').length > 20, 'the checklist shows with tick boxes'); }
+const dom8 = await open('&player=' + encodeURIComponent(A1)); await tick(150); ok(!dom8.window.document.querySelector('[data-view="brief"]'), 'players never see the Brief tab');
 console.log('no-show: ' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
