@@ -35,4 +35,21 @@ ok(calls.length === 1 && calls[0].u === 'https://b.test/bfe/memories?event_id=7'
 t = make(false); await t.api.loadCardPhotos();
 ok(calls.length === 1 && /^https:\/\/g\.test\/photos\?event=/.test(calls[0].u), 'an ordinary card lists its own photos');
 ok(make(true).api.bfeCaptureTarget({ name: '2026 BFCup - Day2' }) === null && make(true).api.bfeCaptureTarget({ name: '2026 BFCup - Day1' }).bfeEventId === 7, 'only a card that belongs to a BFE is routed to it');
+
+// The at-the-course rail: Photo / Video / Upload show for an ordinary card, and for a BFE card (BF Cup) only while the host has memories capture open.
+{
+  const i = src.indexOf('function renderAtCourseRail('), j = src.indexOf('\n}\n', i); const fnSrc = src.slice(i, j + 2);
+  const railFor = (backed, captureOpen) => {
+    const el = { id: 'at-course-rail', innerHTML: '', className: '', classList: { contains: () => false } };
+    const evt = { id: 'e1', name: backed ? '2026 BFCup - Day1' : 'Tuesday League' };
+    const env = { document: { getElementById: () => el, createElement: () => el, body: { appendChild() {} } }, _atCourse: { evt, distM: null }, _atCourseTucked: false,
+      isBFEBackedCard: e => backed, _bfeBackedIndex: new Map(backed ? [[evt.name, { captureOpen }]] : []), atCourseApplyPos() {}, renderAtCourseLocDetail() {}, atCourseHasNetStrokes: () => false,
+      escapeHtml: x => String(x) };
+    const keys = Object.keys(env); new Function(...keys, fnSrc + '\nrenderAtCourseRail();')(...keys.map(k => env[k])); return el.innerHTML;
+  };
+  const has = h => /Photo/.test(h) && /Video/.test(h) && /Upload/.test(h);
+  ok(has(railFor(false, false)), 'an ordinary event shows Photo, Video and Upload on the rail');
+  ok(has(railFor(true, true)), 'a BF Cup round shows Photo, Video and Upload on the rail while memories capture is open');
+  ok(!/Photo|Video|Upload/.test(railFor(true, false)) && /Yardage/.test(railFor(true, false)), 'a BF Cup round hides them while capture is closed, keeping Yardage, Rules, Course');
+}
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

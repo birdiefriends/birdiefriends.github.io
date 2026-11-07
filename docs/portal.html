@@ -5323,6 +5323,8 @@ function renderAtCourseRail() {
   // rounds still capture through the Live Panel's WCRP memories pipeline
   // only (a player capturing mid-round shouldn't create a memory that lives
   // outside the WCRP by accident) — that's the sole reason for the `!bfe` gate.
+  // Photo / Video / Upload also show for a BFE-backed round (the BF Cup) while the host has memories capture open: they save into the event's memories, the same place the card's photo sheet sends them.
+  const bfeCap = bfe && !!((_bfeBackedIndex.get(evt.name) || {}).captureOpen), canCap = !bfe || bfeCap;
   const btn = (icon, label, onclick) => `<button class="acr-btn" onclick="${onclick}"><span class="acr-ico">${icon}</span><span class="acr-lbl">${label}</span></button>`;
   // Dev-88 cascade v2 — distance only exists for the 'proximity' reason;
   // tee_window/latched/manual have nothing to measure, so the pill just
@@ -5337,9 +5339,9 @@ function renderAtCourseRail() {
     <button class="acr-grip" onclick="toggleAtCourseRail()" onpointerdown="atCourseDragStart(event)" title="Tap: ${tucked ? 'show' : 'tuck away'} · Drag: move">${(el.classList.contains('left') ? !tucked : tucked) ? '‹' : '›'}</button>
     <div class="acr-col">
       <div class="acr-status" onpointerdown="atCourseDragStart(event)" onclick="${hasDist ? 'atCourseToggleLocDetail()' : 'atCourseToggleManual()'}" title="${escapeHtml(evt.name)} — ${hasDist ? 'tap for location detail' : 'tap to turn off'} · drag to move"><span style="font-size:1rem">⛳</span><span>${where}</span></div>
-      ${!bfe ? btn('📷', 'Photo', `openCardPhotoSheet('${id}')`) : ''}
-      ${!bfe ? btn('🎥', 'Video', `atCourseQuickCapture('${id}','video')`) : ''}
-      ${!bfe ? btn('⬆️', 'Upload', `atCourseQuickCapture('${id}','upload')`) : ''}
+      ${canCap ? btn('📷', 'Photo', `openCardPhotoSheet('${id}')`) : ''}
+      ${canCap ? btn('🎥', 'Video', `atCourseQuickCapture('${id}','video')`) : ''}
+      ${canCap ? btn('⬆️', 'Upload', `atCourseQuickCapture('${id}','upload')`) : ''}
       ${!bfe ? btn('💬', 'Note', `openCardNoteSheet('${id}')`) : ''}
       ${btn('📏', 'Yardage', 'openYardageModal()')}
       ${btn('📖', 'Rules', 'openRulesModal()')}
