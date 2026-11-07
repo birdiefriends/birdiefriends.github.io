@@ -5757,3 +5757,4 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - The CTP card and distance box are replaced by a one-line status (Set / Change). Greensomes order stays: tee shot, score, Post, then CTP.
 - Fixed an older bug: the ‹ › hole arrows threw a ReferenceError (`allowed` not in scope in the click handler).
 - Tests updated: test_cup_money_page, test_cup_drives (steps are now 1 and 2).
+- Panel v37: the closest-to-pin prompt is now a dialog over a dimmed page (tap a name, Nobody, or outside to close) instead of a card inserted above the score flow. Staged on claude-staging.

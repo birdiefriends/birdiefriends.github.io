@@ -50,6 +50,9 @@ ok(/nobody yet/.test(d.getElementById('lmCtp').textContent) && !d.getElementById
   let c0 = await dbCfg(); ok(!d.getElementById('lmCtpAsk') && !(c0.ctp && c0.ctp.sat && c0.ctp.sat['10']), 'Nobody closes the prompt and saves nothing');
   q().querySelector('[data-lm-go="-1"]').click(); await tick(100); d = q(); ok(d.getElementById('lmCtp') && /nobody yet/.test(d.getElementById('lmCtp').textContent), 'back on hole 10 the line still says nobody');
   d.querySelector('[data-lm-ctpopen]').click(); await tick(100); d = q(); ok(d.getElementById('lmCtpAsk'), 'Set on the line reopens the prompt');
+  ok(d.getElementById('lmCtpAsk').classList.contains('lmmodal'), 'the prompt is a dialog over the page');
+  d.getElementById('lmCtpAsk').click(); await tick(100); d = q(); ok(!d.getElementById('lmCtpAsk'), 'tapping outside the dialog closes it, saving nothing');
+  d.querySelector('[data-lm-ctpopen]').click(); await tick(100); d = q();
   d.querySelector('[data-lm-ctpask="Tom Stitt"]').click(); await tick(300); d = q(); }
 let c = await dbCfg();
 ok(c.ctp && c.ctp.sat['10'].player === 'Tom Stitt' && c.ctp.sat['10'].by === 'Brian Hager', 'the tap saves the claim on the Worker with who set it');

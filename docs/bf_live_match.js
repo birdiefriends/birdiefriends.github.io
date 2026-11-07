@@ -34,6 +34,7 @@
     '.lm .lmhtitle{background:none;border:0;color:var(--tx);font:inherit;font-weight:800;font-size:1.35rem;cursor:pointer;text-align:center}.lm .lmhtitle small{display:block;font-weight:500;font-size:.72rem;color:var(--dim)}' +
     '.lm .lmwin{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--dim)}.lm .lmwin.a{background:var(--a)}.lm .lmwin.b{background:var(--b)}' +
     '.lm .lmchips{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lm .lmchip{display:flex;justify-content:space-between;align-items:center;gap:6px;background:var(--bg2);color:var(--tx);border:2px solid var(--line);border-left:6px solid var(--line);border-radius:10px;padding:10px;font:inherit;font-weight:700;cursor:pointer;text-align:left}' +
+    '.lm .lmmodal{position:fixed;left:0;right:0;top:0;bottom:0;z-index:50;background:rgba(3,10,30,.72);display:flex;align-items:center;justify-content:center;padding:16px}.lm .lmmodal .lmask{width:100%;max-width:420px;margin:0;background:var(--bg2,#12306b);box-shadow:0 10px 40px rgba(0,0,0,.5)}' +
     '.lm .lmchip.a{border-left:10px solid var(--a);background:color-mix(in srgb,var(--a) 18%,var(--bg2))}.lm .lmchip.b{border-left:10px solid var(--b);background:color-mix(in srgb,var(--b) 18%,var(--bg2))}.lm .lmchip.sel{border-color:var(--tx)}.lm .lmask{border:2px solid var(--tx);border-radius:12px;padding:12px;margin:10px 0;background:var(--bg2)}.lm .lmaskt{font-weight:800;font-size:1.05rem}.lm .lmaskb{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.lm .lmaskb button{flex:1 1 40%;width:auto;margin-top:0;padding:14px 8px;font-size:1rem}.lm .lmctpl{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:8px 0;padding:8px 10px;border:1px dashed var(--dim);border-radius:10px;font-size:.88rem}.lm .lmmul{display:flex;gap:8px;align-items:center;justify-content:space-between;margin:8px 0;padding:8px 10px;border:1px dashed var(--dim);border-radius:10px;font-size:.84rem}.lm .lmns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.lm .lmns input{width:64px;margin:0 6px}.lm .lmchip small{display:block;font-weight:500;color:var(--dim);font-size:.7rem}' +
     '.lm .lmcv{font-size:1.7rem;font-weight:800;min-width:30px;text-align:right}.lm .lmcv.pu{color:var(--warn);font-size:1.15rem}.lm .lmpick{margin:10px 0 2px}' +
     '.lm .lmbm{display:block;width:100%;background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:12px;padding:0;margin-top:10px;font:inherit;text-align:left;overflow:hidden}.lm .lmbmt{display:block;width:100%;background:none;color:inherit;border:0;font:inherit;text-align:left;padding:10px 10px 8px;cursor:pointer}' +
@@ -399,9 +400,9 @@
     var hs = ctpHolesOf(cfg, round); if (!hs || hs.indexOf(Number(a.hole)) < 0 || round.payout) return '';
     var cur = (((cfg.ctp || {})[round.key]) || {})[String(a.hole)] || null, players = [];
     (matches || []).forEach(function (m) { (m.sides || []).forEach(function (sd) { (sd.players || []).forEach(function (n) { if (players.indexOf(n) < 0) players.push(n); }); }); });
-    return '<div class="lmask" id="lmCtpAsk"><div class="lmaskt">🚩 Closest to pin on hole ' + a.hole + '?</div>'
+    return '<div class="lmmodal" id="lmCtpAsk" data-lm-ctpbg="1"><div class="lmask"><div class="lmaskt">🚩 Closest to pin on hole ' + a.hole + '?</div>'
       + (cur && cur.player ? '<div class="lmdim">Now: <b>' + esc(cur.player) + '</b>' + (cur.dist ? ' · ' + esc(cur.dist) : '') + '</div>' : '')
-      + '<div class="lmaskb">' + players.map(function (n) { return '<button class="lmgo2" data-lm-ctpask="' + esc(n) + '">' + esc(shortName(n)) + '</button>'; }).join('') + '<button class="lmsec" data-lm-ctpask="">Nobody</button></div></div>';
+      + '<div class="lmaskb">' + players.map(function (n) { return '<button class="lmgo2" data-lm-ctpask="' + esc(n) + '">' + esc(shortName(n)) + '</button>'; }).join('') + '<button class="lmsec" data-lm-ctpask="">Nobody</button></div></div></div>';
   }
   function render() {
     if (!S) return;
@@ -606,6 +607,7 @@
       S.err = ''; render();
     }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-drvopen]'), function (b) { b.addEventListener('click', function () { S.drvOpen = S.drvOpen || {}; var k2 = b.getAttribute('data-lm-drvopen'); S.drvOpen[k2] = !S.drvOpen[k2]; render(); }); });
+    var bg = el.querySelector('[data-lm-ctpbg]'); if (bg) bg.addEventListener('click', function (e) { if (e.target === bg) { S.ctpAsk = null; render(); } });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-ctpopen]'), function (b) { b.addEventListener('click', function () { S.ctpAsk = { g: gkey, hole: Number(b.getAttribute('data-lm-ctpopen')) }; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-ctpask]'), function (b) { b.addEventListener('click', function () {
       var who = b.getAttribute('data-lm-ctpask'), ah = S.ctpAsk ? S.ctpAsk.hole : hole; S.ctpAsk = null;
