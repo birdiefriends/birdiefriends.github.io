@@ -34,7 +34,7 @@
     '.lm .lmhtitle{background:none;border:0;color:var(--tx);font:inherit;font-weight:800;font-size:1.35rem;cursor:pointer;text-align:center}.lm .lmhtitle small{display:block;font-weight:500;font-size:.72rem;color:var(--dim)}' +
     '.lm .lmwin{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--dim)}.lm .lmwin.a{background:var(--a)}.lm .lmwin.b{background:var(--b)}' +
     '.lm .lmchips{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lm .lmchip{display:flex;justify-content:space-between;align-items:center;gap:6px;background:var(--bg2);color:var(--tx);border:2px solid var(--line);border-left:6px solid var(--line);border-radius:10px;padding:10px;font:inherit;font-weight:700;cursor:pointer;text-align:left}' +
-    '.lm .lmchip.a{border-left:10px solid var(--a);background:color-mix(in srgb,var(--a) 18%,var(--bg2))}.lm .lmchip.b{border-left:10px solid var(--b);background:color-mix(in srgb,var(--b) 18%,var(--bg2))}.lm .lmchip.sel{border-color:var(--tx)}.lm .lmmul{display:flex;gap:8px;align-items:center;justify-content:space-between;margin:8px 0;padding:8px 10px;border:1px dashed var(--dim);border-radius:10px;font-size:.84rem}.lm .lmns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.lm .lmns input{width:64px;margin:0 6px}.lm .lmchip small{display:block;font-weight:500;color:var(--dim);font-size:.7rem}' +
+    '.lm .lmchip.a{border-left:10px solid var(--a);background:color-mix(in srgb,var(--a) 18%,var(--bg2))}.lm .lmchip.b{border-left:10px solid var(--b);background:color-mix(in srgb,var(--b) 18%,var(--bg2))}.lm .lmchip.sel{border-color:var(--tx)}.lm .lmask{border:2px solid var(--tx);border-radius:12px;padding:12px;margin:10px 0;background:var(--bg2)}.lm .lmaskt{font-weight:800;font-size:1.05rem}.lm .lmaskb{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.lm .lmaskb button{flex:1 1 40%;width:auto;margin-top:0;padding:14px 8px;font-size:1rem}.lm .lmctpl{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:8px 0;padding:8px 10px;border:1px dashed var(--dim);border-radius:10px;font-size:.88rem}.lm .lmmul{display:flex;gap:8px;align-items:center;justify-content:space-between;margin:8px 0;padding:8px 10px;border:1px dashed var(--dim);border-radius:10px;font-size:.84rem}.lm .lmns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.lm .lmns input{width:64px;margin:0 6px}.lm .lmchip small{display:block;font-weight:500;color:var(--dim);font-size:.7rem}' +
     '.lm .lmcv{font-size:1.7rem;font-weight:800;min-width:30px;text-align:right}.lm .lmcv.pu{color:var(--warn);font-size:1.15rem}.lm .lmpick{margin:10px 0 2px}' +
     '.lm .lmbm{display:block;width:100%;background:var(--bg2);color:var(--tx);border:1px solid var(--line);border-radius:12px;padding:0;margin-top:10px;font:inherit;text-align:left;overflow:hidden}.lm .lmbmt{display:block;width:100%;background:none;color:inherit;border:0;font:inherit;text-align:left;padding:10px 10px 8px;cursor:pointer}' +
     '.lm .lmbmh{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;font-weight:800;margin-bottom:8px}.lm .lmbmh .a{border-left:4px solid var(--a);padding-left:8px}.lm .lmbmh .b{text-align:right;border-right:4px solid var(--b);padding-right:8px}.lm .lmbmh .pt{font-size:1.15rem;text-align:center;min-width:62px;white-space:nowrap}.lm .lmbmh .pt .a,.lm .lmbmh .pt .b{border:0;padding:0}.lm .lmbmh .pt .a{color:var(--a)}.lm .lmbmh .pt .b{color:var(--b)}' +
@@ -390,16 +390,18 @@
   function ctpHtml(cfg, round, hole, matches, stepNo) {
     var hs = ctpHolesOf(cfg, round); if (!hs || hs.indexOf(Number(hole)) < 0) return '';
     var cur = (((cfg.ctp || {})[round.key]) || {})[String(hole)] || null, closed = !!round.payout;
-    // the players of this group's own match(es); whoever already holds the hole (set from another group, or by a captain) stays in the list
-    var players = [];
+    return '<div class="lmctpl" id="lmCtp"><span>🚩 Closest to pin: ' + (cur && cur.player ? '<b>' + esc(cur.player) + '</b> ✓' + (cur.dist ? ' · ' + esc(cur.dist) : '') : 'nobody yet') + '</span>'
+      + (closed ? '<span class="lmdim">closed</span>' : '<button class="lmsec" data-lm-ctpopen="' + hole + '">' + (cur && cur.player ? 'Change' : 'Set') + '</button>') + '</div>';
+  }
+  // The prompt that follows Post hole on a closest-to-the-pin hole: a tap for each player in the group, or nobody.
+  function ctpAskHtml(cfg, round, matches, gkey) {
+    var a = S.ctpAsk; if (!a || a.g !== gkey) return '';
+    var hs = ctpHolesOf(cfg, round); if (!hs || hs.indexOf(Number(a.hole)) < 0 || round.payout) return '';
+    var cur = (((cfg.ctp || {})[round.key]) || {})[String(a.hole)] || null, players = [];
     (matches || []).forEach(function (m) { (m.sides || []).forEach(function (sd) { (sd.players || []).forEach(function (n) { if (players.indexOf(n) < 0) players.push(n); }); }); });
-    if (!players.length) players = S.opts.E.cupRoundPlayers(round);
-    if (cur && cur.player && !players.some(function (n) { return norm(n) === norm(cur.player); })) players.push(cur.player);
-    var sel = '<select id="lmCtpSel"' + (closed ? ' disabled' : '') + '><option value="">(nobody on the green yet)</option>' + players.map(function (n) { return '<option' + (cur && norm(cur.player) === norm(n) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>';
-    return '<div class="lmst ctp opt" id="lmCtp">' + stepHead(stepNo, '🚩', 'Closest to pin', cur && cur.player ? shortName(cur.player) + ' ✓' : 'Nobody yet', !!(cur && cur.player), true)
-      + (cur && cur.player ? '<div class="lmdim">Now: <b>' + esc(cur.player) + '</b>' + (cur.dist ? ' · ' + esc(cur.dist) : '') + (cur.by ? ' (set by ' + esc(cur.by) + ')' : '') + '</div>' : '<div class="lmdim">Nobody has it yet.</div>')
-      + '<div class="lmbar"><label>Who is closest' + sel + '</label><label>Distance (optional)<input id="lmCtpDist" type="text" maxlength="20" placeholder="e.g. 6 ft" value="' + esc((cur && cur.dist) || '') + '"' + (closed ? ' disabled' : '') + '></label></div>'
-      + (closed ? '<div class="lmdim">The money for this round is closed.</div>' : '<button class="lmgo2" id="lmCtpGo">Save closest on hole ' + hole + '</button>') + '</div>';
+    return '<div class="lmask" id="lmCtpAsk"><div class="lmaskt">🚩 Closest to pin on hole ' + a.hole + '?</div>'
+      + (cur && cur.player ? '<div class="lmdim">Now: <b>' + esc(cur.player) + '</b>' + (cur.dist ? ' · ' + esc(cur.dist) : '') + '</div>' : '')
+      + '<div class="lmaskb">' + players.map(function (n) { return '<button class="lmgo2" data-lm-ctpask="' + esc(n) + '">' + esc(shortName(n)) + '</button>'; }).join('') + '<button class="lmsec" data-lm-ctpask="">Nobody</button></div></div>';
   }
   function render() {
     if (!S) return;
@@ -463,6 +465,7 @@
       }
       h += '</div>';
     });
+    h += ctpAskHtml(cfg, round, matches, gkey);
     if (S.last && S.last.g === gkey) h += S.last.lines.map(function (ln) { return '<div class="lmmsg ok" style="background:' + (ln.w === 'a' ? 'var(--a)' : ln.w === 'b' ? 'var(--b)' : 'var(--bg2)') + '">' + esc(ln.text) + '</div>'; }).join('');
     h += '<div class="lmdim" style="margin:6px 0">' + round.segments.map(function (sg) { return 'Holes ' + sg.from + '–' + sg.to + ': ' + FMT[sg.format]; }).join(' · ') + '</div>';
     h += '<div class="lmc">'; var entryStart = h.length;
@@ -603,11 +606,13 @@
       S.err = ''; render();
     }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-drvopen]'), function (b) { b.addEventListener('click', function () { S.drvOpen = S.drvOpen || {}; var k2 = b.getAttribute('data-lm-drvopen'); S.drvOpen[k2] = !S.drvOpen[k2]; render(); }); });
-    var cg = el.querySelector('#lmCtpGo'); if (cg) cg.addEventListener('click', function () {
-      var who = el.querySelector('#lmCtpSel'), dist = el.querySelector('#lmCtpDist');
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-ctpopen]'), function (b) { b.addEventListener('click', function () { S.ctpAsk = { g: gkey, hole: Number(b.getAttribute('data-lm-ctpopen')) }; render(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-ctpask]'), function (b) { b.addEventListener('click', function () {
+      var who = b.getAttribute('data-lm-ctpask'), ah = S.ctpAsk ? S.ctpAsk.hole : hole; S.ctpAsk = null;
+      if (!who) { render(); return; }
       if (!S.opts.player && !S.opts.code && !S.opts.pin) { S.err = 'Pick who you are above first.'; render(); return; }
-      S.err = ''; act(round, 'ctp', { hole: hole, claim: who ? who.value : '', dist: dist ? dist.value : '' });
-    });
+      S.err = ''; render(); act(round, 'ctp', { hole: ah, claim: who, dist: '' });
+    }); });
     var me = el.querySelector('#lmMeSel'); if (me) me.addEventListener('change', function () { if (S.opts.setPlayer) S.opts.setPlayer(me.value); render(); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-hole]'), function (b) { b.addEventListener('click', function () { S.hole = { g: gkey, h: Number(b.getAttribute('data-lm-hole')) }; S.who = null; S.showAll = false; S.msg = ''; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-s]'), function (b) { b.addEventListener('click', function () {
@@ -616,7 +621,7 @@
       (S.inp[key] = S.inp[key] || {})[row.key] = Number(p[1]);
       var nx = rows.filter(function (r) { return r.key !== row.key && need(r); })[0]; S.who = nx ? nx.key : row.key; render(); }); });
     Array.prototype.forEach.call(el.querySelectorAll('[data-lm-who]'), function (b) { b.addEventListener('click', function () { S.who = b.getAttribute('data-lm-who'); render(); }); });
-    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-go]'), function (b) { b.addEventListener('click', function () { var mx = Math.max.apply(null, round.segments.map(function (x) { return x.to; })); S.hole = { g: gkey, h: Math.max(1, Math.min(mx, allowed, hole + Number(b.getAttribute('data-lm-go')))) }; S.who = null; S.msg = ''; render(); }); });
+    Array.prototype.forEach.call(el.querySelectorAll('[data-lm-go]'), function (b) { b.addEventListener('click', function () { var mx = Math.max.apply(null, round.segments.map(function (x) { return x.to; })), cf = S.opts.getCfg(), allowed = Math.min(mx, Math.min.apply(null, matches.map(function (m) { return S.opts.E.cupMatchLive(cf, round, m, entryOf(cf, round.key, m.key)).next; }))); S.hole = { g: gkey, h: Math.max(1, Math.min(mx, allowed, hole + Number(b.getAttribute('data-lm-go')))) }; S.who = null; S.msg = ''; render(); }); });
     var all = el.querySelector('#lmAll'); if (all) all.addEventListener('click', function () { S.showAll = !S.showAll; render(); });
     var clr = el.querySelector('#lmClear'); if (clr) clr.addEventListener('click', function () {
       if (!window.confirm('Clear hole ' + hole + '? Its scores' + (driveSeg(round, hole) ? ' and tee shots' : '') + ' are deleted so you can enter it again.')) return;
@@ -629,6 +634,7 @@
     var go = el.querySelector('#lmPost'); if (go) go.addEventListener('click', function () {
       if (rows.some(need)) return;
       var cfg = S.opts.getCfg(), at = new Date().toISOString(), E = S.opts.E, nums = E.cupMatchNumbers(cfg), lines = [];
+      var wasPosted = matches.some(function (m) { var en = entryOf(cfg, round.key, m.key); return !!(en && en.h && en.h[String(hole)]); });
       matches.forEach(function (match) {                       // one post per match; the Worker lets anyone in the group score any of its matches
         var scores = {}; rows.filter(function (r) { return r.m === match.key; }).forEach(function (r) { var v = cur(r); scores[r.key] = v === undefined ? -1 : v; });
         var post = { round: round.key, match: match.key, hole: hole, scores: scores, player: S.opts.player || '', at: at };
@@ -640,6 +646,7 @@
         lines.push({ w: wn, text: 'Match ' + nums[round.key + '|' + match.key] + ' · hole ' + hole + ': ' + (wn === 'a' ? sideName(cfg, match.sides[0].side) + ' wins the hole' : wn === 'b' ? sideName(cfg, match.sides[1].side) + ' wins the hole' : 'halved') + '  ·  ' + sl2.text + ' (' + sl2.sub + ')' });
       });
       delete S.inp[key]; if (S.drv) delete S.drv[gkey + '|' + hole]; S.msg = ''; S.err = ''; S.last = { g: gkey, lines: lines };
+      var hs0 = ctpHolesOf(cfg, round); S.ctpAsk = (!wasPosted && hs0 && hs0.indexOf(Number(hole)) >= 0 && !round.payout) ? { g: gkey, hole: hole } : null;
       var nxt = Math.min.apply(null, matches.map(function (m) { return E.cupMatchLive(cfg, round, m, entryOf(cfg, round.key, m.key)).next; }));
       S.who = null; S.hole = { g: gkey, h: Math.min(nxt, Math.max.apply(null, round.segments.map(function (s) { return s.to; }))) };
       render(); flush(); if (S.opts.onChange) S.opts.onChange(); });

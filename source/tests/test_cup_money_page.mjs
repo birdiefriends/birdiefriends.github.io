@@ -38,18 +38,27 @@ const dbCfg = async () => (await (await workerFetch(API + '/bfe/cup?event=E&pin=
 // --- a player sets closest to the pin from the live panel (Saturday's fourball is scored, so the panel opens on hole 10, a par 3)
 let dom = await open('&player=' + encodeURIComponent('Brian Hager')), d = dom.window.document;
 ok(d.getElementById('lmMount') && /Hole 10/.test(d.querySelector('#lmAll').textContent) && d.getElementById('lmCtp'), 'hole 10 (a par 3) shows the closest-to-the-pin section');
-ok(/Nobody has it yet/.test(d.getElementById('lmCtp').textContent), 'no claim yet');
-{ const opts = [...d.querySelectorAll('#lmCtpSel option')].map(o => o.textContent);
-  ok(opts.length === 5 && ['Brian Hager', 'BJ Kolonia', 'Tom Stitt', 'Andrew Kabrick'].every(n => opts.includes(n)) && !opts.includes('Harry Pry'), 'only the four players of this match can be picked (plus nobody): ' + opts.join(' | ')); }
-d.getElementById('lmCtpSel').value = 'Tom Stitt'; d.getElementById('lmCtpDist').value = '4 ft'; d.getElementById('lmCtpGo').click(); await tick(300); d = dom.window.document;
+ok(/nobody yet/.test(d.getElementById('lmCtp').textContent) && !d.getElementById('lmCtpAsk') && !d.getElementById('lmCtpSel'), 'compact line, no claim yet, no prompt and no old card');
+// post hole 10 from the panel: tee shots, scores, Post -> the prompt appears
+{ const q = () => dom.window.document; const dr = n => [...q().querySelectorAll('[data-lm-drv]')].filter(b => b.textContent.startsWith(n))[0];
+  q().querySelector('[data-lm-s="Brian Hager|5"]').click(); q().querySelector('[data-lm-s="Tom Stitt|5"]').click(); await tick(100); dr('Brian').click(); dr('Tom').click(); await tick(100);
+  q().getElementById('lmPost').click(); await tick(500); d = q();
+  ok(d.getElementById('lmCtpAsk') && /Closest to pin on hole 10/.test(d.getElementById('lmCtpAsk').textContent), 'after Post hole on a par-3 CTP hole, the prompt asks');
+  const names = [...d.querySelectorAll('[data-lm-ctpask]')].map(b => b.getAttribute('data-lm-ctpask'));
+  ok(names.includes('Tom Stitt') && names.includes('') && !names.includes('Harry Pry'), 'one tap per group player plus Nobody: ' + names.join('|'));
+  d.querySelector('[data-lm-ctpask=""]').click(); await tick(200); d = q();
+  let c0 = await dbCfg(); ok(!d.getElementById('lmCtpAsk') && !(c0.ctp && c0.ctp.sat && c0.ctp.sat['10']), 'Nobody closes the prompt and saves nothing');
+  q().querySelector('[data-lm-go="-1"]').click(); await tick(100); d = q(); ok(d.getElementById('lmCtp') && /nobody yet/.test(d.getElementById('lmCtp').textContent), 'back on hole 10 the line still says nobody');
+  d.querySelector('[data-lm-ctpopen]').click(); await tick(100); d = q(); ok(d.getElementById('lmCtpAsk'), 'Set on the line reopens the prompt');
+  d.querySelector('[data-lm-ctpask="Tom Stitt"]').click(); await tick(300); d = q(); }
 let c = await dbCfg();
-ok(c.ctp && c.ctp.sat['10'].player === 'Tom Stitt' && c.ctp.sat['10'].dist === '4 ft' && c.ctp.sat['10'].by === 'Brian Hager', 'the claim is saved on the Worker with who set it');
-ok(/Now:\s*Tom Stitt/.test(d.getElementById('lmCtp').textContent) && /4 ft/.test(d.getElementById('lmCtp').textContent), 'the panel shows the claim');
+ok(c.ctp && c.ctp.sat['10'].player === 'Tom Stitt' && c.ctp.sat['10'].by === 'Brian Hager', 'the tap saves the claim on the Worker with who set it');
+ok(/Tom Stitt/.test(dom.window.document.getElementById('lmCtp').textContent), 'the line shows the winner');
 await workerFetch(API + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: 'E', action: 'score', round: 'sat', match: 'm1', hole: 10, scores: { 'Brian Hager': 5, 'Tom Stitt': 5 }, drives: { A: 'Brian Hager', B: 'Tom Stitt' }, player: 'Brian Hager' }) });   // the hole lock: post hole 10 before moving on
 dom = await open('&player=' + encodeURIComponent('Brian Hager')); d = dom.window.document; d.getElementById('lmAll').click(); d.querySelector('[data-lm-hole="11"]').click(); await tick(); d = dom.window.document;
 ok(/Hole 11/.test(d.querySelector('#lmAll').textContent) && !d.getElementById('lmCtp'), 'hole 11 (par 5) has none');
 // --- the host's Money tab (host code in the session, like the host page)
-for (const [h, who] of [[3, 'Dave Sherwin'], [8, 'BJ Kolonia'], [15, 'Tom Stitt']]) { await workerFetch(API + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: 'E', action: 'ctp', round: 'sat', hole: h, claim: who, pin: 'HOST1' }) }); }
+for (const [h, who] of [[3, 'Dave Sherwin'], [8, 'BJ Kolonia'], [15, 'Tom Stitt']]) { await workerFetch(API + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: 'E', action: 'ctp', round: 'sat', hole: h, claim: who, dist: h === 3 ? '4 ft' : '', pin: 'HOST1' }) }); }
 for (const [h, who] of [[3, 'Brian Hager'], [8, 'Tom Stitt'], [10, 'BJ Kolonia'], [15, 'Andrew Kabrick'], [18, 'Brian Hager']]) { await workerFetch(API + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: 'E', action: 'ctp', round: 'sun', hole: h, claim: who, pin: 'HOST1' }) }); }
 dom = await open('&host=1&view=money', 'HOST1'); d = dom.window.document;
 ok([...d.querySelectorAll('.toolbar button')].some(b => b.textContent === 'Money' && !b.classList.contains('sec')), 'a Money tab is offered when a round has games, and is the active one');
@@ -83,7 +92,7 @@ d.querySelector('[data-money-close="sun"]').click(); await tick(400); d = dom.wi
 c = await dbCfg(); ok(c.rounds[1].payout && c.rounds[1].payout.carried_in === 8 && c.rounds[1].payout.skins.pot === 88 && c.rounds[1].payout.skins.per_skin === 29, 'Sunday\'s frozen payout: $8 carried in, skins pot $88, $29 a skin');
 // players can no longer change a closed round's CTP from the panel
 dom = await open('&player=' + encodeURIComponent('Brian Hager')); d = dom.window.document; if (d.getElementById('lmAll')) { d.getElementById('lmAll').click(); d.querySelector('[data-lm-hole="10"]').click(); await tick(); d = dom.window.document; }
-ok(d.getElementById('lmCtp') && !d.getElementById('lmCtpGo') && /closed/.test(d.getElementById('lmCtp').textContent), 'a closed round shows its CTP read-only');
+ok(d.getElementById('lmCtp') && !d.querySelector('[data-lm-ctpopen]') && /closed/.test(d.getElementById('lmCtp').textContent), 'a closed round shows its CTP read-only');
 // a spectator (no host code) sees the numbers but has no buttons
 dom = await open('&view=money'); d = dom.window.document;
 ok(/Final · closed by the host/.test(d.getElementById('app').textContent) && !d.querySelector('[data-money-close],[data-money-reopen]'), 'everyone can read the money; only the host has the buttons');

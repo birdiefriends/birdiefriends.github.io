@@ -85,7 +85,7 @@ ok(/Brian H\./.test(d.querySelector('.lmst.tee').textContent) && /Tom S\./.test(
 ok(/Marked/.test(d.querySelector('.lmst.tee').textContent), 'the tee card pill says Marked');
 d.querySelector('[data-lm-drvopen]').click(); await tick(100);
 ok(dq().querySelectorAll('[data-lm-drv]').length >= 4, 'change reopens the buttons');
-ok([...dq().querySelectorAll('.lmst .lmsth .n')].map(n => n.textContent).join() === '1,2,3', 'steps are numbered 1 tee shot, 2 score, 3 closest to the pin (hole 10 is a par 3)');
+ok([...dq().querySelectorAll('.lmst .lmsth .n')].map(n => n.textContent).join() === '1,2', 'steps are numbered 1 tee shot, 2 score; closest to the pin is asked after Post, not a step');
 ok(!dq().getElementById('lmPost').disabled && dq().getElementById('lmPost').classList.contains('ready'), 'with scores and both drives the Save button is green');
 if (process.env.DUMP) { (await import('fs')).writeFileSync('/tmp/panel.html', dom.serialize().replace(/<script[\s\S]*?<\/script>/g, '')); }
 dq().getElementById('lmPost').click(); await tick(500);

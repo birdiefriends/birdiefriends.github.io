@@ -5751,3 +5751,9 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Saturday: the lone player's mulligans are a tally on the Fourball nine (one per hole, no more than allowed, nothing blocked); Greensomes: two tee shots, no drive tally for him, and his team handicap is his own doubled against the pair's sum. Plan table (mulligans per player, Sunday targets) lives in docs/bf-cup-draft.html as window.BF_NOSHOW_PLAN; Lou and Andrew have no target (host types the captains' range).
 - Sunday: BFEngine.cupWalkover totals his round with no hole worse than net double bogey (par + 2 + his strokes at his Cup tee; Out counts as that); win <= win, half <= half, else loss. A loss gives the point to the no-show's team. Standings, results and panel all read it.
 - Tests: source/tests/test_cup_noshow.mjs (58). Known failures unchanged (test_at_course, test_rail_drag).
+
+## 2026-11-07 — BF Cup: guided closest-to-pin prompt (panel v36)
+- After Post hole on a closest-to-pin hole, the panel asks "Closest to pin on hole N?" with a tap per group player and Nobody. Asked on first post only, not on re-posts; closed rounds are read-only.
+- The CTP card and distance box are replaced by a one-line status (Set / Change). Greensomes order stays: tee shot, score, Post, then CTP.
+- Fixed an older bug: the ‹ › hole arrows threw a ReferenceError (`allowed` not in scope in the click handler).
+- Tests updated: test_cup_money_page, test_cup_drives (steps are now 1 and 2).
