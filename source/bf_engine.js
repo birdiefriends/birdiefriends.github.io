@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.48.0';
+  const ENGINE_VERSION = '1.49.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2859,8 +2859,10 @@
   }
   // Match numbers run across the whole Cup in session order: "roundKey|matchKey" -> 1, 2, 3 ...
   function cupMatchNumbers(cfg) {
-    const out = {}; let n = 0;
-    ((cfg && cfg.rounds) || []).forEach(r => (r.matches || []).forEach(m => { out[r.key + '|' + m.key] = ++n; }));
+    // Ryder Cup style: every part of a session is its own numbered match. Saturday's Fourball nine are 1-4, its Greensomes nine 5-8 (a pairing's number
+    // is its first part's; its later parts add the match count of the round), so Sunday's singles start at 9.
+    const out = {}; let base = 0;
+    ((cfg && cfg.rounds) || []).forEach(r => { const ms = r.matches || []; ms.forEach((m, i) => { out[r.key + '|' + m.key] = base + i + 1; }); base += ms.length * Math.max(1, (r.segments || []).length); });
     return out;
   }
   function cupLiveStandings(cfg) {

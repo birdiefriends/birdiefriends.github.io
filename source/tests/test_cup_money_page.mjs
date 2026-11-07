@@ -64,6 +64,8 @@ ok(/Hole 11/.test(d.querySelector('#lmAll').textContent) && !d.getElementById('l
 { const dm = await open('&view=board'); const bd = dm.window.document; const txt = bd.getElementById('app').textContent;
   const segs = [...bd.querySelectorAll('.lmseg')].map(x => x.textContent);
   ok(segs.length >= 2 && /Fourball · holes 1–9/.test(segs[0]) && /Greensomes · holes 10–18/.test(segs[1]) && /1 point each/.test(segs[0]), 'Saturday shows a Fourball block then a Greensomes block: ' + segs.join(' | '));
+  const nums = [...bd.querySelectorAll('.lmseg')].slice(0, 2).map(sg => { const out = []; let e = sg.nextElementSibling; while (e && e.classList.contains('lmbm')) { out.push(Number((e.querySelector('.lmmno').textContent.match(/\d+/) || ['0'])[0])); e = e.nextElementSibling; } return out; });
+  ok(nums[0].length >= 2 && nums[1].length === nums[0].length && nums[1][0] === nums[0][0] + nums[0].length && nums[1][nums[1].length - 1] === nums[0][nums[0].length - 1] + nums[0].length, 'the Greensomes matches carry on the numbering after the Fourball ones: ' + nums.map(x => x.join(',')).join(' / '));
   const rows = [...bd.querySelectorAll('.lmbm')], sat = rows.filter(r => /Fourball|Greensomes/.test(r.textContent));
   ok(sat.length >= 4, 'each match is its own line in each block: ' + sat.length + ' lines');
   const fb = [...bd.querySelectorAll('.lmseg')][0].nextElementSibling; ok(fb && /Fourball/.test(fb.textContent) && !/Greensomes/.test(fb.textContent), 'a Fourball line shows only the Fourball nine');

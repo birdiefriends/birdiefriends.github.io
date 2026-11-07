@@ -287,6 +287,10 @@
     else mid = esc(lbl) + '<br>Not started';
     return '<div class="lmpr"><div class="c l a' + (aw ? ' win' : l ? ' up' : '') + '">' + esc(l) + '</div><div class="mid' + (half ? ' half' : '') + '"><span>' + mid + '</span></div><div class="c r b' + (bw ? ' win' : r ? ' up' : '') + '">' + esc(r) + '</div></div>';
   }
+  function mnum(nums, round, match, hole) {                  // a pairing's number for the part that hole belongs to (Fourball 1-4, Greensomes 5-8)
+    var si = 0; (round.segments || []).forEach(function (sg, i) { if (hole >= sg.from && hole <= sg.to) si = i; });
+    return nums[round.key + '|' + match.key] + si * (round.matches || []).length;
+  }
   function fmtPts(n) { return n === 0.5 ? '½' : (n % 1 === 0.5 ? Math.floor(n) + '½' : String(n)); }
   function boardHtml(cfg, all, standings, nums) {
     var keys = (cfg.sides || []).map(function (x) { return x.key; }), h = '<div class="lm">';
@@ -304,7 +308,7 @@
           r.matches.forEach(function (m) {
             var sg = m.segments[si], id = r.key + '|' + m.key, oid = id + '#' + si, open = !!S.open[oid];
             var pa = sg.points ? (sg.points[keys[0]] || 0) : 0, pb = sg.points ? (sg.points[keys[1]] || 0) : 0;
-            h += '<div class="lmbm"><button class="lmbmt" data-lm-open="' + esc(oid) + '"><div class="lmmno">Match ' + nums[id] + groupTag(all, r.key, m.key) + '</div><div class="lmbmh"><span class="a">' + esc(S.opts.E.cupSideNames(m.sides[0]).join(' & ')) + '</span>' +
+            h += '<div class="lmbm"><button class="lmbmt" data-lm-open="' + esc(oid) + '"><div class="lmmno">Match ' + (nums[id] + si * r.matches.length) + groupTag(all, r.key, m.key) + '</div><div class="lmbmh"><span class="a">' + esc(S.opts.E.cupSideNames(m.sides[0]).join(' & ')) + '</span>' +
               '<span class="pt">' + (sg.decided ? '<span class="a">' + fmtPts(pa) + '</span> <span class="lmdim">–</span> <span class="b">' + fmtPts(pb) + '</span>' : '<span class="lmdim">v</span>') + '</span><span class="b">' + esc(S.opts.E.cupSideNames(m.sides[1]).join(' & ')) + '</span></div>' +
               partRow(cfg, m, sg) + '<div class="lmcar">' + (open ? '▲ Hide scorecard' : '▼ Scorecard') + '</div></button>';
             if (open && rnd) { var mt = (rnd.matches || []).filter(function (x) { return x.key === m.key; })[0]; if (mt) h += scorecardHtml(cfg, rnd, mt) + (S.opts.goScore ? '<div style="padding:0 10px 10px"><button class="lmgo2" data-lm-score="' + esc(id) + '">Enter or correct scores</button></div>' : ''); }
@@ -511,7 +515,7 @@
     matches.forEach(function (match) {
       var mr = rows.filter(function (r) { return r.m === match.key; }), mm = mr.filter(function (r) { return needRow(rows, r, inp, posted); }).length;
       if (match.noshow && lives[matches.indexOf(match)].walkover) { var wv = lives[matches.indexOf(match)].walkover; pv += '<div class="lmres">Target ' + wv.win + ' or better wins · ' + (wv.win + 1) + '–' + wv.half + ' halves · ' + (wv.half + 1) + '+ loses<small>' + (wv.thru ? 'Posted: ' + wv.total + ' through ' + wv.thru + ' (counting no hole worse than net double bogey)' : 'Nothing posted yet') + '</small></div>'; return; }
-      if (mm) { pv += '<div class="lmres q">' + (matches.length > 1 ? 'Match ' + nums[round.key + '|' + match.key] + ': ' : '') + mm + ' score' + (mm > 1 ? 's' : '') + ' to go</div>'; return; }
+      if (mm) { pv += '<div class="lmres q">' + (matches.length > 1 ? 'Match ' + mnum(nums, round, match, hole) + ': ' : '') + mm + ' score' + (mm > 1 ? 's' : '') + ' to go</div>'; return; }
       var pc = JSON.parse(JSON.stringify(cfg)), sc0 = {};
       mr.forEach(function (r) { var v = effVal(rows, r, inp, posted); sc0[r.key] = v === undefined ? -1 : v; });
       applyLocal(pc, { round: round.key, match: match.key, hole: hole, scores: sc0, at: '', player: '' });
@@ -520,7 +524,7 @@
       var conc = nA === -99 || nB === -99, bothOut = nA === 99 && nB === 99, why = conc ? ' · by concession' : (wn !== 'h' && (nA === 99 || nB === 99) ? ' · other side out' : (bothOut ? ' · both sides out' : (nA != null && nB != null && Math.abs(nA) < 50 && Math.abs(nB) < 50 && wn !== 'h' ? ' · net ' + (wn === 'a' ? nA + ' v ' + nB : nB + ' v ' + nA) : '')));
       var outSd = null, skinTxt = ''; ['a', 'b'].forEach(function (sd) { var rr = mr.filter(function (x) { return x.side === sd; }); if (rr.length && rr.every(function (x) { return effVal(rows, x, inp, posted) === 0; })) outSd = sd; });
       if (skinsRound && outSd) { var scs = mr.filter(function (x) { return x.side !== outSd && effVal(rows, x, inp, posted) > 0; }); skinTxt = scs.length ? scs.map(function (x) { return shortName(x.key) + ' ' + effVal(rows, x, inp, posted); }).join(', ') + ' in for the skin' : 'No skin in play'; }
-      pv += '<div class="lmres" style="background:' + (wn === 'a' ? 'var(--a)' : wn === 'b' ? 'var(--b)' : 'var(--bg2)') + '">' + (matches.length > 1 ? 'Match ' + nums[round.key + '|' + match.key] + ' · ' : '') + (wn === 'a' ? esc(sideName(cfg, match.sides[0].side)) + ' wins hole ' + hole : wn === 'b' ? esc(sideName(cfg, match.sides[1].side)) + ' wins hole ' + hole : 'Hole ' + hole + ' halved') + esc(why) + '<small>' + esc(sl3.text) + ' · ' + esc(sl3.sub) + '</small>' + (skinTxt ? '<small><b>Skin: ' + esc(skinTxt) + '</b></small>' : '') + '</div>';
+      pv += '<div class="lmres" style="background:' + (wn === 'a' ? 'var(--a)' : wn === 'b' ? 'var(--b)' : 'var(--bg2)') + '">' + (matches.length > 1 ? 'Match ' + mnum(nums, round, match, hole) + ' · ' : '') + (wn === 'a' ? esc(sideName(cfg, match.sides[0].side)) + ' wins hole ' + hole : wn === 'b' ? esc(sideName(cfg, match.sides[1].side)) + ' wins hole ' + hole : 'Hole ' + hole + ' halved') + esc(why) + '<small>' + esc(sl3.text) + ' · ' + esc(sl3.sub) + '</small>' + (skinTxt ? '<small><b>Skin: ' + esc(skinTxt) + '</b></small>' : '') + '</div>';
     });
     var stepNo = 0, missing0 = rows.filter(function (r) { return needRow(rows, r, inp, posted); }).length;
     if (fmt0 === 'altshot') h += driveHtml(cfg, round, matches, hole, ++stepNo, gkey);
@@ -663,7 +667,7 @@
       });
       matches.forEach(function (match) {
         var live = E.cupMatchLive(cfg, round, match, entryOf(cfg, round.key, match.key)), wn = holeWinner(live, hole), sl2 = statusLine(cfg, live, match);
-        lines.push({ w: wn, text: 'Match ' + nums[round.key + '|' + match.key] + ' · hole ' + hole + ': ' + (wn === 'a' ? sideName(cfg, match.sides[0].side) + ' wins the hole' : wn === 'b' ? sideName(cfg, match.sides[1].side) + ' wins the hole' : 'halved') + '  ·  ' + sl2.text + ' (' + sl2.sub + ')' });
+        lines.push({ w: wn, text: 'Match ' + mnum(nums, round, match, hole) + ' · hole ' + hole + ': ' + (wn === 'a' ? sideName(cfg, match.sides[0].side) + ' wins the hole' : wn === 'b' ? sideName(cfg, match.sides[1].side) + ' wins the hole' : 'halved') + '  ·  ' + sl2.text + ' (' + sl2.sub + ')' });
       });
       delete S.inp[key]; if (S.drv) delete S.drv[gkey + '|' + hole]; S.msg = ''; S.err = ''; S.last = { g: gkey, lines: lines };
       var hs0 = ctpHolesOf(cfg, round); S.ctpAsk = (!wasPosted && hs0 && hs0.indexOf(Number(hole)) >= 0 && !round.payout) ? { g: gkey, hole: hole } : null;

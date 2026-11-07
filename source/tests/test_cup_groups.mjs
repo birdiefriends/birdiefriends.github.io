@@ -14,7 +14,7 @@ const mk = () => ({ sides: [{ key: 'A', name: 'Team Jake', captain: 'a1', player
 const c = mk();
 const g = E.cupGroupsOf(c.rounds[1]); ok(g.length === 2 && g[0].matches.map(m => m.key).join() === 'm1,m2' && g[1].matches.map(m => m.key).join() === 'm3,m4', 'singles: two matches per group, in draw order');
 ok(E.cupGroupsOf(c.rounds[0]).length === 2 && E.cupGroupsOf(c.rounds[0])[0].matches.length === 1, 'pairs: the match is the group');
-const n = E.cupMatchNumbers(c); ok(n['sat|m1'] === 1 && n['sun|m1'] === 3 && n['sun|m4'] === 6, 'match numbers run across the Cup (singles start at 3 here, 5 with four pairs matches)');
+const n = E.cupMatchNumbers(c); ok(n['sat|m1'] === 1 && n['sun|m1'] === 5 && n['sun|m4'] === 8 && n['sat|m2'] === 2, 'match numbers run across the Cup, every part of a session counted (singles start at 5 here: two pairings x Fourball and Greensomes)');
 // ---- worker: anyone in the foursome scores either match ----
 const W = (await import(pathToFileURL(HERE('../bf_experiences_worker.js')).href)).default;
 function makeD1(db) { const wrap = (sql) => { const st = { binds: [], bind(...b) { st.binds = b; return st; }, async first() { return db.prepare(sql).get(...st.binds) ?? null; }, async all() { return { results: db.prepare(sql).all(...st.binds) }; }, async run() { const r = db.prepare(sql).run(...st.binds); return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } }; } }; return st; }; const D = { prepare: wrap, withSession() { return D; } }; return D; }
@@ -38,11 +38,11 @@ const dom = new JSDOM(page, { runScripts: 'dangerously', pretendToBeVisual: true
 let d = dom.window.document; const click = async sel => { const el = dom.window.document.querySelector(sel); if (!el) throw new Error('missing ' + sel); el.click(); await tick(150); };
 ok(d.getElementById('lmMatchSel').value === 'sun|g1', 'opens on a2\'s foursome: Sunday Group 1 (Saturday is closed)');
 ok(/Group/.test(d.querySelector('label').textContent) && d.querySelectorAll('optgroup').length === 2, 'the picker is by group, under the round');
-ok(d.querySelectorAll('.lmhead').length === 2 && /Match 3 · Group 1/.test(d.querySelector('.lm').textContent) && /Match 4 · Group 1/.test(d.querySelector('.lm').textContent), 'one header per match in the group, numbered across the Cup');
+ok(d.querySelectorAll('.lmhead').length === 2 && /Match 5 · Group 1/.test(d.querySelector('.lm').textContent) && /Match 6 · Group 1/.test(d.querySelector('.lm').textContent), 'one header per match in the group, numbered across the Cup');
 ok(d.querySelectorAll('.lmchip').length === 4, 'one scorer, four players on screen');
 for (const [p, v] of [['a1', 4], ['b4', 5], ['a2', 3], ['b3', 4]]) await click('[data-lm-s="' + p + '|' + v + '"]');
 d = dom.window.document; ok(!d.getElementById('lmPost').disabled, 'Post unlocks when all four are tapped');
 await click('#lmPost');
 const sp = posts.filter(p => p.action === 'score'); ok(sp.length === 2 && sp.map(p => p.match).sort().join() === 'm1,m2' && JSON.stringify(sp.find(p => p.match === 'm1').scores) === '{"a1":4,"b4":5}', 'one tap posts each match with its own two players');
-d = dom.window.document; ok(/Match 3 · hole 1: /.test(d.querySelector('.lm').textContent) && /Match 4 · hole 1: /.test(d.querySelector('.lm').textContent), 'a result line per match after posting');
+d = dom.window.document; ok(/Match 5 · hole 1: /.test(d.querySelector('.lm').textContent) && /Match 6 · hole 1: /.test(d.querySelector('.lm').textContent), 'a result line per match after posting');
 console.log('groups: ' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
