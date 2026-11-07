@@ -60,6 +60,14 @@ ok(/Tom Stitt/.test(dom.window.document.getElementById('lmCtp').textContent), 't
 await workerFetch(API + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: 'E', action: 'score', round: 'sat', match: 'm1', hole: 10, scores: { 'Brian Hager': 5, 'Tom Stitt': 5 }, drives: { A: 'Brian Hager', B: 'Tom Stitt' }, player: 'Brian Hager' }) });   // the hole lock: post hole 10 before moving on
 dom = await open('&player=' + encodeURIComponent('Brian Hager')); d = dom.window.document; d.getElementById('lmAll').click(); d.querySelector('[data-lm-hole="11"]').click(); await tick(); d = dom.window.document;
 ok(/Hole 11/.test(d.querySelector('#lmAll').textContent) && !d.getElementById('lmCtp'), 'hole 11 (par 5) has none');
+// --- the leaderboard splits Saturday into a Fourball block and a Greensomes block, one line per match
+{ const dm = await open('&view=board'); const bd = dm.window.document; const txt = bd.getElementById('app').textContent;
+  const segs = [...bd.querySelectorAll('.lmseg')].map(x => x.textContent);
+  ok(segs.length >= 2 && /Fourball · holes 1–9/.test(segs[0]) && /Greensomes · holes 10–18/.test(segs[1]) && /1 point each/.test(segs[0]), 'Saturday shows a Fourball block then a Greensomes block: ' + segs.join(' | '));
+  const rows = [...bd.querySelectorAll('.lmbm')], sat = rows.filter(r => /Fourball|Greensomes/.test(r.textContent));
+  ok(sat.length >= 4, 'each match is its own line in each block: ' + sat.length + ' lines');
+  const fb = [...bd.querySelectorAll('.lmseg')][0].nextElementSibling; ok(fb && /Fourball/.test(fb.textContent) && !/Greensomes/.test(fb.textContent), 'a Fourball line shows only the Fourball nine');
+  fb.querySelector('.lmbmt').click(); await tick(150); ok(bd.querySelector('.lmbm .lmcar') && /Hide scorecard/.test(bd.getElementById('app').textContent), 'a line still opens its scorecard'); }
 // --- the host's Money tab (host code in the session, like the host page)
 for (const [h, who] of [[3, 'Dave Sherwin'], [8, 'BJ Kolonia'], [15, 'Tom Stitt']]) { await workerFetch(API + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: 'E', action: 'ctp', round: 'sat', hole: h, claim: who, dist: h === 3 ? '4 ft' : '', pin: 'HOST1' }) }); }
 for (const [h, who] of [[3, 'Brian Hager'], [8, 'Tom Stitt'], [10, 'BJ Kolonia'], [15, 'Andrew Kabrick'], [18, 'Brian Hager']]) { await workerFetch(API + '/bfe/cup/act', { method: 'POST', body: JSON.stringify({ event_name: 'E', action: 'ctp', round: 'sun', hole: h, claim: who, pin: 'HOST1' }) }); }

@@ -34,6 +34,7 @@
     '.lm .lmhtitle{background:none;border:0;color:var(--tx);font:inherit;font-weight:800;font-size:1.35rem;cursor:pointer;text-align:center}.lm .lmhtitle small{display:block;font-weight:500;font-size:.72rem;color:var(--dim)}' +
     '.lm .lmwin{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--dim)}.lm .lmwin.a{background:var(--a)}.lm .lmwin.b{background:var(--b)}' +
     '.lm .lmchips{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lm .lmchip{display:flex;justify-content:space-between;align-items:center;gap:6px;background:var(--bg2);color:var(--tx);border:2px solid var(--line);border-left:6px solid var(--line);border-radius:10px;padding:10px;font:inherit;font-weight:700;cursor:pointer;text-align:left}' +
+    '.lm .lmseg{font-weight:800;font-size:.92rem;margin:12px 0 6px}' +
     '.lm .lmmodal{position:fixed;left:0;right:0;top:0;bottom:0;z-index:50;background:rgba(3,10,30,.72);display:flex;align-items:center;justify-content:center;padding:16px}.lm .lmmodal .lmask{width:100%;max-width:420px;margin:0;background:var(--bg2,#12306b);box-shadow:0 10px 40px rgba(0,0,0,.5)}' +
     '.lm .lmchip.a{border-left:10px solid var(--a);background:color-mix(in srgb,var(--a) 18%,var(--bg2))}.lm .lmchip.b{border-left:10px solid var(--b);background:color-mix(in srgb,var(--b) 18%,var(--bg2))}.lm .lmchip.sel{border-color:var(--tx)}.lm .lmask{border:2px solid var(--tx);border-radius:12px;padding:12px;margin:10px 0;background:var(--bg2)}.lm .lmaskt{font-weight:800;font-size:1.05rem}.lm .lmaskb{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.lm .lmaskb button{flex:1 1 40%;width:auto;margin-top:0;padding:14px 8px;font-size:1rem}.lm .lmctpl{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:8px 0;padding:8px 10px;border:1px dashed var(--dim);border-radius:10px;font-size:.88rem}.lm .lmmul{display:flex;gap:8px;align-items:center;justify-content:space-between;margin:8px 0;padding:8px 10px;border:1px dashed var(--dim);border-radius:10px;font-size:.84rem}.lm .lmns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.lm .lmns input{width:64px;margin:0 6px}.lm .lmchip small{display:block;font-weight:500;color:var(--dim);font-size:.7rem}' +
     '.lm .lmcv{font-size:1.7rem;font-weight:800;min-width:30px;text-align:right}.lm .lmcv.pu{color:var(--warn);font-size:1.15rem}.lm .lmpick{margin:10px 0 2px}' +
@@ -295,6 +296,23 @@
       if (!r.matches.length) return;
       var rnd = (cfg.rounds || []).filter(function (x) { return x.key === r.key; })[0];
       h += '<div class="lmc"><b>' + esc(r.name || r.key) + '</b>' + (r.done ? ' <span class="lmdim">· final</span>' : '');
+      var nseg = r.matches[0].segments.length;
+      if (nseg > 1) {                                          // a round with parts (Fourball then Greensomes): one block per part, so every match is its own line worth its own point
+        for (var si = 0; si < nseg; si++) {
+          var s0 = r.matches[0].segments[si];
+          h += '<div class="lmseg">' + esc(FMT[s0.format] || s0.format) + ' · holes ' + s0.from + '–' + s0.to + ' <span class="lmdim">· 1 point each</span></div>';
+          r.matches.forEach(function (m) {
+            var sg = m.segments[si], id = r.key + '|' + m.key, oid = id + '#' + si, open = !!S.open[oid];
+            var pa = sg.points ? (sg.points[keys[0]] || 0) : 0, pb = sg.points ? (sg.points[keys[1]] || 0) : 0;
+            h += '<div class="lmbm"><button class="lmbmt" data-lm-open="' + esc(oid) + '"><div class="lmmno">Match ' + nums[id] + groupTag(all, r.key, m.key) + '</div><div class="lmbmh"><span class="a">' + esc(S.opts.E.cupSideNames(m.sides[0]).join(' & ')) + '</span>' +
+              '<span class="pt">' + (sg.decided ? '<span class="a">' + fmtPts(pa) + '</span> <span class="lmdim">–</span> <span class="b">' + fmtPts(pb) + '</span>' : '<span class="lmdim">v</span>') + '</span><span class="b">' + esc(S.opts.E.cupSideNames(m.sides[1]).join(' & ')) + '</span></div>' +
+              partRow(cfg, m, sg) + '<div class="lmcar">' + (open ? '▲ Hide scorecard' : '▼ Scorecard') + '</div></button>';
+            if (open && rnd) { var mt = (rnd.matches || []).filter(function (x) { return x.key === m.key; })[0]; if (mt) h += scorecardHtml(cfg, rnd, mt) + (S.opts.goScore ? '<div style="padding:0 10px 10px"><button class="lmgo2" data-lm-score="' + esc(id) + '">Enter or correct scores</button></div>' : ''); }
+            h += '</div>';
+          });
+        }
+        h += '</div>'; return;
+      }
       r.matches.forEach(function (m) {
         var id = r.key + '|' + m.key, open = !!S.open[id], decided = m.segments.some(function (sg) { return sg.decided; });
         var pa = m.points[keys[0]] || 0, pb = m.points[keys[1]] || 0;
