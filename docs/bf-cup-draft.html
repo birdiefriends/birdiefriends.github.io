@@ -587,6 +587,7 @@ window.BF_NOSHOW_PLAN = {
       + '<div style="overflow-x:auto"><table><tr><th>Player</th><th>Index</th><th>Tee</th><th>Mulligans</th><th>Sunday win</th><th>Half</th><th>Loss</th></tr>' + body + '</table></div>'
       + '<p class="hint">Mulligans start from the handicap tiers (under 6: 2, 6–10: 3, over 10 to 20: 4, over 20: 5) with the captains’ adjustments. The host can change the count when marking. Targets come from 2026 GHIN rounds; Lou and Andrew are estimates from their BFSeries rounds.</p></div>';
   }
+  var hcpMsg = '';
   function hcpHtml() {
     var rule = E.cupHandicapRule(cfg), hc = E.cupHcpMap(cfg), h = cfg.handicap || {}, si = h.strokeIndex, pars = h.pars;
     var by = rule.by || {}, tiers = rule.tiers || [];
@@ -596,7 +597,8 @@ window.BF_NOSHOW_PLAN = {
     var dots = function (n) { return n > 1 ? '●●' : n === 1 ? '●' : '·'; };
     var firstName = function (n) { return String(n).split(' ')[0]; };
     var own = tiers.filter(function (t) { return t.strokeIndex && si && t.strokeIndex.join() !== si.join(); }).map(function (t) { return t.label; });
-    var out = '<div class="card hcpintro"><div class="hcphead"><h2>Match handicaps</h2><button class="sec no-print" id="hcpPrint">🖨 Print</button></div>'
+    var refreshCard = (HOST && pin && !PRACTICE) ? '<div class="card no-print"><b>Handicaps changed in BFE-A?</b><p class="hint" style="margin:4px 0 8px">The Cup keeps its own copy, taken when the draft was set up. This pulls only the handicaps from the event roster. Teams, picks and scores are not touched. Match strokes recalculate from the new handicaps, so do it before tee-off.</p><button id="hcpRefresh">Refresh handicaps from the event roster</button>' + (hcpMsg ? '<div class="banner" style="background:#1a7f3c;margin-top:8px;white-space:pre-line">' + esc(hcpMsg) + '</div>' : '') + '</div>' : '';
+    var out = refreshCard + '<div class="card hcpintro"><div class="hcphead"><h2>Match handicaps</h2><button class="sec no-print" id="hcpPrint">🖨 Print</button></div>'
       + '<p class="hint">● = a stroke on that hole, take it off the gross score before comparing. Fourball ' + (by.bestball || 0) + '% off the lowest course handicap in the match, foursomes ' + (by.altshot || 0) + '% of the gap in combined handicaps, singles ' + (by.singles || 0) + '% off the low. A half stroke rounds up. A player\'s strokes are spread over all 18 holes, and each format shows the ones that fall on its holes. Course handicap is the Index adjusted for the tee played (slope and rating), so it can sit below the Index. A foursomes team handicap is the average of the two course handicaps. '
       + (tiers.length ? 'Tees by Index: ' + tiers.map(function (t) { return esc(t.label) + (t.maxHcp != null ? ' under ' + t.maxHcp : ' above'); }).join(', ') + '. ' : '')
       + (own.length ? esc(own.join(', ')) + ' has its own hole handicaps, already used in the dots.' : '') + '</p></div>';
@@ -732,6 +734,19 @@ window.BF_NOSHOW_PLAN = {
     function on(id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); }
     matchupWire(); singlesWire();
     on('hcpPrint', function () { window.print(); });
+    on('hcpRefresh', function () {
+      hcpMsg = 'Reading the event roster…'; render();
+      fetch(WORKER + '/bfe/events?event=' + encodeURIComponent(EVENT.replace(/ \(practice\)$/, ''))).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); }).then(function (j) {
+        var roster = ((j.config || {}).roster || []).filter(function (p) { return p && p.name && !p.withdrawn; });
+        if (!roster.length) { hcpMsg = 'The event has no roster saved. Nothing changed.'; render(); return; }
+        var d = draft(); d.stats = d.stats || {}; var by = {}; roster.forEach(function (p) { by[String(p.name).trim().toLowerCase()] = p.hcp; });
+        var names = (d.pool || cfg.pool || []).concat(d.subs || []).concat(cfg.sides.map(function (x) { return x.captain; }).filter(Boolean)).concat(Object.keys(d.stats)).filter(function (n, i, a) { return a.indexOf(n) === i; });
+        var ch = [], same = 0;
+        names.forEach(function (n) { var v = by[String(n).trim().toLowerCase()]; if (v === null || v === undefined || v === '' || !isFinite(Number(v))) return; v = Number(v); var cur = d.stats[n] && typeof d.stats[n].hcp === 'number' ? d.stats[n].hcp : null; if (cur === v) { same++; return; } ch.push(n + ' ' + (cur === null ? '–' : cur) + ' → ' + v); d.stats[n] = Object.assign({}, d.stats[n], { hcp: v }); });
+        hcpMsg = ch.length ? 'Updated ' + ch.length + ' handicap' + (ch.length > 1 ? 's' : '') + ':\n' + ch.join('\n') : 'Already the same as the event roster (' + same + ' checked). Nothing changed.';
+        if (ch.length) return save(); render();
+      }).catch(function (e) { hcpMsg = 'Could not read the event roster: ' + e.message; render(); });
+    });
     (function () { var bt = document.getElementById('birdieToggle'); if (bt) bt.addEventListener('click', function () { cfg.birdie_alerts = cfg.birdie_alerts === false ? true : false; save(); }); })();
     Array.prototype.forEach.call(document.querySelectorAll('[data-money-close]'), function (b) { b.addEventListener('click', function () { moneyAct('money_close', b.getAttribute('data-money-close')); }); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-money-reopen]'), function (b) { b.addEventListener('click', function () { moneyAct('money_reopen', b.getAttribute('data-money-reopen')); }); });

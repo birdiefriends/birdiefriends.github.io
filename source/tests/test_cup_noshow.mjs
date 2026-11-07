@@ -152,4 +152,21 @@ const dom7 = await open('&host=1&player=' + encodeURIComponent(A1), 'HOST1'); co
 const bt = d7().querySelector('[data-view="brief"]'); ok(!!bt, 'host sees a Brief tab');
 if (bt) { bt.click(); await tick(80); const t7 = d7().body.textContent; ok(/First-tee briefing/.test(t7) && /Out: you are out of the hole/.test(t7) && /Only if someone did not show/.test(t7) && /Closest to the pin: on the par 3s/.test(t7) && /tap Leaderboard any time/.test(t7) && d7().querySelectorAll('input[type=checkbox]').length > 20, 'the checklist shows with tick boxes'); }
 const dom8 = await open('&player=' + encodeURIComponent(A1)); await tick(150); ok(!dom8.window.document.querySelector('[data-view="brief"]'), 'players never see the Brief tab');
+
+// ---- Handicaps tab: refresh only the handicaps from the BFE-A event roster (teams and picks untouched)
+{ const before = await dbCfg(); const poolBefore = JSON.stringify([before.draft && before.draft.pool, before.sides.map(s => s.players)]);
+  const dom9 = await open('&host=1&player=' + encodeURIComponent(A1), 'HOST1'); const w9 = dom9.window, d9 = () => w9.document; await tick(200);
+  const realFetch = w9.fetch.bind(w9);
+  w9.fetch = (u, o) => /\/bfe\/events\?event=/.test(String(u)) ? Promise.resolve({ ok: true, json: () => Promise.resolve({ config: { roster: [{ name: 'Brian Hager', hcp: 9.1 }, { name: 'Tom Stitt', hcp: before.draft.stats['Tom Stitt'].hcp }, { name: 'Nobody Else', hcp: 3 }] } }) }) : realFetch(u, o);
+  d9().querySelector('[data-view="hcp"]').click(); await tick(80);
+  const rb = d9().getElementById('hcpRefresh'); ok(!!rb, 'host sees the Refresh handicaps button on the Handicaps tab');
+  if (rb) { rb.click(); await tick(600);
+    const after = await dbCfg();
+    ok(after.draft.stats['Brian Hager'].hcp === 9.1, 'Brian 6.8 -> 9.1 saved to the Cup (got ' + after.draft.stats['Brian Hager'].hcp + ')');
+    ok(after.draft.stats['Tom Stitt'].hcp === before.draft.stats['Tom Stitt'].hcp, 'an unchanged handicap stays');
+    ok(!after.draft.stats['Nobody Else'], 'a roster name that is not in the Cup is not added');
+    ok(JSON.stringify([after.draft.pool, after.sides.map(s => s.players)]) === poolBefore, 'the pool and the teams are untouched');
+    ok(/Brian Hager 6\.8 → 9\.1/.test(d9().body.textContent), 'the screen lists what changed');
+  } }
+const dom10 = await open('&player=' + encodeURIComponent(A1)); await tick(150); dom10.window.document.querySelector('[data-view="hcp"]') && dom10.window.document.querySelector('[data-view="hcp"]').click(); await tick(60); ok(!dom10.window.document.getElementById('hcpRefresh'), 'players never see the Refresh handicaps button');
 console.log('no-show: ' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
