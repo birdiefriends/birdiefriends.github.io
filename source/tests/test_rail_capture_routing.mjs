@@ -36,7 +36,7 @@ t = make(false); await t.api.loadCardPhotos();
 ok(calls.length === 1 && /^https:\/\/g\.test\/photos\?event=/.test(calls[0].u), 'an ordinary card lists its own photos');
 ok(make(true).api.bfeCaptureTarget({ name: '2026 BFCup - Day2' }) === null && make(true).api.bfeCaptureTarget({ name: '2026 BFCup - Day1' }).bfeEventId === 7, 'only a card that belongs to a BFE is routed to it');
 
-// The at-the-course rail: Photo / Video / Upload show for an ordinary card, and for a BFE card (BF Cup) only while the host has memories capture open.
+// The at-the-course rail: Photo / Video / Upload show for an ordinary card, and for a BFE card (BF Cup) always (the banner keeps its own switch).
 {
   const i = src.indexOf('function renderAtCourseRail('), j = src.indexOf('\n}\n', i); const fnSrc = src.slice(i, j + 2);
   const railFor = (backed, captureOpen) => {
@@ -47,9 +47,9 @@ ok(make(true).api.bfeCaptureTarget({ name: '2026 BFCup - Day2' }) === null && ma
       escapeHtml: x => String(x) };
     const keys = Object.keys(env); new Function(...keys, fnSrc + '\nrenderAtCourseRail();')(...keys.map(k => env[k])); return el.innerHTML;
   };
-  const has = h => /Photo/.test(h) && /Video/.test(h) && /Upload/.test(h);
-  ok(has(railFor(false, false)), 'an ordinary event shows Photo, Video and Upload on the rail');
-  ok(has(railFor(true, true)), 'a BF Cup round shows Photo, Video and Upload on the rail while memories capture is open');
-  ok(!/Photo|Video|Upload/.test(railFor(true, false)) && /Yardage/.test(railFor(true, false)), 'a BF Cup round hides them while capture is closed, keeping Yardage, Rules, Course');
+  const has = h => /Photo/.test(h) && /Video/.test(h) && /Upload/.test(h) && /Note/.test(h);
+  ok(has(railFor(false, false)), 'an ordinary event shows Photo, Video, Upload and Note on the rail');
+  ok(has(railFor(true, false)) && has(railFor(true, true)), 'a BF Cup round shows Photo, Video, Upload and Note on the rail whether or not memories capture is open');
+  ok(/Yardage/.test(railFor(true, false)) && /Rules/.test(railFor(true, false)) && /Course/.test(railFor(true, false)), 'Yardage, Rules and Course are still there');
 }
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
