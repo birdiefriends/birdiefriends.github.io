@@ -18689,7 +18689,7 @@ function cupLiveForMe(events) {
 // switch off when the next season starts: SERIES_WRAP.on = false (or point it at the next story).
 // Season is over: the Groupings card on the Results screen stays hidden until the first 2027 Series event. Set true then (or make it follow the next scheduled Series event).
 const RESULTS_SHOW_GROUPINGS = false;
-const SERIES_WRAP = { on: true, id: '2026', url: '/series-2026-wrap.html', title: 'The 2026 Series is a wrap', sub: 'Champions, event winners and the best of the season. Tap to read the story.' };
+const SERIES_WRAP = { on: false, id: '2026', url: '/series-2026-wrap.html', title: 'The 2026 Series is a wrap', sub: 'Champions, event winners and the best of the season. Tap to read the story.' };
 function renderSeriesWrapBanner() {
   const gl = document.getElementById('rlc-groupings'); if (gl) gl.style.display = RESULTS_SHOW_GROUPINGS ? '' : 'none';
   const el = document.getElementById('home-series-wrap');

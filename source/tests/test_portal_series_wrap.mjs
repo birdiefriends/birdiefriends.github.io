@@ -10,7 +10,7 @@ const w = dom.window; const opened = []; w.open = u => opened.push(u);
 const ctx = vm.createContext({ document: w.document, localStorage: w.localStorage, window: w, console });
 vm.runInContext(src.match(/const SERIES_WRAP = .*;/)[0] + '\n' + ['renderSeriesWrapBanner', 'openSeriesWrap', 'hideSeriesWrap'].map(n => extractFn(src, n)).join('\n') + '; this.SW = SERIES_WRAP;', ctx);
 const el = () => w.document.getElementById('home-series-wrap');
-ctx.renderSeriesWrapBanner();
+ctx.SW.on = true; ctx.renderSeriesWrapBanner();
 ok(/The 2026 Series is a wrap/.test(el().textContent), 'banner shows');
 ctx.openSeriesWrap(); ok(opened[0] === '/series-2026-wrap.html', 'opens the story');
 ctx.hideSeriesWrap(); ok(el().innerHTML === '', 'dismiss hides it');
