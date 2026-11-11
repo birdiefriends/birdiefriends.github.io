@@ -14823,7 +14823,6 @@ function historyIconActionRow(key) {
 // so gatheringType is used instead for a meaningful type label).
 function historyEventDetailLine(evt) {
   if (!evt) return '';
-  const parts = [];
   if (evt.location) parts.push(`⛳ ${evt.location}`);
   if (evt.dt instanceof Date && !isNaN(evt.dt)) {
     parts.push(`🕐 ${evt.dt.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`);
@@ -20375,6 +20374,13 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
 // The suggested split, as boxes you can type over: any amount is yours to change right here, not only on the game's own screen.
 function gamesFormSplitHtml() {
   const sel = _gamesFormSelected, rows = [];
+  // The split is of the whole pot: every confirmed Yes puts in the buy-in, and each game takes its share of THAT.
+  const dppNow = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0;
+  const nYes = Math.max(4, _gamesFormYesCount), totalPot = Math.round(dppNow * nYes * 100) / 100;
+  const mny = v => '$' + (Math.round(v * 100) / 100).toFixed(Number.isInteger(Math.round(v * 100) / 100) ? 0 : 2);
+  const pctOf = v => totalPot > 0 ? Math.round(v / totalPot * 100) + '% of the pot' : '';
+  const note = h => `<div style="font-size:0.78rem;color:var(--text-muted);margin:-4px 0 8px;line-height:1.45">${h}</div>`;
+  let takenFromPot = 0;   // everything but Skins, in dollars
   const inp = (id, val, fn, unit) => `<span style="font-size:0.86rem">$</span><input type="number" id="${id}" min="0.01" step="0.01" value="${val || ''}" inputmode="decimal" oninput="${fn}(this.value)" style="width:78px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.78rem;color:var(--text-muted)">${unit}</span>`;
   const row = (icon, name, ctl) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border)"><span style="flex:1;font-size:0.9rem;font-weight:600">${icon} ${name}</span>${ctl}</div>`;
   const per = (c, n) => n > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / n * 100) / 100 : '') : (c.dollar_per_player || '');
@@ -20391,26 +20397,38 @@ function gamesFormSplitHtml() {
   GAMES_FORM_SIDE_IDS.forEach(g => { if (sel.has(g)) {
     const m = BFEngine.getGame(g).meta;
     if (g === 'scramble') {
-      // The podium pot, said in dollars: each player puts this in, the pot is that x the players in teams, and the places split it.
+      // Podium = a % of each buy-in. The pot is that x the players in teams; the places then split the pot.
       const sc = _gamesFormSide.scramble, each = Number(sc.dollar_per_player) || 0, tsz = Number(sc.team_size) || 2;
-      const nTeams = (sc.pairs || []).filter(pr => Array.isArray(pr) && pr.length).length, nPl = nTeams ? nTeams * tsz : Math.max(4, _gamesFormYesCount);
+      const nTeams = (sc.pairs || []).filter(pr => Array.isArray(pr) && pr.length).length, nPl = nTeams ? nTeams * tsz : nYes;
       const pot = Math.round(each * nPl * 100) / 100, shares = ({ winner: [100], top2: [65, 35], top3: [50, 30, 20] })[sc.payout] || [100];
-      const ord = ['1st', '2nd', '3rd'], dol = v => '$' + (Math.floor(v) === v ? v : v.toFixed(2));
-      const places = shares.map((pc, i) => `${ord[i]} ${dol(Math.floor(pot * pc / 100))}`).join(' · ');
-      const note = pot > 0 ? `<div style="font-size:0.78rem;color:var(--text-muted);margin:-4px 0 8px;line-height:1.45">${dol(each)} × ${nPl} players = <b>${dol(pot)}</b> podium pot, split by team: ${places}${tsz > 1 ? ` (each of the ${tsz} partners gets an equal share)` : ''}</div>` : '';
-      rows.push(periodRow(m.icon, 'Scramble podium', sc, 1, 'gw-split-scramble', 'setGamesFormSideDollarFor.scramble', 'each player puts in · the places split it') + note);
+      takenFromPot += pot;
+      const ord = ['1st', '2nd', '3rd'];
+      const places = shares.map((pc, i) => `${ord[i]} <b>${mny(Math.floor(pot * pc / 100))}</b>`).join(' · ');
+      const pctNow = dppNow > 0 ? Math.round(each / dppNow * 1000) / 10 : '';
+      const ctl = `<input type="number" id="gw-split-scramble" min="0" max="100" step="1" value="${pctNow}" inputmode="decimal" oninput="setGamesFormScramblePct(this.value)" style="width:70px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.86rem">%</span><span style="font-size:0.78rem;color:var(--text-muted)">of the pot</span>`;
+      rows.push(row(m.icon, 'Scramble podium', ctl) + (pot > 0 ? note(`<b>${mny(pot)}</b> podium (${pctOf(pot)}, ${nPl} players in teams × ${mny(each)}): ${places}${tsz > 1 ? ` · each place is shared by the ${tsz} partners` : ''}`) : note('Enter the % of the pot that goes to the podium.')));
     } else rows.push(periodRow(m.icon, m.label, _gamesFormSide[g], periodSegCount(_gamesFormSide[g]), `gw-split-${g}`, `setGamesFormSideDollarFor.${g}`));
   } });
   if (sel.has('lowscore')) rows.push(periodRow('🎯', 'Individual Low Score', _gamesFormLowscoreConfig, lowscoreSegCount(_gamesFormLowscoreConfig), 'gw-split-ls', 'setGamesFormLowscoreDollarPerPlayer'));
-  if (sel.has('cttp')) rows.push(row('🎯', 'CTP', inp('gw-split-cttp', _gamesFormCttpConfig.dollar_per_hole, 'setGamesFormCttpDollarPerHole', 'a hole')));
+  if (sel.has('cttp')) {
+    const hN = (_gamesFormCttpConfig.holes || []).length, pz = (_gamesFormCttpConfig.prize_holes || []).length, dph = Number(_gamesFormCttpConfig.dollar_per_hole) || 0, cost = dph * hN;
+    takenFromPot += cost;
+    rows.push(row('🎯', 'CTP', inp('gw-split-cttp', _gamesFormCttpConfig.dollar_per_hole, 'setGamesFormCttpDollarPerHole', 'a hole'))
+      + (hN && dph > 0 ? note(`${hN} paid hole${hN === 1 ? '' : 's'} × ${mny(dph)} = <b>${mny(cost)}</b> (${pctOf(cost)})${pz ? ` · ${pz} prize hole${pz === 1 ? ' pays' : 's pay'} no cash` : ''}`) : note(hN ? 'Enter the $ a hole.' : 'Pick the CTP holes on the CTP step.')));
+  }
   if (sel.has('birdieball')) rows.push(row('🐉', 'MiserBall', inp('gw-split-bb', _gamesFormBirdieballConfig.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer', 'per player')));
   if (sel.has('birdiepay')) rows.push(row('🐤', 'Birdie Payouts', inp('gw-split-bp', _gamesFormBirdiepayConfig.dollar_per_birdie, 'setGamesFormBirdiepayDollarPerBirdie', 'a birdie')));
-  if (sel.has('skins')) rows.push(row('⛳', 'Skins', '<span style="font-size:0.8rem;color:var(--text-muted)">gets what is left</span>'));
+  // Skins is the balance of the pot after the games above (MiserBall and the per-player games take their share of the whole pot too).
+  const perPlayerGames = (sel.has('fourball') ? _gamesFormFourballConfig.dollar_per_player || 0 : 0) + (sel.has('altshot') ? _gamesFormSide.altshot.dollar_per_player || 0 : 0) + (sel.has('hilo') ? _gamesFormSide.hilo.dollar_per_player || 0 : 0) + (sel.has('matchplay') ? _gamesFormSide.matchplay.dollar_per_player || 0 : 0) + (sel.has('lowscore') ? _gamesFormLowscoreConfig.dollar_per_player || 0 : 0) + (sel.has('birdieball') ? _gamesFormBirdieballConfig.dollar_per_player || 0 : 0);
+  takenFromPot += perPlayerGames * nYes;
+  const skinsLeft = Math.round((totalPot - takenFromPot) * 100) / 100;
+  if (sel.has('skins')) rows.push(row('⛳', 'Skins', `<span style="font-size:0.95rem;font-weight:700;${skinsLeft < -0.004 ? 'color:#c0392b' : ''}">${skinsLeft < -0.004 ? 'over by ' + mny(-skinsLeft) : mny(skinsLeft)}</span>`) + note(skinsLeft < -0.004 ? 'The games above take more than the pot. Lower an amount.' : `the balance of the pot (${pctOf(Math.max(0, skinsLeft))}), split by the skins won`));
   if (!rows.length) return '';
   // Money not in any game is never played for. Say so when nothing (Skins, Birdie Payouts) is there to take what is left.
   let gap = '';
-  const dppNow = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0;
-  if (dppNow > 0 && !sel.has('skins') && !sel.has('birdiepay')) {
+  if (dppNow > 0 && sel.has('skins') && skinsLeft >= -0.004) {
+    gap = `<div style="font-size:0.78rem;color:var(--green-dark);margin-top:6px;line-height:1.45">✓ ${mny(totalPot)} pot = ${mny(takenFromPot)} in the games above + ${mny(Math.max(0, skinsLeft))} Skins</div>`;
+  } else if (dppNow > 0 && !sel.has('skins') && !sel.has('birdiepay')) {
     const nPl = Math.max(4, _gamesFormYesCount);
     const used = (sel.has('fourball') ? _gamesFormFourballConfig.dollar_per_player || 0 : 0) + (sel.has('altshot') ? _gamesFormSide.altshot.dollar_per_player || 0 : 0) + (sel.has('scramble') ? _gamesFormSide.scramble.dollar_per_player || 0 : 0) + (sel.has('hilo') ? _gamesFormSide.hilo.dollar_per_player || 0 : 0) + (sel.has('matchplay') ? _gamesFormSide.matchplay.dollar_per_player || 0 : 0) + (sel.has('lowscore') ? _gamesFormLowscoreConfig.dollar_per_player || 0 : 0)
       + (sel.has('birdieball') ? _gamesFormBirdieballConfig.dollar_per_player || 0 : 0) + (sel.has('cttp') ? (_gamesFormCttpConfig.dollar_per_hole || 0) * (_gamesFormCttpConfig.holes || []).length / nPl : 0);
@@ -20418,7 +20436,7 @@ function gamesFormSplitHtml() {
     if (left > 0.004) gap = `<div style="font-size:0.76rem;color:#b8860b;margin-top:6px;line-height:1.45">$${left.toFixed(2)} of each $${dppNow.toFixed(2)} is not in any game, so nobody plays for it. Raise an amount, or lower the buy-in.</div>`;
     else if (left > -0.004) gap = `<div style="font-size:0.76rem;color:var(--green-dark);margin-top:6px">✓ All $${dppNow.toFixed(2)} is in a game.</div>`;
   }
-  return `<div style="font-size:0.8rem;font-weight:700;margin:12px 0 2px">How it splits <span style="font-weight:400;color:var(--text-muted)">· type over any amount</span></div>${rows.join('')}${gap}`;
+  return `<div style="font-size:0.8rem;font-weight:700;margin:12px 0 2px">${dppNow > 0 ? 'How the ' + mny(totalPot) + ' pot splits' : 'How it splits'} <span style="font-weight:400;color:var(--text-muted)">· ${mny(dppNow)} × ${nYes} players · type over any amount</span></div>${rows.join('')}${gap}`;
 }
 function refreshGamesFormSplit() {
   const el = document.getElementById('games-form-split');
@@ -21375,6 +21393,14 @@ function setGamesFormSideDollar(gid, val) {
   const c = _gamesFormSide[gid];
   c.dollar_per_player = Math.round((parseFloat(val) || 0) * periodSegCount(c) * 100) / 100;
   _gamesFormTouched.add(gid);
+  updateGamesFormPotPreview();
+}
+// Scramble podium is set as a % of the buy-in (the host thinks "half the pot"); the game still stores $ per player.
+function setGamesFormScramblePct(val) {
+  const dpp = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0;
+  const pct = Math.max(0, Math.min(100, parseFloat(val) || 0));
+  _gamesFormSide.scramble.dollar_per_player = Math.round(dpp * pct) / 100;
+  _gamesFormTouched.add('scramble');
   updateGamesFormPotPreview();
 }
 const setGamesFormSideDollarFor = {}; GAMES_FORM_SIDE_IDS.forEach(g => { setGamesFormSideDollarFor[g] = v => setGamesFormSideDollar(g, v); });
