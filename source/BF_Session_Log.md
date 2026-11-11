@@ -5764,3 +5764,4 @@ Added Hi-Lo as a registry game on the shared head-to-head engine: kind 'hilo' in
 - Rail: Photo / Video / Upload / Note are now always on the At-the-course rail, BFE-backed rounds (the BF Cup) included. No dependence on the memories-capture switch (that switch only gates the banner). Uploads still save to the event's memories; notes are the event's own notes. Staged.
 - Home: the 'The 2026 Series is a wrap' banner is switched off (SERIES_WRAP.on = false); the story stays linked from the Results page. Staged.
 - BF Cup wrap-up: the app's Results screen has a 'BF Cup 2026' card (Team Jake 8.5 - 7.5) linking to bf-cup-results.html; results page gets a Teams tab (rosters, captain, index); bf-cup-story.json is the written final story. Frozen data snapshot still to add (needs the Download the results file).
+- Cup story updated with the Sunday singles results (4 Jake wins, 2 halves, 2 Nate wins), verified against the 5-3 total and the Money tab skins.
