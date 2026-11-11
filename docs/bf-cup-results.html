@@ -178,6 +178,15 @@ td.r,th.r{text-align:right}
     });
     return out;
   }
+  function renderTeams(st) {
+    var o = '<h2>The Teams</h2><div class="lede">Sixteen players, two teams. Cup handicap index in brackets.</div>', stats = (cfg.draft && cfg.draft.stats) || {};
+    (cfg.sides || []).forEach(function (sd) {
+      var won = st.state === 'final' && st.winner === sd.key;
+      o += '<div class="card"><div class="kicker">' + esc(sd.name || sd.key) + (won ? ' \u00b7 \ud83c\udfc6 Cup holders' : '') + ' \u00b7 ' + pts(st.points[sd.key]) + ' points</div><table style="margin-top:8px"><tr><th>Player</th><th class="r">Index</th></tr>'
+        + (sd.players || []).map(function (p) { var h = stats[p] && stats[p].hcp; return '<tr><td>' + esc(p) + (p === sd.captain ? ' <span class="chip">Captain</span>' : '') + '</td><td class="r">' + (h == null || h === '' ? '\u2014' : esc(String(h))) + '</td></tr>'; }).join('') + '</table></div>';
+    });
+    return o;
+  }
   function renderRound(st, ri) {
     var r = st.rounds[ri], o = '<h2>' + esc(r.name) + '</h2>';
     var segs = (cfg.rounds[ri].segments || []).map(function (sg) { return (E.CUP_FORMATS[sg.format] || {}).label || sg.format; }).join(' + ');
@@ -231,13 +240,13 @@ td.r,th.r{text-align:right}
   function render() {
     var st = E.cupLiveStandings(cfg), keys = (cfg.sides || []).map(function (s) { return s.key; }), A = keys[0], B = keys[1];
     var winKey = st.state === 'final' ? st.winner : null;
-    var tabs = [['story', 'The Story']].concat(cfg.rounds.map(function (r, i) { return ['r' + i, r.name || ('Round ' + (i + 1))]; })).concat([['money', 'Money'], ['mem', 'Memories']]);
+    var tabs = [['story', 'The Story'], ['teams', 'Teams']].concat(cfg.rounds.map(function (r, i) { return ['r' + i, r.name || ('Round ' + (i + 1))]; })).concat([['money', 'Money'], ['mem', 'Memories']]);
     if (!tab) tab = 'story';
     var o = '<div class="hero"><div class="eyebrow">' + esc(cfg.venue || cfg.course || 'BirdieFriends') + '</div><h1>' + esc(cfg.title || EVENT) + '</h1><div class="sub">' + esc(sideName(A)) + ' vs ' + esc(sideName(B)) + '</div>'
       + '<div class="score"><div class="team ' + cls(A) + (winKey === A ? ' win' : '') + '"><small>' + esc(sideName(A)) + '</small><b>' + pts(st.points[A]) + '</b></div><div class="vs">' + (st.state === 'final' ? 'FINAL' : '<span class="live"></span>LIVE') + '</div><div class="team ' + cls(B) + (winKey === B ? ' win' : '') + '"><small>' + esc(sideName(B)) + '</small><b>' + pts(st.points[B]) + '</b></div></div>'
       + '<div class="cap">' + (winKey ? '\ud83c\udfc6 Cup holders: <b>' + esc(sideName(winKey)) + '</b>' : st.shared ? 'Cup shared' : st.clinched ? '<b>' + esc(sideName(st.clinched)) + '</b> have clinched the Cup' : pts(st.target) + ' points wins the Cup') + '</div></div>';
     o += '<div class="tabs">' + tabs.map(function (t) { return '<button class="tab' + (t[0] === tab ? ' on' : '') + '" data-t="' + t[0] + '">' + esc(t[1]) + '</button>'; }).join('') + '</div><div class="wrap">';
-    o += tab === 'story' ? renderStory(st) : tab === 'money' ? renderMoney() : tab === 'mem' ? renderMem() : renderRound(st, parseInt(tab.slice(1), 10));
+    o += tab === 'story' ? renderStory(st) : tab === 'teams' ? renderTeams(st) : tab === 'money' ? renderMoney() : tab === 'mem' ? renderMem() : renderRound(st, parseInt(tab.slice(1), 10));
     o += '<div class="foot">BirdieFriends \u00b7 ' + esc(EVENT) + '</div></div>';
     app.innerHTML = o;
     document.title = (cfg.title || EVENT) + ' \u00b7 Results';

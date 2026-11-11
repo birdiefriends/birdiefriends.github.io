@@ -46,15 +46,16 @@ ok(d.querySelector('.hero h1'), 'the page renders');
 ok(/Team Jake/.test(d.querySelector('.score').textContent) && /Team Nate/.test(d.querySelector('.score').textContent), 'both team names in the score box');
 ok(d.querySelector('.team.cred') && d.querySelector('.team.cblue'), 'red and blue teams from the side colors');
 const tabs = [...d.querySelectorAll('.tab')].map(t => t.textContent);
-ok(tabs.join('|') === 'The Story|2026 BFCup - Day1|2026 BFCup - Day2|Money|Memories', 'tabs: story, one per round, money, memories: ' + tabs.join('|'));
+ok(tabs.join('|') === 'The Story|Teams|2026 BFCup - Day1|2026 BFCup - Day2|Money|Memories', 'tabs: story, teams, one per round, money, memories: ' + tabs.join('|'));
 ok(d.querySelector('.bcast .head') && d.querySelector('.bcast .head').textContent.length > 5, 'the commentator headline is written');
 ok(/Team (Jake|Nate)/.test(d.querySelector('.bcast').textContent), 'commentator names a team');
 const tab = n => { [...dom.window.document.querySelectorAll('.tab')][n].click(); return dom.window.document; };
-d = tab(1); ok(d.querySelectorAll(".m").length === 2 && /Brian Hager/.test(d.body.textContent) && /Fourball/.test(d.body.textContent), "Saturday shows its matches with the fourball and foursomes result");
-ok(/Drives used: .*Hager 1/.test(tab(1).body.textContent), 'the Saturday card shows how many times each partner\'s drive was used');
-d = tab(2); ok(d.querySelectorAll('.m').length >= 1, 'Sunday shows singles matches (' + d.querySelectorAll('.m').length + ')');
-d = tab(3); ok(/Money/.test(d.querySelector('h2').textContent) && /Closest to the pin|Skins/.test(d.body.textContent), 'Money tab shows the games');
-d = tab(4); ok(d.querySelectorAll('.ph').length === 2 && d.querySelector('.ph video') && d.querySelector('.ph img'), 'Memories shows the photo and the video');
+d = tab(1); ok(/The Teams/.test(d.querySelector('h2').textContent) && d.querySelectorAll('.card').length === 2 && /Team Jake/.test(d.body.textContent) && /Team Nate/.test(d.body.textContent) && /Captain/.test(d.body.textContent) && /Brian Hager/.test(d.body.textContent), 'the Teams tab lists both rosters with the captain');
+d = tab(2); ok(d.querySelectorAll(".m").length === 2 && /Brian Hager/.test(d.body.textContent) && /Fourball/.test(d.body.textContent), "Saturday shows its matches with the fourball and foursomes result");
+ok(/Drives used: .*Hager 1/.test(tab(2).body.textContent), 'the Saturday card shows how many times each partner\'s drive was used');
+d = tab(3); ok(d.querySelectorAll('.m').length >= 1, 'Sunday shows singles matches (' + d.querySelectorAll('.m').length + ')');
+d = tab(4); ok(/Money/.test(d.querySelector('h2').textContent) && /Closest to the pin|Skins/.test(d.body.textContent), 'Money tab shows the games');
+d = tab(5); ok(d.querySelectorAll('.ph').length === 2 && d.querySelector('.ph video') && d.querySelector('.ph img'), 'Memories shows the photo and the video');
 ok(/memories\/serve\/7/.test(d.querySelector('.ph').href), 'a photo links to the serve route');
 ok(/Great day/.test(d.body.textContent), 'player notes show');
 ok(d.getElementById('dl'), 'download button present');
@@ -62,6 +63,9 @@ ok(d.getElementById('dl'), 'download button present');
 const withStory = (u, o) => /bf-cup-story\.json/.test(u) ? Promise.resolve({ ok: true, status: 200, json: async () => ({ head: 'Hand written headline', paras: ['One.', 'Two.'], days: [{ mic: 'Saturday', text: 'Sat call' }], chips: ['A chip'] }) }) : memStub(u, o);
 dom = await open('?event=E', withStory); d = dom.window.document;
 ok(/Hand written headline/.test(d.querySelector('.bcast .head').textContent) && /Sat call/.test(d.body.textContent) && /A chip/.test(d.body.textContent), 'bf-cup-story.json overrides the auto commentator');
+// the written final story and the Results-screen link ship with the app
+{ const st = JSON.parse(fs.readFileSync(HERE('../../docs/bf-cup-story.json'), 'utf8')); ok(/8\.5 to 7\.5/.test(st.head) && st.paras.length >= 3 && st.days.length === 2 && st.chips.length >= 3, 'bf-cup-story.json is the written final story');
+  for (const f of ['../../docs/portal.html', '../portal.html']) { const pg = fs.readFileSync(HERE(f), 'utf8'); ok(/BF Cup 2026[\s\S]{0,400}bf-cup-results\.html\?event=2026%20BirdieFriends%20Cup[\s\S]{0,300}8\.5 &ndash; 7\.5/.test(pg), 'the app Results list links the Cup results page (' + f + ')'); } }
 // no event param: finds the live Cup
 dom = await open('', memStub); d = dom.window.document;
 ok(d.querySelector('.hero h1') || /Could not load/.test(d.body.textContent), 'no ?event= resolves through cup-live (or fails gracefully)');
