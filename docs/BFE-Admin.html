@@ -559,7 +559,7 @@
     <pre id="rawConfig" style="margin-top:16px"></pre>
   </section>
 </main>
-<script src="bf_engine.js?v=1.49.0"></script>
+<script src="bf_engine.js?v=1.50.0"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════════
 // Connection defaults — flat hardcoded constants, not derived from where
@@ -2144,7 +2144,7 @@ function cupRowToggle(tr) {
 }
 // ── Cup games and money (Dev-98, spec §13.15): a "Games and money" block on each Cup round row (section 4). The form is built from the game registry's
 // config schema, so a game added to BFEngine appears here with no new BFE-A code; the engine's own checks (pot fit, what a round can host) say what is wrong.
-const CUP_GAME_SKIP = { cttp: ['hole_mode', 'dollar_per_hole'], skins: ['basis'], birdiepay: ['pars', 'pars_by_player'] };   // chosen for the Cup: all par 3s by default, skins gross, pars from the Cup's tee
+const CUP_GAME_SKIP = { cttp: ['hole_mode', 'dollar_per_hole', 'prize_holes'], skins: ['basis'], birdiepay: ['pars', 'pars_by_player'] };   // chosen for the Cup: all par 3s by default, skins gross, pars from the Cup's tee
 function cupGameFields(id) { const sc = BFEngine.gameSchemas()[id]; return ((sc && sc.config) || []).filter(f => !(CUP_GAME_SKIP[id] || []).includes(f.key) && ['money', 'int', 'holes', 'enum'].includes(f.type)); }
 function cupGameLabel(id) { const sc = BFEngine.gameSchemas()[id]; return sc ? sc.label : id; }
 function cupGamesRead(tr) {

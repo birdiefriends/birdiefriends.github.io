@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.49.0';
+  const ENGINE_VERSION = '1.50.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -186,7 +186,12 @@
       id: 'cttp', order: 10, entity: 'individual',
       carve(state, addon, inputs) {
         const L = state.ledger;
-        const holes = (addon.holes || []).slice().sort((a, b) => a - b);
+        // Prize-only holes (Turkey 2Man #17): tracked and claimed like any CTP hole, but they carry no cash, so they are left out of the purse
+        // split and an unclaimed one rolls nothing into Skins. `holes` stays the full list (the Live Panel reads it); a prize hole that is only in
+        // `prize_holes` is tracked too.
+        const prizeSet = new Set((addon.prize_holes || []).map(Number).filter(h => h > 0));
+        const allHoles = [...new Set((addon.holes || []).map(Number).concat([...prizeSet]))].sort((a, b) => a - b);
+        const holes = allHoles.filter(h => !prizeSet.has(h));
         // $ per player (Dev-98): the CTP purse is that much from every player in the pot, split evenly over the CTP holes, whole dollars
         // (the odd dollars stay in the pot for the residual game). A fixed $ per hole, when given, wins, so every existing config pays as before.
         const perPlayer = Number(addon.dollar_per_player) || 0;
@@ -197,8 +202,11 @@
         const perHole = capped ? Math.floor(avail / holes.length) : configuredPerHole;
         const leaders = inputs.ctpLeaders;
         let unclaimed = 0;
-        const rows = holes.map(h => {
+        const rows = allHoles.map(h => {
           const lead = leaders && (leaders[h] || leaders[String(h)]);
+          if (prizeSet.has(h)) {
+            return { hole: h, player: lead && lead.player ? L.canon(lead.player) : null, dist: lead && lead.player ? (lead.dist ?? null) : null, paid: 0, prize: true };
+          }
           if (lead && lead.player) {
             L.credit(lead.player, 'cttp', perHole);
             return { hole: h, player: L.canon(lead.player), dist: lead.dist ?? null, paid: perHole };
@@ -352,6 +360,44 @@
         const L = state.ledger;
         const pot = Math.max(0, state.remaining) + state.rollover;
         state.remaining = 0; state.rollover = 0;
+        // Team skins (Turkey 2Man): in a Scramble both partners' cards carry the ONE team score, so by player a team's best hole would
+        // always tie with its own partner and no skin could ever be won. When the round has Scramble teams, the TEAM is the contender: the
+        // lowest team score on a hole, outright, wins that skin and the team's partners share it. Gross only. Players on no team stay
+        // individual contenders. `addon.by === 'player'` switches this off.
+        const teamPairs = addon.by === 'player' ? [] : (Array.isArray(state.teamPairs) ? state.teamPairs : []);
+        if (teamPairs.length) {
+          const cardBy = new Map(inputs.scorecards.map(c => [norm(c.player), c]));
+          const used = new Set(), contenders = [];
+          teamPairs.forEach(pr => {
+            const cs = pr.map(nm => cardBy.get(norm(nm))).filter(Boolean);
+            if (!cs.length) return;
+            pr.forEach(nm => used.add(norm(nm)));
+            const n = Math.max(...cs.map(c => (c.holes || []).length));
+            const holes = Array.from({ length: n }, (_, h) => { const v = cs.map(c => c.holes && c.holes[h]).find(x => typeof x === 'number' && x > 0); return v == null ? null : v; });
+            contenders.push({ player: pr.map(nm => L.canon(nm)).join(' & '), members: pr.map(nm => L.canon(nm)), holes });
+          });
+          inputs.scorecards.filter(c => !used.has(norm(c.player))).forEach(c => contenders.push({ player: c.player, members: [L.canon(c.player)], holes: c.holes }));
+          const teamWon = skinsWon(contenders, 'low');
+          const membersOf = new Map(contenders.map(c => [c.player, c.members]));
+          let perSkinT = 0, givenBackT = 0, unallocT = 0;
+          if (teamWon.length) {
+            perSkinT = Math.floor(pot / teamWon.length);
+            let paid = 0;
+            teamWon.forEach(w => {
+              const ms = membersOf.get(w.player) || [w.player];
+              const each = Math.floor(perSkinT / ms.length);
+              ms.forEach(m => L.credit(m, 'skins', each));
+              paid += each * ms.length;
+              w.members = ms;
+            });
+            unallocT = pot - paid;
+          } else {
+            const gb = L.giveBack(pot);
+            givenBackT = gb.each; unallocT = gb.unallocated;
+          }
+          state.unallocated += unallocT;
+          return { pot, won: teamWon, per_skin: perSkinT, given_back_each: givenBackT, basis: 'gross', by: 'team' };
+        }
         const net = addon.basis === 'net' && inputs.netByPlayer;
         let won;
         if (net) {
@@ -974,9 +1020,10 @@
       { key: 'dollar_per_hole', type: 'money', label: '$ per hole', default: 0, positive: true, required: true, requiredUnless: 'dollar_per_player' },
       { key: 'dollar_per_player', type: 'money', label: '$ per player (split over the holes)', default: 0, positive: true },
       { key: 'hole_mode', type: 'enum', label: 'Hole mode', values: ['all_par3', 'custom'], default: 'all_par3', lenient: true },  // lenient = an unknown value is cleaned to the default, not rejected (the Worker always did this)
-      { key: 'holes', type: 'holes', label: 'Holes', default: [], required: true }
+      { key: 'holes', type: 'holes', label: 'Holes', default: [], required: true },
+      { key: 'prize_holes', type: 'holes', label: 'Prize-only holes (tracked, no cash)', default: [] }
     ],
-    fixedCost: (cfg, ctx) => { const h = (cfg.holes || []).length; return Number(cfg.dollar_per_hole) > 0 || !(Number(cfg.dollar_per_player) > 0) ? (Number(cfg.dollar_per_hole) || 0) * h : (h ? Math.floor(Number(cfg.dollar_per_player) * ((ctx && ctx.players) || 0) / h) * h : 0); },
+    fixedCost: (cfg, ctx) => { const pz = new Set((cfg.prize_holes || []).map(Number)); const h = (cfg.holes || []).filter(x => !pz.has(Number(x))).length; return Number(cfg.dollar_per_hole) > 0 || !(Number(cfg.dollar_per_player) > 0) ? (Number(cfg.dollar_per_hole) || 0) * h : (h ? Math.floor(Number(cfg.dollar_per_player) * ((ctx && ctx.players) || 0) / h) * h : 0); },
     fixtures: [{
       name: 'two holes, one claimed, one unclaimed rolls to skins',
       round: { dollar_per_player: 10, addons: [
@@ -986,6 +1033,15 @@
         ctpLeaders: { 3: { player: 'Ann', dist: 6 } } },
       // pot 40: CTP set-aside 6, skins pot 34 + 3 unclaimed = 37 over 2 skins = 18 each, $1 left over
       expect: { payouts: { Ann: 3 + 36, Bob: 0, Cy: 0, Di: 0 }, unallocated: 1, results: { cttp: { unclaimed_to_skins: 3 }, skins: { per_skin: 18 } } }
+    }, {
+      name: 'a prize-only hole is tracked but pays nothing and rolls nothing',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'cttp', entity: 'individual', dollar_per_hole: 3, holes: [3, 7], prize_holes: [7] },
+        { id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
+      inputs: { scorecards: [_P('Ann', _H(4, 4, 3)), _P('Bob', _H(5, 4, 4)), _P('Cy', _H(5, 5, 5)), _P('Di', _H(6, 5, 5))],
+        ctpLeaders: { 3: { player: 'Ann', dist: 6 }, 7: { player: 'Bob', dist: 4 } } },
+      // pot 40: only hole 3 is paid (3), skins pot 37 over 2 skins = 18 each; hole 7 is Bob's prize, no cash
+      expect: { payouts: { Ann: 3 + 36, Bob: 0, Cy: 0, Di: 0 }, unallocated: 1, results: { cttp: { unclaimed_to_skins: 0 }, skins: { per_skin: 18 } } }
     }]
   });
 
@@ -1366,7 +1422,7 @@
   defineGame('skins', {
     kind: 'addon', input: 'strokes', net: true, residual: true,
     meta: { traits: { unit: 'player', allowance: 'round', individualScores: true }, label: 'Skins', uiOrder: 1, icon: '⛳', seal: 'SKINS',
-      info: 'Every hole is its own prize. The lowest score on a hole, outright, wins that skin (gross unless the host set it to Net); a tie wins nothing. Skins split whatever is left of the pot after CTP, MiserBall and Birdie Payouts, shared by the skins won.' },
+      info: 'Every hole is its own prize. The lowest score on a hole, outright, wins that skin (gross unless the host set it to Net); a tie wins nothing. Skins split whatever is left of the pot after CTP, MiserBall and Birdie Payouts, shared by the skins won. In a Scramble the TEAM is the contender: the lowest team score outright wins the skin and the partners share it (gross).' },
     config: [{ key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' }],
     fixedCost: () => 0,   // the residual game: takes whatever the others leave
     fixtures: [{
@@ -1375,6 +1431,14 @@
       inputs: { scorecards: [_P('Ann', _H(3, 4, 5)), _P('Bob', _H(4, 4, 5)), _P('Cy', _H(5, 5, 6)), _P('Di', _H(6, 6, 6))] },
       // pot 40, one outright skin (#1; #2 and #3 tie) takes it all
       expect: { payouts: { Ann: 40, Bob: 0, Cy: 0, Di: 0 }, unallocated: 0, results: { skins: { per_skin: 40 } } }
+    }, {
+      name: 'scramble teams: the team is the contender and partners share the skin',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'scramble', entity: 'pair', dollar_per_player: 0, basis: 'gross', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] },
+        { id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
+      inputs: { scorecards: [_P('Ann', _H(3, 4, 5)), _P('Bob', _H(3, 4, 5)), _P('Cy', _H(4, 4, 6)), _P('Di', _H(4, 4, 6))] },
+      // pot 40; hole 1 Ann & Bob (3 v 4), hole 3 Ann & Bob (5 v 6); hole 2 ties. 2 skins of 20, shared 10 each
+      expect: { payouts: { Ann: 20, Bob: 20, Cy: 0, Di: 0 }, unallocated: 0, results: { skins: { per_skin: 20 } } }
     }]
   });
 
@@ -1568,7 +1632,8 @@
     const games = (row && Array.isArray(row.games)) ? row.games : [];
     const addons = [];
     if (games.includes('cttp') && row.cttp_config) {
-      addons.push({ id: 'cttp', entity: 'individual', dollar_per_hole: row.cttp_config.dollar_per_hole, holes: row.cttp_config.holes || [] });
+      addons.push({ id: 'cttp', entity: 'individual', dollar_per_hole: row.cttp_config.dollar_per_hole, holes: row.cttp_config.holes || [],
+        ...(Array.isArray(row.cttp_config.prize_holes) && row.cttp_config.prize_holes.length ? { prize_holes: row.cttp_config.prize_holes } : {}), });
     }
     if (games.includes('birdieball') && row.birdieball_config) {
       addons.push({ id: 'birdieball', entity: 'individual', dollar_per_player: row.birdieball_config.dollar_per_player });
@@ -1663,6 +1728,9 @@
     // payout.carry_unclaimed = this round hands its unclaimed CTP on instead of giving it back when it has no Skins. Absent = every older result unchanged.
     const carryIn = Math.max(0, Number(config && config.payout && config.payout.carry_in) || 0);
     const state = { ledger, remaining: totalPot, unallocated: 0, rollover: carryIn };
+    // Scramble teams, so Skins can score by team (a scramble's partners share one score; see the skins carve).
+    const scrambleCfg = ((config && config.addons) || []).find(a => a && a.id === 'scramble');
+    state.teamPairs = scrambleCfg && Array.isArray(scrambleCfg.pairs) ? scrambleCfg.pairs.filter(p => Array.isArray(p) && p.length) : [];
     const results = { cttp: null, birdieball: null, birdiepay: null, fourball: null, altshot: null, scramble: null, hilo: null, matchplay: null, lowscore: null, skins: null };
     const addons = ((config && config.addons) || [])
       .filter(a => ADDONS[a.id])

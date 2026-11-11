@@ -3677,7 +3677,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.49.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.50.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -9361,7 +9361,7 @@ function buildLivePanel(evt) {
   // holes regardless of what the host actually configured.
   const cttpAddon = gatheringAddon(_liveConfig, 'cttp');  // Dev-88: was reading _liveGamesConfig.cttp_config directly
   const ctpHoles = (cttpAddon && Array.isArray(cttpAddon.holes) && cttpAddon.holes.length)
-    ? cttpAddon.holes
+    ? [...new Set(cttpAddon.holes.concat(Array.isArray(cttpAddon.prize_holes) ? cttpAddon.prize_holes : []).map(Number))].sort((a, b) => a - b)   // prize-only holes are claimed like any other
     : (_resolvedCttpHoles && _resolvedCttpHoles.length) ? _resolvedCttpHoles : CTP_HOLES_DEFAULT;
   const ctpPills = ctpHoles.map(h => {
     const leader = _ctpData[h];
@@ -12179,7 +12179,7 @@ let _gamesFormSelected  = new Set();  // subset of ['skins','cttp','birdieball',
 // the same $/player pot as a fixed dollar amount BEFORE MiserBall's own
 // carve-out, and Skins gets whatever is left after both (Brian's explicit
 // call on the funding model, rounds 2 and 3 combined).
-let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
+let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [], prize_holes: [] };   // prize_holes: tracked like CTP, no cash (the Turkey 2Man's #17); `holes` stays the PAID holes
 let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; // Birdie Payouts (Dev-89): flat $ per birdie, taken from the pot before Skins
 // Dev-91 — net/gross setup, frozen into the saved config at Save. kind per player: 'index' (typed Index → USGA playing handicap),
 // 'given' (host types strokes), 'gross' (no strokes). Each net player needs a tee: slope/rating/par and the HOLE stroke index come from it.
@@ -20215,8 +20215,8 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
   _gamesFormGathering = gatheringId;
   _gamesFormSelected = new Set(existing ? existing.games : (preselect || []));
   _gamesFormCttpConfig = (existing && existing.cttp_config)
-    ? { ...existing.cttp_config, holes: [...existing.cttp_config.holes] }
-    : { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
+    ? { ...existing.cttp_config, holes: [...existing.cttp_config.holes], prize_holes: [...(existing.cttp_config.prize_holes || [])] }
+    : { dollar_per_hole: null, hole_mode: 'all_par3', holes: [], prize_holes: [] };
   _gamesFormBirdieballConfig = (existing && existing.birdieball_config)
     ? { ...existing.birdieball_config }
     : { dollar_per_player: null };
@@ -20600,7 +20600,7 @@ function toggleGamesFormGame(key) {
     _gamesFormSelected.delete(key);
     _gamesFormTouched.delete(key);
     if (key === 'cttp') {
-      _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
+      _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [], prize_holes: [] };
     } else if (key === 'birdieball') {
       _gamesFormBirdieballConfig = { dollar_per_player: null };
     } else if (key === 'birdiepay') {
@@ -20622,7 +20622,7 @@ function toggleGamesFormGame(key) {
       // holes those are — matches Brian's "all Par 3 holes or select Par 3
       // holes" framing (All Par 3s is the expected default, not a blank slate).
       if (_gamesFormCttpConfig.hole_mode === 'all_par3' && _gamesFormVenueParDataAvailable) {
-        _gamesFormCttpConfig.holes = [..._gamesFormPar3Holes];
+        _gamesFormCttpConfig.holes = _gamesFormPar3Holes.filter(h => !(_gamesFormCttpConfig.prize_holes || []).includes(h));
       }
     }
     // birdieball and skins need no selection-time defaulting — birdieball's
@@ -20691,7 +20691,21 @@ function gatheringGamesCttpSectionHtml() {
             color:${checked ? 'var(--green-dark)' : 'var(--text)'}">${h}</div>`;
         }).join('')}
       </div>` : ''}
+      <div style="margin-top:10px">
+        <div style="font-size:0.8rem;font-weight:600;margin-bottom:4px">Prize-only holes (tracked like CTP, no cash)</div>
+        <input type="text" id="games-form-cttp-prize" inputmode="numeric" placeholder="e.g. 17" style="width:120px"
+          value="${(_gamesFormCttpConfig.prize_holes || []).join(', ')}" oninput="setGamesFormCttpPrizeHoles(this.value)">
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:3px">Players claim these in the Live Panel like any CTP hole; the winner is listed, nothing is paid and no money rolls into Skins.</div>
+      </div>
     </div>`;
+}
+// Prize-only CTP holes: kept apart from `holes` (the paid ones) so every cost figure on the form stays right.
+function setGamesFormCttpPrizeHoles(val) {
+  const pz = [...new Set(String(val || '').split(/[^0-9]+/).map(Number).filter(h => h >= 1 && h <= 18))].sort((a, b) => a - b);
+  _gamesFormCttpConfig.prize_holes = pz;
+  _gamesFormCttpConfig.holes = (_gamesFormCttpConfig.holes || []).filter(h => !pz.includes(h));
+  _gamesFormTouched.add('cttp');
+  updateGamesFormPotPreview();
 }
 function setGamesFormCttpDollarPerHole(val) {
   _gamesFormCttpConfig.dollar_per_hole = parseFloat(val) || 0;
@@ -20701,7 +20715,7 @@ function setGamesFormCttpDollarPerHole(val) {
 function setGamesFormCttpHoleMode(mode) {
   _gamesFormCttpConfig.hole_mode = mode;
   if (mode === 'all_par3' && _gamesFormVenueParDataAvailable) {
-    _gamesFormCttpConfig.holes = [..._gamesFormPar3Holes];
+    _gamesFormCttpConfig.holes = _gamesFormPar3Holes.filter(h => !(_gamesFormCttpConfig.prize_holes || []).includes(h));
   }
   const cttpSection = document.getElementById('games-form-cttp-section');
   if (cttpSection) cttpSection.innerHTML = gatheringGamesCttpSectionHtml();
@@ -21743,7 +21757,8 @@ async function submitGatheringGames(gatheringId) {
     cttp_config = {
       dollar_per_hole: _gamesFormCttpConfig.dollar_per_hole,
       hole_mode: _gamesFormCttpConfig.hole_mode,
-      holes: _gamesFormCttpConfig.holes
+      holes: _gamesFormCttpConfig.holes,
+      ...((_gamesFormCttpConfig.prize_holes || []).length ? { prize_holes: _gamesFormCttpConfig.prize_holes.slice() } : {})
     };
   }
   let birdieball_config = null;

@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.49.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.50.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -680,6 +680,12 @@ const GAME_SCHEMAS = {
         "label": "Holes",
         "default": [],
         "required": true
+      },
+      {
+        "key": "prize_holes",
+        "type": "holes",
+        "label": "Prize-only holes (tracked, no cash)",
+        "default": []
       }
     ]
   },
