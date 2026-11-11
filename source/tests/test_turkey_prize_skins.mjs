@@ -38,4 +38,8 @@ const plain = pay({ games: ['skins'], dollar_per_player: 10 }, [card('Ann', h =>
 ok(plain.skins.by === undefined && plain.skins.won.length === 1 && plain.skins.won[0].player === 'Ann', 'no Scramble: individual skins as before');
 // 5. skins pot is whole dollars to the team
 ok(Math.abs(r.skins.per_skin * 2 - (r.skins.pot - r.unallocated)) < 1e-9 || r.skins.per_skin > 0, 'per-skin amount is positive');
+// 6. money step: Scramble is a main game, so the suggested split gives the podium its pot (it used to leave it blank and hand Skins 80%)
+const sg = E.suggestGameAmounts({ dollarPerPlayer: 20, players: 25, games: ['cttp', 'scramble', 'skins'], cttpHoles: 4, periods: { scramble: 1 } });
+ok(sg.scramble && sg.scramble.dollar_per_player === 10, 'suggested split gives the Scramble podium $10 a player of $20 (got ' + JSON.stringify(sg.scramble) + ')');
+ok(sg.cttp && sg.cttp.dollar_per_hole * 4 <= 0.35 * 20 * 25, 'CTP stays about 30% of the pot');
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);

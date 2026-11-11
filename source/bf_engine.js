@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.50.0';
+  const ENGINE_VERSION = '1.50.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2255,7 +2255,7 @@
     const n = Math.max(1, Math.floor(Number(players) || 0));
     const has = g => (games || []).includes(g);
     const dollars = x => Math.max(1, Math.round(x));
-    const out = { players: n, pot: B * n, cttp: null, birdieball: null, birdiepay: null, fourball: null, altshot: null, hilo: null, matchplay: null, lowscore: null };
+    const out = { players: n, pot: B * n, cttp: null, birdieball: null, birdiepay: null, fourball: null, altshot: null, scramble: null, hilo: null, matchplay: null, lowscore: null };
     if (!(B > 0)) return out;
     if (has('birdieball')) out.birdieball = { dollar_per_player: dollars(0.2 * B) };
     if (has('cttp')) {
@@ -2272,7 +2272,7 @@
     //  - with neither, nothing would soak up the rest, so the mains take everything the fixed games (CTP, MiserBall) leave.
     // `periods` ({fourball: 3, lowscore: 1}) is how many pots each main is cut into: a main's total is a whole number of
     // dollars per period, so it is rounded down to a multiple of that and the spare dollars go to whichever main can take them.
-    const mains = ['fourball', 'altshot', 'hilo', 'matchplay', 'lowscore'].filter(has);
+    const mains = ['fourball', 'altshot', 'scramble', 'hilo', 'matchplay', 'lowscore'].filter(has);   // scramble is a main game: its podium takes the main share (Dev-98: the Turkey 2Man money step left it blank)
     if (mains.length) {
       const cttpPer = out.cttp ? out.cttp.dollar_per_hole * out.cttp.holes / n : 0;
       const bbTarget = out.birdieball ? out.birdieball.dollar_per_player : 0;
