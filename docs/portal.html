@@ -20379,16 +20379,28 @@ function gamesFormSplitHtml() {
   const row = (icon, name, ctl) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border)"><span style="flex:1;font-size:0.9rem;font-weight:600">${icon} ${name}</span>${ctl}</div>`;
   const per = (c, n) => n > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / n * 100) / 100 : '') : (c.dollar_per_player || '');
   // A game cut into periods reads as the host thinks of it: the periods, then $ a period, then what each player puts in all.
-  const periodRow = (icon, name, c, n, id, fn) => {
+  const periodRow = (icon, name, c, n, id, fn, subOverride) => {
     const pk = BFEngine.periodKey(c), label = (BFEngine.PERIODS[pk] || BFEngine.PERIODS.round).label, each = per(c, n), tot = Number(c.dollar_per_player) || 0;
     const money = v => '$' + (Math.round(v * 100) / 100).toFixed(Number.isInteger(Math.round(v * 100) / 100) ? 0 : 2);
-    const sub = n > 1 ? `${escapeHtml(label)} · ${n} pots` : 'one pot, whole round';
+    const sub = subOverride || (n > 1 ? `${escapeHtml(label)} · ${n} pots` : 'one pot, whole round');
     const unit = n > 1 ? 'a period' : 'per player';
     const sum = n > 1 ? `<div style="font-size:0.8rem;text-align:right;margin-top:3px;white-space:nowrap">${n} × ${money(Number(each) || 0)} = <b>${money(tot)}</b> each</div>` : '';
     return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--border)"><span style="flex:1;min-width:0"><span style="display:block;font-size:0.9rem;font-weight:600">${icon} ${name}</span><span style="display:block;font-size:0.76rem;color:var(--text-muted);margin-top:1px">${sub}</span></span><span style="display:block"><span style="display:flex;align-items:center;gap:6px;justify-content:flex-end"><span style="font-size:0.86rem">$</span><input type="number" id="${id}" min="0.01" step="0.01" value="${each || ''}" inputmode="decimal" oninput="${fn}(this.value)" style="width:78px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.78rem;color:var(--text-muted);min-width:58px">${unit}</span></span>${sum}</span></div>`;
   };
   if (sel.has('fourball')) rows.push(periodRow('🤝', 'BestBall', _gamesFormFourballConfig, fourballSegCount(_gamesFormFourballConfig), 'gw-split-fb', 'setGamesFormFourballDollarPerPlayer'));
-  GAMES_FORM_SIDE_IDS.forEach(g => { if (sel.has(g)) { const m = BFEngine.getGame(g).meta; rows.push(periodRow(m.icon, m.label, _gamesFormSide[g], periodSegCount(_gamesFormSide[g]), `gw-split-${g}`, `setGamesFormSideDollarFor.${g}`)); } });
+  GAMES_FORM_SIDE_IDS.forEach(g => { if (sel.has(g)) {
+    const m = BFEngine.getGame(g).meta;
+    if (g === 'scramble') {
+      // The podium pot, said in dollars: each player puts this in, the pot is that x the players in teams, and the places split it.
+      const sc = _gamesFormSide.scramble, each = Number(sc.dollar_per_player) || 0, tsz = Number(sc.team_size) || 2;
+      const nTeams = (sc.pairs || []).filter(pr => Array.isArray(pr) && pr.length).length, nPl = nTeams ? nTeams * tsz : Math.max(4, _gamesFormYesCount);
+      const pot = Math.round(each * nPl * 100) / 100, shares = ({ winner: [100], top2: [65, 35], top3: [50, 30, 20] })[sc.payout] || [100];
+      const ord = ['1st', '2nd', '3rd'], dol = v => '$' + (Math.floor(v) === v ? v : v.toFixed(2));
+      const places = shares.map((pc, i) => `${ord[i]} ${dol(Math.floor(pot * pc / 100))}`).join(' · ');
+      const note = pot > 0 ? `<div style="font-size:0.78rem;color:var(--text-muted);margin:-4px 0 8px;line-height:1.45">${dol(each)} × ${nPl} players = <b>${dol(pot)}</b> podium pot, split by team: ${places}${tsz > 1 ? ` (each of the ${tsz} partners gets an equal share)` : ''}</div>` : '';
+      rows.push(periodRow(m.icon, 'Scramble podium', sc, 1, 'gw-split-scramble', 'setGamesFormSideDollarFor.scramble', 'each player puts in · the places split it') + note);
+    } else rows.push(periodRow(m.icon, m.label, _gamesFormSide[g], periodSegCount(_gamesFormSide[g]), `gw-split-${g}`, `setGamesFormSideDollarFor.${g}`));
+  } });
   if (sel.has('lowscore')) rows.push(periodRow('🎯', 'Individual Low Score', _gamesFormLowscoreConfig, lowscoreSegCount(_gamesFormLowscoreConfig), 'gw-split-ls', 'setGamesFormLowscoreDollarPerPlayer'));
   if (sel.has('cttp')) rows.push(row('🎯', 'CTP', inp('gw-split-cttp', _gamesFormCttpConfig.dollar_per_hole, 'setGamesFormCttpDollarPerHole', 'a hole')));
   if (sel.has('birdieball')) rows.push(row('🐉', 'MiserBall', inp('gw-split-bb', _gamesFormBirdieballConfig.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer', 'per player')));
@@ -20660,13 +20672,7 @@ function gatheringGamesCttpSectionHtml() {
   return `
     <div class="host-form-field" id="games-form-cttp-field">
       <label>🎯 CTP</label>
-      <div class="gw-money" style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <span style="font-size:0.86rem">$</span>
-        <input type="number" id="games-form-cttp-dpp" min="0.01" step="0.01"
-          value="${_gamesFormCttpConfig.dollar_per_hole || ''}" style="width:90px"
-          oninput="setGamesFormCttpDollarPerHole(this.value)">
-        <span style="font-size:0.86rem;color:var(--text-muted)">per hole</span>
-      </div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px">Pick the holes here. The $ a hole is set on the money step.</div>
       ${!_gamesFormVenueParDataAvailable ? `
       <div style="font-size:0.74rem;color:#b8860b;background:rgba(230,168,0,0.1);border:1px solid rgba(230,168,0,0.3);
         border-radius:8px;padding:8px 10px;margin-bottom:8px">
