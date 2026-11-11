@@ -24,7 +24,7 @@ const ctx = { BFEngine: E, parseFloat, Math, Array, Set, document: { getElementB
   _gamesFormCttpConfig: { dollar_per_hole: null, hole_mode: 'all_par3', holes: [3, 8, 11, 16] }, _gamesFormBirdieballConfig: { dollar_per_player: null }, _gamesFormBirdiepayConfig: { dollar_per_birdie: null },
   gatheringGamesCttpSectionHtml: () => '', gatheringGamesBirdieballSectionHtml: () => '', gatheringGamesBirdiepaySectionHtml: () => '', gatheringGamesFourballSectionHtml: () => '', _gamesFormFourballConfig: { dollar_per_player: null }, updateGamesFormPotPreview: () => {} };
 vm.createContext(ctx);
-vm.runInContext(['periodSegCount','fourballSegCount','lowscoreSegCount','applyGamesSuggestion','gamesFormSyncCttp'].map(n => extractFn(src, n)).join('\n') + ';this.go=applyGamesSuggestion;', ctx);
+vm.runInContext(['periodSegCount','fourballSegCount','lowscoreSegCount','applyGamesSuggestion'].map(n => extractFn(src, n)).join('\n') + ';this.go=applyGamesSuggestion;', ctx);
 ctx.go(false);
 ok(ctx._gamesFormCttpConfig.dollar_per_hole === 3 && ctx._gamesFormBirdieballConfig.dollar_per_player === 2 && ctx._gamesFormBirdiepayConfig.dollar_per_birdie === 3, 'fills every ticked game');
 ok(/4 players \(fewer than 4 confirmed so far\)/.test(els['games-form-suggest-note'].innerHTML), 'states the assumed headcount');
