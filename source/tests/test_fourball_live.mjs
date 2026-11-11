@@ -40,7 +40,7 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date
   gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null,
   fetch: async url => { ctx.fetched.push(url); return { json: async () => ({ scorecards: [card('Ann', 5), card('Bob', 5), card('Cy', 7, { 1: 3 }), card('Dee', 3)] }) }; } };
 vm.createContext(ctx);
-vm.runInContext('let _fbLive = null;\n' + ['loadFourballLive','fourballLiveSectionHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.api={loadFourballLive,fourballLiveSectionHtml,get:()=>_fbLive};', ctx);
+vm.runInContext('let _fbLive = null;\n' + ['loadFourballLive','gatheringRowWithLiveTeams','fourballLiveSectionHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.api={loadFourballLive,fourballLiveSectionHtml,get:()=>_fbLive};', ctx);
 const cfg = E.gatheringConfigFromLegacy(row());
 ok(/Loading standings/.test(ctx.api.fourballLiveSectionHtml(cfg)), 'section: loading state before the first fetch');
 await ctx.api.loadFourballLive({ gatheringId: 7 });

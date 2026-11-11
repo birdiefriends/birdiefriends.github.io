@@ -10863,7 +10863,7 @@ function fourballActionsHtml(cfg) {
 }
 async function loadFourballLive(evt) {
   const gid = panelGamesGid(evt);
-  const row = gid == null ? null : _gatheringGamesIndex.get(gid);
+  const row = gid == null ? null : gatheringRowWithLiveTeams(_gatheringGamesIndex.get(gid), gid);
   const sideGid = row ? BFEngine.sideGames().find(id => (row.games || []).includes(id)) || null : null;
   if (!row || !sideGid) { _fbLive = null; return; }
   try {
@@ -17826,7 +17826,7 @@ async function openGatheringCloseSheet(gatheringId) {
     const cfgData = await cfgRes.json();
     const scData = await scRes.json();
     const bbData = await bbRes.json();
-    const config = cfgData.ok ? cfgData.config : null;
+    const config = cfgData.ok ? gatheringRowWithLiveTeams(cfgData.config, gatheringId) : null;   // pay the teams as they stand now
     if (!config) throw new Error('No games config found for this Gathering');
     if (!g && String(config.host_id || '').trim().toLowerCase() !== String(currentPlayer || '').trim().toLowerCase()) {
       throw new Error('Only the host can close this Gathering');
@@ -18071,9 +18071,25 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 // hand-checking games.includes(...)/cttp_config/birdieball_config on the raw
 // bfe_gathering_games row, as five separate call sites used to. Returns null
 // when the Gathering has no saved games config at all (ungamed).
+// Teams of N (the Turkey 2Man): the locked partner pairs ARE the Scramble teams, and they change right up to tee time. The games config
+// keeps only a snapshot of them (taken when the host saved), so every place that scores or pays reads the CURRENT teams from the
+// registrations instead. Not a team Gathering, or no registrations loaded (an aged-out Gathering): the saved teams stand.
+function gatheringRowWithLiveTeams(row, gatheringId) {
+  try {
+    if (!row || !Array.isArray(row.games) || !row.games.includes('scramble')) return row;
+    const g = gatheringData.find(x => x.gatheringId === gatheringId);
+    const size = g ? teamSizeOf(g) : 0;
+    if (!size) return row;
+    const regs = gatheringRegData.filter(r => r.gatheringId === gatheringId);
+    if (!regs.length) return row;
+    const st = teamsState(regs, size);
+    const sc = Object.assign({}, (row.game_configs && row.game_configs.scramble) || {}, { team_size: size, pairs: st.pairs.map(pr => pr.slice()), names: st.names.map(x => x || '') });
+    return Object.assign({}, row, { game_configs: Object.assign({}, row.game_configs || {}, { scramble: sc }) });
+  } catch (e) { return row; }
+}
 function gatheringRoundConfig(gatheringId) {
   const row = _gatheringGamesIndex.get(gatheringId);
-  return row ? BFEngine.gatheringConfigFromLegacy(row) : null;
+  return row ? BFEngine.gatheringConfigFromLegacy(gatheringRowWithLiveTeams(row, gatheringId)) : null;
 }
 // ── Event games (v4.9.4) ─────────────────────────────────────────────────
 // A non-Gathering event (a BF Weekend Times card — Jotform, no Gathering row)
@@ -20232,12 +20248,13 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
     // Teams of 2: the locked partner pairs are the Scramble teams, and Scramble is the game to suggest
     if (teamSizeOf(g) && !g.eventShadow) {
       if (!existing && !(preselect && preselect.length)) _gamesFormSelected.add('scramble');
-      if (!_gamesFormSide.scramble.pairs.length) {
-        const st = teamsState(gatheringRegData.filter(r => r.gatheringId === gatheringId), teamSizeOf(g));
+      const _regsG = gatheringRegData.filter(r => r.gatheringId === gatheringId);
+      if (_regsG.length) {   // a team event always starts from the CURRENT locked teams (the saved list is only a snapshot)
+        const st = teamsState(_regsG, teamSizeOf(g));
         _gamesFormSide.scramble.team_size = teamSizeOf(g);
         _gamesFormSide.scramble.pairs = st.pairs.map(pr => pr.slice());
         _gamesFormSide.scramble.names = st.names.map(x => x || '');
-        if (st.pairs.length) _gamesFormSideNote.scramble = `Teams filled in from the locked partner pairs (${st.pairs.length}).${st.unpaired ? ` ${st.unpaired} player${st.unpaired === 1 ? ' is' : 's are'} not on a team yet.` : ''}`;
+        _gamesFormSideNote.scramble = `${st.pairs.length} team${st.pairs.length === 1 ? '' : 's'} from the registrations.${st.unpaired ? ` ${st.unpaired} player${st.unpaired === 1 ? ' is' : 's are'} not on a team yet.` : ''} Teams are read from the registrations every time games are scored and paid, so changes after you save are picked up. This list is only a snapshot.`;
       }
     }
     const ls = existing && existing.game_configs && existing.game_configs.lowscore;

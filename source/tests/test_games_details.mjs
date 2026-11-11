@@ -62,7 +62,7 @@ function setup() {
     openModal: (id) => opened.push(id),
   };
   vm.createContext(ctx); ctx.eventGamesAllowed = () => false; ctx._closedGamesGids = new Set(); ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
-  const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','gatheringRoundConfig', 'evtGamesConfig', 'gamesGidFor', 'eventShadowFor', 'eventLocalDay', 'eventGamesRef', 'gatheringIsGamed', 'gatheringAddon', 'gatheringGameDetailsBody', 'gameDetailsEditHtml', 'openGameDetailsModal'];
+  const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','gatheringRoundConfig','gatheringRowWithLiveTeams', 'evtGamesConfig', 'gamesGidFor', 'eventShadowFor', 'eventLocalDay', 'eventGamesRef', 'gatheringIsGamed', 'gatheringAddon', 'gatheringGameDetailsBody', 'gameDetailsEditHtml', 'openGameDetailsModal'];
   vm.runInContext(fns.map(n => extractFn(src, n)).join('\n') + '\nvar _eventShadows = new Map();', ctx);
   return Object.assign(ctx, { opened, evt });
 }
