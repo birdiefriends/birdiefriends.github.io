@@ -6394,7 +6394,7 @@ async function groupsLoadPublished() {
   try {
     if (!currentPlayer || !Array.isArray(gatheringData)) return;
     const now = Date.now(), ids = gatheringData.filter(g => g.dt && +g.dt > now - 8 * 3600e3 && +g.dt < now + 8 * 86400e3
-      && gatheringRegData.some(r => r.gatheringId === g.gatheringId && r.player === currentPlayer && r.status === 'Yes')).map(g => g.gatheringId);
+      && (g.hostId === currentPlayer || gatheringRegData.some(r => r.gatheringId === g.gatheringId && r.player === currentPlayer && r.status !== 'No'))).map(g => g.gatheringId);
     if (!ids.length) return;
     const res = await Promise.all(ids.map(id => gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${id}`, {}, 8000).catch(() => null)));
     let any = false; ids.forEach((id, i) => { const r = res[i]; if (r && r.published) { _groupSets[id] = { published: r.published, version: r.version }; any = true; } });
@@ -6403,10 +6403,26 @@ async function groupsLoadPublished() {
 }
 function myGroupBannerHtml(evt) {
   const gs = evt && evt.gatheringId ? _groupSets[evt.gatheringId] : null; if (!gs || !gs.published || !currentPlayer) return '';
-  const info = BFEngine.BFGroups.of(gs.published, currentPlayer); if (!info) return '';
-  const mates = info.mates.length ? `With ${teamNamesText(info.mates)}` : '';
-  return `<div style="background:rgba(255,255,255,0.07);border:1.5px solid rgba(245,200,66,0.7);border-radius:10px;padding:10px 12px;margin:8px 0 4px;display:flex;gap:10px;align-items:center">
-    <span style="font-size:1.1rem">⛳</span><div style="flex:1;font-size:0.84rem;color:rgba(255,255,255,0.88);line-height:1.5"><b style="color:#F5C842">${GRP_ESC(BFEngine.BFGroups.startText(info))}</b>${mates ? `<br>${mates}` : ''}</div></div>`;
+  const info = BFEngine.BFGroups.of(gs.published, currentPlayer);
+  const mine = info ? `<div style="background:rgba(255,255,255,0.07);border:1.5px solid rgba(245,200,66,0.7);border-radius:10px;padding:10px 12px;margin:8px 0 4px;display:flex;gap:10px;align-items:center">
+    <span style="font-size:1.1rem">⛳</span><div style="flex:1;font-size:0.84rem;color:rgba(255,255,255,0.88);line-height:1.5"><b style="color:#F5C842">${GRP_ESC(BFEngine.BFGroups.startText(info))}</b>${info.mates.length ? `<br>With ${teamNamesText(info.mates)}` : ''}</div></div>` : '';
+  // The full list, the same way the BFSeries card offers "Groupings & Tee Times".
+  const all = `<button onclick="openGatheringGroupsSheet(${evt.gatheringId})" style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,0.06);border-radius:8px;margin:6px 0 2px;width:100%;border:none;cursor:pointer;font-family:inherit;text-align:left;color:rgba(255,255,255,0.9);font-size:0.83rem;font-weight:600">
+    <span style="font-size:1rem">📋</span><span>Groups &amp; ${gs.published.mode === 'tee_times' ? 'Tee Times' : gs.published.mode === 'shotgun' ? 'Starting Holes' : 'Pairings'}</span><span style="margin-left:auto;font-size:0.78rem;color:rgba(255,255,255,0.45)">›</span></button>`;
+  return mine + all;
+}
+function openGatheringGroupsSheet(gatheringId) {
+  const gs = _groupSets[gatheringId]; if (!gs || !gs.published) return;
+  const set = gs.published, G = BFEngine.BFGroups, lc = x => String(x || '').trim().toLowerCase(), me = lc(currentPlayer);
+  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  const order = set.groups.map((gr, i) => ({ gr, i })).sort((a, b) => (a.gr.start_hole || 99) - (b.gr.start_hole || 99) || String(a.gr.tee_time || '').localeCompare(String(b.gr.tee_time || '')) || a.i - b.i);
+  const html = `<div style="padding:0 16px">${order.map(({ gr, i }) => {
+    const mineG = (gr.members || []).some(m => lc(m) === me);
+    return `<div style="border:1.5px solid ${mineG ? 'var(--green)' : 'var(--border)'};background:${mineG ? 'var(--green-light)' : '#fff'};border-radius:12px;padding:10px 12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b style="flex:1">Group ${i + 1}</b><span style="font-size:0.84rem;font-weight:700;color:var(--green-dark)">${GRP_ESC(G.startText({ number: i + 1, start_hole: gr.start_hole, wave: gr.wave, tee_time: gr.tee_time }).replace(/^Group \d+( · )?/, '') || '')}</span></div>
+      <div style="font-size:0.88rem;line-height:1.6">${(gr.members || []).map(m => lc(m) === me ? `<b>${GRP_ESC(m)}</b>` : GRP_ESC(m)).join(' · ')}</div></div>`;
+  }).join('')}</div>`;
+  openHostSheet('📋 ' + GRP_ESC(g ? g.name : 'Groups'), html);
 }
 // ══════════════════════════════════════════
 // TEAMS (v4.48.0) — xMan: a Gathering with team_size 2, 3 or 4
