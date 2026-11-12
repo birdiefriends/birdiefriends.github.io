@@ -3060,10 +3060,10 @@ export default {
             const now = where(d), before = where(prev), title = (gathering && gathering.title) || (body.title ? String(body.title).slice(0, 80) : 'Your event');
             const sends = [];
             now.forEach((w, key) => {
-              const b = before.get(key); if (b && b.num === w.num && b.hole === w.hole && b.time === w.time && b.wave === w.wave) return;
+              const b = before.get(key); if (b && b.num === w.num && b.hole === w.hole && b.time === w.time && b.wave === w.wave && (prev && prev.status) === d.status) return;
               const player = ((d.groups[w.num - 1] || {}).members || []).find(n => lc(n) === key); if (!player) return;
               const start = w.hole ? `start on hole ${w.hole}${w.wave ? ' (' + w.wave + ')' : ''}` : w.time ? `tee time ${fmtT(w.time)}` : 'see the groups';
-              const msg = `${prev ? 'Updated: you are' : 'You are'} in Group ${w.num}, ${start}.${w.mates.length ? ' With ' + w.mates.join(', ') + '.' : ''}`;
+              const msg = `${d.status === 'final' ? 'FINAL: you are' : prev ? 'Updated (preliminary): you are' : 'Preliminary: you are'} in Group ${w.num}, ${start}.${w.mates.length ? ' With ' + w.mates.join(', ') + '.' : ''}`;
               sends.push(fetch('https://onesignal.com/api/v1/notifications', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
                 body: JSON.stringify({ app_id: env.OS_APP_ID, headings: { en: '⛳ ' + title + ': your group' }, contents: { en: msg }, filters: [{ field: 'tag', key: 'player_name', relation: '=', value: player }], url: 'https://birdiefriends.com/portal.html' }) }).catch(e => console.warn('Group push failed:', e)));
             });

@@ -3,7 +3,7 @@ import fs from 'fs'; import vm from 'vm'; import { JSDOM } from 'jsdom'; import 
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine();
-const FN = ['groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsDropAt', 'groupsScroller', 'groupsPtrDown', 'groupsPtrMove', 'groupsPtrUp', 'groupsMenu', 'groupsAddGroupWith', 'groupsToggleSetup', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState'];
+const FN = ['groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsDropAt', 'groupsScroller', 'groupsPtrDown', 'groupsPtrMove', 'groupsPtrUp', 'groupsMenu', 'groupsAddGroupWith', 'groupsToggleSetup', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsSetStatus', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState'];
 const dom = new JSDOM('<body><div id="host-sheet-body"></div><button id="host-sheet-back"></button></body>');
 const reqs = []; let regs, groupSet = null;
 const players = Array.from({ length: 24 }, (_, i) => 'P' + (i + 1)).concat(['Rich']);
@@ -114,7 +114,7 @@ vm.runInContext("groupsSetField(0, 'start_hole', '9')", ctx); ok(vm.runInContext
 // publish: saves the draft then publishes, no unit ids stored
 reqs.length = 0; await vm.runInContext('groupsPublish()', ctx);
 ok(reqs.length === 2 && reqs[0][1].draft && !reqs[0][1].draft.groups.some(g => g.units) && /\/publish$/.test(reqs[1][0]) && reqs[1][1].host_id === 'Brian Hager', 'publish saves the draft (no internal ids), then publishes as the host');
-ok(ctx.toasts.some(t => /25 players told/.test(t[0])), 'says how many players were told: ' + JSON.stringify(ctx.toasts.slice(-1)));
+ok(ctx.toasts.some(t => /Published \(Preliminary\)/.test(t[0])), 'toast says published as Preliminary: ' + JSON.stringify(ctx.toasts.slice(-1)));
 // reopening: saved groups come back, and a roster change is reconciled and reported
 groupSet = { draft: vm.runInContext('groupsStripUnits(_grp.set)', ctx), published: null, version: 1, published_at: '2026-11-12' };
 regs = regs.filter(r => r.player_id !== 'P24'); regs.find(r => r.player_id === 'P23').partner_id = null;
@@ -135,4 +135,12 @@ const sh = sheet.h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 ok(/Group 1.*start on hole 12 \(A\)|Group 1.*hole 12/.test(sh) && /Group 2.*9:20 AM/.test(sh) && sheet.h.indexOf('Group 1') < sheet.h.indexOf('Group 2'), 'the sheet lists every group with its start and members: ' + sh);
 ok(/<b>Ann<\/b>/.test(sheet.h), 'and marks the viewer');
 ctx.currentPlayer = 'Zed'; ok(!/start on hole/.test(vm.runInContext('myGroupBannerHtml({ gatheringId: 104 })', ctx)) && /Starting Holes/.test(vm.runInContext('myGroupBannerHtml({ gatheringId: 104 })', ctx)), 'someone not in a group sees no personal line but still sees the list');
+// Preliminary / Final: defaults to Preliminary, host can flip it, it is saved in the document, players see the tag
+ok(vm.runInContext('_grp.status', ctx) === 'preliminary', 'a group set defaults to Preliminary');
+vm.runInContext("groupsSetStatus('final')", ctx); reqs.length = 0; await vm.runInContext('groupsSave(true)', ctx);
+ok(reqs[0][1].draft.status === 'final', 'Final is stored in the saved document');
+ok(/Preliminary<\/button>/.test(ctx.document.getElementById('host-sheet-body').innerHTML) && !/tell players/i.test(ctx.document.getElementById('host-sheet-body').innerHTML), 'the screen has a Preliminary/Final switch and no "tell players" wording');
+vm.runInContext("_groupSets[104] = { published: { mode: 'shotgun', status: 'preliminary', groups: [{ members: ['Ann'], start_hole: 3 }] }, version: 1 }", ctx);
+ctx.currentPlayer = 'Ann'; ok(/\(Preliminary\)/.test(vm.runInContext("myGroupBannerHtml({gatheringId:104})", ctx)), 'players see (Preliminary) on their start');
+vm.runInContext("_groupSets[104].published.status = 'final'", ctx); ok(!/Preliminary/.test(vm.runInContext("myGroupBannerHtml({gatheringId:104})", ctx)), 'and it disappears once Final');
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);

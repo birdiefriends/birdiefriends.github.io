@@ -33,11 +33,17 @@ ok(r.json.published && r.json.published.groups[1].start_hole === 7 && r.json.ver
 pushes.length = 0; const d2 = JSON.parse(JSON.stringify(draft)); d2.groups[1].start_hole = 10;
 await call('POST', '/group-sets/gathering/104', { host_id: 'Brian Hager', draft: d2 });
 r = await call('POST', '/group-sets/gathering/104/publish', { host_id: 'Brian Hager' });
-ok(r.json.version === 2 && r.json.notified === 2 && pushes.every(p => /Updated: you are in Group 2, start on hole 10/.test(p.contents.en)), 'only the two whose hole changed are told, as an update: ' + JSON.stringify(r.json));
+ok(r.json.version === 2 && r.json.notified === 2 && pushes.every(p => /Updated \(preliminary\): you are in Group 2, start on hole 10/.test(p.contents.en)), 'only the two whose hole changed are told, as an update: ' + JSON.stringify(r.json));
 r = await call('POST', '/group-sets/gathering/104/publish', { host_id: 'Brian Hager', notify: false });
 ok(r.json.notified === 0, 'notify:false stays quiet');
 r = await call('POST', '/group-sets/gathering/104', { host_id: 'Brian Hager', draft: { nope: 1 } });
 ok(r.status === 400, 'a draft without groups is refused');
 r = await call('POST', '/group-sets/series/9', { pin: '7797', draft });
 ok(r.status === 200, 'the commissioner can save for any event type (series here)');
+
+// Preliminary -> Final tells everyone again, as FINAL
+pushes.length = 0; const d3 = JSON.parse(JSON.stringify(d2)); d3.status = 'final';
+await call('POST', '/group-sets/gathering/104', { host_id: 'Brian Hager', draft: d3 });
+r = await call('POST', '/group-sets/gathering/104/publish', { host_id: 'Brian Hager' });
+ok(r.json.notified > 2 && pushes.every(p => /^FINAL: you are in Group/.test(p.contents.en)), 'marking it Final tells every player, as FINAL: ' + JSON.stringify(r.json));
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

@@ -6269,7 +6269,7 @@ async function openGatheringGroups(gatheringId) {
   const base = saved && (saved.draft || saved.published);
   const holes = Number(g.holes) === 9 ? 9 : 18;
   _grp = { gid: gatheringId, g, units, set: null, sel: null, dirty: false, version: (saved && saved.version) || 0, publishedAt: (saved && saved.published_at) || null, notes: [],
-    opts: { mode: (base && base.mode) || 'shotgun', group_size: (base && base.group_size) || 4, spread: (base && base.rules && base.rules.spread) || 'order', holes, first_tee: (base && base.rules && base.rules.first_tee) || '08:00', interval: (base && base.rules && base.rules.interval) || 10, start_holes: ((base && base.rules && base.rules.start_holes) || []).join(', '), individual: false }, setupOpen: !base };
+    status: (saved && saved.published && saved.published.status) || (base && base.status) || 'preliminary', opts: { mode: (base && base.mode) || 'shotgun', group_size: (base && base.group_size) || 4, spread: (base && base.rules && base.rules.spread) || 'order', holes, first_tee: (base && base.rules && base.rules.first_tee) || '08:00', interval: (base && base.rules && base.rules.interval) || 10, start_holes: ((base && base.rules && base.rules.start_holes) || []).join(', '), individual: false }, setupOpen: !base };
   if (base) {   // the roster moves right up to the tee: bring the saved groups up to date and say what changed
     const rc = BFEngine.BFGroups.reconcile(base, units);
     _grp.set = rc.set; if (rc.added.length) _grp.notes.push('Added: ' + rc.added.join(', ')); if (rc.removed.length) _grp.notes.push('No longer on the list: ' + rc.removed.join(', '));
@@ -6462,14 +6462,17 @@ function groupsRender() {
     <div id="grp-warn" style="margin:6px 0 10px">${groupsWarnHtml()}</div>
     ${s ? `<div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--border);margin:0 -2px;padding:8px 2px calc(8px + env(safe-area-inset-bottom,0px));z-index:5">
       <div id="grp-dirty" style="font-size:0.74rem;color:var(--text-muted);text-align:center;min-height:1em;margin-bottom:4px">${_grp.dirty ? 'Unsaved changes' : ''}</div>
-      <div style="display:flex;gap:8px"><button type="button" class="btn btn-secondary" style="flex:1;min-height:48px" onclick="groupsSave()">💾 Save draft</button><button type="button" class="host-cta-btn" id="grp-publish" style="flex:2;margin:0;min-height:48px" onclick="groupsPublish()">📣 Publish &amp; tell players</button></div></div>` : ''}`;
+      <div role="group" aria-label="Status" style="display:flex;gap:6px;margin-bottom:8px">${[['preliminary','Preliminary'],['final','Final']].map(([k, l]) => `<button type="button" onclick="groupsSetStatus('${k}')" aria-pressed="${_grp.status === k}" style="flex:1;min-height:40px;border-radius:10px;font-family:inherit;font-size:0.88rem;cursor:pointer;${_grp.status === k ? 'background:#085041;color:#fff;border:2px solid #085041;font-weight:800' : 'background:#f1f3f2;color:#555;border:2px solid transparent;font-weight:600'}">${_grp.status === k ? '✓ ' : ''}${l}</button>`).join('')}</div>
+      <div style="display:flex;gap:8px"><button type="button" class="btn btn-secondary" style="flex:1;min-height:48px" onclick="groupsSave()">💾 Save draft</button><button type="button" class="host-cta-btn" id="grp-publish" style="flex:2;margin:0;min-height:48px" onclick="groupsPublish()">Publish</button></div></div>` : ''}`;
 }
+function groupsSetStatus(v) { if (!_grp) return; _grp.status = v === 'final' ? 'final' : 'preliminary'; _grp.dirty = true; groupsRender(); }
 function groupsSetOptPlace(v) { _grp.opts.individual = v === 'players'; _grp.sel = null; groupsRender(); }
 function groupsSetOptMode(v) { groupsSetOpt('mode', v); }
 function groupsSetOptSize(v) { groupsSetOpt('group_size', v); }
 function groupsSetOptSpread(v) { groupsSetOpt('spread', v); }
 async function groupsSave(quiet) {
   if (!_grp || !_grp.set) return false;
+  _grp.set.status = _grp.status === 'final' ? 'final' : 'preliminary';
   _grp.set.mode = _grp.opts.mode; _grp.set.group_size = _grp.opts.group_size; _grp.set.holes = _grp.opts.holes;
   _grp.set.rules = Object.assign({}, _grp.set.rules || {}, { spread: _grp.opts.spread }, _grp.opts.mode === 'tee_times' ? { first_tee: _grp.opts.first_tee, interval: Number(_grp.opts.interval) || 10 } : {});
   const sh = groupsOptsForEngine().start_holes; if (sh) _grp.set.rules.start_holes = sh; else delete _grp.set.rules.start_holes;
@@ -6484,14 +6487,14 @@ async function groupsPublish() {
   if (!_grp || !_grp.set) return;
   const w = groupsWarnings().filter(x => ['unplaced', 'over', 'split', 'no_hole', 'no_time', 'duplicate'].includes(x.code));
   const n = _grp.set.groups.reduce((t, g) => t + (g.members || []).length, 0);
-  if (!confirm((w.length ? 'Some things still look off:\n\n' + w.map(x => '• ' + x.msg).join('\n') + '\n\n' : '') + `Publish and send ${n} players their group${_grp.publishedAt ? ' (only players whose start changed are told again)' : ''}?`)) return;
+  if (!confirm((w.length ? 'Some things still look off:\n\n' + w.map(x => '• ' + x.msg).join('\n') + '\n\n' : '') + `Publish these groups as ${_grp.status === 'final' ? 'FINAL' : 'Preliminary'} for ${n} players?`)) return;
   const btn = document.getElementById('grp-publish'); if (btn) btn.disabled = true;
   if (!(await groupsSave(true))) { if (btn) btn.disabled = false; return; }
   try {
     const r = await gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${_grp.gid}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host_id: currentPlayer, title: _grp.g.name }) }, 15000);
     if (!r || !r.ok) throw new Error((r && r.error) || 'the server did not accept it');
     _grp.version = r.version || _grp.version + 1; _grp.publishedAt = new Date().toISOString(); _groupSets[_grp.gid] = { published: groupsStripUnits(_grp.set), version: _grp.version };
-    showToast(r.notified ? `Published. ${r.notified} player${r.notified === 1 ? '' : 's'} told their start.` : 'Published. Nobody needed a new message.');
+    showToast(`Published (${_grp.status === 'final' ? 'Final' : 'Preliminary'}). Players see it on the event card.`);
     groupsRender();
   } catch (e) { showToast('Could not publish: ' + (e.message || e), true); if (btn) btn.disabled = false; }
 }
@@ -6511,10 +6514,10 @@ function myGroupBannerHtml(evt) {
   const gs = evt && evt.gatheringId ? _groupSets[evt.gatheringId] : null; if (!gs || !gs.published || !currentPlayer) return '';
   const info = BFEngine.BFGroups.of(gs.published, currentPlayer);
   const mine = info ? `<div style="background:rgba(255,255,255,0.07);border:1.5px solid rgba(245,200,66,0.7);border-radius:10px;padding:10px 12px;margin:8px 0 4px;display:flex;gap:10px;align-items:center">
-    <span style="font-size:1.1rem">⛳</span><div style="flex:1;font-size:0.84rem;color:rgba(255,255,255,0.88);line-height:1.5"><b style="color:#F5C842">${GRP_ESC(BFEngine.BFGroups.startText(info))}</b>${info.mates.length ? `<br>With ${teamNamesText(info.mates)}` : ''}</div></div>` : '';
+    <span style="font-size:1.1rem">⛳</span><div style="flex:1;font-size:0.84rem;color:rgba(255,255,255,0.88);line-height:1.5"><b style="color:#F5C842">${GRP_ESC(BFEngine.BFGroups.startText(info))}</b>${gs.published.status === 'final' ? '' : ' <span style="font-size:0.72rem;opacity:0.7">(Preliminary)</span>'}${info.mates.length ? `<br>With ${teamNamesText(info.mates)}` : ''}</div></div>` : '';
   // The full list, the same way the BFSeries card offers "Groupings & Tee Times".
   const all = `<button onclick="openGatheringGroupsSheet(${evt.gatheringId})" style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,0.06);border-radius:8px;margin:6px 0 2px;width:100%;border:none;cursor:pointer;font-family:inherit;text-align:left;color:rgba(255,255,255,0.9);font-size:0.83rem;font-weight:600">
-    <span style="font-size:1rem">📋</span><span>Groups &amp; ${gs.published.mode === 'tee_times' ? 'Tee Times' : gs.published.mode === 'shotgun' ? 'Starting Holes' : 'Pairings'}</span><span style="margin-left:auto;font-size:0.78rem;color:rgba(255,255,255,0.45)">›</span></button>`;
+    <span style="font-size:1rem">📋</span><span>Groups &amp; ${gs.published.mode === 'tee_times' ? 'Tee Times' : gs.published.mode === 'shotgun' ? 'Starting Holes' : 'Pairings'}${gs.published.status === 'final' ? '' : ' <span style="font-size:0.72rem;opacity:0.6;font-weight:400">(Preliminary)</span>'}</span><span style="margin-left:auto;font-size:0.78rem;color:rgba(255,255,255,0.45)">›</span></button>`;
   return mine + all;
 }
 function openGatheringGroupsSheet(gatheringId) {
@@ -6528,7 +6531,7 @@ function openGatheringGroupsSheet(gatheringId) {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b style="flex:1">Group ${i + 1}</b><span style="font-size:0.84rem;font-weight:700;color:var(--green-dark)">${GRP_ESC(G.startText({ number: i + 1, start_hole: gr.start_hole, wave: gr.wave, tee_time: gr.tee_time }).replace(/^Group \d+( · )?/, '') || '')}</span></div>
       <div style="font-size:0.88rem;line-height:1.6">${(gr.members || []).map(m => lc(m) === me ? `<b>${GRP_ESC(m)}</b>` : GRP_ESC(m)).join(' · ')}</div></div>`;
   }).join('')}</div>`;
-  openHostSheet('📋 ' + GRP_ESC(g ? g.name : 'Groups'), html);
+  openHostSheet('📋 ' + GRP_ESC(g ? g.name : 'Groups') + (set.status === 'final' ? '' : ' (Preliminary)'), html);
 }
 // ══════════════════════════════════════════
 // TEAMS (v4.48.0) — xMan: a Gathering with team_size 2, 3 or 4
@@ -6730,7 +6733,9 @@ function teamChipsHtml(evt, players) {
   st.open.forEach(n => out.push(chip(`${escapeHtml(n)} <span style="opacity:0.7">· needs a ${N === 2 ? 'partner' : 'team'}</span>`, 'background:transparent;border:1px dashed rgba(245,200,66,0.7)')));
   players.filter(p => p.status === 'Sub').forEach(p => out.push(chip(`${escapeHtml(p.player)} (Sub)`, 'opacity:0.8')));
   players.filter(p => isOpenSpotName(p.player)).forEach(p => out.push(chip(`🪑 ${escapeHtml(p.player)}`, 'background:transparent;border:1px dashed rgba(255,255,255,0.4);opacity:0.75')));
-  return `<div class="player-chips">${out.join('')}</div>`;
+  const isHost = evt && evt.gatheringId && (evt.hostId === currentPlayer || (typeof isCommissioner === 'function' && isCommissioner()));
+  const manage = isHost ? `<button type="button" onclick="openHostTeamsSheet(${evt.gatheringId})" style="margin-top:8px;background:transparent;border:1px solid rgba(255,255,255,0.35);color:rgba(255,255,255,0.85);border-radius:8px;padding:7px 12px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:inherit">🤝 Manage teams (host)</button>` : '';
+  return `<div class="player-chips">${out.join('')}</div>${manage}`;
 }
 // ── Host Panel: who is teamed, who still needs a team, and a way to team or unteam players by hand ──
 function hostTeamsHtml(g) {
@@ -6745,6 +6750,11 @@ function hostTeamsHtml(g) {
     ${teamRows}
     ${free >= N ? `<button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="openHostPairSheet(${g.gatheringId})">🤝 ${N === 2 ? 'Pair players' : 'Make a team'}</button>` : (free >= 1 ? `<div style="font-size:0.76rem;color:var(--text-muted)">${N === 2 ? 'One player is left without a partner.' : free + ' player' + (free === 1 ? ' is' : 's are') + ' left without a full team.'}</div>` : '')}
   </div>`;
+}
+// Host-only: rename, break up or pair teams. It lives on the event card's player list now, not on the Gathering config.
+function openHostTeamsSheet(gatheringId) {
+  const g = gatheringData.find(x => x.gatheringId === gatheringId); if (!g) return;
+  openHostSheet('🤝 Teams', `<div style="padding:0 16px 8px">${hostTeamsHtml(g) || '<div style="font-size:0.85rem;color:var(--text-muted)">This Gathering has no teams.</div>'}</div>`);
 }
 let _hostPair = null;   // { gatheringId, size, names:[free Yes players], picked:[index] }
 function openHostPairSheet(gatheringId) {
@@ -19736,7 +19746,6 @@ function renderHostPanelList() {
           ${detailHtml}
         </div>
         ${hostSpotsHtml(g, true)}
-        ${hostTeamsHtml(g)}
         ${g.teeTimeStatus === 'suggested' ? `
         <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:8px;
           background:rgba(230,168,0,0.1);border-color:rgba(230,168,0,0.4);color:#b8860b;font-weight:700"
@@ -19895,7 +19904,6 @@ function renderHostArchiveList() {
           ${detailHtml}
         </div>
         ${hostSpotsHtml(g, true)}
-        ${hostTeamsHtml(g)}
         <div class="host-gathering-actions">
           <button class="btn btn-primary btn-sm"
             onclick="hostAddPlayer(${g.gatheringId})">➕ Add a player</button>
