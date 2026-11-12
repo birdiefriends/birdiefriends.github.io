@@ -1279,6 +1279,110 @@ async function ensureRosterSubCol(db) {
   try { await db.prepare(`ALTER TABLE bfe_event_roster ADD COLUMN is_sub INTEGER NOT NULL DEFAULT 0`).run(); } catch (e) { /* already added */ }
   _rosterSubCol = true;
 }
+// ── Automatic birdie / eagle / albatross alerts (portal v4.57.0) ──────────────────────────────────────────────────────────
+// Detected HERE, on the server, from the scores the phones save — not announced by a phone. The old BFCup way (the Worker
+// flagged the birdie and the scorer's phone then sent the push) lost the announcement whenever that phone dropped signal or
+// locked between the two steps. Now every score save runs one idempotent scan of the whole round: any birdie-or-better
+// that has no row in bfe_score_alerts gets one, and is sent; a send that fails stays 'failed' and is retried on the next save
+// from anyone. The feed entry is always written (push is the extra), so the announcement queue is never silently empty, and
+// every attempt is on record: GET /bfe/score-alerts?event=gathering:<id> shows what was sent, what failed and why.
+// Rounds: a Gathering's own round (event key 'gathering:<id>') whose games include a Scramble, Skins or Birdie Payouts.
+// Unit: a scramble team (once per hole, whoever's phone saved it), otherwise the player. Gross, from the marks the phone
+// computes against the course pars (no pars on the phone = no marks = nothing to announce; the Live Panel says so).
+const ALERT_PUSH_URL = 'https://birdiefriends-push.birdiefriends01.workers.dev/';
+const ALERT_APP_ID = '88022359-a979-4814-8a52-6f1df9884be2';
+const ALERT_KINDS = { birdie: { label: 'Birdie', emoji: '🐦', rank: 1 }, eagle: { label: 'Eagle', emoji: '🦅', rank: 2 }, albatross: { label: 'Albatross', emoji: '🦄', rank: 3 } };
+async function ensureScoreAlertsTable(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bfe_score_alerts (
+    event_name TEXT NOT NULL, hole INTEGER NOT NULL, unit_key TEXT NOT NULL, label TEXT, kind TEXT,
+    status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, pushed INTEGER, error TEXT,
+    created_at TEXT, sent_at TEXT, PRIMARY KEY (event_name, hole, unit_key))`).run();
+}
+async function sendScoreAlert(env, a, audience, title) {
+  const heading = `${a.k.emoji} #${a.hole} — ${a.label}`;
+  const body = a.upgraded ? `${a.k.label} (corrected up from a lower score)` : `${a.k.label}`;
+  const meta = { hole: a.hole, player: a.label, scoreType: a.k.label };
+  const post = async (payload) => { const r = await globalThis.fetch(ALERT_PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); let j = null; try { j = await r.json(); } catch (e) {} return { status: r.status, json: j }; };
+  const filters = []; audience.forEach((n, i) => { if (i) filters.push({ operator: 'OR' }); filters.push({ field: 'tag', key: 'player_name', relation: '=', value: n }); });
+  let pushed = null, err = null, wroteFeed = false;
+  try {
+    const r = await post({ app_id: ALERT_APP_ID, headings: { en: heading }, contents: { en: body + (title ? ' · ' + title : '') }, filters, url: 'https://birdiefriends.com/portal.html', bf_type: 'birdie', bf_meta: meta });
+    if (r.status === 200 && r.json && r.json.id) { wroteFeed = true; pushed = typeof r.json.recipients === 'number' ? r.json.recipients : null; }
+    else err = 'push ' + r.status + ' ' + JSON.stringify(r.json || {}).slice(0, 160);
+  } catch (e) { err = 'push error ' + String(e.message || e).slice(0, 120); }
+  if (!wroteFeed) {   // no push went out (nobody subscribed, or OneSignal said no): the announcement still goes in the feed
+    try { const r = await post({ feed_only: true, headings: { en: heading }, contents: { en: body }, bf_type: 'birdie', bf_meta: meta }); if (r.status === 200 && r.json && r.json.ok) wroteFeed = true; else err = (err ? err + ' | ' : '') + 'feed ' + r.status; }
+    catch (e) { err = (err ? err + ' | ' : '') + 'feed error ' + String(e.message || e).slice(0, 80); }
+  }
+  return { ok: wroteFeed, pushed, error: err };
+}
+// Current teams of N from a Gathering's registrations (main Worker): a team is locked when every member is a Yes and each names
+// exactly the others (the same rule as the portal's teamsState). Everyone else who is a Yes plays as a unit of one.
+async function liveTeamsFor(gid, N) {
+  try {
+    const r = await globalThis.fetch(ALERT_PUSH_URL + 'gatherings/' + gid + '/registrations'); if (!r.ok) return null;
+    const rows = ((await r.json()) || {}).registrations; if (!Array.isArray(rows) || !rows.length) return null;
+    const lc = x => String(x || '').trim().toLowerCase(), by = new Map(rows.map(x => [lc(x.player_id), x]));
+    const yes = rows.filter(x => x.player_id && lc(x.status) === 'yes'), picks = x => String(x.partner_id || '').split('|').map(t => t.trim()).filter(t => t && lc(t) !== lc(x.player_id));
+    const seen = new Set(), units = [];
+    yes.forEach(x => {
+      if (seen.has(lc(x.player_id))) return;
+      const ps = picks(x); const mem = [x].concat(ps.map(n => by.get(lc(n))));
+      const locked = N >= 2 && ps.length === N - 1 && mem.every(y => y && lc(y.status) === 'yes') && mem.every(y => { const others = mem.filter(z => z !== y).map(z => lc(z.player_id)).sort().join('|'); return picks(y).map(lc).sort().join('|') === others; });
+      const members = locked ? mem.map(y => y.player_id) : [x.player_id]; members.forEach(n => seen.add(lc(n)));
+      const nm = locked ? (mem.map(y => y.team_name).find(Boolean) || null) : null;
+      units.push({ key: members.map(lc).sort().join('|'), label: nm || members.join(' & '), members });
+    });
+    return { units, roster: yes.map(x => x.player_id) };
+  } catch (e) { return null; }
+}
+async function scanScoreAlerts(env, eventName) {
+  const m = /^gathering:(\d+)$/.exec(String(eventName || '')); if (!m) return { skipped: 'not a gathering round' };
+  const cfgRow = await env.DB.prepare(`SELECT games, game_configs, gathering_name, status FROM bfe_gathering_games WHERE gathering_id = ?`).bind(m[1]).first();
+  if (!cfgRow) return { skipped: 'no games config' };
+  const parse = t => { try { return t ? JSON.parse(t) : null; } catch (e) { return null; } };
+  const games = parse(cfgRow.games) || [], gcfg = parse(cfgRow.game_configs) || {};
+  if (!games.some(g => g === 'scramble' || g === 'skins' || g === 'birdiepay')) return { skipped: 'no scramble, skins or birdie payouts' };
+  if (gcfg.birdie_alerts === false) return { skipped: 'alerts switched off' };
+  await ensureScoreAlertsTable(env);
+  const { results } = await env.DB.prepare(`SELECT player, marks FROM bfe_scorecards WHERE event_name = ? AND input_type = 'strokes'`).bind(eventName).all();
+  const lc = x => String(x || '').trim().toLowerCase(), by = new Map(); (results || []).forEach(r => by.set(lc(r.player), { player: r.player, marks: parse(r.marks) }));
+  const scr = gcfg.scramble;
+  let units = null, roster = [];
+  if (games.includes('scramble')) {
+    // The teams in the saved games config are only the snapshot from when the host saved; the CURRENT teams (and names) are the
+    // locked partner picks on the registrations, which the main Worker holds. Use those; the snapshot is the fallback.
+    const live = await liveTeamsFor(m[1], Math.trunc(Number(scr && scr.team_size)) || 2);
+    if (live) { units = live.units; roster = live.roster; }
+    else if (scr && Array.isArray(scr.pairs)) units = scr.pairs.filter(t => Array.isArray(t) && t.length).map((t, i) => ({ key: t.map(lc).sort().join('|'), label: (scr.names && scr.names[i]) || t.join(' & '), members: t }));
+  }
+  if (!units) units = (results || []).map(r => ({ key: lc(r.player), label: r.player, members: [r.player] }));
+  const audience = [...new Set(units.flatMap(u => u.members).concat(roster, (results || []).map(r => r.player)))];
+  const sent = [], failed = [];
+  for (const u of units) {
+    const src = u.members.map(n => by.get(lc(n))).find(r => r && Array.isArray(r.marks) && r.marks.length === 18);
+    if (!src) continue;
+    for (let h = 1; h <= 18; h++) {
+      const k = ALERT_KINDS[src.marks[h - 1]]; if (!k) continue;
+      const ex = await env.DB.prepare(`SELECT kind, status, attempts, created_at FROM bfe_score_alerts WHERE event_name = ? AND hole = ? AND unit_key = ?`).bind(eventName, h, u.key).first();
+      let upgraded = false;
+      if (!ex) {
+        const ins = await env.DB.prepare(`INSERT OR IGNORE INTO bfe_score_alerts (event_name, hole, unit_key, label, kind, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', datetime('now'))`).bind(eventName, h, u.key, u.label, k.label).run();
+        if (!(ins.meta && ins.meta.changes)) continue;          // another save claimed it first
+      } else if (ex.status === 'sent' && (ALERT_KINDS[String(ex.kind).toLowerCase()] || { rank: 9 }).rank < k.rank) {
+        upgraded = true;                                         // a correction made it better (birdie -> eagle): say so once
+        await env.DB.prepare(`UPDATE bfe_score_alerts SET kind = ?, status = 'pending', attempts = 0, error = NULL WHERE event_name = ? AND hole = ? AND unit_key = ?`).bind(k.label, eventName, h, u.key).run();
+      } else if (ex.status === 'failed' && ex.attempts < 6) { /* retry below */ }
+      else continue;
+      const r = await sendScoreAlert(env, { hole: h, label: u.label, k, upgraded }, audience, cfgRow.gathering_name);
+      await env.DB.prepare(`UPDATE bfe_score_alerts SET status = ?, attempts = attempts + 1, pushed = ?, error = ?, sent_at = CASE WHEN ? = 'sent' THEN datetime('now') ELSE sent_at END WHERE event_name = ? AND hole = ? AND unit_key = ?`)
+        .bind(r.ok ? 'sent' : 'failed', r.pushed, r.error, r.ok ? 'sent' : 'failed', eventName, h, u.key).run();
+      (r.ok ? sent : failed).push({ hole: h, label: u.label, kind: k.label });
+    }
+  }
+  return { sent, failed };
+}
+
 export default {
   async fetch(request, env, ctx) {
 
@@ -1338,10 +1442,25 @@ export default {
                wbStatus, wbStatus === 'lost' ? (wb_hole ?? null) : null, wbStatus === 'lost' ? (wb_stroke ?? null) : null,
                inputType, roundKey)
           .run();
+        // Birdie / Eagle / Albatross alerts: scanned on the server after every Gathering score save (see scanScoreAlerts).
+        if (inputType === 'strokes' && /^gathering:\d+$/.test(event_name)) {
+          const scan = scanScoreAlerts(env, event_name).catch(e => console.warn('Score alert scan failed:', e && e.message));
+          if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(scan); else await scan;
+        }
         return new Response(JSON.stringify({ ok: true, id: result.meta.last_row_id }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error saving scorecard: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
+    }
+
+    // GET /bfe/score-alerts?event=gathering:<id> — what the automatic alerts did for a round: sent, failed (and why), when.
+    if (request.method === 'GET' && url.pathname === '/bfe/score-alerts') {
+      try {
+        await ensureScoreAlertsTable(env);
+        const ev = url.searchParams.get('event') || '';
+        const { results } = await env.DB.prepare(`SELECT hole, label, kind, status, attempts, pushed, error, created_at, sent_at FROM bfe_score_alerts WHERE event_name = ? ORDER BY created_at, hole`).bind(ev).all();
+        return new Response(JSON.stringify({ ok: true, event: ev, alerts: results || [] }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) { return new Response(JSON.stringify({ error: String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }); }
     }
 
     // GET /scorecards?event=<key> or ?player=<name> — same filter shape as

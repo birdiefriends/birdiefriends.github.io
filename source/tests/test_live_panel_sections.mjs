@@ -23,7 +23,10 @@ eq(sec(['skins']), { birdieAlert: true, cttp: false, birdieball: false, fourball
 eq(sec(['birdiepay']), { birdieAlert: true, cttp: false, birdieball: false, fourball: false }, 'Birdie Payouts: Birdie Alert on');
 eq(sec(['cttp']), { birdieAlert: false, cttp: true, birdieball: false, fourball: false }, 'CTP only: CTP section, no Birdie Alert');
 eq(sec(['birdieball']), { birdieAlert: false, cttp: false, birdieball: true, fourball: false }, 'MiserBall only');
-eq(sec(['skins', 'cttp', 'birdieball', 'birdiepay', 'fourball']), { birdieAlert: true, cttp: true, birdieball: true, fourball: true }, 'everything on: everything shows');
+eq(sec(['skins', 'cttp', 'birdieball', 'birdiepay']), { birdieAlert: true, cttp: true, birdieball: true, fourball: false }, 'everything on but live scoring: everything shows');
+eq(sec(['skins', 'cttp', 'birdieball', 'birdiepay', 'fourball']), { birdieAlert: false, cttp: true, birdieball: true, fourball: true }, 'with live scoring the Worker announces birdies, so the manual Birdie Alert goes away');
+eq(sec(['skins', 'fourball']).birdieAlert, false, 'Skins + live scoring: no manual Birdie Alert');
+eq(sec(['skins']).birdieAlert, true, 'Skins with nobody keeping live score: the manual Birdie Alert stays');
 // the render uses the helper and still gates by it
 ok(/const _lps = livePanelSections\(_liveConfig, _panelGid\);/.test(src), 'buildLivePanel resolves sections through the helper');
 ok(/showBirdieAlertSection \? liveSectionHtml\('birdie'/.test(src), 'Birdie Alert section is gated');

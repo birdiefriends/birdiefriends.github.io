@@ -9523,7 +9523,10 @@ function bbStrokeGridHtml(selectedStroke, setFnName) {
 function livePanelSections(config, panelGid) {
   if (panelGid == null || !config) return { birdieAlert: true, cttp: true, birdieball: false, fourball: false };
   const has = id => !!gatheringAddon(config, id);
-  return { birdieAlert: has('skins') || has('birdiepay'), cttp: has('cttp'), birdieball: has('birdieball'), fourball: BFEngine.sideGames().some(has) };
+  // Skins / Birdie Payouts need the Birdie Alert, but only by hand when nobody is keeping live score: with Live Score on (a side game
+  // like BestBall or a Scramble) the Worker announces every birdie-or-better itself from the saved scores, so the button goes away.
+  const scoring = BFEngine.sideGames().some(has);
+  return { birdieAlert: (has('skins') || has('birdiepay')) && !scoring, cttp: has('cttp'), birdieball: has('birdieball'), fourball: scoring };
 }
 function buildLivePanel(evt) {
   // 2Man (scramble_pair) rounds pick from that round's saved teams instead
@@ -11054,6 +11057,8 @@ function liveScoreModeHtml() {
     : _sk.sel >= 0 ? `Tap ${escapeHtml(asMode ? (units.find(u => u.k === _sk.sel) || units[0]).label : first(g.players[_sk.sel]))}'s score. It saves and moves to the next ${asMode ? 'team' : 'name'}.`
     : 'Tap a ' + (asMode ? 'team' : 'name') + ' to enter a score.';
   const status = _sk.err ? 'Not saved yet, will retry' : _sk.pending ? 'Saving…' : _sk.savedAt ? 'Saved' : '';
+  const alertsNote = (!pars && (gatheringAddon(_sk.config, 'skins') || gatheringAddon(_sk.config, 'birdiepay') || gatheringAddon(_sk.config, 'scramble')))
+    ? `<div style="margin-top:8px;font-size:0.76rem;color:#ffd27a;line-height:1.4">No par data for this course, so birdies can't be announced automatically. Host: add the course pars in Venues.</div>` : '';
   const statusCol = _sk.err ? '#e0b44c' : '#5DCAA5';
   const chips = gs.length > 1 ? `<div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">${gs.map((x, i) => `<button type="button" onclick="skSetGroup(${i})" style="min-height:36px;padding:0 12px;border-radius:18px;font-family:inherit;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;${i === _sk.groupIdx ? 'background:#5DCAA5;color:#04342a;border:0' : 'background:transparent;color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.3)'}">Group ${x.n}${x.start_hole ? ' · #' + x.start_hole : ''}</button>`).join('')}</div>` : '';
   return `${liveSideChooserHtml()}${chips}
@@ -11065,7 +11070,7 @@ function liveScoreModeHtml() {
     </div>
     ${rows}
     ${nextStrokes}
-    <div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:34px">${hint}</div>`;
+    <div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:34px">${hint}</div>${alertsNote}`;
 }
 // ── Live Actions: the BestBall game view (Dev-93) ─────────────────────────────────────────
 // Two jobs kept apart: (1) how the game stands, (2) each player's card, drilled into from the game view.
