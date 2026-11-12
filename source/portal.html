@@ -9858,7 +9858,7 @@ function buildLivePanel(evt) {
     </div>`;
   }).join('');
   const ctpPlayerEsc = ctpPlayerSel.replace(/'/g, "\\'");
-  // With live scoring the claim happens on the hole (Hole by Hole, step 2), so the Leaderboard shows leaders only.
+  // With live scoring the claim happens on the hole (Scorekeeping, step 2), so the Leaderboard shows leaders only.
   const ctpSection = _skOn ? `
     <div style="background:rgba(0,0,0,0.15);border-radius:10px;padding:4px 12px">${ctpLeaderboard}</div>` : `
     <button onclick="openPlayerSheet(window._liveEvtIndividualPlayers,'${ctpPlayerEsc}',function(n){_ctpPlayer=n;renderLiveBanner()},undefined,window._liveAddOpts)"
@@ -9919,7 +9919,7 @@ function buildLivePanel(evt) {
           <span>🐉💔</span><span>${a.player_name} — hole #${a.lost_hole}</span>
         </div>`).join('')}
       </div>` : '';
-    // With live scoring the lost-ball alert and the end-of-round check are steps in Hole by Hole, so the Leaderboard only lists who lost it.
+    // With live scoring the lost-ball alert and the end-of-round check are steps in Scorekeeping, so the Leaderboard only lists who lost it.
     bbSection = _skOn ? (bbBoard || `<div style="font-size:0.82rem;color:rgba(255,255,255,0.6)">Nobody has lost the MiserBall yet.</div>`) : `
       <button onclick="openPlayerSheet(window._liveEvtIndividualPlayers,'${bbPlayerEsc}',function(n){bbSelectPlayer(n)},undefined,window._liveAddOpts)"
         style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);
@@ -11013,12 +11013,21 @@ function skMergeRemote(rows) {
   }
   if (!_sk.loaded) { _sk.loaded = true; skGoFirstOpen(); }
 }
+// Holes in the order THIS group plays them: a shotgun group starts on its own hole and wraps (start 7 -> 7..18, 1..6).
+// A group with no start hole plays 1..max. Scoring opens on the first hole with a missing score in that order.
+function skOrder() {
+  const max = skMaxHole(), g = _sk ? skGroup() : null;
+  let s = g ? Number(g.start_hole) || 1 : 1; if (s < 1 || s > max) s = 1;
+  const out = []; for (let i = 0; i < max; i++) out.push(((s - 1 + i) % max) + 1);
+  return out;
+}
 function skGoFirstOpen() {
-  const g = skGroup(), max = skMaxHole();
-  for (let h = 1; h <= max; h++) {
+  const g = skGroup(), ord = skOrder();
+  for (let i = 0; i < ord.length; i++) {
+    const h = ord[i];
     if (g.players.some(n => !(skCardOf(n)[h - 1] > 0))) { _sk.hole = h; _sk.sel = Math.max(0, g.players.findIndex(n => !(skCardOf(n)[h - 1] > 0))); return; }
   }
-  _sk.hole = max; _sk.sel = -1;
+  _sk.hole = ord[ord.length - 1]; _sk.sel = -1;
 }
 // The next name down with no score on this hole (wrapping), or -1 when the hole is full.
 function skFirstEmptyPlayer(h, from) {
@@ -11069,7 +11078,7 @@ function skSetScoreOne(name, hole, v) {
 function skPick(k) { if (_sk) { _sk.sel = _sk.sel === k ? -1 : k; renderLiveBanner(); } }
 function skNav(d) {
   if (!_sk) return;
-  const h = Math.min(skMaxHole(), Math.max(1, _sk.hole + d));
+  const ord = skOrder(), i = ord.indexOf(_sk.hole), h = ord[Math.min(ord.length - 1, Math.max(0, (i < 0 ? 0 : i) + d))];
   _sk.hole = h; _sk.sel = skGroup().players.findIndex(n => !(skCardOf(n)[h - 1] > 0));
   renderLiveBanner();
 }
@@ -11114,7 +11123,7 @@ function skFlush() {
 window.addEventListener('online', () => { try { skFlush(); } catch (e) {} });
 function livePanelModeToggleHtml(mode) {
   const b = (id, label) => `<button type="button" onclick="setLiveScoreMode('${id}')" style="flex:1;min-height:44px;border:0;border-radius:10px;font-family:inherit;font-size:0.9rem;font-weight:700;cursor:pointer;${mode === id ? 'background:#fff;color:#085041' : 'background:transparent;color:rgba(255,255,255,0.8)'}">${label}</button>`;
-  return `<div style="display:flex;gap:3px;background:rgba(0,0,0,0.3);border-radius:12px;padding:3px;margin-bottom:10px">${b('score', 'Hole by Hole')}${b('games', 'Leaderboard')}</div>`;
+  return `<div style="display:flex;gap:3px;background:rgba(0,0,0,0.3);border-radius:12px;padding:3px;margin-bottom:10px">${b('score', 'Scorekeeping')}${b('games', 'Leaderboard')}</div>`;
 }
 function liveScoreModeHtml() {
   const g = skGroup(), gs = skGroups(), hole = _sk.hole, max = skMaxHole();
@@ -11143,7 +11152,7 @@ function liveScoreModeHtml() {
       <span style="flex:1;min-width:0;font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(label0)}${asMode && u.who && u.who !== label0 ? ` <span style="font-size:0.7rem;font-weight:400;color:rgba(255,255,255,0.55)">${escapeHtml(u.who)}</span>` : ''} ${skDotsHtml(skGot(n, hole), '#ffe08a')}${skGot(n, hole) ? `<span style="font-size:0.68rem;font-weight:500;color:#ffe08a;margin-left:4px">gets ${skGot(n, hole) > 1 ? skGot(n, hole) + ' strokes' : 'a stroke'}</span>` : ''}</span>
       <span style="min-width:44px;text-align:right;font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:700;color:${col}">${v == null ? '–' : v}${v != null && skGot(n, hole) ? `<span style="display:block;font-size:0.66rem;font-weight:500;color:#ffe08a;line-height:1">net ${v - skGot(n, hole)}</span>` : ''}</span></button>${active ? pad : ''}`;
   }).join('');
-  const nextH = hole < max ? hole + 1 : null;
+  const ord = skOrder(), oi = ord.indexOf(hole), nextH = oi >= 0 && oi < ord.length - 1 ? ord[oi + 1] : null, lastHole = ord[ord.length - 1];
   const nextWho = nextH ? units.filter(u => skGot(u.n, nextH) > 0).map(u => `${escapeHtml(asMode ? u.label : first(u.n))}${skGot(u.n, nextH) > 1 ? ' (' + skGot(u.n, nextH) + ')' : ''}`) : [];
   const nextStrokes = nextH && skAnyStrokes() ? `<div style="margin-top:4px;font-size:0.76rem;color:#ffe08a;text-align:center;line-height:1.4">Hole ${nextH}: ${nextWho.length ? nextWho.join(', ') + ' get' + (nextWho.length === 1 && !/\(/.test(nextWho[0]) ? 's' : '') + ' a stroke' : 'no strokes in this group'}</div>` : '';
   const hi = par == null ? -1 : vals.findIndex(v => v != null && v >= par + 3);
@@ -11151,7 +11160,7 @@ function liveScoreModeHtml() {
     : done ? (units.length === 2 ? 'Both are in. ' : 'All ' + units.length + ' are in. ') + 'Tap a ' + (asMode ? 'team' : 'name') + ' to change a score, or go to the next hole.'
     : _sk.sel >= 0 ? `Tap ${escapeHtml(asMode ? (units.find(u => u.k === _sk.sel) || units[0]).label : first(g.players[_sk.sel]))}'s score. It saves and moves to the next ${asMode ? 'team' : 'name'}.`
     : 'Tap a ' + (asMode ? 'team' : 'name') + ' to enter a score.';
-  const extraSteps = BFEngine.holeSteps(_sk.config, hole, { last: hole === max }).slice(1);   // hole-by-hole flow: what else this hole needs after the score
+  const extraSteps = BFEngine.holeSteps(_sk.config, hole, { last: hole === lastHole }).slice(1);   // hole-by-hole flow: what else this hole needs after the score
   const status = _sk.err ? 'Not saved yet, will retry' : _sk.pending ? 'Saving…' : _sk.savedAt ? 'Saved' : '';
   const alertsNote = (!pars && (gatheringAddon(_sk.config, 'skins') || gatheringAddon(_sk.config, 'birdiepay') || gatheringAddon(_sk.config, 'scramble')))
     ? `<div style="margin-top:8px;font-size:0.76rem;color:#ffd27a;line-height:1.4">No par data for this course, so birdies can't be announced automatically. Host: add the course pars in Venues.</div>` : '';
@@ -11161,8 +11170,8 @@ function liveScoreModeHtml() {
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
       ${navBtn(-1, chevL, false)}
       <div style="flex:1;text-align:center"><div style="font-family:'DM Mono',monospace;font-size:1.9rem;font-weight:700;line-height:1;color:#fff">Hole ${hole}</div>
-        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-top:3px">${par != null ? 'Par ' + par : '&nbsp;'}<span style="margin-left:10px;color:${statusCol}">${status}</span></div></div>
-      ${navBtn(1, chevR, done && hole < max)}
+        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-top:3px">${par != null ? 'Par ' + par : '&nbsp;'}${g.start_hole && hole === ord[0] ? '<span style="margin-left:8px;color:#ffe08a">Your start hole</span>' : ''}<span style="margin-left:10px;color:${statusCol}">${status}</span></div></div>
+      ${navBtn(1, chevR, done && nextH != null)}
     </div>
     ${extraSteps.length ? holeFlowStepHead(1, 'Hole score') : ''}${rows}
     ${nextStrokes}

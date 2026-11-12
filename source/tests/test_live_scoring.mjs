@@ -37,7 +37,7 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date
   gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null, failNext: false,
   fetch: async (url, opt) => { if (ctx.failNext) throw new Error('offline'); posts.push(JSON.parse(opt.body)); return { json: async () => ({ ok: true }) }; } };
 vm.createContext(ctx);
-const names = ['liveScoringOn','skPartnerOf', 'skTeamMates', 'liveSideTeamNames','skSetScoreOne','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skMarks','skGot','skAnyStrokes','skNetGapNote','skDotsHtml','skCardOf','skMergeRemote','skGoFirstOpen','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml','holeFlowStepHead','holeFlowStepHtml','holeFlowClaimHtml','holeFlowClaimPick','holeFlowLostHtml','holeFlowKeptHtml','holeFlowLostPick','holeFlowBbKept','holeFlowBbShort'];
+const names = ['liveScoringOn','skPartnerOf', 'skTeamMates', 'liveSideTeamNames','skSetScoreOne','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skMarks','skGot','skAnyStrokes','skNetGapNote','skDotsHtml','skCardOf','skMergeRemote','skGoFirstOpen','skOrder','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml','holeFlowStepHead','holeFlowStepHtml','holeFlowClaimHtml','holeFlowClaimPick','holeFlowLostHtml','holeFlowKeptHtml','holeFlowLostPick','holeFlowBbKept','holeFlowBbShort'];
 vm.runInContext('let _sk = null; let _groupSets = {}; const _skChain = {};\n' + names.map(n => extractFn(src, n)).join('\n') + '\nthis.api={' + names.join(',') + ',get:()=>_sk, setSets:v=>{_groupSets=v}};', ctx);
 const A = ctx.api;
 const evt = { gatheringId: 7, name: 'Sat BestBall', holes: 18 };
@@ -191,4 +191,26 @@ eq(A.skTeamMates('A1'), ['A2'], 'a team mate list for the one-ball game');
 posts.length = 0; A.skEnsure(evt9, scr); A.get().groupIdx = 0; A.skSetScore('A1', 3, 4); await tick(); await tick();
 ok(posts.some(p => p.player === 'A2') && posts.some(p => p.player === 'A1') && !posts.some(p => p.player === 'B1'), 'one score for the team is saved on both players and nobody else');
 eq([...A.liveSideTeamNames(scr)].sort(), [['a1','Alpha'],['b1','Bravo'],['d1','Delta']], 'team names come from the game config, keyed by the first player');
+// ── shotgun: each group opens on its own starting hole and plays on in order, wrapping past the last hole
+{
+  A.skEnsure({ gatheringId: 9, name: 'Shotgun', holes: 18 }, config);
+  A.setSets({ 9: { published: { groups: [{ members: ['Brian Hager','Tom Marsh','Mike Kay','Dave Vance'], start_hole: 7 }, { members: ['Sam Lee','Pat Roe','Lee Jo','Jo Wu'], start_hole: 1 }] }, version: 1 } });
+  A.skMergeRemote([]);
+  eq(A.get().groupIdx, 0, 'shotgun: the viewer starts in their own group');
+  A.skGoFirstOpen();
+  eq(A.get().hole, 7, 'shotgun: a group that starts on #7 opens on #7, not #1');
+  eq(A.skOrder().slice(0, 3).concat(A.skOrder().slice(-1)), [7, 8, 9, 6], 'shotgun: order runs 7..18 then 1..6');
+  A.skNav(1); eq(A.get().hole, 8, 'shotgun: next goes to #8');
+  A.skNav(-1); A.skNav(-1); eq(A.get().hole, 7, 'shotgun: back stops at the start hole (does not walk to #6)');
+  A.get().hole = 18; A.skNav(1); eq(A.get().hole, 1, 'shotgun: #18 is followed by #1');
+  A.get().hole = 6; A.skNav(1); eq(A.get().hole, 6, 'shotgun: the last hole of the round (#6) is the end');
+  A.skSetGroup(1); eq(A.get().hole, 1, 'shotgun: a group starting on #1 opens on #1');
+  A.skSetGroup(0);
+  [4,4,4,4].forEach(v => A.skTap(v)); await tick(); await tick();
+  A.skGoFirstOpen(); eq(A.get().hole, 8, 'shotgun: with #7 scored the group opens on #8');
+  ok(/Your start hole/.test(A.liveScoreModeHtml()) === false, 'shotgun: the start-hole cue is only on the start hole');
+  A.get().hole = 7;
+  ok(/Your start hole/.test(A.liveScoreModeHtml()), 'shotgun: the start hole is labeled');
+  A.setSets({});
+}
 console.log(`live scoring: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
