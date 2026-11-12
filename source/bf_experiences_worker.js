@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.55.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.56.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -906,6 +906,12 @@ const GAME_SCHEMAS = {
         "label": "Podium shares by place (custom)",
         "default": [],
         "max": 3
+      },
+      {
+        "key": "podium_total",
+        "type": "money",
+        "label": "Podium total ($, fixed)",
+        "default": 0
       },
       {
         "key": "pars",

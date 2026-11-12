@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.55.0';
+  const ENGINE_VERSION = '1.56.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -630,6 +630,8 @@
   }
   const SCRAMBLE_SPLITS = { winner: [100], top2: [65, 35], top3: [50, 30, 20] };
   // 'custom' pays the places the host priced by hand: place_shares are each place's share of the podium (any positive numbers, they are normalised).
+  // The host's fixed podium ($). When present it IS the scramble pot; older games have only the per-player rate.
+  function scramblePodiumTotal(a) { const v = Number(a && a.podium_total); return Number.isFinite(v) && v > 0 ? v : 0; }
   function scrambleShares(a) { return Array.isArray(a && a.place_shares) ? a.place_shares.map(Number).filter(n => Number.isFinite(n) && n > 0).slice(0, 3) : []; }
   function scrambleSplits(a) { const cs = a && a.payout === 'custom' ? scrambleShares(a) : []; return cs.length ? cs : (SCRAMBLE_SPLITS[a && a.payout] || SCRAMBLE_SPLITS.winner); }
 
@@ -846,7 +848,7 @@
         r.tied = ranked.filter(x => x.total === r.total).length > 1;
       });
       const winners = ranked.filter(r => r.place === 1);
-      const configuredPot = (Number(addon.dollar_per_player) || 0) * nPlay;
+      const configuredPot = kind === 'scramble' && scramblePodiumTotal(addon) > 0 ? scramblePodiumTotal(addon) : (Number(addon.dollar_per_player) || 0) * nPlay;
       const pot = Math.min(configuredPot, Math.max(0, state.remaining));
       const capped = pot < configuredPot;
       state.remaining -= pot;
@@ -1213,11 +1215,12 @@
       { key: 'allowance', type: 'int', label: 'Combined handicap %', default: 25, min: 1 },
       { key: 'payout', type: 'enum', label: 'Pays', values: ['winner', 'top2', 'top3', 'custom'], default: 'winner' },
       { key: 'place_shares', type: 'shares', label: 'Podium shares by place (custom)', default: [], max: 3 },
+      { key: 'podium_total', type: 'money', label: 'Podium total ($, fixed)', default: 0 },   // v1.56.0: the host's fixed podium; when set it is the pot, whatever the player count does
       { key: 'pars', type: 'pars', label: 'Par by hole (Stableford)', default: [], min: 3, max: 6, integer: true },
       { key: 'pairs', type: 'pairs', sizeKey: 'team_size', minPairs: 0, label: 'Teams', default: [] },   // may be saved empty: a team event is set up before anyone has signed up, and the locked teams are filled in later
       { key: 'names', type: 'strings', label: 'Team names', default: [], max: 40 }
     ],
-    fixedCost: cfg => (Number(cfg.dollar_per_player) || 0) * scrambleSize(cfg) * ((cfg.pairs || []).length),
+    fixedCost: cfg => scramblePodiumTotal(cfg) > 0 ? scramblePodiumTotal(cfg) : (Number(cfg.dollar_per_player) || 0) * scrambleSize(cfg) * ((cfg.pairs || []).length),
     maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
     fixtures: [{
       name: 'strokes, gross: the team with the lower one-ball total takes the pot',
@@ -1684,7 +1687,7 @@
         net_mode: scc.net_mode === 'low' ? 'low' : 'own', scoring: scc.scoring === 'stableford' ? 'stableford' : 'strokes', scale: scc.scale === 'standard' ? 'standard' : 'bf',
         hcp_method: scrambleMethod(scc), team_size: scrambleSize(scc), allowance: scrambleCombinedPct(scc),
         ...Object.fromEntries([1, 2, 3, 4].filter(i => scc['pct_' + i] != null && Number.isFinite(Number(scc['pct_' + i]))).map(i => ['pct_' + i, Number(scc['pct_' + i])])),
-        payout: ['winner', 'top2', 'top3', 'custom'].includes(scc.payout) ? scc.payout : 'winner', ...(Array.isArray(scc.place_shares) ? { place_shares: scc.place_shares.map(Number) } : {}), pars: Array.isArray(scc.pars) ? scc.pars : [], pairs: Array.isArray(scc.pairs) ? scc.pairs : [], names: Array.isArray(scc.names) ? scc.names.map(x => String(x || '')) : [] });
+        payout: ['winner', 'top2', 'top3', 'custom'].includes(scc.payout) ? scc.payout : 'winner', ...(Array.isArray(scc.place_shares) ? { place_shares: scc.place_shares.map(Number) } : {}), ...(scramblePodiumTotal(scc) > 0 ? { podium_total: scramblePodiumTotal(scc) } : {}), pars: Array.isArray(scc.pars) ? scc.pars : [], pairs: Array.isArray(scc.pairs) ? scc.pairs : [], names: Array.isArray(scc.names) ? scc.names.map(x => String(x || '')) : [] });
     }
     const hlc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.hilo : null;
     if (games.includes('hilo') && hlc) {
@@ -3346,7 +3349,7 @@
     ENGINE_VERSION, BFGroups,
     BASE_GAMES, ADDONS,
     getGame, listGames, recommendPairs, GAME_GROUPS, gamesInUiOrder, gamesUiMeta, gamesInfo, gamesSealLabels, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
-    skinsWon, betterBallHoles, scrambleTeamStrokes, scrambleSize, scramblePcts, scrambleCombinedPct, stablefordHolePoints,
+    skinsWon, betterBallHoles, scrambleTeamStrokes, scrambleSize, scramblePodiumTotal, scramblePcts, scrambleCombinedPct, stablefordHolePoints,
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,
     computeRoundPayout,

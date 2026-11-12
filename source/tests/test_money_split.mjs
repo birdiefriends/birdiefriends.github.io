@@ -84,4 +84,17 @@ ok(els['games-form-split'].innerHTML === 'KEEP', 'typing never rebuilds the box 
 ok(strip(nodes['gs-pod-total'].innerHTML) === '$192 38% of the pot' && strip(nodes['gs-skins'].innerHTML) === '$188 38% of the pot' , 'but the figures change on the same keystroke: ' + strip(nodes['gs-pod-total'].innerHTML) + ' | ' + strip(nodes['gs-skins'].innerHTML));
 doc.activeElement = null; ctx.refreshGamesFormSplit();
 ok(els['games-form-split'].innerHTML !== 'KEEP' && /gw-split-scramble/.test(els['games-form-split'].innerHTML), 'with nothing focused the panel rebuilds');
+// 4b. the podium is a FIXED total: saved with the game, and reopening it gives back the same dollars whatever the headcount did
+ctx.setGamesFormPodiumMode('pl'); ctx.setGamesFormPodiumPlaces(3); ctx.setGamesFormPodiumPlace(0, '80'); ctx.setGamesFormPodiumPlace(1, '40'); ctx.setGamesFormPodiumPlace(2, '20');
+ok(run('_gamesFormSide.scramble.podium_total') === 140, 'entering $80/$40/$20 stores a fixed $140 podium: ' + run('_gamesFormSide.scramble.podium_total'));
+run("_gamesFormPodiumInit_src = { payout: 'custom', place_shares: [80, 40, 20], dollar_per_player: 5.8333, podium_total: 140 }");
+run('gamesFormPodiumInit(_gamesFormPodiumInit_src)');
+ok(JSON.stringify(run('_gamesFormPodium.pl')) === '[80,40,20]' && run('_gamesFormPodium.mode') === 'pl', 'reopening a saved $80/$40/$20 podium gives $80/$40/$20 back (not a re-scaled 73/37/18): ' + JSON.stringify(run('_gamesFormPodium.pl')));
+run("_gamesFormSide.scramble.pairs = _gamesFormSide.scramble.pairs.slice(0, 11)");
+run('gamesFormPodiumInit(_gamesFormPodiumInit_src)');
+ok(JSON.stringify(run('_gamesFormPodium.pl')) === '[80,40,20]', 'with two fewer players the saved podium is unchanged');
+run("_gamesFormPodiumInit_src2 = { payout: 'top3', dollar_per_player: 6, podium_total: 140 }"); run('gamesFormPodiumInit(_gamesFormPodiumInit_src2)');
+ok(run('_gamesFormPodium.mode') === 'tot' && run('_gamesFormPodium.tot') === 140, 'a saved fixed total on a 1st/2nd/3rd split reopens as $ total');
+run("_gamesFormPodiumInit_src3 = { payout: 'top3', dollar_per_player: 6 }"); run('gamesFormPodiumInit(_gamesFormPodiumInit_src3)');
+ok(run('_gamesFormPodium.mode') === 'pct', 'a game saved before this change still opens as % of buy-in');
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);

@@ -3679,7 +3679,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.55.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.56.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -18866,13 +18866,13 @@ function gatheringGameDetailsBody(evt, config) {
     const isM = BFEngine.gameTraits(gid).unit === 'match';
     const sides = isM ? (a.matches || []).filter(m => Array.isArray(m) && m.length === 2) : (a.pairs || []);
     const dpp = Number(a.dollar_per_player) || 0;
-    const cost = dpp * sides.length * 2;
+    const cost = gid === 'scramble' && BFEngine.scramblePodiumTotal(a) > 0 ? BFEngine.scramblePodiumTotal(a) : dpp * sides.length * 2;
     remaining -= cost;
     const aNet = a.basis === 'net';
     const kPk = BFEngine.periodKey(a);
     const list = sides.map(sd => sd.map(escapeHtml).join(isM ? ' vs ' : ' &amp; ')).join(' · ');
     const allow = gid === 'scramble' ? (aNet && a.hcp_method !== 'none' ? ` · ${a.hcp_method === 'combined' ? BFEngine.scrambleCombinedPct(a) + '% of all handicaps' : BFEngine.scramblePcts(a).join('/') + '% by rank'}` : '') + ' · ' + BFEngine.scrambleSize(a) + '-man teams' + (a.scoring === 'stableford' ? ' · Stableford' : '') + (a.payout === 'top2' ? ' · pays top 2' : a.payout === 'top3' ? ' · pays top 3' : a.payout === 'custom' ? ' · pays ' + (a.place_shares || []).length + ' places' : '') : aNet ? ` · ${a.allowance != null && a.allowance !== '' ? a.allowance : (isM ? 100 : 50)}% allowance` : '';
-    rows.push(row(icon, `${title} · ${aNet ? (a.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `${what}${allow} · ${gid === 'scramble' ? (dpp > 0 ? 'pays by place' : 'no money, the loser buys') : dpp > 0 ? '$' + dpp.toFixed(2) + '/player · $' + cost.toFixed(2) + ' pot' : 'no money, the loser buys'}${kPk !== 'round' && !isM ? `, ${BFEngine.PERIODS[kPk].phrase} are separate pots` : ''}${isM ? ', winner announced the moment it is decided (you can play on)' : ''}${list ? `<br><b>${isM ? 'Matches' : 'Pairs'}:</b> ${list}` : ''}`, gid));
+    rows.push(row(icon, `${title} · ${aNet ? (a.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `${what}${allow} · ${gid === 'scramble' ? (BFEngine.scramblePodiumTotal(a) > 0 ? '$' + cost.toFixed(2).replace(/\.00$/, '') + ' podium' : dpp > 0 ? 'pays by place' : 'no money, the loser buys') : dpp > 0 ? '$' + dpp.toFixed(2) + '/player · $' + cost.toFixed(2) + ' pot' : 'no money, the loser buys'}${kPk !== 'round' && !isM ? `, ${BFEngine.PERIODS[kPk].phrase} are separate pots` : ''}${isM ? ', winner announced the moment it is decided (you can play on)' : ''}${list ? `<br><b>${isM ? 'Matches' : 'Pairs'}:</b> ${list}` : ''}`, gid));
   });
   const ls = gatheringAddon(config, 'lowscore');
   if (ls) {
@@ -20989,6 +20989,7 @@ function gamesFormPodiumApply() {
   const sc = _gamesFormSide.scramble, dpp = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0;
   const plan = gamesFormPodiumPlan(_gamesFormPodium, sc, dpp, gamesFormPodiumPlayers());
   sc.dollar_per_player = plan.rate;
+  if (plan.total > 0) sc.podium_total = plan.total; else delete sc.podium_total;   // the host's fixed podium: the pot at Close, whatever the headcount does
   if (plan.mode === 'pl') { sc.payout = 'custom'; sc.place_shares = plan.places.slice(); }
   else { if (sc.payout === 'custom') sc.payout = plan.n === 3 ? 'top3' : plan.n === 2 ? 'top2' : 'winner'; delete sc.place_shares; }
   _gamesFormTouched.add('scramble');
@@ -20997,9 +20998,9 @@ function gamesFormPodiumInit(src) {
   _gamesFormPodium = { mode: 'pct', pct: null, tot: null, pl: [], dirty: false };
   if (src && src.payout === 'custom' && Array.isArray(src.place_shares) && src.place_shares.length) {
     const sh = src.place_shares.map(Number), S = sh.reduce((t, v) => t + v, 0);
-    const tot = (Number(src.dollar_per_player) || 0) * gamesFormPodiumPlayers();
+    const tot = BFEngine.scramblePodiumTotal(src) || (Number(src.dollar_per_player) || 0) * gamesFormPodiumPlayers();   // the saved fixed podium; older games only had the per-player rate
     _gamesFormPodium.mode = 'pl'; _gamesFormPodium.pl = sh.map(v => S > 0 ? _r2(v * (tot || S) / S) : 0);
-  }
+  } else if (src && BFEngine.scramblePodiumTotal(src) > 0) { _gamesFormPodium.mode = 'tot'; _gamesFormPodium.tot = BFEngine.scramblePodiumTotal(src); }
 }
 function setGamesFormScramblePct(val) {
   const p = _gamesFormPodium; p.mode = 'pct'; p.pct = Math.max(0, Math.min(100, parseFloat(val) || 0)); p.dirty = true;
@@ -21283,7 +21284,7 @@ function applyGamesSuggestion(force) {
   if (sug.fourball && !_gamesFormTouched.has('fourball')) _gamesFormFourballConfig.dollar_per_player = sug.fourball.dollar_per_player; // already a whole number per period
   if (sug.lowscore && !_gamesFormTouched.has('lowscore')) _gamesFormLowscoreConfig.dollar_per_player = sug.lowscore.dollar_per_player;
   GAMES_FORM_SIDE_IDS.forEach(gid => { if (sug[gid] && !_gamesFormTouched.has(gid)) _gamesFormSide[gid].dollar_per_player = sug[gid].dollar_per_player; const el = document.getElementById('games-form-' + gid + '-section'); if (el) el.innerHTML = gatheringGamesSideSectionHtml(gid); });
-  if (sug.scramble && !_gamesFormTouched.has('scramble')) { _gamesFormPodium = { mode: 'pct', pct: null, tot: null, pl: [], dirty: false }; if (_gamesFormSide.scramble.payout === 'custom') { _gamesFormSide.scramble.payout = 'top3'; delete _gamesFormSide.scramble.place_shares; } }
+  if (sug.scramble && !_gamesFormTouched.has('scramble')) { _gamesFormPodium = { mode: 'pct', pct: null, tot: null, pl: [], dirty: false }; delete _gamesFormSide.scramble.podium_total; if (_gamesFormSide.scramble.payout === 'custom') { _gamesFormSide.scramble.payout = 'top3'; delete _gamesFormSide.scramble.place_shares; } }
   const ls2 = document.getElementById('games-form-lowscore-section'); if (ls2) ls2.innerHTML = gatheringGamesLowscoreSectionHtml();
   const fs = document.getElementById('games-form-fourball-section'); if (fs) fs.innerHTML = gatheringGamesFourballSectionHtml();
   const cs = document.getElementById('games-form-cttp-section'); if (cs) cs.innerHTML = gatheringGamesCttpSectionHtml();
