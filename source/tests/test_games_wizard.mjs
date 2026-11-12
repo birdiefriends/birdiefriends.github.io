@@ -102,4 +102,9 @@ const label = d => d.window.document.getElementById('gw-step-label').textContent
   ok(/3 × \$3 = \$9 each/.test(row), 'and shows 3 × $3 = $9 each');
   ok(/All \$\d+ is in a game/.test(row), 'and confirms the whole buy-in is in a game');
 }
+{ // review step: a scramble shows its podium pot (what the host set), never the per-player slice
+  const rv = src.slice(src.indexOf('function gwReviewHtml'), src.indexOf('function gwReviewHtml') + 9000);
+  ok(/gid === 'scramble' \? \(Number\(c\.dollar_per_player\) > 0 \? money\(gamesFormPodiumPlan\(/.test(rv) && /\.total\) \+ ' pot'/.test(rv), 'review: scramble line shows the podium pot from the same plan as the legend');
+  ok(/gid === 'scramble' \? '' /.test(rv) === false, 'review: no longer blank for a scramble');
+}
 console.log(`games wizard: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
