@@ -4336,6 +4336,7 @@ let _prefsPanelExpanded = false; // My Preferences filter panel expand state
 let regData       = [];  // Registration submissions
 let memberData    = [];  // Membership form — live roster
 let dataLoaded    = false;
+let _homeLoadFailed = false;   // the first data load errored: Home shows the fallback instead of the loading state
 let newQueueMode  = false;  // New events queue view
 // ── Player personalization state (D1-backed, Dev-55) ────────────────────────
 // Parked/Seen/FirstLoad used to live in localStorage — device-local, invisible
@@ -4534,13 +4535,10 @@ async function loadGatherings() {
   gatheringRegData = [];
   _memberPrefs = {};
   if (!currentPlayer || isGuest()) return;
-  // Load member prefs first (day availability filter needs them before filtering gatheringData)
-  try {
-    const prefsData = await gatheringsFetchJSON(
-      `${GATHERINGS_API}/members/${encodeURIComponent(currentPlayer)}/prefs`, {}, 5000
-    ).catch(() => null);
-    if (prefsData && prefsData.ok) _memberPrefs = prefsData.prefs || {};
-  } catch(e) { /* non-blocking — default to anytime */ }
+  // Member prefs (the day-availability filter below needs them) load IN PARALLEL with the Gatherings fetch, not before it.
+  const _prefsP = gatheringsFetchJSON(
+    `${GATHERINGS_API}/members/${encodeURIComponent(currentPlayer)}/prefs`, {}, 5000
+  ).catch(() => null);
   try {
     const myMember = memberData.find(m => m.display === currentPlayer);
     const gaParam = 'true'; // Open-mode Gatherings always visible; Gathering Alerts pref controls notifications only
@@ -4602,6 +4600,7 @@ async function loadGatherings() {
     });
     // Filter open (fill_list_enabled) Gatherings by the member's rule set.
     // Crew Gatherings are always shown — host targeted them explicitly. (Dev-49)
+    try { const prefsData = await _prefsP; if (prefsData && prefsData.ok) _memberPrefs = prefsData.prefs || {}; } catch(e) { /* non-blocking — default to anytime */ }
     const filters = (_memberPrefs && _memberPrefs.gatheringFilters) || [];
     if (filters.length) {
       gatheringData = gatheringData.filter(g =>
@@ -4712,6 +4711,7 @@ async function loadAllData() {
     runInactivityCheckIfDue();
   } catch(e) {
     console.error('Data load error:', e.message, e);
+    _homeLoadFailed = true;
     renderFallback(e.message);
   }
 }
@@ -5588,6 +5588,8 @@ function getTwoWeekendWindow() {
   return { start: w1.start, end: w2.end };
 }
 function renderHome() {
+  // Until the first load finishes there is nothing to say yet: show the loading state, never "No upcoming events".
+  if (!dataLoaded && !_homeLoadFailed) { showHomeLoading(); return; }
   const now      = new Date();
   const upcoming = eventData.filter(e => {
     if (!e.dt) return e.dt >= now;
@@ -5634,7 +5636,7 @@ function renderHome() {
         ? 'Head to <strong>Events</strong> to restore anything you\'ve hidden.'
         : 'Want to organize a round?'}</div>
       ${!allHidden ? `<div class="bf-hero-actions">
-        <a class="btn btn-register" href="https://form.jotform.com/233113019726045" target="_blank">📋 Request an Event</a>
+        <button type="button" class="btn btn-register" onclick="requestEventClick()">🏌️ Host a Gathering</button>
       </div>` : ''}
     </div>`;
     upEl.innerHTML = '';
@@ -7247,10 +7249,11 @@ function wireCommishSmsLink() {
 function renderAllEvents() {
   const now      = new Date();
   const el       = document.getElementById('all-events-list');
+  if (!dataLoaded && !_homeLoadFailed) { if (el) el.innerHTML = `<div class="bf-loading"><div class="spinner"></div>Loading events…</div>`; return; }
   const upcoming = eventData.filter(e => e.dt >= now);
   if (!upcoming.length) {
     el.innerHTML = `<div class="bf-empty">No upcoming events found.<br><br>
-      <a class="btn btn-primary" href="https://form.jotform.com/233113019726045" target="_blank">📋 Request an Event</a></div>`;
+      <button type="button" class="btn btn-primary" onclick="requestEventClick()">🏌️ Host a Gathering</button></div>`;
     return;
   }
   // Events tab shows only dismissed events — true separation from Home
@@ -7477,6 +7480,12 @@ function showHomeLoading() {
     `<div class="bf-loading"><div class="spinner"></div>Loading events…</div>`;
   document.getElementById('home-events-past').innerHTML = '';
 }
+// "Request an event" on Home: players organize a round as a Gathering now. The old Jotform request form stays only for a
+// guest or before the Gatherings panel is switched on.
+function requestEventClick() {
+  if (GATHERING_PANEL_LIVE && currentPlayer && !isGuest()) { openHostPanel(); return; }
+  window.open('https://form.jotform.com/' + REQUEST_FORM_ID, '_blank');
+}
 function renderFallback(errMsg) {
   const detail = errMsg ? `<div style="font-size:0.7rem;opacity:0.5;margin-top:6px;font-family:'DM Mono',monospace">${errMsg}</div>` : '';
   document.getElementById('home-hero').innerHTML = `<div class="bf-hero">
@@ -7485,7 +7494,7 @@ function renderFallback(errMsg) {
     <div class="bf-hero-sub">Could not load live event data. Make sure the local server is running.</div>
     ${detail}
     <div class="bf-hero-actions" style="margin-top:14px">
-      <a class="btn btn-register" href="https://form.jotform.com/233113019726045" target="_blank">📋 Request an Event</a>
+      <button type="button" class="btn btn-register" onclick="requestEventClick()">🏌️ Host a Gathering</button>
       <a class="btn btn-secondary" href="/results.html">View Results</a>
     </div>
   </div>`;
