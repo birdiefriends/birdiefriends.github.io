@@ -1369,10 +1369,12 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 .host-gathering-actions {
-  display: flex; gap: 8px; margin-top: 10px;
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;
   padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.07);
 }
-.host-gathering-actions .btn { flex: 1; font-size: 0.82rem; padding: 8px 10px; }
+.host-gathering-actions .btn { flex: 1 1 130px; min-width: 0; font-size: 0.82rem; padding: 8px 10px; }
+/* phone: the card can never be wider than the screen (a no-wrap button row used to push it off the left edge) */
+.host-gathering-card { min-width: 0; max-width: 100%; box-sizing: border-box; overflow-x: hidden; }
 .host-status-pills { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 4px;
   padding: 6px 8px; border-radius: 8px; background: rgba(0,0,0,0.03);
   border: 1px solid rgba(0,0,0,0.07); cursor: pointer; user-select: none;
@@ -6736,8 +6738,8 @@ function hostTeamsHtml(g) {
   const rows = gatheringRegData.filter(r => r.gatheringId === g.gatheringId);
   const st = teamsState(rows, N);
   const free = st.open.length + st.waiting.length;
-  const teamRows = st.pairs.map((pr, i) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><span style="font-size:0.84rem;font-weight:700">🤝 ${st.names[i] ? escapeHtml(st.names[i]) + ' <span style="font-weight:400;color:var(--text-muted)">· ' + teamNamesText(pr) + '</span>' : teamNamesText(pr)}</span>
-    <span style="white-space:nowrap"><button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="openTeamNameSheetHost(${g.gatheringId}, ${i})">${st.names[i] ? 'Rename' : 'Name'}</button><button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="hostUnpair(${g.gatheringId}, ${i})">Unteam</button></span></div>`).join('');
+  const teamRows = st.pairs.map((pr, i) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><span style="font-size:0.84rem;font-weight:700;min-width:0;flex:1;overflow-wrap:anywhere">🤝 ${st.names[i] ? escapeHtml(st.names[i]) + ' <span style="font-weight:400;color:var(--text-muted)">· ' + teamNamesText(pr) + '</span>' : teamNamesText(pr)}</span>
+    <span style="display:flex;flex-direction:column;gap:3px;flex:none"><button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="openTeamNameSheetHost(${g.gatheringId}, ${i})">${st.names[i] ? 'Rename' : 'Name'}</button><button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="hostUnpair(${g.gatheringId}, ${i})">Unteam</button></span></div>`).join('');
   return `<div style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(29,158,117,0.08);border:1px solid rgba(29,158,117,0.35)">
     <div style="font-size:0.78rem;font-weight:700;margin-bottom:2px">${N === 2 ? 'Teams of 2' : N + '-man teams'} · ${st.players} player${st.players === 1 ? '' : 's'} · ${st.teams} team${st.teams === 1 ? '' : 's'}${free ? ` · <span style="color:#b8860b">${free} still need${free === 1 ? 's' : ''} a ${N === 2 ? 'partner' : 'team'}</span>` : ''}</div>
     ${teamRows}
