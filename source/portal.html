@@ -10824,8 +10824,28 @@ function skEnsure(evt, config) {
   Object.keys(dirty).forEach(n => { _sk.cards[n] = BFEngine.mergeHoleScores(null, null, dirty[n]); });
   return _sk;
 }
+// The scoring groups follow the PUBLISHED Groups (same numbers, same people) when the host has published them; teams the
+// Groups left out are added after. With no published Groups it is the old behaviour: teams two at a time, in order.
 function skGroups() {
-  return BFEngine.fourballGroups(_sk ? liveSideSides(_sk.config) : []);
+  const sides = _sk ? liveSideSides(_sk.config) : [];
+  const set = _sk && typeof _groupSets !== 'undefined' && _groupSets[_sk.gid] ? _groupSets[_sk.gid].published : null;
+  if (!set || !Array.isArray(set.groups) || !set.groups.length) return BFEngine.fourballGroups(sides);
+  const lc = x => String(x || '').trim().toLowerCase(), used = new Set(), out = [];
+  set.groups.forEach((gr, i) => {
+    const mem = new Set((gr.members || []).map(lc));
+    const gp = sides.filter((sd, si) => !used.has(si) && sd.some(n => mem.has(lc(n))));
+    sides.forEach((sd, si) => { if (gp.includes(sd)) used.add(si); });
+    if (gp.length) out.push({ n: i + 1, pairs: gp, players: gp.reduce((a, q) => a.concat(q), []), start_hole: gr.start_hole || null });
+  });
+  const rest = sides.filter((sd, si) => !used.has(si));
+  BFEngine.fourballGroups(rest).forEach(g => out.push({ ...g, n: out.length + 1 }));
+  return out;
+}
+// Team names for the one-ball games (a scramble's teams are named), keyed by the team's first player.
+function liveSideTeamNames(config) {
+  const id = liveSideGid(config), add = id ? gatheringAddon(config, id) : null, sides = liveSideSides(config), names = add && Array.isArray(add.names) ? add.names : [];
+  const m = new Map(); sides.forEach((sd, i) => { if (names[i] && sd[0]) m.set(String(sd[0]).trim().toLowerCase(), String(names[i])); });
+  return m;
 }
 function skGroup() { const gs = skGroups(); return gs[Math.min(_sk.groupIdx, Math.max(0, gs.length - 1))] || { n: 1, pairs: [], players: [] }; }
 function skMaxHole() { return _sk && _sk.evt && _sk.evt.holes === 9 ? 9 : 18; }
@@ -10930,9 +10950,15 @@ function skPartnerOf(name) {
   const pr = skGroup().pairs.find(p => p.some(x => nm(x) === nm(name)));
   return pr ? (pr.find(x => nm(x) !== nm(name)) || null) : null;
 }
+// One ball per team: the team's score is written to every player on the team (a scramble can be 2, 3 or 4 players).
+function skTeamMates(name) {
+  if (!_sk || !liveOneBall(_sk.config)) return [];
+  const nm = x => String(x || '').trim().toLowerCase();
+  const pr = skGroup().pairs.find(p => p.some(x => nm(x) === nm(name)));
+  return pr ? pr.filter(x => nm(x) !== nm(name)) : [];
+}
 function skSetScore(name, hole, v) {
-  const mate = skPartnerOf(name);
-  if (mate) skSetScoreOne(mate, hole, v);
+  skTeamMates(name).forEach(m => skSetScoreOne(m, hole, v));
   skSetScoreOne(name, hole, v);
 }
 function skSetScoreOne(name, hole, v) {
@@ -10999,7 +11025,8 @@ function liveScoreModeHtml() {
   const first = n => String(n).trim().split(/\s+/)[0];
   // Alternate Shot: one ball per pair, so the rows are the TEAMS (entering for the team fills in both partners).
   const asMode = liveOneBall(_sk.config);
-  const units = asMode ? g.pairs.filter(pr => pr.length === 2).map(pr => ({ k: g.players.indexOf(pr[0]), n: pr[0], label: pr.map(first).join(' & ') }))
+  const tnames = asMode ? liveSideTeamNames(_sk.config) : null;
+  const units = asMode ? g.pairs.filter(pr => pr.length >= 1).map(pr => ({ k: g.players.indexOf(pr[0]), n: pr[0], label: (tnames.get(String(pr[0]).trim().toLowerCase()) || pr.map(first).join(' & ')), who: pr.map(first).join(' & ') }))
     : g.players.map((n, k) => ({ k, n, label: n }));
   const vals = units.map(u => { const v = skCardOf(u.n)[hole - 1]; return v > 0 ? v : null; });
   const done = vals.every(v => v != null);
@@ -11015,7 +11042,7 @@ function liveScoreModeHtml() {
     const pr = g.pairs.find(p => p.length === 2 && p[0] === n);
     const label = pr && !asMode ? `<div style="font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin:10px 2px 4px;font-family:'DM Mono',monospace">${pr.map(x => escapeHtml(first(x))).join(' &amp; ')}</div>` : '';
     return `${label}<button type="button" onclick="skPick(${k})" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:12px;min-height:56px;box-sizing:border-box;cursor:pointer;margin-bottom:6px;color:#fff;font-family:inherit;text-align:left;${active ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.18)' : 'border:1.5px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.2)'}">
-      <span style="flex:1;min-width:0;font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(label0)} ${skDotsHtml(skGot(n, hole), '#ffe08a')}${skGot(n, hole) ? `<span style="font-size:0.68rem;font-weight:500;color:#ffe08a;margin-left:4px">gets ${skGot(n, hole) > 1 ? skGot(n, hole) + ' strokes' : 'a stroke'}</span>` : ''}</span>
+      <span style="flex:1;min-width:0;font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(label0)}${asMode && u.who && u.who !== label0 ? ` <span style="font-size:0.7rem;font-weight:400;color:rgba(255,255,255,0.55)">${escapeHtml(u.who)}</span>` : ''} ${skDotsHtml(skGot(n, hole), '#ffe08a')}${skGot(n, hole) ? `<span style="font-size:0.68rem;font-weight:500;color:#ffe08a;margin-left:4px">gets ${skGot(n, hole) > 1 ? skGot(n, hole) + ' strokes' : 'a stroke'}</span>` : ''}</span>
       <span style="min-width:44px;text-align:right;font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:700;color:${col}">${v == null ? '–' : v}${v != null && skGot(n, hole) ? `<span style="display:block;font-size:0.66rem;font-weight:500;color:#ffe08a;line-height:1">net ${v - skGot(n, hole)}</span>` : ''}</span></button>${active ? pad : ''}`;
   }).join('');
   const nextH = hole < max ? hole + 1 : null;
@@ -11028,7 +11055,7 @@ function liveScoreModeHtml() {
     : 'Tap a ' + (asMode ? 'team' : 'name') + ' to enter a score.';
   const status = _sk.err ? 'Not saved yet, will retry' : _sk.pending ? 'Saving…' : _sk.savedAt ? 'Saved' : '';
   const statusCol = _sk.err ? '#e0b44c' : '#5DCAA5';
-  const chips = gs.length > 1 ? `<div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">${gs.map((x, i) => `<button type="button" onclick="skSetGroup(${i})" style="min-height:36px;padding:0 12px;border-radius:18px;font-family:inherit;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;${i === _sk.groupIdx ? 'background:#5DCAA5;color:#04342a;border:0' : 'background:transparent;color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.3)'}">Group ${x.n}</button>`).join('')}</div>` : '';
+  const chips = gs.length > 1 ? `<div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">${gs.map((x, i) => `<button type="button" onclick="skSetGroup(${i})" style="min-height:36px;padding:0 12px;border-radius:18px;font-family:inherit;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;${i === _sk.groupIdx ? 'background:#5DCAA5;color:#04342a;border:0' : 'background:transparent;color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.3)'}">Group ${x.n}${x.start_hole ? ' · #' + x.start_hole : ''}</button>`).join('')}</div>` : '';
   return `${liveSideChooserHtml()}${chips}
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
       ${navBtn(-1, chevL, false)}

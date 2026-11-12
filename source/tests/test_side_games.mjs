@@ -60,7 +60,7 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date
   gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null, panelGamesGid: e => e.gatheringId, gamesScoreKeyForGid: g => 'g:' + g,
   csResolvePars: () => null, ensureVenueTeeInfoByName: async () => null, csNormalizedVenueName: () => 'V', renderLiveBanner() {}, fetch: async () => ({ json: async () => ({ ok: true }) }) };
 vm.createContext(ctx);
-const names = ['liveScoringOn', 'skPartnerOf', 'skSetScore', 'skSetScoreOne', 'skPersist', 'skStoreKey', 'skEnsure', 'skGroups', 'skGroup', 'skCardOf', 'skQueueSave', 'skPost', 'skMaxHole', 'skPars', 'skMarks'];
+const names = ['liveScoringOn', 'skPartnerOf', 'skTeamMates', 'liveSideTeamNames', 'skSetScore', 'skSetScoreOne', 'skPersist', 'skStoreKey', 'skEnsure', 'skGroups', 'skGroup', 'skCardOf', 'skQueueSave', 'skPost', 'skMaxHole', 'skPars', 'skMarks'];
 vm.runInContext('let _sk = null; const _skChain = {};\n' + names.map(n => extractFn(src, n)).join('\n') + '\nthis.api={' + names.join(',') + ',get:()=>_sk};', ctx);
 const A = ctx.api;
 const cfgOf = ad => ({ addons: [ad], handicap: null });

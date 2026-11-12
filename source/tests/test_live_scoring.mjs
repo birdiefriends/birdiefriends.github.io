@@ -37,8 +37,8 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date
   gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null, failNext: false,
   fetch: async (url, opt) => { if (ctx.failNext) throw new Error('offline'); posts.push(JSON.parse(opt.body)); return { json: async () => ({ ok: true }) }; } };
 vm.createContext(ctx);
-const names = ['liveScoringOn','skPartnerOf','skSetScoreOne','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skMarks','skGot','skAnyStrokes','skNetGapNote','skDotsHtml','skCardOf','skMergeRemote','skGoFirstOpen','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml'];
-vm.runInContext('let _sk = null; const _skChain = {};\n' + names.map(n => extractFn(src, n)).join('\n') + '\nthis.api={' + names.join(',') + ',get:()=>_sk};', ctx);
+const names = ['liveScoringOn','skPartnerOf', 'skTeamMates', 'liveSideTeamNames','skSetScoreOne','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skMarks','skGot','skAnyStrokes','skNetGapNote','skDotsHtml','skCardOf','skMergeRemote','skGoFirstOpen','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml'];
+vm.runInContext('let _sk = null; let _groupSets = {}; const _skChain = {};\n' + names.map(n => extractFn(src, n)).join('\n') + '\nthis.api={' + names.join(',') + ',get:()=>_sk, setSets:v=>{_groupSets=v}};', ctx);
 const A = ctx.api;
 const evt = { gatheringId: 7, name: 'Sat BestBall', holes: 18 };
 const tick = () => new Promise(r => setTimeout(r, 5));
@@ -174,4 +174,21 @@ ok(/liveScoringForEvt\(evt\)\) \{ _skAutoOpened\.add/.test(src), 'panel opens it
 ok(/skMergeRemote\(cards\); skFlush\(\)/.test(src), 'every standings refresh also merges scores and retries waiting saves');
 const gateFn = extractFn(src, 'liveScoringOn'); ok(/gid != null/.test(gateFn), 'no gamed gid (BF Series) -> never live scoring');
 ok(!/liveScoringForEvt\(evt\)[^;]*hasLivePanelSupport/.test(src), 'BF Series gating not altered');
+// ── Scramble: scoring groups follow the PUBLISHED Groups; a team scores once; named teams; an unpaired player is scored too
+const scr = { addons: [{ id: 'scramble', team_size: 2, pairs: [['A1','A2'],['B1','B2'],['C1','C2'],['D1','D2'],['Rich']], names: ['Alpha','Bravo',null,'Delta',null] }], handicap: null };
+const evt9 = { gatheringId: 9, name: 'Turkey', holes: 18 };
+A.setSets({});
+A.skEnsure(evt9, scr);
+eq(A.skGroups().map(g => g.players.length), [4, 4, 1], 'no published Groups: teams two at a time, as before');
+A.setSets({ 9: { published: { mode: 'shotgun', groups: [{ members: ['D1','D2','Rich'], start_hole: 1 }, { members: ['A1','A2','B1','B2'], start_hole: 6 }, { members: ['C1','C2'], start_hole: 9 }] }, version: 1 } });
+const sg = A.skGroups();
+eq(sg.map(g => [g.n, g.players.length, g.start_hole]), [[1, 3, 1], [2, 4, 6], [3, 2, 9]], 'published Groups: same numbers and start holes, a three-team group is allowed');
+eq(sg[0].pairs, [['D1','D2'],['Rich']], 'Group 1 holds Delta and the unpaired player');
+A.setSets({ 9: { published: { groups: [{ members: ['A1','A2'], start_hole: 1 }] }, version: 1 } });
+eq(A.skGroups().map(g => g.players.join()), ['A1,A2', 'B1,B2,C1,C2', 'D1,D2,Rich'], 'teams the Groups left out are added after, never lost');
+A.setSets({ 9: { published: { groups: [{ members: ['A1','A2','B1','B2'], start_hole: 6 }] }, version: 1 } });
+eq(A.skTeamMates('A1'), ['A2'], 'a team mate list for the one-ball game');
+posts.length = 0; A.skEnsure(evt9, scr); A.get().groupIdx = 0; A.skSetScore('A1', 3, 4); await tick(); await tick();
+ok(posts.some(p => p.player === 'A2') && posts.some(p => p.player === 'A1') && !posts.some(p => p.player === 'B1'), 'one score for the team is saved on both players and nobody else');
+eq([...A.liveSideTeamNames(scr)].sort(), [['a1','Alpha'],['b1','Bravo'],['d1','Delta']], 'team names come from the game config, keyed by the first player');
 console.log(`live scoring: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
