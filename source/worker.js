@@ -3001,6 +3001,83 @@ export default {
       }
     }
 
+    // ── Group sets (Dev-99) — who plays with whom, for ANY kind of event ────────────────────────────────
+    // One row per (scope_type, scope_id, round_key); scope_type 'gathering' today, 'series' / 'cup' / 'event' next. The
+    // group list is an OPEN JSON document (the engine's BFGroups shape), so an event type can add its own attributes
+    // without a migration. A host edits `draft`; Publish copies it to `published`, which is what players read.
+    //   GET  /group-sets/:type/:id?round=&host_id=|pin=   host/commissioner: { draft, published, status }; anyone else: published only
+    //   POST /group-sets/:type/:id        { host_id|pin, round?, draft }        save the draft (POST: this Worker's CORS list has no PUT)
+    //   POST /group-sets/:type/:id/publish { host_id|pin, round?, notify? }     publish the draft, optionally push each player their start
+    // The table is created on first use, so there is no manual migration.
+    const gsMatch = url.pathname.match(/^\/group-sets\/([a-z_]+)\/([^\/]+?)(\/publish)?$/);
+    if (gsMatch) {
+      const json = (obj, status) => new Response(JSON.stringify(obj), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      const gsType = gsMatch[1], gsId = decodeURIComponent(gsMatch[2]), isPublish = !!gsMatch[3];
+      try {
+        await env.DB.prepare(`CREATE TABLE IF NOT EXISTS event_group_sets (
+          scope_type TEXT NOT NULL, scope_id TEXT NOT NULL, round_key TEXT NOT NULL DEFAULT '',
+          draft TEXT, published TEXT, version INTEGER NOT NULL DEFAULT 0,
+          updated_by TEXT, updated_at TEXT, published_at TEXT,
+          PRIMARY KEY (scope_type, scope_id, round_key))`).run();
+        let body = {};
+        if (request.method !== 'GET') { try { body = await request.json(); } catch (e) { return json({ error: 'Invalid JSON' }, 400); } }
+        const round = String((request.method === 'GET' ? url.searchParams.get('round') : body.round) || '');
+        const actor = String((request.method === 'GET' ? url.searchParams.get('host_id') : body.host_id) || '').trim();
+        const pin = String((request.method === 'GET' ? url.searchParams.get('pin') : body.pin) || '');
+        let isManager = pin === '7797', gathering = null;
+        if (!isManager && gsType === 'gathering' && actor) {
+          gathering = await env.DB.prepare(`SELECT id, host_id, title, event_time FROM gatherings WHERE id = ?`).bind(gsId).first();
+          isManager = !!gathering && gathering.host_id === actor;
+        }
+        const row = await env.DB.prepare(`SELECT * FROM event_group_sets WHERE scope_type = ? AND scope_id = ? AND round_key = ?`).bind(gsType, gsId, round).first();
+        const parse = t => { try { return t ? JSON.parse(t) : null; } catch (e) { return null; } };
+        if (request.method === 'GET') {
+          const out = { scope_type: gsType, scope_id: gsId, round, version: row ? row.version : 0, published_at: row ? row.published_at : null, published: row ? parse(row.published) : null };
+          if (isManager) { out.draft = row ? parse(row.draft) : null; out.can_edit = true; }
+          return json(out);
+        }
+        if (!isManager) return json({ error: 'Only the host can change the groups' }, 403);
+        if (request.method === 'POST' && !isPublish) {
+          const d = body.draft;
+          if (!d || typeof d !== 'object' || !Array.isArray(d.groups)) return json({ error: 'draft with a groups array is required' }, 400);
+          const text = JSON.stringify(d); if (text.length > 60000) return json({ error: 'Groups document is too large' }, 413);
+          await env.DB.prepare(`INSERT INTO event_group_sets (scope_type, scope_id, round_key, draft, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(scope_type, scope_id, round_key) DO UPDATE SET draft = excluded.draft, updated_by = excluded.updated_by, updated_at = excluded.updated_at`).bind(gsType, gsId, round, text, actor || 'commissioner').run();
+          return json({ ok: true });
+        }
+        if (request.method === 'POST' && isPublish) {
+          const d = body.draft && typeof body.draft === 'object' ? body.draft : parse(row && row.draft);
+          if (!d || !Array.isArray(d.groups) || !d.groups.length) return json({ error: 'There is no draft to publish' }, 400);
+          const text = JSON.stringify(d), prev = parse(row && row.published);
+          await env.DB.prepare(`INSERT INTO event_group_sets (scope_type, scope_id, round_key, draft, published, version, updated_by, updated_at, published_at) VALUES (?, ?, ?, ?, ?, 1, ?, datetime('now'), datetime('now'))
+            ON CONFLICT(scope_type, scope_id, round_key) DO UPDATE SET draft = excluded.draft, published = excluded.published, version = event_group_sets.version + 1, updated_by = excluded.updated_by, updated_at = excluded.updated_at, published_at = excluded.published_at`).bind(gsType, gsId, round, text, text, actor || 'commissioner').run();
+          // Tell each player where they start. Only players whose group, hole or time CHANGED since the last publish are pushed again.
+          let notified = 0;
+          if (body.notify !== false && env.OS_APP_ID && env.OS_REST_KEY) {
+            const lc = s => String(s || '').trim().toLowerCase();
+            const fmtT = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '')); if (!m) return ''; const h = Number(m[1]); return ((h % 12) || 12) + ':' + m[2] + (h < 12 ? ' AM' : ' PM'); };
+            const where = set => { const mp = new Map(); ((set && set.groups) || []).forEach((g, i) => (g.members || []).forEach(n => mp.set(lc(n), { num: i + 1, hole: g.start_hole || null, wave: g.wave || '', time: g.tee_time || '', mates: (g.members || []).filter(m => lc(m) !== lc(n)) }))); return mp; };
+            const now = where(d), before = where(prev), title = (gathering && gathering.title) || (body.title ? String(body.title).slice(0, 80) : 'Your event');
+            const sends = [];
+            now.forEach((w, key) => {
+              const b = before.get(key); if (b && b.num === w.num && b.hole === w.hole && b.time === w.time && b.wave === w.wave) return;
+              const player = ((d.groups[w.num - 1] || {}).members || []).find(n => lc(n) === key); if (!player) return;
+              const start = w.hole ? `start on hole ${w.hole}${w.wave ? ' (' + w.wave + ')' : ''}` : w.time ? `tee time ${fmtT(w.time)}` : 'see the groups';
+              const msg = `${prev ? 'Updated: you are' : 'You are'} in Group ${w.num}, ${start}.${w.mates.length ? ' With ' + w.mates.join(', ') + '.' : ''}`;
+              sends.push(fetch('https://onesignal.com/api/v1/notifications', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
+                body: JSON.stringify({ app_id: env.OS_APP_ID, headings: { en: '⛳ ' + title + ': your group' }, contents: { en: msg }, filters: [{ field: 'tag', key: 'player_name', relation: '=', value: player }], url: 'https://birdiefriends.com/portal.html' }) }).catch(e => console.warn('Group push failed:', e)));
+            });
+            notified = sends.length;
+            if (ctx && ctx.waitUntil) ctx.waitUntil(Promise.all(sends)); else await Promise.all(sends);
+          }
+          return json({ ok: true, version: (row ? row.version : 0) + 1, notified });
+        }
+        return json({ error: 'Not found' }, 404);
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Group sets error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // POST /groupings/publish?pin=7797 — called by GolfScorer's grpPublish() alongside
     // its existing Netlify deploy, so per-player tee times land in D1 (not just the
     // static groupings.html page) the moment groups are published pre-event. Closes

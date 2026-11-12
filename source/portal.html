@@ -3677,7 +3677,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.51.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.52.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -4608,6 +4608,7 @@ async function loadGatherings() {
           || gatheringMatchesFilters(g, filters)
       );
     }
+    groupsLoadPublished();   // Dev-99: published groups for the player's own cards (not awaited)
   } catch(e) {
     console.error('Gatherings load error:', e.message, e);
     gatheringData = [];
@@ -6081,6 +6082,7 @@ function buildEventCard(evt, isPast) {
       </div>
     </div>` : ''}
     ${!isCanceled && !isPast ? teamBannerHtml(evt) : ''}
+    ${!isCanceled && !isPast ? myGroupBannerHtml(evt) : ''}
     ${actionHtml ? `<div class="event-card-actions" id="actions-${evt.id}">${actionHtml}</div>` : ''}
     ${(()=>{
       if (!groupingsMeta) return '';
@@ -6224,6 +6226,187 @@ function buildPlayerChips(evt) {
       return `<span class="player-chip${cls ? ' '+cls : ''}">${p.player}${suffix}</span>`;
     }).join('') +
     `</div>`;
+}
+// ══════════════════════════════════════════
+// GROUPS (Dev-99) — the host's group organizer, built on BFEngine.BFGroups (the one shared grouping function).
+// The Gathering only supplies its roster (Yes players; locked teams stay together). Everything else, the rules, the
+// start holes, the warnings, is the engine's, so Series / Cup / host events can reuse it with a different roster.
+// Stored per event in the Worker's event_group_sets (draft for the host, published for players).
+// ══════════════════════════════════════════
+let _grp = null;            // the host's open session: { gid, g, units, set, opts, sel, dirty, version, publishedAt, notes }
+let _groupSets = {};        // gatheringId -> { published, version } for the player's own cards
+const GRP_ESC = s => escapeHtml(String(s == null ? '' : s));
+function groupsRowsFromApi(list) {
+  const statusMap = { yes: 'Yes', no: 'No', sub: 'Sub' };
+  return (list || []).map(r => ({ player: r.player_id, status: statusMap[r.status] || 'No', partner: r.partner_id || null, teamName: r.team_name || null }));
+}
+function groupsUnitsFor(g, rows) {
+  const yes = rows.filter(r => r && r.player && r.status === 'Yes');
+  const N = teamSizeOf(g), st = N ? teamsState(rows, N) : null;
+  return BFEngine.BFGroups.unitsFromRoster({ players: yes.map(r => ({ name: r.player })), teams: st ? st.pairs : [], team_names: st ? st.names : [] });
+}
+function groupsStripUnits(set) { const o = JSON.parse(JSON.stringify(set)); (o.groups || []).forEach(g => { delete g.units; }); return o; }
+async function openGatheringGroups(gatheringId) {
+  const g = gatheringData.find(x => x.gatheringId === gatheringId);
+  if (!g) { showToast('Could not find Gathering', true); return; }
+  clearHostActionBar();
+  const backBtn = document.getElementById('host-sheet-back');
+  if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; renderHostPanelList(); }; }
+  const body = document.getElementById('host-sheet-body');
+  body.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:20px 0">Loading…</div>';
+  let rows = gatheringRegData.filter(r => r.gatheringId === gatheringId), saved = null;
+  try {
+    const [reg, gs] = await Promise.all([
+      gatheringsFetchJSON(`${GATHERINGS_API}/gatherings/${gatheringId}/registrations`, {}, 8000).catch(() => null),
+      gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${gatheringId}?host_id=${encodeURIComponent(currentPlayer)}`, {}, 8000).catch(() => null)
+    ]);
+    if (reg && reg.registrations) rows = groupsRowsFromApi(reg.registrations);
+    saved = gs;
+  } catch (e) { /* fall back to what is already loaded */ }
+  const units = groupsUnitsFor(g, rows);
+  const base = saved && (saved.draft || saved.published);
+  const holes = Number(g.holes) === 9 ? 9 : 18;
+  _grp = { gid: gatheringId, g, units, set: null, sel: null, dirty: false, version: (saved && saved.version) || 0, publishedAt: (saved && saved.published_at) || null, notes: [],
+    opts: { mode: (base && base.mode) || 'shotgun', group_size: (base && base.group_size) || 4, spread: (base && base.rules && base.rules.spread) || 'order', holes, first_tee: (base && base.rules && base.rules.first_tee) || '08:00', interval: (base && base.rules && base.rules.interval) || 10, start_holes: ((base && base.rules && base.rules.start_holes) || []).join(', '), keep: true } };
+  if (base) {   // the roster moves right up to the tee: bring the saved groups up to date and say what changed
+    const rc = BFEngine.BFGroups.reconcile(base, units);
+    _grp.set = rc.set; if (rc.added.length) _grp.notes.push('Added: ' + rc.added.join(', ')); if (rc.removed.length) _grp.notes.push('No longer on the list: ' + rc.removed.join(', '));
+    _grp.dirty = !!(rc.added.length || rc.removed.length);
+  }
+  groupsRender();
+}
+function groupsOptsForEngine() {
+  const o = _grp.opts, sh = String(o.start_holes || '').split(/[^0-9]+/).map(Number).filter(h => h >= 1 && h <= o.holes);
+  return { mode: o.mode, group_size: o.group_size, spread: o.spread, holes: o.holes, first_tee: o.first_tee, interval: Number(o.interval) || 10, ...(sh.length ? { start_holes: [...new Set(sh)].sort((a, b) => a - b) } : {}) };
+}
+function groupsWarnings() { return _grp && _grp.set ? BFEngine.BFGroups.validate(_grp.set, _grp.units, groupsOptsForEngine()) : []; }
+function groupsWarnHtml() {
+  const w = groupsWarnings(); if (!w.length) return _grp && _grp.set ? '<div style="font-size:0.8rem;color:var(--green-dark);font-weight:600">✓ Everyone is placed and no group is over its limit.</div>' : '';
+  return `<div style="font-size:0.78rem;line-height:1.55;color:#8a6d00">${w.map(x => '⚠️ ' + GRP_ESC(x.msg)).join('<br>')}</div>`;
+}
+function groupsSuggest() {
+  const run = () => { const r = BFEngine.BFGroups.suggest(_grp.units, groupsOptsForEngine()); _grp.set = r.set; _grp.sel = null; _grp.dirty = true; _grp.notes = []; groupsRender(); };
+  if (_grp.set && _grp.dirty && !confirm('Replace the groups on screen with a fresh suggestion?')) return;
+  run();
+}
+function groupsSetOpt(k, v) {
+  const o = _grp.opts; o[k] = (k === 'group_size' || k === 'interval') ? Number(v) : v;
+  if (_grp.set && (k === 'mode')) { _grp.set.mode = o.mode; BFEngine.BFGroups.schedule(_grp.set.groups, groupsOptsForEngine(), true); _grp.dirty = true; }
+  if (_grp.set && k === 'group_size') { _grp.set.group_size = o.group_size; _grp.dirty = true; }
+  groupsRender();
+}
+// Typing in a start-hole / time box must not rebuild the box: only the checks below update.
+function groupsSetOptTyped(k, v) { _grp.opts[k] = v; }
+function groupsSetField(gi, f, v) {
+  const g = _grp.set.groups[gi]; if (!g) return;
+  if (f === 'start_hole') { const n = parseInt(v, 10); if (n >= 1) g.start_hole = n; else delete g.start_hole; }
+  else if (f === 'wave') { if (v) g.wave = v; else delete g.wave; }
+  else if (f === 'tee_time') { if (v) g.tee_time = v; else delete g.tee_time; }
+  _grp.dirty = true; groupsRefreshStatus();
+}
+function groupsRefreshStatus() {
+  const w = document.getElementById('grp-warn'); if (w) w.innerHTML = groupsWarnHtml();
+  const d = document.getElementById('grp-dirty'); if (d) d.textContent = _grp.dirty ? 'Unsaved changes' : (_grp.publishedAt ? 'Saved' : '');
+}
+function groupsPick(name) { _grp.sel = (_grp.sel === name) ? null : name; groupsRender(); }
+function groupsMoveTo(gi) {
+  const s = _grp.set, name = _grp.sel, lc = x => String(x || '').trim().toLowerCase(); if (!s || !name || !s.groups[gi]) return;
+  const unit = _grp.opts.keep ? _grp.units.find(u => u.members.some(m => lc(m) === lc(name))) : null, who = unit ? unit.members : [name];
+  who.forEach(n => s.groups.forEach(g => { g.members = (g.members || []).filter(m => lc(m) !== lc(n)); }));
+  who.forEach(n => s.groups[gi].members.push(n));
+  _grp.sel = null; _grp.dirty = true; groupsRender();
+}
+function groupsAddGroup() { const s = _grp.set; s.groups.push({ members: [] }); _grp.dirty = true; groupsRender(); }
+function groupsRemoveGroup(gi) { const g = _grp.set.groups[gi]; if (!g || (g.members || []).length) return; _grp.set.groups.splice(gi, 1); _grp.dirty = true; groupsRender(); }
+function groupsRender() {
+  const body = document.getElementById('host-sheet-body'); if (!body || !_grp) return;
+  const o = _grp.opts, s = _grp.set, G = BFEngine.BFGroups, lc = x => String(x || '').trim().toLowerCase();
+  const nPlayers = _grp.units.reduce((t, u) => t + u.members.length, 0);
+  const seg = (list, cur, fn) => `<div class="seg-toggle" style="margin:0">${list.map(([v, l]) => `<button type="button" class="seg-btn${String(cur) === String(v) ? ' seg-btn-active' : ''}" style="white-space:nowrap" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
+  const row = (label, ctl) => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span style="flex:1;font-size:0.88rem;font-weight:600">${label}</span>${ctl}</div>`;
+  const inpStyle = 'height:36px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box';
+  const settings = `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">`
+    + row('Start', seg([['shotgun', 'Shotgun'], ['tee_times', 'Tee times'], ['none', 'None']], o.mode, 'groupsSetOptMode'))
+    + row('Players a group', seg([[2, '2'], [3, '3'], [4, '4'], [5, '5']], o.group_size, 'groupsSetOptSize'))
+    + row('Mix', seg([['order', 'Roster order'], ['random', 'Shuffle']], o.spread, 'groupsSetOptSpread'))
+    + (o.mode === 'shotgun' ? row('Start holes', `<input type="text" value="${GRP_ESC(o.start_holes)}" placeholder="auto-spread" oninput="groupsSetOptTyped('start_holes',this.value)" style="width:130px;${inpStyle}">`)
+      : o.mode === 'tee_times' ? row('First tee', `<input type="time" value="${GRP_ESC(o.first_tee)}" oninput="groupsSetOptTyped('first_tee',this.value)" style="${inpStyle}"><input type="number" min="5" max="30" value="${GRP_ESC(o.interval)}" oninput="groupsSetOptTyped('interval',this.value)" style="width:56px;${inpStyle}"><span style="font-size:0.74rem;color:var(--text-muted)">min</span>`) : '')
+    + `<button type="button" class="host-cta-btn" style="margin:6px 0 0" onclick="groupsSuggest()">✨ ${s ? 'Suggest again' : 'Suggest groups'}</button>`
+    + `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px;line-height:1.45">${nPlayers} players${_grp.units.some(u => u.members.length > 1) ? ', partners always stay together' : ''}. Then tap a player and "Move here" to adjust.</div></div>`;
+  let groupsHtml = '';
+  if (s) {
+    const placed = new Set(); s.groups.forEach(g => (g.members || []).forEach(n => placed.add(lc(n))));
+    const unplaced = _grp.units.flatMap(u => u.members).filter(n => !placed.has(lc(n)));
+    const chip = n => `<button type="button" onclick="groupsPick(${JSON.stringify(n).replace(/"/g, '&quot;')})" style="border:1.5px solid ${_grp.sel === n ? 'var(--green)' : 'var(--border)'};background:${_grp.sel === n ? 'var(--green-light)' : '#fff'};border-radius:16px;padding:5px 11px;margin:2px 4px 2px 0;font-family:inherit;font-size:0.84rem;cursor:pointer">${GRP_ESC(n)}</button>`;
+    const startCtl = (g, gi) => s.mode === 'shotgun'
+      ? `<span style="font-size:0.78rem;color:var(--text-muted)">Hole</span><input type="number" min="1" max="${o.holes}" value="${g.start_hole || ''}" oninput="groupsSetField(${gi},'start_hole',this.value)" style="width:56px;${inpStyle}"><select onchange="groupsSetField(${gi},'wave',this.value)" style="${inpStyle}"><option value=""></option>${['A', 'B'].map(w => `<option${g.wave === w ? ' selected' : ''}>${w}</option>`).join('')}</select>`
+      : s.mode === 'tee_times' ? `<input type="time" value="${GRP_ESC(g.tee_time || '')}" oninput="groupsSetField(${gi},'tee_time',this.value)" style="${inpStyle}">` : '';
+    groupsHtml = s.groups.map((g, gi) => `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="flex:1;font-weight:700">Group ${gi + 1} <span style="font-weight:400;font-size:0.76rem;color:var(--text-muted)">${(g.members || []).length} player${(g.members || []).length === 1 ? '' : 's'}</span></span>${startCtl(g, gi)}</div>
+        <div>${(g.members || []).map(chip).join('') || '<span style="font-size:0.8rem;color:var(--text-muted)">Empty</span>'}</div>
+        ${_grp.sel && !(g.members || []).some(m => lc(m) === lc(_grp.sel)) ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px" onclick="groupsMoveTo(${gi})">Move ${GRP_ESC(_grp.sel)} here</button>` : ''}
+        ${!(g.members || []).length ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px;color:var(--text-muted)" onclick="groupsRemoveGroup(${gi})">Remove group</button>` : ''}
+      </div>`).join('')
+      + (unplaced.length ? `<div style="background:rgba(184,134,11,0.08);border:1px solid rgba(184,134,11,0.4);border-radius:12px;padding:10px 12px;margin-bottom:8px"><div style="font-weight:700;margin-bottom:4px">Not in a group yet</div>${unplaced.map(chip).join('')}</div>` : '')
+      + `<button type="button" class="btn btn-ghost btn-sm" onclick="groupsAddGroup()">➕ Add a group</button>`;
+  } else groupsHtml = `<div style="font-size:0.84rem;color:var(--text-muted);padding:10px 2px">No groups yet. Tap Suggest groups, then adjust.</div>`;
+  body.innerHTML = `<div style="font-size:1.15rem;font-weight:700;margin-bottom:2px">👥 Groups</div>
+    <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px">${GRP_ESC(_grp.g.name)}${_grp.publishedAt ? ` · published (v${_grp.version})` : ' · not published yet'}</div>
+    ${_grp.notes.length ? `<div style="font-size:0.78rem;color:#8a6d00;margin-bottom:8px">${_grp.notes.map(GRP_ESC).join('<br>')}</div>` : ''}
+    ${settings}${groupsHtml}
+    <div id="grp-warn" style="margin:10px 0">${groupsWarnHtml()}</div>
+    ${s ? `<div id="grp-dirty" style="font-size:0.74rem;color:var(--text-muted);text-align:right;margin-bottom:4px">${_grp.dirty ? 'Unsaved changes' : ''}</div>
+      <button type="button" class="host-cta-btn" id="grp-publish" onclick="groupsPublish()">📣 Publish &amp; tell players their start</button>
+      <button type="button" class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="groupsSave()">💾 Save draft (players don't see it)</button>` : ''}`;
+}
+function groupsSetOptMode(v) { groupsSetOpt('mode', v); }
+function groupsSetOptSize(v) { groupsSetOpt('group_size', v); }
+function groupsSetOptSpread(v) { groupsSetOpt('spread', v); }
+async function groupsSave(quiet) {
+  if (!_grp || !_grp.set) return false;
+  _grp.set.mode = _grp.opts.mode; _grp.set.group_size = _grp.opts.group_size; _grp.set.holes = _grp.opts.holes;
+  _grp.set.rules = Object.assign({}, _grp.set.rules || {}, { spread: _grp.opts.spread }, _grp.opts.mode === 'tee_times' ? { first_tee: _grp.opts.first_tee, interval: Number(_grp.opts.interval) || 10 } : {});
+  const sh = groupsOptsForEngine().start_holes; if (sh) _grp.set.rules.start_holes = sh; else delete _grp.set.rules.start_holes;
+  try {
+    const r = await gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${_grp.gid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host_id: currentPlayer, draft: groupsStripUnits(_grp.set) }) }, 10000);
+    if (!r || !r.ok) throw new Error((r && r.error) || 'the server did not accept it');
+    _grp.dirty = false; groupsRefreshStatus(); if (!quiet) showToast('Draft saved');
+    return true;
+  } catch (e) { showToast('Could not save: ' + (e.message || e), true); return false; }
+}
+async function groupsPublish() {
+  if (!_grp || !_grp.set) return;
+  const w = groupsWarnings().filter(x => ['unplaced', 'over', 'split', 'no_hole', 'no_time', 'duplicate'].includes(x.code));
+  const n = _grp.set.groups.reduce((t, g) => t + (g.members || []).length, 0);
+  if (!confirm((w.length ? 'Some things still look off:\n\n' + w.map(x => '• ' + x.msg).join('\n') + '\n\n' : '') + `Publish and send ${n} players their group${_grp.publishedAt ? ' (only players whose start changed are told again)' : ''}?`)) return;
+  const btn = document.getElementById('grp-publish'); if (btn) btn.disabled = true;
+  if (!(await groupsSave(true))) { if (btn) btn.disabled = false; return; }
+  try {
+    const r = await gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${_grp.gid}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host_id: currentPlayer, title: _grp.g.name }) }, 15000);
+    if (!r || !r.ok) throw new Error((r && r.error) || 'the server did not accept it');
+    _grp.version = r.version || _grp.version + 1; _grp.publishedAt = new Date().toISOString(); _groupSets[_grp.gid] = { published: groupsStripUnits(_grp.set), version: _grp.version };
+    showToast(r.notified ? `Published. ${r.notified} player${r.notified === 1 ? '' : 's'} told their start.` : 'Published. Nobody needed a new message.');
+    groupsRender();
+  } catch (e) { showToast('Could not publish: ' + (e.message || e), true); if (btn) btn.disabled = false; }
+}
+// The player's own card: where they start. Only gatherings starting within a week are looked up, and only the published set is ever read.
+async function groupsLoadPublished() {
+  try {
+    if (!currentPlayer || !Array.isArray(gatheringData)) return;
+    const now = Date.now(), ids = gatheringData.filter(g => g.dt && +g.dt > now - 8 * 3600e3 && +g.dt < now + 8 * 86400e3
+      && gatheringRegData.some(r => r.gatheringId === g.gatheringId && r.player === currentPlayer && r.status === 'Yes')).map(g => g.gatheringId);
+    if (!ids.length) return;
+    const res = await Promise.all(ids.map(id => gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${id}`, {}, 8000).catch(() => null)));
+    let any = false; ids.forEach((id, i) => { const r = res[i]; if (r && r.published) { _groupSets[id] = { published: r.published, version: r.version }; any = true; } });
+    if (any && typeof renderAll === 'function') renderAll();
+  } catch (e) { /* the card just shows no group line */ }
+}
+function myGroupBannerHtml(evt) {
+  const gs = evt && evt.gatheringId ? _groupSets[evt.gatheringId] : null; if (!gs || !gs.published || !currentPlayer) return '';
+  const info = BFEngine.BFGroups.of(gs.published, currentPlayer); if (!info) return '';
+  const mates = info.mates.length ? `With ${teamNamesText(info.mates)}` : '';
+  return `<div style="background:rgba(255,255,255,0.07);border:1.5px solid rgba(245,200,66,0.7);border-radius:10px;padding:10px 12px;margin:8px 0 4px;display:flex;gap:10px;align-items:center">
+    <span style="font-size:1.1rem">⛳</span><div style="flex:1;font-size:0.84rem;color:rgba(255,255,255,0.88);line-height:1.5"><b style="color:#F5C842">${GRP_ESC(BFEngine.BFGroups.startText(info))}</b>${mates ? `<br>${mates}` : ''}</div></div>`;
 }
 // ══════════════════════════════════════════
 // TEAMS (v4.48.0) — xMan: a Gathering with team_size 2, 3 or 4
@@ -19459,6 +19642,8 @@ function renderHostPanelList() {
         <div class="host-gathering-actions">
           <button class="btn btn-secondary btn-sm" style="flex:1;${(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId)) ? 'background:rgba(29,158,117,0.12);border-color:rgba(29,158,117,0.35);color:#1D9E75;font-weight:700' : ''}"
             onclick="showGatheringGamesForm(${g.gatheringId})">🎮 Games${(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId)) ? ' ✓' : ''}</button>
+          <button class="btn btn-secondary btn-sm" style="flex:1"
+            onclick="openGatheringGroups(${g.gatheringId})">👥 Groups</button>
         </div>
       </div>`;
     }).join('');

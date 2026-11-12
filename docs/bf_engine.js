@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.51.0';
+  const ENGINE_VERSION = '1.52.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -3124,8 +3124,177 @@
     return { ok: errors.length === 0, errors, unassigned };
   }
 
+  // ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // BFGroups (Dev-99): who plays with whom, and where/when they start. ONE shared function for every kind of event
+  // (Gatherings, Series, Cup, host events). It never knows what an event is: an adapter hands it UNITS (a single
+  // player, or a locked team that must stay together) and it returns GROUPS. Flexibility over hard rules:
+  //   - rules are optional settings, and breaking one is a WARNING, never a block; a hand placement always wins
+  //   - the stored shape is an open document (groups carry open attributes), so an event type can add its own
+  //   - mode is a setting: 'shotgun' (start holes), 'tee_times' (a first tee + interval) or 'none'
+  // unit  = { id, members: ['Name', ...], hcp?: number, label?: string }
+  // group = { members: [...], units?: [ids], start_hole?: n, wave?: 'A'|'B', tee_time?: 'HH:MM', label?: string }
+  // set   = { v: 1, mode, holes, group_size, groups: [group...], rules: {...} }
+  const GROUP_DEFAULTS = { group_size: 4, min_size: 3, holes: 18, mode: 'shotgun', spread: 'order', interval: 10, first_tee: '08:00' };
+  function groupsUnitsFromRoster(roster) {
+    // roster = { players: [{ name, hcp? }], teams?: [[name, name], ...], team_names?: [...] }; a player on no team is a unit of one.
+    const lc = s => String(s || '').trim().toLowerCase(), seen = new Set(), units = [];
+    const hcpOf = new Map((roster.players || []).map(p => [lc(p.name), p.hcp]));
+    (roster.teams || []).forEach((tm, i) => {
+      const ms = (tm || []).filter(Boolean); if (!ms.length || ms.some(n => seen.has(lc(n)))) return;
+      ms.forEach(n => seen.add(lc(n)));
+      const hs = ms.map(n => hcpOf.get(lc(n))).filter(h => Number.isFinite(Number(h)) && h !== null && h !== '').map(Number);
+      units.push({ id: 'u' + (units.length + 1), members: ms.slice(), ...(hs.length ? { hcp: hs.reduce((t, v) => t + v, 0) / hs.length } : {}), ...(roster.team_names && roster.team_names[i] ? { label: roster.team_names[i] } : {}) });
+    });
+    (roster.players || []).forEach(p => {
+      if (!p || !p.name || seen.has(lc(p.name))) return; seen.add(lc(p.name));
+      units.push({ id: 'u' + (units.length + 1), members: [p.name], ...(Number.isFinite(Number(p.hcp)) && p.hcp !== null && p.hcp !== '' ? { hcp: Number(p.hcp) } : {}) });
+    });
+    return units;
+  }
+  // Start holes for n groups: spread evenly round the course (6 groups -> 1,4,7,10,13,16). More groups than holes double up (A/B waves).
+  function groupsAutoStartHoles(n, holes, allowed) {
+    holes = holes || 18; n = Math.max(0, n | 0); if (!n) return [];
+    const pool = Array.isArray(allowed) && allowed.length ? allowed.slice().sort((a, b) => a - b) : Array.from({ length: holes }, (_, i) => i + 1);
+    const out = [], per = Math.ceil(n / pool.length), slots = Math.ceil(n / per);
+    for (let i = 0; i < n; i++) { const s = Math.floor(i / per); out.push({ start_hole: pool[Math.min(pool.length - 1, Math.floor(s * pool.length / slots))], wave: per > 1 ? ['A', 'B', 'C'][i % per] : undefined }); }
+    return out.map(o => (o.wave ? o : { start_hole: o.start_hole }));
+  }
+  function groupsTimeAdd(hhmm, mins) { const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || '')); if (!m) return null; const t = (Number(m[1]) * 60 + Number(m[2]) + mins) % 1440; return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); }
+  // Gives every group its start (hole or time). Keeps any group's own value unless `overwrite`.
+  function groupsSchedule(groups, opts, overwrite) {
+    const o = Object.assign({}, GROUP_DEFAULTS, opts || {});
+    if (o.mode === 'shotgun') {
+      const hs = o.start_holes && o.start_holes.length ? o.start_holes : null;
+      const auto = groupsAutoStartHoles(groups.length, o.holes, hs);
+      groups.forEach((g, i) => { if (overwrite || g.start_hole == null) { g.start_hole = auto[i].start_hole; if (auto[i].wave) g.wave = auto[i].wave; else delete g.wave; } delete g.tee_time; });
+    } else if (o.mode === 'tee_times') {
+      groups.forEach((g, i) => { if (overwrite || !g.tee_time) g.tee_time = groupsTimeAdd(o.first_tee, i * o.interval); delete g.start_hole; delete g.wave; });
+    } else groups.forEach(g => { delete g.start_hole; delete g.wave; delete g.tee_time; });
+    return groups;
+  }
+  function groupsSeededRand(seed) { let s = (Number(seed) || 1) >>> 0 || 1; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
+  // Suggest groups for the units. Units are never split; forced pairs travel together; spread decides who is balanced against whom.
+  function groupsSuggest(units, opts) {
+    const o = Object.assign({}, GROUP_DEFAULTS, opts || {}), warnings = [];
+    const byId = new Map(units.map(u => [u.id, u]));
+    const total = units.reduce((t, u) => t + u.members.length, 0);
+    // forced pairs -> super units (union-find)
+    const parent = new Map(units.map(u => [u.id, u.id])), find = x => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+    (o.force || []).forEach(([a, b]) => { if (byId.has(a) && byId.has(b)) parent.set(find(a), find(b)); });
+    const supers = new Map(); units.forEach(u => { const r = find(u.id); if (!supers.has(r)) supers.set(r, []); supers.get(r).push(u.id); });
+    let list = [...supers.values()].map(ids => ({ ids, size: ids.reduce((t, id) => t + byId.get(id).members.length, 0), hcp: (() => { const hs = ids.map(id => byId.get(id).hcp).filter(h => Number.isFinite(h)); return hs.length ? hs.reduce((t, v) => t + v, 0) / hs.length : null; })() }));
+    list.forEach(s => { if (s.size > o.group_size) warnings.push({ code: 'force_too_big', msg: 'Players you asked to play together (' + s.ids.map(id => byId.get(id).members.join(' & ')).join(', ') + ') are more than ' + o.group_size + ' and cannot share one group.' }); });
+    const nGroups = Math.max(1, Math.ceil(total / o.group_size)), bins = Array.from({ length: nGroups }, () => ({ ids: [], size: 0, hsum: 0, hn: 0 }));
+    if (o.spread === 'random') { const r = groupsSeededRand(o.seed); list = list.map(s => [r(), s]).sort((a, b) => a[0] - b[0]).map(x => x[1]); }
+    else if (o.spread === 'hcp') list.sort((a, b) => (a.hcp == null) - (b.hcp == null) || (a.hcp || 0) - (b.hcp || 0));
+    else list.sort((a, b) => 0);
+    // biggest first packs best; ties keep the roster/spread order
+    const order = list.map((s, i) => [s, i]).sort((a, b) => b[0].size - a[0].size || a[1] - b[1]).map(x => x[0]);
+    order.forEach(s => {
+      let fits = bins.filter(b => b.size + s.size <= o.group_size);
+      let pick;
+      if (!fits.length) { pick = { ids: [], size: 0, hsum: 0, hn: 0 }; bins.push(pick); }
+      else if (o.spread === 'order') pick = fits.slice().sort((a, b) => b.size - a.size || bins.indexOf(a) - bins.indexOf(b))[0]; // fill one group before the next: the roster order is kept
+      else if (o.spread === 'hcp') pick = fits.slice().sort((a, b) => (a.hn ? a.hsum / a.hn : 0) - (b.hn ? b.hsum / b.hn : 0) || a.size - b.size || bins.indexOf(a) - bins.indexOf(b))[0];
+      else pick = fits.slice().sort((a, b) => a.size - b.size || bins.indexOf(a) - bins.indexOf(b))[0];
+      pick.ids.push(...s.ids); pick.size += s.size; if (s.hcp != null) { pick.hsum += s.hcp * s.size; pick.hn += s.size; }
+    });
+    let groups = bins.filter(b => b.ids.length).map(b => ({ units: b.ids.slice(), members: b.ids.flatMap(id => byId.get(id).members) }));
+    // nobody plays alone when it can be helped: a group of one borrows a unit from a full group (which keeps at least two players)
+    groups.forEach(g => {
+      const sz = x => x.units.reduce((t, id) => t + byId.get(id).members.length, 0);
+      if (sz(g) >= 2) return;
+      const donors = groups.filter(h => h !== g && sz(h) >= 3 && h.units.length > 1);
+      for (const h of donors) {
+        const cand = h.units.filter(id => !(o.force || []).some(p => p.includes(id)) && sz(g) + byId.get(id).members.length <= o.group_size && sz(h) - byId.get(id).members.length >= 2)
+          .sort((a, b) => byId.get(b).members.length - byId.get(a).members.length)[0];
+        if (cand) { h.units = h.units.filter(x => x !== cand); g.units.push(cand); break; }
+      }
+    });
+    // keep units in the order the roster gave them inside a group
+    const rank = new Map(units.map((u, i) => [u.id, i]));
+    groups.forEach(g => { g.units.sort((a, b) => rank.get(a) - rank.get(b)); g.members = g.units.flatMap(id => byId.get(id).members); });
+    // avoid pairs: swap a same-sized unit out of the group, when that causes no new clash
+    const clash = g => (o.avoid || []).filter(([a, b]) => g.units.includes(a) && g.units.includes(b));
+    for (let pass = 0; pass < 3; pass++) groups.forEach((g, gi) => clash(g).forEach(([a, b]) => {
+      for (const mv of [b, a]) {
+        const mu = byId.get(mv); let done = false;
+        groups.forEach((h, hi) => { if (done || hi === gi) return;
+          h.units.forEach(oid => { if (done) return; const ou = byId.get(oid); if (ou.members.length !== mu.members.length || (o.force || []).some(p => p.includes(oid) || p.includes(mv))) return;
+            const ng = { units: g.units.filter(x => x !== mv).concat(oid) }, nh = { units: h.units.filter(x => x !== oid).concat(mv) };
+            if (clash(ng).length || clash(nh).length) return;
+            g.units = ng.units; h.units = nh.units; done = true; });
+        });
+        if (done) break;
+      }
+      g.members = g.units.flatMap(id => byId.get(id).members);
+    }));
+    groups.forEach(g => { g.units.sort((a, b) => rank.get(a) - rank.get(b)); g.members = g.units.flatMap(id => byId.get(id).members); });
+    groupsSchedule(groups, o, true);
+    const set = { v: 1, mode: o.mode, holes: o.holes, group_size: o.group_size, groups, rules: { spread: o.spread, avoid: o.avoid || [], force: o.force || [], ...(o.start_holes ? { start_holes: o.start_holes } : {}), ...(o.mode === 'tee_times' ? { first_tee: o.first_tee, interval: o.interval } : {}) } };
+    return { set, warnings: warnings.concat(groupsValidate(set, units, o)) };
+  }
+  // Soft checks. Everything is advice: the host can save a set with any of these.
+  function groupsValidate(set, units, opts) {
+    const o = Object.assign({}, GROUP_DEFAULTS, (set && set.rules) || {}, { group_size: (set && set.group_size) || GROUP_DEFAULTS.group_size, holes: (set && set.holes) || 18, mode: (set && set.mode) || 'none' }, opts || {});
+    const out = [], lc = s => String(s || '').trim().toLowerCase(), groups = (set && set.groups) || [];
+    const where = new Map(); // player -> group index
+    groups.forEach((g, gi) => (g.members || []).forEach(n => { const k = lc(n); if (where.has(k)) out.push({ code: 'duplicate', group: gi, player: n, msg: n + ' is in more than one group.' }); else where.set(k, gi); }));
+    const rosterNames = new Set(); (units || []).forEach(u => u.members.forEach(n => rosterNames.add(lc(n))));
+    if (units && units.length) {
+      units.forEach(u => u.members.forEach(n => { if (!where.has(lc(n))) out.push({ code: 'unplaced', player: n, msg: n + ' is not in a group yet.' }); }));
+      groups.forEach((g, gi) => (g.members || []).forEach(n => { if (!rosterNames.has(lc(n))) out.push({ code: 'stale', group: gi, player: n, msg: n + ' is in Group ' + (gi + 1) + ' but is no longer on the list.' }); }));
+      units.filter(u => u.members.length > 1).forEach(u => { const gs = new Set(u.members.map(n => where.get(lc(n))).filter(x => x != null)); if (gs.size > 1) out.push({ code: 'split', msg: (u.label || u.members.join(' & ')) + ' are in different groups.' }); });
+    }
+    groups.forEach((g, gi) => {
+      const n = (g.members || []).length;
+      if (n > o.group_size) out.push({ code: 'over', group: gi, msg: 'Group ' + (gi + 1) + ' has ' + n + ' players (limit ' + o.group_size + ').' });
+      else if (n === 0) out.push({ code: 'empty', group: gi, msg: 'Group ' + (gi + 1) + ' is empty.' });
+      else if (n < o.min_size) out.push({ code: 'short', group: gi, msg: 'Group ' + (gi + 1) + ' has ' + n + ' player' + (n === 1 ? '' : 's') + '.' });
+    });
+    (o.avoid || []).forEach(([a, b]) => { const ua = (units || []).find(u => u.id === a), ub = (units || []).find(u => u.id === b); if (ua && ub && where.get(lc(ua.members[0])) != null && where.get(lc(ua.members[0])) === where.get(lc(ub.members[0]))) out.push({ code: 'avoid', msg: ua.members.join(' & ') + ' and ' + ub.members.join(' & ') + ' are together (you asked to keep them apart).' }); });
+    (o.force || []).forEach(([a, b]) => { const ua = (units || []).find(u => u.id === a), ub = (units || []).find(u => u.id === b); if (ua && ub && where.get(lc(ua.members[0])) !== where.get(lc(ub.members[0]))) out.push({ code: 'force', msg: ua.members.join(' & ') + ' and ' + ub.members.join(' & ') + ' are apart (you asked to put them together).' }); });
+    if (o.mode === 'shotgun') {
+      const cnt = new Map();
+      groups.forEach((g, gi) => { const h = g.start_hole;
+        if (!(h >= 1 && h <= o.holes)) out.push({ code: 'no_hole', group: gi, msg: 'Group ' + (gi + 1) + ' has no starting hole.' });
+        else { const k = h; cnt.set(k, (cnt.get(k) || 0) + 1); } });
+      cnt.forEach((c, h) => { if (c > 2) out.push({ code: 'hole_crowded', hole: h, msg: c + ' groups start on hole ' + h + '.' }); else if (c === 2 && !groups.filter(g => g.start_hole === h).every(g => g.wave)) out.push({ code: 'hole_shared', hole: h, msg: '2 groups start on hole ' + h + ' (give them A and B waves).' }); });
+    } else if (o.mode === 'tee_times') groups.forEach((g, gi) => { if (!/^\d{1,2}:\d{2}$/.test(String(g.tee_time || ''))) out.push({ code: 'no_time', group: gi, msg: 'Group ' + (gi + 1) + ' has no tee time.' }); });
+    return out;
+  }
+  // The roster moved after the groups were made: put anyone new into a group with room, drop anyone gone, keep everything else.
+  function groupsReconcile(set, units, opts) {
+    const o = Object.assign({}, GROUP_DEFAULTS, (set && set.rules) || {}, { group_size: (set && set.group_size) || 4, holes: (set && set.holes) || 18, mode: (set && set.mode) || 'shotgun' }, opts || {});
+    const lc = s => String(s || '').trim().toLowerCase(), live = new Set(); units.forEach(u => u.members.forEach(n => live.add(lc(n))));
+    const next = JSON.parse(JSON.stringify(set || { v: 1, mode: o.mode, holes: o.holes, group_size: o.group_size, groups: [], rules: {} })), added = [], removed = [];
+    next.groups.forEach(g => { const keep = (g.members || []).filter(n => live.has(lc(n))); (g.members || []).filter(n => !live.has(lc(n))).forEach(n => removed.push(n)); g.members = keep; if (g.units) g.units = g.units.filter(id => units.some(u => u.id === id)); });
+    const placed = new Set(); next.groups.forEach(g => g.members.forEach(n => placed.add(lc(n))));
+    units.filter(u => u.members.some(n => !placed.has(lc(n)))).forEach(u => {
+      const mates = u.members.map(n => next.groups.findIndex(g => g.members.some(m => lc(m) === lc(n)))).filter(i => i >= 0);
+      let g = mates.length ? next.groups[mates[0]] : next.groups.filter(x => x.members.length + u.members.length <= o.group_size).sort((a, b) => a.members.length - b.members.length)[0];
+      if (!g) { g = { members: [], units: [] }; next.groups.push(g); groupsSchedule(next.groups, o, false); }
+      u.members.forEach(n => { if (!g.members.some(m => lc(m) === lc(n))) { g.members.push(n); added.push(n); } }); (g.units = g.units || []).push(u.id);
+    });
+    return { set: next, added, removed, warnings: groupsValidate(next, units, o) };
+  }
+  // Where is this player? -> { index, number, start_hole, wave, tee_time, label, mates: [...] } or null
+  function groupsOf(set, name) {
+    const lc = s => String(s || '').trim().toLowerCase(), gs = (set && set.groups) || [];
+    const i = gs.findIndex(g => (g.members || []).some(m => lc(m) === lc(name)));
+    if (i < 0) return null; const g = gs[i];
+    return { index: i, number: i + 1, start_hole: g.start_hole == null ? null : g.start_hole, wave: g.wave || null, tee_time: g.tee_time || null, label: g.label || null, mates: (g.members || []).filter(m => lc(m) !== lc(name)) };
+  }
+  // The words a player is told: "Group 3 · start on hole 7 (A)" / "Group 3 · 9:20 AM"
+  function groupsStartText(info, mode) {
+    if (!info) return '';
+    const t = info.tee_time ? (() => { const [h, m] = info.tee_time.split(':').map(Number); return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM'); })() : '';
+    return 'Group ' + info.number + (info.start_hole ? ' · start on hole ' + info.start_hole + (info.wave ? ' (' + info.wave + ')' : '') : t ? ' · ' + t + ' tee time' : '');
+  }
+  const BFGroups = { GROUP_DEFAULTS, unitsFromRoster: groupsUnitsFromRoster, autoStartHoles: groupsAutoStartHoles, schedule: groupsSchedule, suggest: groupsSuggest, validate: groupsValidate, reconcile: groupsReconcile, of: groupsOf, startText: groupsStartText };
+
   return {
-    ENGINE_VERSION,
+    ENGINE_VERSION, BFGroups,
     BASE_GAMES, ADDONS,
     getGame, listGames, recommendPairs, GAME_GROUPS, gamesInUiOrder, gamesUiMeta, gamesInfo, gamesSealLabels, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
     skinsWon, betterBallHoles, scrambleTeamStrokes, scrambleSize, scramblePcts, scrambleCombinedPct, stablefordHolePoints,
