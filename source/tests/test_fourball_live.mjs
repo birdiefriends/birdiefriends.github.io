@@ -50,6 +50,13 @@ const html = ctx.api.fourballLiveSectionHtml(cfg);
 ok(html.includes('Cy &amp; Dee') && html.includes('Ann &amp; Bob') && html.includes('thru 7') && html.includes('thru 5'), 'section: both pairs with holes played');
 ok(html.includes('-1') || html.includes('−1'), 'section: score to par shown'); ok(html.includes('⭐'), 'section: your own pair is marked');
 ok(/gross/.test(html), 'section: says gross');
+// team names: a named team shows the name first with its partners underneath; an unnamed one shows the pair
+{ const rb = ctx.api.get().board; const keep = rb.rows.map(r => r.name);
+  rb.rows[0].name = 'The Gobblers';
+  const named = ctx.api.fourballLiveSectionHtml(cfg);
+  ok(named.includes('The Gobblers') && named.includes(rb.rows[0].pair.join(' &amp; ')), 'section: a named team shows its name with the partners underneath');
+  ok(named.includes(rb.rows[1].pair.join(' &amp; ')), 'section: an unnamed team still shows its pair');
+  rb.rows.forEach((r, i) => { r.name = keep[i]; }); }
 await (async () => { ctx._gatheringGamesIndex = new Map([[7, { games: ['skins'] }]]); await ctx.api.loadFourballLive({ gatheringId: 7 }); ok(ctx.api.get() === null, 'loader: no BestBall -> nothing kept'); })();
 // wiring guards
 ok(/loadFourballLive\(getLiveEvent\(\)\)/.test(src) && /loadFourballLive\(evt\);/.test(src), 'panel open and the 60s refresh both reload standings');

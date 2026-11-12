@@ -11464,7 +11464,7 @@ function fourballLiveSectionHtml(cfg) {
     const thru = r.complete ? 'F' : (r.played ? `thru ${r.thru}` : '');
     return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid rgba(255,255,255,0.08);font-size:0.84rem;color:#fff;${mine ? 'font-weight:700' : ''}">
       <span style="width:1.6rem;color:rgba(255,255,255,0.5);font-size:0.74rem">${r.place == null ? '' : (r.tied ? 'T' : '') + r.place}</span>
-      <span style="flex:1;min-width:0">${r.pair.map(escapeHtml).join(' &amp; ')}${mine ? ' ⭐' : ''}</span>
+      <span style="flex:1;min-width:0">${r.name ? `<span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.name)}${mine ? ' ⭐' : ''}</span><span style="display:block;font-size:0.72rem;font-weight:400;color:rgba(255,255,255,0.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.pair.map(escapeHtml).join(' &amp; ')}</span>` : `${r.pair.map(escapeHtml).join(' &amp; ')}${mine ? ' ⭐' : ''}`}</span>
       <span style="color:rgba(255,255,255,0.5);font-size:0.74rem">${thru}</span>
       <span style="min-width:2.2rem;text-align:right">${score}</span></div>`;
   }).join('');
