@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.53.0';
+  const ENGINE_VERSION = '1.54.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2044,6 +2044,38 @@
   function gameTraits(id) { const m = (ADDONS[id] && ADDONS[id].meta) || {}; return Object.assign({}, TRAIT_DEFAULTS, m.traits || {}); }
   function gamesWith(pred) { return gamesInUiOrder().filter(id => pred(gameTraits(id), id)); }
   function sideGames() { return gamesWith(t => t.sides); }
+  // ── Hole-by-hole flow (v1.54.0) ───────────────────────────────────────────────────────────────
+  // The reusable live-scoring core: for a config and a hole, the ordered steps a scorer walks through.
+  //   1. 'score'  always first (the hole score, saved by whoever hosts the flow)
+  //   2. extras   one per game that needs an input on THIS hole, contributed by HOLE_STEP_PROVIDERS
+  // A provider is fn(addon, hole, ctx) -> step | null, so a new game adds its per-hole input by registering one
+  // (nothing in the UI changes). Steps are plain data: { id, game, kind, hole, ... }; the UI maps kind -> widget.
+  const HOLE_STEP_PROVIDERS = {
+    cttp(addon, hole) {
+      const holes = (Array.isArray(addon.holes) ? addon.holes : []).map(Number);
+      const prize = (Array.isArray(addon.prize_holes) ? addon.prize_holes : []).map(Number);   // prize-only holes are claimed like any other
+      if (holes.indexOf(hole) < 0 && prize.indexOf(hole) < 0) return null;
+      return { id: 'cttp', game: 'cttp', kind: 'claim', hole, prize: prize.indexOf(hole) >= 0 && holes.indexOf(hole) < 0, label: 'Closest to the pin' };
+    }
+  };
+  function registerHoleStep(gameId, fn) { if (typeof fn === 'function') HOLE_STEP_PROVIDERS[gameId] = fn; }
+  function holeSteps(config, hole, ctx) {
+    const out = [{ id: 'score', game: null, kind: 'score', hole: Number(hole), label: 'Hole score' }];
+    const addons = (config && Array.isArray(config.addons)) ? config.addons : [];
+    Object.keys(HOLE_STEP_PROVIDERS).forEach(gid => {
+      const a = addons.find(x => x && x.id === gid);
+      if (!a) return;
+      const st = HOLE_STEP_PROVIDERS[gid](a, Number(hole), ctx || {});
+      if (st) out.push(st);
+    });
+    return out;
+  }
+  // Every hole that has an extra step (for hole chips / "what's coming" hints).
+  function holeStepHoles(config, holeCount) {
+    const r = {};
+    for (let h = 1; h <= (holeCount || 18); h++) { const e = holeSteps(config, h).slice(1); if (e.length) r[h] = e; }
+    return r;
+  }
   function sideFormGames() { return gamesWith(t => t.sideForm); }
   // The sides of a configured side game, flattened in play order: pairs as given, or each match's two players.
   function gameSides(id, addon) {
@@ -3318,6 +3350,6 @@
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,
     CUP_FORMATS, cupTiersOf, cupTierFor, cupIndexOf, cupStrokeIndexFor, cupPointsRule, cupWinTarget, cupPlanFor, cupSnakeOrder, cupAlternatingOrder, cupMatchState, cupSideScores, cupDriveStatus, cupStandings, cupTotalPoints, cupValidate, cupDraftView, cupOrderFirst, cupDraftPick, cupDraftUndo, cupParseStats, cupSeriesStats, cupBalance, cupRosterOf, cupPairsStatus, cupPairStats, cupPairsSpread, cupPairsSuggest, cupPairsRevealed, cupPairsVisible, cupPairsRound, cupMatchupView, cupMatchupPick, cupSinglesRound, cupSinglesControl, cupSinglesView, cupSinglesPick, cupHandicapRule, cupHcpMap, cupSegmentAt, cupMatchNets, cupMatchLive, cupSideNames, cupMulliganDefault, cupMulligans, cupWalkover, cupGroupsOf, cupMatchNumbers, cupLiveStandings, cupCourseHcp, cupMatchStrokes, cupHoleStrokes, cupMatchStrokeText, CUP_BALANCE_LIMITS,
     CUP_MONEY_GAMES, cupRoundOf, cupRoundPlayers, cupScorecards, cupCtpLeaders, cupParThrees, cupGamesProblems, cupRoundConfig, cupRoundMoney, cupMoneyView,
-    suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
+    suggestGameAmounts, strokeMarksFor, sideStrokeSets, gameTraits, gamesWith, sideGames, holeSteps, holeStepHoles, registerHoleStep, sideFormGames, gameSides, sideMatchView, sideMatchStory, sideGroupResults, sideResultTags
   };
 });

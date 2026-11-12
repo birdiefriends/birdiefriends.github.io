@@ -3679,7 +3679,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.53.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.54.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -11110,7 +11110,7 @@ function skFlush() {
 window.addEventListener('online', () => { try { skFlush(); } catch (e) {} });
 function livePanelModeToggleHtml(mode) {
   const b = (id, label) => `<button type="button" onclick="setLiveScoreMode('${id}')" style="flex:1;min-height:44px;border:0;border-radius:10px;font-family:inherit;font-size:0.9rem;font-weight:700;cursor:pointer;${mode === id ? 'background:#fff;color:#085041' : 'background:transparent;color:rgba(255,255,255,0.8)'}">${label}</button>`;
-  return `<div style="display:flex;gap:3px;background:rgba(0,0,0,0.3);border-radius:12px;padding:3px;margin-bottom:10px">${b('score', 'Live Score')}${b('games', 'Live Actions')}</div>`;
+  return `<div style="display:flex;gap:3px;background:rgba(0,0,0,0.3);border-radius:12px;padding:3px;margin-bottom:10px">${b('score', 'Hole by Hole')}${b('games', 'Leaderboard')}</div>`;
 }
 function liveScoreModeHtml() {
   const g = skGroup(), gs = skGroups(), hole = _sk.hole, max = skMaxHole();
@@ -11147,6 +11147,7 @@ function liveScoreModeHtml() {
     : done ? (units.length === 2 ? 'Both are in. ' : 'All ' + units.length + ' are in. ') + 'Tap a ' + (asMode ? 'team' : 'name') + ' to change a score, or go to the next hole.'
     : _sk.sel >= 0 ? `Tap ${escapeHtml(asMode ? (units.find(u => u.k === _sk.sel) || units[0]).label : first(g.players[_sk.sel]))}'s score. It saves and moves to the next ${asMode ? 'team' : 'name'}.`
     : 'Tap a ' + (asMode ? 'team' : 'name') + ' to enter a score.';
+  const extraSteps = BFEngine.holeSteps(_sk.config, hole).slice(1);   // hole-by-hole flow: what else this hole needs after the score
   const status = _sk.err ? 'Not saved yet, will retry' : _sk.pending ? 'Saving…' : _sk.savedAt ? 'Saved' : '';
   const alertsNote = (!pars && (gatheringAddon(_sk.config, 'skins') || gatheringAddon(_sk.config, 'birdiepay') || gatheringAddon(_sk.config, 'scramble')))
     ? `<div style="margin-top:8px;font-size:0.76rem;color:#ffd27a;line-height:1.4">No par data for this course, so birdies can't be announced automatically. Host: add the course pars in Venues.</div>` : '';
@@ -11159,9 +11160,46 @@ function liveScoreModeHtml() {
         <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-top:3px">${par != null ? 'Par ' + par : '&nbsp;'}<span style="margin-left:10px;color:${statusCol}">${status}</span></div></div>
       ${navBtn(1, chevR, done && hole < max)}
     </div>
-    ${rows}
+    ${extraSteps.length ? holeFlowStepHead(1, 'Hole score') : ''}${rows}
     ${nextStrokes}
-    <div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:34px">${hint}</div>${alertsNote}`;
+    <div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:34px">${hint}</div>${extraSteps.map((st, i) => holeFlowStepHtml(st, i + 2, g, done)).join('')}${alertsNote}`;
+}
+// ── Hole-by-hole flow renderers (v4.60.0) ─────────────────────────────────────────────────
+// The steps come from BFEngine.holeSteps (data only); a step's `kind` picks its renderer here. A new kind (a choice, a
+// count, a yes/no) is one more line in holeFlowStepHtml, and a game gets a step by registering a provider in the engine.
+// Nothing in here knows about Gatherings: it reads the host's state through the small adapter below, so BFE and
+// BirdieFriends events can supply their own save/read functions later.
+function holeFlowStepHead(n, title, sub) {
+  return `<div style="display:flex;align-items:center;gap:8px;margin:14px 0 8px"><span style="width:22px;height:22px;border-radius:50%;background:rgba(93,202,165,0.22);color:#5DCAA5;font-family:'DM Mono',monospace;font-size:0.78rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">${n}</span><span style="font-size:0.95rem;font-weight:700;color:#fff">${escapeHtml(title)}</span>${sub ? `<span style="font-size:0.74rem;color:rgba(255,255,255,0.6)">${sub}</span>` : ''}</div>`;
+}
+function holeFlowStepHtml(st, n, g, scoreDone) {
+  // kind -> renderer (add a line here for a new kind of step)
+  if (st.kind === 'claim') return holeFlowClaimHtml(st, n, g);
+  return '';
+}
+// Claim step (closest to the pin): pick who is closest, optional distance, one button. Saves through submitCttp.
+function holeFlowClaimHtml(st, n, g) {
+  const evt = getLiveEvent(); if (!evt) return '';
+  const hole = st.hole, nm = x => String(x || '').trim().toLowerCase();
+  const leader = _ctpData[hole];
+  const sel = (_ctpHole === hole && _ctpPlayer) ? _ctpPlayer : null;
+  const first = x => String(x).trim().split(/\s+/)[0];
+  const sub = st.prize ? 'Prize hole. Closest wins the pin prize' : (leader ? 'Now: ' + escapeHtml(first(leader.player)) + (leader.dist ? ' ' + leader.dist + ' ft' : '') : 'Nobody yet');
+  const pills = g.players.map(p => {
+    const already = (_ctpHistory[hole] || []).some(e => nm(e.player) === nm(p));
+    const on = sel && nm(sel) === nm(p), lead = leader && nm(leader.player) === nm(p);
+    const style = `min-height:44px;padding:0 14px;border-radius:22px;font-family:inherit;font-size:0.9rem;font-weight:600;color:#fff;cursor:${already ? 'default' : 'pointer'};opacity:${already && !lead ? 0.55 : 1};` + (on ? 'border:2px solid #5DCAA5;background:rgba(93,202,165,0.22)' : lead ? 'border:1px solid #e0b44c;background:rgba(224,180,76,0.15)' : 'border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06)');
+    return `<button type="button" ${already ? 'disabled' : `onclick="holeFlowClaimPick(${hole},${JSON.stringify(p).replace(/"/g, '&quot;')})"`} style="${style}">${escapeHtml(first(p))}${lead ? ' 🎯' : ''}</button>`;
+  }).join('');
+  const entry = sel ? `<div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+      <input class="cttp-dist-input" type="text" id="cttp-dist-input" placeholder="Feet (optional)" inputmode="decimal" style="flex:1;min-width:0" onbeforeinput="if(event.data!=null && (!/^[0-9.]+$/.test(event.data) || (event.data.includes('.') && this.value.includes('.')))) event.preventDefault()">
+      <button type="button" class="sc-submit-btn" style="flex:1.4;margin:0" ${_ctpSubmitting ? 'disabled' : ''} onclick="submitCttp(${JSON.stringify(evt.name).replace(/"/g, '&quot;')})">${_ctpSubmitting ? 'Saving…' : escapeHtml(first(sel)) + ' is closest'}</button></div>` : '';
+  return holeFlowStepHead(n, st.prize ? 'Closest to the pin · prize' : 'Closest to the pin', sub) + `<div style="display:flex;flex-wrap:wrap;gap:6px">${pills}</div>${entry}`;
+}
+function holeFlowClaimPick(hole, player) {
+  if (_ctpSubmitting) return;
+  if (_ctpHole === hole && _ctpPlayer === player) { _ctpHole = null; _ctpPlayer = null; } else { _ctpHole = hole; _ctpPlayer = player; }
+  renderLiveBanner();
 }
 // ── Live Actions: the BestBall game view (Dev-93) ─────────────────────────────────────────
 // Two jobs kept apart: (1) how the game stands, (2) each player's card, drilled into from the game view.

@@ -37,7 +37,7 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date
   gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null, failNext: false,
   fetch: async (url, opt) => { if (ctx.failNext) throw new Error('offline'); posts.push(JSON.parse(opt.body)); return { json: async () => ({ ok: true }) }; } };
 vm.createContext(ctx);
-const names = ['liveScoringOn','skPartnerOf', 'skTeamMates', 'liveSideTeamNames','skSetScoreOne','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skMarks','skGot','skAnyStrokes','skNetGapNote','skDotsHtml','skCardOf','skMergeRemote','skGoFirstOpen','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml'];
+const names = ['liveScoringOn','skPartnerOf', 'skTeamMates', 'liveSideTeamNames','skSetScoreOne','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skMarks','skGot','skAnyStrokes','skNetGapNote','skDotsHtml','skCardOf','skMergeRemote','skGoFirstOpen','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml','holeFlowStepHead','holeFlowStepHtml','holeFlowClaimHtml','holeFlowClaimPick'];
 vm.runInContext('let _sk = null; let _groupSets = {}; const _skChain = {};\n' + names.map(n => extractFn(src, n)).join('\n') + '\nthis.api={' + names.join(',') + ',get:()=>_sk, setSets:v=>{_groupSets=v}};', ctx);
 const A = ctx.api;
 const evt = { gatheringId: 7, name: 'Sat BestBall', holes: 18 };

@@ -1,0 +1,22 @@
+// Hole-by-hole flow core: holeSteps is pure and config-driven (score first, game inputs only on the holes that need them).
+import { loadEngine } from './extract.mjs';
+let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
+const E = loadEngine();
+const cfg = { addons: [{ id: 'cttp', holes: [3, 7, 12], prize_holes: [17] }, { id: 'skins' }] };
+ok(E.holeSteps(cfg, 1).length === 1 && E.holeSteps(cfg, 1)[0].kind === 'score', 'a plain hole has only the score step');
+const s3 = E.holeSteps(cfg, 3);
+ok(s3.length === 2 && s3[0].id === 'score' && s3[1].id === 'cttp' && s3[1].kind === 'claim' && s3[1].hole === 3 && !s3[1].prize, 'a CTP hole adds the claim step after the score');
+const s17 = E.holeSteps(cfg, 17);
+ok(s17.length === 2 && s17[1].prize === true, 'a prize-only hole (#17) is a CTP claim flagged as prize');
+ok(E.holeSteps(cfg, '7')[1].hole === 7, 'hole numbers given as strings still work');
+ok(E.holeSteps(null, 3).length === 1 && E.holeSteps({}, 3).length === 1, 'no config means just the score step');
+ok(E.holeSteps({ addons: [{ id: 'cttp', holes: [] }] }, 3).length === 1, 'a CTP add-on with no holes adds nothing');
+const m = E.holeStepHoles(cfg, 18);
+ok(Object.keys(m).join() === '3,7,12,17', 'holeStepHoles lists exactly the holes with extras');
+ok(Object.keys(E.holeStepHoles(cfg, 9)).join() === '3,7', 'holeStepHoles respects a 9-hole round');
+E.registerHoleStep('miser', (a, h) => h === 5 ? { id: 'miser', game: 'miser', kind: 'choice', hole: h } : null);
+const c2 = { addons: [{ id: 'miser' }, { id: 'cttp', holes: [5] }] };
+const s5 = E.holeSteps(c2, 5);
+ok(s5.map(x => x.id).join() === 'score,cttp,miser' || s5.map(x => x.id).join() === 'score,miser,cttp', 'a registered game contributes its own step with no other change');
+ok(E.holeSteps({ addons: [{ id: 'cttp', holes: [5] }] }, 5).length === 2, 'an unconfigured registered game adds nothing');
+console.log(`hole_steps: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
