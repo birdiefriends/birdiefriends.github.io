@@ -84,11 +84,11 @@ ok(/Ed <span[^>]*>· needs a partner/.test(chips) && /Gus \(Sub\)/.test(chips) &
 // 7. host block
 const hostC = load({ gatheringRegData: [row('Ann', 'Yes', 'Bob'), row('Bob', 'Yes', 'Ann'), row('Cy', 'Yes'), row('Di', 'Yes')] });
 const hb = hostC.hostTeamsHtml({ gatheringId: 7, teamSize: 2 });
-ok(/4 players · 1 team · .*2 still need a partner/.test(hb), 'host sees players, teams and how many still need a partner (got ' + hb.replace(/<[^>]+>/g, '').slice(0, 120) + ')');
+ok(/4 players · 1 team/.test(hb) && !/still need/.test(hb), 'host sees players and teams, with no still-need-a-partner nag (got ' + hb.replace(/<[^>]+>/g, '').slice(0, 120) + ')');
 ok(/openHostPairSheet\(7\)/.test(hb) && /hostUnpair\(7, 0\)/.test(hb), 'host can pair the leftovers and unpair a team');
 ok(hostC.hostTeamsHtml({ gatheringId: 7, teamSize: null }) === '' && hostC.hostTeamsHtml(null) === '', 'ordinary Gatherings get no host team block');
 const one = load({ gatheringRegData: [row('Ann', 'Yes', 'Bob'), row('Bob', 'Yes', 'Ann'), row('Cy', 'Yes')] }).hostTeamsHtml({ gatheringId: 7, teamSize: 2 });
-ok(/One player is left without a partner/.test(one) && !/openHostPairSheet/.test(one), 'a single leftover player cannot be paired with anyone');
+ok(!/left without a partner/.test(one) && !/openHostPairSheet/.test(one), 'a single leftover player gets no reminder and cannot be paired with anyone');
 
 // 8. New Gathering wiring and the registration request
 ok(/_hostTeams \? \{ team_size: _hostTeams \}/.test(src), 'New Gathering sends team_size only when teams are on');

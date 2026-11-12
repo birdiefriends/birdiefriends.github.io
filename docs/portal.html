@@ -6281,7 +6281,14 @@ function groupsOptsForEngine() {
   const o = _grp.opts, sh = String(o.start_holes || '').split(/[^0-9]+/).map(Number).filter(h => h >= 1 && h <= o.holes);
   return { mode: o.mode, group_size: o.group_size, spread: o.spread, holes: o.holes, first_tee: o.first_tee, interval: Number(o.interval) || 10, ...(sh.length ? { start_holes: [...new Set(sh)].sort((a, b) => a - b) } : {}) };
 }
-function groupsWarnings() { return _grp && _grp.set ? BFEngine.BFGroups.validate(_grp.set, _grp.units, groupsOptsForEngine()) : []; }
+function groupsWarnings() {
+  if (!_grp || !_grp.set) return [];
+  const all = BFEngine.BFGroups.validate(_grp.set, _grp.units, groupsOptsForEngine());
+  if (!teamSizeOf(_grp.g)) return all;
+  // An unpaired player in a team event is a known case, not something to keep flagging: a group made only of them is not "short".
+  const lone = new Set((_grp.units || []).filter(u => (u.members || []).length === 1).map(u => String(u.members[0]).trim().toLowerCase()));
+  return all.filter(x => !(x.code === 'short' && ((_grp.set.groups[x.group] || {}).members || []).every(m => lone.has(String(m).trim().toLowerCase()))));
+}
 function groupsWarnHtml() {
   const w = groupsWarnings(); if (!w.length) return _grp && _grp.set ? '<div style="font-size:0.8rem;color:var(--green-dark);font-weight:600">✓ Everyone is placed and no group is over its limit.</div>' : '';
   return `<div style="font-size:0.78rem;line-height:1.55;color:#8a6d00">${w.map(x => '⚠️ ' + GRP_ESC(x.msg)).join('<br>')}</div>`;
@@ -6525,11 +6532,25 @@ function openGatheringGroupsSheet(gatheringId) {
   const set = gs.published, G = BFEngine.BFGroups, lc = x => String(x || '').trim().toLowerCase(), me = lc(currentPlayer);
   const g = gatheringData.find(x => x.gatheringId === gatheringId);
   const order = set.groups.map((gr, i) => ({ gr, i })).sort((a, b) => (a.gr.start_hole || 99) - (b.gr.start_hole || 99) || String(a.gr.tee_time || '').localeCompare(String(b.gr.tee_time || '')) || a.i - b.i);
+  // Team names are looked up now, so a rename shows up without re-publishing.
+  const N = teamSizeOf(g), st = N ? teamsState(gatheringRegData.filter(r => r.gatheringId === gatheringId), N) : null;
+  const teamOf = new Map(); if (st) st.pairs.forEach((pr, ti) => pr.forEach(n => teamOf.set(lc(n), ti)));
+  const membersHtml = gr => {
+    const seen = new Set(), parts = [];
+    (gr.members || []).forEach(m => {
+      const ti = teamOf.get(lc(m)); const nm = lc(m) === me ? `<b>${GRP_ESC(m)}</b>` : GRP_ESC(m);
+      if (ti === undefined) { parts.push(`<div>${nm}</div>`); return; }
+      if (seen.has(ti)) return; seen.add(ti);
+      const mates = (gr.members || []).filter(x => teamOf.get(lc(x)) === ti).map(x => lc(x) === me ? `<b>${GRP_ESC(x)}</b>` : GRP_ESC(x)).join(' &amp; ');
+      parts.push(`<div>${st.names[ti] ? `<b>${GRP_ESC(st.names[ti])}</b> <span style="color:var(--text-muted)">· ${mates}</span>` : mates}</div>`);
+    });
+    return parts.join('');
+  };
   const html = `<div style="padding:0 16px">${order.map(({ gr, i }) => {
     const mineG = (gr.members || []).some(m => lc(m) === me);
     return `<div style="border:1.5px solid ${mineG ? 'var(--green)' : 'var(--border)'};background:${mineG ? 'var(--green-light)' : '#fff'};border-radius:12px;padding:10px 12px;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b style="flex:1">Group ${i + 1}</b><span style="font-size:0.84rem;font-weight:700;color:var(--green-dark)">${GRP_ESC(G.startText({ number: i + 1, start_hole: gr.start_hole, wave: gr.wave, tee_time: gr.tee_time }).replace(/^Group \d+( · )?/, '') || '')}</span></div>
-      <div style="font-size:0.88rem;line-height:1.6">${(gr.members || []).map(m => lc(m) === me ? `<b>${GRP_ESC(m)}</b>` : GRP_ESC(m)).join(' · ')}</div></div>`;
+      <div style="font-size:0.88rem;line-height:1.6">${membersHtml(gr)}</div></div>`;
   }).join('')}</div>`;
   openHostSheet('📋 ' + GRP_ESC(g ? g.name : 'Groups') + (set.status === 'final' ? '' : ' (Preliminary)'), html);
 }
@@ -6746,9 +6767,9 @@ function hostTeamsHtml(g) {
   const teamRows = st.pairs.map((pr, i) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><span style="font-size:0.84rem;font-weight:700;min-width:0;flex:1;overflow-wrap:anywhere">🤝 ${st.names[i] ? escapeHtml(st.names[i]) + ' <span style="font-weight:400;color:var(--text-muted)">· ' + teamNamesText(pr) + '</span>' : teamNamesText(pr)}</span>
     <span style="display:flex;flex-direction:column;gap:3px;flex:none"><button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="openTeamNameSheetHost(${g.gatheringId}, ${i})">${st.names[i] ? 'Rename' : 'Name'}</button><button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="hostUnpair(${g.gatheringId}, ${i})">Unteam</button></span></div>`).join('');
   return `<div style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(29,158,117,0.08);border:1px solid rgba(29,158,117,0.35)">
-    <div style="font-size:0.78rem;font-weight:700;margin-bottom:2px">${N === 2 ? 'Teams of 2' : N + '-man teams'} · ${st.players} player${st.players === 1 ? '' : 's'} · ${st.teams} team${st.teams === 1 ? '' : 's'}${free ? ` · <span style="color:#b8860b">${free} still need${free === 1 ? 's' : ''} a ${N === 2 ? 'partner' : 'team'}</span>` : ''}</div>
+    <div style="font-size:0.78rem;font-weight:700;margin-bottom:2px">${N === 2 ? 'Teams of 2' : N + '-man teams'} · ${st.players} player${st.players === 1 ? '' : 's'} · ${st.teams} team${st.teams === 1 ? '' : 's'}</div>
     ${teamRows}
-    ${free >= N ? `<button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="openHostPairSheet(${g.gatheringId})">🤝 ${N === 2 ? 'Pair players' : 'Make a team'}</button>` : (free >= 1 ? `<div style="font-size:0.76rem;color:var(--text-muted)">${N === 2 ? 'One player is left without a partner.' : free + ' player' + (free === 1 ? ' is' : 's are') + ' left without a full team.'}</div>` : '')}
+    ${free >= N ? `<button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="openHostPairSheet(${g.gatheringId})">🤝 ${N === 2 ? 'Pair players' : 'Make a team'}</button>` : ''}
   </div>`;
 }
 // Host-only: rename, break up or pair teams. It lives on the event card's player list now, not on the Gathering config.

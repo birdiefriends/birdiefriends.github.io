@@ -143,4 +143,17 @@ ok(/Preliminary<\/button>/.test(ctx.document.getElementById('host-sheet-body').i
 vm.runInContext("_groupSets[104] = { published: { mode: 'shotgun', status: 'preliminary', groups: [{ members: ['Ann'], start_hole: 3 }] }, version: 1 }", ctx);
 ctx.currentPlayer = 'Ann'; ok(/\(Preliminary\)/.test(vm.runInContext("myGroupBannerHtml({gatheringId:104})", ctx)), 'players see (Preliminary) on their start');
 vm.runInContext("_groupSets[104].published.status = 'final'", ctx); ok(!/Preliminary/.test(vm.runInContext("myGroupBannerHtml({gatheringId:104})", ctx)), 'and it disappears once Final');
+// Team names on the published list; a lone unpaired player is not nagged about
+ctx.currentPlayer = 'Ann';
+ctx.gatheringRegData = [
+  { gatheringId: 104, player: 'Ann', status: 'Yes', partner: 'Bob', teamName: 'Birdie Brigade' }, { gatheringId: 104, player: 'Bob', status: 'Yes', partner: 'Ann', teamName: 'Birdie Brigade' },
+  { gatheringId: 104, player: 'Cy', status: 'Yes', partner: 'Di', teamName: null }, { gatheringId: 104, player: 'Di', status: 'Yes', partner: 'Cy', teamName: null },
+  { gatheringId: 104, player: 'Rich', status: 'Yes', partner: null, teamName: null }];
+vm.runInContext("_groupSets[104] = { published: { mode: 'shotgun', status: 'preliminary', groups: [{ members: ['Ann','Bob','Cy','Di'], start_hole: 1 }, { members: ['Rich'], start_hole: 2 }] }, version: 1 }", ctx);
+vm.runInContext('openGatheringGroupsSheet(104)', ctx);
+const tsh = sheet.h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+ok(/Birdie Brigade · Ann &amp; Bob/.test(tsh) && /Cy &amp; Di/.test(tsh) && /Rich/.test(tsh), 'the list shows each team by name with its players: ' + tsh);
+ok(/<b>Ann<\/b>/.test(sheet.h), 'and still marks the viewer');
+vm.runInContext("_grp = { g: gatheringData[0], units: groupsUnitsFor(gatheringData[0], gatheringRegData), sel: null, notes: [], opts: { mode: 'shotgun', group_size: 4, spread: 'order', holes: 18 } }; _grp.set = BFEngine.BFGroups.suggest(_grp.units, groupsOptsForEngine()).set; _grp.set.groups = [{ members: ['Ann','Bob','Cy','Di'], start_hole: 1 }, { members: ['Rich'], start_hole: 2 }];", ctx);
+ok(!vm.runInContext('groupsWarnings()', ctx).some(w => w.code === 'short' && w.group === 1), 'a group of just the unpaired player gets no short warning: ' + JSON.stringify(vm.runInContext('groupsWarnings()', ctx)) + JSON.stringify(vm.runInContext('_grp.units', ctx)));
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);
