@@ -6563,6 +6563,23 @@ function leaderboardHtml(board, me, opts) {
     ${note ? `<div style="font-size:0.76rem;color:#8a6d00;margin:4px 0">${esc(note)}</div>` : ''}
     <div style="font-size:0.74rem;color:var(--text-muted);margin:6px 0 2px">Not final until the host closes the round.</div></div>`;
 }
+// When every card is complete the result is already known: show it as PRELIMINARY (Final once the host has closed the round).
+// The host's one step is to approve it, which is the existing Close & Calculate.
+function leaderboardPrelimHtml(info) {
+  const esc = GRP_ESC, out = [];
+  if (!info) return '';
+  if (!info.allIn) {
+    const left = info.waiting || [];
+    return left.length ? `<div style="margin:10px 16px 0;padding:8px 12px;border-radius:10px;background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4);font-size:0.8rem;line-height:1.45">Still to finish: <b>${left.slice(0, 8).map(esc).join(', ')}</b>${left.length > 8 ? ' and ' + (left.length - 8) + ' more' : ''}.<br><span style="color:var(--text-muted)">Payouts appear here as soon as every card is complete.</span></div>` : '';
+  }
+  const pay = ((info.summary && info.summary.payouts) || []).filter(x => Number(x.total) > 0).sort((a, b) => b.total - a.total || String(a.player).localeCompare(String(b.player)));
+  const parts = x => ['scramble', 'cttp', 'skins', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'matchplay', 'hilo'].filter(k => Number(x[k]) > 0).map(k => ({ scramble: 'team', cttp: 'closest', skins: 'skins', birdieball: 'MiserBall', birdiepay: 'birdies', fourball: 'BestBall', altshot: 'Alt Shot', matchplay: 'match', hilo: 'Hi-Lo' }[k]) + ' $' + x[k]).join(' · ');
+  out.push(`<div style="margin:12px 16px 0"><div style="font-weight:700;margin-bottom:2px">${info.closed ? '✅ Final payouts' : '✅ All scores are in · Preliminary payouts'}</div>
+    <div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:8px">${info.closed ? 'The host has closed this round.' : 'Becomes final when the host approves.'}</div>
+    ${pay.length ? pay.map(x => `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1.5px solid ${info.me && String(x.player).trim().toLowerCase() === String(info.me).trim().toLowerCase() ? 'var(--green)' : 'var(--border)'};background:#fff"><div style="flex:1;min-width:0;font-size:0.88rem"><b>${esc(x.player)}</b><div style="font-size:0.72rem;color:var(--text-muted)">${esc(parts(x))}</div></div><div style="font-family:'DM Mono',monospace;font-weight:700">$${Number(x.total)}</div></div>`).join('') : '<div style="font-size:0.84rem;color:var(--text-muted)">No payouts in this round.</div>'}</div>`);
+  if (info.isHost && !info.closed) out.push(`<div style="padding:8px 16px 0"><button type="button" class="host-cta-btn" style="margin:0" onclick="closeHostSheet(); openGatheringCloseSheet(${info.gid})">Review &amp; approve final close</button></div>`);
+  return out.join('');
+}
 let _lbTimer = null;
 async function openGatheringLeaderboard(gid) {
   const evt = eventData.find(e => e.source === 'gathering' && e.gatheringId === gid);
@@ -6581,7 +6598,21 @@ async function openGatheringLeaderboard(gid) {
       const pars = csResolvePars(evt), okPars = Array.isArray(pars) && pars.length === 18 ? pars : null;
       const board = BFEngine.fourballBoard(row, cards, okPars, sideGid);
       const el = document.getElementById('host-option-sheet') ? sheetBody() : null; if (!el) { clearInterval(_lbTimer); _lbTimer = null; return; }
-      el.innerHTML = leaderboardHtml(board, currentPlayer, { noPars: !okPars });
+      const norm = x => String(x || '').trim().toLowerCase(), holeCount = evt.holes === 9 ? 9 : 18;
+      const regYes = gatheringRegData.filter(r => r.gatheringId === gid && r.status === 'Yes' && !isOpenSpotName(r.player)).map(r => r.player);
+      const have = new Set(cards.map(c => norm(c.player)));
+      const waiting = regYes.filter(n => !have.has(norm(n))).concat(cards.filter(c => scorecardMissingHoles(c, holeCount).length).map(c => c.player));
+      const allIn = cards.length > 0 && !waiting.length;
+      const closed = row.status === 'closed';
+      let summary = null;
+      if (allIn) {
+        let ctp = {}, bb = [];
+        try { if ((row.games || []).includes('cttp')) { await loadCtpData(evt); ctp = { ..._ctpData }; } } catch (e) { /* the payout just lacks CTP */ }
+        try { if ((row.games || []).includes('birdieball')) { const b = await (await fetch(`${BFE_API}/bfe/birdieball-answers?gathering_id=${gid}`)).json(); bb = b.ok ? (b.answers || []) : []; } } catch (e) { /* MiserBall answers missing */ }
+        summary = computeGatheringGamesPayout(row, cards, ctp, bb);
+      }
+      el.innerHTML = leaderboardHtml(board, currentPlayer, { noPars: !okPars })
+        + leaderboardPrelimHtml({ allIn, waiting: [...new Set(waiting)], summary, closed, me: currentPlayer, gid, isHost: evt.hostId === currentPlayer });
     } catch (e) { console.warn('[Leaderboard]', e.message); }
   };
   await render();
@@ -9061,7 +9092,7 @@ function buildAnnouncementsHTML(notifications, loading) {
       const invited = n.meta && n.meta.invited;
       if (!invited || !invited.includes(currentPlayer)) return false;
     }
-    if (n.bf_type === 'gathering_capacity') {
+    if (n.bf_type === 'gathering_capacity' || n.bf_type === 'gathering_host') {
       const gid = n.meta && n.meta.gathering_id;
       if (!(gid && gatheringData.some(g => g.gatheringId === gid && g.hostId === currentPlayer))) return false;
     }

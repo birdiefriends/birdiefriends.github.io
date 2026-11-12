@@ -26,7 +26,7 @@ ok(b.rows[0].tied && b.rows[1].tied && b.rows[0].place === 1 && b.rows[1].place 
 const ctx = { GRP_ESC: s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])), BFEngine: E, currentPlayer: 'B1', isGuest: () => false, Date, Math, String, Array,
   _gatheringGamesIndex: new Map([[104, base]]) };
 vm.createContext(ctx);
-vm.runInContext(['leaderboardRowHtml', 'leaderboardHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.f={leaderboardRowHtml,leaderboardHtml};', ctx);
+vm.runInContext(['leaderboardRowHtml', 'leaderboardHtml', 'leaderboardPrelimHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.f={leaderboardRowHtml,leaderboardHtml,leaderboardPrelimHtml};', ctx);
 b = E.fourballBoard(base, cards, PARS, 'scramble');
 const html = ctx.f.leaderboardHtml(b, 'B1', {}), text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 ok(/Bravo/.test(text) && /-12/.test(text) && /thru 9/.test(text) && /Not final until the host closes/.test(text), 'the sheet shows team, score to par, holes played and says it is not final: ' + text.slice(0, 200));
@@ -37,4 +37,16 @@ const now = Date.now(), evt = (dt) => ({ source: 'gathering', gatheringId: 104, 
 ok(/Leaderboard/.test(ctx.f.leaderboardRowHtml(evt(now + 3600e3))) && !ctx.f.leaderboardRowHtml(evt(now + 3 * 86400e3)) && !ctx.f.leaderboardRowHtml(evt(now - 3 * 86400e3)), 'the card row shows on the day of the round only');
 ctx._gatheringGamesIndex = new Map([[104, { games: ['skins'] }]]); ok(!ctx.f.leaderboardRowHtml(evt(now)), 'no live-scoring game, no leaderboard row');
 ok(/leaderboardRowHtml\(evt\)/.test(src) && /openGatheringLeaderboard/.test(src), 'wired into the event card');
+// preliminary payouts once every card is complete; the host approves into the existing close
+const summary = { payouts: [{ player: 'B1', scramble: 60, cttp: 10, total: 70 }, { player: 'B2', scramble: 60, total: 60 }, { player: 'A1', total: 0 }] };
+const noneYet = ctx.f.leaderboardPrelimHtml({ allIn: false, waiting: ['Rich', 'Di'] }).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+ok(/Still to finish: Rich, Di/.test(noneYet) && /as soon as every card is complete/.test(noneYet), 'before everyone finishes it says who is still out');
+const pre = ctx.f.leaderboardPrelimHtml({ allIn: true, summary, closed: false, me: 'B1', gid: 104, isHost: false });
+const preT = pre.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+ok(/All scores are in · Preliminary payouts/.test(preT) && /B1 team \$60 · closest \$10 \$70/.test(preT) && /B2.*\$60/.test(preT) && !/A1/.test(preT), 'all in: preliminary payouts, biggest first, zero payouts left out: ' + preT);
+ok(!/approve final close/.test(pre), 'a player does not get the approve button');
+const hostPre = ctx.f.leaderboardPrelimHtml({ allIn: true, summary, closed: false, me: 'Brian Hager', gid: 104, isHost: true });
+ok(/openGatheringCloseSheet\(104\)/.test(hostPre) && /Review &amp; approve final close/.test(hostPre), 'the host gets one button that opens the existing Close & Calculate');
+ok(/Final payouts/.test(ctx.f.leaderboardPrelimHtml({ allIn: true, summary, closed: true, gid: 104, isHost: true })) && !/approve final close/.test(ctx.f.leaderboardPrelimHtml({ allIn: true, summary, closed: true, gid: 104, isHost: true })), 'once closed it says Final and the approve button is gone');
+ok(/n\.bf_type === 'gathering_capacity' \|\| n\.bf_type === 'gathering_host'/.test(src), 'the all-scores-in notice shows in the feed to the host only');
 console.log(`leaderboard: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

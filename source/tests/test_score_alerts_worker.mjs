@@ -11,8 +11,8 @@ function makeD1(db) { const wrap = (sql) => { const st = { binds: [], bind(...b)
   const D = { prepare: wrap, withSession() { return D; } }; return D; }
 const db = new DatabaseSync(':memory:');
 db.exec(`CREATE TABLE bfe_scorecards (id INTEGER PRIMARY KEY AUTOINCREMENT, event_name TEXT, player TEXT, holes TEXT, marks TEXT, tee_box TEXT, front9 INT, back9 INT, total INT, hole_count INT, hole_half TEXT, venue TEXT, wb_status TEXT, wb_hole INT, wb_stroke INT, input_type TEXT, round_key TEXT, captured_at TEXT, UNIQUE(event_name, player));
- CREATE TABLE bfe_gathering_games (gathering_id INTEGER PRIMARY KEY, gathering_name TEXT, games TEXT, game_configs TEXT, status TEXT);`);
-const putGames = (gid, games, gc) => db.prepare(`INSERT OR REPLACE INTO bfe_gathering_games VALUES (?, ?, ?, ?, 'open')`).run(gid, '2026 Turkey 2Man', JSON.stringify(games), JSON.stringify(gc));
+ CREATE TABLE bfe_gathering_games (gathering_id INTEGER PRIMARY KEY, gathering_name TEXT, games TEXT, game_configs TEXT, status TEXT, host_id TEXT);`);
+const putGames = (gid, games, gc, status = 'open') => db.prepare(`INSERT OR REPLACE INTO bfe_gathering_games VALUES (?, ?, ?, ?, ?, 'Brian Hager')`).run(gid, '2026 Turkey 2Man', JSON.stringify(games), JSON.stringify(gc), status);
 putGames(104, ['scramble', 'cttp'], { scramble: { team_size: 2, pairs: [['Ann', 'Bob']], names: ['Old Snapshot Name'] } });
 putGames(105, ['cttp'], {});
 // the main Worker, faked: registrations and the push
@@ -70,4 +70,27 @@ r = await save('Ann', { 3: 'birdie' }, 'gathering:999'); ok(r.status === 200 && 
 let waited = null; pushes = [];
 r = await call('POST', '/scorecards', { event_name: 'gathering:104', player: 'Ann', holes: new Array(18).fill(4), marks: marksWith({ 14: 'birdie' }), input_type: 'strokes' }, { waitUntil: p => { waited = p; } });
 ok(waited && typeof waited.then === 'function', 'with waitUntil the scan runs after the response'); await waited; ok(pushes.some(p => /#14/.test(p.headings.en)), 'and still sends');
+// ── All scores in: the host is told once, privately; nothing for a round that is not complete
+putGames(106, ['scramble'], { scramble: { team_size: 2, pairs: [] } });
+const full = (player, key) => call('POST', '/scorecards', { event_name: key, player, holes: new Array(18).fill(4), marks: null, input_type: 'strokes', hole_count: 18 });
+pushes = [];
+for (const p of ['Ann', 'Bob', 'Cy', 'Di']) await full(p, 'gathering:106');
+ok(!pushes.some(x => x.bf_type === 'gathering_host'), 'two teams are done but the unpaired player has no card: not all in');
+await full('Rich', 'gathering:106');
+let hp = pushes.filter(x => x.bf_type === 'gathering_host');
+ok(hp.length === 1 && hp[0].filters.length === 1 && hp[0].filters[0].value === 'Brian Hager' && /All scores are in/.test(hp[0].headings.en) && !hp[0].feed_only, 'when the last card completes the host (only) is told: ' + JSON.stringify(hp.map(x => x.filters)));
+ok(hp[0].bf_meta.gathering_id === 106, 'the notice carries the Gathering id so the app can show it to the host only');
+await full('Rich', 'gathering:106'); await full('Ann', 'gathering:106');
+ok(pushes.filter(x => x.bf_type === 'gathering_host').length === 1, 'later saves do not tell the host again');
+// a partial card for one team keeps it from counting
+putGames(107, ['scramble'], { scramble: { team_size: 2, pairs: [] } }); pushes = [];
+for (const p of ['Cy', 'Di', 'Rich']) await full(p, 'gathering:107');
+await call('POST', '/scorecards', { event_name: 'gathering:107', player: 'Ann', holes: [4, 4, 4, ...new Array(15).fill(null)], marks: null, input_type: 'strokes', hole_count: 18 });
+ok(!pushes.some(x => x.bf_type === 'gathering_host'), 'a team with blank holes means not all in');
+// a closed round is not announced again
+putGames(108, ['scramble'], { scramble: { team_size: 2, pairs: [] } }, 'closed'); pushes = [];
+for (const p of ['Ann', 'Bob', 'Cy', 'Di', 'Rich']) await full(p, 'gathering:108');
+ok(!pushes.some(x => x.bf_type === 'gathering_host'), 'a round the host already closed does not notify');
+log = await call('GET', '/bfe/score-alerts?event=gathering:106');
+ok(log.json.alerts.some(a => a.kind === 'AllIn' && a.status === 'sent'), 'the all-in notice is in the log');
 console.log(`score alerts worker: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

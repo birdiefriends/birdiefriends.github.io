@@ -1336,27 +1336,36 @@ async function liveTeamsFor(gid, N) {
     return { units, roster: yes.map(x => x.player_id) };
   } catch (e) { return null; }
 }
+async function sendHostAllIn(cfgRow, gid) {
+  try {
+    const r = await globalThis.fetch(ALERT_PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ app_id: ALERT_APP_ID,
+      headings: { en: '✅ All scores are in' }, contents: { en: (cfgRow.gathering_name || 'Your round') + ': every card is complete. Review the preliminary payouts and approve the close.' },
+      filters: [{ field: 'tag', key: 'player_name', relation: '=', value: cfgRow.host_id }], url: 'https://birdiefriends.com/portal.html', bf_type: 'gathering_host', bf_meta: { gathering_id: Number(gid) } }) });
+    return r.status === 200 ? { ok: true, error: null } : { ok: false, error: 'push ' + r.status };
+  } catch (e) { return { ok: false, error: 'push error ' + String(e.message || e).slice(0, 100) }; }
+}
 async function scanScoreAlerts(env, eventName) {
   const m = /^gathering:(\d+)$/.exec(String(eventName || '')); if (!m) return { skipped: 'not a gathering round' };
-  const cfgRow = await env.DB.prepare(`SELECT games, game_configs, gathering_name, status FROM bfe_gathering_games WHERE gathering_id = ?`).bind(m[1]).first();
+  const cfgRow = await env.DB.prepare(`SELECT games, game_configs, gathering_name, status, host_id FROM bfe_gathering_games WHERE gathering_id = ?`).bind(m[1]).first();
   if (!cfgRow) return { skipped: 'no games config' };
   const parse = t => { try { return t ? JSON.parse(t) : null; } catch (e) { return null; } };
   const games = parse(cfgRow.games) || [], gcfg = parse(cfgRow.game_configs) || {};
   if (!games.some(g => g === 'scramble' || g === 'skins' || g === 'birdiepay')) return { skipped: 'no scramble, skins or birdie payouts' };
   if (gcfg.birdie_alerts === false) return { skipped: 'alerts switched off' };
   await ensureScoreAlertsTable(env);
-  const { results } = await env.DB.prepare(`SELECT player, marks FROM bfe_scorecards WHERE event_name = ? AND input_type = 'strokes'`).bind(eventName).all();
-  const lc = x => String(x || '').trim().toLowerCase(), by = new Map(); (results || []).forEach(r => by.set(lc(r.player), { player: r.player, marks: parse(r.marks) }));
+  const { results } = await env.DB.prepare(`SELECT player, marks, holes, hole_count FROM bfe_scorecards WHERE event_name = ? AND input_type = 'strokes'`).bind(eventName).all();
+  const lc = x => String(x || '').trim().toLowerCase(), by = new Map(); (results || []).forEach(r => by.set(lc(r.player), { player: r.player, marks: parse(r.marks), holes: parse(r.holes), hole_count: r.hole_count }));
   const scr = gcfg.scramble;
-  let units = null, roster = [];
+  let units = null, roster = [], expect = null;   // expect: who must have a complete card before the round counts as "all in"
   if (games.includes('scramble')) {
     // The teams in the saved games config are only the snapshot from when the host saved; the CURRENT teams (and names) are the
     // locked partner picks on the registrations, which the main Worker holds. Use those; the snapshot is the fallback.
     const live = await liveTeamsFor(m[1], Math.trunc(Number(scr && scr.team_size)) || 2);
-    if (live) { units = live.units; roster = live.roster; }
+    if (live) { units = live.units; roster = live.roster; expect = live.units; }
     else if (scr && Array.isArray(scr.pairs)) units = scr.pairs.filter(t => Array.isArray(t) && t.length).map((t, i) => ({ key: t.map(lc).sort().join('|'), label: (scr.names && scr.names[i]) || t.join(' & '), members: t }));
   }
   if (!units) units = (results || []).map(r => ({ key: lc(r.player), label: r.player, members: [r.player] }));
+  if (!expect) { const lv = await liveTeamsFor(m[1], 1); if (lv) expect = lv.units; }
   const audience = [...new Set(units.flatMap(u => u.members).concat(roster, (results || []).map(r => r.player)))];
   const sent = [], failed = [];
   for (const u of units) {
@@ -1380,7 +1389,22 @@ async function scanScoreAlerts(env, eventName) {
       (r.ok ? sent : failed).push({ hole: h, label: u.label, kind: k.label });
     }
   }
-  return { sent, failed };
+  // All scores in: every player (or scramble team) on the roster has a complete card. Tell the host ONCE, privately (not the feed
+  // everyone reads), so the preliminary result can be approved. The app shows the same preliminary payouts to everyone meanwhile.
+  let allIn = false;
+  if (expect && expect.length && cfgRow.status !== 'closed') {
+    const done = u => u.members.some(n => { const c = by.get(lc(n)); return c && Array.isArray(c.holes) && c.holes.filter(v => Number(v) > 0).length >= (c.hole_count === 9 ? 9 : 18); });
+    allIn = expect.every(done);
+    if (allIn && cfgRow.host_id) {
+      const ins = await env.DB.prepare(`INSERT OR IGNORE INTO bfe_score_alerts (event_name, hole, unit_key, label, kind, status, created_at) VALUES (?, 0, '__all_in__', 'all scores in', 'AllIn', 'pending', datetime('now'))`).bind(eventName).run();
+      const ex = (ins.meta && ins.meta.changes) ? { status: 'pending', attempts: 0 } : await env.DB.prepare(`SELECT status, attempts FROM bfe_score_alerts WHERE event_name = ? AND hole = 0 AND unit_key = '__all_in__'`).bind(eventName).first();
+      if (ex && (ex.status === 'pending' || (ex.status === 'failed' && ex.attempts < 6))) {   // first time, or a failed notice retried on the next save
+        const r = await sendHostAllIn(cfgRow, m[1]);
+        await env.DB.prepare(`UPDATE bfe_score_alerts SET status = ?, attempts = attempts + 1, error = ?, sent_at = datetime('now') WHERE event_name = ? AND hole = 0 AND unit_key = '__all_in__'`).bind(r.ok ? 'sent' : 'failed', r.error, eventName).run();
+      }
+    }
+  }
+  return { sent, failed, allIn };
 }
 
 export default {
