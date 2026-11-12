@@ -3,7 +3,7 @@ import fs from 'fs'; import vm from 'vm'; import { JSDOM } from 'jsdom'; import 
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine();
-const FN = ['groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsPick', 'groupsMoveTo', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState'];
+const FN = ['groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsPick', 'groupsMoveTo', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState'];
 const dom = new JSDOM('<body><div id="host-sheet-body"></div><button id="host-sheet-back"></button></body>');
 const reqs = []; let regs, groupSet = null;
 const players = Array.from({ length: 24 }, (_, i) => 'P' + (i + 1)).concat(['Rich']);
@@ -24,24 +24,56 @@ vm.createContext(ctx);
 vm.runInContext('let _grp = null; let _groupSets = {}; const GRP_ESC = s => escapeHtml(String(s == null ? "" : s));\n' + FN.map(n => extractFn(src, n)).join('\n'), ctx);
 const doc = dom.window.document, body = () => doc.getElementById('host-sheet-body');
 await vm.runInContext('openGatheringGroups(104)', ctx);
-ok(/Suggest groups/.test(body().textContent) && /25 players/.test(body().textContent) && /partners always stay together/.test(body().textContent), 'opens with the roster and a Suggest button');
+ok(/Suggest groups/.test(body().textContent) && /25 players/.test(body().textContent) && /teams are placed as one/.test(body().textContent), 'opens with the roster and a Suggest button');
 ok(/\/gatherings\/104\/registrations/.test(reqs[0][0]) && reqs.some(r => /group-sets\/gathering\/104\?host_id=Brian%20Hager/.test(r[0])), 'reads the CURRENT registrations and any saved groups');
 vm.runInContext('groupsSuggest()', ctx);
 let set = vm.runInContext('_grp.set', ctx);
 ok(set.groups.length === 7 && set.groups.every(g => g.start_hole >= 1), 'suggests 7 groups, each with a starting hole: ' + set.groups.map(g => g.start_hole));
 ok(/Group 7/.test(body().textContent) && /Hole/.test(body().textContent), 'and shows them');
 ok(/Group 1 has 2 players/.test(body().textContent), 'the short group is advice on screen, not a block');
-// move a player: the partner travels with them
+// the screen places TEAMS (a scramble places team names, not players)
 const lc = s => s.toLowerCase(); const find = n => set.groups.findIndex(g => g.members.includes(n));
-const from = find('P5'), to = from === 0 ? 1 : 0;
-vm.runInContext("groupsPick('P5')", ctx); vm.runInContext(`groupsMoveTo(${to})`, ctx);
+const itemsNow = () => vm.runInContext('groupsItems()', ctx);
+const where = n => { const it = itemsNow(); for (let gi = 0; gi < it.groups.length; gi++) { const ii = it.groups[gi].findIndex(x => x.names.includes(n)); if (ii >= 0) return [gi, ii]; } const pi = it.pool.findIndex(x => x.names.includes(n)); return pi >= 0 ? [-1, pi] : null; };
+const it0 = itemsNow();
+ok(it0.groups.flat().filter(x => x.names.length === 2).length === 12 && it0.groups.flat().filter(x => x.names.length === 1).length === 1, 'items are 12 teams and 1 solo, not 25 players');
+ok(/Group 1/.test(body().textContent) && doc.querySelectorAll('[draggable="true"]').length === 13, 'each team is ONE draggable item: ' + doc.querySelectorAll('[draggable="true"]').length);
+// drag a team onto another group: both partners go together
+let [fg, fi] = where('P5'); const to = fg === 0 ? 1 : 0;
+vm.runInContext(`groupsDragStart({}, ${fg}, ${fi})`, ctx); vm.runInContext(`groupsDrop({}, ${to})`, ctx);
 set = vm.runInContext('_grp.set', ctx);
-ok(find('P5') === to && find('P6') === to, 'moving P5 also moves their partner P6 (teams stay together)');
+ok(find('P5') === to && find('P6') === to, 'dragging a team to another group moves both partners');
 ok(vm.runInContext('_grp.dirty', ctx) && /Unsaved/.test(body().textContent), 'marked unsaved');
-vm.runInContext('_grp.opts.keep = false', ctx); vm.runInContext("groupsPick('P5')", ctx); vm.runInContext(`groupsMoveTo(${from})`, ctx);
+// drop a team back to the pool, then place it BEFORE a given team
+[fg, fi] = where('P5'); vm.runInContext(`groupsDragStart({}, ${fg}, ${fi})`, ctx); vm.runInContext('groupsDrop({}, -1)', ctx);
+ok(find('P5') === -1 && /Not in a group/.test(body().textContent) && where('P5')[0] === -1, 'dropping on the pool takes a team out of its group (one pool item)');
+const tgt = vm.runInContext('groupsItems()', ctx).groups[to][0];
+vm.runInContext(`groupsDragStart({}, -1, ${where('P5')[1]})`, ctx); vm.runInContext(`groupsDrop({}, ${to}, 0)`, ctx);
 set = vm.runInContext('_grp.set', ctx);
-ok(find('P5') === from && find('P6') === to, 'with "keep together" off, one player moves alone');
-ok(/is in Group|different groups/.test(vm.runInContext('groupsWarnHtml()', ctx)) || /different groups/.test(vm.runInContext('groupsWarnHtml()', ctx)), 'and the split team is flagged');
+ok(set.groups[to].members[0] === 'P5' && set.groups[to].members[2] === tgt.names[0], 'dropping on a team inserts before it');
+// tap path (phones): pick, then Move here
+[fg, fi] = where('P5'); const to2 = to === 0 ? 1 : 0;
+vm.runInContext(`groupsPick(${fg}, ${fi})`, ctx); ok(/Move here/.test(body().textContent), 'tapping an item offers Move here'); vm.runInContext(`groupsMoveTo(${to2})`, ctx);
+set = vm.runInContext('_grp.set', ctx); ok(find('P5') === to2, 'Move here works without dragging');
+// up/down inside a group
+[fg, fi] = where('P5'); const nIt = itemsNow().groups[fg].length; const before = itemsNow().groups[fg].map(x => x.names[0]);
+if (fi === 0 && nIt > 1) { vm.runInContext(`groupsItemMove(${fg}, 0, 1)`, ctx); ok(itemsNow().groups[fg][1].names[0] === before[0], '↓ moves a team down within its group'); }
+else { vm.runInContext(`groupsItemMove(${fg}, ${fi}, -1)`, ctx); ok(itemsNow().groups[fg][fi - 1].names[0] === before[fi], '↑ moves a team up within its group'); }
+// groups up/down: a shotgun hole stays with its group; tee times follow the order
+const h0 = vm.runInContext('_grp.set.groups[0].start_hole', ctx), m0 = vm.runInContext('_grp.set.groups[0].members[0]', ctx);
+vm.runInContext('groupsGroupMove(0, 1)', ctx);
+ok(vm.runInContext('_grp.set.groups[1].start_hole', ctx) === h0 && vm.runInContext('_grp.set.groups[1].members[0]', ctx) === m0, 'moving a group later carries its starting hole with it');
+vm.runInContext("_grp.set.mode = 'tee_times'; _grp.opts.mode = 'tee_times'; _grp.opts.first_tee = '08:00'; _grp.opts.interval = 10; groupsGroupMove(1, -1)", ctx);
+ok(vm.runInContext('_grp.set.groups.map(g => g.tee_time).join()', ctx).startsWith('08:00,08:10,08:20'), 'in tee-time mode the times follow the new order');
+vm.runInContext("_grp.set.mode = 'shotgun'; _grp.opts.mode = 'shotgun'; groupsSuggest()", ctx); set = vm.runInContext('_grp.set', ctx);
+// "Players" mode splits teams for the odd event that needs it
+vm.runInContext("groupsSetOptPlace('players')", ctx);
+ok(itemsNow().groups.flat().every(x => x.names.length === 1) && doc.querySelectorAll('[draggable="true"]').length === 25, 'Players mode: 25 single items');
+[fg, fi] = where('P5'); const to3 = fg === 0 ? 1 : 0;
+vm.runInContext(`groupsDragStart({}, ${fg}, ${fi})`, ctx); vm.runInContext(`groupsDrop({}, ${to3})`, ctx); set = vm.runInContext('_grp.set', ctx);
+ok(find('P5') === to3 && find('P6') !== to3, 'in Players mode one player moves alone');
+ok(/different groups/.test(vm.runInContext('groupsWarnHtml()', ctx)), 'and the split team is flagged');
+vm.runInContext("groupsSetOptPlace('teams')", ctx);
 // typing a hole updates the check text only
 vm.runInContext("groupsSetField(0, 'start_hole', '9')", ctx); ok(vm.runInContext('_grp.set.groups[0].start_hole', ctx) === 9, 'a start hole can be typed over');
 // publish: saves the draft then publishes, no unit ids stored

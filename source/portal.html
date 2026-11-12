@@ -6267,7 +6267,7 @@ async function openGatheringGroups(gatheringId) {
   const base = saved && (saved.draft || saved.published);
   const holes = Number(g.holes) === 9 ? 9 : 18;
   _grp = { gid: gatheringId, g, units, set: null, sel: null, dirty: false, version: (saved && saved.version) || 0, publishedAt: (saved && saved.published_at) || null, notes: [],
-    opts: { mode: (base && base.mode) || 'shotgun', group_size: (base && base.group_size) || 4, spread: (base && base.rules && base.rules.spread) || 'order', holes, first_tee: (base && base.rules && base.rules.first_tee) || '08:00', interval: (base && base.rules && base.rules.interval) || 10, start_holes: ((base && base.rules && base.rules.start_holes) || []).join(', '), keep: true } };
+    opts: { mode: (base && base.mode) || 'shotgun', group_size: (base && base.group_size) || 4, spread: (base && base.rules && base.rules.spread) || 'order', holes, first_tee: (base && base.rules && base.rules.first_tee) || '08:00', interval: (base && base.rules && base.rules.interval) || 10, start_holes: ((base && base.rules && base.rules.start_holes) || []).join(', '), individual: false } };
   if (base) {   // the roster moves right up to the tee: bring the saved groups up to date and say what changed
     const rc = BFEngine.BFGroups.reconcile(base, units);
     _grp.set = rc.set; if (rc.added.length) _grp.notes.push('Added: ' + rc.added.join(', ')); if (rc.removed.length) _grp.notes.push('No longer on the list: ' + rc.removed.join(', '));
@@ -6308,20 +6308,55 @@ function groupsRefreshStatus() {
   const w = document.getElementById('grp-warn'); if (w) w.innerHTML = groupsWarnHtml();
   const d = document.getElementById('grp-dirty'); if (d) d.textContent = _grp.dirty ? 'Unsaved changes' : (_grp.publishedAt ? 'Saved' : '');
 }
-function groupsPick(name) { _grp.sel = (_grp.sel === name) ? null : name; groupsRender(); }
-function groupsMoveTo(gi) {
-  const s = _grp.set, name = _grp.sel, lc = x => String(x || '').trim().toLowerCase(); if (!s || !name || !s.groups[gi]) return;
-  const unit = _grp.opts.keep ? _grp.units.find(u => u.members.some(m => lc(m) === lc(name))) : null, who = unit ? unit.members : [name];
-  who.forEach(n => s.groups.forEach(g => { g.members = (g.members || []).filter(m => lc(m) !== lc(n)); }));
-  who.forEach(n => s.groups[gi].members.push(n));
+// What the screen places: one item per TEAM when the event has teams (a scramble places team names, not players), else one per player.
+// "Players" mode splits teams for the odd event that needs it. Items are derived from the groups' member lists, so nothing else is stored.
+function groupsItems() {
+  const lc = x => String(x || '').trim().toLowerCase(), s = _grp.set, split = !!_grp.opts.individual, unitOf = new Map();
+  _grp.units.forEach(u => u.members.forEach(m => unitOf.set(lc(m), u)));
+  const cluster = names => { const out = [], seen = new Set();
+    names.forEach(n => { const u = unitOf.get(lc(n)), team = u && u.members.length > 1 ? u : null;
+      if (split || !team) { out.push({ names: [n], unit: null }); return; }
+      if (seen.has(u.id)) return; seen.add(u.id);
+      out.push({ names: names.filter(x => u.members.some(m => lc(m) === lc(x))), unit: u }); });
+    return out; };
+  const placed = new Set(); s.groups.forEach(g => (g.members || []).forEach(n => placed.add(lc(n))));
+  return { groups: s.groups.map(g => cluster(g.members || [])), pool: cluster(_grp.units.flatMap(u => u.members).filter(n => !placed.has(lc(n)))) };
+}
+function groupsItemAt(gi, ii) { const it = groupsItems(); return (gi < 0 ? it.pool : it.groups[gi] || [])[ii] || null; }
+function groupsPlace(names, toGi, beforeIi) {
+  const s = _grp.set, lc = x => String(x || '').trim().toLowerCase();
+  s.groups.forEach(g => { g.members = (g.members || []).filter(m => !names.some(n => lc(n) === lc(m))); });
+  if (toGi >= 0 && s.groups[toGi]) {
+    const g = s.groups[toGi], tgt = beforeIi != null ? groupsItems().groups[toGi][beforeIi] : null, at = tgt ? g.members.findIndex(m => lc(m) === lc(tgt.names[0])) : -1;
+    if (at >= 0) g.members.splice(at, 0, ...names); else g.members.push(...names);
+  }
+  _grp.sel = null; _grp.drag = null; _grp.dirty = true; groupsRender();
+}
+function groupsPick(gi, ii) { const c = _grp.sel; _grp.sel = c && c.gi === gi && c.ii === ii ? null : { gi, ii }; groupsRender(); }
+function groupsMoveTo(toGi) { const c = _grp.sel, it = c && groupsItemAt(c.gi, c.ii); if (it) groupsPlace(it.names, toGi); }
+function groupsToPool(gi, ii) { const it = groupsItemAt(gi, ii); if (it) groupsPlace(it.names, -1); }
+function groupsDragStart(ev, gi, ii) { _grp.drag = { gi, ii }; try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', gi + ':' + ii); } catch (e) { /* no dataTransfer outside a browser */ } }
+function groupsDrop(ev, toGi, beforeIi) {
+  if (ev && ev.preventDefault) { ev.preventDefault(); if (ev.stopPropagation) ev.stopPropagation(); }
+  const d = _grp.drag, it = d && groupsItemAt(d.gi, d.ii); if (!it) return;
+  groupsPlace(it.names, toGi, beforeIi == null ? null : beforeIi);
+}
+function groupsItemMove(gi, ii, dir) {
+  const items = groupsItems().groups[gi], j = ii + dir; if (!items || j < 0 || j >= items.length) return;
+  [items[ii], items[j]] = [items[j], items[ii]]; _grp.set.groups[gi].members = items.flatMap(x => x.names); _grp.sel = null; _grp.dirty = true; groupsRender();
+}
+function groupsGroupMove(gi, dir) {
+  const gs = _grp.set.groups, j = gi + dir; if (j < 0 || j >= gs.length) return;
+  [gs[gi], gs[j]] = [gs[j], gs[gi]];
+  if (_grp.set.mode === 'tee_times') BFEngine.BFGroups.schedule(gs, groupsOptsForEngine(), true);   // tee times follow the order; a shotgun hole stays with its group
   _grp.sel = null; _grp.dirty = true; groupsRender();
 }
-function groupsAddGroup() { const s = _grp.set; s.groups.push({ members: [] }); _grp.dirty = true; groupsRender(); }
+function groupsAddGroup() { const s = _grp.set; s.groups.push({ members: [] }); if (s.mode !== 'none') BFEngine.BFGroups.schedule(s.groups, groupsOptsForEngine(), false); _grp.dirty = true; groupsRender(); }
 function groupsRemoveGroup(gi) { const g = _grp.set.groups[gi]; if (!g || (g.members || []).length) return; _grp.set.groups.splice(gi, 1); _grp.dirty = true; groupsRender(); }
 function groupsRender() {
   const body = document.getElementById('host-sheet-body'); if (!body || !_grp) return;
-  const o = _grp.opts, s = _grp.set, G = BFEngine.BFGroups, lc = x => String(x || '').trim().toLowerCase();
-  const nPlayers = _grp.units.reduce((t, u) => t + u.members.length, 0);
+  const o = _grp.opts, s = _grp.set, G = BFEngine.BFGroups;
+  const nPlayers = _grp.units.reduce((t, u) => t + u.members.length, 0), hasTeams = _grp.units.some(u => u.members.length > 1);
   const seg = (list, cur, fn) => `<div class="seg-toggle" style="margin:0">${list.map(([v, l]) => `<button type="button" class="seg-btn${String(cur) === String(v) ? ' seg-btn-active' : ''}" style="white-space:nowrap" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
   const row = (label, ctl) => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span style="flex:1;font-size:0.88rem;font-weight:600">${label}</span>${ctl}</div>`;
   const inpStyle = 'height:36px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box';
@@ -6329,36 +6364,51 @@ function groupsRender() {
     + row('Start', seg([['shotgun', 'Shotgun'], ['tee_times', 'Tee times'], ['none', 'None']], o.mode, 'groupsSetOptMode'))
     + row('Players a group', seg([[2, '2'], [3, '3'], [4, '4'], [5, '5']], o.group_size, 'groupsSetOptSize'))
     + row('Mix', seg([['order', 'Roster order'], ['random', 'Shuffle']], o.spread, 'groupsSetOptSpread'))
+    + (hasTeams ? row('You place', seg([['teams', 'Teams'], ['players', 'Players']], o.individual ? 'players' : 'teams', 'groupsSetOptPlace')) : '')
     + (o.mode === 'shotgun' ? row('Start holes', `<input type="text" value="${GRP_ESC(o.start_holes)}" placeholder="auto-spread" oninput="groupsSetOptTyped('start_holes',this.value)" style="width:130px;${inpStyle}">`)
       : o.mode === 'tee_times' ? row('First tee', `<input type="time" value="${GRP_ESC(o.first_tee)}" oninput="groupsSetOptTyped('first_tee',this.value)" style="${inpStyle}"><input type="number" min="5" max="30" value="${GRP_ESC(o.interval)}" oninput="groupsSetOptTyped('interval',this.value)" style="width:56px;${inpStyle}"><span style="font-size:0.74rem;color:var(--text-muted)">min</span>`) : '')
     + `<button type="button" class="host-cta-btn" style="margin:6px 0 0" onclick="groupsSuggest()">✨ ${s ? 'Suggest again' : 'Suggest groups'}</button>`
-    + `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px;line-height:1.45">${nPlayers} players${_grp.units.some(u => u.members.length > 1) ? ', partners always stay together' : ''}. Then tap a player and "Move here" to adjust.</div></div>`;
-  let groupsHtml = '';
+    + `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px;line-height:1.45">${nPlayers} players${hasTeams && !o.individual ? ', teams are placed as one' : ''}. Drag to move, or tap a ${hasTeams && !o.individual ? 'team' : 'player'} and use Move here. ↑ ↓ reorder.</div></div>`;
+  const small = 'font-size:0.72rem;padding:1px 6px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text-muted);cursor:pointer';
+  const label = it => it.unit && !o.individual
+    ? `<span style="font-weight:700">${GRP_ESC(it.unit.label || it.names.join(' & '))}</span>${it.unit.label ? `<span style="display:block;font-size:0.74rem;color:var(--text-muted)">${GRP_ESC(it.names.join(' & '))}</span>` : ''}`
+    : GRP_ESC(it.names.join(' & '));
+  const item = (it, gi, ii, last) => {
+    const on = _grp.sel && _grp.sel.gi === gi && _grp.sel.ii === ii;
+    return `<div draggable="true" ondragstart="groupsDragStart(event,${gi},${ii})" ondragover="event.preventDefault()" ondrop="groupsDrop(event,${gi},${ii})" onclick="groupsPick(${gi},${ii})"
+      style="display:flex;align-items:center;gap:6px;border:1.5px solid ${on ? 'var(--green)' : 'var(--border)'};background:${on ? 'var(--green-light)' : '#fff'};border-radius:10px;padding:6px 8px;margin-bottom:5px;cursor:grab;font-size:0.86rem">
+      <span style="flex:1;min-width:0;line-height:1.3">${label(it)}</span>
+      ${gi >= 0 ? `<button type="button" title="Up" onclick="event.stopPropagation();groupsItemMove(${gi},${ii},-1)" style="${small}">↑</button><button type="button" title="Down" onclick="event.stopPropagation();groupsItemMove(${gi},${ii},1)" style="${small}">↓</button><button type="button" title="Back to the pool" onclick="event.stopPropagation();groupsToPool(${gi},${ii})" style="${small}">✕</button>` : ''}</div>`; };
+  let poolHtml = '', groupsHtml = '';
   if (s) {
-    const placed = new Set(); s.groups.forEach(g => (g.members || []).forEach(n => placed.add(lc(n))));
-    const unplaced = _grp.units.flatMap(u => u.members).filter(n => !placed.has(lc(n)));
-    const chip = n => `<button type="button" onclick="groupsPick(${JSON.stringify(n).replace(/"/g, '&quot;')})" style="border:1.5px solid ${_grp.sel === n ? 'var(--green)' : 'var(--border)'};background:${_grp.sel === n ? 'var(--green-light)' : '#fff'};border-radius:16px;padding:5px 11px;margin:2px 4px 2px 0;font-family:inherit;font-size:0.84rem;cursor:pointer">${GRP_ESC(n)}</button>`;
+    const it = groupsItems(), nIn = arr => arr.reduce((t, x) => t + x.names.length, 0), sel = _grp.sel;
+    poolHtml = `<div ondragover="event.preventDefault()" ondrop="groupsDrop(event,-1)" style="background:rgba(184,134,11,0.06);border:1px ${it.pool.length ? 'solid rgba(184,134,11,0.4)' : 'dashed var(--border)'};border-radius:12px;padding:10px 12px">
+      <div style="font-weight:700;margin-bottom:6px">Not in a group <span style="font-weight:400;font-size:0.76rem;color:var(--text-muted)">${nIn(it.pool)} player${nIn(it.pool) === 1 ? '' : 's'}</span></div>
+      ${it.pool.map((x, ii) => item(x, -1, ii)).join('') || '<div style="font-size:0.8rem;color:var(--text-muted);padding:8px 0;text-align:center">Everyone is placed ✓</div>'}
+      ${sel && sel.gi >= 0 ? `<button type="button" class="btn btn-secondary btn-sm" onclick="groupsMoveTo(-1)">Move back to the pool</button>` : ''}</div>`;
     const startCtl = (g, gi) => s.mode === 'shotgun'
       ? `<span style="font-size:0.78rem;color:var(--text-muted)">Hole</span><input type="number" min="1" max="${o.holes}" value="${g.start_hole || ''}" oninput="groupsSetField(${gi},'start_hole',this.value)" style="width:56px;${inpStyle}"><select onchange="groupsSetField(${gi},'wave',this.value)" style="${inpStyle}"><option value=""></option>${['A', 'B'].map(w => `<option${g.wave === w ? ' selected' : ''}>${w}</option>`).join('')}</select>`
       : s.mode === 'tee_times' ? `<input type="time" value="${GRP_ESC(g.tee_time || '')}" oninput="groupsSetField(${gi},'tee_time',this.value)" style="${inpStyle}">` : '';
-    groupsHtml = s.groups.map((g, gi) => `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="flex:1;font-weight:700">Group ${gi + 1} <span style="font-weight:400;font-size:0.76rem;color:var(--text-muted)">${(g.members || []).length} player${(g.members || []).length === 1 ? '' : 's'}</span></span>${startCtl(g, gi)}</div>
-        <div>${(g.members || []).map(chip).join('') || '<span style="font-size:0.8rem;color:var(--text-muted)">Empty</span>'}</div>
-        ${_grp.sel && !(g.members || []).some(m => lc(m) === lc(_grp.sel)) ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px" onclick="groupsMoveTo(${gi})">Move ${GRP_ESC(_grp.sel)} here</button>` : ''}
-        ${!(g.members || []).length ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px;color:var(--text-muted)" onclick="groupsRemoveGroup(${gi})">Remove group</button>` : ''}
-      </div>`).join('')
-      + (unplaced.length ? `<div style="background:rgba(184,134,11,0.08);border:1px solid rgba(184,134,11,0.4);border-radius:12px;padding:10px 12px;margin-bottom:8px"><div style="font-weight:700;margin-bottom:4px">Not in a group yet</div>${unplaced.map(chip).join('')}</div>` : '')
-      + `<button type="button" class="btn btn-ghost btn-sm" onclick="groupsAddGroup()">➕ Add a group</button>`;
-  } else groupsHtml = `<div style="font-size:0.84rem;color:var(--text-muted);padding:10px 2px">No groups yet. Tap Suggest groups, then adjust.</div>`;
+    groupsHtml = s.groups.map((g, gi) => `<div ondragover="event.preventDefault()" ondrop="groupsDrop(event,${gi})" style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap"><span style="flex:1;font-weight:700;white-space:nowrap">Group ${gi + 1} <span style="font-weight:400;font-size:0.76rem;color:var(--text-muted)">${nIn(it.groups[gi])}</span></span>${startCtl(g, gi)}
+          <button type="button" title="Earlier" onclick="groupsGroupMove(${gi},-1)" style="${small}">↑</button><button type="button" title="Later" onclick="groupsGroupMove(${gi},1)" style="${small}">↓</button></div>
+        <div style="min-height:40px">${it.groups[gi].map((x, ii) => item(x, gi, ii)).join('') || '<div style="font-size:0.78rem;color:var(--text-muted);padding:10px;text-align:center;border:1px dashed var(--border);border-radius:8px">Drop here</div>'}</div>
+        ${sel && !(sel.gi === gi) ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="groupsMoveTo(${gi})">Move here</button>` : ''}
+        ${!(g.members || []).length ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:4px;color:var(--text-muted)" onclick="groupsRemoveGroup(${gi})">Remove group</button>` : ''}
+      </div>`).join('') + `<button type="button" class="btn btn-ghost btn-sm" onclick="groupsAddGroup()">➕ Add a group</button>`;
+  }
+  const panels = s ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:10px;align-items:start"><div>${poolHtml}</div><div>${groupsHtml}</div></div>`
+    : `<div style="font-size:0.84rem;color:var(--text-muted);padding:10px 2px">No groups yet. Tap Suggest groups, then adjust.</div>`;
   body.innerHTML = `<div style="font-size:1.15rem;font-weight:700;margin-bottom:2px">👥 Groups</div>
     <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px">${GRP_ESC(_grp.g.name)}${_grp.publishedAt ? ` · published (v${_grp.version})` : ' · not published yet'}</div>
     ${_grp.notes.length ? `<div style="font-size:0.78rem;color:#8a6d00;margin-bottom:8px">${_grp.notes.map(GRP_ESC).join('<br>')}</div>` : ''}
-    ${settings}${groupsHtml}
+    ${settings}${panels}
     <div id="grp-warn" style="margin:10px 0">${groupsWarnHtml()}</div>
     ${s ? `<div id="grp-dirty" style="font-size:0.74rem;color:var(--text-muted);text-align:right;margin-bottom:4px">${_grp.dirty ? 'Unsaved changes' : ''}</div>
       <button type="button" class="host-cta-btn" id="grp-publish" onclick="groupsPublish()">📣 Publish &amp; tell players their start</button>
       <button type="button" class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="groupsSave()">💾 Save draft (players don't see it)</button>` : ''}`;
 }
+function groupsSetOptPlace(v) { _grp.opts.individual = v === 'players'; _grp.sel = null; groupsRender(); }
 function groupsSetOptMode(v) { groupsSetOpt('mode', v); }
 function groupsSetOptSize(v) { groupsSetOpt('group_size', v); }
 function groupsSetOptSpread(v) { groupsSetOpt('spread', v); }
