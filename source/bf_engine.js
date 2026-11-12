@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.52.0';
+  const ENGINE_VERSION = '1.53.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1826,12 +1826,23 @@
     const f = snap && snap[gameId || 'fourball'];
     if (!f) return null;
     const parAt = h => (Array.isArray(pars) && Number.isFinite(Number(pars[h - 1])) ? Number(pars[h - 1]) : null);
+    // Stableford (a scramble scored in points): the board is points, most wins; there is no "to par" to rank by.
+    if (f.scoring === 'stableford') {
+      const prow = (f.standings || []).map(r => {
+        const done = (r.holes || []).filter(x => x.score != null);
+        return { pair: r.pair, name: r.name || null, played: done.length, thru: done.length ? Math.max(...done.map(x => x.hole)) : 0, total: done.reduce((a, x) => a + x.score, 0), to_par: null, complete: !!r.complete };
+      });
+      prow.sort((a, b) => (a.played === 0) - (b.played === 0) || b.total - a.total || b.played - a.played);
+      let pl = 0, pv = null; prow.forEach((r, i) => { const k = r.played === 0 ? 'none' : r.total; if (k !== pv) { pl = i + 1; pv = k; } r.place = r.played === 0 ? null : pl; });
+      prow.forEach(r => { r.tied = r.place != null && prow.filter(x => x.place === r.place).length > 1; });
+      return { basis: f.basis, net_mode: f.net_mode || null, net_missing: !!f.net_missing, ranked_by: 'points', rows: prow };
+    }
     const rows = (f.standings || []).map(r => {
       const done = (r.holes || []).filter(x => x.score != null);
       const total = done.reduce((a, x) => a + x.score, 0);
       const parsOk = done.length > 0 && done.every(x => parAt(x.hole) != null);
       return {
-        pair: r.pair, played: done.length, thru: done.length ? Math.max(...done.map(x => x.hole)) : 0,
+        pair: r.pair, name: r.name || null, played: done.length, thru: done.length ? Math.max(...done.map(x => x.hole)) : 0,
         total, to_par: parsOk ? total - done.reduce((a, x) => a + parAt(x.hole), 0) : (done.length ? null : 0), complete: !!r.complete
       };
     });

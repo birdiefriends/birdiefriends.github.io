@@ -3679,7 +3679,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.52.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.53.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -6085,6 +6085,7 @@ function buildEventCard(evt, isPast) {
     </div>` : ''}
     ${!isCanceled && !isPast ? teamBannerHtml(evt) : ''}
     ${!isCanceled && !isPast ? myGroupBannerHtml(evt) : ''}
+    ${!isCanceled ? leaderboardRowHtml(evt) : ''}
     ${actionHtml ? `<div class="event-card-actions" id="actions-${evt.id}">${actionHtml}</div>` : ''}
     ${(()=>{
       if (!groupingsMeta) return '';
@@ -6526,6 +6527,65 @@ function myGroupBannerHtml(evt) {
   const all = `<button onclick="openGatheringGroupsSheet(${evt.gatheringId})" style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,0.06);border-radius:8px;margin:6px 0 2px;width:100%;border:none;cursor:pointer;font-family:inherit;text-align:left;color:rgba(255,255,255,0.9);font-size:0.83rem;font-weight:600">
     <span style="font-size:1rem">📋</span><span>Groups &amp; ${gs.published.mode === 'tee_times' ? 'Tee Times' : gs.published.mode === 'shotgun' ? 'Starting Holes' : 'Pairings'}${gs.published.status === 'final' ? '' : ' <span style="font-size:0.72rem;opacity:0.6;font-weight:400">(Preliminary)</span>'}</span><span style="margin-left:auto;font-size:0.78rem;color:rgba(255,255,255,0.45)">›</span></button>`;
   return mine + all;
+}
+// ── Live leaderboard ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// For a Gathering that keeps live score (a Scramble, BestBall, Alternate Shot...): the standings from the scores saved so far, on the
+// event card for everyone playing. It reads the same payout result Close uses, so the order cannot disagree with the final one.
+function leaderboardRowHtml(evt) {
+  if (!evt || evt.source !== 'gathering' || !evt.gatheringId || !currentPlayer || isGuest()) return '';
+  const row = typeof _gatheringGamesIndex !== 'undefined' ? _gatheringGamesIndex.get(evt.gatheringId) : null;
+  if (!row || !BFEngine.sideGames().some(id => (row.games || []).includes(id))) return '';
+  const t = evt.dt instanceof Date ? +evt.dt : 0, now = Date.now();
+  if (!t || now < t - 3 * 3600e3 || now > t + 20 * 3600e3) return '';
+  return `<button onclick="openGatheringLeaderboard(${evt.gatheringId})" style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,0.06);border-radius:8px;margin:6px 0 2px;width:100%;border:none;cursor:pointer;font-family:inherit;text-align:left;color:rgba(255,255,255,0.9);font-size:0.83rem;font-weight:600">
+    <span style="font-size:1rem">🏆</span><span>Leaderboard</span><span style="margin-left:auto;font-size:0.78rem;color:rgba(255,255,255,0.45)">›</span></button>`;
+}
+function leaderboardHtml(board, me, opts) {
+  const lc = x => String(x || '').trim().toLowerCase(), esc = GRP_ESC;
+  if (!board || !board.rows || !board.rows.length) return `<div style="padding:18px 16px;font-size:0.9rem;color:var(--text-muted)">No teams are set up yet.</div>`;
+  if (!board.rows.some(r => r.played > 0)) return `<div style="padding:18px 16px;font-size:0.9rem;color:var(--text-muted)">No scores saved yet. The leaderboard fills in as the first holes are entered.</div>`;
+  const pts = board.ranked_by === 'points', byPar = board.ranked_by === 'to_par';
+  const fmt = r => pts ? String(r.total) : byPar ? (r.to_par === 0 ? 'E' : r.to_par > 0 ? '+' + r.to_par : String(r.to_par)) : String(r.total);
+  const unit = pts ? 'Points' : byPar ? (board.basis === 'net' ? 'Net' : 'Gross') : (board.basis === 'net' ? 'Net strokes' : 'Strokes');
+  const first = n => String(n).trim().split(/\s+/)[0];
+  const rows = board.rows.map(r => {
+    const mine = (r.pair || []).some(n => lc(n) === lc(me)), who = (r.pair || []).map(first).join(' & ');
+    const label = r.name ? `<b>${esc(r.name)}</b><div style="font-size:0.74rem;color:var(--text-muted)">${esc(who)}</div>` : `<b>${esc(who)}</b>`;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;margin-bottom:6px;border:1.5px solid ${mine ? 'var(--green)' : 'var(--border)'};background:${mine ? 'var(--green-light)' : '#fff'}">
+      <div style="width:34px;text-align:center;font-family:'DM Mono',monospace;font-weight:700">${r.place == null ? '–' : (r.tied ? 'T' : '') + r.place}</div>
+      <div style="flex:1;min-width:0;font-size:0.9rem;line-height:1.3">${label}</div>
+      <div style="width:46px;text-align:right;font-size:0.76rem;color:var(--text-muted)">${r.played ? (r.complete ? 'F' : 'thru ' + r.thru) : '–'}</div>
+      <div style="width:50px;text-align:right;font-family:'DM Mono',monospace;font-size:1.15rem;font-weight:700">${r.played ? fmt(r) : '–'}</div></div>`;
+  }).join('');
+  const note = [opts && opts.noPars ? 'Course pars are missing, so teams are ranked by strokes, not to par.' : '', board.net_missing ? 'Some handicaps are missing, so the net score is not complete.' : ''].filter(Boolean).join(' ');
+  return `<div style="padding:0 16px">
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">${unit}${pts ? ', most wins' : ''} · live from the scores saved so far · updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>${rows}
+    ${note ? `<div style="font-size:0.76rem;color:#8a6d00;margin:4px 0">${esc(note)}</div>` : ''}
+    <div style="font-size:0.74rem;color:var(--text-muted);margin:6px 0 2px">Not final until the host closes the round.</div></div>`;
+}
+let _lbTimer = null;
+async function openGatheringLeaderboard(gid) {
+  const evt = eventData.find(e => e.source === 'gathering' && e.gatheringId === gid);
+  if (!evt) return;
+  openHostSheet('🏆 ' + GRP_ESC(evt.name), '<div style="padding:18px 16px;color:var(--text-muted);font-size:0.9rem">Loading…</div>');
+  const sheetBody = () => document.getElementById('host-sheet-content');
+  const render = async () => {
+    try {
+      const row = gatheringRowWithLiveTeams(_gatheringGamesIndex.get(gid), gid);
+      const sideGid = row ? BFEngine.sideGames().find(id => (row.games || []).includes(id)) || null : null;
+      if (!sideGid) return;
+      const res = await fetch(`${SCORECARD_API}/scorecards?event=${encodeURIComponent(gamesScoreKeyForGid(gid))}&input=strokes`);
+      const data = await res.json();
+      const cards = latestScorecardPerPlayer(data.scorecards || []);
+      await ensureVenueTeeInfoByName(csNormalizedVenueName(evt));
+      const pars = csResolvePars(evt), okPars = Array.isArray(pars) && pars.length === 18 ? pars : null;
+      const board = BFEngine.fourballBoard(row, cards, okPars, sideGid);
+      const el = document.getElementById('host-option-sheet') ? sheetBody() : null; if (!el) { clearInterval(_lbTimer); _lbTimer = null; return; }
+      el.innerHTML = leaderboardHtml(board, currentPlayer, { noPars: !okPars });
+    } catch (e) { console.warn('[Leaderboard]', e.message); }
+  };
+  await render();
+  clearInterval(_lbTimer); _lbTimer = setInterval(() => { if (!document.getElementById('host-option-sheet')) { clearInterval(_lbTimer); _lbTimer = null; return; } render(); }, 30000);
 }
 function openGatheringGroupsSheet(gatheringId) {
   const gs = _groupSets[gatheringId]; if (!gs || !gs.published) return;
