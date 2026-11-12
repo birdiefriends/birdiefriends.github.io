@@ -3,12 +3,12 @@ import fs from 'fs'; import vm from 'vm'; import { JSDOM } from 'jsdom'; import 
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine();
-const FN = ['groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsPick', 'groupsMoveTo', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState'];
+const FN = ['groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsDropAt', 'groupsScroller', 'groupsPtrDown', 'groupsPtrMove', 'groupsPtrUp', 'groupsMenu', 'groupsAddGroupWith', 'groupsToggleSetup', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState'];
 const dom = new JSDOM('<body><div id="host-sheet-body"></div><button id="host-sheet-back"></button></body>');
 const reqs = []; let regs, groupSet = null;
 const players = Array.from({ length: 24 }, (_, i) => 'P' + (i + 1)).concat(['Rich']);
 regs = players.map((p, i) => ({ player_id: p, status: 'yes', partner_id: p === 'Rich' ? null : (i % 2 === 0 ? players[i + 1] : players[i - 1]) }));
-const ctx = { document: dom.window.document, console, JSON, Math, Number, String, Set, Map, Array, Object, parseInt, Date, BFEngine: E, GATHERINGS_API: 'https://api', currentPlayer: 'Brian Hager',
+const ctx = { setInterval, clearInterval, window: dom.window, document: dom.window.document, console, JSON, Math, Number, String, Set, Map, Array, Object, parseInt, Date, BFEngine: E, GATHERINGS_API: 'https://api', currentPlayer: 'Brian Hager',
   escapeHtml: s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])), isOpenSpotName: () => false, clearHostActionBar() {}, renderHostPanelList() {}, renderAll() { ctx._rendered = (ctx._rendered || 0) + 1; },
   toasts: [], showToast(m, e) { ctx.toasts.push([m, !!e]); }, confirm: () => true,
   gatheringData: [{ gatheringId: 104, name: '2026 Turkey 2Man', teamSize: 2, holes: 18, dt: new Date(Date.now() + 3 * 86400e3) }],
@@ -51,10 +51,45 @@ const tgt = vm.runInContext('groupsItems()', ctx).groups[to][0];
 vm.runInContext(`groupsDragStart({}, -1, ${where('P5')[1]})`, ctx); vm.runInContext(`groupsDrop({}, ${to}, 0)`, ctx);
 set = vm.runInContext('_grp.set', ctx);
 ok(set.groups[to].members[0] === 'P5' && set.groups[to].members[2] === tgt.names[0], 'dropping on a team inserts before it');
-// tap path (phones): pick, then Move here
+// phones: tap a row -> the Move-to list (no dragging needed)
+let sheet0 = null; ctx.openHostSheet = (t, h) => { sheet0 = { t, h }; }; ctx.closeHostSheet = () => {};
 [fg, fi] = where('P5'); const to2 = to === 0 ? 1 : 0;
-vm.runInContext(`groupsPick(${fg}, ${fi})`, ctx); ok(/Move here/.test(body().textContent), 'tapping an item offers Move here'); vm.runInContext(`groupsMoveTo(${to2})`, ctx);
-set = vm.runInContext('_grp.set', ctx); ok(find('P5') === to2, 'Move here works without dragging');
+vm.runInContext(`groupsMenu(${fg}, ${fi})`, ctx);
+const mtxt = sheet0.h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+ok(/Group 1/.test(mtxt) && /Group 7/.test(mtxt) && /here/.test(mtxt) && /Back to the pool/.test(mtxt) && /New group/.test(mtxt) && /Earlier/.test(mtxt), 'tapping a row opens Move-to with every group, the pool, a new group and up/down: ' + mtxt.slice(0, 160));
+ok(/hole \d+/.test(mtxt) && /\/4/.test(mtxt), 'each group shows its start and how full it is');
+vm.runInContext(`groupsPlace(groupsItemAt(${fg},${fi}).names, ${to2})`, ctx);
+set = vm.runInContext('_grp.set', ctx); ok(find('P5') === to2 && find('P6') === to2, 'choosing a group from the list moves the team');
+const n0 = set.groups.length; [fg, fi] = where('P5'); vm.runInContext(`groupsAddGroupWith(${fg}, ${fi})`, ctx); set = vm.runInContext('_grp.set', ctx);
+ok(set.groups.length === n0 + 1 && find('P5') === n0, '"New group" makes one and puts the team in it');
+// a finger: grab the ⠿ handle, the ghost follows, release over a group
+[fg, fi] = where('P5'); const dest = fg === 0 ? 1 : 0;
+const targetEl = { getAttribute: k => ({ 'data-drop': String(dest) })[k] ?? null, style: {} };
+doc.elementsFromPoint = () => [targetEl];
+const handle = { setPointerCapture() {}, style: {} };
+vm.runInContext(`groupsPtrDown({ pointerType: 'touch', preventDefault() {}, clientX: 50, clientY: 400, pointerId: 7, currentTarget: null }, ${fg}, ${fi})`, ctx);
+ok(doc.body.lastChild && /P5/.test(doc.body.lastChild.textContent), 'a ghost of the team follows the finger');
+vm.runInContext("groupsPtrMove({ pointerId: 7, preventDefault() {}, clientX: 60, clientY: 300 })", ctx);
+ok(targetEl.style.outline, 'the group under the finger is highlighted');
+vm.runInContext("groupsPtrUp({ pointerId: 7, type: 'pointerup', clientX: 60, clientY: 300 })", ctx);
+set = vm.runInContext('_grp.set', ctx); ok(find('P5') === dest && find('P6') === dest, 'releasing over a group drops the team there');
+ok(!doc.body.lastChild || !/P5/.test(doc.body.lastChild.textContent || ''), 'and the ghost is gone');
+// a finger released over nothing cancels; a mouse is left to HTML5 drag
+const before2 = JSON.stringify(vm.runInContext('_grp.set.groups', ctx)); [fg, fi] = where('P5');
+doc.elementsFromPoint = () => [];
+vm.runInContext(`groupsPtrDown({ pointerType: 'touch', preventDefault() {}, clientX: 5, clientY: 5, pointerId: 8, currentTarget: null }, ${fg}, ${fi})`, ctx);
+vm.runInContext("groupsPtrUp({ pointerId: 8, type: 'pointerup', clientX: 5, clientY: 5 })", ctx);
+ok(JSON.stringify(vm.runInContext('_grp.set.groups', ctx)) === before2, 'letting go over nothing changes nothing');
+vm.runInContext(`groupsPtrDown({ pointerType: 'mouse', preventDefault() {}, clientX: 5, clientY: 5, pointerId: 9, currentTarget: null }, ${fg}, ${fi})`, ctx);
+ok(!doc.body.lastChild || !/P5/.test(doc.body.lastChild.textContent || ''), 'a mouse does not start a finger drag');
+// dropping a team on itself is a no-op
+[fg, fi] = where('P5'); const b3 = JSON.stringify(vm.runInContext('_grp.set.groups', ctx));
+vm.runInContext(`groupsDragStart({}, ${fg}, ${fi})`, ctx); vm.runInContext(`groupsDrop({}, ${fg}, ${fi})`, ctx);
+ok(JSON.stringify(vm.runInContext('_grp.set.groups', ctx)) === b3, 'dropping a team on itself changes nothing');
+// phone layout: big targets, sticky save bar, setup collapses once groups exist
+ok(/position:sticky;bottom:0/.test(body().innerHTML) && /Publish/.test(body().innerHTML), 'Save and Publish stay pinned to the bottom of the screen');
+ok(/⚙ Shotgun/.test(body().textContent) && !/Players a group/.test(body().textContent), 'once groups exist the setup folds up to one line');
+vm.runInContext('groupsToggleSetup()', ctx); ok(/Players a group/.test(body().textContent), 'and opens again with a tap');
 // up/down inside a group
 [fg, fi] = where('P5'); const nIt = itemsNow().groups[fg].length; const before = itemsNow().groups[fg].map(x => x.names[0]);
 if (fi === 0 && nIt > 1) { vm.runInContext(`groupsItemMove(${fg}, 0, 1)`, ctx); ok(itemsNow().groups[fg][1].names[0] === before[0], '↓ moves a team down within its group'); }

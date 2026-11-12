@@ -6267,7 +6267,7 @@ async function openGatheringGroups(gatheringId) {
   const base = saved && (saved.draft || saved.published);
   const holes = Number(g.holes) === 9 ? 9 : 18;
   _grp = { gid: gatheringId, g, units, set: null, sel: null, dirty: false, version: (saved && saved.version) || 0, publishedAt: (saved && saved.published_at) || null, notes: [],
-    opts: { mode: (base && base.mode) || 'shotgun', group_size: (base && base.group_size) || 4, spread: (base && base.rules && base.rules.spread) || 'order', holes, first_tee: (base && base.rules && base.rules.first_tee) || '08:00', interval: (base && base.rules && base.rules.interval) || 10, start_holes: ((base && base.rules && base.rules.start_holes) || []).join(', '), individual: false } };
+    opts: { mode: (base && base.mode) || 'shotgun', group_size: (base && base.group_size) || 4, spread: (base && base.rules && base.rules.spread) || 'order', holes, first_tee: (base && base.rules && base.rules.first_tee) || '08:00', interval: (base && base.rules && base.rules.interval) || 10, start_holes: ((base && base.rules && base.rules.start_holes) || []).join(', '), individual: false }, setupOpen: !base };
   if (base) {   // the roster moves right up to the tee: bring the saved groups up to date and say what changed
     const rc = BFEngine.BFGroups.reconcile(base, units);
     _grp.set = rc.set; if (rc.added.length) _grp.notes.push('Added: ' + rc.added.join(', ')); if (rc.removed.length) _grp.notes.push('No longer on the list: ' + rc.removed.join(', '));
@@ -6285,7 +6285,7 @@ function groupsWarnHtml() {
   return `<div style="font-size:0.78rem;line-height:1.55;color:#8a6d00">${w.map(x => '⚠️ ' + GRP_ESC(x.msg)).join('<br>')}</div>`;
 }
 function groupsSuggest() {
-  const run = () => { const r = BFEngine.BFGroups.suggest(_grp.units, groupsOptsForEngine()); _grp.set = r.set; _grp.sel = null; _grp.dirty = true; _grp.notes = []; groupsRender(); };
+  const run = () => { const r = BFEngine.BFGroups.suggest(_grp.units, groupsOptsForEngine()); _grp.set = r.set; _grp.sel = null; _grp.dirty = true; _grp.notes = []; _grp.setupOpen = false; groupsRender(); };
   if (_grp.set && _grp.dirty && !confirm('Replace the groups on screen with a fresh suggestion?')) return;
   run();
 }
@@ -6325,15 +6325,15 @@ function groupsItems() {
 function groupsItemAt(gi, ii) { const it = groupsItems(); return (gi < 0 ? it.pool : it.groups[gi] || [])[ii] || null; }
 function groupsPlace(names, toGi, beforeIi) {
   const s = _grp.set, lc = x => String(x || '').trim().toLowerCase();
+  const tgt = toGi >= 0 && beforeIi != null ? (groupsItems().groups[toGi] || [])[beforeIi] : null;   // found BEFORE the move, so the index means what the host pointed at
+  if (tgt && tgt.names.some(m => names.some(n => lc(n) === lc(m)))) { _grp.sel = null; _grp.drag = null; return; }   // dropped on itself
   s.groups.forEach(g => { g.members = (g.members || []).filter(m => !names.some(n => lc(n) === lc(m))); });
   if (toGi >= 0 && s.groups[toGi]) {
-    const g = s.groups[toGi], tgt = beforeIi != null ? groupsItems().groups[toGi][beforeIi] : null, at = tgt ? g.members.findIndex(m => lc(m) === lc(tgt.names[0])) : -1;
+    const g = s.groups[toGi], at = tgt ? g.members.findIndex(m => lc(m) === lc(tgt.names[0])) : -1;
     if (at >= 0) g.members.splice(at, 0, ...names); else g.members.push(...names);
   }
   _grp.sel = null; _grp.drag = null; _grp.dirty = true; groupsRender();
 }
-function groupsPick(gi, ii) { const c = _grp.sel; _grp.sel = c && c.gi === gi && c.ii === ii ? null : { gi, ii }; groupsRender(); }
-function groupsMoveTo(toGi) { const c = _grp.sel, it = c && groupsItemAt(c.gi, c.ii); if (it) groupsPlace(it.names, toGi); }
 function groupsToPool(gi, ii) { const it = groupsItemAt(gi, ii); if (it) groupsPlace(it.names, -1); }
 function groupsDragStart(ev, gi, ii) { _grp.drag = { gi, ii }; try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', gi + ':' + ii); } catch (e) { /* no dataTransfer outside a browser */ } }
 function groupsDrop(ev, toGi, beforeIi) {
@@ -6353,60 +6353,114 @@ function groupsGroupMove(gi, dir) {
 }
 function groupsAddGroup() { const s = _grp.set; s.groups.push({ members: [] }); if (s.mode !== 'none') BFEngine.BFGroups.schedule(s.groups, groupsOptsForEngine(), false); _grp.dirty = true; groupsRender(); }
 function groupsRemoveGroup(gi) { const g = _grp.set.groups[gi]; if (!g || (g.members || []).length) return; _grp.set.groups.splice(gi, 1); _grp.dirty = true; groupsRender(); }
+// ── Phone first: a ⠿ handle drags with a finger (a ghost follows it and the list scrolls itself); tapping a row opens "Move to…", which is the
+// no-drag path and has every move in one place. Mouse users drag the whole row (HTML5 drag) as well.
+let _grpPtr = null;
+function groupsDropAt(x, y) {
+  const els = (document.elementsFromPoint ? document.elementsFromPoint(x, y) : []).filter(e => e.getAttribute && e.getAttribute('data-drop') != null);
+  const e = els[0]; if (!e) return null;
+  return { gi: Number(e.getAttribute('data-drop')), before: e.getAttribute('data-before') != null ? Number(e.getAttribute('data-before')) : null, el: e };
+}
+function groupsScroller(el) { for (let n = el; n && n !== document.body; n = n.parentElement) { const oy = (window.getComputedStyle(n) || {}).overflowY; if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) return n; } return null; }
+function groupsPtrDown(ev, gi, ii) {
+  if (ev.pointerType === 'mouse') return;                       // a mouse uses the row's own HTML5 drag
+  ev.preventDefault(); const it = groupsItemAt(gi, ii); if (!it) return;
+  _grp.drag = { gi, ii };
+  const ghost = document.createElement('div');
+  ghost.textContent = it.names.join(' & ');
+  ghost.style.cssText = 'position:fixed;z-index:99999;pointer-events:none;background:var(--green);color:#fff;font-weight:700;padding:8px 14px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,0.3);font-size:0.9rem;max-width:80vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;left:' + (ev.clientX - 20) + 'px;top:' + (ev.clientY - 44) + 'px';
+  document.body.appendChild(ghost);
+  _grpPtr = { ghost, hover: null, scroller: groupsScroller(ev.currentTarget), y: ev.clientY, id: ev.pointerId, handle: ev.currentTarget };
+  try { ev.currentTarget.setPointerCapture(ev.pointerId); } catch (e) { /* ok */ }
+  _grpPtr.timer = setInterval(() => {   // auto-scroll near the top or bottom of the visible list
+    const p = _grpPtr; if (!p) return; const sc = p.scroller, r = sc ? sc.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+    const d = p.y < r.top + 70 ? -14 : p.y > r.bottom - 70 ? 14 : 0; if (d) { if (sc) sc.scrollTop += d; else window.scrollBy(0, d); }
+  }, 30);
+}
+function groupsPtrMove(ev) {
+  const p = _grpPtr; if (!p || ev.pointerId !== p.id) return; ev.preventDefault();
+  p.y = ev.clientY; p.ghost.style.left = (ev.clientX - 20) + 'px'; p.ghost.style.top = (ev.clientY - 44) + 'px';
+  const t = groupsDropAt(ev.clientX, ev.clientY);
+  if (p.hover && p.hover !== (t && t.el)) p.hover.style.outline = '';
+  if (t) { t.el.style.outline = '2.5px solid var(--green)'; p.hover = t.el; } else p.hover = null;
+}
+function groupsPtrUp(ev) {
+  const p = _grpPtr; if (!p || ev.pointerId !== p.id) return;
+  clearInterval(p.timer); if (p.hover) p.hover.style.outline = ''; if (p.ghost.parentNode) p.ghost.parentNode.removeChild(p.ghost);
+  const t = ev.type === 'pointercancel' ? null : groupsDropAt(ev.clientX, ev.clientY);
+  _grpPtr = null;
+  if (t) groupsDrop(null, t.gi, t.before); else _grp.drag = null;
+}
+// Tap a row: every move in one list. Full groups are shown but still allowed (a warning, never a block).
+function groupsMenu(gi, ii) {
+  const it = groupsItemAt(gi, ii); if (!it) return;
+  const s = _grp.set, items = groupsItems(), n = it.names.length, lim = s.group_size || 4;
+  const start = g => s.mode === 'shotgun' ? (g.start_hole ? 'hole ' + g.start_hole + (g.wave ? g.wave : '') : 'no hole') : s.mode === 'tee_times' ? (g.tee_time || 'no time') : '';
+  const btn = (label, js, sub, dis) => `<button type="button" ${dis ? 'disabled' : `onclick="closeHostSheet();${js}"`} style="display:flex;align-items:center;width:100%;min-height:48px;padding:8px 14px;margin:0 0 6px;border:1.5px solid var(--border);background:${dis ? 'var(--green-light)' : '#fff'};border-radius:12px;font-family:inherit;font-size:0.95rem;text-align:left;cursor:pointer"><span style="flex:1">${label}</span><span style="font-size:0.78rem;color:var(--text-muted)">${sub || ''}</span></button>`;
+  const rows = s.groups.map((g, k) => { const cnt = items.groups[k].reduce((t, x) => t + x.names.length, 0), cur = k === gi;
+    return btn('Group ' + (k + 1), `groupsPlace(groupsItemAt(${gi},${ii}).names,${k})`, [start(g), cnt + '/' + lim + (!cur && cnt + n > lim ? ' · full' : '') + (cur ? ' · here' : '')].filter(Boolean).join(' · '), cur); }).join('');
+  const label = it.unit && !_grp.opts.individual ? (it.unit.label || it.names.join(' & ')) : it.names.join(' & ');
+  openHostSheet('Move ' + GRP_ESC(label), `<div style="padding:0 16px">${rows}${gi >= 0 ? btn('Back to the pool', `groupsPlace(groupsItemAt(${gi},${ii}).names,-1)`, '') : ''}${btn('➕ New group', `groupsAddGroupWith(${gi},${ii})`, '')}
+    ${gi >= 0 ? `<div style="display:flex;gap:8px">${btn('↑ Earlier', `groupsItemMove(${gi},${ii},-1)`, '', ii === 0).replace('width:100%', 'width:auto;flex:1')}${btn('↓ Later', `groupsItemMove(${gi},${ii},1)`, '', ii >= items.groups[gi].length - 1).replace('width:100%', 'width:auto;flex:1')}</div>` : ''}</div>`);
+}
+function groupsAddGroupWith(gi, ii) { const it = groupsItemAt(gi, ii); if (!it) return; const s = _grp.set; s.groups.push({ members: [] }); if (s.mode !== 'none') BFEngine.BFGroups.schedule(s.groups, groupsOptsForEngine(), false); groupsPlace(it.names, s.groups.length - 1); }
+function groupsToggleSetup() { _grp.setupOpen = !_grp.setupOpen; groupsRender(); }
 function groupsRender() {
   const body = document.getElementById('host-sheet-body'); if (!body || !_grp) return;
   const o = _grp.opts, s = _grp.set, G = BFEngine.BFGroups;
   const nPlayers = _grp.units.reduce((t, u) => t + u.members.length, 0), hasTeams = _grp.units.some(u => u.members.length > 1);
-  const seg = (list, cur, fn) => `<div class="seg-toggle" style="margin:0">${list.map(([v, l]) => `<button type="button" class="seg-btn${String(cur) === String(v) ? ' seg-btn-active' : ''}" style="white-space:nowrap" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
+  const fine = !(window.matchMedia && !window.matchMedia('(pointer:fine)').matches);   // a real mouse: whole-row drag; a finger: the ⠿ handle
+  const seg = (list, cur, fn) => `<div class="seg-toggle" style="margin:0">${list.map(([v, l]) => `<button type="button" class="seg-btn${String(cur) === String(v) ? ' seg-btn-active' : ''}" style="white-space:nowrap;min-height:40px" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
   const row = (label, ctl) => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span style="flex:1;font-size:0.88rem;font-weight:600">${label}</span>${ctl}</div>`;
-  const inpStyle = 'height:36px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box';
-  const settings = `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">`
-    + row('Start', seg([['shotgun', 'Shotgun'], ['tee_times', 'Tee times'], ['none', 'None']], o.mode, 'groupsSetOptMode'))
-    + row('Players a group', seg([[2, '2'], [3, '3'], [4, '4'], [5, '5']], o.group_size, 'groupsSetOptSize'))
-    + row('Mix', seg([['order', 'Roster order'], ['random', 'Shuffle']], o.spread, 'groupsSetOptSpread'))
-    + (hasTeams ? row('You place', seg([['teams', 'Teams'], ['players', 'Players']], o.individual ? 'players' : 'teams', 'groupsSetOptPlace')) : '')
-    + (o.mode === 'shotgun' ? row('Start holes', `<input type="text" value="${GRP_ESC(o.start_holes)}" placeholder="auto-spread" oninput="groupsSetOptTyped('start_holes',this.value)" style="width:130px;${inpStyle}">`)
-      : o.mode === 'tee_times' ? row('First tee', `<input type="time" value="${GRP_ESC(o.first_tee)}" oninput="groupsSetOptTyped('first_tee',this.value)" style="${inpStyle}"><input type="number" min="5" max="30" value="${GRP_ESC(o.interval)}" oninput="groupsSetOptTyped('interval',this.value)" style="width:56px;${inpStyle}"><span style="font-size:0.74rem;color:var(--text-muted)">min</span>`) : '')
-    + `<button type="button" class="host-cta-btn" style="margin:6px 0 0" onclick="groupsSuggest()">✨ ${s ? 'Suggest again' : 'Suggest groups'}</button>`
-    + `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px;line-height:1.45">${nPlayers} players${hasTeams && !o.individual ? ', teams are placed as one' : ''}. Drag to move, or tap a ${hasTeams && !o.individual ? 'team' : 'player'} and use Move here. ↑ ↓ reorder.</div></div>`;
-  const small = 'font-size:0.72rem;padding:1px 6px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text-muted);cursor:pointer';
+  const inpStyle = 'height:42px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;font-size:16px;box-sizing:border-box';
+  const modeName = { shotgun: 'Shotgun', tee_times: 'Tee times', none: 'No start' }[o.mode] || o.mode;
+  const open = s ? !!_grp.setupOpen : true;
+  const settings = `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:10px">`
+    + (s ? `<button type="button" onclick="groupsToggleSetup()" style="display:flex;align-items:center;width:100%;min-height:40px;border:0;background:none;font-family:inherit;font-size:0.88rem;font-weight:700;cursor:pointer;padding:0;text-align:left"><span style="flex:1">⚙ ${modeName} · ${o.group_size} a group · ${o.spread === 'order' ? 'Roster order' : 'Shuffle'}${hasTeams ? (o.individual ? ' · players' : ' · teams') : ''}</span><span>${open ? '▴' : '▾'}</span></button>` : '')
+    + (open ? `<div style="${s ? 'margin-top:8px' : ''}">`
+      + row('Start', seg([['shotgun', 'Shotgun'], ['tee_times', 'Tee times'], ['none', 'None']], o.mode, 'groupsSetOptMode'))
+      + row('Players a group', seg([[2, '2'], [3, '3'], [4, '4'], [5, '5']], o.group_size, 'groupsSetOptSize'))
+      + row('Mix', seg([['order', 'Roster order'], ['random', 'Shuffle']], o.spread, 'groupsSetOptSpread'))
+      + (hasTeams ? row('You place', seg([['teams', 'Teams'], ['players', 'Players']], o.individual ? 'players' : 'teams', 'groupsSetOptPlace')) : '')
+      + (o.mode === 'shotgun' ? row('Start holes', `<input type="text" value="${GRP_ESC(o.start_holes)}" placeholder="auto-spread" oninput="groupsSetOptTyped('start_holes',this.value)" style="width:130px;${inpStyle}">`)
+        : o.mode === 'tee_times' ? row('First tee', `<input type="time" value="${GRP_ESC(o.first_tee)}" oninput="groupsSetOptTyped('first_tee',this.value)" style="${inpStyle}"><input type="number" min="5" max="30" value="${GRP_ESC(o.interval)}" oninput="groupsSetOptTyped('interval',this.value)" style="width:60px;${inpStyle}"><span style="font-size:0.74rem;color:var(--text-muted)">min</span>`) : '')
+      + `<button type="button" class="host-cta-btn" style="margin:6px 0 0" onclick="groupsSuggest()">✨ ${s ? 'Suggest again' : 'Suggest groups'}</button>`
+      + `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px;line-height:1.45">${nPlayers} players${hasTeams && !o.individual ? ', teams are placed as one' : ''}. Hold ⠿ and drag, or tap a row to move it.</div></div>` : '')
+    + `</div>`;
+  const small = 'min-width:38px;min-height:38px;font-size:0.95rem;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text-muted);cursor:pointer';
   const label = it => it.unit && !o.individual
-    ? `<span style="font-weight:700">${GRP_ESC(it.unit.label || it.names.join(' & '))}</span>${it.unit.label ? `<span style="display:block;font-size:0.74rem;color:var(--text-muted)">${GRP_ESC(it.names.join(' & '))}</span>` : ''}`
+    ? `<span style="font-weight:700">${GRP_ESC(it.unit.label || it.names.join(' & '))}</span>${it.unit.label ? `<span style="display:block;font-size:0.76rem;color:var(--text-muted)">${GRP_ESC(it.names.join(' & '))}</span>` : ''}`
     : GRP_ESC(it.names.join(' & '));
-  const item = (it, gi, ii, last) => {
-    const on = _grp.sel && _grp.sel.gi === gi && _grp.sel.ii === ii;
-    return `<div draggable="true" ondragstart="groupsDragStart(event,${gi},${ii})" ondragover="event.preventDefault()" ondrop="groupsDrop(event,${gi},${ii})" onclick="groupsPick(${gi},${ii})"
-      style="display:flex;align-items:center;gap:6px;border:1.5px solid ${on ? 'var(--green)' : 'var(--border)'};background:${on ? 'var(--green-light)' : '#fff'};border-radius:10px;padding:6px 8px;margin-bottom:5px;cursor:grab;font-size:0.86rem">
-      <span style="flex:1;min-width:0;line-height:1.3">${label(it)}</span>
-      ${gi >= 0 ? `<button type="button" title="Up" onclick="event.stopPropagation();groupsItemMove(${gi},${ii},-1)" style="${small}">↑</button><button type="button" title="Down" onclick="event.stopPropagation();groupsItemMove(${gi},${ii},1)" style="${small}">↓</button><button type="button" title="Back to the pool" onclick="event.stopPropagation();groupsToPool(${gi},${ii})" style="${small}">✕</button>` : ''}</div>`; };
+  const item = (it, gi, ii) => `<div ${fine ? `draggable="true" ondragstart="groupsDragStart(event,${gi},${ii})"` : ''} data-drop="${gi}" data-before="${ii}" ondragover="event.preventDefault()" ondrop="groupsDrop(event,${gi},${ii})" onclick="groupsMenu(${gi},${ii})"
+      style="display:flex;align-items:center;gap:8px;border:1.5px solid var(--border);background:#fff;border-radius:12px;padding:4px 6px 4px 4px;margin-bottom:6px;min-height:50px;font-size:0.95rem;cursor:pointer">
+      <span onpointerdown="groupsPtrDown(event,${gi},${ii})" onpointermove="groupsPtrMove(event)" onpointerup="groupsPtrUp(event)" onpointercancel="groupsPtrUp(event)" onclick="event.stopPropagation()" title="Drag" style="touch-action:none;display:flex;align-items:center;justify-content:center;width:40px;align-self:stretch;font-size:1.2rem;color:var(--text-muted);cursor:grab;user-select:none;-webkit-user-select:none">⠿</span>
+      <span style="flex:1;min-width:0;line-height:1.3">${label(it)}</span><span style="color:var(--text-muted);padding-right:6px">⋯</span></div>`;
   let poolHtml = '', groupsHtml = '';
   if (s) {
-    const it = groupsItems(), nIn = arr => arr.reduce((t, x) => t + x.names.length, 0), sel = _grp.sel;
-    poolHtml = `<div ondragover="event.preventDefault()" ondrop="groupsDrop(event,-1)" style="background:rgba(184,134,11,0.06);border:1px ${it.pool.length ? 'solid rgba(184,134,11,0.4)' : 'dashed var(--border)'};border-radius:12px;padding:10px 12px">
-      <div style="font-weight:700;margin-bottom:6px">Not in a group <span style="font-weight:400;font-size:0.76rem;color:var(--text-muted)">${nIn(it.pool)} player${nIn(it.pool) === 1 ? '' : 's'}</span></div>
-      ${it.pool.map((x, ii) => item(x, -1, ii)).join('') || '<div style="font-size:0.8rem;color:var(--text-muted);padding:8px 0;text-align:center">Everyone is placed ✓</div>'}
-      ${sel && sel.gi >= 0 ? `<button type="button" class="btn btn-secondary btn-sm" onclick="groupsMoveTo(-1)">Move back to the pool</button>` : ''}</div>`;
+    const it = groupsItems(), nIn = arr => arr.reduce((t, x) => t + x.names.length, 0), nPool = nIn(it.pool);
+    poolHtml = `<div data-drop="-1" ondragover="event.preventDefault()" ondrop="groupsDrop(event,-1)" style="background:rgba(184,134,11,0.06);border:1.5px ${nPool ? 'solid rgba(184,134,11,0.5)' : 'dashed var(--border)'};border-radius:12px;padding:10px 10px 4px;margin-bottom:10px">
+      <div style="font-weight:700;margin-bottom:6px">Not in a group <span style="font-weight:400;font-size:0.78rem;color:${nPool ? '#8a6d00' : 'var(--text-muted)'}">${nPool ? nPool + ' to place' : 'everyone is placed ✓'}</span></div>
+      ${it.pool.map((x, ii) => item(x, -1, ii)).join('')}</div>`;
     const startCtl = (g, gi) => s.mode === 'shotgun'
-      ? `<span style="font-size:0.78rem;color:var(--text-muted)">Hole</span><input type="number" min="1" max="${o.holes}" value="${g.start_hole || ''}" oninput="groupsSetField(${gi},'start_hole',this.value)" style="width:56px;${inpStyle}"><select onchange="groupsSetField(${gi},'wave',this.value)" style="${inpStyle}"><option value=""></option>${['A', 'B'].map(w => `<option${g.wave === w ? ' selected' : ''}>${w}</option>`).join('')}</select>`
+      ? `<span style="font-size:0.8rem;color:var(--text-muted)">Hole</span><input type="number" inputmode="numeric" min="1" max="${o.holes}" value="${g.start_hole || ''}" oninput="groupsSetField(${gi},'start_hole',this.value)" style="width:62px;${inpStyle}"><select onchange="groupsSetField(${gi},'wave',this.value)" style="${inpStyle}"><option value=""></option>${['A', 'B'].map(w => `<option${g.wave === w ? ' selected' : ''}>${w}</option>`).join('')}</select>`
       : s.mode === 'tee_times' ? `<input type="time" value="${GRP_ESC(g.tee_time || '')}" oninput="groupsSetField(${gi},'tee_time',this.value)" style="${inpStyle}">` : '';
-    groupsHtml = s.groups.map((g, gi) => `<div ondragover="event.preventDefault()" ondrop="groupsDrop(event,${gi})" style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap"><span style="flex:1;font-weight:700;white-space:nowrap">Group ${gi + 1} <span style="font-weight:400;font-size:0.76rem;color:var(--text-muted)">${nIn(it.groups[gi])}</span></span>${startCtl(g, gi)}
+    groupsHtml = s.groups.map((g, gi) => `<div data-drop="${gi}" ondragover="event.preventDefault()" ondrop="groupsDrop(event,${gi})" style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 10px 4px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap"><span style="flex:1;font-weight:700;white-space:nowrap">Group ${gi + 1} <span style="font-weight:400;font-size:0.78rem;color:var(--text-muted)">${nIn(it.groups[gi])}/${s.group_size || 4}</span></span>${startCtl(g, gi)}
           <button type="button" title="Earlier" onclick="groupsGroupMove(${gi},-1)" style="${small}">↑</button><button type="button" title="Later" onclick="groupsGroupMove(${gi},1)" style="${small}">↓</button></div>
-        <div style="min-height:40px">${it.groups[gi].map((x, ii) => item(x, gi, ii)).join('') || '<div style="font-size:0.78rem;color:var(--text-muted);padding:10px;text-align:center;border:1px dashed var(--border);border-radius:8px">Drop here</div>'}</div>
-        ${sel && !(sel.gi === gi) ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="groupsMoveTo(${gi})">Move here</button>` : ''}
-        ${!(g.members || []).length ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:4px;color:var(--text-muted)" onclick="groupsRemoveGroup(${gi})">Remove group</button>` : ''}
-      </div>`).join('') + `<button type="button" class="btn btn-ghost btn-sm" onclick="groupsAddGroup()">➕ Add a group</button>`;
+        ${it.groups[gi].map((x, ii) => item(x, gi, ii)).join('') || '<div style="font-size:0.82rem;color:var(--text-muted);padding:12px;text-align:center;border:1px dashed var(--border);border-radius:10px;margin-bottom:6px">Drop here</div>'}
+        ${!(g.members || []).length ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-bottom:6px;color:var(--text-muted)" onclick="groupsRemoveGroup(${gi})">Remove group</button>` : ''}
+      </div>`).join('') + `<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="groupsAddGroup()">➕ Add a group</button>`;
   }
-  const panels = s ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:10px;align-items:start"><div>${poolHtml}</div><div>${groupsHtml}</div></div>`
+  const panels = s ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start"><div>${poolHtml}</div><div>${groupsHtml}</div></div>`
     : `<div style="font-size:0.84rem;color:var(--text-muted);padding:10px 2px">No groups yet. Tap Suggest groups, then adjust.</div>`;
   body.innerHTML = `<div style="font-size:1.15rem;font-weight:700;margin-bottom:2px">👥 Groups</div>
     <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px">${GRP_ESC(_grp.g.name)}${_grp.publishedAt ? ` · published (v${_grp.version})` : ' · not published yet'}</div>
     ${_grp.notes.length ? `<div style="font-size:0.78rem;color:#8a6d00;margin-bottom:8px">${_grp.notes.map(GRP_ESC).join('<br>')}</div>` : ''}
     ${settings}${panels}
-    <div id="grp-warn" style="margin:10px 0">${groupsWarnHtml()}</div>
-    ${s ? `<div id="grp-dirty" style="font-size:0.74rem;color:var(--text-muted);text-align:right;margin-bottom:4px">${_grp.dirty ? 'Unsaved changes' : ''}</div>
-      <button type="button" class="host-cta-btn" id="grp-publish" onclick="groupsPublish()">📣 Publish &amp; tell players their start</button>
-      <button type="button" class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="groupsSave()">💾 Save draft (players don't see it)</button>` : ''}`;
+    <div id="grp-warn" style="margin:6px 0 10px">${groupsWarnHtml()}</div>
+    ${s ? `<div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--border);margin:0 -2px;padding:8px 2px calc(8px + env(safe-area-inset-bottom,0px));z-index:5">
+      <div id="grp-dirty" style="font-size:0.74rem;color:var(--text-muted);text-align:center;min-height:1em;margin-bottom:4px">${_grp.dirty ? 'Unsaved changes' : ''}</div>
+      <div style="display:flex;gap:8px"><button type="button" class="btn btn-secondary" style="flex:1;min-height:48px" onclick="groupsSave()">💾 Save draft</button><button type="button" class="host-cta-btn" id="grp-publish" style="flex:2;margin:0;min-height:48px" onclick="groupsPublish()">📣 Publish &amp; tell players</button></div></div>` : ''}`;
 }
 function groupsSetOptPlace(v) { _grp.opts.individual = v === 'players'; _grp.sel = null; groupsRender(); }
 function groupsSetOptMode(v) { groupsSetOpt('mode', v); }
