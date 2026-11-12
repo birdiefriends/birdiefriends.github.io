@@ -35,4 +35,5 @@ ok(A.holeFlowStepHtml({ kind: 'unknown' }, 2, g) === '', 'an unknown step kind r
 // wiring
 ok(/BFEngine\.holeSteps\(_sk\.config, hole\)\.slice\(1\)/.test(src) && /holeFlowStepHead\(1, 'Hole score'\)/.test(src), 'the score view builds its steps from the engine');
 ok(/'Hole by Hole'/.test(src) && /'Leaderboard'/.test(src) && !/Live Actions'\)/.test(src), 'the two tabs are Hole by Hole and Leaderboard');
+ok(/const ctpSection = _skOn \? `/.test(src), 'with live scoring the Leaderboard CTP section is leaders only (no picker, pills or claim button)');
 console.log(`hole_flow_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
