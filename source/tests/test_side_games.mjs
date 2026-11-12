@@ -94,7 +94,7 @@ ok(/bragging rights/.test(h0), '$0 match says no money');
   ok(mk.get('ann').strokes === 15 && mk.get('bob').strokes === 15 && mk.get('cy').strokes === 10, 'A-S pair strokes = 50% of the two course handicaps added (15, 10)');
   ok(mk.get('ann').got[1] === 1 && mk.get('ann').got[15] === 1 && !mk.get('ann').got[16], 'pair gets a stroke on the 15 hardest holes');
 }
-const lsrc = extractFn(src, 'liveScoreModeHtml','holeFlowStepHead','holeFlowStepHtml','holeFlowClaimHtml','holeFlowClaimPick');
+const lsrc = extractFn(src, 'liveScoreModeHtml','holeFlowStepHead','holeFlowStepHtml','holeFlowClaimHtml','holeFlowClaimPick','holeFlowLostHtml','holeFlowKeptHtml','holeFlowLostPick','holeFlowBbKept','holeFlowBbShort');
 ok(/asMode/.test(lsrc) && /units/.test(lsrc), 'Live Score shows teams in Alternate Shot');
 
 // Strokes shown must match the game: A-S ignores the round's 95%, Match Play uses its own allowance

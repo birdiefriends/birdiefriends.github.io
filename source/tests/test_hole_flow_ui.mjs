@@ -32,8 +32,17 @@ A.s('d', { 3: { player: 'Mike Kay', dist: 6 } }); A.s('h', { 3: [{ player: 'Mike
 const h3c = A.holeFlowStepHtml(step(3), 2, g, true);
 ok(/Now: Mike 6 ft/.test(h3c) && /disabled[^>]*>Mike/.test(h3c), 'the current leader shows, and a player who already claimed cannot claim twice');
 ok(A.holeFlowStepHtml({ kind: 'unknown' }, 2, g) === '', 'an unknown step kind renders nothing');
+
+// ── MiserBall steps
+const mrow = { games: ['birdieball', 'skins'], dollar_per_player: 20, birdieball_config: { dollar_per_player: 2 } };
+const mcfg = { addons: [{ id: 'birdieball' }, { id: 'cttp', holes: [3] }] };
+ok(E.holeSteps(mcfg, 1, { last: false }).map(x => x.kind).join() === 'score,lostball', 'MiserBall adds a lost-ball step on every hole');
+ok(E.holeSteps(mcfg, 3, { last: false }).map(x => x.kind).join() === 'score,claim,lostball' || E.holeSteps(mcfg, 3).map(x => x.kind).join() === 'score,lostball,claim', 'it stacks with CTP as a 3rd step');
+ok(E.holeSteps(mcfg, 18, { last: true }).map(x => x.kind).join() === 'score,lostball,keptcheck', 'the last hole adds the Kept / Lost check');
+ok(!E.holeSteps(mcfg, 17, { last: false }).some(x => x.kind === 'keptcheck'), 'no check before the last hole');
+ok(!E.holeSteps({ addons: [{ id: 'cttp', holes: [3] }] }, 1, { last: true }).some(x => x.game === 'birdieball'), 'no MiserBall add-on means no MiserBall steps');
 // wiring
-ok(/BFEngine\.holeSteps\(_sk\.config, hole\)\.slice\(1\)/.test(src) && /holeFlowStepHead\(1, 'Hole score'\)/.test(src), 'the score view builds its steps from the engine');
+ok(/BFEngine\.holeSteps\(_sk\.config, hole, \{ last: hole === max \}\)\.slice\(1\)/.test(src) && /holeFlowStepHead\(1, 'Hole score'\)/.test(src), 'the score view builds its steps from the engine');
 ok(/'Hole by Hole'/.test(src) && /'Leaderboard'/.test(src) && !/Live Actions'\)/.test(src), 'the two tabs are Hole by Hole and Leaderboard');
 ok(/const ctpSection = _skOn \? `/.test(src), 'with live scoring the Leaderboard CTP section is leaders only (no picker, pills or claim button)');
 console.log(`hole_flow_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

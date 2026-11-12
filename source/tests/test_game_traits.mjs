@@ -25,7 +25,7 @@ ok(JSON.stringify(E.gameSides('matchplay', { matches: [['A', 'B'], ['C', 'D']] }
 ok(E.gameSides('altshot', { pairs: [['A', 'B'], ['C', 'D']] }).length === 2, 'pairs are the sides');
 
 // a new game id never has to be named in the screens: these functions must not mention the side games by id
-const SCREEN_FNS = ['liveSideGames', 'liveSideGid', 'liveSideTraits', 'liveSideSides', 'liveOneBall', 'liveSideChooserHtml', 'setLiveSideGame', 'skMarks', 'skPartnerOf', 'liveScoreModeHtml','holeFlowStepHead','holeFlowStepHtml','holeFlowClaimHtml','holeFlowClaimPick', 'fourballActionsHtml', 'fourballLiveSectionHtml', 'loadFourballLive', 'livePanelSections', 'renderStrokeCardHtml', 'sideResultHeroHtml', 'fourballResultsHeatHtml', 'fbResOpen', 'renderGatheringPayoutHtml'];
+const SCREEN_FNS = ['liveSideGames', 'liveSideGid', 'liveSideTraits', 'liveSideSides', 'liveOneBall', 'liveSideChooserHtml', 'setLiveSideGame', 'skMarks', 'skPartnerOf', 'liveScoreModeHtml','holeFlowStepHead','holeFlowStepHtml','holeFlowClaimHtml','holeFlowClaimPick','holeFlowLostHtml','holeFlowKeptHtml','holeFlowLostPick','holeFlowBbKept','holeFlowBbShort', 'fourballActionsHtml', 'fourballLiveSectionHtml', 'loadFourballLive', 'livePanelSections', 'renderStrokeCardHtml', 'sideResultHeroHtml', 'fourballResultsHeatHtml', 'fbResOpen', 'renderGatheringPayoutHtml'];
 SCREEN_FNS.forEach(n => { const f = extractFn(src, n); ok(!/'(altshot|matchplay)'/.test(f), n + ' does not hard-code Alternate Shot / Match Play'); });
 
 // live: a round with two side games gets a chooser and switching changes who is on the screen

@@ -3679,7 +3679,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.54.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.55.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -9246,6 +9246,7 @@ let _skinAllPlayers  = {};     // { holeNum: [playerName, ...] } — every playe
 let _scSubmitting    = false;
 let _scSubmitDone    = false;  // true after successful submit — shows confirmation + next player prompt
 let _ctpSubmitting   = false;
+let _bbAskHole = null;   // hole-flow end-of-round check: the player whose "Lost it" is asking for hole + strokes
 let _birdieSubmitting = false;
 // 2Man (scramble_pair) Live Panel support — Dev-80. A team round has ONE
 // scorer per team, not per player, so Birdie Alert/CttP/Scorecard all need
@@ -9918,7 +9919,8 @@ function buildLivePanel(evt) {
           <span>🐉💔</span><span>${a.player_name} — hole #${a.lost_hole}</span>
         </div>`).join('')}
       </div>` : '';
-    bbSection = `
+    // With live scoring the lost-ball alert and the end-of-round check are steps in Hole by Hole, so the Leaderboard only lists who lost it.
+    bbSection = _skOn ? (bbBoard || `<div style="font-size:0.82rem;color:rgba(255,255,255,0.6)">Nobody has lost the MiserBall yet.</div>`) : `
       <button onclick="openPlayerSheet(window._liveEvtIndividualPlayers,'${bbPlayerEsc}',function(n){bbSelectPlayer(n)},undefined,window._liveAddOpts)"
         style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);
           border-radius:8px;padding:9px 14px;color:#fff;font-size:0.85rem;font-family:inherit;
@@ -11149,7 +11151,7 @@ function liveScoreModeHtml() {
     : done ? (units.length === 2 ? 'Both are in. ' : 'All ' + units.length + ' are in. ') + 'Tap a ' + (asMode ? 'team' : 'name') + ' to change a score, or go to the next hole.'
     : _sk.sel >= 0 ? `Tap ${escapeHtml(asMode ? (units.find(u => u.k === _sk.sel) || units[0]).label : first(g.players[_sk.sel]))}'s score. It saves and moves to the next ${asMode ? 'team' : 'name'}.`
     : 'Tap a ' + (asMode ? 'team' : 'name') + ' to enter a score.';
-  const extraSteps = BFEngine.holeSteps(_sk.config, hole).slice(1);   // hole-by-hole flow: what else this hole needs after the score
+  const extraSteps = BFEngine.holeSteps(_sk.config, hole, { last: hole === max }).slice(1);   // hole-by-hole flow: what else this hole needs after the score
   const status = _sk.err ? 'Not saved yet, will retry' : _sk.pending ? 'Saving…' : _sk.savedAt ? 'Saved' : '';
   const alertsNote = (!pars && (gatheringAddon(_sk.config, 'skins') || gatheringAddon(_sk.config, 'birdiepay') || gatheringAddon(_sk.config, 'scramble')))
     ? `<div style="margin-top:8px;font-size:0.76rem;color:#ffd27a;line-height:1.4">No par data for this course, so birdies can't be announced automatically. Host: add the course pars in Venues.</div>` : '';
@@ -11177,6 +11179,8 @@ function holeFlowStepHead(n, title, sub) {
 function holeFlowStepHtml(st, n, g, scoreDone) {
   // kind -> renderer (add a line here for a new kind of step)
   if (st.kind === 'claim') return holeFlowClaimHtml(st, n, g);
+  if (st.kind === 'lostball') return holeFlowLostHtml(st, n, g);
+  if (st.kind === 'keptcheck') return holeFlowKeptHtml(st, n, g);
   return '';
 }
 // Claim step (closest to the pin): pick who is closest, optional distance, one button. Saves through submitCttp.
@@ -11197,6 +11201,61 @@ function holeFlowClaimHtml(st, n, g) {
       <input class="cttp-dist-input" type="text" id="cttp-dist-input" placeholder="Feet (optional)" inputmode="decimal" style="flex:1;min-width:0" onbeforeinput="if(event.data!=null && (!/^[0-9.]+$/.test(event.data) || (event.data.includes('.') && this.value.includes('.')))) event.preventDefault()">
       <button type="button" class="sc-submit-btn" style="flex:1.4;margin:0" ${_ctpSubmitting ? 'disabled' : ''} onclick="submitCttp(${JSON.stringify(evt.name).replace(/"/g, '&quot;')})">${_ctpSubmitting ? 'Saving…' : escapeHtml(first(sel)) + ' is closest'}</button></div>` : '';
   return holeFlowStepHead(n, st.prize ? 'Closest to the pin · prize' : 'Closest to the pin', sub) + `<div style="display:flex;flex-wrap:wrap;gap:6px">${pills}</div>${entry}`;
+}
+// MiserBall step: "did anyone lose it on this hole?" Tap the player, pick the strokes, send. Uses the same save and group push
+// as the old alert widget (submitBirdieBall), so the answer lands in bfe_birdieball_answers either way.
+function holeFlowBbShort(p) { return String(p).trim().split(/\s+/)[0]; }
+function holeFlowLostHtml(st, n, g) {
+  const hole = st.hole, nm = x => String(x || '').trim().toLowerCase();
+  const rows = g.players.map(p => ({ p, a: bbAnswerFor(p) }));
+  const lost = rows.filter(r => r.a && r.a.kept === false);
+  const sel = (_bbPlayer && !_bbAskHole && _bbTouchedPlayer === _bbPlayer && _bbLostHole === hole && !(bbAnswerFor(_bbPlayer) && bbAnswerFor(_bbPlayer).kept === false)) ? _bbPlayer : null;
+  const pills = rows.filter(r => !(r.a && r.a.kept === false)).map(r => {
+    const on = sel && nm(sel) === nm(r.p);
+    const style = 'min-height:44px;padding:0 14px;border-radius:22px;font-family:inherit;font-size:0.9rem;font-weight:600;color:#fff;cursor:pointer;' + (on ? 'border:2px solid #e0b44c;background:rgba(224,180,76,0.22)' : 'border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06)');
+    return `<button type="button" onclick="holeFlowLostPick(${hole},${JSON.stringify(r.p).replace(/"/g, '&quot;')})" style="${style}">${escapeHtml(holeFlowBbShort(r.p))}</button>`;
+  }).join('');
+  const done = lost.length ? `<div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:8px">${lost.map(r => '🐉💔 ' + escapeHtml(holeFlowBbShort(r.p)) + ' #' + r.a.lost_hole).join(' &middot; ')}</div>` : '';
+  const entry = sel ? `<div style="margin-top:10px"><div class="sc-section-label" style="margin-bottom:4px">${escapeHtml(holeFlowBbShort(sel))} lost it on #${hole}. Strokes?</div>${bbStrokeGridHtml(_bbLostStroke, 'bbSetStroke')}
+      <button type="button" class="sc-submit-btn" style="background:#c9892a;margin-top:8px" ${_bbLostStroke && !_bbSubmitting ? '' : 'disabled'} onclick="submitBirdieBall()">${_bbSubmitting ? 'Sending…' : '💔 ' + escapeHtml(holeFlowBbShort(sel)) + ' lost it'}</button></div>` : '';
+  return holeFlowStepHead(n, 'MiserBall', 'Anyone lose it on this hole?') + done + (pills ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${pills}</div>` : '') + entry;
+}
+function holeFlowLostPick(hole, player, askHole) {
+  if (_bbSubmitting) return;
+  if (_bbPlayer === player && _bbTouchedPlayer === player && (_bbLostHole === hole || (askHole && _bbAskHole === player))) { _bbPlayer = null; _bbTouchedPlayer = null; _bbLostHole = null; _bbLostStroke = null; _bbAskHole = null; renderLiveBanner(); return; }
+  _bbPlayer = player; _bbTouchedPlayer = player; _bbKept = false; _bbLostStroke = null;
+  _bbLostHole = askHole ? null : hole; _bbAskHole = askHole ? player : null;
+  renderLiveBanner();
+}
+// End-of-round check (the same Kept it / Lost it question the scorecard asks): each player confirms so nobody is left blank.
+function holeFlowKeptHtml(st, n, g) {
+  const nm = x => String(x || '').trim().toLowerCase();
+  const rows = g.players.map(p => {
+    const a = bbAnswerFor(p), f = escapeHtml(holeFlowBbShort(p)), q = JSON.stringify(p).replace(/"/g, '&quot;');
+    if (a && a.kept === false) return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.9rem;color:#fff"><span style="flex:1">${f}</span><span style="color:#e0b44c">🐉💔 Lost on #${a.lost_hole}${a.lost_stroke ? ' (' + a.lost_stroke + ')' : ''}</span></div>`;
+    if (a && a.kept === true) return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.9rem;color:#fff"><span style="flex:1">${f}</span><span style="color:#5DCAA5">✅ Kept it</span></div>`;
+    const ask = _bbAskHole && nm(_bbAskHole) === nm(p) && nm(_bbPlayer) === nm(p);
+    const btn = (label, fn, on, col) => `<button type="button" onclick="${fn}" style="flex:1;min-height:44px;border-radius:10px;font-family:inherit;font-weight:600;color:#fff;cursor:pointer;border:1px solid ${col};background:${on ? col : 'rgba(255,255,255,0.06)'}">${label}</button>`;
+    const detail = ask ? `<div style="margin:8px 0"><div class="sc-section-label" style="margin-bottom:4px">Which hole?</div>${bbHoleGridHtml(_bbLostHole, 'bbSetHole')}<div class="sc-section-label" style="margin:6px 0 4px">Strokes</div>${bbStrokeGridHtml(_bbLostStroke, 'bbSetStroke')}
+        <button type="button" class="sc-submit-btn" style="background:#c9892a;margin-top:8px" ${_bbLostHole && _bbLostStroke && !_bbSubmitting ? '' : 'disabled'} onclick="submitBirdieBall()">${_bbSubmitting ? 'Sending…' : '💔 ' + f + ' lost it'}</button></div>` : '';
+    return `<div style="padding:6px 0;border-bottom:0.5px solid rgba(255,255,255,0.08)"><div style="font-size:0.9rem;font-weight:600;color:#fff;margin-bottom:6px">${f}</div><div style="display:flex;gap:8px">${btn('Kept it', `holeFlowBbKept(${q})`, false, 'rgba(29,158,117,0.6)')}${btn('Lost it', `holeFlowLostPick(${st.hole},${q},true)`, ask, 'rgba(220,80,80,0.6)')}</div>${detail}</div>`;
+  }).join('');
+  return holeFlowStepHead(n, 'MiserBall check', 'Last hole. Confirm before you finish') + `<div style="background:rgba(0,0,0,0.15);border-radius:10px;padding:4px 12px">${rows}</div>`;
+}
+async function holeFlowBbKept(player) {
+  if (_bbSubmitting) return;
+  const evt = getLiveEvent(), gid = panelGamesGid(evt);
+  if (gid == null || !player) return;
+  _bbSubmitting = true; renderLiveBanner();
+  try {
+    const payload = { gathering_id: gid, player_name: player, kept: true, lost_hole: null, lost_stroke: null };
+    const res = await fetch(`${BFE_API}/bfe/birdieball-answers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    const idx = _bbAnswers.findIndex(a => (a.player_name || '').trim().toLowerCase() === player.trim().toLowerCase());
+    if (idx === -1) _bbAnswers.push(payload); else _bbAnswers[idx] = payload;
+  } catch (e) { showToast('❌ Could not save. Try again', true); }
+  _bbSubmitting = false; renderLiveBanner();
 }
 function holeFlowClaimPick(hole, player) {
   if (_ctpSubmitting) return;

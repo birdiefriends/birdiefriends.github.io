@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.54.0';
+  const ENGINE_VERSION = '1.55.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2044,11 +2044,11 @@
   function gameTraits(id) { const m = (ADDONS[id] && ADDONS[id].meta) || {}; return Object.assign({}, TRAIT_DEFAULTS, m.traits || {}); }
   function gamesWith(pred) { return gamesInUiOrder().filter(id => pred(gameTraits(id), id)); }
   function sideGames() { return gamesWith(t => t.sides); }
-  // ── Hole-by-hole flow (v1.54.0) ───────────────────────────────────────────────────────────────
+  // ── Hole-by-hole flow (v1.55.0) ───────────────────────────────────────────────────────────────
   // The reusable live-scoring core: for a config and a hole, the ordered steps a scorer walks through.
   //   1. 'score'  always first (the hole score, saved by whoever hosts the flow)
   //   2. extras   one per game that needs an input on THIS hole, contributed by HOLE_STEP_PROVIDERS
-  // A provider is fn(addon, hole, ctx) -> step | null, so a new game adds its per-hole input by registering one
+  // A provider is fn(addon, hole, ctx) -> step | [steps] | null (ctx.last is true on the round's final hole), so a new game adds its per-hole input by registering one
   // (nothing in the UI changes). Steps are plain data: { id, game, kind, hole, ... }; the UI maps kind -> widget.
   const HOLE_STEP_PROVIDERS = {
     cttp(addon, hole) {
@@ -2056,6 +2056,12 @@
       const prize = (Array.isArray(addon.prize_holes) ? addon.prize_holes : []).map(Number);   // prize-only holes are claimed like any other
       if (holes.indexOf(hole) < 0 && prize.indexOf(hole) < 0) return null;
       return { id: 'cttp', game: 'cttp', kind: 'claim', hole, prize: prize.indexOf(hole) >= 0 && holes.indexOf(hole) < 0, label: 'Closest to the pin' };
+    },
+    // MiserBall: anyone can lose it on any hole (3rd+ step), and on the last hole each player confirms Kept / Lost.
+    birdieball(addon, hole, ctx) {
+      const out = [{ id: 'miser', game: 'birdieball', kind: 'lostball', hole, label: 'MiserBall' }];
+      if (ctx && ctx.last) out.push({ id: 'miser_check', game: 'birdieball', kind: 'keptcheck', hole, label: 'Did you keep the MiserBall?' });
+      return out;
     }
   };
   function registerHoleStep(gameId, fn) { if (typeof fn === 'function') HOLE_STEP_PROVIDERS[gameId] = fn; }
@@ -2066,7 +2072,7 @@
       const a = addons.find(x => x && x.id === gid);
       if (!a) return;
       const st = HOLE_STEP_PROVIDERS[gid](a, Number(hole), ctx || {});
-      if (st) out.push(st);
+      (Array.isArray(st) ? st : st ? [st] : []).forEach(x => out.push(x));   // a provider may return one step or several
     });
     return out;
   }
