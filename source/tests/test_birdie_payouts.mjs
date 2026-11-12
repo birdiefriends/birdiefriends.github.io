@@ -138,7 +138,7 @@ const conserved = r => r.payouts.reduce((s, x) => s + x.total, 0) + r.unallocate
 
 // ── K: portal — Host Panel form, save payload, renderer, event-card details
 function formSandbox({ pars = PARS, existing = null } = {}) {
-  const dom = new JSDOM(`<body><div id="games-form-checklist"></div><input id="games-form-dpp" value="20"><div id="games-form-pot-preview"></div>
+  const dom = new JSDOM(`<body><div id="games-form-checklist"></div><input id="games-form-dpp" value="20"><div id="games-form-split"></div><div id="games-form-pot-preview"></div>
     <div id="games-form-cttp-section"></div><div id="games-form-birdieball-section"></div><div id="games-form-birdiepay-section"></div><button id="btn-save-games"></button></body>`);
   const posts = []; const toasts = [];
   const ctx = {
@@ -155,7 +155,7 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
     'gamesFormEntry', 'teeHolesPars', 'gamesFormBirdiepayParsByPlayer', 'gamesFormPlayerNames', 'gamesFormHcpIsNet', 'gamesFormResolvePlayerHcp', 'gamesFormBuildHandicapConfig', 'gatheringGamesHcpSectionHtml', 'refreshGamesFormHcpSection']; // Dev-91: net/gross section now part of the form
   vm.runInContext(`
     const GATHERING_GAMES_META = ${JSON.stringify({ skins: { label: 'Skins', icon: 'x' }, cttp: { label: 'CTP', icon: 'x' }, birdieball: { label: 'BirdieBall', icon: 'x' }, birdiepay: { label: 'Birdie Payouts', icon: 'x' } })};
-    let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
+    const GAMES_FORM_PODIUM_SHARES = { 1: [100], 2: [65, 35], 3: [50, 30, 20] }; let _gamesFormPodium = { mode: 'pct', pct: null, tot: null, pl: [], dirty: false }; let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
     let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round' }; let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' };
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] };
     let _gamesFormBirdieballConfig = { dollar_per_player: null };
@@ -163,7 +163,7 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
     let _gamesFormBirdiepayPars = ${JSON.stringify(pars)};
     let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; let _gamesFormTees = []; let _gamesFormMembers = new Map(); // Dev-91
     let _gamesFormPar3Holes = []; let _gamesFormVenueParDataAvailable = false;
-    ${fns.map(n => extractFn(src, n)).join('\n')}
+    ${[...new Set([...fns, ...['_r2','gamesFormPodiumPlaces','gamesFormPodiumPlan','gamesFormPodiumPlayers','gamesFormPodiumApply','gamesFormPodiumInit','setGamesFormScramblePct','setGamesFormPodiumTotal','setGamesFormPodiumPlace','setGamesFormPodiumMode','setGamesFormPodiumPlaces','gamesFormSplitBuild','gamesFormSplitHtml','gamesFormSplitLive','refreshGamesFormSplit']])].map(n => extractFn(src, n)).join('\n')}
     this.updateGamesFormPotPreview = updateGamesFormPotPreview;
     this.api = { toggleGamesFormGame, setGamesFormBirdiepayDollarPerBirdie, submitGatheringGames, gatheringGamesBirdiepaySectionHtml, sel: () => [..._gamesFormSelected] };
   `, ctx);
@@ -179,8 +179,8 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
   ok(!t.dom.window.document.getElementById('games-form-birdiepay-section').innerHTML.includes('No par data'), 'K: no par warning when pars are on file');
   api.toggleGamesFormGame('skins');
   api.setGamesFormBirdiepayDollarPerBirdie('2.5');
-  const prev = t.dom.window.document.getElementById('games-form-pot-preview').innerHTML;
-  ok(/Pot preview: \$80\.00/.test(prev) && prev.includes('$2.50 per birdie') && prev.includes('Skins gets: $80.00 before birdie payouts'), 'K: preview shows the per-birdie rate and Skins "before birdie payouts"');
+  const prev = t.dom.window.document.getElementById('games-form-split').textContent;
+  ok(/\$80 pot/.test(prev) && prev.includes('a birdie, paid out of the balance before Skins') && /Skins\s*\$80/.test(prev) && /t\.dom/.test('t.dom') && t.dom.window.document.getElementById('gw-split-bp').value === '2.5', 'K: the split shows the per-birdie rate and Skins as the balance');
   await api.submitGatheringGames(7);
   eq(t.posts.length, 1, 'K: saved');
   eq(t.posts[0].games.slice().sort(), ['birdiepay', 'skins'], 'K: payload games');

@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.50.1';
+  const ENGINE_VERSION = '1.51.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -629,6 +629,9 @@
     return diff === -1 ? 4 : diff === -2 ? 6 : 8;
   }
   const SCRAMBLE_SPLITS = { winner: [100], top2: [65, 35], top3: [50, 30, 20] };
+  // 'custom' pays the places the host priced by hand: place_shares are each place's share of the podium (any positive numbers, they are normalised).
+  function scrambleShares(a) { return Array.isArray(a && a.place_shares) ? a.place_shares.map(Number).filter(n => Number.isFinite(n) && n > 0).slice(0, 3) : []; }
+  function scrambleSplits(a) { const cs = a && a.payout === 'custom' ? scrambleShares(a) : []; return cs.length ? cs : (SCRAMBLE_SPLITS[a && a.payout] || SCRAMBLE_SPLITS.winner); }
 
   // Dev-94: the same engine now plays four formats, told apart by `kind`:
   //   'hilo'     (id hilo)      two pairs head to head, own balls: low ball vs low ball and high ball vs high ball, 1 point each
@@ -852,7 +855,7 @@
       if (kind === 'scramble' && winners.length) {
         // Winner takes all, or the pot over the first places (ties share the places they cover). Places nobody finished are
         // spread over the places that were; everything rounds DOWN to whole dollars and the remainder is reported, not moved.
-        const splits = (SCRAMBLE_SPLITS[addon.payout] || SCRAMBLE_SPLITS.winner).slice(0, ranked.length);
+        const splits = scrambleSplits(addon).slice(0, ranked.length);
         const splitSum = splits.reduce((t, v) => t + v, 0);
         placesOut = [];
         let i = 0;
@@ -885,7 +888,7 @@
         winners: winners.map(w => w.pair), per_pair: perPair, per_player: perPlayer, given_back_each: givenBackEach,
         ...(kind === 'scramble' ? { scoring: stable ? 'stableford' : 'strokes', ...(stable ? { scale } : {}),
           hcp_method: scrambleMethod(addon), team_size: size,
-          payout: SCRAMBLE_SPLITS[addon.payout] ? addon.payout : 'winner', ...(placesOut ? { places: placesOut } : {}),
+          payout: addon.payout === 'custom' && scrambleShares(addon).length ? 'custom' : SCRAMBLE_SPLITS[addon.payout] ? addon.payout : 'winner', ...(placesOut ? { places: placesOut } : {}),
           ...(stable && !stablePars ? { par_missing: true } : {}) } : {})
       }, capped ? { capped: true, configured_pot: configuredPot } : {});
   }
@@ -1208,7 +1211,8 @@
       { key: 'pct_3', type: 'int', label: '3rd lowest handicap %', default: 10, min: 0 },
       { key: 'pct_4', type: 'int', label: 'Highest handicap %', default: 10, min: 0 },
       { key: 'allowance', type: 'int', label: 'Combined handicap %', default: 25, min: 1 },
-      { key: 'payout', type: 'enum', label: 'Pays', values: ['winner', 'top2', 'top3'], default: 'winner' },
+      { key: 'payout', type: 'enum', label: 'Pays', values: ['winner', 'top2', 'top3', 'custom'], default: 'winner' },
+      { key: 'place_shares', type: 'shares', label: 'Podium shares by place (custom)', default: [], max: 3 },
       { key: 'pars', type: 'pars', label: 'Par by hole (Stableford)', default: [], min: 3, max: 6, integer: true },
       { key: 'pairs', type: 'pairs', sizeKey: 'team_size', minPairs: 0, label: 'Teams', default: [] },   // may be saved empty: a team event is set up before anyone has signed up, and the locked teams are filled in later
       { key: 'names', type: 'strings', label: 'Team names', default: [], max: 40 }
@@ -1251,6 +1255,12 @@
         { id: 'scramble', entity: 'pair', dollar_per_player: 0, basis: 'gross', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
       inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(4)), _P('Cy', _ALL(5)), _P('Di', _ALL(5))] },
       expect: { payouts: { Ann: 0, Bob: 0, Cy: 0, Di: 0 }, unallocated: 0, results: { scramble: { pot: 0 } } }
+    }, {
+      name: 'custom places: the host priced 1st $30 and 2nd $10 by hand',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'scramble', entity: 'pair', dollar_per_player: 10, basis: 'gross', payout: 'custom', place_shares: [30, 10], pairs: [['Ann', 'Bob'], ['Cy', 'Di']] }] },
+      inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(4)), _P('Cy', _ALL(5)), _P('Di', _ALL(5))] },
+      expect: { payouts: { Ann: 15, Bob: 15, Cy: 5, Di: 5 }, unallocated: 0, results: { scramble: { pot: 40, payout: 'custom' } } }
     }]
   });
 
@@ -1543,6 +1553,8 @@
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
         if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
         else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be on one ' + (sz === 2 ? 'pair' : 'team'));
+      } else if (f.type === 'shares') {
+        if (!Array.isArray(v) || v.length > (f.max || 3) || !v.every(x => Number.isFinite(Number(x)) && Number(x) >= 0)) errors.push(f.label + ' must be up to ' + (f.max || 3) + ' amounts of 0 or more');
       } else if (f.type === 'strings') {
         if (!Array.isArray(v) || !v.every(x => typeof x === 'string' && x.trim().length <= (f.max || 60))) errors.push(f.label + ' must be short text (up to ' + (f.max || 60) + ' characters each)');
       } else if (f.type === 'enum') {
@@ -1562,6 +1574,7 @@
       if (f.type === 'money' || f.type === 'int') out[f.key] = Number(v);
       else if (f.type === 'holes') out[f.key] = v.slice().sort((a, b) => a - b);
       else if (f.type === 'pars') out[f.key] = v.map(Number);
+      else if (f.type === 'shares') out[f.key] = v.map(Number);
       else if (f.type === 'parsmap') { const m = {}; Object.keys(v).forEach(k => { m[String(k).trim()] = v[k].map(Number); }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
       else if (f.type === 'strings') out[f.key] = v.map(x => String(x).trim().slice(0, f.max || 60));
@@ -1671,7 +1684,7 @@
         net_mode: scc.net_mode === 'low' ? 'low' : 'own', scoring: scc.scoring === 'stableford' ? 'stableford' : 'strokes', scale: scc.scale === 'standard' ? 'standard' : 'bf',
         hcp_method: scrambleMethod(scc), team_size: scrambleSize(scc), allowance: scrambleCombinedPct(scc),
         ...Object.fromEntries([1, 2, 3, 4].filter(i => scc['pct_' + i] != null && Number.isFinite(Number(scc['pct_' + i]))).map(i => ['pct_' + i, Number(scc['pct_' + i])])),
-        payout: ['winner', 'top2', 'top3'].includes(scc.payout) ? scc.payout : 'winner', pars: Array.isArray(scc.pars) ? scc.pars : [], pairs: Array.isArray(scc.pairs) ? scc.pairs : [], names: Array.isArray(scc.names) ? scc.names.map(x => String(x || '')) : [] });
+        payout: ['winner', 'top2', 'top3', 'custom'].includes(scc.payout) ? scc.payout : 'winner', ...(Array.isArray(scc.place_shares) ? { place_shares: scc.place_shares.map(Number) } : {}), pars: Array.isArray(scc.pars) ? scc.pars : [], pairs: Array.isArray(scc.pairs) ? scc.pairs : [], names: Array.isArray(scc.names) ? scc.names.map(x => String(x || '')) : [] });
     }
     const hlc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.hilo : null;
     if (games.includes('hilo') && hlc) {

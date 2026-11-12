@@ -3677,7 +3677,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.50.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.51.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -12224,7 +12224,8 @@ function gamesFormSideFrom(gid, src) {
     out.team_size = BFEngine.scrambleSize(src);
     out.hcp_method = ['combined', 'none'].includes(src.hcp_method) ? src.hcp_method : 'ranked';
     Object.assign(out, gamesFormScramblePcts(src)); out.allowance = BFEngine.scrambleCombinedPct(src);
-    out.payout = ['top2', 'top3'].includes(src.payout) ? src.payout : 'winner';
+    out.payout = ['top2', 'top3', 'custom'].includes(src.payout) ? src.payout : 'winner';
+    if (out.payout === 'custom') { if (Array.isArray(src.place_shares) && src.place_shares.length) out.place_shares = src.place_shares.map(Number); else out.payout = 'winner'; }
   }
   else if (gid === 'hilo') out.pairs = (src.pairs || []).map(pr => pr.slice());
   else { out.pairs = (src.pairs || []).map(pr => pr.slice()); out.win_by = src.win_by === 'holes' ? 'holes' : 'strokes'; out.scope = src.win_by === 'holes' || src.scope === 'group' ? 'group' : 'field'; }
@@ -17320,7 +17321,7 @@ function scrambleResultsHtml(f, line, nm, esc) {
   const stable = f.scoring === 'stableford', unit = stable ? ' pts' : '';
   const how = [stable ? `Stableford${f.scale === 'standard' ? ' (standard)' : ' (birdie premium)'}` : 'Strokes',
     f.basis === 'net' ? (f.hcp_method === 'combined' ? 'team handicap: both added' : 'team handicap: lower + higher') : '',
-    f.payout === 'top2' ? 'pays top 2' : f.payout === 'top3' ? 'pays top 3' : 'pays the winner'].filter(Boolean).join(' · ');
+    f.payout === 'top2' ? 'pays top 2' : f.payout === 'top3' ? 'pays top 3' : f.payout === 'custom' ? 'pays ' + ((f.places || []).length || 'set') + ' places' : 'pays the winner'].filter(Boolean).join(' · ');
   let h = `<div style="font-size:0.74rem;color:var(--text-muted);margin:0 0 6px">${esc(how)}</div>`;
   if (f.par_missing) h += `<div style="font-size:0.74rem;color:#b8860b;margin-bottom:6px">No par data was saved with this game, so Stableford points could not be worked out.</div>`;
   const paid = new Map();
@@ -18303,7 +18304,7 @@ function gatheringGameDetailsBody(evt, config) {
     const aNet = a.basis === 'net';
     const kPk = BFEngine.periodKey(a);
     const list = sides.map(sd => sd.map(escapeHtml).join(isM ? ' vs ' : ' &amp; ')).join(' · ');
-    const allow = gid === 'scramble' ? (aNet && a.hcp_method !== 'none' ? ` · ${a.hcp_method === 'combined' ? BFEngine.scrambleCombinedPct(a) + '% of all handicaps' : BFEngine.scramblePcts(a).join('/') + '% by rank'}` : '') + ' · ' + BFEngine.scrambleSize(a) + '-man teams' + (a.scoring === 'stableford' ? ' · Stableford' : '') + (a.payout === 'top2' ? ' · pays top 2' : a.payout === 'top3' ? ' · pays top 3' : '') : aNet ? ` · ${a.allowance != null && a.allowance !== '' ? a.allowance : (isM ? 100 : 50)}% allowance` : '';
+    const allow = gid === 'scramble' ? (aNet && a.hcp_method !== 'none' ? ` · ${a.hcp_method === 'combined' ? BFEngine.scrambleCombinedPct(a) + '% of all handicaps' : BFEngine.scramblePcts(a).join('/') + '% by rank'}` : '') + ' · ' + BFEngine.scrambleSize(a) + '-man teams' + (a.scoring === 'stableford' ? ' · Stableford' : '') + (a.payout === 'top2' ? ' · pays top 2' : a.payout === 'top3' ? ' · pays top 3' : a.payout === 'custom' ? ' · pays ' + (a.place_shares || []).length + ' places' : '') : aNet ? ` · ${a.allowance != null && a.allowance !== '' ? a.allowance : (isM ? 100 : 50)}% allowance` : '';
     rows.push(row(icon, `${title} · ${aNet ? (a.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `${what}${allow} · ${dpp > 0 ? '$' + dpp.toFixed(2) + '/player · $' + cost.toFixed(2) + ' pot' : 'no money, the loser buys'}${kPk !== 'round' && !isM ? `, ${BFEngine.PERIODS[kPk].phrase} are separate pots` : ''}${isM ? ', winner announced the moment it is decided (you can play on)' : ''}${list ? `<br><b>${isM ? 'Matches' : 'Pairs'}:</b> ${list}` : ''}`, gid));
   });
   const ls = gatheringAddon(config, 'lowscore');
@@ -20245,6 +20246,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
       : { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round', win_by: 'strokes', scope: 'field' };
     _gamesFormFourballNote = '';
     GAMES_FORM_SIDE_IDS.forEach(gid => { _gamesFormSide[gid] = gamesFormSideFrom(gid, existing && existing.game_configs && existing.game_configs[gid]); _gamesFormSideNote[gid] = ''; });
+    gamesFormPodiumInit(existing && existing.game_configs && existing.game_configs.scramble);
     // Teams of 2: the locked partner pairs are the Scramble teams, and Scramble is the game to suggest
     if (teamSizeOf(g) && !g.eventShadow) {
       if (!existing && !(preselect && preselect.length)) _gamesFormSelected.add('scramble');
@@ -20388,78 +20390,175 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
   applyGamesSuggestion(false);
   gwRender();
 }
-// The suggested split, as boxes you can type over: any amount is yours to change right here, not only on the game's own screen.
-function gamesFormSplitHtml() {
-  const sel = _gamesFormSelected, rows = [];
-  // The split is of the whole pot: every confirmed Yes puts in the buy-in, and each game takes its share of THAT.
+// ── The money step: one pot, every game a slice of it ───────────────────────────────────────────────────────────
+// Everything on this panel is computed from the live settings by gamesFormSplitBuild(). It returns the markup AND the text of every
+// computed region, so a keystroke never rebuilds a box that is being typed in: it only rewrites the regions (gamesFormSplitLive).
+const GAMES_FORM_PODIUM_SHARES = { 1: [100], 2: [65, 35], 3: [50, 30, 20] };
+let _gamesFormPodium = { mode: 'pct', pct: null, tot: null, pl: [], dirty: false };   // how the host is entering the Scramble podium
+function _r2(v) { return Math.round((Number(v) || 0) * 100) / 100; }
+function gamesFormPodiumPlaces(sc) { return sc.payout === 'custom' ? Math.max(1, Math.min(3, (_gamesFormPodium.pl || []).length || 1)) : ({ top2: 2, top3: 3 })[sc.payout] || 1; }
+// Pure: the podium for the way it is being entered. total = the whole podium purse, places = each place in whole dollars,
+// rate = $ a player stored on the game (rounded UP at 4 decimals so the places never lose a dollar to rounding).
+function gamesFormPodiumPlan(p, sc, dpp, nPl) {
+  const n = gamesFormPodiumPlaces(sc);
+  let total, places, pct = null, mode = p.mode;
+  if (mode === 'pl') { places = Array.from({ length: n }, (_, i) => Math.max(0, _r2((p.pl || [])[i]))); total = _r2(places.reduce((t, v) => t + v, 0)); }
+  else {
+    if (mode === 'tot') total = Math.max(0, _r2(p.tot));
+    else { mode = 'pct'; pct = p.pct != null ? p.pct : (dpp > 0 ? Math.round((Number(sc.dollar_per_player) || 0) / dpp * 1000) / 10 : 0); total = _r2(dpp * nPl * pct / 100); }
+    places = GAMES_FORM_PODIUM_SHARES[n].map(s => Math.floor(total * s / 100 + 1e-9));
+  }
+  const rate = nPl > 0 ? Math.ceil(total / nPl * 1e4 - 1e-9) / 1e4 : 0;
+  return { mode, n, total, places, pct, rate };
+}
+// Players the podium is paid on: everyone on a team, else everyone who said Yes.
+function gamesFormPodiumPlayers() {
+  const sc = _gamesFormSide.scramble, tsz = Number(sc.team_size) || 2, nTeams = (sc.pairs || []).filter(pr => Array.isArray(pr) && pr.length).length;
+  return nTeams ? nTeams * tsz : Math.max(4, _gamesFormYesCount);
+}
+// Writes what the host entered onto the game (the $ a player and the place shares it is saved with).
+function gamesFormPodiumApply() {
+  if (!_gamesFormPodium.dirty) return;
+  const sc = _gamesFormSide.scramble, dpp = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0;
+  const plan = gamesFormPodiumPlan(_gamesFormPodium, sc, dpp, gamesFormPodiumPlayers());
+  sc.dollar_per_player = plan.rate;
+  if (plan.mode === 'pl') { sc.payout = 'custom'; sc.place_shares = plan.places.slice(); }
+  else { if (sc.payout === 'custom') sc.payout = plan.n === 3 ? 'top3' : plan.n === 2 ? 'top2' : 'winner'; delete sc.place_shares; }
+  _gamesFormTouched.add('scramble');
+}
+function gamesFormPodiumInit(src) {
+  _gamesFormPodium = { mode: 'pct', pct: null, tot: null, pl: [], dirty: false };
+  if (src && src.payout === 'custom' && Array.isArray(src.place_shares) && src.place_shares.length) {
+    const sh = src.place_shares.map(Number), S = sh.reduce((t, v) => t + v, 0);
+    const tot = (Number(src.dollar_per_player) || 0) * gamesFormPodiumPlayers();
+    _gamesFormPodium.mode = 'pl'; _gamesFormPodium.pl = sh.map(v => S > 0 ? _r2(v * (tot || S) / S) : 0);
+  }
+}
+function setGamesFormScramblePct(val) {
+  const p = _gamesFormPodium; p.mode = 'pct'; p.pct = Math.max(0, Math.min(100, parseFloat(val) || 0)); p.dirty = true;
+  gamesFormPodiumApply(); updateGamesFormPotPreview();
+}
+function setGamesFormPodiumTotal(val) {
+  const p = _gamesFormPodium; p.mode = 'tot'; p.tot = Math.max(0, parseFloat(val) || 0); p.dirty = true;
+  gamesFormPodiumApply(); updateGamesFormPotPreview();
+}
+function setGamesFormPodiumPlace(i, val) {
+  const p = _gamesFormPodium; p.mode = 'pl'; p.pl = (p.pl || []).slice(); p.pl[i] = Math.max(0, parseFloat(val) || 0); p.dirty = true;
+  gamesFormPodiumApply(); updateGamesFormPotPreview();
+}
+// Switching how it is entered carries today's numbers across, so nothing resets.
+function setGamesFormPodiumMode(mode) {
+  const p = _gamesFormPodium, sc = _gamesFormSide.scramble, dpp = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0, nPl = gamesFormPodiumPlayers();
+  const cur = gamesFormPodiumPlan(p, sc, dpp, nPl);
+  if (mode === 'pl') p.pl = cur.places.slice();
+  else if (mode === 'tot') p.tot = cur.total;
+  else p.pct = dpp > 0 && nPl > 0 ? Math.round(cur.total / (dpp * nPl) * 1000) / 10 : 0;
+  p.mode = mode; p.dirty = true; gamesFormPodiumApply(); updateGamesFormPotPreview();
+}
+function setGamesFormPodiumPlaces(n) {
+  const p = _gamesFormPodium, sc = _gamesFormSide.scramble, dpp = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0, nPl = gamesFormPodiumPlayers();
+  const cur = gamesFormPodiumPlan(p, sc, dpp, nPl);
+  if (p.mode === 'pl') { p.pl = GAMES_FORM_PODIUM_SHARES[n].map(s => Math.floor(cur.total * s / 100 + 1e-9)); sc.payout = 'custom'; }
+  else sc.payout = n === 3 ? 'top3' : n === 2 ? 'top2' : 'winner';
+  p.dirty = true; gamesFormPodiumApply(); updateGamesFormPotPreview();
+}
+function gamesFormSplitBuild() {
+  const sel = _gamesFormSelected, rows = [], R = {};
   const dppNow = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0;
-  const nYes = Math.max(4, _gamesFormYesCount), totalPot = Math.round(dppNow * nYes * 100) / 100;
-  const mny = v => '$' + (Math.round(v * 100) / 100).toFixed(Number.isInteger(Math.round(v * 100) / 100) ? 0 : 2);
-  const pctOf = v => totalPot > 0 ? Math.round(v / totalPot * 100) + '% of the pot' : '';
-  const note = h => `<div style="font-size:0.78rem;color:var(--text-muted);margin:-4px 0 8px;line-height:1.45">${h}</div>`;
-  let takenFromPot = 0;   // everything but Skins, in dollars
-  const inp = (id, val, fn, unit) => `<span style="font-size:0.86rem">$</span><input type="number" id="${id}" min="0.01" step="0.01" value="${val || ''}" inputmode="decimal" oninput="${fn}(this.value)" style="width:78px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.78rem;color:var(--text-muted)">${unit}</span>`;
-  const row = (icon, name, ctl) => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border)"><span style="flex:1;font-size:0.9rem;font-weight:600">${icon} ${name}</span>${ctl}</div>`;
-  const per = (c, n) => n > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / n * 100) / 100 : '') : (c.dollar_per_player || '');
+  const nYes = Math.max(4, _gamesFormYesCount), totalPot = _r2(dppNow * nYes);
+  const mny = v => '$' + (_r2(v)).toFixed(Number.isInteger(_r2(v)) ? 0 : 2);
+  const pctOf = v => totalPot > 0 ? Math.round(v / totalPot * 100) + '%' : '';
+  const reg = (id, html, tag) => { R[id] = html; return `<${tag || 'span'} id="${id}">${html}</${tag || 'span'}>`; };
+  const NUM = 'height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box';
+  const small = 'font-size:0.78rem;color:var(--text-muted)';
+  const inp = (id, val, fn, w) => `<span style="font-size:0.86rem">$</span><input type="number" id="${id}" min="0" step="0.01" value="${val === 0 || val ? val : ''}" inputmode="decimal" oninput="${fn}(this.value)" style="width:${w || 78}px;${NUM}">`;
+  const card = (inner) => `<div style="background:rgba(255,255,255,0.55);border:1px solid var(--border);border-radius:12px;padding:11px 12px;margin-top:10px">${inner}</div>`;
+  const head = (icon, name, totalHtml) => `<div style="display:flex;align-items:center;gap:8px"><span style="flex:1;font-size:0.95rem;font-weight:700">${icon} ${name}</span>${totalHtml}</div>`;
+  const seg = (opts, cur, fn) => `<span style="display:inline-flex;border:1.5px solid var(--green);border-radius:8px;overflow:hidden">${opts.map(([k, l]) => `<button type="button" onclick="${fn}(${JSON.stringify(k).replace(/"/g, '&quot;')})" style="border:0;border-left:1px solid var(--green);background:${String(k) === String(cur) ? 'var(--green)' : '#fff'};color:${String(k) === String(cur) ? '#fff' : 'var(--green)'};font-family:inherit;font-weight:700;font-size:0.78rem;padding:6px 10px;cursor:pointer">${l}</button>`).join('')}</span>`;
+  const bigTot = (id, html) => `<span style="font-size:1rem;font-weight:700;white-space:nowrap">${reg(id, html)}</span>`;
+  let takenFromPot = 0, podiumTotal = 0, ctpCost = 0, otherGames = 0;
   // A game cut into periods reads as the host thinks of it: the periods, then $ a period, then what each player puts in all.
-  const periodRow = (icon, name, c, n, id, fn, subOverride) => {
+  const per = (c, n) => n > 1 ? (c.dollar_per_player ? Math.round(c.dollar_per_player / n * 100) / 100 : '') : (c.dollar_per_player || '');
+  const periodRow = (icon, name, c, n, id, fn) => {
     const pk = BFEngine.periodKey(c), label = (BFEngine.PERIODS[pk] || BFEngine.PERIODS.round).label, each = per(c, n), tot = Number(c.dollar_per_player) || 0;
-    const money = v => '$' + (Math.round(v * 100) / 100).toFixed(Number.isInteger(Math.round(v * 100) / 100) ? 0 : 2);
-    const sub = subOverride || (n > 1 ? `${escapeHtml(label)} · ${n} pots` : 'one pot, whole round');
-    const unit = n > 1 ? 'a period' : 'per player';
-    const sum = n > 1 ? `<div style="font-size:0.8rem;text-align:right;margin-top:3px;white-space:nowrap">${n} × ${money(Number(each) || 0)} = <b>${money(tot)}</b> each</div>` : '';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--border)"><span style="flex:1;min-width:0"><span style="display:block;font-size:0.9rem;font-weight:600">${icon} ${name}</span><span style="display:block;font-size:0.76rem;color:var(--text-muted);margin-top:1px">${sub}</span></span><span style="display:block"><span style="display:flex;align-items:center;gap:6px;justify-content:flex-end"><span style="font-size:0.86rem">$</span><input type="number" id="${id}" min="0.01" step="0.01" value="${each || ''}" inputmode="decimal" oninput="${fn}(this.value)" style="width:78px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.78rem;color:var(--text-muted);min-width:58px">${unit}</span></span>${sum}</span></div>`;
+    const sub = n > 1 ? `${escapeHtml(label)} · ${n} pots` : 'one pot, whole round';
+    const sum = n > 1 ? `${n} × ${mny(Number(each) || 0)} = <b>${mny(tot)}</b> each` : '';
+    return card(`<div style="display:flex;align-items:center;gap:8px"><span style="flex:1;min-width:0"><span style="display:block;font-size:0.92rem;font-weight:700">${icon} ${name}</span><span style="display:block;${small};margin-top:1px">${sub}</span></span><span style="display:flex;align-items:center;gap:6px">${inp(id, each, fn)}<span style="${small};min-width:58px">${n > 1 ? 'a period' : 'per player'}</span></span></div>`
+      + `<div style="${small};margin-top:5px;line-height:1.45">${reg('gs-sum-' + id, `${sum ? sum + ' · ' : ''}${mny(tot * nYes)} from ${nYes} players (${pctOf(tot * nYes)} of the pot)`)}</div>`);
   };
-  if (sel.has('fourball')) rows.push(periodRow('🤝', 'BestBall', _gamesFormFourballConfig, fourballSegCount(_gamesFormFourballConfig), 'gw-split-fb', 'setGamesFormFourballDollarPerPlayer'));
-  GAMES_FORM_SIDE_IDS.forEach(g => { if (sel.has(g)) {
+  if (sel.has('fourball')) { const c = _gamesFormFourballConfig; otherGames += (c.dollar_per_player || 0) * nYes; rows.push(periodRow('🤝', 'BestBall', c, fourballSegCount(c), 'gw-split-fb', 'setGamesFormFourballDollarPerPlayer')); }
+  GAMES_FORM_SIDE_IDS.forEach(g => { if (!sel.has(g)) return;
     const m = BFEngine.getGame(g).meta;
     if (g === 'scramble') {
-      // Podium = a % of each buy-in. The pot is that x the players in teams; the places then split the pot.
-      const sc = _gamesFormSide.scramble, each = Number(sc.dollar_per_player) || 0, tsz = Number(sc.team_size) || 2;
-      const nTeams = (sc.pairs || []).filter(pr => Array.isArray(pr) && pr.length).length, nPl = nTeams ? nTeams * tsz : nYes;
-      const pot = Math.round(each * nPl * 100) / 100, shares = ({ winner: [100], top2: [65, 35], top3: [50, 30, 20] })[sc.payout] || [100];
-      takenFromPot += pot;
+      const sc = _gamesFormSide.scramble, nPl = gamesFormPodiumPlayers(), P = _gamesFormPodium, tsz = Number(sc.team_size) || 2;
+      const plan = gamesFormPodiumPlan(P, sc, dppNow, nPl);
+      podiumTotal = plan.total; takenFromPot += plan.total;
       const ord = ['1st', '2nd', '3rd'];
-      const places = shares.map((pc, i) => `${ord[i]} <b>${mny(Math.floor(pot * pc / 100))}</b>`).join(' · ');
-      const pctNow = dppNow > 0 ? Math.round(each / dppNow * 1000) / 10 : '';
-      const ctl = `<input type="number" id="gw-split-scramble" min="0" max="100" step="1" value="${pctNow}" inputmode="decimal" oninput="setGamesFormScramblePct(this.value)" style="width:70px;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;box-sizing:border-box"><span style="font-size:0.86rem">%</span><span style="font-size:0.78rem;color:var(--text-muted)">of the pot</span>`;
-      rows.push(row(m.icon, 'Scramble podium', ctl) + (pot > 0 ? note(`<b>${mny(pot)}</b> podium (${pctOf(pot)}, ${nPl} players in teams × ${mny(each)}): ${places}${tsz > 1 ? ` · each place is shared by the ${tsz} partners` : ''}`) : note('Enter the % of the pot that goes to the podium.')));
-    } else rows.push(periodRow(m.icon, m.label, _gamesFormSide[g], periodSegCount(_gamesFormSide[g]), `gw-split-${g}`, `setGamesFormSideDollarFor.${g}`));
-  } });
-  if (sel.has('lowscore')) rows.push(periodRow('🎯', 'Individual Low Score', _gamesFormLowscoreConfig, lowscoreSegCount(_gamesFormLowscoreConfig), 'gw-split-ls', 'setGamesFormLowscoreDollarPerPlayer'));
+      let entry;
+      if (plan.mode === 'pct') entry = `<input type="number" id="gw-split-scramble" min="0" max="100" step="0.5" value="${plan.pct === 0 || plan.pct ? plan.pct : ''}" inputmode="decimal" oninput="setGamesFormScramblePct(this.value)" style="width:76px;${NUM}"><span style="font-size:0.86rem">%</span><span style="${small}">of each player's buy-in</span>`;
+      else if (plan.mode === 'tot') entry = `${inp('gw-split-scramble-tot', plan.total, 'setGamesFormPodiumTotal', 90)}<span style="${small}">for the whole podium</span>`;
+      else entry = plan.places.map((v, i) => `<span style="font-size:0.84rem;font-weight:600">${ord[i]}</span>${inp('gw-split-place-' + i, v, `(v=>setGamesFormPodiumPlace(${i},v))`, 72)}`).join('');
+      const table = () => `<table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-top:8px"><tr style="${small}"><td style="padding:2px 0">Place</td><td style="text-align:right">Share</td><td style="text-align:right">Team</td><td style="text-align:right">${tsz > 1 ? 'Each of ' + tsz : 'Player'}</td></tr>`
+        + plan.places.map((v, i) => `<tr><td style="padding:3px 0;font-weight:600">${ord[i]}</td><td style="text-align:right">${plan.total > 0 ? Math.round(v / plan.total * 100) : 0}%</td><td style="text-align:right"><b>${mny(v)}</b></td><td style="text-align:right">${mny(Math.floor(v / tsz))}</td></tr>`).join('')
+        + `</table>`;
+      const onTeams = nPl < nYes ? ` · paid on the ${nPl} players on teams (the other ${nYes - nPl} ${nYes - nPl === 1 ? "player's money goes" : "players' money goes"} to Skins)` : '';
+      rows.push(card(
+        head(m.icon, 'Scramble podium', bigTot('gs-pod-total', `${mny(plan.total)} <span style="${small};font-weight:400">${pctOf(plan.total)} of the pot</span>`))
+        + `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px"><span style="${small}">Enter as</span>${seg([['pct', '% of buy-in'], ['tot', '$ total'], ['pl', '$ by place']], plan.mode, 'setGamesFormPodiumMode')}</div>`
+        + `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px"><span style="${small}">Places paid</span>${seg([[1, '1'], [2, '2'], [3, '3']], plan.n, 'setGamesFormPodiumPlaces')}</div>`
+        + `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px">${entry}</div>`
+        + reg('gs-pod-table', table(), 'div')
+        + `<div style="${small};margin-top:4px;line-height:1.45">${reg('gs-pod-note', `${mny(plan.rate)} a player × ${nPl} players${onTeams}`)}</div>`));
+    } else {
+      const c = _gamesFormSide[g]; otherGames += (c.dollar_per_player || 0) * nYes;
+      rows.push(periodRow(m.icon, m.label, c, periodSegCount(c), `gw-split-${g}`, `setGamesFormSideDollarFor.${g}`));
+    }
+  });
+  if (sel.has('lowscore')) { const c = _gamesFormLowscoreConfig; otherGames += (c.dollar_per_player || 0) * nYes; rows.push(periodRow('🎯', 'Individual Low Score', c, lowscoreSegCount(c), 'gw-split-ls', 'setGamesFormLowscoreDollarPerPlayer')); }
   if (sel.has('cttp')) {
-    const hN = (_gamesFormCttpConfig.holes || []).length, pz = (_gamesFormCttpConfig.prize_holes || []).length, dph = Number(_gamesFormCttpConfig.dollar_per_hole) || 0, cost = dph * hN;
-    takenFromPot += cost;
-    rows.push(row('🎯', 'CTP', inp('gw-split-cttp', _gamesFormCttpConfig.dollar_per_hole, 'setGamesFormCttpDollarPerHole', 'a hole'))
-      + (hN && dph > 0 ? note(`${hN} paid hole${hN === 1 ? '' : 's'} × ${mny(dph)} = <b>${mny(cost)}</b> (${pctOf(cost)})${pz ? ` · ${pz} prize hole${pz === 1 ? ' pays' : 's pay'} no cash` : ''}`) : note(hN ? 'Enter the $ a hole.' : 'Pick the CTP holes on the CTP step.')));
+    const cc = _gamesFormCttpConfig, hN = (cc.holes || []).length, pz = (cc.prize_holes || []).length, dph = Number(cc.dollar_per_hole) || 0;
+    ctpCost = dph * hN; takenFromPot += ctpCost;
+    const holesTxt = hN ? ` (${(cc.holes || []).join(', ')})` : '';
+    const note = hN ? (dph > 0 ? `${hN} paid hole${hN === 1 ? '' : 's'}${holesTxt} × ${mny(dph)} = <b>${mny(ctpCost)}</b>` : 'Enter the $ a hole.') : 'Pick the CTP holes on the CTP step.';
+    rows.push(card(head('🎯', 'Closest to the pin', bigTot('gs-ctp-total', `${mny(ctpCost)} <span style="${small};font-weight:400">${pctOf(ctpCost)} of the pot</span>`))
+      + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-cttp', cc.dollar_per_hole, 'setGamesFormCttpDollarPerHole')}<span style="${small}">a hole</span></div>`
+      + `<div style="${small};margin-top:5px;line-height:1.45">${reg('gs-ctp-note', note)}${pz ? `<br>${pz} prize hole${pz === 1 ? '' : 's'} (${(cc.prize_holes || []).join(', ')}): tracked like CTP, pays no cash` : ''}</div>`));
   }
-  if (sel.has('birdieball')) rows.push(row('🐉', 'MiserBall', inp('gw-split-bb', _gamesFormBirdieballConfig.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer', 'per player')));
-  if (sel.has('birdiepay')) rows.push(row('🐤', 'Birdie Payouts', inp('gw-split-bp', _gamesFormBirdiepayConfig.dollar_per_birdie, 'setGamesFormBirdiepayDollarPerBirdie', 'a birdie')));
-  // Skins is the balance of the pot after the games above (MiserBall and the per-player games take their share of the whole pot too).
-  const perPlayerGames = (sel.has('fourball') ? _gamesFormFourballConfig.dollar_per_player || 0 : 0) + (sel.has('altshot') ? _gamesFormSide.altshot.dollar_per_player || 0 : 0) + (sel.has('hilo') ? _gamesFormSide.hilo.dollar_per_player || 0 : 0) + (sel.has('matchplay') ? _gamesFormSide.matchplay.dollar_per_player || 0 : 0) + (sel.has('lowscore') ? _gamesFormLowscoreConfig.dollar_per_player || 0 : 0) + (sel.has('birdieball') ? _gamesFormBirdieballConfig.dollar_per_player || 0 : 0);
-  takenFromPot += perPlayerGames * nYes;
-  const skinsLeft = Math.round((totalPot - takenFromPot) * 100) / 100;
-  if (sel.has('skins')) rows.push(row('⛳', 'Skins', `<span style="font-size:0.95rem;font-weight:700;${skinsLeft < -0.004 ? 'color:#c0392b' : ''}">${skinsLeft < -0.004 ? 'over by ' + mny(-skinsLeft) : mny(skinsLeft)}</span>`) + note(skinsLeft < -0.004 ? 'The games above take more than the pot. Lower an amount.' : `the balance of the pot (${pctOf(Math.max(0, skinsLeft))}), split by the skins won`));
-  if (!rows.length) return '';
-  // Money not in any game is never played for. Say so when nothing (Skins, Birdie Payouts) is there to take what is left.
-  let gap = '';
-  if (dppNow > 0 && sel.has('skins') && skinsLeft >= -0.004) {
-    gap = `<div style="font-size:0.78rem;color:var(--green-dark);margin-top:6px;line-height:1.45">✓ ${mny(totalPot)} pot = ${mny(takenFromPot)} in the games above + ${mny(Math.max(0, skinsLeft))} Skins</div>`;
-  } else if (dppNow > 0 && !sel.has('skins') && !sel.has('birdiepay')) {
-    const nPl = Math.max(4, _gamesFormYesCount);
-    const used = (sel.has('fourball') ? _gamesFormFourballConfig.dollar_per_player || 0 : 0) + (sel.has('altshot') ? _gamesFormSide.altshot.dollar_per_player || 0 : 0) + (sel.has('scramble') ? _gamesFormSide.scramble.dollar_per_player || 0 : 0) + (sel.has('hilo') ? _gamesFormSide.hilo.dollar_per_player || 0 : 0) + (sel.has('matchplay') ? _gamesFormSide.matchplay.dollar_per_player || 0 : 0) + (sel.has('lowscore') ? _gamesFormLowscoreConfig.dollar_per_player || 0 : 0)
-      + (sel.has('birdieball') ? _gamesFormBirdieballConfig.dollar_per_player || 0 : 0) + (sel.has('cttp') ? (_gamesFormCttpConfig.dollar_per_hole || 0) * (_gamesFormCttpConfig.holes || []).length / nPl : 0);
-    const left = Math.round((dppNow - used) * 100) / 100;
-    if (left > 0.004) gap = `<div style="font-size:0.76rem;color:#b8860b;margin-top:6px;line-height:1.45">$${left.toFixed(2)} of each $${dppNow.toFixed(2)} is not in any game, so nobody plays for it. Raise an amount, or lower the buy-in.</div>`;
-    else if (left > -0.004) gap = `<div style="font-size:0.76rem;color:var(--green-dark);margin-top:6px">✓ All $${dppNow.toFixed(2)} is in a game.</div>`;
-  }
-  return `<div style="font-size:0.8rem;font-weight:700;margin:12px 0 2px">${dppNow > 0 ? 'How the ' + mny(totalPot) + ' pot splits' : 'How it splits'} <span style="font-weight:400;color:var(--text-muted)">· ${mny(dppNow)} × ${nYes} players · type over any amount</span></div>${rows.join('')}${gap}`;
+  if (sel.has('birdieball')) { const c = _gamesFormBirdieballConfig; otherGames += (c.dollar_per_player || 0) * nYes; rows.push(card(head('🐉', 'MiserBall', '') + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-bb', c.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer')}<span style="${small}">per player</span></div><div style="${small};margin-top:5px">${reg('gs-bb-note', `${mny((c.dollar_per_player || 0) * nYes)} from ${nYes} players (${pctOf((c.dollar_per_player || 0) * nYes)} of the pot)`)}</div>`)); }
+  if (sel.has('birdiepay')) rows.push(card(head('🐤', 'Birdie Payouts', '') + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-bp', _gamesFormBirdiepayConfig.dollar_per_birdie, 'setGamesFormBirdiepayDollarPerBirdie')}<span style="${small}">a birdie, paid out of the balance before Skins</span></div>`));
+  takenFromPot += otherGames;
+  const left = _r2(totalPot - takenFromPot), over = left < -0.004, balanceTaker = sel.has('skins') || sel.has('birdiepay');
+  if (sel.has('skins')) rows.push(card(head('⛳', 'Skins', bigTot('gs-skins', over ? `<span style="color:#c0392b">over by ${mny(-left)}</span>` : `${mny(left)} <span style="${small};font-weight:400">${pctOf(left)} of the pot</span>`))
+    + `<div style="${small};margin-top:5px;line-height:1.45">${reg('gs-skins-note', over ? 'The games above take more than the pot. Lower an amount.' : 'Whatever the games above leave. Split by the skins actually won.')}</div>`));
+  if (!rows.length) return { html: '', regions: R };
+  // The bar and the check line: the whole pot, and where every dollar of it goes.
+  let checkHtml, barSeg = '';
+  if (dppNow > 0) {
+    const pc = v => Math.max(0, totalPot > 0 ? v / totalPot * 100 : 0);
+    const seg1 = (w, bg) => w > 0 ? `<div style="width:${w}%;background:${bg};height:100%"></div>` : '';
+    barSeg = seg1(pc(podiumTotal), '#2a7d5f') + seg1(pc(ctpCost), '#c98a1b') + seg1(pc(otherGames), '#7a7a7a') + (balanceTaker && !over ? seg1(pc(left), '#2d6fb0') : '');
+    const lg = (c, t) => `<span style="white-space:nowrap"><span style="color:${c}">■</span> ${t}</span>`;
+    const legend = [podiumTotal > 0 ? lg('#2a7d5f', 'Podium ' + mny(podiumTotal)) : '', ctpCost > 0 ? lg('#c98a1b', 'CTP ' + mny(ctpCost)) : '', otherGames > 0 ? lg('#7a7a7a', 'Other games ' + mny(otherGames)) : '', sel.has('skins') ? lg('#2d6fb0', 'Skins ' + (over ? 'over' : mny(left))) : ''].filter(Boolean).join(' · ');
+    const status = over ? `<span style="color:#c0392b;font-weight:700">Over-allocated by ${mny(-left)}</span>`
+      : balanceTaker ? `<span style="color:var(--green-dark);font-weight:700">✓ All ${mny(totalPot)} is in a game</span>`
+      : left > 0.004 ? `<span style="color:#b8860b;font-weight:700">${mny(left)} is not in any game, so nobody plays for it. Raise an amount, or lower the buy-in.</span>` : `<span style="color:var(--green-dark);font-weight:700">✓ All ${mny(totalPot)} is in a game</span>`;
+    checkHtml = `<div style="${small};line-height:1.5">${legend}</div><div style="font-size:0.8rem;margin-top:4px">${status}</div>`;
+  } else checkHtml = '<div style="font-size:0.8rem;color:var(--text-muted)">Pick a buy-in to see the split.</div>';
+  const top = `<div style="font-size:0.8rem;font-weight:700;margin:12px 0 2px">${dppNow > 0 ? 'How the ' + mny(totalPot) + ' pot splits' : 'How it splits'} <span style="font-weight:400;color:var(--text-muted)">· ${mny(dppNow)} × ${nYes} players · every figure below follows what you type</span></div>`
+    + `<div style="height:18px;border-radius:6px;overflow:hidden;background:var(--border);margin:6px 0 4px;display:flex">${reg('gs-bar', barSeg)}</div>${reg('gs-check', checkHtml, 'div')}`;
+  return { html: top + rows.join(''), regions: R };
 }
-function refreshGamesFormSplit() {
+function gamesFormSplitHtml() { return gamesFormSplitBuild().html; }
+// Rewrites only the computed text. Inputs are never touched, so typing keeps its focus and every number stays true.
+function gamesFormSplitLive() {
+  const b = gamesFormSplitBuild();
+  Object.keys(b.regions).forEach(id => { const e = document.getElementById(id); if (e && e.innerHTML !== b.regions[id]) e.innerHTML = b.regions[id]; });
+}
+function refreshGamesFormSplit(force) {
   const el = document.getElementById('games-form-split');
   if (!el) return;
   const a = document.activeElement;
-  if (a && el.contains(a)) return; // never rebuild a box while it is being typed in
+  if (!force && a && el.contains(a) && /^(INPUT|TEXTAREA)$/.test(a.tagName || '')) { gamesFormSplitLive(); return; } // never rebuild a box while it is being typed in
   el.innerHTML = gamesFormSplitHtml();
 }
 // ── Games setup wizard: one question per screen ──────────────────────────────
@@ -20518,7 +20617,7 @@ function gwReviewHtml() {
     if (!sel.has(gid)) return;
     const c = _gamesFormSide[gid], items = gamesFormSideItems(gid).filter(pr => pr.length && pr.every(Boolean)).length, pk = BFEngine.periodKey(c), mp = gid === 'matchplay', meta = BFEngine.getGame(gid).meta;
     const net = c.basis === 'net' ? `Net${GAMES_FORM_REC_ALLOWANCE[gid] ? ' ' + c.allowance + '%' : ''}${c.net_mode === 'low' ? ', off the low' : ''}` : 'Gross';
-    const scLine = gid === 'scramble' ? `${c.basis === 'net' ? (c.hcp_method === 'none' ? 'Gross' : 'Net ' + (c.hcp_method === 'combined' ? c.allowance + '% of all' : BFEngine.scramblePcts(c).join('/') + '%')) : 'Gross'} · ${BFEngine.scrambleSize(c)}-man · ${c.scoring === 'stableford' ? 'Stableford' : 'Strokes'} · ${c.payout === 'top2' ? 'pays top 2' : c.payout === 'top3' ? 'pays top 3' : 'pays winner'}` : null;
+    const scLine = gid === 'scramble' ? `${c.basis === 'net' ? (c.hcp_method === 'none' ? 'Gross' : 'Net ' + (c.hcp_method === 'combined' ? c.allowance + '% of all' : BFEngine.scramblePcts(c).join('/') + '%')) : 'Gross'} · ${BFEngine.scrambleSize(c)}-man · ${c.scoring === 'stableford' ? 'Stableford' : 'Strokes'} · ${c.payout === 'top2' ? 'pays top 2' : c.payout === 'top3' ? 'pays top 3' : c.payout === 'custom' ? 'pays ' + (c.place_shares || []).length + ' places' : 'pays winner'}` : null;
     const what = mp ? (items ? items + ' match' + (items === 1 ? '' : 'es') : '<span style="color:#b8860b">no matches yet</span>') : (items ? items + (gid === 'scramble' ? ' team' : ' pair') + (items === 1 ? '' : 's') : `<span style="color:#b8860b">no ${gid === 'scramble' ? 'teams' : 'pairs'} yet</span>`);
     add(meta.icon, meta.label, `${scLine || net + ' · ' + per(pk)} · ${Number(c.dollar_per_player) > 0 ? money(c.dollar_per_player) + ' per player' : 'no money'} · ${what}`, items ? gid : GW_SIDE_STEP[gid]);
   });
@@ -20529,12 +20628,13 @@ function gwReviewHtml() {
   if (sel.has('birdiepay')) add('🐤', 'Birdie Payouts', `${money(_gamesFormBirdiepayConfig.dollar_per_birdie)} a birdie · ${basis(_gamesFormHcp.birdiepay_basis)}`, 'birdiepay');
   if (_gamesFormHcp.ranking === true) add('📊', 'Net ranking', 'Shown for fun, no money', 'hcp');
   else if (gamesFormHcpIsNet()) add('⚖️', 'Handicap strokes', `${gamesFormPlayerNames().length} players`, 'hcp');
-  const pot = document.getElementById('games-form-pot-preview');
+  // The review shows the same pot split the money step does: one set of numbers.
+  const potLines = (gamesFormSplitBuild().regions['gs-check'] || '') + ((document.getElementById('games-form-pot-preview') || {}).innerHTML || '');
   const rankOpt = gamesFormHcpIsNet() ? '' : `<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;margin:12px 2px 0;cursor:pointer"><input type="checkbox" onchange="setGamesFormRanking(this.checked);gwRender()"><span>📊 Also show a Net ranking <span style="color:var(--text-muted)">(for fun, no money)</span></span></label>`;
   return `<div style="font-size:1.15rem;font-weight:700;margin-bottom:4px">Here is what will happen</div>
     <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:10px">Tap Change on any line.</div>
     <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">${rows.join('')}</div>
-    ${pot && pot.innerHTML ? `<div style="font-size:0.78rem;line-height:1.55;margin-top:12px;color:var(--text-muted)">${pot.innerHTML}</div>` : ''}${rankOpt}`;
+    ${potLines ? `<div style="font-size:0.78rem;line-height:1.55;margin-top:12px;color:var(--text-muted)">${potLines}</div>` : ''}${rankOpt}`;
 }
 function gwRender() {
   const wiz = document.getElementById('games-wizard');
@@ -20616,6 +20716,7 @@ function applyGamesSuggestion(force) {
   if (sug.fourball && !_gamesFormTouched.has('fourball')) _gamesFormFourballConfig.dollar_per_player = sug.fourball.dollar_per_player; // already a whole number per period
   if (sug.lowscore && !_gamesFormTouched.has('lowscore')) _gamesFormLowscoreConfig.dollar_per_player = sug.lowscore.dollar_per_player;
   GAMES_FORM_SIDE_IDS.forEach(gid => { if (sug[gid] && !_gamesFormTouched.has(gid)) _gamesFormSide[gid].dollar_per_player = sug[gid].dollar_per_player; const el = document.getElementById('games-form-' + gid + '-section'); if (el) el.innerHTML = gatheringGamesSideSectionHtml(gid); });
+  if (sug.scramble && !_gamesFormTouched.has('scramble')) { _gamesFormPodium = { mode: 'pct', pct: null, tot: null, pl: [], dirty: false }; if (_gamesFormSide.scramble.payout === 'custom') { _gamesFormSide.scramble.payout = 'top3'; delete _gamesFormSide.scramble.place_shares; } }
   const ls2 = document.getElementById('games-form-lowscore-section'); if (ls2) ls2.innerHTML = gatheringGamesLowscoreSectionHtml();
   const fs = document.getElementById('games-form-fourball-section'); if (fs) fs.innerHTML = gatheringGamesFourballSectionHtml();
   const cs = document.getElementById('games-form-cttp-section'); if (cs) cs.innerHTML = gatheringGamesCttpSectionHtml();
@@ -21331,7 +21432,7 @@ function gatheringGamesSideSectionHtml(gid) {
         ['winner', 'Winning team', 'One pot. Tied teams split it.', true],
         ['top2', 'Top 2 teams', '65% to first, 35% to second.', false],
         ['top3', 'Top 3 teams', '50% to first, 30% to second, 20% to third.', false]
-      ], c.payout, `(v=>setGamesFormSide('${gid}','payout',v))`)}`;
+      ], c.payout, `(v=>setGamesFormSide('${gid}','payout',v))`)}${c.payout === 'custom' ? `<div style="font-size:0.76rem;color:var(--text-muted);margin-top:6px;line-height:1.5">Now paying ${(c.place_shares || []).length} places at the dollar amounts you set on the money step. Pick one above to go back to a standard split.</div>` : ''}`;
   const winBlock = mp || hl || sc || segN <= 1 ? '' : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Period won by</span>${seg([['strokes', 'Strokes'], ['holes', 'Holes won']], c.win_by, `(v=>setGamesFormSide('${gid}','win_by',v))`)}</div>
         <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.win_by === 'holes' ? 'The pair that wins more holes wins the period.' : 'The pair with the lower total wins the period.'}</div>`;
@@ -21390,7 +21491,11 @@ function setGamesFormSide(gid, key, val, typing) {
     c.pairs = c.pairs.map(pr => Array.from({ length: c.team_size }, (_, i) => pr[i] || ''));   // existing teams grow or shrink to the new size
   }
   else if (gid === 'scramble' && key === 'hcp_method') c.hcp_method = ['combined', 'none'].includes(val) ? val : 'ranked';
-  else if (gid === 'scramble' && key === 'payout') c.payout = ['top2', 'top3'].includes(val) ? val : 'winner';
+  else if (gid === 'scramble' && key === 'payout') {
+    // Picking a preset here leaves any hand-priced places: the podium total carries over, entered as a $ total.
+    if (_gamesFormPodium.mode === 'pl') { const dpp = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0; _gamesFormPodium.tot = gamesFormPodiumPlan(_gamesFormPodium, c, dpp, gamesFormPodiumPlayers()).total; _gamesFormPodium.mode = 'tot'; _gamesFormPodium.dirty = true; }
+    c.payout = ['top2', 'top3'].includes(val) ? val : 'winner'; delete c.place_shares; gamesFormPodiumApply();
+  }
   else if (gid === 'scramble' && /^pct_[1-4]$/.test(key)) { const n = parseFloat(val); c[key] = Number.isFinite(n) && n >= 0 ? n : BFEngine.scramblePcts({ team_size: c.team_size })[Number(key.slice(4)) - 1]; }
   else if (key === 'win_by') { c.win_by = val === 'holes' ? 'holes' : 'strokes'; if (c.win_by === 'holes') c.scope = 'group'; }
   else if (key === 'period') {
@@ -21410,14 +21515,6 @@ function setGamesFormSideDollar(gid, val) {
   const c = _gamesFormSide[gid];
   c.dollar_per_player = Math.round((parseFloat(val) || 0) * periodSegCount(c) * 100) / 100;
   _gamesFormTouched.add(gid);
-  updateGamesFormPotPreview();
-}
-// Scramble podium is set as a % of the buy-in (the host thinks "half the pot"); the game still stores $ per player.
-function setGamesFormScramblePct(val) {
-  const dpp = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0;
-  const pct = Math.max(0, Math.min(100, parseFloat(val) || 0));
-  _gamesFormSide.scramble.dollar_per_player = Math.round(dpp * pct) / 100;
-  _gamesFormTouched.add('scramble');
   updateGamesFormPotPreview();
 }
 const setGamesFormSideDollarFor = {}; GAMES_FORM_SIDE_IDS.forEach(g => { setGamesFormSideDollarFor[g] = v => setGamesFormSideDollar(g, v); });
@@ -21712,6 +21809,7 @@ function gamesFormOverCommit(dpp, yesCount) {
 }
 function updateGamesFormPotPreview(yesCount) {
   if (yesCount !== undefined) _gamesFormYesCount = yesCount;
+  gamesFormPodiumApply();
   if (typeof refreshGamesFormSplit === 'function') refreshGamesFormSplit();
   yesCount = _gamesFormYesCount;
   const el = document.getElementById('games-form-pot-preview');
@@ -21719,60 +21817,9 @@ function updateGamesFormPotPreview(yesCount) {
   if (!el || !input) return;
   const dpp = parseFloat(input.value) || 0;
   if (!(dpp > 0)) { el.textContent = `${yesCount} confirmed Yes so far`; return; }
-  const totalPot = dpp * yesCount;
-  const lines = [`Pot preview: $${totalPot.toFixed(2)} total (${yesCount} confirmed Yes × $${dpp.toFixed(2)})`];
-  // CTP and MiserBall are both carved out of this SAME pot as fixed dollar
-  // amounts; Skins gets whatever's left after both (Dev-86 round 3, Brian's
-  // explicit call on the funding model). Informational only — this preview
-  // will move as players register/drop before the round closes.
-  let remaining = totalPot;
-  if (_gamesFormSelected.has('cttp') && _gamesFormCttpConfig.dollar_per_hole > 0 && _gamesFormCttpConfig.holes.length) {
-    const cttpCost = _gamesFormCttpConfig.dollar_per_hole * _gamesFormCttpConfig.holes.length;
-    remaining -= cttpCost;
-    lines.push(`🎯 CTP: $${cttpCost.toFixed(2)} (${_gamesFormCttpConfig.holes.length} hole${_gamesFormCttpConfig.holes.length !== 1 ? 's' : ''} × $${_gamesFormCttpConfig.dollar_per_hole.toFixed(2)}), carved out`);
-  }
-  if (_gamesFormSelected.has('birdieball') && _gamesFormBirdieballConfig.dollar_per_player > 0) {
-    const bbCost = _gamesFormBirdieballConfig.dollar_per_player * yesCount;
-    remaining -= bbCost;
-    lines.push(`🐉 MiserBall: $${bbCost.toFixed(2)} (${yesCount} × $${_gamesFormBirdieballConfig.dollar_per_player.toFixed(2)}), carved out`);
-  }
-  if (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.dollar_per_player > 0) {
-    const fbCost = _gamesFormFourballConfig.dollar_per_player * yesCount;
-    remaining -= fbCost;
-    lines.push(fourballSegCount(_gamesFormFourballConfig) > 1 ? `🤝 BestBall: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), cut into ${fourballSegCount(_gamesFormFourballConfig)} period pots` : `🤝 BestBall: $${fbCost.toFixed(2)} (${yesCount} × $${_gamesFormFourballConfig.dollar_per_player.toFixed(2)}), the winning pair splits it`);
-  }
-  GAMES_FORM_SIDE_IDS.forEach(gid => {
-    const c = _gamesFormSide[gid];
-    if (!_gamesFormSelected.has(gid) || !(c.dollar_per_player > 0)) return;
-    const people = gamesFormSideItems(gid).filter(pr => pr.length && pr.every(Boolean)).length * gamesFormTeamSize(gid) || yesCount, cost = c.dollar_per_player * people, n = periodSegCount(c);
-    remaining -= cost;
-    lines.push(`${BFEngine.getGame(gid).meta.icon} ${BFEngine.getGame(gid).meta.label}: $${cost.toFixed(2)} (${people} players in ${gid === 'matchplay' ? 'matches' : gid === 'scramble' ? 'teams' : 'pairs'} × $${c.dollar_per_player.toFixed(2)})${n > 1 ? `, cut into ${n} period pots` : ''}, carved out`);
-  });
-  if (_gamesFormSelected.has('lowscore') && _gamesFormLowscoreConfig.dollar_per_player > 0) {
-    const lsCost = _gamesFormLowscoreConfig.dollar_per_player * yesCount, lsN = lowscoreSegCount(_gamesFormLowscoreConfig);
-    remaining -= lsCost;
-    lines.push(lsN > 1 ? `🎯 Individual Low Score: $${lsCost.toFixed(2)} (${yesCount} × $${_gamesFormLowscoreConfig.dollar_per_player.toFixed(2)}), cut into ${lsN} period pots` : `🎯 Individual Low Score: $${lsCost.toFixed(2)} (${yesCount} × $${_gamesFormLowscoreConfig.dollar_per_player.toFixed(2)}), the lowest score takes it`);
-  }
-  // Birdie Payouts is a variable cost (flat $ × birdies actually made), so it
-  // can't be totalled here — say so instead of showing a made-up number.
-  const bpOn = _gamesFormSelected.has('birdiepay') && _gamesFormBirdiepayConfig.dollar_per_birdie > 0;
-  if (bpOn) {
-    lines.push(`🐤 Birdie Payouts: $${_gamesFormBirdiepayConfig.dollar_per_birdie.toFixed(2)} per birdie, taken from the pot before Skins`);
-  }
+  // The split panel above is the pot preview now (one set of numbers). Only a warning from the engine's pot check shows here.
   const overCommit = gamesFormOverCommit(dpp, yesCount);
-  if (overCommit.problem) {
-    lines.push(`<span style="color:#c0392b;font-weight:700">⚠️ ${overCommit.problem}</span>`);
-  }
-  if (_gamesFormSelected.has('skins')) {
-    // v4.9.15 — with Birdie Payouts on, say what Skins is likely left with
-    // after a typical round of birdies (~0.75 a player), not just the
-    // before-birdies figure, which reads like more than the real share.
-    const typicalBirdies = Math.round(0.75 * Math.max(4, yesCount)) * (bpOn ? _gamesFormBirdiepayConfig.dollar_per_birdie : 0);
-    lines.push(bpOn
-      ? `⛳ Skins gets: $${Math.max(0, remaining).toFixed(2)} before birdie payouts (a typical round pays ~$${typicalBirdies.toFixed(0)}, leaving ~$${Math.max(0, remaining - typicalBirdies).toFixed(0)})`
-      : `⛳ Skins gets: $${Math.max(0, remaining).toFixed(2)}`);
-  }
-  el.innerHTML = lines.join('<br>');
+  el.innerHTML = overCommit.problem ? `<span style="color:#c0392b;font-weight:700">⚠️ ${overCommit.problem}</span>` : '';
 }
 // Settings the host sent that the saved config does not carry (an older Worker silently drops fields it has no schema for).
 function droppedGameSettings(sent, saved) {
@@ -21849,7 +21896,7 @@ async function submitGatheringGames(gatheringId) {
     else if (gid === 'hilo') cfg.pairs = rows.map(pr => [pr[0], pr[1]]);
     else if (gid === 'scramble') {
       Object.assign(cfg, { scoring: c.scoring === 'stableford' ? 'stableford' : 'strokes', scale: c.scale === 'standard' ? 'standard' : 'bf', hcp_method: ['combined', 'none'].includes(c.hcp_method) ? c.hcp_method : 'ranked',
-        team_size: BFEngine.scrambleSize(c), ...Object.fromEntries(Array.from({ length: BFEngine.scrambleSize(c) }, (_, i) => ['pct_' + (i + 1), Number(c['pct_' + (i + 1)])])), allowance: Number(c.allowance) || BFEngine.scrambleCombinedPct(c), payout: ['top2', 'top3'].includes(c.payout) ? c.payout : 'winner', pairs: rows.map(pr => [pr[0], pr[1]]) });
+        team_size: BFEngine.scrambleSize(c), ...Object.fromEntries(Array.from({ length: BFEngine.scrambleSize(c) }, (_, i) => ['pct_' + (i + 1), Number(c['pct_' + (i + 1)])])), allowance: Number(c.allowance) || BFEngine.scrambleCombinedPct(c), payout: ['top2', 'top3'].includes(c.payout) ? c.payout : c.payout === 'custom' && (c.place_shares || []).length ? 'custom' : 'winner', ...(c.payout === 'custom' && (c.place_shares || []).length ? { place_shares: c.place_shares.map(Number) } : {}), pairs: rows.map(pr => [pr[0], pr[1]]) });
       delete cfg.period;
       { const nm = gamesFormSideItems(gid).map((pr, i) => (pr.some(Boolean) ? String((c.names || [])[i] || '').trim().slice(0, 40) : null)).filter(x => x !== null); if (nm.some(Boolean)) cfg.names = nm; }
       if (cfg.scoring === 'stableford') {

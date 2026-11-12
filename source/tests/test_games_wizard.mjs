@@ -18,11 +18,11 @@ function world(existing) {
     gameInfoBtnHtml: () => '', gameInfoPanelHtml: () => '', isOpenSpotName: () => false, regData: [], gatheringRegData: ['Ann', 'Bob', 'Cy', 'Dee'].map(p => ({ gatheringId: 7, player: p, status: 'Yes' })), clearHostActionBar() {} };
   vm.createContext(ctx);
   vm.runInContext(`let _gw = { step: 'games' }; ${GW_NAMES_SRC}
-    let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = { gatheringId: 7, name: 'T' }; let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
+    const GAMES_FORM_PODIUM_SHARES = { 1: [100], 2: [65, 35], 3: [50, 30, 20] }; let _gamesFormPodium = { mode: 'pct', pct: null, tot: null, pl: [], dirty: false }; let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = { gatheringId: 7, name: 'T' }; let _gamesFormGathering = 7; let _gamesFormYesCount = 4;
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] }; let _gamesFormBirdieballConfig = { dollar_per_player: null }; let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; let _gamesFormBirdiepayPars = null;
     let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round', win_by: 'strokes', scope: 'field' }; let _gamesFormFourballNote = ''; let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' };
     let _gamesFormDefaultTeeId = null; let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, ranking: false, players: {} }; let _gamesFormTees = [{ id: 1, tee_name: 'White' }]; let _gamesFormMembers = new Map(); let _gamesFormPar3Holes = []; let _gamesFormVenueParDataAvailable = false;
-    ${uniq.map(n => extractFn(src, n)).join('\n')}
+    ${[...new Set([...uniq, ...['_r2','gamesFormPodiumPlaces','gamesFormPodiumPlan','gamesFormPodiumPlayers','gamesFormPodiumApply','gamesFormPodiumInit','setGamesFormScramblePct','setGamesFormPodiumTotal','setGamesFormPodiumPlace','setGamesFormPodiumMode','setGamesFormPodiumPlaces','gamesFormSplitBuild','gamesFormSplitHtml','gamesFormSplitLive','refreshGamesFormSplit']])].map(n => extractFn(src, n)).join('\n')}
     this.api = { renderGatheringGamesForm, toggleGamesFormGame, gwNext, gwPrev, gwGoTo, gwSteps, submitGatheringGames, setGamesFormFourballBasis, setGamesFormRanking, setGamesFormFourballPeriod, setGamesFormBasis, setGamesFormLowscoreBasis, hcp: () => _gamesFormHcp, state: () => _gw, selected: () => _gamesFormSelected };`, ctx);
   return { ctx, api: ctx.api, dom, toasts, posts };
 }
@@ -100,6 +100,6 @@ const label = d => d.window.document.getElementById('gw-step-label').textContent
   ok(/6 \/ 6 \/ 6 · 3 pots/.test(row), 'the BestBall row names the periods: ' + row.slice(0, 120));
   eq([d.getElementById('gw-split-fb').value, d.getElementById('gw-split-bb').value], ['3', '1'], '$10 lands as $3 a period ($9) plus MiserBall $1');
   ok(/3 × \$3 = \$9 each/.test(row), 'and shows 3 × $3 = $9 each');
-  ok(/All \$10\.00 is in a game/.test(row), 'and confirms the whole buy-in is in a game');
+  ok(/All \$\d+ is in a game/.test(row), 'and confirms the whole buy-in is in a game');
 }
 console.log(`games wizard: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

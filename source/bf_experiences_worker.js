@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.50.1 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.51.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -895,9 +895,17 @@ const GAME_SCHEMAS = {
         "values": [
           "winner",
           "top2",
-          "top3"
+          "top3",
+          "custom"
         ],
         "default": "winner"
+      },
+      {
+        "key": "place_shares",
+        "type": "shares",
+        "label": "Podium shares by place (custom)",
+        "default": [],
+        "max": 3
       },
       {
         "key": "pars",
@@ -1233,6 +1241,8 @@ function validateFields(fields, cfg) {
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
         if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
         else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be on one ' + (sz === 2 ? 'pair' : 'team'));
+      } else if (f.type === 'shares') {
+        if (!Array.isArray(v) || v.length > (f.max || 3) || !v.every(x => Number.isFinite(Number(x)) && Number(x) >= 0)) errors.push(f.label + ' must be up to ' + (f.max || 3) + ' amounts of 0 or more');
       } else if (f.type === 'strings') {
         if (!Array.isArray(v) || !v.every(x => typeof x === 'string' && x.trim().length <= (f.max || 60))) errors.push(f.label + ' must be short text (up to ' + (f.max || 60) + ' characters each)');
       } else if (f.type === 'enum') {
@@ -1250,6 +1260,7 @@ function cleanFields(fields, cfg) {
       if (f.type === 'money' || f.type === 'int') out[f.key] = Number(v);
       else if (f.type === 'holes') out[f.key] = v.slice().sort((a, b) => a - b);
       else if (f.type === 'pars') out[f.key] = v.map(Number);
+      else if (f.type === 'shares') out[f.key] = v.map(Number);
       else if (f.type === 'parsmap') { const m = {}; Object.keys(v).forEach(k => { m[String(k).trim()] = v[k].map(Number); }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
       else if (f.type === 'strings') out[f.key] = v.map(x => String(x).trim().slice(0, f.max || 60));

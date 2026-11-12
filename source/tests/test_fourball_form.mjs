@@ -25,7 +25,7 @@ const E = loadEngine();
 }
 
 function sandbox({ names = ['Ann','Bob','Cy','Dee'], members = [] } = {}) {
-  const dom = new JSDOM(`<body><div id="games-form-fourball-section"></div><input id="games-form-dpp" value="20"><div id="games-form-pot-preview"></div><button id="btn-save-games"></button></body>`);
+  const dom = new JSDOM(`<body><div id="games-form-fourball-section"></div><input id="games-form-dpp" value="20"><div id="games-form-split"></div><div id="games-form-pot-preview"></div><button id="btn-save-games"></button></body>`);
   const posts = [], toasts = [];
   const ctx = { document: dom.window.document, console, JSON, Math, Number, String, Set, Map, Array, Object, parseFloat,
     showToast: (m, e) => toasts.push([m, !!e]),
@@ -38,13 +38,13 @@ function sandbox({ names = ['Ann','Bob','Cy','Dee'], members = [] } = {}) {
   E.getGame('fourball').released = true;
   const fns = ['gamesFormAutoRanking','gamesBasisSelectHtml','gamesScoredPeriodRowHtml','gamesPeriodPickerHtml','periodExplainHtml','periodSegCount','lowscoreSegCount','snapToPeriods','fourballSegCount','fourballSnapToSegments','setGamesFormFourballPeriod','setGamesFormFourballWinBy','setGamesFormFourballScope','gamesFormFourballNames','gatheringGamesFourballSectionHtml','refreshGamesFormFourballSection','setGamesFormFourballDollarPerPlayer','setGamesFormFourballBasis','setGamesFormFourballNetMode','setGamesFormFourballMember','addGamesFormFourballPair','removeGamesFormFourballPair','clearGamesFormFourballPairs','suggestGamesFormFourballPairs','gamesFormPlayerNames','gamesFormOverCommit','updateGamesFormPotPreview','submitGatheringGames','gamesFormHcpIsNet','gamesFormEntry','gamesFormResolvePlayerHcp','gamesFormBuildHandicapConfig','refreshGamesFormHcpSection'];
   vm.runInContext(`
-    let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(['fourball']); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = ${names.length};
+    const GAMES_FORM_PODIUM_SHARES = { 1: [100], 2: [65, 35], 3: [50, 30, 20] }; let _gamesFormPodium = { mode: 'pct', pct: null, tot: null, pl: [], dirty: false }; let _gamesFormTouched = new Set(); let _gamesFormSelected = new Set(['fourball']); let _gamesFormShadow = false; let _gamesFormCard = false; let _gamesFormG = null; let _gamesFormGathering = 7; let _gamesFormYesCount = ${names.length};
     let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [] }; let _gamesFormBirdieballConfig = { dollar_per_player: null }; let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; let _gamesFormBirdiepayPars = null;
     let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [] }; let _gamesFormFourballNote = ''; let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' };
     let _gamesFormDefaultTeeId = null; let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; let _gamesFormTees = []; let _gamesFormMembers = new Map(${JSON.stringify(members)}); let _gamesFormPar3Holes = []; let _gamesFormVenueParDataAvailable = false;
     function refreshGamesFormHcpSection() {}
     function applyGamesSuggestion() {}
-    ${fns.filter(n => n !== 'refreshGamesFormHcpSection').map(n => extractFn(src, n)).join('\n')}
+    ${[...new Set([...fns, ...['_r2','gamesFormPodiumPlaces','gamesFormPodiumPlan','gamesFormPodiumPlayers','gamesFormPodiumApply','gamesFormPodiumInit','setGamesFormScramblePct','setGamesFormPodiumTotal','setGamesFormPodiumPlace','setGamesFormPodiumMode','setGamesFormPodiumPlaces','gamesFormSplitBuild','gamesFormSplitHtml','gamesFormSplitLive','refreshGamesFormSplit']])].filter(n => n !== 'refreshGamesFormHcpSection').map(n => extractFn(src, n)).join('\n')}
     this.api = { ...{ setGamesFormFourballPeriod, setGamesFormFourballWinBy, setGamesFormFourballScope, fourballSnapToSegments, gatheringGamesFourballSectionHtml, setGamesFormFourballDollarPerPlayer, setGamesFormFourballBasis, setGamesFormFourballNetMode, setGamesFormFourballMember, addGamesFormFourballPair, removeGamesFormFourballPair, clearGamesFormFourballPairs, suggestGamesFormFourballPairs, submitGatheringGames, gamesFormOverCommit, updateGamesFormPotPreview }, cfg: () => _gamesFormFourballConfig, setSel: s => { _gamesFormSelected = new Set(s); }, setHcp: (n, e) => { _gamesFormHcp.players[n] = e; } };
   `, ctx);
   return { ctx, api: ctx.api, posts, toasts, dom };
@@ -97,8 +97,8 @@ const sec = t => t.dom.window.document.getElementById('games-form-fourball-secti
   const t = sandbox(); const a = t.api;
   a.setGamesFormFourballDollarPerPlayer('5');
   a.suggestGamesFormFourballPairs();
-  const prev = t.dom.window.document.getElementById('games-form-pot-preview').innerHTML;
-  ok(/BestBall: \$20\.00 \(4 × \$5\.00\)/.test(prev), 'P: preview line shows carve');
+  const prev = t.dom.window.document.getElementById('games-form-split').textContent;
+  ok(/BestBall/.test(prev) && /\$20 from 4 players/.test(prev), 'P: the split line shows the carve: ' + prev.slice(0, 200));
   eq(a.gamesFormOverCommit(20, 4).fixedCost, 20, 'P: fixed cost = rate × players');
   ok(a.gamesFormOverCommit(4, 4).problem, 'P: rate above $/player flagged');
   await a.submitGatheringGames(7);
@@ -132,8 +132,8 @@ const sec = t => t.dom.window.document.getElementById('games-form-fourball-secti
   a.setGamesFormFourballPeriod('round');
   eq([a.cfg().period, a.cfg().win_by, a.cfg().scope], ['round', 'strokes', 'field'], 'S: back to one pot resets the variant');
   a.setGamesFormFourballPeriod('sixes'); a.setGamesFormFourballWinBy('holes'); a.setGamesFormFourballDollarPerPlayer('4');
-  const prev = t.dom.window.document.getElementById('games-form-pot-preview').innerHTML;
-  ok(/3 period pots/.test(prev), 'S: pot preview says it is cut into 3 period pots');
+  const prev = t.dom.window.document.getElementById('games-form-split').textContent;
+  ok(/3 pots/.test(prev) && /3 × \$4 = \$12 each/.test(prev), 'S: the split says it is cut into 3 period pots: ' + prev.slice(0, 200));
   await a.submitGatheringGames(7);
   eq(t.posts[0].game_configs.fourball, { dollar_per_player: 12, basis: 'gross', net_mode: 'own', pairs: a.cfg().pairs.map(pr => pr.slice()), period: 'sixes', win_by: 'holes', scope: 'group' }, 'S: payload carries the variant, total ante = $4 x 3');
   const o = sandbox(); o.api.suggestGamesFormFourballPairs(); o.api.setGamesFormFourballDollarPerPlayer('5'); await o.api.submitGatheringGames(7);
