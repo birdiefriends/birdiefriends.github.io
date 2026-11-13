@@ -13,9 +13,10 @@ ok(ctx.C({ yes: 3, guests: 2, maybe: 1 }) === '3 going (+2 guests) · 1 maybe' &
 const pl = (o) => Object.assign({ id: 1, title: 'Breakfast <b>', starts_at: '2026-11-15T07:00', place: 'Grill', description: 'Eggs', audience: 'invited', creator_id: 'Ann', counts: { yes: 2, maybe: 0, no: 0, guests: 0 }, can_join: true, can_edit: false, my: null, notes: 'back room', attendees: [{ player: 'Ann', status: 'yes', guests: 0 }] }, o || {});
 const d = (o) => Object.assign({ role: 'player', can_create: true, who_can_create: 'players', plans: [pl()] }, o || {});
 let h = ctx.H(d(), null, null);
-ok(/Add a plan/.test(h) && /Breakfast &lt;b&gt;/.test(h) && !/Eggs/.test(h) && !/back room/.test(h) && !/Going:/.test(h), 'collapsed by default, text escaped, no details, no setting for a player');
+ok(/Add a plan/.test(h) && /Breakfast &lt;b&gt;/.test(h) && !/Eggs/.test(h) && !/back room/.test(h), 'collapsed by default, text escaped, no details, no setting for a player');
 h = ctx.H(d(), 1, null);
 ok(/Eggs/.test(h) && /back room/.test(h) && /Going:<\/b> Ann/.test(h) && /plansRsvp\(1,'yes'\)/.test(h) && !/Bringing guests/.test(h), 'expanded: details, notes, attendees, RSVP buttons');
+ok((h.match(/Going:/g) || []).length === 1, 'an expanded plan lists the going names once, not twice');
 h = ctx.H(d({ plans: [pl({ my: { status: 'yes', guests: 2 } })] }), 1, null);
 ok(/Bringing guests/.test(h) && /<option value="2" selected>/.test(h), 'a Yes shows the guests picker with the saved value');
 h = ctx.H(d({ role: 'invited', can_create: false, plans: [pl({ audience: 'players', can_join: false, notes: undefined, attendees: undefined })] }), 1, null);
@@ -45,4 +46,8 @@ h = ctx.H(d({ plans: [pl({ default_yes: true, attendees: [{ player: 'Ann', statu
 ok(!/Going:/.test(h) && /Maybe:<\/b> Bo/.test(h), 'a count-me-in plan does not list 20+ going names in the window either');
 ok(/function plansLabel\(gid\)/.test(src) && /<span class="icon-action-label">\$\{plansLabel\(evt\.gatheringId\)\}<\/span>/.test(src) && /<span class="plans-label">\$\{plansLabel\(e\.gatheringId\)\}/.test(src) && /plans\/summary\?player_id=/.test(src), 'the event card and schedule row show the plan count');
 { const c2 = { _plansCounts: { 104: 2 } }; vm.createContext(c2); vm.runInContext(extractFn(src, 'plansLabel') + '\nthis.L=plansLabel;', c2); ok(c2.L(104) === 'Plans · 2' && c2.L('104') === 'Plans · 2' && c2.L(7) === 'Plans', 'label shows the count only when there are plans'); }
+h = ctx.H(d({ plans: [pl({ attendees: ['A','B','C','D','E','F','G'].map(n => ({ player: n, status: 'yes', guests: 0 })) })] }), null, null);
+ok(/<b>Going:<\/b> A, B, C, D, E, F \+1 more/.test(h), 'a collapsed opt-in plan shows who is going (first 6, then +N)');
+h = ctx.H(d({ plans: [pl({ default_yes: true, attendees: [{ player: 'A', status: 'yes', guests: 0 }] })] }), null, null); ok(!/Going:/.test(h), 'but not a count-me-in plan');
+h = ctx.H(d({ plans: [pl({ can_join: false, attendees: undefined })] }), null, null); ok(!/Going:/.test(h), 'nor to someone without access');
 console.log(`plans_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
