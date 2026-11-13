@@ -11013,7 +11013,7 @@ function skGroups() {
     const mem = new Set((gr.members || []).map(lc));
     const gp = sides.filter((sd, si) => !used.has(si) && sd.some(n => mem.has(lc(n))));
     sides.forEach((sd, si) => { if (gp.includes(sd)) used.add(si); });
-    if (gp.length) out.push({ n: i + 1, pairs: gp, players: gp.reduce((a, q) => a.concat(q), []), start_hole: gr.start_hole || null });
+    if (gp.length) out.push({ n: i + 1, pairs: gp, players: gp.reduce((a, q) => a.concat(q), []), start_hole: gr.start_hole || null, wave: gr.wave || null, tee_time: gr.tee_time || null, mode: set.mode || null });
   });
   const rest = sides.filter((sd, si) => !used.has(si));
   BFEngine.fourballGroups(rest).forEach(g => out.push({ ...g, n: out.length + 1 }));
@@ -11092,6 +11092,38 @@ function skMergeRemote(rows) {
     _sk.groupIdx = idx >= 0 ? idx : 0; _sk.groupSet = true;
   }
   if (!_sk.loaded) { _sk.loaded = true; skGoFirstOpen(); }
+}
+// Birdie coin marker (CttP holes). The first group to reach a CttP hole places the coin at the pin; the last group through it picks it
+// up. Read from the Groups: a shotgun group reaches hole H after (H - start) holes (wrapping), so the smallest wait is first and the
+// largest is last; groups on the same start hole go by wave (A before B); tee times go by order. Returns { [hole]: { first, last } }
+// as group numbers. One group (or none): nobody to hand off to, so no reminders.
+function skCoinDuty(groups, holes, max) {
+  const out = {}; if (!Array.isArray(groups) || groups.length < 2) return out;
+  (holes || []).map(Number).filter(h => h >= 1 && h <= max).forEach(h => {
+    const keyOf = g => {
+      const shotgun = g.mode ? g.mode === 'shotgun' : !!g.start_hole;
+      const st = Number(g.start_hole) || 1, off = shotgun ? (((h - st) % max) + max) % max : 0;
+      return [off, String(shotgun ? (g.wave || '') : (g.tee_time || '')), g.n];
+    };
+    const cmp = (a, b) => a[0] - b[0] || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0) || a[2] - b[2];
+    const ranked = groups.map(g => ({ n: g.n, k: keyOf(g) })).sort((a, b) => cmp(a.k, b.k));
+    out[h] = { first: ranked[0].n, last: ranked[ranked.length - 1].n };
+  });
+  return out;
+}
+function skCoinHoles() {
+  const ad = _sk ? gatheringAddon(_sk.config, 'cttp') : null; if (!ad) return [];
+  return [...new Set([...(ad.holes || []), ...(ad.prize_holes || [])].map(Number).filter(h => h > 0))];
+}
+// The reminder for this group on this hole: place the coin on arrival, pick it up when done. Also shown a hole ahead.
+function skCoinNoteHtml(hole, nextH, g, gs) {
+  const duty = skCoinDuty(gs, skCoinHoles(), skMaxHole()), notes = [];
+  const here = duty[hole], next = nextH != null ? duty[nextH] : null;
+  if (here && here.first === g.n) notes.push(`🪙 <b>You are the first group to Hole ${hole}.</b> Place the Birdie coin marker at the pin.`);
+  if (here && here.last === g.n) notes.push(`🪙 <b>You are the last group through Hole ${hole}.</b> Pick up the Birdie coin marker when you finish.`);
+  if (next && next.first === g.n) notes.push(`Heads up: you are the first group to Hole ${nextH}. Place the Birdie coin marker there.`);
+  if (next && next.last === g.n) notes.push(`Heads up: you are the last group through Hole ${nextH}. Pick up the Birdie coin marker there.`);
+  return notes.length ? `<div style="margin:8px 0;padding:9px 12px;border-radius:12px;background:rgba(224,180,76,0.16);border:1px solid rgba(224,180,76,0.5);color:#ffe08a;font-size:0.82rem;line-height:1.45">${notes.join('<br>')}</div>` : '';
 }
 // Holes in the order THIS group plays them: a shotgun group starts on its own hole and wraps (start 7 -> 7..18, 1..6).
 // A group with no start hole plays 1..max. Scoring opens on the first hole with a missing score in that order.
@@ -11293,6 +11325,7 @@ function liveScoreModeHtml() {
         <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-top:3px">${par != null ? 'Par ' + par : '&nbsp;'}${g.start_hole && hole === ord[0] ? '<span style="margin-left:8px;color:#ffe08a">Your start hole</span>' : ''}<span style="margin-left:10px;color:${statusCol}">${status}</span></div></div>
       ${navBtn(1, chevR, done && nextH != null)}
     </div>
+    ${skCoinNoteHtml(hole, nextH, g, gs)}
     ${extraSteps.length ? holeFlowStepHead(1, 'Hole score') : ''}${rows}
     ${nextStrokes}
     <div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:34px">${hint}</div>${extraSteps.map((st, i) => holeFlowStepHtml(st, i + 2, g, done)).join('')}${alertsNote}${finishHtml}`;

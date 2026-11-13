@@ -34,7 +34,7 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date
   localStorage: { getItem: () => null, setItem() {} }, window: { addEventListener() {} }, gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null,
   panelGamesGid: e => e.gatheringId, gamesScoreKeyForGid: g => 'g:' + g, csResolvePars: () => null, ensureVenueTeeInfoByName: async () => null, csNormalizedVenueName: () => 'V', renderLiveBanner() {} };
 vm.createContext(ctx);
-const names = ['liveScoringOn', 'liveSideGames', 'liveSideGid', 'liveSideTraits', 'liveSideSides', 'liveOneBall', 'liveSideChooserHtml', 'setLiveSideGame', 'skStoreKey', 'skEnsure', 'skGroups', 'skGroup', 'skCardOf', 'skMarks', 'skGoFirstOpen','skOrder', 'skMaxHole'];
+const names = ['liveScoringOn', 'liveSideGames', 'liveSideGid', 'liveSideTraits', 'liveSideSides', 'liveOneBall', 'liveSideChooserHtml', 'setLiveSideGame', 'skStoreKey', 'skEnsure', 'skGroups', 'skGroup', 'skCardOf', 'skMarks', 'skGoFirstOpen','skOrder','skCoinDuty','skCoinHoles','skCoinNoteHtml', 'skMaxHole'];
 vm.runInContext('let _sk = null; let _fbUi = {};\n' + names.map(n => extractFn(src, n)).join('\n') + '\nthis.api={' + names.join(',') + ',get:()=>_sk};', ctx);
 const A = ctx.api;
 A.skEnsure({ gatheringId: 1, holes: 18 }, cfg);
