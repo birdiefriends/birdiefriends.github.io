@@ -6182,7 +6182,7 @@ function buildEventCard(evt, isPast) {
       ${(evt.source === 'gathering' && !isCanceled && evt.gatheringId != null) ? `
       <button class="icon-action-btn" data-plans-gid="${evt.gatheringId}" onclick="openPlansSheet('${evt.id}')">
         <span class="icon-action-badge secondary" style="position:relative">📌${_plansPending.has(Number(evt.gatheringId)) ? '<span class="plans-dot" style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#e53935"></span>' : ''}</span>
-        <span class="icon-action-label">Plans</span>
+        <span class="icon-action-label">${plansLabel(evt.gatheringId)}</span>
       </button>` : ''}
       <!-- Dev-88 (2026-09-29) — Yardage/Rules/Venue dropped from the card
            entirely per Brian: "strip duplicate icons from the Event Cards,
@@ -7375,7 +7375,7 @@ function renderSchedule() {
         </div>
       </div>
       <div style="padding:0 14px 12px">
-        ${(e.source === 'gathering' && e.gatheringId != null) ? `<button class="btn btn-secondary" data-plans-gid="${e.gatheringId}" style="width:100%;font-size:0.8rem;padding:7px 12px;margin-bottom:6px" onclick="openPlansSheet('${e.id}')"><span class="plans-anchor" style="position:relative;display:inline-block">📌${_plansPending.has(Number(e.gatheringId)) ? '<span class="plans-dot" style="position:absolute;top:-3px;right:-6px;width:9px;height:9px;border-radius:50%;background:#e53935"></span>' : ''}</span> Plans</button>` : ''}
+        ${(e.source === 'gathering' && e.gatheringId != null) ? `<button class="btn btn-secondary" data-plans-gid="${e.gatheringId}" style="width:100%;font-size:0.8rem;padding:7px 12px;margin-bottom:6px" onclick="openPlansSheet('${e.id}')"><span class="plans-anchor" style="position:relative;display:inline-block">📌${_plansPending.has(Number(e.gatheringId)) ? '<span class="plans-dot" style="position:absolute;top:-3px;right:-6px;width:9px;height:9px;border-radius:50%;background:#e53935"></span>' : ''}</span> <span class="plans-label">${plansLabel(e.gatheringId)}</span></button>` : ''}
         <button class="btn btn-ghost" style="width:100%;font-size:0.8rem;padding:7px 12px"
           onclick="${e.source === 'gathering'
             ? `submitRegistration('${e.id}','${e.name.replace(/'/g,"\\'")}',this,'No')`
@@ -17600,9 +17600,11 @@ function renderRulesContent() {
 // Dev-69 — accepts either an evtId or a full evt object directly; see
 // openCardScoreSheet's comment above for why.
 // ── Plans (v4.64.0): side plans around a Gathering — see docs/BF_Plans_Spec.md ───────────────────────────────────────────────
-let _plansEvt = null, _plansData = null, _plansOpenId = null, _plansForm = null, _plansPending = new Set();
+let _plansEvt = null, _plansData = null, _plansOpenId = null, _plansForm = null, _plansPending = new Set(), _plansCounts = {};
+function plansLabel(gid) { const n = _plansCounts[Number(gid)] || 0; return n ? 'Plans · ' + n : 'Plans'; }
 function plansApplyDots() {
   document.querySelectorAll('[data-plans-gid]').forEach(b => {
+    const lbl = b.querySelector('.icon-action-label, .plans-label'); if (lbl) lbl.textContent = plansLabel(b.getAttribute('data-plans-gid'));
     const badge = b.querySelector('.icon-action-badge, .plans-anchor'); if (!badge) return;
     const on = _plansPending.has(Number(b.getAttribute('data-plans-gid'))), dot = badge.querySelector('.plans-dot');
     if (on && !dot) { if (!badge.classList.contains('plans-anchor')) badge.style.position = 'relative'; badge.insertAdjacentHTML('beforeend', '<span class="plans-dot" style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#e53935"></span>'); }
@@ -17649,8 +17651,10 @@ async function plansPromptAnswer(id, status) {
 async function plansPendingLoad() {
   if (!currentPlayer) return;
   try {
-    const r = await fetch(`${GATHERINGS_API}/plans/pending?player_id=${encodeURIComponent(currentPlayer)}`);
+    const q = encodeURIComponent(currentPlayer);
+    const [r, r2] = await Promise.all([fetch(`${GATHERINGS_API}/plans/pending?player_id=${q}`), fetch(`${GATHERINGS_API}/plans/summary?player_id=${q}`).catch(() => null)]);
     const j = await r.json();
+    try { _plansCounts = (r2 && (await r2.json()).counts) || {}; } catch (e) { _plansCounts = {}; }
     _plansPending = new Set((j.gathering_ids || []).map(Number));
     plansApplyDots();
     plansPromptOpen(j.plans || []);
@@ -17779,7 +17783,7 @@ async function plansSave() {
   const j = f.id ? await plansPost(`/plans/${f.id}`, body) : await plansPost('/plans', Object.assign({ gathering_id: _plansEvt.gatheringId }, body));
   if (!j) return;
   _plansForm = null; if (!f.id && j.id) _plansOpenId = j.id;
-  await plansLoad();
+  await plansLoad(); plansPendingLoad();
 }
 async function plansRsvp(id, status, guests) {
   const j = await plansPost(`/plans/${id}/rsvp`, { player_id: currentPlayer, status, guests: guests == null ? 0 : Number(guests) });
@@ -17788,7 +17792,7 @@ async function plansRsvp(id, status, guests) {
 async function plansCancel(id) {
   if (!confirm('Cancel this plan for everyone?')) return;
   const j = await plansPost(`/plans/${id}`, { player_id: currentPlayer, status: 'cancelled' });
-  if (j) await plansLoad();
+  if (j) { await plansLoad(); plansPendingLoad(); }
 }
 async function plansSetting(mode) {
   const j = await plansPost('/plans/settings', { gathering_id: _plansEvt.gatheringId, host_id: currentPlayer, who_can_create: mode });

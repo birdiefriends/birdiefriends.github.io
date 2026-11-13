@@ -3087,7 +3087,7 @@ export default {
     //   POST /plans/:id                           edit or cancel { player_id, title?.., status?:'cancelled' }  (creator or host)
     //   POST /plans/:id/rsvp                      { player_id, status: yes|maybe|no, guests? }
     //   POST /plans/settings                      { gathering_id, host_id, who_can_create: players|invited|host }
-    const plMatch = url.pathname.match(/^\/plans(?:\/(settings|pending|\d+)(\/rsvp)?)?$/);
+    const plMatch = url.pathname.match(/^\/plans(?:\/(settings|pending|summary|\d+)(\/rsvp)?)?$/);
     if (plMatch) {
       const json = (obj, status) => new Response(JSON.stringify(obj), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       try {
@@ -3096,6 +3096,19 @@ export default {
         if (request.method === 'POST') { try { body = await request.json(); } catch (e) { return json({ error: 'Invalid JSON' }, 400); } }
         const seg = plMatch[1], isRsvp = !!plMatch[2];
         const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+        if (request.method === 'GET' && seg === 'summary') {
+          // How many active plans each upcoming Gathering has, for the count on the event card (only Gatherings this player can see).
+          const who = str(url.searchParams.get('player_id'), 120);
+          if (!who) return json({ ok: true, counts: {} });
+          const { results } = await env.DB.prepare(`SELECT p.gathering_id AS gid, COUNT(*) AS n FROM gathering_plans p
+            JOIN gatherings g ON g.id = p.gathering_id AND COALESCE(g.status,'active') != 'cancelled' AND substr(COALESCE(g.event_time,''),1,10) >= date('now','-1 day')
+            WHERE p.status = 'active' AND (g.host_id = ? OR COALESCE(g.fill_list_enabled,0) = 1
+              OR EXISTS (SELECT 1 FROM registrations r WHERE r.gathering_id = g.id AND r.player_id = ?)
+              OR EXISTS (SELECT 1 FROM crew_members c WHERE c.crew_id = g.crew_id AND c.player_id = ?))
+            GROUP BY p.gathering_id`).bind(who, who, who).all();
+          const counts = {}; results.forEach(r => { counts[r.gid] = r.n; });
+          return json({ ok: true, counts });
+        }
         if (request.method === 'GET' && seg === 'pending') {
           // Plans waiting on this player: a golf Yes player who has not answered (or, on a count-me-in plan, has not confirmed).
           // Upcoming Gatherings only; never the plan's own creator.

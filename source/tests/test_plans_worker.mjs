@@ -105,4 +105,7 @@ await call('POST', `/plans/${pz}/rsvp`, { player_id: 'Bob Player', status: 'yes'
 r = await call('GET', '/plans/pending?player_id=Ann%20Player'); ok(!r.json.plans.some(p => p.id === pz), 'once answered, that plan is no longer pending');
 r = await call('GET', '/plans/pending?player_id=Bob%20Player'); ok(!r.json.plans.some(p => p.id === pz), 'confirming also clears it');
 r = await call('GET', '/plans/pending?player_id=Brian%20Hager'); ok(r.json.plans.length === 0, 'a creator is never prompted for their own plans');
+r = await call('GET', '/plans/summary?player_id=Ann%20Player'); ok(r.json.counts['104'] >= 3 && !r.json.counts['105'], 'summary counts plans per visible Gathering: ' + JSON.stringify(r.json));
+r = await call('GET', '/plans/summary?player_id=Stranger'); ok(Object.keys(r.json.counts).length === 0, 'a stranger gets no counts');
+r = await call('GET', '/plans/summary?player_id=Ed%20Invited'); ok(r.json.counts['104'] >= 3, 'a Crew member sees the count');
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

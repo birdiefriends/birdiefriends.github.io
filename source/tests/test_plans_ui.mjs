@@ -43,4 +43,6 @@ const pr2 = ctx.PR([{ id: 8, title: 'Breakfast', default_yes: false, counts: { y
 ok(/<b>Going:<\/b> A, B, C, D, E, F, G, H \+2 more/.test(pr2) && (pr2.match(/Going:/g) || []).length === 1, 'launch prompt lists the Yes names on an opt-in plan (first 8, then +N), never on a count-me-in plan');
 h = ctx.H(d({ plans: [pl({ default_yes: true, attendees: [{ player: 'Ann', status: 'yes', guests: 0 }, { player: 'Bo', status: 'maybe', guests: 0 }] })] }), 1, null);
 ok(!/Going:/.test(h) && /Maybe:<\/b> Bo/.test(h), 'a count-me-in plan does not list 20+ going names in the window either');
+ok(/function plansLabel\(gid\)/.test(src) && /<span class="icon-action-label">\$\{plansLabel\(evt\.gatheringId\)\}<\/span>/.test(src) && /<span class="plans-label">\$\{plansLabel\(e\.gatheringId\)\}/.test(src) && /plans\/summary\?player_id=/.test(src), 'the event card and schedule row show the plan count');
+{ const c2 = { _plansCounts: { 104: 2 } }; vm.createContext(c2); vm.runInContext(extractFn(src, 'plansLabel') + '\nthis.L=plansLabel;', c2); ok(c2.L(104) === 'Plans · 2' && c2.L('104') === 'Plans · 2' && c2.L(7) === 'Plans', 'label shows the count only when there are plans'); }
 console.log(`plans_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
