@@ -50,4 +50,5 @@ h = ctx.H(d({ plans: [pl({ attendees: ['A','B','C','D','E','F','G'].map(n => ({ 
 ok(/<b>Going:<\/b> A, B, C, D, E, F \+1 more/.test(h), 'a collapsed opt-in plan shows who is going (first 6, then +N)');
 h = ctx.H(d({ plans: [pl({ default_yes: true, attendees: [{ player: 'A', status: 'yes', guests: 0 }] })] }), null, null); ok(!/Going:/.test(h), 'but not a count-me-in plan');
 h = ctx.H(d({ plans: [pl({ can_join: false, attendees: undefined })] }), null, null); ok(!/Going:/.test(h), 'nor to someone without access');
+ok(/if \(choice === 'Yes' && !\(regResult && regResult\.downgraded\)\) plansPendingLoad\(true\);/.test(src) && /function plansPromptOpen\(list, force\)/.test(src) && /if \(!force\) \{ try \{ if \(sessionStorage/.test(src), 'a new Yes triggers the plans prompt right away, even after an earlier Not now');
 console.log(`plans_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

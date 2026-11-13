@@ -8289,6 +8289,7 @@ async function submitGatheringRegistration(evt, choice, submitBtn, opts) {
       if (teamSizeOf(evt)) { try { await gatheringReadBack(evt.gatheringId); } catch (_) { /* local state is already right */ } }
     }
     renderAll();
+    if (choice === 'Yes' && !(regResult && regResult.downgraded)) plansPendingLoad(true);   // a new Yes unlocks the plans that already exist: ask about them now
   } catch(e) {
     submitBtn.classList.remove('btn-loading');
     submitBtn.textContent = 'Try again';
@@ -17637,9 +17638,9 @@ function plansPromptHtml(list) {
   }).join('');
 }
 let _plansPromptList = [];
-function plansPromptOpen(list) {
+function plansPromptOpen(list, force) {
   if (!list.length) return;
-  try { if (sessionStorage.getItem('bf_plans_prompt_later')) return; } catch (e) {}
+  if (!force) { try { if (sessionStorage.getItem('bf_plans_prompt_later')) return; } catch (e) {} }   // force: they just said Yes, so ask even if they tapped Not now earlier
   if (document.querySelector('.bf-modal-overlay.open')) return;                  // never on top of something the player is doing
   if (typeof getLiveEvent === 'function' && getLiveEvent()) return;               // never over a live round; the icon dot still shows
   _plansPromptList = list.slice();
@@ -17656,7 +17657,7 @@ async function plansPromptAnswer(id, status) {
   if (!_plansPromptList.length) closeModal('plans-prompt-modal');
   plansPendingLoad();
 }
-async function plansPendingLoad() {
+async function plansPendingLoad(force) {
   if (!currentPlayer) return;
   try {
     const q = encodeURIComponent(currentPlayer);
@@ -17665,7 +17666,7 @@ async function plansPendingLoad() {
     try { _plansCounts = (r2 && (await r2.json()).counts) || {}; } catch (e) { _plansCounts = {}; }
     _plansPending = new Set((j.gathering_ids || []).map(Number));
     plansApplyDots();
-    plansPromptOpen(j.plans || []);
+    plansPromptOpen(j.plans || [], force);
   } catch (e) { /* the dot is a nicety */ }
 }
 function plansWhen(s) {
