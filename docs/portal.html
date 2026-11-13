@@ -3979,6 +3979,7 @@ async function syncNotifications() {
     if (subId) {
       localStorage.setItem('bf_os_sub_id', subId);
       await writeSubscriptionToMember(subId);
+      osTagPlayer(true);
       const m = memberData.find(m => m.display === currentPlayer);
       if (m) m.pushId = subId;
     }
@@ -4006,6 +4007,18 @@ async function syncNotifications() {
     console.warn('[syncNotifications]', e.message);
   }
 }
+// The Workers (birdie alerts, Plans pushes, group and host notices) address people by the OneSignal tag player_name, but the portal only ever
+// stored the subscription id in Jotform, so those pushes matched nobody ("All included players are not subscribed"). Put the tag on this device
+// whenever it is subscribed and the player is known. One tag per device: it follows whoever is signed in here. Cached so it is sent only on change.
+function osTagPlayer(force) {
+  try {
+    if (typeof OneSignal === 'undefined' || !OneSignal.User || typeof OneSignal.User.addTag !== 'function') return;
+    if (!currentPlayer || currentPlayer === 'Guest') return;
+    if (!force && localStorage.getItem('bf_os_tag') === currentPlayer) return;
+    OneSignal.User.addTag('player_name', currentPlayer);
+    localStorage.setItem('bf_os_tag', currentPlayer);
+  } catch (e) { console.warn('[OS] tag failed:', e && e.message); }
+}
 // ── Silent pushId sync — fires every app load after data ready ───────────────
 // If player is subscribed but their Jotform record has no pushId (or a different one),
 // writes the current pushId to Jotform. Completely invisible to players.
@@ -4016,6 +4029,7 @@ async function osIdentityRefresh() {
   try {
     const subbed = await osIsSubscribed();
     if (!subbed) return;
+    osTagPlayer();
     const subId = OneSignal.User.PushSubscription.id;
     if (!subId) return;
     const cached = localStorage.getItem('bf_os_sub_id');
@@ -4120,6 +4134,7 @@ async function osSubscribe() {
           if (subId) {
             localStorage.setItem('bf_os_sub_id', subId);
             await writeSubscriptionToMember(subId);
+            osTagPlayer(true);
             // Update local memberData so broadcast targeting works immediately
             const m = memberData.find(m => m.display === currentPlayer);
             if (m) m.pushId = subId;
