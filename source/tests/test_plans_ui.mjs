@@ -38,4 +38,5 @@ ok(/Turkey 2Man/.test(pr) && /Awards &lt;i&gt;/.test(pr) && /Confirm/.test(pr) &
 ok(/plansPromptAnswer\(8,'yes'\)/.test(pr) && />✅ Yes</.test(pr) && !/Breakfast<\/div>[\s\S]{0,200}counted in/.test(pr.split('Awards')[1].split('Breakfast')[1] || ''), 'an opt-in plan just asks Yes, Maybe or No');
 ok(ctx.PR([]) === '', 'nothing pending means no prompt');
 ok(/getLiveEvent\(\)\) return;/.test(src) && /bf_plans_prompt_later/.test(src) && /plansPromptOpen\(j\.plans/.test(src), 'the prompt is skipped over a live round or another open dialog, and "Not now" holds for the session');
+ok(/data-plans-gid="\$\{e\.gatheringId\}"[^>]*onclick="openPlansSheet\('\$\{e\.id\}'\)"><span class="plans-anchor"/.test(src) && /\.icon-action-badge, \.plans-anchor/.test(src), 'My Schedule rows carry a Plans button with the same dot');
 console.log(`plans_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
