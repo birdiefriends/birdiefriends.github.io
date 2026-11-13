@@ -11113,7 +11113,8 @@ function skCoinDuty(groups, holes, max) {
 }
 function skCoinHoles() {
   const ad = _sk ? gatheringAddon(_sk.config, 'cttp') : null; if (!ad) return [];
-  return [...new Set([...(ad.holes || []), ...(ad.prize_holes || [])].map(Number).filter(h => h > 0))];
+  const prize = new Set((ad.prize_holes || []).map(Number));   // a prize-only hole is played a different way (no pin coin), so it is left out
+  return [...new Set((ad.holes || []).map(Number).filter(h => h > 0 && !prize.has(h)))];
 }
 // The reminder for this group on this hole: place the coin on arrival, pick it up when done. Also shown a hole ahead.
 function skCoinNoteHtml(hole, nextH, g, gs) {

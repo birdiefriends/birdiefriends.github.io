@@ -21,7 +21,8 @@ d = ctx.D([G(1, 7, { wave: 'B' }), G(2, 7, { wave: 'A' })], [7], 18); ok(d[7].fi
 // tee times follow order / time
 d = ctx.D([{ n: 1, mode: 'tee_times', tee_time: '09:10' }, { n: 2, mode: 'tee_times', tee_time: '08:30' }], [4], 18); ok(d[4].first === 2 && d[4].last === 1, 'tee times: earliest first');
 ok(Object.keys(ctx.D([G(1, 1)], [3], 18)).length === 0, 'one group: no reminders');
-ok(JSON.stringify(ctx.H().sort((a, b) => a - b)) === '[3,8,17,18]', 'CttP holes include the prize hole');
+ctx._sk.config.addons[0].holes = [3, 8, 17, 18];
+ok(JSON.stringify(ctx.H().sort((a, b) => a - b)) === '[3,8,18]', 'a prize-only hole (17) gets no coin reminder');
 // banner text
 const first = ctx.N(3, 4, gs[0], gs), last = ctx.N(3, 4, gs[1], gs), mid = ctx.N(3, 4, gs[2], gs);
 ok(/first group to Hole 3/.test(first) && /Place the Birdie coin marker/.test(first), 'first group is told to place the coin');
