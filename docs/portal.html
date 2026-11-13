@@ -10307,10 +10307,10 @@ function buildLivePanel(evt) {
     ${_skOn ? livePanelModeToggleHtml('games') : ''}
     ${groupingsLink}
     ${photosSection}
-    ${showCttpSection ? liveSectionHtml('cttp', '🎯', 'Closest to the Pin', ctpSection) : ''}
-    ${showBirdieBallSection ? liveSectionHtml('miserball', '🐉', 'MiserBall', bbSection) : ''}
     ${showFourballSection ? liveSectionHtml('game', BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.icon, BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.label, fbSection) : ''}
+    ${showCttpSection ? liveSectionHtml('cttp', '🎯', 'Closest to the Pin', ctpSection) : ''}
     ${showSkinsSection ? liveSectionHtml('skins', '⛳', 'Skins', skinsLiveSectionHtml(_liveConfig)) : ''}
+    ${showBirdieBallSection ? liveSectionHtml('miserball', '🐉', 'MiserBall', bbSection) : ''}
     ${showBirdieAlertSection ? liveSectionHtml('birdie', '🦅', 'Birdie Alert', birdieSection) : ''}
     ${liveSectionHtml('scorecard', '📋', 'Post-Round Scorecard', `${_skOn ? `<div style="font-size:0.82rem;color:rgba(255,255,255,0.75);line-height:1.45;margin-bottom:8px">Scores are saved live while you play, so there is nothing to enter after the round.</div><details><summary style="font-size:0.78rem;color:rgba(255,255,255,0.6);cursor:pointer;padding:8px 0">Enter a full card instead</summary>${scSection}</details>` : scSection}`)}
     ${showCloseSection ? liveSectionHtml('close', '🏁', 'Host · Close &amp; Calculate', `
@@ -11394,7 +11394,7 @@ function holeFlowClaimPick(hole, player) {
 // ── Live Actions: the BestBall game view (Dev-93) ─────────────────────────────────────────
 // Two jobs kept apart: (1) how the game stands, (2) each player's card, drilled into from the game view.
 // Scores shown here are this phone's merged scores laid over the last server read, so a tap shows at once.
-let _fbUi = { view: 'group', hole: null, drill: null };
+let _fbUi = { view: 'field', hole: null, drill: null };   // leaderboard opens on the whole Field
 function fbOverlayCards() {
   const base = (_fbLive && _fbLive.cards) || [];
   if (typeof _sk === 'undefined' || !_sk) return base;
