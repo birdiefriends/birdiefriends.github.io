@@ -110,8 +110,10 @@ function computeGatheringGamesPayout(config, scorecards, ctpLeaders, bbAnswers) 
     let perSkin = 0, givenBackEach = 0, skUnalloc = 0;
     if (won.length) {
       perSkin = Math.floor(pot / won.length);
-      won.forEach(w => credit(w.player, 'skins', perSkin));
-      skUnalloc = pot - perSkin * won.length;
+      // v4.74.3: whole dollars taken once on each player's total skins, not per skin
+      const cntS = new Map(); won.forEach(w => cntS.set(w.player, (cntS.get(w.player) || 0) + 1));
+      let paidS = 0; cntS.forEach((c, pl) => { const amt = Math.floor((pot * c) / won.length); credit(pl, 'skins', amt); paidS += amt; });
+      skUnalloc = pot - paidS;
     } else {
       const gb = giveBack(pot);
       givenBackEach = gb.each; skUnalloc = gb.unallocated;

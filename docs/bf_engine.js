@@ -382,13 +382,16 @@
           let perSkinT = 0, givenBackT = 0, unallocT = 0;
           if (teamWon.length) {
             perSkinT = Math.floor(pot / teamWon.length);
+            // Whole dollars are taken once, on what each player's team won in total (not on every skin), so a pot that doesn't
+            // divide evenly loses at most a dollar per player instead of a dollar per skin per player.
+            const byTeam = new Map();
+            teamWon.forEach(w => { byTeam.set(w.player, (byTeam.get(w.player) || 0) + 1); w.members = membersOf.get(w.player) || [w.player]; });
             let paid = 0;
-            teamWon.forEach(w => {
-              const ms = membersOf.get(w.player) || [w.player];
-              const each = Math.floor(perSkinT / ms.length);
+            byTeam.forEach((cnt, team) => {
+              const ms = membersOf.get(team) || [team];
+              const each = Math.floor((pot * cnt) / teamWon.length / ms.length);
               ms.forEach(m => L.credit(m, 'skins', each));
               paid += each * ms.length;
-              w.members = ms;
             });
             unallocT = pot - paid;
           } else {
@@ -417,8 +420,11 @@
         let perSkin = 0, givenBackEach = 0, unalloc = 0;
         if (won.length) {
           perSkin = Math.floor(pot / won.length);
-          won.forEach(w => L.credit(w.player, 'skins', perSkin));
-          unalloc = pot - perSkin * won.length;
+          const cnt = new Map();
+          won.forEach(w => cnt.set(w.player, (cnt.get(w.player) || 0) + 1));
+          let paid = 0;
+          cnt.forEach((c, player) => { const amt = Math.floor((pot * c) / won.length); L.credit(player, 'skins', amt); paid += amt; });
+          unalloc = pot - paid;
         } else {
           const gb = L.giveBack(pot);
           givenBackEach = gb.each; unalloc = gb.unallocated;
@@ -1037,7 +1043,7 @@
       inputs: { scorecards: [_P('Ann', _H(4, 4, 3)), _P('Bob', _H(5, 4, 4)), _P('Cy', _H(5, 5, 5)), _P('Di', _H(6, 5, 5))],
         ctpLeaders: { 3: { player: 'Ann', dist: 6 } } },
       // pot 40: CTP set-aside 6, skins pot 34 + 3 unclaimed = 37 over 2 skins = 18 each, $1 left over
-      expect: { payouts: { Ann: 3 + 36, Bob: 0, Cy: 0, Di: 0 }, unallocated: 1, results: { cttp: { unclaimed_to_skins: 3 }, skins: { per_skin: 18 } } }
+      expect: { payouts: { Ann: 3 + 37, Bob: 0, Cy: 0, Di: 0 }, unallocated: 0, results: { cttp: { unclaimed_to_skins: 3 }, skins: { per_skin: 18 } } }
     }, {
       name: 'a prize-only hole is tracked but pays nothing and rolls nothing',
       round: { dollar_per_player: 10, addons: [
@@ -1046,7 +1052,7 @@
       inputs: { scorecards: [_P('Ann', _H(4, 4, 3)), _P('Bob', _H(5, 4, 4)), _P('Cy', _H(5, 5, 5)), _P('Di', _H(6, 5, 5))],
         ctpLeaders: { 3: { player: 'Ann', dist: 6 }, 7: { player: 'Bob', dist: 4 } } },
       // pot 40: only hole 3 is paid (3), skins pot 37 over 2 skins = 18 each; hole 7 is Bob's prize, no cash
-      expect: { payouts: { Ann: 3 + 36, Bob: 0, Cy: 0, Di: 0 }, unallocated: 1, results: { cttp: { unclaimed_to_skins: 0 }, skins: { per_skin: 18 } } }
+      expect: { payouts: { Ann: 3 + 37, Bob: 0, Cy: 0, Di: 0 }, unallocated: 0, results: { cttp: { unclaimed_to_skins: 0 }, skins: { per_skin: 18 } } }
     }]
   });
 
@@ -1098,7 +1104,7 @@
       // Ann 4s, Bob 5s -> better ball 4 x18 = 72. Cy 5s, Di 4 on 1-9 then 6 -> 4 x9 + 5 x9 = 81. Pair 1 wins the $20 carve ($10 each).
       // Skins pot 20: #1-9 Ann 4 ties Di 4 (no skin); #10-18 Ann 4 is outright low (9 skins) -> $2 each = $18, $2 left over.
       inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5)), _P('Di', _SPLIT(4, 6))] },
-      expect: { payouts: { Ann: 28, Bob: 10, Cy: 0, Di: 0 }, unallocated: 2, results: { fourball: { per_pair: 20, per_player: 10 }, skins: { per_skin: 2 } } }
+      expect: { payouts: { Ann: 30, Bob: 10, Cy: 0, Di: 0 }, unallocated: 0, results: { fourball: { per_pair: 20, per_player: 10 }, skins: { per_skin: 2 } } }
     }, {
       name: 'gross tie: tied pairs split the carve',
       round: { dollar_per_player: 10, addons: [
@@ -1392,9 +1398,9 @@
       round: { dollar_per_player: 12, addons: [
         { id: 'lowscore', entity: 'individual', dollar_per_player: 5, basis: 'gross' },
         { id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
-      // Ann 4s = 72, Bob 5s = 90, Cy 5s = 90. Ann takes the $15 Low Score pot ($5 x 3). Skins gets the $21 left: Ann wins all 18 holes, $1 each = $18, $3 left over.
+      // Ann 4s = 72, Bob 5s = 90, Cy 5s = 90. Ann takes the $15 Low Score pot ($5 x 3). Skins gets the $21 left: Ann wins all 18 holes and takes the whole $21 (rounding is done once on a player's total, not per hole).
       inputs: { scorecards: [_P('Ann', _ALL(4)), _P('Bob', _ALL(5)), _P('Cy', _ALL(5))] },
-      expect: { payouts: { Ann: 33, Bob: 0, Cy: 0 }, unallocated: 3, results: { lowscore: { per_player: 15 } } }
+      expect: { payouts: { Ann: 36, Bob: 0, Cy: 0 }, unallocated: 0, results: { lowscore: { per_player: 15 } } }
     }, {
       name: 'whole round tie: no blood, a tie for low is a push and every ante comes back',
       round: { dollar_per_player: 10, addons: [{ id: 'lowscore', entity: 'individual', dollar_per_player: 10, basis: 'gross' }] },
