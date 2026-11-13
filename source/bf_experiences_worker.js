@@ -1322,7 +1322,7 @@ async function ensureHoleFinalTable(env) {
 async function sendScoreAlert(env, a, audience, title) {
   const heading = `${a.k.emoji} #${a.hole} — ${a.label}`;
   const body = a.upgraded ? `${a.k.label} (corrected up from a lower score)` : `${a.k.label}`;
-  const meta = { hole: a.hole, player: a.label, scoreType: a.k.label };
+  const meta = { hole: a.hole, player: a.label, scoreType: a.k.label, invited: audience.slice(), gathering_id: a.gid || null };   // invited: only this round's players see it in the feed
   const post = async (payload) => { const r = await alertFetch(env, ALERT_PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); let j = null, t = ''; try { t = await r.text(); j = JSON.parse(t); } catch (e) {} return { status: r.status, json: j, text: t }; };
   const filters = []; audience.forEach((n, i) => { if (i) filters.push({ operator: 'OR' }); filters.push({ field: 'tag', key: 'player_name', relation: '=', value: n }); });
   let pushed = null, err = null, wroteFeed = false;
@@ -1410,7 +1410,7 @@ async function scanScoreAlerts(env, eventName) {
         await env.DB.prepare(`UPDATE bfe_score_alerts SET kind = ?, status = 'pending', attempts = 0, error = NULL WHERE event_name = ? AND hole = ? AND unit_key = ?`).bind(k.label, eventName, h, u.key).run();
       } else if (ex.status === 'failed' && ex.attempts < 6) { /* retry below */ }
       else continue;
-      const r = await sendScoreAlert(env, { hole: h, label: u.label, k, upgraded }, audience, cfgRow.gathering_name);
+      const r = await sendScoreAlert(env, { hole: h, label: u.label, k, upgraded, gid: Number(m[1]) }, audience, cfgRow.gathering_name);
       await env.DB.prepare(`UPDATE bfe_score_alerts SET status = ?, attempts = attempts + 1, pushed = ?, error = ?, sent_at = CASE WHEN ? = 'sent' THEN datetime('now') ELSE sent_at END WHERE event_name = ? AND hole = ? AND unit_key = ?`)
         .bind(r.ok ? 'sent' : 'failed', r.pushed, r.error, r.ok ? 'sent' : 'failed', eventName, h, u.key).run();
       (r.ok ? sent : failed).push({ hole: h, label: u.label, kind: k.label });

@@ -9164,6 +9164,16 @@ function buildAnnouncementsHTML(notifications, loading) {
       const gid = n.meta && n.meta.gathering_id;
       if (!(gid && gatheringData.some(g => g.gatheringId === gid && g.hostId === currentPlayer))) return false;
     }
+    // Round alerts (birdie, closest to the pin, MiserBall) carry the round's players in meta.invited: only they (and the host) see them in the feed.
+    // Alerts without a list (league-wide Series / Cup rounds, older entries) stay visible to everyone, as before.
+    if (n.bf_type === 'birdie' || n.bf_type === 'cttp' || n.bf_type === 'birdieball') {
+      const aud = n.meta && n.meta.invited;
+      if (Array.isArray(aud)) {
+        const gid = n.meta.gathering_id;
+        const isHost = gid && gatheringData.some(g => g.gatheringId === gid && g.hostId === currentPlayer);
+        if (!isHost && !aud.includes(currentPlayer)) return false;
+      }
+    }
     if (n.bf_type === 'gathering_open_invite') {
       const myMember = memberData.find(m => m.display === currentPlayer);
       if (!myMember || myMember.gatheringAlerts !== 'Yes') return false;
@@ -11898,7 +11908,7 @@ async function submitBirdieBall() {
       const others = (window._liveEvtIndividualPlayers || []).filter(n => n !== player);
       const sendP = LIVE_EVENT_TEST_MODE
         ? osSendToPlayers([currentPlayer], `[TEST] ${heading}`, msg, 'https://birdiefriends.com/portal.html', 'birdieball')
-        : (others.length ? osSendToPlayers(others, heading, msg, 'https://birdiefriends.com/portal.html', 'birdieball') : null);
+        : (others.length ? osSendToPlayers(others, heading, msg, 'https://birdiefriends.com/portal.html', 'birdieball', { invited: (window._liveEvtIndividualPlayers || []).slice() }) : null);
       if (sendP) sendP.catch(e => console.warn('[MiserBall] push failed:', e.message));
     }
     showToast(`Recorded — ${player} lost it on #${_bbLostHole}`);
@@ -12654,7 +12664,7 @@ function wbSetStroke(v) {
 async function liveAlertSend(heading, body, bfType, bfMeta) {
   const aud = window._liveAlertAudience;
   const url = 'https://birdiefriends.com/portal.html';
-  if (Array.isArray(aud)) return osSendToPlayers(aud, heading, body, url, bfType, bfMeta);
+  if (Array.isArray(aud)) return osSendToPlayers(aud, heading, body, url, bfType, Object.assign({}, bfMeta || {}, { invited: aud.slice() }));   // the feed entry is for this round's players only
   return osSendAll(heading, body, url, bfType, bfMeta);
 }
 // Send CttP push notification via Cloudflare Worker
