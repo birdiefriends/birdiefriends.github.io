@@ -35,9 +35,12 @@ The host can cancel any plan. A plan expires with its event (hidden once the eve
 One push to the players (golf Yes) when a plan is created, so nobody has to text. Nothing else pushes by default: no
 chat thread, no "X joined" noise. RSVP changes are visible in the window.
 
-**Creator push:** the plan's creator gets one push when someone's RSVP changes ("Name is in (+2 guests)", "is a maybe",
-"can no longer make it"). Not sent for the creator's own RSVP, when the answer did not change, or for a first-ever No.
-The RSVP call accepts `notify: false` to suppress it. Push only, same OneSignal `player_name` tag path as the create push.
+**Message attendees (v4.68.0):** the creator or the host can send one push to the plan's Yes and Maybe players
+(`POST /plans/:id/message {player_id, message}`, up to 280 characters). Count-me-in plans reach every golf Yes player who
+has not declined; players-only plans reach only people who still have the golf Yes. The sender is never pushed. The latest
+message is pinned on the plan card with the sender and a timestamp. Limit: 3 messages per plan per rolling 24 hours (429
+after that). Push only: no SMS, no contact info. Stored in `plan_messages(id, plan_id, sender_id, body, created_at)`,
+created on first use.
 
 ## Data (main Worker, D1, created on first use, so no manual migration)
 - `gathering_plans(id, gathering_id, creator_id, title, starts_at, place, description, notes, audience, status, created_at, updated_at)`
@@ -69,4 +72,4 @@ Additions to the design above, all shipped:
 - **Unregistering:** `GET /plans/mine` lists the player's Yes/Maybe plans (not ones they made); `POST /plans/leave {gathering_id, player_id, plan_ids?}` sets them to No. The dialog ticks everything by default; players-only plans are locked. Safety net on read: a players-only plan counts only people who still have the golf Yes (creator and host always count).
 - **Limits:** 20 active plans per Gathering, up to 5 guests per RSVP, title 80 / description 1000 / notes 2000 characters.
 - **Collapsed card:** shows the first 6 going names for opt-in plans the viewer can join.
-- **Not built:** plan announcements (design agreed: "Message attendees" for the creator and host, one push to Yes and Maybe players, latest message pinned on the plan card with a timestamp, about 3 per plan per day, push only, no SMS or contact info); Plans for Series/Cup events; notes and checklist modules; a push when a plan is edited or cancelled; cancelling a creator's plans when they unregister.
+- **Not built:** Plans for Series/Cup events; notes and checklist modules; a push when a plan is edited or cancelled; cancelling a creator's plans when they unregister.

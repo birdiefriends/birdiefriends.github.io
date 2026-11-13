@@ -17734,12 +17734,17 @@ function plansCardHtml(pl, d, openId) {
         <div style="font-weight:700;font-size:0.9rem">${escapeHtml(pl.title)}${pl.audience === 'players' ? ' <span style="font-size:0.68rem;font-weight:600;color:var(--text-hint)">· players only</span>' : ''}</div>
         ${meta ? `<div style="font-size:0.76rem;color:var(--text-muted)">${meta}</div>` : ''}
         <div style="font-size:0.76rem;color:var(--text-muted)">${escapeHtml(plansCountText(pl.counts))}${pl.needs_response ? ' · <b style="color:#e53935">please confirm</b>' : (my ? ' · you: ' + escapeHtml(my) : '')}</div>
-        ${(!open && !pl.default_yes && pl.can_join) ? (() => { const g = (pl.attendees || []).filter(a => a.status === 'yes').map(a => a.player); return g.length ? `<div style="font-size:0.76rem;margin-top:1px"><b>Going:</b> ${g.slice(0, 6).map(escapeHtml).join(', ')}${g.length > 6 ? ' +' + (g.length - 6) + ' more' : ''}</div>` : ''; })() : ''}
+        ${pl.message ? `<div style="font-size:0.78rem;margin-top:4px;padding:6px 8px;border-radius:8px;background:var(--surface)">📣 <b>${escapeHtml(pl.message.from)}</b> <span style="color:var(--text-hint)">· ${escapeHtml(plansMsgTime(pl.message.at))}</span><div style="white-space:pre-wrap">${escapeHtml(pl.message.text)}</div></div>` : ''}
+                ${(!open && !pl.default_yes && pl.can_join) ? (() => { const g = (pl.attendees || []).filter(a => a.status === 'yes').map(a => a.player); return g.length ? `<div style="font-size:0.76rem;margin-top:1px"><b>Going:</b> ${g.slice(0, 6).map(escapeHtml).join(', ')}${g.length > 6 ? ' +' + (g.length - 6) + ' more' : ''}</div>` : ''; })() : ''}
       </div>
       <span style="color:var(--text-hint)">${open ? '▾' : '▸'}</span>
     </div>`;
   if (open) {
     if (pl.description) h += `<div style="font-size:0.82rem;margin-top:8px;white-space:pre-wrap">${escapeHtml(pl.description)}</div>`;
+    if (pl.can_edit && String(_plansMsgId) === String(pl.id)) {
+      h += `<div style="margin-top:10px"><textarea id="plans-msg-text" rows="3" maxlength="280" placeholder="Message everyone who is in or maybe (one push)" oninput="_plansMsgText=this.value" style="width:100%;box-sizing:border-box;font-size:0.84rem;padding:8px;border:1px solid var(--border);border-radius:8px">${escapeHtml(_plansMsgText)}</textarea>
+        <div style="display:flex;gap:8px;margin-top:6px"><button class="btn btn-primary btn-sm" style="font-size:0.8rem" onclick="plansMsgSend(${pl.id})">Send push</button><button class="btn btn-secondary btn-sm" style="font-size:0.8rem" onclick="plansMsgClose()">Never mind</button></div></div>`;
+    }
     if (pl.can_join) {
       if (pl.notes) h += `<div style="font-size:0.78rem;margin-top:6px;color:var(--text-muted);white-space:pre-wrap">📝 ${escapeHtml(pl.notes)}</div>`;
       if (pl.needs_response) h += `<div style="font-size:0.8rem;margin-top:10px;padding:8px 10px;border-radius:8px;background:var(--surface);font-weight:600">You are counted in. Confirm or decline:</div>`;
@@ -17755,7 +17760,7 @@ function plansCardHtml(pl, d, openId) {
     } else {
       h += `<div style="font-size:0.76rem;margin-top:8px;color:var(--text-hint)">${pl.audience === 'players' ? 'This plan is for players who said Yes to the golf event.' : 'You can see the basics only.'}</div>`;
     }
-    if (pl.can_edit) h += `<div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-secondary btn-sm" style="font-size:0.76rem" onclick="plansEdit(${pl.id})">✏️ Edit</button><button class="btn btn-secondary btn-sm" style="font-size:0.76rem" onclick="plansCancel(${pl.id})">🗑 Cancel plan</button></div>`;
+    if (pl.can_edit) h += `<div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-secondary btn-sm" style="font-size:0.76rem" onclick="plansMsgOpen(${pl.id})">📣 Message attendees</button><button class="btn btn-secondary btn-sm" style="font-size:0.76rem" onclick="plansEdit(${pl.id})">✏️ Edit</button><button class="btn btn-secondary btn-sm" style="font-size:0.76rem" onclick="plansCancel(${pl.id})">🗑 Cancel plan</button></div>`;
   }
   return h + '</div>';
 }
@@ -17805,6 +17810,22 @@ function openPlansSheet(evtOrId) {
   _plansEvt = evt; _plansData = null; _plansOpenId = null; _plansForm = null;
   const t = document.getElementById('plans-title'); if (t) t.textContent = `📌 Plans · ${evt.name}`;
   plansRender(); openModal('plans-modal'); plansLoad();
+}
+let _plansMsgId = null, _plansMsgText = '';
+function plansMsgTime(s) {
+  const d = new Date(String(s || '').replace(' ', 'T') + 'Z');
+  return isNaN(d) ? '' : d.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+function plansMsgOpen(id) { _plansMsgId = id; _plansMsgText = ''; plansRender(); }
+function plansMsgClose() { _plansMsgId = null; _plansMsgText = ''; plansRender(); }
+async function plansMsgSend(id) {
+  const t = (_plansMsgText || '').trim();
+  if (!t) { showToast('Write a message first', true); return; }
+  const j = await plansPost(`/plans/${id}/message`, { player_id: currentPlayer, message: t });
+  if (!j) return;
+  showToast(j.notified ? 'Sent to ' + j.notified + (j.notified === 1 ? ' person' : ' people') : 'Posted on the plan');
+  _plansMsgId = null; _plansMsgText = '';
+  plansLoad();
 }
 function plansToggle(id) { _plansOpenId = String(_plansOpenId) === String(id) ? null : id; plansRender(); }
 function plansNew() { _plansForm = { audience: 'invited' }; plansRender(); }

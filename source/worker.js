@@ -3085,16 +3085,17 @@ export default {
     //   GET  /plans?gathering_id=&player_id=      access, can_create, setting, plans (attendees + notes only with full access)
     //   POST /plans                               create  { gathering_id, player_id, title, starts_at?, place?, description?, notes?, audience?, notify? }
     //   POST /plans/:id                           edit or cancel { player_id, title?.., status?:'cancelled' }  (creator or host)
-    //   POST /plans/:id/rsvp                      { player_id, status: yes|maybe|no, guests?, notify? }  (pushes the plan's creator when the answer changes)
+    //   POST /plans/:id/rsvp                      { player_id, status: yes|maybe|no, guests? }
+    //   POST /plans/:id/message                   { player_id, message }  creator or host: one push to the plan's Yes and Maybe players, pinned on the plan card (max 3 per plan per 24h)
     //   POST /plans/settings                      { gathering_id, host_id, who_can_create: players|invited|host }
-    const plMatch = url.pathname.match(/^\/plans(?:\/(settings|pending|summary|mine|leave|\d+)(\/rsvp)?)?$/);
+    const plMatch = url.pathname.match(/^\/plans(?:\/(settings|pending|summary|mine|leave|\d+)(\/rsvp|\/message)?)?$/);
     if (plMatch) {
       const json = (obj, status) => new Response(JSON.stringify(obj), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       try {
         await ensurePlansTables(env);
         let body = {};
         if (request.method === 'POST') { try { body = await request.json(); } catch (e) { return json({ error: 'Invalid JSON' }, 400); } }
-        const seg = plMatch[1], isRsvp = !!plMatch[2];
+        const seg = plMatch[1], isRsvp = plMatch[2] === '/rsvp', isMsg = plMatch[2] === '/message';
         const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
         if (request.method === 'GET' && seg === 'mine') {
           // The plans this player is in (Yes or Maybe) on a Gathering, for the "you are unregistering" prompt. Plans they made are not listed.
@@ -3158,6 +3159,8 @@ export default {
           const { results: plans } = await env.DB.prepare(`SELECT * FROM gathering_plans WHERE gathering_id = ? AND status = 'active' ORDER BY COALESCE(NULLIF(starts_at,''), '9999'), id`).bind(gid).all();
           const { results: rs } = await env.DB.prepare(`SELECT r.plan_id, r.player_id, r.status, r.guests FROM plan_rsvps r JOIN gathering_plans p ON p.id = r.plan_id WHERE p.gathering_id = ? ORDER BY r.updated_at`).bind(gid).all();
           const { results: golfYes } = await env.DB.prepare(`SELECT player_id FROM registrations WHERE gathering_id = ? AND status = 'yes' AND COALESCE(is_placeholder,0) = 0`).bind(gid).all();
+          const { results: msgs } = await env.DB.prepare(`SELECT m.plan_id, m.sender_id, m.body, m.created_at FROM plan_messages m JOIN gathering_plans p ON p.id = m.plan_id
+            WHERE p.gathering_id = ? AND m.id = (SELECT MAX(id) FROM plan_messages WHERE plan_id = m.plan_id)`).bind(gid).all();
           for (const pl of plans) {
             let mine = rs.filter(r => r.plan_id === pl.id).map(r => ({ ...r }));
             // A players-only plan counts only people who still have the golf Yes (the creator and host always count), so unregistering never leaves a ghost in the count.
@@ -3170,6 +3173,7 @@ export default {
             const my = mine.find(r => r.player_id === viewer);
             out.plans.push({ default_yes: !!pl.default_yes, needs_response: !!(pl.default_yes && my && my.assumed && pl.creator_id !== viewer), id: pl.id, title: pl.title, starts_at: pl.starts_at || '', place: pl.place || '', description: pl.description || '', audience: pl.audience, creator_id: pl.creator_id,
               counts, can_join: full, can_edit: acc.role === 'host' || pl.creator_id === viewer, my: my ? { status: my.status, guests: Number(my.guests) || 0, assumed: !!my.assumed } : null,
+              ...(full ? { message: (() => { const m = msgs.find(x => x.plan_id === pl.id); return m ? { text: m.body, from: m.sender_id, at: m.created_at } : null; })() } : {}),
               ...(full ? { notes: pl.notes || '', attendees: mine.filter(r => r.status !== 'no').map(r => ({ player: r.player_id, status: r.status, guests: Number(r.guests) || 0 })) } : {}) });
           }
           return json(out);
@@ -3217,28 +3221,44 @@ export default {
         const actor = str(body.player_id, 120);
         const acc = await planAccess(env, pl.gathering_id, actor);
         if (acc.role === 'none') return json({ error: 'You are not invited to this event' }, 403);
+        if (isMsg) {
+          // Message attendees: the creator or host sends one push to the plan's Yes and Maybe players. Push only (no SMS, no contact info).
+          // The latest message is pinned on the plan card; at most 3 per plan per rolling 24 hours.
+          if (pl.status !== 'active') return json({ error: 'This plan was cancelled' }, 400);
+          if (acc.role !== 'host' && pl.creator_id !== actor) return json({ error: 'Only the person who made the plan, or the host, can message attendees' }, 403);
+          const text = str(body.message, 280);
+          if (!text) return json({ error: 'Write a message first' }, 400);
+          const recent = await env.DB.prepare(`SELECT COUNT(*) AS n FROM plan_messages WHERE plan_id = ? AND created_at > datetime('now','-1 day')`).bind(planId).first();
+          if (recent && recent.n >= 3) return json({ error: 'You can send 3 messages per plan per day. Try again tomorrow.' }, 429);
+          await env.DB.prepare(`INSERT INTO plan_messages (plan_id, sender_id, body, created_at) VALUES (?, ?, ?, datetime('now'))`).bind(planId, actor, text).run();
+          const { results: rs } = await env.DB.prepare(`SELECT player_id FROM plan_rsvps WHERE plan_id = ? AND status IN ('yes','maybe')`).bind(planId).all();
+          let to = rs.map(r => r.player_id);
+          if (pl.default_yes) {   // count-me-in plan: every golf Yes player who has not declined is going
+            const { results: assumed } = await env.DB.prepare(`SELECT g.player_id FROM registrations g WHERE g.gathering_id = ? AND g.status = 'yes' AND COALESCE(g.is_placeholder,0) = 0 AND NOT EXISTS (SELECT 1 FROM plan_rsvps x WHERE x.plan_id = ? AND x.player_id = g.player_id)`).bind(pl.gathering_id, planId).all();
+            to = to.concat(assumed.map(r => r.player_id));
+          }
+          if (pl.audience === 'players') {   // a players-only plan reaches only people who still have the golf Yes (creator and host always)
+            const { results: golfYes } = await env.DB.prepare(`SELECT player_id FROM registrations WHERE gathering_id = ? AND status = 'yes' AND COALESCE(is_placeholder,0) = 0`).bind(pl.gathering_id).all();
+            to = to.filter(id => id === pl.creator_id || (acc.g && id === acc.g.host_id) || golfYes.some(g => g.player_id === id));
+          }
+          to = [...new Set(to)].filter(id => id && id !== actor);
+          let notified = 0;
+          if (env.OS_APP_ID && env.OS_REST_KEY) {
+            const sends = to.map(id => fetch('https://onesignal.com/api/v1/notifications', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
+              body: JSON.stringify({ app_id: env.OS_APP_ID, headings: { en: '📣 ' + pl.title + ' · from ' + actor }, contents: { en: text }, filters: [{ field: 'tag', key: 'player_name', relation: '=', value: id }], url: 'https://birdiefriends.com/portal.html' }) }).catch(e => console.warn('Plan message push failed:', e)));
+            notified = sends.length;
+            if (ctx && ctx.waitUntil) ctx.waitUntil(Promise.all(sends)); else await Promise.all(sends);
+          }
+          return json({ ok: true, notified, message: { text, from: actor, at: new Date().toISOString().replace('T', ' ').slice(0, 19) } });
+        }
         if (isRsvp) {
           if (pl.status !== 'active') return json({ error: 'This plan was cancelled' }, 400);
           if (!planCanJoin(pl, acc.role, actor)) return json({ error: pl.audience === 'players' ? 'This plan is for players who said Yes' : 'You cannot join this plan' }, 403);
           const st = str(body.status, 8), guests = Math.max(0, Math.min(10, Math.floor(Number(body.guests) || 0)));
           if (!['yes', 'maybe', 'no'].includes(st)) return json({ error: 'status must be yes, maybe or no' }, 400);
-          const prevRsvp = await env.DB.prepare(`SELECT status, guests FROM plan_rsvps WHERE plan_id = ? AND player_id = ?`).bind(planId, actor).first();
           await env.DB.prepare(`INSERT INTO plan_rsvps (plan_id, player_id, status, guests, updated_at) VALUES (?, ?, ?, ?, datetime('now'))
             ON CONFLICT(plan_id, player_id) DO UPDATE SET status = excluded.status, guests = excluded.guests, updated_at = excluded.updated_at`).bind(planId, actor, st, st === 'yes' ? guests : 0).run();
-          // Push to the plan's creator when someone's answer changes (never for their own RSVP, and not when nothing changed).
-          // A first-ever "No" from someone who never said Yes/Maybe is skipped: there is nothing for the creator to act on.
-          const newGuests = st === 'yes' ? guests : 0;
-          const changed = prevRsvp ? (prevRsvp.status !== st || (Number(prevRsvp.guests) || 0) !== newGuests) : st !== 'no';
-          let creatorNotified = 0;
-          if (changed && body.notify !== false && pl.creator_id && pl.creator_id !== actor && env.OS_APP_ID && env.OS_REST_KEY) {
-            const word = st === 'yes' ? 'is in' : st === 'maybe' ? 'is a maybe' : 'can no longer make it';
-            const msg = `${actor} ${word}${st === 'yes' && newGuests ? ' (+' + newGuests + ' guest' + (newGuests > 1 ? 's' : '') + ')' : ''}`;
-            const send = fetch('https://onesignal.com/api/v1/notifications', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
-              body: JSON.stringify({ app_id: env.OS_APP_ID, headings: { en: '📌 ' + pl.title }, contents: { en: msg }, filters: [{ field: 'tag', key: 'player_name', relation: '=', value: pl.creator_id }], url: 'https://birdiefriends.com/portal.html' }) }).catch(e => console.warn('Plan RSVP push failed:', e));
-            creatorNotified = 1;
-            if (ctx && ctx.waitUntil) ctx.waitUntil(send); else await send;
-          }
-          return json({ ok: true, status: st, guests: newGuests, creator_notified: creatorNotified });
+          return json({ ok: true, status: st, guests: st === 'yes' ? guests : 0 });
         }
         if (acc.role !== 'host' && pl.creator_id !== actor) return json({ error: 'Only the person who made the plan, or the host, can change it' }, 403);
         const sets = [], binds = [];
@@ -3868,6 +3888,9 @@ async function ensurePlansTables(env) {
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS plan_rsvps (
     plan_id INTEGER NOT NULL, player_id TEXT NOT NULL, status TEXT NOT NULL, guests INTEGER NOT NULL DEFAULT 0, updated_at TEXT,
     PRIMARY KEY (plan_id, player_id))`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS plan_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER NOT NULL, sender_id TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT)`).run();
+  await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_plan_messages_p ON plan_messages (plan_id)`).run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS gathering_plan_settings (
     gathering_id INTEGER PRIMARY KEY, who_can_create TEXT NOT NULL DEFAULT 'players', updated_by TEXT, updated_at TEXT)`).run();
 }

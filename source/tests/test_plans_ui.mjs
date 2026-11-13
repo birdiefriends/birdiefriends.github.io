@@ -6,8 +6,8 @@ const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const ctx = { console, escapeHtml: s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'), escapeHtmlAttr: s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;') };
 vm.createContext(ctx);
-const names = ['plansWhen','plansCountText','plansRoleNote','plansCardHtml','plansFormHtml','plansHtml','plansPromptHtml','plansLeaveHtml'];
-vm.runInContext(names.map(n => extractFn(src, n)).join('\n') + '\nthis.H=plansHtml; this.W=plansWhen; this.C=plansCountText; this.CARD=plansCardHtml; this.PR=plansPromptHtml; this.LV=plansLeaveHtml;', ctx);
+const names = ['plansMsgTime','plansWhen','plansCountText','plansRoleNote','plansCardHtml','plansFormHtml','plansHtml','plansPromptHtml','plansLeaveHtml'];
+vm.runInContext('var _plansMsgId = null, _plansMsgText = "";\n' + names.map(n => extractFn(src, n)).join('\n') + '\nthis.H=plansHtml; this.MT=plansMsgTime; this.W=plansWhen; this.C=plansCountText; this.CARD=plansCardHtml; this.PR=plansPromptHtml; this.LV=plansLeaveHtml;', ctx);
 ok(ctx.W('2026-11-15T07:00') === 'Sun, Nov 15 · 7:00 AM' && ctx.W('2026-11-15T13:30').endsWith('1:30 PM') && ctx.W('') === '', 'when text');
 ok(ctx.C({ yes: 3, guests: 2, maybe: 1 }) === '3 going (+2 guests) · 1 maybe' && ctx.C({ yes: 1, guests: 1 }) === '1 going (+1 guest)', 'count text');
 const pl = (o) => Object.assign({ id: 1, title: 'Breakfast <b>', starts_at: '2026-11-15T07:00', place: 'Grill', description: 'Eggs', audience: 'invited', creator_id: 'Ann', counts: { yes: 2, maybe: 0, no: 0, guests: 0 }, can_join: true, can_edit: false, my: null, notes: 'back room', attendees: [{ player: 'Ann', status: 'yes', guests: 0 }] }, o || {});
@@ -56,3 +56,15 @@ ok((lv.match(/class="plans-leave-cb"[^>]*checked/g) || []).length === 2 && /valu
 ok(/Untick any you still want to join/.test(lv) && /Players only, so you drop out/.test(lv) && /Keep my plans as they are/.test(lv), 'leave dialog wording');
 ok(/plansLeavePrompt\(evt\);\s*\/\/ they were in side plans/.test(src) && /plans\/leave/.test(src), 'unregistering from a Gathering opens the plans dialog');
 console.log(`plans_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
+
+// Message attendees: button for creator/host only, composer when open, latest message pinned with who and when.
+h = ctx.H(d({ plans: [pl({ can_edit: true })] }), 1, null);
+ok(/plansMsgOpen\(1\)/.test(h) && /Message attendees/.test(h) && !/plans-msg-text/.test(h), 'creator/host sees Message attendees, composer closed');
+h = ctx.H(d({ plans: [pl()] }), 1, null); ok(!/Message attendees/.test(h), 'a plain attendee has no Message attendees button');
+ctx.eval('_plansMsgId = 1; _plansMsgText = "Bring <cash>"');
+h = ctx.H(d({ plans: [pl({ can_edit: true })] }), 1, null);
+ok(/id="plans-msg-text"/.test(h) && /Bring &lt;cash&gt;/.test(h) && /plansMsgSend\(1\)/.test(h), 'composer open, draft escaped');
+ctx.eval('_plansMsgId = null; _plansMsgText = ""');
+h = ctx.H(d({ plans: [pl({ message: { text: 'Leaving at 7 <sharp>', from: 'Dave', at: '2026-11-14 22:30:00' } })] }), null, null);
+ok(/Leaving at 7 &lt;sharp&gt;/.test(h) && />Dave</.test(h) && /📣/.test(h), 'latest message is pinned on the collapsed card with sender, text escaped');
+ok(ctx.MT('') === '' && ctx.MT('garbage') === '' && ctx.MT('2026-11-14 22:30:00') !== '', 'message time formats, bad input is blank');
