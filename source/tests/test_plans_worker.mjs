@@ -108,4 +108,21 @@ r = await call('GET', '/plans/pending?player_id=Brian%20Hager'); ok(r.json.plans
 r = await call('GET', '/plans/summary?player_id=Ann%20Player'); ok(r.json.counts['104'] >= 3 && !r.json.counts['105'], 'summary counts plans per visible Gathering: ' + JSON.stringify(r.json));
 r = await call('GET', '/plans/summary?player_id=Stranger'); ok(Object.keys(r.json.counts).length === 0, 'a stranger gets no counts');
 r = await call('GET', '/plans/summary?player_id=Ed%20Invited'); ok(r.json.counts['104'] >= 3, 'a Crew member sees the count');
+// unregistering: the player's plans are listed, and leaving drops them (Ann made plan 1 and the dinner, so Bob is the joiner)
+await call('POST', `/plans/1/rsvp`, { player_id: 'Bob Player', status: 'yes' });            // Bob in Breakfast (open to all invited)
+await call('POST', `/plans/${pid2}/rsvp`, { player_id: 'Bob Player', status: 'maybe' });   // and the players-only dinner
+r = await call('GET', '/plans/mine?gathering_id=104&player_id=Bob%20Player');
+ok(r.json.plans.find(p => p.id === pid2 && p.keepable === false) && r.json.plans.find(p => p.id === 1 && p.keepable === true), 'mine lists his plans; players-only ones are not keepable: ' + JSON.stringify(r.json.plans.map(p => [p.id, p.keepable])));
+r = await call('GET', '/plans/mine?gathering_id=104&player_id=Ann%20Player'); ok(!r.json.plans.some(p => p.id === 1 || p.id === pid2), 'plans a player made are not listed for them');
+db.exec("UPDATE registrations SET status='no' WHERE gathering_id=104 AND player_id='Bob Player'");   // Bob unregisters from the golf event
+r = await view(104, 'Ed Invited'); let dinner = r.json.plans.find(p => p.id === pid2);
+ok(dinner.counts.yes === 1 && dinner.counts.maybe === 0, 'a players-only plan stops counting someone who is no longer a golf Yes (safety net): ' + JSON.stringify(dinner.counts));
+const brk = r.json.plans.find(p => p.id === 1); ok(brk.counts.yes === 2, 'an open plan still counts him until he leaves it');
+r = await call('POST', '/plans/leave', { gathering_id: 104, player_id: 'Bob Player', plan_ids: [pid2] }); ok(r.json.left === 1, 'leave drops just the chosen plan');
+r = await view(104, 'Ed Invited'); ok(r.json.plans.find(p => p.id === 1).counts.yes === 2, 'the plan he kept still counts him');
+r = await call('POST', '/plans/leave', { gathering_id: 104, player_id: 'Bob Player' }); ok(r.json.left >= 1, 'no plan_ids means leave everything');
+r = await call('GET', '/plans/mine?gathering_id=104&player_id=Bob%20Player'); ok(r.json.plans.length === 0, 'nothing left to list');
+r = await view(104, 'Ed Invited'); ok(r.json.plans.find(p => p.id === 1).counts.yes === 1, 'and the open plan count dropped');
+r = await call('POST', '/plans/leave', { gathering_id: 104 }); ok(r.status === 400, 'leave needs a player');
+db.exec("UPDATE registrations SET status='yes' WHERE gathering_id=104 AND player_id='Bob Player'");
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

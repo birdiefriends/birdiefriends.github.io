@@ -6,8 +6,8 @@ const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const ctx = { console, escapeHtml: s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'), escapeHtmlAttr: s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;') };
 vm.createContext(ctx);
-const names = ['plansWhen','plansCountText','plansRoleNote','plansCardHtml','plansFormHtml','plansHtml','plansPromptHtml'];
-vm.runInContext(names.map(n => extractFn(src, n)).join('\n') + '\nthis.H=plansHtml; this.W=plansWhen; this.C=plansCountText; this.CARD=plansCardHtml; this.PR=plansPromptHtml;', ctx);
+const names = ['plansWhen','plansCountText','plansRoleNote','plansCardHtml','plansFormHtml','plansHtml','plansPromptHtml','plansLeaveHtml'];
+vm.runInContext(names.map(n => extractFn(src, n)).join('\n') + '\nthis.H=plansHtml; this.W=plansWhen; this.C=plansCountText; this.CARD=plansCardHtml; this.PR=plansPromptHtml; this.LV=plansLeaveHtml;', ctx);
 ok(ctx.W('2026-11-15T07:00') === 'Sun, Nov 15 · 7:00 AM' && ctx.W('2026-11-15T13:30').endsWith('1:30 PM') && ctx.W('') === '', 'when text');
 ok(ctx.C({ yes: 3, guests: 2, maybe: 1 }) === '3 going (+2 guests) · 1 maybe' && ctx.C({ yes: 1, guests: 1 }) === '1 going (+1 guest)', 'count text');
 const pl = (o) => Object.assign({ id: 1, title: 'Breakfast <b>', starts_at: '2026-11-15T07:00', place: 'Grill', description: 'Eggs', audience: 'invited', creator_id: 'Ann', counts: { yes: 2, maybe: 0, no: 0, guests: 0 }, can_join: true, can_edit: false, my: null, notes: 'back room', attendees: [{ player: 'Ann', status: 'yes', guests: 0 }] }, o || {});
@@ -51,4 +51,8 @@ ok(/<b>Going:<\/b> A, B, C, D, E, F \+1 more/.test(h), 'a collapsed opt-in plan 
 h = ctx.H(d({ plans: [pl({ default_yes: true, attendees: [{ player: 'A', status: 'yes', guests: 0 }] })] }), null, null); ok(!/Going:/.test(h), 'but not a count-me-in plan');
 h = ctx.H(d({ plans: [pl({ can_join: false, attendees: undefined })] }), null, null); ok(!/Going:/.test(h), 'nor to someone without access');
 ok(/if \(choice === 'Yes' && !\(regResult && regResult\.downgraded\)\) plansPendingLoad\(true\);/.test(src) && /function plansPromptOpen\(list, force\)/.test(src) && /if \(!force\) \{ try \{ if \(sessionStorage/.test(src), 'a new Yes triggers the plans prompt right away, even after an earlier Not now');
+const lv = ctx.LV([{ id: 1, title: 'Breakfast', starts_at: '2026-11-15T07:30', keepable: true }, { id: 2, title: 'Players dinner', starts_at: '', keepable: false }], '2026 Turkey 2Man');
+ok((lv.match(/class="plans-leave-cb"[^>]*checked/g) || []).length === 2 && /value="2" checked disabled/.test(lv) && !/value="1" checked disabled/.test(lv), 'leave dialog: everything ticked by default, a players-only plan is locked');
+ok(/Untick any you still want to join/.test(lv) && /Players only, so you drop out/.test(lv) && /Keep my plans as they are/.test(lv), 'leave dialog wording');
+ok(/plansLeavePrompt\(evt\);\s*\/\/ they were in side plans/.test(src) && /plans\/leave/.test(src), 'unregistering from a Gathering opens the plans dialog');
 console.log(`plans_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

@@ -3087,7 +3087,7 @@ export default {
     //   POST /plans/:id                           edit or cancel { player_id, title?.., status?:'cancelled' }  (creator or host)
     //   POST /plans/:id/rsvp                      { player_id, status: yes|maybe|no, guests? }
     //   POST /plans/settings                      { gathering_id, host_id, who_can_create: players|invited|host }
-    const plMatch = url.pathname.match(/^\/plans(?:\/(settings|pending|summary|\d+)(\/rsvp)?)?$/);
+    const plMatch = url.pathname.match(/^\/plans(?:\/(settings|pending|summary|mine|leave|\d+)(\/rsvp)?)?$/);
     if (plMatch) {
       const json = (obj, status) => new Response(JSON.stringify(obj), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       try {
@@ -3096,6 +3096,23 @@ export default {
         if (request.method === 'POST') { try { body = await request.json(); } catch (e) { return json({ error: 'Invalid JSON' }, 400); } }
         const seg = plMatch[1], isRsvp = !!plMatch[2];
         const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+        if (request.method === 'GET' && seg === 'mine') {
+          // The plans this player is in (Yes or Maybe) on a Gathering, for the "you are unregistering" prompt. Plans they made are not listed.
+          const gid = Number(url.searchParams.get('gathering_id')), who = str(url.searchParams.get('player_id'), 120);
+          if (!gid || !who) return json({ ok: true, plans: [] });
+          const { results } = await env.DB.prepare(`SELECT p.id, p.title, p.starts_at, p.audience, r.status FROM gathering_plans p JOIN plan_rsvps r ON r.plan_id = p.id AND r.player_id = ?
+            WHERE p.gathering_id = ? AND p.status = 'active' AND p.creator_id != ? AND r.status IN ('yes','maybe') ORDER BY COALESCE(NULLIF(p.starts_at,''), '9999'), p.id`).bind(who, gid, who).all();
+          return json({ ok: true, plans: results.map(r => ({ id: r.id, title: r.title, starts_at: r.starts_at || '', audience: r.audience, status: r.status, keepable: r.audience !== 'players' })) });
+        }
+        if (request.method === 'POST' && seg === 'leave') {
+          // Drop out of plans (sets the RSVP to No). Only ever reduces participation, so it needs no access check beyond the player's own row.
+          const gid = Number(body.gathering_id), who = str(body.player_id, 120), ids = Array.isArray(body.plan_ids) ? body.plan_ids.map(Number).filter(Boolean) : null;
+          if (!gid || !who) return json({ error: 'gathering_id and player_id are required' }, 400);
+          const { results } = await env.DB.prepare(`SELECT p.id FROM gathering_plans p JOIN plan_rsvps r ON r.plan_id = p.id AND r.player_id = ? WHERE p.gathering_id = ? AND p.creator_id != ? AND r.status IN ('yes','maybe')`).bind(who, gid, who).all();
+          let n = 0;
+          for (const r of results) { if (ids && !ids.includes(r.id)) continue; await env.DB.prepare(`UPDATE plan_rsvps SET status = 'no', guests = 0, updated_at = datetime('now') WHERE plan_id = ? AND player_id = ?`).bind(r.id, who).run(); n++; }
+          return json({ ok: true, left: n });
+        }
         if (request.method === 'GET' && seg === 'summary') {
           // How many active plans each upcoming Gathering has, for the count on the event card (only Gatherings this player can see).
           const who = str(url.searchParams.get('player_id'), 120);
@@ -3142,7 +3159,9 @@ export default {
           const { results: rs } = await env.DB.prepare(`SELECT r.plan_id, r.player_id, r.status, r.guests FROM plan_rsvps r JOIN gathering_plans p ON p.id = r.plan_id WHERE p.gathering_id = ? ORDER BY r.updated_at`).bind(gid).all();
           const { results: golfYes } = await env.DB.prepare(`SELECT player_id FROM registrations WHERE gathering_id = ? AND status = 'yes' AND COALESCE(is_placeholder,0) = 0`).bind(gid).all();
           for (const pl of plans) {
-            const mine = rs.filter(r => r.plan_id === pl.id).map(r => ({ ...r }));
+            let mine = rs.filter(r => r.plan_id === pl.id).map(r => ({ ...r }));
+            // A players-only plan counts only people who still have the golf Yes (the creator and host always count), so unregistering never leaves a ghost in the count.
+            if (pl.audience === 'players') mine = mine.filter(r => r.player_id === pl.creator_id || (acc.g && r.player_id === acc.g.host_id) || golfYes.some(g => g.player_id === r.player_id));
             // A default-Yes plan counts every golf Yes player as going until they decline.
             if (pl.default_yes) golfYes.forEach(g => { if (!mine.some(r => r.player_id === g.player_id)) mine.push({ plan_id: pl.id, player_id: g.player_id, status: 'yes', guests: 0, assumed: true }); });
             const counts = { yes: 0, maybe: 0, no: 0, guests: 0 };

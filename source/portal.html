@@ -3189,6 +3189,13 @@ body {
     <button class="btn btn-secondary btn-sm" style="width:100%;margin-top:10px" onclick="plansPromptLater()">Not now</button>
   </div>
 </div>
+<div class="bf-modal-overlay" id="plans-leave-modal" onclick="closeModalOnOverlay(event,'plans-leave-modal')" style="z-index:9500">
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div class="bf-modal-title" style="margin-bottom:4px">📌 Your plans</div>
+    <div id="plans-leave-body"></div>
+  </div>
+</div>
 <div class="bf-modal-overlay" id="plans-modal" onclick="closeModalOnOverlay(event,'plans-modal')" style="z-index:9000">
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
@@ -8278,6 +8285,7 @@ async function submitGatheringRegistration(evt, choice, submitBtn, opts) {
       // misleading "registered" state. Dev-45 round 2.
       dismissEvent(evt.id);
       showToast(`Marked as not attending ${evt.name}`);
+      plansLeavePrompt(evt);   // they were in side plans for this event: unregister from them too, unless they pick otherwise
     } else {
       restoreEvent(evt.id);
       showToast(
@@ -17636,6 +17644,34 @@ function plansPromptHtml(list) {
       <div style="display:flex;gap:6px;margin-top:8px">${b('yes', p.default_yes ? '✅ Confirm' : '✅ Yes')}${b('maybe', '🤔 Maybe')}${b('no', p.default_yes ? '✕ Decline' : '✕ No')}</div>
     </div>`;
   }).join('');
+}
+let _plansLeaveEvt = null;
+function plansLeaveHtml(list, evtName) {
+  const rows = list.map(p => `<label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.86rem">
+      <input type="checkbox" class="plans-leave-cb" value="${p.id}" checked${p.keepable ? '' : ' disabled'} style="margin-top:3px">
+      <span><b>${escapeHtml(p.title)}</b>${p.starts_at ? ' <span style="color:var(--text-muted)">· ' + escapeHtml(plansWhen(p.starts_at)) + '</span>' : ''}${p.keepable ? '' : '<br><span style="font-size:0.74rem;color:var(--text-hint)">Players only, so you drop out with the event</span>'}</span></label>`).join('');
+  return `<div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px">You were in ${list.length === 1 ? 'a plan' : list.length + ' plans'} for ${escapeHtml(evtName)}. Drop out of ${list.length === 1 ? 'it' : 'them'} too? Untick any you still want to join.</div>${rows}
+    <button class="btn btn-primary btn-sm" style="width:100%;margin-top:12px" onclick="plansLeaveGo()">Update my plans</button>
+    <button class="btn btn-secondary btn-sm" style="width:100%;margin-top:6px" onclick="closeModal('plans-leave-modal')">Keep my plans as they are</button>`;
+}
+async function plansLeavePrompt(evt) {
+  if (!evt || evt.gatheringId == null || !currentPlayer) return;
+  try {
+    const r = await fetch(`${GATHERINGS_API}/plans/mine?gathering_id=${evt.gatheringId}&player_id=${encodeURIComponent(currentPlayer)}`);
+    const j = await r.json();
+    if (!j.plans || !j.plans.length) return;
+    _plansLeaveEvt = evt;
+    document.getElementById('plans-leave-body').innerHTML = plansLeaveHtml(j.plans, evt.name);
+    openModal('plans-leave-modal');
+  } catch (e) { /* the golf unregister already worked; plans just stay as they are */ }
+}
+async function plansLeaveGo() {
+  const evt = _plansLeaveEvt; if (!evt) return;
+  const boxes = [...document.querySelectorAll('#plans-leave-body .plans-leave-cb')];
+  const ids = boxes.filter(b => b.checked).map(b => Number(b.value));
+  const j = ids.length ? await plansPost('/plans/leave', { gathering_id: evt.gatheringId, player_id: currentPlayer, plan_ids: ids }) : { ok: true };
+  closeModal('plans-leave-modal');
+  if (j) { showToast(ids.length ? 'Dropped out of your plans' : 'Plans left as they are'); plansPendingLoad(); }
 }
 let _plansPromptList = [];
 function plansPromptOpen(list, force) {
