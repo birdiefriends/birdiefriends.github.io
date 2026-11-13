@@ -138,4 +138,24 @@ ok(log.json.alerts.some(a => a.kind === 'AllIn' && a.status === 'sent'), 'the al
   await call('POST', '/bfe/hole-final', { event_name: ek, hole: 9, players: ['Cy'] });
   ok(pushes.length === before + 3, 'the right player\'s hole-final announces their eagle');
 }
+// Shotgun: a group that starts on hole 7 plays 7..18 then 1..6. Cards fill in that order, not 1..18.
+{
+  putGames(131, ['skins'], {}); const ek = 'gathering:131';
+  const holes = scored => Array.from({ length: 18 }, (_, i) => (scored.includes(i + 1) ? 4 : null));
+  const save = (player, scored, m) => call('POST', '/scorecards', { event_name: ek, player, holes: holes(scored), marks: marksWith(m), input_type: 'strokes' });
+  const seq = (from, n) => Array.from({ length: n }, (_, i) => ((from - 1 + i) % 18) + 1);
+  const before = pushes.length;
+  await save('Sam', seq(7, 1), {});
+  await call('POST', '/bfe/hole-final', { event_name: ek, hole: 7, players: ['Sam'] });   // the phone is signalling, so the old guess is off
+  // their LAST hole (6) is birdied; hole 7 (their start hole, numerically next) already has a score
+  await save('Sam', seq(7, 18), { 6: 'birdie' });
+  ok(pushes.length === before, 'last hole of a shotgun group (hole 6, next numeric hole 7 already scored) waits for the signal');
+  await call('POST', '/bfe/hole-final', { event_name: ek, hole: 6, players: ['Sam'] });
+  ok(pushes.length === before + 1, 'Post Round (hole-final on hole 6) announces it');
+  // hole 18 then hole 1: an 18 birdie is final when the phone says so, not by a hole 19
+  await save('Sam', seq(7, 18), { 6: 'birdie', 18: 'birdie' });
+  ok(pushes.length === before + 1, 'a birdie on 18 waits too (there is no hole 19 to prove it final)');
+  await call('POST', '/bfe/hole-final', { event_name: ek, hole: 18, players: ['Sam'] });
+  ok(pushes.length === before + 2, 'advancing from 18 to 1 sends the signal and announces it');
+}
 console.log(`score alerts worker: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

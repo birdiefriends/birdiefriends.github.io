@@ -1395,8 +1395,13 @@ async function scanScoreAlerts(env, eventName) {
   for (const u of units) {
     const src = u.members.map(n => by.get(lc(n))).find(r => r && Array.isArray(r.marks) && r.marks.length === 18);
     if (!src) continue;
+    // A phone that sends hole-final signals is the authority on when a hole is done. Only a unit that has never sent one (an older app)
+    // falls back to "hole h+1 has a score", and that guess assumes holes are played 1..18 in order. It is wrong for a shotgun group
+    // (start on 7: 18 is followed by 1, and the hole before the start hole looks final the moment it is scored), so it is not used
+    // once the phone is signalling.
+    const signals = u.members.some(n => (finals || []).some(f => f.player_lc === lc(n)));
     const isFinal = h => u.members.some(n => finalSet.has(h + '|' + lc(n))) ||
-      (h < 18 && u.members.some(n => { const c = by.get(lc(n)); return c && Array.isArray(c.holes) && Number(c.holes[h]) > 0; }));   // hole h+1 scored
+      (!signals && h < 18 && u.members.some(n => { const c = by.get(lc(n)); return c && Array.isArray(c.holes) && Number(c.holes[h]) > 0; }));   // hole h+1 scored (old apps only)
     for (let h = 1; h <= 18; h++) {
       const k = ALERT_KINDS[src.marks[h - 1]]; if (!k) continue;
       if (!isFinal(h)) continue;                                  // not final yet: say nothing, a later save or the hole-final signal will pick it up
