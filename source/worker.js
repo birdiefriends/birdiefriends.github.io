@@ -3097,14 +3097,25 @@ export default {
         const seg = plMatch[1], isRsvp = !!plMatch[2];
         const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
         if (request.method === 'GET' && seg === 'pending') {
-          // Which Gatherings have a plan waiting on this player (a default-Yes plan they have not confirmed or declined).
+          // Plans waiting on this player: a golf Yes player who has not answered (or, on a count-me-in plan, has not confirmed).
+          // Upcoming Gatherings only; never the plan's own creator.
           const who = str(url.searchParams.get('player_id'), 120);
-          if (!who) return json({ ok: true, gathering_ids: [] });
-          const { results } = await env.DB.prepare(`SELECT DISTINCT p.gathering_id AS gid FROM gathering_plans p
-            JOIN registrations g ON g.gathering_id = p.gathering_id AND g.player_id = ? AND g.status = 'yes'
-            WHERE p.status = 'active' AND p.default_yes = 1 AND p.creator_id != ?
-              AND NOT EXISTS (SELECT 1 FROM plan_rsvps r WHERE r.plan_id = p.id AND r.player_id = ?)`).bind(who, who, who).all();
-          return json({ ok: true, gathering_ids: results.map(r => r.gid) });
+          if (!who) return json({ ok: true, gathering_ids: [], plans: [] });
+          const { results } = await env.DB.prepare(`SELECT p.id, p.gathering_id, p.title, p.starts_at, p.place, p.description, p.default_yes, p.audience, g.title AS gathering_title, g.event_time
+            FROM gathering_plans p
+            JOIN gatherings g ON g.id = p.gathering_id AND COALESCE(g.status,'active') != 'cancelled' AND substr(COALESCE(g.event_time,''),1,10) >= date('now','-1 day')
+            JOIN registrations reg ON reg.gathering_id = p.gathering_id AND reg.player_id = ? AND reg.status = 'yes'
+            WHERE p.status = 'active' AND p.creator_id != ?
+              AND NOT EXISTS (SELECT 1 FROM plan_rsvps r WHERE r.plan_id = p.id AND r.player_id = ?)
+            ORDER BY g.event_time, COALESCE(NULLIF(p.starts_at,''), '9999'), p.id`).bind(who, who, who).all();
+          const plans = [];
+          for (const r of results) {
+            const { results: rs } = await env.DB.prepare(`SELECT status, guests FROM plan_rsvps WHERE plan_id = ?`).bind(r.id).all();
+            let yes = rs.filter(x => x.status === 'yes').length, guests = rs.filter(x => x.status === 'yes').reduce((a, x) => a + (Number(x.guests) || 0), 0);
+            if (r.default_yes) { const c = await env.DB.prepare(`SELECT COUNT(*) AS n FROM registrations g WHERE g.gathering_id = ? AND g.status = 'yes' AND COALESCE(g.is_placeholder,0) = 0 AND NOT EXISTS (SELECT 1 FROM plan_rsvps x WHERE x.plan_id = ? AND x.player_id = g.player_id)`).bind(r.gathering_id, r.id).first(); yes += (c && c.n) || 0; }
+            plans.push({ id: r.id, gathering_id: r.gathering_id, gathering_title: r.gathering_title || '', event_time: r.event_time || '', title: r.title, starts_at: r.starts_at || '', place: r.place || '', description: r.description || '', default_yes: !!r.default_yes, counts: { yes, guests } });
+          }
+          return json({ ok: true, gathering_ids: [...new Set(plans.map(x => x.gathering_id))], plans });
         }
         if (request.method === 'GET' && !seg) {
           const gid = Number(url.searchParams.get('gathering_id')), viewer = str(url.searchParams.get('player_id'), 120);

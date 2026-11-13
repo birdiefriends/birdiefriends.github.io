@@ -3181,6 +3181,14 @@ body {
     <div id="card-photo-list" style="display:flex;flex-wrap:wrap;gap:10px;max-height:50vh;overflow-y:auto"></div>
   </div>
 </div>
+<div class="bf-modal-overlay" id="plans-prompt-modal" onclick="closeModalOnOverlay(event,'plans-prompt-modal')" style="z-index:9500">
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div class="bf-modal-title" style="margin-bottom:4px">📌 Are you in?</div>
+    <div id="plans-prompt-body" style="max-height:65vh;overflow-y:auto"></div>
+    <button class="btn btn-secondary btn-sm" style="width:100%;margin-top:10px" onclick="plansPromptLater()">Not now</button>
+  </div>
+</div>
 <div class="bf-modal-overlay" id="plans-modal" onclick="closeModalOnOverlay(event,'plans-modal')" style="z-index:9000">
   <div class="bf-modal">
     <div class="bf-modal-handle"></div>
@@ -17600,6 +17608,42 @@ function plansApplyDots() {
     else if (!on && dot) dot.remove();
   });
 }
+function plansPromptHtml(list) {
+  if (!list || !list.length) return '';
+  return list.map(p => {
+    const meta = [plansWhen(p.starts_at), p.place].filter(Boolean).map(escapeHtml).join(' · ');
+    const c = p.counts || {};
+    const b = (st, label) => `<button class="btn btn-sm ${st === 'yes' ? 'btn-primary' : 'btn-secondary'}" style="flex:1;font-size:0.8rem" onclick="plansPromptAnswer(${p.id},'${st}')">${label}</button>`;
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:8px 0">
+      <div style="font-size:0.72rem;color:var(--text-hint)">${escapeHtml(p.gathering_title || 'Event')}</div>
+      <div style="font-weight:700;font-size:0.92rem">${escapeHtml(p.title)}</div>
+      ${meta ? `<div style="font-size:0.78rem;color:var(--text-muted)">${meta}</div>` : ''}
+      ${p.description ? `<div style="font-size:0.8rem;margin-top:4px;white-space:pre-wrap">${escapeHtml(p.description)}</div>` : ''}
+      <div style="font-size:0.76rem;color:var(--text-muted);margin-top:4px">${p.default_yes ? 'You are counted in. Please confirm or decline. ' : ''}${c.yes || 0} going so far</div>
+      <div style="display:flex;gap:6px;margin-top:8px">${b('yes', p.default_yes ? '✅ Confirm' : '✅ Yes')}${b('maybe', '🤔 Maybe')}${b('no', p.default_yes ? '✕ Decline' : '✕ No')}</div>
+    </div>`;
+  }).join('');
+}
+let _plansPromptList = [];
+function plansPromptOpen(list) {
+  if (!list.length) return;
+  try { if (sessionStorage.getItem('bf_plans_prompt_later')) return; } catch (e) {}
+  if (document.querySelector('.bf-modal-overlay.open')) return;                  // never on top of something the player is doing
+  if (typeof getLiveEvent === 'function' && getLiveEvent()) return;               // never over a live round; the icon dot still shows
+  _plansPromptList = list.slice();
+  document.getElementById('plans-prompt-body').innerHTML = plansPromptHtml(_plansPromptList);
+  openModal('plans-prompt-modal');
+}
+function plansPromptLater() { try { sessionStorage.setItem('bf_plans_prompt_later', '1'); } catch (e) {} closeModal('plans-prompt-modal'); }
+async function plansPromptAnswer(id, status) {
+  const j = await plansPost(`/plans/${id}/rsvp`, { player_id: currentPlayer, status, guests: 0 });
+  if (!j) return;
+  _plansPromptList = _plansPromptList.filter(p => p.id !== id);
+  const el = document.getElementById('plans-prompt-body');
+  if (el) el.innerHTML = plansPromptHtml(_plansPromptList);
+  if (!_plansPromptList.length) closeModal('plans-prompt-modal');
+  plansPendingLoad();
+}
 async function plansPendingLoad() {
   if (!currentPlayer) return;
   try {
@@ -17607,6 +17651,7 @@ async function plansPendingLoad() {
     const j = await r.json();
     _plansPending = new Set((j.gathering_ids || []).map(Number));
     plansApplyDots();
+    plansPromptOpen(j.plans || []);
   } catch (e) { /* the dot is a nicety */ }
 }
 function plansWhen(s) {

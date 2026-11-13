@@ -95,10 +95,13 @@ ok(pp.default_yes && pp.counts.yes === 3 && pp.my.assumed && pp.needs_response, 
 r = await view(104, 'Brian Hager'); pp = r.json.plans.find(p => p.id === pz); ok(!pp.needs_response && !pp.my.assumed, 'the creator is not prompted');
 r = await view(104, 'Ed Invited'); pp = r.json.plans.find(p => p.id === pz); ok(pp.counts.yes === 3 && !pp.needs_response && pp.can_join === false, 'a non-player is not assumed or prompted');
 r = await call('GET', '/plans/pending?player_id=Ann%20Player'); ok(JSON.stringify(r.json.gathering_ids) === '[104]', 'pending lists the Gathering for Ann: ' + JSON.stringify(r.json));
+ok(r.json.plans.some(p => p.id === pz && p.default_yes && p.counts.yes === 3 && p.gathering_title === '2026 Turkey 2Man'), 'pending carries the plan details for the launch prompt: ' + JSON.stringify(r.json.plans.map(p => [p.id, p.title])));
+ok(r.json.plans.some(p => p.id !== pz), 'it also lists plans she simply has not answered yet (not only count-me-in ones)');
 r = await call('GET', '/plans/pending?player_id=Ed%20Invited'); ok(r.json.gathering_ids.length === 0, 'and not for a non-player');
 await call('POST', `/plans/${pz}/rsvp`, { player_id: 'Ann Player', status: 'no' });
 r = await view(104, 'Ann Player'); pp = r.json.plans.find(p => p.id === pz); ok(pp.counts.yes === 2 && pp.counts.no === 1 && !pp.needs_response && pp.my.status === 'no', 'declining takes her out of the count and clears the prompt');
 await call('POST', `/plans/${pz}/rsvp`, { player_id: 'Bob Player', status: 'yes' });
-r = await call('GET', '/plans/pending?player_id=Ann%20Player'); ok(r.json.gathering_ids.length === 0, 'once answered nothing is pending');
-r = await call('GET', '/plans/pending?player_id=Bob%20Player'); ok(r.json.gathering_ids.length === 0, 'confirming also clears it');
+r = await call('GET', '/plans/pending?player_id=Ann%20Player'); ok(!r.json.plans.some(p => p.id === pz), 'once answered, that plan is no longer pending');
+r = await call('GET', '/plans/pending?player_id=Bob%20Player'); ok(!r.json.plans.some(p => p.id === pz), 'confirming also clears it');
+r = await call('GET', '/plans/pending?player_id=Brian%20Hager'); ok(r.json.plans.length === 0, 'a creator is never prompted for their own plans');
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

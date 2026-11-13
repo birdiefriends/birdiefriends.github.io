@@ -6,8 +6,8 @@ const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const ctx = { console, escapeHtml: s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'), escapeHtmlAttr: s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;') };
 vm.createContext(ctx);
-const names = ['plansWhen','plansCountText','plansRoleNote','plansCardHtml','plansFormHtml','plansHtml'];
-vm.runInContext(names.map(n => extractFn(src, n)).join('\n') + '\nthis.H=plansHtml; this.W=plansWhen; this.C=plansCountText; this.CARD=plansCardHtml;', ctx);
+const names = ['plansWhen','plansCountText','plansRoleNote','plansCardHtml','plansFormHtml','plansHtml','plansPromptHtml'];
+vm.runInContext(names.map(n => extractFn(src, n)).join('\n') + '\nthis.H=plansHtml; this.W=plansWhen; this.C=plansCountText; this.CARD=plansCardHtml; this.PR=plansPromptHtml;', ctx);
 ok(ctx.W('2026-11-15T07:00') === 'Sun, Nov 15 · 7:00 AM' && ctx.W('2026-11-15T13:30').endsWith('1:30 PM') && ctx.W('') === '', 'when text');
 ok(ctx.C({ yes: 3, guests: 2, maybe: 1 }) === '3 going (+2 guests) · 1 maybe' && ctx.C({ yes: 1, guests: 1 }) === '1 going (+1 guest)', 'count text');
 const pl = (o) => Object.assign({ id: 1, title: 'Breakfast <b>', starts_at: '2026-11-15T07:00', place: 'Grill', description: 'Eggs', audience: 'invited', creator_id: 'Ann', counts: { yes: 2, maybe: 0, no: 0, guests: 0 }, can_join: true, can_edit: false, my: null, notes: 'back room', attendees: [{ player: 'Ann', status: 'yes', guests: 0 }] }, o || {});
@@ -33,4 +33,9 @@ h = ctx.H(d({ plans: [pl({ default_yes: true, needs_response: true, my: { status
 ok(/please confirm/.test(h) && /You are counted in/.test(h), 'a default-Yes plan prompts the player to confirm or decline');
 h = ctx.H(d(), null, { audience: 'players', default_yes: true }); ok(/id="plan-f-dy" checked/.test(h), 'the form has the count-in-by-default box');
 ok(/_plansPending\.has\(Number\(evt\.gatheringId\)\)/.test(src) && /plansPendingLoad\(\);\s*\/\/ fire-and-forget/.test(src), 'the icon dot and its load are wired');
+const pr = ctx.PR([{ id: 7, gathering_title: '2026 Turkey 2Man', title: 'Awards <i>', starts_at: '2026-11-15T15:00', place: 'Clubhouse', description: 'Pizza', default_yes: true, counts: { yes: 22 } }, { id: 8, title: 'Breakfast', default_yes: false, counts: { yes: 3 } }]);
+ok(/Turkey 2Man/.test(pr) && /Awards &lt;i&gt;/.test(pr) && /Confirm/.test(pr) && /Decline/.test(pr) && /counted in/.test(pr) && /22 going so far/.test(pr), 'launch prompt: a count-me-in plan asks to confirm or decline');
+ok(/plansPromptAnswer\(8,'yes'\)/.test(pr) && />✅ Yes</.test(pr) && !/Breakfast<\/div>[\s\S]{0,200}counted in/.test(pr.split('Awards')[1].split('Breakfast')[1] || ''), 'an opt-in plan just asks Yes, Maybe or No');
+ok(ctx.PR([]) === '', 'nothing pending means no prompt');
+ok(/getLiveEvent\(\)\) return;/.test(src) && /bf_plans_prompt_later/.test(src) && /plansPromptOpen\(j\.plans/.test(src), 'the prompt is skipped over a live round or another open dialog, and "Not now" holds for the session');
 console.log(`plans_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
