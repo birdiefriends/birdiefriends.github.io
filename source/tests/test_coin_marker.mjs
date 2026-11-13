@@ -6,7 +6,7 @@ const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const ctx = { _sk: { config: { addons: [{ id: 'cttp', holes: [3, 8, 18], prize_holes: [17] }] } }, gatheringAddon: (c, id) => c.addons.find(a => a.id === id) || null, skMaxHole: () => 18 };
 vm.createContext(ctx);
-vm.runInContext(['skCoinDuty', 'skCoinHoles', 'skCoinNoteHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.D = skCoinDuty; this.H = skCoinHoles; this.N = skCoinNoteHtml;', ctx);
+vm.runInContext(['skCoinDuty', 'skCoinHoles', 'skCoinNotes', 'skCoinNoteHtml', 'skCoinPending'].map(n => extractFn(src, n)).join('\n') + '\nthis.D = skCoinDuty; this.H = skCoinHoles; this.N = skCoinNoteHtml; this.P = skCoinPending;', ctx);
 const G = (n, st, extra) => Object.assign({ n, start_hole: st, mode: 'shotgun' }, extra || {});
 // groups start on 1, 5, 9, 13
 const gs = [G(1, 1), G(2, 5), G(3, 9), G(4, 13)];
@@ -30,4 +30,11 @@ ok(/last group through Hole 3/.test(last) && /Pick up the Birdie coin marker/.te
 ok(mid === '', 'a group that is neither first nor last gets nothing');
 ok(/Heads up: you are the first group to Hole 8/.test(ctx.N(7, 8, gs[1], gs)), 'heads-up a hole ahead for the first group');
 ok(/Heads up: you are the last group through Hole 8/.test(ctx.N(7, 8, gs[2], gs)), 'heads-up a hole ahead for the last group');
+// pop-up: place reminders may come a hole ahead; pick-up waits for the hole itself; each shows once
+const none = new Set();
+ok(ctx.P(2, 3, gs[0], gs, none).map(n => n.key).join() === 'place:3', 'first group gets the place pop-up a hole ahead');
+ok(ctx.P(3, 4, gs[0], gs, none).map(n => n.key).join() === 'place:3', 'and on the hole itself if it was missed');
+ok(ctx.P(3, 4, gs[0], gs, new Set(['place:3'])).length === 0, 'once acknowledged it does not come back');
+ok(ctx.P(2, 3, gs[1], gs, none).length === 0, 'the last group is not popped a hole early for pick-up');
+ok(ctx.P(3, 4, gs[1], gs, none).map(n => n.key).join() === 'pickup:3', 'the last group is popped for pick-up on the hole itself');
 console.log(`coin_marker: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

@@ -11116,15 +11116,48 @@ function skCoinHoles() {
   const prize = new Set((ad.prize_holes || []).map(Number));   // a prize-only hole is played a different way (no pin coin), so it is left out
   return [...new Set((ad.holes || []).map(Number).filter(h => h > 0 && !prize.has(h)))];
 }
-// The reminder for this group on this hole: place the coin on arrival, pick it up when done. Also shown a hole ahead.
+// The coin reminders for this group on this hole: place on arrival, pick up when done. Each is { key, kind, hole, ahead, text }; `ahead`
+// means it is about the next hole. The banner shows all of them; the pop-up (below) shows each key once and waits for "Got it".
+function skCoinNotes(hole, nextH, g, gs) {
+  const duty = skCoinDuty(gs, skCoinHoles(), skMaxHole()), out = [];
+  const add = (h, kind, ahead) => {
+    const d = duty[h]; if (!d || d[kind === 'place' ? 'first' : 'last'] !== g.n) return;
+    out.push({ key: kind + ':' + h, kind, hole: h, ahead,
+      text: ahead ? (kind === 'place' ? `Heads up: you are the first group to Hole ${h}. Place the Birdie coin marker there.` : `Heads up: you are the last group through Hole ${h}. Pick up the Birdie coin marker there.`)
+        : (kind === 'place' ? `You are the first group to Hole ${h}. Place the Birdie coin marker at the pin.` : `You are the last group through Hole ${h}. Pick up the Birdie coin marker when you finish.`) });
+  };
+  add(hole, 'place', false); add(hole, 'pickup', false);
+  if (nextH != null) { add(nextH, 'place', true); add(nextH, 'pickup', true); }
+  return out;
+}
 function skCoinNoteHtml(hole, nextH, g, gs) {
-  const duty = skCoinDuty(gs, skCoinHoles(), skMaxHole()), notes = [];
-  const here = duty[hole], next = nextH != null ? duty[nextH] : null;
-  if (here && here.first === g.n) notes.push(`🪙 <b>You are the first group to Hole ${hole}.</b> Place the Birdie coin marker at the pin.`);
-  if (here && here.last === g.n) notes.push(`🪙 <b>You are the last group through Hole ${hole}.</b> Pick up the Birdie coin marker when you finish.`);
-  if (next && next.first === g.n) notes.push(`Heads up: you are the first group to Hole ${nextH}. Place the Birdie coin marker there.`);
-  if (next && next.last === g.n) notes.push(`Heads up: you are the last group through Hole ${nextH}. Pick up the Birdie coin marker there.`);
-  return notes.length ? `<div style="margin:8px 0;padding:9px 12px;border-radius:12px;background:rgba(224,180,76,0.16);border:1px solid rgba(224,180,76,0.5);color:#ffe08a;font-size:0.82rem;line-height:1.45">${notes.join('<br>')}</div>` : '';
+  const notes = skCoinNotes(hole, nextH, g, gs);
+  return notes.length ? `<div style="margin:8px 0;padding:9px 12px;border-radius:12px;background:rgba(224,180,76,0.16);border:1px solid rgba(224,180,76,0.5);color:#ffe08a;font-size:0.82rem;line-height:1.45">${notes.map(n => '🪙 ' + (n.ahead ? n.text : '<b>' + n.text + '</b>')).join('<br>')}</div>` : '';
+}
+// Pop-up: a coin job is easy to miss in a banner, so each one stops the scorer once with a "Got it". Place reminders can fire a hole
+// ahead (or on the start hole); pick-up reminders wait until the group is on the hole itself, when they are about to leave it.
+function skCoinPending(hole, nextH, g, gs, acked) {
+  return skCoinNotes(hole, nextH, g, gs).filter(n => !(n.kind === 'pickup' && n.ahead) && !acked.has(n.key));
+}
+function skCoinAckKey(g) { return 'bf_coin_ack_' + (_sk ? _sk.gid : '') + '_' + (g ? g.n : ''); }
+function skCoinAcked(g) { let a = []; try { a = JSON.parse(localStorage.getItem(skCoinAckKey(g)) || '[]'); } catch (e) {} return new Set(a.concat(_sk && _sk.coinAck ? [..._sk.coinAck] : [])); }
+function skCoinAck(keys) {
+  const g = skGroup(); if (!_sk) return; _sk.coinAck = _sk.coinAck || new Set(); keys.forEach(k => _sk.coinAck.add(k));
+  try { localStorage.setItem(skCoinAckKey(g), JSON.stringify([...skCoinAcked(g)])); } catch (e) {}
+  const el = document.getElementById('sk-coin-popup'); if (el) el.remove();
+}
+function skCoinPopupCheck() {
+  if (!_sk || document.getElementById('sk-coin-popup')) return;
+  const g = skGroup(), gs = skGroups(), ord = skOrder(), oi = ord.indexOf(_sk.hole), nextH = oi >= 0 && oi < ord.length - 1 ? ord[oi + 1] : null;
+  const pend = skCoinPending(_sk.hole, nextH, g, gs, skCoinAcked(g)); if (!pend.length) return;
+  const el = document.createElement('div'); el.id = 'sk-coin-popup';
+  el.setAttribute('style', 'position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px');
+  el.innerHTML = `<div style="background:#fff;color:#1b2b24;border-radius:18px;max-width:420px;width:100%;padding:22px 20px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,0.4)">
+    <div style="font-size:3rem;line-height:1">🪙</div>
+    <div style="font-family:'DM Serif Display',serif;font-size:1.35rem;margin:8px 0 10px">Birdie coin marker</div>
+    ${pend.map(n => `<div style="font-size:1.05rem;line-height:1.45;margin-bottom:10px;font-weight:${n.ahead ? 500 : 700}">${escapeHtml(n.text)}</div>`).join('')}
+    <button type="button" onclick='skCoinAck(${JSON.stringify(pend.map(n => n.key))})' style="margin-top:6px;width:100%;min-height:52px;border-radius:12px;border:none;background:#1f6b4f;color:#fff;font-family:inherit;font-size:1.05rem;font-weight:700;cursor:pointer">Got it</button></div>`;
+  document.body.appendChild(el);
 }
 // Holes in the order THIS group plays them: a shotgun group starts on its own hole and wraps (start 7 -> 7..18, 1..6).
 // A group with no start hole plays 1..max. Scoring opens on the first hole with a missing score in that order.
@@ -11329,7 +11362,7 @@ function liveScoreModeHtml() {
     ${skCoinNoteHtml(hole, nextH, g, gs)}
     ${extraSteps.length ? holeFlowStepHead(1, 'Hole score') : ''}${rows}
     ${nextStrokes}
-    <div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:34px">${hint}</div>${extraSteps.map((st, i) => holeFlowStepHtml(st, i + 2, g, done)).join('')}${alertsNote}${finishHtml}`;
+    <div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:34px">${hint}</div>${extraSteps.map((st, i) => holeFlowStepHtml(st, i + 2, g, done)).join('')}${alertsNote}${finishHtml}${(typeof setTimeout === 'function' && setTimeout(skCoinPopupCheck, 60), '')}`;
 }
 // ── Hole-by-hole flow renderers (v4.60.0) ─────────────────────────────────────────────────
 // The steps come from BFEngine.holeSteps (data only); a step's `kind` picks its renderer here. A new kind (a choice, a
