@@ -17621,6 +17621,7 @@ function plansPromptHtml(list) {
       ${meta ? `<div style="font-size:0.78rem;color:var(--text-muted)">${meta}</div>` : ''}
       ${p.description ? `<div style="font-size:0.8rem;margin-top:4px;white-space:pre-wrap">${escapeHtml(p.description)}</div>` : ''}
       <div style="font-size:0.76rem;color:var(--text-muted);margin-top:4px">${p.default_yes ? 'You are counted in. Please confirm or decline. ' : ''}${c.yes || 0} going so far</div>
+      ${(!p.default_yes && p.going && p.going.length) ? `<div style="font-size:0.76rem;margin-top:2px"><b>Going:</b> ${p.going.slice(0, 8).map(escapeHtml).join(', ')}${p.going.length > 8 ? ` +${p.going.length - 8} more` : ''}</div>` : ''}
       <div style="display:flex;gap:6px;margin-top:8px">${b('yes', p.default_yes ? '✅ Confirm' : '✅ Yes')}${b('maybe', '🤔 Maybe')}${b('no', p.default_yes ? '✕ Decline' : '✕ No')}</div>
     </div>`;
   }).join('');
@@ -17699,7 +17700,7 @@ function plansCardHtml(pl, d, openId) {
         h += `<div style="font-size:0.78rem;margin-top:8px">Bringing guests? <select onchange="plansRsvp(${pl.id},'yes',this.value)" style="font-size:0.8rem;padding:3px 6px">${[0,1,2,3,4,5].map(n => `<option value="${n}"${n === g ? ' selected' : ''}>${n === 0 ? 'none' : '+' + n}</option>`).join('')}</select></div>`;
       }
       const at = (pl.attendees || []).filter(a => a.status === 'yes'), mb = (pl.attendees || []).filter(a => a.status === 'maybe');
-      if (at.length) h += `<div style="font-size:0.78rem;margin-top:8px"><b>Going:</b> ${at.map(a => escapeHtml(a.player) + (a.guests ? ' +' + a.guests : '')).join(', ')}</div>`;
+      if (at.length && !pl.default_yes) h += `<div style="font-size:0.78rem;margin-top:8px"><b>Going:</b> ${at.map(a => escapeHtml(a.player) + (a.guests ? ' +' + a.guests : '')).join(', ')}</div>`;
       if (mb.length) h += `<div style="font-size:0.78rem;margin-top:2px;color:var(--text-muted)"><b>Maybe:</b> ${mb.map(a => escapeHtml(a.player)).join(', ')}</div>`;
     } else {
       h += `<div style="font-size:0.76rem;margin-top:8px;color:var(--text-hint)">${pl.audience === 'players' ? 'This plan is for players who said Yes to the golf event.' : 'You can see the basics only.'}</div>`;

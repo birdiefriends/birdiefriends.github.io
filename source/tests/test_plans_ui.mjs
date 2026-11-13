@@ -39,4 +39,8 @@ ok(/plansPromptAnswer\(8,'yes'\)/.test(pr) && />✅ Yes</.test(pr) && !/Breakfas
 ok(ctx.PR([]) === '', 'nothing pending means no prompt');
 ok(/getLiveEvent\(\)\) return;/.test(src) && /bf_plans_prompt_later/.test(src) && /plansPromptOpen\(j\.plans/.test(src), 'the prompt is skipped over a live round or another open dialog, and "Not now" holds for the session');
 ok(/data-plans-gid="\$\{e\.gatheringId\}"[^>]*onclick="openPlansSheet\('\$\{e\.id\}'\)"><span class="plans-anchor"/.test(src) && /\.icon-action-badge, \.plans-anchor/.test(src), 'My Schedule rows carry a Plans button with the same dot');
+const pr2 = ctx.PR([{ id: 8, title: 'Breakfast', default_yes: false, counts: { yes: 10 }, going: ['A','B','C','D','E','F','G','H','I','J'] }, { id: 9, title: 'Awards', default_yes: true, counts: { yes: 22 }, going: ['Z'] }]);
+ok(/<b>Going:<\/b> A, B, C, D, E, F, G, H \+2 more/.test(pr2) && (pr2.match(/Going:/g) || []).length === 1, 'launch prompt lists the Yes names on an opt-in plan (first 8, then +N), never on a count-me-in plan');
+h = ctx.H(d({ plans: [pl({ default_yes: true, attendees: [{ player: 'Ann', status: 'yes', guests: 0 }, { player: 'Bo', status: 'maybe', guests: 0 }] })] }), 1, null);
+ok(!/Going:/.test(h) && /Maybe:<\/b> Bo/.test(h), 'a count-me-in plan does not list 20+ going names in the window either');
 console.log(`plans_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

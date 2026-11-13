@@ -3110,10 +3110,10 @@ export default {
             ORDER BY g.event_time, COALESCE(NULLIF(p.starts_at,''), '9999'), p.id`).bind(who, who, who).all();
           const plans = [];
           for (const r of results) {
-            const { results: rs } = await env.DB.prepare(`SELECT status, guests FROM plan_rsvps WHERE plan_id = ?`).bind(r.id).all();
+            const { results: rs } = await env.DB.prepare(`SELECT player_id, status, guests FROM plan_rsvps WHERE plan_id = ? ORDER BY updated_at`).bind(r.id).all();
             let yes = rs.filter(x => x.status === 'yes').length, guests = rs.filter(x => x.status === 'yes').reduce((a, x) => a + (Number(x.guests) || 0), 0);
             if (r.default_yes) { const c = await env.DB.prepare(`SELECT COUNT(*) AS n FROM registrations g WHERE g.gathering_id = ? AND g.status = 'yes' AND COALESCE(g.is_placeholder,0) = 0 AND NOT EXISTS (SELECT 1 FROM plan_rsvps x WHERE x.plan_id = ? AND x.player_id = g.player_id)`).bind(r.gathering_id, r.id).first(); yes += (c && c.n) || 0; }
-            plans.push({ id: r.id, gathering_id: r.gathering_id, gathering_title: r.gathering_title || '', event_time: r.event_time || '', title: r.title, starts_at: r.starts_at || '', place: r.place || '', description: r.description || '', default_yes: !!r.default_yes, counts: { yes, guests } });
+            plans.push({ id: r.id, gathering_id: r.gathering_id, gathering_title: r.gathering_title || '', event_time: r.event_time || '', title: r.title, starts_at: r.starts_at || '', place: r.place || '', description: r.description || '', default_yes: !!r.default_yes, counts: { yes, guests }, going: r.default_yes ? [] : rs.filter(x => x.status === 'yes').map(x => x.player_id).slice(0, 30) });
           }
           return json({ ok: true, gathering_ids: [...new Set(plans.map(x => x.gathering_id))], plans });
         }

@@ -96,6 +96,7 @@ r = await view(104, 'Brian Hager'); pp = r.json.plans.find(p => p.id === pz); ok
 r = await view(104, 'Ed Invited'); pp = r.json.plans.find(p => p.id === pz); ok(pp.counts.yes === 3 && !pp.needs_response && pp.can_join === false, 'a non-player is not assumed or prompted');
 r = await call('GET', '/plans/pending?player_id=Ann%20Player'); ok(JSON.stringify(r.json.gathering_ids) === '[104]', 'pending lists the Gathering for Ann: ' + JSON.stringify(r.json));
 ok(r.json.plans.some(p => p.id === pz && p.default_yes && p.counts.yes === 3 && p.gathering_title === '2026 Turkey 2Man'), 'pending carries the plan details for the launch prompt: ' + JSON.stringify(r.json.plans.map(p => [p.id, p.title])));
+ok(r.json.plans.find(p => p.id === pz).going.length === 0 && r.json.plans.some(p => p.id !== pz && p.going.includes('Ann Player') === false && p.going.length > 0), 'opt-in plans carry the Yes names, count-me-in plans do not');
 ok(r.json.plans.some(p => p.id !== pz), 'it also lists plans she simply has not answered yet (not only count-me-in ones)');
 r = await call('GET', '/plans/pending?player_id=Ed%20Invited'); ok(r.json.gathering_ids.length === 0, 'and not for a non-player');
 await call('POST', `/plans/${pz}/rsvp`, { player_id: 'Ann Player', status: 'no' });
