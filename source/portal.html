@@ -9691,12 +9691,12 @@ function bbStrokeGridHtml(selectedStroke, setFnName) {
 //   a gamed round     -> only what its games use: CTP when CTP is on, MiserBall when on, BestBall when on, and
 //                        Birdie Alert only when Skins or Birdie Payouts are in play (they are what it feeds).
 function livePanelSections(config, panelGid) {
-  if (panelGid == null || !config) return { birdieAlert: true, cttp: true, birdieball: false, fourball: false };
+  if (panelGid == null || !config) return { birdieAlert: true, cttp: true, birdieball: false, fourball: false, skins: false };
   const has = id => !!gatheringAddon(config, id);
   // Skins / Birdie Payouts need the Birdie Alert, but only by hand when nobody is keeping live score: with Live Score on (a side game
   // like BestBall or a Scramble) the Worker announces every birdie-or-better itself from the saved scores, so the button goes away.
   const scoring = BFEngine.sideGames().some(has);
-  return { birdieAlert: (has('skins') || has('birdiepay')) && !scoring, cttp: has('cttp'), birdieball: has('birdieball'), fourball: scoring };
+  return { birdieAlert: (has('skins') || has('birdiepay')) && !scoring, cttp: has('cttp'), birdieball: has('birdieball'), fourball: scoring, skins: scoring && has('skins') };
 }
 function buildLivePanel(evt) {
   // 2Man (scramble_pair) rounds pick from that round's saved teams instead
@@ -9753,6 +9753,7 @@ function buildLivePanel(evt) {
   const showBirdieBallSection = _lps.birdieball;
   const showFourballSection = _lps.fourball; // live pair standings
   const showBirdieAlertSection = _lps.birdieAlert;
+  const showSkinsSection = _lps.skins;   // live Skins board (with live scoring the manual Birdie Alert board is gone, so Skins needs its own)
   // Dev-93: a round with BestBall has live scoring. Score mode is the default view and shows only the scoring
   // entry; Games mode is everything else. Other rounds (BF Series included) never reach this branch.
   const _skOn = liveScoringOn(_liveConfig, _panelGid);
@@ -10309,6 +10310,7 @@ function buildLivePanel(evt) {
     ${showCttpSection ? liveSectionHtml('cttp', '🎯', 'Closest to the Pin', ctpSection) : ''}
     ${showBirdieBallSection ? liveSectionHtml('miserball', '🐉', 'MiserBall', bbSection) : ''}
     ${showFourballSection ? liveSectionHtml('game', BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.icon, BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.label, fbSection) : ''}
+    ${showSkinsSection ? liveSectionHtml('skins', '⛳', 'Skins', skinsLiveSectionHtml(_liveConfig)) : ''}
     ${showBirdieAlertSection ? liveSectionHtml('birdie', '🦅', 'Birdie Alert', birdieSection) : ''}
     ${liveSectionHtml('scorecard', '📋', 'Post-Round Scorecard', `${_skOn ? `<div style="font-size:0.82rem;color:rgba(255,255,255,0.75);line-height:1.45;margin-bottom:8px">Scores are saved live while you play, so there is nothing to enter after the round.</div><details><summary style="font-size:0.78rem;color:rgba(255,255,255,0.6);cursor:pointer;padding:8px 0">Enter a full card instead</summary>${scSection}</details>` : scSection}`)}
     ${showCloseSection ? liveSectionHtml('close', '🏁', 'Host · Close &amp; Calculate', `
@@ -11564,6 +11566,24 @@ async function loadFourballLive(evt) {
   } catch (e) {
     console.warn('[BestBall] live standings error:', e.message);
   }
+}
+// Live Skins board (with live scoring): the skins won so far from every card saved on the course, by the engine's own rule, so it
+// always agrees with Close & Calculate. Team rounds (Scramble) contend by team. Gross, lowest outright; a tie wins nothing.
+function skinsLiveSectionHtml(cfg) {
+  const muted = 'font-size:0.82rem;color:rgba(255,255,255,0.6);line-height:1.45';
+  if (!_fbLive || !_fbLive.row) return `<div style="${muted}">Loading…</div>`;
+  let sk = null;
+  try { const pay = BFEngine.computeGatheringGamesPayout(_fbLive.row, fbOverlayCards(), {}, []); sk = pay && pay.skins; } catch (e) { console.warn('[Skins] live board error:', e.message); }
+  if (!sk) return `<div style="${muted}">No scores saved yet.</div>`;
+  const won = (sk.won || []).slice().sort((a, b) => a.hole - b.hole);
+  const note = `<div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:8px;line-height:1.4">${sk.basis === 'net' ? 'Net' : 'Gross'}${sk.by === 'team' ? ' by team' : ''} · lowest score on a hole wins it outright, a tie wins nothing. Final amounts are set at Close &amp; Calculate.</div>`;
+  if (!won.length) return `<div style="${muted}">No skins won yet.</div>${note}`;
+  const groups = new Map();
+  won.forEach(w => { const k = String(w.player).trim().toLowerCase(); if (!groups.has(k)) groups.set(k, { player: w.player, won: [] }); groups.get(k).won.push(w); });
+  const rows = [...groups.values()].sort((a, b) => b.won.length - a.won.length || a.player.localeCompare(b.player)).map(g =>
+    `<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.1)"><div style="display:flex;justify-content:space-between;gap:8px;font-size:0.9rem;font-weight:700"><span>${escapeHtml(g.player)}</span><span style="font-family:'DM Mono',monospace;color:#5DCAA5">${g.won.length} skin${g.won.length === 1 ? '' : 's'}</span></div>
+      <div style="font-size:0.76rem;color:rgba(255,255,255,0.65);margin-top:2px">${g.won.map(w => '#' + escapeHtml(w.hole) + ' (' + escapeHtml(w.net != null ? w.net : w.strokes) + ')').join(' &nbsp;·&nbsp; ')}</div></div>`).join('');
+  return `<div style="font-size:0.78rem;color:rgba(255,255,255,0.65);margin-bottom:4px">${won.length} skin${won.length === 1 ? '' : 's'} won so far</div>${rows}${note}`;
 }
 function fourballLiveSectionHtml(cfg) {
   const sideId = liveSideGid(cfg) || 'fourball';
