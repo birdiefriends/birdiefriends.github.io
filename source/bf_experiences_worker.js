@@ -1489,7 +1489,31 @@ export default {
         await ensureScoreAlertsTable(env);
         const ev = url.searchParams.get('event') || '';
         const { results } = await env.DB.prepare(`SELECT hole, label, kind, status, attempts, pushed, error, created_at, sent_at FROM bfe_score_alerts WHERE event_name = ? ORDER BY created_at, hole`).bind(ev).all();
-        return new Response(JSON.stringify({ ok: true, event: ev, alerts: results || [] }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        // Why nothing fired: the same gates scanScoreAlerts applies, read-only (nothing is sent).
+        let why = null;
+        try {
+          const gm = /^gathering:(\d+)$/.exec(ev);
+          const pj = t => { try { return t ? JSON.parse(t) : null; } catch (e) { return null; } };
+          if (!gm) why = { gate: 'not a gathering round', fix: 'event must look like gathering:<id>' };
+          else {
+            const row = await env.DB.prepare(`SELECT games, game_configs FROM bfe_gathering_games WHERE gathering_id = ?`).bind(gm[1]).first();
+            const games = row ? (pj(row.games) || []) : null, gcfg = row ? (pj(row.game_configs) || {}) : {};
+            const { results: cards } = await env.DB.prepare(`SELECT player, marks, input_type FROM bfe_scorecards WHERE event_name = ?`).bind(ev).all();
+            const withMarks = (cards || []).filter(c => { const m = pj(c.marks); return Array.isArray(m) && m.length === 18; });
+            const good = withMarks.reduce((n, c) => n + pj(c.marks).filter(x => ALERT_KINDS[x]).length, 0);
+            why = { games, birdie_alerts: gcfg.birdie_alerts === false ? 'off' : 'on',
+              games_config_saved: !!row,
+              game_gate_ok: !!games && games.some(g => g === 'scramble' || g === 'skins' || g === 'birdiepay'),
+              scorecards: (cards || []).length, scorecards_with_18_marks: withMarks.length, birdie_or_better_marks: good };
+            why.verdict = !row ? 'no games config saved for this Gathering'
+              : !why.game_gate_ok ? 'skipped: the games do not include scramble, skins or birdie payouts'
+              : why.birdie_alerts === 'off' ? 'skipped: alerts switched off'
+              : !withMarks.length ? 'no scorecard has marks (the phone had no course pars for this venue, so no marks were computed)'
+              : !good ? 'scorecards have marks but no birdie or better yet'
+              : (results && results.length ? 'alerts exist, see alerts[]' : 'gates pass and birdie marks exist: the scan did not run or failed');
+          }
+        } catch (e) { why = { error: String(e.message || e).slice(0, 120) }; }
+        return new Response(JSON.stringify({ ok: true, event: ev, alerts: results || [], why }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) { return new Response(JSON.stringify({ error: String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }); }
     }
 
