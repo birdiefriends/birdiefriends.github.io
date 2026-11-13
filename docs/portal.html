@@ -3181,6 +3181,18 @@ body {
     <div id="card-photo-list" style="display:flex;flex-wrap:wrap;gap:10px;max-height:50vh;overflow-y:auto"></div>
   </div>
 </div>
+<div class="bf-modal-overlay" id="plans-modal" onclick="closeModalOnOverlay(event,'plans-modal')" style="z-index:9000">
+  <div class="bf-modal">
+    <div class="bf-modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="bf-modal-title" style="margin-bottom:0" id="plans-title">📌 Plans</div>
+      <button onclick="closeModal('plans-modal')" title="Close"
+        style="width:28px;height:28px;border-radius:50%;border:none;background:var(--surface);
+          color:var(--text-muted);font-size:0.95rem;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div id="plans-body" style="max-height:70vh;overflow-y:auto"></div>
+  </div>
+</div>
 <div class="bf-modal-overlay" id="card-notes-modal" onclick="closeModalOnOverlay(event,'card-notes-modal')" style="z-index:9000">
   <!-- z-index explicit — see card-score-modal's comment above; same fix, same reason. -->
   <div class="bf-modal">
@@ -6157,6 +6169,11 @@ function buildEventCard(evt, isPast) {
       <button class="icon-action-btn" onclick="openCardNoteSheet('${evt.id}')">
         <span class="icon-action-badge secondary">💬</span>
         <span class="icon-action-label">Notes</span>
+      </button>` : ''}
+      ${(evt.source === 'gathering' && !isCanceled && evt.gatheringId != null) ? `
+      <button class="icon-action-btn" onclick="openPlansSheet('${evt.id}')">
+        <span class="icon-action-badge secondary">📌</span>
+        <span class="icon-action-label">Plans</span>
       </button>` : ''}
       <!-- Dev-88 (2026-09-29) — Yardage/Rules/Venue dropped from the card
            entirely per Brian: "strip duplicate icons from the Event Cards,
@@ -17572,6 +17589,144 @@ function renderRulesContent() {
 }
 // Dev-69 — accepts either an evtId or a full evt object directly; see
 // openCardScoreSheet's comment above for why.
+// ── Plans (v4.64.0): side plans around a Gathering — see docs/BF_Plans_Spec.md ───────────────────────────────────────────────
+let _plansEvt = null, _plansData = null, _plansOpenId = null, _plansForm = null;
+function plansWhen(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(String(s || ''));
+  if (!m) return '';
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  let out = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  if (m[4] != null) { const h = +m[4]; out += ' · ' + ((h % 12) || 12) + ':' + m[5] + (h < 12 ? ' AM' : ' PM'); }
+  return out;
+}
+function plansCountText(c) {
+  c = c || {};
+  const parts = [(c.yes || 0) + ' going'];
+  if (c.guests) parts[0] += ' (+' + c.guests + ' guest' + (c.guests === 1 ? '' : 's') + ')';
+  if (c.maybe) parts.push(c.maybe + ' maybe');
+  return parts.join(' · ');
+}
+function plansRoleNote(d) {
+  if (d.role === 'host' || d.role === 'player') return '';
+  return 'You can see the basics. Say Yes to the golf event to join in on players-only plans.';
+}
+function plansCardHtml(pl, d, openId) {
+  const open = String(openId) === String(pl.id);
+  const meta = [plansWhen(pl.starts_at), pl.place].filter(Boolean).map(escapeHtml).join(' · ');
+  const my = pl.my && pl.my.status;
+  let h = `<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--card, #fff)">
+    <div onclick="plansToggle(${pl.id})" style="cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+      <div style="min-width:0">
+        <div style="font-weight:700;font-size:0.9rem">${escapeHtml(pl.title)}${pl.audience === 'players' ? ' <span style="font-size:0.68rem;font-weight:600;color:var(--text-hint)">· players only</span>' : ''}</div>
+        ${meta ? `<div style="font-size:0.76rem;color:var(--text-muted)">${meta}</div>` : ''}
+        <div style="font-size:0.76rem;color:var(--text-muted)">${escapeHtml(plansCountText(pl.counts))}${my ? ' · you: ' + escapeHtml(my) : ''}</div>
+      </div>
+      <span style="color:var(--text-hint)">${open ? '▾' : '▸'}</span>
+    </div>`;
+  if (open) {
+    if (pl.description) h += `<div style="font-size:0.82rem;margin-top:8px;white-space:pre-wrap">${escapeHtml(pl.description)}</div>`;
+    if (pl.can_join) {
+      if (pl.notes) h += `<div style="font-size:0.78rem;margin-top:6px;color:var(--text-muted);white-space:pre-wrap">📝 ${escapeHtml(pl.notes)}</div>`;
+      const b = (st, label) => `<button class="btn btn-sm ${my === st ? 'btn-primary' : 'btn-secondary'}" style="flex:1;font-size:0.8rem" onclick="plansRsvp(${pl.id},'${st}')">${label}</button>`;
+      h += `<div style="display:flex;gap:6px;margin-top:10px">${b('yes', '✅ Yes')}${b('maybe', '🤔 Maybe')}${b('no', '✕ No')}</div>`;
+      if (my === 'yes') {
+        const g = (pl.my && pl.my.guests) || 0;
+        h += `<div style="font-size:0.78rem;margin-top:8px">Bringing guests? <select onchange="plansRsvp(${pl.id},'yes',this.value)" style="font-size:0.8rem;padding:3px 6px">${[0,1,2,3,4,5].map(n => `<option value="${n}"${n === g ? ' selected' : ''}>${n === 0 ? 'none' : '+' + n}</option>`).join('')}</select></div>`;
+      }
+      const at = (pl.attendees || []).filter(a => a.status === 'yes'), mb = (pl.attendees || []).filter(a => a.status === 'maybe');
+      if (at.length) h += `<div style="font-size:0.78rem;margin-top:8px"><b>Going:</b> ${at.map(a => escapeHtml(a.player) + (a.guests ? ' +' + a.guests : '')).join(', ')}</div>`;
+      if (mb.length) h += `<div style="font-size:0.78rem;margin-top:2px;color:var(--text-muted)"><b>Maybe:</b> ${mb.map(a => escapeHtml(a.player)).join(', ')}</div>`;
+    } else {
+      h += `<div style="font-size:0.76rem;margin-top:8px;color:var(--text-hint)">${pl.audience === 'players' ? 'This plan is for players who said Yes to the golf event.' : 'You can see the basics only.'}</div>`;
+    }
+    if (pl.can_edit) h += `<div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-secondary btn-sm" style="font-size:0.76rem" onclick="plansEdit(${pl.id})">✏️ Edit</button><button class="btn btn-secondary btn-sm" style="font-size:0.76rem" onclick="plansCancel(${pl.id})">🗑 Cancel plan</button></div>`;
+  }
+  return h + '</div>';
+}
+function plansFormHtml(f) {
+  const v = (k) => escapeHtmlAttr(f[k] || '');
+  const inp = 'width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);font-size:0.85rem;font-family:inherit;box-sizing:border-box;margin-bottom:6px';
+  return `<div style="border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+    <div style="font-weight:700;font-size:0.85rem;margin-bottom:6px">${f.id ? 'Edit plan' : 'New plan'}</div>
+    <input id="plan-f-title" maxlength="80" placeholder="What's the plan? (Breakfast, Bar after…)" value="${v('title')}" style="${inp}">
+    <input id="plan-f-when" type="datetime-local" value="${v('starts_at')}" style="${inp}">
+    <input id="plan-f-place" maxlength="120" placeholder="Where?" value="${v('place')}" style="${inp}">
+    <textarea id="plan-f-desc" maxlength="1000" rows="2" placeholder="Details (optional)" style="${inp};resize:none">${escapeHtml(f.description || '')}</textarea>
+    <label style="font-size:0.78rem;display:block;margin-bottom:8px">Who can join
+      <select id="plan-f-aud" style="font-size:0.8rem;padding:3px 6px;margin-left:4px"><option value="invited"${f.audience !== 'players' ? ' selected' : ''}>Everyone invited</option><option value="players"${f.audience === 'players' ? ' selected' : ''}>Players (golf Yes) only</option></select></label>
+    <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" style="flex:1" onclick="plansSave()">${f.id ? 'Save' : '📌 Add plan'}</button><button class="btn btn-secondary btn-sm" onclick="plansFormClose()">Cancel</button></div>
+  </div>`;
+}
+function plansHtml(d, openId, form) {
+  if (!d) return '<div style="font-size:0.8rem;color:var(--text-muted)">Loading…</div>';
+  if (d.error) return `<div style="font-size:0.8rem;color:var(--text-muted)">${escapeHtml(d.error)}</div>`;
+  if (d.role === 'none') return '<div style="font-size:0.8rem;color:var(--text-muted)">Plans are for people invited to this event.</div>';
+  let h = '';
+  const note = plansRoleNote(d);
+  if (note) h += `<div style="font-size:0.76rem;color:var(--text-hint);margin-bottom:8px">${note}</div>`;
+  if (form) h += plansFormHtml(form);
+  else if (d.can_create) h += `<button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:10px" onclick="plansNew()">➕ Add a plan</button>`;
+  if (!d.plans.length) h += `<div style="font-size:0.8rem;color:var(--text-muted);text-align:center;padding:10px 0">No plans yet.${d.can_create ? ' Add a breakfast, a bar after, anything around the round.' : ''}</div>`;
+  else h += d.plans.map(pl => plansCardHtml(pl, d, openId)).join('');
+  if (d.role === 'host') h += `<div style="font-size:0.78rem;margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">Who can add plans
+    <select onchange="plansSetting(this.value)" style="font-size:0.8rem;padding:3px 6px;margin-left:4px"><option value="players"${d.who_can_create === 'players' ? ' selected' : ''}>Players (golf Yes)</option><option value="invited"${d.who_can_create === 'invited' ? ' selected' : ''}>Anyone invited</option><option value="host"${d.who_can_create === 'host' ? ' selected' : ''}>Host only</option></select></div>`;
+  return h;
+}
+function plansRender() { const el = document.getElementById('plans-body'); if (el) el.innerHTML = plansHtml(_plansData, _plansOpenId, _plansForm); }
+async function plansLoad() {
+  if (!_plansEvt) return;
+  try {
+    const r = await fetch(`${GATHERINGS_API}/plans?gathering_id=${_plansEvt.gatheringId}&player_id=${encodeURIComponent(currentPlayer || '')}`);
+    _plansData = await r.json();
+    if (!r.ok && !_plansData.error) _plansData = { error: 'Could not load plans' };
+  } catch (e) { _plansData = { error: 'Could not load plans. Check your connection.' }; }
+  plansRender();
+}
+function openPlansSheet(evtOrId) {
+  const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => e.id === evtOrId);
+  if (!evt || evt.gatheringId == null) return;
+  _plansEvt = evt; _plansData = null; _plansOpenId = null; _plansForm = null;
+  const t = document.getElementById('plans-title'); if (t) t.textContent = `📌 Plans · ${evt.name}`;
+  plansRender(); openModal('plans-modal'); plansLoad();
+}
+function plansToggle(id) { _plansOpenId = String(_plansOpenId) === String(id) ? null : id; plansRender(); }
+function plansNew() { _plansForm = { audience: 'invited' }; plansRender(); }
+function plansEdit(id) {
+  const pl = ((_plansData && _plansData.plans) || []).find(p => p.id === id); if (!pl) return;
+  _plansForm = { id: pl.id, title: pl.title, starts_at: pl.starts_at, place: pl.place, description: pl.description, audience: pl.audience }; plansRender();
+}
+function plansFormClose() { _plansForm = null; plansRender(); }
+async function plansPost(path, body) {
+  try {
+    const r = await fetch(`${GATHERINGS_API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { showToast(j.error || 'That did not save', true); return null; }
+    return j;
+  } catch (e) { showToast('No connection. Try again.', true); return null; }
+}
+async function plansSave() {
+  const f = _plansForm; if (!f) return;
+  const val = (id) => (document.getElementById(id) || {}).value || '';
+  const body = { player_id: currentPlayer, title: val('plan-f-title').trim(), starts_at: val('plan-f-when'), place: val('plan-f-place').trim(), description: val('plan-f-desc').trim(), audience: val('plan-f-aud') };
+  if (!body.title) { showToast('Give the plan a title', true); return; }
+  const j = f.id ? await plansPost(`/plans/${f.id}`, body) : await plansPost('/plans', Object.assign({ gathering_id: _plansEvt.gatheringId }, body));
+  if (!j) return;
+  _plansForm = null; if (!f.id && j.id) _plansOpenId = j.id;
+  await plansLoad();
+}
+async function plansRsvp(id, status, guests) {
+  const j = await plansPost(`/plans/${id}/rsvp`, { player_id: currentPlayer, status, guests: guests == null ? 0 : Number(guests) });
+  if (j) await plansLoad();
+}
+async function plansCancel(id) {
+  if (!confirm('Cancel this plan for everyone?')) return;
+  const j = await plansPost(`/plans/${id}`, { player_id: currentPlayer, status: 'cancelled' });
+  if (j) await plansLoad();
+}
+async function plansSetting(mode) {
+  const j = await plansPost('/plans/settings', { gathering_id: _plansEvt.gatheringId, host_id: currentPlayer, who_can_create: mode });
+  if (j) await plansLoad();
+}
 function openCardNoteSheet(evtOrId) {
   const evt = (evtOrId && typeof evtOrId === 'object') ? evtOrId : eventData.find(e => e.id === evtOrId);
   if (!evt) return;

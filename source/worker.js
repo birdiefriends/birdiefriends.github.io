@@ -3078,6 +3078,116 @@ export default {
       }
     }
 
+    // ── Plans (v4.64.0): side plans around a Gathering (breakfast, bar, seminar...) ─────────────────────────────────────────────
+    // A plan is a title, time, place and description with a Yes/Maybe/No RSVP. See docs/BF_Plans_Spec.md for the access rules:
+    // host / player (golf Yes) / invited, a per-Gathering "who can create" setting, and a per-plan "who can join". Tables are
+    // created on first use (no manual migration).
+    //   GET  /plans?gathering_id=&player_id=      access, can_create, setting, plans (attendees + notes only with full access)
+    //   POST /plans                               create  { gathering_id, player_id, title, starts_at?, place?, description?, notes?, audience?, notify? }
+    //   POST /plans/:id                           edit or cancel { player_id, title?.., status?:'cancelled' }  (creator or host)
+    //   POST /plans/:id/rsvp                      { player_id, status: yes|maybe|no, guests? }
+    //   POST /plans/settings                      { gathering_id, host_id, who_can_create: players|invited|host }
+    const plMatch = url.pathname.match(/^\/plans(?:\/(settings|\d+)(\/rsvp)?)?$/);
+    if (plMatch) {
+      const json = (obj, status) => new Response(JSON.stringify(obj), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      try {
+        await ensurePlansTables(env);
+        let body = {};
+        if (request.method === 'POST') { try { body = await request.json(); } catch (e) { return json({ error: 'Invalid JSON' }, 400); } }
+        const seg = plMatch[1], isRsvp = !!plMatch[2];
+        const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+        if (request.method === 'GET' && !seg) {
+          const gid = Number(url.searchParams.get('gathering_id')), viewer = str(url.searchParams.get('player_id'), 120);
+          if (!gid) return json({ error: 'gathering_id is required' }, 400);
+          const acc = await planAccess(env, gid, viewer);
+          if (!acc.g) return json({ error: 'Gathering not found' }, 404);
+          const setting = await planSetting(env, gid);
+          const out = { ok: true, gathering_id: gid, role: acc.role, who_can_create: setting, can_create: planCanCreate(setting, acc.role), plans: [] };
+          if (acc.role === 'none') return json(out);
+          const { results: plans } = await env.DB.prepare(`SELECT * FROM gathering_plans WHERE gathering_id = ? AND status = 'active' ORDER BY COALESCE(NULLIF(starts_at,''), '9999'), id`).bind(gid).all();
+          const { results: rs } = await env.DB.prepare(`SELECT r.plan_id, r.player_id, r.status, r.guests FROM plan_rsvps r JOIN gathering_plans p ON p.id = r.plan_id WHERE p.gathering_id = ? ORDER BY r.updated_at`).bind(gid).all();
+          for (const pl of plans) {
+            const mine = rs.filter(r => r.plan_id === pl.id);
+            const counts = { yes: 0, maybe: 0, no: 0, guests: 0 };
+            mine.forEach(r => { if (counts[r.status] != null) counts[r.status]++; if (r.status === 'yes') counts.guests += Number(r.guests) || 0; });
+            const full = planCanJoin(pl, acc.role, viewer);
+            const my = mine.find(r => r.player_id === viewer);
+            out.plans.push({ id: pl.id, title: pl.title, starts_at: pl.starts_at || '', place: pl.place || '', description: pl.description || '', audience: pl.audience, creator_id: pl.creator_id,
+              counts, can_join: full, can_edit: acc.role === 'host' || pl.creator_id === viewer, my: my ? { status: my.status, guests: Number(my.guests) || 0 } : null,
+              ...(full ? { notes: pl.notes || '', attendees: mine.filter(r => r.status !== 'no').map(r => ({ player: r.player_id, status: r.status, guests: Number(r.guests) || 0 })) } : {}) });
+          }
+          return json(out);
+        }
+        if (request.method !== 'POST') return json({ error: 'Not found' }, 404);
+        if (seg === 'settings') {
+          const gid = Number(body.gathering_id), host = str(body.host_id, 120), mode = str(body.who_can_create, 12);
+          if (!gid || !['players', 'invited', 'host'].includes(mode)) return json({ error: 'gathering_id and who_can_create (players, invited or host) are required' }, 400);
+          const acc = await planAccess(env, gid, host);
+          if (!acc.g) return json({ error: 'Gathering not found' }, 404);
+          if (acc.role !== 'host' && String(body.pin || '') !== '7797') return json({ error: 'Only the host can change this' }, 403);
+          await env.DB.prepare(`INSERT INTO gathering_plan_settings (gathering_id, who_can_create, updated_by, updated_at) VALUES (?, ?, ?, datetime('now'))
+            ON CONFLICT(gathering_id) DO UPDATE SET who_can_create = excluded.who_can_create, updated_by = excluded.updated_by, updated_at = excluded.updated_at`).bind(gid, mode, host).run();
+          return json({ ok: true, who_can_create: mode });
+        }
+        if (!seg) {   // create
+          const gid = Number(body.gathering_id), actor = str(body.player_id, 120), title = str(body.title, 80);
+          if (!gid || !actor || !title) return json({ error: 'gathering_id, player_id and a title are required' }, 400);
+          const acc = await planAccess(env, gid, actor);
+          if (!acc.g) return json({ error: 'Gathering not found' }, 404);
+          const setting = await planSetting(env, gid);
+          if (!planCanCreate(setting, acc.role)) return json({ error: setting === 'host' ? 'The host has turned plans off for this event' : 'Only players who said Yes can add plans to this event' }, 403);
+          const cnt = await env.DB.prepare(`SELECT COUNT(*) AS n FROM gathering_plans WHERE gathering_id = ? AND status = 'active'`).bind(gid).first();
+          if (cnt && cnt.n >= 20) return json({ error: 'This event already has 20 plans' }, 400);
+          const audience = body.audience === 'players' ? 'players' : 'invited';
+          const ins = await env.DB.prepare(`INSERT INTO gathering_plans (gathering_id, creator_id, title, starts_at, place, description, notes, audience, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))`).bind(gid, actor, title, str(body.starts_at, 40), str(body.place, 120), str(body.description, 1000), str(body.notes, 2000), audience).run();
+          const planId = ins.meta && ins.meta.last_row_id;
+          if (planId) await env.DB.prepare(`INSERT INTO plan_rsvps (plan_id, player_id, status, guests, updated_at) VALUES (?, ?, 'yes', 0, datetime('now'))`).bind(planId, actor).run();
+          let notified = 0;
+          if (body.notify !== false && env.OS_APP_ID && env.OS_REST_KEY) {
+            const { results: yes } = await env.DB.prepare(`SELECT player_id FROM registrations WHERE gathering_id = ? AND status = 'yes' AND player_id != ? AND COALESCE(is_placeholder,0) = 0`).bind(gid, actor).all();
+            const when = str(body.starts_at, 40).replace('T', ' '), msg = `${actor}${when ? ' · ' + when : ''}${body.place ? ' · ' + str(body.place, 60) : ''}`;
+            const sends = yes.map(r => fetch('https://onesignal.com/api/v1/notifications', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
+              body: JSON.stringify({ app_id: env.OS_APP_ID, headings: { en: '📌 New plan: ' + title }, contents: { en: msg }, filters: [{ field: 'tag', key: 'player_name', relation: '=', value: r.player_id }], url: 'https://birdiefriends.com/portal.html' }) }).catch(e => console.warn('Plan push failed:', e)));
+            notified = sends.length;
+            if (ctx && ctx.waitUntil) ctx.waitUntil(Promise.all(sends)); else await Promise.all(sends);
+          }
+          return json({ ok: true, id: planId, notified });
+        }
+        // edit / cancel / rsvp: load the plan
+        const planId = Number(seg);
+        const pl = await env.DB.prepare(`SELECT * FROM gathering_plans WHERE id = ?`).bind(planId).first();
+        if (!pl) return json({ error: 'Plan not found' }, 404);
+        const actor = str(body.player_id, 120);
+        const acc = await planAccess(env, pl.gathering_id, actor);
+        if (acc.role === 'none') return json({ error: 'You are not invited to this event' }, 403);
+        if (isRsvp) {
+          if (pl.status !== 'active') return json({ error: 'This plan was cancelled' }, 400);
+          if (!planCanJoin(pl, acc.role, actor)) return json({ error: pl.audience === 'players' ? 'This plan is for players who said Yes' : 'You cannot join this plan' }, 403);
+          const st = str(body.status, 8), guests = Math.max(0, Math.min(10, Math.floor(Number(body.guests) || 0)));
+          if (!['yes', 'maybe', 'no'].includes(st)) return json({ error: 'status must be yes, maybe or no' }, 400);
+          await env.DB.prepare(`INSERT INTO plan_rsvps (plan_id, player_id, status, guests, updated_at) VALUES (?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(plan_id, player_id) DO UPDATE SET status = excluded.status, guests = excluded.guests, updated_at = excluded.updated_at`).bind(planId, actor, st, st === 'yes' ? guests : 0).run();
+          return json({ ok: true, status: st, guests: st === 'yes' ? guests : 0 });
+        }
+        if (acc.role !== 'host' && pl.creator_id !== actor) return json({ error: 'Only the person who made the plan, or the host, can change it' }, 403);
+        const sets = [], binds = [];
+        const put = (col, v) => { sets.push(col + ' = ?'); binds.push(v); };
+        if (body.title !== undefined) { const t = str(body.title, 80); if (!t) return json({ error: 'A plan needs a title' }, 400); put('title', t); }
+        if (body.starts_at !== undefined) put('starts_at', str(body.starts_at, 40));
+        if (body.place !== undefined) put('place', str(body.place, 120));
+        if (body.description !== undefined) put('description', str(body.description, 1000));
+        if (body.notes !== undefined) put('notes', str(body.notes, 2000));
+        if (body.audience !== undefined) put('audience', body.audience === 'players' ? 'players' : 'invited');
+        if (body.status === 'cancelled') put('status', 'cancelled');
+        if (!sets.length) return json({ error: 'Nothing to change' }, 400);
+        await env.DB.prepare(`UPDATE gathering_plans SET ${sets.join(', ')}, updated_at = datetime('now') WHERE id = ?`).bind(...binds, planId).run();
+        return json({ ok: true });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Plans error: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     // POST /groupings/publish?pin=7797 — called by GolfScorer's grpPublish() alongside
     // its existing Netlify deploy, so per-player tee times land in D1 (not just the
     // static groupings.html page) the moment groups are published pre-event. Closes
@@ -3674,4 +3784,46 @@ async function runHostHcpNudgeCheck(env, targetDaysOut) {
     }
   }
   return matches.length;
+}
+
+// ── Plans helpers (v4.64.0) ───────────────────────────────────────────────────────────────────────────────────────────────────
+async function ensurePlansTables(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS gathering_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, gathering_id INTEGER NOT NULL, creator_id TEXT NOT NULL, title TEXT NOT NULL,
+    starts_at TEXT, place TEXT, description TEXT, notes TEXT, audience TEXT NOT NULL DEFAULT 'invited', status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT, updated_at TEXT)`).run();
+  await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_gathering_plans_g ON gathering_plans (gathering_id)`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS plan_rsvps (
+    plan_id INTEGER NOT NULL, player_id TEXT NOT NULL, status TEXT NOT NULL, guests INTEGER NOT NULL DEFAULT 0, updated_at TEXT,
+    PRIMARY KEY (plan_id, player_id))`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS gathering_plan_settings (
+    gathering_id INTEGER PRIMARY KEY, who_can_create TEXT NOT NULL DEFAULT 'players', updated_by TEXT, updated_at TEXT)`).run();
+}
+// The viewer's role on a Gathering: host | player (said Yes) | invited (Crew member, open Gathering, or has answered it) | none.
+async function planAccess(env, gid, player) {
+  const g = await env.DB.prepare(`SELECT id, host_id, title, event_time, crew_id, fill_list_enabled FROM gatherings WHERE id = ?`).bind(gid).first();
+  const p = String(player || '').trim();
+  if (!g) return { g: null, role: 'none' };
+  if (!p) return { g, role: 'none' };
+  if (g.host_id === p) return { g, role: 'host' };
+  const reg = await env.DB.prepare(`SELECT status FROM registrations WHERE gathering_id = ? AND player_id = ?`).bind(gid, p).first();
+  if (reg && reg.status === 'yes') return { g, role: 'player' };
+  let invited = !!reg || Number(g.fill_list_enabled) === 1;
+  if (!invited && g.crew_id) invited = !!(await env.DB.prepare(`SELECT 1 AS x FROM crew_members WHERE crew_id = ? AND player_id = ?`).bind(g.crew_id, p).first());
+  return { g, role: invited ? 'invited' : 'none' };
+}
+async function planSetting(env, gid) {
+  const r = await env.DB.prepare(`SELECT who_can_create FROM gathering_plan_settings WHERE gathering_id = ?`).bind(gid).first();
+  return r && ['players', 'invited', 'host'].includes(r.who_can_create) ? r.who_can_create : 'players';
+}
+function planCanCreate(setting, role) {
+  if (role === 'host') return true;
+  if (setting === 'host' || role === 'none') return false;
+  return setting === 'invited' ? (role === 'player' || role === 'invited') : role === 'player';
+}
+// Full access to a plan (RSVP, attendees, notes): the host and the creator always; otherwise by the plan's audience.
+function planCanJoin(plan, role, player) {
+  if (role === 'none') return false;
+  if (role === 'host' || plan.creator_id === player) return true;
+  return plan.audience === 'players' ? role === 'player' : (role === 'player' || role === 'invited');
 }
