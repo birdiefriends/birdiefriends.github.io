@@ -103,7 +103,9 @@ ok(A.liveScoreModeHtml().includes('Hole 3') && A.liveScoreModeHtml().includes('P
   ok(!/skTap\(10\)/.test(h) && !/>P</.test(h), 'no 10 key and no pickup key');
   A.get().sel = -1; A.skPick(1); eq((A.liveScoreModeHtml().match(/onclick="skTap\(/g) || []).length, 9, 'pad shows once, under the picked name');
   A.skPick(1); ok(!/skTap\(/.test(A.liveScoreModeHtml()), 'tapping the picked name again closes the pad'); }
-ok(/Group 1/.test(A.liveScoreModeHtml()) && /Group 2/.test(A.liveScoreModeHtml()), 'two foursomes -> group chips');
+ok(!/skSetGroup\(/.test(A.liveScoreModeHtml()), 'a player does not get the other groups to switch to');
+{ const ev = A.get().evt; const was = ev.hostId; ev.hostId = ctx.currentPlayer;
+  ok(/Group 1/.test(A.liveScoreModeHtml()) && /Group 2/.test(A.liveScoreModeHtml()), 'two foursomes -> the host gets group chips'); ev.hostId = was; }
 A.skSetGroup(1);
 eq(A.skGroup().players, ['Sam Lee','Pat Roe','Lee Jo','Jo Wu'], 'any group can be scored from the chips');
 ok(!/standings|Better ball/i.test(A.liveScoreModeHtml()), 'Score mode shows no standings');
