@@ -15529,6 +15529,7 @@ function historyIconActionRow(key) {
 // so gatheringType is used instead for a meaningful type label).
 function historyEventDetailLine(evt) {
   if (!evt) return '';
+  const parts = [];
   if (evt.location) parts.push(`⛳ ${evt.location}`);
   if (evt.dt instanceof Date && !isNaN(evt.dt)) {
     parts.push(`🕐 ${evt.dt.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`);
