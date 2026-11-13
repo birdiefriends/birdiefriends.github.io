@@ -4932,7 +4932,15 @@ function parseRegSubmissions(raw) {
       editUrl:   s.edit_url || `https://www.jotform.com/edit/${s.id}`,
       createdAt, updatedAt
     };
-  }).filter(r => r.eventName && r.player);
+  }).filter(r => r.eventName && r.player)
+    // One row per player per event: a second Jotform submission for the same name (a double tap, a host add) must not count or show twice. The most recently changed one wins, so a later No or Yes still decides.
+    .reduce((acc, r) => {
+      const k = (r.eventName + '|' + r.player).toLowerCase().replace(/\s+/g, ' ');
+      const i = acc.keys.get(k);
+      if (i === undefined) { acc.keys.set(k, acc.rows.length); acc.rows.push(r); }
+      else if (r.updatedAt >= acc.rows[i].updatedAt) acc.rows[i] = r;
+      return acc;
+    }, { keys: new Map(), rows: [] }).rows;
 }
 function parseMemberSubmissions(raw) {
   if (!Array.isArray(raw)) return [];
