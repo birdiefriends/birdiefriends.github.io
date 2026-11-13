@@ -1,6 +1,6 @@
 # BirdieFriends Plans (side plans around an event)
 
-Status: building (v4.64.0). Author: Brian + Claude. Date: 2026-11-13.
+Status: shipped (v4.64.0 to v4.67.0, Dev-99); announcements not built. Author: Brian + Claude. Date: 2026-11-13.
 
 ## What it is
 Players already text each other to organize things around a golf event: a pre-round breakfast, a post-round bar,
@@ -57,3 +57,13 @@ window through a different scope key later.
 
 ## Not in v1
 Chat or comments, checklists, notes edits by attendees, payments, recurring plans, plans for non-Gathering events.
+
+## As built (Dev-99, v4.64.0 to v4.67.0)
+Additions to the design above, all shipped:
+- **Count-me-in plans (`default_yes`):** every golf Yes player counts as going until they decline (used for the Turkey 2Man awards party). Players are not stored as RSVPs until they answer; the Worker computes the assumed rows on read, so late Yes players are counted and removed golf Yes players drop out.
+- **Launch prompt ("Are you in?"):** `GET /plans/pending?player_id=` returns the plans a golf Yes player has not answered (upcoming Gatherings only, never their own plans), plus a Gathering id list for the red dot. The prompt opens on app launch and right after a new golf Yes. It is skipped over a live round (launch only) and over another open dialog; "Not now" holds for the session, except right after a fresh Yes. Opt-in plans list who is going (first 8, then +N); count-me-in plans show only the count.
+- **Counts on the card:** `GET /plans/summary?player_id=` gives active plan counts per visible upcoming Gathering for the "Plans · N" label on the event card and the My Schedule row.
+- **Unregistering:** `GET /plans/mine` lists the player's Yes/Maybe plans (not ones they made); `POST /plans/leave {gathering_id, player_id, plan_ids?}` sets them to No. The dialog ticks everything by default; players-only plans are locked. Safety net on read: a players-only plan counts only people who still have the golf Yes (creator and host always count).
+- **Limits:** 20 active plans per Gathering, up to 5 guests per RSVP, title 80 / description 1000 / notes 2000 characters.
+- **Collapsed card:** shows the first 6 going names for opt-in plans the viewer can join.
+- **Not built:** plan announcements (design agreed: "Message attendees" for the creator and host, one push to Yes and Maybe players, latest message pinned on the plan card with a timestamp, about 3 per plan per day, push only, no SMS or contact info); Plans for Series/Cup events; notes and checklist modules; a push when a plan is edited or cancelled; cancelling a creator's plans when they unregister.
