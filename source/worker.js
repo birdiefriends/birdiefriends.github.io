@@ -3085,7 +3085,7 @@ export default {
     //   GET  /plans?gathering_id=&player_id=      access, can_create, setting, plans (attendees + notes only with full access)
     //   POST /plans                               create  { gathering_id, player_id, title, starts_at?, place?, description?, notes?, audience?, notify? }
     //   POST /plans/:id                           edit or cancel { player_id, title?.., status?:'cancelled' }  (creator or host)
-    //   POST /plans/:id/rsvp                      { player_id, status: yes|maybe|no, guests? }
+    //   POST /plans/:id/rsvp                      { player_id, status: yes|maybe|no, guests?, notify? }  (pushes the plan's creator when the answer changes)
     //   POST /plans/settings                      { gathering_id, host_id, who_can_create: players|invited|host }
     const plMatch = url.pathname.match(/^\/plans(?:\/(settings|pending|summary|mine|leave|\d+)(\/rsvp)?)?$/);
     if (plMatch) {
@@ -3222,9 +3222,23 @@ export default {
           if (!planCanJoin(pl, acc.role, actor)) return json({ error: pl.audience === 'players' ? 'This plan is for players who said Yes' : 'You cannot join this plan' }, 403);
           const st = str(body.status, 8), guests = Math.max(0, Math.min(10, Math.floor(Number(body.guests) || 0)));
           if (!['yes', 'maybe', 'no'].includes(st)) return json({ error: 'status must be yes, maybe or no' }, 400);
+          const prevRsvp = await env.DB.prepare(`SELECT status, guests FROM plan_rsvps WHERE plan_id = ? AND player_id = ?`).bind(planId, actor).first();
           await env.DB.prepare(`INSERT INTO plan_rsvps (plan_id, player_id, status, guests, updated_at) VALUES (?, ?, ?, ?, datetime('now'))
             ON CONFLICT(plan_id, player_id) DO UPDATE SET status = excluded.status, guests = excluded.guests, updated_at = excluded.updated_at`).bind(planId, actor, st, st === 'yes' ? guests : 0).run();
-          return json({ ok: true, status: st, guests: st === 'yes' ? guests : 0 });
+          // Push to the plan's creator when someone's answer changes (never for their own RSVP, and not when nothing changed).
+          // A first-ever "No" from someone who never said Yes/Maybe is skipped: there is nothing for the creator to act on.
+          const newGuests = st === 'yes' ? guests : 0;
+          const changed = prevRsvp ? (prevRsvp.status !== st || (Number(prevRsvp.guests) || 0) !== newGuests) : st !== 'no';
+          let creatorNotified = 0;
+          if (changed && body.notify !== false && pl.creator_id && pl.creator_id !== actor && env.OS_APP_ID && env.OS_REST_KEY) {
+            const word = st === 'yes' ? 'is in' : st === 'maybe' ? 'is a maybe' : 'can no longer make it';
+            const msg = `${actor} ${word}${st === 'yes' && newGuests ? ' (+' + newGuests + ' guest' + (newGuests > 1 ? 's' : '') + ')' : ''}`;
+            const send = fetch('https://onesignal.com/api/v1/notifications', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
+              body: JSON.stringify({ app_id: env.OS_APP_ID, headings: { en: '📌 ' + pl.title }, contents: { en: msg }, filters: [{ field: 'tag', key: 'player_name', relation: '=', value: pl.creator_id }], url: 'https://birdiefriends.com/portal.html' }) }).catch(e => console.warn('Plan RSVP push failed:', e));
+            creatorNotified = 1;
+            if (ctx && ctx.waitUntil) ctx.waitUntil(send); else await send;
+          }
+          return json({ ok: true, status: st, guests: newGuests, creator_notified: creatorNotified });
         }
         if (acc.role !== 'host' && pl.creator_id !== actor) return json({ error: 'Only the person who made the plan, or the host, can change it' }, 403);
         const sets = [], binds = [];

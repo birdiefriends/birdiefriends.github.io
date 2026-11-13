@@ -33,8 +33,11 @@ The host can cancel any plan. A plan expires with its event (hidden once the eve
 
 ## Notifications
 One push to the players (golf Yes) when a plan is created, so nobody has to text. Nothing else pushes by default: no
-chat thread, no "X joined" noise. RSVP changes are visible in the window. (A push to the creator on RSVP changes is a
-possible later option.)
+chat thread, no "X joined" noise. RSVP changes are visible in the window.
+
+**Creator push:** the plan's creator gets one push when someone's RSVP changes ("Name is in (+2 guests)", "is a maybe",
+"can no longer make it"). Not sent for the creator's own RSVP, when the answer did not change, or for a first-ever No.
+The RSVP call accepts `notify: false` to suppress it. Push only, same OneSignal `player_name` tag path as the create push.
 
 ## Data (main Worker, D1, created on first use, so no manual migration)
 - `gathering_plans(id, gathering_id, creator_id, title, starts_at, place, description, notes, audience, status, created_at, updated_at)`
