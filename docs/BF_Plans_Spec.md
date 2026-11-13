@@ -42,6 +42,8 @@ message is pinned on the plan card with the sender and a timestamp. Limit: 3 mes
 after that). Push only: no SMS, no contact info. Stored in `plan_messages(id, plan_id, sender_id, body, created_at)`,
 created on first use.
 
+**Drill detail (v4.69.0):** an expanded plan lists Going, Maybe, No and No response names (full access only). No response = golf Yes players who have not answered the plan (never the creator; count-me-in plans have none, since everyone is assumed Yes). `GET /plans` returns No rows in `attendees` and a `no_response` name list.
+
 ## Data (main Worker, D1, created on first use, so no manual migration)
 - `gathering_plans(id, gathering_id, creator_id, title, starts_at, place, description, notes, audience, status, created_at, updated_at)`
   `audience` = `invited` | `players`; `status` = `active` | `cancelled`.

@@ -17757,6 +17757,9 @@ function plansCardHtml(pl, d, openId) {
       const at = (pl.attendees || []).filter(a => a.status === 'yes'), mb = (pl.attendees || []).filter(a => a.status === 'maybe');
       if (at.length && !pl.default_yes) h += `<div style="font-size:0.78rem;margin-top:8px"><b>Going:</b> ${at.map(a => escapeHtml(a.player) + (a.guests ? ' +' + a.guests : '')).join(', ')}</div>`;
       if (mb.length) h += `<div style="font-size:0.78rem;margin-top:2px;color:var(--text-muted)"><b>Maybe:</b> ${mb.map(a => escapeHtml(a.player)).join(', ')}</div>`;
+      const no = (pl.attendees || []).filter(a => a.status === 'no'), nr = pl.no_response || [];
+      if (no.length) h += `<div style="font-size:0.78rem;margin-top:2px;color:var(--text-muted)"><b>No:</b> ${no.map(a => escapeHtml(a.player)).join(', ')}</div>`;
+      if (nr.length) h += `<div style="font-size:0.78rem;margin-top:2px;color:var(--text-muted)"><b>No response:</b> ${nr.map(escapeHtml).join(', ')}</div>`;
     } else {
       h += `<div style="font-size:0.76rem;margin-top:8px;color:var(--text-hint)">${pl.audience === 'players' ? 'This plan is for players who said Yes to the golf event.' : 'You can see the basics only.'}</div>`;
     }

@@ -3082,7 +3082,7 @@ export default {
     // A plan is a title, time, place and description with a Yes/Maybe/No RSVP. See docs/BF_Plans_Spec.md for the access rules:
     // host / player (golf Yes) / invited, a per-Gathering "who can create" setting, and a per-plan "who can join". Tables are
     // created on first use (no manual migration).
-    //   GET  /plans?gathering_id=&player_id=      access, can_create, setting, plans (attendees + notes only with full access)
+    //   GET  /plans?gathering_id=&player_id=      access, can_create, setting, plans (attendees incl. No, no_response + notes only with full access)
     //   POST /plans                               create  { gathering_id, player_id, title, starts_at?, place?, description?, notes?, audience?, notify? }
     //   POST /plans/:id                           edit or cancel { player_id, title?.., status?:'cancelled' }  (creator or host)
     //   POST /plans/:id/rsvp                      { player_id, status: yes|maybe|no, guests? }
@@ -3174,7 +3174,9 @@ export default {
             out.plans.push({ default_yes: !!pl.default_yes, needs_response: !!(pl.default_yes && my && my.assumed && pl.creator_id !== viewer), id: pl.id, title: pl.title, starts_at: pl.starts_at || '', place: pl.place || '', description: pl.description || '', audience: pl.audience, creator_id: pl.creator_id,
               counts, can_join: full, can_edit: acc.role === 'host' || pl.creator_id === viewer, my: my ? { status: my.status, guests: Number(my.guests) || 0, assumed: !!my.assumed } : null,
               ...(full ? { message: (() => { const m = msgs.find(x => x.plan_id === pl.id); return m ? { text: m.body, from: m.sender_id, at: m.created_at } : null; })() } : {}),
-              ...(full ? { notes: pl.notes || '', attendees: mine.filter(r => r.status !== 'no').map(r => ({ player: r.player_id, status: r.status, guests: Number(r.guests) || 0 })) } : {}) });
+              ...(full ? { notes: pl.notes || '', attendees: mine.map(r => ({ player: r.player_id, status: r.status, guests: Number(r.guests) || 0 })),
+                // Golf Yes players who have not answered this plan (never the creator; a count-me-in plan has none, they are assumed Yes).
+                no_response: golfYes.map(g => g.player_id).filter(id => id !== pl.creator_id && !mine.some(r => r.player_id === id)).sort((a, b) => a.localeCompare(b)) } : {}) });
           }
           return json(out);
         }

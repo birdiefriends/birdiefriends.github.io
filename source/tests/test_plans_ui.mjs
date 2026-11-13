@@ -55,16 +55,24 @@ const lv = ctx.LV([{ id: 1, title: 'Breakfast', starts_at: '2026-11-15T07:30', k
 ok((lv.match(/class="plans-leave-cb"[^>]*checked/g) || []).length === 2 && /value="2" checked disabled/.test(lv) && !/value="1" checked disabled/.test(lv), 'leave dialog: everything ticked by default, a players-only plan is locked');
 ok(/Untick any you still want to join/.test(lv) && /Players only, so you drop out/.test(lv) && /Keep my plans as they are/.test(lv), 'leave dialog wording');
 ok(/plansLeavePrompt\(evt\);\s*\/\/ they were in side plans/.test(src) && /plans\/leave/.test(src), 'unregistering from a Gathering opens the plans dialog');
-console.log(`plans_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
 
 // Message attendees: button for creator/host only, composer when open, latest message pinned with who and when.
 h = ctx.H(d({ plans: [pl({ can_edit: true })] }), 1, null);
 ok(/plansMsgOpen\(1\)/.test(h) && /Message attendees/.test(h) && !/plans-msg-text/.test(h), 'creator/host sees Message attendees, composer closed');
 h = ctx.H(d({ plans: [pl()] }), 1, null); ok(!/Message attendees/.test(h), 'a plain attendee has no Message attendees button');
-ctx.eval('_plansMsgId = 1; _plansMsgText = "Bring <cash>"');
+vm.runInContext('_plansMsgId = 1; _plansMsgText = "Bring <cash>"', ctx);
 h = ctx.H(d({ plans: [pl({ can_edit: true })] }), 1, null);
 ok(/id="plans-msg-text"/.test(h) && /Bring &lt;cash&gt;/.test(h) && /plansMsgSend\(1\)/.test(h), 'composer open, draft escaped');
-ctx.eval('_plansMsgId = null; _plansMsgText = ""');
+vm.runInContext('_plansMsgId = null; _plansMsgText = ""', ctx);
 h = ctx.H(d({ plans: [pl({ message: { text: 'Leaving at 7 <sharp>', from: 'Dave', at: '2026-11-14 22:30:00' } })] }), null, null);
 ok(/Leaving at 7 &lt;sharp&gt;/.test(h) && />Dave</.test(h) && /📣/.test(h), 'latest message is pinned on the collapsed card with sender, text escaped');
 ok(ctx.MT('') === '' && ctx.MT('garbage') === '' && ctx.MT('2026-11-14 22:30:00') !== '', 'message time formats, bad input is blank');
+
+// Drill detail lists No and No response names too (full access only).
+h = ctx.H(d({ plans: [pl({ attendees: [{ player: 'Ann', status: 'yes', guests: 0 }, { player: 'Bo', status: 'maybe', guests: 0 }, { player: 'Cy <x>', status: 'no', guests: 0 }], no_response: ['Di', 'Ed'] })] }), 1, null);
+ok(/<b>No:<\/b> Cy &lt;x&gt;/.test(h) && /<b>No response:<\/b> Di, Ed/.test(h) && /<b>Maybe:<\/b> Bo/.test(h) && (h.match(/Going:/g) || []).length === 1, 'expanded plan lists No and No response names, escaped, Going once');
+h = ctx.H(d({ plans: [pl({ attendees: [{ player: 'Ann', status: 'yes', guests: 0 }], no_response: [] })] }), 1, null);
+ok(!/<b>No:/.test(h) && !/No response/.test(h), 'no empty No / No response lines');
+h = ctx.H(d({ role: 'invited', can_create: false, plans: [pl({ audience: 'players', can_join: false, attendees: undefined, no_response: undefined })] }), 1, null);
+ok(!/No response/.test(h), 'basics-only viewers see no names');
+console.log(`plans_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

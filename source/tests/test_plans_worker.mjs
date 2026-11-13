@@ -58,7 +58,7 @@ r = await view(104, 'Bob Player'); const p2b = r.json.plans.find(p => p.id === p
 ok(p2b.counts.yes === 2 && p2b.counts.guests === 2 && p2b.my.status === 'yes' && p2b.attendees.length === 2, 'counts include guests, my RSVP is returned, attendees listed');
 r = await call('POST', `/plans/${pid2}/rsvp`, { player_id: 'Bob Player', status: 'no', guests: 3 });
 r = await view(104, 'Bob Player'); const p2c = r.json.plans.find(p => p.id === pid2);
-ok(p2c.counts.no === 1 && p2c.counts.yes === 1 && p2c.counts.guests === 0 && !p2c.attendees.some(a => a.player === 'Bob Player'), 'changing to No clears guests and drops them from the attendee list');
+ok(p2c.counts.no === 1 && p2c.counts.yes === 1 && p2c.counts.guests === 0 && p2c.attendees.some(a => a.player === 'Bob Player' && a.status === 'no' && a.guests === 0), 'changing to No clears guests and lists them as No (the drill detail shows No names)');
 r = await call('POST', `/plans/1/rsvp`, { player_id: 'Ed Invited', status: 'maybe' }); ok(r.status === 200, 'an invited member can RSVP to a plan open to everyone invited');
 r = await call('POST', `/plans/1/rsvp`, { player_id: 'Ed Invited', status: 'sure' }); ok(r.status === 400, 'bad status refused');
 r = await call('POST', `/plans/1/rsvp`, { player_id: 'Stranger', status: 'yes' }); ok(r.status === 403, 'a stranger cannot RSVP');
