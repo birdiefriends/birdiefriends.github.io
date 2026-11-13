@@ -111,4 +111,31 @@ ok(log.json.alerts.some(a => a.kind === 'AllIn' && a.status === 'sent'), 'the al
   const lg = await call('GET', '/bfe/score-alerts?event=gathering:121');
   ok(lg.json.alerts.length === 1 && lg.json.alerts[0].status === 'failed' && /push 404 error code: 1042/.test(lg.json.alerts[0].error), 'a 404 from another Worker is logged with its text (error code: 1042): ' + (lg.json.alerts[0] && lg.json.alerts[0].error));
 }
+// Final-hole gating: a birdie is announced only once its hole is final (hole-final signal, or a later hole scored), never while still being keyed.
+{
+  putGames(130, ['skins'], {}); const ek = 'gathering:130';
+  const upTo = n => Array.from({ length: 18 }, (_, i) => (i < n ? 4 : null));
+  const saveP = (player, n, m) => call('POST', '/scorecards', { event_name: ek, player, holes: upTo(n), marks: marksWith(m), input_type: 'strokes' });
+  const alertsNow = async () => (await call('GET', '/bfe/score-alerts?event=' + ek)).json.alerts;
+  const before = pushes.length;
+  await saveP('Ann', 5, { 5: 'birdie' });
+  ok(pushes.length === before && (await alertsNow()).length === 0, 'a birdie on the hole just keyed is NOT announced yet');
+  await saveP('Ann', 5, { 5: null });      // the scorer fixes a keying mistake
+  ok(pushes.length === before, 'fixing the mistake announces nothing');
+  await saveP('Ann', 5, { 5: 'birdie' });
+  let r2 = await call('POST', '/bfe/hole-final', { event_name: ek, hole: 5, players: ['Ann'] });
+  ok(r2.status === 200 && pushes.length === before + 1 && /#5/.test(pushes[pushes.length - 1].headings.en), 'the hole-final signal announces it once');
+  await call('POST', '/bfe/hole-final', { event_name: ek, hole: 5, players: ['Ann'] });
+  ok(pushes.length === before + 1, 'a repeated hole-final does not announce it again');
+  await saveP('Bob', 7, { 6: 'birdie' });   // Bob's phone never sent hole-final, but he has scored hole 7
+  ok(pushes.length === before + 2 && /#6/.test(pushes[pushes.length - 1].headings.en), 'a later hole being scored is the safety net when the signal is lost');
+  await saveP('Cy', 9, { 9: 'eagle' });
+  ok(pushes.length === before + 2, 'the last hole keyed so far (hole 9 of 9 scored) stays quiet until final');
+  const bad = await call('POST', '/bfe/hole-final', { event_name: ek, hole: 0, players: [] });
+  ok(bad.status === 400, 'hole-final validates its input');
+  const other = await call('POST', '/bfe/hole-final', { event_name: ek, hole: 9, players: ['Someone Else'] });
+  ok(other.status === 200 && pushes.length === before + 2, 'one group\'s hole-final does not announce another player\'s hole');
+  await call('POST', '/bfe/hole-final', { event_name: ek, hole: 9, players: ['Cy'] });
+  ok(pushes.length === before + 3, 'the right player\'s hole-final announces their eagle');
+}
 console.log(`score alerts worker: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

@@ -11144,8 +11144,33 @@ function skSetScoreOne(name, hole, v) {
   skQueueSave(name);
 }
 function skPick(k) { if (_sk) { _sk.sel = _sk.sel === k ? -1 : k; renderLiveBanner(); } }
+// A hole is final when Next is tapped with every score on it in (the last hole's Next counts too). The Worker only announces a birdie or
+// better once its hole is final, so a keying mistake being fixed is never announced. Sent after the pending saves land; a failed send is
+// retried on the next tap, and the Worker also treats a later hole being scored as final, so a dropped signal only delays the alert.
+function skFinalizeHole(hole) {
+  if (!_sk || !_sk.key || !hole) return;
+  const g = skGroup(); if (!g || !g.players || !g.players.length) return;
+  if (!g.players.every(n => skCardOf(n)[hole - 1] > 0)) return;
+  _sk.finalQueue = (_sk.finalQueue || []).filter(x => x.hole !== hole).concat([{ hole, players: g.players.slice() }]);
+  skFlushFinal();
+}
+async function skFlushFinal() {
+  if (!_sk || _sk._finalBusy || !(_sk.finalQueue || []).length) return;
+  _sk._finalBusy = true;
+  try {
+    await Promise.all(Object.values(_skChain));
+    while (_sk && _sk.finalQueue.length) {
+      const it = _sk.finalQueue[0];
+      const res = await fetch(`${BFE_API}/bfe/hole-final`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_name: _sk.key, hole: it.hole, players: it.players }) });
+      if (!res.ok) throw new Error('hole-final ' + res.status);
+      _sk.finalQueue.shift();
+    }
+  } catch (e) { console.warn('[Score] hole-final will retry:', e.message); }
+  if (_sk) _sk._finalBusy = false;
+}
 function skNav(d) {
   if (!_sk) return;
+  if (d > 0) skFinalizeHole(_sk.hole);
   const ord = skOrder(), i = ord.indexOf(_sk.hole), h = ord[Math.min(ord.length - 1, Math.max(0, (i < 0 ? 0 : i) + d))];
   _sk.hole = h; _sk.sel = skGroup().players.findIndex(n => !(skCardOf(n)[h - 1] > 0));
   renderLiveBanner();

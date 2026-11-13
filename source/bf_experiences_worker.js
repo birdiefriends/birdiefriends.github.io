@@ -1311,6 +1311,14 @@ async function ensureScoreAlertsTable(env) {
     status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, pushed INTEGER, error TEXT,
     created_at TEXT, sent_at TEXT, PRIMARY KEY (event_name, hole, unit_key))`).run();
 }
+// A hole is FINAL (and so announceable) when the scorer's phone says so (tapped Next after every score on the hole was in; the last
+// hole's Next counts too) or, as the safety net for a dropped signal, when a later hole has been scored by that unit. This is what
+// keeps a keying mistake from being announced the moment it is typed.
+async function ensureHoleFinalTable(env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bfe_hole_final (
+    event_name TEXT NOT NULL, hole INTEGER NOT NULL, player_lc TEXT NOT NULL, created_at TEXT,
+    PRIMARY KEY (event_name, hole, player_lc))`).run();
+}
 async function sendScoreAlert(env, a, audience, title) {
   const heading = `${a.k.emoji} #${a.hole} — ${a.label}`;
   const body = a.upgraded ? `${a.k.label} (corrected up from a lower score)` : `${a.k.label}`;
@@ -1381,11 +1389,17 @@ async function scanScoreAlerts(env, eventName) {
   if (!expect) { const lv = await liveTeamsFor(env, m[1], 1); if (lv) expect = lv.units; }
   const audience = [...new Set(units.flatMap(u => u.members).concat(roster, (results || []).map(r => r.player)))];
   const sent = [], failed = [];
+  await ensureHoleFinalTable(env);
+  const { results: finals } = await env.DB.prepare(`SELECT hole, player_lc FROM bfe_hole_final WHERE event_name = ?`).bind(eventName).all();
+  const finalSet = new Set((finals || []).map(f => f.hole + '|' + f.player_lc));
   for (const u of units) {
     const src = u.members.map(n => by.get(lc(n))).find(r => r && Array.isArray(r.marks) && r.marks.length === 18);
     if (!src) continue;
+    const isFinal = h => u.members.some(n => finalSet.has(h + '|' + lc(n))) ||
+      (h < 18 && u.members.some(n => { const c = by.get(lc(n)); return c && Array.isArray(c.holes) && Number(c.holes[h]) > 0; }));   // hole h+1 scored
     for (let h = 1; h <= 18; h++) {
       const k = ALERT_KINDS[src.marks[h - 1]]; if (!k) continue;
+      if (!isFinal(h)) continue;                                  // not final yet: say nothing, a later save or the hole-final signal will pick it up
       const ex = await env.DB.prepare(`SELECT kind, status, attempts, created_at FROM bfe_score_alerts WHERE event_name = ? AND hole = ? AND unit_key = ?`).bind(eventName, h, u.key).first();
       let upgraded = false;
       if (!ex) {
@@ -1488,6 +1502,21 @@ export default {
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Database error saving scorecard: ' + String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
+    }
+
+    // POST /bfe/hole-final { event_name: 'gathering:<id>', hole, players: [names] } — the scorer's phone says this hole is done for these players
+    // (Next was tapped with every score in). Birdie / eagle / albatross alerts for the hole are only announced once it is final.
+    if (request.method === 'POST' && url.pathname === '/bfe/hole-final') {
+      try {
+        let b; try { b = await request.json(); } catch (e) { return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }); }
+        const ev = String(b.event_name || ''), hole = Math.trunc(Number(b.hole)), ps = (Array.isArray(b.players) ? b.players : []).map(x => String(x || '').trim().toLowerCase()).filter(Boolean).slice(0, 12);
+        if (!/^gathering:\d+$/.test(ev) || !(hole >= 1 && hole <= 18) || !ps.length) return new Response(JSON.stringify({ error: 'event_name (gathering:<id>), hole (1-18) and players are required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        await ensureHoleFinalTable(env);
+        for (const p of ps) await env.DB.prepare(`INSERT OR IGNORE INTO bfe_hole_final (event_name, hole, player_lc, created_at) VALUES (?, ?, ?, datetime('now'))`).bind(ev, hole, p).run();
+        const scan = scanScoreAlerts(env, ev).catch(e => console.warn('Score alert scan failed:', e && e.message));
+        if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(scan); else await scan;
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) { return new Response(JSON.stringify({ error: String(e.message || e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }); }
     }
 
     // GET /bfe/score-alerts?event=gathering:<id> — what the automatic alerts did for a round: sent, failed (and why), when.
