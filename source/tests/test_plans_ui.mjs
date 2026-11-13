@@ -27,6 +27,10 @@ h = ctx.H(d({ role: 'invited', can_create: false, plans: [] }), null, null); ok(
 h = ctx.H(d(), null, { audience: 'invited' }); ok(/id="plan-f-title"/.test(h) && /Add plan/.test(h) && !/Add a plan<\/button>/.test(h), 'the form replaces the add button');
 h = ctx.H(d(), null, { id: 4, title: 'A "q"', audience: 'players' }); ok(/Edit plan/.test(h) && /A &quot;q&quot;/.test(h) && /<option value="players" selected>/.test(h), 'edit form is prefilled and escaped');
 ok(/Plans are for people invited/.test(ctx.H({ role: 'none', plans: [] }, null, null)) && /Loading/.test(ctx.H(null)) && /Could not/.test(ctx.H({ error: 'Could not load plans' })), 'none, loading, error states');
-ok(/openPlansSheet\('\$\{evt\.id\}'\)/.test(src) && /evt\.source === 'gathering' && !isCanceled && evt\.gatheringId != null\) \? `\s*<button class="icon-action-btn" onclick="openPlansSheet/.test(src), 'the Plans icon is on Gathering cards only, not cancelled ones');
+ok(/openPlansSheet\('\$\{evt\.id\}'\)/.test(src) && /evt\.source === 'gathering' && !isCanceled && evt\.gatheringId != null\) \? `\s*<button class="icon-action-btn" data-plans-gid="\$\{evt\.gatheringId\}" onclick="openPlansSheet/.test(src), 'the Plans icon is on Gathering cards only, not cancelled ones');
 ok(/id="plans-modal"/.test(src) && /id="plans-body"/.test(src), 'the modal exists');
+h = ctx.H(d({ plans: [pl({ default_yes: true, needs_response: true, my: { status: 'yes', guests: 0, assumed: true } })] }), 1, null);
+ok(/please confirm/.test(h) && /You are counted in/.test(h), 'a default-Yes plan prompts the player to confirm or decline');
+h = ctx.H(d(), null, { audience: 'players', default_yes: true }); ok(/id="plan-f-dy" checked/.test(h), 'the form has the count-in-by-default box');
+ok(/_plansPending\.has\(Number\(evt\.gatheringId\)\)/.test(src) && /plansPendingLoad\(\);\s*\/\/ fire-and-forget/.test(src), 'the icon dot and its load are wired');
 console.log(`plans_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

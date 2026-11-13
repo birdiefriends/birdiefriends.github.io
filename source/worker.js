@@ -3087,7 +3087,7 @@ export default {
     //   POST /plans/:id                           edit or cancel { player_id, title?.., status?:'cancelled' }  (creator or host)
     //   POST /plans/:id/rsvp                      { player_id, status: yes|maybe|no, guests? }
     //   POST /plans/settings                      { gathering_id, host_id, who_can_create: players|invited|host }
-    const plMatch = url.pathname.match(/^\/plans(?:\/(settings|\d+)(\/rsvp)?)?$/);
+    const plMatch = url.pathname.match(/^\/plans(?:\/(settings|pending|\d+)(\/rsvp)?)?$/);
     if (plMatch) {
       const json = (obj, status) => new Response(JSON.stringify(obj), { status: status || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       try {
@@ -3096,6 +3096,16 @@ export default {
         if (request.method === 'POST') { try { body = await request.json(); } catch (e) { return json({ error: 'Invalid JSON' }, 400); } }
         const seg = plMatch[1], isRsvp = !!plMatch[2];
         const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+        if (request.method === 'GET' && seg === 'pending') {
+          // Which Gatherings have a plan waiting on this player (a default-Yes plan they have not confirmed or declined).
+          const who = str(url.searchParams.get('player_id'), 120);
+          if (!who) return json({ ok: true, gathering_ids: [] });
+          const { results } = await env.DB.prepare(`SELECT DISTINCT p.gathering_id AS gid FROM gathering_plans p
+            JOIN registrations g ON g.gathering_id = p.gathering_id AND g.player_id = ? AND g.status = 'yes'
+            WHERE p.status = 'active' AND p.default_yes = 1 AND p.creator_id != ?
+              AND NOT EXISTS (SELECT 1 FROM plan_rsvps r WHERE r.plan_id = p.id AND r.player_id = ?)`).bind(who, who, who).all();
+          return json({ ok: true, gathering_ids: results.map(r => r.gid) });
+        }
         if (request.method === 'GET' && !seg) {
           const gid = Number(url.searchParams.get('gathering_id')), viewer = str(url.searchParams.get('player_id'), 120);
           if (!gid) return json({ error: 'gathering_id is required' }, 400);
@@ -3106,14 +3116,17 @@ export default {
           if (acc.role === 'none') return json(out);
           const { results: plans } = await env.DB.prepare(`SELECT * FROM gathering_plans WHERE gathering_id = ? AND status = 'active' ORDER BY COALESCE(NULLIF(starts_at,''), '9999'), id`).bind(gid).all();
           const { results: rs } = await env.DB.prepare(`SELECT r.plan_id, r.player_id, r.status, r.guests FROM plan_rsvps r JOIN gathering_plans p ON p.id = r.plan_id WHERE p.gathering_id = ? ORDER BY r.updated_at`).bind(gid).all();
+          const { results: golfYes } = await env.DB.prepare(`SELECT player_id FROM registrations WHERE gathering_id = ? AND status = 'yes' AND COALESCE(is_placeholder,0) = 0`).bind(gid).all();
           for (const pl of plans) {
-            const mine = rs.filter(r => r.plan_id === pl.id);
+            const mine = rs.filter(r => r.plan_id === pl.id).map(r => ({ ...r }));
+            // A default-Yes plan counts every golf Yes player as going until they decline.
+            if (pl.default_yes) golfYes.forEach(g => { if (!mine.some(r => r.player_id === g.player_id)) mine.push({ plan_id: pl.id, player_id: g.player_id, status: 'yes', guests: 0, assumed: true }); });
             const counts = { yes: 0, maybe: 0, no: 0, guests: 0 };
             mine.forEach(r => { if (counts[r.status] != null) counts[r.status]++; if (r.status === 'yes') counts.guests += Number(r.guests) || 0; });
             const full = planCanJoin(pl, acc.role, viewer);
             const my = mine.find(r => r.player_id === viewer);
-            out.plans.push({ id: pl.id, title: pl.title, starts_at: pl.starts_at || '', place: pl.place || '', description: pl.description || '', audience: pl.audience, creator_id: pl.creator_id,
-              counts, can_join: full, can_edit: acc.role === 'host' || pl.creator_id === viewer, my: my ? { status: my.status, guests: Number(my.guests) || 0 } : null,
+            out.plans.push({ default_yes: !!pl.default_yes, needs_response: !!(pl.default_yes && my && my.assumed && pl.creator_id !== viewer), id: pl.id, title: pl.title, starts_at: pl.starts_at || '', place: pl.place || '', description: pl.description || '', audience: pl.audience, creator_id: pl.creator_id,
+              counts, can_join: full, can_edit: acc.role === 'host' || pl.creator_id === viewer, my: my ? { status: my.status, guests: Number(my.guests) || 0, assumed: !!my.assumed } : null,
               ...(full ? { notes: pl.notes || '', attendees: mine.filter(r => r.status !== 'no').map(r => ({ player: r.player_id, status: r.status, guests: Number(r.guests) || 0 })) } : {}) });
           }
           return json(out);
@@ -3139,8 +3152,8 @@ export default {
           const cnt = await env.DB.prepare(`SELECT COUNT(*) AS n FROM gathering_plans WHERE gathering_id = ? AND status = 'active'`).bind(gid).first();
           if (cnt && cnt.n >= 20) return json({ error: 'This event already has 20 plans' }, 400);
           const audience = body.audience === 'players' ? 'players' : 'invited';
-          const ins = await env.DB.prepare(`INSERT INTO gathering_plans (gathering_id, creator_id, title, starts_at, place, description, notes, audience, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))`).bind(gid, actor, title, str(body.starts_at, 40), str(body.place, 120), str(body.description, 1000), str(body.notes, 2000), audience).run();
+          const ins = await env.DB.prepare(`INSERT INTO gathering_plans (gathering_id, creator_id, title, starts_at, place, description, notes, audience, default_yes, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))`).bind(gid, actor, title, str(body.starts_at, 40), str(body.place, 120), str(body.description, 1000), str(body.notes, 2000), audience, body.default_yes ? 1 : 0).run();
           const planId = ins.meta && ins.meta.last_row_id;
           if (planId) await env.DB.prepare(`INSERT INTO plan_rsvps (plan_id, player_id, status, guests, updated_at) VALUES (?, ?, 'yes', 0, datetime('now'))`).bind(planId, actor).run();
           let notified = 0;
@@ -3148,7 +3161,7 @@ export default {
             const { results: yes } = await env.DB.prepare(`SELECT player_id FROM registrations WHERE gathering_id = ? AND status = 'yes' AND player_id != ? AND COALESCE(is_placeholder,0) = 0`).bind(gid, actor).all();
             const when = str(body.starts_at, 40).replace('T', ' '), msg = `${actor}${when ? ' · ' + when : ''}${body.place ? ' · ' + str(body.place, 60) : ''}`;
             const sends = yes.map(r => fetch('https://onesignal.com/api/v1/notifications', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Key ' + env.OS_REST_KEY },
-              body: JSON.stringify({ app_id: env.OS_APP_ID, headings: { en: '📌 New plan: ' + title }, contents: { en: msg }, filters: [{ field: 'tag', key: 'player_name', relation: '=', value: r.player_id }], url: 'https://birdiefriends.com/portal.html' }) }).catch(e => console.warn('Plan push failed:', e)));
+              body: JSON.stringify({ app_id: env.OS_APP_ID, headings: { en: '📌 New plan: ' + title }, contents: { en: (body.default_yes ? 'You are counted in. Open the app to confirm or decline. ' : '') + msg }, filters: [{ field: 'tag', key: 'player_name', relation: '=', value: r.player_id }], url: 'https://birdiefriends.com/portal.html' }) }).catch(e => console.warn('Plan push failed:', e)));
             notified = sends.length;
             if (ctx && ctx.waitUntil) ctx.waitUntil(Promise.all(sends)); else await Promise.all(sends);
           }
@@ -3178,6 +3191,7 @@ export default {
         if (body.place !== undefined) put('place', str(body.place, 120));
         if (body.description !== undefined) put('description', str(body.description, 1000));
         if (body.notes !== undefined) put('notes', str(body.notes, 2000));
+        if (body.default_yes !== undefined) put('default_yes', body.default_yes ? 1 : 0);
         if (body.audience !== undefined) put('audience', body.audience === 'players' ? 'players' : 'invited');
         if (body.status === 'cancelled') put('status', 'cancelled');
         if (!sets.length) return json({ error: 'Nothing to change' }, 400);
@@ -3792,6 +3806,7 @@ async function ensurePlansTables(env) {
     id INTEGER PRIMARY KEY AUTOINCREMENT, gathering_id INTEGER NOT NULL, creator_id TEXT NOT NULL, title TEXT NOT NULL,
     starts_at TEXT, place TEXT, description TEXT, notes TEXT, audience TEXT NOT NULL DEFAULT 'invited', status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT, updated_at TEXT)`).run();
+  try { await env.DB.prepare(`ALTER TABLE gathering_plans ADD COLUMN default_yes INTEGER NOT NULL DEFAULT 0`).run(); } catch (e) { /* already there */ }
   await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_gathering_plans_g ON gathering_plans (gathering_id)`).run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS plan_rsvps (
     plan_id INTEGER NOT NULL, player_id TEXT NOT NULL, status TEXT NOT NULL, guests INTEGER NOT NULL DEFAULT 0, updated_at TEXT,

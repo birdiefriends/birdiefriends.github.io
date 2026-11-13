@@ -84,4 +84,21 @@ r = await call('POST', `/plans/${edPlan}`, { player_id: 'Brian Hager', status: '
 r = await view(104, 'Bob Player'); ok(!r.json.plans.some(p => p.id === edPlan), 'a cancelled plan disappears');
 r = await call('POST', `/plans/${edPlan}/rsvp`, { player_id: 'Bob Player', status: 'yes' }); ok(r.status === 400, 'a cancelled plan takes no RSVPs');
 r = await call('POST', '/plans/9999', { player_id: 'Brian Hager', title: 'x' }); ok(r.status === 404, 'unknown plan is a 404');
+
+// default-Yes plan (awards / pizza party): golf Yes players count as going until they decline
+await call('POST', '/plans/settings', { gathering_id: 104, host_id: 'Brian Hager', who_can_create: 'players' });
+pushes.length = 0;
+r = await call('POST', '/plans', { gathering_id: 104, player_id: 'Brian Hager', title: 'Awards + pizza', audience: 'players', default_yes: true });
+const pz = r.json.id; ok(r.status === 200 && /counted in/.test(pushes[0].contents.en), 'a default-Yes plan pushes "you are counted in"');
+r = await view(104, 'Ann Player'); let pp = r.json.plans.find(p => p.id === pz);
+ok(pp.default_yes && pp.counts.yes === 3 && pp.my.assumed && pp.needs_response, 'golf Yes players (Ann, Bob and the host) are counted, and Ann is asked to respond: ' + JSON.stringify(pp.counts));
+r = await view(104, 'Brian Hager'); pp = r.json.plans.find(p => p.id === pz); ok(!pp.needs_response && !pp.my.assumed, 'the creator is not prompted');
+r = await view(104, 'Ed Invited'); pp = r.json.plans.find(p => p.id === pz); ok(pp.counts.yes === 3 && !pp.needs_response && pp.can_join === false, 'a non-player is not assumed or prompted');
+r = await call('GET', '/plans/pending?player_id=Ann%20Player'); ok(JSON.stringify(r.json.gathering_ids) === '[104]', 'pending lists the Gathering for Ann: ' + JSON.stringify(r.json));
+r = await call('GET', '/plans/pending?player_id=Ed%20Invited'); ok(r.json.gathering_ids.length === 0, 'and not for a non-player');
+await call('POST', `/plans/${pz}/rsvp`, { player_id: 'Ann Player', status: 'no' });
+r = await view(104, 'Ann Player'); pp = r.json.plans.find(p => p.id === pz); ok(pp.counts.yes === 2 && pp.counts.no === 1 && !pp.needs_response && pp.my.status === 'no', 'declining takes her out of the count and clears the prompt');
+await call('POST', `/plans/${pz}/rsvp`, { player_id: 'Bob Player', status: 'yes' });
+r = await call('GET', '/plans/pending?player_id=Ann%20Player'); ok(r.json.gathering_ids.length === 0, 'once answered nothing is pending');
+r = await call('GET', '/plans/pending?player_id=Bob%20Player'); ok(r.json.gathering_ids.length === 0, 'confirming also clears it');
 console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

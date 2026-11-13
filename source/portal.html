@@ -4693,6 +4693,7 @@ async function loadAllData() {
     memberData = parseMemberSubmissions(memContent);
     dataLoaded = true;
     renderAll();
+    plansPendingLoad();   // fire-and-forget: dot on the Plans icon when a plan is waiting on this player
     buildPlayerPickerGrid();  // refresh picker now roster is live
     // Dev-80 — fire-and-forget: BFE-backed index isn't needed for the first
     // paint (icon gating/widget banner just stay in their "not BFE-backed"
@@ -6171,8 +6172,8 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-label">Notes</span>
       </button>` : ''}
       ${(evt.source === 'gathering' && !isCanceled && evt.gatheringId != null) ? `
-      <button class="icon-action-btn" onclick="openPlansSheet('${evt.id}')">
-        <span class="icon-action-badge secondary">📌</span>
+      <button class="icon-action-btn" data-plans-gid="${evt.gatheringId}" onclick="openPlansSheet('${evt.id}')">
+        <span class="icon-action-badge secondary" style="position:relative">📌${_plansPending.has(Number(evt.gatheringId)) ? '<span class="plans-dot" style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#e53935"></span>' : ''}</span>
         <span class="icon-action-label">Plans</span>
       </button>` : ''}
       <!-- Dev-88 (2026-09-29) — Yardage/Rules/Venue dropped from the card
@@ -17590,7 +17591,24 @@ function renderRulesContent() {
 // Dev-69 — accepts either an evtId or a full evt object directly; see
 // openCardScoreSheet's comment above for why.
 // ── Plans (v4.64.0): side plans around a Gathering — see docs/BF_Plans_Spec.md ───────────────────────────────────────────────
-let _plansEvt = null, _plansData = null, _plansOpenId = null, _plansForm = null;
+let _plansEvt = null, _plansData = null, _plansOpenId = null, _plansForm = null, _plansPending = new Set();
+function plansApplyDots() {
+  document.querySelectorAll('[data-plans-gid]').forEach(b => {
+    const badge = b.querySelector('.icon-action-badge'); if (!badge) return;
+    const on = _plansPending.has(Number(b.getAttribute('data-plans-gid'))), dot = badge.querySelector('.plans-dot');
+    if (on && !dot) { badge.style.position = 'relative'; badge.insertAdjacentHTML('beforeend', '<span class="plans-dot" style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#e53935"></span>'); }
+    else if (!on && dot) dot.remove();
+  });
+}
+async function plansPendingLoad() {
+  if (!currentPlayer) return;
+  try {
+    const r = await fetch(`${GATHERINGS_API}/plans/pending?player_id=${encodeURIComponent(currentPlayer)}`);
+    const j = await r.json();
+    _plansPending = new Set((j.gathering_ids || []).map(Number));
+    plansApplyDots();
+  } catch (e) { /* the dot is a nicety */ }
+}
 function plansWhen(s) {
   const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(String(s || ''));
   if (!m) return '';
@@ -17619,7 +17637,7 @@ function plansCardHtml(pl, d, openId) {
       <div style="min-width:0">
         <div style="font-weight:700;font-size:0.9rem">${escapeHtml(pl.title)}${pl.audience === 'players' ? ' <span style="font-size:0.68rem;font-weight:600;color:var(--text-hint)">· players only</span>' : ''}</div>
         ${meta ? `<div style="font-size:0.76rem;color:var(--text-muted)">${meta}</div>` : ''}
-        <div style="font-size:0.76rem;color:var(--text-muted)">${escapeHtml(plansCountText(pl.counts))}${my ? ' · you: ' + escapeHtml(my) : ''}</div>
+        <div style="font-size:0.76rem;color:var(--text-muted)">${escapeHtml(plansCountText(pl.counts))}${pl.needs_response ? ' · <b style="color:#e53935">please confirm</b>' : (my ? ' · you: ' + escapeHtml(my) : '')}</div>
       </div>
       <span style="color:var(--text-hint)">${open ? '▾' : '▸'}</span>
     </div>`;
@@ -17627,6 +17645,7 @@ function plansCardHtml(pl, d, openId) {
     if (pl.description) h += `<div style="font-size:0.82rem;margin-top:8px;white-space:pre-wrap">${escapeHtml(pl.description)}</div>`;
     if (pl.can_join) {
       if (pl.notes) h += `<div style="font-size:0.78rem;margin-top:6px;color:var(--text-muted);white-space:pre-wrap">📝 ${escapeHtml(pl.notes)}</div>`;
+      if (pl.needs_response) h += `<div style="font-size:0.8rem;margin-top:10px;padding:8px 10px;border-radius:8px;background:var(--surface);font-weight:600">You are counted in. Confirm or decline:</div>`;
       const b = (st, label) => `<button class="btn btn-sm ${my === st ? 'btn-primary' : 'btn-secondary'}" style="flex:1;font-size:0.8rem" onclick="plansRsvp(${pl.id},'${st}')">${label}</button>`;
       h += `<div style="display:flex;gap:6px;margin-top:10px">${b('yes', '✅ Yes')}${b('maybe', '🤔 Maybe')}${b('no', '✕ No')}</div>`;
       if (my === 'yes') {
@@ -17652,6 +17671,7 @@ function plansFormHtml(f) {
     <input id="plan-f-when" type="datetime-local" value="${v('starts_at')}" style="${inp}">
     <input id="plan-f-place" maxlength="120" placeholder="Where?" value="${v('place')}" style="${inp}">
     <textarea id="plan-f-desc" maxlength="1000" rows="2" placeholder="Details (optional)" style="${inp};resize:none">${escapeHtml(f.description || '')}</textarea>
+    <label style="font-size:0.78rem;display:block;margin-bottom:8px"><input type="checkbox" id="plan-f-dy"${f.default_yes ? ' checked' : ''}> Count players in by default (they confirm or decline)</label>
     <label style="font-size:0.78rem;display:block;margin-bottom:8px">Who can join
       <select id="plan-f-aud" style="font-size:0.8rem;padding:3px 6px;margin-left:4px"><option value="invited"${f.audience !== 'players' ? ' selected' : ''}>Everyone invited</option><option value="players"${f.audience === 'players' ? ' selected' : ''}>Players (golf Yes) only</option></select></label>
     <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" style="flex:1" onclick="plansSave()">${f.id ? 'Save' : '📌 Add plan'}</button><button class="btn btn-secondary btn-sm" onclick="plansFormClose()">Cancel</button></div>
@@ -17693,7 +17713,7 @@ function plansToggle(id) { _plansOpenId = String(_plansOpenId) === String(id) ? 
 function plansNew() { _plansForm = { audience: 'invited' }; plansRender(); }
 function plansEdit(id) {
   const pl = ((_plansData && _plansData.plans) || []).find(p => p.id === id); if (!pl) return;
-  _plansForm = { id: pl.id, title: pl.title, starts_at: pl.starts_at, place: pl.place, description: pl.description, audience: pl.audience }; plansRender();
+  _plansForm = { id: pl.id, title: pl.title, starts_at: pl.starts_at, place: pl.place, description: pl.description, audience: pl.audience, default_yes: pl.default_yes }; plansRender();
 }
 function plansFormClose() { _plansForm = null; plansRender(); }
 async function plansPost(path, body) {
@@ -17707,7 +17727,7 @@ async function plansPost(path, body) {
 async function plansSave() {
   const f = _plansForm; if (!f) return;
   const val = (id) => (document.getElementById(id) || {}).value || '';
-  const body = { player_id: currentPlayer, title: val('plan-f-title').trim(), starts_at: val('plan-f-when'), place: val('plan-f-place').trim(), description: val('plan-f-desc').trim(), audience: val('plan-f-aud') };
+  const body = { player_id: currentPlayer, title: val('plan-f-title').trim(), starts_at: val('plan-f-when'), place: val('plan-f-place').trim(), description: val('plan-f-desc').trim(), audience: val('plan-f-aud'), default_yes: !!(document.getElementById('plan-f-dy') || {}).checked };
   if (!body.title) { showToast('Give the plan a title', true); return; }
   const j = f.id ? await plansPost(`/plans/${f.id}`, body) : await plansPost('/plans', Object.assign({ gathering_id: _plansEvt.gatheringId }, body));
   if (!j) return;
@@ -17716,7 +17736,7 @@ async function plansSave() {
 }
 async function plansRsvp(id, status, guests) {
   const j = await plansPost(`/plans/${id}/rsvp`, { player_id: currentPlayer, status, guests: guests == null ? 0 : Number(guests) });
-  if (j) await plansLoad();
+  if (j) { await plansLoad(); plansPendingLoad(); }
 }
 async function plansCancel(id) {
   if (!confirm('Cancel this plan for everyone?')) return;
