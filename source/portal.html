@@ -11178,6 +11178,17 @@ async function skFlushFinal() {
   } catch (e) { console.warn('[Score] hole-final will retry:', e.message); }
   if (_sk) _sk._finalBusy = false;
 }
+// Finish round: the last hole has no Next to tap, so this button finalizes every hole this group has fully scored (birdies are announced
+// then). Safe to tap early or twice; the Worker only announces each birdie once.
+function skFinishRound() {
+  if (!_sk || !_sk.key) return;
+  const g = skGroup(); if (!g || !g.players || !g.players.length) return;
+  skOrder().forEach(hole => { if (g.players.every(n => skCardOf(n)[hole - 1] > 0)) _sk.finalQueue = (_sk.finalQueue || []).filter(x => x.hole !== hole).concat([{ hole, players: g.players.slice() }]); });
+  _sk.finished = _sk.finished || {}; _sk.finished[_sk.groupIdx || 0] = true;
+  skFlushFinal();
+  showToast('Round final. Birdies are being announced.');
+  renderLiveBanner();
+}
 function skNav(d) {
   if (!_sk) return;
   if (d > 0) skFinalizeHole(_sk.hole);
@@ -11267,6 +11278,10 @@ function liveScoreModeHtml() {
   const status = _sk.err ? 'Not saved yet, will retry' : _sk.pending ? 'Saving…' : _sk.savedAt ? 'Saved' : '';
   const alertsNote = (!pars && (gatheringAddon(_sk.config, 'skins') || gatheringAddon(_sk.config, 'birdiepay') || gatheringAddon(_sk.config, 'scramble')))
     ? `<div style="margin-top:8px;font-size:0.76rem;color:#ffd27a;line-height:1.4">No par data for this course, so birdies can't be announced automatically. Host: add the course pars in Venues.</div>` : '';
+  const isFinished = !!(_sk.finished && _sk.finished[_sk.groupIdx || 0]);
+  const finishHtml = (hole === lastHole && done)
+    ? (isFinished ? `<div style="margin-top:14px;text-align:center;font-size:0.84rem;color:#5DCAA5;font-weight:600">✓ Round final for this group</div>`
+      : `<button type="button" onclick="skFinishRound()" style="margin-top:14px;width:100%;min-height:52px;border-radius:12px;border:2px solid #5DCAA5;background:rgba(93,202,165,0.2);color:#fff;font-family:inherit;font-size:1rem;font-weight:700;cursor:pointer">✅ Finish round</button><div style="margin-top:4px;font-size:0.72rem;text-align:center;color:rgba(255,255,255,0.6)">Locks in the scores and announces any birdies</div>`) : '';
   const statusCol = _sk.err ? '#e0b44c' : '#5DCAA5';
   const chips = gs.length > 1 ? `<div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">${gs.map((x, i) => `<button type="button" onclick="skSetGroup(${i})" style="min-height:36px;padding:0 12px;border-radius:18px;font-family:inherit;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;${i === _sk.groupIdx ? 'background:#5DCAA5;color:#04342a;border:0' : 'background:transparent;color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.3)'}">Group ${x.n}${x.start_hole ? ' · #' + x.start_hole : ''}</button>`).join('')}</div>` : '';
   return `${liveSideChooserHtml()}${chips}
@@ -11278,7 +11293,7 @@ function liveScoreModeHtml() {
     </div>
     ${extraSteps.length ? holeFlowStepHead(1, 'Hole score') : ''}${rows}
     ${nextStrokes}
-    <div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:34px">${hint}</div>${extraSteps.map((st, i) => holeFlowStepHtml(st, i + 2, g, done)).join('')}${alertsNote}`;
+    <div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.7);text-align:center;line-height:1.4;min-height:34px">${hint}</div>${extraSteps.map((st, i) => holeFlowStepHtml(st, i + 2, g, done)).join('')}${alertsNote}${finishHtml}`;
 }
 // ── Hole-by-hole flow renderers (v4.60.0) ─────────────────────────────────────────────────
 // The steps come from BFEngine.holeSteps (data only); a step's `kind` picks its renderer here. A new kind (a choice, a
