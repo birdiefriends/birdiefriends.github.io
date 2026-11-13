@@ -18,7 +18,9 @@ putGames(105, ['cttp'], {});
 // the main Worker, faked: registrations and the push
 const regs = [['Ann', 'Bob', 'Birdie Brigade'], ['Bob', 'Ann', 'Birdie Brigade'], ['Cy', 'Di', null], ['Di', 'Cy', null], ['Rich', null, null]].map(([p, pa, tn]) => ({ player_id: p, status: 'yes', partner_id: pa, team_name: tn }));
 let pushes = [], mode = 'ok';
-globalThis.fetch = async (url, opt) => {
+const asResp = o => Object.assign(o, { text: async () => JSON.stringify(await o.json()) });   // like a real Response: json() and text()
+globalThis.fetch = async (url, opt) => asResp(await rawFetch(url, opt));
+const rawFetch = async (url, opt) => {
   if (/\/registrations$/.test(url)) return { ok: true, json: async () => ({ registrations: regs }) };
   const body = JSON.parse(opt.body); pushes.push(body);
   if (mode === 'down') throw new Error('network');
@@ -93,4 +95,20 @@ for (const p of ['Ann', 'Bob', 'Cy', 'Di', 'Rich']) await full(p, 'gathering:108
 ok(!pushes.some(x => x.bf_type === 'gathering_host'), 'a round the host already closed does not notify');
 log = await call('GET', '/bfe/score-alerts?event=gathering:106');
 ok(log.json.alerts.some(a => a.kind === 'AllIn' && a.status === 'sent'), 'the all-in notice is in the log');
+// Worker-to-Worker: a service binding (env.PUSH_WORKER) is used when present; a workers.dev 404 (error code 1042) is reported with its text.
+{
+  let viaBinding = 0; const before = pushes.length;
+  const env = { DB: makeD1(db), PUSH_WORKER: { fetch: async (url, opt) => { viaBinding++; return asResp(await rawFetch(url, opt)); } } };
+  const c = (m, pth, b) => W.fetch(new Request('https://w' + pth, { method: m, body: b ? JSON.stringify(b) : undefined }), env, {});
+  putGames(120, ['skins'], {});
+  await c('POST', '/scorecards', { event_name: 'gathering:120', player: 'Ann', holes: new Array(18).fill(4), marks: marksWith({ 5: 'birdie' }), input_type: 'strokes' });
+  ok(viaBinding >= 1 && pushes.length > before, 'with a PUSH_WORKER service binding the alert goes through the binding');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 404, json: async () => { throw new Error('not json'); }, text: async () => 'error code: 1042' });
+  putGames(121, ['skins'], {});
+  await W.fetch(new Request('https://w/scorecards', { method: 'POST', body: JSON.stringify({ event_name: 'gathering:121', player: 'Ann', holes: new Array(18).fill(4), marks: marksWith({ 5: 'birdie' }), input_type: 'strokes' }) }), { DB: makeD1(db) }, {});
+  globalThis.fetch = realFetch;
+  const lg = await call('GET', '/bfe/score-alerts?event=gathering:121');
+  ok(lg.json.alerts.length === 1 && lg.json.alerts[0].status === 'failed' && /push 404 error code: 1042/.test(lg.json.alerts[0].error), 'a 404 from another Worker is logged with its text (error code: 1042): ' + (lg.json.alerts[0] && lg.json.alerts[0].error));
+}
 console.log(`score alerts worker: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

@@ -1298,6 +1298,13 @@ async function ensureRosterSubCol(db) {
 const ALERT_PUSH_URL = 'https://birdiefriends-push.birdiefriends01.workers.dev/';
 const ALERT_APP_ID = '88022359-a979-4814-8a52-6f1df9884be2';
 const ALERT_KINDS = { birdie: { label: 'Birdie', emoji: '🐦', rank: 1 }, eagle: { label: 'Eagle', emoji: '🦅', rank: 2 }, albatross: { label: 'Albatross', emoji: '🦄', rank: 3 } };
+// Worker-to-Worker calls. Cloudflare blocks one Worker fetching another on the same account's workers.dev address (it answers
+// 404, "error code: 1042"), which is what made every automatic alert fail with "push 404". Route through a service binding named
+// PUSH_WORKER (the main birdiefriends-push Worker) when it exists; otherwise fall back to a plain fetch, which works when the
+// compatibility flag global_fetch_strictly_public is on for this Worker.
+function alertFetch(env, url, init) {
+  return env && env.PUSH_WORKER && typeof env.PUSH_WORKER.fetch === 'function' ? env.PUSH_WORKER.fetch(url, init) : globalThis.fetch(url, init);
+}
 async function ensureScoreAlertsTable(env) {
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS bfe_score_alerts (
     event_name TEXT NOT NULL, hole INTEGER NOT NULL, unit_key TEXT NOT NULL, label TEXT, kind TEXT,
@@ -1308,13 +1315,13 @@ async function sendScoreAlert(env, a, audience, title) {
   const heading = `${a.k.emoji} #${a.hole} — ${a.label}`;
   const body = a.upgraded ? `${a.k.label} (corrected up from a lower score)` : `${a.k.label}`;
   const meta = { hole: a.hole, player: a.label, scoreType: a.k.label };
-  const post = async (payload) => { const r = await globalThis.fetch(ALERT_PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); let j = null; try { j = await r.json(); } catch (e) {} return { status: r.status, json: j }; };
+  const post = async (payload) => { const r = await alertFetch(env, ALERT_PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); let j = null, t = ''; try { t = await r.text(); j = JSON.parse(t); } catch (e) {} return { status: r.status, json: j, text: t }; };
   const filters = []; audience.forEach((n, i) => { if (i) filters.push({ operator: 'OR' }); filters.push({ field: 'tag', key: 'player_name', relation: '=', value: n }); });
   let pushed = null, err = null, wroteFeed = false;
   try {
     const r = await post({ app_id: ALERT_APP_ID, headings: { en: heading }, contents: { en: body + (title ? ' · ' + title : '') }, filters, url: 'https://birdiefriends.com/portal.html', bf_type: 'birdie', bf_meta: meta });
     if (r.status === 200 && r.json && r.json.id) { wroteFeed = true; pushed = typeof r.json.recipients === 'number' ? r.json.recipients : null; }
-    else err = 'push ' + r.status + ' ' + JSON.stringify(r.json || {}).slice(0, 160);
+    else err = 'push ' + r.status + ' ' + (r.json ? JSON.stringify(r.json) : String(r.text || '')).slice(0, 160);
   } catch (e) { err = 'push error ' + String(e.message || e).slice(0, 120); }
   if (!wroteFeed) {   // no push went out (nobody subscribed, or OneSignal said no): the announcement still goes in the feed
     try { const r = await post({ feed_only: true, headings: { en: heading }, contents: { en: body }, bf_type: 'birdie', bf_meta: meta }); if (r.status === 200 && r.json && r.json.ok) wroteFeed = true; else err = (err ? err + ' | ' : '') + 'feed ' + r.status; }
@@ -1324,9 +1331,9 @@ async function sendScoreAlert(env, a, audience, title) {
 }
 // Current teams of N from a Gathering's registrations (main Worker): a team is locked when every member is a Yes and each names
 // exactly the others (the same rule as the portal's teamsState). Everyone else who is a Yes plays as a unit of one.
-async function liveTeamsFor(gid, N) {
+async function liveTeamsFor(env, gid, N) {
   try {
-    const r = await globalThis.fetch(ALERT_PUSH_URL + 'gatherings/' + gid + '/registrations'); if (!r.ok) return null;
+    const r = await alertFetch(env, ALERT_PUSH_URL + 'gatherings/' + gid + '/registrations'); if (!r.ok) return null;
     const rows = ((await r.json()) || {}).registrations; if (!Array.isArray(rows) || !rows.length) return null;
     const lc = x => String(x || '').trim().toLowerCase(), by = new Map(rows.map(x => [lc(x.player_id), x]));
     const yes = rows.filter(x => x.player_id && lc(x.status) === 'yes'), picks = x => String(x.partner_id || '').split('|').map(t => t.trim()).filter(t => t && lc(t) !== lc(x.player_id));
@@ -1342,9 +1349,9 @@ async function liveTeamsFor(gid, N) {
     return { units, roster: yes.map(x => x.player_id) };
   } catch (e) { return null; }
 }
-async function sendHostAllIn(cfgRow, gid) {
+async function sendHostAllIn(env, cfgRow, gid) {
   try {
-    const r = await globalThis.fetch(ALERT_PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ app_id: ALERT_APP_ID,
+    const r = await alertFetch(env, ALERT_PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ app_id: ALERT_APP_ID,
       headings: { en: '✅ All scores are in' }, contents: { en: (cfgRow.gathering_name || 'Your round') + ': every card is complete. Review the preliminary payouts and approve the close.' },
       filters: [{ field: 'tag', key: 'player_name', relation: '=', value: cfgRow.host_id }], url: 'https://birdiefriends.com/portal.html', bf_type: 'gathering_host', bf_meta: { gathering_id: Number(gid) } }) });
     return r.status === 200 ? { ok: true, error: null } : { ok: false, error: 'push ' + r.status };
@@ -1366,12 +1373,12 @@ async function scanScoreAlerts(env, eventName) {
   if (games.includes('scramble')) {
     // The teams in the saved games config are only the snapshot from when the host saved; the CURRENT teams (and names) are the
     // locked partner picks on the registrations, which the main Worker holds. Use those; the snapshot is the fallback.
-    const live = await liveTeamsFor(m[1], Math.trunc(Number(scr && scr.team_size)) || 2);
+    const live = await liveTeamsFor(env, m[1], Math.trunc(Number(scr && scr.team_size)) || 2);
     if (live) { units = live.units; roster = live.roster; expect = live.units; }
     else if (scr && Array.isArray(scr.pairs)) units = scr.pairs.filter(t => Array.isArray(t) && t.length).map((t, i) => ({ key: t.map(lc).sort().join('|'), label: (scr.names && scr.names[i]) || t.join(' & '), members: t }));
   }
   if (!units) units = (results || []).map(r => ({ key: lc(r.player), label: r.player, members: [r.player] }));
-  if (!expect) { const lv = await liveTeamsFor(m[1], 1); if (lv) expect = lv.units; }
+  if (!expect) { const lv = await liveTeamsFor(env, m[1], 1); if (lv) expect = lv.units; }
   const audience = [...new Set(units.flatMap(u => u.members).concat(roster, (results || []).map(r => r.player)))];
   const sent = [], failed = [];
   for (const u of units) {
@@ -1405,7 +1412,7 @@ async function scanScoreAlerts(env, eventName) {
       const ins = await env.DB.prepare(`INSERT OR IGNORE INTO bfe_score_alerts (event_name, hole, unit_key, label, kind, status, created_at) VALUES (?, 0, '__all_in__', 'all scores in', 'AllIn', 'pending', datetime('now'))`).bind(eventName).run();
       const ex = (ins.meta && ins.meta.changes) ? { status: 'pending', attempts: 0 } : await env.DB.prepare(`SELECT status, attempts FROM bfe_score_alerts WHERE event_name = ? AND hole = 0 AND unit_key = '__all_in__'`).bind(eventName).first();
       if (ex && (ex.status === 'pending' || (ex.status === 'failed' && ex.attempts < 6))) {   // first time, or a failed notice retried on the next save
-        const r = await sendHostAllIn(cfgRow, m[1]);
+        const r = await sendHostAllIn(env, cfgRow, m[1]);
         await env.DB.prepare(`UPDATE bfe_score_alerts SET status = ?, attempts = attempts + 1, error = ?, sent_at = datetime('now') WHERE event_name = ? AND hole = 0 AND unit_key = '__all_in__'`).bind(r.ok ? 'sent' : 'failed', r.error, eventName).run();
       }
     }
