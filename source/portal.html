@@ -19073,7 +19073,7 @@ async function openGatheringCloseSheet(gatheringId) {
       <div style="display:flex;gap:8px;margin-top:14px">
         <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openGatheringCloseSheet(${gatheringId})">🔄 Refresh</button>
         <button class="btn btn-primary btn-sm" id="btn-gathering-close-confirm" style="flex:2" ${closeBlocked ? 'disabled' : ''}
-          onclick="confirmGatheringClose()">${openSpots.length ? '🪑 Open spots left' : recon.noHandicap.length ? '⚖️ Settle handicaps first' : recon.bbMissing.length ? `🐉 Confirm MiserBall for ${recon.bbMissing.length} first` : `🏁 Close with ${cards.length} player${cards.length === 1 ? '' : 's'}`}</button>
+          onclick="confirmGatheringClose()">${openSpots.length ? '🪑 Open spots left' : recon.noHandicap.length ? '⚖️ Settle handicaps first' : recon.bbMissing.length ? (() => { const n = recon.bbMissing.length, tm = recon.bbMissingGroups.some(g => g.members.length > 1); return `🐉 ${esc(recon.bbName || 'MiserBall')}: answer above for ${n} ${tm ? 'team' : 'player'}${n === 1 ? '' : 's'} to close`; })() : `🏁 Close with ${cards.length} player${cards.length === 1 ? '' : 's'}`}</button>
       </div>
       ${openSpots.length && cards.length && !recon.noHandicap.length
         ? `<button class="btn btn-secondary btn-sm" id="btn-gathering-close-ignore" style="width:100%;margin-top:8px" onclick="confirmGatheringClose(true)">🏁 Close anyway — ignore ${openSpots.length} open spot${openSpots.length === 1 ? '' : 's'}</button>` : ''}`;

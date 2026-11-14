@@ -19,6 +19,6 @@ ok(b && b.players.find(p => p.player === 'Brian').status === 'none', 'unanswered
 ok(b && b.players.find(p => p.player === 'Test1').hole === 14 && b.players.find(p => p.player === 'Test1').won, 'longest holder marked as winner with hole/stroke');
 r = calc([{ player_name: 'Brian', kept: true }, { player_name: 'Test1', kept: false, lost_hole: 14, lost_stroke: 1 }]);
 ok(r.birdieball.mode === 'kept' && r.birdieball.players.find(p => p.player === 'Brian').won, 'kept player wins and is flagged');
-ok(/recon\.bbMissing\.length > 0/.test(src) && /Confirm MiserBall for/.test(src), 'close is held while anyone lacks a MiserBall answer');
+ok(/recon\.bbMissing\.length > 0/.test(src) && /answer above for \${n} /.test(src), 'close is held while anyone lacks a MiserBall answer');
 ok(/Lost it\$\{p\.hole/.test(src) && /'No answer'/.test(src), 'result card shows kept / lost where / no answer per player');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
