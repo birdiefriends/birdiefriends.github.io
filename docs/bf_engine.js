@@ -147,7 +147,7 @@
   // Rounds DOWN to whole dollars on every split; the remainder is reported
   // as unallocated, never silently redistributed (Brian, Dev-87).
   // A host-chosen display name for a side game (Miser-Ball, Wally-Ball, Turkey-Ball): plain text only, short.
-  function cleanGameName(v) { return String(v == null ? '' : v).replace(/[<>&"`\\${}]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24); }
+  function cleanGameName(v, max) { return String(v == null ? '' : v).replace(/[<>&"`\\${}]/g, '').replace(/\s+/g, ' ').trim().slice(0, max || 24); }
   function makeLedger(players) {
     const canonical = new Map(players.map(p => [norm(p), p]));
     const rows = new Map(players.map(p => [p, { player: p, skins: 0, cttp: 0, birdieball: 0, given_back: 0 }]));
@@ -224,8 +224,9 @@
         });
         state.remaining -= perHole * holes.length;
         state.rollover += unclaimed;
+        const prizeText = prizeSet.size ? cleanGameName(addon.prize, 60) : '';
         return Object.assign(
-          { per_hole: capped ? configuredPerHole : perHole, holes: rows, unclaimed_to_skins: unclaimed },
+          { per_hole: capped ? configuredPerHole : perHole, holes: rows, unclaimed_to_skins: unclaimed, ...(prizeText ? { prize: prizeText } : {}) },
           capped ? { capped: true, paid_per_hole: perHole } : {}
         );
       }
@@ -1175,7 +1176,8 @@
       { key: 'dollar_per_player', type: 'money', label: '$ per player (split over the holes)', default: 0, positive: true },
       { key: 'hole_mode', type: 'enum', label: 'Hole mode', values: ['all_par3', 'custom'], default: 'all_par3', lenient: true },  // lenient = an unknown value is cleaned to the default, not rejected (the Worker always did this)
       { key: 'holes', type: 'holes', label: 'Holes', default: [], required: true },
-      { key: 'prize_holes', type: 'holes', label: 'Prize-only holes (tracked, no cash)', default: [] }
+      { key: 'prize_holes', type: 'holes', label: 'Prize-only holes (tracked, no cash)', default: [] },
+      { key: 'prize', type: 'text', label: 'What the prize-hole winner gets', default: '' }
     ],
     fixedCost: (cfg, ctx) => { const pz = new Set((cfg.prize_holes || []).map(Number)); const h = (cfg.holes || []).filter(x => !pz.has(Number(x))).length; return Number(cfg.dollar_per_hole) > 0 || !(Number(cfg.dollar_per_player) > 0) ? (Number(cfg.dollar_per_hole) || 0) * h : (h ? Math.floor(Number(cfg.dollar_per_player) * ((ctx && ctx.players) || 0) / h) * h : 0); },
     fixtures: [{
@@ -1884,7 +1886,8 @@
     const addons = [];
     if (games.includes('cttp') && row.cttp_config) {
       addons.push({ id: 'cttp', entity: 'individual', dollar_per_hole: row.cttp_config.dollar_per_hole, holes: row.cttp_config.holes || [],
-        ...(Array.isArray(row.cttp_config.prize_holes) && row.cttp_config.prize_holes.length ? { prize_holes: row.cttp_config.prize_holes } : {}), });
+        ...(Array.isArray(row.cttp_config.prize_holes) && row.cttp_config.prize_holes.length ? { prize_holes: row.cttp_config.prize_holes } : {}),
+        ...(Array.isArray(row.cttp_config.prize_holes) && row.cttp_config.prize_holes.length && cleanGameName(row.cttp_config.prize, 60) ? { prize: cleanGameName(row.cttp_config.prize, 60) } : {}), });
     }
     if (games.includes('birdieball') && row.birdieball_config) {
       addons.push({ id: 'birdieball', entity: 'individual', dollar_per_player: row.birdieball_config.dollar_per_player, ...(row.birdieball_config.team === true ? { team: true } : {}), ...(Number(row.birdieball_config.pot_total) > 0 ? { pot_total: Number(row.birdieball_config.pot_total) } : {}), ...(cleanGameName(row.birdieball_config.name) ? { name: cleanGameName(row.birdieball_config.name) } : {}) });
@@ -2304,7 +2307,7 @@
       const holes = (Array.isArray(addon.holes) ? addon.holes : []).map(Number);
       const prize = (Array.isArray(addon.prize_holes) ? addon.prize_holes : []).map(Number);   // prize-only holes are claimed like any other
       if (holes.indexOf(hole) < 0 && prize.indexOf(hole) < 0) return null;
-      return { id: 'cttp', game: 'cttp', kind: 'claim', hole, prize: prize.indexOf(hole) >= 0 && holes.indexOf(hole) < 0, label: 'Closest to the pin' };
+      return { id: 'cttp', game: 'cttp', kind: 'claim', hole, prize: prize.indexOf(hole) >= 0 && holes.indexOf(hole) < 0, ...(prize.indexOf(hole) >= 0 && holes.indexOf(hole) < 0 && cleanGameName(addon.prize, 60) ? { prize_text: cleanGameName(addon.prize, 60) } : {}), label: 'Closest to the pin' };
     },
     // MiserBall: anyone can lose it on any hole (3rd+ step), and on the last hole each player confirms Kept / Lost.
     birdieball(addon, hole, ctx) {

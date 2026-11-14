@@ -686,6 +686,12 @@ const GAME_SCHEMAS = {
         "type": "holes",
         "label": "Prize-only holes (tracked, no cash)",
         "default": []
+      },
+      {
+        "key": "prize",
+        "type": "text",
+        "label": "What the prize-hole winner gets",
+        "default": ""
       }
     ]
   },

@@ -9948,6 +9948,7 @@ function buildLivePanel(evt) {
       <span>👤</span><span style="flex:1">${ctpPlayerSel || ''}</span>
       <span style="color:rgba(255,255,255,0.4);font-size:0.75rem">Change ›</span>
     </button>
+    ${cttpAddon && cttpAddon.prize && (cttpAddon.prize_holes || []).length ? `<div style="font-size:0.8rem;color:#ffe08a;margin-bottom:6px">🏆 Hole${cttpAddon.prize_holes.length === 1 ? '' : 's'} ${cttpAddon.prize_holes.map(escapeHtml).join(', ')}: ${escapeHtml(cttpAddon.prize)}</div>` : ''}
     <div class="cttp-holes-row">${ctpPills}</div>
     ${ctpEntry}
     <div style="margin-top:12px;background:rgba(0,0,0,0.15);border-radius:10px;padding:4px 12px">
@@ -11402,7 +11403,7 @@ function holeFlowClaimHtml(st, n, g) {
   const leader = _ctpData[hole];
   const sel = (_ctpHole === hole && _ctpPlayer) ? _ctpPlayer : null;
   const first = x => String(x).trim().split(/\s+/)[0];
-  const sub = st.prize ? 'Prize hole. Closest wins the pin prize' : (leader ? 'Now: ' + escapeHtml(first(leader.player)) + (leader.dist ? ' ' + leader.dist + ' ft' : '') : 'Nobody yet');
+  const sub = st.prize ? (st.prize_text ? 'Prize hole. Closest wins: ' + escapeHtml(st.prize_text) : 'Prize hole. Closest wins the pin prize') : (leader ? 'Now: ' + escapeHtml(first(leader.player)) + (leader.dist ? ' ' + leader.dist + ' ft' : '') : 'Nobody yet');
   const pills = g.players.map(p => {
     const already = (_ctpHistory[hole] || []).some(e => nm(e.player) === nm(p));
     const on = sel && nm(sel) === nm(p), lead = leader && nm(leader.player) === nm(p);
@@ -13016,7 +13017,7 @@ let _gamesFormSelected  = new Set();  // subset of ['skins','cttp','birdieball',
 // the same $/player pot as a fixed dollar amount BEFORE MiserBall's own
 // carve-out, and Skins gets whatever is left after both (Brian's explicit
 // call on the funding model, rounds 2 and 3 combined).
-let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [], prize_holes: [] };   // prize_holes: tracked like CTP, no cash (the Turkey 2Man's #17); `holes` stays the PAID holes
+let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [], prize_holes: [], prize: '' };   // prize_holes: tracked like CTP, no cash (the Turkey 2Man's #17); `holes` stays the PAID holes
 let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; // Birdie Payouts (Dev-89): flat $ per birdie, taken from the pot before Skins
 let _gamesFormTurkeysConfig = { dollar_per_player: null, streak: 3, prize: '', as_skin: false };   // Turkeys (v4.77.0): 3+ holes in a row under par; $ per player is a RESERVE (to the Turkeys, or back to Skins), 0 = prize only
 // Dev-91 — net/gross setup, frozen into the saved config at Save. kind per player: 'index' (typed Index → USGA playing handicap),
@@ -18654,7 +18655,9 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   if (s.cttp) {
     let h = label(`🎯 CTP — ${money(s.cttp.capped ? s.cttp.paid_per_hole : s.cttp.per_hole)}/hole`);
     if (s.cttp.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(s.cttp.per_hole)}/hole, but that was more than the pot had, so each hole paid ${money(s.cttp.paid_per_hole)}</div>`;
-    h += s.cttp.holes.map(x => x.player
+    h += s.cttp.holes.map(x => x.prize
+      ? line(`#${x.hole} ${x.player ? esc(x.player) + (x.dist ? ` <span style="color:var(--text-muted)">(${x.dist} ft)</span>` : '') : '<span style="color:var(--text-muted)">unclaimed</span>'}`, `🏆${s.cttp.prize ? ' ' + esc(s.cttp.prize) : ''}`)
+      : x.player
       ? line(`#${x.hole} ${esc(x.player)}${x.dist ? ` <span style="color:var(--text-muted)">(${x.dist} ft)</span>` : ''}`, money(x.paid))
       : line(`#${x.hole} <span style="color:var(--text-muted)">unclaimed → Skins</span>`, '—')).join('');
     panels.push({ key: 'cttp', tab: '🎯 CTP', html: h });
@@ -19422,7 +19425,7 @@ function gatheringGameDetailsBody(evt, config) {
     const holes = cttp.holes || [];
     const cost = (cttp.dollar_per_hole || 0) * holes.length;
     remaining -= cost;
-    rows.push(row('🎯', 'Closest to the Pin', `${holes.length} hole${holes.length === 1 ? '' : 's'} · $${(cttp.dollar_per_hole || 0).toFixed(2)}/hole · $${cost.toFixed(2)} pot`, 'cttp'));
+    rows.push(row('🎯', 'Closest to the Pin', `${holes.length} hole${holes.length === 1 ? '' : 's'} · $${(cttp.dollar_per_hole || 0).toFixed(2)}/hole · $${cost.toFixed(2)} pot${(cttp.prize_holes || []).length ? ` · prize hole${cttp.prize_holes.length === 1 ? '' : 's'} ${cttp.prize_holes.join(', ')}${cttp.prize ? ': ' + escapeHtml(cttp.prize) : ''}` : ''}`, 'cttp'));
   }
   const bb = gatheringAddon(config, 'birdieball');
   if (bb) {
@@ -21389,7 +21392,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
   _gamesFormSelected = new Set(existing ? existing.games : (preselect || []));
   _gamesFormCttpConfig = (existing && existing.cttp_config)
     ? { ...existing.cttp_config, holes: [...existing.cttp_config.holes], prize_holes: [...(existing.cttp_config.prize_holes || [])] }
-    : { dollar_per_hole: null, hole_mode: 'all_par3', holes: [], prize_holes: [] };
+    : { dollar_per_hole: null, hole_mode: 'all_par3', holes: [], prize_holes: [], prize: '' };
   _gamesFormBirdieballConfig = (existing && existing.birdieball_config)
     ? { ...existing.birdieball_config }
     : { dollar_per_player: null };
@@ -21927,7 +21930,7 @@ function toggleGamesFormGame(key) {
     _gamesFormSelected.delete(key);
     _gamesFormTouched.delete(key);
     if (key === 'cttp') {
-      _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [], prize_holes: [] };
+      _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [], prize_holes: [], prize: '' };
     } else if (key === 'birdieball') {
       _gamesFormBirdieballConfig = { dollar_per_player: null };
     } else if (key === 'birdiepay') {
@@ -22019,10 +22022,14 @@ function gatheringGamesCttpSectionHtml() {
         <input type="text" id="games-form-cttp-prize" inputmode="numeric" placeholder="e.g. 17" style="width:120px"
           value="${(_gamesFormCttpConfig.prize_holes || []).join(', ')}" oninput="setGamesFormCttpPrizeHoles(this.value)">
         <div style="font-size:0.72rem;color:var(--text-muted);margin-top:3px">Players claim these in the Live Panel like any CTP hole; the winner is listed, nothing is paid and no money rolls into Skins.</div>
+        <div style="font-size:0.8rem;font-weight:600;margin:10px 0 4px">What the prize-hole winner gets (optional)</div>
+        <input type="text" id="games-form-cttp-prize-text" maxlength="60" placeholder="e.g. Sleeve of Pro V1s, or Bragging rights" style="width:100%;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 10px;font-family:inherit;box-sizing:border-box"
+          value="${escapeHtml(_gamesFormCttpConfig.prize || '')}" oninput="setGamesFormCttpPrizeText(this.value)">
       </div>
     </div>`;
 }
 // Prize-only CTP holes: kept apart from `holes` (the paid ones) so every cost figure on the form stays right.
+function setGamesFormCttpPrizeText(val) { _gamesFormCttpConfig.prize = String(val || '').replace(/[<>&"`\\${}]/g, '').slice(0, 60); _gamesFormTouched.add('cttp'); }
 function setGamesFormCttpPrizeHoles(val) {
   const pz = [...new Set(String(val || '').split(/[^0-9]+/).map(Number).filter(h => h >= 1 && h <= 18))].sort((a, b) => a - b);
   _gamesFormCttpConfig.prize_holes = pz;
@@ -23070,7 +23077,8 @@ async function submitGatheringGames(gatheringId) {
       dollar_per_hole: _gamesFormCttpConfig.dollar_per_hole,
       hole_mode: _gamesFormCttpConfig.hole_mode,
       holes: _gamesFormCttpConfig.holes,
-      ...((_gamesFormCttpConfig.prize_holes || []).length ? { prize_holes: _gamesFormCttpConfig.prize_holes.slice() } : {})
+      ...((_gamesFormCttpConfig.prize_holes || []).length ? { prize_holes: _gamesFormCttpConfig.prize_holes.slice() } : {}),
+      ...((_gamesFormCttpConfig.prize_holes || []).length && String(_gamesFormCttpConfig.prize || '').trim() ? { prize: String(_gamesFormCttpConfig.prize).trim().slice(0, 60) } : {})
     };
   }
   let birdieball_config = null;
