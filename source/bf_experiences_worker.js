@@ -938,6 +938,12 @@ const GAME_SCHEMAS = {
         "default": 0
       },
       {
+        "key": "prize",
+        "type": "text",
+        "label": "Extra prize for the winning team",
+        "default": ""
+      },
+      {
         "key": "pars",
         "type": "pars",
         "label": "Par by hole (Stableford)",

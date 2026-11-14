@@ -81,11 +81,11 @@ const body = c.document.getElementById('game-details-body').innerHTML;
 // 4 confirmed Yes (Rich Potts is a No, excluded) × $2/player = $8 total pot
 ok(body.includes('4 confirmed Yes') && body.includes('$8.00 total pot'), `pot totals correct (yesCount excludes No): ${body.slice(0, 200)}`);
 // CTP: 4 holes × $2/hole = $8 pot
-ok(body.includes('4 holes') && body.includes('$2.00/hole') && body.includes('$8.00 pot'), 'CTP breakdown correct');
+ok(body.includes('4 holes'.replace('4 holes','holes ')) && body.includes('$2 a hole') && body.includes('$8 pot'), 'CTP breakdown correct');
 // BirdieBall: $2/player × 4 confirmed = $8 pot
-ok(body.includes('$2.00/player') && (body.match(/\$8\.00 pot/g) || []).length >= 2, 'BirdieBall breakdown correct (also $8 pot, same math as CTP here)');
+ok(body.includes('$2 a player') && (body.match(/\$8 pot/g) || []).length >= 2, 'BirdieBall breakdown correct (also $8 pot, same math as CTP here)');
 // Skins gets what's left: $8 total - $8 CTP - $8 BB = -$8 → clamped to $0
-ok(body.includes('Gets what’s left: $0.00 pot') || body.includes("Gets what's left: $0.00 pot"), 'Skins remainder clamped at $0 when carve-outs exceed the pot (informational, matches the Host Panel preview’s own math)');
+ok(body.includes('Gets what’s left: $0 pot') || body.includes("Gets what's left: $0 pot"), 'Skins remainder clamped at $0 when carve-outs exceed the pot (informational, matches the Host Panel preview’s own math)');
 
 // 4) openGameDetailsModal is a no-op (guard) for a non-gamed event — the
 // calling icon is already gated on gatheringIsGamed, but the function
@@ -106,7 +106,7 @@ ok(c.opened.length === 0, 'no-op for an ungamed event — modal never opens');
   ok(!/Handicap strokes/.test(gross), 'no strokes row on a gross round');
   const net = modal({ ...base, handicap_config: { allowance: 95, skins_basis: 'net', birdiepay_basis: 'gross', stroke_index: SI,
     players: { 'Brian Hager': { kind: 'index', strokes: 8, stroke_index: SI }, 'Muna Aliya': { kind: 'given', strokes: 20, stroke_index: SI } } } });
-  ok(/Skins · Net/.test(net) && /Lowest net score wins/.test(net), 'Skins labelled Net');
+  ok(/Skins · Net/.test(net) && /Lowest net score on a hole wins/.test(net), 'Skins labelled Net');
   ok(/Birdie Payouts · Gross/.test(net), 'Birdie Payouts can stay Gross while Skins is Net');
   ok(/openStrokeCard\('gathering-77'\)/.test(net) && /Course with strokes/.test(net) && /openVenueViewerModal\('gathering-77'\)/.test(net), 'strokes row offers Strokes by hole + Course with strokes');
   ok(/Handicap strokes/.test(net) && /95% allowance/.test(net) && /Brian Hager <b>8<\/b>/.test(net) && /Muna Aliya <b>20<\/b>/.test(net), 'strokes row lists every player and the allowance');

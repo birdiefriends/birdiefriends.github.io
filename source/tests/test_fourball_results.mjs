@@ -62,9 +62,9 @@ eq(ctx.f.gcReconcile({ config: { games: ['fourball'], handicap_config: hc, game_
 // event card details
 const cfg = E.gatheringConfigFromLegacy(row);
 const body = ctx.f.gatheringGameDetailsBody({ source: 'gathering', gatheringId: 7, name: 'T' }, cfg);
-ok(body.includes('BestBall') && body.includes('$5.00/player') && body.includes('$20.00 pot'), 'details: fourball row + pot');
-ok(body.includes('Ann &amp; Bob') && body.includes('Cy &amp; Dee'), 'details: pairs shown');
-ok(/Skins · Gross[\s\S]*Gets what's left: \$60\.00/.test(body), 'details: skins remaining after fourball carve');
+ok(body.includes('BestBall') && body.includes('$5 a player') && body.includes('$20 pot'), 'details: fourball row + pot');
+ok(!body.includes('Ann &amp; Bob'), 'details: pairs omitted');
+ok(/Skins · Gross[\s\S]*Gets what's left: \$60/.test(body), 'details: skins remaining after fourball carve');
 // the card says what was played, not just the Format dropdown
 {
   const cfg = E.gatheringConfigFromLegacy({ games: ['fourball', 'skins'], dollar_per_player: 20, game_configs: { fourball: { dollar_per_player: 5, basis: 'gross', net_mode: 'own', segments: 'fbt', win_by: 'holes', scope: 'group', pairs: [['Ann','Bob'],['Cy','Dee']] } } });

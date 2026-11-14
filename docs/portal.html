@@ -11734,6 +11734,7 @@ async function loadBirdieBallAnswers(evt) {
   }
 }
 // The host can rename the game (Miser-Ball, Wally-Ball, Turkey-Ball...). Plain text, short; MiserBall when none is set.
+function cleanPrize(v) { return String(v == null ? '' : v).replace(/[<>&"`\\${}]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60); }
 function bbCleanName(v) { return String(v == null ? '' : v).replace(/[<>&"`\\${}]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24); }
 function bbName(gid) {
   const cfg = (gid != null ? gid : (typeof _bbAnswersForGathering !== 'undefined' ? _bbAnswersForGathering : null)) != null && typeof gatheringRoundConfig === 'function' ? gatheringRoundConfig(gid != null ? gid : _bbAnswersForGathering) : null;
@@ -13063,6 +13064,7 @@ function gamesFormSideFrom(gid, src) {
     out.team_size = BFEngine.scrambleSize(src);
     out.hcp_method = ['combined', 'none'].includes(src.hcp_method) ? src.hcp_method : 'ranked';
     Object.assign(out, gamesFormScramblePcts(src)); out.allowance = BFEngine.scrambleCombinedPct(src);
+    if (cleanPrize(src.prize)) out.prize = cleanPrize(src.prize);
     if (BFEngine.scramblePodiumTotal(src) > 0) out.podium_total = BFEngine.scramblePodiumTotal(src);   // the host's fixed podium is part of what was saved: it has to come back on edit
     out.payout = ['top2', 'top3', 'custom'].includes(src.payout) ? src.payout : 'winner';
     if (out.payout === 'custom') { if (Array.isArray(src.place_shares) && src.place_shares.length) out.place_shares = src.place_shares.map(Number); else out.payout = 'winner'; }
@@ -18429,6 +18431,7 @@ function scrambleResultsHtml(f, line, nm, esc) {
     f.basis === 'net' ? (f.hcp_method === 'combined' ? 'team handicap: both added' : 'team handicap: lower + higher') : '',
     f.payout === 'top2' ? 'pays top 2' : f.payout === 'top3' ? 'pays top 3' : f.payout === 'custom' ? 'pays ' + ((f.places || []).length || 'set') + ' places' : 'pays the winner'].filter(Boolean).join(' · ');
   let h = `<div style="font-size:0.74rem;color:var(--text-muted);margin:0 0 6px">${esc(how)}</div>`;
+  if (f.prize) h += `<div style="font-size:0.84rem;font-weight:700;margin-bottom:6px">🏆 Winners also get: ${esc(f.prize)}</div>`;
   if (f.par_missing) h += `<div style="font-size:0.74rem;color:#b8860b;margin-bottom:6px">No par data was saved with this game, so Stableford points could not be worked out.</div>`;
   const paid = new Map();
   (f.places || []).forEach(pl => pl.pairs.forEach(pr => paid.set(pr.join('|'), pl.per_player)));
@@ -19409,7 +19412,9 @@ function gatheringGameDetailsBody(evt, config) {
   const dpp = (config.payout && config.payout.entry_per_player) || 0;
   const totalPot = dpp * yesCount;
   let remaining = totalPot;
-  const row = (icon, label, detail, key, extra) => `
+  const usd = v => '$' + (Math.round((Number(v) || 0) * 100) / 100).toFixed(Number.isInteger(Math.round((Number(v) || 0) * 100) / 100) ? 0 : 2);
+  const payLine = t => `<br><b style="color:var(--text)">${t}</b>`, prizeLine = t => `<br>🏆 ${t}`;
+  const row = (icon, label, detail, key, extra) => `<!--k:${key}-->
     <div style="padding:10px 12px;border-radius:10px;background:var(--surface)">
     <div style="display:flex;align-items:center;gap:10px">
       <span style="font-size:1.3rem;flex-shrink:0">${icon}</span>
@@ -19425,13 +19430,14 @@ function gatheringGameDetailsBody(evt, config) {
     const holes = cttp.holes || [];
     const cost = (cttp.dollar_per_hole || 0) * holes.length;
     remaining -= cost;
-    rows.push(row('🎯', 'Closest to the Pin', `${holes.length} hole${holes.length === 1 ? '' : 's'} · $${(cttp.dollar_per_hole || 0).toFixed(2)}/hole · $${cost.toFixed(2)} pot${(cttp.prize_holes || []).length ? ` · prize hole${cttp.prize_holes.length === 1 ? '' : 's'} ${cttp.prize_holes.join(', ')}${cttp.prize ? ': ' + escapeHtml(cttp.prize) : ''}` : ''}`, 'cttp'));
+    const pzH = cttp.prize_holes || [];
+    rows.push(row('🎯', 'Closest to the Pin', `Closest to the pin on hole${holes.length === 1 ? '' : 's'} ${holes.join(', ')}${payLine(`${usd(cttp.dollar_per_hole)} a hole · ${usd(cost)} pot`)}${pzH.length ? prizeLine(`Hole${pzH.length === 1 ? '' : 's'} ${pzH.join(', ')} is prize only, no cash${cttp.prize ? ': ' + escapeHtml(cttp.prize) : ''}`) : ''}`, 'cttp'));
   }
   const bb = gatheringAddon(config, 'birdieball');
   if (bb) {
     const cost = Number(bb.pot_total) > 0 ? Number(bb.pot_total) : (bb.dollar_per_player || 0) * yesCount;
     remaining -= cost;
-    rows.push(row('🐉', escapeHtml(bbCleanName(bb.name) || 'MiserBall'), `${Number(bb.pot_total) > 0 ? 'fixed pot' : '$' + (bb.dollar_per_player || 0).toFixed(2) + '/player'} · $${cost.toFixed(2)} pot${bb.team ? ' · by team: one lost ball puts the team out' : ''}`, 'birdieball'));
+    rows.push(row('🐉', escapeHtml(bbCleanName(bb.name) || 'MiserBall'), `${bb.team ? 'Everyone plays a ball and keeps it all round; both stay in play. One lost ball puts the whole team out. Last team standing wins, the longest survivor if every team loses one.' : 'Everyone starts with a ball and keeps it all round. Everyone who still has theirs splits the pot; if all lose theirs, the last one lost wins.'}${payLine(`${usd(cost)} pot${Number(bb.pot_total) > 0 ? '' : ' (' + usd(bb.dollar_per_player) + ' a player)'}`)}`, 'birdieball'));
   }
   const bp = gatheringAddon(config, 'birdiepay');
   if (bp) {
@@ -19444,7 +19450,8 @@ function gatheringGameDetailsBody(evt, config) {
     remaining -= cost;
     const fbNet = fb.basis === 'net';
     const prs = (fb.pairs || []).map(pr => `${escapeHtml(pr[0])} &amp; ${escapeHtml(pr[1])}`).join(' · ');
-    rows.push(row('🤝', `BestBall · ${fbNet ? (fb.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `Better ball of each pair · $${(fb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, ${BFEngine.periodKey(fb) !== 'round' ? `${BFEngine.PERIODS[BFEngine.periodKey(fb)].phrase} are separate pots won on ${fb.win_by === 'holes' ? 'holes won' : 'strokes'} (${fb.win_by === 'holes' || fb.scope === 'group' ? 'each foursome plays its own match' : 'whole field'}), a tie is a push` : 'winning pair splits it'}${prs ? `<br><b>Pairs:</b> ${prs}` : ''}`, 'fourball'));
+    const fbPk = BFEngine.periodKey(fb);
+    rows.push(row('🤝', `BestBall · ${fbNet ? (fb.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `Better ball of each pair${fbPk !== 'round' ? `; ${BFEngine.PERIODS[fbPk].phrase} are separate pots won on ${fb.win_by === 'holes' ? 'holes won' : 'strokes'} (${fb.win_by === 'holes' || fb.scope === 'group' ? 'each foursome plays its own match' : 'whole field'}), a tie is a push` : ''}${payLine(`${usd(fb.dollar_per_player)} a player · ${usd(cost)} pot${fbPk === 'round' ? ', winning pair splits it' : ''}`)}`, 'fourball'));
   }
   BFEngine.sideFormGames().forEach(gid => {
     const a = gatheringAddon(config, gid);
@@ -19457,9 +19464,20 @@ function gatheringGameDetailsBody(evt, config) {
     remaining -= cost;
     const aNet = a.basis === 'net';
     const kPk = BFEngine.periodKey(a);
-    const list = sides.map(sd => sd.map(escapeHtml).join(isM ? ' vs ' : ' &amp; ')).join(' · ');
-    const allow = gid === 'scramble' ? (aNet && a.hcp_method !== 'none' ? ` · ${a.hcp_method === 'combined' ? BFEngine.scrambleCombinedPct(a) + '% of all handicaps' : BFEngine.scramblePcts(a).join('/') + '% by rank'}` : '') + ' · ' + BFEngine.scrambleSize(a) + '-man teams' + (a.scoring === 'stableford' ? ' · Stableford' : '') + (a.payout === 'top2' ? ' · pays top 2' : a.payout === 'top3' ? ' · pays top 3' : a.payout === 'custom' ? ' · pays ' + (a.place_shares || []).length + ' places' : '') : aNet ? ` · ${a.allowance != null && a.allowance !== '' ? a.allowance : (isM ? 100 : 50)}% allowance` : '';
-    rows.push(row(icon, `${title} · ${aNet ? (a.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `${what}${allow} · ${gid === 'scramble' ? (BFEngine.scramblePodiumTotal(a) > 0 ? '$' + cost.toFixed(2).replace(/\.00$/, '') + ' podium' : dpp > 0 ? 'pays by place' : 'no money, the loser buys') : dpp > 0 ? '$' + dpp.toFixed(2) + '/player · $' + cost.toFixed(2) + ' pot' : 'no money, the loser buys'}${kPk !== 'round' && !isM ? `, ${BFEngine.PERIODS[kPk].phrase} are separate pots` : ''}${isM ? ', winner announced the moment it is decided (you can play on)' : ''}${list ? `<br><b>${isM ? 'Matches' : 'Pairs'}:</b> ${list}` : ''}`, gid));
+    const list = gid === 'scramble' ? '' : sides.map(sd => sd.map(escapeHtml).join(isM ? ' vs ' : ' &amp; ')).join(' · ');
+    const allow = gid === 'scramble' ? '' : aNet ? ` · ${a.allowance != null && a.allowance !== '' ? a.allowance : (isM ? 100 : 50)}% allowance` : '';
+    let rule = `${what}${allow}`, pay;
+    if (gid === 'scramble') {
+      const size = BFEngine.scrambleSize(a), nPl = (a.pairs || []).filter(x => Array.isArray(x) && x.length).length * size;
+      rule = `${size}-man teams, one score per team · ${a.scoring === 'stableford' ? 'Stableford points, most wins' : 'lowest total wins'}` + (aNet && a.hcp_method !== 'none' ? ` · ${a.hcp_method === 'combined' ? BFEngine.scrambleCombinedPct(a) + '% of all handicaps' : BFEngine.scramblePcts(a).join('/') + '% by rank'}` : '');
+      const potS = BFEngine.scramblePodiumTotal(a) > 0 ? BFEngine.scramblePodiumTotal(a) : dpp * (nPl || sides.length * 2);
+      if (potS > 0) {
+        const sp = BFEngine.scrambleSplits(a), sum = sp.reduce((t, v) => t + v, 0) || 1, ord = ['1st', '2nd', '3rd'];
+        pay = sp.length > 1 ? sp.map((v, k) => `${ord[k]} ${usd(Math.floor(potS * v / sum))}`).join(' · ') + ` · ${usd(potS)} pot` : `Winning team takes the ${usd(potS)} pot`;
+      } else pay = 'No money, the loser buys';
+    } else pay = dpp > 0 ? usd(dpp) + ' a player · ' + usd(cost) + ' pot' : 'No money, the loser buys';
+    const scPrize = gid === 'scramble' && cleanPrize(a.prize) ? prizeLine(`Winners also get: ${escapeHtml(cleanPrize(a.prize))}`) : '';
+    rows.push(row(icon, `${title} · ${aNet ? (a.net_mode === 'low' ? 'Net, off the low' : 'Net') : 'Gross'}`, `${rule}${payLine(`${pay}${kPk !== 'round' && !isM ? `, ${BFEngine.PERIODS[kPk].phrase} are separate pots` : ''}${isM ? ', winner announced the moment it is decided (you can play on)' : ''}`)}${scPrize}`, gid));
   });
   const ls = gatheringAddon(config, 'lowscore');
   if (ls) {
@@ -19472,12 +19490,13 @@ function gatheringGameDetailsBody(evt, config) {
   if (tkA) {
     const reserve = tkA.as_skin ? 0 : (Number(tkA.dollar_per_player) || 0) * yesCount;
     remaining -= reserve;
-    rows.push(row('🦃', 'Turkeys · Gross', `${tkA.streak || 3} holes in a row under par${tkA.prize ? ' · ' + escapeHtml(tkA.prize) : ''} · ${tkA.as_skin ? 'counts as a skin, paid from the Skins pot' : reserve > 0 ? '$' + reserve.toFixed(2).replace(/\.00$/, '') + ' held in reserve: split between any Turkeys, back to Skins if none' : 'recognition only, no money'}`, 'turkeys'));
+    rows.push(row('🦃', 'Turkeys · Gross', `${tkA.streak || 3} or more holes in a row under par, by a player or a scramble team${payLine(tkA.as_skin ? 'Counts as a skin: worth the same as a hole skin, paid from the Skins pot' : reserve > 0 ? usd(reserve) + ' held in reserve, split between any Turkeys, back to Skins if there are none' : 'Recognition only, no money')}${tkA.prize ? prizeLine(escapeHtml(tkA.prize)) : ''}`, 'turkeys'));
   }
   if ((config.legacy.games || []).includes('skins')) {
     const sk = gatheringAddon(config, 'skins');
     const skNet = !!(sk && sk.basis === 'net');
-    rows.push(row('⛳', `Skins · ${skNet ? 'Net' : 'Gross'}`, `${skNet ? 'Lowest net score wins · ' : ''}Gets what's left: $${Math.max(0, remaining).toFixed(2)} pot${bp ? ', minus any birdie payouts' : ''}`, 'skins'));
+    const skTeams = !!(gatheringAddon(config, 'scramble') && (sk || {}).by !== 'player');
+    rows.push(row('⛳', `Skins · ${skNet ? 'Net' : 'Gross'}`, `Lowest ${skNet ? 'net ' : ''}score on a hole wins it outright; a tie wins nothing${skTeams ? '. In a scramble the team is the contender, and the pot is paid to the team' : ''}${payLine(`Gets what's left: ${usd(Math.max(0, remaining))} pot${bp ? ', minus any birdie payouts' : ''}`)}`, 'skins'));
   }
   // Net rounds: show everyone's strokes (set before the first tee) right on the card.
   const hc = config.handicap;
@@ -19501,7 +19520,12 @@ function gatheringGameDetailsBody(evt, config) {
     <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px">
       $${dpp.toFixed(2)}/player · ${yesCount} confirmed Yes · <b style="color:var(--text)">$${totalPot.toFixed(2)} total pot</b>
     </div>
-    <div style="display:flex;flex-direction:column;gap:8px">${rows.join('')}</div>
+    <div style="display:flex;flex-direction:column;gap:8px">${(() => {
+      // Order for the players: the main format first, then the side games, Skins (what's left) last, handicap strokes at the bottom.
+      const rank = { cttp: 1, birdieball: 2, turkeys: 3, birdiepay: 4, skins: 5, net: 6 };
+      const keyOf = h => { const m = /^<!--k:([^>]*?)-->/.exec(h); return m ? m[1] : ''; };
+      return rows.map((h, n) => ({ h, n, r: rank[keyOf(h)] != null ? rank[keyOf(h)] : 0 })).sort((x, y) => x.r - y.r || x.n - y.n).map(x => x.h).join('');
+    })()}</div>
     <div style="font-size:0.72rem;color:var(--text-hint);margin-top:12px;line-height:1.5">
       Scores and results publish to My History once the round is scored — no separate entry needed.
     </div>`;
@@ -21599,6 +21623,7 @@ function gamesFormPodiumInit(src) {
     _gamesFormPodium.mode = 'pl'; _gamesFormPodium.pl = sh.map(v => S > 0 ? (Math.abs((tot || S) - S) < 0.5 ? _r2(v) : _r2(v * (tot || S) / S)) : 0);   // dollar places that already add up to the podium come back exactly as saved
   } else if (src && BFEngine.scramblePodiumTotal(src) > 0) { _gamesFormPodium.mode = 'tot'; _gamesFormPodium.tot = BFEngine.scramblePodiumTotal(src); }
 }
+function setGamesFormScramblePrize(val) { _gamesFormSide.scramble.prize = cleanPrize(val); _gamesFormTouched.add('scramble'); }
 function setGamesFormScramblePct(val) {
   const p = _gamesFormPodium; p.mode = 'pct'; p.pct = Math.max(0, Math.min(100, parseFloat(val) || 0)); p.dirty = true;
   gamesFormPodiumApply(); updateGamesFormPotPreview();
@@ -22654,7 +22679,10 @@ function gatheringGamesSideSectionHtml(gid) {
         ['winner', 'Winning team', 'One pot. Tied teams split it.', true],
         ['top2', 'Top 2 teams', '65% to first, 35% to second.', false],
         ['top3', 'Top 3 teams', '50% to first, 30% to second, 20% to third.', false]
-      ], c.payout === 'custom' ? ((c.place_shares || []).length >= 3 ? 'top3' : (c.place_shares || []).length === 2 ? 'top2' : 'winner') : c.payout, `(v=>setGamesFormSide('${gid}','payout',v))`)}${c.payout === 'custom' ? `<div style="font-size:0.76rem;color:var(--text-muted);margin-top:6px;line-height:1.5">Paying ${(c.place_shares || []).length} place${(c.place_shares || []).length === 1 ? '' : 's'} at the dollar amounts you set on the money step, not the standard percentages. Tap a split above only if you want the standard percentages back.</div>` : ''}`;
+      ], c.payout === 'custom' ? ((c.place_shares || []).length >= 3 ? 'top3' : (c.place_shares || []).length === 2 ? 'top2' : 'winner') : c.payout, `(v=>setGamesFormSide('${gid}','payout',v))`)}${c.payout === 'custom' ? `<div style="font-size:0.76rem;color:var(--text-muted);margin-top:6px;line-height:1.5">Paying ${(c.place_shares || []).length} place${(c.place_shares || []).length === 1 ? '' : 's'} at the dollar amounts you set on the money step, not the standard percentages. Tap a split above only if you want the standard percentages back.</div>` : ''}
+      <div style="font-size:0.9rem;font-weight:600;margin:12px 0 4px">Extra prize for the winning team (optional)</div>
+      <input type="text" maxlength="60" value="${escapeHtml(c.prize || '')}" placeholder="e.g. Turkeys compliments of Tom &amp; Evan" oninput="setGamesFormScramblePrize(this.value)" style="width:100%;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 10px;font-family:inherit;box-sizing:border-box">
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:3px">Shown to the players with the game. No money moves for it.</div>`;
   const winBlock = mp || hl || sc || segN <= 1 ? '' : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Period won by</span>${seg([['strokes', 'Strokes'], ['holes', 'Holes won']], c.win_by, `(v=>setGamesFormSide('${gid}','win_by',v))`)}</div>
         <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.win_by === 'holes' ? 'The pair that wins more holes wins the period.' : 'The pair with the lower total wins the period.'}</div>`;
@@ -23121,7 +23149,7 @@ async function submitGatheringGames(gatheringId) {
     else if (gid === 'hilo') cfg.pairs = rows.map(pr => [pr[0], pr[1]]);
     else if (gid === 'scramble') {
       Object.assign(cfg, { scoring: c.scoring === 'stableford' ? 'stableford' : 'strokes', scale: c.scale === 'standard' ? 'standard' : 'bf', hcp_method: ['combined', 'none'].includes(c.hcp_method) ? c.hcp_method : 'ranked',
-        team_size: BFEngine.scrambleSize(c), ...Object.fromEntries(Array.from({ length: BFEngine.scrambleSize(c) }, (_, i) => ['pct_' + (i + 1), Number(c['pct_' + (i + 1)])])), allowance: Number(c.allowance) || BFEngine.scrambleCombinedPct(c), payout: ['top2', 'top3'].includes(c.payout) ? c.payout : c.payout === 'custom' && (c.place_shares || []).length ? 'custom' : 'winner', ...(c.payout === 'custom' && (c.place_shares || []).length ? { place_shares: c.place_shares.map(Number) } : {}), ...(Number(c.podium_total) > 0 ? { podium_total: _r2(c.podium_total) } : {}), pairs: rows.map(pr => [pr[0], pr[1]]) });
+        team_size: BFEngine.scrambleSize(c), ...Object.fromEntries(Array.from({ length: BFEngine.scrambleSize(c) }, (_, i) => ['pct_' + (i + 1), Number(c['pct_' + (i + 1)])])), allowance: Number(c.allowance) || BFEngine.scrambleCombinedPct(c), payout: ['top2', 'top3'].includes(c.payout) ? c.payout : c.payout === 'custom' && (c.place_shares || []).length ? 'custom' : 'winner', ...(c.payout === 'custom' && (c.place_shares || []).length ? { place_shares: c.place_shares.map(Number) } : {}), ...(Number(c.podium_total) > 0 ? { podium_total: _r2(c.podium_total) } : {}), ...(cleanPrize(c.prize) ? { prize: cleanPrize(c.prize) } : {}), pairs: rows.map(pr => [pr[0], pr[1]]) });
       delete cfg.period;
       { const nm = gamesFormSideItems(gid).map((pr, i) => (pr.some(Boolean) ? String((c.names || [])[i] || '').trim().slice(0, 40) : null)).filter(x => x !== null); if (nm.some(Boolean)) cfg.names = nm; }
       if (cfg.scoring === 'stableford') {

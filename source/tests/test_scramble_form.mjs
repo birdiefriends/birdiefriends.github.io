@@ -7,7 +7,7 @@ const BFEngine = require('../bf_engine.js');
 const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const ctx = vm.createContext({ console, JSON, Math, Number, String, Set, Map, Array, Object, BFEngine });
-vm.runInContext(['gamesFormScramblePcts', 'gamesFormSideBlank', 'gamesFormSideFrom', 'isScrB', 'scrambleResultsHtml', 'escapeHtml'].map(n => extractFn(src, n)).join('\n'), ctx);
+vm.runInContext(['gamesFormScramblePcts', 'gamesFormSideBlank', 'gamesFormSideFrom', 'isScrB', 'scrambleResultsHtml', 'escapeHtml', 'cleanPrize'].map(n => extractFn(src, n)).join('\n'), ctx);
 
 const b = ctx.gamesFormSideBlank('scramble');
 ok(b.basis === 'net' && b.scoring === 'strokes' && b.hcp_method === 'ranked' && b.team_size === 2 && b.pct_1 === 35 && b.pct_2 === 15 && b.allowance === 25 && b.payout === 'winner', 'blank scramble: net, strokes, 35/15, winner');

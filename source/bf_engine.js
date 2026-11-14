@@ -1039,7 +1039,7 @@
         standings: rows.slice().sort((a, b) => (a.total == null) - (b.total == null) || (a.total == null ? 0 : cmpTotal(a, b))),
         winners: winners.map(w => w.pair), per_pair: perPair, per_player: perPlayer, given_back_each: givenBackEach,
         ...(kind === 'scramble' ? { scoring: stable ? 'stableford' : 'strokes', ...(stable ? { scale } : {}),
-          hcp_method: scrambleMethod(addon), team_size: size,
+          hcp_method: scrambleMethod(addon), team_size: size, ...(cleanGameName(addon.prize, 60) ? { prize: cleanGameName(addon.prize, 60) } : {}),
           payout: addon.payout === 'custom' && scrambleShares(addon).length ? 'custom' : SCRAMBLE_SPLITS[addon.payout] ? addon.payout : 'winner', ...(placesOut ? { places: placesOut } : {}),
           ...(stable && !stablePars ? { par_missing: true } : {}) } : {})
       }, capped ? { capped: true, configured_pot: configuredPot } : {});
@@ -1397,7 +1397,8 @@
       { key: 'allowance', type: 'int', label: 'Combined handicap %', default: 25, min: 1 },
       { key: 'payout', type: 'enum', label: 'Pays', values: ['winner', 'top2', 'top3', 'custom'], default: 'winner' },
       { key: 'place_shares', type: 'shares', label: 'Podium shares by place (custom)', default: [], max: 3 },
-      { key: 'podium_total', type: 'money', label: 'Podium total ($, fixed)', default: 0 },   // v1.56.0: the host's fixed podium; when set it is the pot, whatever the player count does
+      { key: 'podium_total', type: 'money', label: 'Podium total ($, fixed)', default: 0 },
+      { key: 'prize', type: 'text', label: 'Extra prize for the winning team', default: '' },   // v1.56.0: the host's fixed podium; when set it is the pot, whatever the player count does
       { key: 'pars', type: 'pars', label: 'Par by hole (Stableford)', default: [], min: 3, max: 6, integer: true },
       { key: 'pairs', type: 'pairs', sizeKey: 'team_size', minPairs: 0, label: 'Teams', default: [] },   // may be saved empty: a team event is set up before anyone has signed up, and the locked teams are filled in later
       { key: 'names', type: 'strings', label: 'Team names', default: [], max: 40 }
@@ -1931,7 +1932,7 @@
         net_mode: scc.net_mode === 'low' ? 'low' : 'own', scoring: scc.scoring === 'stableford' ? 'stableford' : 'strokes', scale: scc.scale === 'standard' ? 'standard' : 'bf',
         hcp_method: scrambleMethod(scc), team_size: scrambleSize(scc), allowance: scrambleCombinedPct(scc),
         ...Object.fromEntries([1, 2, 3, 4].filter(i => scc['pct_' + i] != null && Number.isFinite(Number(scc['pct_' + i]))).map(i => ['pct_' + i, Number(scc['pct_' + i])])),
-        payout: ['winner', 'top2', 'top3', 'custom'].includes(scc.payout) ? scc.payout : 'winner', ...(Array.isArray(scc.place_shares) ? { place_shares: scc.place_shares.map(Number) } : {}), ...(scramblePodiumTotal(scc) > 0 ? { podium_total: scramblePodiumTotal(scc) } : {}), pars: Array.isArray(scc.pars) ? scc.pars : [], pairs: Array.isArray(scc.pairs) ? scc.pairs : [], names: Array.isArray(scc.names) ? scc.names.map(x => String(x || '')) : [] });
+        payout: ['winner', 'top2', 'top3', 'custom'].includes(scc.payout) ? scc.payout : 'winner', ...(Array.isArray(scc.place_shares) ? { place_shares: scc.place_shares.map(Number) } : {}), ...(scramblePodiumTotal(scc) > 0 ? { podium_total: scramblePodiumTotal(scc) } : {}), ...(cleanGameName(scc.prize, 60) ? { prize: cleanGameName(scc.prize, 60) } : {}), pars: Array.isArray(scc.pars) ? scc.pars : [], pairs: Array.isArray(scc.pairs) ? scc.pairs : [], names: Array.isArray(scc.names) ? scc.names.map(x => String(x || '')) : [] });
     }
     const hlc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.hilo : null;
     if (games.includes('hilo') && hlc) {
@@ -3598,7 +3599,7 @@
     ENGINE_VERSION, BFGroups,
     BASE_GAMES, ADDONS,
     getGame, listGames, recommendPairs, GAME_GROUPS, gamesInUiOrder, gamesUiMeta, gamesInfo, gamesSealLabels, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
-    skinsWon, betterBallHoles, scrambleTeamStrokes, scrambleSize, scramblePodiumTotal, scramblePcts, scrambleCombinedPct, stablefordHolePoints,
+    skinsWon, betterBallHoles, scrambleTeamStrokes, scrambleSize, scramblePodiumTotal, scrambleSplits, scramblePcts, scrambleCombinedPct, stablefordHolePoints,
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,
     computeRoundPayout,

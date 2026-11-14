@@ -5,7 +5,7 @@ const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine();
 const ctx = { BFEngine: E, document: { getElementById: () => null }, _gamesFormYesCount: 8, _gamesFormTouched: new Set() }; vm.createContext(ctx);
-const fns = ['_r2', 'gamesFormPodiumPlaces', 'gamesFormPodiumPlan', 'gamesFormPodiumPlayers', 'gamesFormPodiumInit', 'gamesFormScramblePcts', 'gamesFormSideBlank', 'gamesFormSideFrom'];
+const fns = ['cleanPrize', '_r2', 'gamesFormPodiumPlaces', 'gamesFormPodiumPlan', 'gamesFormPodiumPlayers', 'gamesFormPodiumInit', 'gamesFormScramblePcts', 'gamesFormSideBlank', 'gamesFormSideFrom'];
 vm.runInContext('const GAMES_FORM_PODIUM_SHARES = { 1: [100], 2: [65, 35], 3: [50, 30, 20] }; let _gamesFormPodium = {}; let _gamesFormSide = { scramble: {} }; const GAMES_FORM_SIDE_IDS = ["scramble"];\n' + fns.map(n => extractFn(src, n)).join('\n') + '\nthis.from = gamesFormSideFrom; this.init = gamesFormPodiumInit; this.getP = () => _gamesFormPodium; this.plan = gamesFormPodiumPlan; this.setSide = s => { _gamesFormSide.scramble = s; };', ctx);
 const pairs = [['A1', 'A2'], ['B1', 'B2'], ['C1', 'C2'], ['D1', 'D2']];
 // 1. hand-priced podium: $150 / $90 / $60 on a fixed $300 podium, 8 players
