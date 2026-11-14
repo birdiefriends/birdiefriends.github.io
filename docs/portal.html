@@ -13019,6 +13019,7 @@ function gamesFormSideFrom(gid, src) {
     out.team_size = BFEngine.scrambleSize(src);
     out.hcp_method = ['combined', 'none'].includes(src.hcp_method) ? src.hcp_method : 'ranked';
     Object.assign(out, gamesFormScramblePcts(src)); out.allowance = BFEngine.scrambleCombinedPct(src);
+    if (BFEngine.scramblePodiumTotal(src) > 0) out.podium_total = BFEngine.scramblePodiumTotal(src);   // the host's fixed podium is part of what was saved: it has to come back on edit
     out.payout = ['top2', 'top3', 'custom'].includes(src.payout) ? src.payout : 'winner';
     if (out.payout === 'custom') { if (Array.isArray(src.place_shares) && src.place_shares.length) out.place_shares = src.place_shares.map(Number); else out.payout = 'winner'; }
   }
@@ -21427,6 +21428,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div id="gw-step-label" style="font-size:0.74rem;color:var(--text-muted);flex:1"></div>
         <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">🎮 ${escapeHtml(g.name)}</div></div>
       <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:14px"><div id="gw-bar" style="height:100%;background:var(--green);width:0"></div></div>
+      <div id="gw-jump" style="display:flex;flex-wrap:wrap;gap:6px;margin:-6px 0 12px"></div>
       <div class="gw-pane" id="gw-pane-games">
         <div style="font-size:1.15rem;font-weight:700;margin-bottom:4px">What are you playing for?</div>
         <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;margin-bottom:10px">Tap everything that is in. Details come one game at a time, next. Every registered player's My History gets the result once it is published.</div>
@@ -21517,7 +21519,7 @@ function gamesFormPodiumInit(src) {
   if (src && src.payout === 'custom' && Array.isArray(src.place_shares) && src.place_shares.length) {
     const sh = src.place_shares.map(Number), S = sh.reduce((t, v) => t + v, 0);
     const tot = BFEngine.scramblePodiumTotal(src) || (Number(src.dollar_per_player) || 0) * gamesFormPodiumPlayers();   // the saved fixed podium; older games only had the per-player rate
-    _gamesFormPodium.mode = 'pl'; _gamesFormPodium.pl = sh.map(v => S > 0 ? _r2(v * (tot || S) / S) : 0);
+    _gamesFormPodium.mode = 'pl'; _gamesFormPodium.pl = sh.map(v => S > 0 ? (Math.abs((tot || S) - S) < 0.5 ? _r2(v) : _r2(v * (tot || S) / S)) : 0);   // dollar places that already add up to the podium come back exactly as saved
   } else if (src && BFEngine.scramblePodiumTotal(src) > 0) { _gamesFormPodium.mode = 'tot'; _gamesFormPodium.tot = BFEngine.scramblePodiumTotal(src); }
 }
 function setGamesFormScramblePct(val) {
@@ -21749,6 +21751,9 @@ function gwRender() {
   wiz.querySelectorAll('.gw-pane').forEach(el => { el.style.display = el.id === 'gw-pane-' + pane ? 'block' : 'none'; });
   const lab = document.getElementById('gw-step-label'); if (lab) lab.textContent = `Step ${i + 1} of ${steps.length} · ${GW_NAMES[cur]}`;
   const bar = document.getElementById('gw-bar'); if (bar) bar.style.width = Math.round((i + 1) / steps.length * 100) + '%';
+  // Jump straight to any screen (editing a saved config opens on Review; this is the way back to the first screen without paging back).
+  const jump = document.getElementById('gw-jump');
+  if (jump) jump.innerHTML = steps.length < 2 ? '' : steps.map((st, k) => `<button type="button" onclick="gwGoTo('${st}')" style="height:28px;padding:0 10px;border-radius:14px;border:1.5px solid ${st === cur ? 'var(--green)' : 'var(--border)'};background:${st === cur ? 'var(--green)' : '#fff'};color:${st === cur ? '#fff' : 'var(--text-muted)'};font-family:inherit;font-size:0.72rem;font-weight:700;cursor:pointer">${k + 1}${st === cur ? ' · ' + escapeHtml(GW_NAMES[st] || st) : ''}</button>`).join('');
   if (cur === 'review') { const r = document.getElementById('gw-review'); if (r) r.innerHTML = gwReviewHtml(); }
   const next = document.getElementById('gw-next'), save = document.getElementById('btn-save-games'), prev = document.getElementById('gw-prev');
   if (next) { next.style.display = cur === 'review' ? 'none' : 'block'; next.textContent = cur === 'games' && !_gamesFormSelected.size ? 'Pick at least one game' : 'Next'; }
@@ -22550,7 +22555,7 @@ function gatheringGamesSideSectionHtml(gid) {
         ['winner', 'Winning team', 'One pot. Tied teams split it.', true],
         ['top2', 'Top 2 teams', '65% to first, 35% to second.', false],
         ['top3', 'Top 3 teams', '50% to first, 30% to second, 20% to third.', false]
-      ], c.payout, `(v=>setGamesFormSide('${gid}','payout',v))`)}${c.payout === 'custom' ? `<div style="font-size:0.76rem;color:var(--text-muted);margin-top:6px;line-height:1.5">Now paying ${(c.place_shares || []).length} places at the dollar amounts you set on the money step. Pick one above to go back to a standard split.</div>` : ''}`;
+      ], c.payout === 'custom' ? ((c.place_shares || []).length >= 3 ? 'top3' : (c.place_shares || []).length === 2 ? 'top2' : 'winner') : c.payout, `(v=>setGamesFormSide('${gid}','payout',v))`)}${c.payout === 'custom' ? `<div style="font-size:0.76rem;color:var(--text-muted);margin-top:6px;line-height:1.5">Paying ${(c.place_shares || []).length} place${(c.place_shares || []).length === 1 ? '' : 's'} at the dollar amounts you set on the money step, not the standard percentages. Tap a split above only if you want the standard percentages back.</div>` : ''}`;
   const winBlock = mp || hl || sc || segN <= 1 ? '' : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="flex:1;font-size:0.9rem;font-weight:600">Period won by</span>${seg([['strokes', 'Strokes'], ['holes', 'Holes won']], c.win_by, `(v=>setGamesFormSide('${gid}','win_by',v))`)}</div>
         <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:10px">${c.win_by === 'holes' ? 'The pair that wins more holes wins the period.' : 'The pair with the lower total wins the period.'}</div>`;
@@ -23015,7 +23020,7 @@ async function submitGatheringGames(gatheringId) {
     else if (gid === 'hilo') cfg.pairs = rows.map(pr => [pr[0], pr[1]]);
     else if (gid === 'scramble') {
       Object.assign(cfg, { scoring: c.scoring === 'stableford' ? 'stableford' : 'strokes', scale: c.scale === 'standard' ? 'standard' : 'bf', hcp_method: ['combined', 'none'].includes(c.hcp_method) ? c.hcp_method : 'ranked',
-        team_size: BFEngine.scrambleSize(c), ...Object.fromEntries(Array.from({ length: BFEngine.scrambleSize(c) }, (_, i) => ['pct_' + (i + 1), Number(c['pct_' + (i + 1)])])), allowance: Number(c.allowance) || BFEngine.scrambleCombinedPct(c), payout: ['top2', 'top3'].includes(c.payout) ? c.payout : c.payout === 'custom' && (c.place_shares || []).length ? 'custom' : 'winner', ...(c.payout === 'custom' && (c.place_shares || []).length ? { place_shares: c.place_shares.map(Number) } : {}), pairs: rows.map(pr => [pr[0], pr[1]]) });
+        team_size: BFEngine.scrambleSize(c), ...Object.fromEntries(Array.from({ length: BFEngine.scrambleSize(c) }, (_, i) => ['pct_' + (i + 1), Number(c['pct_' + (i + 1)])])), allowance: Number(c.allowance) || BFEngine.scrambleCombinedPct(c), payout: ['top2', 'top3'].includes(c.payout) ? c.payout : c.payout === 'custom' && (c.place_shares || []).length ? 'custom' : 'winner', ...(c.payout === 'custom' && (c.place_shares || []).length ? { place_shares: c.place_shares.map(Number) } : {}), ...(Number(c.podium_total) > 0 ? { podium_total: _r2(c.podium_total) } : {}), pairs: rows.map(pr => [pr[0], pr[1]]) });
       delete cfg.period;
       { const nm = gamesFormSideItems(gid).map((pr, i) => (pr.some(Boolean) ? String((c.names || [])[i] || '').trim().slice(0, 40) : null)).filter(x => x !== null); if (nm.some(Boolean)) cfg.names = nm; }
       if (cfg.scoring === 'stableford') {
