@@ -6631,7 +6631,7 @@ function leaderboardPrelimHtml(info) {
     return left.length ? `<div style="margin:10px 16px 0;padding:8px 12px;border-radius:10px;background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4);font-size:0.8rem;line-height:1.45">Still to finish: <b>${left.slice(0, 8).map(esc).join(', ')}</b>${left.length > 8 ? ' and ' + (left.length - 8) + ' more' : ''}.<br><span style="color:var(--text-muted)">Payouts appear here as soon as every card is complete.</span></div>` : '';
   }
   const pay = ((info.summary && info.summary.payouts) || []).filter(x => Number(x.total) > 0).sort((a, b) => b.total - a.total || String(a.player).localeCompare(String(b.player)));
-  const parts = x => ['scramble', 'cttp', 'skins', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'matchplay', 'hilo'].filter(k => Number(x[k]) > 0).map(k => ({ scramble: 'team', cttp: 'closest', skins: 'skins', birdieball: 'MiserBall', birdiepay: 'birdies', fourball: 'BestBall', altshot: 'Alt Shot', matchplay: 'match', hilo: 'Hi-Lo' }[k]) + ' $' + x[k]).join(' · ');
+  const parts = x => ['scramble', 'cttp', 'skins', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'matchplay', 'hilo'].filter(k => Number(x[k]) > 0).map(k => ({ scramble: 'team', cttp: 'closest', skins: 'skins', birdieball: bbCleanName(info.summary && info.summary.birdieball && info.summary.birdieball.name) || 'MiserBall', birdiepay: 'birdies', fourball: 'BestBall', altshot: 'Alt Shot', matchplay: 'match', hilo: 'Hi-Lo' }[k]) + ' $' + x[k]).join(' · ');
   out.push(`<div style="margin:12px 16px 0"><div style="font-weight:700;margin-bottom:2px">${info.closed ? '✅ Final payouts' : '✅ All scores are in · Preliminary payouts'}</div>
     <div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:8px">${info.closed ? 'The host has closed this round.' : 'Becomes final when the host approves.'}</div>
     ${pay.length ? pay.map(x => `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;margin-bottom:5px;border:1.5px solid ${info.me && String(x.player).trim().toLowerCase() === String(info.me).trim().toLowerCase() ? 'var(--green)' : 'var(--border)'};background:#fff"><div style="flex:1;min-width:0;font-size:0.88rem"><b>${esc(x.player)}</b><div style="font-size:0.72rem;color:var(--text-muted)">${esc(parts(x))}</div></div><div style="font-family:'DM Mono',monospace;font-weight:700">$${Number(x.total)}</div></div>`).join('') : '<div style="font-size:0.84rem;color:var(--text-muted)">No payouts in this round.</div>'}</div>`);
@@ -18558,6 +18558,24 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     (rk.gross || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.gross = r.total; e.strokes = r.strokes; byName.set(norm(r.player), e); });
     (rk.net || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.net = r.total; byName.set(norm(r.player), e); });
   }
+  // A team's skins / Turkeys / MiserBall money is paid to the team. For the Summary each partner is shown an even share so the +/− is
+  // what that player really came out with (the buy-in is per player). Display only: the saved payout is untouched.
+  const teamNotes = [];
+  if (s.scramble && Array.isArray(s.scramble.pairs)) {
+    const NUM = ['total', 'skins', 'cttp', 'birdieball', 'birdiepay', 'turkeys', 'fourball', 'lowscore', 'given_back'].concat(BFEngine.sideFormGames());
+    s.scramble.pairs.forEach(pr => {
+      if (!Array.isArray(pr) || pr.length < 2) return;
+      const tk = norm(pr.join(' & ')), trow = byName.get(tk);
+      if (!trow) return;
+      if ((Number(trow.total) || 0) > 0) teamNotes.push({ label: pr.join(' & '), total: Number(trow.total), each: Math.round(Number(trow.total) / pr.length * 100) / 100 });
+      pr.forEach(nm => {
+        const e = byName.get(norm(nm)) || { player: nm, total: 0 };
+        NUM.forEach(k => { const v = Number(trow[k]) || 0; if (v) e[k] = Math.round(((Number(e[k]) || 0) + v / pr.length) * 100) / 100; });
+        byName.set(norm(nm), e);
+      });
+      byName.delete(tk);
+    });
+  }
   const strokesBy = new Map(((s.handicap && s.handicap.players) || []).map(p => [norm(p.player), Number(p.strokes) || 0]));
   // Net games that play off the low use fewer strokes than the player's full allowance: say so per player.
   const gameStrokes = new Map();
@@ -18594,12 +18612,14 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   // Many games (Hi-Lo + Skins + CTP + MiserBall + Birdie Payouts ...) no longer fit on a phone: the name column used to collapse to nothing.
   // Past 4 money columns the score moves under the name, the columns tighten, and the table scrolls sideways rather than overlapping.
   const moneyCols = games.length + (anyBack ? 1 : 0), compact = moneyCols >= 4, scoreCol = hasRank && !compact;
-  const colW = compact ? '1.65rem' : '2.1rem', nameMin = compact ? '4.6rem' : '0';
+  const gShort = id => id === 'skins' ? 'Skins' : id === 'cttp' ? 'CTP' : id === 'birdieball' ? (bbCleanName(s.birdieball && s.birdieball.name) || 'Miser') : id === 'birdiepay' ? 'Birdies' : id === 'turkeys' ? 'Turkey' : id === 'fourball' ? 'BestBall' : (() => { const m = (BFEngine.getGame(id) || {}).meta || {}; return m.tab || m.label || id; })();
+  const gFull = id => id === 'turkeys' ? 'Turkeys' : id === 'birdiepay' ? 'Birdie Payouts' : id === 'cttp' ? 'Closest to the Pin' : id === 'birdieball' ? (bbCleanName(s.birdieball && s.birdieball.name) || 'MiserBall') : gShort(id);
+  const colW = compact ? '2.1rem' : '2.5rem', nameMin = compact ? '4.6rem' : '0';
   const cols = `${compact ? '0.9rem' : '1.4rem'} minmax(${nameMin},1fr) ${scoreCol ? '2.3rem ' : ''}${games.map(() => colW).join(' ')}${games.length ? ' ' : ''}${anyBack ? colW + ' ' : ''}${compact ? '2.5rem' : '3rem'}`;
   const gridGap = compact ? '3px' : '4px';
   const cell = (v, bold) => `<span style="text-align:right;${bold ? 'font-weight:800;' : ''}">${v}</span>`;
   const head = scoreLabel => `<div style="display:grid;grid-template-columns:${cols};gap:${gridGap};font-size:0.68rem;color:var(--text-hint);padding:2px 0 4px;border-bottom:1px solid var(--border)">
-      <span></span><span style="overflow:hidden;white-space:nowrap">Player</span>${scoreCol ? cell(scoreLabel) : ''}${games.map(g => cell(g[1])).join('')}${anyBack ? cell('↩') : ''}${cell(buyIn > 0 ? '+/−' : 'Total')}</div>`;
+      <span></span><span style="overflow:hidden;white-space:nowrap">Player</span>${scoreCol ? cell(scoreLabel) : ''}${games.map(g => `<span style="text-align:right;line-height:1.1;min-width:0"><span style="display:block">${g[1]}</span><span style="display:block;font-size:0.54rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(gShort(g[0]))}</span></span>`).join('')}${anyBack ? cell('↩') : ''}${cell(buyIn > 0 ? '+/−' : 'Total')}</div>`;
   const matrix = (mode, scoreKey) => head(scoreKey === 'gross' ? 'Gross' : 'Net') + sortedBy(mode).map(({ p, place, tied }) => {
     const sc = scoreCol ? cell(p[scoreKey] == null ? '—' : esc(p[scoreKey])) : '';
     const scSub = hasRank && compact && p[scoreKey] != null ? `${scoreKey === 'gross' ? 'Gross' : 'Net'} ${esc(p[scoreKey])}` : '';
@@ -18614,17 +18634,20 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   let sum = `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">${s.players_count} player${s.players_count === 1 ? '' : 's'} × ${money(ante)} = <b style="color:var(--text)">${money(ante * s.players_count)} pot</b>${unspentEach > 0 ? ` <span style="font-size:0.72rem;color:var(--text-hint)">· ${money(unspentEach)} of the ${money(buyIn)} buy-in was in no game and went back</span>` : ''}</div>`;
   {
     const lines = [];
-    const addLine = (icon, name, g, winBy) => {
+    const addLine = (icon, name, g, winBy, extra) => {
       if (!g) return;
       const pk = g.segments ? g.segments.mode : (g.period || 'round');
       const P = BFEngine.PERIODS[pk] || BFEngine.PERIODS.round;
       const basis = g.basis === 'net' ? (g.net_mode === 'low' ? 'net, off the low' : 'net') : 'gross';
       const how = pk === 'round' ? 'one pot for the whole round' : `<b>${esc(P.label)}</b>: ${esc(P.phrase)}, ${P.segs.length} pots${winBy ? `, each won on ${winBy === 'holes' ? 'holes won' : winBy === 'points' ? 'points' : 'strokes'}` : ''}`;
-      lines.push(`<div style="padding:3px 0">${icon} <b>${name}</b> <span style="color:var(--text-muted)">(${basis})</span> · ${how}</div>`);
+      lines.push(`<div style="padding:3px 0">${icon} <b>${name}</b> <span style="color:var(--text-muted)">(${basis})</span> · ${how}${extra ? ' · ' + extra : ''}</div>`);
     };
     addLine('🤝', 'BestBall', s.fourball, s.fourball && s.fourball.segments ? s.fourball.segments.win_by : null);
     addLine('🔁', 'Alternate Shot', s.altshot, s.altshot && s.altshot.segments ? s.altshot.segments.win_by : null);
-    addLine('🍳', 'Scramble', s.scramble, null);
+    addLine('🍳', 'Scramble', s.scramble, null, s.scramble && s.scramble.prize ? '🏆 Winners also get: ' + esc(s.scramble.prize) : '');
+    if (s.skins) lines.push(`<div style="padding:3px 0">⛳ <b>Skins</b> <span style="color:var(--text-muted)">(${s.skins.basis === 'net' ? 'net' : 'gross'})</span> · lowest score on a hole wins it outright, a tie wins nothing${s.skins.by === 'team' ? ', the team is the contender' : ''}</div>`);
+    if (s.cttp && (s.cttp.holes || []).length) lines.push(`<div style="padding:3px 0">🎯 <b>Closest to the Pin</b> · hole${s.cttp.holes.length === 1 ? '' : 's'} ${s.cttp.holes.map(x => esc(x.hole)).join(', ')}</div>`);
+    if (s.birdieball) lines.push(`<div style="padding:3px 0">🐉 <b>${esc(bbCleanName(s.birdieball.name) || 'MiserBall')}</b> · ${s.birdieball.by === 'team' ? 'keep both balls all round; one lost ball puts the team out' : 'keep your ball all round'}</div>`);
     if (s.turkeys) lines.push(`<div style="padding:3px 0">🦃 <b>Turkeys</b> <span style="color:var(--text-muted)">(gross)</span> · ${s.turkeys.streak || 3} holes in a row under par${s.turkeys.as_skin ? ', counts as a skin' : s.turkeys.reserve > 0 ? `, ${money(s.turkeys.reserve)} held in reserve` : ''}${s.turkeys.prize ? ' · ' + esc(s.turkeys.prize) : ''}</div>`);
     addLine('⚖️', 'Hi-Lo', s.hilo, s.hilo && s.hilo.segments ? s.hilo.segments.win_by : null);
     addLine('⚔️', 'Match Play', s.matchplay, s.matchplay && s.matchplay.segments ? s.matchplay.segments.win_by : null);
@@ -18633,8 +18656,15 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   }
   if (oneBallOnly) sum += BFEngine.sideFormGames().filter(id => id !== 'scramble').map(id => (s[id] ? sideResultHeroHtml(s[id], id) : '')).join('');
   if (modes.length > 1) sum += `<div style="display:flex;align-items:center;gap:6px;margin:4px 0 6px"><span style="font-size:0.72rem;color:var(--text-muted)">Rank by</span>${modes.map(([m, l]) => modeBtn(m, l)).join('')}<span style="font-size:0.68rem;color:var(--text-hint)">scores are for fun</span></div>`;
-  sum += `<div style="font-size:0.7rem;color:var(--text-muted);margin:2px 0 4px;line-height:1.4">Game columns show what each game paid out.${anyBack ? ' ↩ is an ante handed back from a pot that was halved or not finished.' : ''}${buyIn > 0 ? ` <b>+/−</b> is each player's result: what came back to them, minus the ${money(ante)} they put in.` : ''}</div>`;
+  sum += `<div style="font-size:0.7rem;color:var(--text-muted);margin:2px 0 4px;line-height:1.4">Game columns show what each game paid out (${games.map(g => g[1] + ' ' + esc(gFull(g[0]))).join(' · ')}).${anyBack ? ' ↩ is an ante handed back from a pot that was halved or not finished.' : ''}${buyIn > 0 ? ` <b>+/−</b> is each player's result: what came back to them, minus the ${money(ante)} they put in.` : ''}</div>`;
   sum += modes.map(([m]) => `<div data-gp-sort="${m}" style="overflow-x:auto;${m === defMode ? '' : 'display:none'}">${matrix(m, m === 'gross' ? 'gross' : 'net')}</div>`).join('');
+  {
+    const notes = [];
+    teamNotes.forEach(t => notes.push(`Team money: <b>${esc(t.label)}</b> won ${money(t.total)}, shown split evenly (${money(t.each)} each). Divide it however you agree.`));
+    ((s.skins && s.skins.won) || []).filter(w => w.turkey).forEach(w => notes.push(`${esc(skinWonText(w))}: <b>${esc(w.player)}</b>, paid as a skin`));
+    ((s.cttp && s.cttp.holes) || []).filter(x => !x.player && !x.prize).forEach(x => notes.push(`Closest to the Pin #${esc(x.hole)}: no winner, ${money(s.cttp.capped ? s.cttp.paid_per_hole : s.cttp.per_hole)} went back to Skins`));
+    if (notes.length) sum += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px;line-height:1.5">${notes.map(n => `<div style="padding:1px 0">• ${n}</div>`).join('')}</div>`;
+  }
   if (s.unallocated > 0) sum += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Rounding (whole dollars): ${money(s.unallocated)} stays with the host</div>`;
   else if (buyIn > 0 && people.length && Math.abs(people.reduce((t, p) => t + (Number(p.total) || 0) - buyIn, 0)) < 0.005) sum += `<div style="font-size:0.72rem;color:var(--text-hint);margin-top:6px">Results add up to $0 across the group.</div>`;
   panels.push({ key: 'sum', tab: '📋 Summary', html: sum });
@@ -18668,7 +18698,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   // ── MiserBall ──
   if (s.birdieball) {
     const b = s.birdieball;
-    let h = label(`🐉 ${esc(b.name || 'MiserBall')} — ${money(b.pot)}`);
+    let h = label(`🐉 ${esc(bbCleanName(b.name) || 'MiserBall')} — ${money(b.pot)}`);
     if (b.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(b.configured_pot)}, but the pot only had ${money(b.pot)} left after CTP</div>`;
     if (b.by === 'team') {
       // Team MiserBall: every team's story, in order of who lasted; the winners were paid as a team
@@ -18698,7 +18728,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
         return `<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.06)">${line(`<b>${esc(p.player)}</b> <span style="color:${col}">${what}</span>`, p.won ? `🐉 ${money(b.per_winner)}` : '')}</div>`;
       }).join('')}</div>`;
     }
-    panels.push({ key: 'bb', tab: '🐉 Miser', html: h });
+    panels.push({ key: 'bb', tab: '🐉 ' + esc((bbCleanName(b.name) || 'Miser').slice(0, 12)), html: h });
   }
   // ── Birdie Payouts ──
   if (s.birdiepay) {
@@ -22116,7 +22146,7 @@ function gatheringGamesBirdieballSectionHtml() {
   if (!_gamesFormSelected.has('birdieball')) return '';
   return `
     <div class="host-form-field gw-money" id="games-form-birdieball-field">
-      <label>🐉 MiserBall</label>
+      <label>🐉 ${escapeHtml(bbCleanName(_gamesFormBirdieballConfig.name) || 'MiserBall')}</label>
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.86rem">$</span>
         <input type="number" id="games-form-bb-dpp" min="0.01" step="0.01"
@@ -22515,7 +22545,7 @@ function gamesRollVariantText(id, v) {
   const basis = v.basis === 'net' ? (v.net_mode === 'low' ? 'Net, off the low' : 'Net, full strokes') : 'Gross';
   if (id === 'skins' || id === 'birdiepay') return basis;
   if (id === 'cttp') return 'All par 3s';
-  if (id === 'birdieball') return 'MiserBall';
+  if (id === 'birdieball') return bbCleanName(v.name) || 'MiserBall';
   const per = v.period && v.period !== 'round' ? ` · ${P[v.period].label}${v.win_by === 'holes' ? ', holes won' : v.win_by === 'strokes' ? ', strokes' : ''}` : ' · whole round';
   return basis + per;
 }

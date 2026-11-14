@@ -208,7 +208,7 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
   // renderer + details modal against a real engine snapshot
   const r = E.computeGatheringGamesPayout(row(['birdiepay', 'skins']), [card('Ann', { 1: 3 }), card('Bob')], {}, []);
   const rctx = { escapeHtml: s => String(s), BFEngine: E }; vm.createContext(rctx);
-  vm.runInContext(['renderGatheringPayoutHtml','gpTabStyle','gpBtnStyle'].map(n => extractFn(src, n)).join('\n') + ';this.f=renderGatheringPayoutHtml;', rctx);
+  vm.runInContext(['bbCleanName','skinWonText','renderGatheringPayoutHtml','gpTabStyle','gpBtnStyle'].map(n => extractFn(src, n)).join('\n') + ';this.f=renderGatheringPayoutHtml;', rctx);
   const html = rctx.f(r);
   ok(html.includes('Birdie Payouts') && html.includes('#1 Ann') && html.includes('par 4') && html.includes('🐤') && html.includes('>$5<'), 'K: results show the birdie, its par, and a 🐤 column in the summary');
   const none = rctx.f(E.computeGatheringGamesPayout(row(['birdiepay']), [card('Ann'), card('Bob')], {}, []));
@@ -258,7 +258,7 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
   eq(all.payouts.reduce((t, x) => t + x.total, 0) <= all.total_pot, true, 'M: total paid never exceeds the pot');
   // results explain a cap in plain words
   const rctx = { escapeHtml: x => String(x), BFEngine: E }; vm.createContext(rctx);
-  vm.runInContext(['renderGatheringPayoutHtml','gpTabStyle','gpBtnStyle'].map(n => extractFn(src, n)).join('\n') + ';this.f=renderGatheringPayoutHtml;', rctx);
+  vm.runInContext(['bbCleanName','skinWonText','renderGatheringPayoutHtml','gpTabStyle','gpBtnStyle'].map(n => extractFn(src, n)).join('\n') + ';this.f=renderGatheringPayoutHtml;', rctx);
   const html = rctx.f(r);
   ok(html.includes('Set at $10/hole') && html.includes('each hole paid $7') && html.includes('CTP — $7/hole'), 'M: CTP cap explained in the results');
   ok(rctx.f(b).includes('the pot only had $5 left after CTP'), 'M: BirdieBall cap explained in the results');

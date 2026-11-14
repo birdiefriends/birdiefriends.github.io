@@ -26,7 +26,7 @@ ok(b.rows[0].tied && b.rows[1].tied && b.rows[0].place === 1 && b.rows[1].place 
 const ctx = { GRP_ESC: s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])), BFEngine: E, currentPlayer: 'B1', isGuest: () => false, Date, Math, String, Array,
   _gatheringGamesIndex: new Map([[104, base]]) };
 vm.createContext(ctx);
-vm.runInContext(['leaderboardRowHtml', 'leaderboardHtml', 'leaderboardPrelimHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.f={leaderboardRowHtml,leaderboardHtml,leaderboardPrelimHtml};', ctx);
+vm.runInContext(['bbCleanName', 'leaderboardRowHtml', 'leaderboardHtml', 'leaderboardPrelimHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.f={leaderboardRowHtml,leaderboardHtml,leaderboardPrelimHtml};', ctx);
 b = E.fourballBoard(base, cards, PARS, 'scramble');
 const html = ctx.f.leaderboardHtml(b, 'B1', {}), text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 ok(/Bravo/.test(text) && /-12/.test(text) && /thru 9/.test(text) && /Not final until the host closes/.test(text), 'the sheet shows team, score to par, holes played and says it is not final: ' + text.slice(0, 200));

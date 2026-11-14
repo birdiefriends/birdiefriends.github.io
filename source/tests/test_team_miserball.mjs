@@ -38,7 +38,7 @@ ok(r.payouts.find(p => p.player === 'Ann & Bob').birdieball === 20, 'paid to the
   const esc = x => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const c2 = { BFEngine: E, escapeHtml: esc, esc, norm: x => String(x).trim().toLowerCase() };
   ['scrambleResultsHtml', 'fourballResultsHeatHtml', 'gpBtnStyle', 'gpSort', 'gpTab', 'gpTabStyle', 'isScrB', 'sideResultHeroHtml'].forEach(n => { c2[n] = () => ''; }); vm.createContext(c2);
-  let html = ''; try { vm.runInContext(extractFn(src, 'renderGatheringPayoutHtml') + '\nthis.f = renderGatheringPayoutHtml;', c2); html = c2.f(JSON.parse(JSON.stringify(r))); } catch (e) { console.log('RENDER ERR', e.message); fail++; }
+  let html = ''; try { vm.runInContext(['bbCleanName', 'skinWonText', 'renderGatheringPayoutHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.f = renderGatheringPayoutHtml;', c2); html = c2.f(JSON.parse(JSON.stringify(r))); } catch (e) { console.log('RENDER ERR', e.message); fail++; }
   ok(/Kept both balls all round/.test(html) && /Ann &amp; Bob/.test(html) && /Out on #4/.test(html) && /Cy lost it/.test(html), 'results card: winning team, and the team that is out with who lost it and where');
 }
 // fixed pot and the host's own name for the game
