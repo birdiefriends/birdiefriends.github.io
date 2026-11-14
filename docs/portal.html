@@ -18948,6 +18948,17 @@ async function gcBbKept(gid, player) {
     openGatheringCloseSheet(gid);
   } catch (e) { showToast('❌ ' + e.message, true); }
 }
+async function gcBbLost(gid, gi, player) {
+  try {
+    const who = player || (document.getElementById('gc-bb-who-' + gi) || {}).value;
+    const hole = Number((document.getElementById('gc-bb-hole-' + gi) || {}).value);
+    if (!who || !hole) throw new Error('Pick who and which hole');
+    const r = await fetch(`${BFE_API}/bfe/birdieball-answers`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gathering_id: gid, player_name: who, kept: false, lost_hole: hole, lost_stroke: null }) });
+    const d = await r.json(); if (!d.ok) throw new Error(d.error || 'Save failed');
+    openGatheringCloseSheet(gid);
+  } catch (e) { showToast('❌ ' + e.message, true); }
+}
 async function gcRemoveAdded(gid, player) {
   if (!confirm(`Take ${player} off this game? They have no scorecard.`)) return;
   try {
@@ -19049,9 +19060,15 @@ async function openGatheringCloseSheet(gatheringId) {
       ? `<div id="gc-bb-box" style="background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
           🐉 ${esc(recon.bbName || 'MiserBall')}
           ${recon.bbLost.length ? `<div style="color:var(--text-muted);padding:2px 0">Lost it (from alerts / scorecards): ${recon.bbLost.map(a => `<b>${esc(a.player)}</b>${a.hole ? ` #${esc(a.hole)}` : ''}`).join(', ')}</div>` : ''}
-          ${recon.bbMissing.length ? `<div style="padding:2px 0"><b>Close is on hold.</b> No ${esc(recon.bbName || 'MiserBall')} answer for ${recon.bbMissing.length === 1 ? 'this player' : 'these players'}. Tap Kept it, or record where they lost it in the Live Panel, then Refresh:</div>
-            ${recon.bbMissingGroups.map(gp => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0"><b>${esc(gp.label)}</b>
-              <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcBbKept(${gatheringId}, ${esc(JSON.stringify(gp.members.length > 1 ? gp.members : gp.members[0]))})">${gp.members.length > 1 || gp.label.includes(' & ') ? 'Kept both' : 'Kept it'}</button></div>`).join('')}` : ''}</div>`
+          ${recon.bbMissing.length ? `<div style="padding:2px 0"><b>Close is on hold.</b> No ${esc(recon.bbName || 'MiserBall')} answer for ${recon.bbMissing.length === 1 ? 'this player' : 'these players'}. For each, tap Kept, or Lost and pick the hole:</div>
+            ${recon.bbMissingGroups.map((gp, gi) => { const team = gp.members.length > 1 || gp.label.includes(' & '); const mj = esc(JSON.stringify(team ? gp.members : gp.members[0])); return `<div style="padding:4px 0;border-top:1px solid rgba(212,160,23,0.25)">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><b>${esc(gp.label)}</b>
+                <span style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcBbKept(${gatheringId}, ${mj})">${team ? 'Kept both' : 'Kept it'}</button>
+                <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="document.getElementById('gc-bb-lost-${gi}').style.display='flex'">Lost one</button></span></div>
+              <div id="gc-bb-lost-${gi}" style="display:none;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0 2px">
+                ${team ? `<select id="gc-bb-who-${gi}" style="height:32px;border-radius:6px">${gp.members.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}</select> lost it on` : 'Lost it on'}
+                <select id="gc-bb-hole-${gi}" style="height:32px;border-radius:6px">${Array.from({ length: 18 }, (_, k) => `<option value="${k + 1}">#${k + 1}</option>`).join('')}</select>
+                <button class="btn btn-primary btn-sm" style="padding:4px 12px" onclick="gcBbLost(${gatheringId}, ${gi}, ${team ? 'null' : esc(JSON.stringify(gp.members[0]))})">Save</button></div></div>`; }).join('')}` : ''}</div>`
       : '';
     const scratchHtml = recon.scratch.length
       ? `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:8px">⚖️ Playing scratch (no strokes): ${recon.scratch.map(esc).join(', ')}</div>` : '';
