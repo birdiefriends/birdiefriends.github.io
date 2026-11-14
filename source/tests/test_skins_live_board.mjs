@@ -10,7 +10,7 @@ const row = { games: ['cttp', 'scramble', 'skins'], dollar_per_player: 20, cttp_
   game_configs: { scramble: { dollar_per_player: 10, basis: 'gross', scoring: 'strokes', hcp_method: 'none', payout: 'top2', pairs: [['A1', 'A2'], ['B1', 'B2']] } } };
 const ctx = { console, BFEngine: E, _fbLive: null, escapeHtml: s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'), fbOverlayCards: () => ctx._fbLive.cards };
 vm.createContext(ctx);
-vm.runInContext(extractFn(src, 'skinsLiveSectionHtml') + '\nthis.S = skinsLiveSectionHtml;', ctx);
+vm.runInContext(extractFn(src, 'skinWonText') + '\n' + extractFn(src, 'skinsLiveSectionHtml') + '\nthis.S = skinsLiveSectionHtml;', ctx);
 ok(/Loading/.test(ctx.S({})), 'before the field is loaded it says Loading');
 ctx._fbLive = { row, cards: [] };
 ok(/No skins won yet/.test(ctx.S({})), 'no scores: no skins won yet');

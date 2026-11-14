@@ -363,7 +363,10 @@
         const L = state.ledger;
         const streak = Math.max(2, Math.floor(Number(addon.streak) || 3));
         const perPlayer = Number(addon.dollar_per_player) || 0;
-        const configured = perPlayer * L.n;
+        // as_skin: a Turkey is one more skin in the Skins pot (same value as a hole skin), so nothing is reserved up front:
+        // no Turkey = no extra skin, and the Skins pot divides over the hole skins only.
+        const asSkin = addon.as_skin === true;
+        const configured = asSkin ? 0 : perPlayer * L.n;
         const reserve = Math.min(configured, Math.max(0, state.remaining));
         const capped = reserve < configured;
         state.remaining -= reserve;
@@ -415,11 +418,14 @@
         } else turkeys.forEach(t => { t.paid = 0; });
         rolled = reserve - paidTotal;
         state.rollover += rolled;
-        return {
-          streak, per_player: perPlayer, reserve, count, paid_total: paidTotal, rolled_to_skins: rolled,
+        const out = {
+          streak, per_player: asSkin ? 0 : perPlayer, reserve, count, as_skin: asSkin, paid_total: paidTotal, rolled_to_skins: rolled,
           capped, turkeys, no_par_data: !okPars(pars) && !byPlayer.size,
           ...(addon.prize ? { prize: String(addon.prize) } : {})
         };
+        // Handed to the Skins carve, which adds one skin per Turkey and fills in what each Turkey was worth.
+        if (asSkin && count) state.turkeySkins = { entries: turkeys, result: out };
+        return out;
       }
     },
 
@@ -436,6 +442,8 @@
         // always tie with its own partner and no skin could ever be won. When the round has Scramble teams, the TEAM is the contender: the
         // lowest team score on a hole, outright, wins that skin and the team's partners share it. Gross only. Players on no team stay
         // individual contenders. `addon.by === 'player'` switches this off.
+        const tSk = state.turkeySkins || null;
+        const turkeySkinEntries = () => (tSk ? tSk.entries.map(t => ({ hole: null, turkey: true, player: t.player, members: t.members.slice(), strokes: null, holes: t.holes.slice() })) : []);
         const teamPairs = addon.by === 'player' ? [] : (Array.isArray(state.teamPairs) ? state.teamPairs : []);
         if (teamPairs.length) {
           const cardBy = new Map(inputs.scorecards.map(c => [norm(c.player), c]));
@@ -449,8 +457,9 @@
             contenders.push({ player: pr.map(nm => L.canon(nm)).join(' & '), members: pr.map(nm => L.canon(nm)), holes });
           });
           inputs.scorecards.filter(c => !used.has(norm(c.player))).forEach(c => contenders.push({ player: c.player, members: [L.canon(c.player)], holes: c.holes }));
-          const teamWon = skinsWon(contenders, 'low');
+          const teamWon = skinsWon(contenders, 'low').concat(turkeySkinEntries());
           const membersOf = new Map(contenders.map(c => [c.player, c.members]));
+          teamWon.forEach(w => { if (w.turkey && !membersOf.has(w.player)) membersOf.set(w.player, w.members); });
           let perSkinT = 0, givenBackT = 0, unallocT = 0;
           if (teamWon.length) {
             perSkinT = Math.floor(pot / teamWon.length);
@@ -458,6 +467,7 @@
             // divide evenly loses at most a dollar per player instead of a dollar per skin per player.
             const byTeam = new Map();
             teamWon.forEach(w => { byTeam.set(w.player, (byTeam.get(w.player) || 0) + 1); w.members = membersOf.get(w.player) || [w.player]; });
+            if (tSk) { tSk.entries.forEach(t => { t.paid = Math.floor(perSkinT / t.members.length) * t.members.length; }); tSk.result.paid_total = tSk.entries.reduce((a, t) => a + t.paid, 0); }
             let paid = 0;
             byTeam.forEach((cnt, team) => {
               const ms = membersOf.get(team) || [team];
@@ -489,13 +499,18 @@
         } else {
           won = skinsWon(inputs.scorecards, addon.compare || 'low');
         }
+        won = won.concat(turkeySkinEntries());
         let perSkin = 0, givenBackEach = 0, unalloc = 0;
         if (won.length) {
           perSkin = Math.floor(pot / won.length);
           const cnt = new Map();
-          won.forEach(w => cnt.set(w.player, (cnt.get(w.player) || 0) + 1));
           let paid = 0;
+          won.forEach(w => {
+            if (w.turkey && w.members.length > 1) { const each = Math.floor(perSkin / w.members.length); w.members.forEach(m => L.credit(m, 'skins', each)); paid += each * w.members.length; }
+            else cnt.set(w.player, (cnt.get(w.player) || 0) + 1);
+          });
           cnt.forEach((c, player) => { const amt = Math.floor((pot * c) / won.length); L.credit(player, 'skins', amt); paid += amt; });
+          if (tSk) { tSk.entries.forEach(t => { t.paid = Math.floor(perSkin / t.members.length) * t.members.length; }); tSk.result.paid_total = tSk.entries.reduce((a, t) => a + t.paid, 0); }
           unalloc = pot - paid;
         } else {
           const gb = L.giveBack(pot);
@@ -1515,13 +1530,14 @@
     meta: { traits: { unit: 'player', allowance: 'none', individualScores: true }, label: 'Turkeys', uiOrder: 12, icon: '🦃', seal: 'TURKEYS',
       info: 'A Turkey is three (or more) holes in a row under par, by a player (or by a scramble team). Play it for the glory, for a prize, for money, or all three. A $ per player is held in reserve from the pot because a Turkey is rare in a small scramble: if any are made the reserve is split between them, and if none are made it goes back to Skins. $0 means recognition only, nothing moves. Gross against par, worked out from the scores, nothing to enter.' },
     config: [
+      { key: 'as_skin', type: 'bool', label: 'A Turkey counts as a skin (paid from the Skins pot, no reserve)', default: false },
       { key: 'dollar_per_player', type: 'money', label: '$ per player held in reserve (0 = prize only)', default: 0 },
       { key: 'streak', type: 'int', label: 'Holes in a row under par', default: 3, min: 2, max: 9 },
       { key: 'prize', type: 'text', label: 'Prize or recognition', default: '' },
       { key: 'pars', type: 'pars', label: 'Par by hole', default: [], required: true, min: 3, max: 6, integer: true },
       { key: 'pars_by_player', type: 'parsmap', label: 'Par by hole for players on a different tee', default: {}, min: 3, max: 6, integer: true }
     ],
-    fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),   // the reserve: set aside up front, goes back to Skins if there is no Turkey
+    fixedCost: (cfg, ctx) => cfg.as_skin === true ? 0 : (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),   // the reserve: set aside up front, goes back to Skins if there is no Turkey
     maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
     fixtures: [{
       name: 'one Turkey takes the reserve, Skins gets the rest',
@@ -1546,6 +1562,14 @@
       // Ann starts on 17 and is under par on 17, 18, 1 in a row. With no Skins the other $32 comes back evenly ($8 each).
       inputs: { startHoles: { ann: 17 }, scorecards: [_P('Ann', _H(3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3)), _P('Bob', _ALL(4)), _P('Cy', _ALL(4)), _P('Di', _ALL(4))] },
       expect: { payouts: { Ann: 16, Bob: 8, Cy: 8, Di: 8 }, unallocated: 0, results: { turkeys: { count: 1, paid_total: 8 } } }
+    }, {
+      name: 'a Turkey as a skin: it is one more skin in the Skins pot, nothing is reserved',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'turkeys', entity: 'individual', as_skin: true, dollar_per_player: 5, streak: 3, pars: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4] },
+        { id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
+      // Ann wins holes 1, 2, 3 outright (a Turkey too), Bob wins hole 10. That is 3 + 1 hole skins plus Ann's Turkey = 5 skins of $8 on the whole $40 pot.
+      inputs: { scorecards: [_P('Ann', _H(3, 3, 3, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5)), _P('Bob', _H(5, 5, 5, 5, 5, 5, 5, 5, 5, 3, 5, 5, 5, 5, 5, 5, 5, 5)), _P('Cy', _ALL(5)), _P('Di', _ALL(5))] },
+      expect: { payouts: { Ann: 32, Bob: 8, Cy: 0, Di: 0 }, unallocated: 0, results: { turkeys: { count: 1, as_skin: true, reserve: 0, paid_total: 8 }, skins: { per_skin: 8 } } }
     }, {
       name: 'recognition only: $0 moves no money but the Turkey is listed',
       round: { dollar_per_player: 10, addons: [
@@ -1793,7 +1817,7 @@
     // v4.77.0: Turkeys (3+ holes in a row under par) rides the generic game_configs column.
     const tkc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.turkeys : null;
     if (games.includes('turkeys') && tkc) {
-      addons.push({ id: 'turkeys', entity: 'individual', dollar_per_player: Number(tkc.dollar_per_player) || 0, streak: Math.max(2, Math.floor(Number(tkc.streak) || 3)), pars: Array.isArray(tkc.pars) ? tkc.pars : [],
+      addons.push({ id: 'turkeys', entity: 'individual', dollar_per_player: Number(tkc.dollar_per_player) || 0, streak: Math.max(2, Math.floor(Number(tkc.streak) || 3)), pars: Array.isArray(tkc.pars) ? tkc.pars : [], ...(tkc.as_skin === true ? { as_skin: true } : {}),
         ...(tkc.pars_by_player && typeof tkc.pars_by_player === 'object' ? { pars_by_player: tkc.pars_by_player } : {}), ...(tkc.prize ? { prize: String(tkc.prize) } : {}) });
     }
     // Dev-93: BestBall arrives through the generic game_configs column (no legacy column of its own).

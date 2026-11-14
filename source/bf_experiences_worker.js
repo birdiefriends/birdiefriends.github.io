@@ -1200,6 +1200,12 @@ const GAME_SCHEMAS = {
     "label": "Turkeys",
     "config": [
       {
+        "key": "as_skin",
+        "type": "bool",
+        "label": "A Turkey counts as a skin (paid from the Skins pot, no reserve)",
+        "default": false
+      },
+      {
         "key": "dollar_per_player",
         "type": "money",
         "label": "$ per player held in reserve (0 = prize only)",

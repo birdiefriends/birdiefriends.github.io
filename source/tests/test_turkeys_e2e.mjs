@@ -33,4 +33,20 @@ if (r) {
   let html = ''; try { vm.runInContext(extractFn(src, 'renderGatheringPayoutHtml') + '\nthis.f = renderGatheringPayoutHtml;', ctx2); html = ctx2.f(JSON.parse(JSON.stringify(r))); } catch (e) { console.log('RENDER ERR', e.message); fail++; }
   ok(/Turkey/.test(html) && /Turkey dinner/.test(html) && /A1 &amp; A2/.test(html), 'results card names the Turkey, team and prize');
 }
+// as a skin, on the 2Man shape: team A's Turkey is one extra skin in the Skins pot, shown with the skins
+{
+  const rs = JSON.parse(JSON.stringify(rowRun)); rs.game_configs.turkeys = { as_skin: true, dollar_per_player: 0, streak: 3, pars, prize: 'Turkey dinner' };
+  const cs = [card('A1', A), card('A2', A), card('B1', B), card('B2', B)];
+  const q = E.computeGatheringGamesPayout(rs, cs, {}, [], { startHoles: { a1: 17, a2: 17, b1: 3, b2: 3 } });
+  const tw = (q.skins.won || []).filter(w => w.turkey);
+  ok(tw.length === 1 && tw[0].player === 'A1 & A2' && tw[0].holes.join() === '17,18,1', 'Turkey is listed among the skins won');
+  ok(q.turkeys.as_skin === true && q.turkeys.reserve === 0, 'nothing reserved');
+  ok(q.skins.won.length === 4, 'three hole skins (17, 18, 1) plus the Turkey = 4 skins, got ' + q.skins.won.length);
+  ok(Math.abs(q.payouts.reduce((t, p) => t + p.total, 0) + q.unallocated - q.total_pot) < 1e-9, 'as-skin money conserved');
+  const A1 = q.payouts.find(p => p.player === 'A1').total, B1 = q.payouts.find(p => p.player === 'B1').total;
+  ok(A1 > 0 && B1 === 0 && q.turkeys.paid_total > 0, 'Team A takes the pot, Turkey worth a skin: A1 ' + A1);
+  const src2 = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
+  const c3 = {}; vm.createContext(c3); vm.runInContext(extractFn(src2, 'skinWonText') + '\nthis.f = skinWonText;', c3);
+  ok(c3.f(tw[0]) === '🦃 Turkey (holes 17-18-1)' && c3.f({ hole: 7, strokes: 3 }) === '#7 (3)', 'skin chip text');
+}
 console.log(`turkeys_e2e: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
