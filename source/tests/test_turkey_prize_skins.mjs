@@ -28,8 +28,8 @@ ok(Math.abs(r.payouts.reduce((t, p) => t + p.total, 0) + r.unallocated - r.total
 // 2. team skins: A wins holes 1 and 5 outright (team 3 vs 4), hole 2 ties B/C, partners share
 ok(r.skins.by === 'team' && r.skins.won.length === 2 && r.skins.won.every(w => w.player === 'A1 & A2'), 'A1 & A2 win both skins as a team');
 ok(r.skins.won[0].members.join() === 'A1,A2', 'the skin lists both partners');
-const a1 = r.payouts.find(p => p.player === 'A1'), a2 = r.payouts.find(p => p.player === 'A2');
-ok(a1.skins > 0 && a1.skins === a2.skins, 'partners split the skins evenly');
+const tm = r.payouts.find(p => p.player === 'A1 & A2');
+ok(tm && tm.skins > 0 && tm.members.join() === 'A1,A2', 'the skins are paid to the TEAM as one amount (partners divide it themselves)');
 // 3. a team beating its own partner never happens: without teams the same cards would pay no skin at all (the bug this fixes)
 const solo = pay(row({ games: ['skins'], game_configs: {} }), cards, {});
 ok(solo.skins.won.length === 0, 'by player, partners tie each other: no skins (why team mode exists)');

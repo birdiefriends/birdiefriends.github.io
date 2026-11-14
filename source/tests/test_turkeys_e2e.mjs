@@ -15,7 +15,7 @@ if (r) {
   const tk = r.turkeys; // team = one unit
   ok(tk && tk.count === 1 && tk.turkeys[0].members.length === 2, 'one Turkey found across the 17-18-1 wrap, got ' + JSON.stringify(tk && tk.count));
   ok(tk && tk.reserve === 8 && tk.paid_total === 8 && tk.prize === 'Turkey dinner', 'reserve $8 paid out, prize carried');
-  ok(r.payouts.filter(p => p.turkeys > 0).length === 2, 'both team members credited');
+  ok(r.payouts.filter(p => p.turkeys > 0).length === 1 && r.payouts.find(p => p.turkeys > 0).player === 'A1 & A2', 'the Turkey is paid to the team as one row');
   ok(Math.abs(r.payouts.reduce((t, p) => t + p.total, 0) + r.unallocated - r.total_pot) < 1e-9, 'money conserved');
   const r0 = E.computeGatheringGamesPayout(rowRun, cards, {}, []);
   ok(r0.turkeys.count === 0, 'without Groups the same 17-18-1 run is NOT a Turkey (holes 1, 17, 18 are not consecutive in play order)');
@@ -43,8 +43,9 @@ if (r) {
   ok(q.turkeys.as_skin === true && q.turkeys.reserve === 0, 'nothing reserved');
   ok(q.skins.won.length === 4, 'three hole skins (17, 18, 1) plus the Turkey = 4 skins, got ' + q.skins.won.length);
   ok(Math.abs(q.payouts.reduce((t, p) => t + p.total, 0) + q.unallocated - q.total_pot) < 1e-9, 'as-skin money conserved');
-  const A1 = q.payouts.find(p => p.player === 'A1').total, B1 = q.payouts.find(p => p.player === 'B1').total;
-  ok(A1 > 0 && B1 === 0 && q.turkeys.paid_total > 0, 'Team A takes the pot, Turkey worth a skin: A1 ' + A1);
+  const team = q.payouts.find(p => p.player === 'A1 & A2'), B1 = q.payouts.find(p => p.player === 'B1').total;
+  ok(team && team.skins === 60 && B1 === 0 && q.turkeys.paid_total === 15, 'Team A is paid the whole $60 Skins pot as ONE team row (4 skins x $15, the Turkey one of them), partners split it: ' + JSON.stringify(team));
+  ok(team.members.join() === 'A1,A2', 'the team row names its partners');
   const src2 = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
   const c3 = {}; vm.createContext(c3); vm.runInContext(extractFn(src2, 'skinWonText') + '\nthis.f = skinWonText;', c3);
   ok(c3.f(tw[0]) === '🦃 Turkey (holes 17-18-1)' && c3.f({ hole: 7, strokes: 3 }) === '#7 (3)', 'skin chip text');

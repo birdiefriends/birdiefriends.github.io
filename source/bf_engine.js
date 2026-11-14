@@ -158,13 +158,19 @@
       const row = rows.get(key);
       row[field] = (row[field] || 0) + amt; // birdiepay (Dev-89) is added lazily so pre-existing snapshots keep their exact shape
     };
+    // A team's money is paid to the TEAM as one amount (its own row, named "A & B", with `members`); the partners divide it between themselves.
+    const creditTeam = (label, members, field, amt) => {
+      if (!(amt > 0)) return;
+      credit(label, field, amt);
+      const row = rows.get(canon(label)); if (row && members && members.length > 1) row.members = members.slice();
+    };
     const giveBack = pot => {
       if (!(pot > 0) || !n) return { each: 0, unallocated: Math.max(0, pot) };
       const each = Math.floor(pot / n);
       players.forEach(p => credit(p, 'given_back', each));
       return { each, unallocated: pot - each * n };
     };
-    return { players, n, canonical, canon, has: name => canonical.has(norm(name)), credit, giveBack, rows };
+    return { players, n, canonical, canon, has: name => canonical.has(norm(name)), credit, creditTeam, giveBack, rows };
   }
 
   // ── Add-on registry ────────────────────────────────────────────────────
@@ -411,9 +417,8 @@
         if (reserve > 0 && count) {
           const per = Math.floor(reserve / count);
           turkeys.forEach(t => {
-            const each = Math.floor(per / t.members.length);
-            t.members.forEach(m => L.credit(m, 'turkeys', each));
-            t.paid = each * t.members.length; paidTotal += t.paid;
+            L.creditTeam(t.player, t.members, 'turkeys', per);
+            t.paid = per; paidTotal += t.paid;
           });
         } else turkeys.forEach(t => { t.paid = 0; });
         rolled = reserve - paidTotal;
@@ -467,13 +472,13 @@
             // divide evenly loses at most a dollar per player instead of a dollar per skin per player.
             const byTeam = new Map();
             teamWon.forEach(w => { byTeam.set(w.player, (byTeam.get(w.player) || 0) + 1); w.members = membersOf.get(w.player) || [w.player]; });
-            if (tSk) { tSk.entries.forEach(t => { t.paid = Math.floor(perSkinT / t.members.length) * t.members.length; }); tSk.result.paid_total = tSk.entries.reduce((a, t) => a + t.paid, 0); }
+            if (tSk) { tSk.entries.forEach(t => { t.paid = perSkinT; }); tSk.result.paid_total = tSk.entries.reduce((a, t) => a + t.paid, 0); }
             let paid = 0;
+            // The pot is the TEAM's: each team is paid its share as one amount and the partners split it however they agree.
             byTeam.forEach((cnt, team) => {
-              const ms = membersOf.get(team) || [team];
-              const each = Math.floor((pot * cnt) / teamWon.length / ms.length);
-              ms.forEach(m => L.credit(m, 'skins', each));
-              paid += each * ms.length;
+              const amt = Math.floor((pot * cnt) / teamWon.length);
+              L.creditTeam(team, membersOf.get(team) || [team], 'skins', amt);
+              paid += amt;
             });
             unallocT = pot - paid;
           } else {
@@ -506,11 +511,11 @@
           const cnt = new Map();
           let paid = 0;
           won.forEach(w => {
-            if (w.turkey && w.members.length > 1) { const each = Math.floor(perSkin / w.members.length); w.members.forEach(m => L.credit(m, 'skins', each)); paid += each * w.members.length; }
+            if (w.turkey && w.members.length > 1) { L.creditTeam(w.player, w.members, 'skins', perSkin); paid += perSkin; }
             else cnt.set(w.player, (cnt.get(w.player) || 0) + 1);
           });
           cnt.forEach((c, player) => { const amt = Math.floor((pot * c) / won.length); L.credit(player, 'skins', amt); paid += amt; });
-          if (tSk) { tSk.entries.forEach(t => { t.paid = Math.floor(perSkin / t.members.length) * t.members.length; }); tSk.result.paid_total = tSk.entries.reduce((a, t) => a + t.paid, 0); }
+          if (tSk) { tSk.entries.forEach(t => { t.paid = perSkin; }); tSk.result.paid_total = tSk.entries.reduce((a, t) => a + t.paid, 0); }
           unalloc = pot - paid;
         } else {
           const gb = L.giveBack(pot);
@@ -1598,8 +1603,8 @@
         { id: 'scramble', entity: 'pair', dollar_per_player: 0, basis: 'gross', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] },
         { id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
       inputs: { scorecards: [_P('Ann', _H(3, 4, 5)), _P('Bob', _H(3, 4, 5)), _P('Cy', _H(4, 4, 6)), _P('Di', _H(4, 4, 6))] },
-      // pot 40; hole 1 Ann & Bob (3 v 4), hole 3 Ann & Bob (5 v 6); hole 2 ties. 2 skins of 20, shared 10 each
-      expect: { payouts: { Ann: 20, Bob: 20, Cy: 0, Di: 0 }, unallocated: 0, results: { skins: { per_skin: 20 } } }
+      // pot 40; hole 1 Ann & Bob (3 v 4), hole 3 Ann & Bob (5 v 6); hole 2 ties. 2 skins of 20, paid to the TEAM as one $40 amount (partners split it themselves)
+      expect: { payouts: { 'Ann & Bob': 40, Cy: 0, Di: 0 }, unallocated: 0, results: { skins: { per_skin: 20 } } }
     }]
   });
 
@@ -1938,6 +1943,9 @@
     const rows = [...ledger.rows.values()]
       .map(r => Object.assign({}, r, { total: r.skins + r.cttp + r.birdieball + (r.birdiepay || 0) + (r.turkeys || 0) + (r.fourball || 0) + (r.altshot || 0) + (r.scramble || 0) + (r.hilo || 0) + (r.matchplay || 0) + (r.lowscore || 0) + r.given_back }))
       .sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
+    // A team paid as one row ("Ann & Bob") replaces its partners' own $0 rows; a partner who also won something on their own (a CttP) keeps theirs.
+    const onTeamRow = new Set(); rows.forEach(r => (r.members || []).forEach(m => onTeamRow.add(m)));
+    for (let i = rows.length - 1; i >= 0; i--) if (onTeamRow.has(rows[i].player) && !rows[i].members && !(rows[i].total > 0)) rows.splice(i, 1);
     const games = (config && config.legacy && config.legacy.games) || addons.map(a => a.id);
     return {
       calc_version: 1,

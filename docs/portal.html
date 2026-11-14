@@ -11652,7 +11652,7 @@ function skinsLiveSectionHtml(cfg) {
   try { const pay = BFEngine.computeGatheringGamesPayout(_fbLive.row, fbOverlayCards(), {}, []); sk = pay && pay.skins; } catch (e) { console.warn('[Skins] live board error:', e.message); }
   if (!sk) return `<div style="${muted}">No scores saved yet.</div>`;
   const won = (sk.won || []).slice().sort((a, b) => (a.turkey ? 99 : a.hole) - (b.turkey ? 99 : b.hole));
-  const note = `<div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:8px;line-height:1.4">${sk.basis === 'net' ? 'Net' : 'Gross'}${sk.by === 'team' ? ' by team' : ''} · lowest score on a hole wins it outright, a tie wins nothing. Final amounts are set at Close &amp; Calculate.</div>`;
+  const note = `<div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:8px;line-height:1.4">${sk.basis === 'net' ? 'Net' : 'Gross'}${sk.by === 'team' ? ' by team' : ''} · lowest score on a hole wins it outright, a tie wins nothing. Final amounts are set at Close &amp; Calculate.${sk.by === 'team' ? ' The pot is paid to the team; partners split it.' : ''}</div>`;
   if (!won.length) return `<div style="${muted}">No skins won yet.</div>${note}`;
   const groups = new Map();
   won.forEach(w => { const k = String(w.player).trim().toLowerCase(); if (!groups.has(k)) groups.set(k, { player: w.player, won: [] }); groups.get(k).won.push(w); });
@@ -18595,7 +18595,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   if (s.skins) {
     let h = label(`⛳ Skins (${s.skins.basis || 'gross'}) — ${money(s.skins.pot)}`);
     if (s.skins.won.length) {
-      h += `<div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:4px">${s.skins.won.length} skin${s.skins.won.length === 1 ? '' : 's'} × ${money(s.skins.per_skin)}</div>`;
+      h += `<div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:4px">${s.skins.won.length} skin${s.skins.won.length === 1 ? '' : 's'} × ${money(s.skins.per_skin)}${s.skins.by === 'team' ? ' · paid to the team, partners split it' : ''}</div>`;
       const groups = new Map();
       s.skins.won.forEach(w => { const k = norm(w.player); if (!groups.has(k)) groups.set(k, { player: w.player, won: [] }); groups.get(k).won.push(w); });
       h += [...groups.values()].sort((a, b) => b.won.length - a.won.length || a.player.localeCompare(b.player)).map(g =>
