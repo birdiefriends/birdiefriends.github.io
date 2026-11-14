@@ -9987,7 +9987,19 @@ function buildLivePanel(evt) {
         <div class="sc-section-label" style="margin:6px 0 4px">Strokes</div>
         ${bbStrokeGridHtml(bbStrokeSel, 'bbSetStroke')}
       </div>` : '';
-    const bbLossRows = _bbAnswers.filter(a => a.kept === false);
+    const _bbT = bbTeamsFor(_bbAnswersForGathering);
+    const bbLossRows = (() => {
+      const raw = _bbAnswers.filter(a => a.kept === false);
+      if (!_bbT.length) return raw;
+      // by team: one line per team that is out, at its earliest lost ball
+      const seen = new Set(), out = [];
+      raw.slice().sort((x, y) => bbLostScore(x) - bbLostScore(y)).forEach(a => {
+        const team = bbTeamOf(a.player_name, _bbAnswersForGathering), key = team.map(n => String(n).trim().toLowerCase()).sort().join('|');
+        if (seen.has(key)) return; seen.add(key);
+        out.push(Object.assign({}, a, { player_name: team.length > 1 ? team.join(' & ') + ' (' + a.player_name + ' lost it)' : a.player_name }));
+      });
+      return out;
+    })();
     const bbBoard = bbLossRows.length ? `
       <div style="margin-top:12px;background:rgba(0,0,0,0.15);border-radius:10px;padding:4px 12px">
         <div style="font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;
@@ -10181,14 +10193,14 @@ function buildLivePanel(evt) {
   const bbConfirmNoActive  = bbEffKept === false;
   const bbConfirmDetail = bbConfirmNoActive ? '' +
     '<div style="margin-top:10px">' +
-      '<div class="sc-section-label" style="margin-bottom:4px">Which hole did you lose it?</div>' +
+      '<div class="sc-section-label" style="margin-bottom:4px">' + (bbTeamOf(scPlayerSel).length > 1 ? 'Which hole was a ball lost? (any lost ball puts your team out)' : 'Which hole did you lose it?') + '</div>' +
       bbHoleGridHtml(bbEffHole, 'scBbSetHole') +
       '<div class="sc-section-label" style="margin:6px 0 4px">Strokes</div>' +
       bbStrokeGridHtml(bbEffStroke, 'scBbSetStroke') +
     '</div>' : '';
   const bbConfirmSection = !showBirdieBallSection ? '' : '' +
     '<div style="margin:12px 0;background:rgba(0,0,0,0.15);border-radius:10px;padding:10px 12px">' +
-      '<div class="sc-section-label" style="margin-bottom:6px">\u{1F426} Did you keep the MiserBall?</div>' +
+      '<div class="sc-section-label" style="margin-bottom:6px">\u{1F426} ' + (bbTeamOf(scPlayerSel).length > 1 ? 'Did your team keep BOTH MiserBalls?' : 'Did you keep the MiserBall?') + '</div>' +
       '<div style="display:flex;gap:8px">' +
         '<button onclick="scBbSetStatus(true)" style="flex:1;padding:8px;border-radius:8px;font-family:inherit;' +
           'cursor:pointer;color:#fff;background:' + (bbConfirmYesActive?'rgba(29,158,117,0.35)':'rgba(255,255,255,0.08)') +
@@ -11415,7 +11427,9 @@ function holeFlowLostHtml(st, n, g) {
     const style = 'min-height:44px;padding:0 14px;border-radius:22px;font-family:inherit;font-size:0.9rem;font-weight:600;color:#fff;cursor:pointer;' + (on ? 'border:2px solid #e0b44c;background:rgba(224,180,76,0.22)' : 'border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06)');
     return `<button type="button" onclick="holeFlowLostPick(${hole},${JSON.stringify(r.p).replace(/"/g, '&quot;')})" style="${style}">${escapeHtml(holeFlowBbShort(r.p))}</button>`;
   }).join('');
-  const done = lost.length ? `<div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:8px">${lost.map(r => '🐉💔 ' + escapeHtml(holeFlowBbShort(r.p)) + ' #' + r.a.lost_hole).join(' &middot; ')}</div>` : '';
+  const _seenT = new Set();
+  const doneRows = lost.filter(r => { const t = bbTeamOf(r.p); if (t.length < 2) return true; const k = t.map(nm).sort().join('|'); if (_seenT.has(k)) return false; _seenT.add(k); return true; });
+  const done = lost.length ? `<div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:8px">${doneRows.map(r => { const t = bbTeamOf(r.p); return '🐉💔 ' + (t.length > 1 ? escapeHtml(t.map(holeFlowBbShort).join(' & ')) + ' out' : escapeHtml(holeFlowBbShort(r.p))) + ' #' + r.a.lost_hole; }).join(' &middot; ')}</div>` : '';
   const entry = sel ? `<div style="margin-top:10px"><div class="sc-section-label" style="margin-bottom:4px">${escapeHtml(holeFlowBbShort(sel))} lost it on #${hole}. Strokes?</div>${bbStrokeGridHtml(_bbLostStroke, 'bbSetStroke')}
       <button type="button" class="sc-submit-btn" style="background:#c9892a;margin-top:8px" ${_bbLostStroke && !_bbSubmitting ? '' : 'disabled'} onclick="submitBirdieBall()">${_bbSubmitting ? 'Sending…' : '💔 ' + escapeHtml(holeFlowBbShort(sel)) + ' lost it'}</button></div>` : '';
   return holeFlowStepHead(n, 'MiserBall', 'Anyone lose it on this hole?') + done + (pills ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${pills}</div>` : '') + entry;
@@ -11448,12 +11462,7 @@ async function holeFlowBbKept(player) {
   if (gid == null || !player) return;
   _bbSubmitting = true; renderLiveBanner();
   try {
-    const payload = { gathering_id: gid, player_name: player, kept: true, lost_hole: null, lost_stroke: null };
-    const res = await fetch(`${BFE_API}/bfe/birdieball-answers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Save failed');
-    const idx = _bbAnswers.findIndex(a => (a.player_name || '').trim().toLowerCase() === player.trim().toLowerCase());
-    if (idx === -1) _bbAnswers.push(payload); else _bbAnswers[idx] = payload;
+    await bbPostAnswers(gid, player, { kept: true });
   } catch (e) { showToast('❌ Could not save. Try again', true); }
   _bbSubmitting = false; renderLiveBanner();
 }
@@ -11723,10 +11732,55 @@ async function loadBirdieBallAnswers(evt) {
     console.warn('[MiserBall] loadBirdieBallAnswers error:', e.message);
   }
 }
-function bbAnswerFor(playerName) {
+function bbRawAnswer(playerName) {
   if (!playerName) return null;
   const p = playerName.trim().toLowerCase();
   return _bbAnswers.find(a => (a.player_name || '').trim().toLowerCase() === p) || null;
+}
+// ── Team MiserBall ─────────────────────────────────────────────────────────────
+// With "By team" on, every player on a Scramble team plays their own ball, both stay in play all round, and ONE lost ball puts the whole team out.
+// Answers are still stored per player (same table, same Worker), so a lost ball is written for the teammates too and read back as the team's.
+function bbTeamsFor(gid) {
+  const cfg = gid != null ? gatheringRoundConfig(gid) : null;
+  const bb = cfg && gatheringAddon(cfg, 'birdieball'), sc = cfg && gatheringAddon(cfg, 'scramble');
+  if (!bb || bb.team !== true || !sc || !Array.isArray(sc.pairs)) return [];
+  return sc.pairs.filter(pr => Array.isArray(pr) && pr.length > 1).map(pr => pr.slice());
+}
+function bbTeamOf(name, gid) {
+  const n = String(name || '').trim().toLowerCase();
+  const t = bbTeamsFor(gid == null ? _bbAnswersForGathering : gid).find(pr => pr.some(x => String(x).trim().toLowerCase() === n));
+  return t || [name];
+}
+function bbLostScore(a) { return (Number(a.lost_hole) || 0) * 100 + (Number(a.lost_stroke) || 0); }
+function bbAnswerFor(playerName) {
+  const own = bbRawAnswer(playerName);
+  if (!playerName) return own;
+  const mates = bbTeamOf(playerName);
+  if (mates.length < 2) return own;
+  // the team's answer: its earliest lost ball, whoever lost it
+  const lost = mates.map(bbRawAnswer).filter(a => a && a.kept === false && a.lost_hole != null);
+  if (!lost.length) return own;
+  const first = lost.reduce((b, a) => (bbLostScore(a) < bbLostScore(b) ? a : b));
+  return Object.assign({}, first, { player_name: playerName });
+}
+// Saves one answer, and for a team also the teammates': a lost ball goes to every partner who has no earlier loss; "kept" fills in partners with no answer.
+async function bbPostAnswers(gid, player, ans) {
+  const mates = bbTeamOf(player, gid);
+  const jobs = [{ player, ans }];
+  mates.forEach(m => {
+    if (String(m).trim().toLowerCase() === String(player).trim().toLowerCase()) return;
+    const ex = bbRawAnswer(m);
+    if (ans.kept === false) { if (!(ex && ex.kept === false && ex.lost_hole != null && bbLostScore(ex) <= bbLostScore(ans))) jobs.push({ player: m, ans }); }
+    else if (!ex) jobs.push({ player: m, ans });
+  });
+  for (const j of jobs) {
+    const payload = { gathering_id: gid, player_name: j.player, kept: j.ans.kept, lost_hole: j.ans.kept ? null : j.ans.lost_hole, lost_stroke: j.ans.kept ? null : j.ans.lost_stroke };
+    const res = await fetch(`${BFE_API}/bfe/birdieball-answers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Save failed');
+    const idx = _bbAnswers.findIndex(a => (a.player_name || '').trim().toLowerCase() === String(j.player).trim().toLowerCase());
+    if (idx === -1) _bbAnswers.push(payload); else _bbAnswers[idx] = payload;
+  }
 }
 // Submit scorecard — to Jotform (Stableford points, feeds Wally Cup quota)
 // or to the SCORECARD_API/scorecards D1 endpoint (Dev-88; was GATHERINGS_API) (raw gross strokes, feeds
@@ -11836,17 +11890,7 @@ async function submitScorecard(evtName) {
     if (window._liveBbConfirmPending && _scEvt && panelGamesGid(_scEvt) != null) {
       const _bbG = panelGamesGid(_scEvt);
       const bbPending = window._liveBbConfirmPending;
-      fetch(`${BFE_API}/bfe/birdieball-answers`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gathering_id: _bbG, player_name: scName, ...bbPending })
-      }).then(async (res) => {
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || 'Save failed');
-        const idx = _bbAnswers.findIndex(a => (a.player_name || '').trim().toLowerCase() === scName.trim().toLowerCase());
-        const row = { gathering_id: _bbG, player_name: scName, ...bbPending };
-        if (idx === -1) _bbAnswers.push(row); else _bbAnswers[idx] = row;
-        renderLiveBanner();
-      }).catch(e => console.warn('[MiserBall] scorecard-confirmation save failed:', e.message));
+      bbPostAnswers(_bbG, scName, bbPending).then(() => { renderLiveBanner(); }).catch(e => console.warn('[MiserBall] scorecard-confirmation save failed:', e.message));
     }
     _scSubmitDone = true;
     _scSubmitting = false;
@@ -12009,33 +12053,25 @@ async function submitBirdieBall() {
   _bbSubmitting = true;
   renderLiveBanner();
   try {
-    const payload = { gathering_id: _bbGid, player_name: player, kept: _bbKept,
-      lost_hole: _bbKept ? null : _bbLostHole, lost_stroke: _bbKept ? null : _bbLostStroke };
-    const res = await fetch(`${BFE_API}/bfe/birdieball-answers`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Save failed');
-    // Upsert into the local cache in place so the "who's lost it" board and
-    // the scorecard's already-answered line both refresh instantly, without
-    // waiting for the next poll.
-    const idx = _bbAnswers.findIndex(a => (a.player_name || '').trim().toLowerCase() === player.trim().toLowerCase());
-    if (idx === -1) _bbAnswers.push(payload); else _bbAnswers[idx] = payload;
+    // Saves for the player (and a team's partners) and updates the local cache, so the "who's lost it" board and the
+    // scorecard's already-answered line refresh instantly, without waiting for the next poll.
+    await bbPostAnswers(_bbGid, player, { kept: _bbKept, lost_hole: _bbLostHole, lost_stroke: _bbLostStroke });
     _bbSubmitting = false;
     // v4.9.10 — tell the group who lost it (Brian: "it'll entertain people").
     // Goes to this round's registered players only (not a league-wide blast),
     // everyone but the loser; test mode sends to the commissioner only.
     // Best-effort: a failed push never undoes the saved alert.
     {
-      const heading = `🐉💔 ${player} lost the MiserBall`;
-      const msg = `Hole #${_bbLostHole} — ${_bbLostStroke} stroke${Number(_bbLostStroke) === 1 ? '' : 's'}`;
-      const others = (window._liveEvtIndividualPlayers || []).filter(n => n !== player);
+      const _mates = bbTeamOf(player, _bbGid), _isTeam = _mates.length > 1;
+      const heading = _isTeam ? `🐉💔 ${_mates.join(' & ')} are out of the MiserBall` : `🐉💔 ${player} lost the MiserBall`;
+      const msg = `${_isTeam ? player + ' lost a ball: hole' : 'Hole'} #${_bbLostHole} — ${_bbLostStroke} stroke${Number(_bbLostStroke) === 1 ? '' : 's'}`;
+      const others = (window._liveEvtIndividualPlayers || []).filter(n => !_mates.some(m => String(m).trim().toLowerCase() === String(n).trim().toLowerCase()));
       const sendP = LIVE_EVENT_TEST_MODE
         ? osSendToPlayers([currentPlayer], `[TEST] ${heading}`, msg, 'https://birdiefriends.com/portal.html', 'birdieball')
         : (others.length ? osSendToPlayers(others, heading, msg, 'https://birdiefriends.com/portal.html', 'birdieball', { invited: (window._liveEvtIndividualPlayers || []).slice() }) : null);
       if (sendP) sendP.catch(e => console.warn('[MiserBall] push failed:', e.message));
     }
-    showToast(`Recorded — ${player} lost it on #${_bbLostHole}`);
+    showToast(bbTeamOf(player, _bbGid).length > 1 ? `Recorded — ${player} lost a ball on #${_bbLostHole}, so the team is out` : `Recorded — ${player} lost it on #${_bbLostHole}`);
     renderLiveBanner();
   } catch(e) {
     _bbSubmitting = false;
@@ -18621,11 +18657,23 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     const b = s.birdieball;
     let h = label(`🐉 MiserBall — ${money(b.pot)}`);
     if (b.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(b.configured_pot)}, but the pot only had ${money(b.pot)} left after CTP</div>`;
-    if (b.mode === 'kept') h += `<div style="font-size:0.78rem">Kept it: ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)} each</div>`;
+    if (b.by === 'team') {
+      // Team MiserBall: every team's story, in order of who lasted; the winners were paid as a team
+      if (b.mode === 'kept') h += `<div style="font-size:0.78rem">Kept both balls all round: ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)}${b.winners.length > 1 ? ' each team' : ''}</div>`;
+      else if (b.mode === 'longest') h += `<div style="font-size:0.78rem">Every team lost one — longest survivor (to #${esc(b.longest_hole)}${b.longest_stroke ? `, stroke ${esc(b.longest_stroke)}` : ''}): ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)}${b.winners.length > 1 ? ' each team' : ''}</div>`;
+      else h += `<div style="font-size:0.78rem;color:var(--text-muted)">No answers recorded — ${money(b.given_back_each)} back to each player</div>`;
+      const trank = t => t.won ? 0 : t.status === 'kept' ? 1 : t.status === 'lost' ? 2 : 3;
+      const tscore = t => (Number(t.hole) || 0) * 100 + (Number(t.stroke) || 0);
+      h += `<div style="margin-top:6px">${(b.teams || []).slice().sort((x, y) => trank(x) - trank(y) || tscore(y) - tscore(x) || x.team.localeCompare(y.team)).map(t => {
+        const what = t.status === 'kept' ? 'Kept both' : t.status === 'lost' ? `Out on #${esc(t.hole)}${t.stroke ? `, stroke ${esc(t.stroke)}` : ''}${t.by && t.members.length > 1 ? ` (${esc(t.by)} lost it)` : ''}` : 'No answer';
+        const col = t.status === 'none' ? 'var(--danger, #c0392b)' : 'var(--text-muted)';
+        return `<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.06)">${line(`<b>${esc(t.team)}</b> <span style="color:${col}">${what}</span>`, t.won ? `🐉 ${money(b.per_winner)}` : '')}</div>`;
+      }).join('')}</div>`;
+    } else if (b.mode === 'kept') h += `<div style="font-size:0.78rem">Kept it: ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)} each</div>`;
     else if (b.mode === 'longest') h += `<div style="font-size:0.78rem">Nobody kept it — held longest (#${esc(b.longest_hole)}, stroke ${esc(b.longest_stroke)}): ${b.winners.map(esc).join(', ')} — ${money(b.per_winner)}${b.winners.length > 1 ? ' each' : ''}</div>`;
     else h += `<div style="font-size:0.78rem;color:var(--text-muted)">No answers recorded — ${money(b.given_back_each)} back to each player</div>`;
     // Every player, not just the winners: kept it / lost it where / no answer (older results lack this list).
-    if (Array.isArray(b.players) && b.players.length) {
+    if (b.by !== 'team' && Array.isArray(b.players) && b.players.length) {
       const rank = p => p.won ? 0 : p.status === 'kept' ? 1 : p.status === 'lost' ? 2 : 3;
       const lostAt = p => (Number(p.hole) || 0) * 100 + (Number(p.stroke) || 0);
       const rows = b.players.slice().sort((x, y) => rank(x) - rank(y) || lostAt(y) - lostAt(x) || x.player.localeCompare(y.player));
@@ -18836,9 +18884,25 @@ function gcReconcile(o) {
   const bbOn = Array.isArray(config.games) && config.games.includes('birdieball');
   const answers = o.bbAnswers || [];
   const ansNames = new Set(answers.map(a => norm(a.player_name)));
-  const bbLost = bbOn ? answers.filter(a => !a.kept && cardNames.has(norm(a.player_name))).map(a => ({ player: a.player_name, hole: a.lost_hole, stroke: a.lost_stroke })) : [];
-  const bbMissing = bbOn ? cardPlayers.filter(n => !ansNames.has(norm(n))) : [];
-  return { noHandicap, scratch, added, unregisteredCards, openSpots, bbLost, bbMissing,
+  let bbLost = bbOn ? answers.filter(a => !a.kept && cardNames.has(norm(a.player_name))).map(a => ({ player: a.player_name, hole: a.lost_hole, stroke: a.lost_stroke })) : [];
+  let bbMissing = bbOn ? cardPlayers.filter(n => !ansNames.has(norm(n))) : [];
+  let bbMissingGroups = bbMissing.map(n => ({ label: n, members: [n] }));
+  // Team MiserBall: a team is out the moment any partner lost a ball, and is only unanswered if none did and a partner has no answer.
+  const bbTeamCfg = bbOn ? gatheringAddon(config, 'birdieball') : null, bbSc = bbTeamCfg && bbTeamCfg.team === true ? gatheringAddon(config, 'scramble') : null;
+  if (bbSc && Array.isArray(bbSc.pairs)) {
+    const teams = bbSc.pairs.filter(pr => Array.isArray(pr) && pr.length > 1), onTeam = new Set(teams.flat().map(norm));
+    const lostBy = new Map(answers.filter(a => !a.kept).map(a => [norm(a.player_name), a]));
+    bbLost = []; bbMissingGroups = [];
+    teams.forEach(pr => {
+      const l = pr.map(n => lostBy.get(norm(n))).filter(Boolean);
+      if (l.length) { const f = l.reduce((b, a) => ((Number(a.lost_hole) || 0) * 100 + (Number(a.lost_stroke) || 0) < (Number(b.lost_hole) || 0) * 100 + (Number(b.lost_stroke) || 0) ? a : b)); bbLost.push({ player: pr.join(' & '), hole: f.lost_hole, stroke: f.lost_stroke }); return; }
+      const need = pr.filter(n => !ansNames.has(norm(n)));
+      if (need.length) bbMissingGroups.push({ label: pr.join(' & '), members: need });
+    });
+    cardPlayers.filter(n => !onTeam.has(norm(n))).forEach(n => { if (lostBy.has(norm(n))) { const a = lostBy.get(norm(n)); bbLost.push({ player: n, hole: a.lost_hole, stroke: a.lost_stroke }); } else if (!ansNames.has(norm(n))) bbMissingGroups.push({ label: n, members: [n] }); });
+    bbMissing = bbMissingGroups.map(g => g.label);
+  }
+  return { noHandicap, scratch, added, unregisteredCards, openSpots, bbLost, bbMissing, bbMissingGroups,
     blocking: openSpots.length > 0 || noHandicap.length > 0 };
 }
 const _gcScratchAck = new Map(); // gatheringId -> Set(normalized names the host chose to play scratch)
@@ -18862,9 +18926,12 @@ async function gcSetHandicaps(gid) {
 }
 async function gcBbKept(gid, player) {
   try {
-    const r = await fetch(`${BFE_API}/bfe/birdieball-answers`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gathering_id: gid, player_name: player, kept: true }) });
-    const d = await r.json(); if (!d.ok) throw new Error(d.error || 'Save failed');
+    const names = Array.isArray(player) ? player : [player];   // a team: every partner without an answer
+    for (const n of names) {
+      const r = await fetch(`${BFE_API}/bfe/birdieball-answers`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gathering_id: gid, player_name: n, kept: true }) });
+      const d = await r.json(); if (!d.ok) throw new Error(d.error || 'Save failed');
+    }
     openGatheringCloseSheet(gid);
   } catch (e) { showToast('❌ ' + e.message, true); }
 }
@@ -18970,8 +19037,8 @@ async function openGatheringCloseSheet(gatheringId) {
           🐉 MiserBall
           ${recon.bbLost.length ? `<div style="color:var(--text-muted);padding:2px 0">Lost it (from alerts / scorecards): ${recon.bbLost.map(a => `<b>${esc(a.player)}</b>${a.hole ? ` #${esc(a.hole)}` : ''}`).join(', ')}</div>` : ''}
           ${recon.bbMissing.length ? `<div style="padding:2px 0"><b>Close is on hold.</b> No MiserBall answer for ${recon.bbMissing.length === 1 ? 'this player' : 'these players'}. Tap Kept it, or record where they lost it in the Live Panel, then Refresh:</div>
-            ${recon.bbMissing.map(n => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0"><b>${esc(n)}</b>
-              <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcBbKept(${gatheringId}, ${esc(JSON.stringify(n))})">Kept it</button></div>`).join('')}` : ''}</div>`
+            ${recon.bbMissingGroups.map(gp => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0"><b>${esc(gp.label)}</b>
+              <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcBbKept(${gatheringId}, ${esc(JSON.stringify(gp.members.length > 1 ? gp.members : gp.members[0]))})">${gp.members.length > 1 || gp.label.includes(' & ') ? 'Kept both' : 'Kept it'}</button></div>`).join('')}` : ''}</div>`
       : '';
     const scratchHtml = recon.scratch.length
       ? `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:8px">⚖️ Playing scratch (no strokes): ${recon.scratch.map(esc).join(', ')}</div>` : '';
@@ -19318,7 +19385,7 @@ function gatheringIsGamed(config) {
 // missing (gatheringConfigFromLegacy requires both: an add-on only exists
 // when the game is selected AND its config was actually saved).
 function gatheringAddon(config, id) {
-  return (config && config.addons.find(a => a.id === id)) || null;
+  return (config && (config.addons || []).find(a => a.id === id)) || null;
 }
 // Dev-88 — read-only "what's the game" summary for the event card's new
 // 🏆 Games icon (Brian: "players will want to know the game before heading
@@ -19354,7 +19421,7 @@ function gatheringGameDetailsBody(evt, config) {
   if (bb) {
     const cost = (bb.dollar_per_player || 0) * yesCount;
     remaining -= cost;
-    rows.push(row('🐉', 'MiserBall', `$${(bb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot`, 'birdieball'));
+    rows.push(row('🐉', 'MiserBall', `$${(bb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot${bb.team ? ' · by team: one lost ball puts the team out' : ''}`, 'birdieball'));
   }
   const bp = gatheringAddon(config, 'birdiepay');
   if (bp) {
@@ -21612,7 +21679,7 @@ function gamesFormSplitBuild() {
       + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-cttp', cc.dollar_per_hole, 'setGamesFormCttpDollarPerHole')}<span style="${small}">a hole</span></div>`
       + `<div style="${small};margin-top:5px;line-height:1.45">${reg('gs-ctp-note', note)}${pz ? `<br>${pz} prize hole${pz === 1 ? '' : 's'} (${(cc.prize_holes || []).join(', ')}): tracked like CTP, pays no cash` : ''}</div>`));
   }
-  if (sel.has('birdieball')) { const c = _gamesFormBirdieballConfig; otherGames += (c.dollar_per_player || 0) * nYes; rows.push(card(head('🐉', 'MiserBall', '') + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-bb', c.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer')}<span style="${small}">per player</span></div><div style="${small};margin-top:5px">${reg('gs-bb-note', `${mny((c.dollar_per_player || 0) * nYes)} from ${nYes} players (${pctOf((c.dollar_per_player || 0) * nYes)} of the pot)`)}</div>`)); }
+  if (sel.has('birdieball')) { const c = _gamesFormBirdieballConfig; otherGames += (c.dollar_per_player || 0) * nYes; rows.push(card(head('🐉', 'MiserBall', '') + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-bb', c.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer')}<span style="${small}">per player</span></div><div style="${small};margin-top:5px">${reg('gs-bb-note', `${mny((c.dollar_per_player || 0) * nYes)} from ${nYes} players (${pctOf((c.dollar_per_player || 0) * nYes)} of the pot)`)}</div>${sel.has('scramble') ? `<label style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;font-size:0.84rem;line-height:1.4;cursor:pointer"><input type="checkbox" ${c.team ? 'checked' : ''} onchange="setGamesFormBirdieballTeam(this.checked)" style="margin-top:3px"><span><b>Play it by team</b><br><span style="${small}">Everyone keeps a ball, and both stay in play all round. One lost ball puts the whole team out. Last team standing wins the pot, longest survivor if every team loses one.</span></span></label>` : ''}`)); }
   if (sel.has('birdiepay')) rows.push(card(head('🐤', 'Birdie Payouts', '') + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-bp', _gamesFormBirdiepayConfig.dollar_per_birdie, 'setGamesFormBirdiepayDollarPerBirdie')}<span style="${small}">a birdie, paid out of the balance before Skins</span></div>`));
   if (sel.has('turkeys')) {
     const c = _gamesFormTurkeysConfig, held = c.as_skin ? 0 : (Number(c.dollar_per_player) || 0) * nYes; otherGames += held;
@@ -21718,7 +21785,7 @@ function gwReviewHtml() {
   if (sel.has('lowscore')) add('🎯', 'Individual Low Score', `${basis(ls.basis)} · ${per(BFEngine.periodKey(ls))} · ${money(ls.dollar_per_player)} per player`, 'lowscore');
   if (sel.has('skins')) add('⛳', 'Skins', `${basis(_gamesFormHcp.skins_basis)} · gets what is left`, 'skins');
   if (sel.has('cttp')) add('🎯', 'CTP', `${money(_gamesFormCttpConfig.dollar_per_hole)} a hole · ${(_gamesFormCttpConfig.holes || []).length} hole${(_gamesFormCttpConfig.holes || []).length === 1 ? '' : 's'}`, 'cttp');
-  if (sel.has('birdieball')) add('🐉', 'MiserBall', `${money(_gamesFormBirdieballConfig.dollar_per_player)} per player`, 'money');
+  if (sel.has('birdieball')) add('🐉', 'MiserBall', `${money(_gamesFormBirdieballConfig.dollar_per_player)} per player${_gamesFormBirdieballConfig.team && sel.has('scramble') ? ' · by team, one lost ball puts the team out' : ''}`, 'money');
   if (sel.has('turkeys')) { const tk = _gamesFormTurkeysConfig; add('🦃', 'Turkeys', `${tk.streak || 3} in a row under par · ${tk.as_skin ? 'counts as a skin' : (Number(tk.dollar_per_player) || 0) > 0 ? money(tk.dollar_per_player) + ' per player held in reserve' : 'prize only'}${tk.prize ? ' · ' + escapeHtml(tk.prize) : ''}`, 'turkeys'); }
   if (sel.has('birdiepay')) add('🐤', 'Birdie Payouts', `${money(_gamesFormBirdiepayConfig.dollar_per_birdie)} a birdie · ${basis(_gamesFormHcp.birdiepay_basis)}`, 'birdiepay');
   if (_gamesFormHcp.ranking === true) add('📊', 'Net ranking', 'Shown for fun, no money', 'hcp');
@@ -21988,6 +22055,7 @@ function gatheringGamesBirdieballSectionHtml() {
       </div>
     </div>`;
 }
+function setGamesFormBirdieballTeam(on) { _gamesFormBirdieballConfig.team = !!on; _gamesFormTouched.add('birdieball'); }
 function setGamesFormBirdieballDollarPerPlayer(val) {
   _gamesFormBirdieballConfig.dollar_per_player = parseFloat(val) || 0;
   _gamesFormTouched.add('birdieball');
@@ -22984,7 +23052,7 @@ async function submitGatheringGames(gatheringId) {
   let birdieball_config = null;
   if (games.includes('birdieball')) {
     if (!(_gamesFormBirdieballConfig.dollar_per_player > 0)) { bad('money', 'MiserBall: $ per player must be greater than 0'); return; }
-    birdieball_config = { dollar_per_player: _gamesFormBirdieballConfig.dollar_per_player };
+    birdieball_config = { dollar_per_player: _gamesFormBirdieballConfig.dollar_per_player, ...(_gamesFormBirdieballConfig.team === true && _gamesFormSelected.has('scramble') ? { team: true } : {}) };
   }
   const overCommit = gamesFormOverCommit(dpp, _gamesFormYesCount);
   if (overCommit.problem) { bad('money', overCommit.problem); return; }

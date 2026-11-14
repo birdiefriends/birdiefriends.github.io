@@ -9,11 +9,11 @@ const posts = [];
 const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date, Promise, BFEngine: E,
   escapeHtml: s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])),
   getLiveEvent: () => ({ name: 'Turkey', gatheringId: 104 }), panelGamesGid: e => e.gatheringId, BFE_API: 'https://bfe', showToast: () => {},
-  bbStrokeGridHtml: (v, fn) => `<grid ${fn} ${v}>`, bbHoleGridHtml: (v, fn) => `<holes ${fn} ${v}>`, bbAnswerFor: null,
+  bbStrokeGridHtml: (v, fn) => `<grid ${fn} ${v}>`, bbHoleGridHtml: (v, fn) => `<holes ${fn} ${v}>`, bbAnswerFor: null, gatheringRoundConfig: () => null, gatheringAddon: () => null,
   renderLiveBanner: () => {}, fetch: async (u, o) => { posts.push(JSON.parse(o.body)); return { json: async () => ({ ok: true }) }; } };
 vm.createContext(ctx);
-const names = ['holeFlowStepHead', 'holeFlowBbShort', 'holeFlowLostHtml', 'holeFlowKeptHtml', 'holeFlowLostPick', 'holeFlowBbKept', 'bbAnswerFor'];
-vm.runInContext('let _bbAnswers=[]; let _bbPlayer=null; let _bbTouchedPlayer=null; let _bbLostHole=null; let _bbLostStroke=null; let _bbKept=null; let _bbSubmitting=false; let _bbAskHole=null;\n' +
+const names = ['holeFlowStepHead', 'holeFlowBbShort', 'holeFlowLostHtml', 'holeFlowKeptHtml', 'holeFlowLostPick', 'holeFlowBbKept', 'bbRawAnswer', 'bbTeamsFor', 'bbTeamOf', 'bbLostScore', 'bbAnswerFor', 'bbPostAnswers'];
+vm.runInContext('let _bbAnswers=[]; let _bbAnswersForGathering=null; let _bbPlayer=null; let _bbTouchedPlayer=null; let _bbLostHole=null; let _bbLostStroke=null; let _bbKept=null; let _bbSubmitting=false; let _bbAskHole=null;\n' +
   names.map(n => extractFn(src, n)).join('\n') + '\nthis.api={holeFlowLostHtml,holeFlowKeptHtml,holeFlowLostPick,holeFlowBbKept,set:(k,v)=>{ if(k==="a")_bbAnswers=v; if(k==="s"){_bbLostStroke=v;} },g:()=>[_bbPlayer,_bbLostHole,_bbAskHole,_bbAnswers]};', ctx);
 const A = ctx.api, g = { players: ['Brian Hager', 'Tom Marsh', 'Mike Kay', 'Dave Vance'] };
 const st = { kind: 'lostball', hole: 5 };

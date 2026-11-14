@@ -106,7 +106,7 @@ ok(c.panelGamesGid(g()) === 5, 'a Gathering keeps its own id');
 ok(/if \(eventShadowGamed\(evt\)\) return true;\n  \/\/ Dev-92/.test(src), 'hasLivePanelSupport checks the shadow carve-out before the format ladder');
 ok(/if \(eventShadowGamed\(evt\)\) return 'strokes'/.test(src), 'event games capture strokes');
 ok(/openGatheringCloseSheet\(\$\{_panelGid\}\)/.test(src), 'Close button uses the panel gid');
-ok(/gathering_id: _bbGid, player_name: player/.test(src), 'BirdieBall submit uses the panel gid');
+ok(/bbPostAnswers\(_bbGid, player/.test(src), 'BirdieBall submit uses the panel gid');
 { // hasLivePanelSupport end to end: Weekend gains the panel only with a shadow config; Series/plain Weekend unchanged
   const hc = mkCtx({ _bfeBackedIndex: new Map(), _gatheringGamesIndex: new Map(),
     formatClass: f => /series/i.test(f) ? 'format-series' : /weekend/i.test(f) ? 'format-weekend' : '' });

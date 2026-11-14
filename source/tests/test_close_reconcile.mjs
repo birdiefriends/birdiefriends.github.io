@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { extractFn } from './extract.mjs';
 const src = fs.readFileSync(new URL('../portal.html', import.meta.url), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
-const gcReconcile = new Function(extractFn(src, 'gcReconcile') + '; return gcReconcile;')();
+const gcReconcile = new Function(extractFn(src, 'gatheringAddon') + '\n' + extractFn(src, 'gcReconcile') + '; return gcReconcile;')();
 
 const net = { skins_basis: 'net', birdiepay_basis: 'gross', players: { 'Ann Lee': { kind: 'index' }, 'Bob Roy': { kind: 'gross' } } };
 let r = gcReconcile({ config: { handicap_config: net }, cardPlayers: ['Ann Lee', 'Bob Roy', 'Cy Young'], registeredRows: [{ player: 'Ann Lee' }, { player: 'Bob Roy' }, { player: 'Cy Young', addedBy: 'Host' }], openSpots: [] });

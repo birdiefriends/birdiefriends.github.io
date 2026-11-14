@@ -243,6 +243,51 @@
         const capped = pot < configuredPot;
         state.remaining -= pot;
         const answers = (inputs.bbAnswers || []).filter(a => L.has(a.player_name));
+        // Team MiserBall: every player on a team plays their own ball and BOTH stay in play all round, so one lost ball puts the whole team
+        // out. A team that lost nothing and has an answer for every partner keeps it. If no team did, the longest survivor wins: a team
+        // lasted until its EARLIEST lost ball. The pot goes to the winning team as one amount (the partners split it themselves).
+        if (addon.team === true && Array.isArray(state.teamPairs) && state.teamPairs.length) {
+          const ansBy = new Map(answers.map(a => [norm(a.player_name), a]));
+          const lostScore = a => (Number(a.lost_hole) || 0) * 100 + (Number(a.lost_stroke) || 0);
+          const units = []; const used = new Set();
+          state.teamPairs.forEach(pr => {
+            const ms = pr.map(n => L.canon(n)).filter(n => L.has(n)); if (!ms.length) return;
+            ms.forEach(n => used.add(norm(n))); units.push({ members: ms, label: ms.join(' & ') });
+          });
+          [...L.rows.values()].forEach(r => { if (!used.has(norm(r.player))) units.push({ members: [r.player], label: r.player }); });
+          units.forEach(u => {
+            const as = u.members.map(m => ansBy.get(norm(m)));
+            const lostAs = as.filter(a => a && !a.kept && a.lost_hole != null);
+            if (lostAs.length) {
+              u.status = 'lost';
+              const worst = lostAs.reduce((b, a) => (lostScore(a) < lostScore(b) ? a : b));
+              u.hole = Number(worst.lost_hole); u.stroke = worst.lost_stroke != null ? Number(worst.lost_stroke) : null; u.score = lostScore(worst); u.by = worst.player_name;
+            } else if (as.every(a => a && a.kept)) u.status = 'kept';
+            else u.status = 'none';
+          });
+          const keptU = units.filter(u => u.status === 'kept');
+          let tMode, tWin;
+          if (keptU.length) { tMode = 'kept'; tWin = keptU; }
+          else {
+            const lostU = units.filter(u => u.status === 'lost');
+            if (lostU.length) { const best = Math.max(...lostU.map(u => u.score)); tMode = 'longest'; tWin = lostU.filter(u => u.score === best); }
+            else { tMode = 'none'; tWin = []; }
+          }
+          let perT = 0, unallocT = 0, gbEach = 0;
+          if (tWin.length) {
+            perT = Math.floor(pot / tWin.length);
+            tWin.forEach(u => L.creditTeam(u.label, u.members, 'birdieball', perT));
+            unallocT = pot - perT * tWin.length;
+          } else { const gb = L.giveBack(pot); gbEach = gb.each; unallocT = gb.unallocated; }
+          state.unallocated += unallocT;
+          const lw = tMode === 'longest' ? tWin[0] : null;
+          return Object.assign({
+            pot, mode: tMode, by: 'team', winners: tWin.map(u => u.label), per_winner: perT, given_back_each: gbEach,
+            longest_hole: lw ? lw.hole : null, longest_stroke: lw ? lw.stroke : null,
+            teams: units.map(u => ({ team: u.label, members: u.members.slice(), status: u.status, hole: u.status === 'lost' ? u.hole : null, stroke: u.status === 'lost' ? u.stroke : null, by: u.status === 'lost' ? u.by : null, won: tWin.includes(u) })),
+            players: units.flatMap(u => u.members.map(m => ({ player: m, status: u.status === 'lost' && ansBy.get(norm(m)) && !ansBy.get(norm(m)).kept ? 'lost' : u.status === 'lost' ? 'out' : u.status, hole: u.status === 'lost' ? u.hole : null, stroke: u.status === 'lost' ? u.stroke : null, won: tWin.includes(u) })))
+          }, capped ? { capped: true, configured_pot: configuredPot } : {});
+        }
         const kept = answers.filter(a => a.kept);
         let mode, winners;
         if (kept.length) {
@@ -1152,7 +1197,8 @@
     kind: 'addon', input: 'none', net: false,
     meta: { traits: { unit: 'player', allowance: 'none', individualScores: true }, label: 'MiserBall', uiOrder: 3, icon: '🐉', seal: 'BIRDIEBALL',
       info: 'Everyone starts with one ball. Keep it all round and you win: everyone who still has theirs at the end splits the pot. If everybody loses theirs, the last MiserBall standing (the one lost latest) wins. Lose yours? Tap "I lost it" in the Live Panel so the group knows, and confirm on your scorecard.' },
-    config: [{ key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true }],
+    config: [{ key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
+      { key: 'team', type: 'bool', label: 'By team: every player keeps a ball, one lost ball puts the whole team out', default: false }],
     fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
     // A per-player rate above the whole buy-in is impossible at any headcount.
     maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
@@ -1166,6 +1212,25 @@
           { player_name: 'Cy', kept: false, lost_hole: 4, lost_stroke: 1 }, { player_name: 'Di', kept: false, lost_hole: 9, lost_stroke: 2 }] },
       // pot 40: ball pot 8 split by 2 keepers = 4 each; skins 32 to Ann (1 skin)
       expect: { payouts: { Ann: 36, Bob: 4, Cy: 0, Di: 0 }, unallocated: 0, results: { birdieball: { mode: 'kept', per_winner: 4 }, skins: { per_skin: 32 } } }
+    }, {
+      name: 'Team MiserBall: one lost ball puts the team out; the team that kept both wins the pot as one amount',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'scramble', entity: 'pair', dollar_per_player: 0, basis: 'gross', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] },
+        { id: 'birdieball', entity: 'individual', dollar_per_player: 5, team: true }] },
+      inputs: { scorecards: [_P('Ann', _H(4, 4)), _P('Bob', _H(4, 4)), _P('Cy', _H(4, 4)), _P('Di', _H(4, 4))],
+        bbAnswers: [{ player_name: 'Ann', kept: true }, { player_name: 'Bob', kept: true }, { player_name: 'Cy', kept: true }, { player_name: 'Di', kept: false, lost_hole: 6, lost_stroke: 2 }] },
+      // Di lost a ball, so Cy & Di are out. Ann & Bob kept both and take the whole $20 ball pot as one team amount; the other $20 comes back evenly.
+      expect: { payouts: { 'Ann & Bob': 20, Ann: 5, Bob: 5, Cy: 5, Di: 5 }, unallocated: 0, results: { birdieball: { mode: 'kept', by: 'team', per_winner: 20 } } }
+    }, {
+      name: 'Team MiserBall: everybody lost one, so the longest surviving team wins',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'scramble', entity: 'pair', dollar_per_player: 0, basis: 'gross', pairs: [['Ann', 'Bob'], ['Cy', 'Di']] },
+        { id: 'birdieball', entity: 'individual', dollar_per_player: 5, team: true }] },
+      inputs: { scorecards: [_P('Ann', _H(4, 4)), _P('Bob', _H(4, 4)), _P('Cy', _H(4, 4)), _P('Di', _H(4, 4))],
+        bbAnswers: [{ player_name: 'Ann', kept: false, lost_hole: 9, lost_stroke: 1 }, { player_name: 'Bob', kept: false, lost_hole: 3, lost_stroke: 2 },
+          { player_name: 'Cy', kept: false, lost_hole: 7, lost_stroke: 1 }, { player_name: 'Di', kept: true }] },
+      // Ann & Bob lasted until hole 3 (Bob's loss), Cy & Di until hole 7: Cy & Di survived longest and take the $20 ball pot.
+      expect: { payouts: { 'Cy & Di': 20, Ann: 5, Bob: 5, Cy: 5, Di: 5 }, unallocated: 0, results: { birdieball: { mode: 'longest', by: 'team', per_winner: 20, longest_hole: 7 } } }
     }]
   });
 
@@ -1805,7 +1870,7 @@
         ...(Array.isArray(row.cttp_config.prize_holes) && row.cttp_config.prize_holes.length ? { prize_holes: row.cttp_config.prize_holes } : {}), });
     }
     if (games.includes('birdieball') && row.birdieball_config) {
-      addons.push({ id: 'birdieball', entity: 'individual', dollar_per_player: row.birdieball_config.dollar_per_player });
+      addons.push({ id: 'birdieball', entity: 'individual', dollar_per_player: row.birdieball_config.dollar_per_player, ...(row.birdieball_config.team === true ? { team: true } : {}) });
     }
     // Dev-91: optional net setup frozen at game setup —
     //   handicap_config: { allowance, skins_basis, birdiepay_basis, stroke_index:[18],
@@ -2227,7 +2292,7 @@
     // MiserBall: anyone can lose it on any hole (3rd+ step), and on the last hole each player confirms Kept / Lost.
     birdieball(addon, hole, ctx) {
       const out = [{ id: 'miser', game: 'birdieball', kind: 'lostball', hole, label: 'MiserBall' }];
-      if (ctx && ctx.last) out.push({ id: 'miser_check', game: 'birdieball', kind: 'keptcheck', hole, label: 'Did you keep the MiserBall?' });
+      if (ctx && ctx.last) out.push({ id: 'miser_check', game: 'birdieball', kind: 'keptcheck', hole, label: addon && addon.team === true ? 'Did your team keep BOTH MiserBalls?' : 'Did you keep the MiserBall?' });
       return out;
     }
   };

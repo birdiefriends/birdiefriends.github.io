@@ -699,6 +699,12 @@ const GAME_SCHEMAS = {
         "default": 0,
         "positive": true,
         "required": true
+      },
+      {
+        "key": "team",
+        "type": "bool",
+        "label": "By team: every player keeps a ball, one lost ball puts the whole team out",
+        "default": false
       }
     ]
   },
