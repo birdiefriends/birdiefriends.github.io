@@ -9691,12 +9691,12 @@ function bbStrokeGridHtml(selectedStroke, setFnName) {
 //   a gamed round     -> only what its games use: CTP when CTP is on, MiserBall when on, BestBall when on, and
 //                        Birdie Alert only when Skins or Birdie Payouts are in play (they are what it feeds).
 function livePanelSections(config, panelGid) {
-  if (panelGid == null || !config) return { birdieAlert: true, cttp: true, birdieball: false, fourball: false, skins: false };
+  if (panelGid == null || !config) return { birdieAlert: true, cttp: true, birdieball: false, fourball: false, skins: false, turkeys: false };
   const has = id => !!gatheringAddon(config, id);
   // Skins / Birdie Payouts need the Birdie Alert, but only by hand when nobody is keeping live score: with Live Score on (a side game
   // like BestBall or a Scramble) the Worker announces every birdie-or-better itself from the saved scores, so the button goes away.
   const scoring = BFEngine.sideGames().some(has);
-  return { birdieAlert: (has('skins') || has('birdiepay')) && !scoring, cttp: has('cttp'), birdieball: has('birdieball'), fourball: scoring, skins: scoring && has('skins') };
+  return { birdieAlert: (has('skins') || has('birdiepay')) && !scoring, cttp: has('cttp'), birdieball: has('birdieball'), fourball: scoring, skins: scoring && has('skins'), turkeys: scoring && has('turkeys') };
 }
 function buildLivePanel(evt) {
   // 2Man (scramble_pair) rounds pick from that round's saved teams instead
@@ -9753,6 +9753,7 @@ function buildLivePanel(evt) {
   const showBirdieBallSection = _lps.birdieball;
   const showFourballSection = _lps.fourball; // live pair standings
   const showBirdieAlertSection = _lps.birdieAlert;
+  const showTurkeysSection = _lps.turkeys;
   const showSkinsSection = _lps.skins;   // live Skins board (with live scoring the manual Birdie Alert board is gone, so Skins needs its own)
   // Dev-93: a round with BestBall has live scoring. Score mode is the default view and shows only the scoring
   // entry; Games mode is everything else. Other rounds (BF Series included) never reach this branch.
@@ -10310,6 +10311,7 @@ function buildLivePanel(evt) {
     ${showFourballSection ? liveSectionHtml('game', BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.icon, BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.label, fbSection) : ''}
     ${showCttpSection ? liveSectionHtml('cttp', '🎯', 'Closest to the Pin', ctpSection) : ''}
     ${showSkinsSection ? liveSectionHtml('skins', '⛳', 'Skins', skinsLiveSectionHtml(_liveConfig)) : ''}
+    ${showTurkeysSection ? liveSectionHtml('turkeys', '🦃', 'Turkeys', turkeysLiveSectionHtml(_liveConfig)) : ''}
     ${showBirdieBallSection ? liveSectionHtml('miserball', '🐉', 'MiserBall', bbSection) : ''}
     ${showBirdieAlertSection ? liveSectionHtml('birdie', '🦅', 'Birdie Alert', birdieSection) : ''}
     ${liveSectionHtml('scorecard', '📋', 'Post-Round Scorecard', `${_skOn ? `<div style="font-size:0.82rem;color:rgba(255,255,255,0.75);line-height:1.45;margin-bottom:8px">Scores are saved live while you play, so there is nothing to enter after the round.</div><details><summary style="font-size:0.78rem;color:rgba(255,255,255,0.6);cursor:pointer;padding:8px 0">Enter a full card instead</summary>${scSection}</details>` : scSection}`)}
@@ -11654,6 +11656,19 @@ function skinsLiveSectionHtml(cfg) {
       <div style="font-size:0.76rem;color:rgba(255,255,255,0.65);margin-top:2px">${g.won.map(w => '#' + escapeHtml(w.hole) + ' (' + escapeHtml(w.net != null ? w.net : w.strokes) + ')').join(' &nbsp;·&nbsp; ')}</div></div>`).join('');
   return `<div style="font-size:0.78rem;color:rgba(255,255,255,0.65);margin-bottom:4px">${won.length} skin${won.length === 1 ? '' : 's'} won so far</div>${rows}${note}`;
 }
+// Live Turkeys board (with live scoring): who has made one so far, from the saved scores, by the same rule as the close.
+function turkeysLiveSectionHtml(cfg) {
+  const muted = 'font-size:0.82rem;color:rgba(255,255,255,0.6);line-height:1.45';
+  if (!_fbLive || !_fbLive.row) return `<div style="${muted}">Loading…</div>`;
+  let tk = null;
+  try { const sh = gatheringStartHoles(_fbLive.gid); const pay = BFEngine.computeGatheringGamesPayout(_fbLive.row, fbOverlayCards(), {}, [], sh ? { startHoles: sh } : undefined); tk = pay && pay.turkeys; } catch (e) { console.warn('[Turkeys] live board error:', e.message); }
+  if (!tk) return `<div style="${muted}">No scores saved yet.</div>`;
+  const money = v => '$' + (Number(v) || 0).toFixed(Number.isInteger(Number(v)) ? 0 : 2);
+  const note = `<div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:8px;line-height:1.4">${tk.streak} holes in a row under par, gross.${tk.reserve > 0 ? ` ${money(tk.reserve)} is held in reserve: split between the Turkeys, or back to Skins if there are none.` : ' Recognition only.'}</div>`;
+  const prize = tk.prize ? `<div style="font-size:0.84rem;font-weight:700;color:#ffe08a;margin-bottom:6px">🏆 ${escapeHtml(tk.prize)}</div>` : '';
+  if (!tk.count) return `${prize}<div style="${muted}">No Turkeys yet.</div>${note}`;
+  return `${prize}${tk.turkeys.map(t => `<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.1)"><div style="font-size:0.9rem;font-weight:700">🦃 ${escapeHtml(t.player)}</div><div style="font-size:0.76rem;color:rgba(255,255,255,0.65);margin-top:2px">${t.length} in a row · hole${t.holes.length === 1 ? '' : 's'} ${t.holes.map(escapeHtml).join(', ')}</div></div>`).join('')}${note}`;
+}
 function fourballLiveSectionHtml(cfg) {
   const sideId = liveSideGid(cfg) || 'fourball';
   const fb = gatheringAddon(cfg, sideId);
@@ -12955,6 +12970,7 @@ let _gamesFormSelected  = new Set();  // subset of ['skins','cttp','birdieball',
 // call on the funding model, rounds 2 and 3 combined).
 let _gamesFormCttpConfig = { dollar_per_hole: null, hole_mode: 'all_par3', holes: [], prize_holes: [] };   // prize_holes: tracked like CTP, no cash (the Turkey 2Man's #17); `holes` stays the PAID holes
 let _gamesFormBirdiepayConfig = { dollar_per_birdie: null }; // Birdie Payouts (Dev-89): flat $ per birdie, taken from the pot before Skins
+let _gamesFormTurkeysConfig = { dollar_per_player: null, streak: 3, prize: '' };   // Turkeys (v4.77.0): 3+ holes in a row under par; $ per player is a RESERVE (to the Turkeys, or back to Skins), 0 = prize only
 // Dev-91 — net/gross setup, frozen into the saved config at Save. kind per player: 'index' (typed Index → USGA playing handicap),
 // 'given' (host types strokes), 'gross' (no strokes). Each net player needs a tee: slope/rating/par and the HOLE stroke index come from it.
 let _gamesFormHcp = { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} };
@@ -18278,7 +18294,20 @@ function bfeEventNameCandidates(name) {
 // These three names stay as thin delegates so every caller is unchanged.
 function computeGatheringGamesPayout(config, scorecards, ctpLeaders, bbAnswers) {
   if (typeof BFEngine === 'undefined') throw new Error('bf_engine.js did not load — reload the app');
-  return BFEngine.computeGatheringGamesPayout(config, scorecards, ctpLeaders, bbAnswers);
+  return BFEngine.computeGatheringGamesPayout(config, scorecards, ctpLeaders, bbAnswers, typeof payoutExtra === 'function' ? payoutExtra(config) : undefined);
+}
+function payoutExtra(config) {
+  const sh = gatheringStartHoles(config && (config.gathering_id != null ? config.gathering_id : config.gatheringId));
+  return sh ? { startHoles: sh } : undefined;
+}
+// Where each player starts, when the host published SHOTGUN Groups: { 'name lowercased': hole }. Turkeys count holes in the order a group plays them,
+// so a run can wrap 18 to 1. null = everyone starts on 1 (tee times, no Groups published).
+function gatheringStartHoles(gid) {
+  const set = gid != null && typeof _groupSets !== 'undefined' && _groupSets[gid] ? _groupSets[gid].published : null;
+  if (!set || set.mode !== 'shotgun' || !Array.isArray(set.groups)) return null;
+  const out = {};
+  set.groups.forEach(g => { const h = Number(g.start_hole); if (h >= 1 && h <= 18) (g.members || []).forEach(n => { out[String(n).trim().toLowerCase()] = h; }); });
+  return Object.keys(out).length ? out : null;
 }
 function latestScorecardPerPlayer(rows) {
   if (typeof BFEngine === 'undefined') throw new Error('bf_engine.js did not load — reload the app');
@@ -18466,11 +18495,12 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   if (s.cttp) games.push(['cttp', '🎯']);
   if (s.birdieball) games.push(['birdieball', '🐉']);
   if (s.birdiepay) games.push(['birdiepay', '🐤']);
+  if (s.turkeys && s.turkeys.reserve > 0) games.push(['turkeys', '🦃']);
   if (s.fourball) games.push(['fourball', '🤝']);
   BFEngine.sideFormGames().forEach(id => { if (s[id]) games.push([id, BFEngine.getGame(id).meta.icon]); });
   if (s.lowscore) games.push(['lowscore', '🎯']);
   const byName = new Map();
-  (s.payouts || []).forEach(r => byName.set(norm(r.player), { player: r.player, total: Number(r.total) || 0, skins: r.skins, cttp: r.cttp, birdieball: r.birdieball, birdiepay: r.birdiepay, fourball: r.fourball, altshot: r.altshot, scramble: r.scramble, hilo: r.hilo, matchplay: r.matchplay, lowscore: r.lowscore, given_back: r.given_back }));
+  (s.payouts || []).forEach(r => byName.set(norm(r.player), { player: r.player, total: Number(r.total) || 0, skins: r.skins, cttp: r.cttp, birdieball: r.birdieball, birdiepay: r.birdiepay, turkeys: r.turkeys, fourball: r.fourball, altshot: r.altshot, scramble: r.scramble, hilo: r.hilo, matchplay: r.matchplay, lowscore: r.lowscore, given_back: r.given_back }));
   if (hasRank) {
     (rk.gross || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.gross = r.total; e.strokes = r.strokes; byName.set(norm(r.player), e); });
     (rk.net || []).forEach(r => { const e = byName.get(norm(r.player)) || { player: r.player, total: 0 }; e.net = r.total; byName.set(norm(r.player), e); });
@@ -18541,7 +18571,8 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     };
     addLine('🤝', 'BestBall', s.fourball, s.fourball && s.fourball.segments ? s.fourball.segments.win_by : null);
     addLine('🔁', 'Alternate Shot', s.altshot, s.altshot && s.altshot.segments ? s.altshot.segments.win_by : null);
-    addLine('🦃', 'Scramble', s.scramble, null);
+    addLine('🍳', 'Scramble', s.scramble, null);
+    if (s.turkeys) lines.push(`<div style="padding:3px 0">🦃 <b>Turkeys</b> <span style="color:var(--text-muted)">(gross)</span> · ${s.turkeys.streak || 3} holes in a row under par${s.turkeys.reserve > 0 ? `, ${money(s.turkeys.reserve)} held in reserve` : ''}${s.turkeys.prize ? ' · ' + esc(s.turkeys.prize) : ''}</div>`);
     addLine('⚖️', 'Hi-Lo', s.hilo, s.hilo && s.hilo.segments ? s.hilo.segments.win_by : null);
     addLine('⚔️', 'Match Play', s.matchplay, s.matchplay && s.matchplay.segments ? s.matchplay.segments.win_by : null);
     addLine('🎯', 'Individual Low Score', s.lowscore, null);
@@ -18613,6 +18644,19 @@ function renderGatheringPayoutHtml(s, fbCfg) {
       if (b.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${b.count} birdies × ${money(b.per_birdie)} was more than the pot had left, so each paid ${money(b.paid_each)}</div>`;
     }
     panels.push({ key: 'bp', tab: '🐤 Birdie', html: h });
+  }
+  // ── Turkeys: 3+ holes in a row under par. Prize and/or $ (a reserve: split between the Turkeys, or back to Skins if there are none) ──
+  if (s.turkeys) {
+    const t = s.turkeys;
+    let h = label(`🦃 Turkeys — ${t.streak || 3}+ holes in a row under par${t.reserve > 0 ? ' · ' + money(t.reserve) + ' reserve' : ''}`);
+    if (t.prize) h += `<div style="font-size:0.84rem;font-weight:700;margin-bottom:4px">🏆 ${esc(t.prize)}</div>`;
+    if (t.no_par_data) h += `<div style="font-size:0.78rem;color:var(--text-muted)">No par data was saved for this game, so no Turkeys were counted</div>`;
+    else if (!t.count) h += `<div style="font-size:0.78rem;color:var(--text-muted)">No Turkeys made${t.rolled_to_skins > 0 ? `, so the ${money(t.rolled_to_skins)} reserve went back to Skins` : ''}</div>`;
+    else {
+      h += (t.turkeys || []).map(x => line(`<b>${esc(x.player)}</b> <span style="color:var(--text-muted)">${x.length} in a row · hole${x.holes.length === 1 ? '' : 's'} ${x.holes.map(esc).join(', ')}</span>`, x.paid > 0 ? money(x.paid) : '🦃')).join('');
+      if (t.rolled_to_skins > 0) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${money(t.rolled_to_skins)} of the reserve went back to Skins (rounding)</div>`;
+    }
+    panels.push({ key: 'tk', tab: '🦃 Turkeys', html: h });
   }
   // ── BestBall (Dev-93): better ball of each pair, lowest total wins, winners split the carve ──
   if (s.fourball) {
@@ -19340,6 +19384,12 @@ function gatheringGameDetailsBody(evt, config) {
     remaining -= cost;
     const lk = BFEngine.periodKey(ls);
     rows.push(row('🎯', `Individual Low Score · ${ls.basis === 'net' ? 'Net' : 'Gross'}`, `Lowest individual score · $${(ls.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, ${lk !== 'round' ? `${BFEngine.PERIODS[lk].phrase} are separate pots; a tie in a period is a push` : 'one pot for the lowest total; a tie is a push'}`, 'lowscore'));
+  }
+  const tkA = gatheringAddon(config, 'turkeys');
+  if (tkA) {
+    const reserve = (Number(tkA.dollar_per_player) || 0) * yesCount;
+    remaining -= reserve;
+    rows.push(row('🦃', 'Turkeys · Gross', `${tkA.streak || 3} holes in a row under par${tkA.prize ? ' · ' + escapeHtml(tkA.prize) : ''} · ${reserve > 0 ? '$' + reserve.toFixed(2).replace(/\.00$/, '') + ' held in reserve: split between any Turkeys, back to Skins if none' : 'recognition only, no money'}`, 'turkeys'));
   }
   if ((config.legacy.games || []).includes('skins')) {
     const sk = gatheringAddon(config, 'skins');
@@ -21266,6 +21316,8 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
   _gamesFormBirdiepayConfig = (existing && existing.birdiepay_config)
     ? { dollar_per_birdie: existing.birdiepay_config.dollar_per_birdie }
     : { dollar_per_birdie: null };
+  { const tk = existing && existing.game_configs && existing.game_configs.turkeys;
+    _gamesFormTurkeysConfig = tk ? { dollar_per_player: Number(tk.dollar_per_player) || 0, streak: Number(tk.streak) || 3, prize: tk.prize || '' } : { dollar_per_player: null, streak: 3, prize: '' }; }
   { const fb = existing && existing.game_configs && existing.game_configs.fourball; // Dev-93: BestBall rides the generic game_configs column
     _gamesFormFourballConfig = fb
       ? { dollar_per_player: fb.dollar_per_player, basis: fb.basis === 'net' ? 'net' : 'gross', net_mode: fb.net_mode === 'low' ? 'low' : 'own', pairs: (fb.pairs || []).map(pr => pr.slice()),
@@ -21297,7 +21349,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
       ? { skins_basis: hc.skins_basis === 'net' ? 'net' : 'gross', birdiepay_basis: hc.birdiepay_basis === 'net' ? 'net' : 'gross',
           ranking: hc.ranking === true, rankingTouched: true, allowance: hc.allowance == null ? 95 : hc.allowance, players: JSON.parse(JSON.stringify(hc.players || {})) }
       : { skins_basis: 'gross', birdiepay_basis: 'gross', allowance: 95, players: {} }; }
-  _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'scramble', 'hilo', 'matchplay', 'lowscore'] : []); // an existing config is the host's own numbers
+  _gamesFormTouched = new Set(existing ? ['cttp', 'birdieball', 'birdiepay', 'fourball', 'altshot', 'scramble', 'hilo', 'matchplay', 'lowscore', 'turkeys'] : []); // an existing config is the host's own numbers
   const backBtn = document.getElementById('host-sheet-back');
   if (backBtn) { backBtn.style.display = 'inline-flex'; backBtn.onclick = () => { backBtn.style.display = 'none'; if (_gamesFormCard) closeGamesCardDialog(); else renderHostPanelList(); }; }
   const closeBtn = document.getElementById('host-sheet-close-btn');
@@ -21398,6 +21450,7 @@ function renderGatheringGamesForm(gatheringId, g, existing) {
       <div class="gw-pane" id="gw-pane-birdieball"><div id="games-form-birdieball-section">${gatheringGamesBirdieballSectionHtml()}</div></div>
       <div class="gw-pane" id="gw-pane-skins"><div id="games-form-skins-section">${gatheringGamesSkinsSectionHtml()}</div></div>
       <div class="gw-pane" id="gw-pane-birdiepay"><div id="games-form-birdiepay-section">${gatheringGamesBirdiepaySectionHtml()}</div></div>
+      <div class="gw-pane" id="gw-pane-turkeys"><div id="games-form-turkeys-section">${gatheringGamesTurkeysSectionHtml()}</div></div>
       <div class="gw-pane" id="gw-pane-fourball"><div id="games-form-fourball-section">${gatheringGamesFourballSectionHtml()}</div></div>
       ${GAMES_FORM_SIDE_IDS.map(g => `<div class="gw-pane" id="gw-pane-${g}"><div id="games-form-${g}-section">${gatheringGamesSideSectionHtml(g)}</div></div>`).join('')}
       <div class="gw-pane" id="gw-pane-lowscore"><div id="games-form-lowscore-section">${gatheringGamesLowscoreSectionHtml()}</div></div>
@@ -21554,6 +21607,11 @@ function gamesFormSplitBuild() {
   }
   if (sel.has('birdieball')) { const c = _gamesFormBirdieballConfig; otherGames += (c.dollar_per_player || 0) * nYes; rows.push(card(head('🐉', 'MiserBall', '') + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-bb', c.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer')}<span style="${small}">per player</span></div><div style="${small};margin-top:5px">${reg('gs-bb-note', `${mny((c.dollar_per_player || 0) * nYes)} from ${nYes} players (${pctOf((c.dollar_per_player || 0) * nYes)} of the pot)`)}</div>`)); }
   if (sel.has('birdiepay')) rows.push(card(head('🐤', 'Birdie Payouts', '') + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-bp', _gamesFormBirdiepayConfig.dollar_per_birdie, 'setGamesFormBirdiepayDollarPerBirdie')}<span style="${small}">a birdie, paid out of the balance before Skins</span></div>`));
+  if (sel.has('turkeys')) {
+    const c = _gamesFormTurkeysConfig, held = (Number(c.dollar_per_player) || 0) * nYes; otherGames += held;
+    rows.push(card(head('🦃', 'Turkeys', '') + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-tk', c.dollar_per_player, 'setGamesFormTurkeysDollarPerPlayer')}<span style="${small}">per player, held in reserve (leave 0 for a prize only)</span></div>`
+      + `<div style="${small};margin-top:5px;line-height:1.45">${reg('gs-tk-note', held > 0 ? `<b>${mny(held)}</b> held back (${pctOf(held)} of the pot). Split between the Turkeys if any are made, otherwise it goes back to Skins.` : 'Recognition only: no money moves.')}</div>`));
+  }
   takenFromPot += otherGames;
   const left = _r2(totalPot - takenFromPot), over = left < -0.004, balanceTaker = sel.has('skins') || sel.has('birdiepay');
   if (sel.has('skins')) rows.push(card(head('⛳', 'Skins', bigTot('gs-skins', over ? `<span style="color:#c0392b">over by ${mny(-left)}</span>` : `${mny(left)} <span style="${small};font-weight:400">${pctOf(left)} of the pot</span>`))
@@ -21591,7 +21649,7 @@ function refreshGamesFormSplit(force) {
 }
 // ── Games setup wizard: one question per screen ──────────────────────────────
 let _gw = { step: 'games' };
-const GW_NAMES = { games: 'Games', money: 'The money', fourball: 'BestBall', fbpairs: 'BestBall pairs', altshot: 'Alternate Shot', aspairs: 'Alternate Shot pairs', scramble: 'Scramble', scpairs: 'Scramble teams', hilo: 'Hi-Lo', hlpairs: 'Hi-Lo pairs', matchplay: 'Match Play', mpmatches: 'Match Play matches', lowscore: 'Individual Low Score', skins: 'Skins', cttp: 'CTP', birdieball: 'MiserBall', birdiepay: 'Birdie Payouts', hcp: 'Handicap strokes', review: 'Review' };
+const GW_NAMES = { games: 'Games', money: 'The money', fourball: 'BestBall', fbpairs: 'BestBall pairs', altshot: 'Alternate Shot', aspairs: 'Alternate Shot pairs', scramble: 'Scramble', scpairs: 'Scramble teams', hilo: 'Hi-Lo', hlpairs: 'Hi-Lo pairs', matchplay: 'Match Play', mpmatches: 'Match Play matches', lowscore: 'Individual Low Score', skins: 'Skins', cttp: 'CTP', birdieball: 'MiserBall', birdiepay: 'Birdie Payouts', turkeys: 'Turkeys', hcp: 'Handicap strokes', review: 'Review' };
 function gwSteps() {
   const sel = _gamesFormSelected;
   if (!sel.size) return ['games'];
@@ -21653,6 +21711,7 @@ function gwReviewHtml() {
   if (sel.has('skins')) add('⛳', 'Skins', `${basis(_gamesFormHcp.skins_basis)} · gets what is left`, 'skins');
   if (sel.has('cttp')) add('🎯', 'CTP', `${money(_gamesFormCttpConfig.dollar_per_hole)} a hole · ${(_gamesFormCttpConfig.holes || []).length} hole${(_gamesFormCttpConfig.holes || []).length === 1 ? '' : 's'}`, 'cttp');
   if (sel.has('birdieball')) add('🐉', 'MiserBall', `${money(_gamesFormBirdieballConfig.dollar_per_player)} per player`, 'money');
+  if (sel.has('turkeys')) { const tk = _gamesFormTurkeysConfig; add('🦃', 'Turkeys', `${tk.streak || 3} in a row under par · ${(Number(tk.dollar_per_player) || 0) > 0 ? money(tk.dollar_per_player) + ' per player held in reserve' : 'prize only'}${tk.prize ? ' · ' + escapeHtml(tk.prize) : ''}`, 'turkeys'); }
   if (sel.has('birdiepay')) add('🐤', 'Birdie Payouts', `${money(_gamesFormBirdiepayConfig.dollar_per_birdie)} a birdie · ${basis(_gamesFormHcp.birdiepay_basis)}`, 'birdiepay');
   if (_gamesFormHcp.ranking === true) add('📊', 'Net ranking', 'Shown for fun, no money', 'hcp');
   else if (gamesFormHcpIsNet()) add('⚖️', 'Handicap strokes', `${gamesFormPlayerNames().length} players`, 'hcp');
@@ -21673,8 +21732,8 @@ function gwRender() {
   _gw.shown = cur;
   if (moved) { // a screen can hold stale numbers if an amount was typed on the buy-in screen: rebuild it as it opens
     const redo = { altshot: () => gatheringGamesSideSectionHtml('altshot'), aspairs: () => gatheringGamesSideSectionHtml('altshot'), scramble: () => gatheringGamesSideSectionHtml('scramble'), scpairs: () => gatheringGamesSideSectionHtml('scramble'), hilo: () => gatheringGamesSideSectionHtml('hilo'), hlpairs: () => gatheringGamesSideSectionHtml('hilo'), matchplay: () => gatheringGamesSideSectionHtml('matchplay'), mpmatches: () => gatheringGamesSideSectionHtml('matchplay'),
-      fourball: gatheringGamesFourballSectionHtml, fbpairs: gatheringGamesFourballSectionHtml, lowscore: gatheringGamesLowscoreSectionHtml, cttp: gatheringGamesCttpSectionHtml, birdiepay: gatheringGamesBirdiepaySectionHtml }[cur];
-    const box = { altshot: 'altshot', aspairs: 'altshot', scramble: 'scramble', scpairs: 'scramble', hilo: 'hilo', hlpairs: 'hilo', matchplay: 'matchplay', mpmatches: 'matchplay', fourball: 'fourball', fbpairs: 'fourball', lowscore: 'lowscore', cttp: 'cttp', birdiepay: 'birdiepay' }[cur];
+      fourball: gatheringGamesFourballSectionHtml, fbpairs: gatheringGamesFourballSectionHtml, lowscore: gatheringGamesLowscoreSectionHtml, cttp: gatheringGamesCttpSectionHtml, birdiepay: gatheringGamesBirdiepaySectionHtml, turkeys: gatheringGamesTurkeysSectionHtml }[cur];
+    const box = { altshot: 'altshot', aspairs: 'altshot', scramble: 'scramble', scpairs: 'scramble', hilo: 'hilo', hlpairs: 'hilo', matchplay: 'matchplay', mpmatches: 'matchplay', fourball: 'fourball', fbpairs: 'fourball', lowscore: 'lowscore', cttp: 'cttp', birdiepay: 'birdiepay', turkeys: 'turkeys' }[cur];
     const el = box && document.getElementById('games-form-' + box + '-section');
     if (redo && el) el.innerHTML = redo();
     if (cur === 'money') { applyGamesSuggestion(false); refreshGamesFormSplit(); } // the rules are set, so suggest the split now
@@ -21781,6 +21840,8 @@ function toggleGamesFormGame(key) {
       _gamesFormBirdieballConfig = { dollar_per_player: null };
     } else if (key === 'birdiepay') {
       _gamesFormBirdiepayConfig = { dollar_per_birdie: null };
+    } else if (key === 'turkeys') {
+      _gamesFormTurkeysConfig = { dollar_per_player: null, streak: 3, prize: '' };
     } else if (key === 'fourball') {
       _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round', win_by: 'strokes', scope: 'field' };
       _gamesFormFourballNote = '';
@@ -21958,6 +22019,27 @@ function gatheringGamesBirdiepaySectionHtml() {
       </div>`}
     </div>`;
 }
+function gatheringGamesTurkeysSectionHtml() {
+  if (!_gamesFormSelected.has('turkeys')) return '';
+  const c = _gamesFormTurkeysConfig, haveParData = Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18;
+  return `
+    <div class="host-form-field" id="games-form-turkeys-field">
+      <label>🦃 Turkeys</label>
+      <div style="font-size:0.84rem;line-height:1.5;margin-bottom:10px">A Turkey is a player (or scramble team) under par on several holes <b>in a row</b>. It is worked out from the scores, nothing to enter.</div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:0.86rem">Holes in a row under par</span>
+        <select onchange="setGamesFormTurkeysStreak(this.value)" style="height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit">${[3, 4, 5].map(n => `<option value="${n}"${(c.streak || 3) === n ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
+      <div style="margin-top:10px"><div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:3px">Prize or recognition (optional)</div>
+        <input type="text" maxlength="60" value="${escapeHtml(c.prize || '')}" placeholder="e.g. Turkey dinner, or Bragging rights" oninput="setGamesFormTurkeysPrize(this.value)" style="width:100%;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 10px;font-family:inherit;box-sizing:border-box"></div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px;line-height:1.5">Want money on it too? Set a $ per player on <b>The money</b> step. That is held in reserve from the pot: split between the Turkeys if any are made, and sent back to Skins if none are. Leave it at 0 for a prize only. Gross against par. Holes in a row follow the order each group plays them, so a shotgun run can go from 18 to 1.</div>
+      ${haveParData ? '' : `
+      <div style="font-size:0.74rem;color:#b8860b;background:rgba(230,168,0,0.1);border:1px solid rgba(230,168,0,0.3);border-radius:8px;padding:8px 10px;margin-top:8px">
+        No par data on file for this venue yet, so Turkeys can't be counted. Add one of its tees in Venue Manager before saving.
+      </div>`}
+    </div>`;
+}
+function setGamesFormTurkeysDollarPerPlayer(val) { _gamesFormTurkeysConfig.dollar_per_player = parseFloat(val) || 0; _gamesFormTouched.add('turkeys'); updateGamesFormPotPreview(); }
+function setGamesFormTurkeysStreak(val) { _gamesFormTurkeysConfig.streak = Math.max(2, parseInt(val, 10) || 3); }
+function setGamesFormTurkeysPrize(val) { _gamesFormTurkeysConfig.prize = String(val || '').slice(0, 60); }
 function setGamesFormBirdiepayDollarPerBirdie(val) {
   _gamesFormBirdiepayConfig.dollar_per_birdie = parseFloat(val) || 0;
   _gamesFormTouched.add('birdiepay');
@@ -22829,6 +22911,7 @@ function gamesFormOverCommit(dpp, yesCount) {
   if (_gamesFormSelected.has('birdieball') && _gamesFormBirdieballConfig.dollar_per_player > 0) configs.birdieball = _gamesFormBirdieballConfig;
   if (_gamesFormSelected.has('fourball') && _gamesFormFourballConfig.dollar_per_player > 0) configs.fourball = _gamesFormFourballConfig;
   if (_gamesFormSelected.has('lowscore') && _gamesFormLowscoreConfig.dollar_per_player > 0) configs.lowscore = _gamesFormLowscoreConfig;
+  if (_gamesFormSelected.has('turkeys') && _gamesFormTurkeysConfig.dollar_per_player > 0) configs.turkeys = _gamesFormTurkeysConfig;
   GAMES_FORM_SIDE_IDS.forEach(gid => { if (_gamesFormSelected.has(gid) && _gamesFormSide[gid].dollar_per_player > 0) configs[gid] = _gamesFormSide[gid]; });
   const pf = BFEngine.potFit(configs, dpp, yesCount);
   const cost = id => (pf.parts.find(p => p.id === id) || {}).cost || 0;
@@ -22945,6 +23028,17 @@ async function submitGatheringGames(gatheringId) {
     const v = BFEngine.validateGameConfig('lowscore', ls);
     if (!v.ok) { bad('lowscore', 'Individual Low Score: ' + v.errors[0]); return; }
     game_configs = Object.assign(game_configs || {}, { lowscore: ls });
+  }
+  if (games.includes('turkeys')) {
+    const c = _gamesFormTurkeysConfig;
+    if (!(Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18)) { bad('turkeys', 'Turkeys needs par data for this venue. Add a tee for it in Venue Manager first.'); return; }
+    const tk = { dollar_per_player: Number(c.dollar_per_player) || 0, streak: Math.max(2, Math.floor(Number(c.streak) || 3)), prize: String(c.prize || '').trim().slice(0, 60), pars: _gamesFormBirdiepayPars.slice() };
+    const byPlayer = gamesFormBirdiepayParsByPlayer();
+    if (Object.keys(byPlayer).length) tk.pars_by_player = byPlayer;
+    if (!(tk.dollar_per_player > 0) && !tk.prize) { bad('turkeys', 'Turkeys: add a prize, or a $ per player on The money step'); return; }
+    const v = BFEngine.validateGameConfig('turkeys', tk);
+    if (!v.ok) { bad('turkeys', 'Turkeys: ' + v.errors[0]); return; }
+    game_configs = Object.assign(game_configs || {}, { turkeys: tk });
   }
   const hcb = gamesFormBuildHandicapConfig();
   if (hcb.problem) { bad('hcp', hcb.problem); return; }

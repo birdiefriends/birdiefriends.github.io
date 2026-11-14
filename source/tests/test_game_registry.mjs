@@ -4,7 +4,7 @@ import { createRequire } from 'module'; import { fileURLToPath } from 'url';
 const require = createRequire(import.meta.url);
 const E = require(fileURLToPath(new URL('../bf_engine.js', import.meta.url)));
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
-const TYPES = ['money', 'int', 'holes', 'pars', 'enum', 'pairs', 'parsmap', 'strings', 'shares'];
+const TYPES = ['money', 'int', 'holes', 'pars', 'enum', 'pairs', 'parsmap', 'strings', 'shares', 'text'];
 const addons = E.listGames('addon'), bases = E.listGames('base');
 ok(addons.length >= 4 && bases.length >= 1, 'registry lists add-ons and base games');
 
@@ -82,7 +82,7 @@ for (let t = 0; t < 400; t++) {
   ok(Math.abs(paid + r.unallocated - r.total_pot) < 1e-9, 'fuzz ' + t + ': conservation (' + chosen.join(',') + ')');
 }
 // 7. UI helpers: stable host-facing order, unique uiOrder, text lives only in the definition
-ok(E.gamesInUiOrder().join() === 'fourball,altshot,scramble,hilo,matchplay,lowscore,skins,cttp,birdieball,birdiepay', 'UI order: Format group first (BestBall, Low Score), then the side games in their old order');
+ok(E.gamesInUiOrder().join() === 'fourball,altshot,scramble,hilo,matchplay,lowscore,skins,cttp,birdieball,birdiepay,turkeys', 'UI order: Format group first (BestBall, Low Score), then the side games in their old order');
 ok(new Set(addons.map(id => E.getGame(id).meta.uiOrder)).size === addons.length, 'uiOrder is unique per game');
 ok(E.gamesInUiOrder().includes('fourball') && E.gamesUiMeta().fourball && E.gamesInfo().fourball, 'released BestBall shows in the portal tables');
 ok((() => { const g = E.getGame('fourball'); g.released = false; const hidden = !E.gamesInUiOrder().includes('fourball') && !E.gamesUiMeta().fourball; g.released = true; return hidden; })(), 'the released flag still hides a game when off');
@@ -106,7 +106,7 @@ const psrc = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta
 ok(!/GAMES_SEAL_LABELS = \{/.test(psrc), 'portal: no hand-written seal table');
 ok(!/const GATHERING_GAMES_META = \{/.test(psrc), 'portal: no hand-written game meta table');
 ok(!/(?:^|\n)\s+(skins|cttp|birdieball|birdiepay):\s+'(?:Every hole|Closest|Everyone|A flat)/.test(psrc), 'portal: no hand-written (i) text for a game');
-ok(/function gamesFormOverCommit[\s\S]{0,900}BFEngine\.potFit\(/.test(psrc), 'portal: over-commit guard uses BFEngine.potFit');
+ok(/function gamesFormOverCommit[\s\S]{0,1400}BFEngine\.potFit\(/.test(psrc), 'portal: over-commit guard uses BFEngine.potFit');
 // 10. BestBall specifics
 {
   const full = v => Array.from({ length: 18 }, () => v);

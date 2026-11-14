@@ -1196,6 +1196,50 @@ const GAME_SCHEMAS = {
       }
     ]
   },
+  "turkeys": {
+    "label": "Turkeys",
+    "config": [
+      {
+        "key": "dollar_per_player",
+        "type": "money",
+        "label": "$ per player held in reserve (0 = prize only)",
+        "default": 0
+      },
+      {
+        "key": "streak",
+        "type": "int",
+        "label": "Holes in a row under par",
+        "default": 3,
+        "min": 2,
+        "max": 9
+      },
+      {
+        "key": "prize",
+        "type": "text",
+        "label": "Prize or recognition",
+        "default": ""
+      },
+      {
+        "key": "pars",
+        "type": "pars",
+        "label": "Par by hole",
+        "default": [],
+        "required": true,
+        "min": 3,
+        "max": 6,
+        "integer": true
+      },
+      {
+        "key": "pars_by_player",
+        "type": "parsmap",
+        "label": "Par by hole for players on a different tee",
+        "default": {},
+        "min": 3,
+        "max": 6,
+        "integer": true
+      }
+    ]
+  },
   "skins": {
     "label": "Skins",
     "config": [

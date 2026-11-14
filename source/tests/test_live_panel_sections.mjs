@@ -15,16 +15,16 @@ const cfg = games => E.gatheringConfigFromLegacy({ games, dollar_per_player: 10,
   game_configs: { fourball: { dollar_per_player: 5, basis: 'gross', net_mode: 'own', pairs: [['A', 'B'], ['C', 'D']] } } });
 const sec = (games, gid = 7) => ctx.f(cfg(games), gid);
 // BF Series / any round with no games config: exactly the classic panel
-eq(ctx.f(null, null), { birdieAlert: true, cttp: true, birdieball: false, fourball: false, skins: false }, 'no games config (BF Series): Birdie Alert + CTP as always');
-eq(ctx.f(cfg(['fourball']), null), { birdieAlert: true, cttp: true, birdieball: false, fourball: false, skins: false }, 'no panel gid: classic panel even if a config object is passed');
+eq(ctx.f(null, null), { birdieAlert: true, cttp: true, birdieball: false, fourball: false, skins: false, turkeys: false }, 'no games config (BF Series): Birdie Alert + CTP as always');
+eq(ctx.f(cfg(['fourball']), null), { birdieAlert: true, cttp: true, birdieball: false, fourball: false, skins: false, turkeys: false }, 'no panel gid: classic panel even if a config object is passed');
 // gamed rounds
-eq(sec(['fourball']), { birdieAlert: false, cttp: false, birdieball: false, fourball: true, skins: false }, 'BestBall only: no Birdie Alert, no CTP');
-eq(sec(['skins']), { birdieAlert: true, cttp: false, birdieball: false, fourball: false, skins: false }, 'Skins: Birdie Alert on');
-eq(sec(['birdiepay']), { birdieAlert: true, cttp: false, birdieball: false, fourball: false, skins: false }, 'Birdie Payouts: Birdie Alert on');
-eq(sec(['cttp']), { birdieAlert: false, cttp: true, birdieball: false, fourball: false, skins: false }, 'CTP only: CTP section, no Birdie Alert');
-eq(sec(['birdieball']), { birdieAlert: false, cttp: false, birdieball: true, fourball: false, skins: false }, 'MiserBall only');
-eq(sec(['skins', 'cttp', 'birdieball', 'birdiepay']), { birdieAlert: true, cttp: true, birdieball: true, fourball: false, skins: false }, 'everything on but live scoring: everything shows');
-eq(sec(['skins', 'cttp', 'birdieball', 'birdiepay', 'fourball']), { birdieAlert: false, cttp: true, birdieball: true, fourball: true, skins: true }, 'with live scoring the Worker announces birdies, so the manual Birdie Alert goes away');
+eq(sec(['fourball']), { birdieAlert: false, cttp: false, birdieball: false, fourball: true, skins: false, turkeys: false }, 'BestBall only: no Birdie Alert, no CTP');
+eq(sec(['skins']), { birdieAlert: true, cttp: false, birdieball: false, fourball: false, skins: false, turkeys: false }, 'Skins: Birdie Alert on');
+eq(sec(['birdiepay']), { birdieAlert: true, cttp: false, birdieball: false, fourball: false, skins: false, turkeys: false }, 'Birdie Payouts: Birdie Alert on');
+eq(sec(['cttp']), { birdieAlert: false, cttp: true, birdieball: false, fourball: false, skins: false, turkeys: false }, 'CTP only: CTP section, no Birdie Alert');
+eq(sec(['birdieball']), { birdieAlert: false, cttp: false, birdieball: true, fourball: false, skins: false, turkeys: false }, 'MiserBall only');
+eq(sec(['skins', 'cttp', 'birdieball', 'birdiepay']), { birdieAlert: true, cttp: true, birdieball: true, fourball: false, skins: false, turkeys: false }, 'everything on but live scoring: everything shows');
+eq(sec(['skins', 'cttp', 'birdieball', 'birdiepay', 'fourball']), { birdieAlert: false, cttp: true, birdieball: true, fourball: true, skins: true, turkeys: false }, 'with live scoring the Worker announces birdies, so the manual Birdie Alert goes away');
 eq(sec(['skins', 'fourball']).birdieAlert, false, 'Skins + live scoring: no manual Birdie Alert');
 eq(sec(['skins']).birdieAlert, true, 'Skins with nobody keeping live score: the manual Birdie Alert stays');
 eq(sec(['skins', 'fourball']).skins, true, 'Skins + live scoring: the live Skins board shows');
