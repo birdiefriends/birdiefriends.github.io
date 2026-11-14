@@ -41,4 +41,17 @@ ok(r.payouts.find(p => p.player === 'Ann & Bob').birdieball === 20, 'paid to the
   let html = ''; try { vm.runInContext(extractFn(src, 'renderGatheringPayoutHtml') + '\nthis.f = renderGatheringPayoutHtml;', c2); html = c2.f(JSON.parse(JSON.stringify(r))); } catch (e) { console.log('RENDER ERR', e.message); fail++; }
   ok(/Kept both balls all round/.test(html) && /Ann &amp; Bob/.test(html) && /Out on #4/.test(html) && /Cy lost it/.test(html), 'results card: winning team, and the team that is out with who lost it and where');
 }
+// fixed pot and the host's own name for the game
+{
+  const row2 = { games: ['birdieball'], dollar_per_player: 20, birdieball_config: { dollar_per_player: 0.8334, pot_total: 20, name: 'Turkey-Ball<b>' } };
+  const names = Array.from({ length: 24 }, (_, i) => 'P' + (i + 1));
+  const rr = E.computeGatheringGamesPayout(row2, names.map(card), {}, [{ player_name: 'P1', kept: true }, { player_name: 'P2', kept: true }]);
+  ok(rr.birdieball.pot === 20 && rr.birdieball.per_winner === 10, 'a $20 fixed pot with 24 players: two keepers $10 each, got ' + JSON.stringify([rr.birdieball.pot, rr.birdieball.per_winner]));
+  ok(rr.birdieball.name === 'Turkey-Ballb', 'the name rides on the result, stripped of markup characters: ' + rr.birdieball.name);
+  const c3 = { gatheringRoundConfig: () => ({ addons: [{ id: 'birdieball', name: 'Wally-Ball' }] }), gatheringAddon: (c, id) => c.addons.find(a => a.id === id) || null, _bbAnswersForGathering: 7 }; vm.createContext(c3);
+  vm.runInContext(['bbCleanName', 'bbName'].map(n => extractFn(src, n)).join('\n') + '\nthis.N = bbName;', c3);
+  ok(c3.N() === 'Wally-Ball' && c3.N(7) === 'Wally-Ball', 'the live screens read the configured name');
+  c3.gatheringRoundConfig = () => ({ addons: [{ id: 'birdieball' }] });
+  ok(c3.N() === 'MiserBall', 'no name set: MiserBall');
+}
 console.log(`team_miserball: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

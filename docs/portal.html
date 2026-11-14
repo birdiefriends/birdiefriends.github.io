@@ -10004,7 +10004,7 @@ function buildLivePanel(evt) {
       <div style="margin-top:12px;background:rgba(0,0,0,0.15);border-radius:10px;padding:4px 12px">
         <div style="font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;
           color:rgba(255,255,255,0.35);padding:6px 0 4px;font-family:'DM Mono',monospace">
-          Lost the MiserBall
+          Lost the ${bbName()}
         </div>
         ${bbLossRows.map(a => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;
           border-bottom:0.5px solid rgba(255,255,255,0.08);font-size:0.82rem;color:#fff">
@@ -10012,7 +10012,7 @@ function buildLivePanel(evt) {
         </div>`).join('')}
       </div>` : '';
     // With live scoring the lost-ball alert and the end-of-round check are steps in Scorekeeping, so the Leaderboard only lists who lost it.
-    bbSection = _skOn ? (bbBoard || `<div style="font-size:0.82rem;color:rgba(255,255,255,0.6)">Nobody has lost the MiserBall yet.</div>`) : `
+    bbSection = _skOn ? (bbBoard || `<div style="font-size:0.82rem;color:rgba(255,255,255,0.6)">Nobody has lost the ${bbName()} yet.</div>`) : `
       <button onclick="openPlayerSheet(window._liveEvtIndividualPlayers,'${bbPlayerEsc}',function(n){bbSelectPlayer(n)},undefined,window._liveAddOpts)"
         style="width:100%;background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.25);
           border-radius:8px;padding:9px 14px;color:#fff;font-size:0.85rem;font-family:inherit;
@@ -10020,7 +10020,7 @@ function buildLivePanel(evt) {
         <span>👤</span><span style="flex:1">${bbPlayerSel || ''}</span>
         <span style="color:rgba(255,255,255,0.4);font-size:0.75rem">Change ›</span>
       </button>
-      <div style="font-size:0.8rem;color:rgba(255,255,255,0.65);margin-bottom:8px;line-height:1.4">Lost the MiserBall? Tell the group now. Your scorecard confirms it either way.</div>
+      <div style="font-size:0.8rem;color:rgba(255,255,255,0.65);margin-bottom:8px;line-height:1.4">Lost the ${bbName()}? Tell the group now. Your scorecard confirms it either way.</div>
       ${bbDetailGrid}
       <button class="sc-submit-btn" style="background:#c9892a"
         ${bbCanSubmit && !_bbSubmitting ? '' : 'disabled'}
@@ -10200,7 +10200,7 @@ function buildLivePanel(evt) {
     '</div>' : '';
   const bbConfirmSection = !showBirdieBallSection ? '' : '' +
     '<div style="margin:12px 0;background:rgba(0,0,0,0.15);border-radius:10px;padding:10px 12px">' +
-      '<div class="sc-section-label" style="margin-bottom:6px">\u{1F426} ' + (bbTeamOf(scPlayerSel).length > 1 ? 'Did your team keep BOTH MiserBalls?' : 'Did you keep the MiserBall?') + '</div>' +
+      '<div class="sc-section-label" style="margin-bottom:6px">\u{1F426} ' + (bbTeamOf(scPlayerSel).length > 1 ? 'Did your team keep BOTH ' + bbName() + 's?' : 'Did you keep the ' + bbName() + '?') + '</div>' +
       '<div style="display:flex;gap:8px">' +
         '<button onclick="scBbSetStatus(true)" style="flex:1;padding:8px;border-radius:8px;font-family:inherit;' +
           'cursor:pointer;color:#fff;background:' + (bbConfirmYesActive?'rgba(29,158,117,0.35)':'rgba(255,255,255,0.08)') +
@@ -10241,7 +10241,7 @@ function buildLivePanel(evt) {
         (_scSubmitting ? '\u23f3 Submitting\u2026'
           : !allEntered ? 'Enter all ' + (scIsNine ? 9 : 18) + ' holes (' + enteredCount + '/' + (scIsNine ? 9 : 18) + ')'
           : !wbAnswered ? 'Answer Wally Ball above \u2191'
-          : !bbConfirmAnswered ? 'Confirm MiserBall above \u2191'
+          : !bbConfirmAnswered ? 'Confirm ' + bbName() + ' above \u2191'
           : !scPlayerSel ? 'Select your team above \u2191'
           : '\u2705 Submit Scorecard') +
       '</button>';
@@ -10324,7 +10324,7 @@ function buildLivePanel(evt) {
     ${showCttpSection ? liveSectionHtml('cttp', '🎯', 'Closest to the Pin', ctpSection) : ''}
     ${showSkinsSection ? liveSectionHtml('skins', '⛳', 'Skins', skinsLiveSectionHtml(_liveConfig)) : ''}
     ${showTurkeysSection ? liveSectionHtml('turkeys', '🦃', 'Turkeys', turkeysLiveSectionHtml(_liveConfig)) : ''}
-    ${showBirdieBallSection ? liveSectionHtml('miserball', '🐉', 'MiserBall', bbSection) : ''}
+    ${showBirdieBallSection ? liveSectionHtml('miserball', '🐉', bbName(), bbSection) : ''}
     ${showBirdieAlertSection ? liveSectionHtml('birdie', '🦅', 'Birdie Alert', birdieSection) : ''}
     ${liveSectionHtml('scorecard', '📋', 'Post-Round Scorecard', `${_skOn ? `<div style="font-size:0.82rem;color:rgba(255,255,255,0.75);line-height:1.45;margin-bottom:8px">Scores are saved live while you play, so there is nothing to enter after the round.</div><details><summary style="font-size:0.78rem;color:rgba(255,255,255,0.6);cursor:pointer;padding:8px 0">Enter a full card instead</summary>${scSection}</details>` : scSection}`)}
     ${showCloseSection ? liveSectionHtml('close', '🏁', 'Host · Close &amp; Calculate', `
@@ -11432,7 +11432,7 @@ function holeFlowLostHtml(st, n, g) {
   const done = lost.length ? `<div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:8px">${doneRows.map(r => { const t = bbTeamOf(r.p); return '🐉💔 ' + (t.length > 1 ? escapeHtml(t.map(holeFlowBbShort).join(' & ')) + ' out' : escapeHtml(holeFlowBbShort(r.p))) + ' #' + r.a.lost_hole; }).join(' &middot; ')}</div>` : '';
   const entry = sel ? `<div style="margin-top:10px"><div class="sc-section-label" style="margin-bottom:4px">${escapeHtml(holeFlowBbShort(sel))} lost it on #${hole}. Strokes?</div>${bbStrokeGridHtml(_bbLostStroke, 'bbSetStroke')}
       <button type="button" class="sc-submit-btn" style="background:#c9892a;margin-top:8px" ${_bbLostStroke && !_bbSubmitting ? '' : 'disabled'} onclick="submitBirdieBall()">${_bbSubmitting ? 'Sending…' : '💔 ' + escapeHtml(holeFlowBbShort(sel)) + ' lost it'}</button></div>` : '';
-  return holeFlowStepHead(n, 'MiserBall', 'Anyone lose it on this hole?') + done + (pills ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${pills}</div>` : '') + entry;
+  return holeFlowStepHead(n, (typeof bbName === 'function' ? bbName() : 'MiserBall'), 'Anyone lose it on this hole?') + done + (pills ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${pills}</div>` : '') + entry;
 }
 function holeFlowLostPick(hole, player, askHole) {
   if (_bbSubmitting) return;
@@ -11454,7 +11454,7 @@ function holeFlowKeptHtml(st, n, g) {
         <button type="button" class="sc-submit-btn" style="background:#c9892a;margin-top:8px" ${_bbLostHole && _bbLostStroke && !_bbSubmitting ? '' : 'disabled'} onclick="submitBirdieBall()">${_bbSubmitting ? 'Sending…' : '💔 ' + f + ' lost it'}</button></div>` : '';
     return `<div style="padding:6px 0;border-bottom:0.5px solid rgba(255,255,255,0.08)"><div style="font-size:0.9rem;font-weight:600;color:#fff;margin-bottom:6px">${f}</div><div style="display:flex;gap:8px">${btn('Kept it', `holeFlowBbKept(${q})`, false, 'rgba(29,158,117,0.6)')}${btn('Lost it', `holeFlowLostPick(${st.hole},${q},true)`, ask, 'rgba(220,80,80,0.6)')}</div>${detail}</div>`;
   }).join('');
-  return holeFlowStepHead(n, 'MiserBall check', 'Last hole. Confirm before you finish') + `<div style="background:rgba(0,0,0,0.15);border-radius:10px;padding:4px 12px">${rows}</div>`;
+  return holeFlowStepHead(n, (typeof bbName === 'function' ? bbName() : 'MiserBall') + ' check', 'Last hole. Confirm before you finish') + `<div style="background:rgba(0,0,0,0.15);border-radius:10px;padding:4px 12px">${rows}</div>`;
 }
 async function holeFlowBbKept(player) {
   if (_bbSubmitting) return;
@@ -11731,6 +11731,13 @@ async function loadBirdieBallAnswers(evt) {
   } catch(e) {
     console.warn('[MiserBall] loadBirdieBallAnswers error:', e.message);
   }
+}
+// The host can rename the game (Miser-Ball, Wally-Ball, Turkey-Ball...). Plain text, short; MiserBall when none is set.
+function bbCleanName(v) { return String(v == null ? '' : v).replace(/[<>&"`\\${}]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24); }
+function bbName(gid) {
+  const cfg = (gid != null ? gid : (typeof _bbAnswersForGathering !== 'undefined' ? _bbAnswersForGathering : null)) != null && typeof gatheringRoundConfig === 'function' ? gatheringRoundConfig(gid != null ? gid : _bbAnswersForGathering) : null;
+  const bb = cfg && gatheringAddon(cfg, 'birdieball');
+  return bbCleanName(bb && bb.name) || 'MiserBall';
 }
 function bbRawAnswer(playerName) {
   if (!playerName) return null;
@@ -12063,7 +12070,7 @@ async function submitBirdieBall() {
     // Best-effort: a failed push never undoes the saved alert.
     {
       const _mates = bbTeamOf(player, _bbGid), _isTeam = _mates.length > 1;
-      const heading = _isTeam ? `🐉💔 ${_mates.join(' & ')} are out of the MiserBall` : `🐉💔 ${player} lost the MiserBall`;
+      const heading = _isTeam ? `🐉💔 ${_mates.join(' & ')} are out of the ${bbName(_bbGid)}` : `🐉💔 ${player} lost the ${bbName(_bbGid)}`;
       const msg = `${_isTeam ? player + ' lost a ball: hole' : 'Hole'} #${_bbLostHole} — ${_bbLostStroke} stroke${Number(_bbLostStroke) === 1 ? '' : 's'}`;
       const others = (window._liveEvtIndividualPlayers || []).filter(n => !_mates.some(m => String(m).trim().toLowerCase() === String(n).trim().toLowerCase()));
       const sendP = LIVE_EVENT_TEST_MODE
@@ -18655,7 +18662,7 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   // ── MiserBall ──
   if (s.birdieball) {
     const b = s.birdieball;
-    let h = label(`🐉 MiserBall — ${money(b.pot)}`);
+    let h = label(`🐉 ${esc(b.name || 'MiserBall')} — ${money(b.pot)}`);
     if (b.capped) h += `<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:2px">Set at ${money(b.configured_pot)}, but the pot only had ${money(b.pot)} left after CTP</div>`;
     if (b.by === 'team') {
       // Team MiserBall: every team's story, in order of who lasted; the winners were paid as a team
@@ -18902,7 +18909,7 @@ function gcReconcile(o) {
     cardPlayers.filter(n => !onTeam.has(norm(n))).forEach(n => { if (lostBy.has(norm(n))) { const a = lostBy.get(norm(n)); bbLost.push({ player: n, hole: a.lost_hole, stroke: a.lost_stroke }); } else if (!ansNames.has(norm(n))) bbMissingGroups.push({ label: n, members: [n] }); });
     bbMissing = bbMissingGroups.map(g => g.label);
   }
-  return { noHandicap, scratch, added, unregisteredCards, openSpots, bbLost, bbMissing, bbMissingGroups,
+  return { noHandicap, scratch, added, unregisteredCards, openSpots, bbLost, bbMissing, bbMissingGroups, bbName: bbTeamCfg && bbCleanName(bbTeamCfg.name) || 'MiserBall',
     blocking: openSpots.length > 0 || noHandicap.length > 0 };
 }
 const _gcScratchAck = new Map(); // gatheringId -> Set(normalized names the host chose to play scratch)
@@ -19034,9 +19041,9 @@ async function openGatheringCloseSheet(gatheringId) {
       : '';
     const bbHtml = (recon.bbLost.length || recon.bbMissing.length)
       ? `<div style="background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
-          🐉 MiserBall
+          🐉 ${esc(recon.bbName || 'MiserBall')}
           ${recon.bbLost.length ? `<div style="color:var(--text-muted);padding:2px 0">Lost it (from alerts / scorecards): ${recon.bbLost.map(a => `<b>${esc(a.player)}</b>${a.hole ? ` #${esc(a.hole)}` : ''}`).join(', ')}</div>` : ''}
-          ${recon.bbMissing.length ? `<div style="padding:2px 0"><b>Close is on hold.</b> No MiserBall answer for ${recon.bbMissing.length === 1 ? 'this player' : 'these players'}. Tap Kept it, or record where they lost it in the Live Panel, then Refresh:</div>
+          ${recon.bbMissing.length ? `<div style="padding:2px 0"><b>Close is on hold.</b> No ${esc(recon.bbName || 'MiserBall')} answer for ${recon.bbMissing.length === 1 ? 'this player' : 'these players'}. Tap Kept it, or record where they lost it in the Live Panel, then Refresh:</div>
             ${recon.bbMissingGroups.map(gp => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0"><b>${esc(gp.label)}</b>
               <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcBbKept(${gatheringId}, ${esc(JSON.stringify(gp.members.length > 1 ? gp.members : gp.members[0]))})">${gp.members.length > 1 || gp.label.includes(' & ') ? 'Kept both' : 'Kept it'}</button></div>`).join('')}` : ''}</div>`
       : '';
@@ -19419,9 +19426,9 @@ function gatheringGameDetailsBody(evt, config) {
   }
   const bb = gatheringAddon(config, 'birdieball');
   if (bb) {
-    const cost = (bb.dollar_per_player || 0) * yesCount;
+    const cost = Number(bb.pot_total) > 0 ? Number(bb.pot_total) : (bb.dollar_per_player || 0) * yesCount;
     remaining -= cost;
-    rows.push(row('🐉', 'MiserBall', `$${(bb.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot${bb.team ? ' · by team: one lost ball puts the team out' : ''}`, 'birdieball'));
+    rows.push(row('🐉', escapeHtml(bbCleanName(bb.name) || 'MiserBall'), `${Number(bb.pot_total) > 0 ? 'fixed pot' : '$' + (bb.dollar_per_player || 0).toFixed(2) + '/player'} · $${cost.toFixed(2)} pot${bb.team ? ' · by team: one lost ball puts the team out' : ''}`, 'birdieball'));
   }
   const bp = gatheringAddon(config, 'birdiepay');
   if (bp) {
@@ -21679,7 +21686,14 @@ function gamesFormSplitBuild() {
       + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-cttp', cc.dollar_per_hole, 'setGamesFormCttpDollarPerHole')}<span style="${small}">a hole</span></div>`
       + `<div style="${small};margin-top:5px;line-height:1.45">${reg('gs-ctp-note', note)}${pz ? `<br>${pz} prize hole${pz === 1 ? '' : 's'} (${(cc.prize_holes || []).join(', ')}): tracked like CTP, pays no cash` : ''}</div>`));
   }
-  if (sel.has('birdieball')) { const c = _gamesFormBirdieballConfig; otherGames += (c.dollar_per_player || 0) * nYes; rows.push(card(head('🐉', 'MiserBall', '') + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-bb', c.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer')}<span style="${small}">per player</span></div><div style="${small};margin-top:5px">${reg('gs-bb-note', `${mny((c.dollar_per_player || 0) * nYes)} from ${nYes} players (${pctOf((c.dollar_per_player || 0) * nYes)} of the pot)`)}</div>${sel.has('scramble') ? `<label style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;font-size:0.84rem;line-height:1.4;cursor:pointer"><input type="checkbox" ${c.team ? 'checked' : ''} onchange="setGamesFormBirdieballTeam(this.checked)" style="margin-top:3px"><span><b>Play it by team</b><br><span style="${small}">Everyone keeps a ball, and both stay in play all round. One lost ball puts the whole team out. Last team standing wins the pot, longest survivor if every team loses one.</span></span></label>` : ''}`)); }
+  if (sel.has('birdieball')) {
+    const c = _gamesFormBirdieballConfig, potMode = c.mode === 'pot' || Number(c.pot_total) > 0, held = potMode ? (Number(c.pot_total) || 0) : (c.dollar_per_player || 0) * nYes; otherGames += held;
+    const segBtn = (on, fn, label) => `<button type="button" onclick="${fn}" style="flex:1;height:32px;border-radius:8px;border:1.5px solid ${on ? 'var(--green)' : 'var(--border)'};background:${on ? 'var(--green)' : '#fff'};color:${on ? '#fff' : 'var(--text-muted)'};font-family:inherit;font-size:0.78rem;font-weight:700;cursor:pointer">${label}</button>`;
+    rows.push(card(head('🐉', escapeHtml(bbCleanName(c.name) || 'MiserBall'), '')
+      + `<div style="margin-top:8px"><div style="${small};margin-bottom:3px">Game name (optional): MiserBall, Wally-Ball, Turkey-Ball...</div><input type="text" maxlength="24" value="${escapeHtml(c.name || '')}" placeholder="MiserBall" oninput="setGamesFormBirdieballName(this.value)" style="width:100%;height:36px;border-radius:8px;border:1.5px solid var(--border);padding:0 10px;font-family:inherit;box-sizing:border-box"></div>`
+      + `<div style="display:flex;gap:6px;margin-top:10px">${segBtn(!potMode, "setGamesFormBirdieballMode('pp')", 'Per player')}${segBtn(potMode, "setGamesFormBirdieballMode('pot')", 'Fixed pot')}</div>`
+      + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${potMode ? inp('gw-split-bb', c.pot_total, 'setGamesFormBirdieballPot') + `<span style="${small}">for the whole game, whatever the headcount</span>` : inp('gw-split-bb', c.dollar_per_player, 'setGamesFormBirdieballDollarPerPlayer') + `<span style="${small}">per player</span>`}</div>`
+      + `<div style="${small};margin-top:5px">${reg('gs-bb-note', potMode ? `${mny(held)} held back (${pctOf(held)} of the pot)` : `${mny(held)} from ${nYes} players (${pctOf(held)} of the pot)`)}</div>${sel.has('scramble') ? `<label style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;font-size:0.84rem;line-height:1.4;cursor:pointer"><input type="checkbox" ${c.team ? 'checked' : ''} onchange="setGamesFormBirdieballTeam(this.checked)" style="margin-top:3px"><span><b>Play it by team</b><br><span style="${small}">Everyone keeps a ball, and both stay in play all round. One lost ball puts the whole team out. Last team standing wins the pot, longest survivor if every team loses one.</span></span></label>` : ''}`)); }
   if (sel.has('birdiepay')) rows.push(card(head('🐤', 'Birdie Payouts', '') + `<div style="display:flex;align-items:center;gap:6px;margin-top:8px">${inp('gw-split-bp', _gamesFormBirdiepayConfig.dollar_per_birdie, 'setGamesFormBirdiepayDollarPerBirdie')}<span style="${small}">a birdie, paid out of the balance before Skins</span></div>`));
   if (sel.has('turkeys')) {
     const c = _gamesFormTurkeysConfig, held = c.as_skin ? 0 : (Number(c.dollar_per_player) || 0) * nYes; otherGames += held;
@@ -21785,7 +21799,7 @@ function gwReviewHtml() {
   if (sel.has('lowscore')) add('🎯', 'Individual Low Score', `${basis(ls.basis)} · ${per(BFEngine.periodKey(ls))} · ${money(ls.dollar_per_player)} per player`, 'lowscore');
   if (sel.has('skins')) add('⛳', 'Skins', `${basis(_gamesFormHcp.skins_basis)} · gets what is left`, 'skins');
   if (sel.has('cttp')) add('🎯', 'CTP', `${money(_gamesFormCttpConfig.dollar_per_hole)} a hole · ${(_gamesFormCttpConfig.holes || []).length} hole${(_gamesFormCttpConfig.holes || []).length === 1 ? '' : 's'}`, 'cttp');
-  if (sel.has('birdieball')) add('🐉', 'MiserBall', `${money(_gamesFormBirdieballConfig.dollar_per_player)} per player${_gamesFormBirdieballConfig.team && sel.has('scramble') ? ' · by team, one lost ball puts the team out' : ''}`, 'money');
+  if (sel.has('birdieball')) add('🐉', escapeHtml(bbCleanName(_gamesFormBirdieballConfig.name) || 'MiserBall'), `${Number(_gamesFormBirdieballConfig.pot_total) > 0 ? money(_gamesFormBirdieballConfig.pot_total) + ' fixed pot' : money(_gamesFormBirdieballConfig.dollar_per_player) + ' per player'}${_gamesFormBirdieballConfig.team && sel.has('scramble') ? ' · by team, one lost ball puts the team out' : ''}`, 'money');
   if (sel.has('turkeys')) { const tk = _gamesFormTurkeysConfig; add('🦃', 'Turkeys', `${tk.streak || 3} in a row under par · ${tk.as_skin ? 'counts as a skin' : (Number(tk.dollar_per_player) || 0) > 0 ? money(tk.dollar_per_player) + ' per player held in reserve' : 'prize only'}${tk.prize ? ' · ' + escapeHtml(tk.prize) : ''}`, 'turkeys'); }
   if (sel.has('birdiepay')) add('🐤', 'Birdie Payouts', `${money(_gamesFormBirdiepayConfig.dollar_per_birdie)} a birdie · ${basis(_gamesFormHcp.birdiepay_basis)}`, 'birdiepay');
   if (_gamesFormHcp.ranking === true) add('📊', 'Net ranking', 'Shown for fun, no money', 'hcp');
@@ -22055,6 +22069,16 @@ function gatheringGamesBirdieballSectionHtml() {
       </div>
     </div>`;
 }
+// A fixed pot is stored with the $ a player it works out to (rounded up, so the pot is never short), like the Scramble podium.
+function gamesFormBbSyncRate() { const c = _gamesFormBirdieballConfig, n = Math.max(1, _gamesFormYesCount || 1); if (Number(c.pot_total) > 0) c.dollar_per_player = Math.ceil(Number(c.pot_total) / n * 1e4 - 1e-9) / 1e4; }
+function setGamesFormBirdieballName(val) { _gamesFormBirdieballConfig.name = bbCleanName(val); _gamesFormTouched.add('birdieball'); }
+function setGamesFormBirdieballMode(m) {
+  const c = _gamesFormBirdieballConfig, n = Math.max(1, _gamesFormYesCount || 1);
+  c.mode = m; _gamesFormTouched.add('birdieball');
+  if (m === 'pot') c.pot_total = Math.round((Number(c.pot_total) || (Number(c.dollar_per_player) || 0) * n) * 100) / 100 || null; else { delete c.pot_total; }
+  gamesFormBbSyncRate(); const r = document.getElementById('games-form-split'); if (r) r.innerHTML = gamesFormSplitHtml(); updateGamesFormPotPreview();
+}
+function setGamesFormBirdieballPot(val) { const c = _gamesFormBirdieballConfig; c.mode = 'pot'; c.pot_total = parseFloat(val) || 0; _gamesFormTouched.add('birdieball'); gamesFormBbSyncRate(); updateGamesFormPotPreview(); }
 function setGamesFormBirdieballTeam(on) { _gamesFormBirdieballConfig.team = !!on; _gamesFormTouched.add('birdieball'); }
 function setGamesFormBirdieballDollarPerPlayer(val) {
   _gamesFormBirdieballConfig.dollar_per_player = parseFloat(val) || 0;
@@ -23051,8 +23075,9 @@ async function submitGatheringGames(gatheringId) {
   }
   let birdieball_config = null;
   if (games.includes('birdieball')) {
-    if (!(_gamesFormBirdieballConfig.dollar_per_player > 0)) { bad('money', 'MiserBall: $ per player must be greater than 0'); return; }
-    birdieball_config = { dollar_per_player: _gamesFormBirdieballConfig.dollar_per_player, ...(_gamesFormBirdieballConfig.team === true && _gamesFormSelected.has('scramble') ? { team: true } : {}) };
+    gamesFormBbSyncRate();
+    if (!(_gamesFormBirdieballConfig.dollar_per_player > 0)) { bad('money', `${bbCleanName(_gamesFormBirdieballConfig.name) || 'MiserBall'}: add a $ per player, or a fixed pot`); return; }
+    birdieball_config = { dollar_per_player: _gamesFormBirdieballConfig.dollar_per_player, ...(Number(_gamesFormBirdieballConfig.pot_total) > 0 ? { pot_total: Math.round(Number(_gamesFormBirdieballConfig.pot_total) * 100) / 100 } : {}), ...(bbCleanName(_gamesFormBirdieballConfig.name) ? { name: bbCleanName(_gamesFormBirdieballConfig.name) } : {}), ...(_gamesFormBirdieballConfig.team === true && _gamesFormSelected.has('scramble') ? { team: true } : {}) };
   }
   const overCommit = gamesFormOverCommit(dpp, _gamesFormYesCount);
   if (overCommit.problem) { bad('money', overCommit.problem); return; }

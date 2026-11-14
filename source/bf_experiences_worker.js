@@ -701,6 +701,18 @@ const GAME_SCHEMAS = {
         "required": true
       },
       {
+        "key": "pot_total",
+        "type": "money",
+        "label": "Fixed pot ($, instead of $ per player)",
+        "default": 0
+      },
+      {
+        "key": "name",
+        "type": "text",
+        "label": "Game name (MiserBall, Wally-Ball, ...)",
+        "default": ""
+      },
+      {
         "key": "team",
         "type": "bool",
         "label": "By team: every player keeps a ball, one lost ball puts the whole team out",

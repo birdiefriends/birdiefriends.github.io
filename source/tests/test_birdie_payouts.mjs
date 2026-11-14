@@ -150,8 +150,8 @@ function formSandbox({ pars = PARS, existing = null } = {}) {
     loadHostGamesConfigs: async () => {}, renderHostPanelList: () => {}
   };
   vm.createContext(ctx); ctx.BFEngine = E; ctx.GAME_INFO = { skins: 'x', cttp: 'x', birdieball: 'x', birdiepay: 'x' }; 
-  const fns = ['gamesFormAutoRanking','applyGamesSuggestion','fourballSegCount','lowscoreSegCount','periodSegCount','gameInfoBtnHtml','gameInfoPanelHtml','gatheringGamesChecklistHtml', 'toggleGamesFormGame', 'gatheringGamesCttpSectionHtml', 'gatheringGamesBirdieballSectionHtml',
-    'gamesBasisSelectHtml','gatheringGamesSkinsSectionHtml','refreshGamesFormSkinsSection','gatheringGamesBirdiepaySectionHtml', 'setGamesFormBirdiepayDollarPerBirdie', 'gamesFormOverCommit', 'updateGamesFormPotPreview', 'submitGatheringGames',
+  const fns = ['escapeHtml','gamesFormAutoRanking','applyGamesSuggestion','fourballSegCount','lowscoreSegCount','periodSegCount','gameInfoBtnHtml','gameInfoPanelHtml','gatheringGamesChecklistHtml', 'toggleGamesFormGame', 'gatheringGamesCttpSectionHtml', 'gatheringGamesBirdieballSectionHtml',
+    'gamesBasisSelectHtml','bbCleanName','gamesFormBbSyncRate','gatheringGamesSkinsSectionHtml','refreshGamesFormSkinsSection','gatheringGamesBirdiepaySectionHtml', 'setGamesFormBirdiepayDollarPerBirdie', 'gamesFormOverCommit', 'updateGamesFormPotPreview', 'submitGatheringGames',
     'gamesFormEntry', 'teeHolesPars', 'gamesFormBirdiepayParsByPlayer', 'gamesFormPlayerNames', 'gamesFormHcpIsNet', 'gamesFormResolvePlayerHcp', 'gamesFormBuildHandicapConfig', 'gatheringGamesHcpSectionHtml', 'refreshGamesFormHcpSection']; // Dev-91: net/gross section now part of the form
   vm.runInContext(`
     const GATHERING_GAMES_META = ${JSON.stringify({ skins: { label: 'Skins', icon: 'x' }, cttp: { label: 'CTP', icon: 'x' }, birdieball: { label: 'BirdieBall', icon: 'x' }, birdiepay: { label: 'Birdie Payouts', icon: 'x' } })};

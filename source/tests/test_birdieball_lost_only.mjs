@@ -5,7 +5,7 @@ ok(!/bbSetKept\(/.test(src.replace(/function bbSetKept[\s\S]*?\n}\n/, '')), 'liv
 ok(/💔 I lost it/.test(src), 'live card is a lost-ball alert');
 ok(/_bbKept = false; \/\/ v4\.9\.10/.test(src), 'live submit always sends kept:false');
 ok(/const bbConfirmNeedsAsk = showBirdieBallSection;/.test(src), 'scorecard always asks, even after an alert');
-ok(/lost the MiserBall`;/.test(src) && /'birdieball'\)/.test(src), 'lost alert sends a push of type birdieball');
+ok(/lost the \$\{bbName\(_bbGid\)\}`;/.test(src) && /'birdieball'\)/.test(src), 'lost alert sends a push of type birdieball');
 ok(/_mates\.some\(m => String\(m\)/.test(src), 'push goes to the round\'s other players, not a league blast');
 ok(/case 'birdieball':/.test(src), 'feed knows the birdieball type');
 // materialize: first touch copies the saved lost alert, then edits build on it

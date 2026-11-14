@@ -146,6 +146,8 @@
   // ── Payout ledger shared by every add-on in one close ──────────────────
   // Rounds DOWN to whole dollars on every split; the remainder is reported
   // as unallocated, never silently redistributed (Brian, Dev-87).
+  // A host-chosen display name for a side game (Miser-Ball, Wally-Ball, Turkey-Ball): plain text only, short.
+  function cleanGameName(v) { return String(v == null ? '' : v).replace(/[<>&"`\\${}]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24); }
   function makeLedger(players) {
     const canonical = new Map(players.map(p => [norm(p), p]));
     const rows = new Map(players.map(p => [p, { player: p, skins: 0, cttp: 0, birdieball: 0, given_back: 0 }]));
@@ -237,7 +239,9 @@
       id: 'birdieball', order: 20, entity: 'individual',
       carve(state, addon, inputs) {
         const L = state.ledger;
-        const configuredPot = (Number(addon.dollar_per_player) || 0) * L.n;
+        // A fixed pot (pot_total) is the pot whatever the headcount does; otherwise $ per player x players.
+        const configuredPot = Number(addon.pot_total) > 0 ? Number(addon.pot_total) : (Number(addon.dollar_per_player) || 0) * L.n;
+        const bbName = cleanGameName(addon.name);
         // Dev-89: never more than the pot has left (after CTP). Only reported when it bites.
         const pot = Math.min(configuredPot, Math.max(0, state.remaining));
         const capped = pot < configuredPot;
@@ -282,6 +286,7 @@
           state.unallocated += unallocT;
           const lw = tMode === 'longest' ? tWin[0] : null;
           return Object.assign({
+            ...(bbName ? { name: bbName } : {}),
             pot, mode: tMode, by: 'team', winners: tWin.map(u => u.label), per_winner: perT, given_back_each: gbEach,
             longest_hole: lw ? lw.hole : null, longest_stroke: lw ? lw.stroke : null,
             teams: units.map(u => ({ team: u.label, members: u.members.slice(), status: u.status, hole: u.status === 'lost' ? u.hole : null, stroke: u.status === 'lost' ? u.stroke : null, by: u.status === 'lost' ? u.by : null, won: tWin.includes(u) })),
@@ -329,6 +334,7 @@
             won: winners.includes(r.player) };
         });
         return Object.assign({
+          ...(bbName ? { name: bbName } : {}),
           pot, mode, winners, per_winner: perWinner, given_back_each: givenBackEach,
           longest_hole: longest ? longest.lost_hole : null, longest_stroke: longest ? longest.lost_stroke : null,
           players: roster
@@ -1198,8 +1204,10 @@
     meta: { traits: { unit: 'player', allowance: 'none', individualScores: true }, label: 'MiserBall', uiOrder: 3, icon: '🐉', seal: 'BIRDIEBALL',
       info: 'Everyone starts with one ball. Keep it all round and you win: everyone who still has theirs at the end splits the pot. If everybody loses theirs, the last MiserBall standing (the one lost latest) wins. Lose yours? Tap "I lost it" in the Live Panel so the group knows, and confirm on your scorecard.' },
     config: [{ key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
+      { key: 'pot_total', type: 'money', label: 'Fixed pot ($, instead of $ per player)', default: 0 },
+      { key: 'name', type: 'text', label: 'Game name (MiserBall, Wally-Ball, ...)', default: '' },
       { key: 'team', type: 'bool', label: 'By team: every player keeps a ball, one lost ball puts the whole team out', default: false }],
-    fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
+    fixedCost: (cfg, ctx) => Number(cfg.pot_total) > 0 ? Number(cfg.pot_total) : (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
     // A per-player rate above the whole buy-in is impossible at any headcount.
     maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
     fixtures: [{
@@ -1212,6 +1220,15 @@
           { player_name: 'Cy', kept: false, lost_hole: 4, lost_stroke: 1 }, { player_name: 'Di', kept: false, lost_hole: 9, lost_stroke: 2 }] },
       // pot 40: ball pot 8 split by 2 keepers = 4 each; skins 32 to Ann (1 skin)
       expect: { payouts: { Ann: 36, Bob: 4, Cy: 0, Di: 0 }, unallocated: 0, results: { birdieball: { mode: 'kept', per_winner: 4 }, skins: { per_skin: 32 } } }
+    }, {
+      name: 'a fixed MiserBall pot is the pot whatever the headcount, and the game can carry its own name',
+      round: { dollar_per_player: 10, addons: [
+        { id: 'birdieball', entity: 'individual', dollar_per_player: 0.8334, pot_total: 20, name: 'Wally-Ball' },
+        { id: 'skins', entity: 'individual', basis: 'gross', compare: 'low' }] },
+      inputs: { scorecards: [_P('Ann', _H(4, 4)), _P('Bob', _H(5, 4)), _P('Cy', _H(5, 5)), _P('Di', _H(6, 5))],
+        bbAnswers: [{ player_name: 'Ann', kept: true }, { player_name: 'Bob', kept: true }, { player_name: 'Cy', kept: false, lost_hole: 4, lost_stroke: 1 }, { player_name: 'Di', kept: false, lost_hole: 9, lost_stroke: 2 }] },
+      // pot 40: a flat $20 for the ball game, two keepers $10 each; skins gets the other $20 (Ann wins one)
+      expect: { payouts: { Ann: 30, Bob: 10, Cy: 0, Di: 0 }, unallocated: 0, results: { birdieball: { mode: 'kept', per_winner: 10, pot: 20, name: 'Wally-Ball' }, skins: { per_skin: 20 } } }
     }, {
       name: 'Team MiserBall: one lost ball puts the team out; the team that kept both wins the pot as one amount',
       round: { dollar_per_player: 10, addons: [
@@ -1870,7 +1887,7 @@
         ...(Array.isArray(row.cttp_config.prize_holes) && row.cttp_config.prize_holes.length ? { prize_holes: row.cttp_config.prize_holes } : {}), });
     }
     if (games.includes('birdieball') && row.birdieball_config) {
-      addons.push({ id: 'birdieball', entity: 'individual', dollar_per_player: row.birdieball_config.dollar_per_player, ...(row.birdieball_config.team === true ? { team: true } : {}) });
+      addons.push({ id: 'birdieball', entity: 'individual', dollar_per_player: row.birdieball_config.dollar_per_player, ...(row.birdieball_config.team === true ? { team: true } : {}), ...(Number(row.birdieball_config.pot_total) > 0 ? { pot_total: Number(row.birdieball_config.pot_total) } : {}), ...(cleanGameName(row.birdieball_config.name) ? { name: cleanGameName(row.birdieball_config.name) } : {}) });
     }
     // Dev-91: optional net setup frozen at game setup —
     //   handicap_config: { allowance, skins_basis, birdiepay_basis, stroke_index:[18],
