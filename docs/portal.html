@@ -6651,7 +6651,7 @@ async function openGatheringLeaderboard(gid) {
       if (!sideGid) return;
       const res = await fetch(`${SCORECARD_API}/scorecards?event=${encodeURIComponent(gamesScoreKeyForGid(gid))}&input=strokes`);
       const data = await res.json();
-      const cards = latestScorecardPerPlayer(data.scorecards || []);
+      const cards = gcActiveCards(gid, latestScorecardPerPlayer(data.scorecards || []));
       await ensureVenueTeeInfoByName(csNormalizedVenueName(evt));
       const pars = csResolvePars(evt), okPars = Array.isArray(pars) && pars.length === 18 ? pars : null;
       const board = BFEngine.fourballBoard(row, cards, okPars, sideGid);
@@ -11638,7 +11638,7 @@ async function loadFourballLive(evt) {
     const key = gamesScoreKeyForGid(gid);
     const res = await fetch(`${SCORECARD_API}/scorecards?event=${encodeURIComponent(key)}&input=strokes`);
     const data = await res.json();
-    const cards = latestScorecardPerPlayer(data.scorecards || []);
+    const cards = gcActiveCards(gid, latestScorecardPerPlayer(data.scorecards || []));
     await ensureVenueTeeInfoByName(csNormalizedVenueName(evt));
     const pars = csResolvePars(evt);
     try { if (_sk && _sk.key === key) { skMergeRemote(cards); skFlush(); } } catch (e) { console.warn('[Score] merge error:', e.message); }
@@ -18361,6 +18361,11 @@ function gatheringStartHoles(gid) {
   set.groups.forEach(g => { const h = Number(g.start_hole); if (h >= 1 && h <= 18) (g.members || []).forEach(n => { out[String(n).trim().toLowerCase()] = h; }); });
   return Object.keys(out).length ? out : null;
 }
+// A player the host took off the game (registration set to "No") must not count, even if someone in their group keyed scores for them.
+function gcActiveCards(gid, cards) {
+  const out = new Set((typeof gatheringRegData !== 'undefined' ? gatheringRegData : []).filter(r => Number(r.gatheringId) === Number(gid) && r.status === 'No').map(r => String(r.player || '').trim().toLowerCase()));
+  return out.size ? (cards || []).filter(c => !out.has(String(c.player || '').trim().toLowerCase())) : cards;
+}
 function latestScorecardPerPlayer(rows) {
   if (typeof BFEngine === 'undefined') throw new Error('bf_engine.js did not load — reload the app');
   return BFEngine.latestScorecardPerPlayer(rows);
@@ -18989,8 +18994,9 @@ async function gcBbLost(gid, gi, player) {
     openGatheringCloseSheet(gid);
   } catch (e) { showToast('❌ ' + e.message, true); }
 }
-async function gcRemoveAdded(gid, player) {
-  if (!confirm(`Take ${player} off this game? They have no scorecard, so they will not be in the pot.`)) return;
+function gcRemoveNoShowPick(gid) { const el = document.getElementById('gc-noshow-pick'); if (el && el.value) gcRemoveAdded(gid, el.value, true); }
+async function gcRemoveAdded(gid, player, hasCard) {
+  if (!confirm(`Take ${player} off this game? ${hasCard ? 'Any scores entered for them will be ignored and ' : 'They have no scorecard, so '}they will not be in the pot.`)) return;
   try {
     const r = await fetch(`${GATHERINGS_API}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gathering_id: gid, player_id: player, status: 'no' }) });
@@ -19041,7 +19047,8 @@ async function openGatheringCloseSheet(gatheringId) {
       await loadCtpData(liveEvt);
       ctpLeaders = { ..._ctpData };
     }
-    const cards = latestScorecardPerPlayer(scData.scorecards || []);
+    const allCards = latestScorecardPerPlayer(scData.scorecards || []);
+    const cards = gcActiveCards(gatheringId, allCards);
     const holeCount = (g && g.holes === 9) ? 9 : 18;
     const norm = s => String(s || '').trim().toLowerCase();
     const cardNames = new Set(cards.map(c => norm(c.player)));
@@ -19067,6 +19074,10 @@ async function openGatheringCloseSheet(gatheringId) {
             <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcRemoveAdded(${gatheringId}, ${esc(JSON.stringify(n))})">No-show: remove</button></div>`).join('')}
           <span style="color:var(--text-muted)">If they didn't play, remove them (or just close anyway) — the pot counts only the ${cards.length} who turned in a card.</span></div>`
       : '';
+    const removeHtml = allCards.length ? `<details style="font-size:0.78rem;margin-bottom:8px"><summary style="cursor:pointer;color:var(--text-muted)">Someone listed who didn't play? Take them off the game</summary>
+          <div style="display:flex;gap:6px;align-items:center;padding:6px 0"><select id="gc-noshow-pick" style="height:34px;border-radius:6px;flex:1">${allCards.map(c => `<option value="${esc(c.player)}">${esc(c.player)}</option>`).join('')}</select>
+          <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcRemoveNoShowPick(${gatheringId})">No-show: remove</button></div>
+          <div style="color:var(--text-muted)">Their scores, if any, are ignored and they are out of the pot.</div></details>` : '';
     const incompleteHtml = incomplete.length
       ? `<div style="background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
           ⚠️ Blank holes: ${incomplete.map(x => `<b>${esc(x.player)}</b> (#${x.holes.slice(0, 6).join(', #')}${x.holes.length > 6 ? '…' : ''})`).join('; ')}<br>
@@ -19117,7 +19128,7 @@ async function openGatheringCloseSheet(gatheringId) {
     const bbOnlyHold = recon.bbMissing.length > 0 && cards.length && !recon.blocking;   // held only for the ball answers: the button points at them instead of sitting dead
     const closeBlocked = !cards.length || recon.blocking || (recon.bbMissing.length > 0 && !bbOnlyHold);
     body.innerHTML = `
-      ${statusLine}${spotsHtml}${hcHtml}${bbHtml}${scratchHtml}${addedHtml}${strayHtml}${missingHtml}${incompleteHtml}
+      ${statusLine}${spotsHtml}${hcHtml}${bbHtml}${scratchHtml}${addedHtml}${strayHtml}${missingHtml}${removeHtml}${incompleteHtml}
       ${alreadyClosed ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Already closed — saving again replaces the earlier result.</div>` : ''}
       <div style="border-top:1px solid var(--border);padding-top:6px">${renderGatheringPayoutHtml(summary)}</div>
       <div style="display:flex;gap:8px;margin-top:14px">
