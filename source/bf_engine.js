@@ -248,12 +248,16 @@
         const capped = pot < configuredPot;
         state.remaining -= pot;
         const answers = (inputs.bbAnswers || []).filter(a => L.has(a.player_name));
+        // "Longest survivor" is measured in holes PLAYED, not hole numbers: on a shotgun a group that starts on 10 and loses its ball there
+        // lasted one hole, a group that starts on 1 and loses it on 5 lasted five. inputs.startHoles = { 'player lowercased': start hole }.
+        const bbStart = n => { const h = inputs.startHoles && inputs.startHoles[norm(n)]; return Number.isInteger(Number(h)) && Number(h) >= 1 && Number(h) <= 18 ? Number(h) : 1; };
+        const bbPlayed = a => ((Number(a.lost_hole) || 0) - bbStart(a.player_name) + 18) % 18 + 1;
         // Team MiserBall: every player on a team plays their own ball and BOTH stay in play all round, so one lost ball puts the whole team
         // out. A team that lost nothing and has an answer for every partner keeps it. If no team did, the longest survivor wins: a team
         // lasted until its EARLIEST lost ball. The pot goes to the winning team as one amount (the partners split it themselves).
         if (addon.team === true && Array.isArray(state.teamPairs) && state.teamPairs.length) {
           const ansBy = new Map(answers.map(a => [norm(a.player_name), a]));
-          const lostScore = a => (Number(a.lost_hole) || 0) * 100 + (Number(a.lost_stroke) || 0);
+          const lostScore = a => bbPlayed(a) * 100 + (Number(a.lost_stroke) || 0);
           const units = []; const used = new Set();
           state.teamPairs.forEach(pr => {
             const ms = pr.map(n => L.canon(n)).filter(n => L.has(n)); if (!ms.length) return;
@@ -303,7 +307,7 @@
           const lost = answers.filter(a => !a.kept && a.lost_hole != null);
           if (lost.length) {
             mode = 'longest';
-            const score = a => (Number(a.lost_hole) || 0) * 100 + (Number(a.lost_stroke) || 0);
+            const score = a => bbPlayed(a) * 100 + (Number(a.lost_stroke) || 0);
             const best = Math.max(...lost.map(score));
             winners = lost.filter(a => score(a) === best).map(a => L.canonical.get(norm(a.player_name)));
           } else {
