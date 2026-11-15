@@ -44,7 +44,7 @@ ok(c.document.getElementById('gathering-close-modal').classList.contains('open')
 ok(c._scUrl === 'https://bfe/scorecards?event=gathering%3A42&input=strokes', 'scorecards fetched from the D1 store (Dev-88) by gathering key, strokes only: ' + c._scUrl);
 ok(c._ctpLoadedFor === 'Jefferson Event', 'CTP leaders loaded via loadCtpData');
 ok(body.includes('Scorecards in: 3 of 4 confirmed'), 'count uses Yes only, deduped cards');
-ok(body.includes('No scorecard yet: <b>No Show</b>'), 'missing player flagged');
+ok(body.includes('No scorecard yet:') && body.includes('<b>No Show</b>') && body.includes('No-show: remove'), 'missing player flagged');
 ok(body.includes('Blank holes') && body.includes('Tony Choy') && body.includes('#5'), 'incomplete card flagged');
 ok(body.includes('Close with 3 players'), 'close button reflects N');
 const s = c._gcClose.summary;

@@ -18990,7 +18990,7 @@ async function gcBbLost(gid, gi, player) {
   } catch (e) { showToast('❌ ' + e.message, true); }
 }
 async function gcRemoveAdded(gid, player) {
-  if (!confirm(`Take ${player} off this game? They have no scorecard.`)) return;
+  if (!confirm(`Take ${player} off this game? They have no scorecard, so they will not be in the pot.`)) return;
   try {
     const r = await fetch(`${GATHERINGS_API}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gathering_id: gid, player_id: player, status: 'no' }) });
@@ -19062,8 +19062,10 @@ async function openGatheringCloseSheet(gatheringId) {
       : `<div style="font-size:0.85rem;font-weight:700;margin-bottom:6px">📋 Scorecards in: ${cards.length}</div>`; // RSVPs no longer loaded (aged out) — count only
     const missingHtml = missingCards.length
       ? `<div style="background:rgba(212,160,23,0.12);border:1px solid rgba(212,160,23,0.4);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
-          ⚠️ No scorecard yet: <b>${missingCards.map(esc).join(', ')}</b><br>
-          <span style="color:var(--text-muted)">If they didn't play, close anyway — the pot counts only the ${cards.length} who turned in a card.</span></div>`
+          ⚠️ No scorecard yet:
+          ${missingCards.map(n => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0"><b>${esc(n)}</b>
+            <button class="btn btn-secondary btn-sm" style="padding:4px 12px" onclick="gcRemoveAdded(${gatheringId}, ${esc(JSON.stringify(n))})">No-show: remove</button></div>`).join('')}
+          <span style="color:var(--text-muted)">If they didn't play, remove them (or just close anyway) — the pot counts only the ${cards.length} who turned in a card.</span></div>`
       : '';
     const incompleteHtml = incomplete.length
       ? `<div style="background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:10px;padding:8px 12px;font-size:0.78rem;margin-bottom:8px">
