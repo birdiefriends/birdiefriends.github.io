@@ -2087,7 +2087,7 @@
     if (f.scoring === 'stableford') {
       const prow = (f.standings || []).map(r => {
         const done = (r.holes || []).filter(x => x.score != null);
-        return { pair: r.pair, name: r.name || null, played: done.length, thru: done.length ? Math.max(...done.map(x => x.hole)) : 0, total: done.reduce((a, x) => a + x.score, 0), to_par: null, complete: !!r.complete };
+        return { pair: r.pair, name: r.name || null, played: done.length, thru: done.length, total: done.reduce((a, x) => a + x.score, 0), to_par: null, complete: !!r.complete };
       });
       prow.sort((a, b) => (a.played === 0) - (b.played === 0) || b.total - a.total || b.played - a.played);
       let pl = 0, pv = null; prow.forEach((r, i) => { const k = r.played === 0 ? 'none' : r.total; if (k !== pv) { pl = i + 1; pv = k; } r.place = r.played === 0 ? null : pl; });
@@ -2099,7 +2099,7 @@
       const total = done.reduce((a, x) => a + x.score, 0);
       const parsOk = done.length > 0 && done.every(x => parAt(x.hole) != null);
       return {
-        pair: r.pair, name: r.name || null, played: done.length, thru: done.length ? Math.max(...done.map(x => x.hole)) : 0,
+        pair: r.pair, name: r.name || null, played: done.length, thru: done.length,
         total, to_par: parsOk ? total - done.reduce((a, x) => a + parAt(x.hole), 0) : (done.length ? null : 0), complete: !!r.complete
       };
     });
