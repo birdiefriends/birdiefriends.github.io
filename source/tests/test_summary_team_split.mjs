@@ -36,4 +36,8 @@ ok(/🐉 TurkeyBalls/.test(html) && /TurkeyBalls/.test(text), 'named game tab/co
 ok(/Skins<\/span>/.test(html) && /CTP<\/span>/.test(html), 'text headers under icons');
 // the sum of every player's total is unchanged by the display split (payout math untouched)
 const nets = [...html.matchAll(/([+−-])\$(\d+(?:\.\d+)?)<\/span>\s*<\/div>/g)];
+ok(/Pay list/.test(text), 'pay list shown');
+const pl = text.slice(text.indexOf('Pay list'));
+ok(/Brian Hager \$15/.test(pl) && /Test3 Three \$15/.test(pl) && /Test1 One \$25/.test(pl) && /Test2 Two \$24/.test(pl), 'whole-dollar pay list: team $22 -> 11/11 (+$4 CTP), team $21 -> 11/10, +$14 each for Scramble+CTP: ' + pl.slice(0, 200));
+ok(/Ante check: \$79 paid out \+ \$1 stays with the host = \$80 \(pot \$80\)/.test(text), 'ante check closes to the pot');
 console.log(`summary_team_split: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

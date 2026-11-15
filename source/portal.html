@@ -18566,12 +18566,17 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   // A team's skins / Turkeys / MiserBall money is paid to the team. For the Summary each partner is shown an even share so the +/− is
   // what that player really came out with (the buy-in is per player). Display only: the saved payout is untouched.
   const teamNotes = [];
+  // Whole-dollar pay list (what the host actually hands out): individual money as is, team money split in whole dollars with any odd dollar to the first partner.
+  const payWhole = new Map(); byName.forEach((r, k) => payWhole.set(k, { player: r.player, amt: Math.round(Number(r.total) || 0) }));
   if (s.scramble && Array.isArray(s.scramble.pairs)) {
     const NUM = ['total', 'skins', 'cttp', 'birdieball', 'birdiepay', 'turkeys', 'fourball', 'lowscore', 'given_back'].concat(BFEngine.sideFormGames());
     s.scramble.pairs.forEach(pr => {
       if (!Array.isArray(pr) || pr.length < 2) return;
       const tk = norm(pr.join(' & ')), trow = byName.get(tk);
       if (!trow) return;
+      payWhole.delete(tk);
+      { const T = Math.round(Number(trow.total) || 0), base = Math.floor(T / pr.length), extra = T - base * pr.length;
+        pr.forEach((nm, i) => { const k = norm(nm), e = payWhole.get(k) || { player: nm, amt: 0 }; e.amt += base + (i < extra ? 1 : 0); payWhole.set(k, e); }); }
       if ((Number(trow.total) || 0) > 0) teamNotes.push({ label: pr.join(' & '), total: Number(trow.total), each: Math.round(Number(trow.total) / pr.length * 100) / 100 });
       pr.forEach(nm => {
         const e = byName.get(norm(nm)) || { player: nm, total: 0 };
@@ -18668,6 +18673,14 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     teamNotes.forEach(t => notes.push(`Team money: <b>${esc(t.label)}</b> won ${money(t.total)}, shown split evenly (${money(t.each)} each). Divide it however you agree.`));
     ((s.skins && s.skins.won) || []).filter(w => w.turkey).forEach(w => notes.push(`${esc(skinWonText(w))}: <b>${esc(w.player)}</b>, paid as a skin`));
     ((s.cttp && s.cttp.holes) || []).filter(x => !x.player && !x.prize).forEach(x => notes.push(`Closest to the Pin #${esc(x.hole)}: no winner, ${money(s.cttp.capped ? s.cttp.paid_per_hole : s.cttp.per_hole)} went back to Skins`));
+    const payRows = [...payWhole.values()].filter(x => x.amt > 0).sort((a, b) => b.amt - a.amt || String(a.player).localeCompare(String(b.player)));
+    if (payRows.length) {
+      const paid = payRows.reduce((t, x) => t + x.amt, 0), host = Math.round(Number(s.unallocated) || 0), pot = (Number(s.players_count) || 0) * (Number(ante) || 0);
+      sum += `<div style="margin-top:12px;border:1px solid var(--border);border-radius:10px;padding:8px 12px">
+        <div style="font-size:0.85rem;font-weight:700;margin-bottom:4px">💵 Pay list</div>
+        ${payRows.map(x => `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:0.84rem"><span>${esc(x.player)}</span><b>$${x.amt}</b></div>`).join('')}
+        <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;font-size:0.78rem;${pot && paid + host === pot ? 'color:var(--green,#1a7f4b)' : 'color:#c0392b'}">${pot && paid + host === pot ? '✓' : '⚠️'} Ante check: $${paid} paid out + $${host} stays with the host = $${paid + host}${pot ? ` (pot $${pot})` : ''}</div></div>`;
+    }
     if (notes.length) sum += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px;line-height:1.5">${notes.map(n => `<div style="padding:1px 0">• ${n}</div>`).join('')}</div>`;
   }
   if (s.unallocated > 0) sum += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Rounding (whole dollars): ${money(s.unallocated)} stays with the host</div>`;
