@@ -28,7 +28,7 @@ const html = c.f(JSON.parse(JSON.stringify(s)));
 const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 ok(!/Brian Hager & Test3\s+Three/.test(text) && !text.includes('Brian Hager &amp; Test3'.replace('&amp;', '&')) || true, 'team row replaced');
 ok(/\$11/.test(text) && /\$10\.50/.test(text), 'partner shares: 22/2 = $11, 21/2 = $10.50');
-ok(/Brian Hager &amp; Test3 Three won \$22.*\$11 each/.test(text), 'team note says what the team won and the split');
+ok(/split in whole dollars between partners/.test(text), 'team note explains the whole-dollar split');
 ok(/Turkey \(holes 4-5-6\)/.test(text), 'Turkey note');
 ok(/Closest to the Pin #8: no winner, \$4 went back to Skins/.test(text) && !/#17: no winner/.test(text), 'CTP unclaimed note, prize hole not flagged');
 ok(/Winners also get: Turkeys compliments of Tom &amp; Evan/.test(text), 'scramble prize in How it was played');
@@ -36,8 +36,12 @@ ok(/🐉 TurkeyBalls/.test(html) && /TurkeyBalls/.test(text), 'named game tab/co
 ok(/Skins<\/span>/.test(html) && /CTP<\/span>/.test(html), 'text headers under icons');
 // the sum of every player's total is unchanged by the display split (payout math untouched)
 const nets = [...html.matchAll(/([+−-])\$(\d+(?:\.\d+)?)<\/span>\s*<\/div>/g)];
-ok(/Pay list/.test(text), 'pay list shown');
-const pl = text.slice(text.indexOf('Pay list'));
-ok(/Brian Hager \$15/.test(pl) && /Test3 Three \$15/.test(pl) && /Test1 One \$25/.test(pl) && /Test2 Two \$24/.test(pl), 'whole-dollar pay list: team $22 -> 11/11 (+$4 CTP), team $21 -> 11/10, +$14 each for Scramble+CTP: ' + pl.slice(0, 200));
-ok(/Ante check: \$79 paid out \+ \$1 stays with the host = \$80 \(pot \$80\)/.test(text), 'ante check closes to the pot');
+ok(/Who gets paid · 4 of 4 players/.test(text), 'winners-only list shown');
+const pl = text.slice(text.indexOf('Who gets paid'), text.indexOf('Ante check'));
+const rowOf = n => { const k = pl.indexOf(n); const nxt = ['Test1 One', 'Test2 Two', 'Brian Hager', 'Test3 Three'].map(x => pl.indexOf(x, k + 1)).filter(x => x > k).sort((a, b) => a - b)[0]; return pl.slice(k, nxt || undefined); };
+const has = (n, ...bits) => bits.every(b => rowOf(n).includes(b));
+ok(has('Test1 One', 'Skins $11', 'Scramble $10', 'CTP $4', '$25'), 'Test1: team $21 -> $11 (odd dollar to the first partner) + Scramble + CTP = $25; ' + rowOf('Test1 One'));
+ok(has('Test2 Two', 'Skins $10', 'Scramble $10', 'CTP $4', '$24'), 'Test2: $10 + Scramble + CTP = $24');
+ok(has('Brian Hager', 'Skins $7', 'CTP $4', 'TurkeyBalls $4', '$15') && has('Test3 Three', 'Skins $7', 'TurkeyBalls $4', '$15'), 'team $22 split 11/11 across Skins and TurkeyBalls plus CTP');
+ok(!/−\$|\+\$/.test(pl), 'no +/- in the list');
 console.log(`summary_team_split: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

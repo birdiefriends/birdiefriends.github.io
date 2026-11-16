@@ -30,7 +30,7 @@ if (r) {
   const ctx = new Proxy({ BFEngine: E, escapeHtml: esc, esc, console, Math, Number, String, Array, Object, Map, Set, JSON }, { has: () => true, get: (t, k) => (k in t ? t[k] : (k === Symbol.unscopables ? undefined : (() => ''))) });
   const stubs = ['scrambleResultsHtml', 'fourballResultsHeatHtml', 'gpBtnStyle', 'gpSort', 'gpTab', 'gpTabStyle', 'isScrB', 'sideResultHeroHtml'];
   const ctx2 = { BFEngine: E, escapeHtml: esc, esc, norm: x => String(x).trim().toLowerCase() }; stubs.forEach(n => { ctx2[n] = () => ''; }); vm.createContext(ctx2);
-  let html = ''; try { vm.runInContext(extractFn(src, 'renderGatheringPayoutHtml') + '\nthis.f = renderGatheringPayoutHtml;', ctx2); html = ctx2.f(JSON.parse(JSON.stringify(r))); } catch (e) { console.log('RENDER ERR', e.message); fail++; }
+  let html = ''; try { vm.runInContext(['bbCleanName', 'skinWonText', 'renderGatheringPayoutHtml'].map(n => extractFn(src, n)).join('\n') + '\nthis.f = renderGatheringPayoutHtml;', ctx2); html = ctx2.f(JSON.parse(JSON.stringify(r))); } catch (e) { console.log('RENDER ERR', e.message); fail++; }
   ok(/Turkey/.test(html) && /Turkey dinner/.test(html) && /A1 &amp; A2/.test(html), 'results card names the Turkey, team and prize');
 }
 // as a skin, on the 2Man shape: team A's Turkey is one extra skin in the Skins pot, shown with the skins

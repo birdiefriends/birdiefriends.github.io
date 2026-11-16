@@ -89,7 +89,7 @@ ok(fb(['Brian'], ['Tony']) === 'B', 'normal names stay one letter');
   const html3 = A.renderGatheringPayoutHtml(snap3, null); if (process.env.DUMP_RES) fs.writeFileSync(process.env.DUMP_RES, html3); const t3 = html3.replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
   ok(/4 players × \$9 = \|?\$36 pot/.test(t3), 'the pot header uses the ante the games collected: 4 x $9 = $36 (got ' + t3.slice(0, 160) + ')');
   ok(/\$1 of the \$10 buy-in was in no game and went back/.test(t3), 'and says where the other dollar went');
-  const t3t = t3.split('Pay list')[0]; ok(/\|\+\$6\|/.test(t3t) && /\|−\$6\|/.test(t3) && !/\|\$16\|/.test(t3t), 'the last column is only the result (+$6 / −$6), not the $16 received (got ' + t3.slice(-420) + ')');
+  const t3t = (t3.split('Full breakdown')[1] || t3); ok(/\|\+\$6\|/.test(t3t) && /\|−\$6\|/.test(t3) && !/\|\$16\|/.test(t3t), 'the last column is only the result (+$6 / −$6), not the $16 received (got ' + t3.slice(-420) + ')');
   ok(/Results add up to \$0/.test(t3), 'the footer says the results add up to $0');
   ok(!/↩[^|]*\|\$4/.test(t3), 'the returned unspent dollar is not shown as a pushed-back pot');
 }

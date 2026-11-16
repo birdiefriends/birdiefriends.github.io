@@ -18572,17 +18572,25 @@ function renderGatheringPayoutHtml(s, fbCfg) {
   // A team's skins / Turkeys / MiserBall money is paid to the team. For the Summary each partner is shown an even share so the +/− is
   // what that player really came out with (the buy-in is per player). Display only: the saved payout is untouched.
   const teamNotes = [];
-  // Whole-dollar pay list (what the host actually hands out): individual money as is, team money split in whole dollars with any odd dollar to the first partner.
-  const payWhole = new Map(); byName.forEach((r, k) => payWhole.set(k, { player: r.player, amt: Math.round(Number(r.total) || 0) }));
+  // Whole-dollar payout (what the host actually hands out), by game. Individual money as is; team money split in whole dollars with the odd dollars
+  // rotated between partners. Display only: the saved payout is untouched.
+  const PAYK = ['skins', 'cttp', 'birdieball', 'birdiepay', 'turkeys', 'fourball', 'lowscore'].concat(BFEngine.sideFormGames()).filter((x, n, a) => a.indexOf(x) === n);
+  const payWhole = new Map();
+  const addPart = (k, name, id, v) => { if (!(v > 0)) return; const e = payWhole.get(k) || { player: name, amt: 0, parts: {} }; e.parts[id] = (e.parts[id] || 0) + v; e.amt += v; payWhole.set(k, e); };
+  const wholeOf = r => { let got = 0; const out = []; PAYK.forEach(id => { const v = Math.round(Number(r[id]) || 0); if (v > 0) { out.push([id, v]); got += v; } }); const rest = Math.round(Number(r.total) || 0) - got; if (rest > 0) out.push(['other', rest]); return out; };
+  byName.forEach((r, k) => wholeOf(r).forEach(([id, v]) => addPart(k, r.player, id, v)));
+  const wholeTeam = (tk, trow, pr) => {
+    payWhole.delete(tk);
+    const n = pr.length; let off = 0;
+    wholeOf(trow).forEach(([id, v]) => { const base = Math.floor(v / n), rem = v - base * n; pr.forEach((nm, i) => addPart(norm(nm), nm, id, base + (((i - off + n) % n) < rem ? 1 : 0))); off = (off + rem) % n; });
+  };
   if (s.scramble && Array.isArray(s.scramble.pairs)) {
     const NUM = ['total', 'skins', 'cttp', 'birdieball', 'birdiepay', 'turkeys', 'fourball', 'lowscore', 'given_back'].concat(BFEngine.sideFormGames());
     s.scramble.pairs.forEach(pr => {
       if (!Array.isArray(pr) || pr.length < 2) return;
       const tk = norm(pr.join(' & ')), trow = byName.get(tk);
       if (!trow) return;
-      payWhole.delete(tk);
-      { const T = Math.round(Number(trow.total) || 0), base = Math.floor(T / pr.length), extra = T - base * pr.length;
-        pr.forEach((nm, i) => { const k = norm(nm), e = payWhole.get(k) || { player: nm, amt: 0 }; e.amt += base + (i < extra ? 1 : 0); payWhole.set(k, e); }); }
+      wholeTeam(tk, trow, pr);
       if ((Number(trow.total) || 0) > 0) teamNotes.push({ label: pr.join(' & '), total: Number(trow.total), each: Math.round(Number(trow.total) / pr.length * 100) / 100 });
       pr.forEach(nm => {
         const e = byName.get(norm(nm)) || { player: nm, total: 0 };
@@ -18671,26 +18679,32 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     if (lines.length) sum += `<div style="font-size:0.78rem;line-height:1.45;background:rgba(255,255,255,0.45);border-radius:10px;padding:6px 10px;margin:2px 0 8px"><div style="font-size:0.68rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-hint);margin-bottom:2px">How it was played</div>${lines.join('')}${gameStrokes.size ? '<div style="padding:3px 0;color:var(--text-muted)">The Net column uses each player\'s full handicap strokes. Games played off the low use fewer, shown under each name.</div>' : ''}</div>`;
   }
   if (oneBallOnly) sum += BFEngine.sideFormGames().filter(id => id !== 'scramble').map(id => (s[id] ? sideResultHeroHtml(s[id], id) : '')).join('');
-  if (modes.length > 1) sum += `<div style="display:flex;align-items:center;gap:6px;margin:4px 0 6px"><span style="font-size:0.72rem;color:var(--text-muted)">Rank by</span>${modes.map(([m, l]) => modeBtn(m, l)).join('')}<span style="font-size:0.68rem;color:var(--text-hint)">scores are for fun</span></div>`;
-  sum += `<div style="font-size:0.7rem;color:var(--text-muted);margin:2px 0 4px;line-height:1.4">Game columns show what each game paid out (${games.map(g => g[1] + ' ' + esc(gFull(g[0]))).join(' · ')}).${anyBack ? ' ↩ is an ante handed back from a pot that was halved or not finished.' : ''}${buyIn > 0 ? ` <b>+/−</b> is each player's result: what came back to them, minus the ${money(ante)} they put in.` : ''}</div>`;
-  sum += modes.map(([m]) => `<div data-gp-sort="${m}" style="overflow-x:auto;${m === defMode ? '' : 'display:none'}">${matrix(m, m === 'gross' ? 'gross' : 'net')}</div>`).join('');
+  let full = '';
+  if (modes.length > 1) full += `<div style="display:flex;align-items:center;gap:6px;margin:4px 0 6px"><span style="font-size:0.72rem;color:var(--text-muted)">Rank by</span>${modes.map(([m, l]) => modeBtn(m, l)).join('')}<span style="font-size:0.68rem;color:var(--text-hint)">scores are for fun</span></div>`;
+  full += `<div style="font-size:0.7rem;color:var(--text-muted);margin:2px 0 4px;line-height:1.4">Game columns show what each game paid out (${games.map(g => g[1] + ' ' + esc(gFull(g[0]))).join(' · ')}).${anyBack ? ' ↩ is an ante handed back from a pot that was halved or not finished.' : ''}${buyIn > 0 ? ` <b>+/−</b> is each player's result: what came back to them, minus the ${money(ante)} they put in.` : ''}</div>`;
+  full += modes.map(([m]) => `<div data-gp-sort="${m}" style="overflow-x:auto;${m === defMode ? '' : 'display:none'}">${matrix(m, m === 'gross' ? 'gross' : 'net')}</div>`).join('');
   {
+    const gIcon = id => id === 'other' ? '↩' : ((games.find(g => g[0] === id) || [])[1] || '');
+    const gName = id => id === 'other' ? 'Returned' : gShort(id);
+    const payRows = [...payWhole.values()].filter(x => x.amt > 0).sort((x, y) => y.amt - x.amt || String(x.player).localeCompare(String(y.player)));
+    const paid = payRows.reduce((t, x) => t + x.amt, 0), host = Math.round(Number(s.unallocated) || 0), pot = (Number(s.players_count) || 0) * (Number(ante) || 0);
+    const potOk = pot > 0 && paid + host === pot;
+    sum += `<div style="margin-top:10px;border:1px solid var(--border);border-radius:10px;padding:6px 12px">
+      <div style="font-size:0.85rem;font-weight:700;margin:2px 0 4px">💵 Who gets paid <span style="font-weight:400;color:var(--text-muted);font-size:0.74rem">· ${payRows.length} of ${s.players_count} players</span></div>
+      ${payRows.length ? payRows.map(x => `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:7px 0;border-bottom:1px solid rgba(0,0,0,0.06)">
+        <div style="min-width:0"><div style="font-weight:700;font-size:0.9rem">${esc(x.player)}</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);line-height:1.35">${Object.keys(x.parts).sort((u, v) => x.parts[v] - x.parts[u]).map(id => `${gIcon(id)} ${esc(gName(id))} $${x.parts[id]}`).join(' · ')}</div></div>
+        <b style="font-size:1.02rem;white-space:nowrap">$${x.amt}</b></div>`).join('') : '<div style="font-size:0.8rem;color:var(--text-muted);padding:6px 0">No money was won.</div>'}
+      <div style="padding:7px 0 3px;font-size:0.78rem;${potOk ? 'color:var(--green,#1a7f4b)' : 'color:#c0392b'}">${potOk ? '✓' : '⚠️'} Ante check: $${paid} paid out + $${host} stays with the host = $${paid + host}${pot ? ` (pot $${pot})` : ''}</div></div>`;
     const notes = [];
-    teamNotes.forEach(t => notes.push(`Team money: <b>${esc(t.label)}</b> won ${money(t.total)}, shown split evenly (${money(t.each)} each). Divide it however you agree.`));
+    if (teamNotes.length) notes.push('Team money (Skins, Turkeys, ' + esc(gFull('birdieball')) + ') is split in whole dollars between partners; an odd dollar goes to the first partner listed. Divide it however you agree.');
     ((s.skins && s.skins.won) || []).filter(w => w.turkey).forEach(w => notes.push(`${esc(skinWonText(w))}: <b>${esc(w.player)}</b>, paid as a skin`));
     ((s.cttp && s.cttp.holes) || []).filter(x => !x.player && !x.prize).forEach(x => notes.push(`Closest to the Pin #${esc(x.hole)}: no winner, ${money(s.cttp.capped ? s.cttp.paid_per_hole : s.cttp.per_hole)} went back to Skins`));
-    const payRows = [...payWhole.values()].filter(x => x.amt > 0).sort((a, b) => b.amt - a.amt || String(a.player).localeCompare(String(b.player)));
-    if (payRows.length) {
-      const paid = payRows.reduce((t, x) => t + x.amt, 0), host = Math.round(Number(s.unallocated) || 0), pot = (Number(s.players_count) || 0) * (Number(ante) || 0);
-      sum += `<div style="margin-top:12px;border:1px solid var(--border);border-radius:10px;padding:8px 12px">
-        <div style="font-size:0.85rem;font-weight:700;margin-bottom:4px">💵 Pay list</div>
-        ${payRows.map(x => `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:0.84rem"><span>${esc(x.player)}</span><b>$${x.amt}</b></div>`).join('')}
-        <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;font-size:0.78rem;${pot && paid + host === pot ? 'color:var(--green,#1a7f4b)' : 'color:#c0392b'}">${pot && paid + host === pot ? '✓' : '⚠️'} Ante check: $${paid} paid out + $${host} stays with the host = $${paid + host}${pot ? ` (pot $${pot})` : ''}</div></div>`;
-    }
     if (notes.length) sum += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px;line-height:1.5">${notes.map(n => `<div style="padding:1px 0">• ${n}</div>`).join('')}</div>`;
   }
   if (s.unallocated > 0) sum += `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Rounding (whole dollars): ${money(s.unallocated)} stays with the host</div>`;
   else if (buyIn > 0 && people.length && Math.abs(people.reduce((t, p) => t + (Number(p.total) || 0) - buyIn, 0)) < 0.005) sum += `<div style="font-size:0.72rem;color:var(--text-hint);margin-top:6px">Results add up to $0 across the group.</div>`;
+  sum += `<details style="margin-top:12px"><summary style="cursor:pointer;font-size:0.78rem;color:var(--text-muted)">Full breakdown for everyone (by game, with +/−)</summary><div style="margin-top:6px">${full}</div></details>`;
   panels.push({ key: 'sum', tab: '📋 Summary', html: sum });
 
   // ── Skins: grouped by player ──
