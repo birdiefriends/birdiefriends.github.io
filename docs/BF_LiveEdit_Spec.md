@@ -60,11 +60,18 @@ One screen at the first tee: each player Present / No-show, with the same impact
 - Notifications only to moved players.
 - Regression: Close dialog and leaderboard agree with live after a mid-round regroup.
 
-## 6. Open decisions (Brian)
-1. Orphaned partner default: solo team, or merged 3-some? (Merge is fairer in a scramble but changes the team count.)
-2. No-show ante refund: automatic, or host chooses each time?
-3. Editor: host only, or also a designated on-course co-host?
-(Settled: scoring keeps running during edit mode; build edit mode first, check-in later; mid-round withdrawal can wait if it adds scope.)
+## 6. Decisions (Brian, 2026-11-16) and UX rules
+1. **Orphaned partner: no default, the host decides in the moment.** Skill level and competitive integrity drive it (a weak player added as a 3rd to a weak team is fine; adding a strong player to a strong team is not, so they play solo). The result can be a 3-some, a solo, or a 5-some, depending on pace of play and course rules. So the app never auto-picks. It shows the options as one-tap choices (play solo / join Team N as a 3-some / pair with another leftover), shows each team's and group's size, and the host taps one. Group sizes of 1 to 5 must be allowed (warn, do not block).
+2. **Ante follows presence.** No-show (no holes played): out of the pot automatically, no prompt. Started and stopped: the ante stays in the pot, no prompt. Pot and ante check recompute on Apply.
+3. **Editor: host and commissioner only.** One open edit session per Gathering. No co-host in v1.
+(Settled earlier: scoring keeps running during edit mode; build edit mode first, check-in later; mid-round withdrawal can wait if it adds scope.)
+
+### UX rules (Brian's top requirement)
+The course is distracting and the host is under time pressure, so the screen must be minimal and direct:
+- One entry button on the Live Panel ("Fix groups"); small banner for players while open.
+- Three actions only: Not here (tap name), Move (tap player or team, tap destination group), Start hole (tap group, pick hole).
+- Plain-sentence impact ("Group 6 will have 2 players"), one Review then Apply screen, no tables. Draft/Apply stays underneath for atomicity.
+- Change log is written but has no screen in v1. Late-player add and mid-round withdrawal are out of v1.
 
 ## 7. Related shipped work in Dev-100 that this builds on
 v4.80.3/4.80.4 (Close dialog can remove a no-show, with or without a card; removed players excluded even with keyed scores), v4.81.1 (commissioner can delete a scorecard from the score detail; use it to clear a no-show's bogus card).
