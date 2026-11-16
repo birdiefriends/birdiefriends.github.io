@@ -9594,6 +9594,7 @@ function toggleLivePanel() {
 function startCtpRefresh() {
   stopCtpRefresh();  // clear any existing timer
   _ctpRefreshTimer = setInterval(() => {
+    if (document.hidden) return;   // a backgrounded tab / locked phone doesn't poll; the visibilitychange hook below refreshes on return
     const evt = getLiveEvent();
     if (!evt || !_livePanelOpen) { stopCtpRefresh(); return; }
     loadCtpData(evt);
@@ -9602,6 +9603,11 @@ function startCtpRefresh() {
     loadFourballLive(evt);
   }, 60000);  // refresh every 60 seconds
 }
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !_livePanelOpen || !_ctpRefreshTimer) return;
+  const evt = getLiveEvent(); if (!evt) return;
+  loadCtpData(evt); loadSkinBoardData(); loadBirdieBallAnswers(evt); loadFourballLive(evt);
+});
 function stopCtpRefresh() {
   if (_ctpRefreshTimer) { clearInterval(_ctpRefreshTimer); _ctpRefreshTimer = null; }
 }

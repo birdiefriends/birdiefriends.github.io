@@ -67,8 +67,25 @@ async function resolveAnnouncementEventTime(env, entry, gatheringTimeCache) {
 // Single prune pass shared by the write path (after every send) and the
 // read path (GET /feed, hit far more often — every Home load — so this is
 // what actually keeps the feed current between sends).
-async function pruneAnnouncementFeed(env, nowMs) {
-  const allKeys = await env.BF_FLAGS.list({ prefix: 'feed::' });
+// KV list operations are the scarce resource (free tier: 1,000 a day). The read path used to do two lists per request and the Live Panel
+// polls every minute, so a busy event burned the budget. Now: reads share one list with the prune, the prune runs at most once every
+// PRUNE_EVERY_MS per isolate unless a send forces it, and GET /feed is served from the edge cache for FEED_CACHE_SECONDS.
+const PRUNE_EVERY_MS = 5 * 60 * 1000, FEED_CACHE_SECONDS = 30;
+let _lastPruneAt = 0, _lastFeedJson = null, _feedOrigin = null;
+const feedCacheKey = origin => new Request(new URL('/__feed_cache__', origin).toString());
+async function bustFeedCache(origin) {
+  try { if (typeof caches !== 'undefined' && caches.default && origin) await caches.default.delete(feedCacheKey(origin)); } catch (e) { /* cache is best effort */ }
+}
+// Write + invalidate: a sender must see their own entry on the very next read.
+async function feedPut(env, key, value) {
+  await env.BF_FLAGS.put(key, value);
+  _lastFeedJson = null;
+  await bustFeedCache(_feedOrigin);
+}
+async function pruneAnnouncementFeed(env, nowMs, preList, force) {
+  if (!force && Date.now() - _lastPruneAt < PRUNE_EVERY_MS) return;
+  _lastPruneAt = Date.now();
+  const allKeys = preList || await env.BF_FLAGS.list({ prefix: 'feed::' });
   const cutoff  = nowMs - 48 * 60 * 60 * 1000;
   const toDelete = [];
   const gatheringTimeCache = new Map();
@@ -244,7 +261,7 @@ async function spawnAutoRepeatGatherings(env) {
               bf_type: 'gathering_invite',
               bf_meta: bfMeta
             };
-            await env.BF_FLAGS.put(kvKey, JSON.stringify({
+            await feedPut(env, kvKey, JSON.stringify({
               id: `feed-${sentAt}`, key: kvKey,
               title: notifyPayload.headings.en, body: notifyPayload.contents.en,
               sentAt, type: 'gathering_invite', meta: bfMeta
@@ -302,6 +319,7 @@ async function classifyPhotoSection(env, { eventName, capturedBy, eventStart, ca
 
 export default {
   async fetch(request, env, ctx) {
+    try { _feedOrigin = new URL(request.url).origin; } catch (e) { /* keep the last one */ }
 
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
@@ -607,7 +625,7 @@ export default {
               bf_type: 'gathering_cancelled',
               bf_meta: bfMeta
             };
-            await env.BF_FLAGS.put(kvKey, JSON.stringify({
+            await feedPut(env, kvKey, JSON.stringify({
               id: `feed-${sentAt}`, key: kvKey,
               title: notifyPayload.headings.en, body: notifyPayload.contents.en,
               sentAt, type: 'gathering_cancelled', meta: bfMeta
@@ -755,7 +773,7 @@ export default {
                 sentAt, type: 'gathering_date_changed',
                 meta: notifyPayload.bf_meta
               };
-              await env.BF_FLAGS.put(kvKey, JSON.stringify(entry));
+              await feedPut(env, kvKey, JSON.stringify(entry));
               // Push via OneSignal (best-effort — edit succeeds even if notify fails)
               fetch('https://onesignal.com/api/v1/notifications', {
                 method: 'POST',
@@ -1020,7 +1038,7 @@ export default {
                   const title  = '🤝 Partner request';
                   const bodyText = `${player_id} picked you as a teammate for "${g2 ? g2.title : 'a game'}". Open the game to say Yes and team up.`;
                   const bfMeta = { gathering_id: Number(gathering_id), player_id, invited: [partnerName] };
-                  await env.BF_FLAGS.put(kvKey, JSON.stringify({
+                  await feedPut(env, kvKey, JSON.stringify({
                     id: `feed-${sentAt}`, key: kvKey, title, body: bodyText, sentAt, type: 'gathering_partner', meta: bfMeta
                   }));
                   await fetch('https://onesignal.com/api/v1/notifications', {
@@ -1054,7 +1072,7 @@ export default {
               const title  = '🔄 Gathering full';
               const bodyText = `${player_id} tried to join "${gInfo.title}" — already at capacity, moved to Sub instead.`;
               const bfMeta = { gathering_id: Number(gathering_id), player_id };
-              await env.BF_FLAGS.put(kvKey, JSON.stringify({
+              await feedPut(env, kvKey, JSON.stringify({
                 id: `feed-${sentAt}`, key: kvKey, title, body: bodyText, sentAt, type: 'gathering_capacity', meta: bfMeta
               }));
               await fetch('https://onesignal.com/api/v1/notifications', {
@@ -3680,21 +3698,29 @@ export default {
       // path below. Non-blocking on purpose — a full KV list + per-entry D1
       // lookup shouldn't add latency to every page load; the response below
       // reflects whatever was true a moment ago, and self-corrects next read.
-      ctx.waitUntil(pruneAnnouncementFeed(env, Date.now()));
-      const list = await env.BF_FLAGS.list({ prefix: 'feed::' });
-      const entries = await Promise.all(
-        list.keys.map(async k => {
-          const val = await env.BF_FLAGS.get(k.name);
-          try { return JSON.parse(val); } catch(e) { return null; }
-        })
-      );
-      const feed = entries
-        .filter(Boolean)
-        .sort((a, b) => b.sentAt - a.sentAt)
-        .slice(0, 50);
-      return new Response(JSON.stringify({ feed }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+      const edge = typeof caches !== 'undefined' ? caches.default : null, ckey = feedCacheKey(url.origin);
+      if (edge) { const hit = await edge.match(ckey); if (hit) return new Response(hit.body, { headers: { 'Content-Type': 'application/json', 'X-Feed-Cache': 'hit', ...corsHeaders } }); }
+      try {
+        const list = await env.BF_FLAGS.list({ prefix: 'feed::' });
+        ctx.waitUntil(pruneAnnouncementFeed(env, Date.now(), list));
+        const entries = await Promise.all(
+          list.keys.map(async k => {
+            const val = await env.BF_FLAGS.get(k.name);
+            try { return JSON.parse(val); } catch(e) { return null; }
+          })
+        );
+        const feed = entries
+          .filter(Boolean)
+          .sort((a, b) => b.sentAt - a.sentAt)
+          .slice(0, 50);
+        const bodyJson = JSON.stringify({ feed });
+        _lastFeedJson = bodyJson;
+        if (edge) ctx.waitUntil(edge.put(ckey, new Response(bodyJson, { headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${FEED_CACHE_SECONDS}` } })));
+        return new Response(bodyJson, { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        // Over the KV limit (429) or a KV hiccup: serve the last good feed rather than failing the page.
+        return new Response(_lastFeedJson || JSON.stringify({ feed: [] }), { headers: { 'Content-Type': 'application/json', 'X-Feed-Stale': '1', ...corsHeaders } });
+      }
     }
 
     // DELETE /feed — clear feed entries (PIN required)
@@ -3711,6 +3737,7 @@ export default {
       if (body.key) {
         // Delete single entry
         await env.BF_FLAGS.delete(body.key);
+        _lastFeedJson = null; await bustFeedCache(_feedOrigin);
         return new Response(JSON.stringify({ ok: true, deleted: 1 }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -3718,6 +3745,7 @@ export default {
         // Delete all feed entries
         const list = await env.BF_FLAGS.list({ prefix: 'feed::' });
         await Promise.all(list.keys.map(k => env.BF_FLAGS.delete(k.name)));
+        _lastFeedJson = null; await bustFeedCache(_feedOrigin);
         return new Response(JSON.stringify({ ok: true, deleted: list.keys.length }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -3749,7 +3777,7 @@ export default {
       const type    = payload.bf_type || 'broadcast';
       const meta    = payload.bf_meta || null;
       const entry   = { id: `feed-${sentAt}`, key: kvKey, title, body, sentAt, type, meta };
-      await env.BF_FLAGS.put(kvKey, JSON.stringify(entry));
+      await feedPut(env, kvKey, JSON.stringify(entry));
       return new Response(JSON.stringify({ ok: true, feedKey: kvKey, recipients: 0 }), {
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
@@ -3781,14 +3809,14 @@ export default {
       // OneSignal's View Notification endpoint separately, out of scope here.
       const recipients = typeof data.recipients === 'number' ? data.recipients : null;
       const entry   = { id: data.id, key: kvKey, title, body, sentAt, type, meta, recipients };
-      await env.BF_FLAGS.put(kvKey, JSON.stringify(entry));
+      await feedPut(env, kvKey, JSON.stringify(entry));
 
       // Dev-69 — was an inline 48hr-only prune; now the shared helper,
       // which does that AND the new card-expiry rule for the types in
       // CARD_TIED_ANNOUNCEMENT_TYPES. Non-blocking (waitUntil) — no reason
       // to make every push send wait on a full feed scan when GET /feed
       // already does this same pass on every Home load anyway.
-      ctx.waitUntil(pruneAnnouncementFeed(env, sentAt));
+      ctx.waitUntil(pruneAnnouncementFeed(env, sentAt, null, true));
     }
 
     return new Response(JSON.stringify({ ...data, feedKey }), {
