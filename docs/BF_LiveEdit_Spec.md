@@ -73,5 +73,15 @@ The course is distracting and the host is under time pressure, so the screen mus
 - Plain-sentence impact ("Group 6 will have 2 players"), one Review then Apply screen, no tables. Draft/Apply stays underneath for atomicity.
 - Change log is written but has no screen in v1. Late-player add and mid-round withdrawal are out of v1.
 
+## 6b. Scope after the design review (Brian, 2026-11-16)
+Goal: match plan to reality and give the host confidence the results are right. Not an audit trail for players ("the players played; focus on result integrity, not the sausage making"). Do not over-engineer.
+**In v1:**
+1. **Plan vs. as-played.** The published Groups stay as the plan. Live Edit changes an as-played copy; scoring, Close and payouts read only that copy, so no reader depends on the 8-hour window (replaces the `ensureGroupSet` patch as the root fix).
+2. **Player status, never delete.** Registered / Playing / Out (reason: no-show, or withdrew after N holes). Ante follows status (decision 2). Scores for an Out player are refused or held aside.
+3. **Quick "who's here" at launch.** One list, everyone defaulted present, tap only exceptions. Brought forward from "later" because most no-shows are known at the first tee.
+4. **Host confidence line**, shown at Review and at the top of Close, plain sentences: Planned N players / G groups. Playing N / G. Out: names (reason). Teams that changed size.
+**Dropped:** player-visible change list, "corrected" marker with before/after payouts, change log screen (an internal row may still be written).
+**To verify before building:** whether each score already stores who entered it and when.
+
 ## 7. Related shipped work in Dev-100 that this builds on
 v4.80.3/4.80.4 (Close dialog can remove a no-show, with or without a card; removed players excluded even with keyed scores), v4.81.1 (commissioner can delete a scorecard from the score detail; use it to clear a no-show's bogus card).
