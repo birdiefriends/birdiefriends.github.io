@@ -16055,9 +16055,23 @@ function openScoreDetail(scId) {
           <span style="font-size:0.85rem;font-weight:600;color:var(--green-dark)">Total</span>
           <span style="font-family:'DM Mono',monospace;font-size:1.3rem;font-weight:800;color:var(--green-dark)">${sc.total != null ? sc.total : '–'}</span>
         </div>
+        ${isCommissioner() ? `<button type="button" class="btn btn-secondary-danger btn-sm" style="width:100%;margin-top:12px" onclick="deleteScorecardAdmin(${Number(sc.id)})">🗑 Delete this scorecard</button>` : ''}
       </div>`;
   }
   openModal('score-detail-modal');
+}
+async function deleteScorecardAdmin(scId) {
+  if (!isCommissioner()) return;
+  const sc = _historyScores.find(s => s.id === scId); if (!sc) return;
+  if (!confirm(`Delete ${sc.player}'s scorecard (${sc.total != null ? sc.total : 'no total'}) for good? It cannot be undone. If the event is closed, reopen and re-close it to refresh the results.`)) return;
+  try {
+    const res = await fetch(`${SCORECARD_API}/scorecards/${scId}?pin=${encodeURIComponent(COMMISSIONER_PIN)}`, { method: 'DELETE' });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.ok) throw new Error(d.error || 'Delete failed');
+    showToast(`🗑 ${sc.player}'s scorecard deleted`);
+    try { closeModal('score-detail-modal'); } catch (e) {}
+    try { await loadMyHistory(); } catch (e) {}
+  } catch (e) { showToast('❌ ' + e.message, true); }
 }
 // Synthetic 'gathering:<id>' keys aren't human-readable on their own — look
 // up the real title from gatheringData when available.
