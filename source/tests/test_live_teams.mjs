@@ -8,7 +8,7 @@ const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const ctx = vm.createContext({ console, JSON, Math, Number, String, Set, Map, Array, Object, BFEngine });
 vm.runInContext(`let gatheringData = [{ gatheringId: 7, teamSize: 2 }, { gatheringId: 8 }]; let gatheringRegData = []; let _gatheringGamesIndex = new Map();`, ctx);
-vm.runInContext(['isOpenSpotName', 'escapeHtml', 'teamSizeOf', 'partnersOf', 'teamsState', 'gatheringRowWithLiveTeams', 'gatheringRoundConfig'].map(n => extractFn(src, n)).join('\n'), ctx);
+vm.runInContext(['isOpenSpotName', 'escapeHtml', 'teamSizeOf', 'partnersOf', 'teamsState', 'gatheringAsPlayed', 'gatheringRowWithLiveTeams', 'gatheringRoundConfig'].map(n => extractFn(src, n)).join('\n'), ctx);
 const reg = (player, partner, teamName) => ({ gatheringId: 7, player, status: 'Yes', partner: partner || null, teamName: teamName || null });
 const saved = { games: ['scramble'], dollar_per_player: 10, game_configs: { scramble: { dollar_per_player: 10, basis: 'gross', scoring: 'strokes', hcp_method: 'none', payout: 'winner', pairs: [['Ann', 'Bob'], ['Cy', 'Di']], names: ['Old A', 'Old B'] } } };
 const card = (player, v) => ({ player, holes: Array.from({ length: 18 }, () => v) });

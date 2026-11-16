@@ -3064,6 +3064,9 @@ export default {
           return json({ ok: true });
         }
         if (request.method === 'POST' && isPublish) {
+          // Live Edit (Dev-101): a publish may carry the version the editor started from. If someone else published since, refuse, so a stale
+          // second editor cannot overwrite the host's change. Callers that send no if_version (the Groups screen) behave exactly as before.
+          if (body.if_version != null && body.if_version !== '' && Number(body.if_version) !== (row ? row.version : 0)) return json({ error: 'The groups were changed by someone else. Reload and try again.', code: 'stale', version: row ? row.version : 0 }, 409);
           const d = body.draft && typeof body.draft === 'object' ? body.draft : parse(row && row.draft);
           if (!d || !Array.isArray(d.groups) || !d.groups.length) return json({ error: 'There is no draft to publish' }, 400);
           const text = JSON.stringify(d), prev = parse(row && row.published);

@@ -6564,6 +6564,141 @@ async function groupsPublish() {
     groupsRender();
   } catch (e) { showToast('Could not publish: ' + (e.message || e), true); if (btn) btn.disabled = false; }
 }
+// ── Live Edit (Dev-101): fix the roster and groups after launch ─────────────────────────────────────────────────────────
+// The as-played roster is the published Groups document plus { teams, out, planned } (see gatheringAsPlayed). BFEngine.BFLiveEdit holds
+// all the rules; this is only the glue: load the current state, and save it in ONE publish (version-checked, so a stale second editor is refused).
+function liveEditState(gid) {
+  const g = gatheringData.find(x => x.gatheringId === gid), set = _groupSets[gid] && _groupSets[gid].published;
+  if (!set) return null;
+  const N = g ? teamSizeOf(g) : 0, LE = BFEngine.BFLiveEdit;
+  if (Array.isArray(set.teams) && set.planned) {   // already edited once: the saved copy IS the state
+    return { v: 1, mode: set.mode || 'shotgun', holes: set.holes || 18, group_size: set.group_size || 4, team_size: N, groups: JSON.parse(JSON.stringify(set.groups || [])),
+      teams: JSON.parse(JSON.stringify(set.teams)), out: JSON.parse(JSON.stringify(set.out || {})), planned: set.planned };
+  }
+  const st = N ? teamsState(gatheringRegData.filter(r => r.gatheringId === gid), N) : null;
+  return LE.fromPlan(set, st ? { pairs: st.pairs, names: st.names } : null, { team_size: N });
+}
+// Save the as-played state: ONE publish carrying the whole document. Players who moved get their usual group push (the Worker only notifies
+// players whose group or start hole changed). Registrations for no-shows are then set to No (best effort; the document alone already excludes them).
+async function liveEditSave(gid, state, title) {
+  const g = gatheringData.find(x => x.gatheringId === gid), cur = _groupSets[gid] || {}, prev = cur.published || {};
+  const doc = Object.assign({}, prev, { groups: state.groups.map(x => { const o = Object.assign({}, x); delete o.units; return o; }), teams: state.teams, out: state.out, planned: state.planned });
+  const r = await gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${gid}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ host_id: currentPlayer, title: title || (g && g.name) || 'Your event', draft: doc, if_version: cur.version != null ? cur.version : 0 }) }, 15000);
+  if (!r || !r.ok) { const e = new Error((r && r.error) || 'the server did not accept it'); e.code = r && r.code; throw e; }
+  _groupSets[gid] = { published: doc, version: r.version || (cur.version || 0) + 1 };
+  const failed = [];
+  for (const k of Object.keys(state.out || {})) {
+    const o = state.out[k]; if (!o || o.reason !== 'noshow') continue;
+    const reg = gatheringRegData.find(x => x.gatheringId === gid && String(x.player).trim().toLowerCase() === k);
+    if (reg && reg.status === 'No') continue;
+    try {
+      const rr = await gatheringsFetchJSON(`${GATHERINGS_API}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gathering_id: gid, player_id: o.player, status: 'no' }) }, 10000);
+      if (!rr || !rr.ok) throw new Error('not saved');
+      if (reg) reg.status = 'No';
+    } catch (e) { failed.push(o.player); }
+  }
+  return { version: _groupSets[gid].version, notified: r.notified || 0, regFailed: failed };
+}
+// The "Fix groups" sheet (Live Panel, host or commissioner). Three actions only: Not here / Move / Start hole. Everything is a DRAFT (a list of ops)
+// until Apply; the preview line says in plain words what the event will look like. The rules live in BFEngine.BFLiveEdit.
+let _le = null;
+function liveEditEntryHtml(gid) {
+  if (gid == null) return '';
+  const g = gatheringData.find(x => x.gatheringId === gid);
+  const ok = g && (g.hostId === currentPlayer || (typeof isCommissioner === 'function' && isCommissioner())) && _groupSets[gid] && _groupSets[gid].published;
+  return ok ? `<div style="margin:0 0 10px"><button type="button" class="sc-submit-btn" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.35)" onclick="openLiveEdit(${gid})">✏️ Fix groups</button></div>` : '';
+}
+async function openLiveEdit(gid) {
+  const g = gatheringData.find(x => x.gatheringId === gid);
+  if (!g) { showToast('Could not find this Gathering', true); return; }
+  await ensureGroupSet(gid);
+  const base = liveEditState(gid);
+  if (!base) { showToast('Publish the groups first, then you can fix them here', true); return; }
+  _le = { gid, title: g.name, base, ops: [], sel: null, moveFor: null, holeFor: null, names: [] };
+  leRender(true);
+}
+function leRender(open) {
+  if (!_le) return;
+  const LE = BFEngine.BFLiveEdit, P = LE.preview(_le.base, _le.ops), st = P.state, E = escapeHtml, N = st.team_size || 0;
+  _le.names = [];
+  const idx = n => { _le.names.push(n); return _le.names.length - 1; };
+  const box = (bg, color, inner) => `<div style="background:${bg};color:${color};border-radius:10px;padding:9px 12px;margin:0 0 8px;font-size:0.85rem;line-height:1.5">${inner}</div>`;
+  const btn = (label, js, strong) => `<button type="button" onclick="${js}" style="min-height:40px;padding:0 12px;margin:3px 4px 3px 0;border-radius:10px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer;${strong ? 'background:var(--green);color:#fff;border:0' : 'background:#fff;color:var(--green-dark);border:1.5px solid var(--green)'}">${label}</button>`;
+  let h = box('var(--green-light)', 'var(--green-dark)', E(P.line));
+  P.errors.forEach(e => { h += box('#FDECEA', '#8A1C13', '⛔ ' + E(e.msg)); });
+  P.warnings.filter(w => w.code !== 'hole_shared').forEach(w => { h += box('#FFF6DD', '#6B4E00', E(w.msg)); });
+  P.orphans.forEach(o => {
+    const who = o.players.join(' & ');
+    h += box('#FFF6DD', '#6B4E00', `<b>${E(who)}</b> ${o.players.length > 1 ? 'are' : 'is'} short of a team (Group ${o.group + 1}). Stays as is unless you choose:<br>` +
+      o.options.filter(x => x.kind !== 'solo').map(x => btn(E(x.msg) + (x.group_size_after ? ` · Group ${x.group + 1} → ${x.group_size_after}` : ''), `leDo(${JSON.stringify({ op: 'join', player: o.players[0], with: x.with }).replace(/"/g, '&quot;')})`)).join(''));
+  });
+  st.groups.forEach((g, gi) => {
+    const teamsHere = st.teams.filter(t => t.members.some(m => g.members.some(x => String(x).trim().toLowerCase() === String(m).trim().toLowerCase())));
+    h += `<div style="border:1.5px solid var(--border);border-radius:12px;padding:8px 10px;margin:0 0 8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b style="flex:1">Group ${gi + 1} <span style="font-weight:400;color:var(--text-muted)">· ${g.members.length} player${g.members.length === 1 ? '' : 's'}</span></b>
+        ${st.mode === 'shotgun' ? `<button type="button" onclick="leHole(${gi})" style="min-height:34px;padding:0 10px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-family:inherit;font-weight:700;cursor:pointer">Hole ${g.start_hole || '?'}</button>` : ''}</div>`;
+    if (_le.holeFor === gi) h += `<div style="padding:4px 0 8px">${Array.from({ length: st.holes }, (_, i) => `<button type="button" onclick="leSetHole(${gi},${i + 1})" style="width:40px;height:40px;margin:2px;border-radius:8px;border:1.5px solid var(--green);background:${g.start_hole === i + 1 ? 'var(--green)' : '#fff'};color:${g.start_hole === i + 1 ? '#fff' : 'var(--green-dark)'};font-family:inherit;font-weight:700;cursor:pointer">${i + 1}</button>`).join('')}</div>`;
+    teamsHere.forEach(t => {
+      const tag = N > 1 && t.members.length < N ? (t.members.length === 1 ? 'alone' : 'short') : N > 1 && t.members.length > N ? t.members.length + '-some' : '';
+      h += `<div style="margin:2px 0">${t.members.map(m => { const i = idx(m), on = _le.sel === i; return `<button type="button" onclick="leTap(${i})" style="min-height:38px;padding:0 10px;margin:2px 4px 2px 0;border-radius:9px;font-family:inherit;font-size:0.9rem;cursor:pointer;border:1.5px solid ${on ? 'var(--green)' : 'var(--border)'};background:${on ? 'var(--green-light)' : '#fff'};font-weight:${on ? 700 : 500}">${E(m)}</button>`; }).join('')}${tag ? `<span style="font-size:0.74rem;color:#6B4E00;background:#FFF6DD;border-radius:6px;padding:2px 6px">${tag}</span>` : ''}</div>`;
+      const selName = _le.sel != null ? _le.names[_le.sel] : null;
+      if (selName && t.members.includes(selName)) {
+        h += `<div style="padding:2px 0 6px">${btn('Not here', `leAct('noshow')`)}${btn('Left early', `leAct('withdrew')`)}${N > 1 && t.members.length > 1 ? btn('Play alone', `leAct('solo')`) : ''}${btn('Move…', `leAct('move')`)}</div>`;
+        if (_le.moveFor === _le.sel) h += `<div style="padding:0 0 6px">${st.groups.map((x, xi) => xi === gi ? '' : btn('Group ' + (xi + 1) + (x.start_hole ? ' · hole ' + x.start_hole : ''), `leMoveTo(${xi})`)).join('')}${btn('+ New group', `leMoveTo(${st.groups.length})`)}</div>`;
+      }
+    });
+    h += `</div>`;
+  });
+  const outs = Object.keys(st.out).map(k => st.out[k]);
+  if (outs.length) h += `<div style="font-size:0.8rem;color:var(--text-muted);margin:0 0 8px">Out: ${outs.map(o => `${E(o.player)} (${o.reason === 'noshow' ? 'no-show' : 'left early'})`).join(', ')}</div>`;
+  h += `<div style="display:flex;gap:8px;margin-top:6px"><button type="button" class="host-cta-btn" style="margin:0;flex:2${P.can_apply && _le.ops.length ? '' : ';opacity:0.45'}" ${P.can_apply && _le.ops.length ? '' : 'disabled'} onclick="leApply()">Apply</button>
+    <button type="button" class="host-cta-btn" style="margin:0;flex:1;background:#fff;color:var(--green-dark);border:1.5px solid var(--green)" ${_le.ops.length ? '' : 'disabled'} onclick="leUndo()">Undo</button></div>`;
+  if (open || !document.getElementById('host-sheet-content')) openHostSheet('✏️ Fix groups', h); else document.getElementById('host-sheet-content').innerHTML = h;
+}
+function leTap(i) { if (!_le) return; _le.sel = _le.sel === i ? null : i; _le.moveFor = null; _le.holeFor = null; leRender(); }
+function leDo(op) { if (!_le) return; _le.ops.push(op); _le.sel = null; _le.moveFor = null; _le.holeFor = null; leRender(); }
+function leAct(kind) {
+  if (!_le || _le.sel == null) return; const name = _le.names[_le.sel];
+  if (kind === 'move') { _le.moveFor = _le.sel; _le.holeFor = null; leRender(); return; }
+  if (kind === 'solo') return leDo({ op: 'solo', player: name });
+  leDo({ op: 'out', player: name, reason: kind });
+}
+function leMoveTo(gi) {
+  if (!_le || _le.sel == null) return; const name = _le.names[_le.sel], st = BFEngine.BFLiveEdit.preview(_le.base, _le.ops).state;
+  const ti = st.teams.findIndex(t => t.members.includes(name)), mates = ti >= 0 ? st.teams[ti].members : [name];   // a team moves together
+  leDo({ op: 'move', players: mates.slice(), group: gi });
+}
+function leHole(gi) { if (!_le) return; _le.holeFor = _le.holeFor === gi ? null : gi; _le.sel = null; _le.moveFor = null; leRender(); }
+function leSetHole(gi, hole) { leDo({ op: 'startHole', group: gi, hole }); }
+function leUndo() { if (!_le || !_le.ops.length) return; _le.ops.pop(); _le.sel = null; _le.moveFor = null; _le.holeFor = null; leRender(); }
+async function leApply() {
+  if (!_le) return; const P = BFEngine.BFLiveEdit.preview(_le.base, _le.ops); if (!P.can_apply || !_le.ops.length) return;
+  const gid = _le.gid; showToast('Saving…');
+  try {
+    const r = await liveEditSave(gid, P.state, _le.title);
+    closeHostSheet(); _le = null;
+    showToast(r.regFailed.length ? `Groups updated. Could not set ${r.regFailed.join(', ')} to No; scoring already ignores them.` : `Groups updated${r.notified ? ' · ' + r.notified + ' player' + (r.notified === 1 ? '' : 's') + ' told' : ''}`, !!r.regFailed.length);
+    if (typeof renderAll === 'function') renderAll();
+    if (typeof renderLiveBanner === 'function') renderLiveBanner();
+  } catch (e) {
+    if (e.code === 'stale') { await refreshGroupSetNow(gid); showToast('Someone else changed the groups. Reloaded; please redo your change.', true); closeHostSheet(); _le = null; }
+    else showToast('Could not save: ' + (e.message || e), true);
+  }
+}
+// Phones with the live panel open pick up a regroup within a minute: compare the published version, reload the set when it moved.
+async function refreshGroupSetNow(gid) {
+  try {
+    const r = await gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${gid}`, {}, 8000);
+    if (r && r.published) { _groupSets[gid] = { published: r.published, version: r.version }; return true; }
+  } catch (e) { /* retried on the next tick */ }
+  return false;
+}
+async function liveGroupSetCheck(evt) {
+  const gid = evt && evt.gatheringId; if (gid == null || !_groupSets[gid]) return;
+  const before = _groupSets[gid].version;
+  if (await refreshGroupSetNow(gid) && _groupSets[gid].version !== before) { if (typeof renderAll === 'function') renderAll(); if (typeof renderLiveBanner === 'function') renderLiveBanner(); }
+}
 // The player's own card: where they start. Only gatherings starting within a week are looked up, and only the published set is ever read.
 async function groupsLoadPublished() {
   try {
@@ -9610,12 +9745,13 @@ function startCtpRefresh() {
     loadSkinBoardData();
     loadBirdieBallAnswers(evt); // Dev-86 round 3 follow-up — keeps the "who's lost it" board and the already-answered check both live
     loadFourballLive(evt);
+    liveGroupSetCheck(evt);   // Live Edit: a regroup by the host reaches every open phone within a minute
   }, 60000);  // refresh every 60 seconds
 }
 document.addEventListener('visibilitychange', () => {
   if (document.hidden || !_livePanelOpen || !_ctpRefreshTimer) return;
   const evt = getLiveEvent(); if (!evt) return;
-  loadCtpData(evt); loadSkinBoardData(); loadBirdieBallAnswers(evt); loadFourballLive(evt);
+  loadCtpData(evt); loadSkinBoardData(); loadBirdieBallAnswers(evt); loadFourballLive(evt); liveGroupSetCheck(evt);
 });
 function stopCtpRefresh() {
   if (_ctpRefreshTimer) { clearInterval(_ctpRefreshTimer); _ctpRefreshTimer = null; }
@@ -10334,6 +10470,7 @@ function buildLivePanel(evt) {
   const fbSection = showFourballSection ? (_skOn ? fourballActionsHtml(_liveConfig) : fourballLiveSectionHtml(_liveConfig)) : '';
   return `<div class="live-panel">
     ${_skOn ? livePanelModeToggleHtml('games') : ''}
+    ${liveEditEntryHtml(_panelGid)}
     ${groupingsLink}
     ${photosSection}
     ${showFourballSection ? liveSectionHtml('game', BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.icon, BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.label, fbSection) : ''}
@@ -18393,7 +18530,16 @@ function gatheringStartHoles(gid) {
 // A player the host took off the game (registration set to "No") must not count, even if someone in their group keyed scores for them.
 function gcActiveCards(gid, cards) {
   const out = new Set((typeof gatheringRegData !== 'undefined' ? gatheringRegData : []).filter(r => Number(r.gatheringId) === Number(gid) && r.status === 'No').map(r => String(r.player || '').trim().toLowerCase()));
+  // Live Edit (Dev-101): a no-show the host marked Out is excluded even when the registration change did not go through
+  const ap = gatheringAsPlayed(gid);
+  if (ap && ap.out) Object.keys(ap.out).forEach(k => { if (ap.out[k] && ap.out[k].reason === 'noshow') out.add(String(k).trim().toLowerCase()); });
   return out.size ? (cards || []).filter(c => !out.has(String(c.player || '').trim().toLowerCase())) : cards;
+}
+// Live Edit (Dev-101): the AS-PLAYED roster rides inside the published Groups document ({ teams, out, planned }) so one write changes it
+// atomically. null = the host never used Live Edit; everything then reads the registrations and the published groups as before.
+function gatheringAsPlayed(gid) {
+  const set = gid != null && typeof _groupSets !== 'undefined' && _groupSets[gid] ? _groupSets[gid].published : null;
+  return set && (Array.isArray(set.teams) || (set.out && typeof set.out === 'object')) ? set : null;
 }
 function latestScorecardPerPlayer(rows) {
   if (typeof BFEngine === 'undefined') throw new Error('bf_engine.js did not load — reload the app');
@@ -19360,6 +19506,13 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 function gatheringRowWithLiveTeams(row, gatheringId) {
   try {
     if (!row || !Array.isArray(row.games) || !row.games.includes('scramble')) return row;
+    // Live Edit (Dev-101): the host's as-played teams win. A solo or a 3-some is a team like any other, so no size check here.
+    const ap = gatheringAsPlayed(gatheringId);
+    if (ap && Array.isArray(ap.teams) && ap.teams.length) {
+      const tm = ap.teams.filter(t => t && Array.isArray(t.members) && t.members.length);
+      const sc0 = Object.assign({}, (row.game_configs && row.game_configs.scramble) || {}, { pairs: tm.map(t => t.members.slice()), names: tm.map(t => t.name || '') });
+      return Object.assign({}, row, { game_configs: Object.assign({}, row.game_configs || {}, { scramble: sc0 }) });
+    }
     const g = gatheringData.find(x => x.gatheringId === gatheringId);
     const size = g ? teamSizeOf(g) : 0;
     if (!size) return row;

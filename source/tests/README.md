@@ -17,6 +17,11 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_game_registry.mjs` | Dev-93 conformance loop over every registered game: required members, config schema, fixtures reproduce exact payouts, validator, generic pot-fit guard wording, 400-round conservation fuzz |
 | `test_worker_game_configs.mjs` | Dev-93 R3: BFE Worker validates/stores game configs through the schemas generated from bf_engine.js; legacy column shapes unchanged; generic `game_configs`; works before the migration; fails if the generated block is stale (`node sync_worker_schemas.mjs` regenerates it) |
 | `test_fourball_form.mjs` | Dev-93 Fourball step 3: Games-form section (pair editor, Gross/Net + Own/Off-the-low, ✨ Suggest pairs, pot preview, over-commit, save payload incl. `game_configs.fourball`) and `recommendPairs` unit tests |
+| `test_scramble_odd_teams.mjs` | Dev-101: scramble scores solo and 3-some teams; pot counts players in; team prize splits among the players on the team; handicap at the team's own size |
+| `test_live_edit_engine.mjs` | Dev-101: BFLiveEdit as-played copy, orphan choices (no default), no-show vs left early, errors vs warnings, Planned/Playing line |
+| `test_asplayed_readers.mjs` | Dev-101: Close, live boards and payouts read the as-played teams and Out players from the published Groups document |
+| `test_live_edit_save.mjs` | Dev-101: one version-checked publish; stale editor refused; no-show registrations set to No |
+| `test_live_edit_ui.mjs` | Dev-101: the Fix groups sheet (Not here / Move / Start hole, preview line, Apply) |
 | `test_rail_cancel.mjs` | Dev-93: At-the-course rail off switch sticks past tee time; cancelled events never launch the rail or the Live Panel (test rounds excepted) |
 | `test_fourball_live.mjs` | Dev-93: Fourball live board (partial cards, to-par ranking, net, agrees with the Close winner) and the Live Panel section |
 | `test_fourball_segments.mjs` | Dev-93: Fourball pot variants: segments, strokes vs holes won, foursome vs field, pushes, match view |

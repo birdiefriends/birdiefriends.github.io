@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 const HERE = (p) => fileURLToPath(new URL(p, import.meta.url));
 const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
-const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','escapeHtml','evtPhotoKey','computeGatheringGamesPayout','latestScorecardPerPlayer','gcActiveCards','ensureGroupSet','gcRemoveNoShowPick','scorecardMissingHoles','renderGatheringPayoutHtml','gpTabStyle','gpBtnStyle',
+const fns = ['gameInfoBtnHtml','gameInfoPanelHtml','escapeHtml','evtPhotoKey','computeGatheringGamesPayout','latestScorecardPerPlayer','gatheringAsPlayed','gcActiveCards','ensureGroupSet','gcRemoveNoShowPick','scorecardMissingHoles','renderGatheringPayoutHtml','gpTabStyle','gpBtnStyle',
   'openGatheringCloseSheet','gatheringRowWithLiveTeams','gcReconcile','confirmGatheringClose','openModal','closeModal',
   'isOpenSpotName','loadHostSpots','hostSpotsHtml','hostAddOpenSpot','refreshAfterSpotChange','openFillSpotSheet','renderFillSpotSheet',
   'fillSpotListHtml','filterFillSpotList','pickFillSpotMember','confirmFillSpot','gamesScoreKeyForGid','eventNameFromRef','hostAutoOpenSpots','hostLeftoverSeats','hostUnheldSeats','hostBumpHold','hostSetLeftAnnounce','renderHostLeftover','updateHostSpotsPreview','updateHostPlayersRow','hostCapacitySubText','hostTeamsCount','setHostTeams','hostSwitchHtml','hostSwitchSet','hostRowHtml','hostSetRowValue','bumpHostCapacity','setHostWantGames','pickHostOption','setHostHoles','closeHostSheet','openHostSheet'];

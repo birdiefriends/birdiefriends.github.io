@@ -7,7 +7,7 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) cons
 const c = { gatheringRegData: [
   { gatheringId: 7, player: 'Tom Kobal', status: 'No' }, { gatheringId: 7, player: 'Troy Schwab', status: 'No' },
   { gatheringId: 7, player: 'Carl Stadtmueller', status: 'Yes' }, { gatheringId: 8, player: 'Carl Stadtmueller', status: 'No' }] };
-vm.createContext(c); vm.runInContext(extractFn(src, 'gcActiveCards') + '\nthis.f = gcActiveCards;', c);
+vm.createContext(c); vm.runInContext(extractFn(src, 'gatheringAsPlayed') + '\n' + extractFn(src, 'gcActiveCards') + '\nthis.f = gcActiveCards;', c);
 const cards = ['Tom Kobal', 'troy schwab ', 'Carl Stadtmueller', 'Scott Skeens'].map(p => ({ player: p, holes: [4] }));
 const r = c.f(7, cards);
 ok(r.length === 2 && r.every(x => !/kobal|schwab/i.test(x.player)), 'removed players dropped (case/space tolerant)');
