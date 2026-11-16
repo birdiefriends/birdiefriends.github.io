@@ -6576,6 +6576,15 @@ async function groupsLoadPublished() {
     if (any && typeof renderAll === 'function') renderAll();
   } catch (e) { /* the card just shows no group line */ }
 }
+// The shotgun start holes drive MiserBall and Turkeys. groupsLoadPublished only looks at events within 8 hours of tee time, so a Close done that evening or the next
+// day found no Groups and counted every group from hole 1 (2Man 2026-11-16: wrong TurkeyBall winner). Close loads the set itself.
+async function ensureGroupSet(gid) {
+  try {
+    if (gid == null || (_groupSets[gid] && _groupSets[gid].published)) return;
+    const r = await gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${gid}`, {}, 8000);
+    if (r && r.published) _groupSets[gid] = { published: r.published, version: r.version };
+  } catch (e) { console.warn('[Groups] start holes not loaded:', e.message); }
+}
 function myGroupBannerHtml(evt) {
   const gs = evt && evt.gatheringId ? _groupSets[evt.gatheringId] : null; if (!gs || !gs.published || !currentPlayer) return '';
   const info = BFEngine.BFGroups.of(gs.published, currentPlayer);
@@ -19063,6 +19072,7 @@ async function openGatheringCloseSheet(gatheringId) {
   body.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:20px 0">Checking scorecards…</div>`;
   openModal('gathering-close-modal');
   try {
+    await ensureGroupSet(gatheringId); // start holes for shotgun MiserBall/Turkeys, even when closing the next day
     const key = gamesScoreKeyForGid(gatheringId); // v4.9.4 — event shadows score under the event's own name
     const _shadowRef = _eventShadowByGid.get(Number(gatheringId)) || null;
     const [cfgRes, scRes, bbRes, spotsData] = await Promise.all([

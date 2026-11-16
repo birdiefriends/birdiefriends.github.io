@@ -1,7 +1,7 @@
 # Next session: Dev-101 (written 2026-11-16, end of Dev-100)
 
 ## State at the end of Dev-100 ("Turkey 2Man game day, payouts and the day after", 2026-11-13 to 11-16)
-- `main` = `59a4b76`; portal **v4.81.1**, `bf_engine.js` **1.56.0**. Main Worker (`worker.js`, v4.80.6 KV-budget fix) deployed by Brian. BFE Worker (`bf_experiences_worker.js`) changed during the session (Turkeys, MiserBall, scramble `prize` schemas via `node source/tests/sync_worker_schemas.mjs`); confirm with Brian that the current file is the one deployed.
+- `main` = see git log (v4.81.2 fix is the last portal commit); portal **v4.81.2**, `bf_engine.js` **1.56.0**. Main Worker (`worker.js`, v4.80.6 KV-budget fix) deployed by Brian. BFE Worker (`bf_experiences_worker.js`) changed during the session (Turkeys, MiserBall, scramble `prize` schemas via `node source/tests/sync_worker_schemas.mjs`); confirm with Brian that the current file is the one deployed.
 - Tests: per-file `node test_*.mjs`; `run_all.mjs` takes about 3.5 minutes (run in background and poll). Known pre-existing failures only: `test_at_course`, `test_dupe_removal`, `test_rail_drag`.
 - The Turkey 2Man (Gathering 104, Sun 11/15, 24 registered, 22 played, 12 scramble teams) was played, closed and paid out from the new whole-dollar list.
 - Read `docs/BF_LiveEdit_Spec.md` (the Dev-101 build) and the Dev-100 entry in `docs/BF_Session_Log.md`.
