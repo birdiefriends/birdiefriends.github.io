@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.56.0';
+  const ENGINE_VERSION = '1.57.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -763,6 +763,11 @@
     const v = addon && addon.allowance;
     return v != null && v !== '' && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : SCRAMBLE_COMBINED[scrambleSize(addon)];
   }
+  // A scramble team that is not the event's size (a solo or a 3-some after a no-show, Live Edit): the event's method at the team's OWN
+  // size, with the built-in percentages for that size (the host's custom percentages were set for the event's size, so they do not carry over).
+  function scrambleAddonFor(addon, n) {
+    return n === scrambleSize(addon) ? addon : { hcp_method: addon && addon.hcp_method, team_size: n };
+  }
   function scrambleTeamStrokes(addon, hcps) {
     const hs = (hcps || []).map(Number).filter(Number.isFinite).sort((x, y) => x - y);
     if (!hs.length) return 0;
@@ -813,7 +818,7 @@
       const cardBy = new Map((inputs.scorecards || []).map(c => [norm(c.player), c]));
       const pairsCfg = kind === 'match'
         ? [].concat(...(addon.matches || []).filter(m => Array.isArray(m) && m.length === 2).map(m => [[m[0]], [m[1]]]))
-        : (addon.pairs || []).filter(p => Array.isArray(p) && p.length === size);
+        : (addon.pairs || []).filter(p => Array.isArray(p) && (kind === 'scramble' ? p.length >= 1 && p.length <= 4 : p.length === size));   // a scramble team may be a solo or a 3-some (Live Edit)
       const wantNet = addon.basis === 'net';
       const mode = addon.net_mode === 'low' ? 'low' : 'own';
       const netOk = wantNet && !!inputs.netByPlayer && !!inputs.hcSpecs;
@@ -840,7 +845,7 @@
       const courseOf = nm => { const sp = specOf(nm); return sp.kind === 'index' && Number.isFinite(Number(sp.course_hcp)) ? Number(sp.course_hcp) : null; };
       const playerStrokes = nm => { const c = courseOf(nm); return pct != null && c != null ? Math.round(c * pct / 100) : strokesOf(nm); };
       const sideStrokes = side => {
-        if (kind === 'scramble') return scrambleTeamStrokes(addon, side.map(nm => (courseOf(nm) != null ? courseOf(nm) : strokesOf(nm))));
+        if (kind === 'scramble') return scrambleTeamStrokes(scrambleAddonFor(addon, side.length), side.map(nm => (courseOf(nm) != null ? courseOf(nm) : strokesOf(nm))));
         if (kind !== 'altshot') return side.reduce((a, nm) => a + playerStrokes(nm), 0);
         const sum = side.reduce((a, nm) => a + (courseOf(nm) != null ? courseOf(nm) : strokesOf(nm)), 0);
         return Math.round(sum * (pct != null ? pct : 100) / 100);
@@ -935,7 +940,7 @@
         plan = { period: plan.period, mode: plan.period === 'round' || nineRound ? 'match' : plan.period, win_by: kind === 'hilo' ? 'points' : 'holes', scope: 'group', segs: plan.period === 'round' || nineRound ? whole : plan.segs };
       }
       // participants: the whole round antes into BestBall; Alternate Shot and Match Play only the people in a side
-      const nPlay = kind === 'bestball' ? L.n : pairsCfg.length * size;
+      const nPlay = kind === 'bestball' ? L.n : kind === 'scramble' ? pairsCfg.reduce((t, pr) => t + pr.length, 0) : pairsCfg.length * size;
       const everyoneIn = kind === 'bestball' ? L.players.slice() : pairsCfg.flat().map(nm => L.canon(nm));
       const giveBackTo = (names, amt) => { const back = names.length ? Math.floor(amt / names.length) : 0; names.forEach(nm => L.credit(nm, 'given_back', back)); return { each: back, unallocated: amt - back * names.length }; };
       if (plan.mode !== 'total' && (headToHead || !nineRound) && rows.length >= 2) {
@@ -1014,17 +1019,18 @@
         const splits = scrambleSplits(addon).slice(0, ranked.length);
         const splitSum = splits.reduce((t, v) => t + v, 0);
         placesOut = [];
-        let i = 0;
+        let i = 0, paidOut = 0;
         while (i < ranked.length && i < splits.length) {
           const grp = ranked.filter(r => r.total === ranked[i].total);
           const share = splits.slice(i, i + grp.length).reduce((t, v) => t + v, 0);
           const each = Math.floor(Math.floor(pot * share / splitSum) / grp.length);
+          // the team prize is split equally among the players ON that team, so a 3-some's players get less each than a pair's
           const eachPlayer = Math.floor(each / size);
-          grp.forEach(r => r.pair.forEach(nm => L.credit(nm, gid, eachPlayer)));
+          grp.forEach(r => { const ep = Math.floor(each / r.pair.length); r.pair.forEach(nm => L.credit(nm, gid, ep)); paidOut += ep * r.pair.length; });
           placesOut.push({ place: i + 1, tied: grp.length > 1, pairs: grp.map(r => r.pair), total: grp[0].total, per_pair: each, per_player: eachPlayer });
           i += grp.length;
         }
-        unalloc = pot - placesOut.reduce((t, p) => t + p.per_player * size * p.pairs.length, 0);
+        unalloc = pot - paidOut;
         perPair = placesOut[0].per_pair; perPlayer = placesOut[0].per_player;
       } else if (winners.length) {
         perPair = Math.floor(pot / winners.length);
@@ -2387,14 +2393,15 @@
   // Scramble: a team's strokes from its players' course handicaps (ranked %s, a combined %, or none); 'low' = off the lowest team
   ADDONS.scramble.strokeRows = (sc, h) => {
     const method = scrambleMethod(sc), n = scrambleSize(sc);
-    const pairs = (sc.pairs || []).filter(pr => Array.isArray(pr) && pr.length === n);
+    const pairs = (sc.pairs || []).filter(pr => Array.isArray(pr) && pr.length >= 1 && pr.length <= 4);   // solo / 3-some teams after a Live Edit
     const base = pairs.map(pr => pr.map(nm => (h.course(nm) != null ? h.course(nm) : h.given(nm))));
-    const own = base.map(parts => scrambleTeamStrokes(sc, parts));
+    const own = base.map(parts => scrambleTeamStrokes(scrambleAddonFor(sc, parts.length), parts));
     const lowest = sc.net_mode === 'low' && own.length ? Math.min(...own) : 0;
     const pc = scramblePcts(sc), cp = scrambleCombinedPct(sc);
     return { pct: method === 'combined' ? cp : method === 'ranked' ? null : 0, rows: pairs.map((pr, i) => {
       const k = own[i] - lowest, sorted = base[i].slice().sort((a, b) => a - b);
-      const how = method === 'none' ? 'No handicap' : method === 'combined' ? `${cp}% of ${base[i].map(h.round1).join(' + ')}` : sorted.map((v, j) => `${pc[j]}% of ${h.round1(v)}`).join(' + ');
+      const ta = scrambleAddonFor(sc, pr.length), cpT = scrambleCombinedPct(ta), pcT = scramblePcts(ta);
+      const how = method === 'none' ? 'No handicap' : method === 'combined' ? `${cpT}% of ${base[i].map(h.round1).join(' + ')}` : sorted.map((v, j) => `${pcT[j]}% of ${h.round1(v)}`).join(' + ');
       return { names: pr, strokes: k, got: h.gotFor(pr[0], k), detail: `${how} = ${own[i]}${lowest ? `, off the low (${lowest}) = ${k}` : ''}` };
     }) };
   };
@@ -3597,10 +3604,131 @@
     const t = info.tee_time ? (() => { const [h, m] = info.tee_time.split(':').map(Number); return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM'); })() : '';
     return 'Group ' + info.number + (info.start_hole ? ' · start on hole ' + info.start_hole + (info.wave ? ' (' + info.wave + ')' : '') : t ? ' · ' + t + ' tee time' : '');
   }
+  // BFLiveEdit (Dev-101): the host fixes the roster and groups AFTER launch. Pure functions, no screen, no network.
+  // The published Groups are the PLAN. This works on an AS-PLAYED copy, which is what scoring, Close and payouts should read:
+  //   state = { v:1, mode, holes, group_size, team_size, groups: [{ members, start_hole?, wave? }],
+  //             teams: [{ members, name? }], out: { 'name lowercased': { player, reason: 'noshow'|'withdrew' } },
+  //             planned: { players, groups } }
+  // Rules (Brian, 2026-11-16): the host decides every orphaned partner (the app lists the choices, never picks one); group sizes 1-5 are
+  // allowed (warnings, never blocks); a no-show leaves the pot and the teams, a player who started and stopped stays (ante stays).
+  const lcn = s => String(s || '').trim().toLowerCase();
+  const LE_REASONS = { noshow: 'no-show', withdrew: 'withdrew' };
+  function liveEditFromPlan(set, teams, opts) {
+    const o = Object.assign({ holes: 18, group_size: 4, team_size: 0 }, opts || {});
+    const groups = ((set && set.groups) || []).map(g => ({ members: (g.members || []).slice(), ...(g.start_hole != null ? { start_hole: g.start_hole } : {}), ...(g.wave ? { wave: g.wave } : {}), ...(g.tee_time ? { tee_time: g.tee_time } : {}) }));
+    const inGroup = new Set(); groups.forEach(g => g.members.forEach(n => inGroup.add(lcn(n))));
+    const seen = new Set(), tms = [];
+    ((teams && teams.pairs) || []).forEach((pr, i) => { const ms = (pr || []).filter(Boolean); if (!ms.length) return; ms.forEach(n => seen.add(lcn(n))); tms.push({ members: ms.slice(), ...(teams.names && teams.names[i] ? { name: teams.names[i] } : {}) }); });
+    groups.forEach(g => g.members.forEach(n => { if (!seen.has(lcn(n))) { seen.add(lcn(n)); tms.push({ members: [n] }); } }));   // a player on no locked team is a team of one
+    return { v: 1, mode: (set && set.mode) || 'shotgun', holes: (set && set.holes) || o.holes, group_size: (set && set.group_size) || o.group_size, team_size: o.team_size || 0,
+      groups, teams: tms, out: {}, planned: { players: inGroup.size, groups: groups.length } };
+  }
+  const leGroupOf = (st, name) => st.groups.findIndex(g => g.members.some(m => lcn(m) === lcn(name)));
+  const leTeamOf = (st, name) => st.teams.findIndex(t => t.members.some(m => lcn(m) === lcn(name)));
+  function leTidy(st) {   // empty teams and empty groups disappear; nothing else is touched
+    st.teams = st.teams.filter(t => t.members.length);
+    st.groups = st.groups.filter(g => g.members.length);
+    return st;
+  }
+  function leTakeFromGroup(st, name) { st.groups.forEach(g => { g.members = g.members.filter(m => lcn(m) !== lcn(name)); }); }
+  function leTakeFromTeam(st, name) { st.teams.forEach(t => { t.members = t.members.filter(m => lcn(m) !== lcn(name)); }); }
+  function leAddToGroup(st, name, gi) {
+    if (gi >= st.groups.length) st.groups.push({ members: [] });
+    if (!st.groups[gi].members.some(m => lcn(m) === lcn(name))) st.groups[gi].members.push(name);
+  }
+  // Applies a list of ops to a COPY. Ops:
+  //  { op:'out', player, reason:'noshow'|'withdrew' }   noshow: off the groups, teams and pot; withdrew: stays where they are (ante stays) but is marked
+  //  { op:'back', player, group }                       an Out player returns (alone, to that group)
+  //  { op:'move', players:[...], group }                 these players go to group index `group` (group === groups.length starts a new group)
+  //  { op:'startHole', group, hole, wave? }
+  //  { op:'solo', player }                              the player becomes a team of one (stays in their group)
+  //  { op:'join', player, with }                        the player joins the team `with` is on, and moves to that team's group
+  function liveEditApply(state, ops) {
+    const st = JSON.parse(JSON.stringify(state)); const notes = [];
+    (ops || []).forEach(op => {
+      if (!op || !op.op) return;
+      if (op.op === 'out') {
+        const name = op.player, reason = op.reason === 'withdrew' ? 'withdrew' : 'noshow';
+        st.out[lcn(name)] = { player: name, reason };
+        if (reason === 'noshow') { leTakeFromGroup(st, name); leTakeFromTeam(st, name); }
+      } else if (op.op === 'back') {
+        const name = (st.out[lcn(op.player)] || {}).player || op.player; delete st.out[lcn(op.player)];
+        if (leGroupOf(st, name) < 0) { leAddToGroup(st, name, op.group != null ? op.group : 0); if (leTeamOf(st, name) < 0) st.teams.push({ members: [name] }); }
+      } else if (op.op === 'move') {
+        const to = op.group != null ? op.group : st.groups.length;
+        const dest = to >= st.groups.length ? st.groups.length : to;
+        (op.players || []).forEach(n => { leTakeFromGroup(st, n); });
+        // empty groups only disappear in the tidy at the end, so group indexes stay stable while ops run
+        (op.players || []).forEach(n => leAddToGroup(st, n, dest));
+      } else if (op.op === 'startHole') {
+        const g = st.groups[op.group]; if (g) { g.start_hole = op.hole; if (op.wave) g.wave = op.wave; else delete g.wave; }
+      } else if (op.op === 'solo') {
+        const name = (st.teams[leTeamOf(st, op.player)] || { members: [] }).members.find(m => lcn(m) === lcn(op.player));
+        if (name) { leTakeFromTeam(st, name); st.teams.push({ members: [name] }); }
+      } else if (op.op === 'join') {
+        const ti = leTeamOf(st, op.with), gi = leGroupOf(st, op.with);
+        if (ti >= 0 && gi >= 0) { const nm = op.player; leTakeFromTeam(st, nm); st.teams[ti].members.push(nm); leTakeFromGroup(st, nm); leAddToGroup(st, nm, gi); }
+      }
+    });
+    return { state: leTidy(st), notes };
+  }
+  const leTeamLabel = t => t.members.join(' & ');
+  // What the host sees before Apply: sizes, start-hole counts, the partners left alone (with the choices, never a default), errors and warnings.
+  function liveEditPreview(state, ops) {
+    const st = ops && ops.length ? liveEditApply(state, ops).state : JSON.parse(JSON.stringify(state));
+    const errors = [], warnings = [];
+    const sizes = st.groups.map(g => g.members.length);
+    const holeCount = {}; st.groups.forEach(g => { if (g.start_hole != null) holeCount[g.start_hole] = (holeCount[g.start_hole] || 0) + 1; });
+    // errors: these disable Apply
+    const where = new Map();
+    st.groups.forEach((g, gi) => g.members.forEach(n => { const k = lcn(n); if (where.has(k)) errors.push({ code: 'duplicate', player: n, msg: n + ' is in more than one group.' }); else where.set(k, gi); }));
+    const onTeam = new Map();
+    st.teams.forEach(t => t.members.forEach(n => { const k = lcn(n); if (onTeam.has(k)) errors.push({ code: 'team_duplicate', player: n, msg: n + ' is on more than one team.' }); else onTeam.set(k, true); }));
+    st.teams.forEach(t => t.members.forEach(n => { if (!where.has(lcn(n))) errors.push({ code: 'unplaced', player: n, msg: n + ' is not in a group.' }); }));
+    st.groups.forEach(g => g.members.forEach(n => { if (!onTeam.has(lcn(n))) errors.push({ code: 'no_team', player: n, msg: n + ' is not on a team.' }); }));
+    if (!st.groups.length) errors.push({ code: 'nobody', msg: 'Nobody is left in a group.' });
+    // warnings: advice only
+    st.groups.forEach((g, gi) => { const n = g.members.length;
+      if (n === 1) warnings.push({ code: 'alone', group: gi, msg: 'Group ' + (gi + 1) + ' has 1 player.' });
+      else if (n > st.group_size) warnings.push({ code: 'over', group: gi, msg: 'Group ' + (gi + 1) + ' has ' + n + ' players.' }); });
+    st.teams.forEach(t => { const gs = new Set(t.members.map(n => where.get(lcn(n))).filter(x => x != null)); if (gs.size > 1) warnings.push({ code: 'split', msg: leTeamLabel(t) + ' are in different groups.' }); });
+    Object.keys(holeCount).forEach(h => { if (holeCount[h] > 1) warnings.push({ code: 'hole_shared', hole: Number(h), msg: holeCount[h] + ' groups start on hole ' + h + '.' }); });
+    if (st.mode === 'shotgun') st.groups.forEach((g, gi) => { if (!(g.start_hole >= 1 && g.start_hole <= st.holes)) warnings.push({ code: 'no_hole', group: gi, msg: 'Group ' + (gi + 1) + ' has no starting hole.' }); });
+    // partners left alone: a team smaller than the event's team size. The host picks; the app only lists what is possible.
+    const N = st.team_size || 0, orphans = [];
+    if (N > 1) st.teams.forEach((t, ti) => { if (t.members.length >= N) return;
+      const options = [{ kind: 'solo', msg: 'Play as a team of ' + t.members.length }];
+      st.teams.forEach((o, oi) => { if (oi === ti || !o.members.length) return;
+        const gi = where.get(lcn(o.members[0])), after = st.groups[gi] ? st.groups[gi].members.length + t.members.length - (where.get(lcn(t.members[0])) === gi ? t.members.length : 0) : null;
+        if (o.members.length < N) options.push({ kind: 'pair', with: o.members[0], team: o.members.slice(), group: gi, group_size_after: after, msg: 'Pair up with ' + leTeamLabel(o) });
+        else options.push({ kind: 'join', with: o.members[0], team: o.members.slice(), group: gi, group_size_after: after, msg: 'Join ' + leTeamLabel(o) + ' as a ' + (o.members.length + t.members.length) + '-some' }); });
+      orphans.push({ players: t.members.slice(), group: where.get(lcn(t.members[0])), options }); });
+    return { state: st, errors, warnings, sizes, hole_counts: holeCount, orphans, can_apply: !errors.length, line: liveEditLine(st) };
+  }
+  const leNames = a => a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' & ' + a[a.length - 1];
+  // The host-confidence line: plain sentences, plan against reality.
+  function liveEditLine(st) {
+    const playing = new Set(); st.groups.forEach(g => g.members.forEach(n => playing.add(lcn(n))));
+    const parts = ['Planned: ' + st.planned.players + ' players, ' + st.planned.groups + ' group' + (st.planned.groups === 1 ? '' : 's') + '.',
+      'Playing: ' + playing.size + ' players, ' + st.groups.length + ' group' + (st.groups.length === 1 ? '' : 's') + '.'];
+    const outs = Object.keys(st.out).map(k => st.out[k]);
+    ['noshow', 'withdrew'].forEach(r => { const l = outs.filter(x => x.reason === r).map(x => x.player); if (l.length) parts.push('Out: ' + leNames(l) + ' (' + LE_REASONS[r] + ').'); });
+    const N = st.team_size || 0;
+    if (N > 1) st.teams.forEach(t => { const n = t.members.length; if (n === 1) parts.push(t.members[0] + ' is playing alone.'); else if (n > N) parts.push(leTeamLabel(t) + ' is a ' + n + '-some.'); else if (n < N) parts.push(leTeamLabel(t) + ' is a team of ' + n + '.'); });
+    return parts.join(' ');
+  }
+  // What scoring reads from the as-played copy.
+  function liveEditStartHoles(st) { const out = {}; if (st.mode !== 'shotgun') return null; st.groups.forEach(g => { if (g.start_hole >= 1 && g.start_hole <= 18) g.members.forEach(n => { out[lcn(n)] = g.start_hole; }); }); return Object.keys(out).length ? out : null; }
+  function liveEditScramble(st) { return { pairs: st.teams.map(t => t.members.slice()), names: st.teams.map(t => t.name || '') }; }
+  // Who is in the pot: everyone still on a team or in a group (a no-show is gone; a player who withdrew stays, so their ante stays).
+  function liveEditInPot(st) { const s = new Set(); st.groups.forEach(g => g.members.forEach(n => s.add(lcn(n)))); st.teams.forEach(t => t.members.forEach(n => s.add(lcn(n)))); return s.size; }
+  // A score keyed for a player who is Out (no-show) must not count; a withdrawn player's played holes do.
+  function liveEditCardsActive(st, cards) { return (cards || []).filter(c => { const o = st.out[lcn(c.player)]; return !(o && o.reason === 'noshow'); }); }
+  const BFLiveEdit = { fromPlan: liveEditFromPlan, apply: liveEditApply, preview: liveEditPreview, line: liveEditLine, startHoles: liveEditStartHoles, scrambleTeams: liveEditScramble, inPot: liveEditInPot, activeCards: liveEditCardsActive };
   const BFGroups = { GROUP_DEFAULTS, unitsFromRoster: groupsUnitsFromRoster, autoStartHoles: groupsAutoStartHoles, schedule: groupsSchedule, suggest: groupsSuggest, validate: groupsValidate, reconcile: groupsReconcile, of: groupsOf, startText: groupsStartText };
 
   return {
-    ENGINE_VERSION, BFGroups,
+    ENGINE_VERSION, BFGroups, BFLiveEdit,
     BASE_GAMES, ADDONS,
     getGame, listGames, recommendPairs, GAME_GROUPS, gamesInUiOrder, gamesUiMeta, gamesInfo, gamesSealLabels, defaultConfig, validateFields, cleanFields, validateGameConfig, cleanGameConfig, gameSchemas, potFit,
     skinsWon, betterBallHoles, scrambleTeamStrokes, scrambleSize, scramblePodiumTotal, scrambleSplits, scramblePcts, scrambleCombinedPct, stablefordHolePoints,
