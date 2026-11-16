@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.57.0';
+  const ENGINE_VERSION = '1.58.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -3621,7 +3621,7 @@
     ((teams && teams.pairs) || []).forEach((pr, i) => { const ms = (pr || []).filter(Boolean); if (!ms.length) return; ms.forEach(n => seen.add(lcn(n))); tms.push({ members: ms.slice(), ...(teams.names && teams.names[i] ? { name: teams.names[i] } : {}) }); });
     groups.forEach(g => g.members.forEach(n => { if (!seen.has(lcn(n))) { seen.add(lcn(n)); tms.push({ members: [n] }); } }));   // a player on no locked team is a team of one
     return { v: 1, mode: (set && set.mode) || 'shotgun', holes: (set && set.holes) || o.holes, group_size: (set && set.group_size) || o.group_size, team_size: o.team_size || 0,
-      groups, teams: tms, out: {}, planned: { players: inGroup.size, groups: groups.length } };
+      groups, teams: tms, out: {}, added: {}, planned: { players: inGroup.size, groups: groups.length } };
   }
   const leGroupOf = (st, name) => st.groups.findIndex(g => g.members.some(m => lcn(m) === lcn(name)));
   const leTeamOf = (st, name) => st.teams.findIndex(t => t.members.some(m => lcn(m) === lcn(name)));
@@ -3643,6 +3643,8 @@
   //  { op:'startHole', group, hole, wave? }
   //  { op:'solo', player }                              the player becomes a team of one (stays in their group)
   //  { op:'join', player, with }                        the player joins the team `with` is on, and moves to that team's group
+  //  { op:'add', player, with?, group? }                a player not on the list (a recruit): joins the team `with` is on (and its group), or plays as a team of one in `group`
+  //  { op:'replace', out, player }                      `out` is a no-show and `player` takes their place: same team, same group, same start hole
   function liveEditApply(state, ops) {
     const st = JSON.parse(JSON.stringify(state)); const notes = [];
     (ops || []).forEach(op => {
@@ -3665,6 +3667,20 @@
       } else if (op.op === 'solo') {
         const name = (st.teams[leTeamOf(st, op.player)] || { members: [] }).members.find(m => lcn(m) === lcn(op.player));
         if (name) { leTakeFromTeam(st, name); st.teams.push({ members: [name] }); }
+      } else if (op.op === 'add' || op.op === 'replace') {
+        const nm = op.player; if (!nm || leGroupOf(st, nm) >= 0) return;   // already playing: nothing to add
+        st.added = st.added || {}; delete st.out[lcn(nm)];
+        let gi = op.group, mate = op.with || null;
+        if (op.op === 'replace') {
+          gi = leGroupOf(st, op.out); const ti = leTeamOf(st, op.out);
+          mate = ti >= 0 ? (st.teams[ti].members.find(m => lcn(m) !== lcn(op.out)) || null) : null;
+          st.out[lcn(op.out)] = { player: op.out, reason: 'noshow' }; leTakeFromGroup(st, op.out); leTakeFromTeam(st, op.out);
+        }
+        const ti2 = mate ? leTeamOf(st, mate) : -1;
+        if (ti2 >= 0) { gi = leGroupOf(st, mate); st.teams[ti2].members.push(nm); }
+        else st.teams.push({ members: [nm] });
+        leAddToGroup(st, nm, gi != null && gi >= 0 ? gi : st.groups.length);
+        st.added[lcn(nm)] = nm;
       } else if (op.op === 'join') {
         const ti = leTeamOf(st, op.with), gi = leGroupOf(st, op.with);
         if (ti >= 0 && gi >= 0) { const nm = op.player; leTakeFromTeam(st, nm); st.teams[ti].members.push(nm); leTakeFromGroup(st, nm); leAddToGroup(st, nm, gi); }
@@ -3713,6 +3729,8 @@
       'Playing: ' + playing.size + ' players, ' + st.groups.length + ' group' + (st.groups.length === 1 ? '' : 's') + '.'];
     const outs = Object.keys(st.out).map(k => st.out[k]);
     ['noshow', 'withdrew'].forEach(r => { const l = outs.filter(x => x.reason === r).map(x => x.player); if (l.length) parts.push('Out: ' + leNames(l) + ' (' + LE_REASONS[r] + ').'); });
+    const adds = Object.keys(st.added || {}).map(k => st.added[k]).filter(n => playing.has(lcn(n)));
+    if (adds.length) parts.push('Added: ' + leNames(adds) + '.');
     const N = st.team_size || 0;
     if (N > 1) st.teams.forEach(t => { const n = t.members.length; if (n === 1) parts.push(t.members[0] + ' is playing alone.'); else if (n > N) parts.push(leTeamLabel(t) + ' is a ' + n + '-some.'); else if (n < N) parts.push(leTeamLabel(t) + ' is a team of ' + n + '.'); });
     return parts.join(' ');
@@ -3724,7 +3742,18 @@
   function liveEditInPot(st) { const s = new Set(); st.groups.forEach(g => g.members.forEach(n => s.add(lcn(n)))); st.teams.forEach(t => t.members.forEach(n => s.add(lcn(n)))); return s.size; }
   // A score keyed for a player who is Out (no-show) must not count; a withdrawn player's played holes do.
   function liveEditCardsActive(st, cards) { return (cards || []).filter(c => { const o = st.out[lcn(c.player)]; return !(o && o.reason === 'noshow'); }); }
-  const BFLiveEdit = { fromPlan: liveEditFromPlan, apply: liveEditApply, preview: liveEditPreview, line: liveEditLine, startHoles: liveEditStartHoles, scrambleTeams: liveEditScramble, inPot: liveEditInPot, activeCards: liveEditCardsActive };
+  // Where a new player could go: join a team (a pair becomes a 3-some, a solo becomes a pair), or play as a team of one in a group.
+  // The host chooses; nothing is picked for them. group_size_after tells them how crowded the group gets.
+  function liveEditAddOptions(st, player) {
+    const out = [];
+    st.groups.forEach((g, gi) => {
+      st.teams.forEach(t => { if (t.members.some(m => g.members.some(x => lcn(x) === lcn(m)))) out.push({ kind: 'join', group: gi, with: t.members[0], team: t.members.slice(), group_size_after: g.members.length + 1 }); });
+      out.push({ kind: 'solo', group: gi, group_size_after: g.members.length + 1 });
+    });
+    out.push({ kind: 'newgroup', group: st.groups.length, group_size_after: 1 });
+    return out;
+  }
+  const BFLiveEdit = { addOptions: liveEditAddOptions, fromPlan: liveEditFromPlan, apply: liveEditApply, preview: liveEditPreview, line: liveEditLine, startHoles: liveEditStartHoles, scrambleTeams: liveEditScramble, inPot: liveEditInPot, activeCards: liveEditCardsActive };
   const BFGroups = { GROUP_DEFAULTS, unitsFromRoster: groupsUnitsFromRoster, autoStartHoles: groupsAutoStartHoles, schedule: groupsSchedule, suggest: groupsSuggest, validate: groupsValidate, reconcile: groupsReconcile, of: groupsOf, startText: groupsStartText };
 
   return {

@@ -3706,7 +3706,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.57.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.58.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -6573,7 +6573,7 @@ function liveEditState(gid) {
   const N = g ? teamSizeOf(g) : 0, LE = BFEngine.BFLiveEdit;
   if (Array.isArray(set.teams) && set.planned) {   // already edited once: the saved copy IS the state
     return { v: 1, mode: set.mode || 'shotgun', holes: set.holes || 18, group_size: set.group_size || 4, team_size: N, groups: JSON.parse(JSON.stringify(set.groups || [])),
-      teams: JSON.parse(JSON.stringify(set.teams)), out: JSON.parse(JSON.stringify(set.out || {})), planned: set.planned };
+      teams: JSON.parse(JSON.stringify(set.teams)), out: JSON.parse(JSON.stringify(set.out || {})), added: JSON.parse(JSON.stringify(set.added || {})), planned: set.planned };
   }
   const st = N ? teamsState(gatheringRegData.filter(r => r.gatheringId === gid), N) : null;
   return LE.fromPlan(set, st ? { pairs: st.pairs, names: st.names } : null, { team_size: N });
@@ -6582,7 +6582,7 @@ function liveEditState(gid) {
 // players whose group or start hole changed). Registrations for no-shows are then set to No (best effort; the document alone already excludes them).
 async function liveEditSave(gid, state, title) {
   const g = gatheringData.find(x => x.gatheringId === gid), cur = _groupSets[gid] || {}, prev = cur.published || {};
-  const doc = Object.assign({}, prev, { groups: state.groups.map(x => { const o = Object.assign({}, x); delete o.units; return o; }), teams: state.teams, out: state.out, planned: state.planned });
+  const doc = Object.assign({}, prev, { groups: state.groups.map(x => { const o = Object.assign({}, x); delete o.units; return o; }), teams: state.teams, out: state.out, added: state.added || {}, planned: state.planned });
   const r = await gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${gid}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ host_id: currentPlayer, title: title || (g && g.name) || 'Your event', draft: doc, if_version: cur.version != null ? cur.version : 0 }) }, 15000);
   if (!r || !r.ok) { const e = new Error((r && r.error) || 'the server did not accept it'); e.code = r && r.code; throw e; }
@@ -6615,7 +6615,7 @@ async function openLiveEdit(gid) {
   await ensureGroupSet(gid);
   const base = liveEditState(gid);
   if (!base) { showToast('Publish the groups first, then you can fix them here', true); return; }
-  _le = { gid, title: g.name, base, ops: [], sel: null, moveFor: null, holeFor: null, names: [] };
+  _le = { gid, title: g.name, base, ops: [], sel: null, moveFor: null, holeFor: null, names: [], adding: null };
   leRender(true);
 }
 function leRender(open) {
@@ -6626,6 +6626,16 @@ function leRender(open) {
   const box = (bg, color, inner) => `<div style="background:${bg};color:${color};border-radius:10px;padding:9px 12px;margin:0 0 8px;font-size:0.85rem;line-height:1.5">${inner}</div>`;
   const btn = (label, js, strong) => `<button type="button" onclick="${js}" style="min-height:40px;padding:0 12px;margin:3px 4px 3px 0;border-radius:10px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer;${strong ? 'background:var(--green);color:#fff;border:0' : 'background:#fff;color:var(--green-dark);border:1.5px solid var(--green)'}">${label}</button>`;
   let h = box('var(--green-light)', 'var(--green-dark)', E(P.line));
+  if (_le.adding) {
+    // a recruit is registered but not placed yet: the host chooses where they play (nothing is picked for them)
+    const opts = LE.addOptions(st, _le.adding), pj = o => JSON.stringify(o).replace(/"/g, '&quot;');
+    h += box('#FFF6DD', '#6B4E00', `<b>Where does ${E(_le.adding)} play?</b>` + st.groups.map((g, gi) => {
+      const mine = opts.filter(o => o.group === gi && o.kind !== 'newgroup');
+      return `<div style="margin-top:6px"><b>Group ${gi + 1}</b>${g.start_hole ? ' · hole ' + g.start_hole : ''}<br>` + mine.map(o => o.kind === 'join'
+        ? btn('Join ' + E(o.team.join(' & ')) + ' · → ' + o.group_size_after, `leAddAt(${pj({ op: 'add', player: _le.adding, with: o.with })})`)
+        : btn('Own team · → ' + o.group_size_after, `leAddAt(${pj({ op: 'add', player: _le.adding, group: o.group })})`)).join('') + '</div>'; }).join('') +
+      `<div style="margin-top:6px">${btn('+ New group', `leAddAt(${pj({ op: 'add', player: _le.adding, group: st.groups.length })})`)}${btn('Cancel', 'leAddCancel()')}</div>`);
+  }
   P.errors.forEach(e => { h += box('#FDECEA', '#8A1C13', '⛔ ' + E(e.msg)); });
   P.warnings.filter(w => w.code !== 'hole_shared').forEach(w => { h += box('#FFF6DD', '#6B4E00', E(w.msg)); });
   P.orphans.forEach(o => {
@@ -6644,7 +6654,7 @@ function leRender(open) {
       h += `<div style="margin:2px 0">${t.members.map(m => { const i = idx(m), on = _le.sel === i; return `<button type="button" onclick="leTap(${i})" style="min-height:38px;padding:0 10px;margin:2px 4px 2px 0;border-radius:9px;font-family:inherit;font-size:0.9rem;cursor:pointer;border:1.5px solid ${on ? 'var(--green)' : 'var(--border)'};background:${on ? 'var(--green-light)' : '#fff'};font-weight:${on ? 700 : 500}">${E(m)}</button>`; }).join('')}${tag ? `<span style="font-size:0.74rem;color:#6B4E00;background:#FFF6DD;border-radius:6px;padding:2px 6px">${tag}</span>` : ''}</div>`;
       const selName = _le.sel != null ? _le.names[_le.sel] : null;
       if (selName && t.members.includes(selName)) {
-        h += `<div style="padding:2px 0 6px">${btn('Not here', `leAct('noshow')`)}${btn('Left early', `leAct('withdrew')`)}${N > 1 && t.members.length > 1 ? btn('Play alone', `leAct('solo')`) : ''}${btn('Move…', `leAct('move')`)}</div>`;
+        h += `<div style="padding:2px 0 6px">${btn('Not here', `leAct('noshow')`)}${btn('Replace…', `leAct('replace')`)}${btn('Left early', `leAct('withdrew')`)}${N > 1 && t.members.length > 1 ? btn('Play alone', `leAct('solo')`) : ''}${btn('Move…', `leAct('move')`)}</div>`;
         if (_le.moveFor === _le.sel) h += `<div style="padding:0 0 6px">${st.groups.map((x, xi) => xi === gi ? '' : btn('Group ' + (xi + 1) + (x.start_hole ? ' · hole ' + x.start_hole : ''), `leMoveTo(${xi})`)).join('')}${btn('+ New group', `leMoveTo(${st.groups.length})`)}</div>`;
       }
     });
@@ -6652,6 +6662,7 @@ function leRender(open) {
   });
   const outs = Object.keys(st.out).map(k => st.out[k]);
   if (outs.length) h += `<div style="font-size:0.8rem;color:var(--text-muted);margin:0 0 8px">Out: ${outs.map(o => `${E(o.player)} (${o.reason === 'noshow' ? 'no-show' : 'left early'})`).join(', ')}</div>`;
+  h += `<div style="margin:0 0 8px">${btn('+ Add player', 'leAddStart(null)')}</div>`;
   h += `<div style="display:flex;gap:8px;margin-top:6px"><button type="button" class="host-cta-btn" style="margin:0;flex:2${P.can_apply && _le.ops.length ? '' : ';opacity:0.45'}" ${P.can_apply && _le.ops.length ? '' : 'disabled'} onclick="leApply()">Apply</button>
     <button type="button" class="host-cta-btn" style="margin:0;flex:1;background:#fff;color:var(--green-dark);border:1.5px solid var(--green)" ${_le.ops.length ? '' : 'disabled'} onclick="leUndo()">Undo</button></div>`;
   if (open || !document.getElementById('host-sheet-content')) openHostSheet('✏️ Fix groups', h); else document.getElementById('host-sheet-content').innerHTML = h;
@@ -6660,10 +6671,23 @@ function leTap(i) { if (!_le) return; _le.sel = _le.sel === i ? null : i; _le.mo
 function leDo(op) { if (!_le) return; _le.ops.push(op); _le.sel = null; _le.moveFor = null; _le.holeFor = null; leRender(); }
 function leAct(kind) {
   if (!_le || _le.sel == null) return; const name = _le.names[_le.sel];
+  if (kind === 'replace') return leAddStart(name);
   if (kind === 'move') { _le.moveFor = _le.sel; _le.holeFor = null; leRender(); return; }
   if (kind === 'solo') return leDo({ op: 'solo', player: name });
   leDo({ op: 'out', player: name, reason: kind });
 }
+// A recruit: the existing course "Add a player" dialog finds or creates the member and registers them Yes (as it always has), then hands
+// back the name. With `replacing` set the recruit takes that player's place in one step; otherwise the host picks where they play.
+function leAddStart(replacing) {
+  if (!_le) return; const gid = _le.gid, g = gatheringData.find(x => x.gatheringId === gid);
+  openAddPlayerDialog(null, { gatheringId: gid, eventName: g ? g.name : '' }, display => {
+    if (!_le) return;
+    if (replacing) leDo({ op: 'replace', out: replacing, player: display });
+    else { _le.adding = display; _le.sel = null; leRender(); }
+  });
+}
+function leAddAt(op) { if (!_le) return; _le.adding = null; leDo(op); }
+function leAddCancel() { if (!_le) return; _le.adding = null; leRender(); }
 function leMoveTo(gi) {
   if (!_le || _le.sel == null) return; const name = _le.names[_le.sel], st = BFEngine.BFLiveEdit.preview(_le.base, _le.ops).state;
   const ti = st.teams.findIndex(t => t.members.includes(name)), mates = ti >= 0 ? st.teams[ti].members : [name];   // a team moves together

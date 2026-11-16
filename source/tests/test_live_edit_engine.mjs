@@ -3,7 +3,7 @@ import { loadEngine } from './extract.mjs';
 let pass = 0, fail = 0;
 const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine(), LE = E.BFLiveEdit;
-ok(!!LE && E.ENGINE_VERSION === '1.57.0', 'engine exposes BFLiveEdit, version 1.57.0');
+ok(!!LE && E.ENGINE_VERSION === '1.58.0', 'engine exposes BFLiveEdit, version 1.58.0');
 const set = { v: 1, mode: 'shotgun', holes: 18, group_size: 4, groups: [
   { members: ['A','B','C','D'], start_hole: 1 }, { members: ['E','F','G','H'], start_hole: 4 }, { members: ['I','J','K','L'], start_hole: 7 } ] };
 const teams = { pairs: [['A','B'],['C','D'],['E','F'],['G','H'],['I','J'],['K','L']], names: ['','','','','',''] };
@@ -76,4 +76,34 @@ const back = LE.apply(LE.apply(plan, [{ op: 'out', player: 'K', reason: 'noshow'
 ok(back.groups[2].members.includes('K') && !back.out.k && back.teams.some(t => t.members.join() === 'K'), 'restored as a solo in the chosen group');
 // apply does not mutate its input
 ok(plan.groups[2].members.length === 4 && !plan.out.k, 'input state is untouched');
+
+// ── swap and add (a recruit from the parking lot) ──
+// replace: L is a no-show, Z takes L's place: same team (with K), same group, same start hole
+p = LE.preview(plan, [{ op: 'replace', out: 'L', player: 'Z' }]);
+ok(p.state.teams.some(t => t.members.includes('K') && t.members.includes('Z')) && p.orphans.length === 0, 'Z replaces L on K\'s team: no orphan');
+ok(p.state.groups[2].members.includes('Z') && !p.state.groups[2].members.includes('L') && p.state.groups[2].start_hole === 7, 'Z is in L\'s group, same hole');
+ok(LE.inPot(p.state) === 12 && /Out: L \(no-show\)\. Added: Z\./.test(p.line), 'pot unchanged (L out, Z in); line: ' + p.line);
+ok(LE.startHoles(p.state).z === 7, 'Z starts where L did');
+// replace a whole team member whose partner already left: Z becomes a team of one in that group
+p = LE.preview(plan, [{ op: 'out', player: 'K', reason: 'noshow' }, { op: 'replace', out: 'L', player: 'Z' }]);
+ok(p.state.teams.some(t => t.members.join() === 'Z') && p.state.groups[2].members.join() === 'I,J,Z', 'replacing the last of a team: Z is alone in the group');
+// add: joins a team (3-some) or plays alone in a group or a new group
+p = LE.preview(plan, [{ op: 'add', player: 'Z', with: 'E' }]);
+ok(p.state.teams.some(t => t.members.length === 3 && t.members.includes('Z')) && p.state.groups[1].members.includes('Z') && p.sizes.join() === '4,5,4', 'Z joins E & F as a 3-some in group 2');
+ok(LE.inPot(p.state) === 13 && /Playing: 13 players/.test(p.line) && /Planned: 12/.test(p.line) && /Added: Z\./.test(p.line), 'Planned 12, Playing 13: ' + p.line);
+p = LE.preview(plan, [{ op: 'add', player: 'Z', group: 0 }]);
+ok(p.state.teams.some(t => t.members.join() === 'Z') && p.state.groups[0].members.includes('Z') && p.orphans.some(o => o.players[0] === 'Z'), 'Z alone in group 1 and listed as short of a team');
+p = LE.preview(plan, [{ op: 'add', player: 'Z', group: 3 }, { op: 'startHole', group: 3, hole: 10 }]);
+ok(p.state.groups.length === 4 && p.state.groups[3].members.join() === 'Z' && p.state.groups[3].start_hole === 10, 'Z in a new group on 10');
+// adding someone already playing does nothing; adding a returning no-show clears Out
+p = LE.preview(plan, [{ op: 'add', player: 'A', with: 'E' }]);
+ok(p.state.groups[0].members.includes('A') && !p.state.groups[1].members.includes('A') && p.sizes.join() === '4,4,4', 'adding a player who is already playing is ignored');
+p = LE.preview(plan, [{ op: 'out', player: 'K', reason: 'noshow' }, { op: 'add', player: 'K', group: 2 }]);
+ok(!p.state.out.k && p.state.groups[2].members.includes('K'), 'a no-show who shows up can be added back');
+// options listing: no default, every group offered
+const opts = LE.addOptions(plan, 'Z');
+ok(opts.filter(o => o.kind === 'join').length === 6 && opts.filter(o => o.kind === 'solo').length === 3 && opts[opts.length - 1].kind === 'newgroup', 'add options: join each team, play alone in each group, or a new group');
+ok(opts.find(o => o.kind === 'join' && o.with === 'E').group_size_after === 5, 'each option shows the group size it makes');
+// a recruit's card counts, a no-show's does not
+ok(LE.activeCards(LE.preview(plan, [{ op: 'replace', out: 'L', player: 'Z' }]).state, [{ player: 'L' }, { player: 'Z' }]).map(c => c.player).join() === 'Z', 'replacement card counts, no-show card does not');
 console.log(`live_edit_engine: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
