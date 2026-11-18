@@ -6639,54 +6639,97 @@ async function openLiveEdit(gid) {
   _le = { gid, title: g.name, base, ops: [], sel: null, moveFor: null, holeFor: null, names: [], adding: null };
   leRender(true);
 }
+// A floating window: opens in the middle of the screen, drag its title bar anywhere, scrolls inside itself. Position survives re-renders.
+const _bfDragPos = {};
+function bfDraggable(key, win, handle) {
+  const p = _bfDragPos[key] || (_bfDragPos[key] = { x: 0, y: 0 });
+  const apply = () => { win.style.transform = `translate(${p.x}px,${p.y}px)`; };
+  apply(); handle.style.touchAction = 'none'; handle.style.cursor = 'grab';
+  let sx = 0, sy = 0, ox = 0, oy = 0, on = false;
+  handle.onpointerdown = e => { if (e.target.closest && e.target.closest('button')) return; on = true; sx = e.clientX; sy = e.clientY; ox = p.x; oy = p.y; try { handle.setPointerCapture(e.pointerId); } catch (_) {} handle.style.cursor = 'grabbing'; };
+  handle.onpointermove = e => { if (!on) return;
+    const mx = Math.max(0, (window.innerWidth || 800) / 2 - 60), my = Math.max(0, (window.innerHeight || 800) / 2 - 40);
+    p.x = Math.max(-mx, Math.min(mx, ox + e.clientX - sx)); p.y = Math.max(-my, Math.min(my, oy + e.clientY - sy)); apply(); };
+  handle.onpointerup = handle.onpointercancel = () => { on = false; handle.style.cursor = 'grab'; };
+}
+function leShow(hint, bodyHtml, footerHtml) {
+  let ov = document.getElementById('host-option-sheet');
+  if (!ov || !ov.dataset.le) {
+    closeHostSheet();
+    _bfDragPos.le = { x: 0, y: 0 };
+    ov = document.createElement('div'); ov.id = 'host-option-sheet'; ov.dataset.le = '1';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9200;background:rgba(20,30,25,0.4);display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box';
+    ov.innerHTML = `<div id="le-window" style="width:min(94vw,560px);max-height:88vh;display:flex;flex-direction:column;background:#fff;border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,0.45);overflow:hidden">
+      <div id="le-handle" style="background:var(--green-dark);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:10px;user-select:none;-webkit-user-select:none">
+        <div style="flex:1"><div style="font-size:1.05rem;font-weight:800">✏️ Fix teams &amp; groups</div><div style="font-size:0.74rem;opacity:0.75">Drag this bar to move the window</div></div>
+        <button type="button" onclick="closeHostSheet()" aria-label="Close" style="width:44px;height:44px;border-radius:12px;border:0;background:rgba(255,255,255,0.16);color:#fff;font-size:1.2rem;cursor:pointer">✕</button></div>
+      <div id="le-hint" style="padding:10px 14px;background:#FFF6DD;color:#5a4300;font-size:0.92rem;font-weight:600;line-height:1.4"></div>
+      <div id="host-sheet-content" style="flex:1;overflow:auto;padding:12px 14px"></div>
+      <div id="le-footer" style="padding:10px 14px 14px;border-top:1px solid var(--border);background:#fafaf7"></div></div>`;
+    document.body.appendChild(ov);
+    bfDraggable('le', ov.querySelector('#le-window'), ov.querySelector('#le-handle'));
+  }
+  ov.querySelector('#le-hint').innerHTML = hint;
+  ov.querySelector('#host-sheet-content').innerHTML = bodyHtml;
+  ov.querySelector('#le-footer').innerHTML = footerHtml;
+}
 function leRender(open) {
   if (!_le) return;
   const LE = BFEngine.BFLiveEdit, P = LE.preview(_le.base, _le.ops), st = P.state, E = escapeHtml, N = st.team_size || 0;
+  const selName = _le.sel != null ? (_le.names || [])[_le.sel] : null;   // the name tapped on the PREVIOUS render (indexes are rebuilt below)
   _le.names = [];
   const idx = n => { _le.names.push(n); return _le.names.length - 1; };
-  const box = (bg, color, inner) => `<div style="background:${bg};color:${color};border-radius:10px;padding:9px 12px;margin:0 0 8px;font-size:0.85rem;line-height:1.5">${inner}</div>`;
-  const btn = (label, js, strong) => `<button type="button" onclick="${js}" style="min-height:40px;padding:0 12px;margin:3px 4px 3px 0;border-radius:10px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer;${strong ? 'background:var(--green);color:#fff;border:0' : 'background:#fff;color:var(--green-dark);border:1.5px solid var(--green)'}">${label}</button>`;
-  let h = box('var(--green-light)', 'var(--green-dark)', E(P.line));
+  const box = (bg, color, inner) => `<div style="background:${bg};color:${color};border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:0.88rem;line-height:1.5">${inner}</div>`;
+  const btn = (label, js, strong) => `<button type="button" onclick="${js}" style="min-height:44px;padding:0 14px;margin:3px 6px 3px 0;border-radius:12px;font-family:inherit;font-size:0.9rem;font-weight:700;cursor:pointer;${strong ? 'background:var(--green);color:#fff;border:0' : 'background:#fff;color:var(--green-dark);border:1.5px solid var(--green)'}">${label}</button>`;
+  let h = `<div style="background:var(--green-light);color:var(--green-dark);border-radius:12px;padding:10px 12px;margin:0 0 10px"><div style="font-size:0.68rem;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;opacity:0.7;margin-bottom:2px">How it will look</div><div style="font-size:0.9rem;line-height:1.5">${E(P.line)}</div></div>`;
+  P.errors.forEach(e => { h += box('#FDECEA', '#8A1C13', '⛔ ' + E(e.msg)); });
+  P.warnings.filter(w => w.code !== 'hole_shared').forEach(w => { h += box('#FFF6DD', '#6B4E00', '⚠️ ' + E(w.msg)); });
   if (_le.adding) {
     // a recruit is registered but not placed yet: the host chooses where they play (nothing is picked for them)
     const opts = LE.addOptions(st, _le.adding), pj = o => JSON.stringify(o).replace(/"/g, '&quot;');
-    h += box('#FFF6DD', '#6B4E00', `<b>Where does ${E(_le.adding)} play?</b>` + st.groups.map((g, gi) => {
+    h += box('#EAF4FF', '#12395f', `<b>Where does ${E(_le.adding)} play?</b>` + st.groups.map((g, gi) => {
       const mine = opts.filter(o => o.group === gi && o.kind !== 'newgroup');
-      return `<div style="margin-top:6px"><b>Group ${gi + 1}</b>${g.start_hole ? ' · hole ' + g.start_hole : ''}<br>` + mine.map(o => o.kind === 'join'
-        ? btn('Join ' + E(o.team.join(' & ')) + ' · → ' + o.group_size_after, `leAddAt(${pj({ op: 'add', player: _le.adding, with: o.with })})`)
-        : btn('Own team · → ' + o.group_size_after, `leAddAt(${pj({ op: 'add', player: _le.adding, group: o.group })})`)).join('') + '</div>'; }).join('') +
-      `<div style="margin-top:6px">${btn('+ New group', `leAddAt(${pj({ op: 'add', player: _le.adding, group: st.groups.length })})`)}${btn('Cancel', 'leAddCancel()')}</div>`);
+      return `<div style="margin-top:8px"><b>Group ${gi + 1}</b>${g.start_hole ? ' · hole ' + g.start_hole : ''}<br>` + mine.map(o => o.kind === 'join'
+        ? btn('Join ' + E(o.team.join(' & ')) + ' · group of ' + o.group_size_after, `leAddAt(${pj({ op: 'add', player: _le.adding, with: o.with })})`)
+        : btn('Own team · group of ' + o.group_size_after, `leAddAt(${pj({ op: 'add', player: _le.adding, group: o.group })})`)).join('') + '</div>'; }).join('') +
+      `<div style="margin-top:8px">${btn('+ New group', `leAddAt(${pj({ op: 'add', player: _le.adding, group: st.groups.length })})`)}${btn('Cancel', 'leAddCancel()')}</div>`);
   }
-  P.errors.forEach(e => { h += box('#FDECEA', '#8A1C13', '⛔ ' + E(e.msg)); });
-  P.warnings.filter(w => w.code !== 'hole_shared').forEach(w => { h += box('#FFF6DD', '#6B4E00', E(w.msg)); });
   P.orphans.forEach(o => {
     const who = o.players.join(' & ');
-    h += box('#FFF6DD', '#6B4E00', `<b>${E(who)}</b> ${o.players.length > 1 ? 'are' : 'is'} short of a team (Group ${o.group + 1}). Stays as is unless you choose:<br>` +
-      o.options.filter(x => x.kind !== 'solo').map(x => btn(E(x.msg) + (x.group_size_after ? ` · Group ${x.group + 1} → ${x.group_size_after}` : ''), `leDo(${JSON.stringify({ op: 'join', player: o.players[0], with: x.with }).replace(/"/g, '&quot;')})`)).join(''));
+    h += box('#FFF6DD', '#6B4E00', `<b>${E(who)}</b> ${o.players.length > 1 ? 'need' : 'needs'} a partner. They play on their own unless you choose:<br>` +
+      o.options.filter(x => x.kind !== 'solo').map(x => btn(E(x.msg) + (x.group_size_after ? ` · group of ${x.group_size_after}` : ''), `leDo(${JSON.stringify({ op: 'join', player: o.players[0], with: x.with }).replace(/"/g, '&quot;')})`)).join(''));
   });
   st.groups.forEach((g, gi) => {
     const teamsHere = st.teams.filter(t => t.members.some(m => g.members.some(x => String(x).trim().toLowerCase() === String(m).trim().toLowerCase())));
-    h += `<div style="border:1.5px solid var(--border);border-radius:12px;padding:8px 10px;margin:0 0 8px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b style="flex:1">Group ${gi + 1} <span style="font-weight:400;color:var(--text-muted)">· ${g.members.length} player${g.members.length === 1 ? '' : 's'}</span></b>
-        ${st.mode === 'shotgun' ? `<button type="button" onclick="leHole(${gi})" style="min-height:34px;padding:0 10px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-family:inherit;font-weight:700;cursor:pointer">Hole ${g.start_hole || '?'}</button>` : ''}</div>`;
-    if (_le.holeFor === gi) h += `<div style="padding:4px 0 8px">${Array.from({ length: st.holes }, (_, i) => `<button type="button" onclick="leSetHole(${gi},${i + 1})" style="width:40px;height:40px;margin:2px;border-radius:8px;border:1.5px solid var(--green);background:${g.start_hole === i + 1 ? 'var(--green)' : '#fff'};color:${g.start_hole === i + 1 ? '#fff' : 'var(--green-dark)'};font-family:inherit;font-weight:700;cursor:pointer">${i + 1}</button>`).join('')}</div>`;
+    h += `<div style="border:1.5px solid var(--border);border-radius:14px;padding:10px 10px 6px;margin:0 0 10px;background:#fff">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="flex:1;font-size:1rem">Group ${gi + 1} <span style="font-weight:500;color:var(--text-muted);font-size:0.85rem">· ${g.members.length} player${g.members.length === 1 ? '' : 's'}</span></b>
+        ${st.mode === 'shotgun' ? `<button type="button" onclick="leHole(${gi})" style="min-height:40px;padding:0 12px;border-radius:10px;border:1.5px solid var(--border);background:#f6f8f6;font-family:inherit;font-weight:700;cursor:pointer">Starts hole ${g.start_hole || '?'} ✎</button>` : ''}</div>`;
+    if (_le.holeFor === gi) h += `<div style="padding:2px 0 8px">${Array.from({ length: st.holes }, (_, i) => `<button type="button" onclick="leSetHole(${gi},${i + 1})" style="width:44px;height:44px;margin:2px;border-radius:10px;border:1.5px solid var(--green);background:${g.start_hole === i + 1 ? 'var(--green)' : '#fff'};color:${g.start_hole === i + 1 ? '#fff' : 'var(--green-dark)'};font-family:inherit;font-weight:700;cursor:pointer">${i + 1}</button>`).join('')}</div>`;
     teamsHere.forEach(t => {
-      const tag = N > 1 && t.members.length < N ? (t.members.length === 1 ? 'alone' : 'short') : N > 1 && t.members.length > N ? t.members.length + '-some' : '';
-      h += `<div style="margin:2px 0">${t.members.map(m => { const i = idx(m), on = _le.sel === i; return `<button type="button" onclick="leTap(${i})" style="min-height:38px;padding:0 10px;margin:2px 4px 2px 0;border-radius:9px;font-family:inherit;font-size:0.9rem;cursor:pointer;border:1.5px solid ${on ? 'var(--green)' : 'var(--border)'};background:${on ? 'var(--green-light)' : '#fff'};font-weight:${on ? 700 : 500}">${E(m)}</button>`; }).join('')}${tag ? `<span style="font-size:0.74rem;color:#6B4E00;background:#FFF6DD;border-radius:6px;padding:2px 6px">${tag}</span>` : ''}</div>`;
-      const selName = _le.sel != null ? _le.names[_le.sel] : null;
-      if (selName && t.members.includes(selName)) {
-        h += `<div style="padding:2px 0 6px">${btn('Not here', `leAct('noshow')`)}${btn('Replace…', `leAct('replace')`)}${btn('Left early', `leAct('withdrew')`)}${N > 1 && t.members.length > 1 ? btn('Play alone', `leAct('solo')`) : ''}${btn('Move…', `leAct('move')`)}</div>`;
-        if (_le.moveFor === _le.sel) h += `<div style="padding:0 0 6px">${st.groups.map((x, xi) => xi === gi ? '' : btn('Group ' + (xi + 1) + (x.start_hole ? ' · hole ' + x.start_hole : ''), `leMoveTo(${xi})`)).join('')}${btn('+ New group', `leMoveTo(${st.groups.length})`)}</div>`;
+      const tag = N > 1 && t.members.length < N ? (t.members.length === 1 ? 'on their own' : 'short a partner') : N > 1 && t.members.length > N ? t.members.length + '-some' : '';
+      const mine = selName && t.members.includes(selName);
+      h += `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:2px;background:${mine ? '#F1F8F4' : '#F7F9F7'};border:1px solid ${mine ? 'var(--green)' : 'var(--border)'};border-radius:12px;padding:4px 6px;margin:0 0 6px">${t.members.map((m, k) => { const i = idx(m), on = _le.sel === i; return (k ? '<span style="color:var(--text-muted);font-weight:700;padding:0 2px">&amp;</span>' : '') + `<button type="button" onclick="leTap(${i})" style="min-height:44px;padding:0 12px;margin:2px;border-radius:10px;font-family:inherit;font-size:0.95rem;cursor:pointer;border:1.5px solid ${on ? 'var(--green)' : 'var(--border)'};background:${on ? 'var(--green)' : '#fff'};color:${on ? '#fff' : 'var(--text)'};font-weight:${on ? 800 : 600}">${E(m)}</button>`; }).join('')}${tag ? `<span style="font-size:0.74rem;color:#6B4E00;background:#FFF6DD;border-radius:8px;padding:3px 8px;margin-left:4px">${tag}</span>` : ''}</div>`;
+      if (mine) {
+        h += `<div style="padding:0 0 8px"><div style="font-size:0.8rem;font-weight:700;color:var(--text-muted);margin:2px 0">What happened to ${E(selName)}?</div>${btn('🚫 Didn’t show', `leAct('noshow')`)}${btn('🔁 Replace with someone', `leAct('replace')`)}${btn('🏃 Left early', `leAct('withdrew')`)}${btn('↔️ Move to a group', `leAct('move')`)}${N > 1 && t.members.length > 1 ? btn('🙋 Play on their own', `leAct('solo')`) : ''}</div>`;
+        if (_le.moveFor === _le.sel) h += `<div style="padding:0 0 8px">${st.groups.map((x, xi) => xi === gi ? '' : btn('Group ' + (xi + 1) + (x.start_hole ? ' · hole ' + x.start_hole : ''), `leMoveTo(${xi})`)).join('')}${btn('+ New group', `leMoveTo(${st.groups.length})`)}</div>`;
       }
     });
     h += `</div>`;
   });
   const outs = Object.keys(st.out).map(k => st.out[k]);
-  if (outs.length) h += `<div style="font-size:0.8rem;color:var(--text-muted);margin:0 0 8px">Out: ${outs.map(o => `${E(o.player)} (${o.reason === 'noshow' ? 'no-show' : 'left early'})`).join(', ')}</div>`;
-  h += `<div style="margin:0 0 8px">${btn('+ Add player', 'leAddStart(null)')}</div>`;
-  h += `<div style="display:flex;gap:8px;margin-top:6px"><button type="button" class="host-cta-btn" style="margin:0;flex:2${P.can_apply && _le.ops.length ? '' : ';opacity:0.45'}" ${P.can_apply && _le.ops.length ? '' : 'disabled'} onclick="leApply()">Apply</button>
-    <button type="button" class="host-cta-btn" style="margin:0;flex:1;background:#fff;color:var(--green-dark);border:1.5px solid var(--green)" ${_le.ops.length ? '' : 'disabled'} onclick="leUndo()">Undo</button></div>`;
-  if (open || !document.getElementById('host-sheet-content')) openHostSheet('✏️ Fix teams &amp; groups', h); else document.getElementById('host-sheet-content').innerHTML = h;
+  if (outs.length) h += `<div style="font-size:0.84rem;color:var(--text-muted);margin:0 0 10px">Out: ${outs.map(o => `${E(o.player)} (${o.reason === 'noshow' ? 'didn’t show' : 'left early'})`).join(', ')}</div>`;
+  h += `<div style="margin:0 0 4px">${btn('➕ Add a player', 'leAddStart(null)')}</div>`;
+  const can = P.can_apply && _le.ops.length > 0;
+  const hint = _le.adding ? `Where does <b>${E(_le.adding)}</b> play? Tap one of the choices below.`
+    : _le.holeFor != null ? `Tap the hole <b>Group ${_le.holeFor + 1}</b> starts on.`
+    : (_le.moveFor != null && selName) ? `Tap the group <b>${E(selName)}</b> should play in.`
+    : selName ? `What happened to <b>${E(selName)}</b>? Tap one of the buttons under their name.`
+    : _le.ops.length ? `Check <b>How it will look</b>, then tap <b>Save changes</b>. Or keep fixing: tap another name.`
+    : `Who isn’t playing, or who’s joining? <b>Tap a player’s name</b> to fix it, or tap <b>Add a player</b>.`;
+  const foot = `<div style="display:flex;gap:8px"><button type="button" class="host-cta-btn" style="margin:0;flex:2${can ? '' : ';opacity:0.45'}" ${can ? '' : 'disabled'} onclick="leApply()">${can ? 'Save changes' : 'Nothing to save yet'}</button>
+    <button type="button" class="host-cta-btn" style="margin:0;flex:1;background:#fff;color:var(--green-dark);border:1.5px solid var(--green)" ${_le.ops.length ? '' : 'disabled'} onclick="leUndo()">↩ Undo</button></div>
+    <div style="font-size:0.74rem;color:var(--text-muted);margin-top:8px;text-align:center">Nothing changes for anyone until you save. Only players who move are notified.</div>`;
+  leShow(hint, h, foot);
 }
 function leTap(i) { if (!_le) return; _le.sel = _le.sel === i ? null : i; _le.moveFor = null; _le.holeFor = null; leRender(); }
 function leDo(op) { if (!_le) return; _le.ops.push(op); _le.sel = null; _le.moveFor = null; _le.holeFor = null; leRender(); }
@@ -12626,19 +12669,26 @@ function openAddPlayerDialog(prefill, optIn, cbIn) {
   const opt = optIn || (_sheetOpts && _sheetOpts.addPlayer);
   if (!opt) return;
   _addP = { busy: false, opt, cb: cbIn || _sheetCallback, view: prefill ? 'new' : 'pick', q: '' };
+  _bfDragPos.ap = { x: 0, y: 0 };
   let ov = document.getElementById('add-player-overlay');
   if (!ov) {
     ov = document.createElement('div');
     ov.id = 'add-player-overlay';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,0.7);display:flex;align-items:flex-end;justify-content:center';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box';
     document.body.appendChild(ov);
   }
   ov.style.display = 'flex';
   renderAddPlayerForm('', prefill || null);
 }
+// The Add a player window floats in the middle (drag its title) instead of sitting on the bottom edge; it survives re-renders where it was put.
+function apFloat(ov) {
+  const w = ov && ov.firstElementChild; if (!w || !w.firstElementChild) return;
+  const h = w.firstElementChild; h.insertAdjacentHTML('beforeend', '<span style="float:right;font-size:0.7rem;opacity:0.55;font-weight:500">drag to move</span>');
+  bfDraggable('ap', w, h);
+}
 function renderAddPlayerPick(msg) {
   const ov = document.getElementById('add-player-overlay'); if (!ov || !_addP) return;
-  ov.innerHTML = `<div style="background:#0b3d2e;width:100%;max-width:480px;max-height:88vh;display:flex;flex-direction:column;border-radius:18px 18px 0 0;padding:18px 16px 16px;box-sizing:border-box" onclick="event.stopPropagation()">
+  ov.innerHTML = `<div style="background:#0b3d2e;width:100%;max-width:480px;max-height:88vh;display:flex;flex-direction:column;border-radius:18px;padding:18px 16px 16px;box-sizing:border-box" onclick="event.stopPropagation()">
     <div style="font-weight:700;font-size:1.05rem;color:#fff;margin-bottom:2px">Add a player</div>
     <div style="font-size:0.8rem;color:rgba(255,255,255,0.6);margin-bottom:10px">Pick who is playing. Not a member yet? Choose "New person" below.</div>
     <input id="ap-search" style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:1rem;margin-bottom:8px" placeholder="Search members" autocomplete="off" oninput="apPickFilter(this.value)" value="${escapeHtmlAttr(_addP.q)}">
@@ -12649,6 +12699,7 @@ function renderAddPlayerPick(msg) {
   </div>`;
   ov.onclick = closeAddPlayerDialog;
   apPickRender();
+  apFloat(ov);
 }
 function apPickRender() {
   const el = document.getElementById('ap-list'); if (!el || !_addP || !_addP.opt) return;
@@ -12658,7 +12709,8 @@ function apPickRender() {
       <span>${escapeHtmlAttr(x.display)}</span>${x.inactive ? '<span style="font-size:0.72rem;color:#d4a017">inactive</span>' : ''}</div>`).join('')
     : `<div style="padding:16px 8px;color:rgba(255,255,255,0.6);font-size:0.9rem">No matching members. Use "New person" below.</div>`;
 }
-function apPickFilter(q) { if (!_addP) return; _addP.q = q; apPickRender(); }
+function apPickFilter(q) { if (!_addP) return; _addP.q = q; apPickRender();
+}
 function apShowNew() { if (!_addP) return; _addP.view = 'new'; renderAddPlayerForm('', _addP.vals || null); }
 function apPickMember(i) {
   if (!_addP || _addP.busy) return;
@@ -12672,7 +12724,7 @@ function renderAddPlayerForm(msg, vals) {
   const ov = document.getElementById('add-player-overlay'); if (!ov) return;
   const v = vals || {};
   const inp = 'width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:1rem;margin-bottom:10px';
-  ov.innerHTML = `<div style="background:#0b3d2e;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:18px 16px 24px;box-sizing:border-box" onclick="event.stopPropagation()">
+  ov.innerHTML = `<div style="background:#0b3d2e;width:100%;max-width:480px;border-radius:18px;padding:18px 16px 24px;box-sizing:border-box" onclick="event.stopPropagation()">
     <div style="font-weight:700;font-size:1.05rem;color:#fff;margin-bottom:4px">Add a player</div>
     <div style="font-size:0.8rem;color:rgba(255,255,255,0.6);margin-bottom:12px">Someone playing who isn't registered. Ask them for their cell — it's how BirdieFriends knows who they are.</div>
     <input id="ap-first" style="${inp}" placeholder="First name" autocomplete="off" value="${escapeHtmlAttr(v.first)}">
@@ -12685,8 +12737,10 @@ function renderAddPlayerForm(msg, vals) {
       <button class="btn" id="ap-go" style="flex:2" onclick="submitAddPlayer()">Add to this game</button>
     </div></div>`;
   ov.onclick = closeAddPlayerDialog;
+  apFloat(ov);
 }
-function escapeHtmlAttr(x) { return String(x == null ? '' : x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escapeHtmlAttr(x) { return String(x == null ? '' : x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 function closeAddPlayerDialog() {
   const ov = document.getElementById('add-player-overlay');
   if (ov) { ov.style.display = 'none'; ov.innerHTML = ''; }
