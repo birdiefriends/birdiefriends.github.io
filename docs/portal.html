@@ -6492,7 +6492,7 @@ function groupsRender() {
       + (hasTeams ? row('You place', seg([['teams', 'Teams'], ['players', 'Players']], o.individual ? 'players' : 'teams', 'groupsSetOptPlace')) : '')
       + (o.mode === 'shotgun' ? row('Start holes', `<input type="text" value="${GRP_ESC(o.start_holes)}" placeholder="auto-spread" oninput="groupsSetOptTyped('start_holes',this.value)" style="width:130px;${inpStyle}">`)
         : o.mode === 'tee_times' ? row('First tee', `<input type="time" value="${GRP_ESC(o.first_tee)}" oninput="groupsSetOptTyped('first_tee',this.value)" style="${inpStyle}"><input type="number" min="5" max="30" value="${GRP_ESC(o.interval)}" oninput="groupsSetOptTyped('interval',this.value)" style="width:60px;${inpStyle}"><span style="font-size:0.74rem;color:var(--text-muted)">min</span>`) : '')
-      + `<button type="button" class="host-cta-btn" style="margin:6px 0 0" onclick="groupsSuggest()">✨ ${s ? 'Suggest again' : 'Suggest groups'}</button>`
+      + `<button type="button" class="host-cta-btn" style="margin:6px 0 0" onclick="groupsSuggest()">✨ ${s ? 'Rebuild groups' : 'Build groups'}</button>`
       + `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px;line-height:1.45">${nPlayers} players${hasTeams && !o.individual ? ', teams are placed as one' : ''}. Hold ⠿ and drag, or tap a row to move it.</div></div>` : '')
     + `</div>`;
   const small = 'min-width:38px;min-height:38px;font-size:0.95rem;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text-muted);cursor:pointer';
@@ -6520,7 +6520,7 @@ function groupsRender() {
       </div>`).join('') + `<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="groupsAddGroup()">➕ Add a group</button>`;
   }
   const panels = s ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start"><div>${poolHtml}</div><div>${groupsHtml}</div></div>`
-    : `<div style="font-size:0.84rem;color:var(--text-muted);padding:10px 2px">No groups yet. Tap Suggest groups, then adjust.</div>`;
+    : `<div style="font-size:0.84rem;color:var(--text-muted);padding:10px 2px">No groups yet. Tap Build groups, then adjust.</div>`;
   body.innerHTML = `<div style="font-size:1.15rem;font-weight:700;margin-bottom:2px">👥 Groups</div>
     <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px">${GRP_ESC(_grp.g.name)}${_grp.publishedAt ? ` · published (v${_grp.version})` : ' · not published yet'}</div>
     ${_grp.notes.length ? `<div style="font-size:0.78rem;color:#8a6d00;margin-bottom:8px">${_grp.notes.map(GRP_ESC).join('<br>')}</div>` : ''}

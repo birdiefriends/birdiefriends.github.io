@@ -24,7 +24,7 @@ vm.createContext(ctx);
 vm.runInContext('let _grp = null; let _groupSets = {}; const GRP_ESC = s => escapeHtml(String(s == null ? "" : s));\n' + FN.map(n => extractFn(src, n)).join('\n'), ctx);
 const doc = dom.window.document, body = () => doc.getElementById('host-sheet-body');
 await vm.runInContext('openGatheringGroups(104)', ctx);
-ok(/Suggest groups/.test(body().textContent) && /25 players/.test(body().textContent) && /teams are placed as one/.test(body().textContent), 'opens with the roster and a Suggest button');
+ok(/Build groups/.test(body().textContent) && /25 players/.test(body().textContent) && /teams are placed as one/.test(body().textContent), 'opens with the roster and a Build button');
 ok(/\/gatherings\/104\/registrations/.test(reqs[0][0]) && reqs.some(r => /group-sets\/gathering\/104\?host_id=Brian%20Hager/.test(r[0])), 'reads the CURRENT registrations and any saved groups');
 vm.runInContext('groupsSuggest()', ctx);
 let set = vm.runInContext('_grp.set', ctx);
