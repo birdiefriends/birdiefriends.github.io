@@ -37,7 +37,7 @@ const ctx = { console, JSON, Math, Number, String, Set, Map, Array, Object, Date
   gatheringAddon: (c, id) => (c && c.addons.find(a => a.id === id)) || null, failNext: false,
   fetch: async (url, opt) => { if (/hole-final/.test(url)) return { ok: true, status: 200 }; if (ctx.failNext) throw new Error('offline'); posts.push(JSON.parse(opt.body)); return { json: async () => ({ ok: true }) }; } };
 vm.createContext(ctx);
-const names = ['skCoinDuty','skCoinHoles','skCoinNoteHtml','skCoinNotes','skCoinPending','skCoinAckKey','skCoinAcked','skCoinAck','skCoinPopupCheck','skFinalizeHole','skFlushFinal','skFinishRound','liveScoringOn','skPartnerOf', 'skTeamMates', 'liveSideTeamNames','skSetScoreOne','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skMarks','skGot','skAnyStrokes','skNetGapNote','skDotsHtml','skCardOf','skMergeRemote','skGoFirstOpen','skOrder','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml','holeFlowStepHead','holeFlowStepHtml','holeFlowClaimHtml','holeFlowClaimPick','holeFlowLostHtml','holeFlowKeptHtml','holeFlowLostPick','holeFlowBbKept','holeFlowBbShort'];
+const names = ['skStoreStartKey','skStartOverride','skGroupScored','skStartFor','skAskStart','skPickStart','skChangeStart','skStartPickerHtml','skCoinDuty','skCoinHoles','skCoinNoteHtml','skCoinNotes','skCoinPending','skCoinAckKey','skCoinAcked','skCoinAck','skCoinPopupCheck','skFinalizeHole','skFlushFinal','skFinishRound','liveScoringOn','skPartnerOf', 'skTeamMates', 'liveSideTeamNames','skSetScoreOne','skStoreKey','skPersist','skEnsure','skGroups','skGroup','skMaxHole','skPars','skMode','setLiveScoreMode','skMarks','skGot','skAnyStrokes','skNetGapNote','skDotsHtml','skCardOf','skMergeRemote','skGoFirstOpen','skOrder','skFirstEmptyPlayer','skTap','skClear','skSetScore','skPick','skNav','skSetGroup','skJump','skQueueSave','skPost','skFlush','livePanelModeToggleHtml','liveScoreModeHtml','holeFlowStepHead','holeFlowStepHtml','holeFlowClaimHtml','holeFlowClaimPick','holeFlowLostHtml','holeFlowKeptHtml','holeFlowLostPick','holeFlowBbKept','holeFlowBbShort'];
 vm.runInContext('let _sk = null; let _groupSets = {}; const _skChain = {}; const BFE_API = "https://bfe";\n' + names.map(n => extractFn(src, n)).join('\n') + '\nthis.api={' + names.join(',') + ',get:()=>_sk, setSets:v=>{_groupSets=v}};', ctx);
 const A = ctx.api;
 const evt = { gatheringId: 7, name: 'Sat BestBall', holes: 18 };
@@ -207,6 +207,7 @@ eq([...A.liveSideTeamNames(scr)].sort(), [['a1','Alpha'],['b1','Bravo'],['d1','D
   A.get().hole = 18; A.skNav(1); eq(A.get().hole, 1, 'shotgun: #18 is followed by #1');
   A.get().hole = 6; A.skNav(1); eq(A.get().hole, 6, 'shotgun: the last hole of the round (#6) is the end');
   A.skSetGroup(1); eq(A.get().hole, 1, 'shotgun: a group starting on #1 opens on #1');
+
   A.skSetGroup(0);
   [4,4,4,4].forEach(v => A.skTap(v)); await tick(); await tick();
   A.skGoFirstOpen(); eq(A.get().hole, 8, 'shotgun: with #7 scored the group opens on #8');
@@ -214,5 +215,26 @@ eq([...A.liveSideTeamNames(scr)].sort(), [['a1','Alpha'],['b1','Bravo'],['d1','D
   A.get().hole = 7;
   ok(/Your start hole/.test(A.liveScoreModeHtml()), 'shotgun: the start hole is labeled');
   A.setSets({});
+  // ── the host's start hole is only a suggestion: the group is asked once, and the scores say what happened
+  {
+    A.skEnsure({ gatheringId: 11, name: 'Shotgun2', holes: 18 }, config);
+    A.setSets({ 11: { published: { mode: 'shotgun', groups: [{ members: ['Brian Hager','Tom Marsh','Mike Kay','Dave Vance'], start_hole: 7 }, { members: ['Sam Lee','Pat Roe','Lee Jo','Jo Wu'], start_hole: 1 }] }, version: 1 } });
+    A.skMergeRemote([]); A.skSetGroup(0);
+    const g0 = A.get() && A.skGroups()[0];
+    ok(A.skAskStart(g0), 'shotgun, nothing scored: the group is asked which hole it is starting on');
+    ok(/Which hole are you starting on\?/.test(A.skStartPickerHtml(g0)) && /host suggested hole <b[^>]*>7</.test(A.skStartPickerHtml(g0)), 'the picker names the host suggestion');
+    A.skPickStart(12); eq(A.get().hole, 12, 'picked 12: the scorecard opens on 12'); ok(!A.skAskStart(A.skGroups()[0]), 'asked only once');
+    eq(A.skOrder().slice(0, 2).concat(A.skOrder().slice(-1)), [12, 13, 11], 'order follows the hole they picked, not the plan');
+    A.skChangeStart(); ok(A.skAskStart(A.skGroups()[0]), 'Change reopens the question');
+    A.skPickStart(7); eq(A.skOrder()[0], 7, 'changed back to 7');
+    // scores say otherwise (no confirmed hole on this phone, e.g. another phone is keeping score): the scores win over the plan
+    A.skEnsure({ gatheringId: 12, name: 'Shotgun3', holes: 18 }, config);
+    A.setSets({ 12: { published: { mode: 'shotgun', groups: [{ members: ['Brian Hager','Tom Marsh','Mike Kay','Dave Vance'], start_hole: 1 }] }, version: 1 } });
+    A.skMergeRemote([]); A.skSetGroup(0);
+    const sc = A.skGroups()[0]; [10, 11, 12].forEach(h => A.get().cards['Brian Hager'][h - 1] = 4);
+    ok(!A.skAskStart(sc), 'once a score exists the question is not asked');
+    eq(A.skStartFor(sc), 10, 'the plan said 1, the scores begin on 10: the order starts on 10');
+  }
+
 }
 console.log(`live scoring: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

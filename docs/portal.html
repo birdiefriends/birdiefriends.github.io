@@ -11416,9 +11416,49 @@ function skCoinPopupCheck() {
 }
 // Holes in the order THIS group plays them: a shotgun group starts on its own hole and wraps (start 7 -> 7..18, 1..6).
 // A group with no start hole plays 1..max. Scoring opens on the first hole with a missing score in that order.
+// Where this group started, most trustworthy first: the hole the scorekeeper confirmed, then what the scores show, then the host's suggestion, then hole 1.
+// The host's plan is only a suggestion (people walk to a different tee); the scores and the scorekeeper are what happened.
+function skStoreStartKey() { return 'bf_sk_start_' + _sk.key; }
+function skStartOverride(g) {
+  if (!_sk) return null;
+  if (!_sk.start) { try { _sk.start = JSON.parse(localStorage.getItem(skStoreStartKey()) || '{}') || {}; } catch (e) { _sk.start = {}; } }
+  const v = Number(_sk.start[g.n]); return v >= 1 && v <= skMaxHole() ? v : null;
+}
+function skGroupScored(g) { return (g.players || []).some(n => (skCardOf(n) || []).some(v => v > 0)); }
+function skStartFor(g) {
+  const max = skMaxHole(), o = skStartOverride(g); if (o) return o;
+  if (max === 18 && skGroupScored(g)) {
+    const union = new Array(18).fill(null); (g.players || []).forEach(n => skCardOf(n).forEach((v, i) => { if (v > 0) union[i] = 1; }));
+    const e = BFEngine.effectiveStartHoles([{ player: 'g', holes: union }], { g: Number(g.start_hole) || 0 }).g;
+    if (e >= 1 && e <= 18) return e;
+  }
+  const s = Number(g.start_hole) || 1; return s >= 1 && s <= max ? s : 1;
+}
+// A shotgun group is asked once, before its first score: "Which hole are you starting on?" (the host's suggestion is highlighted).
+function skAskStart(g) {
+  if (!_sk) return false;
+  if (_sk.askStart === g.n) return true;
+  return g.mode === 'shotgun' && !skGroupScored(g) && !skStartOverride(g);
+}
+function skPickStart(h) {
+  if (!_sk) return; const g = skGroup();
+  if (!_sk.start) skStartOverride(g);
+  _sk.start[g.n] = h; _sk.askStart = null;
+  try { localStorage.setItem(skStoreStartKey(), JSON.stringify(_sk.start)); } catch (e) {}
+  skGoFirstOpen(); renderLiveBanner();
+}
+function skChangeStart() { if (!_sk) return; _sk.askStart = skGroup().n; renderLiveBanner(); }
+function skStartPickerHtml(g) {
+  const max = skMaxHole(), sug = Number(g.start_hole) || 0, cur = skStartOverride(g);
+  const cell = h => { const on = h === (cur || sug); return `<button type="button" onclick="skPickStart(${h})" style="min-height:56px;border-radius:12px;border:2px solid ${on ? '#ffe08a' : 'rgba(255,255,255,0.25)'};background:${on ? 'rgba(255,224,138,0.18)' : 'rgba(255,255,255,0.06)'};color:#fff;font-family:'DM Mono',monospace;font-size:1.3rem;font-weight:700;cursor:pointer">${h}</button>`; };
+  return `<div style="text-align:center;padding:6px 2px 4px"><div style="font-size:1.25rem;font-weight:800;color:#fff;margin-bottom:4px">Which hole are you starting on?</div>
+    <div style="font-size:0.86rem;color:rgba(255,255,255,0.75);margin-bottom:12px;line-height:1.4">${sug ? `The host suggested hole <b style="color:#ffe08a">${sug}</b>. ` : ''}Tap the hole your group is starting on.</div>
+    <div style="display:grid;grid-template-columns:repeat(${max === 9 ? 3 : 6},1fr);gap:8px">${Array.from({ length: max }, (_, i) => cell(i + 1)).join('')}</div>
+</div>`;
+}
 function skOrder() {
   const max = skMaxHole(), g = _sk ? skGroup() : null;
-  let s = g ? Number(g.start_hole) || 1 : 1; if (s < 1 || s > max) s = 1;
+  let s = g ? skStartFor(g) : 1; if (s < 1 || s > max) s = 1;
   const out = []; for (let i = 0; i < max; i++) out.push(((s - 1 + i) % max) + 1);
   return out;
 }
@@ -11564,6 +11604,7 @@ function livePanelModeToggleHtml(mode) {
 }
 function liveScoreModeHtml() {
   const g = skGroup(), gs = skGroups(), hole = _sk.hole, max = skMaxHole();
+  if (skAskStart(g)) return skStartPickerHtml(g);
   if (!g.players.length) return `<div style="font-size:0.85rem;color:rgba(255,255,255,0.7);padding:8px 0">Nobody is set up for this game yet.</div>`;
   const pars = skPars(), par = pars ? pars[hole - 1] : null;
   const first = n => String(n).trim().split(/\s+/)[0];
@@ -11613,7 +11654,7 @@ function liveScoreModeHtml() {
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
       ${navBtn(-1, chevL, false)}
       <div style="flex:1;text-align:center"><div style="font-family:'DM Mono',monospace;font-size:1.9rem;font-weight:700;line-height:1;color:#fff">Hole ${hole}</div>
-        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-top:3px">${par != null ? 'Par ' + par : '&nbsp;'}${g.start_hole && hole === ord[0] ? '<span style="margin-left:8px;color:#ffe08a">Your start hole</span>' : ''}<span style="margin-left:10px;color:${statusCol}">${status}</span></div></div>
+        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-top:3px">${par != null ? 'Par ' + par : '&nbsp;'}${hole === ord[0] && (g.start_hole || skStartOverride(g)) ? '<span style="margin-left:8px;color:#ffe08a">Your start hole</span>' : ''}${hole === ord[0] && !skGroupScored(g) ? '<a onclick="skChangeStart()" style="margin-left:8px;color:#9fd8ff;text-decoration:underline;cursor:pointer">Change</a>' : ''}<span style="margin-left:10px;color:${statusCol}">${status}</span></div></div>
       ${navBtn(1, chevR, done && nextH != null)}
     </div>
     ${skCoinNoteHtml(hole, nextH, g, gs)}
