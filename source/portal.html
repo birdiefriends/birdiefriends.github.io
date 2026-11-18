@@ -6492,7 +6492,7 @@ function groupsRender() {
       + (hasTeams ? row('You place', seg([['teams', 'Teams'], ['players', 'Players']], o.individual ? 'players' : 'teams', 'groupsSetOptPlace')) : '')
       + (o.mode === 'shotgun' ? row('Start holes', `<input type="text" value="${GRP_ESC(o.start_holes)}" placeholder="auto-spread" oninput="groupsSetOptTyped('start_holes',this.value)" style="width:130px;${inpStyle}">`)
         : o.mode === 'tee_times' ? row('First tee', `<input type="time" value="${GRP_ESC(o.first_tee)}" oninput="groupsSetOptTyped('first_tee',this.value)" style="${inpStyle}"><input type="number" min="5" max="30" value="${GRP_ESC(o.interval)}" oninput="groupsSetOptTyped('interval',this.value)" style="width:60px;${inpStyle}"><span style="font-size:0.74rem;color:var(--text-muted)">min</span>`) : '')
-      + `<button type="button" class="host-cta-btn" style="margin:6px 0 0" onclick="groupsSuggest()">✨ ${s ? 'Rebuild groups' : 'Build groups'}</button>`
+      + `<button type="button" class="host-cta-btn" style="margin:6px 0 0" onclick="groupsSuggest()">✨ ${s ? 'Rebuild playing groups' : 'Build playing groups'}</button>`
       + `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px;line-height:1.45">${nPlayers} players${hasTeams && !o.individual ? ', teams are placed as one' : ''}. Hold ⠿ and drag, or tap a row to move it.</div></div>` : '')
     + `</div>`;
   const small = 'min-width:38px;min-height:38px;font-size:0.95rem;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text-muted);cursor:pointer';
@@ -6520,9 +6520,9 @@ function groupsRender() {
       </div>`).join('') + `<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="groupsAddGroup()">➕ Add a group</button>`;
   }
   const panels = s ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start"><div>${poolHtml}</div><div>${groupsHtml}</div></div>`
-    : `<div style="font-size:0.84rem;color:var(--text-muted);padding:10px 2px">No groups yet. Tap Build groups, then adjust.</div>`;
-  body.innerHTML = `<div style="font-size:1.15rem;font-weight:700;margin-bottom:2px">👥 Groups</div>
-    <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px">${GRP_ESC(_grp.g.name)}${_grp.publishedAt ? ` · published (v${_grp.version})` : ' · not published yet'}</div>
+    : `<div style="font-size:0.84rem;color:var(--text-muted);padding:10px 2px">No playing groups yet. Tap Build playing groups, then adjust.</div>`;
+  body.innerHTML = `<div style="font-size:1.15rem;font-weight:700;margin-bottom:2px">👥 Playing groups</div>
+    <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px">${GRP_ESC(_grp.g.name)}${_grp.publishedAt ? ` · published (v${_grp.version})` : ' · not published yet'}<br>Teams stay together. This sets who tees off together.</div>
     ${_grp.notes.length ? `<div style="font-size:0.78rem;color:#8a6d00;margin-bottom:8px">${_grp.notes.map(GRP_ESC).join('<br>')}</div>` : ''}
     ${settings}${panels}
     <div id="grp-warn" style="margin:6px 0 10px">${groupsWarnHtml()}</div>
@@ -6610,6 +6610,16 @@ async function liveEditSave(gid, state, title) {
   }
   return { version: _groupSets[gid].version, notified: r.notified || 0, regFailed: failed };
 }
+// Teams and playing groups are different things (teams = partners; playing groups = who tees off together). When everyone fits in ONE group
+// (a foursome or fewer) there is nothing to build: the Playing groups step is not offered, and the app treats it as one group. Once the host
+// has published groups, or the field is bigger than a group, the step is there.
+function gatheringNeedsGroups(g) {
+  if (!g || g.gatheringId == null) return false;
+  const gs = _groupSets[g.gatheringId], pub = gs && gs.published;
+  if (pub && Array.isArray(pub.groups) && pub.groups.length) return true;
+  const size = (pub && pub.group_size) || 4;
+  return gatheringRegData.filter(r => r.gatheringId === g.gatheringId && r.status === 'Yes').length > size;
+}
 // The "Fix groups" sheet (Live Panel, host or commissioner). Three actions only: Not here / Move / Start hole. Everything is a DRAFT (a list of ops)
 // until Apply; the preview line says in plain words what the event will look like. The rules live in BFEngine.BFLiveEdit.
 let _le = null;
@@ -6617,7 +6627,7 @@ function liveEditEntryHtml(gid) {
   if (gid == null) return '';
   const g = gatheringData.find(x => x.gatheringId === gid);
   const ok = g && (g.hostId === currentPlayer || (typeof isCommissioner === 'function' && isCommissioner()));
-  return ok ? `<div style="margin:0 0 10px"><button type="button" class="sc-submit-btn" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.35)" onclick="openLiveEdit(${gid})">✏️ Fix groups</button></div>` : '';
+  return ok ? `<div style="margin:0 0 10px"><button type="button" class="sc-submit-btn" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.35)" onclick="openLiveEdit(${gid})">✏️ Fix teams &amp; groups</button></div>` : '';
 }
 async function openLiveEdit(gid) {
   const g = gatheringData.find(x => x.gatheringId === gid);
@@ -6675,7 +6685,7 @@ function leRender(open) {
   h += `<div style="margin:0 0 8px">${btn('+ Add player', 'leAddStart(null)')}</div>`;
   h += `<div style="display:flex;gap:8px;margin-top:6px"><button type="button" class="host-cta-btn" style="margin:0;flex:2${P.can_apply && _le.ops.length ? '' : ';opacity:0.45'}" ${P.can_apply && _le.ops.length ? '' : 'disabled'} onclick="leApply()">Apply</button>
     <button type="button" class="host-cta-btn" style="margin:0;flex:1;background:#fff;color:var(--green-dark);border:1.5px solid var(--green)" ${_le.ops.length ? '' : 'disabled'} onclick="leUndo()">Undo</button></div>`;
-  if (open || !document.getElementById('host-sheet-content')) openHostSheet('✏️ Fix groups', h); else document.getElementById('host-sheet-content').innerHTML = h;
+  if (open || !document.getElementById('host-sheet-content')) openHostSheet('✏️ Fix teams &amp; groups', h); else document.getElementById('host-sheet-content').innerHTML = h;
 }
 function leTap(i) { if (!_le) return; _le.sel = _le.sel === i ? null : i; _le.moveFor = null; _le.holeFor = null; leRender(); }
 function leDo(op) { if (!_le) return; _le.ops.push(op); _le.sel = null; _le.moveFor = null; _le.holeFor = null; leRender(); }
@@ -20954,8 +20964,8 @@ function renderHostPanelList() {
         <div class="host-gathering-actions">
           <button class="btn btn-secondary btn-sm" style="flex:1;${(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId)) ? 'background:rgba(29,158,117,0.12);border-color:rgba(29,158,117,0.35);color:#1D9E75;font-weight:700' : ''}"
             onclick="showGatheringGamesForm(${g.gatheringId})">🎮 Games${(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId)) ? ' ✓' : ''}</button>
-          <button class="btn btn-secondary btn-sm" style="flex:1"
-            onclick="openGatheringGroups(${g.gatheringId})">👥 Groups</button>
+          ${gatheringNeedsGroups(g) ? `<button class="btn btn-secondary btn-sm" style="flex:1"
+            onclick="openGatheringGroups(${g.gatheringId})">👥 Playing groups</button>` : ''}
         </div>
       </div>`;
     }).join('');

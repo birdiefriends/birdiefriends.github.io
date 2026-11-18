@@ -16,13 +16,13 @@ const ctx = { window: dom.window, document: doc, console, JSON, Math, Number, St
   ensureGroupSet: async () => {}, addDialogs: [], openAddPlayerDialog(prefill, opt, cb) { ctx.addDialogs.push(opt); ctx.addCb = cb; },
   gatheringsFetchJSON: async (u, o) => { reqs.push([u, o && o.body ? JSON.parse(o.body) : null]); return /publish$/.test(u) ? { ok: true, version: 3, notified: 1 } : { ok: true }; } };
 vm.createContext(ctx);
-const FN = ['openHostSheet','closeHostSheet','liveEditState','liveEditSave','liveEditEntryHtml','openLiveEdit','leRender','leTap','leDo','leAct','leMoveTo','leHole','leSetHole','leUndo','leApply','refreshGroupSetNow','leAddStart','leAddAt','leAddCancel'];
+const FN = ['openHostSheet','closeHostSheet','liveEditState','liveEditSave','liveEditEntryHtml','openLiveEdit','leRender','leTap','leDo','leAct','leMoveTo','leHole','leSetHole','leUndo','leApply','refreshGroupSetNow','leAddStart','leAddAt','leAddCancel','gatheringNeedsGroups'];
 vm.runInContext('let _groupSets = { 104: { published: ' + JSON.stringify(set) + ', version: 2 } }; let _le = null;\n' + FN.map(n => extractFn(src, n)).join('\n') + '\nthis.api = { ' + FN.join(',') + ', get le() { return _le; } };', ctx);
 const A = ctx.api, txt = () => (doc.getElementById('host-sheet-content') || { textContent: '' }).textContent;
 const click = label => { const b = [...doc.querySelectorAll('#host-sheet-content button')].find(x => x.textContent.trim().startsWith(label)); if (!b) throw new Error('no button ' + label); vm.runInContext(b.getAttribute('onclick'), ctx); };
 const tapName = n => vm.runInContext(`leTap(${A.le.names.indexOf(n)})`, ctx);
 
-ok(A.liveEditEntryHtml(104).includes('Fix groups') && !A.liveEditEntryHtml(999), 'host sees the Fix groups button (Gathering found); unknown Gathering: none');
+ok(A.liveEditEntryHtml(104).includes('Fix teams') && !A.liveEditEntryHtml(999), 'host sees the Fix groups button (Gathering found); unknown Gathering: none');
 ctx.currentPlayer = 'Someone'; ok(A.liveEditEntryHtml(104) === '', 'a player does not'); ctx.currentPlayer = 'Brian Hager';
 await A.openLiveEdit(104);
 ok(/Planned: 12 players, 3 groups\. Playing: 12 players, 3 groups\./.test(txt()), 'opens with the plain line');
@@ -96,4 +96,16 @@ reqs.length = 0; ctx.gatheringsFetchJSON = async (u, o) => { reqs.push([u, o && 
 await A.leApply();
 const pub3 = reqs.find(r => /publish$/.test(r[0]));
 ok(pub3 && pub3[1].if_version === 0 && pub3[1].draft.mode === 'tee_times' && pub3[1].draft.out.f.reason === 'noshow', 'first Apply publishes the plan and the change together');
+
+// ── the Playing groups step is only offered when there is more than one group to build ──
+ctx.gatheringRegData = 'ABCD'.split('').map(p => ({ gatheringId: 104, player: p, status: 'Yes' }));
+vm.runInContext('_groupSets = {}', ctx);
+ok(A.gatheringNeedsGroups(ctx.gatheringData[0]) === false, 'a foursome: no Playing groups step');
+ctx.gatheringRegData = 'ABCDE'.split('').map(p => ({ gatheringId: 104, player: p, status: 'Yes' }));
+ok(A.gatheringNeedsGroups(ctx.gatheringData[0]) === true, 'five players: more than one group');
+ctx.gatheringRegData = 'ABCD'.split('').map(p => ({ gatheringId: 104, player: p, status: 'Yes' }));
+vm.runInContext('_groupSets = { 104: { published: { groups: [{ members: ["A","B","C","D"] }] }, version: 1 } }', ctx);
+ok(A.gatheringNeedsGroups(ctx.gatheringData[0]) === true, 'groups already published: the step stays available');
+ctx.gatheringRegData = ['A','B','C','D','E'].map((p, i) => ({ gatheringId: 104, player: p, status: i === 4 ? 'No' : 'Yes' })); vm.runInContext('_groupSets = {}', ctx);
+ok(A.gatheringNeedsGroups(ctx.gatheringData[0]) === false, 'players who said No do not count');
 console.log(`live_edit_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
