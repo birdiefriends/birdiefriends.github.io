@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.58.0';
+  const ENGINE_VERSION = '1.59.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1988,9 +1988,30 @@
   // Pot = entry_per_player × players who actually turned in a card.
   // Returns the results snapshot (same shape Dev-87 saved as payout_summary,
   // calc_version 1 — existing saved snapshots stay readable as-is).
+  // Where did each player REALLY start? The plan says where they were sent; the scores say where they went. Games that care about the order holes were
+  // played in (Turkeys, MiserBall's longest survivor) use this, so a group that was moved, pushed back or started on the back nine at the last minute
+  // still scores right even if nobody updated the plan. Rule: the holes a player has scored form a run that wraps 18 -> 1; its first hole is the start.
+  // Falls back to the plan (planned = { 'player lowercased': hole }) when the scores can't say: nothing scored yet, all 18 scored, 9-hole cards, or
+  // gaps that leave more than one possible start (then the plan wins if it is one of them).
+  function effectiveStartHoles(cards, planned) {
+    const out = Object.assign({}, planned || {});
+    (cards || []).forEach(c => {
+      if (!c || !c.player || c.hole_count === 9 || !Array.isArray(c.holes)) return;
+      const key = String(c.player).trim().toLowerCase();
+      const has = []; for (let h = 1; h <= 18; h++) has[h] = typeof c.holes[h - 1] === 'number' && c.holes[h - 1] > 0;
+      const scored = []; for (let h = 1; h <= 18; h++) if (has[h]) scored.push(h);
+      if (!scored.length || scored.length === 18) return;
+      const starts = scored.filter(h => !has[((h + 16) % 18) + 1]);
+      const plan = Number(out[key]);
+      if (starts.length === 1) out[key] = starts[0];
+      else if (starts.length > 1 && !(plan >= 1 && starts.indexOf(plan) >= 0)) { /* ambiguous and the plan doesn't fit: keep the plan (or 1) */ }
+    });
+    return out;
+  }
   function computeRoundPayout(config, inputs) {
     inputs = inputs || {};
     const cards = (inputs.scorecards || []).filter(c => c && c.player);
+    inputs = Object.assign({}, inputs, { startHoles: effectiveStartHoles(cards, inputs.startHoles) });
     const players = cards.map(c => c.player);
     const ledger = makeLedger(players);
     const dpp = Number(config && config.payout && config.payout.entry_per_player) || 0;
@@ -3763,7 +3784,7 @@
     skinsWon, betterBallHoles, scrambleTeamStrokes, scrambleSize, scramblePodiumTotal, scrambleSplits, scramblePcts, scrambleCombinedPct, stablefordHolePoints,
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,
-    computeRoundPayout,
+    computeRoundPayout, effectiveStartHoles,
     computeGatheringGamesPayout, fourballBoard, fourballMatchView, matchSegmentResult, fourballSegmentPlan, PERIODS, PERIOD_ORDER, periodKey, periodList,
     latestScorecardPerPlayer,
     scorecardMissingHoles,

@@ -22,6 +22,7 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_asplayed_readers.mjs` | Dev-101: Close, live boards and payouts read the as-played teams and Out players from the published Groups document |
 | `test_live_edit_save.mjs` | Dev-101: one version-checked publish; stale editor refused; no-show registrations set to No |
 | `test_live_edit_ui.mjs` | Dev-101: the Fix groups sheet (Not here / Move / Start hole, preview line, Apply) |
+| `test_effective_start.mjs` | Dev-101: Turkeys + MiserBall survivor use the start hole the scores show, plan only as fallback |
 | `test_rail_cancel.mjs` | Dev-93: At-the-course rail off switch sticks past tee time; cancelled events never launch the rail or the Live Panel (test rounds excepted) |
 | `test_fourball_live.mjs` | Dev-93: Fourball live board (partial cards, to-par ranking, net, agrees with the Close winner) and the Live Panel section |
 | `test_fourball_segments.mjs` | Dev-93: Fourball pot variants: segments, strokes vs holes won, foursome vs field, pushes, match view |
