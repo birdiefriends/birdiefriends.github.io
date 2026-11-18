@@ -6627,7 +6627,8 @@ function liveEditEntryHtml(gid) {
   if (gid == null) return '';
   const g = gatheringData.find(x => x.gatheringId === gid);
   const ok = g && (g.hostId === currentPlayer || (typeof isCommissioner === 'function' && isCommissioner()));
-  return ok ? `<div style="margin:0 0 10px"><button type="button" class="sc-submit-btn" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.35)" onclick="openLiveEdit(${gid})">✏️ Fix teams &amp; groups</button></div>` : '';
+  // a quiet footer of the Live Panel, never in the scoring area: the host finds it when they need it, nobody taps it by accident
+  return ok ? `<div style="margin-top:12px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.18);text-align:center"><button type="button" onclick="openLiveEdit(${gid})" style="min-height:44px;padding:0 14px;border:0;background:none;color:rgba(255,255,255,0.85);font-family:inherit;font-size:0.88rem;font-weight:600;cursor:pointer">✏️ Fix teams &amp; groups</button></div>` : '';
 }
 async function openLiveEdit(gid) {
   const g = gatheringData.find(x => x.gatheringId === gid);
@@ -9956,7 +9957,7 @@ function buildLivePanel(evt) {
   if (_skOn) {
     skEnsure(evt, _liveConfig);
     if (!_sk.loaded && !_sk.loading && Date.now() - (_sk.tried || 0) > 8000) { _sk.loading = true; _sk.tried = Date.now(); loadFourballLive(evt).finally(() => { if (_sk) _sk.loading = false; }); }
-    if (skMode() === 'score') return `<div class="live-panel">${livePanelModeToggleHtml('score')}${liveEditEntryHtml(_panelGid)}${liveScoreModeHtml()}</div>`;
+    if (skMode() === 'score') return `<div class="live-panel">${livePanelModeToggleHtml('score')}${liveScoreModeHtml()}${liveEditEntryHtml(_panelGid)}</div>`;
   }
   // Dev-87 — host-only Close & Calculate. Only a gamed Gathering (open
   // config in the index) reaching this panel, and only its own host.
@@ -10514,7 +10515,6 @@ function buildLivePanel(evt) {
   const fbSection = showFourballSection ? (_skOn ? fourballActionsHtml(_liveConfig) : fourballLiveSectionHtml(_liveConfig)) : '';
   return `<div class="live-panel">
     ${_skOn ? livePanelModeToggleHtml('games') : ''}
-    ${liveEditEntryHtml(_panelGid)}
     ${groupingsLink}
     ${photosSection}
     ${showFourballSection ? liveSectionHtml('game', BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.icon, BFEngine.getGame(liveSideGid(_liveConfig) || 'fourball').meta.label, fbSection) : ''}
@@ -10528,6 +10528,7 @@ function buildLivePanel(evt) {
         <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-bottom:10px;line-height:1.45">Once everyone's card is in: check scorecards, preview Skins/CTP/MiserBall/Birdie payouts, and post results to My History.</div>
         <button class="sc-submit-btn" onclick="openGatheringCloseSheet(${_panelGid})">🏁 Close &amp; Calculate</button>
       `) : ''}
+    ${liveEditEntryHtml(_panelGid)}
   </div>`;
 }
 // Live panel sections fold away when their header is tapped. The folded set is remembered on this phone (and survives the
