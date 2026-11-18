@@ -22,7 +22,7 @@ const A = ctx.api, txt = () => (doc.getElementById('host-sheet-content') || { te
 const click = label => { const b = [...doc.querySelectorAll('#host-sheet-content button')].find(x => x.textContent.trim().startsWith(label)); if (!b) throw new Error('no button ' + label); vm.runInContext(b.getAttribute('onclick'), ctx); };
 const tapName = n => vm.runInContext(`leTap(${A.le.names.indexOf(n)})`, ctx);
 
-ok(A.liveEditEntryHtml(104).includes('Fix groups') && !A.liveEditEntryHtml(999), 'host sees the Fix groups button; no groups published: none');
+ok(A.liveEditEntryHtml(104).includes('Fix groups') && !A.liveEditEntryHtml(999), 'host sees the Fix groups button (Gathering found); unknown Gathering: none');
 ctx.currentPlayer = 'Someone'; ok(A.liveEditEntryHtml(104) === '', 'a player does not'); ctx.currentPlayer = 'Brian Hager';
 await A.openLiveEdit(104);
 ok(/Planned: 12 players, 3 groups\. Playing: 12 players, 3 groups\./.test(txt()), 'opens with the plain line');
@@ -83,4 +83,17 @@ ctx._groupSets = ctx._groupSets;
 await A.leApply();
 const pub2 = reqs.find(r => /publish$/.test(r[0]));
 ok(pub2 && pub2[1].draft.added.yan === 'Yan' && pub2[1].draft.teams.some(t => t.members.includes('Yan') && t.members.length === 3), 'Apply saves the added player and the 3-some in the same document');
+
+// ── no groups were ever published: Fix groups builds the plan from who is registered Yes ──
+ctx._groupSets = {}; vm.runInContext('_groupSets = {}', ctx);
+ctx.gatheringRegData = 'ABCDEF'.split('').map(p => ({ gatheringId: 104, player: p, status: 'Yes' }));
+ctx.teamsState = () => ({ pairs: [['A','B'],['C','D'],['E','F']], names: ['','',''] });
+await A.openLiveEdit(104);
+ok(/Planned: 6 players, 2 groups\. Playing: 6 players, 2 groups\./.test(txt()) && /Group 1 · 4 players/.test(txt()) && /Group 2 · 2 players/.test(txt()), 'no published groups: plan built from the registrations, teams kept together');
+tapName('F'); click('Not here');
+ok(/Out: F \(no-show\)/.test(txt()) && /E is short of a team/.test(txt()), 'Not here works on a Gathering that never had groups');
+reqs.length = 0; ctx.gatheringsFetchJSON = async (u, o) => { reqs.push([u, o && o.body ? JSON.parse(o.body) : null]); return /publish$/.test(u) ? { ok: true, version: 1, notified: 0 } : { ok: true }; };
+await A.leApply();
+const pub3 = reqs.find(r => /publish$/.test(r[0]));
+ok(pub3 && pub3[1].if_version === 0 && pub3[1].draft.mode === 'tee_times' && pub3[1].draft.out.f.reason === 'noshow', 'first Apply publishes the plan and the change together');
 console.log(`live_edit_ui: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

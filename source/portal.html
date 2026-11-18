@@ -6568,9 +6568,19 @@ async function groupsPublish() {
 // The as-played roster is the published Groups document plus { teams, out, planned } (see gatheringAsPlayed). BFEngine.BFLiveEdit holds
 // all the rules; this is only the glue: load the current state, and save it in ONE publish (version-checked, so a stale second editor is refused).
 function liveEditState(gid) {
-  const g = gatheringData.find(x => x.gatheringId === gid), set = _groupSets[gid] && _groupSets[gid].published;
-  if (!set) return null;
-  const N = g ? teamSizeOf(g) : 0, LE = BFEngine.BFLiveEdit;
+  const g = gatheringData.find(x => x.gatheringId === gid), N = g ? teamSizeOf(g) : 0, LE = BFEngine.BFLiveEdit;
+  let set = _groupSets[gid] && _groupSets[gid].published;
+  if (!set) {
+    // The host never published groups (a quick event, or a Gathering made on the course): the plan is simply who is registered Yes, teams kept
+    // together, in groups of up to 4 in registration order. The first Apply publishes it, so Fix groups never dead-ends.
+    const regs = gatheringRegData.filter(r => r.gatheringId === gid && r.status === 'Yes');
+    if (!regs.length) return null;
+    const ts = N ? teamsState(regs, N) : null, used = new Set(), units = [];
+    ((ts && ts.pairs) || []).forEach(pr => { const ms = pr.filter(Boolean); if (ms.length) { ms.forEach(n => used.add(String(n).trim().toLowerCase())); units.push(ms); } });
+    regs.forEach(r => { if (!used.has(String(r.player).trim().toLowerCase())) { used.add(String(r.player).trim().toLowerCase()); units.push([r.player]); } });
+    const groups = []; units.forEach(u => { const last = groups[groups.length - 1]; if (last && last.members.length + u.length <= 4) last.members.push(...u); else groups.push({ members: u.slice() }); });
+    return LE.fromPlan({ mode: 'tee_times', holes: 18, group_size: 4, groups }, ts ? { pairs: ts.pairs, names: ts.names } : null, { team_size: N });
+  }
   if (Array.isArray(set.teams) && set.planned) {   // already edited once: the saved copy IS the state
     return { v: 1, mode: set.mode || 'shotgun', holes: set.holes || 18, group_size: set.group_size || 4, team_size: N, groups: JSON.parse(JSON.stringify(set.groups || [])),
       teams: JSON.parse(JSON.stringify(set.teams)), out: JSON.parse(JSON.stringify(set.out || {})), added: JSON.parse(JSON.stringify(set.added || {})), planned: set.planned };
@@ -6582,7 +6592,7 @@ function liveEditState(gid) {
 // players whose group or start hole changed). Registrations for no-shows are then set to No (best effort; the document alone already excludes them).
 async function liveEditSave(gid, state, title) {
   const g = gatheringData.find(x => x.gatheringId === gid), cur = _groupSets[gid] || {}, prev = cur.published || {};
-  const doc = Object.assign({}, prev, { groups: state.groups.map(x => { const o = Object.assign({}, x); delete o.units; return o; }), teams: state.teams, out: state.out, added: state.added || {}, planned: state.planned });
+  const doc = Object.assign({ v: 1, mode: state.mode, holes: state.holes, group_size: state.group_size }, prev, { groups: state.groups.map(x => { const o = Object.assign({}, x); delete o.units; return o; }), teams: state.teams, out: state.out, added: state.added || {}, planned: state.planned });
   const r = await gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${gid}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ host_id: currentPlayer, title: title || (g && g.name) || 'Your event', draft: doc, if_version: cur.version != null ? cur.version : 0 }) }, 15000);
   if (!r || !r.ok) { const e = new Error((r && r.error) || 'the server did not accept it'); e.code = r && r.code; throw e; }
@@ -6606,7 +6616,7 @@ let _le = null;
 function liveEditEntryHtml(gid) {
   if (gid == null) return '';
   const g = gatheringData.find(x => x.gatheringId === gid);
-  const ok = g && (g.hostId === currentPlayer || (typeof isCommissioner === 'function' && isCommissioner())) && _groupSets[gid] && _groupSets[gid].published;
+  const ok = g && (g.hostId === currentPlayer || (typeof isCommissioner === 'function' && isCommissioner()));
   return ok ? `<div style="margin:0 0 10px"><button type="button" class="sc-submit-btn" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.35)" onclick="openLiveEdit(${gid})">✏️ Fix groups</button></div>` : '';
 }
 async function openLiveEdit(gid) {
@@ -6614,7 +6624,7 @@ async function openLiveEdit(gid) {
   if (!g) { showToast('Could not find this Gathering', true); return; }
   await ensureGroupSet(gid);
   const base = liveEditState(gid);
-  if (!base) { showToast('Publish the groups first, then you can fix them here', true); return; }
+  if (!base) { showToast('Nobody is registered for this Gathering yet', true); return; }
   _le = { gid, title: g.name, base, ops: [], sel: null, moveFor: null, holeFor: null, names: [], adding: null };
   leRender(true);
 }
@@ -9936,7 +9946,7 @@ function buildLivePanel(evt) {
   if (_skOn) {
     skEnsure(evt, _liveConfig);
     if (!_sk.loaded && !_sk.loading && Date.now() - (_sk.tried || 0) > 8000) { _sk.loading = true; _sk.tried = Date.now(); loadFourballLive(evt).finally(() => { if (_sk) _sk.loading = false; }); }
-    if (skMode() === 'score') return `<div class="live-panel">${livePanelModeToggleHtml('score')}${liveScoreModeHtml()}</div>`;
+    if (skMode() === 'score') return `<div class="live-panel">${livePanelModeToggleHtml('score')}${liveEditEntryHtml(_panelGid)}${liveScoreModeHtml()}</div>`;
   }
   // Dev-87 — host-only Close & Calculate. Only a gamed Gathering (open
   // config in the index) reaching this panel, and only its own host.
