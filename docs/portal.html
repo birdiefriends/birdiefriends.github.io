@@ -6173,6 +6173,7 @@ function buildEventCard(evt, isPast) {
         <span class="icon-action-badge secondary">🏆</span>
         <span class="icon-action-label">Games</span>
       </button>` : eventAddGamesBtnHtml(evt, isCanceled)}
+      ${liveEditCardBtnHtml(evt, isCanceled)}
       <!-- Dev-88 — Photo/Notes are "Gaming Mode" only icons: they drop out
            for as long as THIS event IS the live gamed round (getLiveEvent
            matches it), whether or not the Live Panel happens to be expanded
@@ -19786,6 +19787,17 @@ function eventGamesAllowed(evt) {
   if (day < today) return false; // v4.9.6 — any time up to the event day (Brian: fine if someone sets it up early); never for a past event
   const reg = findMyReg(evt.name);
   return !!reg && reg.status === 'Yes';
+}
+// The host's door to Fix teams & groups, right on the event card (before the event and during it). Same tool as the Live Panel footer.
+function liveEditCardBtnHtml(evt, isCanceled) {
+  if (isCanceled || !evt || evt.source !== 'gathering' || evt.gatheringId == null || !currentPlayer || isGuest()) return '';
+  const isHost = String(evt.hostId) === String(currentPlayer) || (typeof isCommissioner === 'function' && isCommissioner());
+  if (!isHost || _closedGamesGids.has(Number(evt.gatheringId))) return '';
+  if (!(evt.dt instanceof Date) || isNaN(evt.dt) || eventLocalDay(evt.dt) < eventLocalDay(new Date())) return '';
+  return `<button class="icon-action-btn" onclick="openLiveEdit(${Number(evt.gatheringId)})">
+        <span class="icon-action-badge secondary">✏️</span>
+        <span class="icon-action-label">Fix teams</span>
+      </button>`;
 }
 function eventAddGamesBtnHtml(evt, isCanceled) {
   if (isCanceled || gatheringIsGamed(evtGamesConfig(evt)) || !eventGamesAllowed(evt)) return '';
