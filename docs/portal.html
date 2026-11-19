@@ -21001,6 +21001,19 @@ function hostAddPlayer(gid) {
   const g = gatheringData.find(x => x.gatheringId === gid); if (!g) return;
   openAddPlayerDialog(null, { gatheringId: gid, eventName: g.name }, () => { try { (_hostPanelView === 'archive' ? renderHostArchiveList : renderHostPanelList)(); } catch (_) {} });
 }
+// One dark (primary) button per host card, chosen by the event's state: the next thing the host should do. Everything else is light.
+// f = { live, gamesSet, needsGroups, groupsPublished, spotsLeft }
+function hostCardPrimary(f) {
+  if (f.live) return 'fix';
+  if (!f.gamesSet) return 'games';
+  if (f.needsGroups && !f.groupsPublished) return 'groups';
+  if (f.spotsLeft > 0) return 'announce';
+  return 'none';
+}
+function toggleHostMore(gid) {
+  const el = document.getElementById('host-more-' + gid), b = document.getElementById('host-more-btn-' + gid); if (!el) return;
+  const open = el.style.display === 'none'; el.style.display = open ? 'block' : 'none'; if (b) b.textContent = open ? 'Less ▴' : 'More ▾';
+}
 function renderHostPanelList() {
   _hostPanelView = 'list';
   const backBtn = document.getElementById('host-sheet-back');
@@ -21053,6 +21066,12 @@ function renderHostPanelList() {
       const detailHtml = regs.length === 0
         ? `<div style="font-size:0.82rem;color:var(--text-muted)">No responses yet.</div>`
         : rsection('✅', byStatus.Yes) + rsection('🔄', byStatus.Sub) + rsection('❌', byStatus.No);
+      const live = !!(g.dt && g.dt < now);
+      const gamesSet = !!(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId));
+      const needsG = gatheringNeedsGroups(g);
+      const pubd = !!(typeof _groupSets !== 'undefined' && _groupSets[g.gatheringId] && _groupSets[g.gatheringId].published);
+      const pri = hostCardPrimary({ live, gamesSet, needsGroups: needsG, groupsPublished: pubd, spotsLeft: g.capacity ? Number(g.capacity) - yes : 0 });
+      const cls = k => 'btn ' + (pri === k ? 'btn-primary' : 'btn-secondary') + ' btn-sm';
       return `<div class="host-gathering-card">
         <div style="font-weight:700;font-size:0.95rem">${g.name}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin:3px 0 2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -21087,12 +21106,14 @@ function renderHostPanelList() {
         <div class="host-gathering-actions">
           <button class="btn btn-secondary btn-sm"
             onclick="showEditGatheringForm(${g.gatheringId})">✏️ Edit</button>
-          ${(g.dt && g.dt < now) ? `<button class="btn btn-primary btn-sm"
+          ${live ? `<button class="btn btn-secondary btn-sm"
             onclick="hostAddPlayer(${g.gatheringId})">➕ Add a player</button>` : ''}
+          ${regs.length ? `<button class="${cls('fix')}" onclick="openLiveEdit(${g.gatheringId})">✏️ Fix teams</button>` : ''}
+          ${live ? `</div><button type="button" id="host-more-btn-${g.gatheringId}" class="btn btn-secondary btn-sm" style="width:100%;margin-top:6px" onclick="toggleHostMore(${g.gatheringId})">More ▾</button><div id="host-more-${g.gatheringId}" style="display:none"><div class="host-gathering-actions">` : ''}
           <button class="btn btn-secondary btn-sm"
             onclick="hostInviteOthers(${g.gatheringId})">➕ Invite Others</button>
-          ${!g.fillListEnabled ? `<button class="btn btn-primary btn-sm"
-            onclick="hostOpenToAllMembers(${g.gatheringId})">📢 Open to all members</button>` : `<button class="btn btn-primary btn-sm"
+          ${!g.fillListEnabled ? `<button class="${cls('announce')}"
+            onclick="hostOpenToAllMembers(${g.gatheringId})">📢 Open to all members</button>` : `<button class="${cls('announce')}"
             onclick="hostAnnounceOpen(${g.gatheringId})">📣 Announce to all members</button>`}
           <button class="btn btn-secondary btn-sm"
             onclick="repeatGathering(${g.gatheringId})">🔁 Repeat</button>
@@ -21102,10 +21123,11 @@ function renderHostPanelList() {
             onclick="cancelGatheringFromPanel(${g.gatheringId},'${g.name.replace(/'/g, "\\'")}')">Cancel Gathering</button>
         </div>
         ${destroyRoundButtonHtml(g.gatheringId, g.name, 'host')}
+        ${live ? '</div>' : ''}
         <div class="host-gathering-actions">
-          <button class="btn btn-secondary btn-sm" style="flex:1;${(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId)) ? 'background:rgba(29,158,117,0.12);border-color:rgba(29,158,117,0.35);color:#1D9E75;font-weight:700' : ''}"
+          <button class="${cls('games')}" style="flex:1;${(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId)) ? 'background:rgba(29,158,117,0.12);border-color:rgba(29,158,117,0.35);color:#1D9E75;font-weight:700' : ''}"
             onclick="showGatheringGamesForm(${g.gatheringId})">🎮 Games${(_hostGamesByGathering && _hostGamesByGathering.has(g.gatheringId)) ? ' ✓' : ''}</button>
-          ${gatheringNeedsGroups(g) ? `<button class="btn btn-secondary btn-sm" style="flex:1"
+          ${gatheringNeedsGroups(g) ? `<button class="${cls('groups')}" style="flex:1"
             onclick="openGatheringGroups(${g.gatheringId})">👥 Playing groups</button>` : ''}
         </div>
       </div>`;

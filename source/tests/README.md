@@ -22,6 +22,7 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_asplayed_readers.mjs` | Dev-101: Close, live boards and payouts read the as-played teams and Out players from the published Groups document |
 | `test_live_edit_save.mjs` | Dev-101: one version-checked publish; stale editor refused; no-show registrations set to No |
 | `test_live_edit_ui.mjs` | Dev-101: the Fix groups sheet (Not here / Move / Start hole, preview line, Apply) |
+| `test_host_card_primary.mjs` | Dev-101: host card has one dark primary button by state (live: Fix teams) and a More fold while live |
 | `test_live_edit_card_button.mjs` | Dev-101: the host Fix teams icon on the event card (host/commissioner, not past/closed/canceled) |
 | `test_host_set_teams.mjs` | Dev-101: host-set teams (Games, teams_by host) win over players picks on the card, panel, Close, partner prompts |
 | `test_effective_start.mjs` | Dev-101: Turkeys + MiserBall survivor use the start hole the scores show, plan only as fallback |

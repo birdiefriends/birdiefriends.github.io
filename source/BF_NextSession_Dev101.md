@@ -57,3 +57,5 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 - Portal v4.93.0: event card 'Round in progress' status restyled (was dim green text on the green card): dark strip, green left accent, white title, brighter detail. Wording 'Tap the banner at the top to enter scores'.
 
 - Portal v4.94.0: in-progress strip runs the full card width (margin 0 -18px -18px) so it lines up with the Leaderboard row and banners.
+
+- Portal v4.95.0: Host panel (My Gatherings) cards: ONE dark primary button by state via hostCardPrimary (live: Fix teams; setup: Games -> Playing groups -> fill the field -> none). Fix teams button added to the card (when anyone is registered). While live, Invite/Open to all/Repeat/Template/Cancel/Delete fold behind a More toggle (toggleHostMore). Colors: dark = next step, light = other, yellow = needs action, pink = destructive.
