@@ -6003,23 +6003,23 @@ function buildEventCard(evt, isPast) {
     const timeInStr = hoursIn > 0 ? `${hoursIn}h ${minsIn}m in` : `${minsIn}m in`;
     if (hasLivePanelSupport(evt)) {
       // Tier 2 — Live Panel is actually available; tap-to-score promise is honest.
-      actionHtml = `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;
-        background:rgba(29,158,117,0.15);border-radius:10px;border:1px solid rgba(29,158,117,0.3)">
-        <span style="font-size:1.1rem">⛳</span>
-        <div>
-          <div style="font-size:0.82rem;font-weight:700;color:#1D9E75">Round in progress</div>
-          <div style="font-size:0.75rem;color:rgba(255,255,255,0.55);margin-top:1px">${timeInStr} · Tap the banner to enter scores</div>
+      actionHtml = `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;
+        background:rgba(0,0,0,0.22);border-radius:10px;border-left:4px solid #5DCAA5">
+        <span style="font-size:1.3rem;line-height:1">⛳</span>
+        <div style="min-width:0">
+          <div style="font-size:0.95rem;font-weight:800;color:#fff">Round in progress</div>
+          <div style="font-size:0.82rem;color:rgba(255,255,255,0.85);margin-top:2px;line-height:1.35">${timeInStr} · Tap the banner at the top to enter scores</div>
         </div>
       </div>`;
     } else {
       // Tier 1 — no Live Panel for this format/event. No scoring promise, but
       // bright enough to read as a real status indicator.
-      actionHtml = `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;
-        background:rgba(29,158,117,0.12);border-radius:10px;border:1px solid rgba(29,158,117,0.25)">
-        <span style="font-size:1.05rem">⛳</span>
-        <div>
-          <div style="font-size:0.82rem;font-weight:700;color:#1D9E75">In-Progress</div>
-          <div style="font-size:0.75rem;color:rgba(255,255,255,0.55);margin-top:1px">${timeInStr}</div>
+      actionHtml = `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;
+        background:rgba(0,0,0,0.22);border-radius:10px;border-left:4px solid #5DCAA5">
+        <span style="font-size:1.3rem;line-height:1">⛳</span>
+        <div style="min-width:0">
+          <div style="font-size:0.95rem;font-weight:800;color:#fff">In progress</div>
+          <div style="font-size:0.82rem;color:rgba(255,255,255,0.85);margin-top:2px">${timeInStr}</div>
         </div>
       </div>`;
     }
