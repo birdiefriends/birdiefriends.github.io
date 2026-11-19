@@ -3706,7 +3706,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.59.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.60.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -6949,7 +6949,29 @@ function teamNamesText(names) {
   return a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' &amp; ' + a[a.length - 1];
 }
 function teamMateWord(size, many) { return size === 2 ? (many ? 'partners' : 'partner') : (many ? 'teammates' : 'teammate'); }
+// Who set the teams? When the HOST built them (Games > Scramble teams, saved with teams_by:'host') those are the teams, full stop: the card, the
+// partner prompts, the Players sheet, the live panel and Close all read them. When the host did not, the teams are whatever the players picked.
+function hostSetTeamsFor(gid) {
+  try {
+    const row = (typeof _gatheringGamesIndex !== 'undefined' && _gatheringGamesIndex && _gatheringGamesIndex.get(gid)) || (_hostGamesByGathering && _hostGamesByGathering.get(gid));
+    const sc = row && row.game_configs && row.game_configs.scramble;
+    if (!sc || sc.teams_by !== 'host' || !Array.isArray(sc.pairs)) return null;
+    const pairs = sc.pairs.filter(pr => Array.isArray(pr) && pr.length && pr.every(Boolean));
+    return pairs.length ? { pairs, names: Array.isArray(sc.names) ? sc.names : [] } : null;
+  } catch (e) { return null; }
+}
 function teamsState(rows, size) {
+  const base = teamsStateFromPicks(rows, size);
+  const first = (rows || []).find(r => r && r.gatheringId != null), hs = first ? hostSetTeamsFor(first.gatheringId) : null;
+  if (!hs) return base;
+  const N = base.size, tn = s => String(s || '').trim().toLowerCase();
+  const yes = (rows || []).filter(r => r && r.player && !isOpenSpotName(r.player) && r.status === 'Yes'), yesSet = new Set(yes.map(r => tn(r.player)));
+  const pairs = [], names = [];
+  hs.pairs.forEach((pr, i) => { if (pr.every(n => yesSet.has(tn(n)))) { pairs.push(pr.slice()); names.push(hs.names[i] || null); } });
+  const locked = new Set(pairs.flat().map(tn));
+  return Object.assign({}, base, { pairs, names, waiting: [], open: yes.filter(r => !locked.has(tn(r.player))).map(r => r.player), teams: pairs.length, unpaired: yes.length - pairs.length * N, askedBy: {}, hostSet: true });
+}
+function teamsStateFromPicks(rows, size) {
   const N = size >= 2 && size <= 4 ? size : 2;
   const tn = s => String(s || '').trim().toLowerCase();
   const real = (rows || []).filter(r => r && r.player && !isOpenSpotName(r.player));
@@ -7008,6 +7030,7 @@ function partnerCandidates(rows, me, members, size) {
 function teamRowsFor(evt) { return regData.filter(r => r.gatheringId === evt.gatheringId); }
 let _partnerCtx = null;
 function openPartnerSheet(evt, btn, registering) {
+  if (hostSetTeamsFor(evt.gatheringId)) { showToast('Your host has set the teams for this game'); return; }
   const rows = teamRowsFor(evt), N = teamSizeOf(evt);
   const list = partnerCandidates(rows, currentPlayer, memberData, N);
   const mine = rows.find(r => r.player === currentPlayer);
@@ -7111,12 +7134,14 @@ function teamBannerHtml(evt) {
   const id = evt.id;
   const change = `<a href="#" onclick="openPartnerSheetById('${id}');return false" style="color:rgba(255,255,255,0.6);margin-left:6px">Change</a>`;
   const askName = escapeHtml(asks[0] || '');
+  const hostSet = !!st.hostSet;
   const askJs = `acceptPartnerRequest('${id}', '${String(asks[0] || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;')}')`;
   if (me && me.status === 'Yes') {
     if (pair) {
       const mt = pair.filter(n => tn(n) !== tn(currentPlayer)), tName = st.names[st.pairs.indexOf(pair)];
-      return box('🤝', 'rgba(93,202,165,0.7)', `<b style="color:#5dcaa5">You're teamed with ${teamNamesText(mt)}</b> ${change}<br>${tName ? `Team name: <b style="color:#F5C842">${escapeHtml(tName)}</b> ` : ''}<a href="#" onclick="openTeamNameSheet('${id}');return false" style="color:#F5C842;font-weight:700">${tName ? 'Rename' : '✏️ Name your team'}</a>`);
+      return box('🤝', 'rgba(93,202,165,0.7)', `<b style="color:#5dcaa5">You're teamed with ${teamNamesText(mt)}</b> ${hostSet ? '' : change}<br>${tName ? `Team name: <b style="color:#F5C842">${escapeHtml(tName)}</b> ` : ''}<a href="#" onclick="openTeamNameSheet('${id}');return false" style="color:#F5C842;font-weight:700">${tName ? 'Rename' : '✏️ Name your team'}</a>`);
     }
+    if (hostSet) return box('🧑‍🤝‍🧑', 'rgba(255,255,255,0.35)', `<b>Your host is setting the teams.</b> You don't need to pick a partner. You'll see your team here.`);
     if (asks.length) return box('🤝', '#F5C842', `<b style="color:#F5C842">${askName} picked you as their ${mates}</b>${asks.length > 1 ? ` (and ${asks.length - 1} more)` : ''}<br>${btn('Team up with ' + askName, askJs)} ${change.replace('Change', 'Pick someone else')}`);
     const picks = partnersOf(me.partner);
     if (picks.length) return box('⏳', 'rgba(245,200,66,0.6)', `<b style="color:#F5C842">Waiting on ${teamNamesText(picks)}</b> to say Yes and pick the same team${picks.length < N - 1 ? `, and ${N - 1 - picks.length} more still to pick` : ''}. ${change}`);
@@ -7144,6 +7169,13 @@ function hostTeamsHtml(g) {
   const N = teamSizeOf(g); if (!N) return '';
   const rows = gatheringRegData.filter(r => r.gatheringId === g.gatheringId);
   const st = teamsState(rows, N);
+  if (st.hostSet) return `<div style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(29,158,117,0.08);border:1px solid rgba(29,158,117,0.35)">
+    <div style="font-size:0.78rem;font-weight:700;margin-bottom:4px">${N === 2 ? 'Teams of 2' : N + '-man teams'} · ${st.players} player${st.players === 1 ? '' : 's'} · ${st.teams} team${st.teams === 1 ? '' : 's'}</div>
+    ${st.pairs.map((pr, i) => `<div style="font-size:0.84rem;font-weight:700;padding:3px 0">${escapeHtml(pr.join(' & '))}${st.names[i] ? ` <span style="font-weight:500;color:var(--text-muted)">· ${escapeHtml(st.names[i])}</span>` : ''}</div>`).join('')}
+    ${st.open.length ? `<div style="font-size:0.8rem;color:#6B4E00;margin-top:4px">Not on a team yet: ${escapeHtml(st.open.join(', '))}</div>` : ''}
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;line-height:1.4">You set these teams in Games, so they are the teams. Change them there.</div>
+    <button class="btn btn-secondary btn-sm" style="margin-top:6px" onclick="closeHostSheet();showGatheringGamesForm(${g.gatheringId})">🎮 Open Games</button>
+  </div>`;
   const free = st.open.length + st.waiting.length;
   const teamRows = st.pairs.map((pr, i) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0"><span style="font-size:0.84rem;font-weight:700;min-width:0;flex:1;overflow-wrap:anywhere">🤝 ${st.names[i] ? escapeHtml(st.names[i]) + ' <span style="font-weight:400;color:var(--text-muted)">· ' + teamNamesText(pr) + '</span>' : teamNamesText(pr)}</span>
     <span style="display:flex;flex-direction:column;gap:3px;flex:none"><button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="openTeamNameSheetHost(${g.gatheringId}, ${i})">${st.names[i] ? 'Rename' : 'Name'}</button><button class="btn btn-ghost btn-sm" style="padding:3px 10px;color:var(--text-muted)" onclick="hostUnpair(${g.gatheringId}, ${i})">Unteam</button></span></div>`).join('');
@@ -8468,7 +8500,7 @@ async function toggleGatheringAlerts() {
 }
 async function submitGatheringRegistration(evt, choice, submitBtn, opts) {
   // v4.48.0 — Teams of 2: a Yes first asks who the partner is (or "find me one"), then comes back here with partnerDone.
-  if (teamSizeOf(evt) && choice === 'Yes' && !(opts && opts.partnerDone)) { openPartnerSheet(evt, submitBtn, true); return; }
+  if (teamSizeOf(evt) && choice === 'Yes' && !(opts && opts.partnerDone) && !hostSetTeamsFor(evt.gatheringId)) { openPartnerSheet(evt, submitBtn, true); return; }
   const partner = opts && opts.partnerDone ? (opts.partner || null) : undefined;
   submitBtn.classList.add('btn-loading');
   submitBtn.textContent = choice === 'No' ? 'Submitting…' : 'Registering…';
@@ -13353,6 +13385,7 @@ function gamesFormSideFrom(gid, src) {
     out.pairs = (src.pairs || []).map(pr => pr.slice());
     out.scoring = src.scoring === 'stableford' ? 'stableford' : 'strokes'; out.scale = src.scale === 'standard' ? 'standard' : 'bf';
     out.names = (Array.isArray(src.names) ? src.names : []).map(x => String(x || ''));
+    out.teams_by = src.teams_by === 'host' ? 'host' : 'players';
     out.team_size = BFEngine.scrambleSize(src);
     out.hcp_method = ['combined', 'none'].includes(src.hcp_method) ? src.hcp_method : 'ranked';
     Object.assign(out, gamesFormScramblePcts(src)); out.allowance = BFEngine.scrambleCombinedPct(src);
@@ -21855,7 +21888,9 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
     if (teamSizeOf(g) && !g.eventShadow) {
       if (!existing && !(preselect && preselect.length)) _gamesFormSelected.add('scramble');
       const _regsG = gatheringRegData.filter(r => r.gatheringId === gatheringId);
-      if (_regsG.length) {   // a team event always starts from the CURRENT locked teams (the saved list is only a snapshot)
+      if (_regsG.length && _gamesFormSide.scramble.teams_by === 'host') {   // teams the host set stay as set
+        _gamesFormSideNote.scramble = 'These are the teams you set. They stay as you set them; players are not asked to pick.';
+      } else if (_regsG.length) {   // teams nobody set start from the CURRENT locked teams (the saved list is only a snapshot)
         const st = teamsState(_regsG, teamSizeOf(g));
         _gamesFormSide.scramble.team_size = teamSizeOf(g);
         _gamesFormSide.scramble.pairs = st.pairs.map(pr => pr.slice());
@@ -23505,6 +23540,16 @@ function droppedGameSettings(sent, saved) {
   }
   return out;
 }
+// Teams the host built or changed are the host's (teams_by 'host'); teams that are just the players' own picks stay the players'.
+function gamesFormTeamsBy(rows, c, gatheringId) {
+  if (!rows || !rows.length) return 'players';
+  if (c && c.teams_by === 'host') return 'host';
+  const key = pr => pr.map(x => String(x).trim().toLowerCase()).sort().join('|');
+  const g = _gamesFormG, N = g ? teamSizeOf(g) : 0, regs = gatheringRegData.filter(r => r.gatheringId === gatheringId);
+  if (!N || !regs.length) return 'host';
+  const fromPicks = teamsStateFromPicks(regs, N).pairs.map(key).sort().join('/');
+  return rows.map(key).sort().join('/') === fromPicks ? 'players' : 'host';
+}
 async function submitGatheringGames(gatheringId) {
   const g = (_gamesFormG && _gamesFormG.gatheringId === gatheringId) ? _gamesFormG : gatheringData.find(x => x.gatheringId === gatheringId);
   if (!g) { showToast('Gathering not found', true); return; }
@@ -23570,6 +23615,7 @@ async function submitGatheringGames(gatheringId) {
         team_size: BFEngine.scrambleSize(c), ...Object.fromEntries(Array.from({ length: BFEngine.scrambleSize(c) }, (_, i) => ['pct_' + (i + 1), Number(c['pct_' + (i + 1)])])), allowance: Number(c.allowance) || BFEngine.scrambleCombinedPct(c), payout: ['top2', 'top3'].includes(c.payout) ? c.payout : c.payout === 'custom' && (c.place_shares || []).length ? 'custom' : 'winner', ...(c.payout === 'custom' && (c.place_shares || []).length ? { place_shares: c.place_shares.map(Number) } : {}), ...(Number(c.podium_total) > 0 ? { podium_total: _r2(c.podium_total) } : {}), ...(cleanPrize(c.prize) ? { prize: cleanPrize(c.prize) } : {}), pairs: rows.map(pr => [pr[0], pr[1]]) });
       delete cfg.period;
       { const nm = gamesFormSideItems(gid).map((pr, i) => (pr.some(Boolean) ? String((c.names || [])[i] || '').trim().slice(0, 40) : null)).filter(x => x !== null); if (nm.some(Boolean)) cfg.names = nm; }
+      cfg.teams_by = gamesFormTeamsBy(rows, c, gatheringId);
       if (cfg.scoring === 'stableford') {
         if (!(Array.isArray(_gamesFormBirdiepayPars) && _gamesFormBirdiepayPars.length === 18)) { bad(step, 'Scramble: Stableford needs par data for this venue. Add a tee for it in Venue Manager first, or score by strokes'); bailed = true; return; }
         cfg.pars = _gamesFormBirdiepayPars.slice();

@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.59.0';
+  const ENGINE_VERSION = '1.60.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1411,7 +1411,8 @@
       { key: 'prize', type: 'text', label: 'Extra prize for the winning team', default: '' },   // v1.56.0: the host's fixed podium; when set it is the pot, whatever the player count does
       { key: 'pars', type: 'pars', label: 'Par by hole (Stableford)', default: [], min: 3, max: 6, integer: true },
       { key: 'pairs', type: 'pairs', sizeKey: 'team_size', minPairs: 0, label: 'Teams', default: [] },   // may be saved empty: a team event is set up before anyone has signed up, and the locked teams are filled in later
-      { key: 'names', type: 'strings', label: 'Team names', default: [], max: 40 }
+      { key: 'names', type: 'strings', label: 'Team names', default: [], max: 40 },
+      { key: 'teams_by', type: 'enum', values: ['host', 'players'], label: 'Who set the teams', default: 'players' }
     ],
     fixedCost: cfg => scramblePodiumTotal(cfg) > 0 ? scramblePodiumTotal(cfg) : (Number(cfg.dollar_per_player) || 0) * scrambleSize(cfg) * ((cfg.pairs || []).length),
     maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,

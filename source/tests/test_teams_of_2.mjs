@@ -8,13 +8,13 @@ const HERE = (p) => fileURLToPath(new URL(p, import.meta.url));
 const src = fs.readFileSync(HERE('../portal.html'), 'utf8');
 const workerSrc = fs.readFileSync(HERE('../worker.js'), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
-const fns = ['isOpenSpotName', 'escapeHtml', 'teamsState', 'partnerCandidates', 'teamRowsFor', 'teamCountSuffix', 'teamBannerHtml', 'teamChipsHtml', 'hostTeamsHtml',
+const fns = ['isOpenSpotName', 'escapeHtml', 'teamsState', 'teamsStateFromPicks', 'hostSetTeamsFor', 'partnerCandidates', 'teamRowsFor', 'teamCountSuffix', 'teamBannerHtml', 'teamChipsHtml', 'hostTeamsHtml',
   'hostTeamsCount', 'hostTeamsCount'].filter((n, i, a) => a.indexOf(n) === i);
 function load(extra = {}) {
   const ctx = Object.assign({ console, JSON, Math, Number, String, Set, Map, Array, Object, Date,
     currentPlayer: 'Ann', isGuest: () => false, regData: [], gatheringRegData: [], memberData: [] }, extra);
   vm.createContext(ctx);
-  const names = ['isOpenSpotName', 'escapeHtml', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamMateWord', 'teamsState', 'partnerCandidates', 'teamRowsFor', 'teamCountSuffix', 'teamBannerHtml', 'teamChipsHtml', 'hostTeamsHtml'];
+  const names = ['isOpenSpotName', 'escapeHtml', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamMateWord', 'teamsState', 'teamsStateFromPicks', 'hostSetTeamsFor', 'partnerCandidates', 'teamRowsFor', 'teamCountSuffix', 'teamBannerHtml', 'teamChipsHtml', 'hostTeamsHtml'];
   vm.runInContext(names.map(n => extractFn(src, n)).join('\n'), ctx);
   return ctx;
 }
@@ -94,7 +94,7 @@ ok(!/left without a partner/.test(one) && !/openHostPairSheet/.test(one), 'a sin
 ok(/_hostTeams \? \{ team_size: _hostTeams \}/.test(src), 'New Gathering sends team_size only when teams are on');
 ok(/_hostTeams && \(size < _hostTeams \|\| size % _hostTeams\)/.test(src), 'Teams refuse a player count that is not whole teams');
 ok(/id="host-teams-switch"|'host-teams-switch'/.test(src), 'the Teams of 2 switch is on the New Gathering form');
-ok(/teamSizeOf\(evt\) && choice === 'Yes' && !\(opts && opts\.partnerDone\)\) \{ openPartnerSheet/.test(src), 'a Yes on a Teams-of-2 card opens the partner picker first');
+ok(/teamSizeOf\(evt\) && choice === 'Yes' && !\(opts && opts\.partnerDone\) && !hostSetTeamsFor\(evt\.gatheringId\)\) \{ openPartnerSheet/.test(src), 'a Yes on a Teams-of-2 card opens the partner picker first');
 ok(/partner !== undefined \? \{ partner_id: partner \|\| null \} : \{\}/.test(src), 'the registration only carries partner_id when one was chosen or cleared');
 ok(/teamSize: Number\(g\.team_size\) >= 2 && Number\(g\.team_size\) <= 4/.test(src) && /partner: r\.partner_id \|\| null/.test(src), 'loadGatherings reads team_size and each partner_id');
 
