@@ -55,3 +55,5 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 - Portal v4.92.0: ✏️ "Fix teams" icon on the host's event card icon row (liveEditCardBtnHtml, after Games; host/commissioner, Gathering cards only, not past/closed/canceled). Same tool as the live panel footer. Brian's concern: hosts may be confused by yet another config link (event config vs game details). Naming rule: label by the job ("Fix teams"), not by config. Still to do: tuck Build playing groups behind "Start over" after first publish; add if_version to the Groups screen publish.
 
 - Portal v4.93.0: event card 'Round in progress' status restyled (was dim green text on the green card): dark strip, green left accent, white title, brighter detail. Wording 'Tap the banner at the top to enter scores'.
+
+- Portal v4.94.0: in-progress strip runs the full card width (margin 0 -18px -18px) so it lines up with the Leaderboard row and banners.

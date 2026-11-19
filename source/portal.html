@@ -6003,8 +6003,8 @@ function buildEventCard(evt, isPast) {
     const timeInStr = hoursIn > 0 ? `${hoursIn}h ${minsIn}m in` : `${minsIn}m in`;
     if (hasLivePanelSupport(evt)) {
       // Tier 2 — Live Panel is actually available; tap-to-score promise is honest.
-      actionHtml = `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;
-        background:rgba(0,0,0,0.22);border-radius:10px;border-left:4px solid #5DCAA5">
+      actionHtml = `<div style="display:flex;align-items:center;gap:12px;padding:12px 18px;margin:0 -18px -18px;
+        background:rgba(0,0,0,0.22);border-radius:0;border-left:4px solid #5DCAA5">
         <span style="font-size:1.3rem;line-height:1">⛳</span>
         <div style="min-width:0">
           <div style="font-size:0.95rem;font-weight:800;color:#fff">Round in progress</div>
@@ -6014,8 +6014,8 @@ function buildEventCard(evt, isPast) {
     } else {
       // Tier 1 — no Live Panel for this format/event. No scoring promise, but
       // bright enough to read as a real status indicator.
-      actionHtml = `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;
-        background:rgba(0,0,0,0.22);border-radius:10px;border-left:4px solid #5DCAA5">
+      actionHtml = `<div style="display:flex;align-items:center;gap:12px;padding:12px 18px;margin:0 -18px -18px;
+        background:rgba(0,0,0,0.22);border-radius:0;border-left:4px solid #5DCAA5">
         <span style="font-size:1.3rem;line-height:1">⛳</span>
         <div style="min-width:0">
           <div style="font-size:0.95rem;font-weight:800;color:#fff">In progress</div>
