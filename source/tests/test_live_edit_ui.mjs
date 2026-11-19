@@ -16,7 +16,7 @@ const ctx = { window: dom.window, document: doc, console, JSON, Math, Number, St
   ensureGroupSet: async () => {}, addDialogs: [], openAddPlayerDialog(prefill, opt, cb) { ctx.addDialogs.push(opt); ctx.addCb = cb; },
   gatheringsFetchJSON: async (u, o) => { reqs.push([u, o && o.body ? JSON.parse(o.body) : null]); return /publish$/.test(u) ? { ok: true, version: 3, notified: 1 } : { ok: true }; } };
 vm.createContext(ctx);
-const FN = ['openHostSheet','closeHostSheet','liveEditState','liveEditSave','liveEditEntryHtml','openLiveEdit','leRender','leTap','leDo','leAct','leMoveTo','leHole','leSetHole','leUndo','leApply','refreshGroupSetNow','leAddStart','leAddAt','leAddCancel','gatheringNeedsGroups','leShow','bfDraggable'];
+const FN = ['openHostSheet','closeHostSheet','liveEditState','liveEditSave','liveEditSetRegNo','liveEditPending','liveEditPendingSet','liveEditPendingAdd','liveEditEntryHtml','openLiveEdit','leRender','leTap','leDo','leAct','leMoveTo','leHole','leSetHole','leUndo','leApply','refreshGroupSetNow','leAddStart','leAddAt','leAddCancel','gatheringNeedsGroups','leShow','bfDraggable'];
 vm.runInContext('let _groupSets = { 104: { published: ' + JSON.stringify(set) + ', version: 2 } }; let _le = null; const _bfDragPos = {};\n' + FN.map(n => extractFn(src, n)).join('\n') + '\nthis.api = { ' + FN.join(',') + ', get le() { return _le; } };', ctx);
 const A = ctx.api, txt = () => (doc.getElementById('host-sheet-content') || { textContent: '' }).textContent;
 const click = label => { const b = [...doc.querySelectorAll('#host-option-sheet button')].find(x => x.textContent.trim().startsWith(label)); if (!b) throw new Error('no button ' + label); vm.runInContext(b.getAttribute('onclick'), ctx); };

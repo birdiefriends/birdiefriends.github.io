@@ -6591,6 +6591,31 @@ function liveEditState(gid) {
 }
 // Save the as-played state: ONE publish carrying the whole document. Players who moved get their usual group push (the Worker only notifies
 // players whose group or start hole changed). Registrations for no-shows are then set to No (best effort; the document alone already excludes them).
+// A no-show's registration is set to No so the Players list, the card and the pot agree. Three tries; anything still failing is kept and retried
+// whenever the live panel refreshes (the host also sees the toast naming them).
+async function liveEditSetRegNo(gid, player) {
+  for (let i = 0; i < 3; i++) {
+    try {
+      const rr = await gatheringsFetchJSON(`${GATHERINGS_API}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gathering_id: gid, player_id: player, status: 'no' }) }, 10000);
+      if (rr && rr.ok) return true;
+    } catch (e) { /* try again */ }
+    await new Promise(r => setTimeout(r, 400 * (i + 1)));
+  }
+  return false;
+}
+function liveEditPending() { try { return JSON.parse(localStorage.getItem('bf_le_regpending') || '[]') || []; } catch (e) { return []; } }
+function liveEditPendingSet(list) { try { localStorage.setItem('bf_le_regpending', JSON.stringify(list)); } catch (e) {} }
+function liveEditPendingAdd(gid, player) { const l = liveEditPending(); if (!l.some(x => x.gid === gid && x.player === player)) l.push({ gid, player }); liveEditPendingSet(l); }
+async function liveEditRetryPending() {
+  const l = liveEditPending(); if (!l.length) return;
+  const keep = [];
+  for (const x of l) {
+    if (await liveEditSetRegNo(x.gid, x.player)) { const reg = gatheringRegData.find(r => r.gatheringId === x.gid && String(r.player).trim().toLowerCase() === String(x.player).trim().toLowerCase()); if (reg) reg.status = 'No'; }
+    else keep.push(x);
+  }
+  liveEditPendingSet(keep);
+  if (keep.length < l.length && typeof renderAll === 'function') renderAll();
+}
 async function liveEditSave(gid, state, title) {
   const g = gatheringData.find(x => x.gatheringId === gid), cur = _groupSets[gid] || {}, prev = cur.published || {};
   const doc = Object.assign({ v: 1, mode: state.mode, holes: state.holes, group_size: state.group_size }, prev, { groups: state.groups.map(x => { const o = Object.assign({}, x); delete o.units; return o; }), teams: state.teams, out: state.out, added: state.added || {}, planned: state.planned });
@@ -6603,11 +6628,7 @@ async function liveEditSave(gid, state, title) {
     const o = state.out[k]; if (!o || o.reason !== 'noshow') continue;
     const reg = gatheringRegData.find(x => x.gatheringId === gid && String(x.player).trim().toLowerCase() === k);
     if (reg && reg.status === 'No') continue;
-    try {
-      const rr = await gatheringsFetchJSON(`${GATHERINGS_API}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gathering_id: gid, player_id: o.player, status: 'no' }) }, 10000);
-      if (!rr || !rr.ok) throw new Error('not saved');
-      if (reg) reg.status = 'No';
-    } catch (e) { failed.push(o.player); }
+    if (await liveEditSetRegNo(gid, o.player)) { if (reg) reg.status = 'No'; } else { failed.push(o.player); liveEditPendingAdd(gid, o.player); }
   }
   return { version: _groupSets[gid].version, notified: r.notified || 0, regFailed: failed };
 }
@@ -6784,6 +6805,7 @@ async function refreshGroupSetNow(gid) {
   return false;
 }
 async function liveGroupSetCheck(evt) {
+  try { liveEditRetryPending(); } catch (e) { /* retried on the next tick */ }
   const gid = evt && evt.gatheringId; if (gid == null || !_groupSets[gid]) return;
   const before = _groupSets[gid].version;
   if (await refreshGroupSetNow(gid) && _groupSets[gid].version !== before) { if (typeof renderAll === 'function') renderAll(); if (typeof renderLiveBanner === 'function') renderLiveBanner(); }
@@ -11293,7 +11315,7 @@ function skEnsure(evt, config) {
 // The scoring groups follow the PUBLISHED Groups (same numbers, same people) when the host has published them; teams the
 // Groups left out are added after. With no published Groups it is the old behaviour: teams two at a time, in order.
 function skGroups() {
-  const sides = _sk ? liveSideSides(_sk.config) : [];
+  const sides = (_sk ? liveSideSides(_sk.config) : []).map(sd => sd.filter(n => !skIsOut(n))).filter(sd => sd.length);   // players the host marked out are not offered
   const set = _sk && typeof _groupSets !== 'undefined' && _groupSets[_sk.gid] ? _groupSets[_sk.gid].published : null;
   if (!set || !Array.isArray(set.groups) || !set.groups.length) return BFEngine.fourballGroups(sides);
   const lc = x => String(x || '').trim().toLowerCase(), used = new Set(), out = [];
@@ -11509,6 +11531,11 @@ function skFirstEmptyPlayer(h, from) {
   for (let i = 1; i <= n; i++) { const k = (from + i) % n; if (!(skCardOf(g.players[k])[h - 1] > 0)) return k; }
   return -1;
 }
+// Players the host marked out (no-show, or left early) cannot be scored: they are not offered on the scoring screen, and a stale phone's tap is refused.
+function skIsOut(name) {
+  const set = _sk && typeof _groupSets !== 'undefined' && _groupSets[_sk.gid] ? _groupSets[_sk.gid].published : null;
+  return !!(set && set.out && set.out[String(name || '').trim().toLowerCase()]);
+}
 function skTap(v) {
   if (!_sk) return;
   const g = skGroup(), name = g.players[_sk.sel];
@@ -11543,6 +11570,7 @@ function skSetScore(name, hole, v) {
   skSetScoreOne(name, hole, v);
 }
 function skSetScoreOne(name, hole, v) {
+  if (skIsOut(name)) { showToast(`${name} was marked out by the host, so no score was saved`, true); return; }
   const card = skCardOf(name);
   card[hole - 1] = v > 0 ? v : null;
   (_sk.dirty[name] = _sk.dirty[name] || {})[hole] = v > 0 ? v : 0;
@@ -11600,6 +11628,9 @@ function skQueueSave(name) {
 }
 async function skPost(name) {
   if (!_sk) return;
+  // Before saving, make sure the host has not taken this player out since this phone last looked (at most one check every 20 seconds).
+  if (_sk.gid != null && (!_sk.outCheckedAt || Date.now() - _sk.outCheckedAt > 20000)) { _sk.outCheckedAt = Date.now(); try { await refreshGroupSetNow(_sk.gid); } catch (e) { /* offline: the local list stands */ } }
+  if (skIsOut(name)) { delete _sk.dirty[name]; skPersist(); showToast(`${name} was marked out by the host, so no score was saved`, true); if (_sk) renderLiveBanner(); return; }
   const sentDirty = Object.assign({}, _sk.dirty[name] || {});
   const holes = BFEngine.mergeHoleScores(skCardOf(name), null, sentDirty);
   const nine = _sk.evt && _sk.evt.holes === 9;

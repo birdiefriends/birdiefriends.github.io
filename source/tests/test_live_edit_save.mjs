@@ -17,7 +17,7 @@ const ctx = { console, BFEngine: E, GATHERINGS_API: 'https://api', currentPlayer
     if (/publish$/.test(url)) return b.if_version !== serverVersion ? { error: 'stale', code: 'stale', version: serverVersion } : { ok: true, version: ++serverVersion, notified: 1 };
     return { ok: true }; } };
 vm.createContext(ctx);
-vm.runInContext(['liveEditState','liveEditSave'].map(n => extractFn(src, n)).join('\n') + '\nthis.f={liveEditState,liveEditSave};', ctx);
+vm.runInContext(['liveEditState','liveEditSave','liveEditSetRegNo','liveEditPending','liveEditPendingSet','liveEditPendingAdd'].map(n => extractFn(src, n)).join('\n') + '\nthis.f={liveEditState,liveEditSave};', ctx);
 const st0 = ctx.f.liveEditState(104);
 ok(st0.planned.players === 8 && st0.teams.length === 4 && st0.team_size === 2, 'state built from the plan and the registration teams');
 const next = LE.apply(st0, [{ op: 'out', player: 'H', reason: 'noshow' }, { op: 'join', player: 'G', with: 'E' }]).state;
