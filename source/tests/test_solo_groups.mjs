@@ -16,4 +16,5 @@ ok(!/_groupDraftPreview/.test(iso), 'start holes / out marks never read the draf
 ok(/Date\.now\(\) - Number\(o\.t\) < 12 \* 3600e3/.test(src) && /JSON\.stringify\(\{ t: Date\.now\(\), k: \[\.\.\.skCoinAcked\(g\)\] \}\)/.test(src), 'a coin "Got it" is remembered for 12 hours only, so a look in test mode days early does not silence game day');
 ok(src.includes("const first = n => String(n).trim().replace(/\\s+/g, ' '), firstOnly"), 'the Live panel shows a solo player\'s full name (pairs stay first names)');
 ok(src.includes("(r.members.length === 1 ? r.members[0] : r.label)") && !/font-size:0\.88rem;font-weight:700;margin-top:2px;[^"]*white-space:nowrap/.test(src), 'leaderboard leader chips show the full name and wrap instead of cutting it off');
+ok((src.match(/\(pr\.length === 1 \? first\(pr\[0\]\) : pr\.map\(firstOnly\)\.join\(' & '\)\)/g) || []).length === 2, 'the score-row label and who-line show a one-player team by full name');
 console.log(`solo_groups: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

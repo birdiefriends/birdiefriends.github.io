@@ -11849,7 +11849,7 @@ function liveScoreModeHtml() {
   // Alternate Shot: one ball per pair, so the rows are the TEAMS (entering for the team fills in both partners).
   const asMode = liveOneBall(_sk.config);
   const tnames = asMode ? liveSideTeamNames(_sk.config) : null;
-  const units = asMode ? g.pairs.filter(pr => pr.length >= 1).map(pr => ({ k: g.players.indexOf(pr[0]), n: pr[0], label: (tnames.get(String(pr[0]).trim().toLowerCase()) || pr.map(firstOnly).join(' & ')), who: pr.map(firstOnly).join(' & ') }))
+  const units = asMode ? g.pairs.filter(pr => pr.length >= 1).map(pr => ({ k: g.players.indexOf(pr[0]), n: pr[0], label: (tnames.get(String(pr[0]).trim().toLowerCase()) || (pr.length === 1 ? first(pr[0]) : pr.map(firstOnly).join(' & '))), who: (pr.length === 1 ? first(pr[0]) : pr.map(firstOnly).join(' & ')) }))
     : g.players.map((n, k) => ({ k, n, label: n }));
   const vals = units.map(u => { const v = skCardOf(u.n)[hole - 1]; return v > 0 ? v : null; });
   const done = vals.every(v => v != null);
