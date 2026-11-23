@@ -19884,6 +19884,19 @@ function gatheringRowWithLiveTeams(row, gatheringId) {
       const sc0 = Object.assign({}, (row.game_configs && row.game_configs.scramble) || {}, { pairs: tm.map(t => t.members.slice()), names: tm.map(t => t.name || '') });
       return Object.assign({}, row, { game_configs: Object.assign({}, row.game_configs || {}, { scramble: sc0 }) });
     }
+    // A 1-man scramble (every player is their own team) has no partners to pair, so its teams ARE the Yes players: the saved list is only a
+    // snapshot, so players who dropped come off it and players who registered since are added. Without this, a list saved before the field
+    // settled (or never filled) leaves the live panel with "Nobody is set up".
+    const scc = row.game_configs && row.game_configs.scramble;
+    if (scc && Number(scc.team_size) === 1) {
+      const yes = gatheringRegData.filter(r => r.gatheringId === gatheringId && r.status === 'Yes' && !isOpenSpotName(r.player)).map(r => String(r.player).trim()).filter(Boolean);
+      if (yes.length) {
+        const lcn = x => String(x || '').trim().toLowerCase(), isYes = new Set(yes.map(lcn)), seen = new Set(), pairs = [], names = [];
+        (Array.isArray(scc.pairs) ? scc.pairs : []).forEach((pr, i) => { const n = pr && pr[0]; if (n && isYes.has(lcn(n)) && !seen.has(lcn(n))) { seen.add(lcn(n)); pairs.push([n]); names.push((scc.names || [])[i] || ''); } });
+        yes.forEach(n => { if (!seen.has(lcn(n))) { seen.add(lcn(n)); pairs.push([n]); names.push(''); } });
+        return Object.assign({}, row, { game_configs: Object.assign({}, row.game_configs || {}, { scramble: Object.assign({}, scc, { pairs, names }) }) });
+      }
+    }
     const g = gatheringData.find(x => x.gatheringId === gatheringId);
     const size = g ? teamSizeOf(g) : 0;
     if (!size) return row;

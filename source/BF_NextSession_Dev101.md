@@ -133,3 +133,7 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 
 ## v4.108.2
 - Player games card: zero-money games say "No money, bragging rights" (the "loser buys" line is BF Cup wording); a Scramble that feeds Prizes says it ranks the Prizes; the Prizes line shows the prize pot, not $/player.
+
+## v4.108.3
+- Live panel said "Nobody is set up for this game yet" on the 1Man: skGroups reads the Scramble teams from the saved `pairs` snapshot. A team-of-1 Scramble now takes its teams from the current Yes registrations (gatheringRowWithLiveTeams): saved order kept, dropouts removed, new Yes players added, open spots ignored; as-played still wins. Live panel, leaderboard, Close all use it.
+- Unverified on real data: if the panel still says nobody is set up, the event has no Yes registrations loaded.

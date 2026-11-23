@@ -1,0 +1,20 @@
+// A 1-man scramble's teams are the current Yes players (the saved list is a snapshot): dropouts come off, new players are added, a stale or empty list still works.
+import fs from 'fs'; import vm from 'vm'; import { fileURLToPath } from 'url'; import { extractFn } from './extract.mjs';
+const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
+let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
+const ctx = { gatheringAsPlayed: () => null, gatheringData: [{ gatheringId: 9, teamSize: 0 }], gatheringRegData: [], isOpenSpotName: n => /^Open Spot/i.test(n), teamSizeOf: x => { const n = Number(x && x.teamSize); return n >= 2 && n <= 4 ? n : 0; }, teamsState: () => ({ pairs: [], names: [] }), Object, Array, Set, String, Number };
+vm.createContext(ctx); vm.runInContext(extractFn(src, 'gatheringRowWithLiveTeams') + '\nthis.f = gatheringRowWithLiveTeams;', ctx);
+const reg = (p, st = 'Yes') => ({ gatheringId: 9, player: p, status: st });
+const row = pairs => ({ games: ['scramble', 'podium'], game_configs: { scramble: { team_size: 1, pairs, names: pairs.map(() => '') } } });
+const pairsOf = r => r.game_configs.scramble.pairs.map(p => p[0]);
+ctx.gatheringRegData = [reg('Ann'), reg('Bo'), reg('Cy'), reg('Open Spot 1'), reg('Di', 'No'), reg('Ed', 'Maybe')];
+ok(pairsOf(ctx.f(row([]), 9)).join() === 'Ann,Bo,Cy', 'an empty saved list: every Yes player is a team (open spots and non-Yes are not)');
+ok(pairsOf(ctx.f(row([['Ann'], ['Di'], ['Bo']]), 9)).join() === 'Ann,Bo,Cy', 'a player who dropped comes off, a player who registered since is added, the saved order is kept');
+ok(ctx.f(row([['Ann']]), 9).game_configs.scramble.pairs.every(p => p.length === 1), 'every team has one player');
+ctx.gatheringRegData = [];
+ok(pairsOf(ctx.f(row([['Ann'], ['Bo']]), 9)).join() === 'Ann,Bo', 'no registrations loaded: the saved list is left alone');
+ctx.gatheringRegData = [reg('Ann')]; const two = { games: ['scramble'], game_configs: { scramble: { team_size: 2, pairs: [['A', 'B']] } } };
+ok(ctx.f(two, 9).game_configs.scramble.pairs[0].join() === 'A,B', 'teams of 2 are not touched by this');
+ctx.gatheringAsPlayed = () => ({ teams: [{ members: ['Zed'], name: 'Z' }] });
+ok(pairsOf(ctx.f(row([['Ann']]), 9)).join() === 'Zed', 'the host\'s as-played teams still win');
+console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
