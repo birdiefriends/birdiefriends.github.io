@@ -24060,7 +24060,7 @@ async function submitGatheringGames(gatheringId) {
     const c = _gamesFormSide[gid], mp = gid === 'matchplay', nm = BFEngine.getGame(gid).meta.label, step = GW_SIDE_STEP[gid];
     if (gid === 'scramble') gamesFormScrambleFillFromRegs();   // always the current registrations
     const rows = gamesFormSideItems(gid).filter(pr => pr.some(Boolean));
-    if (gid === 'scramble' && !rows.length) { bad(step, 'Scramble: its teams come from registration, and nobody has registered Yes' + (BFEngine.scrambleSize(c) > 1 ? ' with a partner' : '') + ' yet'); bailed = true; return; }
+    // No error when nobody has registered yet: the games are set up first, and the teams are read from the registrations whenever they are needed.
     if (rows.some(pr => pr.some(x => !x))) { bad(step, `${nm}: finish or remove the incomplete ${mp ? 'match' : gid === 'scramble' ? 'team' : 'pair'}`); bailed = true; return; }
     const cfg = { dollar_per_player: Number(c.dollar_per_player) || 0, basis: c.basis === 'net' ? 'net' : 'gross', net_mode: c.net_mode === 'low' ? 'low' : 'own', ...(GAMES_FORM_REC_ALLOWANCE[gid] ? { allowance: Number(c.allowance) || GAMES_FORM_REC_ALLOWANCE[gid] } : {}),
       ...(periodSegCount(c) > 1 ? { period: c.period } : {}) };
