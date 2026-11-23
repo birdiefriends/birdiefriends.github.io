@@ -57,3 +57,4 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 **When a test starts failing after a portal change:** check whether the behavior changed on
 purpose (then update the test and say so in the session log) or by accident (then fix the code).
 | `test_solo_groups.mjs` | v4.109.1: unpublished Groups: solos go three to a group in the Live panel |
+| `test_1man_scenarios.mjs` | 1Man remodel: 25 solos, Prizes (Overall + flights), CTP, MiserBall, Skins+Turkey; 300-field fuzz: money always balances, no crash, no-shows, ties, wrap Turkey, missing tees |
