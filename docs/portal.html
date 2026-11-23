@@ -3709,7 +3709,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.65.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.66.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -6936,6 +6936,48 @@ function leaderboardHtml(board, me, opts) {
 }
 // Prizes: the same live standings, split the way the prizes are. One chip per scope (Overall, each flight) shows who leads it; tap a chip
 // for that scope's order. Rows that would be paid today carry their prize. Reads BFEngine.prizeBoard, so it follows the host's setup.
+// Tiebreak: silent until players tie for a paid place AFTER the whole field has finished; then loud, on the leaderboard and the Close sheet.
+// The host's rule (putt-off, playoff hole...) shows to everyone; the host records who won, and the payout follows that order.
+let _tbTies = [], _tbCtx = null, _tbPick = [], _tbRecording = false;   // _tbRecording: the 30-second refresh must not paint over the host's record screen
+function tiebreakBannerHtml(ties, rule, isHost, gid, from, settled) {
+  const esc = GRP_ESC, ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  _tbTies = ties || []; _tbCtx = { gid, from };
+  let h = (ties || []).map((t, i) => `<div style="margin:0 0 10px;padding:14px;border-radius:14px;background:#b3261e;color:#fff;border:2px solid #7f1d17;box-shadow:0 2px 10px rgba(179,38,30,0.35)">
+    <div style="font-size:0.72rem;letter-spacing:0.1em;font-weight:800">🔔 TIEBREAK NEEDED</div>
+    <div style="font-size:1.3rem;font-weight:800;line-height:1.2;margin:3px 0">Tie for ${ord(t.place)} · ${esc(t.scope_name)}</div>
+    <div style="font-size:1.05rem;font-weight:700">${t.players.map(esc).join(' &nbsp;·&nbsp; ')}</div>
+    <div style="font-size:0.92rem;margin-top:6px">${rule ? `Tiebreak: <b>${esc(rule)}</b>` : 'The host will call the tiebreak.'}</div>
+    ${isHost ? `<button type="button" onclick="openTiebreakRecord(${i})" style="width:100%;min-height:48px;margin-top:10px;border:none;border-radius:12px;background:#fff;color:#b3261e;font-family:inherit;font-size:1rem;font-weight:800;cursor:pointer">Record who won</button>` : `<div style="font-size:0.86rem;margin-top:6px;opacity:0.95">Tied players: find the host.</div>`}</div>`).join('');
+  if ((settled || []).length) h += `<div style="margin:0 0 10px;padding:8px 12px;border-radius:10px;background:#e8f5ee;border:1px solid #9bd3b4;font-size:0.82rem">✅ Tiebreak settled: ${settled.map(x => `<b>${esc(x.player)}</b> ${ord(x.place)}${x.scope_name && x.scope_name !== 'Overall' ? ' ' + esc(x.scope_name) : ''}`).join(', ')}.${isHost ? ` <button type="button" onclick="tiebreakClear('${esc(settled[0].scope)}')" style="border:none;background:none;color:#085041;text-decoration:underline;font-family:inherit;font-size:0.8rem;cursor:pointer">Undo</button>` : ''}</div>`;
+  return h;
+}
+function openTiebreakRecord(i) {
+  const t = _tbTies[i]; if (!t || !_tbCtx) return;
+  _tbPick = []; _tbCtx.tie = t; _tbRecording = true; tiebreakRecordPaint();
+}
+function tiebreakRecordPaint() {
+  const t = _tbCtx && _tbCtx.tie; if (!t) return; const esc = GRP_ESC;
+  const btns = t.players.map(n => { const k = _tbPick.indexOf(n);
+    return `<button type="button" onclick="tiebreakTap(this.dataset.n)" data-n="${esc(n)}" style="display:flex;align-items:center;gap:12px;width:100%;min-height:54px;margin-bottom:8px;padding:0 14px;border-radius:12px;border:2px solid ${k >= 0 ? 'var(--green)' : 'var(--border)'};background:${k >= 0 ? 'var(--green-light)' : '#fff'};font-family:inherit;font-size:1.05rem;font-weight:700;cursor:pointer;text-align:left">
+      <span style="min-width:30px;font-family:'DM Mono',monospace;font-size:1.2rem">${k >= 0 ? k + 1 : '·'}</span><span>${esc(n)}</span></button>`; }).join('');
+  const done = _tbPick.length >= t.players.length - 1 && _tbPick.length > 0;
+  openHostSheet('🔔 ' + esc(t.scope_name) + ' tiebreak', `<div style="padding:0 16px 8px"><div style="font-size:0.84rem;color:var(--text-muted);margin-bottom:10px">Tap the players in the order they finished the tiebreak: winner first.</div>${btns}
+    <button type="button" class="host-cta-btn" ${done ? '' : 'disabled'} style="margin:6px 0 0;${done ? '' : 'opacity:0.5'}" onclick="tiebreakSave()">Save the result</button>
+    ${_tbPick.length ? `<button type="button" class="btn btn-secondary btn-sm" style="width:100%;margin-top:8px" onclick="_tbPick=[];tiebreakRecordPaint()">Start over</button>` : ''}</div>`);
+}
+function tiebreakTap(n) { const k = _tbPick.indexOf(n); if (k >= 0) _tbPick.splice(k, 1); else _tbPick.push(n); tiebreakRecordPaint(); }
+async function tiebreakPost(scope, order) {
+  const c = _tbCtx; if (!c) return;
+  try {
+    const res = await fetch(`${BFE_API}/bfe/gathering-games/${c.gid}/tiebreak`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host_id: currentPlayer, scope, order }) });
+    const j = await res.json(); if (!res.ok || !j.ok) throw new Error(j.error || 'Could not save');
+    _tbRecording = false; closeHostSheet(); showToast(order.length ? 'Tiebreak saved' : 'Tiebreak result cleared');
+    if (typeof _gatheringGamesIndex !== 'undefined' && _gatheringGamesIndex.get(c.gid) && _gatheringGamesIndex.get(c.gid).game_configs && _gatheringGamesIndex.get(c.gid).game_configs.podium) { const pc = _gatheringGamesIndex.get(c.gid).game_configs.podium; if (j.tie_order && Object.keys(j.tie_order).length) pc.tie_order = j.tie_order; else delete pc.tie_order; }
+    if (c.from === 'close') openGatheringCloseSheet(c.gid); else openGatheringLeaderboard(c.gid);
+  } catch (e) { showToast(e.message || 'Could not save the tiebreak', true); }
+}
+function tiebreakSave() { const t = _tbCtx && _tbCtx.tie; if (!t || !_tbPick.length) return; return tiebreakPost(t.scope, _tbPick.slice()); }
+function tiebreakClear(scope) { return tiebreakPost(scope, []); }
 let _lbUi = { scope: 'overall', sort: 'score' }, _lbRepaint = null;
 function lbPick(id) { _lbUi.scope = id; if (_lbRepaint) _lbRepaint(); }
 function lbSort(k) { _lbUi.sort = k; if (_lbRepaint) _lbRepaint(); }
@@ -6970,6 +7012,7 @@ function leaderboardPrizesHtml(pb, me, opts) {
   const note = [opts && opts.noPars ? 'Course pars are missing, so players are ranked by strokes, not to par.' : '', pb.net_missing ? 'Some handicaps are missing, so the net score is not complete.' : '', opts && opts.netNote ? opts.netNote : '',
     cur.id !== 'overall' && pb.unflighted && pb.unflighted.length ? 'No tee box set, so not in a flight (Overall only): ' + pb.unflighted.join(', ') + '.' : ''].filter(Boolean).join(' ');
   return `<div style="padding:0 16px">
+    ${opts && opts.tieHtml || ''}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${chips}</div>
     ${spots.length ? `<div style="font-size:0.8rem;margin-bottom:8px">You: <b>${spots.join(' · ')}</b></div>` : ''}
     <div style="display:flex;gap:6px;margin-bottom:8px">${sortBtn('score', 'By score')}${sortBtn('holes', 'By holes played')}</div>
@@ -7000,7 +7043,9 @@ async function openGatheringLeaderboard(gid) {
   if (!evt) return;
   openHostSheet('🏆 ' + GRP_ESC(evt.name), '<div style="padding:18px 16px;color:var(--text-muted);font-size:0.9rem">Loading…</div>');
   const sheetBody = () => document.getElementById('host-sheet-content');
+  _tbRecording = false;
   const render = async () => {
+    if (_tbRecording) return;
     try {
       const row = gatheringRowWithLiveTeams(_gatheringGamesIndex.get(gid), gid);
       const sideGid = row ? BFEngine.sideGames().find(id => (row.games || []).includes(id)) || null : null;
@@ -7029,7 +7074,7 @@ async function openGatheringLeaderboard(gid) {
       }
       const tail = leaderboardPrelimHtml({ allIn, waiting: [...new Set(waiting)], summary, closed, me: currentPlayer, gid, isHost: evt.hostId === currentPlayer });
       if (pb) {
-        const lopts = { noPars: !okPars, netNote: row.game_configs.podium.basis === 'net' && pb.source === 'round' ? 'Net is applied when the round closes. This shows gross.' : '' };
+        const lopts = { tieHtml: tiebreakBannerHtml(pb.ties, pb.tiebreak, evt.hostId === currentPlayer, gid, 'lb', pb.settled), noPars: !okPars, netNote: row.game_configs.podium.basis === 'net' && pb.source === 'round' ? 'Net is applied when the round closes. This shows gross.' : '' };
         _lbRepaint = () => { const e2 = document.getElementById('host-option-sheet') ? sheetBody() : null; if (e2) e2.innerHTML = leaderboardPrizesHtml(pb, currentPlayer, lopts) + tail; };
         _lbRepaint();
       } else { _lbRepaint = null; el.innerHTML = leaderboardHtml(board, currentPlayer, { noPars: !okPars }) + tail; }
@@ -19658,6 +19703,7 @@ async function openGatheringCloseSheet(gatheringId) {
     body.innerHTML = `
       ${statusLine}${spotsHtml}${hcHtml}${bbHtml}${scratchHtml}${addedHtml}${strayHtml}${missingHtml}${removeHtml}${incompleteHtml}
       ${alreadyClosed ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Already closed — saving again replaces the earlier result.</div>` : ''}
+      ${(() => { const pzc = (config.game_configs || {}).podium, pzs = summary && summary.podium; return pzs ? tiebreakBannerHtml(pzs.ties, pzc && Array.isArray(pzc.tiebreak) ? pzc.tiebreak[0] : '', true, gatheringId, 'close', pzs.settled) : ''; })()}
       <div style="border-top:1px solid var(--border);padding-top:6px">${renderGatheringPayoutHtml(summary)}</div>
       <div style="display:flex;gap:8px;margin-top:14px">
         <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openGatheringCloseSheet(${gatheringId})">🔄 Refresh</button>
@@ -22092,7 +22138,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
     const ls = existing && existing.game_configs && existing.game_configs.lowscore;
     _gamesFormLowscoreConfig = ls ? { dollar_per_player: ls.dollar_per_player, basis: ls.basis === 'net' ? 'net' : 'gross', period: BFEngine.periodKey(ls) } : { dollar_per_player: null, basis: 'gross', period: 'round' };
     const pz = existing && existing.game_configs && existing.game_configs.podium;
-    _gamesFormPrizes = pz && pz.table ? { dollar_per_player: pz.dollar_per_player, rank_by: pz.rank_by || 'auto', basis: pz.basis === 'net' ? 'net' : 'gross', table: JSON.parse(JSON.stringify(pz.table)) } : pzBlank(); }
+    _gamesFormPrizes = pz && pz.table ? { dollar_per_player: pz.dollar_per_player, rank_by: pz.rank_by || 'auto', basis: pz.basis === 'net' ? 'net' : 'gross', tiebreak: Array.isArray(pz.tiebreak) ? String(pz.tiebreak[0] || '') : '', ...(pz.tie_order ? { tie_order: JSON.parse(JSON.stringify(pz.tie_order)) } : {}), table: JSON.parse(JSON.stringify(pz.table)) } : pzBlank(); }
   // Par table for Birdie Payouts — same resolver Card Score Sheet uses (Venue
   // Manager's stored pars first, BSGC's built-in table as the fallback).
   // Frozen into the saved config so Close never needs a second venue lookup.
@@ -22883,7 +22929,7 @@ function refreshGamesFormLowscoreSection() { const el = document.getElementById(
 // ── Prizes: tiers of places, Overall and/or flights, for ANY game (v4.103.0) ──────────────────────────────────────────────
 // _gamesFormPrizes = { dollar_per_player, rank_by: 'auto'|'round'|<game id>, basis, table: { flights: [{ id, name, tees[] }], prizes: [{ scope: 'overall' | flightId, place, amount | pct }] } }.
 // Players are in a flight by the tee box the host gave them in Playing groups. Overall and each flight are paid separately (one player can win both).
-function pzBlank() { return { dollar_per_player: null, rank_by: 'auto', basis: 'gross', table: { flights: [], prizes: [{ scope: 'overall', place: 1, amount: 0 }] } }; }
+function pzBlank() { return { dollar_per_player: null, rank_by: 'auto', basis: 'gross', tiebreak: '', table: { flights: [], prizes: [{ scope: 'overall', place: 1, amount: 0 }] } }; }
 function pzTable() { return _gamesFormPrizes.table; }
 // The prize pot is what the places add up to: $ per player is worked out from the table and the head count, never typed in.
 // (A table with a % place is the older shape: its pot is still typed.)
@@ -22904,6 +22950,7 @@ function setGamesFormPrizesDollarPerPlayer(val) {
   _gamesFormPrizes.dollar_per_player = Math.round((parseFloat(val) || 0) * 100) / 100; _gamesFormTouched.add('podium');
   const el = document.getElementById('pz-check'); if (el) el.innerHTML = pzCheckHtml(); updateGamesFormPotPreview();
 }
+function pzTiebreak(v) { _gamesFormPrizes.tiebreak = String(v || '').slice(0, 80); _gamesFormTouched.add('podium'); }
 function pzSetRankBy(v) { _gamesFormPrizes.rank_by = v; pzRefresh(); }
 function pzSetBasis(v) { _gamesFormPrizes.basis = v === 'net' ? 'net' : 'gross'; pzRefresh(); gamesFormAutoRanking(); refreshGamesFormHcpSection(); }
 function pzPreset(kind) {
@@ -22985,6 +23032,10 @@ function gatheringGamesPodiumSectionHtml() {
       ${scopeBox('overall', '🏆 Overall')}
       ${t.flights.map((f, i) => scopeBox(f.id, '🚩 ' + esc(f.name), flightExtra(f, i))).join('')}
       ${t.flights.length < 4 ? `<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px;margin-bottom:6px" onclick="pzAddFlight()">➕ Add a flight</button>` : ''}
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin:4px 0 8px"><div style="font-weight:700;margin-bottom:2px">🔔 Tiebreak <span style="font-weight:400;font-size:0.76rem;color:var(--text-muted)">(optional)</span></div>
+        <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:6px;line-height:1.4">The app stays quiet unless players tie for a paid place once everyone has finished. Then it tells the whole field, shows this rule, and asks you to record who won. No rule: the tied players split.</div>
+        <input type="text" id="pz-tiebreak" maxlength="80" value="${esc(c.tiebreak || '')}" placeholder="e.g. Putt-off on the practice green" oninput="pzTiebreak(this.value)" style="width:100%;${inp}">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${['Putt-off', 'Playoff hole', 'Closest to the pin'].map(x => btn(x, `pzTiebreak('${x}');var e=document.getElementById('pz-tiebreak');if(e)e.value='${x}'`, c.tiebreak === x, false)).join('')}</div></div>
       <div id="pz-check" style="font-size:0.8rem;line-height:1.45;margin:4px 0 8px">${pzCheckHtml()}</div>
     </div>`;
 }
@@ -23988,7 +24039,7 @@ async function submitGatheringGames(gatheringId) {
     const c = _gamesFormPrizes;
     if (!(c.dollar_per_player > 0)) { bad('money', 'Prizes: $ per player must be greater than 0'); return; }
     if (c.table.flights.some(f => !f.tees.length)) { bad('podium', 'Prizes: pick at least one tee box for each flight'); return; }
-    const pz = { dollar_per_player: c.dollar_per_player, rank_by: c.rank_by, basis: c.basis === 'net' ? 'net' : 'gross',
+    const pz = { dollar_per_player: c.dollar_per_player, rank_by: c.rank_by, basis: c.basis === 'net' ? 'net' : 'gross', ...(String(c.tiebreak || '').trim() ? { tiebreak: [String(c.tiebreak).trim().slice(0, 80)] } : {}), ...(c.tie_order ? { tie_order: c.tie_order } : {}),
       table: { flights: c.table.flights.map(f => ({ id: f.id, name: String(f.name || '').trim() || f.id, tees: f.tees })), prizes: c.table.prizes.filter(x => x.amount > 0 || x.pct > 0) } };
     const v = BFEngine.validateGameConfig('podium', pz);
     if (!v.ok) { bad('podium', v.errors[0]); return; }

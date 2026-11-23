@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.65.1 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.66.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1245,6 +1245,17 @@ const GAME_SCHEMAS = {
         "type": "podium",
         "label": "Prizes (flights and places)",
         "required": true
+      },
+      {
+        "key": "tiebreak",
+        "type": "strings",
+        "label": "Tiebreak rule",
+        "max": 80
+      },
+      {
+        "key": "tie_order",
+        "type": "tieorder",
+        "label": "Tiebreak results"
       }
     ]
   },
@@ -1395,6 +1406,10 @@ function validateFields(fields, cfg) {
         if (typeof v !== 'object' || Array.isArray(v) || !flightsOk) errors.push(f.label + ': each flight needs a name and at least one tee or player (up to 4 flights)');
         else if (!prizesOk) errors.push(f.label + ': each prize needs a place (1-5), who it is for, and a dollar amount or a percent');
         else if (dup) errors.push(f.label + ': a place can only be paid once in each flight');
+      } else if (f.type === 'tieorder') {
+        // { scopeId: [player names in the order the host recorded] } : the host's call after a tiebreak (putt-off, playoff hole...)
+        const okOrder = v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length <= 6 && Object.keys(v).every(k => /^[a-z0-9_-]{1,20}$/i.test(k) && Array.isArray(v[k]) && v[k].length <= 30 && v[k].every(n => typeof n === 'string' && n.trim().length > 0 && n.length <= 80));
+        if (!okOrder) errors.push(f.label + ' must list player names for each flight');
       } else if (f.type === 'shares') {
         if (!Array.isArray(v) || v.length > (f.max || 3) || !v.every(x => Number.isFinite(Number(x)) && Number(x) >= 0)) errors.push(f.label + ' must be up to ' + (f.max || 3) + ' amounts of 0 or more');
       } else if (f.type === 'strings') {
@@ -1417,6 +1432,7 @@ function cleanFields(fields, cfg) {
       else if (f.type === 'shares') out[f.key] = v.map(Number);
       else if (f.type === 'podium') out[f.key] = { flights: (v.flights || []).map(x => ({ id: String(x.id).trim().toLowerCase(), name: String(x.name).trim().slice(0, 24), ...(x.tees && x.tees.length ? { tees: x.tees.map(t => String(t).trim()) } : {}), ...(x.players && x.players.length ? { players: x.players.map(t => String(t).trim()) } : {}) })),
         prizes: (v.prizes || []).map(x => ({ scope: x.scope === 'overall' ? 'overall' : String(x.scope).trim().toLowerCase(), place: Number(x.place), ...(Number(x.amount) > 0 ? { amount: Math.round(Number(x.amount) * 100) / 100 } : { pct: Number(x.pct) }) })) };
+      else if (f.type === 'tieorder') { const m = {}; Object.keys(v).forEach(k => { const a = v[k].map(n => String(n).trim()).filter(Boolean); if (a.length) m[String(k).trim().toLowerCase()] = a; }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'parsmap') { const m = {}; Object.keys(v).forEach(k => { m[String(k).trim()] = v[k].map(Number); }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
       else if (f.type === 'strings') out[f.key] = v.map(x => String(x).trim().slice(0, f.max || 60));
@@ -2869,6 +2885,34 @@ export default {
     // Flips back to 'open' and clears the snapshot, which puts the Gathering
     // back in the status=open index (Live Panel returns) so the host can fix
     // data and close again.
+    // POST /bfe/gathering-games/:gathering_id/tiebreak — the HOST records the result of a tiebreak (putt-off, playoff hole...) for the
+    // Prizes game: { host_id, scope: 'overall' | flight id, order: [names, winner first] }. An empty order clears it. Stored in
+    // game_configs.podium.tie_order, which the payout reads, so Close pays in that order instead of splitting. Open rounds only.
+    const gatheringTieMatch = url.pathname.match(/^\/bfe\/gathering-games\/(\d+)\/tiebreak$/);
+    if (request.method === 'POST' && gatheringTieMatch) {
+      const J = (o, st) => new Response(JSON.stringify(o), { status: st || 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      let body; try { body = await request.json(); } catch (e) { return J({ error: 'Invalid JSON' }, 400); }
+      const { host_id, scope, order } = body || {};
+      if (!host_id || !scope || !Array.isArray(order)) return J({ error: 'host_id, scope and order (a list of names) are required' }, 400);
+      try {
+        const row = await env.DB.prepare(`SELECT host_id, status, game_configs FROM bfe_gathering_games WHERE gathering_id = ?`).bind(gatheringTieMatch[1]).first();
+        if (!row) return J({ error: 'No games config for this gathering' }, 404);
+        if (String(row.host_id).trim().toLowerCase() !== String(host_id).trim().toLowerCase()) return J({ error: 'Only the host can record a tiebreak' }, 403);
+        if (row.status === 'closed') return J({ error: 'This round is closed. Reopen it to change the result.' }, 409);
+        let cfgs = {}; try { cfgs = row.game_configs ? JSON.parse(row.game_configs) : {}; } catch (e) { cfgs = {}; }
+        if (!cfgs.podium) return J({ error: 'This Gathering has no Prizes game' }, 400);
+        const sc = String(scope).trim().toLowerCase(), names = order.map(n => String(n).trim()).filter(Boolean);
+        const next = Object.assign({}, cfgs.podium), cur = Object.assign({}, next.tie_order || {});
+        // a new result is added after what is already recorded for this scope (a tie for 1st and a later tie for 3rd are both Overall); an empty order clears the scope
+        if (names.length) { const have = new Set(names.map(n => n.toLowerCase())); cur[sc] = (cur[sc] || []).filter(n => !have.has(String(n).toLowerCase())).concat(names); } else delete cur[sc];
+        if (Object.keys(cur).length) next.tie_order = cur; else delete next.tie_order;
+        const v = validateFields(GAME_SCHEMAS.podium.config, next);
+        if (!v.ok) return J({ error: v.errors[0] }, 400);
+        cfgs.podium = cleanFields(GAME_SCHEMAS.podium.config, next);
+        await env.DB.prepare(`UPDATE bfe_gathering_games SET game_configs = ? WHERE gathering_id = ?`).bind(JSON.stringify(cfgs), gatheringTieMatch[1]).run();
+        return J({ ok: true, tie_order: cfgs.podium.tie_order || {} });
+      } catch (e) { return J({ error: String(e.message || e) }, 500); }
+    }
     const gatheringGamesCloseMatch = url.pathname.match(/^\/bfe\/gathering-games\/(\d+)\/(close|reopen)$/);
     if (request.method === 'POST' && gatheringGamesCloseMatch) {
       let body;

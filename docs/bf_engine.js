@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.65.1';
+  const ENGINE_VERSION = '1.66.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1116,14 +1116,28 @@
       const owed = z => (z.amount > 0 ? Number(z.amount) : (Number(z.pct) / 100) * pot);
       const asked = table.prizes.reduce((a, z) => a + owed(z), 0), ratio = asked > pot && asked > 0 ? pot / asked : 1;   // a table bigger than the pot: every prize shrinks the same way, and the result says so
       const scopes = [{ id: 'overall', name: 'Overall', members: pr.rows }].concat(flights.map(f => ({ id: f.id, name: f.name, members: pr.rows.filter(r => flightOfRow([f], r, tee) === f.id) })));
-      const prizesOut = [], scopesOut = []; let spent = 0;
+      const prizesOut = [], scopesOut = [], tiesOut = [], settledOut = []; let spent = 0;
       const pay = (row, amt) => { if (row.members.length > 1) L.creditTeam(row.label, row.members, 'podium', amt); else L.credit(row.members[0], 'podium', amt); };
       scopes.forEach(sc => {
         const mine = table.prizes.filter(z => z.scope === sc.id).sort((a, b) => a.place - b.place); if (!mine.length) return;
         const ranked = sc.members.filter(r => r.complete).sort((a, b) => pr.higher ? b.total - a.total : a.total - b.total);
-        const groups = []; ranked.forEach((r, i) => { const g = groups[groups.length - 1]; if (g && g.total === r.total) g.rows.push(r); else groups.push({ total: r.total, rows: [r], start: i }); });
+        let groups = []; ranked.forEach((r, i) => { const g = groups[groups.length - 1]; if (g && g.total === r.total) g.rows.push(r); else groups.push({ total: r.total, rows: [r], start: i }); });
         const prizeAt = place => mine.find(z => z.place === place), winnersOut = [];
+        // A tiebreak the host recorded (putt-off, playoff hole...) orders the tied players: each listed player takes a place in that order, anyone not listed stays tied behind them.
+        const rec = addon.tie_order && Array.isArray(addon.tie_order[sc.id]) ? addon.tie_order[sc.id].map(norm) : null;
+        if (rec) groups = [].concat(...groups.map(g => {
+          if (g.rows.length < 2) return [g];
+          const at = r => { const k = rec.findIndex(n => n === norm(r.label) || r.members.some(m => norm(m) === n)); return k < 0 ? 1e9 : k; };
+          const listed = g.rows.filter(r => at(r) < 1e9).sort((a, b) => at(a) - at(b)), rest = g.rows.filter(r => at(r) >= 1e9);
+          if (!listed.length) return [g];
+          const out = listed.map((r, k) => ({ total: g.total, rows: [r], start: g.start + k, called: true }));
+          if (rest.length) out.push({ total: g.total, rows: rest, start: g.start + listed.length });
+          return out;
+        }));
+        const amountAt = place => { const z = prizeAt(place); return z ? owed(z) * ratio : 0; };
         groups.forEach(g => {
+          if (g.rows.length > 1) { const am = []; for (let k = 1; k <= g.rows.length; k++) am.push(Math.round(amountAt(g.start + k) * 100)); if (!am.every(x => x === am[0])) tiesOut.push({ scope: sc.id, scope_name: sc.name, place: g.start + 1, players: g.rows.map(r => r.label), all_in: sc.members.every(r => r.complete) }); }   // a tie that changes who gets what: the host has a call to make
+          if (g.called) settledOut.push({ scope: sc.id, scope_name: sc.name, place: g.start + 1, player: g.rows[0].label });
           let poolAmt = 0; for (let k = 1; k <= g.rows.length; k++) if (prizeAt(g.start + k)) poolAmt += owed(prizeAt(g.start + k)) * ratio;
           const each = Math.floor(poolAmt / g.rows.length);               // whole dollars; the odd dollars are reported, not moved
           g.each = each; g.rows.forEach(r => { r.place_in = g.start + 1; r.tied_in = g.rows.length > 1; if (each > 0) { pay(r, each); spent += each; winnersOut.push({ player: r.label, place: g.start + 1, tied: g.rows.length > 1, amount: each, scope: sc.id }); } });
@@ -1140,7 +1154,7 @@
       const unflighted = flights.length ? pr.rows.filter(r => r.complete && !flightOfRow(flights, r, tee)).map(r => r.label) : [];
       return Object.assign({ pot, basis: pr.basis, ranked_by: pr.source, flights: flights.map(f => ({ id: f.id, name: f.name })), prizes: prizesOut, scopes: scopesOut,
         standings: pr.rows.map(r => ({ player: r.label, complete: r.complete, total: r.total })).sort((a, b) => (a.total == null) - (b.total == null) || (pr.higher ? b.total - a.total : a.total - b.total)),
-        winners, paid: Math.round(spent * 100) / 100, given_back_each: gb.each, ...(ratio < 1 ? { scaled: true, asked: Math.round(asked * 100) / 100 } : {}), ...(unflighted.length ? { unflighted } : {}) },
+        winners, paid: Math.round(spent * 100) / 100, given_back_each: gb.each, ...(tiesOut.length ? { ties: tiesOut } : {}), ...(settledOut.length ? { settled: settledOut } : {}), ...(ratio < 1 ? { scaled: true, asked: Math.round(asked * 100) / 100 } : {}), ...(unflighted.length ? { unflighted } : {}) },
         capped ? { capped: true, configured_pot: configuredPot } : {});
     }
   };
@@ -1687,7 +1701,9 @@
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
       { key: 'rank_by', type: 'enum', label: 'Ranked by', values: ['auto', 'round'].concat(PRIZE_SOURCES), default: 'auto' },
       { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
-      { key: 'table', type: 'podium', label: 'Prizes (flights and places)', required: true }
+      { key: 'table', type: 'podium', label: 'Prizes (flights and places)', required: true },
+      { key: 'tiebreak', type: 'strings', label: 'Tiebreak rule', max: 80 },
+      { key: 'tie_order', type: 'tieorder', label: 'Tiebreak results' }
     ],
     fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
     maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
@@ -1916,6 +1932,10 @@
         if (typeof v !== 'object' || Array.isArray(v) || !flightsOk) errors.push(f.label + ': each flight needs a name and at least one tee or player (up to 4 flights)');
         else if (!prizesOk) errors.push(f.label + ': each prize needs a place (1-5), who it is for, and a dollar amount or a percent');
         else if (dup) errors.push(f.label + ': a place can only be paid once in each flight');
+      } else if (f.type === 'tieorder') {
+        // { scopeId: [player names in the order the host recorded] } : the host's call after a tiebreak (putt-off, playoff hole...)
+        const okOrder = v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length <= 6 && Object.keys(v).every(k => /^[a-z0-9_-]{1,20}$/i.test(k) && Array.isArray(v[k]) && v[k].length <= 30 && v[k].every(n => typeof n === 'string' && n.trim().length > 0 && n.length <= 80));
+        if (!okOrder) errors.push(f.label + ' must list player names for each flight');
       } else if (f.type === 'shares') {
         if (!Array.isArray(v) || v.length > (f.max || 3) || !v.every(x => Number.isFinite(Number(x)) && Number(x) >= 0)) errors.push(f.label + ' must be up to ' + (f.max || 3) + ' amounts of 0 or more');
       } else if (f.type === 'strings') {
@@ -1940,6 +1960,7 @@
       else if (f.type === 'shares') out[f.key] = v.map(Number);
       else if (f.type === 'podium') out[f.key] = { flights: (v.flights || []).map(x => ({ id: String(x.id).trim().toLowerCase(), name: String(x.name).trim().slice(0, 24), ...(x.tees && x.tees.length ? { tees: x.tees.map(t => String(t).trim()) } : {}), ...(x.players && x.players.length ? { players: x.players.map(t => String(t).trim()) } : {}) })),
         prizes: (v.prizes || []).map(x => ({ scope: x.scope === 'overall' ? 'overall' : String(x.scope).trim().toLowerCase(), place: Number(x.place), ...(Number(x.amount) > 0 ? { amount: Math.round(Number(x.amount) * 100) / 100 } : { pct: Number(x.pct) }) })) };
+      else if (f.type === 'tieorder') { const m = {}; Object.keys(v).forEach(k => { const a = v[k].map(n => String(n).trim()).filter(Boolean); if (a.length) m[String(k).trim().toLowerCase()] = a; }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'parsmap') { const m = {}; Object.keys(v).forEach(k => { m[String(k).trim()] = v[k].map(Number); }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
       else if (f.type === 'strings') out[f.key] = v.map(x => String(x).trim().slice(0, f.max || 60));
@@ -2295,19 +2316,41 @@
     const scopes = scopeDefs.map(sd => {
       const mine = board.rows.filter(r => !sd.only || flightOfRow([sd.only], { members: r.pair }, teeByPlayer) === sd.id);
       const rows = mine.map(r => Object.assign({}, r, { label: r.name || r.pair.join(' & '), members: r.pair })).sort((a, b) => (a.played === 0) - (b.played === 0) || (higher ? key(b) - key(a) : key(a) - key(b)) || b.played - a.played);
-      let place = 0, prev = null; rows.forEach((r, i) => { const k = r.played === 0 ? 'none' : key(r) + (board.ranked_by === 'total' ? '|' + r.played : ''); if (k !== prev) { place = i + 1; prev = k; } r.place = r.played === 0 ? null : place; });
-      rows.forEach(r => { r.tied = r.place != null && rows.filter(x => x.place === r.place).length > 1; });
-      const prizes = pc.table.prizes.filter(z => z.scope === sd.id).sort((a, b) => a.place - b.place).map(z => ({ place: z.place, amount: z.amount > 0 ? Number(z.amount) : 0 }));
-      rows.forEach(r => {   // a tie shares the places it covers, whole dollars each, exactly as the payout does
+      const prizes = pc.table.prizes.filter(z => z.scope === sd.id).sort((a, b) => a.place - b.place).map(z => ({ place: z.place, amount: z.amount > 0 ? Number(z.amount) : (Number(z.pct) || 0) / 100 * (Number(pc.dollar_per_player) || 0) * Math.max(1, board.rows.length) }));
+      // equal scores form a group; a tiebreak the host recorded puts the listed players in that order, anyone unlisted stays tied behind them
+      const rec = pc.tie_order && Array.isArray(pc.tie_order[sd.id]) ? pc.tie_order[sd.id].map(norm) : null;
+      const gk = r => r.played === 0 ? 'none' : key(r) + (board.ranked_by === 'total' ? '|' + r.played : '');
+      const groups = []; rows.forEach(r => { const g = groups[groups.length - 1]; if (g && g.k === gk(r)) g.rows.push(r); else groups.push({ k: gk(r), rows: [r] }); });
+      const ordered = [], settled = []; let at0 = 0;
+      groups.forEach(g => {
+        const idx = r => { const k = rec ? rec.findIndex(n => n === norm(r.label) || r.members.some(m => norm(m) === n)) : -1; return k < 0 ? 1e9 : k; };
+        const listed = g.rows.length > 1 && g.k !== 'none' ? g.rows.filter(r => idx(r) < 1e9).sort((a, b) => idx(a) - idx(b)) : [];
+        const rest = g.rows.filter(r => !listed.includes(r));
+        listed.forEach((r, n) => { r.place = at0 + n + 1; r.tied = false; r.called = true; settled.push({ place: r.place, player: r.label }); ordered.push(r); });
+        rest.forEach(r => { r.place = g.k === 'none' ? null : at0 + listed.length + 1; r.tied = g.k !== 'none' && rest.length > 1; ordered.push(r); });
+        at0 += g.rows.length;
+      });
+      rows.splice(0, rows.length, ...ordered);
+      const amountAt = pl => { const z = prizes.find(x => x.place === pl); return z ? z.amount : 0; };
+      rows.forEach(r => {   // what each place pays today: a tie shares the places it covers, whole dollars
         if (r.place == null) { r.prize = 0; return; }
-        const n = rows.filter(x => x.place === r.place).length; let pool = 0;
-        for (let k = 0; k < n; k++) { const z = prizes.find(x => x.place === r.place + k); if (z) pool += z.amount; }
+        const n = r.tied ? rows.filter(x => x.place === r.place).length : 1; let pool = 0;
+        for (let k = 0; k < n; k++) pool += amountAt(r.place + k);
         r.prize = Math.floor(pool / n);
       });
-      return { id: sd.id, name: sd.name, rows, prizes, field: rows.length, leader: rows.find(r => r.place === 1) || null };
+      const allDone = rows.length > 0 && rows.every(r => r.complete);
+      const ties = [];
+      if (allDone) groups.forEach(g => {   // only once the whole field has finished, and only a tie that changes who gets what
+        const tiedNow = g.rows.filter(r => r.tied);
+        if (tiedNow.length < 2) return;
+        const am = tiedNow.map((_, k) => Math.round(amountAt(tiedNow[0].place + k) * 100));
+        if (!am.every(x => x === am[0])) ties.push({ scope: sd.id, scope_name: sd.name, place: tiedNow[0].place, players: tiedNow.map(r => r.label) });
+      });
+      return { id: sd.id, name: sd.name, rows, prizes, field: rows.length, leader: rows.find(r => r.place === 1) || null, all_done: allDone, ties, settled };
     });
     if (flights.length) board.rows.forEach(r => { if (!flightOfRow(flights, { members: r.pair }, teeByPlayer)) unflighted.push(r.name || r.pair.join(' & ')); });
-    return { basis: board.basis, ranked_by: board.ranked_by, source: src || 'round', net_missing: !!board.net_missing, scopes, unflighted };
+    const tb = Array.isArray(pc.tiebreak) && pc.tiebreak[0] ? String(pc.tiebreak[0]) : '';
+    return { basis: board.basis, ranked_by: board.ranked_by, source: src || 'round', net_missing: !!board.net_missing, scopes, unflighted, tiebreak: tb, ties: [].concat(...scopes.map(x => x.ties)), settled: [].concat(...scopes.map(x => x.settled.map(z => Object.assign({ scope: x.id, scope_name: x.name }, z)))) };
   }
 
   // ── BestBall match view (Dev-93) ────────────────────────────────────────

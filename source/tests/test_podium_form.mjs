@@ -2,7 +2,7 @@
 import fs from 'fs'; import vm from 'vm'; import { extractFn, loadEngine } from './extract.mjs'; import { fileURLToPath } from 'url';
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
-const FN = ['pzResultsHtml', 'pzSync', 'pzHasPct', 'pzTotal', 'pzTeeChoices', 'pzFlightTeeOther', 'pzBlank', 'pzTable', 'pzPot', 'pzPlan', 'pzRefresh', 'pzSetRankBy', 'pzPreset', 'pzFlightName', 'pzFlightTee', 'pzAddFlight', 'pzRemoveFlight', 'pzAddPlace', 'pzRemovePlace', 'pzPrize', 'pzCheckHtml', 'pzSources', 'setGamesFormPrizesDollarPerPlayer', 'gatheringGamesPodiumSectionHtml'];
+const FN = ['pzResultsHtml', 'pzTiebreak', 'pzSync', 'pzHasPct', 'pzTotal', 'pzTeeChoices', 'pzFlightTeeOther', 'pzBlank', 'pzTable', 'pzPot', 'pzPlan', 'pzRefresh', 'pzSetRankBy', 'pzPreset', 'pzFlightName', 'pzFlightTee', 'pzAddFlight', 'pzRemoveFlight', 'pzAddPlace', 'pzRemovePlace', 'pzPrize', 'pzCheckHtml', 'pzSources', 'setGamesFormPrizesDollarPerPlayer', 'gatheringGamesPodiumSectionHtml'];
 const els = {}; let refreshes = 0;
 const ctx = { Math, Number, String, Array, Object, JSON, parseFloat, escapeHtml: s => String(s), document: { getElementById: id => els[id] || null }, updateGamesFormPotPreview() { refreshes++; }, gamesFormAutoRanking() {}, refreshGamesFormHcpSection() {} };
 vm.createContext(ctx);
@@ -42,4 +42,6 @@ R("_gamesFormSelected.delete('podium')"); ok(R('gatheringGamesPodiumSectionHtml(
 // A custom tee (Combo) shows as a choice once a flight or the Playing groups use it
 { R("pzTable().flights[0].tees.push('Combo')"); ok(R('pzTeeChoices()').includes('Combo') && R('pzTeeChoices()').includes('Black'), 'a custom tee already in a flight is offered alongside the standard boxes');
   R("_gamesFormSelected.add('podium')"); ok(/pzFlightTeeOther\(0\)/.test(R('gatheringGamesPodiumSectionHtml()')), 'each flight has an Other… tee button'); }
+R("pzTiebreak('Putt-off on the green')"); ok(R('_gamesFormPrizes.tiebreak') === 'Putt-off on the green', 'the Tiebreak rule is kept on the Prizes config');
+ok(/tiebreak: \[String\(c\.tiebreak\)/.test(src) && /tie_order: c\.tie_order/.test(src), 'it is saved with the Prizes config, and a recorded result survives an edit of Games');
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);

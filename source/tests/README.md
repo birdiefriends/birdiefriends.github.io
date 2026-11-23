@@ -29,6 +29,7 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_effective_start.mjs` | Dev-101: Turkeys + MiserBall survivor use the start hole the scores show, plan only as fallback |
 | `test_podium.mjs` | Individual Low Score prizes: overall + flights (by tee or name), several places, ties share, scale-to-pot, validation |
 | `test_prize_board.mjs` | Prizes live board: Overall + each flight from partial cards, prize each place pays today, chips / You line / sort on the leaderboard sheet |
+| `test_tiebreak_worker.mjs` | Worker POST /bfe/gathering-games/:id/tiebreak: host only, merges per scope, clears, refuses closed rounds |
 | `test_podium_form.mjs` | The Games prize editor: flights by tee, places, $ or % of pot, pot check, removing a flight |
 | `test_rail_cancel.mjs` | Dev-93: At-the-course rail off switch sticks past tee time; cancelled events never launch the rail or the Live Panel (test rounds excepted) |
 | `test_fourball_live.mjs` | Dev-93: Fourball live board (partial cards, to-par ranking, net, agrees with the Close winner) and the Live Panel section |

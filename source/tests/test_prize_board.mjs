@@ -34,6 +34,22 @@ ok(b.scopes[0].rows.every(r => r.place === null && r.prize === 0), 'before any s
   const t2 = [card('Ann', Array(18).fill(4)), card('Bo', Array(18).fill(5)), card('Cy', Array(18).fill(5)), card('Di', Array(18).fill(6))];
   const o2 = E.prizeBoard(row, t2, PARS, null).scopes[0].rows;
   ok(o2[0].prize === 50 && o2[1].prize === 25 && o2[2].prize === 25 && o2[3].prize === 0, 'a tie for 2nd splits 2nd and 3rd ($25 each)'); }
+// the tiebreak: silent when nothing is tied for money, a tie to call once the field has finished, and the host's recorded order settles it
+{ const tb = { flights: [], prizes: [{ scope: 'overall', place: 1, amount: 50 }, { scope: 'overall', place: 2, amount: 30 }] };
+  const mkRow = (extra) => ({ games: ['podium'], game_configs: { podium: Object.assign({ dollar_per_player: 25, rank_by: 'round', basis: 'gross', table: tb, tiebreak: ['Putt-off'] }, extra || {}) } });
+  const full = (n, v) => card(n, Array(18).fill(v));
+  const tied = [full('Ann', 4), full('Bo', 4), full('Cy', 5), full('Di', 6)];
+  let b = E.prizeBoard(mkRow(), tied, PARS, null);
+  ok(b.ties.length === 1 && b.ties[0].players.sort().join() === 'Ann,Bo' && b.ties[0].place === 1 && b.tiebreak === 'Putt-off', 'a tie for 1st with the field finished is a tie to call, and carries the host\'s rule');
+  ok(E.prizeBoard(mkRow(), [full('Ann', 4), full('Bo', 5), full('Cy', 5), full('Di', 6)], PARS, null).ties.length === 1, 'a tie for 2nd (2nd and 3rd pay differently, 3rd pays nothing) is also a tie to call');
+  ok(E.prizeBoard(mkRow(), [full('Ann', 4), full('Bo', 5), full('Cy', 6), full('Di', 6)], PARS, null).ties.length === 0, 'a tie for 3rd, where nothing is paid, stays silent');
+  ok(E.prizeBoard(mkRow(), [card('Ann', Array(10).fill(4)), card('Bo', Array(10).fill(4)), full('Cy', 5), full('Di', 6)], PARS, null).ties.length === 0, 'a tie while players are still out is silent');
+  b = E.prizeBoard(mkRow({ tie_order: { overall: ['Bo', 'Ann'] } }), tied, PARS, null);
+  ok(b.ties.length === 0 && b.scopes[0].rows[0].label === 'Bo' && b.scopes[0].rows[0].place === 1 && b.scopes[0].rows[1].label === 'Ann' && b.scopes[0].rows[1].place === 2 && b.settled.length === 2, 'the recorded order settles it: Bo 1st, Ann 2nd, no tie left');
+  const pay = r => E.computeRoundPayout({ payout: { entry_per_player: 25 }, addons: [{ id: 'podium', entity: 'individual', dollar_per_player: 25, basis: 'gross', rank_by: 'round', table: tb, tiebreak: ['Putt-off'], ...(r || {}) }] }, { scorecards: tied });
+  let pr = pay(); ok(pr.payouts.find(x => x.player === 'Ann').podium === 40 && pr.podium.ties && pr.podium.ties.length === 1, 'unrecorded: the payout splits (1st+2nd = $80, $40 each) and reports the tie');
+  pr = pay({ tie_order: { overall: ['Bo', 'Ann'] } }); ok(pr.payouts.find(x => x.player === 'Bo').podium === 50 && pr.payouts.find(x => x.player === 'Ann').podium === 30 && !pr.podium.ties && pr.podium.settled.length === 2, 'recorded: Bo takes 1st ($50), Ann 2nd ($30), the tie is cleared');
+  pr = pay({ tie_order: { overall: ['Ann'] } }); ok(pr.payouts.find(x => x.player === 'Ann').podium === 50 && pr.payouts.find(x => x.player === 'Bo').podium === 30, 'naming only the winner puts the other tied player next'); }
 // the screen: leader chips, a "You" line, prizes on paid rows, a sort switch
 { const ctx = { GRP_ESC: s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])), Date, Math, String, Array };
   vm.createContext(ctx);
@@ -49,4 +65,25 @@ ok(b.scopes[0].rows.every(r => r.place === null && r.prize === 0), 'before any s
   ok(t.indexOf('Cy') < t.indexOf('Di') && ctx.f.ui().sort === 'holes', 'sorted by holes played: furthest along first');
   ok(/No scores saved yet/.test(ctx.f.leaderboardPrizesHtml(E.prizeBoard(sc1, [], PARS, tee), 'Ann', {})), 'before any score: a plain message');
   ok(/leaderboardPrizesHtml\(pb, currentPlayer/.test(src) && /prizeBoard\(row, cards/.test(src), 'wired into the leaderboard sheet'); }
+// the loud part: banner for everyone, "Record who won" for the host only, tap order, save, silent when no tie
+{ const calls = [], sheets = [], toasts = [];
+  const ctx = { GRP_ESC: s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])), Date, Math, String, Array, JSON, Object, currentPlayer: 'Brian Hager', BFE_API: 'https://bfe.test',
+    openHostSheet: (title, html) => sheets.push({ title, html }), closeHostSheet() {}, showToast: m => toasts.push(m), openGatheringLeaderboard: g => calls.push(['lb', g]), openGatheringCloseSheet: g => calls.push(['close', g]),
+    fetch: async (url, o) => { calls.push(['post', url, JSON.parse(o.body)]); return { ok: true, json: async () => ({ ok: true, tie_order: { overall: JSON.parse(o.body).order } }) }; }, _gatheringGamesIndex: new Map() };
+  vm.createContext(ctx);
+  vm.runInContext(['tiebreakBannerHtml', 'openTiebreakRecord', 'tiebreakRecordPaint', 'tiebreakTap', 'tiebreakPost', 'tiebreakSave', 'tiebreakClear'].map(n => extractFn(src, n)).join('\n').replace(/^/, 'let _tbTies = [], _tbCtx = null, _tbPick = [], _tbRecording = false;\n') + '\nthis.f={tiebreakBannerHtml,openTiebreakRecord,tiebreakTap,tiebreakSave,tiebreakClear,rec:()=>_tbRecording};', ctx);
+  const ties = [{ scope: 'overall', scope_name: 'Overall', place: 1, players: ['Brian Hager', 'Scott Justus'] }], txt = h => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  ok(ctx.f.tiebreakBannerHtml([], 'Putt-off', true, 7, 'lb', []) === '', 'no tie, nothing on screen: silent');
+  let h = ctx.f.tiebreakBannerHtml(ties, 'Putt-off', false, 7, 'lb', []), x = txt(h);
+  ok(/TIEBREAK NEEDED/.test(x) && /Tie for 1st/.test(x) && /Brian Hager/.test(x) && /Scott Justus/.test(x) && /Putt-off/.test(x) && /find the host/.test(x) && !/Record who won/.test(x), 'players see the loud banner with the tied names and the rule, and are told to find the host');
+  h = ctx.f.tiebreakBannerHtml(ties, '', true, 7, 'lb', []); x = txt(h);
+  ok(/Record who won/.test(x) && /host will call the tiebreak/i.test(x), 'the host gets the record button; no rule set says the host will call it');
+  ctx.f.openTiebreakRecord(0); ok(ctx.f.rec() === true && /Tap the players in the order/.test(sheets.at(-1).html), 'the record screen opens and blocks the refresh from painting over it');
+  ctx.f.tiebreakTap('Scott Justus'); ok(/disabled/.test(sheets.at(-1).html) === false, 'one pick of two is enough to save (the other takes the next place)');
+  await ctx.f.tiebreakSave();
+  const post = calls.find(c => c[0] === 'post');
+  ok(post && /\/bfe\/gathering-games\/7\/tiebreak$/.test(post[1]) && post[2].host_id === 'Brian Hager' && post[2].scope === 'overall' && post[2].order.join() === 'Scott Justus', 'saving posts the order to the Worker as the host');
+  ok(calls.some(c => c[0] === 'lb' && c[1] === 7) && ctx.f.rec() === false, 'then the leaderboard reopens with the result');
+  h = ctx.f.tiebreakBannerHtml([], 'Putt-off', true, 7, 'lb', [{ scope: 'overall', scope_name: 'Overall', place: 1, player: 'Scott Justus' }]); x = txt(h);
+  ok(/Tiebreak settled/.test(x) && /Scott Justus/.test(x) && /Undo/.test(x) && !/TIEBREAK NEEDED/.test(x), 'once recorded: a calm settled line, with Undo for the host'); }
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

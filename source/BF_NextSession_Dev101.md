@@ -120,3 +120,10 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 
 ## v4.107.2 (engine 1.65.1)
 - Live leaderboard shows NO money (Brian's call): place status only; prize amounts stay in the engine's prizeBoard rows (tie-split tested) for later. Preliminary payouts still appear once every card is in. Added tie tests for the payout (3-way, 4-way, tie for 2nd, everyone tied, odd dollar reported).
+
+## v4.108.0 — Tiebreak (engine 1.66.0, Worker change: new route)
+- Prizes config gains `tiebreak` (free-text rule, ≤80, the host's own words; chips Putt-off / Playoff hole / Closest to the pin) and `tie_order` ({scope: [names, winner first]}, host-recorded). Schema types `strings` + new `tieorder`.
+- Payout: `tie_order` puts the listed tied players in that order (unlisted stay tied behind them); results gain `ties` (unresolved, only when the tie changes who gets what) and `settled`. No recording = split, as before.
+- `BFEngine.prizeBoard` returns `ties` only once EVERY row in the scope has finished, plus `settled` and `tiebreak`. Silent otherwise (a tie for an unpaid place, or while players are still out, never shows).
+- Loud: red "TIEBREAK NEEDED" banner at the top of the leaderboard (everyone) and in the Close sheet (host); host taps "Record who won" (tap players in finish order), saved via Worker `POST /bfe/gathering-games/:id/tiebreak` {host_id, scope, order}; settled shows a calm green line with Undo. The 30s leaderboard refresh is held while recording (`_tbRecording`).
+- NOT built (next): a push/notification to the whole field when a tie appears, and a card-level alert on the event row. Needs server-side tie detection (the Worker has no payout engine) or a host "call it" button that fires a push.
