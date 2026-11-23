@@ -211,9 +211,9 @@ eq([...A.liveSideTeamNames(scr)].sort(), [['a1','Alpha'],['b1','Bravo'],['d1','D
   A.skSetGroup(0);
   [4,4,4,4].forEach(v => A.skTap(v)); await tick(); await tick();
   A.skGoFirstOpen(); eq(A.get().hole, 8, 'shotgun: with #7 scored the group opens on #8');
-  ok(/Your start hole/.test(A.liveScoreModeHtml()) === false, 'shotgun: the start-hole cue is only on the start hole');
+  ok(/Starting on hole/.test(A.liveScoreModeHtml()) === false, 'shotgun: the start-hole cue is only on the start hole');
   A.get().hole = 7;
-  ok(/Your start hole/.test(A.liveScoreModeHtml()), 'shotgun: the start hole is labeled');
+  ok(/Starting on hole/.test(A.liveScoreModeHtml()), 'shotgun: the start hole is labeled');
   A.setSets({});
   // ── the host's start hole is only a suggestion: the group is asked once, and the scores say what happened
   {
@@ -221,8 +221,9 @@ eq([...A.liveSideTeamNames(scr)].sort(), [['a1','Alpha'],['b1','Bravo'],['d1','D
     A.setSets({ 11: { published: { mode: 'shotgun', groups: [{ members: ['Brian Hager','Tom Marsh','Mike Kay','Dave Vance'], start_hole: 7 }, { members: ['Sam Lee','Pat Roe','Lee Jo','Jo Wu'], start_hole: 1 }] }, version: 1 } });
     A.skMergeRemote([]); A.skSetGroup(0);
     const g0 = A.get() && A.skGroups()[0];
-    ok(A.skAskStart(g0), 'shotgun, nothing scored: the group is asked which hole it is starting on');
-    ok(/Which hole are you starting on\?/.test(A.skStartPickerHtml(g0)) && /host suggested hole <b[^>]*>7</.test(A.skStartPickerHtml(g0)), 'the picker names the host suggestion');
+    ok(!A.skAskStart(g0) && A.skOrder()[0] === 7, 'a group with a planned start hole is not asked: it starts on the plan (7)');
+    A.skChangeStart(); ok(A.skAskStart(A.skGroups()[0]), 'Change start opens the question');
+    ok(/Which hole are you starting on\?/.test(A.skStartPickerHtml(g0)) && /host suggested hole <b[^>]*>7</.test(A.skStartPickerHtml(g0)), 'the picker names the plan');
     A.skPickStart(12); eq(A.get().hole, 12, 'picked 12: the scorecard opens on 12'); ok(!A.skAskStart(A.skGroups()[0]), 'asked only once');
     eq(A.skOrder().slice(0, 2).concat(A.skOrder().slice(-1)), [12, 13, 11], 'order follows the hole they picked, not the plan');
     A.skChangeStart(); ok(A.skAskStart(A.skGroups()[0]), 'Change reopens the question');

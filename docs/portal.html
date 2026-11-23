@@ -11661,7 +11661,9 @@ function skStartFor(g) {
 function skAskStart(g) {
   if (!_sk) return false;
   if (_sk.askStart === g.n) return true;
-  return g.mode === 'shotgun' && !skGroupScored(g) && !skStartOverride(g);
+  // The Groups plan answers it: a group with a planned start hole starts there (Live Edit already moved it for no-shows and regroups),
+  // and "Change start" is one tap away if the day went differently. Only a group with no planned hole is asked.
+  return g.mode === 'shotgun' && !skGroupScored(g) && !skStartOverride(g) && !(Number(g.start_hole) >= 1);
 }
 function skPickStart(h) {
   if (!_sk) return; const g = skGroup();
@@ -11886,7 +11888,7 @@ function liveScoreModeHtml() {
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
       ${navBtn(-1, chevL, false)}
       <div style="flex:1;text-align:center"><div style="font-family:'DM Mono',monospace;font-size:1.9rem;font-weight:700;line-height:1;color:#fff">Hole ${hole}</div>
-        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-top:3px">${par != null ? 'Par ' + par : '&nbsp;'}${hole === ord[0] && (g.start_hole || skStartOverride(g)) ? '<span style="margin-left:8px;color:#ffe08a">Your start hole</span>' : ''}${hole === ord[0] && !skGroupScored(g) ? '<a onclick="skChangeStart()" style="margin-left:8px;color:#9fd8ff;text-decoration:underline;cursor:pointer">Change</a>' : ''}<span style="margin-left:10px;color:${statusCol}">${status}</span></div></div>
+        <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);margin-top:3px">${par != null ? 'Par ' + par : '&nbsp;'}${hole === ord[0] && (g.start_hole || skStartOverride(g)) ? '<span style="margin-left:8px;color:#ffe08a">Starting on hole ' + ord[0] + '</span>' : ''}${hole === ord[0] && !skGroupScored(g) ? '<a onclick="skChangeStart()" style="margin-left:8px;color:#9fd8ff;text-decoration:underline;cursor:pointer">Not here? Change start</a>' : ''}<span style="margin-left:10px;color:${statusCol}">${status}</span></div></div>
       ${navBtn(1, chevR, done && nextH != null)}
     </div>
     ${skCoinNoteHtml(hole, nextH, g, gs)}
