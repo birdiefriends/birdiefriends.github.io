@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.67.0';
+  const ENGINE_VERSION = '1.67.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2102,7 +2102,9 @@
     }
     const pdc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.podium : null;
     if (games.includes('podium') && pdc) {
-      addons.push({ id: 'podium', entity: 'individual', dollar_per_player: pdc.dollar_per_player, basis: pdc.basis === 'net' ? 'net' : 'gross', rank_by: pdc.rank_by || 'auto', table: pdc.table });
+      addons.push({ id: 'podium', entity: 'individual', dollar_per_player: pdc.dollar_per_player, basis: pdc.basis === 'net' ? 'net' : 'gross', rank_by: pdc.rank_by || 'auto', table: pdc.table,
+        ...(Array.isArray(pdc.tiebreak) && pdc.tiebreak.length ? { tiebreak: pdc.tiebreak } : {}), ...(pdc.tiebreak_flights === true ? { tiebreak_flights: true } : {}),
+        ...(pdc.tie_order && typeof pdc.tie_order === 'object' ? { tie_order: pdc.tie_order } : {}) });   // the host's recorded playoff must reach the payout, not only the live board
     }
     if (games.includes('skins')) {
       addons.push({ id: 'skins', entity: 'individual', basis: basisOf('skins_basis'), compare: 'low' });

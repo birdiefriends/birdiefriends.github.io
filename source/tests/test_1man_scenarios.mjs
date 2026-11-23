@@ -91,6 +91,17 @@ ok(threw === 0, 'fuzz: no scenario throws (' + threw + ' of 300)'); ok(unbalance
   // a field too small to fund the posted prizes: capped by what is left, shrunk evenly, still balanced
   const tiny = run(mkRow(NAMES.slice(0, 10)), distinct(NAMES.slice(0, 10)), { 3: { player: NAMES[0], dist: 3 }, 8: { player: NAMES[1], dist: 3 }, 12: { player: NAMES[2], dist: 3 }, 16: { player: NAMES[3], dist: 3 } });
   balanced(tiny, 'prizes + CTP bigger than a 10-player pot'); console.log('  10 players:', JSON.stringify({ pot: tiny.total_pot, podium: tiny.podium.pot, scaled: !!tiny.podium.scaled, paid: sum(tiny) })); }
+// 15. the host's recorded playoff must reach the CLOSE payout (it lives in the saved podium config), not only the live board
+{ const ps = NAMES.slice(0, 9), cs = ps.map((n, i) => (i < 2 ? card(n, h => PARS[h] - (h % 6 === 0 ? 1 : 0)) : randCard(n, -0.3)));
+  const before = run(mkRow(ps), cs), withOrder = mkRow(ps); withOrder.game_configs.podium.tie_order = { overall: [ps[1], ps[0]] }; const after = run(withOrder, cs);
+  const amt = (x, n) => (x.payouts.find(p => p.player === n) || {}).podium || 0;
+  ok(before.podium.ties && before.podium.ties.length >= 1, 'unrecorded: the Overall tie is reported');
+  const sel = x => { const o = x.podium.scopes.find(sc => sc.id === 'overall'); return o; };
+  const ow = x => (x.podium.winners || []).filter(w => w.scope === 'overall').map(w => [w.player, w.place, w.amount].join(':')).join('|');
+  ok(amt(after, ps[1]) > amt(after, ps[0]), 'recorded: the playoff winner is paid more than the loser (' + amt(after, ps[1]) + ' vs ' + amt(after, ps[0]) + ')');
+  ok(JSON.stringify(after.podium.settled || []).includes(ps[1]), 'recorded: the settled list names the playoff winner');
+  ok(!(after.podium.ties && after.podium.ties.length), 'recorded: no tie is left to call'); balanced(after, 'after a recorded playoff');
+  const fl = mkRow(ps); fl.game_configs.podium.tiebreak_flights = true; ok(E.gatheringConfigFromLegacy(fl).addons.find(a => a.id === 'podium').tiebreak_flights === true, 'tiebreak_flights reaches the payout config'); }
 // 14. the stored results (MyHistory and the Close sheet render the same saved summary): the 1Man's full summary survives JSON and renders without errors
 import fs from 'fs'; import vm from 'vm'; import { extractFn } from './extract.mjs'; import { fileURLToPath } from 'url';
 { const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
