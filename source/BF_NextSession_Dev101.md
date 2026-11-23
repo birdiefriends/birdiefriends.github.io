@@ -92,3 +92,8 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 - Flight membership = `flightOfPlayer` (tee box from the published Groups via `payoutExtra`/`gatheringTeesByPlayer`, or a name list); a team is in a flight only when all members are. New flight rules (handicap, age) are new cases there only.
 - 1Man: Scramble (Players per team = 1, $0 of its own) + Prizes ranked by Scramble (or Automatic). BF Series can feed the same `ADDONS.podium` / `prizeRows` later.
 - Known gaps: payout-table team splitting for Prizes only covers Scramble teams (the portal's existing split); not yet run end to end on a live team-of-1 Scramble event.
+
+## v4.104.0 — Scramble Pays → "Flights & places"
+- Scramble Pays step has a 4th option, "Flights & places": zeroes the Scramble's own pot, turns the Prizes game on (rank_by 'scramble') and jumps to the Prizes screen. Picking any other Pays option turns Prizes back off. Money step hides the Scramble podium card in this mode (Prizes row carries the money).
+- Engine unchanged (1.64.0); no Worker change beyond the v4.103 file (podium schema) which must be deployed.
+- Still to verify: reopening a saved config shows "Flights & places"; team-of-1 Scramble + Prizes through live scoring/Close.

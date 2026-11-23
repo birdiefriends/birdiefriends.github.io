@@ -21,8 +21,8 @@ function updateGamesFormPotPreview() { gamesFormPodiumApply(); refreshGamesFormS
 function fourballSegCount() { return 1; } function periodSegCount() { return 1; } function lowscoreSegCount() { return 1; }
 let _gamesFormG = null;
 `, ctx);
-const FN = ['escapeHtml', '_r2', 'gamesFormPodiumPlaces', 'gamesFormPodiumPlan', 'gamesFormPodiumPlayers', 'gamesFormPodiumApply', 'gamesFormPodiumInit', 'setGamesFormScramblePct', 'setGamesFormPodiumTotal', 'setGamesFormPodiumPlace', 'setGamesFormPodiumMode', 'setGamesFormPodiumPlaces', 'gamesFormSplitBuild', 'gamesFormSplitHtml', 'gamesFormSplitLive', 'refreshGamesFormSplit'];
-vm.runInContext('const GAMES_FORM_PODIUM_SHARES = { 1: [100], 2: [65, 35], 3: [50, 30, 20] }; let _gamesFormPodium = { mode: "pct", pct: null, tot: null, pl: [], dirty: false };\n' + FN.map(n => extractFn(src, n)).join('\n'), ctx);
+const FN = ['escapeHtml', 'gamesFormScrambleInPrizes', '_r2', 'gamesFormPodiumPlaces', 'gamesFormPodiumPlan', 'gamesFormPodiumPlayers', 'gamesFormPodiumApply', 'gamesFormPodiumInit', 'setGamesFormScramblePct', 'setGamesFormPodiumTotal', 'setGamesFormPodiumPlace', 'setGamesFormPodiumMode', 'setGamesFormPodiumPlaces', 'gamesFormSplitBuild', 'gamesFormSplitHtml', 'gamesFormSplitLive', 'refreshGamesFormSplit'];
+vm.runInContext('const GAMES_FORM_PODIUM_SHARES = { 1: [100], 2: [65, 35], 3: [50, 30, 20] }; let _gamesFormPrizes = { rank_by: "auto" }; let _gamesFormPodium = { mode: "pct", pct: null, tot: null, pl: [], dirty: false };\n' + FN.map(n => extractFn(src, n)).join('\n'), ctx);
 const run = c => vm.runInContext(c, ctx);
 const strip = h => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const R = () => ctx.gamesFormSplitBuild().regions;

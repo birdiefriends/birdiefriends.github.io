@@ -29,4 +29,14 @@ R("_gamesFormSelected.delete('podium')"); ok(R('gatheringGamesPodiumSectionHtml(
   const lbl = t => `<h>${t}</h>`, line = (a, b) => `<l>${a}|${b}</l>`, m = v => '$' + v;
   const html = ctx.pzResultsHtml(r.podium, lbl, line, m, x => String(x));
   ok(/Overall/.test(html) && /Green/.test(html) && /<b>Ann<\/b> \$30/.test(html) && /<b>Bob<\/b> \$10/.test(html), 'the results show each prize and its winner'); }
+// Scramble → "Flights & places": the Scramble keeps ranking with no pot of its own, and Prizes (ranked by the Scramble) pays the tiers
+{ const c2 = { Math, Number, String, Array, Object, JSON, parseFloat, escapeHtml: x => String(x), BFEngine: loadEngine(), showToast() {}, gwGoTo(s) { c2._went = s; }, refreshGamesFormSideSection() {}, refreshGamesFormSplit() {}, document: { getElementById: () => null }, updateGamesFormPotPreview() {} };
+  vm.createContext(c2);
+  vm.runInContext(`let _gamesFormSelected = new Set(['scramble']); const _gamesFormTouched = new Set(); let _gamesFormPrizes = { dollar_per_player: null, rank_by: 'auto', basis: 'gross', table: { flights: [], prizes: [] } }; const _gamesFormSide = { scramble: { dollar_per_player: 12, payout: 'top3', place_shares: [40, 20, 10], podium_total: 70 } };
+    function toggleGamesFormGame(k) { if (_gamesFormSelected.has(k)) { _gamesFormSelected.delete(k); _gamesFormPrizes = { dollar_per_player: null, rank_by: 'auto', basis: 'gross', table: { flights: [], prizes: [] } }; } else _gamesFormSelected.add(k); }
+    function pzRefresh() {}\n` + ['gamesFormScrambleInPrizes', 'gamesFormScrambleToPrizes'].map(n => extractFn(src, n)).join('\n'), c2);
+  const R2 = c => vm.runInContext(c, c2);
+  ok(R2('gamesFormScrambleInPrizes()') === false, 'a normal Scramble is not in Flights & places');
+  R2('gamesFormScrambleToPrizes()');
+  ok(R2('gamesFormScrambleInPrizes()') === true && R2('_gamesFormSide.scramble.dollar_per_player') === 0 && R2('_gamesFormSide.scramble.podium_total') === undefined && R2("_gamesFormSelected.has('podium')") && R2('_gamesFormPrizes.rank_by') === 'scramble' && c2._went === 'podium', 'choosing Flights & places clears the Scramble pot, turns Prizes on ranked by the Scramble, and goes to the Prizes screen'); }
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);

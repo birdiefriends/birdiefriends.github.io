@@ -22276,6 +22276,7 @@ function gamesFormSplitBuild() {
   };
   if (sel.has('fourball')) { const c = _gamesFormFourballConfig; otherGames += (c.dollar_per_player || 0) * nYes; rows.push(periodRow('🤝', 'BestBall', c, fourballSegCount(c), 'gw-split-fb', 'setGamesFormFourballDollarPerPlayer')); }
   GAMES_FORM_SIDE_IDS.forEach(g => { if (!sel.has(g)) return;
+    if (g === 'scramble' && gamesFormScrambleInPrizes()) return;   // Flights & places: the Prizes row below carries the money
     const m = BFEngine.getGame(g).meta;
     if (g === 'scramble') {
       const sc = _gamesFormSide.scramble, nPl = gamesFormPodiumPlayers(), P = _gamesFormPodium, tsz = Number(sc.team_size) || 2;
@@ -23390,8 +23391,9 @@ function gatheringGamesSideSectionHtml(gid) {
       ${radioRowsHtml([
         ['winner', 'Winning team', 'One pot. Tied teams split it.', true],
         ['top2', 'Top 2 teams', '65% to first, 35% to second.', false],
-        ['top3', 'Top 3 teams', '50% to first, 30% to second, 20% to third.', false]
-      ], c.payout === 'custom' ? ((c.place_shares || []).length >= 3 ? 'top3' : (c.place_shares || []).length === 2 ? 'top2' : 'winner') : c.payout, `(v=>setGamesFormSide('${gid}','payout',v))`)}${c.payout === 'custom' ? `<div style="font-size:0.76rem;color:var(--text-muted);margin-top:6px;line-height:1.5">Paying ${(c.place_shares || []).length} place${(c.place_shares || []).length === 1 ? '' : 's'} at the dollar amounts you set on the money step, not the standard percentages. Tap a split above only if you want the standard percentages back.</div>` : ''}
+        ['top3', 'Top 3 teams', '50% to first, 30% to second, 20% to third.', false],
+        ['prizes', 'Flights & places', 'Overall and flights (players grouped by tee box), as many places as you like, each priced separately. Set up on the Prizes screen.', false]
+      ], gamesFormScrambleInPrizes() ? 'prizes' : c.payout === 'custom' ? ((c.place_shares || []).length >= 3 ? 'top3' : (c.place_shares || []).length === 2 ? 'top2' : 'winner') : c.payout, `(v=>setGamesFormSide('${gid}','payout',v))`)}${c.payout === 'custom' ? `<div style="font-size:0.76rem;color:var(--text-muted);margin-top:6px;line-height:1.5">Paying ${(c.place_shares || []).length} place${(c.place_shares || []).length === 1 ? '' : 's'} at the dollar amounts you set on the money step, not the standard percentages. Tap a split above only if you want the standard percentages back.</div>` : ''}
       <div style="font-size:0.9rem;font-weight:600;margin:12px 0 4px">Extra prize for the winning team (optional)</div>
       <input type="text" maxlength="60" value="${escapeHtml(c.prize || '')}" placeholder="e.g. Turkeys compliments of Tom &amp; Evan" oninput="setGamesFormScramblePrize(this.value)" style="width:100%;height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 10px;font-family:inherit;box-sizing:border-box">
       <div style="font-size:0.72rem;color:var(--text-muted);margin-top:3px">Shown to the players with the game. No money moves for it.</div>`;
@@ -23439,6 +23441,17 @@ function refreshGamesFormSideSection(gid) {
   const el = document.getElementById('games-form-' + gid + '-section');
   if (el) el.innerHTML = gatheringGamesSideSectionHtml(gid);
 }
+// Scramble "Flights & places": the Scramble only ranks (no pot of its own) and the Prizes game, ranked by the Scramble, pays Overall and the flights.
+function gamesFormScrambleInPrizes() { return _gamesFormSelected.has('podium') && _gamesFormPrizes.rank_by === 'scramble' && _gamesFormSelected.has('scramble') && !(Number(_gamesFormSide.scramble.dollar_per_player) > 0) && !(BFEngine.scramblePodiumTotal(_gamesFormSide.scramble) > 0); }
+function gamesFormScrambleToPrizes() {
+  const c = _gamesFormSide.scramble;
+  c.payout = 'winner'; delete c.place_shares; delete c.podium_total; c.dollar_per_player = 0; _gamesFormTouched.add('scramble');
+  if (!_gamesFormSelected.has('podium')) toggleGamesFormGame('podium');
+  _gamesFormPrizes.rank_by = 'scramble';
+  refreshGamesFormSideSection('scramble'); pzRefresh(); refreshGamesFormSplit(true);
+  showToast('Flights and places are set on the Prizes screen.');
+  if (typeof gwGoTo === 'function') gwGoTo('podium');
+}
 function setGamesFormSide(gid, key, val, typing) {
   const c = _gamesFormSide[gid];
   if (key === 'basis') c.basis = val === 'net' ? 'net' : 'gross';
@@ -23453,7 +23466,9 @@ function setGamesFormSide(gid, key, val, typing) {
     c.pairs = c.pairs.map(pr => Array.from({ length: c.team_size }, (_, i) => pr[i] || ''));   // existing teams grow or shrink to the new size
   }
   else if (gid === 'scramble' && key === 'hcp_method') c.hcp_method = ['combined', 'none'].includes(val) ? val : 'ranked';
+  else if (gid === 'scramble' && key === 'payout' && val === 'prizes') { gamesFormScrambleToPrizes(); return; }
   else if (gid === 'scramble' && key === 'payout') {
+    if (gamesFormScrambleInPrizes()) { _gamesFormTouched.delete('scramble'); toggleGamesFormGame('podium'); }   // leaving Flights & places: the Prizes game goes with it
     // Picking a preset here leaves any hand-priced places: the podium total carries over, entered as a $ total.
     if (_gamesFormPodium.mode === 'pl') { const dpp = parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0; _gamesFormPodium.tot = gamesFormPodiumPlan(_gamesFormPodium, c, dpp, gamesFormPodiumPlayers()).total; _gamesFormPodium.mode = 'tot'; _gamesFormPodium.dirty = true; }
     c.payout = ['top2', 'top3'].includes(val) ? val : 'winner'; delete c.place_shares; gamesFormPodiumApply();
