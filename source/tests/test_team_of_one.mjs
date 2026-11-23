@@ -29,4 +29,11 @@ ok(pairsOf(ctx.f(row([['Ann']]), 9)).join() === 'Zed', 'the host\'s as-played te
   ok(c2.f() === false, 'team of 2 on a Gathering with no partner picking: nothing to read (the form says so)'); }
 ok(!/if \(GW_SIDE_STEP\[k\]\) steps\.push/.test(src) && /GW_SIDE_STEP\[k\] !== k/.test(src) && /scramble: 'scramble'/.test(src), 'the Scramble has no Teams step in the wizard');
 ok(/cfg\.teams_by = 'players'/.test(src) && /return null;   \/\/ Registrations are always the source/.test(src), 'host-built teams are no longer saved or read');
+// the saved config for a team of 1 is [[name], ...] and passes validation; a malformed team says exactly what is wrong
+{ const E = (await import('./extract.mjs')).loadEngine();
+  const v = E.validateGameConfig('scramble', { dollar_per_player: 0, basis: 'gross', team_size: 1, pairs: [['Ann'], ['Bo'], ['Cy']] });
+  ok(v.ok, 'team of 1 config with [[name], ...] validates: ' + JSON.stringify(v.errors));
+  const bad = E.validateGameConfig('scramble', { dollar_per_player: 0, basis: 'gross', team_size: 1, pairs: [['Ann', undefined]] });
+  ok(!bad.ok && /each team needs exactly one player/.test(bad.errors[0]), 'the error names the real problem: ' + bad.errors[0]);
+  ok(/pairs: rows\.map\(pr => pr\.slice\(0, BFEngine\.scrambleSize\(c\)\)\)/.test(fs.readFileSync(new URL('../portal.html', import.meta.url), 'utf8')), 'the form saves a team of 1 as [name]'); }
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

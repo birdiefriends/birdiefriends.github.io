@@ -3,7 +3,7 @@ import { loadEngine } from './extract.mjs';
 let pass = 0, fail = 0;
 const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine(), LE = E.BFLiveEdit;
-ok(!!LE && E.ENGINE_VERSION === '1.66.2', 'engine exposes BFLiveEdit, version 1.66.2');
+ok(!!LE && E.ENGINE_VERSION === '1.66.3', 'engine exposes BFLiveEdit, version 1.66.3');
 const set = { v: 1, mode: 'shotgun', holes: 18, group_size: 4, groups: [
   { members: ['A','B','C','D'], start_hole: 1 }, { members: ['E','F','G','H'], start_hole: 4 }, { members: ['I','J','K','L'], start_hole: 7 } ] };
 const teams = { pairs: [['A','B'],['C','D'],['E','F'],['G','H'],['I','J'],['K','L']], names: ['','','','','',''] };

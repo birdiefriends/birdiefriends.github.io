@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.66.2';
+  const ENGINE_VERSION = '1.66.3';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1917,7 +1917,8 @@
         const wellFormed = Array.isArray(v) && v.length >= (f.minPairs != null ? f.minPairs : 2) && (!f.evenPairs || v.length % 2 === 0) && v.every(pr => Array.isArray(pr) && pr.length === sz &&
           pr.every(n => typeof n === 'string' && n.trim()) && new Set(pr.map(n => n.trim().toLowerCase())).size === sz);
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
-        if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
+        if (!wellFormed && f.minPairs === 0) errors.push(f.label + ': each team needs ' + (sz === 1 ? 'exactly one player' : sz + ' different players'));
+        else if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
         else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be on one ' + (sz === 2 ? 'pair' : 'team'));
       } else if (f.type === 'podium') {
         // { flights: [{ id, name, tees?: [..], players?: [..] }], prizes: [{ scope: 'overall' | flightId, place: 1-5, amount?: $, pct?: % of the pot }] }

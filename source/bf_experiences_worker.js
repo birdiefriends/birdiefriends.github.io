@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.66.2 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.66.3 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1395,7 +1395,8 @@ function validateFields(fields, cfg) {
         const wellFormed = Array.isArray(v) && v.length >= (f.minPairs != null ? f.minPairs : 2) && (!f.evenPairs || v.length % 2 === 0) && v.every(pr => Array.isArray(pr) && pr.length === sz &&
           pr.every(n => typeof n === 'string' && n.trim()) && new Set(pr.map(n => n.trim().toLowerCase())).size === sz);
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
-        if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
+        if (!wellFormed && f.minPairs === 0) errors.push(f.label + ': each team needs ' + (sz === 1 ? 'exactly one player' : sz + ' different players'));
+        else if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
         else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be on one ' + (sz === 2 ? 'pair' : 'team'));
       } else if (f.type === 'podium') {
         // { flights: [{ id, name, tees?: [..], players?: [..] }], prizes: [{ scope: 'overall' | flightId, place: 1-5, amount?: $, pct?: % of the pot }] }
