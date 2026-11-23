@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.64.0';
+  const ENGINE_VERSION = '1.65.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2264,6 +2264,47 @@
     return { basis: f.basis, net_mode: f.net_mode || null, net_missing: !!f.net_missing, ranked_by: useParLive ? 'to_par' : 'total', rows };
   }
 
+  // ── Prizes live board ─────────────────────────────────────────────────────────────────────────────────────
+  // Where everyone stands RIGHT NOW in each Prizes scope (Overall, then each flight), read from the saved scores (partial cards welcome).
+  // Ranked the way the payout ranks: by the game the Prizes follow (a Scramble, BestBall...) or by each player's own round.
+  // Each row carries the prize its place would pay today. Returns null when the event has no Prizes.
+  function prizeBoard(row, scorecards, pars, teeByPlayer) {
+    const pc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.podium : null;
+    if (!pc || !pc.table || !Array.isArray(pc.table.prizes)) return null;
+    const games = Array.isArray(row.games) ? row.games : [], flights = pc.table.flights || [];
+    const want = pc.rank_by && pc.rank_by !== 'auto' ? pc.rank_by : null;
+    const src = want && want !== 'round' ? want : (!want ? PRIZE_SOURCES.find(id => games.includes(id)) || null : null);
+    const cards = (scorecards || []).filter(c => c && c.player), parAt = h => (Array.isArray(pars) && Number.isFinite(Number(pars[h - 1])) ? Number(pars[h - 1]) : null);
+    let board = src ? fourballBoard(row, cards, pars, src) : null;
+    if (!board) {                                   // each player on their own round
+      const have = new Map(cards.map(c => [norm(c.player), c])), roster = [];
+      const seen = new Set();
+      cards.forEach(c => { const k = norm(c.player); if (!seen.has(k)) { seen.add(k); roster.push(c.player); } });
+      const rows = roster.map(nm => {
+        const c = have.get(norm(nm)), hs = (c.holes || []).map((v, i) => ({ hole: i + 1, v })).filter(x => typeof x.v === 'number' && x.v > 0), total = hs.reduce((a, x) => a + x.v, 0);
+        const parsOk = hs.length > 0 && hs.every(x => parAt(x.hole) != null);
+        return { pair: [nm], name: null, played: hs.length, thru: hs.length, total, to_par: parsOk ? total - hs.reduce((a, x) => a + parAt(x.hole), 0) : (hs.length ? null : 0), complete: hs.length >= (c.hole_count === 9 ? 9 : 18) };
+      });
+      const byPar = rows.every(r => r.to_par !== null);
+      board = { basis: 'gross', net_missing: false, ranked_by: byPar ? 'to_par' : 'total', rows };
+    }
+    const higher = board.ranked_by === 'points';
+    const key = r => board.ranked_by === 'points' ? r.total : board.ranked_by === 'to_par' ? r.to_par : r.total;
+    const scopeDefs = [{ id: 'overall', name: 'Overall', only: null }].concat(flights.map(f => ({ id: f.id, name: f.name, only: f })));
+    const unflighted = [];
+    const scopes = scopeDefs.map(sd => {
+      const mine = board.rows.filter(r => !sd.only || flightOfRow([sd.only], { members: r.pair }, teeByPlayer) === sd.id);
+      const rows = mine.map(r => Object.assign({}, r, { label: r.name || r.pair.join(' & '), members: r.pair })).sort((a, b) => (a.played === 0) - (b.played === 0) || (higher ? key(b) - key(a) : key(a) - key(b)) || b.played - a.played);
+      let place = 0, prev = null; rows.forEach((r, i) => { const k = r.played === 0 ? 'none' : key(r) + (board.ranked_by === 'total' ? '|' + r.played : ''); if (k !== prev) { place = i + 1; prev = k; } r.place = r.played === 0 ? null : place; });
+      rows.forEach(r => { r.tied = r.place != null && rows.filter(x => x.place === r.place).length > 1; });
+      const prizes = pc.table.prizes.filter(z => z.scope === sd.id).sort((a, b) => a.place - b.place).map(z => ({ place: z.place, amount: z.amount > 0 ? Number(z.amount) : 0 }));
+      rows.forEach(r => { const z = prizes.find(x => x.place === r.place); r.prize = z && z.amount > 0 ? z.amount : 0; });
+      return { id: sd.id, name: sd.name, rows, prizes, field: rows.length, leader: rows.find(r => r.place === 1) || null };
+    });
+    if (flights.length) board.rows.forEach(r => { if (!flightOfRow(flights, { members: r.pair }, teeByPlayer)) unflighted.push(r.name || r.pair.join(' & ')); });
+    return { basis: board.basis, ranked_by: board.ranked_by, source: src || 'round', net_missing: !!board.net_missing, scopes, unflighted };
+  }
+
   // ── BestBall match view (Dev-93) ────────────────────────────────────────
   // For the Live Actions screen: each foursome (two pairs head to head) hole by hole, with the running tally of
   // every segment. Read from the same payout result Close uses (so it cannot disagree), partial cards welcome.
@@ -3906,7 +3947,7 @@
     courseHandicap, playingHandicap, strokesOnHole, rankWithin, netCard,
     gatheringConfigFromLegacy,
     computeRoundPayout, effectiveStartHoles,
-    computeGatheringGamesPayout, fourballBoard, fourballMatchView, matchSegmentResult, fourballSegmentPlan, PERIODS, PERIOD_ORDER, periodKey, periodList,
+    computeGatheringGamesPayout, fourballBoard, prizeBoard, fourballMatchView, matchSegmentResult, fourballSegmentPlan, PERIODS, PERIOD_ORDER, periodKey, periodList,
     latestScorecardPerPlayer,
     scorecardMissingHoles,
     fourballGroups, playerInitials, rollGameSetup, rollFormatsFor, rollSideVariant, rollDraw, mergeHoleScores,

@@ -3709,7 +3709,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.64.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.65.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -6905,7 +6905,7 @@ function myGroupBannerHtml(evt) {
 function leaderboardRowHtml(evt) {
   if (!evt || evt.source !== 'gathering' || !evt.gatheringId || !currentPlayer || isGuest()) return '';
   const row = typeof _gatheringGamesIndex !== 'undefined' ? _gatheringGamesIndex.get(evt.gatheringId) : null;
-  if (!row || !BFEngine.sideGames().some(id => (row.games || []).includes(id))) return '';
+  if (!row || !(BFEngine.sideGames().some(id => (row.games || []).includes(id)) || (row.games || []).includes('podium'))) return '';
   const t = evt.dt instanceof Date ? +evt.dt : 0, now = Date.now();
   if (!t || now < t - 3 * 3600e3 || now > t + 20 * 3600e3) return '';
   return `<button onclick="openGatheringLeaderboard(${evt.gatheringId})" style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,0.06);border-radius:8px;margin:6px 0 2px;width:100%;border:none;cursor:pointer;font-family:inherit;text-align:left;color:rgba(255,255,255,0.9);font-size:0.83rem;font-weight:600">
@@ -6931,6 +6931,50 @@ function leaderboardHtml(board, me, opts) {
   const note = [opts && opts.noPars ? 'Course pars are missing, so teams are ranked by strokes, not to par.' : '', board.net_missing ? 'Some handicaps are missing, so the net score is not complete.' : ''].filter(Boolean).join(' ');
   return `<div style="padding:0 16px">
     <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">${unit}${pts ? ', most wins' : ''} · live from the scores saved so far · updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>${rows}
+    ${note ? `<div style="font-size:0.76rem;color:#8a6d00;margin:4px 0">${esc(note)}</div>` : ''}
+    <div style="font-size:0.74rem;color:var(--text-muted);margin:6px 0 2px">Not final until the host closes the round.</div></div>`;
+}
+// Prizes: the same live standings, split the way the prizes are. One chip per scope (Overall, each flight) shows who leads it; tap a chip
+// for that scope's order. Rows that would be paid today carry their prize. Reads BFEngine.prizeBoard, so it follows the host's setup.
+let _lbUi = { scope: 'overall', sort: 'score' }, _lbRepaint = null;
+function lbPick(id) { _lbUi.scope = id; if (_lbRepaint) _lbRepaint(); }
+function lbSort(k) { _lbUi.sort = k; if (_lbRepaint) _lbRepaint(); }
+function leaderboardPrizesHtml(pb, me, opts) {
+  const lc = x => String(x || '').trim().toLowerCase(), esc = GRP_ESC, money = v => '$' + (Math.round(v * 100) / 100).toFixed(Number.isInteger(Math.round(v * 100) / 100) ? 0 : 2);
+  if (!pb || !pb.scopes || !pb.scopes.length || !pb.scopes[0].rows.length) return `<div style="padding:18px 16px;font-size:0.9rem;color:var(--text-muted)">No players yet.</div>`;
+  if (!pb.scopes[0].rows.some(r => r.played > 0)) return `<div style="padding:18px 16px;font-size:0.9rem;color:var(--text-muted)">No scores saved yet. The leaderboard fills in as the first holes are entered.</div>`;
+  const pts = pb.ranked_by === 'points', byPar = pb.ranked_by === 'to_par';
+  const fmt = r => pts ? String(r.total) : byPar ? (r.to_par === 0 ? 'E' : r.to_par > 0 ? '+' + r.to_par : String(r.to_par)) : String(r.total);
+  const first = n => String(n).trim().split(/\s+/)[0], ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  const label = r => r.label.includes(' & ') || r.members.length > 1 ? r.members.map(first).join(' & ') : r.label;
+  const mineRow = r => (r.members || []).some(n => lc(n) === lc(me));
+  const cur = pb.scopes.find(x => x.id === _lbUi.scope) || pb.scopes[0];
+  const chips = pb.scopes.map(sc => { const on = sc.id === cur.id, L = sc.leader;
+    return `<button type="button" onclick="lbPick('${esc(sc.id)}')" style="flex:1;min-width:104px;text-align:left;padding:8px 10px;border-radius:12px;border:1.5px solid ${on ? 'var(--green)' : 'var(--border)'};background:${on ? 'var(--green-light)' : '#fff'};font-family:inherit;cursor:pointer">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted)">${sc.id === 'overall' ? '🏆' : '🚩'} ${esc(sc.name)}</div>
+      <div style="font-size:0.9rem;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${L ? esc(label(L)) : '–'}</div>
+      <div style="font-size:0.74rem;color:var(--text-muted)">${L ? `${fmt(L)} · ${L.complete ? 'F' : 'thru ' + L.thru}` : 'no scores'}</div></button>`; }).join('');
+  const spots = pb.scopes.map(sc => { const r = sc.rows.find(mineRow); return r && r.place != null ? `${r.tied ? 'T' : ''}${ord(r.place)} ${esc(sc.name)}` : ''; }).filter(Boolean);
+  const sortBtn = (k, t) => `<button type="button" onclick="lbSort('${k}')" style="flex:1;height:32px;border-radius:8px;border:1.5px solid ${_lbUi.sort === k ? 'var(--green)' : 'var(--border)'};background:${_lbUi.sort === k ? 'var(--green)' : '#fff'};color:${_lbUi.sort === k ? '#fff' : 'var(--text-muted)'};font-family:inherit;font-size:0.76rem;font-weight:700;cursor:pointer">${t}</button>`;
+  const key = r => pts ? -r.total : byPar ? r.to_par : r.total;
+  const rows = cur.rows.slice(); if (_lbUi.sort === 'holes') rows.sort((a, b) => b.played - a.played || key(a) - key(b));
+  const paidTo = Math.max(0, ...cur.prizes.filter(z => z.amount > 0).map(z => z.place));
+  let list = '', lastPaid = -1; rows.forEach((r, i) => { if (_lbUi.sort === 'score' && r.place != null && r.place <= paidTo) lastPaid = i; });
+  rows.forEach((r, i) => { const mine = mineRow(r);
+    list += `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;margin-bottom:5px;border:1.5px solid ${mine ? 'var(--green)' : 'var(--border)'};background:${mine ? 'var(--green-light)' : '#fff'}">
+      <div style="width:30px;text-align:center;font-family:'DM Mono',monospace;font-weight:700">${r.place == null ? '–' : (r.tied ? 'T' : '') + r.place}</div>
+      <div style="flex:1;min-width:0;font-size:0.9rem;line-height:1.3"><b>${esc(label(r))}</b>${r.prize > 0 ? ` <span style="font-size:0.72rem;font-weight:700;color:#0a5c3c;background:#d9f2e6;border-radius:8px;padding:1px 7px;white-space:nowrap">${money(r.prize)}</span>` : ''}</div>
+      <div style="width:46px;text-align:right;font-size:0.76rem;color:var(--text-muted)">${r.played ? (r.complete ? 'F' : 'thru ' + r.thru) : '–'}</div>
+      <div style="width:46px;text-align:right;font-family:'DM Mono',monospace;font-size:1.1rem;font-weight:700">${r.played ? fmt(r) : '–'}</div></div>`;
+    if (i === lastPaid && i < rows.length - 1) list += `<div style="font-size:0.68rem;color:var(--text-muted);text-align:center;margin:-1px 0 6px;letter-spacing:0.04em">▲ PAID PLACES ▲</div>`; });
+  const unit = pts ? 'Points, most wins' : byPar ? (pb.basis === 'net' ? 'Net to par' : 'Gross to par') : 'Strokes';
+  const note = [opts && opts.noPars ? 'Course pars are missing, so players are ranked by strokes, not to par.' : '', pb.net_missing ? 'Some handicaps are missing, so the net score is not complete.' : '', opts && opts.netNote ? opts.netNote : '',
+    cur.id !== 'overall' && pb.unflighted && pb.unflighted.length ? 'No tee box set, so not in a flight (Overall only): ' + pb.unflighted.join(', ') + '.' : ''].filter(Boolean).join(' ');
+  return `<div style="padding:0 16px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${chips}</div>
+    ${spots.length ? `<div style="font-size:0.8rem;margin-bottom:8px">You: <b>${spots.join(' · ')}</b></div>` : ''}
+    <div style="display:flex;gap:6px;margin-bottom:8px">${sortBtn('score', 'By score')}${sortBtn('holes', 'By holes played')}</div>
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">${esc(cur.name)} · ${unit} · prizes shown are what each place pays today · updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>${list}
     ${note ? `<div style="font-size:0.76rem;color:#8a6d00;margin:4px 0">${esc(note)}</div>` : ''}
     <div style="font-size:0.74rem;color:var(--text-muted);margin:6px 0 2px">Not final until the host closes the round.</div></div>`;
 }
@@ -6961,13 +7005,15 @@ async function openGatheringLeaderboard(gid) {
     try {
       const row = gatheringRowWithLiveTeams(_gatheringGamesIndex.get(gid), gid);
       const sideGid = row ? BFEngine.sideGames().find(id => (row.games || []).includes(id)) || null : null;
-      if (!sideGid) return;
+      const hasPrizes = !!(row && (row.games || []).includes('podium') && row.game_configs && row.game_configs.podium);
+      if (!sideGid && !hasPrizes) return;
       const res = await fetch(`${SCORECARD_API}/scorecards?event=${encodeURIComponent(gamesScoreKeyForGid(gid))}&input=strokes`);
       const data = await res.json();
       const cards = gcActiveCards(gid, latestScorecardPerPlayer(data.scorecards || []));
       await ensureVenueTeeInfoByName(csNormalizedVenueName(evt));
       const pars = csResolvePars(evt), okPars = Array.isArray(pars) && pars.length === 18 ? pars : null;
-      const board = BFEngine.fourballBoard(row, cards, okPars, sideGid);
+      const pb = hasPrizes ? BFEngine.prizeBoard(row, cards, okPars, gatheringTeesByPlayer(gid)) : null;
+      const board = !pb && sideGid ? BFEngine.fourballBoard(row, cards, okPars, sideGid) : null;
       const el = document.getElementById('host-option-sheet') ? sheetBody() : null; if (!el) { clearInterval(_lbTimer); _lbTimer = null; return; }
       const norm = x => String(x || '').trim().toLowerCase(), holeCount = evt.holes === 9 ? 9 : 18;
       const regYes = gatheringRegData.filter(r => r.gatheringId === gid && r.status === 'Yes' && !isOpenSpotName(r.player)).map(r => r.player);
@@ -6982,8 +7028,12 @@ async function openGatheringLeaderboard(gid) {
         try { if ((row.games || []).includes('birdieball')) { const b = await (await fetch(`${BFE_API}/bfe/birdieball-answers?gathering_id=${gid}`)).json(); bb = b.ok ? (b.answers || []) : []; } } catch (e) { /* MiserBall answers missing */ }
         summary = computeGatheringGamesPayout(row, cards, ctp, bb);
       }
-      el.innerHTML = leaderboardHtml(board, currentPlayer, { noPars: !okPars })
-        + leaderboardPrelimHtml({ allIn, waiting: [...new Set(waiting)], summary, closed, me: currentPlayer, gid, isHost: evt.hostId === currentPlayer });
+      const tail = leaderboardPrelimHtml({ allIn, waiting: [...new Set(waiting)], summary, closed, me: currentPlayer, gid, isHost: evt.hostId === currentPlayer });
+      if (pb) {
+        const lopts = { noPars: !okPars, netNote: row.game_configs.podium.basis === 'net' && pb.source === 'round' ? 'Net is applied when the round closes. This shows gross.' : '' };
+        _lbRepaint = () => { const e2 = document.getElementById('host-option-sheet') ? sheetBody() : null; if (e2) e2.innerHTML = leaderboardPrizesHtml(pb, currentPlayer, lopts) + tail; };
+        _lbRepaint();
+      } else { _lbRepaint = null; el.innerHTML = leaderboardHtml(board, currentPlayer, { noPars: !okPars }) + tail; }
     } catch (e) { console.warn('[Leaderboard]', e.message); }
   };
   await render();

@@ -108,3 +108,9 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 - Prize places are typed in dollars; the prize pot = sum of places, and `dollar_per_player` is computed (ceil to the cent over Yes count) by `pzSync()` (runs on every table edit and when the money step builds). No $/player retype. Money step Prizes row is a read-only total; Skins takes the remainder as before. Presets are dollar amounts (~40% of buy-in pot, rounded to $5).
 - Older tables with % places keep the typed $/player input (pzHasPct).
 - Tee flights, ranking and the engine are unchanged.
+
+## v4.107.0 — live leaderboard follows the Prizes config (engine 1.65.0)
+- `BFEngine.prizeBoard(row, cards, pars, teeByPlayer)`: per scope (Overall + each flight) live rows from partial cards, ranked by the Prizes' source game or each player's round, each row carries today's prize. Flights use the published tee boxes (same `flightOfRow`).
+- Leaderboard sheet: when the event has Prizes, shows leader chips (one per scope, tap to switch), a "You: 1st Green · T3 Overall" line, By score / By holes played sort, prize pills on paid rows and a PAID PLACES divider. Card row now also shows for a Prizes-only event. Events without Prizes keep the old board.
+- Worker file regenerated only for the schema-header version string (no behaviour change); redeploy optional.
+- Net basis on a round-ranked Prizes shows gross live (note says so); net applies at Close.
