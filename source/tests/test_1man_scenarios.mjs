@@ -80,4 +80,15 @@ ok(threw === 0, 'fuzz: no scenario throws (' + threw + ' of 300)'); ok(unbalance
 // 12. duplicate names / case differences between the team list, cards and tee map
 { const cs = NAMES.map((n, i) => card(i === 3 ? n.toUpperCase() : n, h => PARS[h])); let ex = null, x; try { x = run(mkRow(NAMES), cs); } catch (e) { ex = e; }
   ok(!ex, 'a card saved in a different letter case does not crash'); if (x) balanced(x, 'case-mismatched card'); }
+// 13. fixed prizes: a no-show leaves the buy-in pot but not the posted prizes. Distinct scores, so no ties muddy the amounts.
+{ const posted = x => { const g = sc => x.payouts.filter(p => p.podium > 0).map(p => p.podium).sort((a, b) => b - a); return g(); };
+  const distinct = ps => ps.map((n, i) => card(n, h => PARS[h] + (h < i ? 1 : 0) + (i % 2)));
+  const full = run(mkRow(NAMES), distinct(NAMES)), short = run(mkRow(NAMES.slice(0, 22)), distinct(NAMES.slice(0, 22)));
+  ok(full.podium.pot === 200 && short.podium.pot === 200, 'the Prizes pot is the posted $200 with 25 players and with 22, got ' + full.podium.pot + ' / ' + short.podium.pot);
+  ok(Math.max(...posted(short)) === Math.max(...posted(full)) && Math.max(...posted(short)) === 80, 'the top winner (Overall $40 + a flight $40) takes the same $80 after three no-shows, got ' + Math.max(...posted(short)) + ' vs ' + Math.max(...posted(full)));
+  ok(!short.podium.scaled, 'nothing is scaled down for a smaller field');
+  balanced(short, 'fixed prizes with 22 players');
+  // a field too small to fund the posted prizes: capped by what is left, shrunk evenly, still balanced
+  const tiny = run(mkRow(NAMES.slice(0, 10)), distinct(NAMES.slice(0, 10)), { 3: { player: NAMES[0], dist: 3 }, 8: { player: NAMES[1], dist: 3 }, 12: { player: NAMES[2], dist: 3 }, 16: { player: NAMES[3], dist: 3 } });
+  balanced(tiny, 'prizes + CTP bigger than a 10-player pot'); console.log('  10 players:', JSON.stringify({ pot: tiny.total_pot, podium: tiny.podium.pot, scaled: !!tiny.podium.scaled, paid: sum(tiny) })); }
 console.log(`1man_scenarios: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

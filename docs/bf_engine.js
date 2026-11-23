@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.66.3';
+  const ENGINE_VERSION = '1.67.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1110,7 +1110,9 @@
     id: 'podium', order: 27, entity: 'individual',
     carve(state, addon, inputs) {
       const L = state.ledger, table = addon.table && Array.isArray(addon.table.prizes) ? addon.table : { flights: [], prizes: [] }, flights = table.flights || [];
-      const dpp = Number(addon.dollar_per_player) || 0, configuredPot = dpp * L.n, pot = Math.min(configuredPot, Math.max(0, state.remaining)), capped = pot < configuredPot;
+      const dpp = Number(addon.dollar_per_player) || 0;
+      // Prizes priced in dollars are FIXED: a no-show leaves the buy-in pot but not the posted prizes (the money comes from the pot's other games). Only percent prizes follow the field.
+      const fixedPrizes = table.prizes.length > 0 && table.prizes.every(z => Number(z.amount) > 0), configuredPot = fixedPrizes ? table.prizes.reduce((a, z) => a + Number(z.amount), 0) : dpp * L.n, pot = Math.min(configuredPot, Math.max(0, state.remaining)), capped = pot < configuredPot;
       state.remaining -= pot;
       const pr = prizeRows(state, addon, inputs), tee = inputs.teeByPlayer;
       const owed = z => (z.amount > 0 ? Number(z.amount) : (Number(z.pct) / 100) * pot);
