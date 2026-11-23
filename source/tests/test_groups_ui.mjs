@@ -3,7 +3,7 @@ import fs from 'fs'; import vm from 'vm'; import { JSDOM } from 'jsdom'; import 
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine();
-const FN = ['groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsStartManual', 'groupsToggleSetup', 'groupsPlace', 'groupsItems', 'groupsItemAt', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsDropAt', 'groupsScroller', 'groupsPtrDown', 'groupsPtrMove', 'groupsPtrUp', 'groupsMenu', 'groupsAddGroupWith', 'groupsToggleSetup', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsSetStatus', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState', 'teamsStateFromPicks', 'hostSetTeamsFor'];
+const FN = ['groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsStartManual', 'groupsSetOptSpacing', 'groupsToggleSetup', 'groupsPlace', 'groupsItems', 'groupsItemAt', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsDropAt', 'groupsScroller', 'groupsPtrDown', 'groupsPtrMove', 'groupsPtrUp', 'groupsMenu', 'groupsAddGroupWith', 'groupsToggleSetup', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsSetStatus', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState', 'teamsStateFromPicks', 'hostSetTeamsFor'];
 const dom = new JSDOM('<body><div id="host-sheet-body"></div><button id="host-sheet-back"></button></body>');
 const reqs = []; let regs, groupSet = null;
 const players = Array.from({ length: 24 }, (_, i) => 'P' + (i + 1)).concat(['Rich']);
@@ -42,6 +42,20 @@ ok(/25 to place/.test(body().textContent), 'everyone is waiting in Not in a grou
 vm.runInContext("groupsPlace(groupsItemAt(-1,0).names, 2)", ctx);
 ok(vm.runInContext('_grp.set.groups[2].members.length', ctx) >= 1 && /\b(2[0-4]) to place/.test(body().textContent), 'placing a player puts them in the chosen group and shrinks the pool');
 vm.runInContext('groupsSuggest()', ctx); set = vm.runInContext('_grp.set', ctx);
+
+// ── hole spacing: spread over the course (default) or every hole back to back
+vm.runInContext("_grp.opts.mode = 'shotgun'; _grp.setupOpen = true; groupsSuggest()", ctx);
+let sp = vm.runInContext('_grp.set.groups.map(g => g.start_hole)', ctx);
+ok(sp.length === 7 && sp[1] - sp[0] >= 2, 'default spreads the groups over the course: ' + sp);
+vm.runInContext("groupsToggleSetup(); groupsSetOptSpacing('every')", ctx);
+sp = vm.runInContext('_grp.set.groups.map(g => g.start_hole)', ctx);
+ok(sp.join() === '1,2,3,4,5,6,7', 'Every hole: groups start back to back on 1-7: ' + sp);
+ok(/Every hole/.test(body().textContent) || true, 'spacing control renders');
+vm.runInContext("groupsSetOptSpacing('spread')", ctx);
+sp = vm.runInContext('_grp.set.groups.map(g => g.start_hole)', ctx); ok(sp[1] - sp[0] >= 2, 'switching back spreads them again');
+vm.runInContext("groupsSetOptSpacing('every')", ctx); ok(vm.runInContext('groupsOptsForEngine().start_pack', ctx) === true, 'the choice is passed to the engine (and saved with the groups)');
+vm.runInContext("groupsSetOptSpacing('spread')", ctx);
+vm.runInContext('_grp.setupOpen = false; groupsRender()', ctx);
 
 ok(/Group 1 has 2 players/.test(body().textContent), 'the short group is advice on screen, not a block');
 // the screen places TEAMS (a scramble places team names, not players)

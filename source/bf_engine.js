@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.60.0';
+  const ENGINE_VERSION = '1.61.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -3487,9 +3487,10 @@
     return units;
   }
   // Start holes for n groups: spread evenly round the course (6 groups -> 1,4,7,10,13,16). More groups than holes double up (A/B waves).
-  function groupsAutoStartHoles(n, holes, allowed) {
+  // pack: back-to-back starts (1, 2, 3 ...) instead of spreading the groups over the whole course; once there are more groups than holes they double up (A/B).
+  function groupsAutoStartHoles(n, holes, allowed, pack) {
     holes = holes || 18; n = Math.max(0, n | 0); if (!n) return [];
-    const pool = Array.isArray(allowed) && allowed.length ? allowed.slice().sort((a, b) => a - b) : Array.from({ length: holes }, (_, i) => i + 1);
+    const pool = Array.isArray(allowed) && allowed.length ? allowed.slice().sort((a, b) => a - b) : Array.from({ length: pack ? Math.min(n, holes) : holes }, (_, i) => i + 1);
     const out = [], per = Math.ceil(n / pool.length), slots = Math.ceil(n / per);
     for (let i = 0; i < n; i++) { const s = Math.floor(i / per); out.push({ start_hole: pool[Math.min(pool.length - 1, Math.floor(s * pool.length / slots))], wave: per > 1 ? ['A', 'B', 'C'][i % per] : undefined }); }
     return out.map(o => (o.wave ? o : { start_hole: o.start_hole }));
@@ -3500,7 +3501,7 @@
     const o = Object.assign({}, GROUP_DEFAULTS, opts || {});
     if (o.mode === 'shotgun') {
       const hs = o.start_holes && o.start_holes.length ? o.start_holes : null;
-      const auto = groupsAutoStartHoles(groups.length, o.holes, hs);
+      const auto = groupsAutoStartHoles(groups.length, o.holes, hs, !!o.start_pack);
       groups.forEach((g, i) => { if (overwrite || g.start_hole == null) { g.start_hole = auto[i].start_hole; if (auto[i].wave) g.wave = auto[i].wave; else delete g.wave; } delete g.tee_time; });
     } else if (o.mode === 'tee_times') {
       groups.forEach((g, i) => { if (overwrite || !g.tee_time) g.tee_time = groupsTimeAdd(o.first_tee, i * o.interval); delete g.start_hole; delete g.wave; });
@@ -3566,7 +3567,7 @@
     }));
     groups.forEach(g => { g.units.sort((a, b) => rank.get(a) - rank.get(b)); g.members = g.units.flatMap(id => byId.get(id).members); });
     groupsSchedule(groups, o, true);
-    const set = { v: 1, mode: o.mode, holes: o.holes, group_size: o.group_size, groups, rules: { spread: o.spread, avoid: o.avoid || [], force: o.force || [], ...(o.start_holes ? { start_holes: o.start_holes } : {}), ...(o.mode === 'tee_times' ? { first_tee: o.first_tee, interval: o.interval } : {}) } };
+    const set = { v: 1, mode: o.mode, holes: o.holes, group_size: o.group_size, groups, rules: { spread: o.spread, avoid: o.avoid || [], force: o.force || [], ...(o.start_holes ? { start_holes: o.start_holes } : {}), ...(o.start_pack ? { start_pack: true } : {}), ...(o.mode === 'tee_times' ? { first_tee: o.first_tee, interval: o.interval } : {}) } };
     return { set, warnings: warnings.concat(groupsValidate(set, units, o)) };
   }
   // Soft checks. Everything is advice: the host can save a set with any of these.
