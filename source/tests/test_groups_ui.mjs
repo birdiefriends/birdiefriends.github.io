@@ -43,6 +43,10 @@ vm.runInContext("groupsPlace(groupsItemAt(-1,0).names, 2)", ctx);
 ok(vm.runInContext('_grp.set.groups[2].members.length', ctx) >= 1 && /\b(2[0-4]) to place/.test(body().textContent), 'placing a player puts them in the chosen group and shrinks the pool');
 vm.runInContext('groupsSuggest()', ctx); set = vm.runInContext('_grp.set', ctx);
 
+// ── the two panes scroll on their own (so a player can be dragged from the pool to the last groups)
+ok(!!doc.getElementById('grp-pool-pane') && !!doc.getElementById('grp-groups-pane') && doc.getElementById('grp-pool-pane') !== doc.getElementById('grp-groups-pane'), 'the pool and the groups are separate panes');
+ok(/\.grp-pane\s*\{[^}]*overflow-y:\s*auto[^}]*max-height/.test(src) && /overscroll-behavior:\s*contain/.test(src), 'each pane scrolls inside its own box');
+ok(/closest\('\.grp-pane'\)/.test(src), 'a touch drag auto-scrolls the pane under the finger, not just the one it started in');
 // ── hole spacing: spread over the course (default) or every hole back to back
 vm.runInContext("_grp.opts.mode = 'shotgun'; _grp.setupOpen = true; groupsSuggest()", ctx);
 let sp = vm.runInContext('_grp.set.groups.map(g => g.start_hole)', ctx);

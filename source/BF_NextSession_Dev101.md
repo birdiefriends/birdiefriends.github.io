@@ -65,3 +65,8 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 - Portal v4.97.0: Groups screen 'I'll place the players myself' (groupsStartManual): empty groups sized to the field (start holes/times pre-filled), everyone in 'Not in a group', host places with the row menu or drag handle. For the 1Man (individual, groups of 3). Note: row menu (groupsMenu) still uses the bottom-anchored openHostSheet.
 
 - Portal v4.98.0 / engine 1.61.0: Groups settings 'Hole spacing' (Spread out | Every hole). start_pack in BFGroups.schedule/suggest rules: back-to-back starts 1,2,3... (A/B doubling only when groups > holes). Brian's 1Man: every hole.
+
+## v4.99.0 — Playing groups panes scroll independently
+- The "Not in a group" pool and the groups list are now separate scroll boxes (`.grp-pane`, ids `grp-pool-pane` / `grp-groups-pane`; 60vh, 28vh/42vh on phones).
+- Touch drag auto-scrolls whichever pane is under the finger (not just the pane the drag started in), so the last groups can be reached.
+- Full suite: only the four known baseline failures.

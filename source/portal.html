@@ -1246,6 +1246,9 @@ body {
   padding: 14px 16px 24px;
   background: #EAF6F0;
 }
+/* Playing groups: the pool and the groups scroll on their own, so a player can be dragged from one to the other without the page getting in the way */
+.grp-pane { overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; max-height: 60vh; padding-right: 2px; }
+@media (max-width: 700px) { #grp-pool-pane { max-height: 28vh; } #grp-groups-pane { max-height: 42vh; } }
 .host-sheet-body .section-label { margin: 14px 2px 6px; }
 .host-sheet-body .section-label:first-child { margin-top: 0; }
 .host-entry-row {
@@ -6452,14 +6455,17 @@ function groupsPtrDown(ev, gi, ii) {
   document.body.appendChild(ghost);
   _grpPtr = { ghost, hover: null, scroller: groupsScroller(ev.currentTarget), y: ev.clientY, id: ev.pointerId, handle: ev.currentTarget };
   try { ev.currentTarget.setPointerCapture(ev.pointerId); } catch (e) { /* ok */ }
-  _grpPtr.timer = setInterval(() => {   // auto-scroll near the top or bottom of the visible list
-    const p = _grpPtr; if (!p) return; const sc = p.scroller, r = sc ? sc.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
-    const d = p.y < r.top + 70 ? -14 : p.y > r.bottom - 70 ? 14 : 0; if (d) { if (sc) sc.scrollTop += d; else window.scrollBy(0, d); }
+  _grpPtr.x = ev.clientX;
+  _grpPtr.timer = setInterval(() => {   // auto-scroll whichever pane the finger is over (the pool or the groups) near its top or bottom edge
+    const p = _grpPtr; if (!p) return;
+    const under = document.elementFromPoint ? document.elementFromPoint(p.x, p.y) : null, pane = under && under.closest ? under.closest('.grp-pane') : null;
+    const sc = pane || p.scroller, r = sc ? sc.getBoundingClientRect() : { top: 0, bottom: window.innerHeight }, zone = Math.min(70, (r.bottom - r.top) / 3);
+    const d = p.y < r.top + zone ? -14 : p.y > r.bottom - zone ? 14 : 0; if (d) { if (sc) sc.scrollTop += d; else window.scrollBy(0, d); }
   }, 30);
 }
 function groupsPtrMove(ev) {
   const p = _grpPtr; if (!p || ev.pointerId !== p.id) return; ev.preventDefault();
-  p.y = ev.clientY; p.ghost.style.left = (ev.clientX - 20) + 'px'; p.ghost.style.top = (ev.clientY - 44) + 'px';
+  p.y = ev.clientY; p.x = ev.clientX; p.ghost.style.left = (ev.clientX - 20) + 'px'; p.ghost.style.top = (ev.clientY - 44) + 'px';
   const t = groupsDropAt(ev.clientX, ev.clientY);
   if (p.hover && p.hover !== (t && t.el)) p.hover.style.outline = '';
   if (t) { t.el.style.outline = '2.5px solid var(--green)'; p.hover = t.el; } else p.hover = null;
@@ -6533,7 +6539,7 @@ function groupsRender() {
         ${!(g.members || []).length ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-bottom:6px;color:var(--text-muted)" onclick="groupsRemoveGroup(${gi})">Remove group</button>` : ''}
       </div>`).join('') + `<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="groupsAddGroup()">➕ Add a group</button>`;
   }
-  const panels = s ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start"><div>${poolHtml}</div><div>${groupsHtml}</div></div>`
+  const panels = s ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start"><div id="grp-pool-pane" class="grp-pane">${poolHtml}</div><div id="grp-groups-pane" class="grp-pane">${groupsHtml}</div></div>`
     : `<div style="font-size:0.84rem;color:var(--text-muted);padding:10px 2px">No playing groups yet. Tap Build playing groups to have them made for you, or I’ll place the players myself to choose who plays with whom.</div>`;
   body.innerHTML = `<div style="font-size:1.15rem;font-weight:700;margin-bottom:2px">👥 Playing groups</div>
     <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px">${GRP_ESC(_grp.g.name)}${_grp.publishedAt ? ` · published (v${_grp.version})` : ' · not published yet'}<br>Teams stay together. This sets who tees off together.</div>
