@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.62.0';
+  const ENGINE_VERSION = '1.63.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1070,6 +1070,57 @@
   // (A shared pool or a split can be offered later as a tie rule; nothing else here needs to change.)
   //   addon: { dollar_per_player, basis:'gross'|'net', period }
   // Like BestBall it can never take more than the pot has left (reported as `capped`).
+  // ── Prizes: flights + places (v1.62.0) ────────────────────────────────────────────────────────────────────────────────
+  // podium = { flights: [{ id, name, tees?, players? }], prizes: [{ scope: 'overall' | flightId, place, amount? | pct? }] }. A flight is a group of
+  // players ranked among themselves; "overall" ranks everyone. A player can win overall AND in their flight. How a player lands in a flight is
+  // one small function (flightOfPlayer): by the tee box they were given, or by name. Other ways (handicap, age) are new cases there, nothing else.
+  function lowscorePodiumOf(addon) {
+    const p = addon && addon.podium; if (!p || !Array.isArray(p.prizes) || !p.prizes.length) return null;
+    return { flights: Array.isArray(p.flights) ? p.flights : [], prizes: p.prizes };
+  }
+  function flightOfPlayer(flights, name, teeByPlayer) {
+    const nm = norm(name), tee = teeByPlayer ? String(teeByPlayer.get ? teeByPlayer.get(nm) || '' : teeByPlayer[nm] || '').trim().toLowerCase() : '';
+    const f = (flights || []).find(x => (x.players || []).some(pn => norm(pn) === nm) || (tee && (x.tees || []).some(t => String(t).trim().toLowerCase() === tee)));
+    return f ? f.id : null;
+  }
+  function lowscorePodium(state, addon, podium, rows, pot, head, tail, inputs) {
+    const L = state.ledger;
+    const owed = pr => (pr.amount > 0 ? Number(pr.amount) : (Number(pr.pct) / 100) * pot);
+    const total = podium.prizes.reduce((a, pr) => a + owed(pr), 0);
+    const ratio = total > pot && total > 0 ? pot / total : 1;   // the table asks for more than the pot holds: every prize shrinks the same way, and the result says so
+    const scopes = [{ id: 'overall', name: 'Overall', members: rows }].concat(podium.flights.map(f => ({ id: f.id, name: f.name,
+      members: rows.filter(r => flightOfPlayer([f], r.player, inputs && inputs.teeByPlayer) === f.id) })));
+    const paid = new Map(), prizesOut = [], scopesOut = [];
+    let spent = 0, unplaced = 0;
+    scopes.forEach(sc => {
+      const mine = podium.prizes.filter(pr => pr.scope === sc.id).sort((a, b) => a.place - b.place); if (!mine.length) return;
+      const ranked = sc.members.filter(r => r.complete).sort((a, b) => a.total - b.total);
+      const groups = []; ranked.forEach(r => { const g = groups[groups.length - 1]; if (g && g.total === r.total) g.rows.push(r); else groups.push({ total: r.total, rows: [r], start: ranked.indexOf(r) }); });
+      const prizeAt = place => mine.find(pr => pr.place === place);
+      const winnersOut = [];
+      groups.forEach(g => {
+        const covered = []; for (let k = 1; k <= g.rows.length; k++) covered.push(g.start + k);
+        const pool = covered.reduce((a, pl) => a + (prizeAt(pl) ? owed(prizeAt(pl)) * ratio : 0), 0);
+        const each = Math.floor(pool / g.rows.length);                  // whole dollars; the odd dollars are reported, not moved
+        g.rows.forEach(r => { r.place_in = g.start + 1; r.tied_in = g.rows.length > 1;
+          if (each > 0) { L.credit(r.player, 'lowscore', each); paid.set(norm(r.player), (paid.get(norm(r.player)) || 0) + each); winnersOut.push({ player: r.player, place: g.start + 1, tied: g.rows.length > 1, amount: each, scope: sc.id }); } });
+        g.each = each; spent += each * g.rows.length; unplaced += pool - each * g.rows.length;
+      });
+      mine.forEach(pr => { const amt = owed(pr) * ratio, g = groups.find(x => pr.place > x.start && pr.place <= x.start + x.rows.length);
+        prizesOut.push({ scope: sc.id, scope_name: sc.name, place: pr.place, amount: Math.round(amt * 100) / 100, ...(pr.pct > 0 && !(pr.amount > 0) ? { pct: pr.pct } : {}), filled: !!g,
+          winners: g ? g.rows.map(r => ({ player: r.player, amount: g.each, ...(g.rows.length > 1 ? { tied: true } : {}) })) : [] }); });
+      scopesOut.push({ id: sc.id, name: sc.name, field: sc.members.length, finished: ranked.length, winners: winnersOut,
+        standings: ranked.map(r => ({ player: r.player, total: r.total, place: r.place_in, tied: !!r.tied_in })) });
+    });
+    // whatever was not paid (a place nobody finished, odd dollars, a pot bigger than the table) goes back to everyone, never lost
+    const left = Math.max(0, pot - spent), gb = L.giveBack(left);
+    state.unallocated += gb.unallocated;
+    const winners = [...new Set(scopesOut.flatMap(x => x.winners.map(w => w.player)))];
+    const unflighted = podium.flights.length ? rows.filter(r => r.complete && !flightOfPlayer(podium.flights, r.player, inputs && inputs.teeByPlayer)).map(r => r.player) : [];
+    return Object.assign({ ...head, podium: true, flights: podium.flights.map(f => ({ id: f.id, name: f.name })), prizes: prizesOut, scopes: scopesOut,
+      standings: rows.map(r => ({ player: r.player, complete: r.complete, played: r.played, total: r.total, holes: r.holes })).sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
+      winners, per_player: 0, given_back_each: gb.each, paid: Math.round(spent * 100) / 100, ...(ratio < 1 ? { scaled: true, asked: Math.round(total * 100) / 100 } : {}), ...(unflighted.length ? { unflighted } : {}) }, tail);
+  }
   ADDONS.lowscore = {
     id: 'lowscore', order: 26, entity: 'individual',
     carve(state, addon, inputs) {
@@ -1108,6 +1159,8 @@
       const head = { pot, basis: netOk ? 'net' : 'gross', ...(netOk ? { net_mode: 'own', stroke_marks } : {}), ...(wantNet && !netOk ? { net_missing: true } : {}), period: plan.period };
       const tail = capped ? { capped: true, configured_pot: configuredPot } : {};
       const strip = r => ({ player: r.player, complete: r.complete, played: r.played, total: r.total, holes: r.holes });
+      const podium = lowscorePodiumOf(addon);
+      if (podium && plan.period === 'round') return lowscorePodium(state, addon, podium, rows, pot, head, tail, inputs);
       if (plan.period === 'round' || rows.length < 2) {
         const ranked = rows.filter(r => r.complete).sort((a, b) => a.total - b.total);
         ranked.forEach(r => { r.place = ranked.findIndex(x => x.total === r.total) + 1; r.tied = ranked.filter(x => x.total === r.total).length > 1; });
@@ -1577,7 +1630,8 @@
     config: [
       { key: 'dollar_per_player', type: 'money', label: '$ per player', default: 0, positive: true, required: true },
       { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
-      { key: 'period', type: 'enum', label: 'Scoring period', values: PERIOD_ORDER.slice(), default: 'round' }
+      { key: 'period', type: 'enum', label: 'Scoring period', values: PERIOD_ORDER.slice(), default: 'round' },
+      { key: 'podium', type: 'podium', label: 'Prizes (flights and places)' }   // v1.62.0: optional. Without it the lowest total takes the pot; with it the pot is paid as the host's prize table (overall and/or flights, several places)
     ],
     fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
     maxPerPlayer: cfg => Number(cfg.dollar_per_player) || 0,
@@ -1805,6 +1859,20 @@
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
         if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
         else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be on one ' + (sz === 2 ? 'pair' : 'team'));
+      } else if (f.type === 'podium') {
+        // { flights: [{ id, name, tees?: [..], players?: [..] }], prizes: [{ scope: 'overall' | flightId, place: 1-5, amount?: $, pct?: % of the pot }] }
+        const fl = v && Array.isArray(v.flights) ? v.flights : [], pr = v && Array.isArray(v.prizes) ? v.prizes : [];
+        const ids = fl.map(x => x && String(x.id || '').trim().toLowerCase());
+        const flightsOk = fl.length <= 4 && fl.every(x => x && typeof x === 'object' && /^[a-z0-9_-]{1,20}$/i.test(String(x.id || '')) && String(x.id).toLowerCase() !== 'overall' && String(x.name || '').trim().length > 0 && String(x.name).length <= 24
+          && (x.tees == null || (Array.isArray(x.tees) && x.tees.length <= 10 && x.tees.every(t => typeof t === 'string' && t.trim().length > 0 && t.length <= 24)))
+          && (x.players == null || (Array.isArray(x.players) && x.players.length <= 200 && x.players.every(t => typeof t === 'string' && t.trim().length > 0 && t.length <= 60)))
+          && ((x.tees && x.tees.length) || (x.players && x.players.length))) && new Set(ids).size === ids.length;
+        const prizesOk = pr.length >= 1 && pr.length <= 24 && pr.every(x => x && typeof x === 'object' && (x.scope === 'overall' || ids.includes(String(x.scope || '').toLowerCase())) && Number.isInteger(Number(x.place)) && Number(x.place) >= 1 && Number(x.place) <= 5
+          && ((Number.isFinite(Number(x.amount)) && Number(x.amount) > 0) || (Number.isFinite(Number(x.pct)) && Number(x.pct) > 0 && Number(x.pct) <= 100)));
+        const dup = new Set(pr.map(x => x && x.scope + '#' + x.place)).size !== pr.length;
+        if (typeof v !== 'object' || Array.isArray(v) || !flightsOk) errors.push(f.label + ': each flight needs a name and at least one tee or player (up to 4 flights)');
+        else if (!prizesOk) errors.push(f.label + ': each prize needs a place (1-5), who it is for, and a dollar amount or a percent');
+        else if (dup) errors.push(f.label + ': a place can only be paid once in each flight');
       } else if (f.type === 'shares') {
         if (!Array.isArray(v) || v.length > (f.max || 3) || !v.every(x => Number.isFinite(Number(x)) && Number(x) >= 0)) errors.push(f.label + ' must be up to ' + (f.max || 3) + ' amounts of 0 or more');
       } else if (f.type === 'strings') {
@@ -1827,6 +1895,8 @@
       else if (f.type === 'holes') out[f.key] = v.slice().sort((a, b) => a - b);
       else if (f.type === 'pars') out[f.key] = v.map(Number);
       else if (f.type === 'shares') out[f.key] = v.map(Number);
+      else if (f.type === 'podium') out[f.key] = { flights: (v.flights || []).map(x => ({ id: String(x.id).trim().toLowerCase(), name: String(x.name).trim().slice(0, 24), ...(x.tees && x.tees.length ? { tees: x.tees.map(t => String(t).trim()) } : {}), ...(x.players && x.players.length ? { players: x.players.map(t => String(t).trim()) } : {}) })),
+        prizes: (v.prizes || []).map(x => ({ scope: x.scope === 'overall' ? 'overall' : String(x.scope).trim().toLowerCase(), place: Number(x.place), ...(Number(x.amount) > 0 ? { amount: Math.round(Number(x.amount) * 100) / 100 } : { pct: Number(x.pct) }) })) };
       else if (f.type === 'parsmap') { const m = {}; Object.keys(v).forEach(k => { m[String(k).trim()] = v[k].map(Number); }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
       else if (f.type === 'strings') out[f.key] = v.map(x => String(x).trim().slice(0, f.max || 60));
@@ -1960,7 +2030,7 @@
     const lsc = row && row.game_configs && typeof row.game_configs === 'object' ? row.game_configs.lowscore : null;
     if (games.includes('lowscore') && lsc) {
       addons.push({ id: 'lowscore', entity: 'individual', dollar_per_player: lsc.dollar_per_player, basis: lsc.basis === 'net' ? 'net' : 'gross',
-        ...(periodKey(lsc) !== 'round' ? { period: periodKey(lsc) } : {}) });
+        ...(periodKey(lsc) !== 'round' ? { period: periodKey(lsc) } : {}), ...(lsc.podium && typeof lsc.podium === 'object' ? { podium: lsc.podium } : {}) });
     }
     if (games.includes('skins')) {
       addons.push({ id: 'skins', entity: 'individual', basis: basisOf('skins_basis'), compare: 'low' });
@@ -2098,7 +2168,7 @@
   // ── Gatherings Close & Calculate (Dev-87 contract, unchanged) ──────────
   // extra (optional): { startHoles: { 'player name lowercased': hole } }, so a shotgun group's Turkey run can wrap 18 → 1.
   function computeGatheringGamesPayout(row, scorecards, ctpLeaders, bbAnswers, extra) {
-    return computeRoundPayout(gatheringConfigFromLegacy(row), Object.assign({ scorecards, ctpLeaders, bbAnswers }, extra && extra.startHoles ? { startHoles: extra.startHoles } : {}));
+    return computeRoundPayout(gatheringConfigFromLegacy(row), Object.assign({ scorecards, ctpLeaders, bbAnswers }, extra && extra.startHoles ? { startHoles: extra.startHoles } : {}, extra && extra.teeByPlayer ? { teeByPlayer: extra.teeByPlayer } : {}));
   }
 
   // ── BestBall live board (Dev-93) ───────────────────────────────────────

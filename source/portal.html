@@ -3709,7 +3709,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.62.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.63.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -13444,7 +13444,7 @@ let _gamesFormTees = []; // the venue's stored tees that carry full 18-hole data
 let _gamesFormBirdiepayPars = null; // 18 hole pars resolved for the Gathering's venue when the form opened (null = no par data on file)
 let _gamesFormBirdieballConfig = { dollar_per_player: null }; // MiserBall's OWN per-player rate — distinct from the main $/player pot rate
 let _gamesFormFourballConfig = { dollar_per_player: null, basis: 'gross', net_mode: 'own', pairs: [], period: 'round', win_by: 'strokes', scope: 'field' }; // BestBall (Dev-93)
-let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' }; // Low Score (Dev-93)
+let _gamesFormLowscoreConfig = { dollar_per_player: null, basis: 'gross', period: 'round' }; // Low Score (Dev-93); .podium = { flights, prizes } when the host pays places/flights (v4.102.0)
 // Alternate Shot + Match Play (Dev-94): same shape as BestBall, one object per game. altshot lists `pairs`, matchplay lists `matches`.
 const GAMES_FORM_SIDE_IDS = BFEngine.sideFormGames(); // registry: games with the `sideForm` trait
 // The wizard's second step for each (pairs / matches). A new side-form game adds one entry here and one to GW_NAMES.
@@ -18778,8 +18778,17 @@ function computeGatheringGamesPayout(config, scorecards, ctpLeaders, bbAnswers) 
   return BFEngine.computeGatheringGamesPayout(config, scorecards, ctpLeaders, bbAnswers, typeof payoutExtra === 'function' ? payoutExtra(config) : undefined);
 }
 function payoutExtra(config) {
-  const sh = gatheringStartHoles(config && (config.gathering_id != null ? config.gathering_id : config.gatheringId));
-  return sh ? { startHoles: sh } : undefined;
+  const gid = config && (config.gathering_id != null ? config.gathering_id : config.gatheringId);
+  const sh = gatheringStartHoles(gid), tees = gatheringTeesByPlayer(gid);
+  return sh || tees ? Object.assign({}, sh ? { startHoles: sh } : {}, tees ? { teeByPlayer: tees } : {}) : undefined;
+}
+// The tee box each player was given in the published Groups (their own, else the everyone-default): { 'name lowercased': 'Blue' }. Flights read this. null = no tees set.
+function gatheringTeesByPlayer(gid) {
+  const set = gid != null && typeof _groupSets !== 'undefined' && _groupSets[gid] ? _groupSets[gid].published : null;
+  if (!set || !Array.isArray(set.groups)) return null;
+  const out = new Map();
+  set.groups.forEach(g => (g.members || []).forEach(n => { const k = String(n).trim().toLowerCase(), t = (set.tees && set.tees[k]) || set.tee_default || ''; if (t) out.set(k, t); }));
+  return out.size ? out : null;
 }
 // Where each player starts, when the host published SHOTGUN Groups: { 'name lowercased': hole }. Turkeys count holes in the order a group plays them,
 // so a run can wrap 18 to 1. null = everyone starts on 1 (tee times, no Groups published).
@@ -19305,7 +19314,8 @@ function renderGatheringPayoutHtml(s, fbCfg) {
     panels.push({ key: gid, tab, html: h });
   });
   // ── Low Score: lowest individual total in each scoring period; a tie is a push (no blood) ──
-  if (s.lowscore) {
+  if (s.lowscore && s.lowscore.podium) panels.push({ key: 'ls', tab: '🎯 Low Score', html: lsPodiumResultsHtml(s.lowscore, label, line, money, esc, norm) });
+  if (s.lowscore && !s.lowscore.podium) {
     const f = s.lowscore;
     const pk = f.period || (f.segments && f.segments.mode) || 'round';
     const P = BFEngine.PERIODS[pk] || BFEngine.PERIODS.round;
@@ -20036,7 +20046,7 @@ function gatheringGameDetailsBody(evt, config) {
     const cost = (ls.dollar_per_player || 0) * yesCount;
     remaining -= cost;
     const lk = BFEngine.periodKey(ls);
-    rows.push(row('🎯', `Individual Low Score · ${ls.basis === 'net' ? 'Net' : 'Gross'}`, `Lowest individual score · $${(ls.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, ${lk !== 'round' ? `${BFEngine.PERIODS[lk].phrase} are separate pots; a tie in a period is a push` : 'one pot for the lowest total; a tie is a push'}`, 'lowscore'));
+    rows.push(row('🎯', `Individual Low Score · ${ls.basis === 'net' ? 'Net' : 'Gross'}`, `${ls.podium ? 'Places &amp; flights' : 'Lowest individual score'} · $${(ls.dollar_per_player || 0).toFixed(2)}/player · $${cost.toFixed(2)} pot, ${lk !== 'round' ? `${BFEngine.PERIODS[lk].phrase} are separate pots; a tie in a period is a push` : 'one pot for the lowest total; a tie is a push'}`, 'lowscore'));
   }
   const tkA = gatheringAddon(config, 'turkeys');
   if (tkA) {
@@ -22022,7 +22032,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
       }
     }
     const ls = existing && existing.game_configs && existing.game_configs.lowscore;
-    _gamesFormLowscoreConfig = ls ? { dollar_per_player: ls.dollar_per_player, basis: ls.basis === 'net' ? 'net' : 'gross', period: BFEngine.periodKey(ls) } : { dollar_per_player: null, basis: 'gross', period: 'round' }; }
+    _gamesFormLowscoreConfig = ls ? { dollar_per_player: ls.dollar_per_player, basis: ls.basis === 'net' ? 'net' : 'gross', period: BFEngine.periodKey(ls), ...(ls.podium ? { podium: JSON.parse(JSON.stringify(ls.podium)) } : {}) } : { dollar_per_player: null, basis: 'gross', period: 'round' }; }
   // Par table for Birdie Payouts — same resolver Card Score Sheet uses (Venue
   // Manager's stored pars first, BSGC's built-in table as the fallback).
   // Frozen into the saved config so Close never needs a second venue lookup.
@@ -22400,7 +22410,7 @@ function gwReviewHtml() {
     const what = mp ? (items ? items + ' match' + (items === 1 ? '' : 'es') : '<span style="color:#b8860b">no matches yet</span>') : (items ? items + (gid === 'scramble' ? ' team' : ' pair') + (items === 1 ? '' : 's') : `<span style="color:#b8860b">no ${gid === 'scramble' ? 'teams' : 'pairs'} yet</span>`);
     add(meta.icon, meta.label, `${scLine || net + ' · ' + per(pk)} · ${gid === 'scramble' ? (Number(c.dollar_per_player) > 0 ? money(gamesFormPodiumPlan(_gamesFormPodium, c, parseFloat((document.getElementById('games-form-dpp') || {}).value) || 0, gamesFormPodiumPlayers()).total) + ' pot' : 'no money') + ' · ' : (Number(c.dollar_per_player) > 0 ? money(c.dollar_per_player) + ' per player' : 'no money') + ' · '}${what}`, items ? gid : GW_SIDE_STEP[gid]);
   });
-  if (sel.has('lowscore')) add('🎯', 'Individual Low Score', `${basis(ls.basis)} · ${per(BFEngine.periodKey(ls))} · ${money(ls.dollar_per_player)} per player`, 'lowscore');
+  if (sel.has('lowscore')) add('🎯', 'Individual Low Score', `${basis(ls.basis)} · ${ls.podium ? 'places &amp; flights' : per(BFEngine.periodKey(ls))} · ${money(ls.dollar_per_player)} per player`, 'lowscore');
   if (sel.has('skins')) add('⛳', 'Skins', `${basis(_gamesFormHcp.skins_basis)} · gets what is left`, 'skins');
   if (sel.has('cttp')) add('🎯', 'CTP', `${money(_gamesFormCttpConfig.dollar_per_hole)} a hole · ${(_gamesFormCttpConfig.holes || []).length} hole${(_gamesFormCttpConfig.holes || []).length === 1 ? '' : 's'}`, 'cttp');
   if (sel.has('birdieball')) add('🐉', escapeHtml(bbCleanName(_gamesFormBirdieballConfig.name) || 'MiserBall'), `${Number(_gamesFormBirdieballConfig.pot_total) > 0 ? money(_gamesFormBirdieballConfig.pot_total) + ' fixed pot' : money(_gamesFormBirdieballConfig.dollar_per_player) + ' per player'}${_gamesFormBirdieballConfig.team && sel.has('scramble') ? ' · by team, one lost ball puts the team out' : ''}`, 'money');
@@ -22793,13 +22803,105 @@ function gatheringGamesLowscoreSectionHtml() {
       </div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">${n > 1 ? `Each player puts in $${(c.dollar_per_player || 0).toFixed(2)} in all ($${(Math.round((c.dollar_per_player || 0) / n * 100) / 100).toFixed(2)} for each of the ${n} periods).` : 'Everyone plays their own ball. The lowest total takes the pot. A tie is a push and the antes go back.'}</div></div>
       ${gamesScoredPeriodRowHtml(c.basis, 'setGamesFormLowscoreBasis', pk, 'setGamesFormLowscorePeriod')}
-      <div style="margin:10px 0 12px;background:var(--green-light);border-radius:10px;padding:10px 12px;font-size:0.8rem;line-height:1.45">${periodExplainHtml(pk, c.dollar_per_player, { round: 'The lowest total over the whole round wins one pot. A tie for low is a push and every ante comes back.' })}</div>
+      ${c.podium ? '' : `<div style="margin:10px 0 12px;background:var(--green-light);border-radius:10px;padding:10px 12px;font-size:0.8rem;line-height:1.45">${periodExplainHtml(pk, c.dollar_per_player, { round: 'The lowest total over the whole round wins one pot. A tie for low is a push and every ante comes back.' })}</div>`}
+      ${lsPodiumHtml(c, pk)}
     </div>`;
+}
+// ── Prizes: overall and/or flights, several places (v4.102.0) ─────────────────────────────────────────────────────────────
+// podium = { flights: [{ id, name, tees: [..] }], prizes: [{ scope: 'overall' | flightId, place, amount? | pct? }] }. A player is in a flight by the tee box the
+// host gave them in Playing groups. Overall and flights are paid separately, so one player can win both. Ties share the places they cover.
+// The published result for prizes: each prize with who took it, then the standings. label/line/money/esc/norm are the results screen's own helpers.
+function lsPodiumResultsHtml(f, label, line, money, esc, norm) {
+  const ord = n => ['', '1st', '2nd', '3rd', '4th', '5th'][n] || n + 'th';
+  let h = label(`🎯 Individual Low Score (${f.basis === 'net' ? 'net' : 'gross'}) — ${money(f.pot)}`);
+  if (f.net_missing) h += `<div style="font-size:0.72rem;color:#b8860b;margin-bottom:2px">Net was chosen but no strokes were on file, so this played gross</div>`;
+  if (f.scaled) h += `<div style="font-size:0.72rem;color:#b8860b;margin-bottom:2px">The prizes asked for ${money(f.asked)} but the pot is ${money(f.pot)}, so each was reduced to fit</div>`;
+  (f.scopes || []).forEach(sc => {
+    h += `<div style="font-size:0.84rem;font-weight:700;margin:10px 0 2px">${sc.id === 'overall' ? '🏆' : '🚩'} ${esc(sc.name)} <span style="font-weight:400;font-size:0.74rem;color:var(--text-muted)">${sc.finished} of ${sc.field} finished</span></div>`;
+    (f.prizes || []).filter(x => x.scope === sc.id).forEach(pz => {
+      const w = pz.winners || [], names = w.map(x => x.player);
+      h += line(`${ord(pz.place)} <span style="color:var(--text-muted)">${money(pz.amount)}${pz.pct ? ` (${pz.pct}%)` : ''}</span>`, w.length ? w.map(x => `<b>${esc(x.player)}</b> ${money(x.amount)}${x.tied ? ' (tie)' : ''}`).join(', ') : `<span style="color:var(--text-muted)">Not finished, goes back</span>`);
+    });
+    h += (sc.standings || []).map(r => line(`<span style="color:var(--text-muted);display:inline-block;min-width:1.6rem">${r.tied ? 'T' : ''}${r.place}</span>${esc(r.player)}`, `${esc(r.total)}`)).join('');
+  });
+  if ((f.unflighted || []).length) h += `<div style="font-size:0.74rem;color:#b8860b;margin-top:6px">Not in a flight (no tee box set): ${f.unflighted.map(esc).join(', ')}. They can still win Overall.</div>`;
+  if (f.given_back_each > 0) h += `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px">${money(f.given_back_each)} a player goes back for any prize not paid.</div>`;
+  return h;
+}
+function lsPodiumPot() { const c = _gamesFormLowscoreConfig; return (Number(c.dollar_per_player) || 0) * Math.max(0, _gamesFormYesCount || 0); }
+function lsPodiumPlan() {
+  const p = _gamesFormLowscoreConfig.podium; if (!p) return null;
+  const pot = lsPodiumPot(), asked = p.prizes.reduce((t, x) => t + (x.amount > 0 ? Number(x.amount) : (Number(x.pct) || 0) / 100 * pot), 0);
+  return { pot, asked, left: pot - asked };
+}
+function lsPodiumToggle(on) {
+  const c = _gamesFormLowscoreConfig;
+  if (on) { c.period = 'round'; c.podium = { flights: [], prizes: [{ scope: 'overall', place: 1, pct: 100 }] }; } else delete c.podium;
+  _gamesFormTouched.add('lowscore'); refreshGamesFormLowscoreSection();
+}
+function lsPodiumPreset(kind) {
+  const c = _gamesFormLowscoreConfig, pot = lsPodiumPot();
+  if (kind === 'overall') c.podium = { flights: [], prizes: [{ scope: 'overall', place: 1, pct: 100 }] };
+  else if (kind === 'flights') c.podium = { flights: [{ id: 'f1', name: 'Flight 1', tees: [] }, { id: 'f2', name: 'Flight 2', tees: [] }], prizes: [{ scope: 'f1', place: 1, pct: 50 }, { scope: 'f2', place: 1, pct: 50 }] };
+  else c.podium = { flights: [{ id: 'f1', name: 'Flight 1', tees: [] }, { id: 'f2', name: 'Flight 2', tees: [] }], prizes: [{ scope: 'overall', place: 1, pct: 40 }, { scope: 'f1', place: 1, pct: 30 }, { scope: 'f2', place: 1, pct: 30 }] };
+  refreshGamesFormLowscoreSection();
+}
+function lsPodiumFlightName(i, v) { const f = _gamesFormLowscoreConfig.podium.flights[i]; if (f) f.name = String(v).slice(0, 24); }
+function lsPodiumFlightTee(i, tee) { const f = _gamesFormLowscoreConfig.podium.flights[i]; if (!f) return; const at = f.tees.indexOf(tee); if (at >= 0) f.tees.splice(at, 1); else f.tees.push(tee); refreshGamesFormLowscoreSection(); }
+function lsPodiumAddFlight() {
+  const p = _gamesFormLowscoreConfig.podium; if (p.flights.length >= 4) return;
+  let k = 1; while (p.flights.some(f => f.id === 'f' + k)) k++;
+  p.flights.push({ id: 'f' + k, name: 'Flight ' + (p.flights.length + 1), tees: [] }); refreshGamesFormLowscoreSection();
+}
+function lsPodiumRemoveFlight(i) { const p = _gamesFormLowscoreConfig.podium, f = p.flights[i]; if (!f) return; p.flights.splice(i, 1); p.prizes = p.prizes.filter(x => x.scope !== f.id); refreshGamesFormLowscoreSection(); }
+function lsPodiumAddPlace(scope) {
+  const p = _gamesFormLowscoreConfig.podium, used = p.prizes.filter(x => x.scope === scope).map(x => x.place); let pl = 1; while (used.includes(pl)) pl++;
+  if (pl > 5) return; p.prizes.push({ scope, place: pl, pct: 0 }); p.prizes.sort((a, b) => (a.scope === b.scope ? a.place - b.place : 0)); refreshGamesFormLowscoreSection();
+}
+function lsPodiumRemovePlace(idx) { const p = _gamesFormLowscoreConfig.podium; p.prizes.splice(idx, 1); refreshGamesFormLowscoreSection(); }
+function lsPodiumPrize(idx, field, v) {
+  const x = _gamesFormLowscoreConfig.podium.prizes[idx]; if (!x) return;
+  if (field === 'unit') { const val = x.amount > 0 ? x.amount : x.pct || 0; delete x.amount; delete x.pct; x[v === 'pct' ? 'pct' : 'amount'] = val; refreshGamesFormLowscoreSection(); return; }
+  const n = Math.max(0, parseFloat(v) || 0); if (x.pct != null && !(x.amount > 0)) { x.pct = Math.min(100, n); delete x.amount; } else { x.amount = n; delete x.pct; }
+  const el = document.getElementById('ls-pod-check'); if (el) el.innerHTML = lsPodiumCheckHtml();
+}
+function lsPodiumCheckHtml() {
+  const pl = lsPodiumPlan(); if (!pl) return '';
+  const m = v => '$' + (Math.round(v * 100) / 100).toFixed(Number.isInteger(Math.round(v * 100) / 100) ? 0 : 2);
+  if (!(pl.pot > 0)) return '<span style="color:var(--text-muted)">Enter $ per player above to see the pot.</span>';
+  return pl.left < -0.005 ? `<span style="color:#b8860b">⚠️ Prizes add up to ${m(pl.asked)} but the pot is ${m(pl.pot)} (${_gamesFormYesCount} players). They will all be reduced to fit.</span>`
+    : `Prizes ${m(pl.asked)} of the ${m(pl.pot)} pot${pl.left > 0.005 ? ` · ${m(pl.left)} left goes back to the players` : ' · all paid out'}.`;
+}
+function lsPodiumHtml(c, pk) {
+  const btn = (label, js, on) => `<button type="button" class="seg-btn${on ? ' seg-btn-active' : ''}" style="min-height:40px;padding:0 12px;border:1.5px solid var(--border);border-radius:10px;flex:1" onclick="${js}">${label}</button>`;
+  const head = `<div style="margin:10px 0 6px;font-size:0.86rem;font-weight:700">Who gets paid</div><div style="display:flex;gap:6px;margin-bottom:8px">${btn('Winner takes all', 'lsPodiumToggle(false)', !c.podium)}${btn('Places &amp; flights', `lsPodiumToggle(true)`, !!c.podium)}</div>`;
+  if (!c.podium) return head;
+  const p = c.podium, esc = escapeHtml, ord = n => ['', '1st', '2nd', '3rd', '4th', '5th'][n] || n + 'th';
+  const inp = 'height:38px;border-radius:8px;border:1.5px solid var(--border);padding:0 8px;font-family:inherit;font-size:16px;box-sizing:border-box';
+  const prizeRows = scope => p.prizes.map((x, idx) => ({ x, idx })).filter(o => o.x.scope === scope).map(({ x, idx }) => {
+    const isPct = !(x.amount > 0) && x.pct != null, val = isPct ? x.pct : (x.amount || '');
+    return `<div style="display:flex;align-items:center;gap:6px;margin:4px 0"><span style="min-width:34px;font-weight:700;font-size:0.86rem">${ord(x.place)}</span>
+      <input type="number" inputmode="decimal" min="0" step="any" value="${val === 0 ? '' : val}" placeholder="0" oninput="lsPodiumPrize(${idx},'v',this.value)" style="width:84px;${inp}">
+      <select onchange="lsPodiumPrize(${idx},'unit',this.value)" style="${inp}"><option value="amount"${isPct ? '' : ' selected'}>$</option><option value="pct"${isPct ? ' selected' : ''}>% of pot</option></select>
+      <button type="button" onclick="lsPodiumRemovePlace(${idx})" title="Remove" style="min-width:38px;min-height:38px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text-muted)">✕</button></div>`;
+  }).join('');
+  const scopeBox = (scope, title, extra) => `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px"><div style="font-weight:700;margin-bottom:4px">${title}</div>${extra || ''}${prizeRows(scope)}
+    ${p.prizes.filter(x => x.scope === scope).length < 5 ? `<button type="button" class="btn btn-ghost btn-sm" style="min-height:40px" onclick="lsPodiumAddPlace('${scope}')">➕ Add a place</button>` : ''}</div>`;
+  const flightExtra = (f, i) => `<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><input type="text" value="${esc(f.name)}" maxlength="24" oninput="lsPodiumFlightName(${i},this.value)" style="flex:1;${inp}"><button type="button" onclick="lsPodiumRemoveFlight(${i})" style="min-height:38px;padding:0 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text-muted);font-size:0.78rem">Remove flight</button></div>
+    <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px">Players on these tee boxes (set in Playing groups) are in this flight:</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">${CS_TEE_OPTIONS.map(t => `<button type="button" class="seg-btn${f.tees.includes(t) ? ' seg-btn-active' : ''}" style="min-height:36px;padding:0 10px;border:1.5px solid var(--border);border-radius:10px;font-size:0.84rem" onclick="lsPodiumFlightTee(${i},'${t}')">${t}</button>`).join('')}</div>`;
+  return head + `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;line-height:1.45">Overall and each flight are paid separately, so one player can win both. A tie shares the places it covers.</div>
+    ${p.flights.length === 0 && p.prizes.length <= 1 ? `<div style="display:flex;gap:6px;margin-bottom:8px">${btn('Overall + 2 flights', "lsPodiumPreset('both')")}${btn('2 flights only', "lsPodiumPreset('flights')")}</div>` : ''}
+    ${scopeBox('overall', '🏆 Overall')}
+    ${p.flights.map((f, i) => scopeBox(f.id, '🚩 ' + esc(f.name), flightExtra(f, i))).join('')}
+    ${p.flights.length < 4 ? `<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px;margin-bottom:6px" onclick="lsPodiumAddFlight()">➕ Add a flight</button>` : ''}
+    <div id="ls-pod-check" style="font-size:0.8rem;line-height:1.45;margin:4px 0 8px">${lsPodiumCheckHtml()}</div>`;
 }
 function refreshGamesFormLowscoreSection() { const el = document.getElementById('games-form-lowscore-section'); if (el) el.innerHTML = gatheringGamesLowscoreSectionHtml(); }
 function setGamesFormLowscorePeriod(v) {
   const c = _gamesFormLowscoreConfig;
   c.period = BFEngine.periodKey({ period: v });
+  if (c.period !== 'round') delete c.podium;   // places and flights are for the whole round
   if (lowscoreSegCount(c) > 1 && c.dollar_per_player > 0) c.dollar_per_player = lowscoreSnapToPeriods(c.dollar_per_player);
   refreshGamesFormLowscoreSection();
   applyGamesSuggestion(false);
@@ -23754,9 +23856,14 @@ async function submitGatheringGames(gatheringId) {
     const c = _gamesFormLowscoreConfig;
     if (!(c.dollar_per_player > 0)) { bad('money', 'Individual Low Score: $ per player must be greater than 0'); return; }
     const ls = { dollar_per_player: c.dollar_per_player, basis: c.basis === 'net' ? 'net' : 'gross', ...(lowscoreSegCount(c) > 1 ? { period: c.period } : {}) };
+    if (c.podium) {
+      const pd = { flights: c.podium.flights.map(f => ({ id: f.id, name: String(f.name || '').trim(), tees: f.tees })), prizes: c.podium.prizes.filter(x => x.amount > 0 || x.pct > 0) };
+      if (pd.flights.some(f => !f.tees.length)) { bad('lowscore', 'Individual Low Score: pick at least one tee box for each flight'); return; }
+      ls.podium = pd;
+    }
     const v = BFEngine.validateGameConfig('lowscore', ls);
     if (!v.ok) { bad('lowscore', 'Individual Low Score: ' + v.errors[0]); return; }
-    game_configs = Object.assign(game_configs || {}, { lowscore: ls });
+    game_configs = Object.assign(game_configs || {}, { lowscore: v.ok && c.podium ? Object.assign(ls, { podium: BFEngine.cleanGameConfig('lowscore', ls).podium }) : ls });
   }
   if (games.includes('turkeys')) {
     const c = _gamesFormTurkeysConfig;

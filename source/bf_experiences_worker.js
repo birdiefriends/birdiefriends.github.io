@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.62.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.63.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1201,6 +1201,11 @@ const GAME_SCHEMAS = {
           "sixes"
         ],
         "default": "round"
+      },
+      {
+        "key": "podium",
+        "type": "podium",
+        "label": "Prizes (flights and places)"
       }
     ]
   },
@@ -1337,6 +1342,20 @@ function validateFields(fields, cfg) {
         if (wellFormed) v.forEach(pr => pr.forEach(n => names.push(n.trim().toLowerCase())));
         if (!wellFormed) errors.push(f.label + ' needs ' + (f.evenPairs ? 'two pairs for every foursome' : 'at least ' + ((f.minPairs || 2) === 1 ? 'one ' : 'two ') + (sz === 2 ? 'pairs' : 'teams')) + ' of ' + (sz === 1 ? 'one player' : sz + ' different players'));
         else if (new Set(names).size !== names.length) errors.push(f.label + ': a player can only be on one ' + (sz === 2 ? 'pair' : 'team'));
+      } else if (f.type === 'podium') {
+        // { flights: [{ id, name, tees?: [..], players?: [..] }], prizes: [{ scope: 'overall' | flightId, place: 1-5, amount?: $, pct?: % of the pot }] }
+        const fl = v && Array.isArray(v.flights) ? v.flights : [], pr = v && Array.isArray(v.prizes) ? v.prizes : [];
+        const ids = fl.map(x => x && String(x.id || '').trim().toLowerCase());
+        const flightsOk = fl.length <= 4 && fl.every(x => x && typeof x === 'object' && /^[a-z0-9_-]{1,20}$/i.test(String(x.id || '')) && String(x.id).toLowerCase() !== 'overall' && String(x.name || '').trim().length > 0 && String(x.name).length <= 24
+          && (x.tees == null || (Array.isArray(x.tees) && x.tees.length <= 10 && x.tees.every(t => typeof t === 'string' && t.trim().length > 0 && t.length <= 24)))
+          && (x.players == null || (Array.isArray(x.players) && x.players.length <= 200 && x.players.every(t => typeof t === 'string' && t.trim().length > 0 && t.length <= 60)))
+          && ((x.tees && x.tees.length) || (x.players && x.players.length))) && new Set(ids).size === ids.length;
+        const prizesOk = pr.length >= 1 && pr.length <= 24 && pr.every(x => x && typeof x === 'object' && (x.scope === 'overall' || ids.includes(String(x.scope || '').toLowerCase())) && Number.isInteger(Number(x.place)) && Number(x.place) >= 1 && Number(x.place) <= 5
+          && ((Number.isFinite(Number(x.amount)) && Number(x.amount) > 0) || (Number.isFinite(Number(x.pct)) && Number(x.pct) > 0 && Number(x.pct) <= 100)));
+        const dup = new Set(pr.map(x => x && x.scope + '#' + x.place)).size !== pr.length;
+        if (typeof v !== 'object' || Array.isArray(v) || !flightsOk) errors.push(f.label + ': each flight needs a name and at least one tee or player (up to 4 flights)');
+        else if (!prizesOk) errors.push(f.label + ': each prize needs a place (1-5), who it is for, and a dollar amount or a percent');
+        else if (dup) errors.push(f.label + ': a place can only be paid once in each flight');
       } else if (f.type === 'shares') {
         if (!Array.isArray(v) || v.length > (f.max || 3) || !v.every(x => Number.isFinite(Number(x)) && Number(x) >= 0)) errors.push(f.label + ' must be up to ' + (f.max || 3) + ' amounts of 0 or more');
       } else if (f.type === 'strings') {
@@ -1357,6 +1376,8 @@ function cleanFields(fields, cfg) {
       else if (f.type === 'holes') out[f.key] = v.slice().sort((a, b) => a - b);
       else if (f.type === 'pars') out[f.key] = v.map(Number);
       else if (f.type === 'shares') out[f.key] = v.map(Number);
+      else if (f.type === 'podium') out[f.key] = { flights: (v.flights || []).map(x => ({ id: String(x.id).trim().toLowerCase(), name: String(x.name).trim().slice(0, 24), ...(x.tees && x.tees.length ? { tees: x.tees.map(t => String(t).trim()) } : {}), ...(x.players && x.players.length ? { players: x.players.map(t => String(t).trim()) } : {}) })),
+        prizes: (v.prizes || []).map(x => ({ scope: x.scope === 'overall' ? 'overall' : String(x.scope).trim().toLowerCase(), place: Number(x.place), ...(Number(x.amount) > 0 ? { amount: Math.round(Number(x.amount) * 100) / 100 } : { pct: Number(x.pct) }) })) };
       else if (f.type === 'parsmap') { const m = {}; Object.keys(v).forEach(k => { m[String(k).trim()] = v[k].map(Number); }); if (Object.keys(m).length) out[f.key] = m; }
       else if (f.type === 'pairs') out[f.key] = v.map(pr => pr.map(n => String(n).trim()));
       else if (f.type === 'strings') out[f.key] = v.map(x => String(x).trim().slice(0, f.max || 60));

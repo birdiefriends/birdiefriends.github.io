@@ -27,6 +27,8 @@ Chromium binary if it isn't at `/opt/pw-browsers/chromium`, or it's reported as 
 | `test_live_edit_card_button.mjs` | Dev-101: the host Fix teams icon on the event card (host/commissioner, not past/closed/canceled) |
 | `test_host_set_teams.mjs` | Dev-101: host-set teams (Games, teams_by host) win over players picks on the card, panel, Close, partner prompts |
 | `test_effective_start.mjs` | Dev-101: Turkeys + MiserBall survivor use the start hole the scores show, plan only as fallback |
+| `test_podium.mjs` | Individual Low Score prizes: overall + flights (by tee or name), several places, ties share, scale-to-pot, validation |
+| `test_podium_form.mjs` | The Games prize editor: flights by tee, places, $ or % of pot, pot check, removing a flight |
 | `test_rail_cancel.mjs` | Dev-93: At-the-course rail off switch sticks past tee time; cancelled events never launch the rail or the Live Panel (test rounds excepted) |
 | `test_fourball_live.mjs` | Dev-93: Fourball live board (partial cards, to-par ranking, net, agrees with the Close winner) and the Live Panel section |
 | `test_fourball_segments.mjs` | Dev-93: Fourball pot variants: segments, strokes vs holes won, foursome vs field, pushes, match view |

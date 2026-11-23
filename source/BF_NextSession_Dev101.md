@@ -78,3 +78,9 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 
 ## v4.101.0 — Refresh from registration on the Playing groups screen
 - 🔄 button re-reads registrations and takes dropped players out of their groups on screen (unsaved edits kept). New Yes players are NOT auto-placed; they wait in "Not in a group". Says plainly if the registration list could not be reached.
+
+## v4.102.0 — Prizes: overall + flights, several places (Individual Low Score; engine 1.63.0)
+- Games → Individual Low Score → "Places & flights". Config `lowscore.podium = { flights:[{id,name,tees[]|players[]}], prizes:[{scope:'overall'|flightId, place 1-5, amount | pct}] }`. Schema type `podium` (validateFields/cleanFields; Worker embeds it, so **bf_experiences_worker.js must be redeployed before saving a prize table**, an old Worker would silently drop `podium`).
+- Calculator (`lowscorePodium`): each scope (Overall + each flight) ranks complete rounds; ties share the places they cover (whole dollars, odd dollars reported); a player can win overall AND in their flight; table over the pot scales every prize and flags it; unpaid prizes/odd dollars go back to everyone via giveBack.
+- Flight membership = one function (`flightOfPlayer`): by tee box from the published Groups (`teeByPlayer` via `payoutExtra`/`gatheringTeesByPlayer`) or by name list. New ways (handicap, age) are new cases there only.
+- Results tab shows each prize with its winner(s); period other than Round turns prizes off. Next games (Scramble place_shares already has its own) could reuse `lowscorePodium`.
