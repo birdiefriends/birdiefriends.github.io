@@ -642,7 +642,7 @@
 const JOTFORM_API_KEY = 'dd0cb09a71eee7d0db3aa690e292660f';
 const JF_API = 'https://api.jotform.com';
 
-// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.66.0 by source/tests/sync_worker_schemas.mjs — do not edit by hand
+// <GAME_SCHEMAS:begin> GENERATED from bf_engine.js 1.66.1 by source/tests/sync_worker_schemas.mjs — do not edit by hand
 const GAME_SCHEMAS = {
   "cttp": {
     "label": "CTP",
@@ -1251,6 +1251,11 @@ const GAME_SCHEMAS = {
         "type": "strings",
         "label": "Tiebreak rule",
         "max": 80
+      },
+      {
+        "key": "tiebreak_flights",
+        "type": "bool",
+        "label": "Break ties in the flights too"
       },
       {
         "key": "tie_order",

@@ -127,3 +127,6 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 - `BFEngine.prizeBoard` returns `ties` only once EVERY row in the scope has finished, plus `settled` and `tiebreak`. Silent otherwise (a tie for an unpaid place, or while players are still out, never shows).
 - Loud: red "TIEBREAK NEEDED" banner at the top of the leaderboard (everyone) and in the Close sheet (host); host taps "Record who won" (tap players in finish order), saved via Worker `POST /bfe/gathering-games/:id/tiebreak` {host_id, scope, order}; settled shows a calm green line with Undo. The 30s leaderboard refresh is held while recording (`_tbRecording`).
 - NOT built (next): a push/notification to the whole field when a tie appears, and a card-level alert on the event row. Needs server-side tie detection (the Worker has no payout engine) or a host "call it" button that fires a push.
+
+## v4.108.1 (engine 1.66.1)
+- Tiebreak applies to OVERALL only by default; flight ties split quietly. New Prizes field `tiebreak_flights` (checkbox "Break ties in the flights too", only shown when flights exist). Worker schema regenerated: the Worker only needs redeploying to ever store `tiebreak_flights: true`; without it the default (Overall only) is exactly Brian's Black Friday intent.

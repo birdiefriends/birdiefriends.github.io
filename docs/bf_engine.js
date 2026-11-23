@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.66.0';
+  const ENGINE_VERSION = '1.66.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -1136,7 +1136,7 @@
         }));
         const amountAt = place => { const z = prizeAt(place); return z ? owed(z) * ratio : 0; };
         groups.forEach(g => {
-          if (g.rows.length > 1) { const am = []; for (let k = 1; k <= g.rows.length; k++) am.push(Math.round(amountAt(g.start + k) * 100)); if (!am.every(x => x === am[0])) tiesOut.push({ scope: sc.id, scope_name: sc.name, place: g.start + 1, players: g.rows.map(r => r.label), all_in: sc.members.every(r => r.complete) }); }   // a tie that changes who gets what: the host has a call to make
+          if (g.rows.length > 1) { const am = []; for (let k = 1; k <= g.rows.length; k++) am.push(Math.round(amountAt(g.start + k) * 100)); if (!am.every(x => x === am[0]) && (sc.id === 'overall' || addon.tiebreak_flights)) tiesOut.push({ scope: sc.id, scope_name: sc.name, place: g.start + 1, players: g.rows.map(r => r.label), all_in: sc.members.every(r => r.complete) }); }   // a tie that changes who gets what: the host has a call to make
           if (g.called) settledOut.push({ scope: sc.id, scope_name: sc.name, place: g.start + 1, player: g.rows[0].label });
           let poolAmt = 0; for (let k = 1; k <= g.rows.length; k++) if (prizeAt(g.start + k)) poolAmt += owed(prizeAt(g.start + k)) * ratio;
           const each = Math.floor(poolAmt / g.rows.length);               // whole dollars; the odd dollars are reported, not moved
@@ -1703,6 +1703,7 @@
       { key: 'basis', type: 'enum', label: 'Gross or Net', values: ['gross', 'net'], default: 'gross' },
       { key: 'table', type: 'podium', label: 'Prizes (flights and places)', required: true },
       { key: 'tiebreak', type: 'strings', label: 'Tiebreak rule', max: 80 },
+      { key: 'tiebreak_flights', type: 'bool', label: 'Break ties in the flights too' },
       { key: 'tie_order', type: 'tieorder', label: 'Tiebreak results' }
     ],
     fixedCost: (cfg, ctx) => (Number(cfg.dollar_per_player) || 0) * ((ctx && ctx.players) || 0),
@@ -2344,7 +2345,7 @@
         const tiedNow = g.rows.filter(r => r.tied);
         if (tiedNow.length < 2) return;
         const am = tiedNow.map((_, k) => Math.round(amountAt(tiedNow[0].place + k) * 100));
-        if (!am.every(x => x === am[0])) ties.push({ scope: sd.id, scope_name: sd.name, place: tiedNow[0].place, players: tiedNow.map(r => r.label) });
+        if (!am.every(x => x === am[0]) && (sd.id === 'overall' || pc.tiebreak_flights)) ties.push({ scope: sd.id, scope_name: sd.name, place: tiedNow[0].place, players: tiedNow.map(r => r.label) });
       });
       return { id: sd.id, name: sd.name, rows, prizes, field: rows.length, leader: rows.find(r => r.place === 1) || null, all_done: allDone, ties, settled };
     });

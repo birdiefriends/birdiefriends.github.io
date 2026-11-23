@@ -3709,7 +3709,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.66.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.66.1"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -22138,7 +22138,7 @@ async function showGatheringGamesForm(gatheringId, preselect, opts) {
     const ls = existing && existing.game_configs && existing.game_configs.lowscore;
     _gamesFormLowscoreConfig = ls ? { dollar_per_player: ls.dollar_per_player, basis: ls.basis === 'net' ? 'net' : 'gross', period: BFEngine.periodKey(ls) } : { dollar_per_player: null, basis: 'gross', period: 'round' };
     const pz = existing && existing.game_configs && existing.game_configs.podium;
-    _gamesFormPrizes = pz && pz.table ? { dollar_per_player: pz.dollar_per_player, rank_by: pz.rank_by || 'auto', basis: pz.basis === 'net' ? 'net' : 'gross', tiebreak: Array.isArray(pz.tiebreak) ? String(pz.tiebreak[0] || '') : '', ...(pz.tie_order ? { tie_order: JSON.parse(JSON.stringify(pz.tie_order)) } : {}), table: JSON.parse(JSON.stringify(pz.table)) } : pzBlank(); }
+    _gamesFormPrizes = pz && pz.table ? { dollar_per_player: pz.dollar_per_player, rank_by: pz.rank_by || 'auto', basis: pz.basis === 'net' ? 'net' : 'gross', tiebreak: Array.isArray(pz.tiebreak) ? String(pz.tiebreak[0] || '') : '', tiebreak_flights: pz.tiebreak_flights === true, ...(pz.tie_order ? { tie_order: JSON.parse(JSON.stringify(pz.tie_order)) } : {}), table: JSON.parse(JSON.stringify(pz.table)) } : pzBlank(); }
   // Par table for Birdie Payouts — same resolver Card Score Sheet uses (Venue
   // Manager's stored pars first, BSGC's built-in table as the fallback).
   // Frozen into the saved config so Close never needs a second venue lookup.
@@ -22950,6 +22950,7 @@ function setGamesFormPrizesDollarPerPlayer(val) {
   _gamesFormPrizes.dollar_per_player = Math.round((parseFloat(val) || 0) * 100) / 100; _gamesFormTouched.add('podium');
   const el = document.getElementById('pz-check'); if (el) el.innerHTML = pzCheckHtml(); updateGamesFormPotPreview();
 }
+function pzTiebreakFlights(on) { _gamesFormPrizes.tiebreak_flights = !!on; _gamesFormTouched.add('podium'); }
 function pzTiebreak(v) { _gamesFormPrizes.tiebreak = String(v || '').slice(0, 80); _gamesFormTouched.add('podium'); }
 function pzSetRankBy(v) { _gamesFormPrizes.rank_by = v; pzRefresh(); }
 function pzSetBasis(v) { _gamesFormPrizes.basis = v === 'net' ? 'net' : 'gross'; pzRefresh(); gamesFormAutoRanking(); refreshGamesFormHcpSection(); }
@@ -23033,9 +23034,10 @@ function gatheringGamesPodiumSectionHtml() {
       ${t.flights.map((f, i) => scopeBox(f.id, '🚩 ' + esc(f.name), flightExtra(f, i))).join('')}
       ${t.flights.length < 4 ? `<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px;margin-bottom:6px" onclick="pzAddFlight()">➕ Add a flight</button>` : ''}
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin:4px 0 8px"><div style="font-weight:700;margin-bottom:2px">🔔 Tiebreak <span style="font-weight:400;font-size:0.76rem;color:var(--text-muted)">(optional)</span></div>
-        <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:6px;line-height:1.4">The app stays quiet unless players tie for a paid place once everyone has finished. Then it tells the whole field, shows this rule, and asks you to record who won. No rule: the tied players split.</div>
+        <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:6px;line-height:1.4">The app stays quiet unless players tie for a paid place in Overall once everyone has finished. Then it tells the whole field, shows this rule, and asks you to record who won. Everything else (flights, lower places) splits the tied places. Your wording is shown as written, so you can leave the choice for game day.</div>
         <input type="text" id="pz-tiebreak" maxlength="80" value="${esc(c.tiebreak || '')}" placeholder="e.g. Putt-off on the practice green" oninput="pzTiebreak(this.value)" style="width:100%;${inp}">
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${['Putt-off', 'Playoff hole', 'Closest to the pin'].map(x => btn(x, `pzTiebreak('${x}');var e=document.getElementById('pz-tiebreak');if(e)e.value='${x}'`, c.tiebreak === x, false)).join('')}</div></div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${['Putt-off', 'Playoff hole', 'Closest to the pin'].map(x => btn(x, `pzTiebreak('${x}');var e=document.getElementById('pz-tiebreak');if(e)e.value='${x}'`, c.tiebreak === x, false)).join('')}</div>
+        ${t.flights.length ? `<label style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:0.82rem;line-height:1.4;cursor:pointer"><input type="checkbox" ${c.tiebreak_flights ? 'checked' : ''} onchange="pzTiebreakFlights(this.checked)" style="margin-top:3px"><span>Break ties in the flights too <span style="color:var(--text-muted)">(off: a flight tie just splits)</span></span></label>` : ''}</div>
       <div id="pz-check" style="font-size:0.8rem;line-height:1.45;margin:4px 0 8px">${pzCheckHtml()}</div>
     </div>`;
 }
@@ -24039,7 +24041,7 @@ async function submitGatheringGames(gatheringId) {
     const c = _gamesFormPrizes;
     if (!(c.dollar_per_player > 0)) { bad('money', 'Prizes: $ per player must be greater than 0'); return; }
     if (c.table.flights.some(f => !f.tees.length)) { bad('podium', 'Prizes: pick at least one tee box for each flight'); return; }
-    const pz = { dollar_per_player: c.dollar_per_player, rank_by: c.rank_by, basis: c.basis === 'net' ? 'net' : 'gross', ...(String(c.tiebreak || '').trim() ? { tiebreak: [String(c.tiebreak).trim().slice(0, 80)] } : {}), ...(c.tie_order ? { tie_order: c.tie_order } : {}),
+    const pz = { dollar_per_player: c.dollar_per_player, rank_by: c.rank_by, basis: c.basis === 'net' ? 'net' : 'gross', ...(String(c.tiebreak || '').trim() ? { tiebreak: [String(c.tiebreak).trim().slice(0, 80)] } : {}), ...(c.tiebreak_flights && (c.table.flights || []).length ? { tiebreak_flights: true } : {}), ...(c.tie_order ? { tie_order: c.tie_order } : {}),
       table: { flights: c.table.flights.map(f => ({ id: f.id, name: String(f.name || '').trim() || f.id, tees: f.tees })), prizes: c.table.prizes.filter(x => x.amount > 0 || x.pct > 0) } };
     const v = BFEngine.validateGameConfig('podium', pz);
     if (!v.ok) { bad('podium', v.errors[0]); return; }

@@ -50,6 +50,19 @@ ok(b.scopes[0].rows.every(r => r.place === null && r.prize === 0), 'before any s
   let pr = pay(); ok(pr.payouts.find(x => x.player === 'Ann').podium === 40 && pr.podium.ties && pr.podium.ties.length === 1, 'unrecorded: the payout splits (1st+2nd = $80, $40 each) and reports the tie');
   pr = pay({ tie_order: { overall: ['Bo', 'Ann'] } }); ok(pr.payouts.find(x => x.player === 'Bo').podium === 50 && pr.payouts.find(x => x.player === 'Ann').podium === 30 && !pr.podium.ties && pr.podium.settled.length === 2, 'recorded: Bo takes 1st ($50), Ann 2nd ($30), the tie is cleared');
   pr = pay({ tie_order: { overall: ['Ann'] } }); ok(pr.payouts.find(x => x.player === 'Ann').podium === 50 && pr.payouts.find(x => x.player === 'Bo').podium === 30, 'naming only the winner puts the other tied player next'); }
+// Overall only by default: a tie in a flight splits quietly unless the host turned flight tiebreaks on
+{ const tb = { flights: [{ id: 'g', name: 'Green', tees: ['Green'] }], prizes: [{ scope: 'overall', place: 1, amount: 40 }, { scope: 'g', place: 1, amount: 20 }, { scope: 'g', place: 2, amount: 10 }] };
+  const teeG = new Map([['ann', 'Green'], ['bo', 'Green'], ['cy', 'Green'], ['di', 'Green']]), fc = (n, v) => card(n, Array(18).fill(v));
+  const mkRow = x => ({ games: ['podium'], game_configs: { podium: Object.assign({ dollar_per_player: 5, rank_by: 'round', basis: 'gross', table: tb, tiebreak: ['Putt-off'] }, x || {}) } });
+  const tied2 = [fc('Ann', 3), fc('Bo', 4), fc('Cy', 4), fc('Di', 6)];   // Bo and Cy tie for 2nd: in Overall nothing is paid there, in Green 2nd pays $10 vs 3rd $0
+  let b = E.prizeBoard(mkRow(), tied2, PARS, teeG);
+  ok(b.ties.length === 0, 'a tie for 2nd in a flight does not raise the alarm by default');
+  b = E.prizeBoard(mkRow({ tiebreak_flights: true }), tied2, PARS, teeG);
+  ok(b.ties.length === 1 && b.ties[0].scope === 'g', 'with flight tiebreaks on, the same tie is called');
+  const tie1 = [fc('Ann', 3), fc('Bo', 3), fc('Cy', 4), fc('Di', 6)];
+  b = E.prizeBoard(mkRow(), tie1, PARS, teeG); ok(b.ties.some(x => x.scope === 'overall'), 'a tie for 1st in Overall is always called');
+  const pr = E.computeRoundPayout({ payout: { entry_per_player: 20 }, addons: [{ id: 'podium', entity: 'individual', dollar_per_player: 20, basis: 'gross', rank_by: 'round', table: tb, tiebreak: ['Putt-off'] }] }, { scorecards: tied2, teeByPlayer: teeG });
+  ok(!pr.podium.ties && pr.payouts.find(x => x.player === 'Bo').podium === 5 && pr.payouts.find(x => x.player === 'Cy').podium === 5, 'the payout of a flight tie is the split ($10 over 2nd and 3rd = $5 each), and no tie is reported'); }
 // the screen: leader chips, a "You" line, prizes on paid rows, a sort switch
 { const ctx = { GRP_ESC: s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])), Date, Math, String, Array };
   vm.createContext(ctx);
