@@ -3709,7 +3709,7 @@ body {
   </div>
 </div>
 <div class="bf-toast" id="bf-toast"></div>
-<script src="bf_engine.js?v=1.61.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
+<script src="bf_engine.js?v=1.62.0"></script><!-- Dev-88 shared game engine; bump ?v= with BFEngine.ENGINE_VERSION -->
 <script>
 // ══════════════════════════════════════════
 // CONFIG
@@ -6298,6 +6298,7 @@ function buildPlayerChips(evt) {
 // start holes, the warnings, is the engine's, so Series / Cup / host events can reuse it with a different roster.
 // Stored per event in the Worker's event_group_sets (draft for the host, published for players).
 // ══════════════════════════════════════════
+let _grpTeeInit = null;
 let _grp = null;            // the host's open session: { gid, g, units, set, opts, sel, dirty, version, publishedAt, notes }
 let _groupSets = {};        // gatheringId -> { published, version } for the player's own cards
 const GRP_ESC = s => escapeHtml(String(s == null ? '' : s));
@@ -6331,8 +6332,10 @@ async function openGatheringGroups(gatheringId) {
   const units = groupsUnitsFor(g, rows);
   const base = saved && (saved.draft || saved.published);
   const holes = Number(g.holes) === 9 ? 9 : 18;
+  _grpTeeInit = { def: (base && base.tee_default) || '', tees: Object.assign({}, (base && base.tees) || {}) };
   _grp = { gid: gatheringId, g, units, set: null, sel: null, dirty: false, version: (saved && saved.version) || 0, publishedAt: (saved && saved.published_at) || null, notes: [],
     status: (saved && saved.published && saved.published.status) || (base && base.status) || 'preliminary', opts: { mode: (base && base.mode) || 'shotgun', group_size: (base && base.group_size) || 4, spread: (base && base.rules && base.rules.spread) || 'order', holes, first_tee: (base && base.rules && base.rules.first_tee) || '08:00', interval: (base && base.rules && base.rules.interval) || 10, start_holes: ((base && base.rules && base.rules.start_holes) || []).join(', '), start_pack: !!(base && base.rules && base.rules.start_pack), individual: false }, setupOpen: !base };
+  _grp.tee_default = _grpTeeInit.def; _grp.tees = _grpTeeInit.tees;
   if (base) {   // the roster moves right up to the tee: bring the saved groups up to date and say what changed
     const rc = BFEngine.BFGroups.reconcile(base, units);
     _grp.set = rc.set; if (rc.added.length) _grp.notes.push('Added: ' + rc.added.join(', ')); if (rc.removed.length) _grp.notes.push('No longer on the list: ' + rc.removed.join(', '));
@@ -6486,10 +6489,20 @@ function groupsMenu(gi, ii) {
   const rows = s.groups.map((g, k) => { const cnt = items.groups[k].reduce((t, x) => t + x.names.length, 0), cur = k === gi;
     return btn('Group ' + (k + 1), `groupsPlace(groupsItemAt(${gi},${ii}).names,${k})`, [start(g), cnt + '/' + lim + (!cur && cnt + n > lim ? ' · full' : '') + (cur ? ' · here' : '')].filter(Boolean).join(' · '), cur); }).join('');
   const label = it.unit && !_grp.opts.individual ? (it.unit.label || it.names.join(' & ')) : it.names.join(' & ');
-  openHostSheet('Move ' + GRP_ESC(label), `<div style="padding:0 16px">${rows}${gi >= 0 ? btn('Back to the pool', `groupsPlace(groupsItemAt(${gi},${ii}).names,-1)`, '') : ''}${btn('➕ New group', `groupsAddGroupWith(${gi},${ii})`, '')}
+  const teeChips = `<div style="margin:2px 0 10px"><div style="font-size:0.8rem;font-weight:700;margin-bottom:4px">⛳ Tee box${_grp.tee_default ? ` <span style="font-weight:400;color:var(--text-muted)">(everyone: ${GRP_ESC(_grp.tee_default)})</span>` : ''}</div><div style="display:flex;flex-wrap:wrap;gap:6px">${[...(_grp.tee_default ? [['__same', 'Same as everyone']] : []), ...CS_TEE_OPTIONS.map(t => [t, t])].map(([v, l]) => `<button type="button" onclick="groupsSetTeeFor(${gi},${ii},'${v}')" style="min-height:40px;padding:0 12px;border:1.5px solid ${it.names.every(n => groupsTeeOf(n) === (v === '__same' ? _grp.tee_default : v)) ? '#085041' : 'var(--border)'};background:${it.names.every(n => groupsTeeOf(n) === (v === '__same' ? _grp.tee_default : v)) ? 'var(--green-light)' : '#fff'};border-radius:10px;font-family:inherit;font-size:0.9rem;cursor:pointer">${l}</button>`).join('')}<button type="button" onclick="closeHostSheet();groupsTeeOther(false,${gi},${ii})" style="min-height:40px;padding:0 12px;border:1.5px solid var(--border);background:#fff;border-radius:10px;font-family:inherit;font-size:0.9rem;cursor:pointer">Other…</button></div></div>`;
+  openHostSheet('Move ' + GRP_ESC(label), `<div style="padding:0 16px">${teeChips}${rows}${gi >= 0 ? btn('Back to the pool', `groupsPlace(groupsItemAt(${gi},${ii}).names,-1)`, '') : ''}${btn('➕ New group', `groupsAddGroupWith(${gi},${ii})`, '')}
     ${gi >= 0 ? `<div style="display:flex;gap:8px">${btn('↑ Earlier', `groupsItemMove(${gi},${ii},-1)`, '', ii === 0).replace('width:100%', 'width:auto;flex:1')}${btn('↓ Later', `groupsItemMove(${gi},${ii},1)`, '', ii >= items.groups[gi].length - 1).replace('width:100%', 'width:auto;flex:1')}</div>` : ''}</div>`);
 }
 function groupsAddGroupWith(gi, ii) { const it = groupsItemAt(gi, ii); if (!it) return; const s = _grp.set; s.groups.push({ members: [] }); if (s.mode !== 'none') BFEngine.BFGroups.schedule(s.groups, groupsOptsForEngine(), false); groupsPlace(it.names, s.groups.length - 1); }
+// Tee box (Brian, 2026-11-23): one box for everyone, and a per-player override. Plain words ("Blue"), no handicap/age rules, not used in scoring.
+function groupsTeeOf(name) { const lc = String(name || '').trim().toLowerCase(); return (_grp.tees && _grp.tees[lc]) || _grp.tee_default || ''; }
+function groupsSetTeeDefault(v) { _grp.tee_default = v === '__none' ? '' : v; _grp.dirty = true; groupsRender(); }
+function groupsTeeOther(forAll, gi, ii) { const v = (prompt('Which tee box?', '') || '').trim(); if (!v) return; if (forAll) groupsSetTeeDefault(v); else groupsSetTeeFor(gi, ii, v); }
+function groupsSetTeeFor(gi, ii, v) {
+  const it = groupsItemAt(gi, ii); if (!it) return; _grp.tees = _grp.tees || {};
+  it.names.forEach(n => { const k = String(n).trim().toLowerCase(); if (!v || v === '__same' || v === _grp.tee_default) delete _grp.tees[k]; else _grp.tees[k] = v; });
+  _grp.dirty = true; closeHostSheet(); groupsRender();
+}
 function groupsToggleSetup() { _grp.setupOpen = !_grp.setupOpen; groupsRender(); }
 function groupsRender() {
   const body = document.getElementById('host-sheet-body'); if (!body || !_grp) return;
@@ -6502,13 +6515,14 @@ function groupsRender() {
   const modeName = { shotgun: 'Shotgun', tee_times: 'Tee times', none: 'No start' }[o.mode] || o.mode;
   const open = s ? !!_grp.setupOpen : true;
   const settings = `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:10px">`
-    + (s ? `<button type="button" onclick="groupsToggleSetup()" style="display:flex;align-items:center;width:100%;min-height:40px;border:0;background:none;font-family:inherit;font-size:0.88rem;font-weight:700;cursor:pointer;padding:0;text-align:left"><span style="flex:1">⚙ ${modeName} · ${o.group_size} a group · ${o.spread === 'order' ? 'Roster order' : 'Shuffle'}${hasTeams ? (o.individual ? ' · players' : ' · teams') : ''}</span><span>${open ? '▴' : '▾'}</span></button>` : '')
+    + (s ? `<button type="button" onclick="groupsToggleSetup()" style="display:flex;align-items:center;width:100%;min-height:40px;border:0;background:none;font-family:inherit;font-size:0.88rem;font-weight:700;cursor:pointer;padding:0;text-align:left"><span style="flex:1">⚙ ${modeName} · ${o.group_size} a group · ${o.spread === 'order' ? 'Roster order' : 'Shuffle'}${_grp.tee_default ? ' · ' + GRP_ESC(_grp.tee_default) + ' tees' : ''}${hasTeams ? (o.individual ? ' · players' : ' · teams') : ''}</span><span>${open ? '▴' : '▾'}</span></button>` : '')
     + (open ? `<div style="${s ? 'margin-top:8px' : ''}">`
       + row('Start', seg([['shotgun', 'Shotgun'], ['tee_times', 'Tee times'], ['none', 'None']], o.mode, 'groupsSetOptMode'))
       + row('Players a group', seg([[2, '2'], [3, '3'], [4, '4'], [5, '5']], o.group_size, 'groupsSetOptSize'))
       + row('Mix', seg([['order', 'Roster order'], ['random', 'Shuffle']], o.spread, 'groupsSetOptSpread'))
       + (hasTeams ? row('You place', seg([['teams', 'Teams'], ['players', 'Players']], o.individual ? 'players' : 'teams', 'groupsSetOptPlace')) : '')
       + (o.mode === 'shotgun' ? row('Hole spacing', seg([['spread', 'Spread out'], ['every', 'Every hole']], o.start_pack ? 'every' : 'spread', 'groupsSetOptSpacing')) : '')
+      + `<div style="margin-bottom:8px"><div style="font-size:0.88rem;font-weight:600;margin-bottom:4px">Tee box <span style="font-weight:400;font-size:0.74rem;color:var(--text-muted)">everyone (change one player from their row)</span></div><div style="display:flex;flex-wrap:wrap;gap:6px">${[['__none', 'None'], ...CS_TEE_OPTIONS.map(t => [t, t])].map(([v, l]) => `<button type="button" class="seg-btn${(_grp.tee_default || '__none') === v ? ' seg-btn-active' : ''}" style="min-height:40px;padding:0 12px;border:1.5px solid var(--border);border-radius:10px" onclick="groupsSetTeeDefault('${v}')">${l}</button>`).join('')}<button type="button" class="seg-btn${_grp.tee_default && !CS_TEE_OPTIONS.includes(_grp.tee_default) ? ' seg-btn-active' : ''}" style="min-height:40px;padding:0 12px;border:1.5px solid var(--border);border-radius:10px" onclick="groupsTeeOther(true)">${_grp.tee_default && !CS_TEE_OPTIONS.includes(_grp.tee_default) ? GRP_ESC(_grp.tee_default) : 'Other…'}</button></div></div>`
       + (o.mode === 'shotgun' ? row('Start holes', `<input type="text" value="${GRP_ESC(o.start_holes)}" placeholder="auto-spread" oninput="groupsSetOptTyped('start_holes',this.value)" style="width:130px;${inpStyle}">`)
         : o.mode === 'tee_times' ? row('First tee', `<input type="time" value="${GRP_ESC(o.first_tee)}" oninput="groupsSetOptTyped('first_tee',this.value)" style="${inpStyle}"><input type="number" min="5" max="30" value="${GRP_ESC(o.interval)}" oninput="groupsSetOptTyped('interval',this.value)" style="width:60px;${inpStyle}"><span style="font-size:0.74rem;color:var(--text-muted)">min</span>`) : '')
       + `<button type="button" class="host-cta-btn" style="margin:6px 0 0" onclick="groupsSuggest()">✨ ${s ? 'Rebuild playing groups' : 'Build playing groups'}</button>`
@@ -6522,7 +6536,7 @@ function groupsRender() {
   const item = (it, gi, ii) => `<div ${fine ? `draggable="true" ondragstart="groupsDragStart(event,${gi},${ii})"` : ''} data-drop="${gi}" data-before="${ii}" ondragover="event.preventDefault()" ondrop="groupsDrop(event,${gi},${ii})" onclick="groupsMenu(${gi},${ii})"
       style="display:flex;align-items:center;gap:8px;border:1.5px solid var(--border);background:#fff;border-radius:12px;padding:4px 6px 4px 4px;margin-bottom:6px;min-height:50px;font-size:0.95rem;cursor:pointer">
       <span onpointerdown="groupsPtrDown(event,${gi},${ii})" onpointermove="groupsPtrMove(event)" onpointerup="groupsPtrUp(event)" onpointercancel="groupsPtrUp(event)" onclick="event.stopPropagation()" title="Drag" style="touch-action:none;display:flex;align-items:center;justify-content:center;width:40px;align-self:stretch;font-size:1.2rem;color:var(--text-muted);cursor:grab;user-select:none;-webkit-user-select:none">⠿</span>
-      <span style="flex:1;min-width:0;line-height:1.3">${label(it)}</span><span style="color:var(--text-muted);padding-right:6px">⋯</span></div>`;
+      <span style="flex:1;min-width:0;line-height:1.3">${label(it)}${(() => { const t = [...new Set(it.names.map(groupsTeeOf).filter(Boolean))]; return t.length && (t.some(x => x !== _grp.tee_default) || !_grp.tee_default) ? `<span style="display:block;font-size:0.74rem;color:#085041;font-weight:600">⛳ ${GRP_ESC(t.join(' / '))} tees</span>` : ''; })()}</span><span style="color:var(--text-muted);padding-right:6px">⋯</span></div>`;
   let poolHtml = '', groupsHtml = '';
   if (s) {
     const it = groupsItems(), nIn = arr => arr.reduce((t, x) => t + x.names.length, 0), nPool = nIn(it.pool);
@@ -6565,6 +6579,8 @@ async function groupsSave(quiet) {
   _grp.set.rules = Object.assign({}, _grp.set.rules || {}, { spread: _grp.opts.spread }, _grp.opts.mode === 'tee_times' ? { first_tee: _grp.opts.first_tee, interval: Number(_grp.opts.interval) || 10 } : {});
   const sh = groupsOptsForEngine().start_holes; if (sh) _grp.set.rules.start_holes = sh; else delete _grp.set.rules.start_holes;
   if (_grp.opts.start_pack) _grp.set.rules.start_pack = true; else delete _grp.set.rules.start_pack;
+  if (_grp.tee_default) _grp.set.tee_default = _grp.tee_default; else delete _grp.set.tee_default;
+  const tk = Object.keys(_grp.tees || {}).filter(k => _grp.tees[k] && _grp.tees[k] !== _grp.tee_default); if (tk.length) _grp.set.tees = Object.fromEntries(tk.map(k => [k, _grp.tees[k]])); else delete _grp.set.tees;
   try {
     const r = await gatheringsFetchJSON(`${GATHERINGS_API}/group-sets/gathering/${_grp.gid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host_id: currentPlayer, draft: groupsStripUnits(_grp.set) }) }, 10000);
     if (!r || !r.ok) throw new Error((r && r.error) || 'the server did not accept it');
@@ -6857,7 +6873,7 @@ function myGroupBannerHtml(evt) {
   const gs = evt && evt.gatheringId ? _groupSets[evt.gatheringId] : null; if (!gs || !gs.published || !currentPlayer) return '';
   const info = BFEngine.BFGroups.of(gs.published, currentPlayer);
   const mine = info ? `<div style="background:rgba(255,255,255,0.07);border:1.5px solid rgba(245,200,66,0.7);border-radius:10px;padding:10px 12px;margin:8px 0 4px;display:flex;gap:10px;align-items:center">
-    <span style="font-size:1.1rem">⛳</span><div style="flex:1;font-size:0.84rem;color:rgba(255,255,255,0.88);line-height:1.5"><b style="color:#F5C842">${GRP_ESC(BFEngine.BFGroups.startText(info))}</b>${gs.published.status === 'final' ? '' : ' <span style="font-size:0.72rem;opacity:0.7">(Preliminary)</span>'}${info.mates.length ? `<br>With ${teamNamesText(info.mates)}` : ''}</div></div>` : '';
+    <span style="font-size:1.1rem">⛳</span><div style="flex:1;font-size:0.84rem;color:rgba(255,255,255,0.88);line-height:1.5"><b style="color:#F5C842">${GRP_ESC(BFEngine.BFGroups.startText(info))}${info.tee ? ' · ' + GRP_ESC(info.tee) + ' tees' : ''}</b>${gs.published.status === 'final' ? '' : ' <span style="font-size:0.72rem;opacity:0.7">(Preliminary)</span>'}${info.mates.length ? `<br>With ${teamNamesText(info.mates)}` : ''}</div></div>` : '';
   // The full list, the same way the BFSeries card offers "Groupings & Tee Times".
   const all = `<button onclick="openGatheringGroupsSheet(${evt.gatheringId})" style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,0.06);border-radius:8px;margin:6px 0 2px;width:100%;border:none;cursor:pointer;font-family:inherit;text-align:left;color:rgba(255,255,255,0.9);font-size:0.83rem;font-weight:600">
     <span style="font-size:1rem">📋</span><span>Groups &amp; ${gs.published.mode === 'tee_times' ? 'Tee Times' : gs.published.mode === 'shotgun' ? 'Starting Holes' : 'Pairings'}${gs.published.status === 'final' ? '' : ' <span style="font-size:0.72rem;opacity:0.6;font-weight:400">(Preliminary)</span>'}</span><span style="margin-left:auto;font-size:0.78rem;color:rgba(255,255,255,0.45)">›</span></button>`;

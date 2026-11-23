@@ -70,3 +70,8 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 - The "Not in a group" pool and the groups list are now separate scroll boxes (`.grp-pane`, ids `grp-pool-pane` / `grp-groups-pane`; 60vh, 28vh/42vh on phones).
 - Touch drag auto-scrolls whichever pane is under the finger (not just the pane the drag started in), so the last groups can be reached.
 - Full suite: only the four known baseline failures.
+
+## v4.100.0 — Tee box on the Playing groups setup (engine 1.62.0)
+- Decision (Brian): no automated tee rules (handicap/age variants are too many). Just a plain-words Tee box on the Groups setup.
+- Setup row: one tee for everyone (Black…Silver, None, Other…); a player's ⋯ menu sets that player (or team) to a different tee. Saved in the Groups doc as `tee_default` + `tees{lowercased name: tee}`; no Worker change (doc is stored as JSON).
+- `BFGroups.of` returns `tee`; the player's event-card banner shows "Group 3 · start on hole 7 · Blue tees". Not used in scoring. Tee-for-handicap stays in the Games form (net).

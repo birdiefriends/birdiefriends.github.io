@@ -3,7 +3,7 @@ import fs from 'fs'; import vm from 'vm'; import { JSDOM } from 'jsdom'; import 
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine();
-const FN = ['groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsStartManual', 'groupsSetOptSpacing', 'groupsToggleSetup', 'groupsPlace', 'groupsItems', 'groupsItemAt', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsDropAt', 'groupsScroller', 'groupsPtrDown', 'groupsPtrMove', 'groupsPtrUp', 'groupsMenu', 'groupsAddGroupWith', 'groupsToggleSetup', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsSetStatus', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState', 'teamsStateFromPicks', 'hostSetTeamsFor'];
+const FN = ['groupsTeeOf', 'groupsSetTeeDefault', 'groupsSetTeeFor', 'groupsTeeOther', 'groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsStartManual', 'groupsSetOptSpacing', 'groupsToggleSetup', 'groupsPlace', 'groupsItems', 'groupsItemAt', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsDropAt', 'groupsScroller', 'groupsPtrDown', 'groupsPtrMove', 'groupsPtrUp', 'groupsMenu', 'groupsAddGroupWith', 'groupsToggleSetup', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsSetStatus', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState', 'teamsStateFromPicks', 'hostSetTeamsFor'];
 const dom = new JSDOM('<body><div id="host-sheet-body"></div><button id="host-sheet-back"></button></body>');
 const reqs = []; let regs, groupSet = null;
 const players = Array.from({ length: 24 }, (_, i) => 'P' + (i + 1)).concat(['Rich']);
@@ -21,7 +21,7 @@ const ctx = { setInterval, clearInterval, window: dom.window, document: dom.wind
     return { ok: true };
   } };
 vm.createContext(ctx);
-vm.runInContext('let _grp = null; let _groupSets = {}; const GRP_ESC = s => escapeHtml(String(s == null ? "" : s));\n' + FN.map(n => extractFn(src, n)).join('\n'), ctx);
+vm.runInContext('let _grp = null; let _grpTeeInit = null; const CS_TEE_OPTIONS = ["Black","Blue","Green","White","Yellow","Gold","Red","Silver"]; let _groupSets = {}; const GRP_ESC = s => escapeHtml(String(s == null ? "" : s));\n' + FN.map(n => extractFn(src, n)).join('\n'), ctx);
 const doc = dom.window.document, body = () => doc.getElementById('host-sheet-body');
 await vm.runInContext('openGatheringGroups(104)', ctx);
 ok(/Build playing groups/.test(body().textContent) && /25 players/.test(body().textContent) && /teams are placed as one/.test(body().textContent), 'opens with the roster and a Build button');
@@ -47,6 +47,18 @@ vm.runInContext('groupsSuggest()', ctx); set = vm.runInContext('_grp.set', ctx);
 ok(!!doc.getElementById('grp-pool-pane') && !!doc.getElementById('grp-groups-pane') && doc.getElementById('grp-pool-pane') !== doc.getElementById('grp-groups-pane'), 'the pool and the groups are separate panes');
 ok(/\.grp-pane\s*\{[^}]*overflow-y:\s*auto[^}]*max-height/.test(src) && /overscroll-behavior:\s*contain/.test(src), 'each pane scrolls inside its own box');
 ok(/closest\('\.grp-pane'\)/.test(src), 'a touch drag auto-scrolls the pane under the finger, not just the one it started in');
+// ── tee box: one for everyone, one player different; it saves with the groups and the player is told
+const R = c => vm.runInContext(c, ctx);
+R("_grp.tee_default=''; _grp.tees={}; _grp.setupOpen=true; groupsRender()");
+ok(/Tee box/.test(body().innerHTML), 'the setup has a Tee box row');
+R("groupsSetTeeDefault('Blue')"); ok(R('_grp.tee_default')==='Blue' && /Blue tees/.test(body().innerHTML), 'everyone on Blue shows in the setup line');
+const _nm=R("_grp.set.groups.find(g=>(g.members||[]).length).members[0]");
+R(`_grp.tees={}; _grp.tees[${JSON.stringify(_nm.toLowerCase())}]='Gold'; groupsRender()`); ok(R(`groupsTeeOf(${JSON.stringify(_nm)})`)==='Gold', 'one player can be on a different tee');
+const _other=R(`_grp.set.groups.flatMap(g=>g.members).find(n=>n!==${JSON.stringify(_nm)})`); ok(R(`groupsTeeOf(${JSON.stringify(_other)})`)==='Blue', 'everyone else keeps the default');
+ok(/⛳ [^<]*Gold/.test(body().innerHTML), 'the override shows on the player row');
+const G2=E.BFGroups, gr=[{members:[_nm]}];
+ok(G2.of({groups:gr,tee_default:'Blue',tees:{[_nm.toLowerCase()]:'Gold'}},_nm).tee==='Gold' && G2.of({groups:gr,tee_default:'Blue'},_nm).tee==='Blue' && G2.of({groups:gr},_nm).tee===null, 'the player lookup returns their tee (override, else default, else none)');
+R("groupsSetTeeDefault('')");
 // ── hole spacing: spread over the course (default) or every hole back to back
 vm.runInContext("_grp.opts.mode = 'shotgun'; _grp.setupOpen = true; groupsSuggest()", ctx);
 let sp = vm.runInContext('_grp.set.groups.map(g => g.start_hole)', ctx);

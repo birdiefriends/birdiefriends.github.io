@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.61.0';
+  const ENGINE_VERSION = '1.62.0';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -3619,7 +3619,7 @@
     const lc = s => String(s || '').trim().toLowerCase(), gs = (set && set.groups) || [];
     const i = gs.findIndex(g => (g.members || []).some(m => lc(m) === lc(name)));
     if (i < 0) return null; const g = gs[i];
-    return { index: i, number: i + 1, start_hole: g.start_hole == null ? null : g.start_hole, wave: g.wave || null, tee_time: g.tee_time || null, label: g.label || null, mates: (g.members || []).filter(m => lc(m) !== lc(name)) };
+    return { index: i, number: i + 1, start_hole: g.start_hole == null ? null : g.start_hole, wave: g.wave || null, tee_time: g.tee_time || null, label: g.label || null, tee: String(((set && set.tees) || {})[lc(name)] || (set && set.tee_default) || '').trim() || null, mates: (g.members || []).filter(m => lc(m) !== lc(name)) };
   }
   // The words a player is told: "Group 3 · start on hole 7 (A)" / "Group 3 · 9:20 AM"
   function groupsStartText(info, mode) {
