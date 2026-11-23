@@ -25,6 +25,15 @@ ok(b.source === 'round' && b.scopes[0].rows[0].label === 'Bo' && b.scopes[0].row
 ok(E.prizeBoard({ games: ['scramble'], game_configs: {} }, cards, PARS, tee) === null, 'no Prizes, no board');
 b = E.prizeBoard(sc1, [], PARS, tee);
 ok(b.scopes[0].rows.every(r => r.place === null && r.prize === 0), 'before any score nobody is ranked or paid');
+// ties share the places they cover (whole dollars), like the payout
+{ const tie = [card('Ann', Array(18).fill(4)), card('Bo', Array(18).fill(4)), card('Cy', Array(18).fill(4)), card('Di', Array(18).fill(5))];
+  const tb = { flights: [], prizes: [{ scope: 'overall', place: 1, amount: 50 }, { scope: 'overall', place: 2, amount: 30 }, { scope: 'overall', place: 3, amount: 20 }] };
+  const row = { games: ['podium'], game_configs: { podium: { dollar_per_player: 25, rank_by: 'round', basis: 'gross', table: tb } } };
+  const o = E.prizeBoard(row, tie, PARS, null).scopes[0].rows;
+  ok(o.slice(0, 3).every(r => r.tied && r.place === 1 && r.prize === 33) && o[3].prize === 0, 'three tied for 1st split places 1-3 ($100 / 3 = $33 each), the 4th gets nothing');
+  const t2 = [card('Ann', Array(18).fill(4)), card('Bo', Array(18).fill(5)), card('Cy', Array(18).fill(5)), card('Di', Array(18).fill(6))];
+  const o2 = E.prizeBoard(row, t2, PARS, null).scopes[0].rows;
+  ok(o2[0].prize === 50 && o2[1].prize === 25 && o2[2].prize === 25 && o2[3].prize === 0, 'a tie for 2nd splits 2nd and 3rd ($25 each)'); }
 // the screen: leader chips, a "You" line, prizes on paid rows, a sort switch
 { const ctx = { GRP_ESC: s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])), Date, Math, String, Array };
   vm.createContext(ctx);
@@ -33,9 +42,9 @@ ok(b.scopes[0].rows.every(r => r.place === null && r.prize === 0), 'before any s
   let h = ctx.f.leaderboardPrizesHtml(pb, 'Ann', {}), t = txt(h);
   ok(/Overall/.test(t) && /Green/.test(t) && /Combo\+/.test(t) && (h.match(/lbPick\(/g) || []).length === 3, 'one chip per scope');
   ok(/You: .*1st Green/.test(t) && /Overall/.test(t.split('You:')[1].split('By score')[0]), 'a "You" line shows where the viewer stands in each scope');
-  ok(/\$50/.test(t) && /Not final until the host closes/.test(t), 'the paid row shows its prize and it says not final');
+  ok(!/\$/.test(t.split('Not final')[0]) && /Not final until the host closes/.test(t), 'no money on the live board, and it says not final');
   ctx.f.lbPick('c'); h = ctx.f.leaderboardPrizesHtml(pb, 'Ann', {}); t = txt(h);
-  ok(ctx.f.ui().scope === 'c' && /Combo\+ · Gross to par/.test(t) && /\$30/.test(t) && /\$10/.test(t) && /PAID PLACES/.test(t) === false, 'a flight chip shows that flight, with its prizes (no divider when everyone is paid)');
+  ok(ctx.f.ui().scope === 'c' && /Combo\+ · Gross to par/.test(t) && !/\$|PAID/.test(t), 'a flight chip shows that flight, still no money');
   ctx.f.lbPick('overall'); ctx.f.lbSort('holes'); h = ctx.f.leaderboardPrizesHtml(pb, 'Ann', {}); t = txt(h);
   ok(t.indexOf('Cy') < t.indexOf('Di') && ctx.f.ui().sort === 'holes', 'sorted by holes played: furthest along first');
   ok(/No scores saved yet/.test(ctx.f.leaderboardPrizesHtml(E.prizeBoard(sc1, [], PARS, tee), 'Ann', {})), 'before any score: a plain message');

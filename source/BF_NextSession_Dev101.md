@@ -117,3 +117,6 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 
 ## v4.107.1
 - MiserBall money card shows its total and % of pot in the right margin like the others; "Play it by team" is hidden when the Scramble is team size 1 (a team of one is the individual game).
+
+## v4.107.2 (engine 1.65.1)
+- Live leaderboard shows NO money (Brian's call): place status only; prize amounts stay in the engine's prizeBoard rows (tie-split tested) for later. Preliminary payouts still appear once every card is in. Added tie tests for the payout (3-way, 4-way, tie for 2nd, everyone tied, odd dollar reported).

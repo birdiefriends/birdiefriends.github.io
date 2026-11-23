@@ -61,4 +61,11 @@ ok(E.cleanGameConfig('podium', { dollar_per_player: 20, table: { flights, prizes
   r = run({ flights: [{ id: 'green', name: 'Green', tees: ['Green'] }], prizes: [{ scope: 'overall', place: 1, amount: 40 }, { scope: 'green', place: 1, amount: 20 }] }, [mk('A', 4), mk('B', 4), mk('C', 5), mk('D', 5)], new Map([['a', 'Green'], ['b', 'Green'], ['c', 'Blue'], ['d', 'Blue']]), 20, [sc], 'scramble');
   const tm = r.payouts.find(p => p.player === 'A & B');
   ok(tm && tm.podium === 60 && r.podium.scopes.find(x => x.id === 'green').field === 1, 'a team wins Overall and its flight as one entry (A & B $60); a flight needs the whole team in it'); }
+// ties in the payout: shared places, whole dollars, odd dollars reported not lost
+{ const names = 'ABCDEFGHIJ'.split(''), P3 = [{ scope: 'overall', place: 1, amount: 50 }, { scope: 'overall', place: 2, amount: 30 }, { scope: 'overall', place: 3, amount: 20 }];
+  const go = sc => { const cs = names.map((n, i) => mk(n, sc[i])); const r = E.computeRoundPayout({ payout: { entry_per_player: 10 }, addons: [{ id: 'podium', entity: 'individual', dollar_per_player: 10, basis: 'gross', rank_by: 'round', table: { flights: [], prizes: P3 } }] }, { scorecards: cs }); return { by: Object.fromEntries(r.payouts.map(p => [p.player, p.podium || 0])), sum: r.payouts.reduce((a, p) => a + (p.total || 0), 0), un: r.unallocated }; };
+  let t = go([4, 4, 4, 5, 5, 5, 5, 5, 5, 5]); ok(t.by.A === 33 && t.by.B === 33 && t.by.C === 33 && t.by.D === 0 && t.un === 1 && t.sum === 99, 'three-way tie for 1st: $33 each, the odd $1 is reported as unallocated, nothing invented');
+  t = go([4, 4, 4, 4, 6, 6, 6, 6, 6, 6]); ok(t.by.A === 25 && t.by.D === 25 && t.by.E === 0 && t.sum === 100, 'four-way tie for 1st: the $100 of places 1-3 is shared four ways');
+  t = go([4, 5, 5, 6, 6, 6, 6, 6, 6, 6]); ok(t.by.A === 50 && t.by.B === 25 && t.by.C === 25, 'a tie for 2nd splits 2nd and 3rd');
+  t = go(Array(10).fill(4)); ok(Object.values(t.by).every(v => v === 10), 'everyone tied: each gets back the buy-in'); }
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);

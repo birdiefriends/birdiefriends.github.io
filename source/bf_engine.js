@@ -26,7 +26,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const ENGINE_VERSION = '1.65.0';
+  const ENGINE_VERSION = '1.65.1';
 
   const norm = s => String(s || '').trim().toLowerCase();
 
@@ -2298,7 +2298,12 @@
       let place = 0, prev = null; rows.forEach((r, i) => { const k = r.played === 0 ? 'none' : key(r) + (board.ranked_by === 'total' ? '|' + r.played : ''); if (k !== prev) { place = i + 1; prev = k; } r.place = r.played === 0 ? null : place; });
       rows.forEach(r => { r.tied = r.place != null && rows.filter(x => x.place === r.place).length > 1; });
       const prizes = pc.table.prizes.filter(z => z.scope === sd.id).sort((a, b) => a.place - b.place).map(z => ({ place: z.place, amount: z.amount > 0 ? Number(z.amount) : 0 }));
-      rows.forEach(r => { const z = prizes.find(x => x.place === r.place); r.prize = z && z.amount > 0 ? z.amount : 0; });
+      rows.forEach(r => {   // a tie shares the places it covers, whole dollars each, exactly as the payout does
+        if (r.place == null) { r.prize = 0; return; }
+        const n = rows.filter(x => x.place === r.place).length; let pool = 0;
+        for (let k = 0; k < n; k++) { const z = prizes.find(x => x.place === r.place + k); if (z) pool += z.amount; }
+        r.prize = Math.floor(pool / n);
+      });
       return { id: sd.id, name: sd.name, rows, prizes, field: rows.length, leader: rows.find(r => r.place === 1) || null };
     });
     if (flights.length) board.rows.forEach(r => { if (!flightOfRow(flights, { members: r.pair }, teeByPlayer)) unflighted.push(r.name || r.pair.join(' & ')); });
