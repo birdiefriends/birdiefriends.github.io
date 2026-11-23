@@ -2,7 +2,7 @@
 import fs from 'fs'; import vm from 'vm'; import { extractFn, loadEngine } from './extract.mjs'; import { fileURLToPath } from 'url';
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
-const FN = ['pzResultsHtml', 'pzBlank', 'pzTable', 'pzPot', 'pzPlan', 'pzRefresh', 'pzSetRankBy', 'pzPreset', 'pzFlightName', 'pzFlightTee', 'pzAddFlight', 'pzRemoveFlight', 'pzAddPlace', 'pzRemovePlace', 'pzPrize', 'pzCheckHtml', 'pzSources', 'setGamesFormPrizesDollarPerPlayer', 'gatheringGamesPodiumSectionHtml'];
+const FN = ['pzResultsHtml', 'pzTeeChoices', 'pzFlightTeeOther', 'pzBlank', 'pzTable', 'pzPot', 'pzPlan', 'pzRefresh', 'pzSetRankBy', 'pzPreset', 'pzFlightName', 'pzFlightTee', 'pzAddFlight', 'pzRemoveFlight', 'pzAddPlace', 'pzRemovePlace', 'pzPrize', 'pzCheckHtml', 'pzSources', 'setGamesFormPrizesDollarPerPlayer', 'gatheringGamesPodiumSectionHtml'];
 const els = {}; let refreshes = 0;
 const ctx = { Math, Number, String, Array, Object, JSON, parseFloat, escapeHtml: s => String(s), document: { getElementById: id => els[id] || null }, updateGamesFormPotPreview() { refreshes++; }, gamesFormAutoRanking() {}, refreshGamesFormHcpSection() {} };
 vm.createContext(ctx);
@@ -39,4 +39,7 @@ R("_gamesFormSelected.delete('podium')"); ok(R('gatheringGamesPodiumSectionHtml(
   ok(R2('gamesFormScrambleInPrizes()') === false, 'a normal Scramble is not in Flights & places');
   R2('gamesFormScrambleToPrizes()');
   ok(R2('gamesFormScrambleInPrizes()') === true && R2('_gamesFormSide.scramble.dollar_per_player') === 0 && R2('_gamesFormSide.scramble.podium_total') === undefined && R2("_gamesFormSelected.has('podium')") && R2('_gamesFormPrizes.rank_by') === 'scramble' && c2._went === 'podium', 'choosing Flights & places clears the Scramble pot, turns Prizes on ranked by the Scramble, and goes to the Prizes screen'); }
+// A custom tee (Combo) shows as a choice once a flight or the Playing groups use it
+{ R("pzTable().flights[0].tees.push('Combo')"); ok(R('pzTeeChoices()').includes('Combo') && R('pzTeeChoices()').includes('Black'), 'a custom tee already in a flight is offered alongside the standard boxes');
+  R("_gamesFormSelected.add('podium')"); ok(/pzFlightTeeOther\(0\)/.test(R('gatheringGamesPodiumSectionHtml()')), 'each flight has an Other… tee button'); }
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);

@@ -22852,6 +22852,14 @@ function pzPreset(kind) {
   pzRefresh();
 }
 function pzFlightName(i, v) { const f = pzTable().flights[i]; if (f) f.name = String(v).slice(0, 24); }
+// Tee boxes a flight can take: the standard ones, plus any custom tee (Combo, Seniors...) already used in a flight or typed into the Playing groups.
+function pzTeeChoices() {
+  const out = CS_TEE_OPTIONS.slice(), add = t => { t = String(t || '').trim(); if (t && !out.some(x => x.toLowerCase() === t.toLowerCase())) out.push(t); };
+  pzTable().flights.forEach(f => (f.tees || []).forEach(add));
+  try { const sets = typeof _groupSets !== 'undefined' ? _groupSets : {}; Object.values(sets).forEach(g => [g && g.published, g && g.draft].forEach(d => { if (!d) return; add(d.tee_default); Object.values(d.tees || {}).forEach(add); })); } catch (e) {}
+  return out;
+}
+function pzFlightTeeOther(i) { const v = (prompt('Which tee box? (the same name used in Playing groups)', '') || '').trim(); if (!v) return; const f = pzTable().flights[i]; if (f && !f.tees.some(x => String(x).toLowerCase() === v.toLowerCase())) f.tees.push(v); pzRefresh(); }
 function pzFlightTee(i, tee) { const f = pzTable().flights[i]; if (!f) return; const at = f.tees.indexOf(tee); if (at >= 0) f.tees.splice(at, 1); else f.tees.push(tee); pzRefresh(); }
 function pzAddFlight() {
   const t = pzTable(); if (t.flights.length >= 4) return;
@@ -22896,7 +22904,7 @@ function gatheringGamesPodiumSectionHtml() {
     ${t.prizes.filter(x => x.scope === scope).length < 5 ? `<button type="button" class="btn btn-ghost btn-sm" style="min-height:40px" onclick="pzAddPlace('${scope}')">➕ Add a place</button>` : ''}</div>`;
   const flightExtra = (f, i) => `<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><input type="text" value="${esc(f.name)}" maxlength="24" oninput="pzFlightName(${i},this.value)" style="flex:1;${inp}"><button type="button" onclick="pzRemoveFlight(${i})" style="min-height:38px;padding:0 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text-muted);font-size:0.78rem">Remove flight</button></div>
     <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:4px">Players on these tee boxes (set in Playing groups) are in this flight:</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">${CS_TEE_OPTIONS.map(x => `<button type="button" class="seg-btn${f.tees.includes(x) ? ' seg-btn-active' : ''}" style="min-height:36px;padding:0 10px;border:1.5px solid var(--border);border-radius:10px;font-size:0.84rem" onclick="pzFlightTee(${i},'${x}')">${x}</button>`).join('')}</div>`;
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">${pzTeeChoices().map(x => `<button type="button" class="seg-btn${f.tees.includes(x) ? ' seg-btn-active' : ''}" style="min-height:36px;padding:0 10px;border:1.5px solid var(--border);border-radius:10px;font-size:0.84rem" onclick="pzFlightTee(${i},this.dataset.t)" data-t="${esc(x)}">${esc(x)}</button>`).join('')}<button type="button" class="seg-btn" style="min-height:36px;padding:0 10px;border:1.5px solid var(--border);border-radius:10px;font-size:0.84rem" onclick="pzFlightTeeOther(${i})">Other…</button></div>`;
   const srcs = pzSources(), cur = srcs.some(([k]) => k === c.rank_by) ? c.rank_by : 'auto';
   const net = c.basis === 'net';
   return `<div class="host-form-field" id="games-form-podium-field">

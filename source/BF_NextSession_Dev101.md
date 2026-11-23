@@ -100,3 +100,6 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 
 ## v4.104.1 — Prizes screen was blank
 - The whole Prizes section sat inside `.gw-money` (hidden on every wizard screen but the last). Only the $ per player row is money-only now; flights/places/ranked-by show on the Prizes step. Rule: anything a host configures on a setup screen must not live inside `.gw-money`.
+
+## v4.105.0 — custom tee boxes in Prizes flights
+- Flight tee picker now offers custom tees (any already in a flight or typed in Playing groups) plus an "Other…" button. Matching is case-insensitive on the tee name, so it must be spelled the same as in Playing groups.
