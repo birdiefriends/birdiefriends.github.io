@@ -22902,7 +22902,7 @@ function gatheringGamesPodiumSectionHtml() {
   return `<div class="host-form-field" id="games-form-podium-field">
       <label>🏆 Prizes</label>
       <div class="gw-money"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:0.86rem">$</span>
-        <input type="number" id="games-form-pz-dpp" min="0.01" step="0.01" value="${c.dollar_per_player || ''}" style="width:90px" oninput="setGamesFormPrizesDollarPerPlayer(this.value)"><span style="font-size:0.86rem;color:var(--text-muted)">per player into the prize pot</span></div>
+        <input type="number" id="games-form-pz-dpp" min="0.01" step="0.01" value="${c.dollar_per_player || ''}" style="width:90px" oninput="setGamesFormPrizesDollarPerPlayer(this.value)"><span style="font-size:0.86rem;color:var(--text-muted)">per player into the prize pot</span></div></div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 10px">Paid in tiers of places. This works with any game: it ranks the round totals, or the standings of another game you picked.</div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:0.86rem;font-weight:600;flex:1">Ranked by</span>
         <select onchange="pzSetRankBy(this.value)" style="${inp}">${srcs.map(([k, l]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
@@ -22912,7 +22912,7 @@ function gatheringGamesPodiumSectionHtml() {
       ${scopeBox('overall', '🏆 Overall')}
       ${t.flights.map((f, i) => scopeBox(f.id, '🚩 ' + esc(f.name), flightExtra(f, i))).join('')}
       ${t.flights.length < 4 ? `<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px;margin-bottom:6px" onclick="pzAddFlight()">➕ Add a flight</button>` : ''}
-      <div id="pz-check" style="font-size:0.8rem;line-height:1.45;margin:4px 0 8px">${pzCheckHtml()}</div></div>
+      <div id="pz-check" style="font-size:0.8rem;line-height:1.45;margin:4px 0 8px">${pzCheckHtml()}</div>
     </div>`;
 }
 // The published result: each prize with who took it, then the standings. label/line/money/esc are the results screen's own helpers.

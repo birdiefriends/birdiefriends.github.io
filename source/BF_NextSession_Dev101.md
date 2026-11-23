@@ -97,3 +97,6 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 - Scramble Pays step has a 4th option, "Flights & places": zeroes the Scramble's own pot, turns the Prizes game on (rank_by 'scramble') and jumps to the Prizes screen. Picking any other Pays option turns Prizes back off. Money step hides the Scramble podium card in this mode (Prizes row carries the money).
 - Engine unchanged (1.64.0); no Worker change beyond the v4.103 file (podium schema) which must be deployed.
 - Still to verify: reopening a saved config shows "Flights & places"; team-of-1 Scramble + Prizes through live scoring/Close.
+
+## v4.104.1 — Prizes screen was blank
+- The whole Prizes section sat inside `.gw-money` (hidden on every wizard screen but the last). Only the $ per player row is money-only now; flights/places/ranked-by show on the Prizes step. Rule: anything a host configures on a setup screen must not live inside `.gw-money`.
