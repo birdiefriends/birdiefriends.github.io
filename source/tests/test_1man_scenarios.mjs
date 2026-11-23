@@ -91,4 +91,19 @@ ok(threw === 0, 'fuzz: no scenario throws (' + threw + ' of 300)'); ok(unbalance
   // a field too small to fund the posted prizes: capped by what is left, shrunk evenly, still balanced
   const tiny = run(mkRow(NAMES.slice(0, 10)), distinct(NAMES.slice(0, 10)), { 3: { player: NAMES[0], dist: 3 }, 8: { player: NAMES[1], dist: 3 }, 12: { player: NAMES[2], dist: 3 }, 16: { player: NAMES[3], dist: 3 } });
   balanced(tiny, 'prizes + CTP bigger than a 10-player pot'); console.log('  10 players:', JSON.stringify({ pot: tiny.total_pot, podium: tiny.podium.pot, scaled: !!tiny.podium.scaled, paid: sum(tiny) })); }
+// 14. the stored results (MyHistory and the Close sheet render the same saved summary): the 1Man's full summary survives JSON and renders without errors
+import fs from 'fs'; import vm from 'vm'; import { extractFn } from './extract.mjs'; import { fileURLToPath } from 'url';
+{ const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const full = run(mkRow(NAMES), NAMES.map(n => randCard(n, 0)), { 3: { player: NAMES[1], dist: 6 }, 8: { player: NAMES[4], dist: 2 } }, [{ player_name: NAMES[2], kept: false, lost_hole: 5, lost_stroke: 1 }], SH);
+  const stored = JSON.parse(JSON.stringify(full));
+  const c = { BFEngine: E, escapeHtml: esc, esc, norm: x => String(x).trim().toLowerCase(), console, Math, Number, String, Array, Object, Map, Set, JSON }; vm.createContext(c);
+  const need = ['bbCleanName', 'skinWonText', 'renderGatheringPayoutHtml', 'pzResultsHtml', 'scrambleResultsHtml', 'tiebreakBannerHtml'];
+  const stub = ['fourballResultsHeatHtml', 'gpBtnStyle', 'gpSort', 'gpTab', 'gpTabStyle', 'isScrB', 'sideResultHeroHtml']; stub.forEach(n => { c[n] = () => ''; });
+  let html = '', err = null;
+  try { vm.runInContext(need.map(n => { try { return extractFn(src, n); } catch (e) { return ''; } }).join('\n') + '\nthis.f = renderGatheringPayoutHtml;', c); html = c.f(stored); } catch (e) { err = e; }
+  ok(!err, 'the results card renders for the 1Man summary' + (err ? ': ' + err.message : ''));
+  ok(/Prizes/.test(html) && /Overall/.test(html) && /Green/.test(html) && /Combo\+/.test(html), 'the card shows Prizes with Overall and both flights');
+  ok(NAMES.some(n => html.includes(esc(n))), 'winners are named in full');
+  ok(!/NaN|undefined|\[object/.test(html), 'no NaN / undefined / [object] in the card'); }
 console.log(`1man_scenarios: ${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
