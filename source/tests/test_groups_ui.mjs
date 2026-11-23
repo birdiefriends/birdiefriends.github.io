@@ -3,7 +3,7 @@ import fs from 'fs'; import vm from 'vm'; import { JSDOM } from 'jsdom'; import 
 const src = fs.readFileSync(fileURLToPath(new URL('../portal.html', import.meta.url)), 'utf8');
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; if (!c) console.log('FAIL', m); };
 const E = loadEngine();
-const FN = ['groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsDropAt', 'groupsScroller', 'groupsPtrDown', 'groupsPtrMove', 'groupsPtrUp', 'groupsMenu', 'groupsAddGroupWith', 'groupsToggleSetup', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsSetStatus', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState', 'teamsStateFromPicks', 'hostSetTeamsFor'];
+const FN = ['groupsRowsFromApi', 'groupsUnitsFor', 'groupsStripUnits', 'openGatheringGroups', 'groupsOptsForEngine', 'groupsStartManual', 'groupsToggleSetup', 'groupsPlace', 'groupsItems', 'groupsItemAt', 'groupsWarnings', 'groupsWarnHtml', 'groupsSuggest', 'groupsSetOpt', 'groupsSetOptTyped', 'groupsSetField', 'groupsRefreshStatus', 'groupsItems', 'groupsItemAt', 'groupsPlace', 'groupsDropAt', 'groupsScroller', 'groupsPtrDown', 'groupsPtrMove', 'groupsPtrUp', 'groupsMenu', 'groupsAddGroupWith', 'groupsToggleSetup', 'groupsToPool', 'groupsDragStart', 'groupsDrop', 'groupsItemMove', 'groupsGroupMove', 'groupsSetOptPlace', 'groupsSetStatus', 'groupsAddGroup', 'groupsRemoveGroup', 'groupsRender', 'groupsSetOptMode', 'groupsSetOptSize', 'groupsSetOptSpread', 'groupsSave', 'groupsPublish', 'groupsLoadPublished', 'myGroupBannerHtml', 'openGatheringGroupsSheet', 'teamSizeOf', 'partnersOf', 'teamNamesText', 'teamsState', 'teamsStateFromPicks', 'hostSetTeamsFor'];
 const dom = new JSDOM('<body><div id="host-sheet-body"></div><button id="host-sheet-back"></button></body>');
 const reqs = []; let regs, groupSet = null;
 const players = Array.from({ length: 24 }, (_, i) => 'P' + (i + 1)).concat(['Rich']);
@@ -26,10 +26,23 @@ const doc = dom.window.document, body = () => doc.getElementById('host-sheet-bod
 await vm.runInContext('openGatheringGroups(104)', ctx);
 ok(/Build playing groups/.test(body().textContent) && /25 players/.test(body().textContent) && /teams are placed as one/.test(body().textContent), 'opens with the roster and a Build button');
 ok(/\/gatherings\/104\/registrations/.test(reqs[0][0]) && reqs.some(r => /group-sets\/gathering\/104\?host_id=Brian%20Hager/.test(r[0])), 'reads the CURRENT registrations and any saved groups');
+ok(/place the players myself/.test(body().textContent), 'offered before any groups exist');
 vm.runInContext('groupsSuggest()', ctx);
 let set = vm.runInContext('_grp.set', ctx);
 ok(set.groups.length === 7 && set.groups.every(g => g.start_hole >= 1), 'suggests 7 groups, each with a starting hole: ' + set.groups.map(g => g.start_hole));
 ok(/Group 7/.test(body().textContent) && /Hole/.test(body().textContent), 'and shows them');
+// ── place the players yourself: empty groups sized to the field, everyone waiting in the pool, then the host puts each one where they want
+vm.runInContext('groupsToggleSetup()', ctx);
+ok(/place the players myself/.test(body().textContent), 'the Groups screen offers "I\u2019ll place the players myself"');
+vm.runInContext('confirm = () => true; groupsStartManual()', ctx);
+let ms = vm.runInContext('_grp.set', ctx);
+ok(ms.groups.length === 7 && ms.groups.every(g => (g.members || []).length === 0), 'manual start: 7 empty groups for 25 players of 4');
+ok(ms.groups.every(g => g.start_hole >= 1), 'each empty group already has a start hole');
+ok(/25 to place/.test(body().textContent), 'everyone is waiting in Not in a group (25 to place)');
+vm.runInContext("groupsPlace(groupsItemAt(-1,0).names, 2)", ctx);
+ok(vm.runInContext('_grp.set.groups[2].members.length', ctx) >= 1 && /\b(2[0-4]) to place/.test(body().textContent), 'placing a player puts them in the chosen group and shrinks the pool');
+vm.runInContext('groupsSuggest()', ctx); set = vm.runInContext('_grp.set', ctx);
+
 ok(/Group 1 has 2 players/.test(body().textContent), 'the short group is advice on screen, not a block');
 // the screen places TEAMS (a scramble places team names, not players)
 const lc = s => s.toLowerCase(); const find = n => set.groups.findIndex(g => g.members.includes(n));
@@ -156,4 +169,5 @@ ok(/Birdie Brigade · Ann &amp; Bob/.test(tsh) && /Cy &amp; Di/.test(tsh) && /Ri
 ok(/<b>Ann<\/b>/.test(sheet.h), 'and still marks the viewer');
 vm.runInContext("_grp = { g: gatheringData[0], units: groupsUnitsFor(gatheringData[0], gatheringRegData), sel: null, notes: [], opts: { mode: 'shotgun', group_size: 4, spread: 'order', holes: 18 } }; _grp.set = BFEngine.BFGroups.suggest(_grp.units, groupsOptsForEngine()).set; _grp.set.groups = [{ members: ['Ann','Bob','Cy','Di'], start_hole: 1 }, { members: ['Rich'], start_hole: 2 }];", ctx);
 ok(!vm.runInContext('groupsWarnings()', ctx).some(w => w.code === 'short' && w.group === 1), 'a group of just the unpaired player gets no short warning: ' + JSON.stringify(vm.runInContext('groupsWarnings()', ctx)) + JSON.stringify(vm.runInContext('_grp.units', ctx)));
+
 console.log(`${pass} passed, ${fail} failed`); if (fail) process.exit(1);

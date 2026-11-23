@@ -6358,6 +6358,17 @@ function groupsSuggest() {
   if (_grp.set && _grp.dirty && !confirm('Replace the groups on screen with a fresh suggestion?')) return;
   run();
 }
+// Place players yourself: empty groups sized to the field (start holes / tee times filled in), everyone waiting in "Not in a group". The ⋯ menu or the ⠿ handle puts each player where the host wants.
+function groupsStartManual() {
+  if (!_grp) return;
+  const placed = _grp.set ? _grp.set.groups.reduce((t, g) => t + (g.members || []).length, 0) : 0;
+  if (placed && !confirm('Move everyone back to "Not in a group" and place them yourself?')) return;
+  const o = _grp.opts, n = _grp.units.reduce((t, u) => t + u.members.length, 0), size = Math.max(1, Number(o.group_size) || 4), k = Math.max(1, Math.ceil(n / size));
+  const groups = Array.from({ length: k }, () => ({ members: [] }));
+  if (o.mode !== 'none') BFEngine.BFGroups.schedule(groups, groupsOptsForEngine(), false);
+  _grp.set = { v: 1, mode: o.mode, holes: o.holes, group_size: o.group_size, groups, rules: { spread: o.spread } };
+  _grp.sel = null; _grp.dirty = true; _grp.notes = []; _grp.setupOpen = false; groupsRender();
+}
 function groupsSetOpt(k, v) {
   const o = _grp.opts; o[k] = (k === 'group_size' || k === 'interval') ? Number(v) : v;
   if (_grp.set && (k === 'mode')) { _grp.set.mode = o.mode; BFEngine.BFGroups.schedule(_grp.set.groups, groupsOptsForEngine(), true); _grp.dirty = true; }
@@ -6494,6 +6505,7 @@ function groupsRender() {
       + (o.mode === 'shotgun' ? row('Start holes', `<input type="text" value="${GRP_ESC(o.start_holes)}" placeholder="auto-spread" oninput="groupsSetOptTyped('start_holes',this.value)" style="width:130px;${inpStyle}">`)
         : o.mode === 'tee_times' ? row('First tee', `<input type="time" value="${GRP_ESC(o.first_tee)}" oninput="groupsSetOptTyped('first_tee',this.value)" style="${inpStyle}"><input type="number" min="5" max="30" value="${GRP_ESC(o.interval)}" oninput="groupsSetOptTyped('interval',this.value)" style="width:60px;${inpStyle}"><span style="font-size:0.74rem;color:var(--text-muted)">min</span>`) : '')
       + `<button type="button" class="host-cta-btn" style="margin:6px 0 0" onclick="groupsSuggest()">✨ ${s ? 'Rebuild playing groups' : 'Build playing groups'}</button>`
+      + `<button type="button" class="btn btn-secondary" style="width:100%;min-height:48px;margin-top:8px" onclick="groupsStartManual()">✋ I’ll place the players myself</button>`
       + `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px;line-height:1.45">${nPlayers} players${hasTeams && !o.individual ? ', teams are placed as one' : ''}. Hold ⠿ and drag, or tap a row to move it.</div></div>` : '')
     + `</div>`;
   const small = 'min-width:38px;min-height:38px;font-size:0.95rem;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text-muted);cursor:pointer';
@@ -6521,7 +6533,7 @@ function groupsRender() {
       </div>`).join('') + `<button type="button" class="btn btn-ghost btn-sm" style="min-height:44px" onclick="groupsAddGroup()">➕ Add a group</button>`;
   }
   const panels = s ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start"><div>${poolHtml}</div><div>${groupsHtml}</div></div>`
-    : `<div style="font-size:0.84rem;color:var(--text-muted);padding:10px 2px">No playing groups yet. Tap Build playing groups, then adjust.</div>`;
+    : `<div style="font-size:0.84rem;color:var(--text-muted);padding:10px 2px">No playing groups yet. Tap Build playing groups to have them made for you, or I’ll place the players myself to choose who plays with whom.</div>`;
   body.innerHTML = `<div style="font-size:1.15rem;font-weight:700;margin-bottom:2px">👥 Playing groups</div>
     <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px">${GRP_ESC(_grp.g.name)}${_grp.publishedAt ? ` · published (v${_grp.version})` : ' · not published yet'}<br>Teams stay together. This sets who tees off together.</div>
     ${_grp.notes.length ? `<div style="font-size:0.78rem;color:#8a6d00;margin-bottom:8px">${_grp.notes.map(GRP_ESC).join('<br>')}</div>` : ''}
