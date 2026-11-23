@@ -75,3 +75,6 @@ Ask Brian the three open decisions first: (1) orphaned partner default (solo vs 
 - Decision (Brian): no automated tee rules (handicap/age variants are too many). Just a plain-words Tee box on the Groups setup.
 - Setup row: one tee for everyone (Black…Silver, None, Other…); a player's ⋯ menu sets that player (or team) to a different tee. Saved in the Groups doc as `tee_default` + `tees{lowercased name: tee}`; no Worker change (doc is stored as JSON).
 - `BFGroups.of` returns `tee`; the player's event-card banner shows "Group 3 · start on hole 7 · Blue tees". Not used in scoring. Tee-for-handicap stays in the Games form (net).
+
+## v4.101.0 — Refresh from registration on the Playing groups screen
+- 🔄 button re-reads registrations and takes dropped players out of their groups on screen (unsaved edits kept). New Yes players are NOT auto-placed; they wait in "Not in a group". Says plainly if the registration list could not be reached.

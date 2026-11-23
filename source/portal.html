@@ -6503,6 +6503,25 @@ function groupsSetTeeFor(gi, ii, v) {
   it.names.forEach(n => { const k = String(n).trim().toLowerCase(); if (!v || v === '__same' || v === _grp.tee_default) delete _grp.tees[k]; else _grp.tees[k] = v; });
   _grp.dirty = true; closeHostSheet(); groupsRender();
 }
+// Pull the registration list again and bring the groups on screen in line with it: dropped players come out of their group, new Yes players are added
+// (unsaved edits are kept). Says what changed, and says so if the list could not be reached.
+async function groupsRefresh() {
+  if (!_grp) return; const gid = _grp.gid;
+  let reg = null; try { reg = await gatheringsFetchJSON(`${GATHERINGS_API}/gatherings/${gid}/registrations`, {}, 8000); } catch (e) { reg = null; }
+  if (!reg || !reg.registrations) { showToast('Could not reach the registration list. Try again.', true); return; }
+  const rows = groupsRowsFromApi(reg.registrations);
+  gatheringRegData = gatheringRegData.filter(r => r.gatheringId !== gid).concat(rows.map(r => Object.assign({ gatheringId: gid }, r)));
+  _grp.units = groupsUnitsFor(_grp.g, rows); _grp.notes = [];
+  if (_grp.set) {
+    const lc = x => String(x || '').trim().toLowerCase(), live = new Set(_grp.units.flatMap(u => u.members).map(lc)), placed = new Set(), removed = [];
+    _grp.set.groups.forEach(g => { g.members = (g.members || []).filter(m => { if (live.has(lc(m))) { placed.add(lc(m)); return true; } removed.push(m); return false; }); });
+    const fresh = [...live].filter(k => !placed.has(k)).length;   // new Yes players wait in "Not in a group" for the host to place; nothing is moved for them
+    if (removed.length) _grp.notes.push('Removed (no longer registered): ' + removed.join(', '));
+    if (removed.length) _grp.dirty = true;
+    if (fresh) _grp.notes.push(fresh + ' not in a group yet: see Not in a group.');
+  }
+  const n = _grp.notes.length; groupsRender(); showToast(n ? 'Updated from registration' : 'Already matches registration');
+}
 function groupsToggleSetup() { _grp.setupOpen = !_grp.setupOpen; groupsRender(); }
 function groupsRender() {
   const body = document.getElementById('host-sheet-body'); if (!body || !_grp) return;
@@ -6558,6 +6577,7 @@ function groupsRender() {
   body.innerHTML = `<div style="font-size:1.15rem;font-weight:700;margin-bottom:2px">👥 Playing groups</div>
     <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px">${GRP_ESC(_grp.g.name)}${_grp.publishedAt ? ` · published (v${_grp.version})` : ' · not published yet'}<br>Teams stay together. This sets who tees off together.</div>
     ${_grp.notes.length ? `<div style="font-size:0.78rem;color:#8a6d00;margin-bottom:8px">${_grp.notes.map(GRP_ESC).join('<br>')}</div>` : ''}
+    <button type="button" class="btn btn-secondary" style="width:100%;min-height:44px;margin-bottom:10px" onclick="groupsRefresh()">🔄 Refresh from registration</button>
     ${settings}${panels}
     <div id="grp-warn" style="margin:6px 0 10px">${groupsWarnHtml()}</div>
     ${s ? `<div style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--border);margin:0 -2px;padding:8px 2px calc(8px + env(safe-area-inset-bottom,0px));z-index:5">
